@@ -1,0 +1,89 @@
+{
+  "name": "@extension.dev/mcp",
+  "type": "module",
+  "version": "0.0.1",
+  "description": "MCP server that lets AI agents build, run, inspect, and publish browser extensions. 26 tools for scaffolding, live DOM inspection, log streaming, and store-ready builds across Chrome, Edge, and Firefox.",
+  "license": "MIT",
+  "author": {
+    "name": "Cezar Augusto",
+    "email": "boss@cezaraugusto.net",
+    "url": "https://cezaraugusto.com"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/extensiondev/mcp.git"
+  },
+  "bugs": {
+    "url": "https://github.com/extensiondev/mcp/issues"
+  },
+  "homepage": "https://github.com/extensiondev/mcp#readme",
+  "engines": {
+    "node": ">=20.18"
+  },
+  "packageManager": "pnpm@10.19.0",
+  "exports": {
+    ".": {
+      "types": "./dist/module.d.ts",
+      "import": "./dist/module.js"
+    }
+  },
+  "main": "./dist/module.js",
+  "types": "./dist/module.d.ts",
+  "bin": {
+    "extension-mcp": "./bin/extension-mcp.js"
+  },
+  "files": [
+    "dist",
+    "bin",
+    "claude",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "clean": "rm -rf dist",
+    "watch": "rslib build --watch",
+    "compile": "rslib build",
+    "build": "pnpm run compile",
+    "start": "node bin/extension-mcp.js",
+    "test": "vitest run",
+    "prepublishOnly": "pnpm run test && pnpm run compile"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "ai-agent",
+    "agents",
+    "claude",
+    "claude-code",
+    "claude-desktop",
+    "cursor",
+    "browser-extension",
+    "chrome-extension",
+    "firefox-addon",
+    "manifest-v3",
+    "webextension",
+    "cross-browser",
+    "developer-tools",
+    "extension.dev"
+  ],
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.1",
+    "cross-spawn": "^7.0.6",
+    "extension-create": "^3.13.5",
+    "extension-develop": "^3.13.5",
+    "extension-install": "^3.13.5",
+    "ws": "^8.20.0"
+  },
+  "devDependencies": {
+    "@rslib/core": "^0.19.4",
+    "@types/node": "^25.2.0",
+    "@types/ws": "^8.18.1",
+    "typescript": "6.0.2",
+    "vitest": "^4.1.3"
+  }
+}

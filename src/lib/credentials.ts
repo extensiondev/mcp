@@ -1,0 +1,100 @@
+// Local credentials store for the `login` flow.
+//
+// `login` persists a project-scoped extension.dev access token here so the
+// publish path can discover it without the user exporting EXTENSION_DEV_TOKEN
+// by hand. The file is the only thing on disk that holds the secret, so it is
+// written 0600 (owner read/write only) and never logged.
+//
+// Location: $XDG_CONFIG_HOME/extension-dev/auth.json (defaulting to
+// ~/.config/extension-dev/auth.json) on macOS/Linux; %APPDATA%\extension-dev\
+// auth.json on Windows. The shape is versioned so the format can evolve.
+
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+
+export interface StoredCredentials {
+  version: 1;
+  /** The HMAC access token the publish path sends as `Bearer`. */
+  token: string;
+  workspaceSlug: string;
+  projectSlug: string;
+  /** Token expiry as unix epoch seconds (0 if unknown). */
+  expiresAt: number;
+  /** Platform base URL the token was minted against. */
+  api: string;
+}
+
+export function credentialsPath(): string {
+  if (process.platform === "win32") {
+    const base =
+      process.env.APPDATA ||
+      process.env.LOCALAPPDATA ||
+      path.join(os.homedir(), "AppData", "Roaming");
+    return path.join(base, "extension-dev", "auth.json");
+  }
+  const xdg = String(process.env.XDG_CONFIG_HOME || "").trim();
+  const base = xdg || path.join(os.homedir(), ".config");
+  return path.join(base, "extension-dev", "auth.json");
+}
+
+export function readCredentials(): StoredCredentials | null {
+  try {
+    const raw = fs.readFileSync(credentialsPath(), "utf8");
+    const data = JSON.parse(raw) as Partial<StoredCredentials> | null;
+    if (!data || typeof data !== "object") return null;
+    if (data.version !== 1) return null;
+    const token = String(data.token || "").trim();
+    if (!token) return null;
+    return {
+      version: 1,
+      token,
+      workspaceSlug: String(data.workspaceSlug || ""),
+      projectSlug: String(data.projectSlug || ""),
+      expiresAt: Number(data.expiresAt || 0),
+      api: String(data.api || ""),
+    };
+  } catch {
+    return null;
+  }
+}
+
+export function writeCredentials(creds: StoredCredentials): string {
+  const file = credentialsPath();
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  // The `mode` option only applies when the file is created, so chmod after
+  // writing to also tighten perms on a pre-existing file.
+  fs.writeFileSync(file, JSON.stringify(creds, null, 2) + "\n", {
+    mode: 0o600,
+  });
+  try {
+    fs.chmodSync(file, 0o600);
+  } catch {
+    // Best-effort: some filesystems (e.g. Windows) do not support chmod.
+  }
+  return file;
+}
+
+export function clearCredentials(): { cleared: boolean; path: string } {
+  const file = credentialsPath();
+  try {
+    fs.unlinkSync(file);
+    return { cleared: true, path: file };
+  } catch {
+    return { cleared: false, path: file };
+  }
+}
+
+/**
+ * Return stored credentials only if the token has not expired. Used by the
+ * publish token resolution so an expired local token falls through cleanly to
+ * "no token" instead of producing a 401 from the platform.
+ */
+export function readValidCredentials(
+  nowSeconds: number = Math.floor(Date.now() / 1000),
+): StoredCredentials | null {
+  const creds = readCredentials();
+  if (!creds) return null;
+  if (creds.expiresAt && creds.expiresAt <= nowSeconds) return null;
+  return creds;
+}

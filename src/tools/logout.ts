@@ -1,0 +1,26 @@
+// extension_logout — delete the locally stored credentials file. The token is
+// not revoked server-side (it remains revocable from the dashboard); this only
+// removes it from this machine.
+
+import { clearCredentials } from "../lib/credentials";
+
+export const schema = {
+  name: "extension_logout",
+  description:
+    "Delete the locally stored extension.dev credentials. Does not revoke the token server-side (revoke from the dashboard if needed); only removes it from this machine.",
+  inputSchema: {
+    type: "object" as const,
+    properties: {},
+  },
+};
+
+export async function handler(): Promise<string> {
+  const result = clearCredentials();
+  return JSON.stringify({
+    ok: true,
+    cleared: result.cleared,
+    message: result.cleared
+      ? "Local credentials removed."
+      : "No stored credentials to remove.",
+  });
+}
