@@ -1,0 +1,16 @@
+node_modules/
+.pnpm-store/
+*.log
+dist/
+build/
+coverage/
+.vitest/
+test-results/
+.env
+.env.*
+.turbo/
+.swc/
+
+# gitignore hygiene sweep
+.DS_Store
+*.tsbuildinfo
