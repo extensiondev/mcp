@@ -1,0 +1,71 @@
+name: Sync template catalog
+
+on:
+  schedule:
+    # Run daily at 06:00 UTC (after the examples repo nightly build)
+    - cron: "0 6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Fetch latest templates-meta.json
+        run: |
+          curl -fsSL \
+            https://github.com/extension-js/examples/releases/download/nightly/templates-meta.json \
+            -o /tmp/templates-meta-latest.json
+
+      - name: Check for changes
+        id: diff
+        run: |
+          CACHED="src/lib/templates-meta.snapshot.json"
+          if [ ! -f "$CACHED" ]; then
+            echo "No snapshot exists yet — will create one."
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          elif ! diff -q /tmp/templates-meta-latest.json "$CACHED" > /dev/null 2>&1; then
+            echo "Template catalog has changed."
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Template catalog is up to date."
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Update snapshot
+        if: steps.diff.outputs.changed == 'true'
+        run: cp /tmp/templates-meta-latest.json src/lib/templates-meta.snapshot.json
+
+      - name: Extract template table for CLAUDE.md
+        if: steps.diff.outputs.changed == 'true'
+        run: |
+          node -e "
+            const meta = require('/tmp/templates-meta-latest.json');
+            const templates = meta.templates || [];
+            const featured = templates.filter(t => t.featured);
+            const count = templates.length;
+            console.log('Total templates: ' + count);
+            console.log('Featured: ' + featured.length);
+            console.log('Surfaces: ' + [...new Set(templates.flatMap(t => t.surfaces || []))].sort().join(', '));
+          "
+
+      - name: Create pull request
+        if: steps.diff.outputs.changed == 'true'
+        uses: peter-evans/create-pull-request@v7
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "chore: sync template catalog from examples repo"
+          branch: chore/sync-templates
+          title: "chore: sync template catalog"
+          body: |
+            Auto-generated PR — the upstream [templates-meta.json](https://github.com/extension-js/examples/releases/tag/nightly) has changed.
+
+            Review the snapshot diff to see what templates were added, removed, or modified.
+          labels: automated
+          delete-branch: true
