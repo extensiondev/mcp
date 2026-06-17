@@ -91,7 +91,6 @@ export async function handler(args: {
   const files = walkDir(distPath);
   const totalSize = files.reduce((sum, f) => sum + f.size, 0);
 
-  // Read manifest from dist
   let manifest: Record<string, unknown> = {};
   const manifestPath = path.join(distPath, "manifest.json");
 
@@ -101,7 +100,6 @@ export async function handler(args: {
     // No manifest in dist
   }
 
-  // Aggregate by type
   const byType: Record<string, { count: number; size: number }> = {};
 
   for (const f of files) {
