@@ -60,7 +60,6 @@ export class CDPClient {
     try {
       const message = JSON.parse(data) as Record<string, unknown>;
 
-      // Handle command responses
       if (typeof message.id === "number") {
         const pending = this.pendingRequests.get(message.id);
 
@@ -77,7 +76,6 @@ export class CDPClient {
         return;
       }
 
-      // Capture console messages
       if (message.method === "Log.entryAdded") {
         const entry = (message.params as Record<string, unknown>)?.entry as
           | Record<string, unknown>
@@ -111,7 +109,6 @@ export class CDPClient {
         }
       }
 
-      // Notify event listeners
       for (const listener of this.eventListeners) {
         listener(message);
       }
@@ -130,7 +127,6 @@ export class CDPClient {
     }
   }
 
-  // Send a CDP command and wait for the response.
   async sendCommand(
     method: string,
     params: Record<string, unknown> = {},
@@ -160,7 +156,6 @@ export class CDPClient {
     });
   }
 
-  // Discover the browser-level WebSocket URL from CDP HTTP endpoint.
   static async discoverBrowserWsUrl(
     port: number,
     host = "127.0.0.1",
@@ -177,7 +172,6 @@ export class CDPClient {
     throw new Error("No webSocketDebuggerUrl in /json/version response");
   }
 
-  // Discover page targets via CDP HTTP endpoint.
   static async discoverTargets(
     port: number,
     host = "127.0.0.1",
@@ -243,7 +237,6 @@ export class CDPClient {
     });
   }
 
-  // JavaScript evaluation
   async evaluate(sessionId: string, expression: string): Promise<unknown> {
     const response = (await this.sendCommand(
       "Runtime.evaluate",
@@ -254,7 +247,6 @@ export class CDPClient {
     return response.result?.value;
   }
 
-  // Page inspection
   async getPageHTML(sessionId: string): Promise<string> {
     const result = await this.evaluate(
       sessionId,

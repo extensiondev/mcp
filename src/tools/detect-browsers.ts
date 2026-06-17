@@ -135,7 +135,6 @@ function findManagedBinary(browser: string): string | null {
   const browserDir = path.join(resolveCacheRoot(), browser);
   if (!fs.existsSync(browserDir)) return null;
 
-  // Look for known executable patterns in the managed cache
   const execNames: Record<string, string[]> = {
     chrome: ["chrome", "chrome.exe", "Google Chrome for Testing"],
     chromium: [
@@ -211,7 +210,6 @@ export async function handler(args: { browsers?: string[] }): Promise<string> {
     installed: [],
   };
 
-  // Check managed cache
   for (const browser of ALL_BROWSERS) {
     const browserDir = path.join(managed.cacheRoot, browser);
     if (fs.existsSync(browserDir)) {
@@ -219,11 +217,9 @@ export async function handler(args: { browsers?: string[] }): Promise<string> {
     }
   }
 
-  // Detect each requested browser
   for (const browser of browsersToCheck) {
     const isGecko = browser === "firefox";
 
-    // Check managed first, then system
     let binaryPath = findManagedBinary(browser);
     let source: DetectedBrowser["source"] = "managed";
 

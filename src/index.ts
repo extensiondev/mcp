@@ -5,7 +5,6 @@ import {
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 
-// Core tools
 import * as create from "./tools/create";
 import * as listTemplates from "./tools/list-templates";
 import * as build from "./tools/build";
@@ -13,7 +12,6 @@ import * as dev from "./tools/dev";
 import * as start from "./tools/start";
 import * as preview from "./tools/preview";
 
-// Intelligence tools
 import * as getTemplateSource from "./tools/get-template-source";
 import * as manifestValidate from "./tools/manifest-validate";
 import * as inspect from "./tools/inspect";
@@ -40,7 +38,6 @@ import {
   resolveApiBase,
 } from "./lib/login-flow";
 
-// Browser management tools
 import * as installBrowser from "./tools/install-browser";
 import * as listBrowsers from "./tools/list-browsers";
 import * as detectBrowsers from "./tools/detect-browsers";
@@ -56,14 +53,12 @@ interface ToolModule {
 }
 
 const tools: ToolModule[] = [
-  // Core tools
   create,
   listTemplates,
   build,
   dev,
   start,
   preview,
-  // Intelligence tools
   getTemplateSource,
   manifestValidate,
   inspect,
@@ -78,11 +73,9 @@ const tools: ToolModule[] = [
   publish,
   wait,
   addFeature,
-  // Auth tools
   login,
   whoami,
   logout,
-  // Browser management tools
   installBrowser,
   listBrowsers,
   detectBrowsers,
@@ -107,7 +100,6 @@ export async function startServer(): Promise<void> {
     },
   );
 
-  // List all available tools
   server.setRequestHandler(ListToolsRequestSchema, async () => {
     return {
       tools: tools.map((t) => ({
@@ -118,7 +110,6 @@ export async function startServer(): Promise<void> {
     };
   });
 
-  // Handle tool calls
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const { name, arguments: args } = request.params;
     const tool = toolMap.get(name);
@@ -164,7 +155,6 @@ export async function startServer(): Promise<void> {
     }
   });
 
-  // Connect via stdio transport
   const transport = new StdioServerTransport();
   await server.connect(transport);
 }
