@@ -45,7 +45,6 @@ export async function handler(args: {
     similarTemplates: [],
   };
 
-  // Read manifest
   let manifest: Record<string, unknown>;
   try {
     const raw = fs.readFileSync(path.resolve(args.manifestPath), "utf8");
@@ -62,7 +61,6 @@ export async function handler(args: {
     });
   }
 
-  // Required fields
   if (!manifest.name) {
     result.errors.push("Missing required field: name");
   }
@@ -72,7 +70,6 @@ export async function handler(args: {
     );
   }
 
-  // Manifest version
   const chromiumMv =
     manifest["chromium:manifest_version"] ?? manifest.manifest_version;
   const firefoxMv =
@@ -84,7 +81,6 @@ export async function handler(args: {
     );
   }
 
-  // Browser-specific validation
   for (const browser of browsers) {
     const isChromium = ["chrome", "edge", "chromium-based"].includes(browser);
     const isFirefox = ["firefox", "gecko-based"].includes(browser);
@@ -99,7 +95,6 @@ export async function handler(args: {
         );
       }
 
-      // Side panel check
       if (manifest["chromium:side_panel"] || manifest.side_panel) {
         const perms = (manifest["chromium:permissions"] ??
           manifest.permissions ??
@@ -111,7 +106,6 @@ export async function handler(args: {
           );
         }
       }
-      // Action check
       if (
         manifest["firefox:browser_action"] &&
         !manifest["chromium:action"] &&
@@ -124,7 +118,6 @@ export async function handler(args: {
     }
 
     if (isFirefox) {
-      // world: MAIN check
       const contentScripts = manifest.content_scripts as
         | Array<Record<string, unknown>>
         | undefined;
@@ -138,7 +131,6 @@ export async function handler(args: {
           }
         }
       }
-      // Side panel vs sidebar action
       if (
         manifest["chromium:side_panel"] &&
         !manifest["firefox:sidebar_action"]
@@ -148,7 +140,6 @@ export async function handler(args: {
         );
       }
 
-      // Service worker vs scripts
       const bg = manifest.background as Record<string, unknown> | undefined;
 
       if (bg) {
@@ -170,7 +161,6 @@ export async function handler(args: {
     }
   }
 
-  // Find similar templates in the catalog
   const surfaces: string[] = [];
   if (manifest.content_scripts) surfaces.push("content");
   if (manifest["chromium:side_panel"] || manifest.side_panel)

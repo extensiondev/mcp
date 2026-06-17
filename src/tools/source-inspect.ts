@@ -82,10 +82,9 @@ async function findCdpPort(
     // `port` is the rspack dev-server port — NOT CDP — so never use it here.
     if (typeof contract.cdpPort === "number") return contract.cdpPort;
   } catch {
-    // No ready.json
+    /* ignore */
   }
 
-  // Try default CDP port
   const defaultPort = 9222;
   return new Promise((resolve) => {
     const socket = new net.Socket();
@@ -124,7 +123,6 @@ export async function handler(args: {
     });
   }
 
-  // Find the CDP port
   const cdpPort = await findCdpPort(args.projectPath, browser);
   if (!cdpPort) {
     return JSON.stringify({
@@ -137,7 +135,6 @@ export async function handler(args: {
   const cdp = new CDPClient();
 
   try {
-    // Discover page targets
     const allTargets = await CDPClient.discoverTargets(cdpPort);
     const pageTargets = allTargets.filter(
       (t) =>
@@ -159,7 +156,6 @@ export async function handler(args: {
       });
     }
 
-    // Pick the target to inspect
     const target = args.url
       ? (pageTargets.find((t) => t.url.includes(args.url!)) ?? pageTargets[0])
       : pageTargets[0];
@@ -168,11 +164,9 @@ export async function handler(args: {
     const browserWsUrl = await CDPClient.discoverBrowserWsUrl(cdpPort);
     await cdp.connect(browserWsUrl);
 
-    // Attach to the page target
     const sessionId = await cdp.attachToTarget(target.id);
     await cdp.enableDomains(sessionId);
 
-    // Navigate if requested
     if (args.url && !target.url.includes(args.url)) {
       await cdp.navigate(sessionId, args.url);
       // Brief delay for content scripts to inject
@@ -182,7 +176,6 @@ export async function handler(args: {
       await new Promise((r) => setTimeout(r, 500));
     }
 
-    // Build response
     const result: Record<string, unknown> = {
       cdpPort,
       browser,
@@ -208,7 +201,6 @@ export async function handler(args: {
       result.html = html;
     }
 
-    // HTML summary (counts without full HTML)
     if (include.has("summary")) {
       const summary = await cdp.evaluate(
         sessionId,
@@ -229,27 +221,22 @@ export async function handler(args: {
       result.summary = summary;
     }
 
-    // Page metadata
     if (include.has("meta")) {
       result.meta = await cdp.getPageMeta(sessionId);
     }
 
-    // DOM snapshot (structured tree)
     if (include.has("dom_snapshot")) {
       result.domSnapshot = await cdp.getDomSnapshot(sessionId);
     }
 
-    // Console messages
     if (include.has("console")) {
       result.console = cdp.getConsoleSummary();
     }
 
-    // Extension root / reinject metadata
     if (include.has("extension_roots")) {
       result.extensionRoots = await cdp.getExtensionRootMeta(sessionId);
     }
 
-    // Selector probes
     if (args.probe?.length) {
       result.probes = await cdp.probeSelectors(sessionId, args.probe);
     }
