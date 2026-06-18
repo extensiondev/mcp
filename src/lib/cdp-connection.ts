@@ -1,0 +1,212 @@
+import WebSocket from "ws";
+
+const COMMAND_TIMEOUT_MS = 15_000;
+
+// Transport + console-capture layer for the CDP client. Owns the WebSocket
+// connection, request/response plumbing, event fan-out, and console capture.
+export class CDPConnection {
+  private ws: WebSocket | null = null;
+  private messageId = 0;
+  private eventListeners = new Set<(msg: Record<string, unknown>) => void>();
+  private pendingRequests = new Map<
+    number,
+    {
+      resolve: (value: unknown) => void;
+      reject: (reason: Error) => void;
+      timeout: ReturnType<typeof setTimeout>;
+    }
+  >();
+  private consoleMessages: Array<{
+    level: string;
+    text: string;
+    source: string;
+    timestamp: number;
+  }> = [];
+
+  // Connect to a CDP WebSocket URL (e.g., ws://127.0.0.1:9222/devtools/browser/...)
+  async connect(wsUrl: string): Promise<void> {
+    return new Promise((resolve, reject) => {
+      this.ws = new WebSocket(wsUrl);
+
+      this.ws.on("open", () => resolve());
+
+      this.ws.on("message", (data: WebSocket.Data) => {
+        this.handleMessage(data.toString());
+      });
+
+      this.ws.on("error", (err: Error) => {
+        this.rejectAllPending(err.message);
+        reject(err);
+      });
+
+      this.ws.on("close", () => {
+        this.rejectAllPending("CDP connection closed");
+      });
+    });
+  }
+
+  disconnect(): void {
+    if (this.ws) {
+      try {
+        this.ws.close();
+      } catch {
+        /* ignore */
+      }
+      this.ws = null;
+    }
+  }
+
+  private handleMessage(data: string): void {
+    try {
+      const message = JSON.parse(data) as Record<string, unknown>;
+
+      if (typeof message.id === "number") {
+        const pending = this.pendingRequests.get(message.id);
+
+        if (pending) {
+          clearTimeout(pending.timeout);
+          this.pendingRequests.delete(message.id);
+
+          if (message.error) {
+            pending.reject(new Error(JSON.stringify(message.error)));
+          } else {
+            pending.resolve(message.result);
+          }
+        }
+        return;
+      }
+
+      if (message.method === "Log.entryAdded") {
+        const entry = (message.params as Record<string, unknown>)?.entry as
+          | Record<string, unknown>
+          | undefined;
+
+        if (entry) {
+          this.consoleMessages.push({
+            level: String(entry.level ?? "info"),
+            text: String(entry.text ?? ""),
+            source: String(entry.source ?? "other"),
+            timestamp: Number(entry.timestamp ?? Date.now()),
+          });
+        }
+      }
+
+      if (message.method === "Runtime.consoleAPICalled") {
+        const params = message.params as Record<string, unknown> | undefined;
+
+        if (params) {
+          const args = (params.args as Array<Record<string, unknown>>) ?? [];
+          const text = args
+            .map((a) => String(a.value ?? a.description ?? ""))
+            .join(" ");
+
+          this.consoleMessages.push({
+            level: String(params.type ?? "log"),
+            text,
+            source: "console-api",
+            timestamp: Number(params.timestamp ?? Date.now()),
+          });
+        }
+      }
+
+      for (const listener of this.eventListeners) {
+        listener(message);
+      }
+    } catch {
+      // Malformed message, ignore
+    }
+  }
+
+  private rejectAllPending(reason: string): void {
+    for (const [id, pending] of this.pendingRequests) {
+      clearTimeout(pending.timeout);
+
+      pending.reject(new Error(reason));
+
+      this.pendingRequests.delete(id);
+    }
+  }
+
+  async sendCommand(
+    method: string,
+    params: Record<string, unknown> = {},
+    sessionId?: string,
+  ): Promise<unknown> {
+    return new Promise((resolve, reject) => {
+      if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+        return reject(new Error("CDP WebSocket is not connected"));
+      }
+
+      const id = ++this.messageId;
+      const message: Record<string, unknown> = { id, method, params };
+
+      if (sessionId) message.sessionId = sessionId;
+
+      const timeout = setTimeout(() => {
+        this.pendingRequests.delete(id);
+        reject(
+          new Error(
+            `CDP command timed out (${COMMAND_TIMEOUT_MS}ms): ${method}`,
+          ),
+        );
+      }, COMMAND_TIMEOUT_MS);
+
+      this.pendingRequests.set(id, { resolve, reject, timeout });
+      this.ws.send(JSON.stringify(message));
+    });
+  }
+
+  getConsoleMessages(): Array<{
+    level: string;
+    text: string;
+    source: string;
+    timestamp: number;
+  }> {
+    return [...this.consoleMessages];
+  }
+
+  getConsoleSummary(): Record<string, unknown> {
+    const counts: Record<string, number> = {};
+    const uniqueByLevel: Record<string, Map<string, number>> = {};
+
+    for (const msg of this.consoleMessages) {
+      counts[msg.level] = (counts[msg.level] ?? 0) + 1;
+
+      if (!uniqueByLevel[msg.level]) uniqueByLevel[msg.level] = new Map();
+
+      const key = msg.text.slice(0, 200);
+
+      uniqueByLevel[msg.level].set(
+        key,
+        (uniqueByLevel[msg.level].get(key) ?? 0) + 1,
+      );
+    }
+
+    const topMessages: Array<{ level: string; text: string; count: number }> =
+      [];
+
+    for (const [level, msgs] of Object.entries(uniqueByLevel)) {
+      const sorted = [...msgs.entries()].sort((a, b) => b[1] - a[1]);
+
+      for (const [text, count] of sorted.slice(0, 5)) {
+        topMessages.push({ level, text, count });
+      }
+    }
+
+    return {
+      total: this.consoleMessages.length,
+      counts,
+      topMessages: topMessages.sort((a, b) => b.count - a.count).slice(0, 10),
+    };
+  }
+
+  protected onEvent(
+    handler: (msg: Record<string, unknown>) => void,
+  ): () => void {
+    this.eventListeners.add(handler);
+
+    return () => {
+      this.eventListeners.delete(handler);
+    };
+  }
+}
