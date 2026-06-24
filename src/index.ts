@@ -24,6 +24,7 @@ import * as reload from "./tools/reload";
 import * as open from "./tools/open";
 import * as domInspect from "./tools/dom-inspect";
 import * as publish from "./tools/publish";
+import * as releasePromote from "./tools/release-promote";
 import * as wait from "./tools/wait";
 import * as addFeature from "./tools/add-feature";
 
@@ -71,6 +72,7 @@ const tools: ToolModule[] = [
   open,
   domInspect,
   publish,
+  releasePromote,
   wait,
   addFeature,
   login,
@@ -179,6 +181,39 @@ export async function runCli(cmd: string, args: string[]): Promise<number> {
     return 0;
   }
 
+  if (cmd === "release") {
+    const sub = String(args[0] || "").trim();
+    if (sub === "promote") {
+      const buildId = String(flag("build") || flag("build-id") || "").trim();
+      const channel = String(flag("channel") || "").trim();
+      if (!buildId || !channel) {
+        log(
+          "Usage: extension-mcp release promote --build <sha> --channel <channel> [--source-channel <c>] [--version <v>] [--api <url>]",
+        );
+        return 1;
+      }
+      const out = await releasePromote.handler({
+        buildId,
+        channel,
+        sourceChannel: flag("source-channel"),
+        version: flag("version"),
+        api: flag("api"),
+      });
+      log(out);
+      let parsed: any = null;
+      try {
+        parsed = JSON.parse(out);
+      } catch {
+        parsed = null;
+      }
+      return parsed?.ok === false ? 1 : 0;
+    }
+    log(
+      "Usage: extension-mcp release promote --build <sha> --channel <channel>",
+    );
+    return 1;
+  }
+
   if (cmd === "logout") {
     log(await logout.handler());
     return 0;
@@ -228,6 +263,8 @@ export async function runCli(cmd: string, args: string[]): Promise<number> {
     }
   }
 
-  log(`Unknown command: ${cmd}. Expected one of: login, logout, whoami.`);
+  log(
+    `Unknown command: ${cmd}. Expected one of: login, logout, whoami, release.`,
+  );
   return 1;
 }
