@@ -3,7 +3,7 @@ import {startServer, runCli} from '../dist/module.js'
 
 const [, , cmd, ...rest] = process.argv
 
-if (cmd && ['login', 'logout', 'whoami'].includes(cmd)) {
+if (cmd && ['login', 'logout', 'whoami', 'release'].includes(cmd)) {
   runCli(cmd, rest)
     .then((code) => process.exit(code))
     .catch((err) => {
