@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { filterKeysForThisBrowser } from "browser-extension-manifest-fields";
 import { listTemplates } from "../lib/templates-cache";
 
 export const schema = {
@@ -70,12 +71,14 @@ export async function handler(args: {
     );
   }
 
-  const chromiumMv =
-    manifest["chromium:manifest_version"] ?? manifest.manifest_version;
-  const firefoxMv =
-    manifest["firefox:manifest_version"] ?? manifest.manifest_version;
+  // Resolve the effective manifest each engine family actually sees by folding
+  // down browser-prefixed keys (chrome:/edge:/chromium: for Chromium,
+  // firefox:/gecko: for Gecko), at any nesting depth. This replaces the
+  // hand-rolled `manifest["chromium:x"] ?? manifest.x` coalescing and also
+  // recognizes prefixes the old code missed (e.g. chrome:/edge:/brave:).
+  const chromiumManifest = filterKeysForThisBrowser(manifest, "chrome");
 
-  if (!chromiumMv && !manifest.manifest_version) {
+  if (!chromiumManifest.manifest_version) {
     result.errors.push(
       'Missing manifest_version. Use "chromium:manifest_version": 3 and "firefox:manifest_version": 2 for cross-browser support.',
     );
@@ -84,10 +87,12 @@ export async function handler(args: {
   for (const browser of browsers) {
     const isChromium = ["chrome", "edge", "chromium-based"].includes(browser);
     const isFirefox = ["firefox", "gecko-based"].includes(browser);
+    // Effective manifest for this specific target family.
+    const effective = filterKeysForThisBrowser(manifest, browser);
     const issues: string[] = [];
 
     if (isChromium) {
-      const mv = chromiumMv as number;
+      const mv = effective.manifest_version as number;
 
       if (mv && mv < 3) {
         issues.push(
@@ -95,10 +100,8 @@ export async function handler(args: {
         );
       }
 
-      if (manifest["chromium:side_panel"] || manifest.side_panel) {
-        const perms = (manifest["chromium:permissions"] ??
-          manifest.permissions ??
-          []) as string[];
+      if (effective.side_panel) {
+        const perms = (effective.permissions ?? []) as string[];
 
         if (!perms.includes("sidePanel")) {
           issues.push(
@@ -106,11 +109,9 @@ export async function handler(args: {
           );
         }
       }
-      if (
-        manifest["firefox:browser_action"] &&
-        !manifest["chromium:action"] &&
-        !manifest.action
-      ) {
+      // Cross-variant advice inspects the *other* family's raw key, so it reads
+      // from `manifest`, not the folded-down `effective`.
+      if (manifest["firefox:browser_action"] && !effective.action) {
         issues.push(
           'Firefox browser_action found but no chromium:action. Chromium MV3 uses "action" instead of "browser_action".',
         );
@@ -118,7 +119,7 @@ export async function handler(args: {
     }
 
     if (isFirefox) {
-      const contentScripts = manifest.content_scripts as
+      const contentScripts = effective.content_scripts as
         | Array<Record<string, unknown>>
         | undefined;
 
@@ -131,19 +132,16 @@ export async function handler(args: {
           }
         }
       }
-      if (
-        manifest["chromium:side_panel"] &&
-        !manifest["firefox:sidebar_action"]
-      ) {
+      if (chromiumManifest.side_panel && !effective.sidebar_action) {
         issues.push(
           "Chromium side_panel declared but no firefox:sidebar_action. Firefox uses sidebar_action for sidebars.",
         );
       }
 
-      const bg = manifest.background as Record<string, unknown> | undefined;
+      const bg = effective.background as Record<string, unknown> | undefined;
 
       if (bg) {
-        if (bg.service_worker && !bg["firefox:scripts"] && !bg.scripts) {
+        if (bg.service_worker && !bg.scripts) {
           issues.push(
             'Background service_worker declared but no firefox:scripts. Firefox uses "scripts" (array) instead of "service_worker".',
           );
@@ -162,18 +160,13 @@ export async function handler(args: {
   }
 
   const surfaces: string[] = [];
-  if (manifest.content_scripts) surfaces.push("content");
-  if (manifest["chromium:side_panel"] || manifest.side_panel)
-    surfaces.push("sidebar");
-  if (
-    manifest.action ||
-    manifest["chromium:action"] ||
-    manifest["firefox:browser_action"]
-  )
+  if (chromiumManifest.content_scripts) surfaces.push("content");
+  if (chromiumManifest.side_panel) surfaces.push("sidebar");
+  if (chromiumManifest.action || manifest["firefox:browser_action"])
     surfaces.push("action");
-  if ((manifest.chrome_url_overrides as Record<string, unknown>)?.newtab)
+  if ((chromiumManifest.chrome_url_overrides as Record<string, unknown>)?.newtab)
     surfaces.push("newtab");
-  if (manifest.background) surfaces.push("background");
+  if (chromiumManifest.background) surfaces.push("background");
 
   if (surfaces.length) {
     try {
