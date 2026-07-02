@@ -119,6 +119,13 @@ describe("list-browsers handler", () => {
 });
 
 describe("manifest-validate handler", () => {
+  const writeManifest = (manifest: Record<string, unknown>): string => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "extjs-manifest-"));
+    const file = path.join(dir, "manifest.json");
+    fs.writeFileSync(file, JSON.stringify(manifest));
+    return file;
+  };
+
   it("returns error for non-existent manifest", async () => {
     const result = await manifestValidate.handler({
       manifestPath: "/tmp/nonexistent-manifest.json",
@@ -126,6 +133,66 @@ describe("manifest-validate handler", () => {
     const parsed = JSON.parse(result);
     expect(parsed.valid).toBe(false);
     expect(parsed.errors.length).toBeGreaterThan(0);
+  });
+
+  it("recognizes chrome:/edge: prefixes, not just chromium:", async () => {
+    // The old hand-rolled coalescing only matched the literal "chromium:"
+    // prefix. filterKeysForThisBrowser folds the whole Chromium family.
+    const file = writeManifest({
+      name: "prefixed",
+      version: "1.0.0",
+      "chrome:manifest_version": 2,
+    });
+    const parsed = JSON.parse(
+      await manifestValidate.handler({ manifestPath: file, browsers: ["chrome"] }),
+    );
+    // manifest_version resolves from chrome: → no "Missing manifest_version".
+    expect(parsed.errors).not.toContain(
+      expect.stringContaining("Missing manifest_version"),
+    );
+    // MV2 on Chromium is still flagged via the folded value.
+    expect(parsed.browserSupport.chrome.issues.join(" ")).toContain(
+      "Manifest V2 is deprecated",
+    );
+  });
+
+  it("accepts nested firefox:scripts as the background fallback", async () => {
+    const file = writeManifest({
+      name: "bg",
+      version: "1.0.0",
+      manifest_version: 3,
+      background: {
+        service_worker: "sw.js",
+        "firefox:scripts": ["bg.js"],
+      },
+    });
+    const parsed = JSON.parse(
+      await manifestValidate.handler({
+        manifestPath: file,
+        browsers: ["firefox"],
+      }),
+    );
+    expect(parsed.browserSupport.firefox.issues.join(" ")).not.toContain(
+      "firefox:scripts",
+    );
+  });
+
+  it("flags a Firefox background missing its scripts fallback", async () => {
+    const file = writeManifest({
+      name: "bg",
+      version: "1.0.0",
+      manifest_version: 3,
+      background: { service_worker: "sw.js" },
+    });
+    const parsed = JSON.parse(
+      await manifestValidate.handler({
+        manifestPath: file,
+        browsers: ["firefox"],
+      }),
+    );
+    expect(parsed.browserSupport.firefox.issues.join(" ")).toContain(
+      "firefox:scripts",
+    );
   });
 });
 
