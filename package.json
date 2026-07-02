@@ -73,6 +73,7 @@
   ],
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.1",
+    "browser-extension-manifest-fields": "^2.2.8",
     "cross-spawn": "^7.0.6",
     "extension-create": "^3.13.5",
     "extension-develop": "^3.13.5",
