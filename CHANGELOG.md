@@ -1,5 +1,26 @@
 # Changelog
 
+## 4.0.8
+
+Tracks the `extension` 4.0.8 suite (the versioning convention: this package's
+version follows the CLI suite release it pairs with). One tool was added since
+3.17.0, `extension_release_promote`, bringing the surface to 27 tools.
+
+- Bump `extension-create`, `extension-develop`, `extension-install` from
+  ^3.13.5 to ^4.0.8. All consumed APIs (`extensionCreate`, `extensionBuild`,
+  `extensionInstall`, `getManagedBrowsersCacheRoot`) and all CLI verbs the
+  tools shell out to (`dev`, `start`, `preview`, `logs`, `eval`, `storage`,
+  `reload`, `open`, `inspect`, `publish`, including `--allow-control`,
+  `--allow-eval` and `--no-browser`) are unchanged in 4.x; verified
+  end-to-end (create -> build -> dev ready contract -> manifest validate).
+- `package.json` version now matches the published line (was a stale 0.0.1)
+  and the server reports its version from `package.json` instead of a
+  hardcoded string (previously stuck at 3.13.5).
+- `browser-extension-manifest-fields` ^2.2.8 -> ^2.2.9.
+- vitest config: resolve the extension-* test aliases from the packages'
+  exports maps; 4.x dropped the CJS entry, so `require.resolve` on the bare
+  specifier no longer works.
+
 ## 3.17.0
 
 First stable release on npm. The registry previously carried only canary
