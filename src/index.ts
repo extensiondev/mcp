@@ -1,5 +1,6 @@
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { version } from "../package.json";
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
@@ -93,7 +94,7 @@ export async function startServer(): Promise<void> {
   const server = new Server(
     {
       name: "extension-dev",
-      version: "3.13.5",
+      version,
     },
     {
       capabilities: {
