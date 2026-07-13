@@ -1,5 +1,13 @@
 # Changelog
 
+## 4.1.1
+
+README rewritten for the public npm page: Extension.js-style header
+(badges, tagline, quick start), tool table updated to the full 27-tool
+surface (release-promote was missing), and links to private repos or
+npm-restricted packages removed. Package description tool count fixed
+(26 -> 27). No code changes.
+
 ## 4.1.0
 
 The MCP now consumes `@extension.dev/core` for all platform-auth logic
