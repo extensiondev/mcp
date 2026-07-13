@@ -10,7 +10,7 @@
 // version-bump PR) is intentionally NOT exposed headlessly: it writes to your
 // source repo, which needs an interactive GitHub login the CLI does not hold.
 
-import { resolveToken, safeApiBase } from "./publish";
+import { resolveToken, safeApiBase } from "@extension.dev/core";
 
 const DEFAULT_API = "https://www.extension.dev";
 

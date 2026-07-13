@@ -59,6 +59,10 @@ jobs:
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
 
       - name: Install dependencies
+        env:
+          # @extension.dev/core is npm-restricted until the public flip; the
+          # package .npmrc resolves ${NPM_TOKEN} for the install.
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: pnpm install --no-frozen-lockfile
 
       - name: Build

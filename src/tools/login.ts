@@ -14,13 +14,11 @@
 import {
   pollForToken,
   startDeviceCode,
-  type DeviceCodeStart,
-} from "../lib/github-device";
-import {
   exchangeAndPersist,
   fetchLoginConfig,
   resolveApiBase,
-} from "../lib/login-flow";
+  type DeviceCodeStart,
+} from "@extension.dev/core";
 
 export const schema = {
   name: "extension_login",

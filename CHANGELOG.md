@@ -1,5 +1,26 @@
 # Changelog
 
+## 4.1.0
+
+The MCP now consumes `@extension.dev/core` for all platform-auth logic
+(core MIGRATION.md phase 2). No tool schema changes, no behavior changes:
+the JSON-string envelopes are byte-compatible and pinned by tests.
+
+- New dependency `@extension.dev/core` ^0.2.0: device-code login, credential
+  store, and publish client now live there, shared with every other surface.
+- Deleted `src/lib/credentials.ts`, `src/lib/github-device.ts`,
+  `src/lib/login-flow.ts` and their migrated tests; `login`, `whoami`,
+  `logout`, and `release-promote` import from core.
+- `tools/publish.ts` is a thin adapter over core's `publish()`; the frozen
+  PublishAuthError / PublishConfigError / PublishNetworkError / PublishError
+  envelopes and the success passthrough are pinned by a new
+  `publish-envelope` test.
+- New `core-boundary` regression test: no file under `src/` may redefine the
+  credential store or import auth primitives from anywhere but
+  `@extension.dev/core`.
+- CI and Release workflows pass `NPM_TOKEN` to the install step (core is
+  npm-restricted until the public flip).
+
 ## 4.0.8
 
 Tracks the `extension` 4.0.8 suite (the versioning convention: this package's
