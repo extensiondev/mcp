@@ -1,48 +1,37 @@
-[npm-version-image]: https://img.shields.io/npm/v/%40extension.dev%2Fmcp
+[npm-version-image]: https://img.shields.io/npm/v/%40extension.dev%2Fmcp.svg?color=0971fe
 [npm-version-url]: https://www.npmjs.com/package/@extension.dev/mcp
-[action-image]: https://github.com/extensiondev/mcp/actions/workflows/ci.yml/badge.svg?branch=main
-[action-url]: https://github.com/extensiondev/mcp/actions
+[npm-downloads-image]: https://img.shields.io/npm/dm/%40extension.dev%2Fmcp.svg?color=0971fe
+[npm-downloads-url]: https://www.npmjs.com/package/@extension.dev/mcp
+[discord-image]: https://img.shields.io/discord/1253608412890271755?label=Discord&logo=discord&style=flat&color=0971fe
+[discord-url]: https://discord.gg/v9h2RgeTSN
 
-[![Version][npm-version-image]][npm-version-url] [![workflow][action-image]][action-url]
+# @extension.dev/mcp [![Version][npm-version-image]][npm-version-url] [![Downloads][npm-downloads-image]][npm-downloads-url] [![Discord][discord-image]][discord-url]
 
-# @extension.dev/mcp
+> Give your AI agent hands for browser extension development. 27 MCP tools that scaffold, run, inspect, debug, and publish cross-browser extensions.
 
-Give your AI agent hands for browser extension development. One command connects Claude Code, Claude Desktop, Cursor, or any MCP client to 26 tools that scaffold, run, inspect, debug, and publish cross-browser extensions:
+<img alt="Logo" align="right" src="https://avatars.githubusercontent.com/u/106714027" width="20%" />
 
 ```bash
 claude mcp add extension-dev npx @extension.dev/mcp
 ```
 
-Extensions fail silently: content scripts that never inject, panels that never open, permissions that return `undefined` with no error. These tools give agents eyes on the live browser (DOM probes, unified logs from every context, storage access, event replay) so they debug from evidence instead of guessing. Scaffolding draws on the 60+ template catalog of the [extension.dev](https://extension.dev) platform, built on [Extension.js](https://extension.js.org).
+Works with Claude Code, Claude Desktop, Cursor, and any MCP client.
 
-## What's in this package
+[extension.dev](https://extension.dev) · [Documentation](https://extension.js.org) · [Templates](https://templates.extension.dev) · [Examples](https://github.com/extension-js/examples) · [Discord](https://discord.gg/v9h2RgeTSN)
 
-```
-@extension.dev/mcp
-  src/              MCP server source (26 tools)
-  claude/           Claude Code integration (CLAUDE.md, slash commands, rules)
-  bin/              CLI entrypoint
-```
+## Why an MCP server for extensions
 
-**MCP server**: programmatic bridge between AI assistants and the extension.dev platform. Imports from published npm packages:
+Extensions fail silently: content scripts that never inject, panels that never open, permissions that return `undefined` with no error. An agent editing files blind will happily "fix" all of them without noticing none of them work.
 
-- `extension-create`: project scaffolding
-- `extension-develop`: build/dev/preview
-- `extension-install`: managed browser binaries
+These tools give agents eyes on the live browser, so they debug from evidence instead of guessing:
 
-**Claude Code integration**: drop-in instructions, slash commands, and rules for Claude Code:
+- **Scaffold** from the 60+ template catalog behind [templates.extension.dev](https://templates.extension.dev), or add a popup, sidebar, or content script to an existing project
+- **Run** the dev server with HMR in Chrome, Edge, Firefox, or any managed browser binary, no build config
+- **See** the live DOM, unified logs from every extension context, `chrome.storage` contents, and the loaded-extension list
+- **Act**: evaluate code in any context, trigger the action button and commands, reload the extension, replay events
+- **Ship**: validate the manifest cross-browser, build for production, publish a shareable preview, and promote builds to release channels headlessly
 
-- `claude/CLAUDE.md`: project-level instructions for any extension project
-- `claude/commands/`: slash commands (`/extension`, `/extension-add`, `/extension-debug`, `/extension-publish`)
-- `claude/rules/`: rules for extension development, cross-browser compat, and MCP tools
-
-**Agent Skill**: the knowledge companion to this server lives in [`@extension.dev/skill`](https://npmjs.com/package/@extension.dev/skill): a portable [Agent Skills](https://agentskills.io)-format skill (SKILL.md + references) covering cross-browser rules, silent-failure gotchas, debugging playbooks, and store publishing. This server gives agents hands; the skill gives them judgment. Pair them:
-
-```bash
-mkdir -p .claude/skills && cp -R node_modules/@extension.dev/skill/skills/extension-dev .claude/skills/
-```
-
-Browser-launching tools (`dev`, `start`, `preview`) shell out to the `extension` CLI since they require the full browser launcher infrastructure.
+Built on [Extension.js](https://extension.js.org), the open-source cross-browser extension framework.
 
 ## Setup
 
@@ -52,7 +41,7 @@ Browser-launching tools (`dev`, `start`, `preview`) shell out to the `extension`
 claude mcp add extension-dev npx @extension.dev/mcp
 ```
 
-### Claude Desktop / .mcp.json
+### Claude Desktop / `.mcp.json`
 
 ```json
 {
@@ -65,79 +54,63 @@ claude mcp add extension-dev npx @extension.dev/mcp
 }
 ```
 
-### Claude Code integration (manual)
+### Claude Code project integration
 
-Copy the Claude Code rules and commands into any extension project:
+The package ships drop-in instructions, slash commands, and rules for extension projects:
 
 ```bash
 # Rules (how Claude understands your project)
 cp node_modules/@extension.dev/mcp/claude/CLAUDE.md ~/my-extension/.claude/CLAUDE.md
 
-# Slash commands
+# Slash commands (/extension, /extension-add, /extension-debug, /extension-publish)
 mkdir -p ~/my-extension/.claude/commands
 cp node_modules/@extension.dev/mcp/claude/commands/*.md ~/my-extension/.claude/commands/
 ```
 
 ## Tools
 
-| Tier | Tool                            | Integration                     | Description                       |
-| ---- | ------------------------------- | ------------------------------- | --------------------------------- |
-| 1    | `extension_create`              | `extensionCreate()`             | Scaffold from a template          |
-| 1    | `extension_list_templates`      | native                          | Browse 60+ templates              |
-| 1    | `extension_build`               | `extensionBuild()`              | Build for production              |
-| 1    | `extension_dev`                 | CLI spawn                       | Dev server with HMR               |
-| 1    | `extension_start`               | CLI spawn                       | Build + preview                   |
-| 1    | `extension_preview`             | CLI spawn                       | Preview production build          |
-| 2    | `extension_get_template_source` | native                          | Read template source files        |
-| 2    | `extension_manifest_validate`   | native                          | Cross-browser manifest validation |
-| 2    | `extension_inspect`             | native                          | Build output analysis             |
-| 2    | `extension_source_inspect`      | CDP WebSocket                   | Live DOM inspection               |
-| 2    | `extension_dom_inspect`         | agent bridge                    | CDP-free DOM snapshot             |
-| 2    | `extension_list_extensions`     | CDP WebSocket                   | List loaded extensions (Chromium) |
-| 2    | `extension_logs`                | agent bridge                    | Stream logs from every context    |
-| 2    | `extension_wait`                | native                          | Poll ready.json contract          |
-| 2    | `extension_add_feature`         | native                          | Add sidebar/popup/content script  |
-| act  | `extension_eval`                | agent bridge                    | Eval in a context (`--allow-eval`) |
-| act  | `extension_storage`             | agent bridge                    | Read/write `chrome.storage`       |
-| act  | `extension_reload`              | agent bridge                    | Reload extension or tab           |
-| act  | `extension_open`                | agent bridge                    | Open surface / trigger `action`,`command` |
-| 3    | `extension_install_browser`     | `extensionInstall()`            | Install managed browser           |
-| 3    | `extension_list_browsers`       | `getManagedBrowsersCacheRoot()` | List managed browsers             |
-| 3    | `extension_detect_browsers`     | native                          | System browser detection          |
-| auth | `extension_login`               | platform                        | GitHub device-code → stored token |
-| auth | `extension_whoami`              | native                          | Show stored login (no token)      |
-| auth | `extension_logout`              | native                          | Remove stored credentials         |
-| auth | `extension_publish`             | platform                        | Publish to extension.dev (token)  |
+| Tier | Tool | Description |
+| ---- | ---- | ----------- |
+| build | `extension_create` | Scaffold from a template |
+| build | `extension_list_templates` | Browse 60+ templates |
+| build | `extension_get_template_source` | Read template source files |
+| build | `extension_add_feature` | Add sidebar/popup/content script |
+| build | `extension_build` | Build for production |
+| run | `extension_dev` | Dev server with HMR |
+| run | `extension_start` | Build + preview |
+| run | `extension_preview` | Preview the production build |
+| run | `extension_wait` | Poll the dev-server ready contract |
+| see | `extension_manifest_validate` | Cross-browser manifest validation |
+| see | `extension_inspect` | Build output analysis |
+| see | `extension_source_inspect` | Live DOM inspection (CDP) |
+| see | `extension_dom_inspect` | CDP-free DOM snapshot |
+| see | `extension_list_extensions` | List loaded extensions (Chromium) |
+| see | `extension_logs` | Stream logs from every context |
+| act | `extension_eval` | Evaluate in a context (`--allow-eval`) |
+| act | `extension_storage` | Read/write `chrome.storage` |
+| act | `extension_reload` | Reload extension or tab |
+| act | `extension_open` | Open a surface / trigger `action`, `command` |
+| browsers | `extension_install_browser` | Install a managed browser binary |
+| browsers | `extension_list_browsers` | List managed browsers |
+| browsers | `extension_detect_browsers` | Detect system browsers |
+| platform | `extension_login` | GitHub device-code login, stored token |
+| platform | `extension_whoami` | Show the stored login (never the token) |
+| platform | `extension_logout` | Remove stored credentials |
+| platform | `extension_publish` | Publish a shareable preview to extension.dev |
+| platform | `extension_release_promote` | Promote a build to a release channel, headless |
 
-## Development
+Browser-launching tools (`dev`, `start`, `preview`) shell out to the `extension` CLI; everything else runs in-process.
 
-```bash
-pnpm install
-pnpm compile    # Build with rslib
-pnpm test       # Run tests
-pnpm start      # Start MCP server
-```
+## From preview to store
 
-### Publishing
+The four platform tools connect agents to [extension.dev](https://extension.dev): `extension_login` runs a GitHub device-code flow and stores a project-scoped token locally (never returned to the agent), `extension_publish` turns a build into a shareable preview URL, and `extension_release_promote` promotes a tested build to a release channel from CI or an agent session, no browser required. To automate store submission itself (Chrome Web Store, Edge Add-ons, Firefox AMO), pair with [`deploy`](https://extension.dev).
 
-```bash
-NPM_TOKEN=<token> pnpm publish
-```
+## Community
 
-Uses `prepublishOnly` to run tests and compile before publishing.
-
-## The extension.dev open source stack
-
-| Package | Use it to |
-| --- | --- |
-| [`@extension.dev/skill`](https://github.com/extensiondev/skill) | Teach agents the cross-browser rules and silent-failure gotchas |
-| [`deploy`](https://extension.dev) | Ship to Chrome, Firefox, and Edge stores from CI |
-| [`@extension.dev/artifact-integrity`](https://github.com/extensiondev/artifact-integrity) | Gate releases on artifact verification |
-| [`@extension.dev/compiler`](https://github.com/extensiondev/compiler) | Build extensions in the browser with esbuild-wasm |
-| [`@extension.dev/core`](https://github.com/extensiondev/core) | Authenticate and publish to the extension.dev platform |
-
-All of it rides on [Extension.js](https://github.com/extension-js/extension.js), the open-source cross-browser extension framework.
+- Join the [Discord](https://discord.gg/v9h2RgeTSN) for help and feedback
+- Browse production-ready [examples](https://github.com/extension-js/examples)
+- Report Extension.js framework issues on [GitHub](https://github.com/extension-js/extension.js/issues)
 
 ## License
 
-MIT
+MIT (c) Cezar Augusto and the Extension.js authors.
