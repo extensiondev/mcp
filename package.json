@@ -1,7 +1,7 @@
 {
   "name": "@extension.dev/mcp",
   "type": "module",
-  "version": "4.0.8",
+  "version": "4.1.0",
   "description": "MCP server that lets AI agents build, run, inspect, and publish browser extensions. 26 tools for scaffolding, live DOM inspection, log streaming, and store-ready builds across Chrome, Edge, and Firefox.",
   "license": "MIT",
   "author": {
@@ -72,6 +72,7 @@
     "extension.dev"
   ],
   "dependencies": {
+    "@extension.dev/core": "^0.2.0",
     "@modelcontextprotocol/sdk": "^1.12.1",
     "browser-extension-manifest-fields": "^2.2.9",
     "cross-spawn": "^7.0.6",

@@ -2,7 +2,7 @@
 // not revoked server-side (it remains revocable from the dashboard); this only
 // removes it from this machine.
 
-import { clearCredentials } from "../lib/credentials";
+import { clearCredentials } from "@extension.dev/core";
 
 export const schema = {
   name: "extension_logout",
