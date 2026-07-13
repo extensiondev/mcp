@@ -54,6 +54,15 @@ claude mcp add extension-dev npx @extension.dev/mcp
 }
 ```
 
+### Pair with the skill
+
+This server gives agents hands; [`@extension.dev/skill`](https://www.npmjs.com/package/@extension.dev/skill) gives them judgment: the cross-browser rules, silent-failure gotchas, debugging playbooks, and store checklist, packaged in the open [Agent Skills](https://agentskills.io) format. With both installed, agents know to verify against the live browser instead of guessing, and these tools make that a one-call operation.
+
+```bash
+npm i -D @extension.dev/skill
+mkdir -p .claude/skills && cp -R node_modules/@extension.dev/skill/skills/extension-dev .claude/skills/
+```
+
 ### Claude Code project integration
 
 The package ships drop-in instructions, slash commands, and rules for extension projects:
