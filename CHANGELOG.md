@@ -1,5 +1,10 @@
 # Changelog
 
+## 4.1.2
+
+README: restore the `@extension.dev/skill` pairing section (hands +
+judgment) now that the skill is public on npm. No code changes.
+
 ## 4.1.1
 
 README rewritten for the public npm page: Extension.js-style header
