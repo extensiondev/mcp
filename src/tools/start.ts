@@ -1,5 +1,5 @@
 import { spawnExtensionCli } from "../lib/exec";
-import { registerSession } from "../lib/process-manager";
+import { registerSession, removeSession } from "../lib/process-manager";
 
 export const schema = {
   name: "extension_start",
@@ -36,7 +36,7 @@ export async function handler(args: {
   const cliArgs = ["start", args.projectPath, "--browser", browser];
   if (args.polyfill === false) cliArgs.push("--no-polyfill");
 
-  const child = spawnExtensionCli(cliArgs);
+  const child = spawnExtensionCli(cliArgs, { projectDir: args.projectPath });
   const pid = child.pid!;
 
   registerSession({
@@ -45,6 +45,7 @@ export async function handler(args: {
     projectPath: args.projectPath,
     command: "start",
   });
+  child.on("exit", () => removeSession(args.projectPath, browser));
 
   let earlyOutput = "";
   const collector = (data: Buffer) => {
@@ -62,7 +63,7 @@ export async function handler(args: {
     browser,
     projectPath: args.projectPath,
     status: "started",
-    hint: "Use extension_wait to check when the build and browser launch are complete.",
+    hint: "Use extension_wait to check when the build and browser launch are complete. When you are done, call extension_stop to shut down the session.",
     earlyOutput: earlyOutput.slice(0, 500),
   });
 }

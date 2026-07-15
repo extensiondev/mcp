@@ -1,5 +1,32 @@
 # Changelog
 
+## 4.2.0
+
+Session lifecycle + determinism release. Tool count 27 -> 28.
+
+- New tool `extension_stop`: terminates a dev/start/preview session (dev
+  server AND the browser it launched) via a process-group signal with
+  SIGTERM -> SIGKILL escalation. Finds the pid in the in-memory session
+  registry, falling back to the `ready.json` contract when the MCP server
+  restarted since the session began, and removes the stale contract so
+  `extension_wait` cannot report a dead session as ready. Supports
+  `all: true` to stop everything the server started.
+- Sessions self-clean: dev/start/preview register an exit listener so a
+  session that dies on its own is no longer reported as stoppable.
+  `extension_preview` sessions are now registered (and stoppable) too.
+- `extension_create` gains `parentDir`: control where the project lands
+  instead of inheriting the MCP server's working directory. `nextSteps`
+  now reports the full project path.
+- CLI spawns are deterministic: dev/start/preview and the act tools now
+  prefer the project's own `node_modules/.bin/extension`, falling back to
+  `npx extension@<pinned>` where the pin derives from the vendored
+  `extension-develop` version — never a floating `latest`.
+- Session registry keys are path-normalized, so a stop with an absolute
+  path matches a session registered with a relative one.
+- Tests: registry suite now asserts against the exported `tools` array
+  (the old hand-maintained mirror had drifted to 26 while the server
+  registered 27); new stop + CLI-resolution suites (123 tests total).
+
 ## 4.1.2
 
 README: restore the `@extension.dev/skill` pairing section (hands +

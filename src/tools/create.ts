@@ -1,3 +1,4 @@
+import path from "node:path";
 import { extensionCreate } from "extension-create";
 
 export const schema = {
@@ -10,6 +11,11 @@ export const schema = {
       projectName: {
         type: "string",
         description: "Name of the extension project (used as directory name)",
+      },
+      parentDir: {
+        type: "string",
+        description:
+          "Directory to create the project inside. Defaults to the MCP server's working directory, which may not be where you expect — pass this explicitly when you care where the project lands.",
       },
       template: {
         type: "string",
@@ -29,13 +35,21 @@ export const schema = {
 
 export async function handler(args: {
   projectName: string;
+  parentDir?: string;
   template?: string;
   install?: boolean;
 }): Promise<string> {
   const start = Date.now();
 
+  // extensionCreate treats an absolute input as the full project path, so a
+  // parentDir just resolves the name against it. Without parentDir the name
+  // resolves against the server's cwd (extensionCreate's own default).
+  const projectInput = args.parentDir
+    ? path.resolve(args.parentDir, args.projectName)
+    : args.projectName;
+
   try {
-    const result = await extensionCreate(args.projectName, {
+    const result = await extensionCreate(projectInput, {
       template: args.template ?? "typescript",
       install: args.install ?? true,
       logger: {
@@ -50,7 +64,7 @@ export async function handler(args: {
       template: result.template,
       depsInstalled: result.depsInstalled,
       duration: Date.now() - start,
-      nextSteps: [`cd ${result.projectName}`, "npm run dev"],
+      nextSteps: [`cd ${result.projectPath}`, "npm run dev"],
     });
   } catch (err) {
     return JSON.stringify({

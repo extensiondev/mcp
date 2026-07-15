@@ -1,5 +1,5 @@
 import { spawnExtensionCli } from "../lib/exec";
-import { registerSession } from "../lib/process-manager";
+import { registerSession, removeSession } from "../lib/process-manager";
 
 export const schema = {
   name: "extension_dev",
@@ -58,7 +58,7 @@ export async function handler(args: {
   if (args.allowControl) cliArgs.push("--allow-control");
   if (args.allowEval) cliArgs.push("--allow-eval");
 
-  const child = spawnExtensionCli(cliArgs);
+  const child = spawnExtensionCli(cliArgs, { projectDir: args.projectPath });
   const pid = child.pid!;
 
   registerSession({
@@ -68,6 +68,9 @@ export async function handler(args: {
     projectPath: args.projectPath,
     command: "dev",
   });
+  // Keep the registry honest: a session that dies on its own (crash, user
+  // closes the browser, Ctrl+C on the terminal) should not linger as stoppable.
+  child.on("exit", () => removeSession(args.projectPath, browser));
 
   // Collect initial output for a few seconds so we can report early errors
   let earlyOutput = "";
@@ -87,7 +90,7 @@ export async function handler(args: {
     port: args.port ?? 8080,
     projectPath: args.projectPath,
     status: "started",
-    hint: "Use extension_wait to check when the extension is fully loaded, then extension_source_inspect to inspect the live state.",
+    hint: "Use extension_wait to check when the extension is fully loaded, then extension_source_inspect to inspect the live state. When you are done, call extension_stop to shut down the dev server and browser.",
     earlyOutput: earlyOutput.slice(0, 500),
   });
 }

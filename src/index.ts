@@ -12,6 +12,7 @@ import * as build from "./tools/build";
 import * as dev from "./tools/dev";
 import * as start from "./tools/start";
 import * as preview from "./tools/preview";
+import * as stop from "./tools/stop";
 
 import * as getTemplateSource from "./tools/get-template-source";
 import * as manifestValidate from "./tools/manifest-validate";
@@ -49,7 +50,7 @@ import {
   validateToolInput,
 } from "./lib/validate-input";
 
-interface ToolModule {
+export interface ToolModule {
   schema: {
     name: string;
     description: string;
@@ -59,13 +60,16 @@ interface ToolModule {
   handler: (args: any) => Promise<string>;
 }
 
-const tools: ToolModule[] = [
+// Exported so tests (and embedders) assert against the real registry instead
+// of a hand-maintained mirror that drifts.
+export const tools: ToolModule[] = [
   create,
   listTemplates,
   build,
   dev,
   start,
   preview,
+  stop,
   getTemplateSource,
   manifestValidate,
   inspect,

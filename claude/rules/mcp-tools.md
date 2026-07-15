@@ -612,6 +612,47 @@ The `similarTemplates` field lists templates from the catalog with similar surfa
 
 ---
 
+#### `extension_stop`
+
+**Source:** MCP `lib/process-manager` + the `ready.json` contract (no CLI verb)
+
+**Purpose:** Terminate a running dev/start/preview session — the dev server AND the browser it launched. The lifecycle counterpart to `extension_dev`/`extension_start`.
+
+```json
+{
+  "name": "extension_stop",
+  "description": "Stop a running dev, start, or preview session: terminates the dev server and the browser it launched.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "projectPath": {
+        "type": "string",
+        "description": "Path to the extension project root"
+      },
+      "browser": {
+        "type": "string",
+        "default": "chrome",
+        "description": "Browser of the session to stop"
+      },
+      "all": {
+        "type": "boolean",
+        "default": false,
+        "description": "Stop every session this server started"
+      }
+    },
+    "required": []
+  }
+}
+```
+
+**Returns:** `{ projectPath, browser, pid, stopped, detail }` (or `{ stopped: [...] }` with `all: true`).
+
+**How it finds the process:** the in-memory session registry first; if the MCP server restarted since the session began, it falls back to the `pid` recorded in the `ready.json` contract. It signals the whole process group (sessions are spawned detached), escalates SIGTERM → SIGKILL, and removes the stale `ready.json` so a later `extension_wait` cannot report a dead session as ready.
+
+**Why this matters for MCP:** without a stop tool, every `extension_dev` call leaks a dev server and a browser window that outlive the agent's task. Agents should stop sessions when verification is done.
+
+---
+
 ### Tier 3 — Browser management tools
 
 #### `extension_install_browser`
@@ -721,6 +762,7 @@ The `similarTemplates` field lists templates from the catalog with similar surfa
 | `extension_source_inspect`      | `programs/extension` | CDP client / RDP transport                | Live browser via debugging protocol         | Wire to running session                    |
 | `extension_list_extensions`     | MCP `lib/cdp`        | `Extensions.getExtensionInfo` (read-only) | Live browser via CDP (Chromium)             | MCP tool (no CLI verb)                      |
 | `extension_wait`                | `programs/extension` | `dev-wait.ts`                             | `ready.json` contract file                  | Thin wrapper (exists in CLI)               |
+| `extension_stop`                | MCP `lib/process-manager` | session registry + group signal      | Session registry + `ready.json` pid         | MCP tool (no CLI verb)                      |
 | `extension_add_feature`         | New                  | `extension_get_template_source`           | examples repo patterns                      | Codegen from examples                      |
 | **Agent bridge — act / triggers** |                    |                                           |                                             |                                            |
 | `extension_eval`                | `programs/extension` | bridge control channel                    | Live extension context                      | Wraps `extension eval` (`--allow-eval`)     |

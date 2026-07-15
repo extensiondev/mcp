@@ -1,11 +1,16 @@
+import path from "node:path";
 import type { ProcessInfo } from "./types";
 
-// In-memory registry of running extension dev/start processes
-// Lets the MCP server track sessions for source inspection and wait
+// In-memory registry of running extension dev/start/preview processes.
+// Lets the MCP server track sessions so extension_stop can terminate them
+// and so lifecycle tools can report what is running.
 const sessions = new Map<string, ProcessInfo>();
 
+// Keys are normalized so the path the caller passes to extension_stop matches
+// the path extension_dev registered, even if one is relative or has a
+// trailing slash.
 function sessionKey(projectPath: string, browser: string): string {
-  return `${projectPath}::${browser}`;
+  return `${path.resolve(projectPath)}::${browser}`;
 }
 
 export function registerSession(info: ProcessInfo): void {
