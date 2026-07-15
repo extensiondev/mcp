@@ -3,66 +3,23 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-// Import all tool modules to verify they export the correct shape
-import * as create from "../tools/create";
-import * as listTemplates from "../tools/list-templates";
-import * as build from "../tools/build";
-import * as dev from "../tools/dev";
-import * as start from "../tools/start";
-import * as preview from "../tools/preview";
-import * as getTemplateSource from "../tools/get-template-source";
+// Assert against the real registry the server serves, not a hand-maintained
+// mirror (the old copy here drifted: it listed 26 tools while the server
+// registered 27).
+import { tools as ALL_TOOLS } from "../index";
+import * as listBrowsers from "../tools/list-browsers";
+
+// Modules whose handlers get exercised directly below.
 import * as manifestValidate from "../tools/manifest-validate";
 import * as inspect from "../tools/inspect";
 import * as sourceInspect from "../tools/source-inspect";
-import * as listExtensions from "../tools/list-extensions";
 import * as logs from "../tools/logs";
-import * as evalTool from "../tools/eval";
 import * as storage from "../tools/storage";
-import * as reload from "../tools/reload";
-import * as open from "../tools/open";
-import * as domInspect from "../tools/dom-inspect";
-import * as publish from "../tools/publish";
-import * as wait from "../tools/wait";
 import * as addFeature from "../tools/add-feature";
-import * as login from "../tools/login";
-import * as whoami from "../tools/whoami";
-import * as logout from "../tools/logout";
-import * as installBrowser from "../tools/install-browser";
-import * as listBrowsers from "../tools/list-browsers";
-import * as detectBrowsers from "../tools/detect-browsers";
-
-const ALL_TOOLS = [
-  create,
-  listTemplates,
-  build,
-  dev,
-  start,
-  preview,
-  getTemplateSource,
-  manifestValidate,
-  inspect,
-  sourceInspect,
-  listExtensions,
-  logs,
-  evalTool,
-  storage,
-  reload,
-  open,
-  domInspect,
-  publish,
-  wait,
-  addFeature,
-  login,
-  whoami,
-  logout,
-  installBrowser,
-  listBrowsers,
-  detectBrowsers,
-];
 
 describe("MCP Server tool registry", () => {
-  it("has exactly 26 tools", () => {
-    expect(ALL_TOOLS.length).toBe(26);
+  it("has exactly 28 tools", () => {
+    expect(ALL_TOOLS.length).toBe(28);
   });
 
   for (const tool of ALL_TOOLS) {

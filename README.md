@@ -7,7 +7,7 @@
 
 # @extension.dev/mcp [![Version][npm-version-image]][npm-version-url] [![Downloads][npm-downloads-image]][npm-downloads-url] [![Discord][discord-image]][discord-url]
 
-> Give your AI agent hands for browser extension development. 27 MCP tools that scaffold, run, inspect, debug, and publish cross-browser extensions.
+> Give your AI agent hands for browser extension development. 28 MCP tools that scaffold, run, inspect, debug, and publish cross-browser extensions.
 
 <img alt="Logo" align="right" src="https://avatars.githubusercontent.com/u/106714027" width="20%" />
 
@@ -89,6 +89,7 @@ cp node_modules/@extension.dev/mcp/claude/commands/*.md ~/my-extension/.claude/c
 | run | `extension_start` | Build + preview |
 | run | `extension_preview` | Preview the production build |
 | run | `extension_wait` | Poll the dev-server ready contract |
+| run | `extension_stop` | Stop a dev/start/preview session (server + browser) |
 | see | `extension_manifest_validate` | Cross-browser manifest validation |
 | see | `extension_inspect` | Build output analysis |
 | see | `extension_source_inspect` | Live DOM inspection (CDP) |
@@ -108,11 +109,21 @@ cp node_modules/@extension.dev/mcp/claude/commands/*.md ~/my-extension/.claude/c
 | platform | `extension_publish` | Publish a shareable preview to extension.dev |
 | platform | `extension_release_promote` | Promote a build to a release channel, headless |
 
-Browser-launching tools (`dev`, `start`, `preview`) shell out to the `extension` CLI; everything else runs in-process.
+Browser-launching tools (`dev`, `start`, `preview`) shell out to the `extension` CLI — the project's own `node_modules/.bin/extension` when present, otherwise `npx extension@<pinned>` at the version this package is verified against; everything else runs in-process.
 
 ## From preview to store
 
 The four platform tools connect agents to [extension.dev](https://extension.dev): `extension_login` runs a GitHub device-code flow and stores a project-scoped token locally (never returned to the agent), `extension_publish` turns a build into a shareable preview URL, and `extension_release_promote` promotes a tested build to a release channel from CI or an agent session, no browser required. To automate store submission itself (Chrome Web Store, Edge Add-ons, Firefox AMO), pair with [`@extension.dev/deploy`](https://www.npmjs.com/package/@extension.dev/deploy).
+
+## The extension.dev stack
+
+| Package | Use it to |
+| --- | --- |
+| [`@extension.dev/skill`](https://www.npmjs.com/package/@extension.dev/skill) | Teach AI agents the judgment half: cross-browser rules, gotchas, playbooks |
+| [`@extension.dev/deploy`](https://www.npmjs.com/package/@extension.dev/deploy) | Ship to Chrome, Firefox, and Edge stores from CI |
+| [`@extension.dev/core`](https://www.npmjs.com/package/@extension.dev/core) | Authenticate and publish to the extension.dev platform |
+
+All of it rides on [Extension.js](https://github.com/extension-js/extension.js), the open-source cross-browser extension framework.
 
 ## Community
 
