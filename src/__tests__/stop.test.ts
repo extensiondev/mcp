@@ -142,7 +142,8 @@ describe("resolveExtensionInvocation", () => {
     const { command, prefixArgs } = resolveExtensionInvocation();
     expect(command).toBe("npx");
     expect(prefixArgs).toHaveLength(1);
-    expect(prefixArgs[0]).toMatch(/^extension@\d+\.\d+\.\d+$/);
+    // The vendored engine may be a stable or a prerelease (CI pins canary).
+    expect(prefixArgs[0]).toMatch(/^extension@\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/);
   });
 
   it("prefers the project-local extension bin when present", () => {

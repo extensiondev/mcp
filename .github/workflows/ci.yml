@@ -32,6 +32,16 @@ jobs:
       - name: Install dependencies
         run: pnpm install --no-frozen-lockfile
 
+      # Build/test against the engine that will become the next stable, not
+      # the vendored floor: extension_build runs extension-develop in-process,
+      # so only a canary-pinned CI catches engine regressions before release
+      # (same rule as the corpus walk's EXTENSION_MCP_CLI_VERSION pin).
+      - name: Pin engine to latest canary
+        run: |
+          CANARY=$(npm view extension-develop@canary version)
+          echo "extension-develop canary: $CANARY"
+          pnpm add "extension-develop@$CANARY"
+
       - name: Build
         run: pnpm compile
 
