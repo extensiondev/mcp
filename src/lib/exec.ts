@@ -29,6 +29,17 @@ const PINNED_CLI_VERSION = String(
   dependencies["extension-develop"] ?? "latest",
 ).replace(/^[\^~]/, "");
 
+// EXTENSION_MCP_CLI_VERSION overrides the vendored pin. This is the harness
+// escape hatch for validating an unreleased engine (e.g. the latest canary)
+// through the same MCP surface real agents use; a project-local CLI still
+// wins per the lockstep invariant.
+function pinnedCliVersion(): string {
+  const override = String(
+    process.env.EXTENSION_MCP_CLI_VERSION || "",
+  ).trim();
+  return override || PINNED_CLI_VERSION;
+}
+
 /**
  * Resolve how to invoke the `extension` CLI for a given project.
  *
@@ -58,7 +69,7 @@ export function resolveExtensionInvocation(projectDir?: string): {
       // no project-local CLI — fall through to the pinned npx path
     }
   }
-  return { command: "npx", prefixArgs: [`extension@${PINNED_CLI_VERSION}`] };
+  return { command: "npx", prefixArgs: [`extension@${pinnedCliVersion()}`] };
 }
 
 // Run `extension <args>` to completion and capture its output. Used by the
