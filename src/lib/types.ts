@@ -66,7 +66,7 @@ export interface ProcessInfo {
   browser: string;
   port?: number;
   projectPath: string;
-  command: "dev" | "start";
+  command: "dev" | "start" | "preview";
 }
 
 export type BrowserType =
