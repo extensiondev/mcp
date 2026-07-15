@@ -1,8 +1,5 @@
-import fs from "node:fs";
-import path from "node:path";
-import net from "node:net";
-import type { ReadyContract } from "../lib/types";
 import { CDPClient } from "../lib/cdp";
+import { resolveCdpPort, CDP_PORT_MISSING_HINT } from "../lib/cdp-port";
 
 export const schema = {
   name: "extension_source_inspect",
@@ -63,45 +60,6 @@ export const schema = {
   },
 };
 
-async function findCdpPort(
-  projectPath: string,
-  browser: string,
-): Promise<number | null> {
-  const readyPath = path.resolve(
-    projectPath,
-    "dist",
-    "extension-js",
-    browser,
-    "ready.json",
-  );
-  try {
-    const contract = JSON.parse(fs.readFileSync(readyPath, "utf8")) as ReadyContract & {
-      cdpPort?: number;
-    };
-    // cdpPort is the browser's real --remote-debugging-port (filled in post-launch).
-    // `port` is the rspack dev-server port — NOT CDP — so never use it here.
-    if (typeof contract.cdpPort === "number") return contract.cdpPort;
-  } catch {
-    /* ignore */
-  }
-
-  const defaultPort = 9222;
-  return new Promise((resolve) => {
-    const socket = new net.Socket();
-    socket.setTimeout(1000);
-    socket.on("connect", () => {
-      socket.destroy();
-      resolve(defaultPort);
-    });
-    socket.on("error", () => resolve(null));
-    socket.on("timeout", () => {
-      socket.destroy();
-      resolve(null);
-    });
-    socket.connect(defaultPort, "127.0.0.1");
-  });
-}
-
 export async function handler(args: {
   projectPath: string;
   url?: string;
@@ -123,14 +81,18 @@ export async function handler(args: {
     });
   }
 
-  const cdpPort = await findCdpPort(args.projectPath, browser);
-  if (!cdpPort) {
+  // cdpPort is the browser's real --remote-debugging-port (stamped by the
+  // launcher post-launch; resolveCdpPort polls for it). The contract's `port`
+  // is the rspack dev-server port — NOT CDP — so never use it here.
+  const resolved = await resolveCdpPort(args.projectPath, browser);
+  if (!resolved) {
     return JSON.stringify({
       error:
         "No active dev session found. Cannot connect to Chrome DevTools Protocol.",
-      hint: "Start a dev session first with extension_dev, then use extension_wait to confirm it is ready.",
+      hint: `Start a dev session first with extension_dev, then use extension_wait to confirm it is ready. ${CDP_PORT_MISSING_HINT}`,
     });
   }
+  const cdpPort = resolved.port;
 
   const cdp = new CDPClient();
 
