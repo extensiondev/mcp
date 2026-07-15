@@ -44,6 +44,10 @@ import {
 import * as installBrowser from "./tools/install-browser";
 import * as listBrowsers from "./tools/list-browsers";
 import * as detectBrowsers from "./tools/detect-browsers";
+import {
+  inputValidationError,
+  validateToolInput,
+} from "./lib/validate-input";
 
 interface ToolModule {
   schema: {
@@ -127,6 +131,22 @@ export async function startServer(): Promise<void> {
               error: `Unknown tool: ${name}`,
               availableTools: tools.map((t) => t.schema.name),
             }),
+          },
+        ],
+        isError: true,
+      };
+    }
+
+    const issues = validateToolInput(
+      tool.schema.inputSchema,
+      (args ?? {}) as Record<string, unknown>,
+    );
+    if (issues.length) {
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: inputValidationError(name, issues),
           },
         ],
         isError: true,
