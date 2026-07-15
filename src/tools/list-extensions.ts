@@ -1,8 +1,5 @@
-import fs from "node:fs";
-import path from "node:path";
-import net from "node:net";
-import type { ReadyContract } from "../lib/types";
 import { CDPClient } from "../lib/cdp";
+import { resolveCdpPort, CDP_PORT_MISSING_HINT } from "../lib/cdp-port";
 
 export const schema = {
   name: "extension_list_extensions",
@@ -44,21 +41,38 @@ export async function handler(args: {
     });
   }
 
-  const cdpPort = await findCdpPort(args.projectPath, browser);
-  if (!cdpPort) {
+  const resolved = await resolveCdpPort(args.projectPath, browser);
+  if (!resolved) {
     return JSON.stringify({
       error:
         "No active dev session found. Cannot connect to Chrome DevTools Protocol.",
-      hint: "Start a dev session first with extension_dev, then use extension_wait to confirm it is ready.",
+      hint: `Start a dev session first with extension_dev, then use extension_wait to confirm it is ready. ${CDP_PORT_MISSING_HINT}`,
     });
   }
+  const cdpPort = resolved.port;
 
   const cdp = new CDPClient();
   try {
-    const browserWsUrl = await CDPClient.discoverBrowserWsUrl(cdpPort);
-    await cdp.connect(browserWsUrl);
-
-    const targets = await cdp.getTargets();
+    // The contract's port is stamped post-launch (resolveCdpPort waits for
+    // it), but the socket itself can still be a beat behind — give the dial
+    // a short grace window instead of bouncing the agent into retry lore.
+    let targets: Awaited<ReturnType<CDPClient["getTargets"]>> | null = null;
+    let lastError: unknown = null;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        const browserWsUrl = await CDPClient.discoverBrowserWsUrl(cdpPort);
+        await cdp.connect(browserWsUrl);
+        targets = await cdp.getTargets();
+        break;
+      } catch (error) {
+        lastError = error;
+        cdp.disconnect();
+        if (attempt < 2) {
+          await new Promise((resolve) => setTimeout(resolve, 800));
+        }
+      }
+    }
+    if (!targets) throw lastError;
 
     // Group every chrome-extension:// target by its extension id.
     const byId = new Map<string, Array<{ type: string; url: string }>>();
@@ -118,39 +132,3 @@ export async function handler(args: {
   }
 }
 
-async function findCdpPort(
-  projectPath: string,
-  browser: string,
-): Promise<number | null> {
-  const readyPath = path.resolve(
-    projectPath,
-    "dist",
-    "extension-js",
-    browser,
-    "ready.json",
-  );
-  try {
-    const contract = JSON.parse(fs.readFileSync(readyPath, "utf8")) as ReadyContract & {
-      cdpPort?: number;
-    };
-    if (typeof contract.cdpPort === "number") return contract.cdpPort;
-  } catch {
-    // No ready.json
-  }
-
-  const defaultPort = 9222;
-  return new Promise((resolve) => {
-    const socket = new net.Socket();
-    socket.setTimeout(1000);
-    socket.on("connect", () => {
-      socket.destroy();
-      resolve(defaultPort);
-    });
-    socket.on("error", () => resolve(null));
-    socket.on("timeout", () => {
-      socket.destroy();
-      resolve(null);
-    });
-    socket.connect(defaultPort, "127.0.0.1");
-  });
-}
