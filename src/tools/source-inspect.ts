@@ -1,5 +1,6 @@
 import { CDPClient } from "../lib/cdp";
 import { resolveCdpPort, CDP_PORT_MISSING_HINT } from "../lib/cdp-port";
+import { resolveSessionBrowser } from "../lib/session-browser";
 
 export const schema = {
   name: "extension_source_inspect",
@@ -42,7 +43,8 @@ export const schema = {
       },
       browser: {
         type: "string",
-        default: "chrome",
+        description:
+          "Browser session to target. Defaults to the active dev session's browser for this project.",
       },
       maxBytes: {
         type: "number",
@@ -69,15 +71,21 @@ export async function handler(args: {
   maxBytes?: number;
   deepDom?: boolean;
 }): Promise<string> {
-  const browser = args.browser ?? "chrome";
+  const { browser } = resolveSessionBrowser(
+    args.projectPath,
+    args.browser,
+    "chrome",
+  );
   const include = new Set(args.include ?? ["summary", "meta", "console"]);
   const maxBytes = args.maxBytes ?? 262_144;
-  const isChromium = ["chrome", "edge", "chromium-based"].includes(browser);
+  const isChromium = ["chrome", "chromium", "edge", "chromium-based"].includes(
+    browser,
+  );
 
   if (!isChromium) {
     return JSON.stringify({
       error: `Source inspection for ${browser} uses RDP (Remote Debug Protocol). Currently only Chromium CDP is supported.`,
-      hint: "Use --browser=chrome for source inspection, or use the CLI: npx extension dev --source",
+      hint: 'Pass browser: "chrome" (against a Chromium-family dev session).',
     });
   }
 

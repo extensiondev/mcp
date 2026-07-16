@@ -1,9 +1,10 @@
 import { runActVerb, type ActArgs } from "../lib/act";
+import { resolveSessionBrowser } from "../lib/session-browser";
 
 export const schema = {
   name: "extension_open",
   description:
-    "Open an extension surface or replay an event in a running session. 'popup'/'options'/'sidebar' open UI surfaces. 'action' triggers the toolbar action: opens the action's popup, or (no popup) replays chrome.action.onClicked. 'command' replays a chrome.commands.onCommand keyboard shortcut (pass `name`). NOTE: action/command replay invokes your listener WITHOUT a user gesture, so the gesture-derived activeTab grant does not apply (the result includes gesture:false and a warning when activeTab is declared). Requires --allow-control. Wraps `extension open`.",
+    "Open an extension surface or replay an event in a running session. 'popup'/'options'/'sidebar' open UI surfaces. 'action' triggers the toolbar action: opens the action's popup, or (no popup) replays chrome.action.onClicked. 'command' replays a chrome.commands.onCommand keyboard shortcut (pass `name`). NOTE: action/command replay invokes your listener WITHOUT a user gesture, so the gesture-derived activeTab grant does not apply (the result includes gesture:false and a warning when activeTab is declared). Requires the dev session to be started with allowControl: true (extension_dev). Wraps `extension open`.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -20,7 +21,11 @@ export const schema = {
         type: "string",
         description: "For surface 'command': the chrome.commands name to trigger.",
       },
-      browser: { type: "string", default: "chromium" },
+      browser: {
+        type: "string",
+        description:
+          "Browser session to target. Defaults to the active dev session's browser for this project.",
+      },
       timeout: { type: "number", description: "Command timeout in ms (default 5000)" },
     },
     required: ["projectPath", "surface"],
@@ -30,9 +35,10 @@ export const schema = {
 export async function handler(
   args: ActArgs & { surface: string; name?: string },
 ): Promise<string> {
+  const { browser } = resolveSessionBrowser(args.projectPath, args.browser);
   const cli = ["open", args.surface, args.projectPath];
   if (args.surface === "command" && args.name) cli.push("--name", args.name);
-  if (args.browser) cli.push("--browser", args.browser);
+  cli.push("--browser", browser);
   if (args.timeout != null) cli.push("--timeout", String(args.timeout));
   return runActVerb(cli, args.projectPath, args.timeout);
 }

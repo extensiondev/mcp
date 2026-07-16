@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { ReadyContract } from "../lib/types";
+import { resolveSessionBrowser } from "../lib/session-browser";
 
 export const schema = {
   name: "extension_wait",
@@ -15,8 +16,8 @@ export const schema = {
       },
       browser: {
         type: "string",
-        default: "chrome",
-        description: "Browser to check readiness for",
+        description:
+          "Browser to check readiness for. Defaults to the active dev session's browser for this project.",
       },
       timeout: {
         type: "number",
@@ -33,7 +34,11 @@ export async function handler(args: {
   browser?: string;
   timeout?: number;
 }): Promise<string> {
-  const browser = args.browser ?? "chrome";
+  const { browser } = resolveSessionBrowser(
+    args.projectPath,
+    args.browser,
+    "chrome",
+  );
   const timeout = args.timeout ?? 60_000;
   const readyPath = path.resolve(
     args.projectPath,

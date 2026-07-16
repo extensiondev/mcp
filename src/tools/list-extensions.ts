@@ -1,5 +1,6 @@
 import { CDPClient } from "../lib/cdp";
 import { resolveCdpPort, CDP_PORT_MISSING_HINT } from "../lib/cdp-port";
+import { resolveSessionBrowser } from "../lib/session-browser";
 
 export const schema = {
   name: "extension_list_extensions",
@@ -13,7 +14,11 @@ export const schema = {
         description:
           "Path to the extension project root (must have an active dev session)",
       },
-      browser: { type: "string", default: "chrome" },
+      browser: {
+        type: "string",
+        description:
+          "Browser session to target. Defaults to the active dev session's browser for this project.",
+      },
     },
     required: ["projectPath"],
   },
@@ -31,13 +36,19 @@ export async function handler(args: {
   projectPath: string;
   browser?: string;
 }): Promise<string> {
-  const browser = args.browser ?? "chrome";
-  const isChromium = ["chrome", "edge", "chromium-based"].includes(browser);
+  const { browser } = resolveSessionBrowser(
+    args.projectPath,
+    args.browser,
+    "chrome",
+  );
+  const isChromium = ["chrome", "chromium", "edge", "chromium-based"].includes(
+    browser,
+  );
 
   if (!isChromium) {
     return JSON.stringify({
       error: `Listing extensions for ${browser} uses RDP (Remote Debug Protocol). Currently only Chromium CDP is supported.`,
-      hint: "Use --browser=chrome.",
+      hint: 'Pass browser: "chrome" (against a Chromium-family dev session).',
     });
   }
 

@@ -1,5 +1,47 @@
 # Changelog
 
+## 4.2.2
+
+Agent-ergonomics release from the 4.2.1 fresh-eyes walk: the two changes
+that removed nearly all friction a real MCP client hit.
+
+- Session-aware browser default. Tools that target a running session
+  (`extension_logs`, `extension_reload`, `extension_eval`,
+  `extension_storage`, `extension_open`, `extension_dom_inspect`,
+  `extension_list_extensions`, `extension_source_inspect`,
+  `extension_wait`) no longer hard-default `browser` to a constant that
+  could disagree with the session `extension_dev` actually started.
+  Omitting `browser` now resolves to the active session's browser:
+  in-memory registry first, then the freshest live `ready.json` contract
+  on disk (dead pids ignored), then the old constant. Starting a session
+  with `browser: "chrome"` and calling `extension_logs` with no args now
+  just works instead of erroring about a missing chromium channel.
+- Error hints speak the MCP tool surface, not the CLI. Act-verb error
+  prose is rewritten before returning: `` `extension dev
+  --browser=chromium --allow-control` `` becomes `extension_dev with
+  { browser: "chromium", allowControl: true }`, and stray
+  `--allow-control` / `--allow-eval` / `--browser=<x>` mentions become
+  their tool-argument names. Result data is never touched — only
+  error/hint prose. Tool descriptions now name `allowControl` /
+  `allowEval` directly, so agents no longer discover the gates by
+  fuzzing the schema.
+- The no-channel error now names the session that IS running ("Active
+  session browser(s) for this project: chrome — pass that as `browser`"),
+  so an agent retargets instead of spawning a second, conflicting
+  session. Same for the `extension_logs` follow miss.
+- `extension_list_extensions` / `extension_source_inspect` accept
+  `browser: "chromium"` (the default dev target) instead of rejecting it
+  as non-Chromium.
+- Tests: session-browser resolution + hint-translation suite (137 total).
+
+## 4.2.1
+
+`extension_build` failures no longer kill the MCP server process
+(fatal-error path returned a rejected promise the server didn't catch).
+CDP-dependent tools resolve the debug port from the session's ready
+contract instead of assuming 9222 (plus a test-only engine pin
+override, `EXTENSION_MCP_CLI_VERSION`).
+
 ## 4.2.0
 
 Session lifecycle + determinism release. Tool count 27 -> 28.

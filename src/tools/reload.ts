@@ -1,9 +1,10 @@
 import { runActVerb, commonFlags, type ActArgs } from "../lib/act";
+import { resolveSessionBrowser } from "../lib/session-browser";
 
 export const schema = {
   name: "extension_reload",
   description:
-    "Reload a running extension (background) or a tab. Requires the dev session to be started with --allow-control. Wraps `extension reload`.",
+    "Reload a running extension (background) or a tab. Requires the dev session to be started with allowControl: true (extension_dev). Wraps `extension reload`.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -17,7 +18,11 @@ export const schema = {
         default: "background",
       },
       tab: { type: "number", description: "For content/page: a specific tab id" },
-      browser: { type: "string", default: "chromium" },
+      browser: {
+        type: "string",
+        description:
+          "Browser session to target. Defaults to the active dev session's browser for this project.",
+      },
       timeout: { type: "number", description: "Command timeout in ms (default 5000)" },
     },
     required: ["projectPath"],
@@ -25,8 +30,9 @@ export const schema = {
 };
 
 export async function handler(args: ActArgs): Promise<string> {
+  const { browser } = resolveSessionBrowser(args.projectPath, args.browser);
   return runActVerb(
-    ["reload", args.projectPath, ...commonFlags(args)],
+    ["reload", args.projectPath, ...commonFlags({ ...args, browser })],
     args.projectPath,
     args.timeout,
   );

@@ -1,9 +1,10 @@
 import { runActVerb, commonFlags, type ActArgs } from "../lib/act";
+import { resolveSessionBrowser } from "../lib/session-browser";
 
 export const schema = {
   name: "extension_storage",
   description:
-    "Read or write chrome.storage in a running extension. Requires the dev session to be started with --allow-control. Wraps `extension storage get|set`.",
+    "Read or write chrome.storage in a running extension. Requires the dev session to be started with allowControl: true (extension_dev). Wraps `extension storage get|set`.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -30,7 +31,11 @@ export const schema = {
         enum: ["background", "popup", "options", "sidebar", "content"],
         default: "background",
       },
-      browser: { type: "string", default: "chromium" },
+      browser: {
+        type: "string",
+        description:
+          "Browser session to target. Defaults to the active dev session's browser for this project.",
+      },
       timeout: { type: "number", description: "Command timeout in ms (default 5000)" },
     },
     required: ["projectPath", "action"],
@@ -45,6 +50,7 @@ export async function handler(
     value?: unknown;
   },
 ): Promise<string> {
+  const { browser } = resolveSessionBrowser(args.projectPath, args.browser);
   const cli = ["storage", args.action, args.projectPath];
   if (args.area) cli.push("--area", args.area);
   if (args.key) cli.push("--key", args.key);
@@ -58,7 +64,7 @@ export async function handler(
     cli.push("--value", JSON.stringify(args.value));
   }
   if (args.context) cli.push("--context", args.context);
-  if (args.browser) cli.push("--browser", args.browser);
+  cli.push("--browser", browser);
   if (args.timeout != null) cli.push("--timeout", String(args.timeout));
   return runActVerb(cli, args.projectPath, args.timeout);
 }
