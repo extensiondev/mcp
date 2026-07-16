@@ -96,7 +96,7 @@ cp node_modules/@extension.dev/mcp/claude/commands/*.md ~/my-extension/.claude/c
 | see | `extension_dom_inspect` | CDP-free DOM snapshot |
 | see | `extension_list_extensions` | List loaded extensions (Chromium) |
 | see | `extension_logs` | Stream logs from every context |
-| act | `extension_eval` | Evaluate in a context (`--allow-eval`) |
+| act | `extension_eval` | Evaluate in a context (needs `allowEval: true` on `extension_dev`) |
 | act | `extension_storage` | Read/write `chrome.storage` |
 | act | `extension_reload` | Reload extension or tab |
 | act | `extension_open` | Open a surface / trigger `action`, `command` |

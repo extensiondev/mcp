@@ -27,7 +27,7 @@ export async function handler(args: { browser: string }): Promise<string> {
       status: "installed",
       browser: args.browser,
       duration: Date.now() - start,
-      hint: `Browser "${args.browser}" is now available. Use extension_dev or extension_start with --browser=${args.browser}.`,
+      hint: `Browser "${args.browser}" is now available. Use extension_dev or extension_start with browser: "${args.browser}".`,
     });
   } catch (err) {
     return JSON.stringify({

@@ -8,8 +8,9 @@ import WebSocket from "ws";
 // CLI verb (programs/extension/commands/logs.ts). The filter semantics below
 // MUST stay in lockstep with that command — same level ordering, same
 // context/since/signals-only rules — so an agent and a human see the same
-// stream. Default `browser` is `chromium` to match the CLI and the folder a
-// default `extension dev` actually writes (dist/extension-js/chromium/).
+// stream. `browser` defaults to the active session's browser for the project
+// (see lib/session-browser), falling back to chromium — the folder a default
+// `extension dev` writes (dist/extension-js/chromium/).
 //
 // Bounded by design: a one-shot returns the most recent matching lines (so it
 // never floods the agent's context); `follow` collects from the live control
@@ -24,6 +25,10 @@ import {
   MAX_FOLLOW_MS,
 } from "./logs-constants";
 import { makeFilter, type LogsArgs } from "./logs-filter";
+import {
+  resolveSessionBrowser,
+  knownSessionBrowsers,
+} from "../lib/session-browser";
 
 export { schema } from "./logs-schema";
 
@@ -141,9 +146,15 @@ async function readFromStream(
 ): Promise<string> {
   const ready = readReadyContract(args.projectPath, browser);
   if (!ready) {
+    const running = knownSessionBrowsers(args.projectPath).filter(
+      (b) => b !== browser,
+    );
+    const retarget = running.length
+      ? `An active session exists for browser(s): ${running.join(", ")} — pass that as \`browser\`. Otherwise run`
+      : "Run";
     return JSON.stringify({
       error: `No active control channel found for ${browser}.`,
-      hint: `Run extension_dev (browser: ${browser}) and wait for it to be ready, then retry. For past logs without a live channel, call without follow.`,
+      hint: `${retarget} extension_dev (browser: ${browser}) and wait for it to be ready, then retry. For past logs without a live channel, call without follow.`,
     });
   }
 
@@ -235,7 +246,7 @@ async function readFromStream(
 }
 
 export async function handler(args: LogsArgs): Promise<string> {
-  const browser = args.browser ?? "chromium";
+  const { browser } = resolveSessionBrowser(args.projectPath, args.browser);
   const limit = args.limit && args.limit > 0 ? args.limit : DEFAULT_LIMIT;
 
   if (args.follow) {

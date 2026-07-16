@@ -1,9 +1,10 @@
 import { runActVerb, type ActArgs } from "../lib/act";
+import { resolveSessionBrowser } from "../lib/session-browser";
 
 export const schema = {
   name: "extension_dom_inspect",
   description:
-    "Inspect a page/content-script DOM via the agent bridge (CDP-free, localhost). Returns a structured snapshot (counts, extension roots, open shadow roots, optional capped HTML). Requires --allow-control. For closed shadow roots or deep CDP inspection use extension_source_inspect. Wraps `extension inspect`.",
+    "Inspect a page/content-script DOM via the agent bridge (CDP-free, localhost). Returns a structured snapshot (counts, extension roots, open shadow roots, optional capped HTML). Requires the dev session to be started with allowControl: true (extension_dev). For closed shadow roots or deep CDP inspection use extension_source_inspect. Wraps `extension inspect`.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -30,7 +31,11 @@ export const schema = {
         type: "number",
         description: "Also include the last N console lines for the target (DOM + recent console in one call)",
       },
-      browser: { type: "string", default: "chromium" },
+      browser: {
+        type: "string",
+        description:
+          "Browser session to target. Defaults to the active dev session's browser for this project.",
+      },
       timeout: { type: "number", description: "Command timeout in ms (default 5000)" },
     },
     required: ["projectPath"],
@@ -59,7 +64,7 @@ export async function handler(
   if (args.include?.length) cli.push("--include", args.include.join(","));
   if (args.maxBytes != null) cli.push("--max-bytes", String(args.maxBytes));
   if (args.withConsole != null) cli.push("--with-console", String(args.withConsole));
-  if (args.browser) cli.push("--browser", args.browser);
+  cli.push("--browser", resolveSessionBrowser(args.projectPath, args.browser).browser);
   if (args.timeout != null) cli.push("--timeout", String(args.timeout));
   return runActVerb(cli, args.projectPath, args.timeout);
 }
