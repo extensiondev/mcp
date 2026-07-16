@@ -7,7 +7,7 @@
 
 # @extension.dev/mcp [![Version][npm-version-image]][npm-version-url] [![Downloads][npm-downloads-image]][npm-downloads-url] [![Discord][discord-image]][discord-url]
 
-> Give your AI agent hands for browser extension development. 28 MCP tools that scaffold, run, inspect, debug, and publish cross-browser extensions.
+> Give your AI agent hands for browser extension development. 29 MCP tools that scaffold, run, inspect, debug, and publish cross-browser extensions.
 
 <img alt="Logo" align="right" src="https://avatars.githubusercontent.com/u/106714027" width="20%" />
 
@@ -96,6 +96,7 @@ cp node_modules/@extension.dev/mcp/claude/commands/*.md ~/my-extension/.claude/c
 | see | `extension_dom_inspect` | CDP-free DOM snapshot |
 | see | `extension_list_extensions` | List loaded extensions (Chromium) |
 | see | `extension_logs` | Stream logs from every context |
+| see | `extension_doctor` | Diagnose the dev session leg by leg (ready contract, ports, token, executor, browser) |
 | act | `extension_eval` | Evaluate in a context (needs `allowEval: true` on `extension_dev`) |
 | act | `extension_storage` | Read/write `chrome.storage` |
 | act | `extension_reload` | Reload extension or tab |

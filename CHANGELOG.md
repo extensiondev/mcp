@@ -1,5 +1,36 @@
 # Changelog
 
+## 4.3.0
+
+Diagnosis + version-skew release: a 29th tool that turns "an act tool
+errored, now what" into one call, and a CI that tests the engine
+versions users actually run.
+
+- New tool `extension_doctor`. Wraps `extension doctor --output json`:
+  walks the dev session's control-channel legs (ready contract,
+  dev-server process, control-port agreement, control channel, eval
+  token, executor, browser liveness) and returns one
+  `{check, status, detail, remediation?}` entry per leg in dependency
+  order. Detail and remediation prose are rewritten to MCP-speak like
+  every other act-verb error. Engines that predate the `doctor` verb get
+  a clean CliError with a hint instead of a crash.
+- Browser-family classification now has ONE copy
+  (`src/lib/browser-family.ts`). Fixes real drift: `browsers:
+  ["chromium"]` ran ZERO family checks in `extension_manifest_validate`
+  (an MV2 manifest validated "fine"), and `chromium` was still missing
+  from the `extension_build` / `extension_dev` / `extension_preview` /
+  `extension_start` schema enums.
+- CI version-skew matrix: every push builds and tests against the
+  engine canary, the latest stable, and the vendored floor (deduped),
+  plus a nightly run that exercises the real `npx extension@<pin>` path
+  end-to-end (`RUN_CLI_SMOKE=1`). A red canary cell now surfaces engine
+  regressions the day they publish instead of on the next unrelated PR.
+- Legacy ready-contract compatibility suite: fixtures pin the contract
+  shapes older engines wrote (no `cdpPort`, no `pid`), so a 4.0.6-era
+  session stays visible to browser defaulting and `resolveCdpPort`
+  refuses to adopt an unrelated developer Chrome instead of probing a
+  bogus port.
+
 ## 4.2.2
 
 Agent-ergonomics release from the 4.2.1 fresh-eyes walk: the two changes
