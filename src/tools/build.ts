@@ -13,7 +13,7 @@ export const schema = {
       },
       browser: {
         type: "string",
-        enum: ["chrome", "edge", "firefox", "chromium-based", "gecko-based"],
+        enum: ["chrome", "chromium", "edge", "firefox", "chromium-based", "gecko-based"],
         default: "chrome",
         description: "Target browser",
       },
