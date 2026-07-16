@@ -19,9 +19,8 @@ export const schema = {
       },
       browser: {
         type: "string",
-        default: "chromium",
         description:
-          "Which dist/extension-js/<browser>/ to read. Defaults to chromium (the default dev target).",
+          "Which dist/extension-js/<browser>/ to read. Defaults to the active dev session's browser for this project (falls back to chromium).",
       },
       level: {
         type: "string",
