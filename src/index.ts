@@ -45,6 +45,7 @@ import {
 import * as installBrowser from "./tools/install-browser";
 import * as listBrowsers from "./tools/list-browsers";
 import * as detectBrowsers from "./tools/detect-browsers";
+import * as doctor from "./tools/doctor";
 import {
   inputValidationError,
   validateToolInput,
@@ -91,6 +92,7 @@ export const tools: ToolModule[] = [
   installBrowser,
   listBrowsers,
   detectBrowsers,
+  doctor,
 ];
 
 const toolMap = new Map<string, ToolModule>();

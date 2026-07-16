@@ -1,4 +1,5 @@
 import { CDPClient } from "../lib/cdp";
+import { isChromiumFamily } from "../lib/browser-family";
 import { resolveCdpPort, CDP_PORT_MISSING_HINT } from "../lib/cdp-port";
 import { resolveSessionBrowser } from "../lib/session-browser";
 
@@ -41,11 +42,7 @@ export async function handler(args: {
     args.browser,
     "chrome",
   );
-  const isChromium = ["chrome", "chromium", "edge", "chromium-based"].includes(
-    browser,
-  );
-
-  if (!isChromium) {
+  if (!isChromiumFamily(browser)) {
     return JSON.stringify({
       error: `Listing extensions for ${browser} uses RDP (Remote Debug Protocol). Currently only Chromium CDP is supported.`,
       hint: 'Pass browser: "chrome" (against a Chromium-family dev session).',

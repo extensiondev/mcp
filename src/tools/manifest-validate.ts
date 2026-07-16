@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { filterKeysForThisBrowser } from "browser-extension-manifest-fields";
+import { isChromiumFamily, isGeckoFamily } from "../lib/browser-family";
 import { listTemplates } from "../lib/templates-cache";
 
 export const schema = {
@@ -85,8 +86,8 @@ export async function handler(args: {
   }
 
   for (const browser of browsers) {
-    const isChromium = ["chrome", "edge", "chromium-based"].includes(browser);
-    const isFirefox = ["firefox", "gecko-based"].includes(browser);
+    const isChromium = isChromiumFamily(browser);
+    const isFirefox = isGeckoFamily(browser);
     // Effective manifest for this specific target family.
     const effective = filterKeysForThisBrowser(manifest, browser);
     const issues: string[] = [];

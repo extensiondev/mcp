@@ -6,13 +6,59 @@ on:
       - main
   pull_request:
   workflow_dispatch:
+  # Engine canaries move without MCP commits — without a nightly run, a skew
+  # regression only surfaces on the next unrelated PR.
+  schedule:
+    - cron: '0 6 * * *'
 
 permissions:
   contents: read
 
 jobs:
-  verify:
+  # Version-skew matrix: extension_build runs extension-develop in-process and
+  # the act tools spawn the pinned CLI, so one engine version is one blind
+  # spot. Cells: canary (the next stable), latest stable (what users get
+  # today), and the vendored floor (the npx-pin fallback for projects with no
+  # local install). Deduped when they coincide right after a release. Every
+  # cell is required — a red canary cell is this workflow doing its job.
+  engines:
     runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set.outputs.matrix }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve engine versions
+        id: set
+        run: |
+          CANARY=$(npm view extension-develop@canary version)
+          STABLE=$(npm view extension-develop version)
+          FLOOR=$(node -p "require('./package.json').dependencies['extension-develop'].replace(/^[~^]/,'')")
+          echo "canary=$CANARY stable=$STABLE floor=$FLOOR"
+          node -e '
+            const cells = [
+              ["canary", process.argv[1]],
+              ["stable", process.argv[2]],
+              ["floor", process.argv[3]],
+            ];
+            const seen = new Set();
+            const include = [];
+            for (const [name, version] of cells) {
+              if (seen.has(version)) continue;
+              seen.add(version);
+              include.push({name, version});
+            }
+            console.log("matrix=" + JSON.stringify({include}));
+          ' "$CANARY" "$STABLE" "$FLOOR" >> "$GITHUB_OUTPUT"
+
+  verify:
+    needs: engines
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.engines.outputs.matrix) }}
+    name: verify (${{ matrix.name }})
 
     steps:
       - name: Checkout
@@ -32,18 +78,16 @@ jobs:
       - name: Install dependencies
         run: pnpm install --no-frozen-lockfile
 
-      # Build/test against the engine that will become the next stable, not
-      # the vendored floor: extension_build runs extension-develop in-process,
-      # so only a canary-pinned CI catches engine regressions before release
-      # (same rule as the corpus walk's EXTENSION_MCP_CLI_VERSION pin).
-      - name: Pin engine to latest canary
-        run: |
-          CANARY=$(npm view extension-develop@canary version)
-          echo "extension-develop canary: $CANARY"
-          pnpm add "extension-develop@$CANARY"
+      - name: Pin engine (${{ matrix.name }} = ${{ matrix.version }})
+        run: pnpm add "extension-develop@${{ matrix.version }}"
 
       - name: Build
         run: pnpm compile
 
       - name: Test
+        env:
+          # The real-CLI smoke exercises the npx pinned path — nightly only,
+          # to keep PR cells fast.
+          RUN_CLI_SMOKE: ${{ github.event_name == 'schedule' && '1' || '' }}
+          EXTENSION_MCP_CLI_VERSION: ${{ matrix.version }}
         run: pnpm test
