@@ -1,5 +1,35 @@
 # Changelog
 
+## 4.4.0
+
+Browser-matrix parity release: the tool surface now mirrors the engine
+CLI flag for flag, and a 30th tool cleans up the managed browser cache.
+
+- New tool `extension_uninstall_browser`. Removes a managed browser
+  binary from the Extension.js cache (or every one with `all: true`).
+  Only touches the managed cache, never system-installed browsers.
+- Full Extension.js browser matrix in `extension_detect_browsers`: all
+  eleven supported browsers (chrome, chromium, edge, brave, opera,
+  vivaldi, yandex, firefox, waterfox, librewolf, safari) are probed,
+  each reported with its engine family and whether the managed
+  installer can provision it.
+- Shared browser-launch flags on `extension_dev`, `extension_start`,
+  and `extension_preview`: `profile` (path, or `"false"` to reuse the
+  default user profile), `startingUrl`, `chromiumBinary` /
+  `geckoBinary` custom binaries, `host` / `publicHost` for Docker and
+  devcontainer splits, and companion `extensions` loaded alongside the
+  project.
+- `extension_build` closes its gaps against the engine CLI:
+  `zipFilename`, `polyfill`, `silent`, and `mode`
+  (development/production/none, also sets NODE_ENV).
+- Engine dependencies bumped to ^4.0.11.
+- The shipped debugging docs are rewritten around the live inspect
+  surface.
+- Release plumbing: npm publishes now carry provenance from a
+  changelog-backed GitHub workflow, the npm README renders the logo at
+  the right width via pack hooks, and the Safari web extension keyword
+  aids npm discovery.
+
 ## 4.3.0
 
 Diagnosis + version-skew release: a 29th tool that turns "an act tool
