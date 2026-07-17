@@ -518,7 +518,7 @@ The `similarTemplates` field lists templates from the catalog with similar surfa
         "type": "array",
         "items": {
           "type": "string",
-          "enum": ["html", "summary", "meta", "dom_snapshot", "console", "tree"]
+          "enum": ["html", "summary", "meta", "dom_snapshot", "console", "extension_roots"]
         },
         "default": ["summary", "meta", "console"],
         "description": "What data to return"
@@ -555,17 +555,17 @@ The `similarTemplates` field lists templates from the catalog with similar surfa
 }
 ```
 
-**Returns:** Structured NDJSON events based on `include` selection:
+**Returns:** One JSON object; keys appear based on `include` selection:
 
-| Event type            | What it contains                                                                           |
-| --------------------- | ------------------------------------------------------------------------------------------ |
-| `page_html`           | Full injected HTML (after content scripts run)                                             |
-| `page_html_summary`   | Compact stats: root/script/style/link counts                                               |
-| `page_meta`           | readyState, viewport dimensions, frame count                                               |
-| `dom_snapshot`        | Structured tree: tag, id, classes, role, text length, child count (max 500 nodes, depth 6) |
-| `console_summary`     | error/warn/info/log/debug counts + top 5 unique messages                                   |
-| `extension_root_tree` | Extension root elements with reinject generations                                          |
-| `selector_probe`      | Per-selector: count + element samples                                                      |
+| Key              | What it contains                                                                           |
+| ---------------- | ------------------------------------------------------------------------------------------ |
+| `html`           | Full injected HTML (after content scripts run), `htmlTruncated` flag when capped           |
+| `summary`        | Compact stats: html length, script/style/link counts, extension root + body child counts   |
+| `meta`           | readyState, viewport dimensions, frame count                                               |
+| `domSnapshot`    | Structured tree: tag, id, classes, role, text length, child count (max 500 nodes, depth 6) |
+| `console`        | error/warn/info/log/debug counts + top 5 unique messages                                   |
+| `extensionRoots` | Extension root elements with reinject generations                                          |
+| `probes`         | Per-selector: count + element samples (when `probe` selectors are passed)                  |
 
 **Implementation:**
 
