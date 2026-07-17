@@ -9,7 +9,7 @@
 
 > Give your AI agent hands for browser extension development. 30 MCP tools that scaffold, run, inspect, debug, and publish cross-browser extensions.
 
-<img alt="Logo" align="right" src="https://media.extension.land/brand/extension-dev/logo-dock.png" width="18.4%" />
+<img alt="Logo" align="right" src="https://media.extension.land/brand/extension-dev/logo-dock.png" width="15.5%" />
 
 ```bash
 claude mcp add extension-dev npx @extension.dev/mcp
