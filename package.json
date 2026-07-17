@@ -2,7 +2,7 @@
   "name": "@extension.dev/mcp",
   "type": "module",
   "version": "4.3.0",
-  "description": "MCP server that lets AI agents (Claude Code, Claude Desktop, Cursor, Copilot, Codex) build, run, inspect, and publish browser extensions. 29 tools for scaffolding, live DOM inspection, log streaming, and store-ready builds across Chrome, Edge, Firefox, Safari, and every Chromium- or Gecko-based browser (Brave, Opera, Vivaldi, Yandex, Waterfox, LibreWolf). Powered by extension.dev and Extension.js.",
+  "description": "MCP server that lets AI agents (Claude Code, Claude Desktop, Cursor, Copilot, Codex) build, run, inspect, and publish browser extensions. 30 tools for scaffolding, live DOM inspection, log streaming, and store-ready builds across Chrome, Edge, Firefox, Safari, and every Chromium- or Gecko-based browser (Brave, Opera, Vivaldi, Yandex, Waterfox, LibreWolf). Powered by extension.dev and Extension.js.",
   "mcpName": "io.github.extensiondev/mcp",
   "license": "MIT",
   "author": {
@@ -84,9 +84,9 @@
     "@modelcontextprotocol/sdk": "^1.12.1",
     "browser-extension-manifest-fields": "^2.2.9",
     "cross-spawn": "^7.0.6",
-    "extension-create": "^4.0.8",
-    "extension-develop": "^4.0.8",
-    "extension-install": "^4.0.8",
+    "extension-create": "^4.0.11",
+    "extension-develop": "^4.0.11",
+    "extension-install": "^4.0.11",
     "ws": "^8.20.0"
   },
   "devDependencies": {

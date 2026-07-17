@@ -186,6 +186,8 @@ These map directly to existing programmatic APIs and provide immediate value.
 
 **Returns:** `{ outputPath, duration, zipPath?, warnings[] }`
 
+`extension_build` also accepts `zipFilename` (string), `polyfill` (boolean, default false), `silent` (boolean), and `mode` (`development` | `production` | `none`, default `production`).
+
 ---
 
 #### `extension_dev`
@@ -218,7 +220,21 @@ These map directly to existing programmatic APIs and provide immediate value.
         "type": "boolean",
         "default": false,
         "description": "Start dev server without launching browser"
-      }
+      },
+      "polyfill": {
+        "type": "boolean",
+        "default": true,
+        "description": "Apply cross-browser polyfill"
+      },
+      "profile": { "type": "string", "description": "Browser profile path, or \"false\" for the default user profile" },
+      "startingUrl": { "type": "string", "description": "URL the browser opens on launch" },
+      "chromiumBinary": { "type": "string", "description": "Custom Chromium-based binary path" },
+      "geckoBinary": { "type": "string", "description": "Custom Gecko/Firefox binary path" },
+      "host": { "type": "string", "description": "Bind host (0.0.0.0 for Docker); default 127.0.0.1" },
+      "publicHost": { "type": "string", "description": "Connectable host for HMR/reload when it differs from the bind host" },
+      "extensions": { "type": "array", "items": { "type": "string" }, "description": "Companion extension paths or store URLs" },
+      "allowControl": { "type": "boolean", "default": false, "description": "Enable the agent-bridge control channel" },
+      "allowEval": { "type": "boolean", "default": false, "description": "Additionally enable extension_eval" }
     },
     "required": ["projectPath"]
   }
@@ -273,6 +289,8 @@ These map directly to existing programmatic APIs and provide immediate value.
 ```
 
 **Returns:** When `wait: true`, returns the `ready.json` contract: `{ status, browser, port, pid, distPath, manifestPath, compiledAt }`. Otherwise returns `{ pid, browser }`.
+
+Both `extension_start` and `extension_preview` also accept `port`, `noBrowser`, and the shared launch flags: `profile`, `startingUrl`, `chromiumBinary`, `geckoBinary`, `host`, `publicHost`, `extensions` (same shapes as on `extension_dev`).
 
 **Why this is distinct from dev:** `dev` uses HMR and watches files. `start` builds once in production mode and launches — what you'd use to verify a production build works before publishing.
 
@@ -741,6 +759,38 @@ The `similarTemplates` field lists templates from the catalog with similar surfa
 ```
 
 **Why this matters:** Before Claude runs `extension_dev --browser=firefox`, it should know if Firefox is actually installed. This prevents "browser not found" errors and lets Claude suggest `extension_install_browser` when needed. Especially important for Docker/devcontainer environments.
+
+---
+
+#### `extension_uninstall_browser`
+
+**Source:** `extension-install` → `extensionUninstall()`
+
+**Purpose:** Remove a managed browser binary from the Extension.js cache (never system-installed browsers).
+
+```json
+{
+  "name": "extension_uninstall_browser",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "browser": {
+        "type": "string",
+        "enum": ["chrome", "chromium", "edge", "firefox"],
+        "description": "Managed browser to remove"
+      },
+      "all": {
+        "type": "boolean",
+        "default": false,
+        "description": "Remove every managed browser binary"
+      }
+    },
+    "required": []
+  }
+}
+```
+
+**Returns:** `{ status, target, duration }`
 
 ---
 

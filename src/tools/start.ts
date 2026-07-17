@@ -8,6 +8,11 @@
 
 import { spawnExtensionCli } from "../lib/exec";
 import { registerSession, removeSession } from "../lib/process-manager";
+import {
+  LAUNCH_FLAG_SCHEMA,
+  launchFlagArgs,
+  type LaunchFlagArgs,
+} from "../lib/launch-flags";
 
 export const schema = {
   name: "extension_start",
@@ -30,19 +35,36 @@ export const schema = {
         default: true,
         description: "Apply cross-browser polyfill",
       },
+      port: {
+        type: "number",
+        description: "Server port (0 for auto-assign)",
+      },
+      noBrowser: {
+        type: "boolean",
+        default: false,
+        description: "Build and serve without launching a browser",
+      },
+      ...LAUNCH_FLAG_SCHEMA,
     },
     required: ["projectPath"],
   },
 };
 
-export async function handler(args: {
-  projectPath: string;
-  browser?: string;
-  polyfill?: boolean;
-}): Promise<string> {
+export async function handler(
+  args: {
+    projectPath: string;
+    browser?: string;
+    polyfill?: boolean;
+    port?: number;
+    noBrowser?: boolean;
+  } & LaunchFlagArgs,
+): Promise<string> {
   const browser = args.browser ?? "chrome";
   const cliArgs = ["start", args.projectPath, "--browser", browser];
-  if (args.polyfill === false) cliArgs.push("--no-polyfill");
+  if (args.polyfill === false) cliArgs.push("--polyfill", "false");
+  if (args.port !== undefined) cliArgs.push("--port", String(args.port));
+  if (args.noBrowser) cliArgs.push("--no-browser");
+  cliArgs.push(...launchFlagArgs(args));
 
   const child = spawnExtensionCli(cliArgs, { projectDir: args.projectPath });
   const pid = child.pid!;

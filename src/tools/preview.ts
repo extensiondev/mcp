@@ -8,6 +8,11 @@
 
 import { spawnExtensionCli } from "../lib/exec";
 import { registerSession, removeSession } from "../lib/process-manager";
+import {
+  LAUNCH_FLAG_SCHEMA,
+  launchFlagArgs,
+  type LaunchFlagArgs,
+} from "../lib/launch-flags";
 
 export const schema = {
   name: "extension_preview",
@@ -25,17 +30,34 @@ export const schema = {
         enum: ["chrome", "chromium", "edge", "brave", "opera", "vivaldi", "yandex", "firefox", "waterfox", "librewolf", "safari", "chromium-based", "gecko-based", "firefox-based", "webkit-based"],
         default: "chrome",
       },
+      port: {
+        type: "number",
+        description: "Server port (0 for auto-assign)",
+      },
+      noBrowser: {
+        type: "boolean",
+        default: false,
+        description: "Serve the preview without launching a browser",
+      },
+      ...LAUNCH_FLAG_SCHEMA,
     },
     required: ["projectPath"],
   },
 };
 
-export async function handler(args: {
-  projectPath: string;
-  browser?: string;
-}): Promise<string> {
+export async function handler(
+  args: {
+    projectPath: string;
+    browser?: string;
+    port?: number;
+    noBrowser?: boolean;
+  } & LaunchFlagArgs,
+): Promise<string> {
   const browser = args.browser ?? "chrome";
   const cliArgs = ["preview", args.projectPath, "--browser", browser];
+  if (args.port !== undefined) cliArgs.push("--port", String(args.port));
+  if (args.noBrowser) cliArgs.push("--no-browser");
+  cliArgs.push(...launchFlagArgs(args));
 
   const child = spawnExtensionCli(cliArgs, { projectDir: args.projectPath });
   const pid = child.pid!;
