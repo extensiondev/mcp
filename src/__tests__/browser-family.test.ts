@@ -7,13 +7,32 @@ import { handler as validateManifest } from "../tools/manifest-validate";
 
 describe("browser-family", () => {
   it("classifies every Extension.js browser name", () => {
-    for (const name of ["chrome", "chromium", "edge", "chromium-based"]) {
+    for (const name of [
+      "chrome",
+      "chromium",
+      "edge",
+      "brave",
+      "opera",
+      "vivaldi",
+      "yandex",
+      "chromium-based",
+    ]) {
       expect(isChromiumFamily(name)).toBe(true);
       expect(isGeckoFamily(name)).toBe(false);
     }
-    for (const name of ["firefox", "gecko-based", "firefox-based"]) {
+    for (const name of [
+      "firefox",
+      "waterfox",
+      "librewolf",
+      "gecko-based",
+      "firefox-based",
+    ]) {
       expect(isGeckoFamily(name)).toBe(true);
       expect(isChromiumFamily(name)).toBe(false);
+    }
+    for (const name of ["safari", "webkit-based"]) {
+      expect(isChromiumFamily(name)).toBe(false);
+      expect(isGeckoFamily(name)).toBe(false);
     }
   });
 });

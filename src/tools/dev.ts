@@ -22,7 +22,7 @@ export const schema = {
       },
       browser: {
         type: "string",
-        enum: ["chrome", "chromium", "edge", "firefox", "chromium-based", "gecko-based"],
+        enum: ["chrome", "chromium", "edge", "brave", "opera", "vivaldi", "yandex", "firefox", "waterfox", "librewolf", "safari", "chromium-based", "gecko-based", "firefox-based", "webkit-based"],
         default: "chrome",
       },
       port: {
