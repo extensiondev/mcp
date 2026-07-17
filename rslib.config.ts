@@ -1,3 +1,11 @@
+// ███╗   ███╗ ██████╗██████╗
+// ████╗ ████║██╔════╝██╔══██╗
+// ██╔████╔██║██║     ██████╔╝
+// ██║╚██╔╝██║██║     ██╔═══╝
+// ██║ ╚═╝ ██║╚██████╗██║
+// ╚═╝     ╚═╝ ╚═════╝╚═╝
+// MIT License (c) Cezar Augusto and the extension.dev collaborators
+
 import * as path from "path";
 import { createRequire } from "module";
 import { defineConfig } from "@rslib/core";

@@ -1,3 +1,11 @@
+// ███╗   ███╗ ██████╗██████╗
+// ████╗ ████║██╔════╝██╔══██╗
+// ██╔████╔██║██║     ██████╔╝
+// ██║╚██╔╝██║██║     ██╔═══╝
+// ██║ ╚═╝ ██║╚██████╗██║
+// ╚═╝     ╚═╝ ╚═════╝╚═╝
+// MIT License (c) Cezar Augusto and the extension.dev collaborators
+
 import { runActVerb, commonFlags, type ActArgs } from "../lib/act";
 import { resolveSessionBrowser } from "../lib/session-browser";
 

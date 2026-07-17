@@ -1,3 +1,11 @@
+// ███╗   ███╗ ██████╗██████╗
+// ████╗ ████║██╔════╝██╔══██╗
+// ██╔████╔██║██║     ██████╔╝
+// ██║╚██╔╝██║██║     ██╔═══╝
+// ██║ ╚═╝ ██║╚██████╗██║
+// ╚═╝     ╚═╝ ╚═════╝╚═╝
+// MIT License (c) Cezar Augusto and the extension.dev collaborators
+
 import { CDPClient } from "../lib/cdp";
 import { isChromiumFamily } from "../lib/browser-family";
 import { resolveCdpPort, CDP_PORT_MISSING_HINT } from "../lib/cdp-port";

@@ -1,3 +1,11 @@
+// ███╗   ███╗ ██████╗██████╗
+// ████╗ ████║██╔════╝██╔══██╗
+// ██╔████╔██║██║     ██████╔╝
+// ██║╚██╔╝██║██║     ██╔═══╝
+// ██║ ╚═╝ ██║╚██████╗██║
+// ╚═╝     ╚═╝ ╚═════╝╚═╝
+// MIT License (c) Cezar Augusto and the extension.dev collaborators
+
 import { resolveToken, safeApiBase } from "@extension.dev/core";
 
 const DEFAULT_API = "https://www.extension.dev";
