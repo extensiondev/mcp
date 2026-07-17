@@ -50,6 +50,8 @@
     "build": "pnpm run compile",
     "start": "node bin/extension-mcp.js",
     "test": "vitest run",
+    "prepack": "node scripts/readme-logo-width.mjs npm",
+    "postpack": "node scripts/readme-logo-width.mjs github",
     "prepublishOnly": "pnpm run test && pnpm run compile"
   },
   "publishConfig": {
