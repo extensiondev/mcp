@@ -34,7 +34,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
           cache: pnpm
           registry-url: https://registry.npmjs.org
 
@@ -147,7 +147,8 @@ jobs:
       - name: Prepare npm README
         run: node scripts/readme-logo-width.mjs npm
 
-      # OIDC trusted publishing needs npm >= 11.5.1; Node 20 ships npm 10.x.
+      # OIDC trusted publishing needs npm >= 11.5.1; pin the newest npm so we
+      # never depend on which patch of npm the Node runtime happens to ship.
       - name: Upgrade npm for trusted publishing
         run: npm install -g npm@latest
 
