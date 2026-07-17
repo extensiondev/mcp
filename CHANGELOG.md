@@ -1,5 +1,14 @@
 # Changelog
 
+## 4.5.0
+
+The platform client (GitHub device-code login, the credential store, and the
+publish flow) is now vendored directly in this package instead of the
+separate `@extension.dev/core` dependency. No behavior change: the tool
+schemas, the credential file, token resolution, and the publish error
+envelopes are all unchanged. This drops a runtime dependency and the
+two-package release step.
+
 ## 4.4.0
 
 Browser-matrix parity release: the tool surface now mirrors the engine

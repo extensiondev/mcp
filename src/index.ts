@@ -41,13 +41,12 @@ import * as addFeature from "./tools/add-feature";
 import * as login from "./tools/login";
 import * as whoami from "./tools/whoami";
 import * as logout from "./tools/logout";
+import { pollForToken, startDeviceCode } from "./lib/github-device";
 import {
-  pollForToken,
-  startDeviceCode,
   exchangeAndPersist,
   fetchLoginConfig,
   resolveApiBase,
-} from "@extension.dev/core";
+} from "./lib/login-flow";
 
 import * as installBrowser from "./tools/install-browser";
 import * as uninstallBrowser from "./tools/uninstall-browser";

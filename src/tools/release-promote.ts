@@ -6,7 +6,8 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // MIT License (c) Cezar Augusto and the extension.dev collaborators
 
-import { resolveToken, safeApiBase } from "@extension.dev/core";
+import { resolveToken } from "../lib/publish";
+import { safeApiBase } from "../lib/login-flow";
 
 const DEFAULT_API = "https://www.extension.dev";
 

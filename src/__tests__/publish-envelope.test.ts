@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { writeCredentials } from "@extension.dev/core";
+import { writeCredentials } from "../lib/credentials";
 import { handler } from "../tools/publish";
 
 describe("extension_publish envelope compatibility", () => {

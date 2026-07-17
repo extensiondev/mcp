@@ -6,7 +6,7 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // MIT License (c) Cezar Augusto and the extension.dev collaborators
 
-import { publish, resolveToken } from "@extension.dev/core";
+import { publish, resolveToken } from "../lib/publish";
 
 export const schema = {
   name: "extension_publish",
