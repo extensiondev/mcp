@@ -6,7 +6,7 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // MIT License (c) Cezar Augusto and the extension.dev collaborators
 
-import { readCredentials } from "@extension.dev/core";
+import { readCredentials } from "../lib/credentials";
 
 export const schema = {
   name: "extension_whoami",

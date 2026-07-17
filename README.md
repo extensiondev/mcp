@@ -134,7 +134,6 @@ The four platform tools connect agents to [extension.dev](https://extension.dev)
 | --- | --- |
 | [`@extension.dev/skill`](https://www.npmjs.com/package/@extension.dev/skill) | Teach AI agents the judgment half: cross-browser rules, gotchas, playbooks |
 | [`deploy`](https://extension.dev) | Ship to Chrome, Firefox, and Edge stores from CI |
-| [`@extension.dev/core`](https://www.npmjs.com/package/@extension.dev/core) | Authenticate and publish to the extension.dev platform |
 
 All of it rides on [Extension.js](https://github.com/extension-js/extension.js), the open-source cross-browser extension framework.
 
