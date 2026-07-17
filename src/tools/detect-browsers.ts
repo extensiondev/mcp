@@ -10,6 +10,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import { isGeckoFamily, WEBKIT_FAMILY } from "../lib/browser-family";
 
 const execFileAsync = promisify(execFile);
 
@@ -24,7 +25,19 @@ export const schema = {
         type: "array",
         items: {
           type: "string",
-          enum: ["chrome", "chromium", "edge", "firefox"],
+          enum: [
+            "chrome",
+            "chromium",
+            "edge",
+            "brave",
+            "opera",
+            "vivaldi",
+            "yandex",
+            "firefox",
+            "waterfox",
+            "librewolf",
+            "safari",
+          ],
         },
         description: "Browsers to check. If omitted, checks all.",
       },
@@ -36,13 +49,28 @@ interface DetectedBrowser {
   browser: string;
   binaryPath: string | null;
   source: "managed" | "system" | "not_found";
-  engine: "chromium" | "gecko";
+  engine: "chromium" | "gecko" | "webkit";
   version: string | null;
   cdpSupport: boolean;
   rdpSupport: boolean;
 }
 
-const ALL_BROWSERS = ["chrome", "chromium", "edge", "firefox"] as const;
+const ALL_BROWSERS = [
+  "chrome",
+  "chromium",
+  "edge",
+  "brave",
+  "opera",
+  "vivaldi",
+  "yandex",
+  "firefox",
+  "waterfox",
+  "librewolf",
+  "safari",
+] as const;
+
+// Browsers the managed installer (extension_install_browser) can provision.
+const MANAGED_INSTALLABLE = new Set(["chrome", "chromium", "edge", "firefox"]);
 
 const SYSTEM_PATHS: Record<string, Record<string, string[]>> = {
   darwin: {
@@ -62,6 +90,31 @@ const SYSTEM_PATHS: Record<string, Record<string, string[]>> = {
       "/Applications/Firefox.app/Contents/MacOS/firefox",
       `${process.env.HOME}/Applications/Firefox.app/Contents/MacOS/firefox`,
     ],
+    brave: [
+      "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser",
+      `${process.env.HOME}/Applications/Brave Browser.app/Contents/MacOS/Brave Browser`,
+    ],
+    opera: [
+      "/Applications/Opera.app/Contents/MacOS/Opera",
+      `${process.env.HOME}/Applications/Opera.app/Contents/MacOS/Opera`,
+    ],
+    vivaldi: [
+      "/Applications/Vivaldi.app/Contents/MacOS/Vivaldi",
+      `${process.env.HOME}/Applications/Vivaldi.app/Contents/MacOS/Vivaldi`,
+    ],
+    yandex: [
+      "/Applications/Yandex.app/Contents/MacOS/Yandex",
+      `${process.env.HOME}/Applications/Yandex.app/Contents/MacOS/Yandex`,
+    ],
+    waterfox: [
+      "/Applications/Waterfox.app/Contents/MacOS/waterfox",
+      `${process.env.HOME}/Applications/Waterfox.app/Contents/MacOS/waterfox`,
+    ],
+    librewolf: [
+      "/Applications/LibreWolf.app/Contents/MacOS/librewolf",
+      `${process.env.HOME}/Applications/LibreWolf.app/Contents/MacOS/librewolf`,
+    ],
+    safari: ["/Applications/Safari.app/Contents/MacOS/Safari"],
   },
   linux: {
     chrome: [
@@ -84,6 +137,12 @@ const SYSTEM_PATHS: Record<string, Record<string, string[]>> = {
       "/snap/bin/firefox",
       "/usr/lib/firefox/firefox",
     ],
+    brave: ["/usr/bin/brave-browser", "/usr/bin/brave", "/snap/bin/brave"],
+    opera: ["/usr/bin/opera", "/snap/bin/opera"],
+    vivaldi: ["/usr/bin/vivaldi", "/usr/bin/vivaldi-stable"],
+    yandex: ["/usr/bin/yandex-browser", "/usr/bin/yandex-browser-stable"],
+    waterfox: ["/usr/bin/waterfox", "/opt/waterfox/waterfox"],
+    librewolf: ["/usr/bin/librewolf", "/opt/librewolf/librewolf"],
   },
   win32: {
     chrome: [
@@ -98,6 +157,30 @@ const SYSTEM_PATHS: Record<string, Record<string, string[]>> = {
     firefox: [
       "C:\\Program Files\\Mozilla Firefox\\firefox.exe",
       "C:\\Program Files (x86)\\Mozilla Firefox\\firefox.exe",
+    ],
+    brave: [
+      "C:\\Program Files\\BraveSoftware\\Brave-Browser\\Application\\brave.exe",
+      "C:\\Program Files (x86)\\BraveSoftware\\Brave-Browser\\Application\\brave.exe",
+    ],
+    opera: [
+      `${process.env.LOCALAPPDATA || ""}\\Programs\\Opera\\opera.exe`,
+      "C:\\Program Files\\Opera\\opera.exe",
+    ],
+    vivaldi: [
+      `${process.env.LOCALAPPDATA || ""}\\Vivaldi\\Application\\vivaldi.exe`,
+      "C:\\Program Files\\Vivaldi\\Application\\vivaldi.exe",
+    ],
+    yandex: [
+      `${process.env.LOCALAPPDATA || ""}\\Yandex\\YandexBrowser\\Application\\browser.exe`,
+      "C:\\Program Files (x86)\\Yandex\\YandexBrowser\\Application\\browser.exe",
+    ],
+    waterfox: [
+      "C:\\Program Files\\Waterfox\\waterfox.exe",
+      "C:\\Program Files (x86)\\Waterfox\\waterfox.exe",
+    ],
+    librewolf: [
+      "C:\\Program Files\\LibreWolf\\librewolf.exe",
+      "C:\\Program Files (x86)\\LibreWolf\\librewolf.exe",
     ],
   },
 };
@@ -222,7 +305,8 @@ export async function handler(args: { browsers?: string[] }): Promise<string> {
   }
 
   for (const browser of browsersToCheck) {
-    const isGecko = browser === "firefox";
+    const isGecko = isGeckoFamily(browser);
+    const isWebkit = WEBKIT_FAMILY.has(browser);
 
     let binaryPath = findManagedBinary(browser);
     let source: DetectedBrowser["source"] = "managed";
@@ -233,7 +317,8 @@ export async function handler(args: { browsers?: string[] }): Promise<string> {
     }
 
     let version: string | null = null;
-    if (binaryPath) {
+    // Running the Safari binary with --version launches the app, so skip it.
+    if (binaryPath && !isWebkit) {
       version = await getVersion(binaryPath, browser);
     }
 
@@ -241,9 +326,9 @@ export async function handler(args: { browsers?: string[] }): Promise<string> {
       browser,
       binaryPath,
       source,
-      engine: isGecko ? "gecko" : "chromium",
+      engine: isWebkit ? "webkit" : isGecko ? "gecko" : "chromium",
       version,
-      cdpSupport: !isGecko,
+      cdpSupport: !isGecko && !isWebkit,
       rdpSupport: isGecko,
     });
   }
@@ -259,7 +344,14 @@ export async function handler(args: { browsers?: string[] }): Promise<string> {
       missing: missing.map((d) => d.browser),
     },
     hint: missing.length
-      ? `Missing browser(s): ${missing.map((d) => d.browser).join(", ")}. Use extension_install_browser to install them.`
+      ? `Missing browser(s): ${missing.map((d) => d.browser).join(", ")}.${
+          missing.some((d) => MANAGED_INSTALLABLE.has(d.browser))
+            ? ` Use extension_install_browser to install ${missing
+                .filter((d) => MANAGED_INSTALLABLE.has(d.browser))
+                .map((d) => d.browser)
+                .join(", ")}.`
+            : ""
+        }`
       : "All requested browsers are available.",
   });
 }
