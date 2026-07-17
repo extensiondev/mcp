@@ -84,7 +84,6 @@
     "extension.js"
   ],
   "dependencies": {
-    "@extension.dev/core": "^0.2.0",
     "@modelcontextprotocol/sdk": "^1.12.1",
     "browser-extension-manifest-fields": "^2.2.9",
     "cross-spawn": "^7.0.6",

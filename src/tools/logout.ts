@@ -6,7 +6,7 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // MIT License (c) Cezar Augusto and the extension.dev collaborators
 
-import { clearCredentials } from "@extension.dev/core";
+import { clearCredentials } from "../lib/credentials";
 
 export const schema = {
   name: "extension_logout",
