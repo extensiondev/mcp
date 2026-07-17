@@ -8,6 +8,11 @@
 
 import { spawnExtensionCli } from "../lib/exec";
 import { registerSession, removeSession } from "../lib/process-manager";
+import {
+  LAUNCH_FLAG_SCHEMA,
+  launchFlagArgs,
+  type LaunchFlagArgs,
+} from "../lib/launch-flags";
 
 export const schema = {
   name: "extension_dev",
@@ -34,6 +39,12 @@ export const schema = {
         default: false,
         description: "Start dev server without launching browser",
       },
+      polyfill: {
+        type: "boolean",
+        default: true,
+        description: "Apply cross-browser polyfill",
+      },
+      ...LAUNCH_FLAG_SCHEMA,
       allowControl: {
         type: "boolean",
         default: false,
@@ -51,18 +62,23 @@ export const schema = {
   },
 };
 
-export async function handler(args: {
-  projectPath: string;
-  browser?: string;
-  port?: number;
-  noBrowser?: boolean;
-  allowControl?: boolean;
-  allowEval?: boolean;
-}): Promise<string> {
+export async function handler(
+  args: {
+    projectPath: string;
+    browser?: string;
+    port?: number;
+    noBrowser?: boolean;
+    polyfill?: boolean;
+    allowControl?: boolean;
+    allowEval?: boolean;
+  } & LaunchFlagArgs,
+): Promise<string> {
   const browser = args.browser ?? "chrome";
   const cliArgs = ["dev", args.projectPath, "--browser", browser];
   if (args.port !== undefined) cliArgs.push("--port", String(args.port));
   if (args.noBrowser) cliArgs.push("--no-browser");
+  if (args.polyfill === false) cliArgs.push("--polyfill", "false");
+  cliArgs.push(...launchFlagArgs(args));
   if (args.allowControl) cliArgs.push("--allow-control");
   if (args.allowEval) cliArgs.push("--allow-eval");
 

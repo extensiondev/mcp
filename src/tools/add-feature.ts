@@ -16,7 +16,7 @@ const RAW_BASE =
 export const schema = {
   name: "extension_add_feature",
   description:
-    "Add a new feature surface to an existing extension. Generates the required files and updates manifest.json. Sources patterns from the extension.dev template catalog.",
+    "Plan a new feature surface for an existing extension. Returns step-by-step instructions, the manifest additions to make, and reference templates from the extension.dev catalog. Does not modify files; apply the returned plan yourself.",
   inputSchema: {
     type: "object" as const,
     properties: {
