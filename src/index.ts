@@ -50,6 +50,7 @@ import {
 } from "@extension.dev/core";
 
 import * as installBrowser from "./tools/install-browser";
+import * as uninstallBrowser from "./tools/uninstall-browser";
 import * as listBrowsers from "./tools/list-browsers";
 import * as detectBrowsers from "./tools/detect-browsers";
 import * as doctor from "./tools/doctor";
@@ -94,6 +95,7 @@ export const tools: ToolModule[] = [
   whoami,
   logout,
   installBrowser,
+  uninstallBrowser,
   listBrowsers,
   detectBrowsers,
   doctor,

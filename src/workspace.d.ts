@@ -55,7 +55,13 @@ declare module "extension-install" {
     browser: string;
   }
 
+  export interface UninstallOptions {
+    browser?: string;
+    all?: boolean;
+  }
+
   export function extensionInstall(options: InstallOptions): Promise<void>;
+  export function extensionUninstall(options: UninstallOptions): Promise<void>;
   export function getManagedBrowsersCacheRoot(): string;
   export function getManagedBrowserInstallDir(browser: string): string;
 }

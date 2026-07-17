@@ -21,14 +21,14 @@ importers:
         specifier: ^7.0.6
         version: 7.0.6
       extension-create:
-        specifier: ^4.0.8
-        version: 4.0.8
+        specifier: ^4.0.11
+        version: 4.0.11
       extension-develop:
-        specifier: ^4.0.8
-        version: 4.0.8(@swc/helpers@0.5.21)(svelte@5.56.6)(webpack@5.108.4(postcss@8.5.10))
+        specifier: ^4.0.11
+        version: 4.0.11(@swc/helpers@0.5.21)(svelte@5.56.6)(webpack@5.108.4(postcss@8.5.10))
       extension-install:
-        specifier: ^4.0.8
-        version: 4.0.8
+        specifier: ^4.0.11
+        version: 4.0.11
       ws:
         specifier: ^8.20.0
         version: 8.20.0
@@ -1379,12 +1379,12 @@ packages:
     resolution: {integrity: sha512-hIS4idWWai69NezIdRt2xFVofaF4j+6INOpJlVOLDO8zXGpUVEVzIYk12UUi2JzjEzWL3IOAxcTubgz9Po0yXw==}
     engines: {node: '>= 18'}
 
-  extension-create@4.0.8:
-    resolution: {integrity: sha512-EW8MzsSmGRw7j5uttTSaSNI36f9+usTbzE/DJaKZVbisKBPJZAvb0YZrVznrP6kxaQ8nZCEdeFODqs+84ewGhg==}
+  extension-create@4.0.11:
+    resolution: {integrity: sha512-sxQ9itKwOcD2lpoFVkYjzKOD+wkZONN3ta6WpyeBn4WavaghtzWKhibJECR5Aq0WclO9r9WOwf+FZjUXjLeVqg==}
     engines: {node: '>=22'}
 
-  extension-develop@4.0.8:
-    resolution: {integrity: sha512-ub++VQ3+eBxgMmgeIg+EGSbWZ7bs8E44nCXuzKKqC0F4o5BhztCmfF9QXcwDk3x31yesD48KTQeib8QK0q+txA==}
+  extension-develop@4.0.11:
+    resolution: {integrity: sha512-hpCLtIaxjtd5QmltxO9xa+r9wGJWfVDYcs0F5kmH2IMY8rBC+cTXXuduqTCRg2WpcwDLM3Ur/8NFO4FJpU606w==}
     engines: {node: '>=22'}
 
   extension-from-store@0.1.1:
@@ -1392,8 +1392,8 @@ packages:
     engines: {node: '>=16'}
     hasBin: true
 
-  extension-install@4.0.8:
-    resolution: {integrity: sha512-z331+vZ3NRCSRw1xOe29AeezZkLoZFzaBTIT+5tPr/Ejv/J1mo0TU4OZfF2ELdbgpacOxhstROt2w4Zo6B22Bg==}
+  extension-install@4.0.11:
+    resolution: {integrity: sha512-00VEF0hRxg2PDo2AMox4iSuKB4tGi7tVCBFFupgW7JJgUinnyIquOFCDopuHDcTg06EpPdj3ZmunKvbqHWMlGQ==}
     engines: {node: '>=22'}
 
   extract-zip@2.0.1:
@@ -1470,9 +1470,6 @@ packages:
   get-stream@5.2.0:
     resolution: {integrity: sha512-nBF+F1rAZVCu/p7rjzgA+Yb4lfYXrpl7a6VmJrU8wF9I1CKvP/QwPNZHnOlwbTkY6dvtFIzFMSyQXbLoTQPRpA==}
     engines: {node: '>=8'}
-
-  glob-to-regexp@0.4.1:
-    resolution: {integrity: sha512-lkX1HJXwyMcprw/5YUZc2s7DrpAiHB21/V+E1rHUrVNokkvB6bqMzT0VfV6/86ZNabt1k14YOIaT7nDvOX3Iiw==}
 
   globalyzer@0.1.0:
     resolution: {integrity: sha512-40oNTM9UfG6aBmuKxk/giHn5nQ8RVz/SS4Ir6zgzOv9/qC3kKZ9v4etGTcJbEl/NyVQH7FGU7d+X1egr57Md2Q==}
@@ -2444,10 +2441,6 @@ packages:
     peerDependenciesMeta:
       typescript:
         optional: true
-
-  watchpack@2.5.1:
-    resolution: {integrity: sha512-Zn5uXdcFNIA1+1Ei5McRd+iRzfhENPCe7LeABkJtNulSxjma+l7ltNx55BWZkRlwRnpOgHqxnjyaDgJnNXnqzg==}
-    engines: {node: '>=10.13.0'}
 
   watchpack@2.5.2:
     resolution: {integrity: sha512-6i/00NBjP4yGPs+caKSyRfpTF/8Torsu0MOW3mMzIbhgISFder8i7xbqgHlLMwJrdiN8ndBV3UA1/AfzPSr+jg==}
@@ -3848,7 +3841,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  extension-create@4.0.8:
+  extension-create@4.0.11:
     dependencies:
       adm-zip: 0.5.17
       axios: 1.18.1
@@ -3860,7 +3853,7 @@ snapshots:
       - debug
       - supports-color
 
-  extension-develop@4.0.8(@swc/helpers@0.5.21)(svelte@5.56.6)(webpack@5.108.4(postcss@8.5.10)):
+  extension-develop@4.0.11(@swc/helpers@0.5.21)(svelte@5.56.6)(webpack@5.108.4(postcss@8.5.10)):
     dependencies:
       '@prefresh/core': 1.5.9(preact@10.27.3)
       '@prefresh/utils': 1.2.1
@@ -3918,7 +3911,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  extension-install@4.0.8:
+  extension-install@4.0.11:
     dependencies:
       cross-spawn: 7.0.6
       pintor: 0.3.0
@@ -4000,8 +3993,6 @@ snapshots:
   get-stream@5.2.0:
     dependencies:
       pump: 3.0.4
-
-  glob-to-regexp@0.4.1: {}
 
   globalyzer@0.1.0: {}
 
@@ -4875,7 +4866,7 @@ snapshots:
     dependencies:
       chalk: 4.1.2
       hash-sum: 2.0.0
-      watchpack: 2.5.1
+      watchpack: 2.5.2
       webpack: 5.108.4(postcss@8.5.10)
     optionalDependencies:
       '@vue/compiler-sfc': 3.5.26
@@ -4890,11 +4881,6 @@ snapshots:
       '@vue/shared': 3.5.26
     optionalDependencies:
       typescript: 5.9.3
-
-  watchpack@2.5.1:
-    dependencies:
-      glob-to-regexp: 0.4.1
-      graceful-fs: 4.2.11
 
   watchpack@2.5.2:
     dependencies:

@@ -35,6 +35,26 @@ export const schema = {
         default: false,
         description: "Include source code zip (required by some stores)",
       },
+      zipFilename: {
+        type: "string",
+        description: "Custom .zip file name (defaults to name and version)",
+      },
+      polyfill: {
+        type: "boolean",
+        default: false,
+        description: "Apply cross-browser polyfill",
+      },
+      silent: {
+        type: "boolean",
+        default: false,
+        description: "Suppress build output",
+      },
+      mode: {
+        type: "string",
+        enum: ["development", "production", "none"],
+        default: "production",
+        description: "Bundler mode override (also sets NODE_ENV)",
+      },
     },
     required: ["projectPath"],
   },
@@ -45,6 +65,10 @@ export async function handler(args: {
   browser?: string;
   zip?: boolean;
   zipSource?: boolean;
+  zipFilename?: string;
+  polyfill?: boolean;
+  silent?: boolean;
+  mode?: "development" | "production" | "none";
 }): Promise<string> {
   const start = Date.now();
 
@@ -53,6 +77,10 @@ export async function handler(args: {
       browser: args.browser ?? "chrome",
       zip: args.zip ?? false,
       zipSource: args.zipSource ?? false,
+      ...(args.zipFilename ? { zipFilename: args.zipFilename } : {}),
+      ...(args.polyfill !== undefined ? { polyfill: args.polyfill } : {}),
+      ...(args.silent !== undefined ? { silent: args.silent } : {}),
+      ...(args.mode ? { mode: args.mode } : {}),
       exitOnError: false,
     });
 
