@@ -86,9 +86,6 @@ export async function handler(args: {
     });
   }
 
-  // cdpPort is the browser's real --remote-debugging-port (stamped by the
-  // launcher post-launch; resolveCdpPort polls for it). The contract's `port`
-  // is the rspack dev-server port — NOT CDP — so never use it here.
   const resolved = await resolveCdpPort(args.projectPath, browser);
   if (!resolved) {
     return JSON.stringify({
@@ -127,7 +124,6 @@ export async function handler(args: {
       ? (pageTargets.find((t) => t.url.includes(args.url!)) ?? pageTargets[0])
       : pageTargets[0];
 
-    // Connect to the browser-level WebSocket for full CDP access
     const browserWsUrl = await CDPClient.discoverBrowserWsUrl(cdpPort);
     await cdp.connect(browserWsUrl);
 
@@ -136,10 +132,8 @@ export async function handler(args: {
 
     if (args.url && !target.url.includes(args.url)) {
       await cdp.navigate(sessionId, args.url);
-      // Brief delay for content scripts to inject
       await new Promise((r) => setTimeout(r, 1500));
     } else {
-      // Brief delay to collect console messages
       await new Promise((r) => setTimeout(r, 500));
     }
 
@@ -158,7 +152,6 @@ export async function handler(args: {
       })),
     };
 
-    // Full HTML extraction (includes shadow DOM from extension roots)
     if (include.has("html")) {
       let html = await cdp.getPageHTML(sessionId);
       if (maxBytes > 0 && html.length > maxBytes) {
@@ -208,8 +201,6 @@ export async function handler(args: {
       result.probes = await cdp.probeSelectors(sessionId, args.probe);
     }
 
-    // --deep-dom: pierce closed shadow roots (CDP, Chromium only). The default
-    // path above reads open shadow roots; this recovers the closed ones.
     if (args.deepDom) {
       const closed = await cdp.getClosedShadowRoots(
         sessionId,

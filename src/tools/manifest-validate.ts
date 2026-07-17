@@ -72,11 +72,6 @@ export async function handler(args: {
     );
   }
 
-  // Resolve the effective manifest each engine family actually sees by folding
-  // down browser-prefixed keys (chrome:/edge:/chromium: for Chromium,
-  // firefox:/gecko: for Gecko), at any nesting depth. This replaces the
-  // hand-rolled `manifest["chromium:x"] ?? manifest.x` coalescing and also
-  // recognizes prefixes the old code missed (e.g. chrome:/edge:/brave:).
   const chromiumManifest = filterKeysForThisBrowser(manifest, "chrome");
 
   if (!chromiumManifest.manifest_version) {
@@ -88,7 +83,6 @@ export async function handler(args: {
   for (const browser of browsers) {
     const isChromium = isChromiumFamily(browser);
     const isFirefox = isGeckoFamily(browser);
-    // Effective manifest for this specific target family.
     const effective = filterKeysForThisBrowser(manifest, browser);
     const issues: string[] = [];
 
@@ -110,8 +104,6 @@ export async function handler(args: {
           );
         }
       }
-      // Cross-variant advice inspects the *other* family's raw key, so it reads
-      // from `manifest`, not the folded-down `effective`.
       if (manifest["firefox:browser_action"] && !effective.action) {
         issues.push(
           'Firefox browser_action found but no chromium:action. Chromium MV3 uses "action" instead of "browser_action".',
@@ -177,7 +169,6 @@ export async function handler(args: {
         .slice(0, 5)
         .map((t) => ({ slug: t.slug, surfaces: t.surfaces }));
     } catch {
-      // Template lookup is best-effort
     }
   }
 

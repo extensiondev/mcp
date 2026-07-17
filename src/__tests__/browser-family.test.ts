@@ -25,10 +25,6 @@ describe("manifest-validate chromium-family gate", () => {
   });
   afterEach(() => fs.rmSync(dir, { recursive: true, force: true }));
 
-  // Regression: the inline family list lacked "chromium", so
-  // browsers: ["chromium"] silently ran ZERO family checks and reported the
-  // manifest fine (same drift that made list-extensions refuse --browser
-  // chromium sessions).
   it('runs the Chromium checks for browsers: ["chromium"]', async () => {
     const manifestPath = path.join(dir, "manifest.json");
     fs.writeFileSync(

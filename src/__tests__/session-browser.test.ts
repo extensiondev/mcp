@@ -103,7 +103,6 @@ describe("resolveSessionBrowser", () => {
 
   it("skips contracts whose pid is dead and non-ready contracts", () => {
     const project = tmpProject();
-    // 2^30 is far above any real pid ulimit -> reliably dead.
     writeContract(project, "chrome", { status: "ready", pid: 2 ** 30 });
     writeContract(project, "edge", { status: "error" });
     expect(resolveSessionBrowser(project, undefined).source).toBe("fallback");

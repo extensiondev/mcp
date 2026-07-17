@@ -36,7 +36,6 @@ interface DetectedBrowser {
 
 const ALL_BROWSERS = ["chrome", "chromium", "edge", "firefox"] as const;
 
-// Platform-specific default binary paths for system-installed browsers
 const SYSTEM_PATHS: Record<string, Record<string, string[]>> = {
   darwin: {
     chrome: [
@@ -150,7 +149,6 @@ function findManagedBinary(browser: string): string | null {
 
   const names = execNames[browser] ?? [];
 
-  // Shallow search (max 4 levels deep)
   function search(dir: string, depth: number): string | null {
     if (depth > 4) return null;
     try {
@@ -165,7 +163,6 @@ function findManagedBinary(browser: string): string | null {
         }
       }
     } catch {
-      // Not readable
     }
     return null;
   }
@@ -194,7 +191,6 @@ async function getVersion(
       timeout: 5000,
       env: { ...process.env },
     });
-    // Extract version number from output like "Google Chrome 120.0.6099.109" or "Mozilla Firefox 121.0"
     const match = stdout.match(/[\d]+\.[\d]+[\d.]*/);
     return match ? match[0] : stdout.trim().slice(0, 50);
   } catch {

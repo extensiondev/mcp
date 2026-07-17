@@ -6,8 +6,6 @@ on:
       - main
   pull_request:
   workflow_dispatch:
-  # Engine canaries move without MCP commits — without a nightly run, a skew
-  # regression only surfaces on the next unrelated PR.
   schedule:
     - cron: '0 6 * * *'
 
@@ -15,12 +13,6 @@ permissions:
   contents: read
 
 jobs:
-  # Version-skew matrix: extension_build runs extension-develop in-process and
-  # the act tools spawn the pinned CLI, so one engine version is one blind
-  # spot. Cells: canary (the next stable), latest stable (what users get
-  # today), and the vendored floor (the npx-pin fallback for projects with no
-  # local install). Deduped when they coincide right after a release. Every
-  # cell is required — a red canary cell is this workflow doing its job.
   engines:
     runs-on: ubuntu-latest
     outputs:
@@ -86,8 +78,6 @@ jobs:
 
       - name: Test
         env:
-          # The real-CLI smoke exercises the npx pinned path — nightly only,
-          # to keep PR cells fast.
           RUN_CLI_SMOKE: ${{ github.event_name == 'schedule' && '1' || '' }}
           EXTENSION_MCP_CLI_VERSION: ${{ matrix.version }}
         run: pnpm test

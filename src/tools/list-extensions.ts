@@ -61,9 +61,6 @@ export async function handler(args: {
 
   const cdp = new CDPClient();
   try {
-    // The contract's port is stamped post-launch (resolveCdpPort waits for
-    // it), but the socket itself can still be a beat behind — give the dial
-    // a short grace window instead of bouncing the agent into retry lore.
     let targets: Awaited<ReturnType<CDPClient["getTargets"]>> | null = null;
     let lastError: unknown = null;
     for (let attempt = 0; attempt < 3; attempt++) {
@@ -82,7 +79,6 @@ export async function handler(args: {
     }
     if (!targets) throw lastError;
 
-    // Group every chrome-extension:// target by its extension id.
     const byId = new Map<string, Array<{ type: string; url: string }>>();
     for (const t of targets) {
       const url = String(t.url ?? "");
@@ -102,9 +98,6 @@ export async function handler(args: {
         source: "target-only",
       };
 
-      // Read identity via the browser-level Extensions domain — no attach, no
-      // eval into another extension's context (so we never wake or disturb a
-      // third-party service worker just to list it).
       try {
         const info = (await cdp.sendCommand("Extensions.getExtensionInfo", {
           extensionId: id,
@@ -115,7 +108,6 @@ export async function handler(args: {
           entry.source = "extensions-domain";
         }
       } catch {
-        // Extensions domain unavailable (older Chromium) — keep target-only.
       }
 
       extensions.push(entry);
@@ -139,4 +131,3 @@ export async function handler(args: {
     cdp.disconnect();
   }
 }
-

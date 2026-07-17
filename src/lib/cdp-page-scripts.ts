@@ -1,7 +1,3 @@
-// Browser-side scripts injected via Runtime.evaluate by CDPClient.
-// Kept verbatim from the inline evaluate() arguments; moved here to keep
-// cdp.ts focused on the client methods.
-
 export const PAGE_HTML_SCRIPT = `(() => {
         try {
           const doctype = document.doctype;

@@ -3,13 +3,9 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-// Assert against the real registry the server serves, not a hand-maintained
-// mirror (the old copy here drifted: it listed 26 tools while the server
-// registered 27).
 import { tools as ALL_TOOLS } from "../index";
 import * as listBrowsers from "../tools/list-browsers";
 
-// Modules whose handlers get exercised directly below.
 import * as manifestValidate from "../tools/manifest-validate";
 import * as inspect from "../tools/inspect";
 import * as sourceInspect from "../tools/source-inspect";
@@ -93,8 +89,6 @@ describe("manifest-validate handler", () => {
   });
 
   it("recognizes chrome:/edge: prefixes, not just chromium:", async () => {
-    // The old hand-rolled coalescing only matched the literal "chromium:"
-    // prefix. filterKeysForThisBrowser folds the whole Chromium family.
     const file = writeManifest({
       name: "prefixed",
       version: "1.0.0",
@@ -103,11 +97,9 @@ describe("manifest-validate handler", () => {
     const parsed = JSON.parse(
       await manifestValidate.handler({ manifestPath: file, browsers: ["chrome"] }),
     );
-    // manifest_version resolves from chrome: → no "Missing manifest_version".
     expect(parsed.errors).not.toContain(
       expect.stringContaining("Missing manifest_version"),
     );
-    // MV2 on Chromium is still flagged via the folded value.
     expect(parsed.browserSupport.chrome.issues.join(" ")).toContain(
       "Manifest V2 is deprecated",
     );
@@ -193,8 +185,6 @@ describe("source-inspect handler", () => {
     });
     const parsed = JSON.parse(result);
     expect(parsed.error).toBeDefined();
-    // Robust to whether a CDP endpoint happens to be listening on the default
-    // port: both the "no session" and "CDP unreachable" hints mention a dev session.
     expect(parsed.hint).toContain("dev session");
   });
 });
@@ -224,7 +214,6 @@ describe("logs handler", () => {
       lines.map((l) => JSON.stringify(l)).join("\n") + "\n",
     );
 
-    // All events (header excluded), runId surfaced, nextSince = last seq.
     const all = JSON.parse(await logs.handler({ projectPath: root }));
     expect(all.ok).toBe(true);
     expect(all.source).toBe("file");
@@ -232,22 +221,18 @@ describe("logs handler", () => {
     expect(all.count).toBe(3);
     expect(all.nextSince).toBe(3);
 
-    // signalsOnly keeps only the dx.signal line.
     const signals = JSON.parse(await logs.handler({ projectPath: root, signalsOnly: true }));
     expect(signals.count).toBe(1);
     expect(signals.events[0].code).toBe("X");
 
-    // level=error drops info/debug.
     const errors = JSON.parse(await logs.handler({ projectPath: root, level: "error" }));
     expect(errors.count).toBe(1);
     expect(errors.events[0].seq).toBe(2);
 
-    // since cursor advances past seq 2.
     const since = JSON.parse(await logs.handler({ projectPath: root, since: 2 }));
     expect(since.count).toBe(1);
     expect(since.events[0].seq).toBe(3);
 
-    // url glob matches the content event by hostname/url; events without a url drop out.
     const byUrl = JSON.parse(await logs.handler({ projectPath: root, url: "shop.example/*" }));
     expect(byUrl.count).toBe(1);
     expect(byUrl.events[0].seq).toBe(2);
@@ -255,14 +240,12 @@ describe("logs handler", () => {
     expect(byUrlSubstr.count).toBe(1);
     expect(byUrlSubstr.events[0].seq).toBe(2);
 
-    // tab filter matches the originating tab id.
     const byTab = JSON.parse(await logs.handler({ projectPath: root, tab: 7 }));
     expect(byTab.count).toBe(1);
     expect(byTab.events[0].seq).toBe(2);
     const byTabMiss = JSON.parse(await logs.handler({ projectPath: root, tab: 999 }));
     expect(byTabMiss.count).toBe(0);
 
-    // limit caps to the most recent N and flags truncation.
     const capped = JSON.parse(await logs.handler({ projectPath: root, limit: 1 }));
     expect(capped.count).toBe(1);
     expect(capped.truncated).toBe(true);
@@ -279,7 +262,6 @@ describe("storage act tool", () => {
         projectPath: "/tmp/whatever",
         action: "set",
         key: "k",
-        // value omitted
       }),
     );
     expect(result.ok).toBe(false);

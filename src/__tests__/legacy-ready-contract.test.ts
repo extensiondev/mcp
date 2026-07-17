@@ -25,8 +25,6 @@ afterEach(() => fs.rmSync(dir, { recursive: true, force: true }));
 describe("legacy ready-contract compatibility", () => {
   it("resolveCdpPort returns null (not a bogus probe) for a portless legacy contract", async () => {
     writeLegacyContract(dir, "chrome");
-    // A contract EXISTS but has no cdpPort: probing 9222 here could adopt an
-    // unrelated developer Chrome, so the resolver must give up instead.
     const resolved = await resolveCdpPort(dir, "chrome", { waitMs: 700 });
     expect(resolved).toBeNull();
   });
@@ -41,8 +39,6 @@ describe("legacy ready-contract compatibility", () => {
   });
 
   it("session-browser keeps a pid-less legacy sighting", () => {
-    // Old contracts carry no pid; absence of liveness data must not read as
-    // dead, or every 4.0.6 session would be invisible to browser defaulting.
     writeLegacyContract(dir, "chrome");
     expect(knownSessionBrowsers(dir)).toContain("chrome");
     expect(resolveSessionBrowser(dir, undefined)).toEqual({
@@ -85,9 +81,6 @@ describe("legacy ready-contract compatibility", () => {
   });
 
   it("ignores legacy engine-state files (port slot, shared token)", () => {
-    // These belong to the engine, not the MCP. If an MCP feature ever starts
-    // reading them, this is the fixture to extend — until then their mere
-    // presence must not conjure a session.
     writeLegacyEngineState(dir, "chrome");
     expect(knownSessionBrowsers(dir)).toEqual([]);
     expect(resolveSessionBrowser(dir, undefined).source).toBe("fallback");

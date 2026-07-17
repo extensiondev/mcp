@@ -2,7 +2,8 @@
   "name": "@extension.dev/mcp",
   "type": "module",
   "version": "4.3.0",
-  "description": "MCP server that lets AI agents build, run, inspect, and publish browser extensions. 29 tools for scaffolding, live DOM inspection, log streaming, and store-ready builds across Chrome, Edge, and Firefox.",
+  "description": "MCP server that lets AI agents (Claude Code, Claude Desktop, Cursor, Copilot, Codex) build, run, inspect, and publish browser extensions. 29 tools for scaffolding, live DOM inspection, log streaming, and store-ready builds across Chrome, Edge, and Firefox. Powered by extension.dev and Extension.js.",
+  "mcpName": "io.github.extensiondev/mcp",
   "license": "MIT",
   "author": {
     "name": "Cezar Augusto",
@@ -16,7 +17,7 @@
   "bugs": {
     "url": "https://github.com/extensiondev/mcp/issues"
   },
-  "homepage": "https://github.com/extensiondev/mcp#readme",
+  "homepage": "https://extension.dev",
   "engines": {
     "node": ">=20.18"
   },
@@ -36,6 +37,8 @@
     "dist",
     "bin",
     "claude",
+    ".claude-plugin",
+    "server.json",
     "README.md",
     "CHANGELOG.md",
     "LICENSE"
@@ -55,6 +58,7 @@
   },
   "keywords": [
     "mcp",
+    "mcp-server",
     "model-context-protocol",
     "ai-agent",
     "agents",
@@ -62,14 +66,18 @@
     "claude-code",
     "claude-desktop",
     "cursor",
+    "github-copilot",
+    "codex",
     "browser-extension",
     "chrome-extension",
     "firefox-addon",
+    "edge-extension",
     "manifest-v3",
     "webextension",
     "cross-browser",
     "developer-tools",
-    "extension.dev"
+    "extension.dev",
+    "extension.js"
   ],
   "dependencies": {
     "@extension.dev/core": "^0.2.0",

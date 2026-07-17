@@ -2,20 +2,6 @@ import fs from "node:fs";
 import path from "node:path";
 import WebSocket from "ws";
 
-// MCP consumer of the agent-bridge logs plane (Slice 1, read side).
-//
-// One client, many front-ends: this is the MCP twin of the `extension logs`
-// CLI verb (programs/extension/commands/logs.ts). The filter semantics below
-// MUST stay in lockstep with that command — same level ordering, same
-// context/since/signals-only rules — so an agent and a human see the same
-// stream. `browser` defaults to the active session's browser for the project
-// (see lib/session-browser), falling back to chromium — the folder a default
-// `extension dev` writes (dist/extension-js/chromium/).
-//
-// Bounded by design: a one-shot returns the most recent matching lines (so it
-// never floods the agent's context); `follow` collects from the live control
-// WS for a short, capped window and returns. There is no infinite stream — an
-// agent polls forward with `since`.
 import {
   CONTROL_ENVELOPE_VERSION,
   CONTROL_WS_PATH,
@@ -66,8 +52,6 @@ function readReadyContract(
   }
 }
 
-// Trim to the most recent `limit` matches; report whether anything was dropped
-// off the front so the caller knows the window was capped (not silently lossy).
 function capRecent(
   events: any[],
   limit: number,
@@ -191,7 +175,6 @@ async function readFromStream(
       try {
         socket.close();
       } catch {
-        // ignore
       }
       resolve(summarize(events, "stream", browser, runId, limit, dropped));
     };
@@ -209,7 +192,6 @@ async function readFromStream(
           }),
         );
       } catch {
-        // ignore — timer will settle the call
       }
     });
 

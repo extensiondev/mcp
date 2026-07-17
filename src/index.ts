@@ -30,7 +30,6 @@ import * as releasePromote from "./tools/release-promote";
 import * as wait from "./tools/wait";
 import * as addFeature from "./tools/add-feature";
 
-// Auth tools (platform-facing, like publish)
 import * as login from "./tools/login";
 import * as whoami from "./tools/whoami";
 import * as logout from "./tools/logout";
@@ -57,12 +56,9 @@ export interface ToolModule {
     description: string;
     inputSchema: Record<string, unknown>;
   };
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   handler: (args: any) => Promise<string>;
 }
 
-// Exported so tests (and embedders) assert against the real registry instead
-// of a hand-maintained mirror that drifts.
 export const tools: ToolModule[] = [
   create,
   listTemplates,
@@ -189,13 +185,6 @@ export async function startServer(): Promise<void> {
   await server.connect(transport);
 }
 
-/**
- * Human-facing subcommands for `extension-mcp <cmd>`. Unlike the MCP tools
- * (which must return promptly and so resume across calls), the bin blocks on
- * the device flow because there is a person watching the terminal. Returns a
- * process exit code. All console output goes to stderr so it never pollutes a
- * machine-readable stdout if a script captures it.
- */
 export async function runCli(cmd: string, args: string[]): Promise<number> {
   const log = (msg: string) => process.stderr.write(`${msg}\n`);
 

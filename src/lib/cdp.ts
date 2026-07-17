@@ -7,8 +7,6 @@ import {
   domSnapshotScript,
 } from "./cdp-page-scripts";
 
-// Lightweight CDP WebSocket client for MCP source inspection.
-// Connects to a running Chrome instance, evaluates JS, and captures console output.
 export class CDPClient extends CDPConnection {
   static async discoverBrowserWsUrl(
     port: number,
@@ -77,7 +75,6 @@ export class CDPClient extends CDPConnection {
 
   async navigate(sessionId: string, url: string): Promise<void> {
     await this.sendCommand("Page.navigate", { url }, sessionId);
-    // Wait for load event with timeout
     await new Promise<void>((resolve) => {
       const timeout = setTimeout(resolve, 5000);
 
@@ -106,10 +103,6 @@ export class CDPClient extends CDPConnection {
     return typeof result === "string" ? result : "";
   }
 
-  // Closed-shadow pierce (--deep-dom, Chromium only). JS evaluate() can't see
-  // closed shadow roots (.shadowRoot is null), so we go through the CDP DOM
-  // domain: DOM.getDocument({pierce:true}) returns the full tree INCLUDING closed
-  // shadow roots, then DOM.getOuterHTML extracts each closed root's content.
   async getClosedShadowRoots(
     sessionId: string,
     maxBytes = 65536,

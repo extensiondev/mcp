@@ -1,0 +1,30 @@
+{
+  "name": "extension-mcp",
+  "description": "MCP tools for browser extension development: scaffold from 60+ templates, run the dev server with HMR, inspect the live DOM and logs, and publish store-ready builds for Chrome, Edge, and Firefox. Ships /extension, /extension-add, /extension-debug, and /extension-publish commands.",
+  "version": "4.3.0",
+  "author": {
+    "name": "Cezar Augusto",
+    "email": "boss@cezaraugusto.net",
+    "url": "https://cezaraugusto.com"
+  },
+  "homepage": "https://github.com/extensiondev/mcp",
+  "repository": "https://github.com/extensiondev/mcp",
+  "license": "MIT",
+  "keywords": [
+    "mcp",
+    "browser-extension",
+    "chrome-extension",
+    "firefox-addon",
+    "edge-extension",
+    "manifest-v3",
+    "webextension",
+    "cross-browser"
+  ],
+  "commands": "./claude/commands",
+  "mcpServers": {
+    "extension-dev": {
+      "command": "npx",
+      "args": ["-y", "@extension.dev/mcp"]
+    }
+  }
+}

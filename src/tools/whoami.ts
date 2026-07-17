@@ -1,6 +1,3 @@
-// extension_whoami — report the locally stored login identity without ever
-// revealing the token. Reads the credentials file written by extension_login.
-
 import { readCredentials } from "@extension.dev/core";
 
 export const schema = {
