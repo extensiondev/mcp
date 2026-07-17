@@ -145,4 +145,4 @@ All of it rides on [Extension.js](https://github.com/extension-js/extension.js),
 
 ## License
 
-MIT (c) Cezar Augusto and the Extension.js authors.
+MIT (c) Cezar Augusto and the extension.dev collaborators
