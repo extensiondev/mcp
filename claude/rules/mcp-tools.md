@@ -408,7 +408,7 @@ The `similarTemplates` field lists templates from the catalog with similar surfa
 
 #### `extension_inspect`
 
-**Source:** New tool — wraps `--source` inspection from `programs/develop`
+**Source:** New tool; static analysis of the built `dist/` output
 
 **Purpose:** Analyze a built extension's structure, size, and entry points.
 
@@ -492,7 +492,7 @@ The `similarTemplates` field lists templates from the catalog with similar surfa
 
 **Source:** `programs/extension/browsers/` → CDP/RDP source inspection system
 
-**Purpose:** Live-inspect a running extension's DOM, console, and content script injection state. This is the `--source` system exposed as an MCP tool — it gives Claude _eyes_ into the running extension.
+**Purpose:** Live-inspect a running extension's DOM, console, and content script injection state over the debugging protocol. It gives Claude _eyes_ into the running extension. (This grew out of the engine's old `dev --source` CLI flags, which are no longer registered; the MCP connects to the CDP port directly.)
 
 ```json
 {
