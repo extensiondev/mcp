@@ -1,11 +1,3 @@
-// extension_publish — thin MCP adapter over @extension.dev/core's publish().
-//
-// The platform client (token resolution, base-URL egress guard, POST) lives in
-// core and is shared by every surface; this file owns only the MCP tool
-// contract. The schema and the JSON-string envelopes are frozen: agents
-// pattern-match on PublishAuthError / PublishNetworkError / PublishError, and
-// success returns the platform response verbatim.
-
 import { publish, resolveToken } from "@extension.dev/core";
 
 export const schema = {
@@ -38,16 +30,11 @@ export const schema = {
 };
 
 export async function handler(args: {
-  // projectPath is accepted for interface parity with the CLI; the publish
-  // target is identified by the token's claims (workspaceSlug/projectSlug),
-  // so the value is not sent in the request body.
   projectPath: string;
   ttlHours?: number;
   buildSha?: string;
   api?: string;
 }): Promise<string> {
-  // Pre-check the token here so the guidance names the MCP tool
-  // (extension_login), not core's surface-neutral wording.
   const token = resolveToken();
   if (!token) {
     return JSON.stringify({
@@ -67,8 +54,5 @@ export async function handler(args: {
     token,
   });
 
-  // Success: the platform response verbatim (shareUrl, visibility, …).
-  // Failure: core's envelope is byte-compatible with the frozen
-  // { ok: false, error: { name, message } } shape.
   return result.ok ? JSON.stringify(result.data) : JSON.stringify(result);
 }

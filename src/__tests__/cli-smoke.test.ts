@@ -4,12 +4,6 @@ import os from "node:os";
 import path from "node:path";
 import { runExtensionCli } from "../lib/exec";
 
-// The npx pinned path is version-skew's front door: with no project-local
-// bin, users get `npx extension@<vendored-or-EXTENSION_MCP_CLI_VERSION>`.
-// Nothing else exercises that resolution against a REAL engine, so the
-// nightly matrix runs this with RUN_CLI_SMOKE=1 (and the cell's engine
-// version in EXTENSION_MCP_CLI_VERSION). Skipped on PRs/local by default —
-// it downloads the CLI from npm.
 describe.skipIf(!process.env.RUN_CLI_SMOKE)("real-CLI smoke (npx pin)", () => {
   it("builds a fixture project through the pinned extension CLI", async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-cli-smoke-"));

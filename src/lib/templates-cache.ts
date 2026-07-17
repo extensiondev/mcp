@@ -5,7 +5,7 @@ import type { TemplatesMetaV2, TemplateMeta } from "./types";
 
 const CACHE_DIR = path.join(os.homedir(), ".cache", "extension-js");
 const CACHE_FILE = path.join(CACHE_DIR, "templates-meta.json");
-const CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
+const CACHE_TTL_MS = 60 * 60 * 1000;
 const TEMPLATES_META_URL =
   "https://github.com/extension-js/examples/releases/download/nightly/templates-meta.json";
 

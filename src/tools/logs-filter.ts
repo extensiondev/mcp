@@ -1,5 +1,3 @@
-// Increasing verbosity; selecting a level includes it + everything more severe.
-// Mirrors programs/extension/commands/logs.ts.
 const LEVEL_ORDER = ["error", "warn", "info", "debug", "trace"];
 
 function levelRank(level: string): number {
@@ -22,9 +20,6 @@ export interface LogsArgs {
   limit?: number;
 }
 
-// `url` accepts a glob (`*` = any run of chars) or a plain substring. Matched
-// against the event's url, then hostname. Mirrors makeUrlMatcher in the CLI
-// (programs/extension/commands/logs.ts) — keep the two in lockstep.
 function makeUrlMatcher(pattern: string): (event: any) => boolean {
   const hasGlob = pattern.includes("*");
   let re: RegExp | null = null;

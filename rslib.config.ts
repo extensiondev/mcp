@@ -23,8 +23,6 @@ export default defineConfig({
   },
   lib: [
     {
-      // ESM output: the MCP imports the now-ESM-only extension-* packages
-      // (extensionBuild/Create/Install), so a CJS bundle can't require() them.
       format: "esm",
       syntax: "es2021",
       dts: shouldGenerateDts,

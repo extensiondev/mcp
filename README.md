@@ -41,6 +41,17 @@ Built on [Extension.js](https://extension.js.org), the open-source cross-browser
 claude mcp add extension-dev npx @extension.dev/mcp
 ```
 
+Or install it as a plugin — the MCP server plus the `/extension`, `/extension-add`, `/extension-debug`, and `/extension-publish` commands in one step:
+
+```
+/plugin marketplace add extensiondev/mcp
+/plugin install extension-mcp@extensiondev-mcp
+```
+
+### Cursor
+
+[![Install MCP Server](https://cursor.com/deeplink/mcp-install-dark.svg)](https://cursor.com/en/install-mcp?name=extension-dev&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyJAZXh0ZW5zaW9uLmRldi9tY3AiXX0%3D)
+
 ### Claude Desktop / `.mcp.json`
 
 ```json

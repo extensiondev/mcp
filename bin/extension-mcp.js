@@ -11,6 +11,5 @@ if (cmd && ['login', 'logout', 'whoami', 'release'].includes(cmd)) {
       process.exit(1)
     })
 } else {
-  // No subcommand: run as the MCP stdio server (the default and primary mode).
   startServer()
 }

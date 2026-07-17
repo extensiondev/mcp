@@ -1,15 +1,3 @@
-// Headless "promote a build to a channel" for CI/CLI.
-//
-// Mirrors tools/publish.ts: auth-AWARE not auth-HOLDING. The release token is
-// read at call time (EXTENSION_DEV_TOKEN, else the login creds file) and never
-// persisted or logged here. The project is identified by the token's claims, so
-// the caller passes only the build + channel.
-//
-// Promote is mirror-side on the platform (it dispatches the release workflow and
-// pins channels.json), so it works with no browser. Cutting a release (the
-// version-bump PR) is intentionally NOT exposed headlessly: it writes to your
-// source repo, which needs an interactive GitHub login the CLI does not hold.
-
 import { resolveToken, safeApiBase } from "@extension.dev/core";
 
 const DEFAULT_API = "https://www.extension.dev";
@@ -132,6 +120,5 @@ export async function handler(args: {
     );
   }
 
-  // Success: return the platform response verbatim (queuedBrowsers, ...).
   return JSON.stringify(data);
 }

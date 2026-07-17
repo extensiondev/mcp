@@ -1,14 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
 
-/**
- * ready.json shape builders across engine generations. The MCP must keep
- * working against contracts written by OLDER extension.js versions — a
- * 4.0.6-era session writes no cdpPort and no pid, and users run old CLIs
- * under new MCPs all the time (the version-skew CI matrix pins the engine;
- * these fixtures pin the contract SHAPES those engines wrote).
- */
-
 function contractDir(projectPath: string, browser: string): string {
   return path.join(projectPath, "dist", "extension-js", browser);
 }
@@ -25,7 +17,6 @@ function writeContract(
   return file;
 }
 
-/** Current-generation contract: pid, cdpPort, controlPort all stamped. */
 export function writeModernContract(
   projectPath: string,
   browser: string,
@@ -45,7 +36,6 @@ export function writeModernContract(
   });
 }
 
-/** 4.0.6-era contract: status/ports/instanceId only — NO cdpPort, NO pid. */
 export function writeLegacyContract(
   projectPath: string,
   browser: string,
@@ -77,13 +67,6 @@ export function writeErrorContract(
   });
 }
 
-/**
- * Old-generation SESSION-STATE files the engine (not the MCP) reads:
- * the pre-#484 control-port slot under dist/ and the shared control.token.
- * The MCP deliberately ignores both — these exist so any future MCP feature
- * that starts reading them gets a fixture to extend instead of inventing
- * shapes.
- */
 export function writeLegacyEngineState(
   projectPath: string,
   browser: string,

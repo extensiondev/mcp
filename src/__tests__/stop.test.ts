@@ -8,7 +8,6 @@ import { registerSession, getSession } from "../lib/process-manager";
 import { resolveExtensionInvocation } from "../lib/exec";
 
 function spawnVictim(): number {
-  // A detached long-lived process standing in for `extension dev`.
   const child = spawn(
     process.execPath,
     ["-e", "setInterval(() => {}, 1000)"],
@@ -105,8 +104,6 @@ describe("extension_stop", () => {
     expect(result.pid).toBe(pid);
     expect(result.stopped).toBe(true);
     expect(isAlive(pid)).toBe(false);
-    // The stale contract must not survive, or extension_wait would report a
-    // dead session as ready.
     expect(fs.existsSync(readyPath)).toBe(false);
   });
 
@@ -142,7 +139,6 @@ describe("resolveExtensionInvocation", () => {
     const { command, prefixArgs } = resolveExtensionInvocation();
     expect(command).toBe("npx");
     expect(prefixArgs).toHaveLength(1);
-    // The vendored engine may be a stable or a prerelease (CI pins canary).
     expect(prefixArgs[0]).toMatch(/^extension@\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/);
   });
 

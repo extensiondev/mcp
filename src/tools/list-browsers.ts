@@ -26,12 +26,10 @@ function getDirSize(dir: string): number {
         try {
           total += fs.statSync(full).size;
         } catch {
-          // Skip inaccessible files
         }
       }
     }
   } catch {
-    // Directory not readable
   }
   return total;
 }

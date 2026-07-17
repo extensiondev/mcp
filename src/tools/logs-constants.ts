@@ -1,4 +1,3 @@
-// Control-envelope wire constants (control-envelope-1.0.json).
 export const CONTROL_ENVELOPE_VERSION = 1;
 export const CONTROL_WS_PATH = "/extjs-control";
 

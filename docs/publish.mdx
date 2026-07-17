@@ -39,7 +39,7 @@ extension publish --token <token>
 </CodeGroup>
 
 <Note>
-There is no `extension login` command today — authentication is the `EXTENSION_DEV_TOKEN` value, nothing more. (A streamlined login flow is planned; until it ships, use a dashboard-minted token.)
+Prefer not to copy tokens by hand? `npx @extension.dev/mcp login` (or the `extension_login` MCP tool) runs a GitHub device-code flow and stores a project-scoped token locally; the publish path picks it up automatically. Precedence: `--token` flag, then `EXTENSION_DEV_TOKEN`, then the stored login.
 </Note>
 
 ## Usage

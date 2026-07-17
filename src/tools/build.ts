@@ -45,8 +45,6 @@ export async function handler(args: {
       browser: args.browser ?? "chrome",
       zip: args.zip ?? false,
       zipSource: args.zipSource ?? false,
-      // The build runs in-process; the compiler's default fatal path calls
-      // process.exit(1), which would kill the whole MCP server mid-session.
       exitOnError: false,
     });
 
