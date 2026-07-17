@@ -1,15 +1,15 @@
-[npm-version-image]: https://img.shields.io/npm/v/%40extension.dev%2Fmcp.svg?color=0971fe
+[npm-version-image]: https://img.shields.io/npm/v/%40extension.dev%2Fmcp.svg?color=26FFB8
 [npm-version-url]: https://www.npmjs.com/package/@extension.dev/mcp
-[npm-downloads-image]: https://img.shields.io/npm/dm/%40extension.dev%2Fmcp.svg?color=0971fe
+[npm-downloads-image]: https://img.shields.io/npm/dm/%40extension.dev%2Fmcp.svg?color=26FFB8
 [npm-downloads-url]: https://www.npmjs.com/package/@extension.dev/mcp
-[discord-image]: https://img.shields.io/discord/1253608412890271755?label=Discord&logo=discord&style=flat&color=0971fe
+[discord-image]: https://img.shields.io/discord/1253608412890271755?label=Discord&logo=discord&style=flat&color=26FFB8
 [discord-url]: https://discord.gg/v9h2RgeTSN
 
 # @extension.dev/mcp [![Version][npm-version-image]][npm-version-url] [![Downloads][npm-downloads-image]][npm-downloads-url] [![Discord][discord-image]][discord-url]
 
 > Give your AI agent hands for browser extension development. 29 MCP tools that scaffold, run, inspect, debug, and publish cross-browser extensions.
 
-<img alt="Logo" align="right" src="https://avatars.githubusercontent.com/u/106714027" width="20%" />
+<img alt="Logo" align="right" src="https://media.extension.land/brand/extension-dev/logo-dock.png" width="18.4%" />
 
 ```bash
 claude mcp add extension-dev npx @extension.dev/mcp
