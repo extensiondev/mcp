@@ -61,7 +61,6 @@ function walkDir(dir: string, base: string = ""): FileEntry[] {
       }
     }
   } catch {
-    // Directory may not exist
   }
   return entries;
 }
@@ -97,7 +96,6 @@ export async function handler(args: {
   try {
     manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
   } catch {
-    // No manifest in dist
   }
 
   const byType: Record<string, { count: number; size: number }> = {};

@@ -2,10 +2,6 @@ import { describe, it, expect } from "vitest";
 import * as fs from "node:fs";
 import * as path from "node:path";
 
-// Regression guard for the @extension.dev/core extraction (MIGRATION.md
-// phase 2): the MCP is a protocol adapter and must not re-grow its own
-// platform-auth logic. The only auth entry point is @extension.dev/core.
-
 const SRC = path.resolve(__dirname, "..");
 const THIS_FILE = path.resolve(__dirname, "core-boundary.test.ts");
 

@@ -1,16 +1,3 @@
-// extension_login — authenticate to extension.dev and persist a project-scoped
-// access token locally so `extension_publish` works without the user exporting
-// EXTENSION_DEV_TOKEN by hand.
-//
-// Two-phase by design, because an MCP tool call must return promptly and the
-// device flow waits on a human:
-//   - First call (no deviceCode): starts the GitHub device flow, polls briefly,
-//     and if the user hasn't authorized yet returns the code + URL plus a
-//     `deviceCode` to resume with.
-//   - Resume call (deviceCode passed): polls again; on success it writes the
-//     credentials, on "pending" it asks to be called again.
-// The token is never returned or logged.
-
 import {
   pollForToken,
   startDeviceCode,
@@ -47,8 +34,6 @@ export const schema = {
   },
 };
 
-// Per-call poll budgets. Kept well under typical MCP client timeouts; the user
-// is expected to authorize between calls, not during a single one.
 const FIRST_CALL_BUDGET_MS = 8_000;
 const RESUME_BUDGET_MS = 22_000;
 
@@ -113,7 +98,6 @@ export async function handler(args: {
     );
   }
 
-  // Resume phase: we already have a device code from a prior call.
   if (args.deviceCode) {
     const poll = await pollForToken({
       clientId: config.clientId,
@@ -152,8 +136,6 @@ export async function handler(args: {
     }
   }
 
-  // First phase: start the device flow and poll briefly in case the user is
-  // quick. Otherwise hand back the code + URL to resume with.
   let start: DeviceCodeStart;
   try {
     start = await startDeviceCode({

@@ -2,24 +2,6 @@ import fs from "node:fs";
 import path from "node:path";
 import { listSessions } from "./process-manager";
 
-// Session-aware browser defaulting (fresh-eyes walk, friction #1).
-//
-// The act tools used to hard-default `browser` to "chromium" while
-// `extension_dev` defaults to "chrome" — so an agent that started a session
-// with one browser and omitted `browser` on the next call was told "no active
-// control channel", and an obedient agent would spawn a second, conflicting
-// session. The default must be THE SESSION THAT IS RUNNING, not a constant.
-//
-// Resolution order:
-// 1. explicit — the caller said which browser; never second-guess it.
-// 2. session — the in-memory registry of dev/start/preview processes this
-//    MCP server spawned (most recently registered wins).
-// 3. contract — dist/extension-js/<browser>/ready.json files on disk. Covers
-//    sessions started before an MCP restart or from a terminal. Freshest
-//    contract wins; entries whose pid is dead are ignored.
-// 4. fallback — the tool's historical default, so behavior without any
-//    session is unchanged.
-
 export interface ResolvedBrowser {
   browser: string;
   source: "explicit" | "session" | "contract" | "fallback";
@@ -52,7 +34,6 @@ function contractSightings(projectPath: string): ContractSighting[] {
         pid: typeof contract.pid === "number" ? contract.pid : undefined,
       });
     } catch {
-      // No contract in this dir, or mid-write — skip it.
     }
   }
   return sightings;
@@ -67,7 +48,6 @@ function pidAlive(pid: number): boolean {
   }
 }
 
-/** Browsers with a live session for this project (registry + disk contracts). */
 export function knownSessionBrowsers(projectPath: string): string[] {
   const resolved = path.resolve(projectPath);
   const browsers: string[] = [];

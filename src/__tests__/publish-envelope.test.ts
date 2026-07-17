@@ -5,11 +5,6 @@ import path from "node:path";
 import { writeCredentials } from "@extension.dev/core";
 import { handler } from "../tools/publish";
 
-// The extension_publish JSON-string envelopes are a frozen contract: agents
-// pattern-match on PublishAuthError / PublishConfigError / PublishNetworkError
-// / PublishError. These strings must stay byte-identical across the
-// @extension.dev/core thin-adapter rewrite (MIGRATION.md phase 2).
-
 describe("extension_publish envelope compatibility", () => {
   let tmp: string;
   let prevXdg: string | undefined;
@@ -77,8 +72,6 @@ describe("extension_publish envelope compatibility", () => {
       expiresAt: Math.floor(Date.now() / 1000) + 3600,
       api: "https://www.extension.dev",
     });
-    // Non-localhost http still refuses BEFORE any network call, proving the
-    // token was resolved (env wins) and then guarded.
     process.env.EXTENSION_DEV_TOKEN = "tok_env";
     const out = await handler({
       projectPath: "/tmp/x",

@@ -4,20 +4,11 @@ import os from "node:os";
 import path from "node:path";
 import spawn from "cross-spawn";
 
-// SECURITY regression guard for src/lib/exec.ts.
-//
-// exec.ts spawns `npx extension <...args>` where some args are untrusted tool
-// inputs (e.g. the extension_eval expression). It must NEVER use `{ shell: true }`
-// -- that would run the argv through a shell and let metacharacters in those
-// inputs execute arbitrary commands. These tests fail if the shell is reintroduced.
-
 const execSource = fs.readFileSync(
   new URL("../lib/exec.ts", import.meta.url),
   "utf8",
 );
 
-// Strip comments so the guard checks actual code, not the explanatory note that
-// mentions the old `shell: true` it replaced.
 const execCode = execSource
   .replace(/\/\*[\s\S]*?\*\//g, "")
   .replace(/\/\/.*$/gm, "");
@@ -36,8 +27,6 @@ describe("exec.ts spawns without a shell", () => {
       os.tmpdir(),
       `mcp-no-shell-${process.pid}-${Date.now()}`,
     );
-    // If argv were routed through a shell, `; touch <marker>` would create the
-    // file. Without a shell it is just an inert argument to `node`.
     await new Promise<void>((resolve) => {
       const child = spawn(
         "node",

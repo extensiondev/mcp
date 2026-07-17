@@ -39,7 +39,6 @@ export const schema = {
   },
 };
 
-// Map feature + framework to the best reference template
 const FEATURE_TEMPLATE_MAP: Record<string, Record<string, string>> = {
   sidebar: {
     react: "sidebar-shadcn",
@@ -92,7 +91,6 @@ const FEATURE_TEMPLATE_MAP: Record<string, Record<string, string>> = {
   },
 };
 
-// Manifest fields needed per feature
 const MANIFEST_ADDITIONS: Record<string, Record<string, unknown>> = {
   sidebar: {
     "chromium:side_panel": { default_path: "sidebar/index.html" },
@@ -144,7 +142,6 @@ export async function handler(args: {
   const projectPath = path.resolve(args.projectPath);
   const srcDir = path.join(projectPath, "src");
 
-  // Validate project exists
   const manifestPath = path.join(srcDir, "manifest.json");
 
   if (!fs.existsSync(manifestPath)) {
@@ -154,7 +151,6 @@ export async function handler(args: {
     });
   }
 
-  // Find reference template
   const templateSlug = FEATURE_TEMPLATE_MAP[args.feature]?.[framework];
 
   if (!templateSlug) {
@@ -166,7 +162,6 @@ export async function handler(args: {
   const template = await getTemplateBySlug(templateSlug);
   const referenceFiles = template?.keyFiles ?? template?.files ?? [];
 
-  // Determine what files to create
   const featureDir =
     args.feature === "content-script" ? "content" : args.feature;
   const filesToCreate: Array<{ path: string; hint: string }> = [];
@@ -209,7 +204,6 @@ export async function handler(args: {
     });
   }
 
-  // Check for conflicts
   const conflicts = filesToCreate.filter((f) =>
     fs.existsSync(path.join(projectPath, f.path)),
   );

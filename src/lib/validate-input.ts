@@ -1,15 +1,3 @@
-// Server-side validation of tools/call arguments against a tool's declared
-// inputSchema. The MCP SDK does not enforce inputSchema on the server, so
-// without this a missing required argument reaches the handler and surfaces
-// as a raw internal error (e.g. a Node path TypeError), and a misspelled
-// argument is silently ignored. Agents pattern-match on error envelopes, so
-// both cases should fail fast with a typed, self-correcting message.
-//
-// Deliberately a small JSON Schema subset: the tool schemas in this package
-// only use type/object, properties with primitive types, enum, arrays with
-// primitive items, and required. Anything the subset does not understand is
-// accepted rather than rejected, so schema growth never breaks calls.
-
 export interface InputIssue {
   path: string;
   message: string;
@@ -71,10 +59,6 @@ function checkPrimitive(
   }
 }
 
-/**
- * Validate tools/call arguments against a tool inputSchema. Returns an empty
- * array when the args are acceptable.
- */
 export function validateToolInput(
   inputSchema: Record<string, unknown>,
   args: Record<string, unknown>,
@@ -106,7 +90,6 @@ export function validateToolInput(
   return issues;
 }
 
-/** Frozen-style error envelope for input validation failures. */
 export function inputValidationError(
   toolName: string,
   issues: InputIssue[],

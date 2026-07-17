@@ -1,7 +1,3 @@
-// extension_logout — delete the locally stored credentials file. The token is
-// not revoked server-side (it remains revocable from the dashboard); this only
-// removes it from this machine.
-
 import { clearCredentials } from "@extension.dev/core";
 
 export const schema = {

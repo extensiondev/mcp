@@ -2,8 +2,6 @@ import WebSocket from "ws";
 
 const COMMAND_TIMEOUT_MS = 15_000;
 
-// Transport + console-capture layer for the CDP client. Owns the WebSocket
-// connection, request/response plumbing, event fan-out, and console capture.
 export class CDPConnection {
   private ws: WebSocket | null = null;
   private messageId = 0;
@@ -23,7 +21,6 @@ export class CDPConnection {
     timestamp: number;
   }> = [];
 
-  // Connect to a CDP WebSocket URL (e.g., ws://127.0.0.1:9222/devtools/browser/...)
   async connect(wsUrl: string): Promise<void> {
     return new Promise((resolve, reject) => {
       this.ws = new WebSocket(wsUrl);
@@ -50,7 +47,6 @@ export class CDPConnection {
       try {
         this.ws.close();
       } catch {
-        /* ignore */
       }
       this.ws = null;
     }
@@ -113,7 +109,6 @@ export class CDPConnection {
         listener(message);
       }
     } catch {
-      // Malformed message, ignore
     }
   }
 

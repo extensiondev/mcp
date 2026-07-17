@@ -68,11 +68,8 @@ export async function handler(args: {
     projectPath: args.projectPath,
     command: "dev",
   });
-  // Keep the registry honest: a session that dies on its own (crash, user
-  // closes the browser, Ctrl+C on the terminal) should not linger as stoppable.
   child.on("exit", () => removeSession(args.projectPath, browser));
 
-  // Collect initial output for a few seconds so we can report early errors
   let earlyOutput = "";
   const collector = (data: Buffer) => {
     earlyOutput += data.toString();

@@ -52,10 +52,6 @@ function isAlive(pid: number): boolean {
   }
 }
 
-// Signal the whole process group (the spawn is detached, so the CLI leads its
-// own group and the group signal reaches the dev server AND the browser it
-// launched). Fall back to a single-pid signal for platforms/sessions where
-// group signaling is unavailable.
 function signal(pid: number, sig: NodeJS.Signals): boolean {
   try {
     process.kill(-pid, sig);
@@ -80,9 +76,6 @@ function readyJsonPath(projectPath: string, browser: string): string {
   );
 }
 
-// The MCP server may have restarted since the session began, losing the
-// in-memory registry. The ready.json contract the CLI writes carries the pid,
-// so a stop can still find the process.
 function pidFromReadyContract(
   projectPath: string,
   browser: string,
@@ -119,8 +112,6 @@ async function stopOne(
     detail = "Process was already gone; cleaned up session records.";
   } else {
     signal(pid, "SIGTERM");
-    // Give the CLI a moment to shut down its browser and server cleanly,
-    // then escalate if the tree is still alive.
     await new Promise((resolve) => setTimeout(resolve, 1500));
     if (isAlive(pid)) {
       signal(pid, "SIGKILL");
@@ -132,12 +123,9 @@ async function stopOne(
   }
 
   removeSession(projectPath, browser);
-  // Drop the stale ready contract so a later extension_wait cannot report a
-  // dead session as ready.
   try {
     fs.rmSync(readyJsonPath(projectPath, browser), { force: true });
   } catch {
-    // dist may be read-only or already gone — not worth failing the stop
   }
 
   return { projectPath, browser, pid, stopped: !isAlive(pid), detail };

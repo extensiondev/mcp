@@ -41,9 +41,6 @@ export async function handler(args: {
 }): Promise<string> {
   const start = Date.now();
 
-  // extensionCreate treats an absolute input as the full project path, so a
-  // parentDir just resolves the name against it. Without parentDir the name
-  // resolves against the server's cwd (extensionCreate's own default).
   const projectInput = args.parentDir
     ? path.resolve(args.parentDir, args.projectName)
     : args.projectName;

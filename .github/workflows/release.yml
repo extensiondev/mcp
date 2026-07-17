@@ -90,7 +90,25 @@ jobs:
         env:
           VERSION: ${{ steps.validate.outputs.version }}
         run: |
-          node -e "const fs=require('fs');const p='package.json';const j=JSON.parse(fs.readFileSync(p,'utf8'));j.version=process.env.VERSION;fs.writeFileSync(p,JSON.stringify(j,null,2)+'\n')"
+          node -e "
+            const fs = require('fs');
+            const v = process.env.VERSION;
+            const write = (p, mutate) => {
+              if (!fs.existsSync(p)) return;
+              const j = JSON.parse(fs.readFileSync(p, 'utf8'));
+              mutate(j);
+              fs.writeFileSync(p, JSON.stringify(j, null, 2) + '\n');
+            };
+            write('package.json', (j) => { j.version = v; });
+            write('server.json', (j) => {
+              j.version = v;
+              for (const pkg of j.packages || []) pkg.version = v;
+            });
+            write('.claude-plugin/plugin.json', (j) => { j.version = v; });
+            write('.claude-plugin/marketplace.json', (j) => {
+              for (const p of j.plugins || []) p.version = v;
+            });
+          "
 
       - name: Configure git identity
         run: |
@@ -102,7 +120,7 @@ jobs:
           VERSION: ${{ steps.validate.outputs.version }}
           TAG: ${{ steps.validate.outputs.tag }}
         run: |
-          git add package.json pnpm-lock.yaml
+          git add package.json pnpm-lock.yaml server.json .claude-plugin
           if ! git diff --cached --quiet; then
             git commit -m "release: v$VERSION"
           fi

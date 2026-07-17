@@ -82,7 +82,6 @@ export async function handler(args: {
         });
       }
     } catch {
-      // File doesn't exist yet or is being written — keep polling
     }
 
     await new Promise((resolve) => setTimeout(resolve, pollInterval));
