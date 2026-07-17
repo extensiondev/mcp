@@ -156,7 +156,7 @@ jobs:
       # (id-token: write above) against the trusted publisher configured on
       # npmjs.com for this repo/workflow. Provenance is generated automatically.
       - name: Publish to npm with provenance
-        run: npm publish --provenance --access ${{ steps.meta.outputs.publish_access }} --tag latest --no-git-checks --ignore-scripts
+        run: npm publish --provenance --access ${{ steps.meta.outputs.publish_access }} --tag latest --ignore-scripts
 
       - name: Create GitHub release
         env:
