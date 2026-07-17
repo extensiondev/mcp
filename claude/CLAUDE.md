@@ -170,52 +170,42 @@ https://github.com/extension-js/examples/tree/main/examples/<slug>/src
 
 ## When debugging
 
-### Source inspection (`--source`)
+### Live DOM inspection (`extension inspect` / MCP inspect tools)
 
-The `--source` flag on `dev` gives live DOM inspection of a running extension:
+Two ways to see inside a running extension. Both need an active dev session.
+
+**Agent bridge (CDP-free, localhost): `extension inspect`.** Requires the session to be started with `--allow-control` (or `allowControl: true` on the `extension_dev` MCP tool). Sees open shadow roots but not closed ones.
 
 ```bash
-# Basic: see injected HTML after content scripts run
-npm run dev -- --source https://example.com
+# Structured summary of the content-script DOM in a tab
+extension inspect --tab 1
 
-# Structured JSON output (best for programmatic use)
-npm run dev -- --source https://example.com --source-format json
+# Inspect an open extension surface instead of a tab
+extension inspect --context popup
 
-# Probe specific selectors
-npm run dev -- --source https://example.com --source-probe "#my-root,.sidebar"
-
-# Full inspection: DOM snapshots, console summary, diffs on rebuild
-npm run dev -- --source https://example.com --source-dom --source-console --source-diff
+# Include byte-capped HTML plus the last 20 console lines
+extension inspect --tab 1 --include summary,html --with-console 20
 ```
 
-**Available --source sub-flags:**
+| Flag                 | Default | Purpose                                                                                        |
+| -------------------- | ------- | ---------------------------------------------------------------------------------------------- |
+| `--context <name>`   | content | `content`/`page` (needs `--tab`) or an open surface: `popup`, `options`, `sidebar`, `devtools` |
+| `--tab <id>`         | -       | Tab id to inspect (required for content/page)                                                  |
+| `--include <list>`   | summary | Comma-separated: `summary`, `html` (html is byte-capped)                                       |
+| `--max-bytes <n>`    | 262144  | Cap on returned HTML bytes                                                                     |
+| `--with-console [n]` | 20      | Also include the last n console lines for the target                                           |
 
-| Flag                         | Default   | Purpose                                           |
-| ---------------------------- | --------- | ------------------------------------------------- |
-| `--source [url]`             | —         | Open URL and print live HTML after injection      |
-| `--watch-source`             | true      | Re-print on rebuilds                              |
-| `--source-format`            | json      | Output format: `pretty`, `json`, `ndjson`         |
-| `--source-summary`           | auto      | Compact stats instead of full HTML                |
-| `--source-meta`              | auto      | Page metadata: readyState, viewport, frames       |
-| `--source-probe <selectors>` | —         | CSS selectors to query (comma-separated)          |
-| `--source-tree`              | off       | Extension root DOM tree: `off`, `root-only`       |
-| `--source-console`           | auto      | Console counts: error/warn/info/log/debug         |
-| `--source-dom`               | auto      | DOM snapshots and structural diffs                |
-| `--source-max-bytes`         | 256KB     | Truncate HTML output (0 = unlimited)              |
-| `--source-redact`            | safe      | Redact sensitive content: `off`, `safe`, `strict` |
-| `--source-include-shadow`    | open-only | Shadow DOM: `off`, `open-only`, `all`             |
-| `--source-diff`              | auto      | Include diff metadata on watch updates            |
+The `extension_dom_inspect` MCP tool wraps this verb one-to-one.
 
-**Output event types** (in JSON/NDJSON format):
+**Debugging protocol (Chromium CDP): `extension_source_inspect` MCP tool.** Connects directly to the running session's debug port. Use it when the bridge is not enough: closed shadow roots (`deepDom`), selector probes, DOM snapshots, console summaries, or navigating the tab to a URL before inspecting. Returns structured events:
 
-- `page_html` — full injected HTML
-- `page_html_summary` — root/script/style/link counts
-- `page_meta` — readyState, viewport, frame count
-- `dom_snapshot` — structured tree (tag, id, classes, role, max 500 nodes)
-- `dom_diff` — added/removed/changed between rebuilds
-- `console_summary` — error/warn counts + top 5 unique messages
-- `selector_probe` — per-selector element counts and samples
-- `extension_root_tree` — extension root elements with reinject generations
+- `page_html` - full injected HTML (after content scripts run)
+- `page_html_summary` - root/script/style/link counts
+- `page_meta` - readyState, viewport, frame count
+- `dom_snapshot` - structured tree (tag, id, classes, role, max 500 nodes)
+- `console_summary` - error/warn counts + top 5 unique messages
+- `selector_probe` - per-selector element counts and samples
+- `extension_root_tree` - extension root elements with reinject generations
 
 ### Unified logging (`--logs`)
 

@@ -20,9 +20,8 @@ Debug the currently running extension dev session. The user said: $ARGUMENTS
    - Report the results in a structured way
 
    If MCP is not available:
-   - Suggest the CLI equivalent: `npx extension dev --source <url> --source-format json --source-console`
-   - Read `dist/extension-js/chrome/ready.json` to get the CDP port
-   - Report the port and suggest Chrome DevTools inspection
+   - If the session was started with `--allow-control`, suggest the CLI equivalent: `npx extension inspect --tab <id> --include summary,html --with-console 20`
+   - Otherwise read `dist/extension-js/chrome/ready.json` to get the CDP port and suggest Chrome DevTools inspection
 
 3. **Exercise event handlers (when the bug is in an action / command / shortcut)**
    If the session was started with `--allow-control`, fire the events a user would, without clicking:
