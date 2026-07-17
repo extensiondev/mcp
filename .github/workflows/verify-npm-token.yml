@@ -1,0 +1,26 @@
+name: Verify npm token
+
+on:
+  workflow_dispatch:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          registry-url: https://registry.npmjs.org
+
+      - name: Check token shape and identity
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          if [ -z "$NODE_AUTH_TOKEN" ]; then
+            echo "NPM_TOKEN secret is empty" >&2
+            exit 1
+          fi
+          echo "token byte length: $(printf '%s' "$NODE_AUTH_TOKEN" | wc -c)"
+          echo "trailing newline present: $([ "$(printf '%s' "$NODE_AUTH_TOKEN" | wc -l)" -gt 0 ] && echo yes || echo no)"
+          echo "whoami: $(npm whoami --registry https://registry.npmjs.org/)"
