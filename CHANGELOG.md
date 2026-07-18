@@ -1,5 +1,14 @@
 # Changelog
 
+## 4.6.0
+
+New `extension_deploy` tool (31 tools total): submit a built extension to the
+Chrome Web Store, Firefox AMO, and Edge Add-ons by driving the standalone
+`deploy` CLI. Store targets are inferred from the `.zip` paths
+you pass. It defaults to a dry run, and store credentials are read from the
+environment or a `.env.submit` file, never from tool arguments, so secrets
+never enter the agent transcript.
+
 ## 4.5.0
 
 The platform client (GitHub device-code login, the credential store, and the
