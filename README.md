@@ -121,12 +121,13 @@ cp node_modules/@extension.dev/mcp/claude/commands/*.md ~/my-extension/.claude/c
 | platform | `extension_logout` | Remove stored credentials |
 | platform | `extension_publish` | Publish a shareable preview to extension.dev |
 | platform | `extension_release_promote` | Promote a build to a release channel, headless |
+| platform | `extension_deploy` | Submit to the Chrome, Firefox, and Edge stores (wraps `deploy`) |
 
 Browser-launching tools (`dev`, `start`, `preview`) shell out to the `extension` CLI — the project's own `node_modules/.bin/extension` when present, otherwise `npx extension@<pinned>` at the version this package is verified against; everything else runs in-process.
 
 ## From preview to store
 
-The four platform tools connect agents to [extension.dev](https://extension.dev): `extension_login` runs a GitHub device-code flow and stores a project-scoped token locally (never returned to the agent), `extension_publish` turns a build into a shareable preview URL, and `extension_release_promote` promotes a tested build to a release channel from CI or an agent session, no browser required. To automate store submission itself (Chrome Web Store, Edge Add-ons, Firefox AMO), pair with [`deploy`](https://extension.dev).
+The platform tools connect agents to [extension.dev](https://extension.dev): `extension_login` runs a GitHub device-code flow and stores a project-scoped token locally (never returned to the agent), `extension_publish` turns a build into a shareable preview URL, and `extension_release_promote` promotes a tested build to a release channel from CI or an agent session, no browser required. `extension_deploy` submits the built `.zip` to the Chrome Web Store, Edge Add-ons, and Firefox AMO by driving the standalone [`deploy`](https://extension.dev) CLI — it defaults to a dry run and reads store credentials from the environment or a `.env.submit` file, never from tool arguments.
 
 ## The extension.dev stack
 
