@@ -1,5 +1,15 @@
 # Changelog
 
+## 4.7.0
+
+`extension_deploy` gains platform mode. Set `platform: true` (with
+`EXTENSION_DEV_TOKEN` in the environment) and pass `browsers` + `buildSha` to
+route the submission through extension.dev instead of the store APIs; direct
+zip-based submission is unchanged and stays the default. The tool shapes the
+child environment per mode, so a token that merely happens to be present cannot
+redirect a direct submission into platform mode. Platform mode requires
+`deploy` >= 1.3.0.
+
 ## 4.6.0
 
 New `extension_deploy` tool (31 tools total): submit a built extension to the

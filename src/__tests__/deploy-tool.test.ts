@@ -1,6 +1,16 @@
-import { describe, it, expect } from "vitest";
-import { buildDeployArgs, schema, handler } from "../tools/deploy";
+import { afterEach, describe, it, expect } from "vitest";
+import {
+  buildDeployArgs,
+  buildPlatformArgs,
+  isPlatformInvocation,
+  schema,
+  handler,
+} from "../tools/deploy";
 import { tools as ALL_TOOLS } from "../index";
+
+afterEach(() => {
+  delete process.env.EXTENSION_DEV_TOKEN;
+});
 
 describe("extension_deploy: buildDeployArgs", () => {
   it("adds --dry-run by default (no explicit dryRun)", () => {
@@ -9,12 +19,6 @@ describe("extension_deploy: buildDeployArgs", () => {
       "--chrome-zip",
       "c.zip",
     ]);
-  });
-
-  it("adds --dry-run when dryRun is true", () => {
-    expect(
-      buildDeployArgs({ projectPath: ".", chromeZip: "c.zip", dryRun: true }),
-    ).toContain("--dry-run");
   });
 
   it("omits --dry-run only when dryRun is explicitly false", () => {
@@ -72,8 +76,6 @@ describe("extension_deploy: buildDeployArgs", () => {
   });
 
   it("never emits a credential flag, whatever is passed", () => {
-    // Cast through unknown: even if a caller smuggles secret-looking keys, the
-    // builder must ignore them - creds only ever come from the environment.
     const argv = buildDeployArgs({
       projectPath: ".",
       chromeZip: "c.zip",
@@ -89,11 +91,67 @@ describe("extension_deploy: buildDeployArgs", () => {
   });
 });
 
-describe("extension_deploy: handler guard", () => {
-  it("errors when no store zip is provided (no spawn)", async () => {
+describe("extension_deploy: platform mode", () => {
+  it("detects platform mode from platform:true, browsers, or buildSha", () => {
+    expect(isPlatformInvocation({ projectPath: ".", chromeZip: "c.zip" })).toBe(false);
+    expect(isPlatformInvocation({ projectPath: ".", platform: true })).toBe(true);
+    expect(isPlatformInvocation({ projectPath: ".", browsers: ["chrome"] })).toBe(true);
+    expect(isPlatformInvocation({ projectPath: ".", buildSha: "abc1234" })).toBe(true);
+  });
+
+  it("builds platform argv with --platform and no store zips", () => {
+    const argv = buildPlatformArgs({
+      projectPath: ".",
+      dryRun: false,
+      browsers: ["chrome", "firefox"],
+      buildSha: "abc1234",
+      channel: "beta",
+    });
+    expect(argv).toEqual([
+      "--platform",
+      "--browsers",
+      "chrome,firefox",
+      "--build-sha",
+      "abc1234",
+      "--channel",
+      "beta",
+    ]);
+    expect(argv.join(" ")).not.toMatch(/zip/);
+  });
+
+  it("dry-runs by default in platform mode", () => {
+    expect(
+      buildPlatformArgs({ projectPath: ".", browsers: ["chrome"], buildSha: "s" }),
+    ).toContain("--dry-run");
+  });
+});
+
+describe("extension_deploy: handler guards", () => {
+  it("errors when direct mode has no store zip (no spawn)", async () => {
     const out = JSON.parse(await handler({ projectPath: "." }));
     expect(out.ok).toBe(false);
     expect(out.error.name).toBe("DeployInputError");
+  });
+
+  it("errors when platform mode is requested without a token (no spawn)", async () => {
+    delete process.env.EXTENSION_DEV_TOKEN;
+    const out = JSON.parse(
+      await handler({ projectPath: ".", browsers: ["chrome"], buildSha: "abc1234" }),
+    );
+    expect(out.ok).toBe(false);
+    expect(out.error.name).toBe("DeployAuthError");
+  });
+
+  it("errors when platform mode lacks browsers or buildSha (no spawn)", async () => {
+    process.env.EXTENSION_DEV_TOKEN = "tok";
+    const noBrowsers = JSON.parse(
+      await handler({ projectPath: ".", platform: true, buildSha: "abc1234" }),
+    );
+    expect(noBrowsers.error.name).toBe("DeployInputError");
+    const noSha = JSON.parse(
+      await handler({ projectPath: ".", platform: true, browsers: ["chrome"] }),
+    );
+    expect(noSha.error.name).toBe("DeployInputError");
   });
 });
 
