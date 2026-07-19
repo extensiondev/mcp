@@ -1,0 +1,6 @@
+{
+  "//": "Test-scoped tsconfig so the vitest vite:oxc transform can resolve a config that APPLIES to the test files. The root tsconfig.json excludes **/*.test.ts (they must not land in the rslib build), which left oxc with no applicable tsconfig and it failed every suite with [TSCONFIG_ERROR] Tsconfig not found. This one inherits the compiler options and re-includes the tests without touching the build/typecheck scope.",
+  "extends": "../../tsconfig.json",
+  "include": ["**/*.ts"],
+  "exclude": []
+}
