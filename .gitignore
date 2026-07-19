@@ -14,3 +14,6 @@ test-results/
 # gitignore hygiene sweep
 .DS_Store
 *.tsbuildinfo
+
+# Local working docs (docs policy: knowledge -> memory, ledgers gitignored)
+BUGS_TO_FIX.md
