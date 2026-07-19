@@ -23,7 +23,7 @@ export const schema = {
       buildSha: {
         type: "string",
         description:
-          "Pin the share URL to a specific build sha (7-40 hex chars). Existence is not verified here; an unknown sha yields a link to a build that does not exist.",
+          "Pin the share URL to a specific build sha (7-40 hex chars). The platform verifies the build exists in the project's build index and rejects an unknown sha, so the returned URL always points at a real build.",
       },
       api: {
         type: "string",
