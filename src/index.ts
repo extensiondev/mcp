@@ -43,6 +43,7 @@ import * as login from "./tools/login";
 import * as whoami from "./tools/whoami";
 import * as logout from "./tools/logout";
 import { pollForToken, startDeviceCode } from "./lib/github-device";
+import { requestDeviceCode, pollDeviceToken } from "./lib/device-flow";
 import {
   exchangeAndPersist,
   fetchLoginConfig,
@@ -256,6 +257,43 @@ export async function runCli(cmd: string, args: string[]): Promise<number> {
     const apiBase = resolveApiBase(flag("api"));
     try {
       const config = await fetchLoginConfig(apiBase);
+
+      // extension.dev-gated device flow (branded /device, GitHub server-side).
+      // Mirrors the tools/login.ts provider branch so the shell CLI and the MCP
+      // tool authenticate identically instead of the CLI always forcing GitHub.
+      if (config.provider === "extensiondev") {
+        const start = await requestDeviceCode({
+          apiBase,
+          path: config.deviceCodeUrl,
+          project,
+        });
+        log("");
+        log(`  Open ${start.verificationUri} and enter code: ${start.userCode}`);
+        log("");
+        log("  Waiting for authorization...");
+        const poll = await pollDeviceToken({
+          apiBase,
+          path: config.deviceTokenUrl,
+          project,
+          deviceCode: start.deviceCode,
+          interval: start.interval,
+          budgetMs: start.expiresIn * 1000,
+        });
+        if (!poll.ok) {
+          log(
+            poll.reason === "denied"
+              ? "Authorization was denied at extension.dev/device."
+              : poll.reason === "expired"
+                ? "The device code expired. Run login again."
+                : "Timed out waiting for authorization. Run login again.",
+          );
+          return 1;
+        }
+        log(`Logged in to ${poll.creds.workspaceSlug}/${poll.creds.projectSlug}.`);
+        return 0;
+      }
+
+      // Legacy GitHub-direct device flow (fallback until the server default flips).
       const start = await startDeviceCode({
         clientId: config.clientId,
         scope: config.scope,

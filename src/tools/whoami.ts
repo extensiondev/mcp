@@ -36,6 +36,9 @@ export async function handler(): Promise<string> {
     workspaceSlug: creds.workspaceSlug,
     projectSlug: creds.projectSlug,
     api: creds.api,
+    // Which device flow minted the stored token. Tokens predating the
+    // extension.dev-gated flow have no recorded provider and were GitHub-direct.
+    provider: creds.provider ?? "github",
     expiresAt: creds.expiresAt
       ? new Date(creds.expiresAt * 1000).toISOString()
       : null,

@@ -47,14 +47,23 @@ export function safeApiBase(
 }
 
 export interface LoginConfig {
+  /**
+   * "extensiondev": the extension.dev-gated device flow (branded /device, GitHub
+   * federated server-side). "github": the legacy GitHub-direct device flow.
+   */
+  provider: "extensiondev" | "github";
   clientId: string;
   scope: string;
+  deviceCodeUrl: string;
+  deviceTokenUrl: string;
+  verificationUri: string;
 }
 
 /**
- * Resolve the GitHub OAuth client id the device flow authenticates against.
- * EXTENSION_DEV_GITHUB_CLIENT_ID overrides (useful when pointing at a self-
- * hosted platform); otherwise it comes from the platform's public config.
+ * Resolve how the device flow should authenticate. The server's public config
+ * picks the provider (extension.dev-gated once its device endpoints are live,
+ * else GitHub-direct). EXTENSION_DEV_GITHUB_CLIENT_ID forces the GitHub flow
+ * (useful when pointing at a self-hosted platform).
  */
 export async function fetchLoginConfig(
   apiBase: string,
@@ -63,7 +72,16 @@ export async function fetchLoginConfig(
   const override = String(
     process.env.EXTENSION_DEV_GITHUB_CLIENT_ID || "",
   ).trim();
-  if (override) return { clientId: override, scope: "read:user" };
+  if (override) {
+    return {
+      provider: "github",
+      clientId: override,
+      scope: "read:user",
+      deviceCodeUrl: "/api/cli/device/code",
+      deviceTokenUrl: "/api/cli/device/token",
+      verificationUri: "https://github.com/login/device",
+    };
+  }
 
   const res = await fetchImpl(`${apiBase}/api/cli/login/config`, {
     headers: { accept: "application/json" },
@@ -74,14 +92,51 @@ export async function fetchLoginConfig(
     );
   }
   const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+  const provider = data.provider === "extensiondev" ? "extensiondev" : "github";
   const clientId = String(data.githubClientId || "").trim();
-  if (!clientId) {
+
+  if (provider === "github" && !clientId) {
     throw new Error(
       "Login is not configured on the server (no GitHub client id). " +
         "Set EXTENSION_DEV_GITHUB_CLIENT_ID to override.",
     );
   }
-  return { clientId, scope: String(data.scope || "read:user") };
+  return {
+    provider,
+    clientId,
+    scope: String(data.scope || "read:user"),
+    deviceCodeUrl: String(data.deviceCodeUrl || "/api/cli/device/code"),
+    deviceTokenUrl: String(data.deviceTokenUrl || "/api/cli/device/token"),
+    verificationUri: String(
+      data.verificationUri || "https://github.com/login/device",
+    ),
+  };
+}
+
+/**
+ * Persist a `{ token, expiresAt, workspaceSlug, projectSlug }` response (the
+ * shape returned by BOTH the GitHub exchange endpoint and the extension.dev
+ * device/token endpoint) to the local credentials file. Records which provider
+ * minted it.
+ */
+export function persistTokenResponse(args: {
+  apiBase: string;
+  data: Record<string, unknown>;
+  provider: "extensiondev" | "github";
+}): StoredCredentials {
+  const token = String(args.data.token || "").trim();
+  if (!token) throw new Error("Login returned no token.");
+  const creds: StoredCredentials = {
+    version: 1,
+    token,
+    workspaceSlug: String(args.data.workspaceSlug || ""),
+    projectSlug: String(args.data.projectSlug || ""),
+    expiresAt: Number(args.data.expiresAt || 0),
+    api: args.apiBase,
+    provider: args.provider,
+  };
+  writeCredentials(creds);
+  return creds;
 }
 
 /**
@@ -118,17 +173,9 @@ export async function exchangeAndPersist(args: {
       }`,
     );
   }
-  const token = String(data.token || "").trim();
-  if (!token) throw new Error("Login exchange returned no token.");
-
-  const creds: StoredCredentials = {
-    version: 1,
-    token,
-    workspaceSlug: String(data.workspaceSlug || ""),
-    projectSlug: String(data.projectSlug || ""),
-    expiresAt: Number(data.expiresAt || 0),
-    api: args.apiBase,
-  };
-  writeCredentials(creds);
-  return creds;
+  return persistTokenResponse({
+    apiBase: args.apiBase,
+    data,
+    provider: "github",
+  });
 }
