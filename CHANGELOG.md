@@ -2,13 +2,17 @@
 
 ## 4.7.0
 
-`extension_deploy` gains platform mode. Set `platform: true` (with
-`EXTENSION_DEV_TOKEN` in the environment) and pass `browsers` + `buildSha` to
-route the submission through extension.dev instead of the store APIs; direct
-zip-based submission is unchanged and stays the default. The tool shapes the
-child environment per mode, so a token that merely happens to be present cannot
-redirect a direct submission into platform mode. Platform mode requires
-`deploy` >= 1.3.0.
+`extension_deploy` now submits **through** extension.dev instead of driving a
+local CLI. Pass `browsers` + `buildSha` and the submission is routed to the
+platform, which holds your store credentials and dispatches the release from
+your project's mirror CI; authentication is your `extension_login` session or a
+release token in `EXTENSION_DEV_TOKEN`, and it defaults to a dry run. The tool
+is now a thin authenticated client of the platform's store-submission endpoint,
+exactly like `extension_publish` and `extension_release_promote`, with no
+external CLI dependency. This replaces the previous mode that shelled out to a
+standalone local CLI. Direct zip-based submission with store credentials in the
+environment is no longer exposed through the MCP; use your own CI pipeline for
+that.
 
 ## 4.6.0
 
