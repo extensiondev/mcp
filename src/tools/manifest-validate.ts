@@ -46,7 +46,12 @@ export const schema = {
     properties: {
       manifestPath: {
         type: "string",
-        description: "Path to manifest.json",
+        description: "Path to manifest.json. Or pass projectPath and the manifest is located for you.",
+      },
+      projectPath: {
+        type: "string",
+        description:
+          "Path to the extension project root; manifest.json is resolved from it (root or src/). Accepted in place of manifestPath.",
       },
       browsers: {
         type: "array",
@@ -55,9 +60,72 @@ export const schema = {
         description: "Browsers to validate against",
       },
     },
-    required: ["manifestPath"],
+    required: [],
   },
 };
+
+// Manifest fields whose value is a path to a bundled file. Globs, URLs, and
+// data: refs are not local files and are skipped. Extension.js resolves these
+// from a source root, so a miss is reported as a WARNING (verify with build),
+// never a hard error, to avoid false blockers on layouts we don't fully model.
+function collectPathRefs(m: Record<string, unknown>): string[] {
+  const refs: string[] = [];
+  const push = (v: unknown) => {
+    if (typeof v === "string") refs.push(v);
+  };
+  const action = (m.action || m.browser_action) as Record<string, unknown> | undefined;
+  if (action) {
+    push(action.default_popup);
+    if (typeof action.default_icon === "string") push(action.default_icon);
+    else if (action.default_icon)
+      Object.values(action.default_icon as Record<string, unknown>).forEach(push);
+  }
+  const bg = m.background as Record<string, unknown> | undefined;
+  if (bg) {
+    push(bg.service_worker);
+    push(bg.page);
+    if (Array.isArray(bg.scripts)) bg.scripts.forEach(push);
+  }
+  if (m.icons) Object.values(m.icons as Record<string, unknown>).forEach(push);
+  const cs = m.content_scripts as Array<Record<string, unknown>> | undefined;
+  if (Array.isArray(cs)) {
+    for (const c of cs) {
+      if (Array.isArray(c.js)) c.js.forEach(push);
+      if (Array.isArray(c.css)) c.css.forEach(push);
+    }
+  }
+  push(m.options_page);
+  const oui = m.options_ui as Record<string, unknown> | undefined;
+  if (oui) push(oui.page);
+  const sp = m.side_panel as Record<string, unknown> | undefined;
+  if (sp) push(sp.default_path);
+  const sa = m.sidebar_action as Record<string, unknown> | undefined;
+  if (sa) push(sa.default_panel);
+  const cuo = m.chrome_url_overrides as Record<string, unknown> | undefined;
+  if (cuo) Object.values(cuo).forEach(push);
+  return refs;
+}
+
+function fileResolvesSomewhere(ref: string, roots: string[]): boolean {
+  if (!ref || ref.includes("*") || /^(https?:|data:)/i.test(ref)) return true;
+  const clean = ref.replace(/^\.?\//, "");
+  return roots.some((root) => {
+    try {
+      return fs.existsSync(path.resolve(root, clean));
+    } catch {
+      return false;
+    }
+  });
+}
+
+// Locate manifest.json from a project root (root first, then src/).
+function findManifest(projectPath: string): string | null {
+  for (const rel of ["manifest.json", path.join("src", "manifest.json")]) {
+    const candidate = path.resolve(projectPath, rel);
+    if (fs.existsSync(candidate)) return candidate;
+  }
+  return null;
+}
 
 interface ValidationResult {
   valid: boolean;
@@ -68,7 +136,8 @@ interface ValidationResult {
 }
 
 export async function handler(args: {
-  manifestPath: string;
+  manifestPath?: string;
+  projectPath?: string;
   browsers?: string[];
 }): Promise<string> {
   const browsers = args.browsers ?? ["chrome", "firefox"];
@@ -80,9 +149,27 @@ export async function handler(args: {
     similarTemplates: [],
   };
 
+  const manifestPath =
+    args.manifestPath ??
+    (args.projectPath ? findManifest(args.projectPath) : null);
+  if (!manifestPath) {
+    return JSON.stringify({
+      valid: false,
+      errors: [
+        args.projectPath
+          ? `No manifest.json found under ${args.projectPath} (looked in the root and src/).`
+          : "Pass manifestPath (path to manifest.json) or projectPath (project root).",
+      ],
+      warnings: [],
+      browserSupport: {},
+      similarTemplates: [],
+    });
+  }
+  const manifestDir = path.dirname(path.resolve(manifestPath));
+
   let manifest: Record<string, unknown>;
   try {
-    const raw = fs.readFileSync(path.resolve(args.manifestPath), "utf8");
+    const raw = fs.readFileSync(path.resolve(manifestPath), "utf8");
     manifest = JSON.parse(raw);
   } catch (err) {
     return JSON.stringify({
@@ -106,6 +193,24 @@ export async function handler(args: {
   }
 
   const chromiumManifest = filterKeysForThisBrowser(manifest, "chrome");
+
+  // Probe path-valued fields against disk so a manifest pointing at a missing
+  // popup/script/icon no longer gets a clean bill of health. Reported as
+  // warnings (Extension.js resolves from source roots we don't fully model).
+  const roots = [
+    manifestDir,
+    path.join(manifestDir, "src"),
+    ...(path.basename(manifestDir) === "src"
+      ? [path.dirname(manifestDir)]
+      : []),
+  ];
+  for (const ref of new Set(collectPathRefs(chromiumManifest))) {
+    if (!fileResolvesSomewhere(ref, roots)) {
+      result.warnings.push(
+        `Referenced file "${ref}" was not found near the manifest — this is the kind of dangling reference extension_build fails on. Verify with extension_build.`,
+      );
+    }
+  }
 
   if (!chromiumManifest.manifest_version) {
     result.errors.push(

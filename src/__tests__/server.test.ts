@@ -169,14 +169,17 @@ describe("add-feature handler", () => {
 });
 
 describe("source-inspect handler", () => {
-  it("returns error for Firefox (unsupported RDP)", async () => {
+  it("returns a capability-limit error for Firefox and points at a working alternative", async () => {
     const result = await sourceInspect.handler({
       projectPath: "/tmp/test",
       browser: "firefox",
     });
     const parsed = JSON.parse(result);
     expect(parsed.error).toBeDefined();
-    expect(parsed.error).toContain("RDP");
+    expect(parsed.error).toContain("Chrome DevTools Protocol");
+    // The hint must not send the caller back to a tool that also refuses; it
+    // should name the Firefox-capable alternatives (eval/logs).
+    expect(parsed.hint).toMatch(/extension_eval|extension_logs/);
   });
 
   it("returns error when no dev session is running", async () => {

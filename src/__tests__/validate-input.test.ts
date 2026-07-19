@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   validateToolInput,
   inputValidationError,
+  normalizeArgAliases,
 } from "../lib/validate-input";
 import { schema as manifestValidateSchema } from "../tools/manifest-validate";
 import { schema as devSchema } from "../tools/dev";
@@ -18,9 +19,9 @@ describe("validateToolInput", () => {
   });
 
   it("flags a missing required argument", () => {
-    const issues = validateToolInput(manifestValidateSchema.inputSchema, {});
+    const issues = validateToolInput(devSchema.inputSchema, {});
     expect(issues).toHaveLength(1);
-    expect(issues[0].path).toBe("manifestPath");
+    expect(issues[0].path).toBe("projectPath");
     expect(issues[0].message).toContain("required");
   });
 
@@ -60,6 +61,43 @@ describe("validateToolInput", () => {
     });
     expect(issues).toHaveLength(1);
     expect(issues[0].path).toBe("browsers[1]");
+  });
+});
+
+describe("normalizeArgAliases", () => {
+  it("folds a soft alias to the canonical arg when the tool has it", () => {
+    // dev has projectPath but not `path`; `path` should become projectPath.
+    const out = normalizeArgAliases(devSchema.inputSchema, {
+      path: "/tmp/x",
+    });
+    expect(out.projectPath).toBe("/tmp/x");
+    expect(out.path).toBeUndefined();
+  });
+
+  it("does not clobber an explicit canonical value", () => {
+    const out = normalizeArgAliases(devSchema.inputSchema, {
+      projectPath: "/keep",
+      path: "/ignore",
+    });
+    expect(out.projectPath).toBe("/keep");
+  });
+
+  it("leaves an alias alone when it is a real arg for that tool", () => {
+    // manifest_validate now has both manifestPath and projectPath as real
+    // props, so projectPath must NOT be rewritten away.
+    const out = normalizeArgAliases(manifestValidateSchema.inputSchema, {
+      projectPath: "/tmp/proj",
+    });
+    expect(out.projectPath).toBe("/tmp/proj");
+  });
+
+  it("does not invent an arg the tool does not accept", () => {
+    const out = normalizeArgAliases(logsSchema.inputSchema, {
+      name: "x",
+    });
+    // logs has no projectName, so `name` stays as-is (validation will reject it)
+    expect(out.name).toBe("x");
+    expect(out.projectName).toBeUndefined();
   });
 });
 

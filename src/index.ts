@@ -57,6 +57,7 @@ import * as detectBrowsers from "./tools/detect-browsers";
 import * as doctor from "./tools/doctor";
 import {
   inputValidationError,
+  normalizeArgAliases,
   validateToolInput,
 } from "./lib/validate-input";
 
@@ -151,10 +152,11 @@ export async function startServer(): Promise<void> {
       };
     }
 
-    const issues = validateToolInput(
+    const normalizedArgs = normalizeArgAliases(
       tool.schema.inputSchema,
       (args ?? {}) as Record<string, unknown>,
     );
+    const issues = validateToolInput(tool.schema.inputSchema, normalizedArgs);
     if (issues.length) {
       return {
         content: [
@@ -168,7 +170,7 @@ export async function startServer(): Promise<void> {
     }
 
     try {
-      const result = await tool.handler(args ?? {});
+      const result = await tool.handler(normalizedArgs);
       return {
         content: [
           {

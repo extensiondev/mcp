@@ -121,9 +121,52 @@ export async function handler(args: {
   const buildType = sourcemapSize > 0 ? "development" : "production";
   const shippableSize = totalSize - sourcemapSize;
 
+  // Entry points a caller cares about (content scripts, background, popup) are
+  // usually small and get buried under assets in the top-10-by-size list, which
+  // reads as "my content script didn't ship". List declared entrypoints
+  // explicitly with a present/size flag so their presence is unambiguous.
+  const sizeByPath = new Map(files.map((f) => [f.path, f.size]));
+  const entrypoints: Array<{
+    role: string;
+    path: string;
+    present: boolean;
+    sizeFormatted?: string;
+  }> = [];
+  const addEntry = (role: string, ref: unknown) => {
+    if (typeof ref !== "string") return;
+    const size = sizeByPath.get(ref.replace(/^\.?\//, ""));
+    entrypoints.push({
+      role,
+      path: ref,
+      present: size !== undefined,
+      ...(size !== undefined ? { sizeFormatted: formatBytes(size) } : {}),
+    });
+  };
+  const bg = manifest.background as Record<string, unknown> | undefined;
+  if (bg?.service_worker) addEntry("background.service_worker", bg.service_worker);
+  if (Array.isArray(bg?.scripts))
+    bg.scripts.forEach((s) => addEntry("background.scripts", s));
+  const actionField = (manifest.action || manifest.browser_action) as
+    | Record<string, unknown>
+    | undefined;
+  if (actionField?.default_popup)
+    addEntry("action.default_popup", actionField.default_popup);
+  const contentScripts = manifest.content_scripts as
+    | Array<Record<string, unknown>>
+    | undefined;
+  if (Array.isArray(contentScripts)) {
+    contentScripts.forEach((c, i) => {
+      if (Array.isArray(c.js))
+        c.js.forEach((j) => addEntry(`content_scripts[${i}].js`, j));
+      if (Array.isArray(c.css))
+        c.css.forEach((s) => addEntry(`content_scripts[${i}].css`, s));
+    });
+  }
+
   const result = {
     browser,
     distPath,
+    entrypoints,
     buildType,
     totalSize,
     totalSizeFormatted: formatBytes(totalSize),

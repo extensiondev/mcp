@@ -55,7 +55,7 @@ export const schema = {
         type: "boolean",
         default: false,
         description:
-          "Additionally enable extension_eval (runs code in a context; writes a 0600 session token)",
+          "Enable extension_eval (runs code in a context; writes a 0600 session token). Implies allowControl, so a single allowEval: true also unlocks storage/reload/open/dom_inspect — you do not need to pass both.",
       },
     },
     required: ["projectPath"],
@@ -74,12 +74,16 @@ export async function handler(
   } & LaunchFlagArgs,
 ): Promise<string> {
   const browser = args.browser ?? "chrome";
+  // allowEval is a superset of allowControl (eval can do anything the control
+  // verbs can), so enabling eval must also open the control channel — otherwise
+  // callers who pass allowEval:true hit silent refusals on storage/reload/open.
+  const allowControl = Boolean(args.allowControl || args.allowEval);
   const cliArgs = ["dev", args.projectPath, "--browser", browser];
   if (args.port !== undefined) cliArgs.push("--port", String(args.port));
   if (args.noBrowser) cliArgs.push("--no-browser");
   if (args.polyfill === false) cliArgs.push("--polyfill", "false");
   cliArgs.push(...launchFlagArgs(args));
-  if (args.allowControl) cliArgs.push("--allow-control");
+  if (allowControl) cliArgs.push("--allow-control");
   if (args.allowEval) cliArgs.push("--allow-eval");
 
   const child = spawnExtensionCli(cliArgs, { projectDir: args.projectPath });
@@ -105,13 +109,30 @@ export async function handler(
   child.stdout?.off("data", collector);
   child.stderr?.off("data", collector);
 
+  const controlVerbs = "storage, reload, open, dom_inspect";
+  const capabilities = {
+    allowControl,
+    allowEval: Boolean(args.allowEval),
+    unlocked: allowControl
+      ? args.allowEval
+        ? `${controlVerbs}, eval`
+        : controlVerbs
+      : "none (read-only: logs, source_inspect, wait, doctor)",
+  };
+
   return JSON.stringify({
     pid,
     browser,
     port: args.port ?? 8080,
     projectPath: args.projectPath,
     status: "started",
-    hint: "Use extension_wait to check when the extension is fully loaded, then extension_source_inspect to inspect the live state. When you are done, call extension_stop to shut down the dev server and browser.",
+    capabilities,
+    hint:
+      "Use extension_wait to check when the extension is fully loaded, then extension_source_inspect to inspect the live state. " +
+      (allowControl
+        ? `Control channel is ON: extension_${controlVerbs.split(", ").join("/extension_")}${args.allowEval ? "/extension_eval" : ""} will work against this session.`
+        : "Control channel is OFF: extension_storage/reload/open/dom_inspect need allowControl: true, and extension_eval needs allowEval: true (which also implies allowControl). Restart extension_dev with the flag you need.") +
+      " When you are done, call extension_stop to shut down the dev server and browser.",
     earlyOutput: denoiseEarlyOutput(earlyOutput).slice(0, 500),
   });
 }

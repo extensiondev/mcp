@@ -12,6 +12,22 @@ import os from "node:os";
 import { runExtensionCli } from "../lib/exec";
 import { toMcpSpeak } from "../lib/act";
 import { resolveSessionBrowser } from "../lib/session-browser";
+import type { ReadyContract } from "../lib/types";
+
+function readReadyContract(
+  projectPath: string,
+  browser: string,
+): ReadyContract | null {
+  try {
+    const raw = fs.readFileSync(
+      path.resolve(projectPath, "dist", "extension-js", browser, "ready.json"),
+      "utf8",
+    );
+    return JSON.parse(raw) as ReadyContract;
+  } catch {
+    return null;
+  }
+}
 
 export const schema = {
   name: "extension_doctor",
@@ -115,7 +131,28 @@ export async function handler(args: {
         check.remediation = toMcpSpeak(check.remediation);
       }
     }
-    return JSON.stringify({ browser, healthy: code === 0, checks });
+
+    // The CLI doctor reports harness legs (ports, token, executor) but does not
+    // fail on an error recorded in the ready contract — a build or extension
+    // load failure would otherwise read as healthy. Inline it and downgrade.
+    let healthy = code === 0;
+    const contract = readReadyContract(projectPath, browser);
+    if (contract?.status === "error") {
+      healthy = false;
+      const detail =
+        contract.errors && contract.errors.length
+          ? contract.errors.join("; ")
+          : contract.message ||
+            "The dev session recorded status: error in ready.json.";
+      checks.push({
+        check: "runtime-errors",
+        status: "fail",
+        detail: toMcpSpeak(detail),
+        remediation:
+          "The build or extension load failed. Fix the reported error, let the dev server recompile, then re-run doctor.",
+      });
+    }
+    return JSON.stringify({ browser, healthy, checks });
   } catch {
     const message = stderr.trim() || `extension exited with code ${code}`;
     return JSON.stringify({
