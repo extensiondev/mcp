@@ -14,7 +14,7 @@ const DEFAULT_API = "https://www.extension.dev";
 export const schema = {
   name: "extension_release_promote",
   description:
-    "Promote a built extension to a release channel (e.g. stable, preview, beta) on extension.dev, headless. Auth-gated: requires a release token in EXTENSION_DEV_TOKEN (mint and revoke it in the dashboard under project settings -> Access tokens). Posts to the platform's CLI release endpoint; the project is identified by the token. Cutting a version-bump PR is not available headlessly (it writes to your source repo and needs an interactive login).",
+    "Promote a built extension to a release channel (e.g. stable, preview, beta) on extension.dev, headless. Auth-gated: uses your stored login (extension_login) or a release token in EXTENSION_DEV_TOKEN (mint and revoke it in the dashboard under project settings -> Access tokens). Posts to the platform's CLI release endpoint; the project is identified by the token. Cutting a version-bump PR is not available headlessly (it writes to your source repo and needs an interactive login).",
   inputSchema: {
     type: "object" as const,
     properties: {
