@@ -12,6 +12,31 @@ import { filterKeysForThisBrowser } from "browser-extension-manifest-fields";
 import { isChromiumFamily, isGeckoFamily } from "../lib/browser-family";
 import { listTemplates } from "../lib/templates-cache";
 
+// Recognized MV3 API permissions across Chromium and Firefox. Not exhaustive of
+// every experimental flag, but covers the stable surface; unknown values warn.
+const KNOWN_PERMISSIONS = new Set<string>([
+  "activeTab", "alarms", "background", "bookmarks", "browsingData",
+  "certificateProvider", "clipboardRead", "clipboardWrite", "contentSettings",
+  "contextMenus", "cookies", "debugger", "declarativeContent",
+  "declarativeNetRequest", "declarativeNetRequestWithHostAccess",
+  "declarativeNetRequestFeedback", "desktopCapture", "dns", "documentScan",
+  "downloads", "downloads.open", "downloads.ui", "enterprise.deviceAttributes",
+  "enterprise.hardwarePlatform", "enterprise.networkingAttributes",
+  "enterprise.platformKeys", "favicon", "fileBrowserHandler",
+  "fileSystemProvider", "fontSettings", "gcm", "geolocation", "history",
+  "identity", "identity.email", "idle", "loginState", "management",
+  "nativeMessaging", "notifications", "offscreen", "pageCapture", "power",
+  "printerProvider", "printing", "printingMetrics", "privacy", "processes",
+  "proxy", "readingList", "runtime", "scripting", "search", "sessions",
+  "sidePanel", "storage", "system.cpu", "system.display", "system.memory",
+  "system.storage", "tabCapture", "tabGroups", "tabs", "topSites", "tts",
+  "ttsEngine", "unlimitedStorage", "vpnProvider", "wallpaper", "webAuthenticationProxy",
+  "webNavigation", "webRequest", "webRequestBlocking", "webRequestAuthProvider",
+  // Firefox-specific
+  "browserSettings", "captivePortal", "contextualIdentities", "dns",
+  "menus", "menus.overrideContext", "pkcs11", "theme", "webRequestFilterResponse",
+]);
+
 export const schema = {
   name: "extension_manifest_validate",
   description:
@@ -86,6 +111,25 @@ export async function handler(args: {
     result.errors.push(
       'Missing manifest_version. Use "chromium:manifest_version": 3 and "firefox:manifest_version": 2 for cross-browser support.',
     );
+  }
+
+  // Flag permission strings that aren't recognized API permissions (likely
+  // typos). Host/match patterns belong in host_permissions and are skipped
+  // here; unknown-but-plausible values warn rather than error, since the API
+  // surface grows over time.
+  const declaredPerms = [
+    ...((chromiumManifest.permissions as string[] | undefined) ?? []),
+    ...((chromiumManifest.optional_permissions as string[] | undefined) ?? []),
+  ].filter((p) => typeof p === "string");
+  for (const perm of declaredPerms) {
+    if (perm.includes("://") || perm.includes("*") || perm === "<all_urls>") {
+      continue; // host/match pattern, not an API permission
+    }
+    if (!KNOWN_PERMISSIONS.has(perm)) {
+      result.warnings.push(
+        `Unrecognized permission "${perm}" — check for a typo (host/match patterns belong in host_permissions, not permissions).`,
+      );
+    }
   }
 
   for (const browser of browsers) {
@@ -169,11 +213,23 @@ export async function handler(args: {
     surfaces.push("newtab");
   if (chromiumManifest.background) surfaces.push("background");
 
-  if (surfaces.length) {
+  // "background" is present in almost every template, so matching on it makes
+  // every manifest look similar to the same alphabetical first five. Rank by
+  // how many DISTINCTIVE surfaces overlap (content/sidebar/action/newtab) and
+  // only fall back to background when nothing distinctive is declared.
+  const distinctive = surfaces.filter((s) => s !== "background");
+  const matchOn = distinctive.length ? distinctive : surfaces;
+  if (matchOn.length) {
     try {
       const templates = await listTemplates();
       result.similarTemplates = templates
-        .filter((t) => t.surfaces.some((s) => surfaces.includes(s)))
+        .map((t) => ({
+          slug: t.slug,
+          surfaces: t.surfaces,
+          score: t.surfaces.filter((s) => matchOn.includes(s)).length,
+        }))
+        .filter((t) => t.score > 0)
+        .sort((a, b) => b.score - a.score)
         .slice(0, 5)
         .map((t) => ({ slug: t.slug, surfaces: t.surfaces }));
     } catch {

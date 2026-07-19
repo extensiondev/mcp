@@ -11,27 +11,27 @@ import { listTemplates } from "../lib/templates-cache";
 export const schema = {
   name: "extension_list_templates",
   description:
-    "List available extension templates from the extension.dev template catalog. Filter by surface, framework, or tags. Returns structured metadata from templates-meta.json.",
+    "List available extension templates from the extension.dev template catalog. Filter by surface, framework, or tags. Returns structured metadata from templates-meta.json. Note: 'framework' is the UI framework only (react/vue/svelte/preact/vanilla) - it is not the language. TypeScript and JavaScript templates live under slugs (e.g. 'typescript', 'content-typescript'); shadcn is a React variant ('sidebar-shadcn') and provider AIs are tagged 'ai' ('ai-chatgpt', 'ai-claude'). Reach those with query/tags/slug, not framework.",
   inputSchema: {
     type: "object" as const,
     properties: {
       surface: {
         type: "string",
-        enum: [
-          "content",
-          "sidebar",
-          "action",
-          "newtab",
-          "devtools",
-          "options",
-          "background",
-        ],
-        description: "Filter by extension surface type",
+        // Only the surfaces the catalog actually tags today. The popup lives
+        // in the 'action' template but is not yet tagged as an 'action'
+        // surface upstream, so filtering surface:'action'/'options'/'devtools'
+        // would silently return nothing; expand this enum once
+        // templates-meta populates those surfaces (see extension.js
+        // BUGS_TO_FIX: template surface tagging).
+        enum: ["content", "sidebar", "newtab", "background"],
+        description:
+          "Filter by extension surface type. For a popup/action starter use the 'action' slug (query:'action'), not a surface filter.",
       },
       framework: {
         type: "string",
         enum: ["react", "vue", "svelte", "preact", ""],
-        description: "Filter by UI framework (empty string = vanilla JS)",
+        description:
+          "Filter by UI framework only (empty string = vanilla JS). Not a language filter - for TypeScript/JavaScript use query or slug.",
       },
       tags: {
         type: "array",
@@ -45,7 +45,7 @@ export const schema = {
       query: {
         type: "string",
         description:
-          "Free-text search across slug, description, tags, and useCases",
+          "Keyword search across slug, description, tags, and useCases. Ranks by how many query words match, so a natural phrase works; single keywords are fine too.",
       },
     },
   },

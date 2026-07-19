@@ -108,19 +108,34 @@ export async function handler(args: {
 
   try {
     const allTargets = await CDPClient.discoverTargets(cdpPort);
+    // Chrome renders a chrome_url_overrides page (new tab, bookmarks, history)
+    // at its chrome:// URL, but the DOM is the extension's own surface — so
+    // these must be inspectable, not filtered out with the rest of chrome://.
+    const OVERRIDE_PAGES = [
+      "chrome://newtab/",
+      "chrome://new-tab-page/",
+      "chrome://bookmarks/",
+      "chrome://history/",
+    ];
+    const isOverridePage = (url: string): boolean =>
+      OVERRIDE_PAGES.some((p) => url.startsWith(p));
     const pageTargets = allTargets.filter(
       (t) =>
         t.type === "page" &&
-        !t.url.startsWith("chrome://") &&
-        !t.url.startsWith("devtools://"),
+        !t.url.startsWith("devtools://") &&
+        (!t.url.startsWith("chrome://") || isOverridePage(t.url)),
     );
 
     if (pageTargets.length === 0) {
+      const chromeOnly = allTargets.some(
+        (t) => t.type === "page" && t.url.startsWith("chrome://"),
+      );
       return JSON.stringify({
         cdpPort,
         browser,
-        warning:
-          "No inspectable page targets found. The extension may not have opened a page yet.",
+        warning: chromeOnly
+          ? "No inspectable page targets found. Only internal chrome:// pages are open; open the extension's surface (or pass a url to navigate a tab) first."
+          : "No inspectable page targets found. The extension may not have opened a page yet.",
         allTargets: allTargets.map((t) => ({
           type: t.type,
           url: t.url?.slice(0, 100),

@@ -14,9 +14,15 @@ import type { ReadyContract } from "./types";
 export async function resolveCdpPort(
   projectPath: string,
   browser: string,
-  options?: { waitMs?: number },
+  options?: { waitMs?: number; graceMs?: number },
 ): Promise<{ port: number; source: "contract" | "default-probe" } | null> {
   const waitMs = options?.waitMs ?? 20_000;
+  // Once a ready contract exists but carries no cdpPort, this is almost always a
+  // session type that never exposes CDP (preview/start shell out to the project
+  // CLI without a debug port), not a dev session mid-bind. Cap the wait from
+  // that point to a short grace so list_extensions/source_inspect return their
+  // "needs a dev session" message in ~2.5s instead of burning the full 20s.
+  const graceMs = options?.graceMs ?? 2_500;
   const readyPath = path.resolve(
     projectPath,
     "dist",
@@ -27,19 +33,25 @@ export async function resolveCdpPort(
 
   const deadline = Date.now() + waitMs;
   let contractSeen = false;
+  let contractSeenAt: number | null = null;
   for (;;) {
     try {
       const contract = JSON.parse(
         fs.readFileSync(readyPath, "utf8"),
       ) as ReadyContract & { cdpPort?: number };
       contractSeen = true;
+      if (contractSeenAt == null) contractSeenAt = Date.now();
       if (typeof contract.cdpPort === "number") {
         return { port: contract.cdpPort, source: "contract" };
       }
     } catch {
       if (!contractSeen) break;
     }
-    if (Date.now() >= deadline) break;
+    const effectiveDeadline =
+      contractSeenAt != null
+        ? Math.min(deadline, contractSeenAt + graceMs)
+        : deadline;
+    if (Date.now() >= effectiveDeadline) break;
     await new Promise((resolve) => setTimeout(resolve, 500));
   }
 

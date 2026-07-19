@@ -11,7 +11,7 @@ import { extensionInstall } from "extension-install";
 export const schema = {
   name: "extension_install_browser",
   description:
-    "Install a managed browser binary for extension testing. Useful in CI, Docker, or fresh environments where browsers are not pre-installed.",
+    "Install a managed browser binary for extension testing. Useful in CI, Docker, or fresh environments where browsers are not pre-installed. This downloads ~580-625 MB in a single blocking call (30s+ on a fast link); on a slow network it can exceed a client's default request timeout, so allow a generous timeout when calling it.",
   inputSchema: {
     type: "object" as const,
     properties: {

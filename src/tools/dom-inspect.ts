@@ -63,7 +63,12 @@ export async function handler(
   if (!isSurface && args.tab == null) {
     return JSON.stringify({
       ok: false,
-      error: { name: "BadRequest", message: "content/page inspect requires a tab id" },
+      error: {
+        name: "BadRequest",
+        message:
+          "content/page inspect requires a numeric tab id (chrome.tabs id, not a CDP target id).",
+      },
+      hint: "To inspect a content script's DOM without hunting for a tab id, use extension_source_inspect (it auto-selects the active page and can navigate via its url arg). Use extension_dom_inspect with context popup/options/sidebar/devtools for an open surface (no tab needed).",
     });
   }
   const cli = ["inspect", args.projectPath];

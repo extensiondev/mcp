@@ -6,6 +6,9 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // MIT License (c) Cezar Augusto and the extension.dev collaborators
 
+import fs from "node:fs";
+import path from "node:path";
+import os from "node:os";
 import { runExtensionCli } from "../lib/exec";
 import { toMcpSpeak } from "../lib/act";
 import { resolveSessionBrowser } from "../lib/session-browser";
@@ -13,13 +16,14 @@ import { resolveSessionBrowser } from "../lib/session-browser";
 export const schema = {
   name: "extension_doctor",
   description:
-    "Diagnose a dev session end-to-end: ready contract, dev-server process, control-port agreement, control channel, eval token, executor, and browser liveness. Returns one {check, status, detail, remediation?} entry per leg in dependency order — a 'skip' names the check that blocked it and is NOT a pass. Run this first when any act tool (storage/reload/eval/open) errors unexpectedly. Wraps `extension doctor`.",
+    "Diagnose a dev session end-to-end: ready contract, dev-server process, control-port agreement, control channel, eval token, executor, and browser liveness. Returns one {check, status, detail, remediation?} entry per leg in dependency order — a 'skip' names the check that blocked it and is NOT a pass. Run this first when any act tool (storage/reload/eval/open) errors unexpectedly. Wraps `extension doctor`. Call with no projectPath for a pre-flight environment check (node, extension CLI, template cache) before any project exists.",
   inputSchema: {
     type: "object" as const,
     properties: {
       projectPath: {
         type: "string",
-        description: "Path to the extension project root",
+        description:
+          "Path to the extension project root. Omit for a pre-flight environment check with no project.",
       },
       browser: {
         type: "string",
@@ -27,18 +31,78 @@ export const schema = {
           "Browser session to diagnose. Defaults to the active dev session's browser for this project.",
       },
     },
-    required: ["projectPath"],
   },
 };
 
+async function environmentPreflight(): Promise<string> {
+  const checks: Array<{
+    check: string;
+    status: "pass" | "warn" | "fail";
+    detail: string;
+    remediation?: string;
+  }> = [];
+
+  const nodeMajor = Number(process.versions.node.split(".")[0]);
+  checks.push({
+    check: "node",
+    status: nodeMajor >= 20 ? "pass" : "fail",
+    detail: `Node ${process.versions.node} on ${process.platform}/${process.arch}`,
+    remediation: nodeMajor >= 20 ? undefined : "Extension.js needs Node >= 20.18.",
+  });
+
+  const { code, stdout, stderr } = await runExtensionCli(["--version"], {
+    timeoutMs: 60_000,
+  });
+  const cliVersion = stdout.trim() || stderr.trim();
+  checks.push({
+    check: "extension-cli",
+    status: code === 0 ? "pass" : "fail",
+    detail:
+      code === 0
+        ? `extension CLI resolvable (${cliVersion})`
+        : "extension CLI could not be resolved",
+    remediation:
+      code === 0
+        ? undefined
+        : "Install locally (npm i -D extension) or rely on npx; check network access to the npm registry.",
+  });
+
+  const cacheFile = path.join(
+    os.homedir(),
+    ".cache",
+    "extension-js",
+    "templates-meta.json",
+  );
+  const cacheExists = fs.existsSync(cacheFile);
+  checks.push({
+    check: "template-cache",
+    status: cacheExists ? "pass" : "warn",
+    detail: cacheExists
+      ? `Template catalog cached at ${cacheFile}`
+      : "Template catalog not cached yet (first extension_list_templates will fetch it)",
+  });
+
+  const healthy = checks.every((c) => c.status !== "fail");
+  return JSON.stringify({
+    mode: "environment",
+    healthy,
+    checks,
+    hint: "Pass projectPath to diagnose a live dev session end-to-end.",
+  });
+}
+
 export async function handler(args: {
-  projectPath: string;
+  projectPath?: string;
   browser?: string;
 }): Promise<string> {
-  const { browser } = resolveSessionBrowser(args.projectPath, args.browser);
+  if (!args.projectPath) {
+    return environmentPreflight();
+  }
+  const projectPath = args.projectPath;
+  const { browser } = resolveSessionBrowser(projectPath, args.browser);
   const { code, stdout, stderr } = await runExtensionCli(
-    ["doctor", args.projectPath, "--browser", browser, "--output", "json"],
-    { cwd: args.projectPath },
+    ["doctor", projectPath, "--browser", browser, "--output", "json"],
+    { cwd: projectPath },
   );
 
   const out = stdout.trim();

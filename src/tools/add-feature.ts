@@ -170,8 +170,37 @@ export async function handler(args: {
   const template = await getTemplateBySlug(templateSlug);
   const referenceFiles = template?.keyFiles ?? template?.files ?? [];
 
-  const featureDir =
-    args.feature === "content-script" ? "content" : args.feature;
+  // Extension.js keeps some surfaces under a directory that differs from the
+  // feature name (the popup/action surface lives at src/action/, matching the
+  // manifest's default_popup: "action/index.html"). Map those so filesToCreate
+  // and manifestUpdates never disagree.
+  const FEATURE_DIR: Record<string, string> = {
+    "content-script": "content",
+    popup: "action",
+  };
+  const featureDir = FEATURE_DIR[args.feature] ?? args.feature;
+
+  // Per-framework file conventions (confirmed against the catalog): react/preact
+  // use JSX (.tsx) for both the mount script and the component; vue/svelte use a
+  // .ts mount script plus a single-file component (.vue/.svelte) — never .tsx;
+  // vanilla uses a .ts script and no component file.
+  const scriptExt =
+    framework === "react" || framework === "preact" ? "tsx" : "ts";
+  const componentExt =
+    framework === "vue" ? "vue" : framework === "svelte" ? "svelte" : "tsx";
+  const COMPONENT_BASE: Record<string, string> = {
+    content: "Content",
+    sidebar: "Sidebar",
+    action: "Action",
+    newtab: "NewTab",
+    options: "Options",
+    devtools: "DevTools",
+    background: "Background",
+  };
+  const componentBase =
+    COMPONENT_BASE[featureDir] ??
+    featureDir.charAt(0).toUpperCase() + featureDir.slice(1);
+
   const filesToCreate: Array<{ path: string; hint: string }> = [];
   const manifestUpdates = MANIFEST_ADDITIONS[args.feature] ?? {};
 
@@ -181,7 +210,7 @@ export async function handler(args: {
     filesToCreate.push(
       { path: `src/${featureDir}/index.html`, hint: "HTML entry point" },
       {
-        path: `src/${featureDir}/scripts.${framework === "vanilla" ? "ts" : "tsx"}`,
+        path: `src/${featureDir}/scripts.${scriptExt}`,
         hint:
           framework === "vanilla"
             ? "Script entry point"
@@ -192,17 +221,43 @@ export async function handler(args: {
 
     if (framework !== "vanilla") {
       filesToCreate.push({
-        path: `src/${featureDir}/${featureDir.charAt(0).toUpperCase() + featureDir.slice(1)}App.tsx`,
+        path: `src/${featureDir}/${componentBase}App.${componentExt}`,
         hint: `Main ${framework} component`,
       });
+      if (framework === "vue") {
+        filesToCreate.push({
+          path: `src/${featureDir}/shims-vue.d.ts`,
+          hint: "Vue SFC type shim (lets TS import .vue components)",
+        });
+      }
     }
   }
 
   if (args.feature === "content-script") {
+    // scripts.ts stays .ts to match content_scripts.js in the manifest addition;
+    // non-vanilla frameworks mount a component from it (ContentApp.vue/.svelte/.tsx).
     filesToCreate.push(
-      { path: "src/content/scripts.ts", hint: "Content script entry point" },
+      {
+        path: "src/content/scripts.ts",
+        hint:
+          framework === "vanilla"
+            ? "Content script entry point"
+            : `${framework} content-script mount point`,
+      },
       { path: "src/content/styles.css", hint: "Content script styles" },
     );
+    if (framework !== "vanilla") {
+      filesToCreate.push({
+        path: `src/content/ContentApp.${componentExt}`,
+        hint: `Main ${framework} component mounted by the content script`,
+      });
+      if (framework === "vue") {
+        filesToCreate.push({
+          path: "src/content/shims-vue.d.ts",
+          hint: "Vue SFC type shim (lets TS import .vue components)",
+        });
+      }
+    }
   }
 
   if (args.feature === "background") {
