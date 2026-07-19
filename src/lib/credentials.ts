@@ -23,6 +23,8 @@ export interface StoredCredentials {
   expiresAt: number;
   /** Platform base URL the token was minted against. */
   api: string;
+  /** Which device flow minted this token: extension.dev-gated or GitHub-direct. */
+  provider?: "extensiondev" | "github";
 }
 
 export function credentialsPath(): string {
@@ -46,6 +48,10 @@ export function readCredentials(): StoredCredentials | null {
     if (data.version !== 1) return null;
     const token = String(data.token || "").trim();
     if (!token) return null;
+    const provider =
+      data.provider === "extensiondev" || data.provider === "github"
+        ? data.provider
+        : undefined;
     return {
       version: 1,
       token,
@@ -53,6 +59,7 @@ export function readCredentials(): StoredCredentials | null {
       projectSlug: String(data.projectSlug || ""),
       expiresAt: Number(data.expiresAt || 0),
       api: String(data.api || ""),
+      ...(provider ? { provider } : {}),
     };
   } catch {
     return null;
