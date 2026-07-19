@@ -163,10 +163,39 @@ export async function handler(args: {
     });
   }
 
+  // Flag assets that silently bloat the shipped package: store-listing promo
+  // images (screenshot/promo/marquee) that belong in the listing, not the zip,
+  // and any single non-icon asset that dominates the shippable bundle. These
+  // kept storeReadiness green while inflating size in the swarm findings.
+  const PROMO_RE =
+    /(screenshot|promo|marquee|tile|banner|preview)[-_.]?\d*\.(png|jpe?g|webp|gif)$/i;
+  const sizeWarnings: string[] = [];
+  for (const f of files) {
+    if (f.type === "sourcemap") continue;
+    if (PROMO_RE.test(f.path)) {
+      sizeWarnings.push(
+        `${f.path} (${formatBytes(f.size)}) looks like a store-listing promo image shipped inside the extension package — move it out of the bundled sources so it does not inflate the store zip.`,
+      );
+    } else if (
+      f.type === "image" &&
+      !f.path.includes("icon") &&
+      f.size > 50 * 1024 &&
+      shippableSize > 0 &&
+      f.size / shippableSize > 0.25
+    ) {
+      sizeWarnings.push(
+        `${f.path} (${formatBytes(f.size)}) is ${Math.round(
+          (f.size / shippableSize) * 100,
+        )}% of the shipped bundle — unusually large for a shipped asset.`,
+      );
+    }
+  }
+
   const result = {
     browser,
     distPath,
     entrypoints,
+    ...(sizeWarnings.length ? { sizeWarnings } : {}),
     buildType,
     totalSize,
     totalSizeFormatted: formatBytes(totalSize),
@@ -217,6 +246,7 @@ export async function handler(args: {
         (f) => f.type === "image" && f.path.includes("icon"),
       ),
       noSourceMaps: !files.some((f) => f.type === "sourcemap"),
+      noPromoAssets: !files.some((f) => PROMO_RE.test(f.path)),
       under10MB: totalSize < 10 * 1024 * 1024,
     },
   };
