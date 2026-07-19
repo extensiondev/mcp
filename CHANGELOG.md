@@ -1,5 +1,37 @@
 # Changelog
 
+## 4.8.0
+
+Dev-session ergonomics hardened from a 30-persona agent walk of the toolchain.
+
+- **`allowEval` now implies `allowControl`.** Enabling eval on `extension_dev`
+  also opens the control channel, so a single `allowEval: true` unlocks
+  `extension_storage`/`reload`/`open`/`dom_inspect` too. `extension_dev` now
+  returns a `capabilities` block naming exactly which verbs the session unlocked,
+  ending the stop-and-restart loop that hit agents who passed one flag and not
+  the other.
+- **Session-aware browser default.** `extension_stop` (and the other
+  browser-scoped tools) resolve the browser from the one live session for the
+  project instead of assuming `chrome`. `extension_stop` also reaps the launched
+  browser's process tree and refuses to report `stopped: true` while a process
+  survives, fixing orphaned browsers (notably Firefox) after a stop.
+- **Forgiving argument names.** Common synonyms are accepted and normalized:
+  `path`/`dir` for `projectPath`, `name` for `projectName`, `template` for
+  `slug`, `code` for `expression`, and more, so a reasonable first guess no
+  longer 400s.
+- **`extension_manifest_validate`** accepts `projectPath` (it finds the
+  manifest) and probes path-valued fields (popup, service worker, icons, content
+  scripts) against disk, warning on dangling references instead of a false
+  all-clear.
+- **`extension_doctor`** inlines the dev session's own recorded errors so a build
+  or load failure no longer reads as healthy.
+- **`extension_inspect`** lists declared entrypoints (so a small content script
+  is not buried under assets) and warns when a store-listing promo image is
+  shipped inside the package.
+- **`extension_source_inspect`** on a Gecko session now names the working
+  alternatives (`extension_logs`, `extension_eval`) instead of pointing back at
+  the tool that just refused.
+
 ## 4.7.0
 
 `extension_deploy` now submits **through** extension.dev instead of driving a
