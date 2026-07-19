@@ -20,7 +20,7 @@ export const schema = {
     properties: {
       slug: {
         type: "string",
-        description: "Template slug (e.g. 'sidebar-claude', 'content-react')",
+        description: "Template slug (e.g. 'ai-claude', 'content-react')",
       },
       files: {
         type: "array",

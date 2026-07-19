@@ -114,12 +114,27 @@ export async function handler(args: {
     byType[f.type].size += f.size;
   }
 
+  // A dev dist ships sourcemaps (and inlined HMR runtime); a production build
+  // does not. Surface this so the reported size isn't mistaken for shippable
+  // weight — sourcemaps never reach the store zip.
+  const sourcemapSize = byType.sourcemap?.size ?? 0;
+  const buildType = sourcemapSize > 0 ? "development" : "production";
+  const shippableSize = totalSize - sourcemapSize;
+
   const result = {
     browser,
     distPath,
+    buildType,
     totalSize,
     totalSizeFormatted: formatBytes(totalSize),
+    shippableSize,
+    shippableSizeFormatted: formatBytes(shippableSize),
     fileCount: files.length,
+    ...(buildType === "development"
+      ? {
+          note: `This dist contains ${formatBytes(sourcemapSize)} of sourcemaps and looks like a dev build; run extension_build for production sizes. shippableSize excludes sourcemaps.`,
+        }
+      : {}),
     manifest: {
       name: manifest.name,
       version: manifest.version,

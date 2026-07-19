@@ -112,6 +112,27 @@ export async function handler(
     projectPath: args.projectPath,
     status: "started",
     hint: "Use extension_wait to check when the extension is fully loaded, then extension_source_inspect to inspect the live state. When you are done, call extension_stop to shut down the dev server and browser.",
-    earlyOutput: earlyOutput.slice(0, 500),
+    earlyOutput: denoiseEarlyOutput(earlyOutput).slice(0, 500),
   });
+}
+
+// Drop benign package-manager chatter (e.g. npm's "Unknown project config
+// auto-install-peers" warning, emitted because pnpm-style config lands in the
+// ambient .npmrc) so earlyOutput carries signal, not noise. Real errors and
+// the extension CLI's own progress lines are preserved.
+function denoiseEarlyOutput(raw: string): string {
+  const NOISE = [
+    /^npm warn Unknown project config/i,
+    /This will stop working in the next major version of npm/i,
+    /^npm warn config/i,
+    /V8: .*Invalid asm\.js/i,
+    /^\(node:\d+\) V8:/i,
+    /Use `node --trace-warnings/i,
+  ];
+  return raw
+    .split("\n")
+    .filter((line) => !NOISE.some((re) => re.test(line.trim())))
+    .join("\n")
+    .replace(/\n{2,}/g, "\n")
+    .trimStart();
 }
