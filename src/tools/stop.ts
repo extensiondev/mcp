@@ -8,12 +8,14 @@
 
 import fs from "node:fs";
 import path from "node:path";
+import { execFileSync } from "node:child_process";
 import type { ReadyContract } from "../lib/types";
 import {
   getSession,
   listSessions,
   removeSession,
 } from "../lib/process-manager";
+import { resolveSessionBrowser } from "../lib/session-browser";
 
 export const schema = {
   name: "extension_stop",
@@ -28,9 +30,8 @@ export const schema = {
       },
       browser: {
         type: "string",
-        default: "chrome",
         description:
-          "Browser of the session to stop (matches the browser passed to extension_dev/extension_start)",
+          "Browser of the session to stop (matches the browser passed to extension_dev/extension_start). Defaults to the one live session for this project when omitted, instead of assuming chrome.",
       },
       all: {
         type: "boolean",
@@ -48,7 +49,42 @@ interface StopOutcome {
   browser: string;
   pid: number | null;
   stopped: boolean;
+  reaped: number[];
   detail: string;
+}
+
+// The dev-server pid does not own the launched browser: it runs under its own
+// user-data-dir (dist/extension-profile-<browser>) and, on Firefox especially,
+// survives the CLI dying. Killing only the dev pid left orphan browser
+// processes reporting stopped:true. Find every process whose command line
+// references this project's browser profile and terminate them too.
+function profileProcessPids(projectPath: string, browser: string): number[] {
+  const marker = path.resolve(
+    projectPath,
+    "dist",
+    `extension-profile-${browser}`,
+  );
+  try {
+    const out = execFileSync("pgrep", ["-f", marker], { encoding: "utf8" });
+    return out
+      .split("\n")
+      .map((s) => parseInt(s.trim(), 10))
+      .filter((n) => Number.isInteger(n) && n > 0 && n !== process.pid);
+  } catch {
+    // pgrep exits non-zero when nothing matches (or is unavailable on Windows).
+    return [];
+  }
+}
+
+function reapProfileProcesses(projectPath: string, browser: string): number[] {
+  const pids = profileProcessPids(projectPath, browser);
+  for (const pid of pids) {
+    try {
+      process.kill(pid, "SIGKILL");
+    } catch {
+    }
+  }
+  return pids;
 }
 
 function isAlive(pid: number): boolean {
@@ -105,13 +141,19 @@ async function stopOne(
   const pid = session?.pid ?? pidFromReadyContract(projectPath, browser);
 
   if (pid == null) {
+    // Even with no registered dev pid, an orphaned browser may still be running
+    // under the profile dir; reap those before reporting nothing to do.
+    const reaped = reapProfileProcesses(projectPath, browser);
     return {
       projectPath,
       browser,
       pid: null,
-      stopped: false,
+      stopped: reaped.length === 0 ? false : true,
+      reaped,
       detail:
-        "No known session for this project/browser (nothing registered in this server and no ready.json contract found).",
+        reaped.length === 0
+          ? "No known session for this project/browser (nothing registered in this server and no ready.json contract found)."
+          : `No dev pid on record, but reaped ${reaped.length} orphaned browser process(es) from the profile dir.`,
     };
   }
 
@@ -130,13 +172,27 @@ async function stopOne(
       : "Terminated.";
   }
 
+  // Reap the browser process tree launched under the profile dir; the dev pid
+  // dying does not take these with it (Firefox in particular detaches).
+  const reaped = reapProfileProcesses(projectPath, browser);
+
   removeSession(projectPath, browser);
   try {
     fs.rmSync(readyJsonPath(projectPath, browser), { force: true });
   } catch {
   }
 
-  return { projectPath, browser, pid, stopped: !isAlive(pid), detail };
+  // Only claim stopped when the dev pid is gone AND no profile process survived
+  // the reap. A survivor means the caller must not trust the machine is quiet.
+  const survivors = profileProcessPids(projectPath, browser);
+  const stopped = !isAlive(pid) && survivors.length === 0;
+  if (survivors.length) {
+    detail += ` Warning: ${survivors.length} browser process(es) still alive after reap (pids ${survivors.join(", ")}).`;
+  } else if (reaped.length) {
+    detail += ` Reaped ${reaped.length} browser process(es).`;
+  }
+
+  return { projectPath, browser, pid, stopped, reaped, detail };
 }
 
 export async function handler(args: {
@@ -166,6 +222,7 @@ export async function handler(args: {
     });
   }
 
-  const outcome = await stopOne(args.projectPath, args.browser ?? "chrome");
+  const { browser } = resolveSessionBrowser(args.projectPath, args.browser);
+  const outcome = await stopOne(args.projectPath, browser);
   return JSON.stringify(outcome);
 }

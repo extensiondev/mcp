@@ -67,6 +67,43 @@ function checkPrimitive(
   }
 }
 
+// Common argument synonyms folded to each tool's canonical name before
+// validation, so callers who reach for the obvious word (`name`, `code`,
+// `path`, `template`) are not rejected. Applied schema-aware: an alias is only
+// rewritten when the canonical IS a property of this tool and the alias is NOT
+// (so a tool that legitimately uses the alias word keeps its own meaning).
+const ARG_ALIASES: Record<string, string[]> = {
+  projectPath: ["path", "dir", "projectDir", "cwd"],
+  projectName: ["name"],
+  parentDir: ["parent", "into"],
+  slug: ["template", "templateSlug"],
+  expression: ["code", "js", "script"],
+  manifestPath: ["manifest"],
+  surface: ["view"],
+};
+
+export function normalizeArgAliases(
+  inputSchema: Record<string, unknown>,
+  args: Record<string, unknown>,
+): Record<string, unknown> {
+  const schema = inputSchema as ObjectSchema;
+  const props = schema.properties ?? {};
+  const out: Record<string, unknown> = { ...args };
+  for (const [canonical, aliases] of Object.entries(ARG_ALIASES)) {
+    if (!(canonical in props)) continue;
+    if (out[canonical] !== undefined) continue;
+    for (const alias of aliases) {
+      if (alias in props) continue;
+      if (out[alias] !== undefined) {
+        out[canonical] = out[alias];
+        delete out[alias];
+        break;
+      }
+    }
+  }
+  return out;
+}
+
 export function validateToolInput(
   inputSchema: Record<string, unknown>,
   args: Record<string, unknown>,

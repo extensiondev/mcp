@@ -89,8 +89,8 @@ export async function handler(args: {
   const maxBytes = args.maxBytes ?? 262_144;
   if (!isChromiumFamily(browser)) {
     return JSON.stringify({
-      error: `Source inspection for ${browser} uses RDP (Remote Debug Protocol). Currently only Chromium CDP is supported.`,
-      hint: 'Pass browser: "chrome" (against a Chromium-family dev session).',
+      error: `Source inspection reads the live DOM over Chrome DevTools Protocol, which ${browser} (Gecko) does not expose. This is a capability limit, not a missing session.`,
+      hint: `For the ${browser} session, read runtime state with extension_logs, or extension_eval (context: "content"/"page") which works against Firefox over the control channel. To get CDP DOM inspection, run a Chromium-family dev session (extension_dev with browser: "chrome") in parallel.`,
     });
   }
 
