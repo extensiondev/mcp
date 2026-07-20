@@ -85,6 +85,49 @@ export function deadReadySession(
   return null;
 }
 
+export interface BrowserExitStamp {
+  code?: string;
+  browserExitCode?: number | null;
+  browserExitedAt?: string;
+}
+
+// Engines carrying the bug-71/72 fixes stamp ready.json with status:"error",
+// code:"browser_exited" when the browser they launched dies unexpectedly during
+// preview/start. Launch tools read the stamp so they can report the death
+// instead of "launched". `since` guards against a stale stamp from a previous
+// run: only a stamp written after our own spawn counts.
+export function browserExitStamp(
+  projectPath: string,
+  browser: string,
+  since: number,
+): BrowserExitStamp | null {
+  const readyPath = path.resolve(
+    projectPath,
+    "dist",
+    "extension-js",
+    browser,
+    "ready.json",
+  );
+  try {
+    const stat = fs.statSync(readyPath);
+    if (stat.mtimeMs < since) return null;
+    const contract = JSON.parse(fs.readFileSync(readyPath, "utf8"));
+    const exited =
+      contract?.code === "browser_exited" ||
+      contract?.browserExitCode !== undefined ||
+      contract?.browserExitedAt !== undefined;
+    if (contract?.status === "error" && exited) {
+      return {
+        code: contract.code,
+        browserExitCode: contract.browserExitCode ?? null,
+        browserExitedAt: contract.browserExitedAt,
+      };
+    }
+  } catch {
+  }
+  return null;
+}
+
 // "chrome", not "chromium": the blind fallback used to name a browser almost
 // nobody runs, and because a DEAD session left no live sighting, every tool call
 // after the dev server exited silently retargeted chromium. That mismatch was

@@ -221,8 +221,19 @@ export async function handler(args: {
     const contract = readReadyContract(projectPath, browser);
     if (contract?.status === "error") {
       healthy = false;
-      const detail =
-        contract.errors && contract.errors.length
+      // Engines with the bug-71/72 fixes stamp code:"browser_exited" when the
+      // launched browser died; name that instead of the generic build wording,
+      // because the remediation is entirely different.
+      const browserExited =
+        contract.code === "browser_exited" ||
+        contract.browserExitCode !== undefined;
+      const detail = browserExited
+        ? `The ${browser} browser for this session exited unexpectedly${
+            contract.browserExitCode != null
+              ? ` (exit code ${contract.browserExitCode})`
+              : ""
+          }; the extension may have been rejected or the browser crashed. The session cannot be driven.`
+        : contract.errors && contract.errors.length
           ? contract.errors.join("; ")
           : contract.message ||
             "The dev session recorded status: error in ready.json.";
@@ -230,8 +241,9 @@ export async function handler(args: {
         check: "runtime-errors",
         status: "fail",
         detail: toMcpSpeak(detail),
-        remediation:
-          "The build or extension load failed. Fix the reported error, let the dev server recompile, then re-run doctor.",
+        remediation: browserExited
+          ? "Read extension_logs and the session log for the rejection cause, call extension_stop to clean up, then relaunch."
+          : "The build or extension load failed. Fix the reported error, let the dev server recompile, then re-run doctor.",
       });
     } else {
       // ready.json says ready, but the extension may still be throwing at

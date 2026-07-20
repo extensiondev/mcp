@@ -30,10 +30,10 @@ export const schema = {
       },
       context: {
         type: "string",
-        enum: ["content", "page", "popup", "options", "sidebar", "devtools"],
+        enum: ["content", "page", "popup", "options", "sidebar", "devtools", "newtab", "history", "bookmarks"],
         default: "content",
         description:
-          "content/page (targets `url`, else the active tab) or an OPEN extension surface (popup/options/sidebar/devtools)",
+          "content/page (targets `url`, else the active tab), an OPEN extension surface (popup/options/sidebar/devtools), or an override page (newtab/history/bookmarks)",
       },
       include: {
         type: "array",

@@ -8,6 +8,7 @@
 
 import { spawnExtensionCli } from "../lib/exec";
 import { registerSession, removeSession } from "../lib/process-manager";
+import { browserExitStamp } from "../lib/session-browser";
 import {
   LAUNCH_FLAG_SCHEMA,
   launchFlagArgs,
@@ -66,7 +67,9 @@ export async function handler(
   if (args.noBrowser) cliArgs.push("--no-browser");
   cliArgs.push(...launchFlagArgs(args));
 
-  const child = spawnExtensionCli(cliArgs, { projectDir: args.projectPath });
+  const spawnedAt = Date.now();
+  const spawned = spawnExtensionCli(cliArgs, { projectDir: args.projectPath });
+  const { child, logPath } = spawned;
   const pid = child.pid!;
 
   registerSession({
@@ -77,16 +80,8 @@ export async function handler(
   });
   child.on("exit", () => removeSession(args.projectPath, browser));
 
-  let earlyOutput = "";
-  const collector = (data: Buffer) => {
-    earlyOutput += data.toString();
-  };
-  child.stdout?.on("data", collector);
-  child.stderr?.on("data", collector);
-
   await new Promise((resolve) => setTimeout(resolve, 5000));
-  child.stdout?.off("data", collector);
-  child.stderr?.off("data", collector);
+  const earlyOutput = spawned.readOutput();
 
   // Same health tick as extension_dev: reporting status:"started" for a process
   // that already exited sends the caller to extension_wait against a session
@@ -106,7 +101,29 @@ export async function handler(
         `The preview server exited during startup (${signal ? `signal ${signal}` : `exit code ${code}`}). ` +
         "No session is running.",
       output: earlyOutput.slice(0, 2000),
+      logPath,
       hint: "Read `output` above for the cause: a failed production build, a port already in use, or a missing browser binary are the common ones. extension_build will surface a build error on its own.",
+    });
+  }
+
+  // The CLI can outlive the browser it launched. Engines with the bug-71/72
+  // fixes stamp ready.json status:"error" code:"browser_exited" when that
+  // happens; a dead browser IS a dead run-only session, so report it.
+  const exitStamp = browserExitStamp(args.projectPath, browser, spawnedAt);
+  if (exitStamp) {
+    return JSON.stringify({
+      ok: false,
+      status: "browser-exited",
+      projectPath: args.projectPath,
+      browser,
+      pid,
+      ...exitStamp,
+      error:
+        "The preview process is running but the browser it launched has exited " +
+        "(the extension may have been rejected or the browser crashed). The session cannot be driven.",
+      output: earlyOutput.slice(0, 2000),
+      logPath,
+      hint: "Read `output` above and extension_logs for the cause, then call extension_stop to clean up before retrying.",
     });
   }
 
@@ -118,5 +135,6 @@ export async function handler(
     status: "started",
     hint: "Use extension_wait to check when the build and browser launch are complete. When you are done, call extension_stop to shut down the session.",
     earlyOutput: earlyOutput.slice(0, 500),
+    logPath,
   });
 }

@@ -158,6 +158,24 @@ export async function handler(args: {
     }
   }
 
+  // A resolved promise is extension-create's verdict, not the artifact's: an
+  // interrupted download can resolve over a partial tree. Verify the shape a
+  // dev loop needs before claiming success.
+  const hasManifest =
+    fs.existsSync(path.join(result.projectPath, "manifest.json")) ||
+    fs.existsSync(path.join(result.projectPath, "src", "manifest.json"));
+  if (!hasManifest) {
+    return JSON.stringify({
+      ok: false,
+      status: "incomplete",
+      projectPath: result.projectPath,
+      error: `The scaffold is incomplete: no manifest.json exists under ${result.projectPath} (checked the root and src/). Do not run extension_dev against it.`,
+      duration: Date.now() - start,
+      log: logTail(),
+      hint: "Delete the directory and retry extension_create; a template download interrupted mid-way can leave a partial tree.",
+    });
+  }
+
   // extension-create reports the package manager it actually used (upstream
   // #47), which is authoritative and available even when deps were not
   // installed. Lockfile sniffing is the fallback for older engines. Guessing
