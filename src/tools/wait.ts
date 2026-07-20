@@ -10,6 +10,7 @@ import fs from "node:fs";
 import path from "node:path";
 import type { ReadyContract } from "../lib/types";
 import { resolveSessionBrowser } from "../lib/session-browser";
+import { recentErrorLogs } from "./doctor";
 
 // A single call is bounded below the MCP client's default request timeout
 // (DEFAULT_REQUEST_TIMEOUT_MSEC = 60_000 in the SDK), with margin for the
@@ -119,6 +120,12 @@ export async function handler(args: {
           sawCompiledButUnattached = true;
           continue;
         }
+        // E21 in the API-surface swarm: wait returned a bare status:"ready"
+        // while the service worker had crashed at top level on load, and only
+        // doctor told the truth. "ready" still means compiled+attached, but a
+        // ready that hides a crashing runtime is the false-green class this
+        // file exists to prevent, so recent error events ride along.
+        const runtimeErrors = recentErrorLogs(args.projectPath, browser, 3);
         return JSON.stringify({
           status: "ready",
           command: contract.command,
@@ -130,6 +137,12 @@ export async function handler(args: {
           compiledAt: contract.compiledAt,
           startedAt: contract.startedAt,
           waitDuration: Date.now() - start,
+          ...(runtimeErrors.length
+            ? {
+                runtimeErrors,
+                warning: `Compiled and attached, but the extension is throwing at runtime (${runtimeErrors.length} recent error event${runtimeErrors.length === 1 ? "" : "s"} above). Check extension_logs (level: error) or extension_doctor before trusting this session.`,
+              }
+            : {}),
         });
       }
 

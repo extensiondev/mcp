@@ -245,6 +245,12 @@ export async function handler(args: {
       hasIcons: files.some(
         (f) => f.type === "image" && f.path.includes("icon"),
       ),
+      // hasIcons alone stayed green when only small icons shipped; the Chrome
+      // Web Store specifically requires a 128x128 manifest icon (persona F30).
+      has128Icon:
+        typeof (manifest.icons as Record<string, unknown> | undefined)?.[
+          "128"
+        ] === "string",
       noSourceMaps: !files.some((f) => f.type === "sourcemap"),
       noPromoAssets: !files.some((f) => PROMO_RE.test(f.path)),
       under10MB: totalSize < 10 * 1024 * 1024,
