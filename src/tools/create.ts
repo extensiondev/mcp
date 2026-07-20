@@ -56,7 +56,7 @@ export const schema = {
       parentDir: {
         type: "string",
         description:
-          "Directory to create the project inside. Defaults to the MCP server's working directory, which may not be where you expect — pass this explicitly when you care where the project lands.",
+          "Directory to create the project inside. Defaults to the MCP server's working directory, which may not be where you expect, pass this explicitly when you care where the project lands.",
       },
       template: {
         type: "string",
@@ -133,7 +133,7 @@ export async function handler(args: {
   const failure = (err: unknown, transient: boolean): string =>
     JSON.stringify({
       error: transient
-        ? "Template download failed (network/timeout/rate-limit) — this is not a bad template name. Retry, or check connectivity/GitHub rate limits."
+        ? "Template download failed (network/timeout/rate-limit). This is not a bad template name. Retry, or check connectivity/GitHub rate limits."
         : err instanceof Error
           ? err.message
           : String(err),

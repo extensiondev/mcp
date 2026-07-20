@@ -142,7 +142,7 @@ async function readFromStream(
       (b) => b !== browser,
     );
     const retarget = running.length
-      ? `An active session exists for browser(s): ${running.join(", ")} — pass that as \`browser\`. Otherwise run`
+      ? `An active session exists for browser(s): ${running.join(", ")}, pass that as \`browser\`. Otherwise run`
       : "Run";
     return JSON.stringify({
       error: `No active control channel found for ${browser}.`,

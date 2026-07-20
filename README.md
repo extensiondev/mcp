@@ -41,7 +41,7 @@ Built on [Extension.js](https://extension.js.org), the open-source cross-browser
 claude mcp add extension-dev npx @extension.dev/mcp
 ```
 
-Or install it as a plugin — the MCP server plus the `/extension`, `/extension-add`, `/extension-debug`, and `/extension-publish` commands in one step:
+Or install it as a plugin, the MCP server plus the `/extension`, `/extension-add`, `/extension-debug`, and `/extension-publish` commands in one step:
 
 ```
 /plugin marketplace add extensiondev/mcp
@@ -123,11 +123,11 @@ cp node_modules/@extension.dev/mcp/claude/commands/*.md ~/my-extension/.claude/c
 | platform | `extension_release_promote` | Promote a build to a release channel, headless |
 | platform | `extension_deploy` | Submit to the Chrome, Firefox, and Edge stores through extension.dev |
 
-Browser-launching tools (`dev`, `start`, `preview`) shell out to the `extension` CLI — the project's own `node_modules/.bin/extension` when present, otherwise `npx extension@<pinned>` at the version this package is verified against; everything else runs in-process.
+Browser-launching tools (`dev`, `start`, `preview`) shell out to the `extension` CLI, the project's own `node_modules/.bin/extension` when present, otherwise `npx extension@<pinned>` at the version this package is verified against; everything else runs in-process.
 
 ## From preview to store
 
-The platform tools connect agents to [extension.dev](https://extension.dev): `extension_login` runs a GitHub device-code flow and stores a project-scoped token locally (never returned to the agent), `extension_publish` turns a build into a shareable preview URL, and `extension_release_promote` promotes a tested build to a release channel from CI or an agent session, no browser required. `extension_deploy` submits a built extension to the Chrome Web Store, Edge Add-ons, and Firefox AMO through extension.dev, which holds your store credentials and dispatches the release from your project's mirror CI — it defaults to a dry run and store credentials are never tool arguments.
+The platform tools connect agents to [extension.dev](https://extension.dev): `extension_login` runs a GitHub device-code flow and stores a project-scoped token locally (never returned to the agent), `extension_publish` turns a build into a shareable preview URL, and `extension_release_promote` promotes a tested build to a release channel from CI or an agent session, no browser required. `extension_deploy` submits a built extension to the Chrome Web Store, Edge Add-ons, and Firefox AMO through extension.dev, which holds your store credentials and dispatches the release from your project's mirror CI, it defaults to a dry run and store credentials are never tool arguments.
 
 ## The extension.dev stack
 

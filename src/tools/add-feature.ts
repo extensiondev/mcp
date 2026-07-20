@@ -182,7 +182,7 @@ export async function handler(args: {
 
   // Per-framework file conventions (confirmed against the catalog): react/preact
   // use JSX (.tsx) for both the mount script and the component; vue/svelte use a
-  // .ts mount script plus a single-file component (.vue/.svelte) — never .tsx;
+  // .ts mount script plus a single-file component (.vue/.svelte), never .tsx;
   // vanilla uses a .ts script and no component file.
   const scriptExt =
     framework === "react" || framework === "preact" ? "tsx" : "ts";

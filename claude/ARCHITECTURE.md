@@ -1,6 +1,6 @@
 # How the pieces connect
 
-This document explains how the three Claude integration layers — the template, the Claude Code rules, and the MCP tools — connect through the [examples](https://github.com/extension-js/examples) repo.
+This document explains how the three Claude integration layers (the template, the Claude Code rules, and the MCP tools) connect through the [examples](https://github.com/extension-js/examples) repo.
 
 ## The examples repo is the backbone
 
@@ -154,7 +154,7 @@ MCP server calls extensionCreate() → same go-git-it flow as CLI
 
 1. **Single source of truth.** `templates-meta.json` is generated from the actual examples. No manual sync needed. Add a template to `examples/`, run `pnpm run generate`, and all three layers pick it up.
 
-2. **The examples repo is the knowledge base.** The MCP server doesn't hard-code extension patterns — it reads them from examples. This means new patterns (like `sidebar-claude`) are immediately available to Claude without updating the MCP server.
+2. **The examples repo is the knowledge base.** The MCP server doesn't hard-code extension patterns, it reads them from examples. This means new patterns (like `sidebar-claude`) are immediately available to Claude without updating the MCP server.
 
 3. **Graceful degradation.** Users who don't use MCP still benefit from CLAUDE.md. Users who don't use Claude Code still benefit from the template. Each layer works independently.
 

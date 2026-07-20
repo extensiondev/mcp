@@ -210,7 +210,7 @@ export async function handler(args: {
     );
     // A zero exit code is the BUNDLER's verdict, not the artifact's. If the
     // built manifest declares a file the dist does not contain, Chrome refuses
-    // to load the extension — so reporting success:true here would be the same
+    // to load the extension, so reporting success:true here would be the same
     // "it built, so it works" lie the manifest gate exists to prevent. We
     // already computed `present` per entrypoint; act on it.
     const missing = entrypoints.filter((e) => !e.present);

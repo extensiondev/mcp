@@ -39,13 +39,13 @@ function withSessionContext(message: string, projectPath: string): string {
   // text hides. Detect a ready.json with a dead pid and lead with that instead.
   const dead = deadReadySession(projectPath);
   if (dead) {
-    return `${message}\nLikely cause: the dev server has exited — ${dead.browser} ready.json still says ready but its pid ${dead.pid} is dead. Restart with extension_dev (this is not an allowControl problem); extension_doctor confirms.`;
+    return `${message}\nLikely cause: the dev server has exited, ${dead.browser} ready.json still says ready but its pid ${dead.pid} is dead. Restart with extension_dev (this is not an allowControl problem); extension_doctor confirms.`;
   }
   const running = knownSessionBrowsers(projectPath);
   if (running.length === 0) return message;
   return `${message} Active session browser(s) for this project: ${running.join(
     ", ",
-  )} — pass that as \`browser\`, or restart it via extension_dev with allowControl: true if the control channel is off.`;
+  )}, pass that as \`browser\`, or restart it via extension_dev with allowControl: true if the control channel is off.`;
 }
 
 function translateFrame(frame: any, projectPath: string): any {

@@ -32,7 +32,7 @@ function readReadyContract(
 export const schema = {
   name: "extension_doctor",
   description:
-    "Diagnose a dev session end-to-end: ready contract, dev-server process, control-port agreement, control channel, eval token, executor, and browser liveness. Returns one {check, status, detail, remediation?} entry per leg in dependency order — a 'skip' names the check that blocked it and is NOT a pass. Run this first when any act tool (storage/reload/eval/open) errors unexpectedly. Wraps `extension doctor`. Call with no projectPath for a pre-flight environment check (node, extension CLI, template cache) before any project exists.",
+    "Diagnose a dev session end-to-end: ready contract, dev-server process, control-port agreement, control channel, eval token, executor, and browser liveness. Returns one {check, status, detail, remediation?} entry per leg in dependency order, a 'skip' names the check that blocked it and is NOT a pass. Run this first when any act tool (storage/reload/eval/open) errors unexpectedly. Wraps `extension doctor`. Call with no projectPath for a pre-flight environment check (node, extension CLI, template cache) before any project exists.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -215,7 +215,7 @@ export async function handler(args: {
     }
 
     // The CLI doctor reports harness legs (ports, token, executor) but does not
-    // fail on an error recorded in the ready contract — a build or extension
+    // fail on an error recorded in the ready contract, a build or extension
     // load failure would otherwise read as healthy. Inline it and downgrade.
     let healthy = code === 0;
     const contract = readReadyContract(projectPath, browser);
@@ -252,7 +252,7 @@ export async function handler(args: {
 
     // Keep the project-local engine version visible in project mode (env mode
     // reports it; project mode dropped it) and flag when it differs from a pin
-    // — the project bin, not EXTENSION_MCP_CLI_VERSION, drives the dev loop.
+    // because the project bin, not EXTENSION_MCP_CLI_VERSION, drives the dev loop.
     const engineVersion = projectEngineVersion(projectPath);
     if (engineVersion) {
       const pin = String(process.env.EXTENSION_MCP_CLI_VERSION || "").trim();
@@ -261,7 +261,7 @@ export async function handler(args: {
       checks.push({
         check: "project-engine",
         status: mismatch ? "warn" : "pass",
-        detail: `project-local extension@${engineVersion}${mismatch ? ` — but EXTENSION_MCP_CLI_VERSION=${pin}; the dev loop uses the project bin, not the pin` : ""}`,
+        detail: `project-local extension@${engineVersion}${mismatch ? `, but EXTENSION_MCP_CLI_VERSION=${pin}; the dev loop uses the project bin, not the pin` : ""}`,
         ...(mismatch
           ? {
               remediation: `Run \`(cd ${projectPath} && npm i -D extension@${pin})\` to match the pinned engine.`,
@@ -282,7 +282,7 @@ export async function handler(args: {
       error: {
         name: "CliError",
         message: toMcpSpeak(message),
-        hint: "extension doctor requires a recent extension CLI — the project's local install may predate it.",
+        hint: "extension doctor requires a recent extension CLI, the project's local install may predate it.",
       },
     });
   }

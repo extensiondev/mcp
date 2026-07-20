@@ -68,7 +68,7 @@ function pgrepPids(pattern: string): number[] {
 
 // Every process this dev session spawned, so stop can actually reap them:
 // - the dev CLI, whose argv is "extension dev <projectPath>" (the launched
-//   browser detaches from it — Firefox especially — so killing the dev pid
+//   browser detaches from it (Firefox especially) so killing the dev pid
 //   alone leaves it, and the dev pid itself sometimes survives);
 // - the launched browser, whose profile (gecko) and --load-extension (chromium)
 //   both live under <projectPath>/dist.

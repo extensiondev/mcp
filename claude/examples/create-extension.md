@@ -13,7 +13,7 @@
    cd page-summarizer
    ```
 
-2. **Define the manifest** — content script for the floating button, background script for orchestration:
+2. **Define the manifest**, content script for the floating button, background script for orchestration:
 
    ```json
    {
@@ -35,7 +35,7 @@
    }
    ```
 
-3. **Build the content script** — inject a floating button, handle click to extract `document.body.innerText`, send to background for processing.
+3. **Build the content script**, inject a floating button, handle click to extract `document.body.innerText`, send to background for processing.
 
 4. **Test it:**
    ```bash

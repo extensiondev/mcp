@@ -55,7 +55,7 @@ export const schema = {
         type: "boolean",
         default: false,
         description:
-          "Enable extension_eval (runs code in a context; writes a 0600 session token). Implies allowControl, so a single allowEval: true also unlocks storage/reload/open/dom_inspect — you do not need to pass both.",
+          "Enable extension_eval (runs code in a context; writes a 0600 session token). Implies allowControl, so a single allowEval: true also unlocks storage/reload/open/dom_inspect. You do not need to pass both.",
       },
     },
     required: ["projectPath"],
@@ -75,7 +75,7 @@ export async function handler(
 ): Promise<string> {
   const browser = args.browser ?? "chrome";
   // allowEval is a superset of allowControl (eval can do anything the control
-  // verbs can), so enabling eval must also open the control channel — otherwise
+  // verbs can), so enabling eval must also open the control channel, otherwise
   // callers who pass allowEval:true hit silent refusals on storage/reload/open.
   const allowControl = Boolean(args.allowControl || args.allowEval);
   const cliArgs = ["dev", args.projectPath, "--browser", browser];
@@ -111,7 +111,7 @@ export async function handler(
 
   // Health tick before claiming "started". This used to report status:"started"
   // unconditionally after the fixed 3s wait, so a dev server that died on boot
-  // (port taken, bad manifest, missing binary) still read as a healthy session —
+  // (port taken, bad manifest, missing binary) still read as a healthy session,
   // and every later tool call then failed against a session that was never
   // alive. Report the death honestly, with the child's own output as evidence.
   if (child.exitCode !== null || child.signalCode !== null) {

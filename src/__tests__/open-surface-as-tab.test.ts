@@ -8,7 +8,7 @@ const navigations: string[] = [];
 let cdpTargets: Array<{ id: string; type: string; url: string; title?: string }> =
   [];
 let cdpPort: { port: number } | null = { port: 9222 };
-// When false, a navigation does NOT produce a live target — the shape of a
+// When false, a navigation does NOT produce a live target, the shape of a
 // blocked or 404'd navigation, which must be reported as a failure.
 let navigationLands = true;
 

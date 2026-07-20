@@ -1,6 +1,6 @@
 ---
 title: "Inspect and act: drive your extension from the terminal"
-description: "Read the live DOM of any extension surface and run scoped operations — eval, storage, reload, open — in your service worker, content script, or popup, on Chrome and Firefox."
+description: "Read the live DOM of any extension surface and run scoped operations (eval, storage, reload, open) in your service worker, content script, or popup, on Chrome and Firefox."
 keywords:
   [
     "extension.js",
@@ -14,7 +14,7 @@ keywords:
   ]
 ---
 
-The [agent bridge](/docs/ai/agent-bridge) doesn't just let you *watch* your extension — it lets you *reach into* it. You can read the live DOM of any surface and run scoped operations in the exact context you care about, addressed the same way whether you're reading or acting.
+The [agent bridge](/docs/ai/agent-bridge) doesn't just let you *watch* your extension. It lets you *reach into* it. You can read the live DOM of any surface and run scoped operations in the exact context you care about, addressed the same way whether you're reading or acting.
 
 This is the half of the bridge that turns "observe" into a real debugging loop. It's still entirely local and free; the only thing gated is power (see [Safety](#safety)).
 
@@ -31,16 +31,16 @@ Reading and acting share one vocabulary. You name the surface; Extension.js reso
 
 ## Inspect the live DOM
 
-Source inspection prints the real, post-injection HTML and structure of a surface — what your extension actually produced, not the static bundle.
+Source inspection prints the real, post-injection HTML and structure of a surface, what your extension actually produced, not the static bundle.
 
 ```bash
 extension dev ./my-extension --source https://example.com
 ```
 
-See the full set of `--source-*` options on the [`dev` command page](/docs/commands/dev#source-inspection-workflow). The output — HTML, summary counts, DOM snapshots, diffs, redaction, byte caps — is identical regardless of how it was captured.
+See the full set of `--source-*` options on the [`dev` command page](/docs/commands/dev#source-inspection-workflow). The output (HTML, summary counts, DOM snapshots, diffs, redaction, byte caps) is identical regardless of how it was captured.
 
 <Note>
-**Firefox is supported for inspection.** Inspection runs through the in-browser companion rather than the Chrome DevTools Protocol, so it reaches your extension's own surfaces (popup, options, isolated content world) on **both** Chrome and Firefox — for these reads the old "Firefox uses RDP, not supported" wall is gone.
+**Firefox is supported for inspection.** Inspection runs through the in-browser companion rather than the Chrome DevTools Protocol, so it reaches your extension's own surfaces (popup, options, isolated content world) on **both** Chrome and Firefox, for these reads the old "Firefox uses RDP, not supported" wall is gone.
 
 Two things still need Chromium, because they fall back to the DevTools Protocol: **closed** shadow roots (`--deep-dom`) and `list-extensions`. The default open-shadow-root read works everywhere.
 </Note>
@@ -55,7 +55,7 @@ When you've enabled acting for the session, these operations run **inside your e
 | `extension storage get \| set --area <local\|session\|sync>` | Read or write your extension's storage. | `--allow-control` |
 | `extension reload` | Reload the extension. | `--allow-control` |
 | `extension open <popup\|options\|sidebar>` | Open an extension surface. | `--allow-control` |
-| `extension open action` | Trigger the toolbar action — opens its popup, or replays `chrome.action.onClicked`. | `--allow-control` |
+| `extension open action` | Trigger the toolbar action, opens its popup, or replays `chrome.action.onClicked`. | `--allow-control` |
 | `extension open command --name <cmd>` | Replay a `chrome.commands.onCommand` keyboard shortcut. | `--allow-control` |
 
 ### Example: poke a background function
@@ -69,7 +69,7 @@ extension eval "recomputeIndex()" --context background --allow-eval
 { "ok": true, "value": { "indexed": 42 } }
 ```
 
-You get the return value back as JSON. Any `console.log` your expression triggers flows out through [Agent logs](/docs/ai/logs) at the same time — return value and side effects, correlated by sequence.
+You get the return value back as JSON. Any `console.log` your expression triggers flows out through [Agent logs](/docs/ai/logs) at the same time, return value and side effects, correlated by sequence.
 
 ### Example: inspect storage without building UI
 
@@ -83,7 +83,7 @@ extension storage get --area local --allow-control
 
 ## Trigger actions and commands
 
-You can fire the events a user would normally trigger by hand — clicking the toolbar icon, or pressing a keyboard shortcut — so an agent (or a test) can exercise those handlers directly.
+You can fire the events a user would normally trigger by hand (clicking the toolbar icon, or pressing a keyboard shortcut) so an agent (or a test) can exercise those handlers directly.
 
 <CodeGroup>
 
@@ -97,28 +97,28 @@ extension open command --name toggle-theme --allow-control
 
 </CodeGroup>
 
-`open action` opens the action's popup if it has one; otherwise it replays the `chrome.action.onClicked` listeners. `open command` replays the `chrome.commands.onCommand` listeners for the named command. Both capture your listeners at build time (the bridge runs before your background code) and touch only `addListener`, so they run on **both Chrome and Firefox** — verified on both. A single `background.service_worker` source works on Firefox too: Extension.js translates it to a `background.scripts` event page for the Firefox build.
+`open action` opens the action's popup if it has one; otherwise it replays the `chrome.action.onClicked` listeners. `open command` replays the `chrome.commands.onCommand` listeners for the named command. Both capture your listeners at build time (the bridge runs before your background code) and touch only `addListener`, so they run on **both Chrome and Firefox**, verified on both. A single `background.service_worker` source works on Firefox too: Extension.js translates it to a `background.scripts` event page for the Firefox build.
 
 <Warning>
-**Replay carries no user gesture.** A real toolbar click grants temporary `activeTab` and satisfies gesture-gated APIs (`chrome.permissions.request`, interactive `identity.getAuthToken`); a replay does not. So a handler that depends on `activeTab` — `chrome.scripting.executeScript` on the active tab, `captureVisibleTab` — behaves differently than a real click. The result carries `gesture: false`, and a `warning` when your manifest declares `activeTab`.
+**Replay carries no user gesture.** A real toolbar click grants temporary `activeTab` and satisfies gesture-gated APIs (`chrome.permissions.request`, interactive `identity.getAuthToken`); a replay does not. So a handler that depends on `activeTab` (`chrome.scripting.executeScript` on the active tab, `captureVisibleTab`) behaves differently than a real click. The result carries `gesture: false`, and a `warning` when your manifest declares `activeTab`.
 </Warning>
 
 ### Need a genuine-gesture click?
 
-For the rare case where you need the gesture itself — `activeTab` granted, exactly like a user click — use [chrome-devtools-mcp](https://github.com/ChromeDevTools/chrome-devtools-mcp)'s `trigger_extension_action` (Chromium only). It performs a real action invocation through Puppeteer over the supported pipe transport. We recommend running it alongside this server anyway (see [Chrome DevTools MCP with Extension.js](/docs/integrations/chrome-devtools-mcp)) — let it own genuine-gesture browser driving, while Extension.js owns the build-aware, cross-browser replay.
+For the rare case where you need the gesture itself, `activeTab` granted, exactly like a user click, use [chrome-devtools-mcp](https://github.com/ChromeDevTools/chrome-devtools-mcp)'s `trigger_extension_action` (Chromium only). It performs a real action invocation through Puppeteer over the supported pipe transport. We recommend running it alongside this server anyway (see [Chrome DevTools MCP with Extension.js](/docs/integrations/chrome-devtools-mcp)), let it own genuine-gesture browser driving, while Extension.js owns the build-aware, cross-browser replay.
 
 ## List what's loaded
 
-The MCP tool `extension_list_extensions` reports the extensions that currently have a live context (service worker or open page) in the dev browser, with each one's id, name, version, and contexts. It reads identity **read-only** through the Chrome DevTools Protocol Extensions domain — it never attaches to or evaluates in another extension's context. A dormant MV3 service worker with no open page may be absent until it wakes. It's an MCP tool (no CLI verb) and is Chromium only, since it connects over the DevTools Protocol (Firefox uses RDP).
+The MCP tool `extension_list_extensions` reports the extensions that currently have a live context (service worker or open page) in the dev browser, with each one's id, name, version, and contexts. It reads identity **read-only** through the Chrome DevTools Protocol Extensions domain. It never attaches to or evaluates in another extension's context. A dormant MV3 service worker with no open page may be absent until it wakes. It's an MCP tool (no CLI verb) and is Chromium only, since it connects over the DevTools Protocol (Firefox uses RDP).
 
 ## The composed loop
 
 The real payoff is chaining read and act in one vocabulary. A typical agent (or you) does:
 
-1. `extension open options` — put the surface on screen
-2. inspect it with `--source` — read its DOM, on Firefox too
-3. `extension eval "store.getState().theme" --context options` — check its state
-4. `extension logs --since <seq>` — see what it logged doing all that
+1. `extension open options`, put the surface on screen
+2. inspect it with `--source`, read its DOM, on Firefox too
+3. `extension eval "store.getState().theme" --context options`, check its state
+4. `extension logs --since <seq>`, see what it logged doing all that
 
 Four operations, one addressing model, one ordered clock.
 
@@ -128,12 +128,12 @@ Acting on a privileged extension is genuinely powerful, so the gates are intenti
 
 - **Observation needs nothing.** Reading logs and DOM is always available.
 - **Bounded operations need `--allow-control`.** `storage`, `reload`, `open`, and `tabs` are scoped and safe, but they still change state, so you opt in per session.
-- **`eval` needs `--allow-eval` *and* a per-session token.** The token is written to a `0600` file outside `dist/` (so it never ships in a build), and only a process that can read it can run arbitrary code in your extension. This is why a random local process — or a misbehaving tool — can't quietly drive your service worker.
+- **`eval` needs `--allow-eval` *and* a per-session token.** The token is written to a `0600` file outside `dist/` (so it never ships in a build), and only a process that can read it can run arbitrary code in your extension. This is why a random local process (or a misbehaving tool) can't quietly drive your service worker.
 - **Every action is audited.** Each operation is appended to `dist/extension-js/<browser>/actions.ndjson` (eval source is hashed, not stored, unless you're in author mode) so you have a record of what touched your extension.
 
 ## For AI assistants
 
-With the [MCP server](/docs/ai/mcp), these map to `extension_eval`, `extension_storage`, `extension_reload`, `extension_open` (surfaces `popup`/`options`/`sidebar`/`action`/`command`), and `extension_list_extensions`. The same gates apply — an assistant can observe freely but only acts when you've enabled it for the session.
+With the [MCP server](/docs/ai/mcp), these map to `extension_eval`, `extension_storage`, `extension_reload`, `extension_open` (surfaces `popup`/`options`/`sidebar`/`action`/`command`), and `extension_list_extensions`. The same gates apply. An assistant can observe freely but only acts when you've enabled it for the session.
 
 ## Next steps
 
