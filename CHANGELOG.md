@@ -45,6 +45,24 @@ published to npm; installing 5.1.0 picks up both.
   `extension_storage` set without a `key` answers in MCP vocabulary rather
   than CLI flags.
 
+### Added
+
+- **Structured bundler warnings on `extension_build`.** The engine now
+  persists its build summary to `dist/extension-js/<browser>/
+  build-summary.json` (the transport half of engine bug 73), and the tool
+  returns it as `buildWarnings` (with `buildWarningsTruncated` naming the
+  true count when the engine capped the list). Older engines simply omit the
+  field; nothing is scraped from stdout.
+- **Popup-faithful headless rendering.** A popup rendered as a tab is now
+  sized like the real popup: the document's content size is measured over
+  CDP, clamped to Chrome's 25x25-800x600 popup bounds, and the window is
+  resized to it (reported as `renderedAsTab.popupBounds`). If the browser
+  does not verifiably honor the resize, the tool keeps saying "no popup
+  sizing" instead of implying fidelity.
+- **CI typechecks the tests.** `pnpm typecheck` covers `src/` and the test
+  tsconfig, wired into the CI matrix, so type drift between tools and their
+  tests cannot accumulate silently again.
+
 ### Changed
 
 - **Tool prose caught up with the fixed engine.** `extension_eval` and

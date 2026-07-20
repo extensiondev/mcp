@@ -276,6 +276,85 @@ function surfaceDocument(
   return null;
 }
 
+// Chrome popups auto-size to their content inside hard platform bounds.
+// Rendering the popup document in a full-size tab breaks any layout that
+// depends on that (max-width media queries, fit-content shells), which was the
+// deferred "full headless popup-render" gap.
+const POPUP_MIN = 25;
+const POPUP_MAX_WIDTH = 800;
+const POPUP_MAX_HEIGHT = 600;
+
+export function clampPopupBounds(
+  width: number,
+  height: number,
+): { width: number; height: number; clamped: boolean } {
+  const w = Math.min(Math.max(Math.ceil(width), POPUP_MIN), POPUP_MAX_WIDTH);
+  const h = Math.min(Math.max(Math.ceil(height), POPUP_MIN), POPUP_MAX_HEIGHT);
+  return { width: w, height: h, clamped: w !== Math.ceil(width) || h !== Math.ceil(height) };
+}
+
+// Approximate the popup's real rendering for a popup-as-tab: measure the
+// document's preferred content size, clamp to Chrome's popup bounds, and
+// resize the tab's WINDOW to it. Window bounds are browser state, so they
+// persist after this CDP session detaches (an Emulation override would reset
+// on detach). Returns null when it could not verifiably apply; callers must
+// then keep saying "no popup sizing" rather than implying fidelity.
+async function applyPopupBounds(
+  projectPath: string,
+  browser: string,
+  targetId: string,
+): Promise<{ width: number; height: number; clamped: boolean } | null> {
+  const resolved = await resolveCdpPort(projectPath, browser);
+  if (!resolved) return null;
+  const cdp = new CDPClient();
+  try {
+    const ws = await CDPClient.discoverBrowserWsUrl(resolved.port);
+    await cdp.connect(ws);
+    const sessionId = await cdp.attachToTarget(targetId);
+    const measured = (await cdp.evaluate(
+      sessionId,
+      "(() => { const d = document.documentElement, b = document.body; return { w: Math.max(d ? d.scrollWidth : 0, b ? b.scrollWidth : 0), h: Math.max(d ? d.scrollHeight : 0, b ? b.scrollHeight : 0) }; })()",
+    )) as { w?: number; h?: number } | undefined;
+    if (
+      !measured ||
+      typeof measured.w !== "number" ||
+      typeof measured.h !== "number" ||
+      measured.w <= 0 ||
+      measured.h <= 0
+    ) {
+      return null;
+    }
+    const bounds = clampPopupBounds(measured.w, measured.h);
+    const win = (await cdp.sendCommand("Browser.getWindowForTarget", {
+      targetId,
+    })) as { windowId?: number } | undefined;
+    if (typeof win?.windowId !== "number") return null;
+    await cdp.sendCommand("Browser.setWindowBounds", {
+      windowId: win.windowId,
+      bounds: { width: bounds.width, height: bounds.height },
+    });
+    // Read back: a setWindowBounds the browser ignored must not be reported
+    // as popup-faithful rendering.
+    const after = (await cdp.sendCommand("Browser.getWindowBounds", {
+      windowId: win.windowId,
+    })) as { bounds?: { width?: number; height?: number } } | undefined;
+    if (
+      after?.bounds?.width !== bounds.width ||
+      after?.bounds?.height !== bounds.height
+    ) {
+      return null;
+    }
+    return bounds;
+  } catch {
+    return null;
+  } finally {
+    try {
+      cdp.disconnect();
+    } catch {
+    }
+  }
+}
+
 // Headless Chromium has no window chrome to hang a popup on, so `open popup`
 // dead-ends there, the single biggest blocker cluster for the headless
 // personas. But a popup is just a document: navigating a real tab to
@@ -315,9 +394,26 @@ async function openSurfaceAsTab(
     const parsed = JSON.parse(raw);
     if (parsed?.ok) {
       parsed.renderedAsTab = { surface, document: doc, extensionId: id };
+      // For a popup, go the extra step: size the window like Chrome would
+      // size the popup, so content-fit layouts render as they really would.
+      let popupBounds: { width: number; height: number; clamped: boolean } | null =
+        null;
+      if (
+        (surface === "popup" || surface === "action") &&
+        typeof parsed.target?.targetId === "string"
+      ) {
+        popupBounds = await applyPopupBounds(
+          projectPath,
+          browser,
+          parsed.target.targetId,
+        );
+        if (popupBounds) parsed.renderedAsTab.popupBounds = popupBounds;
+      }
       parsed.hint =
         `Rendered the ${surface} document in a real tab, which is how you inspect a surface headlessly. ` +
-        "It is the same page with the same extension APIs, but it is NOT hosted in a popup window: no popup sizing, and window.close() closes the tab. " +
+        (popupBounds
+          ? `The window was resized to the popup's content size (${popupBounds.width}x${popupBounds.height}${popupBounds.clamped ? ", clamped to Chrome's 25x25-800x600 popup bounds" : ""}), approximating real popup rendering. This resizes the WHOLE browser window for the session. It is the same page with the same extension APIs, but window.close() closes the tab. `
+          : "It is the same page with the same extension APIs, but it is NOT hosted in a popup window: no popup sizing, and window.close() closes the tab. ") +
         `Inspect it with extension_dom_inspect context: '${surface}' (include: ['html']), or extension_source_inspect with this url. ` +
         "Do NOT pass this chrome-extension:// url to extension_dom_inspect or extension_eval as a tab target: script injection cannot reach extension pages, only the surface context or CDP can.";
       return JSON.stringify(parsed);

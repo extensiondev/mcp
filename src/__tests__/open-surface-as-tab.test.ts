@@ -11,6 +11,12 @@ let cdpPort: { port: number } | null = { port: 9222 };
 // When false, a navigation does NOT produce a live target, the shape of a
 // blocked or 404'd navigation, which must be reported as a failure.
 let navigationLands = true;
+// Popup-render emulation knobs: what the document measures, and whether the
+// browser actually honors Browser.setWindowBounds (a headed window manager
+// can refuse; the tool must then NOT claim popup-faithful rendering).
+let popupMeasure: { w: number; h: number } | null = null;
+let windowResizeHonored = true;
+let windowBounds: { width?: number; height?: number } = {};
 
 vi.mock("../lib/cdp-port", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../lib/cdp-port")>();
@@ -42,6 +48,20 @@ vi.mock("../lib/cdp", () => {
       }
     }
     async getPageMeta() {
+      return {};
+    }
+    async evaluate() {
+      return popupMeasure ? { w: popupMeasure.w, h: popupMeasure.h } : null;
+    }
+    async sendCommand(method: string, params?: Record<string, unknown>) {
+      if (method === "Browser.getWindowForTarget") return { windowId: 7 };
+      if (method === "Browser.setWindowBounds") {
+        if (windowResizeHonored) {
+          windowBounds = { ...(params?.bounds as Record<string, number>) };
+        }
+        return {};
+      }
+      if (method === "Browser.getWindowBounds") return { bounds: windowBounds };
       return {};
     }
     disconnect() {}
@@ -94,6 +114,9 @@ afterEach(() => {
   cdpPort = { port: 9222 };
   cdpTargets = [];
   navigationLands = true;
+  popupMeasure = null;
+  windowResizeHonored = true;
+  windowBounds = {};
   for (const dir of tmpDirs.splice(0)) {
     fs.rmSync(dir, { recursive: true, force: true });
   }
@@ -269,5 +292,78 @@ describe("open surface asTab", () => {
     expect(navigations).toEqual([
       `chrome-extension://${p.id}/action/index.html`,
     ]);
+  });
+});
+
+// Full headless popup-render: a popup-as-tab is resized to the popup's real
+// content-fit bounds so popup-dependent layouts render as they actually
+// would. The un-deferred remainder of the asTab work.
+describe("popup-as-tab window sizing", () => {
+  function popupProject() {
+    const p = project({});
+    fs.mkdirSync(p.distPath, { recursive: true });
+    fs.writeFileSync(
+      path.join(p.distPath, "manifest.json"),
+      JSON.stringify({ action: { default_popup: "popup.html" } }),
+    );
+    cdpTargets = [{ id: "t1", type: "page", url: "https://example.com" }];
+    return p;
+  }
+
+  it("resizes the window to the measured content size", async () => {
+    const p = popupProject();
+    popupMeasure = { w: 360, h: 240 };
+
+    const result = JSON.parse(
+      await open.handler({ projectPath: p.dir, surface: "popup", asTab: true }),
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.renderedAsTab.popupBounds).toEqual({
+      width: 360,
+      height: 240,
+      clamped: false,
+    });
+    expect(windowBounds).toEqual({ width: 360, height: 240 });
+    expect(result.hint).toContain("resized to the popup's content size (360x240");
+  });
+
+  it("clamps oversized content to Chrome's popup bounds and says so", async () => {
+    const p = popupProject();
+    popupMeasure = { w: 1200, h: 2000 };
+
+    const result = JSON.parse(
+      await open.handler({ projectPath: p.dir, surface: "popup", asTab: true }),
+    );
+
+    expect(result.renderedAsTab.popupBounds).toEqual({
+      width: 800,
+      height: 600,
+      clamped: true,
+    });
+    expect(result.hint).toContain("clamped");
+  });
+
+  it("does not claim popup fidelity when the browser ignored the resize", async () => {
+    const p = popupProject();
+    popupMeasure = { w: 360, h: 240 };
+    windowResizeHonored = false;
+
+    const result = JSON.parse(
+      await open.handler({ projectPath: p.dir, surface: "popup", asTab: true }),
+    );
+
+    // The navigation itself still succeeded; only the sizing claim must go.
+    expect(result.ok).toBe(true);
+    expect(result.renderedAsTab.popupBounds).toBeUndefined();
+    expect(result.hint).toContain("no popup sizing");
+  });
+
+  it("clampPopupBounds enforces the 25x25 floor", () => {
+    expect(open.clampPopupBounds(10, 10)).toEqual({
+      width: 25,
+      height: 25,
+      clamped: true,
+    });
   });
 });
