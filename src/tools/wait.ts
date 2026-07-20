@@ -22,6 +22,15 @@ import { resolveSessionBrowser } from "../lib/session-browser";
 // CLIENT sets resetTimeoutOnProgress, which the server cannot control.)
 const SAFE_CEILING_MS = 50_000;
 
+function isAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export const schema = {
   name: "extension_wait",
   description:
@@ -79,6 +88,18 @@ export async function handler(args: {
       const contract: ReadyContract = JSON.parse(raw);
 
       if (contract.status === "ready") {
+        // A ready.json can outlive its dev server (crash/kill). Returning
+        // status:ready then would send the caller into reload/eval that fail
+        // with a misleading control-channel error; report the dead session.
+        if (typeof contract.pid === "number" && !isAlive(contract.pid)) {
+          return JSON.stringify({
+            status: "stale",
+            message: `ready.json reports ready but its dev-server pid ${contract.pid} is dead — the session exited. Restart with extension_dev; extension_doctor will confirm.`,
+            browser: contract.browser,
+            pid: contract.pid,
+            waitDuration: Date.now() - start,
+          });
+        }
         return JSON.stringify({
           status: "ready",
           command: contract.command,

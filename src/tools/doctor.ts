@@ -107,6 +107,59 @@ async function environmentPreflight(): Promise<string> {
   });
 }
 
+// Recent error-level logs from the dev session, so a runtime crash (background
+// throwing on every event, now captured since engine #55) is surfaced even when
+// ready.json still says "ready" and the harness legs pass.
+function recentErrorLogs(
+  projectPath: string,
+  browser: string,
+  max = 5,
+): string[] {
+  const file = path.resolve(
+    projectPath,
+    "dist",
+    "extension-js",
+    browser,
+    "logs.ndjson",
+  );
+  let lines: string[];
+  try {
+    lines = fs.readFileSync(file, "utf8").split("\n").filter(Boolean);
+  } catch {
+    return [];
+  }
+  const errs: string[] = [];
+  for (const line of lines) {
+    let ev: { level?: string; args?: unknown[]; message?: string; text?: string };
+    try {
+      ev = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    if (ev && ev.level === "error") {
+      const msg = Array.isArray(ev.args)
+        ? ev.args.join(" ")
+        : ev.message || ev.text || "";
+      if (msg) errs.push(String(msg).slice(0, 300));
+    }
+  }
+  return errs.slice(-max);
+}
+
+function projectEngineVersion(projectPath: string): string | null {
+  try {
+    const p = path.resolve(
+      projectPath,
+      "node_modules",
+      "extension",
+      "package.json",
+    );
+    return JSON.parse(fs.readFileSync(p, "utf8")).version || null;
+  } catch {
+    return null;
+  }
+}
+
 export async function handler(args: {
   projectPath?: string;
   browser?: string;
@@ -151,8 +204,48 @@ export async function handler(args: {
         remediation:
           "The build or extension load failed. Fix the reported error, let the dev server recompile, then re-run doctor.",
       });
+    } else {
+      // ready.json says ready, but the extension may still be throwing at
+      // runtime (e.g. a missing permission for a called chrome.* API). Surface
+      // recent error-level logs and downgrade, so doctor isn't falsely healthy.
+      const errs = recentErrorLogs(projectPath, browser);
+      if (errs.length) {
+        healthy = false;
+        checks.push({
+          check: "runtime-errors",
+          status: "fail",
+          detail: `Recent error-level logs: ${errs.join(" | ")}`,
+          remediation:
+            "The extension is throwing at runtime. Inspect with extension_logs; a missing permission for a called chrome.* API is a common cause (extension_manifest_validate now checks this).",
+        });
+      }
     }
-    return JSON.stringify({ browser, healthy, checks });
+
+    // Keep the project-local engine version visible in project mode (env mode
+    // reports it; project mode dropped it) and flag when it differs from a pin
+    // — the project bin, not EXTENSION_MCP_CLI_VERSION, drives the dev loop.
+    const engineVersion = projectEngineVersion(projectPath);
+    if (engineVersion) {
+      const pin = String(process.env.EXTENSION_MCP_CLI_VERSION || "").trim();
+      const mismatch =
+        pin !== "" && pin !== "latest" && !engineVersion.includes(pin);
+      checks.push({
+        check: "project-engine",
+        status: mismatch ? "warn" : "pass",
+        detail: `project-local extension@${engineVersion}${mismatch ? ` — but EXTENSION_MCP_CLI_VERSION=${pin}; the dev loop uses the project bin, not the pin` : ""}`,
+        ...(mismatch
+          ? {
+              remediation: `Run \`(cd ${projectPath} && npm i -D extension@${pin})\` to match the pinned engine.`,
+            }
+          : {}),
+      });
+    }
+    return JSON.stringify({
+      browser,
+      ...(engineVersion ? { engineVersion } : {}),
+      healthy,
+      checks,
+    });
   } catch {
     const message = stderr.trim() || `extension exited with code ${code}`;
     return JSON.stringify({

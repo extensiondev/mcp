@@ -1,5 +1,43 @@
 # Changelog
 
+## 4.9.0
+
+A second pass from the persona swarm, closing the gaps 4.8.0 left and the top
+new blockers it surfaced.
+
+- **Honest `extension_manifest_validate`.** It now scans the project source for
+  permission-gated `chrome.*`/`browser.*` calls and flags any the manifest does
+  not declare — an API used without its permission is `undefined` at runtime and
+  crashes the context, the exact case where validate used to report `valid:true`.
+  The headline is now honest (`valid:false` + `buildBlocking:true` on any error),
+  and it accepts singular `browser` as an alias for `browsers`.
+- **`extension_open` can navigate a tab.** Pass a `url` (Chromium, via CDP) to
+  drive a content-script test page, a `webNavigation` target, or the popup as a
+  page (`chrome-extension://<id>/popup.html`) — the loop the surface-only open
+  could not do. `target` is accepted as an alias for `surface`.
+- **`extension_stop` actually reaps the session.** It now terminates the dev CLI
+  and both browser families (gecko profile + chromium `--load-extension`, under
+  the project's dist) and refuses to report `stopped:true` while any survive.
+- **`extension_wait` won't lie about a dead session.** A `ready.json` whose pid
+  is dead now returns `status:"stale"` instead of `ready`, so you don't walk into
+  a reload/eval that fails with a misleading control-channel error.
+- **Dropped-channel errors name the real cause.** A `1006` / "no control channel"
+  now detects an exited dev server (stale ready.json + dead pid) and says so,
+  instead of asking "is the session started with allowControl?" when it was.
+- **`extension_doctor`** surfaces recent error-level logs as a `runtime-errors`
+  check (so a background throwing on every event isn't `healthy:true`), keeps the
+  project-local engine version in project mode, and flags when that engine
+  differs from a pinned `EXTENSION_MCP_CLI_VERSION`.
+- **`extension_build`** lists declared entrypoints in its success output, so a
+  content script no longer reads as "didn't build".
+- **`extension_create`** forces non-interactive git (`GIT_TERMINAL_PROMPT=0`) so a
+  credential prompt can't hang the template download, retries once on a transient
+  network/timeout failure (cleaning the partial dir first), reports a download
+  failure as such instead of "choose a valid template name", and warns when the
+  scaffold's `extension@latest` pin will win over your pinned CLI.
+- Eval/inspect error guidance now speaks MCP JSON args (`context`, `tab`, `url`)
+  instead of CLI flags.
+
 ## 4.8.0
 
 Dev-session ergonomics hardened from a 30-persona agent walk of the toolchain.
