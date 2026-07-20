@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 
 import { afterEach, beforeEach, describe, it, expect } from "vitest";
-import { schema, handler } from "../tools/deploy";
+import { schema, handler, storeMdWarnings } from "../tools/deploy";
 import { tools as ALL_TOOLS } from "../index";
 
 function jsonResponse(body: unknown, ok = true, status = 200): Response {
@@ -131,6 +131,24 @@ describe("extension_deploy: platform submit handler", () => {
     expect(body.dryRun).toBe(false);
   });
 
+  it("attaches STORE.md warnings to the result without blocking it", async () => {
+    process.env.EXTENSION_DEV_TOKEN = "tok";
+    global.fetch = (async () =>
+      jsonResponse({ ok: true, dryRun: true })) as unknown as typeof fetch;
+    const prevCwd = process.cwd();
+    process.chdir(tmp); // no STORE.md here
+    try {
+      const out = JSON.parse(
+        await handler({ browsers: ["firefox"], buildSha: "abc1234" }),
+      );
+      expect(out.ok).toBe(true);
+      expect(out.warnings).toHaveLength(1);
+      expect(out.warnings[0]).toContain("No STORE.md");
+    } finally {
+      process.chdir(prevCwd);
+    }
+  });
+
   it("surfaces a non-OK response as DeployError", async () => {
     process.env.EXTENSION_DEV_TOKEN = "tok";
     global.fetch = (async () =>
@@ -145,5 +163,59 @@ describe("extension_deploy: platform submit handler", () => {
     expect(out.ok).toBe(false);
     expect(out.error.name).toBe("DeployError");
     expect(out.error.message).toContain("404");
+  });
+});
+
+describe("storeMdWarnings", () => {
+  let tmp: string;
+
+  beforeEach(() => {
+    tmp = fs.mkdtempSync(path.join(os.tmpdir(), "extdev-storemd-"));
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  });
+
+  it("stays silent for chrome-only submissions", () => {
+    expect(storeMdWarnings(["chrome"], tmp)).toEqual([]);
+  });
+
+  it("warns once when STORE.md is missing entirely", () => {
+    const warnings = storeMdWarnings(["firefox", "edge"], tmp);
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain("No STORE.md");
+  });
+
+  it("warns per store for empty or absent note fields", () => {
+    fs.writeFileSync(
+      path.join(tmp, "STORE.md"),
+      [
+        "## Firefox Add-ons",
+        "### Reviewer notes",
+        "<!-- fill me in -->",
+        "## Edge Add-ons",
+        "### Certification notes",
+        "Real guidance here.",
+      ].join("\n"),
+    );
+    const warnings = storeMdWarnings(["firefox", "edge"], tmp);
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain("Firefox reviewer notes");
+  });
+
+  it("stays silent when the fields are filled in", () => {
+    fs.writeFileSync(
+      path.join(tmp, "STORE.md"),
+      [
+        "## firefox-amo",
+        "### Reviewer notes",
+        "Test account and steps.",
+        "## Edge Add-ons",
+        "### Certification notes",
+        "Guidance.",
+      ].join("\n"),
+    );
+    expect(storeMdWarnings(["firefox", "edge"], tmp)).toEqual([]);
   });
 });
