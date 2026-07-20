@@ -1,6 +1,60 @@
 # Changelog
 
-## 5.0.0
+## 5.1.0
+
+The engine closed its entire open bug range (Extension.js 61-73) in the
+4.0.14 canary line. This release re-aligns the MCP with the fixed engine,
+finishes the MCP-side half of those bugs, and continues the
+report-failure-not-false-success program that 5.0.0 started. 5.0.0 was never
+published to npm; installing 5.1.0 picks up both.
+
+### Fixed
+
+- **Sessions now genuinely survive the MCP process.** `detached: true` alone
+  never did it: the child held pipes to the MCP, so when the MCP exited the
+  next compile log line killed the dev server with EPIPE. Launch tools
+  (`extension_dev`/`start`/`preview`) now stream the child's output to a
+  session log file (returned as `logPath`) instead of pipes. A detached
+  session outlives the MCP and a fresh MCP process rediscovers it through
+  `ready.json` and can stop it. Pinned by a detach-contract test.
+- **`extension_preview` no longer reports `launched` for a process that died
+  in seconds.** It health-checks the child like `dev`/`start` (the MCP half of
+  engine bug 72), and all three launch tools read the engine's new
+  `browser_exited` stamp, so a browser that dies after launch (for example a
+  rejected add-on) returns `status:"browser-exited"` instead of success.
+- **`extension_doctor` names a dead browser.** A `browser_exited` ready
+  contract now produces a runtime-errors failure that says the browser died,
+  with the matching remedy, instead of the generic "fix the build error"
+  wording that pointed at a build that was fine.
+- **`extension_create` verifies the scaffold.** A resolved create over a
+  partial tree (an interrupted template download) returned `nextSteps`
+  pointing at a project that could not compile. It now checks the manifest
+  exists and returns `status:"incomplete"` when it does not.
+- **`extension_manifest_validate` is per-target honest.** `chromium:`/
+  `firefox:` prefixed keys resolve per target, `edge` joins the default
+  matrix, `manifest_version` must be 2 or 3, a `default_locale` without its
+  `_locales` catalog blocks, and a missing 128px store icon warns
+  (`extension_inspect` reports `has128Icon`).
+- **Stale state stops being served as live.** `extension_logs` stamps
+  `stale:true` when the producing session is dead or from a different run;
+  `extension_wait` returns `runtimeErrors` alongside ready instead of a bare
+  green over a crashing worker; `extension_build` reports
+  `productionDivergence` when the production manifest lost permissions or
+  resources relative to source.
+- **`extension_open`'s `asTab` fallback fires on the user-gesture wall**, and
+  `extension_storage` set without a `key` answers in MCP vocabulary rather
+  than CLI flags.
+
+### Changed
+
+- **Tool prose caught up with the fixed engine.** `extension_eval` and
+  `extension_dom_inspect` now advertise the surface contexts
+  (`popup`/`options`/`sidebar`/`devtools`) and override pages
+  (`newtab`/`history`/`bookmarks`) the engine's relay serves, needing no tab
+  id. The "content eval is known-broken" guard is version-honest: on
+  Extension.js >= 4.0.14 a null is the expression's real result, and the note
+  says so instead of condemning a repaired path. Firefox hints name every
+  working route.
 
 A pass focused on a single question: when something has gone wrong, does the
 tool say so? Five tools were reporting success over a failure. All five now
