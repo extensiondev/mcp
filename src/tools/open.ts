@@ -198,6 +198,31 @@ async function resolveExtensionId(
   return ids.size === 1 ? [...ids][0] : null;
 }
 
+// The command names the BUILT manifest declares, or null when we cannot read a
+// manifest at all (in which case we must not block the caller on a guess).
+function declaredCommands(projectPath: string, browser: string): string[] | null {
+  const candidates = [
+    path.join(projectPath, "dist", browser, "manifest.json"),
+    path.join(projectPath, "dist", "manifest.json"),
+    path.join(projectPath, "src", "manifest.json"),
+    path.join(projectPath, "manifest.json"),
+  ];
+  for (const file of candidates) {
+    try {
+      const manifest = JSON.parse(fs.readFileSync(file, "utf8"));
+      const commands = manifest?.commands;
+      if (commands && typeof commands === "object") {
+        return Object.keys(commands);
+      }
+      // A readable manifest with no commands block is a definitive empty list.
+      return [];
+    } catch {
+      continue;
+    }
+  }
+  return null;
+}
+
 // The dist directory the running session loaded, straight from the ready
 // contract the engine writes.
 function readDistPath(projectPath: string, browser: string): string | null {
@@ -370,6 +395,27 @@ export async function handler(
           "Pass `surface` (popup/options/sidebar/action/command) to open a surface, or `url` to navigate a tab.",
       },
     });
+  }
+
+  // A command name that is not declared in the manifest used to return a green
+  // "triggered" and ship a dead keyboard shortcut: the SW never had a listener
+  // for it, so nothing happened and nothing said so. Check the built manifest
+  // first, and name the commands that DO exist.
+  if (args.surface === "command") {
+    const declared = declaredCommands(args.projectPath, browser);
+    if (declared && args.name && !declared.includes(args.name)) {
+      return JSON.stringify({
+        ok: false,
+        error: {
+          name: "UnknownCommand",
+          message: `"${args.name}" is not declared in the manifest's \`commands\`, so triggering it can only ever be a no-op.`,
+        },
+        declaredCommands: declared,
+        hint: declared.length
+          ? `Declared commands are: ${declared.join(", ")}. Check for a typo, or add "${args.name}" to the manifest.`
+          : "This manifest declares no commands at all. Add a `commands` block, rebuild, then retry.",
+      });
+    }
   }
 
   const cli = ["open", args.surface, args.projectPath];

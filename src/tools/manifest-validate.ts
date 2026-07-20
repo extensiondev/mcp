@@ -108,6 +108,30 @@ function collectPathRefs(m: Record<string, unknown>): string[] {
   if (sa) push(sa.default_panel);
   const cuo = m.chrome_url_overrides as Record<string, unknown> | undefined;
   if (cuo) Object.values(cuo).forEach(push);
+  // declarativeNetRequest rulesets. Missing these was invisible here while
+  // extension_build failed with NOT FOUND on the same tree, so an adblocker (one
+  // of the largest extension categories) got valid:true for a manifest the
+  // browser cannot load. Found by persona B6 in the API-surface swarm.
+  const dnr = m.declarative_net_request as Record<string, unknown> | undefined;
+  if (dnr && Array.isArray(dnr.rule_resources)) {
+    for (const r of dnr.rule_resources) {
+      if (r && typeof r === "object") push((r as Record<string, unknown>).path);
+    }
+  }
+  // Enterprise policy schema. C15 declared it, the file was never copied into
+  // dist, and validate said nothing at all while the build emitted a NOT FOUND
+  // warning and still reported success.
+  const storage = m.storage as Record<string, unknown> | undefined;
+  if (storage) push(storage.managed_schema);
+  // devtools_page and the MV2 page-action surface were also unreferenced.
+  push(m.devtools_page);
+  const pa = m.page_action as Record<string, unknown> | undefined;
+  if (pa) {
+    push(pa.default_popup);
+    if (typeof pa.default_icon === "string") push(pa.default_icon);
+    else if (pa.default_icon)
+      Object.values(pa.default_icon as Record<string, unknown>).forEach(push);
+  }
   return refs;
 }
 
@@ -209,6 +233,9 @@ export async function handler(args: {
   if (!args.browsers && typeof (args as { browser?: string }).browser === "string") {
     args = { ...args, browsers: [(args as { browser: string }).browser] };
   }
+  // Whether the caller NAMED the targets. When they did not, an advisory about
+  // a browser they never asked about must not decide the headline verdict.
+  const explicitBrowsers = Array.isArray(args.browsers) && args.browsers.length > 0;
   const browsers = args.browsers ?? ["chrome", "firefox"];
   const result: ValidationResult = {
     valid: true,
@@ -275,8 +302,17 @@ export async function handler(args: {
   ];
   for (const ref of new Set(collectPathRefs(chromiumManifest))) {
     if (!fileResolvesSomewhere(ref, roots)) {
-      result.warnings.push(
-        `Referenced file "${ref}" was not found near the manifest. This is the kind of dangling reference extension_build fails on. Verify with extension_build.`,
+      // This used to be a WARNING while `valid` stayed true, so the payload
+      // said "extension_build fails on this" in prose and "buildBlocking:false"
+      // in the machine fields, and any CI gate branching on `valid` shipped a
+      // broken build. The API-surface swarm supplied the evidence that was
+      // missing when this was written as a warning: on the same source tree,
+      // extension_build returns success:false with NOT FOUND. A reference that
+      // resolves nowhere is build-blocking, so say so. fileResolvesSomewhere
+      // already exempts globs, http(s) and data: URIs, which is what kept this
+      // conservative in the first place.
+      result.errors.push(
+        `Referenced file "${ref}" was not found near the manifest. extension_build fails on this dangling reference.`,
       );
     }
   }
@@ -437,9 +473,27 @@ export async function handler(args: {
 
   // Errors must make the headline honest: valid only when there are no errors
   // AND every target is supported (previously errors could coexist with valid).
-  result.valid =
-    result.errors.length === 0 &&
-    Object.values(result.browserSupport).every((b) => b.supported);
+  // `valid:false` with an EMPTY errors[] was the single most corroborated lie in
+  // the API-surface swarm (6 of 15 personas). Cause: `browsers` defaults to
+  // ["chrome","firefox"], so a Chrome-targeted extension was ruled invalid
+  // because of a Firefox advisory that appeared nowhere in errors[] or
+  // warnings[]. The verdict must always be explainable by what it reports:
+  // an unsupported target the caller ASKED about is an error, an unsupported
+  // target we merely defaulted to is a named warning.
+  for (const [browser, support] of Object.entries(result.browserSupport)) {
+    if (support.supported) continue;
+    const issues = support.issues?.length
+      ? support.issues.join("; ")
+      : `${browser} is not supported by this manifest.`;
+    if (explicitBrowsers) {
+      result.errors.push(`${browser}: ${issues}`);
+    } else {
+      result.warnings.push(
+        `${browser} (not requested, checked by default): ${issues}`,
+      );
+    }
+  }
+  result.valid = result.errors.length === 0;
 
   return JSON.stringify({
     ...result,

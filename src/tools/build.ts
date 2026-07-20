@@ -35,11 +35,15 @@ function builtEntrypoints(
   };
   const bg = manifest.background as Record<string, unknown> | undefined;
   if (bg?.service_worker) add("background.service_worker", bg.service_worker);
+  if (bg?.page) add("background.page", bg.page);
   if (Array.isArray(bg?.scripts)) bg.scripts.forEach((s) => add("background.scripts", s));
   const action = (manifest.action || manifest.browser_action) as
     | Record<string, unknown>
     | undefined;
   if (action?.default_popup) add("action.default_popup", action.default_popup);
+  const pageAction = manifest.page_action as Record<string, unknown> | undefined;
+  if (pageAction?.default_popup)
+    add("page_action.default_popup", pageAction.default_popup);
   const cs = manifest.content_scripts as
     | Array<Record<string, unknown>>
     | undefined;
@@ -49,6 +53,40 @@ function builtEntrypoints(
         c.js.forEach((j) => add(`content_scripts[${i}].js`, j));
       if (Array.isArray(c.css))
         c.css.forEach((s) => add(`content_scripts[${i}].css`, s));
+    });
+  }
+  // Everything below was OUTSIDE the completeness contract, so a build that
+  // dropped a devtools panel, an options page or a side panel still reported
+  // "ready for deployment". Found by persona A1 in the API-surface swarm: its
+  // devtools panel file was never emitted and build stayed green.
+  add("devtools_page", manifest.devtools_page);
+  add("options_page", manifest.options_page);
+  const optionsUi = manifest.options_ui as Record<string, unknown> | undefined;
+  if (optionsUi?.page) add("options_ui.page", optionsUi.page);
+  const sidePanel = manifest.side_panel as Record<string, unknown> | undefined;
+  if (sidePanel?.default_path)
+    add("side_panel.default_path", sidePanel.default_path);
+  const sidebarAction = manifest.sidebar_action as
+    | Record<string, unknown>
+    | undefined;
+  if (sidebarAction?.default_panel)
+    add("sidebar_action.default_panel", sidebarAction.default_panel);
+  const overrides = manifest.chrome_url_overrides as
+    | Record<string, unknown>
+    | undefined;
+  if (overrides) {
+    for (const [key, ref] of Object.entries(overrides)) {
+      add(`chrome_url_overrides.${key}`, ref);
+    }
+  }
+  const dnr = manifest.declarative_net_request as
+    | Record<string, unknown>
+    | undefined;
+  if (dnr && Array.isArray(dnr.rule_resources)) {
+    dnr.rule_resources.forEach((r, i) => {
+      if (r && typeof r === "object") {
+        add(`declarative_net_request[${i}].path`, (r as Record<string, unknown>).path);
+      }
     });
   }
   return out;
@@ -111,6 +149,52 @@ export const schema = {
     required: ["projectPath"],
   },
 };
+
+// A production build can emit a manifest that differs from the source in ways
+// that silently change behavior: personas shipped builds whose
+// web_accessible_resources had been stripped (so insertCSS targets were
+// undeclared) and whose permission set was narrower than the one they had
+// tested against in dev. The build was green both times. Diff the two manifests
+// and report what the production artifact actually lost.
+function manifestDivergence(
+  projectPath: string,
+  browser: string,
+): string[] {
+  const read = (p: string): Record<string, any> | null => {
+    try {
+      return JSON.parse(fs.readFileSync(p, "utf8"));
+    } catch {
+      return null;
+    }
+  };
+  const built = read(path.resolve(projectPath, "dist", browser, "manifest.json"));
+  const source =
+    read(path.resolve(projectPath, "src", "manifest.json")) ??
+    read(path.resolve(projectPath, "manifest.json"));
+  if (!built || !source) return [];
+
+  const notes: string[] = [];
+  const listOf = (m: Record<string, any>, key: string): string[] =>
+    Array.isArray(m[key]) ? m[key].filter((x: unknown) => typeof x === "string") : [];
+
+  for (const key of ["permissions", "host_permissions", "optional_permissions"]) {
+    const lost = listOf(source, key).filter((p) => !listOf(built, key).includes(p));
+    if (lost.length) {
+      notes.push(
+        `The built manifest drops ${key}: ${lost.join(", ")}. The production build has narrower access than the source you tested in dev.`,
+      );
+    }
+  }
+
+  const sourceWar = source.web_accessible_resources;
+  const builtWar = built.web_accessible_resources;
+  if (Array.isArray(sourceWar) && sourceWar.length && !Array.isArray(builtWar)) {
+    notes.push(
+      "The built manifest has no web_accessible_resources although the source declares them. Anything injected into a page (scripting.insertCSS targets, injected scripts, images) will be blocked at runtime.",
+    );
+  }
+  return notes;
+}
 
 interface ValidationPreflight {
   valid: boolean;
@@ -244,6 +328,10 @@ export async function handler(args: {
       ...(preflight?.warnings.length
         ? { manifestWarnings: preflight.warnings }
         : {}),
+      ...(() => {
+        const divergence = manifestDivergence(args.projectPath, browser);
+        return divergence.length ? { productionDivergence: divergence } : {};
+      })(),
       zip: args.zip ?? false,
       duration,
       output: lastLines(out, 12),

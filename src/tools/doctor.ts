@@ -244,8 +244,14 @@ export async function handler(args: {
           check: "runtime-errors",
           status: "fail",
           detail: `Recent error-level logs: ${errs.join(" | ")}`,
+          // The old copy said manifest_validate "now checks this" for permission
+          // causes without qualification. It checks permissions[] MEMBERSHIP
+          // only: it does not model host-permission scope or gesture
+          // requirements. Two personas followed the pointer, got valid:true, and
+          // burned a debug cycle; in one case it steered them off the real
+          // cause. Say exactly what the check covers.
           remediation:
-            "The extension is throwing at runtime. Inspect with extension_logs; a missing permission for a called chrome.* API is a common cause (extension_manifest_validate now checks this).",
+            "The extension is throwing at runtime. Inspect with extension_logs. A chrome.* API called without its permission is a common cause: extension_manifest_validate catches a permission MISSING FROM permissions[], but it does not model host-permission scope (e.g. webRequest with no matching host_permissions) or gesture requirements (e.g. activeTab without a user gesture), so a valid:true there does not rule those out.",
         });
       }
     }

@@ -14,6 +14,7 @@ vi.mock("../lib/act", async (importOriginal) => {
 
 const domInspect = await import("../tools/dom-inspect");
 const evalTool = await import("../tools/eval");
+const openTool = await import("../tools/open");
 
 afterEach(() => {
   calls.length = 0;
@@ -87,5 +88,63 @@ describe("eval targeting", () => {
 
     expect(calls[0]).not.toContain("--url");
     expect(calls[0]).not.toContain("--tab");
+  });
+});
+
+// L9: extension_open surface:"command" used to fire a command that the manifest
+// never declares, returning a green "triggered" for a shortcut that can only
+// ever be a no-op.
+describe("open command validates against the manifest", () => {
+  const fs = require("node:fs") as typeof import("node:fs");
+  const os = require("node:os") as typeof import("node:os");
+  const nodePath = require("node:path") as typeof import("node:path");
+
+  const dirs: string[] = [];
+  function projectWithCommands(commands: Record<string, unknown> | undefined) {
+    const dir = fs.mkdtempSync(nodePath.join(os.tmpdir(), "mcp-open-cmd-"));
+    dirs.push(dir);
+    fs.mkdirSync(nodePath.join(dir, "src"), { recursive: true });
+    fs.writeFileSync(
+      nodePath.join(dir, "src", "manifest.json"),
+      JSON.stringify({ manifest_version: 3, name: "F", ...(commands ? { commands } : {}) }),
+    );
+    return dir;
+  }
+
+  afterEach(() => {
+    for (const d of dirs.splice(0)) fs.rmSync(d, { recursive: true, force: true });
+  });
+
+  it("refuses an undeclared command and lists the real ones", async () => {
+    const dir = projectWithCommands({ "toggle-speed": { suggested_key: {} } });
+
+    const result = JSON.parse(
+      await openTool.handler({ projectPath: dir, surface: "command", name: "toggle-sped" }),
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.error.name).toBe("UnknownCommand");
+    expect(result.declaredCommands).toEqual(["toggle-speed"]);
+    expect(calls).toHaveLength(0);
+  });
+
+  it("allows a declared command through", async () => {
+    const dir = projectWithCommands({ "toggle-speed": { suggested_key: {} } });
+
+    await openTool.handler({ projectPath: dir, surface: "command", name: "toggle-speed" });
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toContain("--name");
+  });
+
+  it("says so when the manifest declares no commands at all", async () => {
+    const dir = projectWithCommands(undefined);
+
+    const result = JSON.parse(
+      await openTool.handler({ projectPath: dir, surface: "command", name: "anything" }),
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.hint).toContain("no commands at all");
   });
 });
