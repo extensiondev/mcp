@@ -1,5 +1,15 @@
 # Changelog
 
+## 5.1.1
+
+### Added
+
+- `extension_deploy` warns when a Firefox or Edge submission ships without
+  the STORE.md notes the platform submits automatically (Firefox reviewer
+  and release notes, Edge certification notes). The warnings ride along in
+  the result as `warnings` and never block the submission; Chrome-only
+  submissions stay silent.
+
 ## 5.1.0
 
 The engine closed its entire open bug range (Extension.js 61-73) in the
