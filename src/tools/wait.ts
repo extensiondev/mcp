@@ -16,7 +16,7 @@ import { resolveSessionBrowser } from "../lib/session-browser";
 // request round-trip. Waiting longer than the client timeout would surface as
 // an opaque transport error ("-32001 Request timed out") that also loses the
 // session handle, instead of the graceful status below. A caller that needs to
-// wait longer simply calls extension_wait again — it resumes polling the same
+// wait longer simply calls extension_wait again, it resumes polling the same
 // on-disk contract, so the loop is idempotent and client-agnostic. (Progress
 // notifications can't fix this: the SDK only resets the client timeout when the
 // CLIENT sets resetTimeoutOnProgress, which the server cannot control.)
@@ -94,7 +94,7 @@ export async function handler(args: {
         if (typeof contract.pid === "number" && !isAlive(contract.pid)) {
           return JSON.stringify({
             status: "stale",
-            message: `ready.json reports ready but its dev-server pid ${contract.pid} is dead — the session exited. Restart with extension_dev; extension_doctor will confirm.`,
+            message: `ready.json reports ready but its dev-server pid ${contract.pid} is dead, the session exited. Restart with extension_dev; extension_doctor will confirm.`,
             browser: contract.browser,
             pid: contract.pid,
             waitDuration: Date.now() - start,
@@ -138,6 +138,6 @@ export async function handler(args: {
     clamped: clamped
       ? `requested ${requested}ms was clamped to ${SAFE_CEILING_MS}ms to stay under the MCP client request timeout`
       : undefined,
-    hint: "Still building — call extension_wait again to keep waiting (it resumes polling the same contract). If it never readies, check the dev process with extension_doctor.",
+    hint: "Still building, call extension_wait again to keep waiting (it resumes polling the same contract). If it never readies, check the dev process with extension_doctor.",
   });
 }

@@ -1,6 +1,6 @@
 ---
 title: "Agent bridge: give your AI tools eyes inside the browser"
-description: "Let terminal AI assistants and scripts observe and act on your running extension — service worker, content scripts, popup, options — across Chrome and Firefox, with no Chrome DevTools Protocol gymnastics."
+description: "Let terminal AI assistants and scripts observe and act on your running extension (service worker, content scripts, popup, options) across Chrome and Firefox, with no Chrome DevTools Protocol gymnastics."
 keywords:
   [
     "extension.js",
@@ -15,9 +15,9 @@ keywords:
   ]
 ---
 
-If you have ever tried to point an AI assistant — or Playwright, or the Chrome DevTools Protocol (CDP) — at a browser extension, you already know the wall: those tools see **pages**. Your extension lives somewhere else. Its logic runs in a service worker, its content scripts run in an isolated world, its UI lives in popup, options, and side-panel documents. The interesting data is exactly where page-centric tools can't reach.
+If you have ever tried to point an AI assistant (or Playwright, or the Chrome DevTools Protocol (CDP)) at a browser extension, you already know the wall: those tools see **pages**. Your extension lives somewhere else. Its logic runs in a service worker, its content scripts run in an isolated world, its UI lives in popup, options, and side-panel documents. The interesting data is exactly where page-centric tools can't reach.
 
-The **agent bridge** closes that gap. When you run `extension dev`, Extension.js loads a privileged companion alongside your extension and opens a local channel that lets a human (a sidebar), a script (a file), or an AI agent (a live stream) **observe and act on every extension surface** — on Chrome *and* Firefox.
+The **agent bridge** closes that gap. When you run `extension dev`, Extension.js loads a privileged companion alongside your extension and opens a local channel that lets a human (a sidebar), a script (a file), or an AI agent (a live stream) **observe and act on every extension surface**, on Chrome *and* Firefox.
 
 <Note>
 The agent bridge is a **free, local, open-source** part of Extension.js. It runs entirely on `127.0.0.1`. No account, no cloud, no data leaves your machine. The only paid surface in the platform is hosted [distribution](/docs/ai/publish), which is unrelated to the bridge.
@@ -47,7 +47,7 @@ You never opt into a "mode." You run `extension dev` the way you always have. Th
 
 <CardGroup cols={3}>
   <Card title="Sidebar (you)" icon="window">
-    A live, human-readable view of logs and diagnostics across every context. Zero setup — it ships with dev mode.
+    A live, human-readable view of logs and diagnostics across every context. Zero setup. It ships with dev mode.
   </Card>
   <Card title="Files (any tool)" icon="file-lines">
     `ready.json`, `logs.ndjson`, `actions.ndjson` under `dist/extension-js/<browser>/`. An assistant with only filesystem access still gets the full read path.
@@ -63,9 +63,9 @@ The bridge is deliberately split so that *reading* is effortless and *acting* is
 
 | Capability | What it does | Gate |
 | --- | --- | --- |
-| **Observe** — logs, diagnostics, DOM inspection | read-only view of what your extension is doing | none (localhost) |
-| **Bounded act** — `storage`, `reload`, `open`, `tabs` | safe, scoped operations | `--allow-control` |
-| **Eval** — run arbitrary code in a context | maximum power, maximum risk | `--allow-eval` + a per-session token |
+| **Observe**, logs, diagnostics, DOM inspection | read-only view of what your extension is doing | none (localhost) |
+| **Bounded act**, `storage`, `reload`, `open`, `tabs` | safe, scoped operations | `--allow-control` |
+| **Eval**, run arbitrary code in a context | maximum power, maximum risk | `--allow-eval` + a per-session token |
 
 Observation is on by default. Acting is something you turn on for a session, on purpose. See [Inspect and act](/docs/ai/inspect-and-act#safety) for why `eval` is gated the way it is.
 
@@ -75,7 +75,7 @@ We would rather tell you where a tool stops than let it lie to you.
 
 - **Closed shadow roots:** the default (companion-based) inspector reads open shadow roots. Closed ones need `--deep-dom` (Chromium only).
 - **Network:** the bridge streams console output and structured diagnostics, not your extension's outbound `fetch`/XHR. Use DevTools for network-level debugging.
-- **Dropped events under flood:** if you log thousands of events per second, the stream reports exactly how many it coalesced or dropped — it never silently loses data and pretends otherwise.
+- **Dropped events under flood:** if you log thousands of events per second, the stream reports exactly how many it coalesced or dropped. It never silently loses data and pretends otherwise.
 
 ## Next steps
 

@@ -116,7 +116,7 @@ export async function handler(args: {
 
   // A dev dist ships sourcemaps (and inlined HMR runtime); a production build
   // does not. Surface this so the reported size isn't mistaken for shippable
-  // weight — sourcemaps never reach the store zip.
+  // weight, sourcemaps never reach the store zip.
   const sourcemapSize = byType.sourcemap?.size ?? 0;
   const buildType = sourcemapSize > 0 ? "development" : "production";
   const shippableSize = totalSize - sourcemapSize;
@@ -174,7 +174,7 @@ export async function handler(args: {
     if (f.type === "sourcemap") continue;
     if (PROMO_RE.test(f.path)) {
       sizeWarnings.push(
-        `${f.path} (${formatBytes(f.size)}) looks like a store-listing promo image shipped inside the extension package — move it out of the bundled sources so it does not inflate the store zip.`,
+        `${f.path} (${formatBytes(f.size)}) looks like a store-listing promo image shipped inside the extension package, move it out of the bundled sources so it does not inflate the store zip.`,
       );
     } else if (
       f.type === "image" &&
@@ -186,7 +186,7 @@ export async function handler(args: {
       sizeWarnings.push(
         `${f.path} (${formatBytes(f.size)}) is ${Math.round(
           (f.size / shippableSize) * 100,
-        )}% of the shipped bundle — unusually large for a shipped asset.`,
+        )}% of the shipped bundle, unusually large for a shipped asset.`,
       );
     }
   }

@@ -1,4 +1,4 @@
-# extension.dev — Claude Code Integration
+# extension.dev, Claude Code Integration
 
 Drop-in instructions, rules, and example prompts for building browser extensions with the [extension.dev](https://extension.dev) platform using Claude Code.
 
@@ -11,10 +11,10 @@ claude/
   CLAUDE.md               Drop-in Claude Code instructions for any extension project
   ARCHITECTURE.md         How the template, CLAUDE.md, and MCP layers connect
   commands/
-    extension.md          /extension — create, dev, build, add features, debug
-    extension-add.md      /extension-add — add sidebar, popup, content script, etc.
-    extension-debug.md    /extension-debug — live DOM/console inspection
-    extension-publish.md  /extension-publish — store submission prep
+    extension.md          /extension: create, dev, build, add features, debug
+    extension-add.md      /extension-add: add sidebar, popup, content script, etc.
+    extension-debug.md    /extension-debug: live DOM/console inspection
+    extension-publish.md  /extension-publish: store submission prep
   rules/
     extension-dev.md      Core rules: project structure, manifest, commands
     cross-browser.md      Cross-browser manifest field mapping
@@ -61,9 +61,9 @@ Claude Code will automatically pick up the instructions and know how to:
 
 The [examples repo](https://github.com/extension-js/examples) publishes `templates-meta.json` as a nightly release asset. This file is the single source of truth for:
 
-- **CLAUDE.md** — references it so Claude knows all available templates
-- **MCP tools** — `extension_list_templates` fetches and queries it at runtime
-- **`extension create`** — resolves template slugs to repo URLs via the same naming convention
+- **CLAUDE.md**, references it so Claude knows all available templates
+- **MCP tools**, `extension_list_templates` fetches and queries it at runtime
+- **`extension create`**, resolves template slugs to repo URLs via the same naming convention
 
 When a new template is added to the examples repo, all three layers pick it up automatically.
 

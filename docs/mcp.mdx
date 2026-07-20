@@ -17,7 +17,7 @@ keywords:
 `@extension.dev/mcp` is a [Model Context Protocol](https://modelcontextprotocol.io) server that gives AI assistants real tools for browser-extension work: scaffold from a template, run a dev session, stream logs, inspect the DOM, call into the extension, and publish a build.
 
 <Note>
-This is different from the **docs** MCP described in [AI access](/docs/ai-access). That one answers questions *from the documentation*. This one *drives the tooling* — it runs commands and talks to the local [agent bridge](/docs/ai/agent-bridge) on your machine.
+This is different from the **docs** MCP described in [AI access](/docs/ai-access). That one answers questions *from the documentation*. This one *drives the tooling*. It runs commands and talks to the local [agent bridge](/docs/ai/agent-bridge) on your machine.
 </Note>
 
 ## Install
@@ -54,7 +54,7 @@ claude mcp add extension-dev npx @extension.dev/mcp
 
 ## How it works
 
-The server doesn't reimplement Extension.js — it **wraps the CLI** and the local bridge. Tools that run a build or launch a browser shell out to the `extension` command; tools that observe or act connect to the bridge's local channel exactly as any other client would. That means the assistant and the CLI always behave the same way, and your assistant never holds anything the CLI doesn't.
+The server doesn't reimplement Extension.js, it **wraps the CLI** and the local bridge. Tools that run a build or launch a browser shell out to the `extension` command; tools that observe or act connect to the bridge's local channel exactly as any other client would. That means the assistant and the CLI always behave the same way, and your assistant never holds anything the CLI doesn't.
 
 ## Tools
 
@@ -62,29 +62,29 @@ Most tools are **local and need no account.** Only `extension_publish` is gated.
 
 | Tool | What it does | Auth |
 | --- | --- | --- |
-| `extension_create` | Scaffold from a template | — |
-| `extension_list_templates` / `extension_get_template_source` | Browse the catalog / read a template's source | — |
-| `extension_add_feature` | Add a feature to an existing project | — |
-| `extension_dev` | Start a dev session (HMR, browser launch) | — |
-| `extension_build` / `extension_start` / `extension_preview` | Build / build+launch / preview | — |
-| `extension_wait` | Wait for the [`ready.json`](/docs/commands/dev#automation-metadata-recommended-for-scripts-agents) contract | — |
-| `extension_logs` | Stream logs from every context ([Agent logs](/docs/ai/logs)) | — |
-| `extension_inspect` / `extension_source_inspect` / `extension_dom_inspect` | Analyze build output / read a surface's live DOM ([Inspect and act](/docs/ai/inspect-and-act)) | — |
-| `extension_list_extensions` | List extensions with a live context in the dev browser (Chromium) | — |
+| `extension_create` | Scaffold from a template | n/a |
+| `extension_list_templates` / `extension_get_template_source` | Browse the catalog / read a template's source | n/a |
+| `extension_add_feature` | Add a feature to an existing project | n/a |
+| `extension_dev` | Start a dev session (HMR, browser launch) | n/a |
+| `extension_build` / `extension_start` / `extension_preview` | Build / build+launch / preview | n/a |
+| `extension_wait` | Wait for the [`ready.json`](/docs/commands/dev#automation-metadata-recommended-for-scripts-agents) contract | n/a |
+| `extension_logs` | Stream logs from every context ([Agent logs](/docs/ai/logs)) | n/a |
+| `extension_inspect` / `extension_source_inspect` / `extension_dom_inspect` | Analyze build output / read a surface's live DOM ([Inspect and act](/docs/ai/inspect-and-act)) | n/a |
+| `extension_list_extensions` | List extensions with a live context in the dev browser (Chromium) | n/a |
 | `extension_eval` / `extension_storage` / `extension_reload` / `extension_open` | Act on the running extension. `extension_open` surfaces: `popup`/`options`/`sidebar`/`action`/`command` ([Inspect and act](/docs/ai/inspect-and-act#trigger-actions-and-commands)) | session opt-in |
-| `extension_manifest_validate` | Validate the manifest | — |
-| `extension_detect_browsers` / `extension_list_browsers` / `extension_install_browser` | Manage browsers for dev/preview | — |
+| `extension_manifest_validate` | Validate the manifest | n/a |
+| `extension_detect_browsers` / `extension_list_browsers` / `extension_install_browser` | Manage browsers for dev/preview | n/a |
 | `extension_publish` | Publish to extension.dev and return a shareable URL ([`publish`](/docs/ai/publish)) | **token required** |
 
 ## A typical session
 
 > "Create a sidebar extension from a template, run it in Firefox, and tell me if the background script errors on startup."
 
-The assistant chains `extension_create` → `extension_dev` → `extension_wait` → `extension_logs --signals-only`, reads any `dx.signal` diagnostics (with their `remediation`), and reports back — without you leaving the editor.
+The assistant chains `extension_create` → `extension_dev` → `extension_wait` → `extension_logs --signals-only`, reads any `dx.signal` diagnostics (with their `remediation`), and reports back, without you leaving the editor.
 
 ## Authentication
 
-The only auth boundary is `extension_publish`. It requires an `EXTENSION_DEV_TOKEN` (a workspace/project access token you create in the [extension.dev](https://extension.dev) dashboard) in the environment; the MCP server reads it from there and never holds it itself. Everything else — dev, logs, inspect, act — is local and unauthenticated. See [`publish`](/docs/ai/publish) for details.
+The only auth boundary is `extension_publish`. It requires an `EXTENSION_DEV_TOKEN` (a workspace/project access token you create in the [extension.dev](https://extension.dev) dashboard) in the environment; the MCP server reads it from there and never holds it itself. Everything else (dev, logs, inspect, act) is local and unauthenticated. See [`publish`](/docs/ai/publish) for details.
 
 ## Best practices
 

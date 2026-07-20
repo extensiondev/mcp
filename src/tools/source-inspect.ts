@@ -32,7 +32,7 @@ export const schema = {
         type: "array",
         items: { type: "string" },
         description:
-          "CSS selectors to query — returns element counts and samples for each",
+          "CSS selectors to query, returns element counts and samples for each",
       },
       include: {
         type: "array",
@@ -109,7 +109,7 @@ export async function handler(args: {
   try {
     const allTargets = await CDPClient.discoverTargets(cdpPort);
     // Chrome renders a chrome_url_overrides page (new tab, bookmarks, history)
-    // at its chrome:// URL, but the DOM is the extension's own surface — so
+    // at its chrome:// URL, but the DOM is the extension's own surface, so
     // these must be inspectable, not filtered out with the rest of chrome://.
     const OVERRIDE_PAGES = [
       "chrome://newtab/",

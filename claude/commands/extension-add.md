@@ -7,8 +7,8 @@ Add a new feature surface to the current extension project. The user said: $ARGU
 
 ## Parse arguments
 
-- First argument: feature type — one of: `sidebar`, `popup`, `content-script`, `background`, `newtab`, `options`, `devtools`
-- Second argument (optional): framework — one of: `react`, `vue`, `svelte`, `preact`, `vanilla`. Default: detect from existing project, fall back to `react`
+- First argument: feature type, one of: `sidebar`, `popup`, `content-script`, `background`, `newtab`, `options`, `devtools`
+- Second argument (optional): framework, one of: `react`, `vue`, `svelte`, `preact`, `vanilla`. Default: detect from existing project, fall back to `react`
 
 ## Steps
 
@@ -18,7 +18,7 @@ Add a new feature surface to the current extension project. The user said: $ARGU
    - Detect the framework from existing dependencies in `package.json`
 
 2. **Get the reference pattern**
-   If MCP tool `extension_add_feature` is available, use it — it returns the exact manifest additions, files to create, and reference template.
+   If MCP tool `extension_add_feature` is available, use it. It returns the exact manifest additions, files to create, and reference template.
 
    If MCP tool `extension_get_template_source` is available, read the reference template source to get real implementation patterns.
 
@@ -37,17 +37,17 @@ Add a new feature surface to the current extension project. The user said: $ARGU
 
 4. **Create the files**
    For HTML-based features (sidebar, popup, newtab, options, devtools):
-   - `src/<feature>/index.html` — HTML entry with script tag
-   - `src/<feature>/scripts.tsx` — Framework mount point (or `.ts` for vanilla)
-   - `src/<feature>/styles.css` — Stylesheet
-   - `src/<feature>/<Feature>App.tsx` — Main component (non-vanilla only)
+   - `src/<feature>/index.html`, HTML entry with script tag
+   - `src/<feature>/scripts.tsx`, Framework mount point (or `.ts` for vanilla)
+   - `src/<feature>/styles.css`, Stylesheet
+   - `src/<feature>/<Feature>App.tsx`, Main component (non-vanilla only)
 
    For content scripts:
-   - `src/content/scripts.ts` — Entry point
-   - `src/content/styles.css` — Injected styles
+   - `src/content/scripts.ts`, Entry point
+   - `src/content/styles.css`, Injected styles
 
    For background:
-   - `src/background.ts` — Service worker / background script
+   - `src/background.ts`, Service worker / background script
 
 5. **Handle sidebar specifically**
    If adding a sidebar, also create/update `src/background.ts`:

@@ -30,7 +30,7 @@ export const schema = {
         default: "background",
         description: "Which extension surface to evaluate in",
       },
-      url: { type: "string", description: "For content/page: selects the target tab by url (match pattern, then substring fallback). Preferred over `tab` — you do not need a numeric id." },
+      url: { type: "string", description: "For content/page: selects the target tab by url (match pattern, then substring fallback). Preferred over `tab`. You do not need a numeric id." },
       tab: { type: "number", description: "Numeric chrome.tabs id, for disambiguating when several tabs match. Optional: with neither `tab` nor `url`, content/page target the active tab." },
       browser: {
         type: "string",

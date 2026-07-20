@@ -70,13 +70,13 @@ new blockers it surfaced.
 
 - **Honest `extension_manifest_validate`.** It now scans the project source for
   permission-gated `chrome.*`/`browser.*` calls and flags any the manifest does
-  not declare — an API used without its permission is `undefined` at runtime and
+  not declare, an API used without its permission is `undefined` at runtime and
   crashes the context, the exact case where validate used to report `valid:true`.
   The headline is now honest (`valid:false` + `buildBlocking:true` on any error),
   and it accepts singular `browser` as an alias for `browsers`.
 - **`extension_open` can navigate a tab.** Pass a `url` (Chromium, via CDP) to
   drive a content-script test page, a `webNavigation` target, or the popup as a
-  page (`chrome-extension://<id>/popup.html`) — the loop the surface-only open
+  page (`chrome-extension://<id>/popup.html`), the loop the surface-only open
   could not do. `target` is accepted as an alias for `surface`.
 - **`extension_stop` actually reaps the session.** It now terminates the dev CLI
   and both browser families (gecko profile + chromium `--load-extension`, under
@@ -247,12 +247,12 @@ that removed nearly all friction a real MCP client hit.
   --browser=chromium --allow-control` `` becomes `extension_dev with
   { browser: "chromium", allowControl: true }`, and stray
   `--allow-control` / `--allow-eval` / `--browser=<x>` mentions become
-  their tool-argument names. Result data is never touched — only
+  their tool-argument names. Result data is never touched, only
   error/hint prose. Tool descriptions now name `allowControl` /
   `allowEval` directly, so agents no longer discover the gates by
   fuzzing the schema.
 - The no-channel error now names the session that IS running ("Active
-  session browser(s) for this project: chrome — pass that as `browser`"),
+  session browser(s) for this project: chrome, pass that as `browser`"),
   so an agent retargets instead of spawning a second, conflicting
   session. Same for the `extension_logs` follow miss.
 - `extension_list_extensions` / `extension_source_inspect` accept
@@ -288,7 +288,7 @@ Session lifecycle + determinism release. Tool count 27 -> 28.
 - CLI spawns are deterministic: dev/start/preview and the act tools now
   prefer the project's own `node_modules/.bin/extension`, falling back to
   `npx extension@<pinned>` where the pin derives from the vendored
-  `extension-develop` version — never a floating `latest`.
+  `extension-develop` version, never a floating `latest`.
 - Session registry keys are path-normalized, so a stop with an absolute
   path matches a session registered with a relative one.
 - Tests: registry suite now asserts against the exported `tools` array
@@ -363,9 +363,9 @@ this release graduates that line to stable and becomes `latest`.
   @extension.dev/skill pairing.
 - MIT license shipped; repository moved to extensiondev/mcp.
 
-# @extension.dev/mcp — Changelog
+# @extension.dev/mcp, Changelog
 
-## Unreleased — agent-bridge tools
+## Unreleased, agent-bridge tools
 
 Adds the MCP client surface for the Extension.js **agent bridge** (dev-time
 observe + act + inspect). All new tools shell out to the `extension` CLI verbs
@@ -375,32 +375,32 @@ a recent **`extension` CLI that ships the bridge verbs** (`logs`, `eval`,
 
 > ⚠️ **Release order:** publish this package ONLY after the `extension` /
 > `extension-develop` suite that ships those verbs is on npm. The published CLI
-> at the time of writing (`3.17.0`) does NOT have them — publishing this package
+> at the time of writing (`3.17.0`) does NOT have them, publishing this package
 > before the suite would ship tools that fail with "unknown command". Bump the
 > version + `extension-*` deps to that suite release, then publish.
 
 New tools (22 total):
 
-- **`extension_logs`** — read/stream logs from every extension context
+- **`extension_logs`**, read/stream logs from every extension context
   (background, content, popup/options/sidebar/devtools); filters
   `level`/`context`/`url`/`tab`/`since`, bounded `follow` window.
-- **`extension_eval`** — evaluate an expression in a context (requires the dev
+- **`extension_eval`**, evaluate an expression in a context (requires the dev
   session started with `--allow-eval`; MV3 service worker is CSP-gated).
-- **`extension_storage`** — read/write `chrome.storage` (requires `--allow-control`).
-- **`extension_reload`** — reload the extension or a tab (`--allow-control`).
-- **`extension_open`** — open popup/options/sidebar (`--allow-control`).
-- **`extension_dom_inspect`** — CDP-free DOM snapshot of content/page or an open
+- **`extension_storage`**, read/write `chrome.storage` (requires `--allow-control`).
+- **`extension_reload`**, reload the extension or a tab (`--allow-control`).
+- **`extension_open`**, open popup/options/sidebar (`--allow-control`).
+- **`extension_dom_inspect`**, CDP-free DOM snapshot of content/page or an open
   surface (popup/options/sidebar/devtools); `withConsole` merges recent logs.
-- **`extension_publish`** — publish to extension.dev and return a shareable URL
+- **`extension_publish`**, publish to extension.dev and return a shareable URL
   (auth-gated; requires `EXTENSION_DEV_TOKEN`).
-- **`extension_source_inspect`** gains **`deepDom`** — pierce CLOSED shadow roots
+- **`extension_source_inspect`** gains **`deepDom`**, pierce CLOSED shadow roots
   via CDP (Chromium only).
 
 Internal: `lib/act` (CLI shell-out helper), `lib/exec.runExtensionCli` (capture),
 `lib/cdp.getClosedShadowRoots`. Test infra aligned to the workspace vitest
 catalog.
 
-## Unreleased — login (auth tools)
+## Unreleased, login (auth tools)
 
 Adds the missing `login` flow so `extension_publish` no longer requires the user
 to mint and export `EXTENSION_DEV_TOKEN` by hand. Auth stays auth-AWARE: the
@@ -408,13 +408,13 @@ token lives in a local credentials file, never in the MCP process state or logs.
 
 New tools (25 total):
 
-- **`extension_login`** — GitHub **device-code** flow (no local server; works
+- **`extension_login`**, GitHub **device-code** flow (no local server; works
   headless). Two-phase: call with `project` (`<workspace>/<project>`) to get a
   code + URL, call again with the returned `deviceCode` to finish. On success it
   writes a project-scoped token to the credentials file. Never returns the token.
-- **`extension_whoami`** — report the stored workspace/project and token expiry
+- **`extension_whoami`**, report the stored workspace/project and token expiry
   without revealing the token.
-- **`extension_logout`** — delete the local credentials file.
+- **`extension_logout`**, delete the local credentials file.
 
 Token resolution for publish is now `EXTENSION_DEV_TOKEN` env **>** the
 credentials file (expired file tokens are ignored).
@@ -424,8 +424,8 @@ Credentials file (versioned, `0600`): `$XDG_CONFIG_HOME/extension-dev/auth.json`
 
 Platform endpoints this depends on (in `apps/www.extension.dev`):
 
-- `GET /api/cli/login/config` — public GitHub OAuth client id + scope.
-- `POST /api/cli/login/exchange` — trades a GitHub **user** token for a
+- `GET /api/cli/login/config`, public GitHub OAuth client id + scope.
+- `POST /api/cli/login/exchange`, trades a GitHub **user** token for a
   project-scoped access token after checking workspace membership. Modeled on
   `/api/oidc/exchange`; tokens are recorded so they stay revocable.
 

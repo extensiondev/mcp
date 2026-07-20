@@ -1,4 +1,4 @@
-# extension.dev — Claude Code Instructions
+# extension.dev, Claude Code Instructions
 
 You are working on a browser extension project built with the [extension.dev](https://extension.dev) platform, a zero-config cross-browser extension framework.
 
@@ -23,11 +23,11 @@ The extension.dev platform ships 60+ templates in the [examples](https://github.
 
 | Surface        | Vanilla      | React            | Vue           | Svelte           | AI               |
 | -------------- | ------------ | ---------------- | ------------- | ---------------- | ---------------- |
-| Content script | `content`    | `content-react`  | `content-vue` | `content-svelte` | —                |
-| Sidebar        | `sidebar`    | `sidebar-shadcn` | —             | —                | `sidebar-claude` |
-| Action popup   | `action`     | —                | —             | —                | `action-chatgpt` |
-| New tab        | `new`        | `new-react`      | `new-vue`     | `new-svelte`     | —                |
-| Full framework | `javascript` | `react`          | `vue`         | `svelte`         | —                |
+| Content script | `content`    | `content-react`  | `content-vue` | `content-svelte` | n/a              |
+| Sidebar        | `sidebar`    | `sidebar-shadcn` | n/a           |, | `sidebar-claude` |
+| Action popup   | `action`     | n/a              |, | n/a              | `action-chatgpt` |
+| New tab        | `new`        | `new-react`      | `new-vue`     | `new-svelte`     | n/a              |
+| Full framework | `javascript` | `react`          | `vue`         | `svelte`         | n/a              |
 
 **When recommending a template:**
 
@@ -56,7 +56,7 @@ A typical extension.dev project:
 ```
 my-extension/
   src/
-    manifest.json          # Required — the source of truth
+    manifest.json          # Required: the source of truth
     background.ts          # Service worker (Chromium) / background script (Firefox)
     content/               # Content scripts
       scripts.tsx
@@ -151,16 +151,16 @@ export default {
 3. **Service workers vs background scripts.** Chromium uses `service_worker` (single file). Firefox uses `scripts` (array).
 4. **Environment variables.** Use `EXTENSION_PUBLIC_*` prefix for variables accessible in extension code. `import.meta.env.EXTENSION_PUBLIC_BROWSER` gives the current browser.
 5. **Asset imports.** Import images/fonts directly in your code. The build system handles bundling.
-6. **CSS Modules.** Use `*.module.css` / `*.module.scss`. Never use the `?url` suffix for CSS module imports — it breaks class name hashing.
+6. **CSS Modules.** Use `*.module.css` / `*.module.scss`. Never use the `?url` suffix for CSS module imports, it breaks class name hashing.
 
 ## When creating new extensions
 
 1. Check if an existing template matches the use case (see template catalog above)
 2. If yes: `npx extension@latest create my-ext --template=<slug>`
-3. If no: start from `manifest.json` — define what the extension needs
+3. If no: start from `manifest.json`, define what the extension needs
 4. Add entry points referenced by the manifest (background, content scripts, UI pages)
-5. Install framework deps if needed (React, Vue, etc.) — the framework auto-detects them
-6. Run `npm run dev` — the dev server handles the rest
+5. Install framework deps if needed (React, Vue, etc.), the framework auto-detects them
+6. Run `npm run dev`, the dev server handles the rest
 
 **Learning from examples:** When building a feature you haven't done before, read the source of a relevant template from the examples repo. The source for any template is at:
 
@@ -234,11 +234,11 @@ npm run dev -- --logs info --log-url "example.com"
 
 ### Triggering events without clicking (requires `--allow-control`)
 
-- `extension open action` — fire the toolbar action (opens its popup, or replays `chrome.action.onClicked`).
-- `extension open command --name <cmd>` — replay a `chrome.commands.onCommand` keyboard shortcut.
-- `extension_list_extensions` (MCP tool; no CLI verb) — list extensions with a live context in the browser (Chromium, read-only).
+- `extension open action`, fire the toolbar action (opens its popup, or replays `chrome.action.onClicked`).
+- `extension open command --name <cmd>`, replay a `chrome.commands.onCommand` keyboard shortcut.
+- `extension_list_extensions` (MCP tool; no CLI verb), list extensions with a live context in the browser (Chromium, read-only).
 
-These replay your captured listeners, so they work on Chrome and Firefox — but carry **no user gesture**, so `activeTab` is not granted (the result reports `gesture: false`, plus a `warning` when the manifest declares `activeTab`). If you need a genuine-gesture click (activeTab granted), use [chrome-devtools-mcp](https://github.com/ChromeDevTools/chrome-devtools-mcp)'s `trigger_extension_action` (Chromium only) alongside this server.
+These replay your captured listeners, so they work on Chrome and Firefox, but carry **no user gesture**, so `activeTab` is not granted (the result reports `gesture: false`, plus a `warning` when the manifest declares `activeTab`). If you need a genuine-gesture click (activeTab granted), use [chrome-devtools-mcp](https://github.com/ChromeDevTools/chrome-devtools-mcp)'s `trigger_extension_action` (Chromium only) alongside this server.
 
 ## Contributing templates to the examples repo
 

@@ -15,16 +15,16 @@ keywords:
 `publish` turns a build into a **shareable [extension.dev](https://extension.dev) URL** you can hand to a tester, reviewer, or teammate.
 
 <Note>
-Building your extension is **local and free** — see [`build`](/docs/commands/build). `publish` is the one step that talks to the hosted platform, so it's the only place Extension.js asks for an account token.
+Building your extension is **local and free**, see [`build`](/docs/commands/build). `publish` is the one step that talks to the hosted platform, so it's the only place Extension.js asks for an account token.
 </Note>
 
 ## How it relates to the rest of Extension.js
 
-Everything else in Extension.js — dev, logs, inspect, act, the [agent bridge](/docs/ai/agent-bridge) — is local and needs no account. **Hosted distribution is the single paid/platform surface**, and `publish` is its entry point. The command is a thin wrapper: it posts to the platform and prints the URL the platform returns.
+Everything else in Extension.js (dev, logs, inspect, act, the [agent bridge](/docs/ai/agent-bridge)) is local and needs no account. **Hosted distribution is the single paid/platform surface**, and `publish` is its entry point. The command is a thin wrapper: it posts to the platform and prints the URL the platform returns.
 
 ## Authentication
 
-`publish` authenticates with **`EXTENSION_DEV_TOKEN`** — a workspace/project access token. Create one in the [extension.dev](https://extension.dev) dashboard and provide it via the environment or `--token`:
+`publish` authenticates with **`EXTENSION_DEV_TOKEN`**, a workspace/project access token. Create one in the [extension.dev](https://extension.dev) dashboard and provide it via the environment or `--token`:
 
 <CodeGroup>
 
@@ -52,7 +52,7 @@ extension publish [path] [options]
 
 | Flag | What it does | Default |
 | --- | --- | --- |
-| `--token <token>` | extension.dev access token (or `EXTENSION_DEV_TOKEN`). | — |
+| `--token <token>` | extension.dev access token (or `EXTENSION_DEV_TOKEN`). | n/a |
 | `--ttl <hours>` | Share-link lifetime, `1`–`168`. | `24` |
 | `--build-sha <sha>` | Pin the share URL to a specific build. | latest |
 | `--api <url>` | Platform base URL (or `EXTENSION_DEV_API_URL`). | `https://www.extension.dev` |
@@ -73,11 +73,11 @@ EXTENSION_DEV_TOKEN=<token> extension publish \
   --build-sha 672c4f2 --ttl 168 --output json
 ```
 
-`pretty` prints just the share URL; `json` returns the full response (`shareUrl`, `visibility`, and—when applicable—`expiresAt`).
+`pretty` prints just the share URL; `json` returns the full response (`shareUrl`, `visibility`, and, when applicable, `expiresAt`).
 
 ## For AI assistants
 
-With the [MCP server](/docs/ai/mcp), this is `extension_publish` — the **only** tool that talks to the hosted platform. It reads `EXTENSION_DEV_TOKEN` from the environment; the MCP server never holds the token itself.
+With the [MCP server](/docs/ai/mcp), this is `extension_publish`, the **only** tool that talks to the hosted platform. It reads `EXTENSION_DEV_TOKEN` from the environment; the MCP server never holds the token itself.
 
 ## Next steps
 

@@ -4,13 +4,13 @@
 
 When Claude creates a new extension, follow this order:
 
-1. `manifest.json` — always first, defines the extension surface
-2. Background script (if needed) — handles browser events
-3. UI entry points — HTML files referenced by manifest
-4. UI scripts — React/Vue/Svelte components mounted into HTML
-5. Styles — CSS/Tailwind files imported by scripts
-6. `package.json` — dependencies based on what was used above
-7. Config files — tsconfig.json, postcss.config.js, extension.config.js only if needed
+1. `manifest.json`, always first, defines the extension surface
+2. Background script (if needed), handles browser events
+3. UI entry points, HTML files referenced by manifest
+4. UI scripts, React/Vue/Svelte components mounted into HTML
+5. Styles, CSS/Tailwind files imported by scripts
+6. `package.json`, dependencies based on what was used above
+7. Config files, tsconfig.json, postcss.config.js, extension.config.js only if needed
 
 ## manifest.json rules
 
@@ -76,8 +76,8 @@ Use `chrome.storage.local` for persistent data. It works cross-browser when the 
 
 Only request permissions the extension actually needs. Common ones:
 
-- `sidePanel` — Chromium only, for side panel UI
-- `storage` — for chrome.storage API
-- `activeTab` — for accessing the current tab
-- `tabs` — for tab management
-- `scripting` — for programmatic script injection
+- `sidePanel`. Chromium only, for side panel UI
+- `storage`, for chrome.storage API
+- `activeTab`, for accessing the current tab
+- `tabs`, for tab management
+- `scripting`, for programmatic script injection

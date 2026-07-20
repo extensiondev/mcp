@@ -6,7 +6,7 @@
 
 ## How Claude should approach this
 
-1. **Update manifest.json** — add side panel config for both browsers:
+1. **Update manifest.json**, add side panel config for both browsers:
 
    ```json
    {
@@ -47,7 +47,7 @@
    }
    ```
 
-4. **Create the sidebar UI** — `src/sidebar/index.html`, `src/sidebar/scripts.tsx`, `src/sidebar/styles.css`
+4. **Create the sidebar UI**, `src/sidebar/index.html`, `src/sidebar/scripts.tsx`, `src/sidebar/styles.css`
 
 5. **Test both browsers:**
    ```bash

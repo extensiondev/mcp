@@ -14,7 +14,7 @@ import { resolveSessionBrowser } from "../lib/session-browser";
 export const schema = {
   name: "extension_list_extensions",
   description:
-    "List the extensions with a live context in the running dev browser via Chrome DevTools Protocol. Returns each extension's id, name, version, and live contexts (service worker, page). Identity is read read-only via the Extensions domain — other extensions' contexts are never attached to or evaluated in. A dormant MV3 service worker with no open page may be absent until it wakes. Chromium only (Firefox uses RDP, not yet supported). Requires an active dev or start session.",
+    "List the extensions with a live context in the running dev browser via Chrome DevTools Protocol. Returns each extension's id, name, version, and live contexts (service worker, page). Identity is read read-only via the Extensions domain, other extensions' contexts are never attached to or evaluated in. A dormant MV3 service worker with no open page may be absent until it wakes. Chromium only (Firefox uses RDP, not yet supported). Requires an active dev or start session.",
   inputSchema: {
     type: "object" as const,
     properties: {

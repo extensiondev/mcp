@@ -69,7 +69,7 @@ Firefox will ignore the `chromium:world` field and run in the default isolated w
 
 - Chromium: use `chrome.*` namespace for Chrome-specific APIs (sidePanel, etc.)
 - Firefox: use `browser.*` namespace (auto-polyfilled by the framework)
-- For cross-browser code: use `browser.*` when possible — the polyfill maps it to `chrome.*` on Chromium
+- For cross-browser code: use `browser.*` when possible, the polyfill maps it to `chrome.*` on Chromium
 
 ## Testing across browsers
 

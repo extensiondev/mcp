@@ -72,7 +72,7 @@ export function knownSessionBrowsers(projectPath: string): string[] {
 }
 
 // A ready.json that says "ready" but whose pid is dead means the dev server
-// exited — the real cause behind most "control channel refused (1006)" errors,
+// exited, the real cause behind most "control channel refused (1006)" errors,
 // which otherwise misleadingly ask "is the session started with allowControl?".
 export function deadReadySession(
   projectPath: string,

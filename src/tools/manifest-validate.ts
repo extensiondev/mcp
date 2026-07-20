@@ -276,7 +276,7 @@ export async function handler(args: {
   for (const ref of new Set(collectPathRefs(chromiumManifest))) {
     if (!fileResolvesSomewhere(ref, roots)) {
       result.warnings.push(
-        `Referenced file "${ref}" was not found near the manifest — this is the kind of dangling reference extension_build fails on. Verify with extension_build.`,
+        `Referenced file "${ref}" was not found near the manifest. This is the kind of dangling reference extension_build fails on. Verify with extension_build.`,
       );
     }
   }
@@ -284,7 +284,7 @@ export async function handler(args: {
   // Code-vs-permission coherence: scan the source for permission-gated
   // chrome.*/browser.* usage and flag anything the manifest doesn't declare. A
   // HARD-gated API used without its permission is undefined at runtime and
-  // crashes the context — the exact false-green case where validate said valid.
+  // crashes the context, the exact false-green case where validate said valid.
   const declaredPermSet = new Set<string>(
     [
       ...((chromiumManifest.permissions as string[] | undefined) ?? []),
@@ -297,11 +297,11 @@ export async function handler(args: {
     const base = `Code calls chrome.${api} but "${perm}" is not in permissions`;
     if (HARD_APIS.has(api)) {
       result.errors.push(
-        `${base} — chrome.${api} is undefined without it and will crash the context at runtime.`,
+        `${base}, chrome.${api} is undefined without it and will crash the context at runtime.`,
       );
     } else {
       result.warnings.push(
-        `${base}; it may be undefined at runtime — add "${perm}" if you use it.`,
+        `${base}; it may be undefined at runtime, add "${perm}" if you use it.`,
       );
     }
   }
@@ -326,7 +326,7 @@ export async function handler(args: {
     }
     if (!KNOWN_PERMISSIONS.has(perm)) {
       result.warnings.push(
-        `Unrecognized permission "${perm}" — check for a typo (host/match patterns belong in host_permissions, not permissions).`,
+        `Unrecognized permission "${perm}", check for a typo (host/match patterns belong in host_permissions, not permissions).`,
       );
     }
   }

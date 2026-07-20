@@ -1,6 +1,6 @@
 ---
 title: "Agent logs: one stream from every extension context"
-description: "Stream and tail logs from your service worker, content scripts, popup, options, and pages in one ordered timeline — as a terminal stream, an NDJSON file, or a live MCP tool."
+description: "Stream and tail logs from your service worker, content scripts, popup, options, and pages in one ordered timeline, as a terminal stream, an NDJSON file, or a live MCP tool."
 keywords:
   [
     "extension.js",
@@ -82,7 +82,7 @@ extension logs [path] [options]
 
 </CodeGroup>
 
-By default it prints the current session's logs and exits — a bounded snapshot, ideal for "what just happened." Add `--follow` to watch live.
+By default it prints the current session's logs and exits, a bounded snapshot, ideal for "what just happened." Add `--follow` to watch live.
 
 ### Flags
 
@@ -123,7 +123,7 @@ Every line is the same shape on the wire, in the file, and in the sidebar. The f
 
 ```jsonc
 {
-  "seq": 2,                          // monotonic order — use this, not the clock
+  "seq": 2,                          // monotonic order: use this, not the clock
   "level": "error",
   "context": "content",              // which surface emitted it
   "messageParts": ["sendMessage failed", { "err": "Could not establish connection" }],
@@ -137,10 +137,10 @@ Every line is the same shape on the wire, in the file, and in the sidebar. The f
 ```
 
 <Tip>
-`dx.signal` events carry a **`remediation`** — the fix travels with the diagnostic. This is what makes the stream useful to an AI assistant: it doesn't have to guess the cause from raw console text, it reads the suggested fix directly.
+`dx.signal` events carry a **`remediation`**, the fix travels with the diagnostic. This is what makes the stream useful to an AI assistant: it doesn't have to guess the cause from raw console text, it reads the suggested fix directly.
 </Tip>
 
-Order by `seq`, not `timestamp`: it's a single monotonic counter assigned as events arrive, so interleaving contexts is exact even when their clocks drift. If the stream ever has to drop events under heavy load, it emits a `gap` marker and you'll see `seq` jump — you always know when you're missing data.
+Order by `seq`, not `timestamp`: it's a single monotonic counter assigned as events arrive, so interleaving contexts is exact even when their clocks drift. If the stream ever has to drop events under heavy load, it emits a `gap` marker and you'll see `seq` jump. You always know when you're missing data.
 
 ## For AI assistants
 
@@ -148,7 +148,7 @@ With the [MCP server](/docs/ai/mcp) installed, your assistant calls `extension_l
 
 > "Tail the background logs and tell me why `sendMessage` is failing."
 
-The assistant reads the `dx.signal` with `code: RUNTIME_NO_RECEIVER` and its `remediation`, and proposes the fix — no screenshots, no copy-paste.
+The assistant reads the `dx.signal` with `code: RUNTIME_NO_RECEIVER` and its `remediation`, and proposes the fix, no screenshots, no copy-paste.
 
 ## Best practices
 

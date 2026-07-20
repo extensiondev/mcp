@@ -5,7 +5,7 @@
 // DOES THE TOOL SAY SO?
 //
 // Motivation (2026-07-20): four separate false greens shipped or nearly
-// shipped in one release cycle — doctor reported healthy over a crashing
+// shipped in one release cycle, doctor reported healthy over a crashing
 // background, dev and start reported "started" for a process that had already
 // exited, open reported ok:true for a navigation that 404'd, and build reported
 // success for a dist missing a declared entrypoint. A 30-persona swarm found
@@ -13,7 +13,7 @@
 // adversarial assertion catches a lie.
 //
 // RULE FOR THIS FILE: break something real, then assert the tool reports the
-// failure. Never assert on the happy path here — that is what the other suites
+// failure. Never assert on the happy path here. That is what the other suites
 // are for. A test that passes because nothing was broken is worse than no test.
 import { describe, it, expect, afterEach, vi } from "vitest";
 import fs from "node:fs";

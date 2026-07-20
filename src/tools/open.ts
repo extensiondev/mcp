@@ -51,7 +51,7 @@ async function pollForTarget(
 
 // Navigate a real tab to a URL (Chromium, via CDP) so agents can drive a
 // content-script test page, a webNavigation target, or the popup rendered as a
-// page (chrome-extension://<id>/popup.html) — the loop the surface-only open
+// page (chrome-extension://<id>/popup.html), the loop the surface-only open
 // could not do. Gecko has no CDP; callers use eval(context:page)/logs there.
 async function navigateToUrl(
   projectPath: string,
@@ -129,7 +129,7 @@ async function navigateToUrl(
         url: settled.url,
       },
       hint:
-        "Inspect it with extension_dom_inspect or extension_source_inspect using url (context: 'page') — they resolve the tab themselves. " +
+        "Inspect it with extension_dom_inspect or extension_source_inspect using url (context: 'page'), they resolve the tab themselves. " +
         "`target.targetId` is a CDP target id, NOT a chrome.tabs id: do not pass it as `tab`. If you need a numeric tab id, call extension_dom_inspect with listTabs: true.",
     });
   } catch (e) {
@@ -252,7 +252,7 @@ function surfaceDocument(
 }
 
 // Headless Chromium has no window chrome to hang a popup on, so `open popup`
-// dead-ends there — the single biggest blocker cluster for the headless
+// dead-ends there, the single biggest blocker cluster for the headless
 // personas. But a popup is just a document: navigating a real tab to
 // chrome-extension://<id>/<popup> renders the same page with the same APIs, and
 // everything downstream (dom_inspect, eval, screenshots) then works.
