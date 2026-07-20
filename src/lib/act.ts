@@ -7,7 +7,7 @@
 // MIT License (c) Cezar Augusto and the extension.dev collaborators
 
 import { runExtensionCli } from "./exec";
-import { knownSessionBrowsers } from "./session-browser";
+import { knownSessionBrowsers, deadReadySession } from "./session-browser";
 
 export function toMcpSpeak(text: string): string {
   return (
@@ -18,6 +18,10 @@ export function toMcpSpeak(text: string): string {
       )
       .replace(/--allow-control/g, "allowControl: true (extension_dev)")
       .replace(/--allow-eval/g, "allowEval: true (extension_dev)")
+      // eval/inspect remediation speaks CLI flags; rewrite to MCP JSON args.
+      .replace(/--context[= ]([\w-]+)/g, 'context: "$1"')
+      .replace(/--tab[= ](\d+)/g, "tab: $1")
+      .replace(/--url[= ](\S+)/g, 'url: "$1"')
       .replace(/--browser[= ]([\w-]+)/g, 'browser: "$1"')
       .replace(/`extension dev`/g, "extension_dev")
       .replace(/\bextension dev\b/g, "extension_dev")
@@ -25,7 +29,18 @@ export function toMcpSpeak(text: string): string {
 }
 
 function withSessionContext(message: string, projectPath: string): string {
-  if (!/no active control channel/i.test(message)) return message;
+  const isControlError =
+    /no active control channel|control channel refused|\b1006\b|no executor connected|is the session started with allowControl/i.test(
+      message,
+    );
+  if (!isControlError) return message;
+  // The most common real cause of a dropped control channel is the dev server
+  // having exited (a reload crash, a kill), which the "is allowControl set?"
+  // text hides. Detect a ready.json with a dead pid and lead with that instead.
+  const dead = deadReadySession(projectPath);
+  if (dead) {
+    return `${message}\nLikely cause: the dev server has exited — ${dead.browser} ready.json still says ready but its pid ${dead.pid} is dead. Restart with extension_dev (this is not an allowControl problem); extension_doctor confirms.`;
+  }
   const running = knownSessionBrowsers(projectPath);
   if (running.length === 0) return message;
   return `${message} Active session browser(s) for this project: ${running.join(

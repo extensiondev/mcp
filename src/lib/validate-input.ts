@@ -79,7 +79,7 @@ const ARG_ALIASES: Record<string, string[]> = {
   slug: ["template", "templateSlug"],
   expression: ["code", "js", "script"],
   manifestPath: ["manifest"],
-  surface: ["view"],
+  surface: ["view", "target"],
 };
 
 export function normalizeArgAliases(

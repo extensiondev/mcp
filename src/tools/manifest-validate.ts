@@ -59,6 +59,11 @@ export const schema = {
         default: ["chrome", "firefox"],
         description: "Browsers to validate against",
       },
+      browser: {
+        type: "string",
+        description:
+          "Single browser to validate against; alias for browsers:[browser] to match the other tools.",
+      },
     },
     required: [],
   },
@@ -135,11 +140,75 @@ interface ValidationResult {
   similarTemplates: Array<{ slug: string; surfaces: string[] }>;
 }
 
+// chrome.<ns> / browser.<ns> namespaces that need a manifest permission. Used
+// but not declared = likely runtime failure; for HARD_APIS the namespace is
+// `undefined` and crashes the context at load (the false-green blocker).
+const API_PERMISSION: Record<string, string> = {
+  storage: "storage", webNavigation: "webNavigation", history: "history",
+  cookies: "cookies", bookmarks: "bookmarks", alarms: "alarms",
+  contextMenus: "contextMenus", notifications: "notifications",
+  downloads: "downloads", webRequest: "webRequest", tabGroups: "tabGroups",
+  topSites: "topSites", idle: "idle", management: "management",
+  scripting: "scripting", declarativeNetRequest: "declarativeNetRequest",
+  sessions: "sessions", proxy: "proxy", tts: "tts", pageCapture: "pageCapture",
+  desktopCapture: "desktopCapture", debugger: "debugger", geolocation: "geolocation",
+};
+const HARD_APIS = new Set([
+  "history", "cookies", "bookmarks", "webNavigation", "downloads",
+  "webRequest", "topSites", "management", "tabGroups", "sessions", "proxy",
+  "debugger", "pageCapture", "desktopCapture",
+]);
+
+// Bounded scan of the project source for permission-gated API usage.
+function scanApiUsage(roots: string[]): Set<string> {
+  const used = new Set<string>();
+  let filesRead = 0;
+  const walk = (dir: string, depth: number): void => {
+    if (depth > 6 || filesRead > 300) return;
+    let entries: fs.Dirent[];
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const e of entries) {
+      if (e.name === "node_modules" || e.name === "dist" || e.name.startsWith("."))
+        continue;
+      const full = path.join(dir, e.name);
+      if (e.isDirectory()) {
+        walk(full, depth + 1);
+        continue;
+      }
+      if (!/\.(js|mjs|cjs|ts|tsx|jsx|svelte|vue)$/.test(e.name)) continue;
+      if (filesRead++ > 300) return;
+      let src: string;
+      try {
+        src = fs.readFileSync(full, "utf8");
+      } catch {
+        continue;
+      }
+      const re = /\b(?:chrome|browser)\.(\w+)/g;
+      let m: RegExpExecArray | null;
+      while ((m = re.exec(src))) {
+        if (API_PERMISSION[m[1]]) used.add(m[1]);
+      }
+    }
+  };
+  for (const root of new Set(roots)) walk(root, 0);
+  return used;
+}
+
 export async function handler(args: {
   manifestPath?: string;
   projectPath?: string;
+  browser?: string;
   browsers?: string[];
 }): Promise<string> {
+  // Accept singular `browser` (every sibling tool uses it) as an alias for the
+  // `browsers` array.
+  if (!args.browsers && typeof (args as { browser?: string }).browser === "string") {
+    args = { ...args, browsers: [(args as { browser: string }).browser] };
+  }
   const browsers = args.browsers ?? ["chrome", "firefox"];
   const result: ValidationResult = {
     valid: true,
@@ -208,6 +277,31 @@ export async function handler(args: {
     if (!fileResolvesSomewhere(ref, roots)) {
       result.warnings.push(
         `Referenced file "${ref}" was not found near the manifest — this is the kind of dangling reference extension_build fails on. Verify with extension_build.`,
+      );
+    }
+  }
+
+  // Code-vs-permission coherence: scan the source for permission-gated
+  // chrome.*/browser.* usage and flag anything the manifest doesn't declare. A
+  // HARD-gated API used without its permission is undefined at runtime and
+  // crashes the context — the exact false-green case where validate said valid.
+  const declaredPermSet = new Set<string>(
+    [
+      ...((chromiumManifest.permissions as string[] | undefined) ?? []),
+      ...((chromiumManifest.optional_permissions as string[] | undefined) ?? []),
+    ].filter((p) => typeof p === "string"),
+  );
+  for (const api of scanApiUsage(roots)) {
+    const perm = API_PERMISSION[api];
+    if (declaredPermSet.has(perm)) continue;
+    const base = `Code calls chrome.${api} but "${perm}" is not in permissions`;
+    if (HARD_APIS.has(api)) {
+      result.errors.push(
+        `${base} — chrome.${api} is undefined without it and will crash the context at runtime.`,
+      );
+    } else {
+      result.warnings.push(
+        `${base}; it may be undefined at runtime — add "${perm}" if you use it.`,
       );
     }
   }
@@ -341,11 +435,14 @@ export async function handler(args: {
     }
   }
 
-  if (result.errors.length === 0) {
-    result.valid = Object.values(result.browserSupport).every(
-      (b) => b.supported,
-    );
-  }
+  // Errors must make the headline honest: valid only when there are no errors
+  // AND every target is supported (previously errors could coexist with valid).
+  result.valid =
+    result.errors.length === 0 &&
+    Object.values(result.browserSupport).every((b) => b.supported);
 
-  return JSON.stringify(result);
+  return JSON.stringify({
+    ...result,
+    buildBlocking: result.errors.length > 0,
+  });
 }

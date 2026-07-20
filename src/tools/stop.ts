@@ -53,19 +53,9 @@ interface StopOutcome {
   detail: string;
 }
 
-// The dev-server pid does not own the launched browser: it runs under its own
-// user-data-dir (dist/extension-profile-<browser>) and, on Firefox especially,
-// survives the CLI dying. Killing only the dev pid left orphan browser
-// processes reporting stopped:true. Find every process whose command line
-// references this project's browser profile and terminate them too.
-function profileProcessPids(projectPath: string, browser: string): number[] {
-  const marker = path.resolve(
-    projectPath,
-    "dist",
-    `extension-profile-${browser}`,
-  );
+function pgrepPids(pattern: string): number[] {
   try {
-    const out = execFileSync("pgrep", ["-f", marker], { encoding: "utf8" });
+    const out = execFileSync("pgrep", ["-f", pattern], { encoding: "utf8" });
     return out
       .split("\n")
       .map((s) => parseInt(s.trim(), 10))
@@ -76,8 +66,25 @@ function profileProcessPids(projectPath: string, browser: string): number[] {
   }
 }
 
-function reapProfileProcesses(projectPath: string, browser: string): number[] {
-  const pids = profileProcessPids(projectPath, browser);
+// Every process this dev session spawned, so stop can actually reap them:
+// - the dev CLI, whose argv is "extension dev <projectPath>" (the launched
+//   browser detaches from it — Firefox especially — so killing the dev pid
+//   alone leaves it, and the dev pid itself sometimes survives);
+// - the launched browser, whose profile (gecko) and --load-extension (chromium)
+//   both live under <projectPath>/dist.
+// Both markers avoid the MCP client (it uses "extension_dev" with an underscore)
+// and this server process (excluded by pid in pgrepPids).
+function sessionProcessPids(projectPath: string): number[] {
+  const resolved = path.resolve(projectPath);
+  const pids = new Set<number>();
+  for (const marker of [`extension dev ${resolved}`, path.join(resolved, "dist")]) {
+    for (const pid of pgrepPids(marker)) pids.add(pid);
+  }
+  return [...pids];
+}
+
+function reapSessionProcesses(projectPath: string): number[] {
+  const pids = sessionProcessPids(projectPath);
   for (const pid of pids) {
     try {
       process.kill(pid, "SIGKILL");
@@ -143,7 +150,7 @@ async function stopOne(
   if (pid == null) {
     // Even with no registered dev pid, an orphaned browser may still be running
     // under the profile dir; reap those before reporting nothing to do.
-    const reaped = reapProfileProcesses(projectPath, browser);
+    const reaped = reapSessionProcesses(projectPath);
     return {
       projectPath,
       browser,
@@ -174,7 +181,7 @@ async function stopOne(
 
   // Reap the browser process tree launched under the profile dir; the dev pid
   // dying does not take these with it (Firefox in particular detaches).
-  const reaped = reapProfileProcesses(projectPath, browser);
+  const reaped = reapSessionProcesses(projectPath);
 
   removeSession(projectPath, browser);
   try {
@@ -184,7 +191,7 @@ async function stopOne(
 
   // Only claim stopped when the dev pid is gone AND no profile process survived
   // the reap. A survivor means the caller must not trust the machine is quiet.
-  const survivors = profileProcessPids(projectPath, browser);
+  const survivors = sessionProcessPids(projectPath);
   const stopped = !isAlive(pid) && survivors.length === 0;
   if (survivors.length) {
     detail += ` Warning: ${survivors.length} browser process(es) still alive after reap (pids ${survivors.join(", ")}).`;

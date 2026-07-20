@@ -6,7 +6,53 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // MIT License (c) Cezar Augusto and the extension.dev collaborators
 
+import fs from "node:fs";
+import path from "node:path";
 import { runExtensionCli } from "../lib/exec";
+
+// Enumerate declared entrypoints from the built manifest so a content-script (or
+// any small entry) is not read as "didn't build" when the CLI's own summary tree
+// omits it. Mirrors extension_inspect's entrypoints list.
+function builtEntrypoints(
+  distDir: string,
+): Array<{ role: string; path: string; present: boolean }> {
+  let manifest: Record<string, unknown>;
+  try {
+    manifest = JSON.parse(
+      fs.readFileSync(path.join(distDir, "manifest.json"), "utf8"),
+    );
+  } catch {
+    return [];
+  }
+  const out: Array<{ role: string; path: string; present: boolean }> = [];
+  const add = (role: string, ref: unknown) => {
+    if (typeof ref !== "string") return;
+    out.push({
+      role,
+      path: ref,
+      present: fs.existsSync(path.join(distDir, ref.replace(/^\.?\//, ""))),
+    });
+  };
+  const bg = manifest.background as Record<string, unknown> | undefined;
+  if (bg?.service_worker) add("background.service_worker", bg.service_worker);
+  if (Array.isArray(bg?.scripts)) bg.scripts.forEach((s) => add("background.scripts", s));
+  const action = (manifest.action || manifest.browser_action) as
+    | Record<string, unknown>
+    | undefined;
+  if (action?.default_popup) add("action.default_popup", action.default_popup);
+  const cs = manifest.content_scripts as
+    | Array<Record<string, unknown>>
+    | undefined;
+  if (Array.isArray(cs)) {
+    cs.forEach((c, i) => {
+      if (Array.isArray(c.js))
+        c.js.forEach((j) => add(`content_scripts[${i}].js`, j));
+      if (Array.isArray(c.css))
+        c.css.forEach((s) => add(`content_scripts[${i}].css`, s));
+    });
+  }
+  return out;
+}
 
 export const schema = {
   name: "extension_build",
@@ -100,11 +146,15 @@ export async function handler(args: {
   if (code === 0) {
     const size = out.match(/Size:\s*([\d.]+\s*[kKmMgG]?B)/)?.[1];
     const status = out.match(/Build Status:\s*(\w+)/)?.[1];
+    const entrypoints = builtEntrypoints(
+      path.resolve(args.projectPath, "dist", browser),
+    );
     return JSON.stringify({
       success: true,
       browser,
       ...(size ? { size } : {}),
       ...(status ? { status } : {}),
+      ...(entrypoints.length ? { entrypoints } : {}),
       zip: args.zip ?? false,
       duration,
       output: lastLines(out, 12),
