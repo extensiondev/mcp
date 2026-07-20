@@ -58,7 +58,12 @@ published to npm; installing 5.1.0 picks up both.
   CDP, clamped to Chrome's 25x25-800x600 popup bounds, and the window is
   resized to it (reported as `renderedAsTab.popupBounds`). If the browser
   does not verifiably honor the resize, the tool keeps saying "no popup
-  sizing" instead of implying fidelity.
+  sizing" instead of implying fidelity. Note headless-new is one such
+  browser: it accepts `Browser.setWindowBounds` and changes nothing, so
+  headless sessions get the honest fallback, not a resized window. The
+  measurement also leaves `body`'s authored width alone; only the root takes
+  the temporary fit-content override, so a popup that sizes itself through
+  `body { width }` measures at its real width.
 - **CI typechecks the tests.** `pnpm typecheck` covers `src/` and the test
   tsconfig, wired into the CI matrix, so type drift between tools and their
   tests cannot accumulate silently again.

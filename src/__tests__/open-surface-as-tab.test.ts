@@ -17,6 +17,7 @@ let navigationLands = true;
 let popupMeasure: { w: number; h: number } | null = null;
 let windowResizeHonored = true;
 let windowBounds: { width?: number; height?: number } = {};
+const evaluatedExpressions: string[] = [];
 
 vi.mock("../lib/cdp-port", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../lib/cdp-port")>();
@@ -50,7 +51,8 @@ vi.mock("../lib/cdp", () => {
     async getPageMeta() {
       return {};
     }
-    async evaluate() {
+    async evaluate(_session: string, expression: string) {
+      evaluatedExpressions.push(expression);
       return popupMeasure ? { w: popupMeasure.w, h: popupMeasure.h } : null;
     }
     async sendCommand(method: string, params?: Record<string, unknown>) {
@@ -117,6 +119,7 @@ afterEach(() => {
   popupMeasure = null;
   windowResizeHonored = true;
   windowBounds = {};
+  evaluatedExpressions.length = 0;
   for (const dir of tmpDirs.splice(0)) {
     fs.rmSync(dir, { recursive: true, force: true });
   }
@@ -342,6 +345,22 @@ describe("popup-as-tab window sizing", () => {
       clamped: true,
     });
     expect(result.hint).toContain("clamped");
+  });
+
+  it("never overrides the BODY width when measuring content size", async () => {
+    // Live run: an inline body { width: fit-content } override beat the
+    // popup's own authored width (body { width: 320px } measured as 127px,
+    // shrink-wrapped to its text). Only the root may take the temporary
+    // fit-content override; body keeps its stylesheet width.
+    const p = popupProject();
+    popupMeasure = { w: 320, h: 180 };
+
+    await open.handler({ projectPath: p.dir, surface: "popup", asTab: true });
+
+    const measure = evaluatedExpressions.find((e) => e.includes("fit-content"));
+    expect(measure).toBeDefined();
+    expect(measure).not.toMatch(/b(ody)?\.style\.width\s*=/);
+    expect(measure).toMatch(/de\.style\.width\s*=\s*"fit-content"/);
   });
 
   it("does not claim popup fidelity when the browser ignored the resize", async () => {
