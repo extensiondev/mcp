@@ -32,7 +32,9 @@ describe("extension_publish envelope compatibility", () => {
   });
 
   it("returns the frozen PublishAuthError bytes when no token is available", async () => {
-    const out = await handler({ projectPath: "/tmp/x" });
+    // publish takes NO projectPath by design: the target is the token's
+    // project, local files are never uploaded.
+    const out = await handler({});
     expect(out).toBe(
       JSON.stringify({
         ok: false,
@@ -48,7 +50,6 @@ describe("extension_publish envelope compatibility", () => {
   it("returns the frozen PublishConfigError bytes for a plaintext api URL", async () => {
     process.env.EXTENSION_DEV_TOKEN = "tok_test";
     const out = await handler({
-      projectPath: "/tmp/x",
       api: "http://evil.example.com",
     });
     expect(out).toBe(
@@ -74,7 +75,6 @@ describe("extension_publish envelope compatibility", () => {
     });
     process.env.EXTENSION_DEV_TOKEN = "tok_env";
     const out = await handler({
-      projectPath: "/tmp/x",
       api: "http://not-localhost.example",
     });
     expect(JSON.parse(out).error.name).toBe("PublishConfigError");

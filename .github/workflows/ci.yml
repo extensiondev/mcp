@@ -76,6 +76,9 @@ jobs:
       - name: Build
         run: pnpm compile
 
+      - name: Typecheck (src and tests)
+        run: pnpm typecheck
+
       - name: Test
         env:
           RUN_CLI_SMOKE: ${{ github.event_name == 'schedule' && '1' || '' }}
