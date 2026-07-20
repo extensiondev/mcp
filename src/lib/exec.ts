@@ -8,6 +8,7 @@
 
 import type { ChildProcess } from "node:child_process";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import spawn from "cross-spawn";
 import { dependencies } from "../../package.json";
@@ -72,21 +73,50 @@ export function runExtensionCli(
   });
 }
 
+export interface SpawnedCli {
+  child: ChildProcess;
+  // Path of the file the child's stdout+stderr stream into. Survives the MCP
+  // process, so it doubles as the postmortem record for a detached session.
+  logPath: string;
+  readOutput: () => string;
+}
+
+// Long-lived sessions (dev/start/preview) write to a LOG FILE, not pipes.
+// `detached: true` alone does not make a child outlive the MCP stdio process:
+// with piped stdio, the pipes close when the MCP exits and the child dies with
+// EPIPE on its next write, which for a dev server is the next compile log line.
+// A file fd has no reader to lose, so the session genuinely survives, and a
+// fresh MCP process rediscovers it through ready.json (resolveSessionBrowser)
+// and can stop it through the contract pid + profile-tree reaper.
 export function spawnExtensionCli(
   args: string[],
   options?: { cwd?: string; projectDir?: string },
-): ChildProcess {
+): SpawnedCli {
   const { command, prefixArgs } = resolveExtensionInvocation(
     options?.projectDir ?? options?.cwd,
   );
+  const logDir = fs.mkdtempSync(path.join(os.tmpdir(), "extension-mcp-"));
+  const logPath = path.join(logDir, "session.log");
+  const fd = fs.openSync(logPath, "a");
   const child = spawn(command, [...prefixArgs, ...args], {
     cwd: options?.cwd,
     detached: true,
-    stdio: ["ignore", "pipe", "pipe"],
+    stdio: ["ignore", fd, fd],
     env: { ...process.env, FORCE_COLOR: "0", NO_COLOR: "1" },
   });
+  fs.closeSync(fd);
 
   child.unref();
 
-  return child;
+  return {
+    child,
+    logPath,
+    readOutput: () => {
+      try {
+        return fs.readFileSync(logPath, "utf8");
+      } catch {
+        return "";
+      }
+    },
+  };
 }

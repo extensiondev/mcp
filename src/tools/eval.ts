@@ -12,7 +12,7 @@ import { resolveSessionBrowser } from "../lib/session-browser";
 export const schema = {
   name: "extension_eval",
   description:
-    "Evaluate an expression in a running extension context. Requires the dev session to be started with allowEval: true (extension_dev; writes a 0600 session token the CLI reads). Targeting for context content/page: pass `url` to pick the matching tab, or omit both `url` and `tab` to use the ACTIVE tab; a numeric `tab` id is only needed to disambiguate. Chromium caveat: eval in the MV3 background/service_worker is blocked by CSP (use an MV2/Firefox build for that context), and context popup has no tab (inspect the open surface with extension_dom_inspect instead). Use extension_dom_inspect with listTabs: true to enumerate {tabId,url,title}. Wraps `extension eval`.",
+    "Evaluate an expression in a running extension context. Requires the dev session to be started with allowEval: true (extension_dev; writes a 0600 session token the CLI reads). Targeting for context content/page: pass `url` to pick the matching tab, or omit both `url` and `tab` to use the ACTIVE tab; a numeric `tab` id is only needed to disambiguate. Extension surfaces (popup/options/sidebar/devtools) and override pages (newtab/history/bookmarks) evaluate over the in-bundle relay and need NO tab id; the surface must be OPEN (extension_open first; a closed surface returns an explicit error). Chromium caveat: eval in the MV3 background/service_worker is blocked by CSP (use an MV2/Firefox build for that context). Use extension_dom_inspect with listTabs: true to enumerate {tabId,url,title}. Wraps `extension eval`.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -26,7 +26,7 @@ export const schema = {
       },
       context: {
         type: "string",
-        enum: ["background", "popup", "options", "sidebar", "devtools", "content", "page"],
+        enum: ["background", "popup", "options", "sidebar", "devtools", "newtab", "history", "bookmarks", "content", "page"],
         default: "background",
         description: "Which extension surface to evaluate in",
       },
@@ -53,18 +53,18 @@ export async function handler(
     args.timeout,
   );
 
-  // Engine bug 60 (filed 2026-07-20 against 4.0.14-canary...7d7da9cc):
-  // context:"content" NEVER executes the injection and still replies
-  // ok:true with a null value, on both Chromium and Gecko. We cannot honestly
-  // turn that into a failure here, because null is also a legitimate result,
-  // but passing it through unannotated makes the MCP complicit in the lie: two
-  // swarm personas misdiagnosed their own extension because of it. Annotate.
+  // Engines carrying the bug-61 fix (Extension.js >= 4.0.14) reply with an
+  // explicit error when the isolated-world injection never runs, so an ok:true
+  // null from them is a REAL null. Engines older than that could lie
+  // (injection dead, ok:true value:null); keep a soft note for the ambiguous
+  // case only, so an old engine cannot make the MCP complicit without
+  // condemning content eval on engines where it works.
   if (args.context === "content") {
     try {
       const parsed = JSON.parse(raw);
       if (parsed?.ok === true && (parsed.value === null || parsed.value === undefined)) {
-        parsed.warning =
-          "context:'content' eval is known-broken in the current engine (Extension.js bug 60): the isolated-world injection does not run, and a null value here may mean 'nothing executed' rather than 'the expression evaluated to null'. Verify with extension_source_inspect or extension_logs, or use context:'page' when the MAIN world is acceptable.";
+        parsed.note =
+          "On Extension.js >= 4.0.14 a failed injection errors explicitly, so this null is the expression's real result. On OLDER engines (bug 61) it could mean the injection never ran; if this result looks wrong, check the engine version with extension_doctor, or verify with extension_logs or context:'page'.";
         return JSON.stringify(parsed);
       }
     } catch {

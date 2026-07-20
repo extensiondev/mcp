@@ -7,17 +7,34 @@ import type { ChildProcess } from "node:child_process";
 
 // Stand in for the extension CLI: `node -e <script>` gives a real child process
 // with real exit semantics, so the health tick is exercised end to end rather
-// than against a hand-rolled EventEmitter.
+// than against a hand-rolled EventEmitter. Mirrors the real spawnExtensionCli
+// contract: output goes to a log file, not pipes (the detach-outlives-stdio
+// design), and the handle exposes readOutput().
+type SpawnedCli = import("../lib/exec").SpawnedCli;
 const spawned: ChildProcess[] = [];
-function fakeCli(script: string): ChildProcess {
+function fakeCli(script: string): SpawnedCli {
+  const logDir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-fake-cli-"));
+  const logPath = path.join(logDir, "session.log");
+  const fd = fs.openSync(logPath, "a");
   const child = spawn(process.execPath, ["-e", script], {
-    stdio: ["ignore", "pipe", "pipe"],
+    stdio: ["ignore", fd, fd],
   });
+  fs.closeSync(fd);
   spawned.push(child);
-  return child;
+  return {
+    child,
+    logPath,
+    readOutput: () => {
+      try {
+        return fs.readFileSync(logPath, "utf8");
+      } catch {
+        return "";
+      }
+    },
+  };
 }
 
-let nextChild: () => ChildProcess = () => fakeCli("setTimeout(()=>{}, 60000)");
+let nextChild: () => SpawnedCli = () => fakeCli("setTimeout(()=>{}, 60000)");
 
 vi.mock("../lib/exec", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../lib/exec")>();

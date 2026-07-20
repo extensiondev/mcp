@@ -90,7 +90,7 @@ export async function handler(args: {
   if (!isChromiumFamily(browser)) {
     return JSON.stringify({
       error: `Source inspection reads the live DOM over Chrome DevTools Protocol, which ${browser} (Gecko) does not expose. This is a capability limit, not a missing session.`,
-      hint: `For the ${browser} session, read runtime state with extension_logs, or extension_eval (context: "content"/"page") which works against Firefox over the control channel. To get CDP DOM inspection, run a Chromium-family dev session (extension_dev with browser: "chrome") in parallel.`,
+      hint: `For the ${browser} session, read runtime state with extension_logs, or extension_eval / extension_dom_inspect (content/page, an open surface like popup/options/sidebar, or an override page like newtab) which work against Firefox over the control channel. To get CDP DOM inspection, run a Chromium-family dev session (extension_dev with browser: "chrome") in parallel.`,
     });
   }
 

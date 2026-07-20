@@ -764,3 +764,151 @@ describe("wave-2 swarm lies stay fixed", () => {
     expect(result.error.message).not.toContain("--key");
   });
 });
+
+// Post-61-73 additions (2026-07-20): the canary closed the engine bugs, so the
+// remaining lies live in how WE relay engine state. Same charter: break
+// something real, assert the tool says so.
+describe("act verbs report the dead session, not a config riddle", () => {
+  it("eval's control error names the exited dev server when ready.json outlives it", async () => {
+    const evalTool = await import("../tools/eval");
+    const project = tmpProject();
+    // The trap: a ready contract whose pid is dead. The engine's error text
+    // asks "is the session started with allowControl?", which is a lie of
+    // omission; nothing is running at all.
+    writeReady(project, "chrome", { status: "ready", pid: DEAD_PID });
+    cliResult = {
+      code: 0,
+      stdout: JSON.stringify({
+        ok: false,
+        error: {
+          name: "ControlChannelError",
+          message:
+            "no executor connected: is the session started with allowControl?",
+        },
+      }),
+      stderr: "",
+    };
+
+    const result = JSON.parse(
+      await evalTool.handler({ projectPath: project, expression: "1+1" }),
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.error.message).toContain("dev server has exited");
+    expect(result.error.message).toContain("not an allowControl problem");
+  });
+
+  it("eval annotates an ambiguous null instead of asserting the engine is broken", async () => {
+    const evalTool = await import("../tools/eval");
+    const project = tmpProject();
+    writeReady(project, "chrome", { status: "ready", pid: process.pid });
+    cliResult = {
+      code: 0,
+      stdout: JSON.stringify({ ok: true, value: null }),
+      stderr: "",
+    };
+
+    const result = JSON.parse(
+      await evalTool.handler({
+        projectPath: project,
+        expression: "void 0",
+        context: "content",
+      }),
+    );
+
+    // The old guard called content eval "known-broken in the current engine"
+    // forever, steering callers off a path bug 61's fix repaired. The note must
+    // be version-honest: trust the null on fixed engines, doubt it on old ones.
+    expect(result.ok).toBe(true);
+    expect(result.note).toContain(">= 4.0.14");
+    expect(result.note).toContain("OLDER engines");
+    expect(JSON.stringify(result)).not.toContain("known-broken");
+  });
+
+  it("eval leaves a real value un-annotated", async () => {
+    const evalTool = await import("../tools/eval");
+    const project = tmpProject();
+    cliResult = {
+      code: 0,
+      stdout: JSON.stringify({ ok: true, value: 2 }),
+      stderr: "",
+    };
+
+    const result = JSON.parse(
+      await evalTool.handler({
+        projectPath: project,
+        expression: "1+1",
+        context: "content",
+      }),
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.note).toBeUndefined();
+  });
+});
+
+describe("doctor names a dead browser instead of a generic build failure", () => {
+  it("reads the engine's browser_exited stamp and prescribes the right remedy", async () => {
+    const doctorTool = await import("../tools/doctor");
+    const project = tmpProject();
+    // The engine's bug-71/72 stamp: the CLI lives, the browser died.
+    writeReady(project, "chrome", {
+      status: "error",
+      code: "browser_exited",
+      browserExitCode: 9,
+      browserExitedAt: "2026-07-20T12:00:00.000Z",
+      pid: process.pid,
+    });
+    cliResult = { code: 0, stdout: "[]", stderr: "" };
+
+    const result = JSON.parse(
+      await doctorTool.handler({ projectPath: project, browser: "chrome" }),
+    );
+
+    expect(result.healthy).toBe(false);
+    const runtime = result.checks.find(
+      (c: { check: string }) => c.check === "runtime-errors",
+    );
+    expect(runtime.status).toBe("fail");
+    expect(runtime.detail).toContain("browser");
+    expect(runtime.detail).toContain("exit code 9");
+    // The generic remedy ("fix the build error") would send the caller in
+    // exactly the wrong direction; the build is fine, the browser is dead.
+    expect(runtime.remediation).not.toContain("recompile");
+    expect(runtime.remediation).toContain("extension_stop");
+  });
+});
+
+describe("create verifies the scaffold instead of trusting the library", () => {
+  it("reports incomplete when extension-create resolves over a manifest-less tree", async () => {
+    vi.resetModules();
+    const scaffoldDir = tmpProject();
+    // Partial tree: package.json survived the interrupted download,
+    // manifest.json did not.
+    fs.writeFileSync(
+      path.join(scaffoldDir, "package.json"),
+      JSON.stringify({ name: "partial" }),
+    );
+    vi.doMock("extension-create", () => ({
+      extensionCreate: async () => ({
+        projectPath: scaffoldDir,
+        projectName: "partial",
+        template: "typescript",
+        depsInstalled: false,
+      }),
+    }));
+    const createTool = await import("../tools/create");
+
+    const result = JSON.parse(
+      await createTool.handler({ projectName: scaffoldDir } as never),
+    );
+    vi.doUnmock("extension-create");
+
+    expect(result.ok).toBe(false);
+    expect(result.status).toBe("incomplete");
+    expect(result.error).toContain("manifest.json");
+    // The lie we are guarding against: nextSteps pointing a caller at `run dev`
+    // inside a tree that cannot compile.
+    expect(result.nextSteps).toBeUndefined();
+  });
+});

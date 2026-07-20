@@ -86,7 +86,8 @@ export async function handler(
   if (allowControl) cliArgs.push("--allow-control");
   if (args.allowEval) cliArgs.push("--allow-eval");
 
-  const child = spawnExtensionCli(cliArgs, { projectDir: args.projectPath });
+  const spawned = spawnExtensionCli(cliArgs, { projectDir: args.projectPath });
+  const { child, logPath } = spawned;
   const pid = child.pid!;
 
   registerSession({
@@ -98,16 +99,8 @@ export async function handler(
   });
   child.on("exit", () => removeSession(args.projectPath, browser));
 
-  let earlyOutput = "";
-  const collector = (data: Buffer) => {
-    earlyOutput += data.toString();
-  };
-  child.stdout?.on("data", collector);
-  child.stderr?.on("data", collector);
-
   await new Promise((resolve) => setTimeout(resolve, 3000));
-  child.stdout?.off("data", collector);
-  child.stderr?.off("data", collector);
+  const earlyOutput = spawned.readOutput();
 
   // Health tick before claiming "started". This used to report status:"started"
   // unconditionally after the fixed 3s wait, so a dev server that died on boot
@@ -129,6 +122,7 @@ export async function handler(
         `The dev server exited during startup (${signal ? `signal ${signal}` : `exit code ${code}`}). ` +
         "No session is running, so extension_logs/wait/eval and the control verbs have nothing to attach to.",
       output: denoiseEarlyOutput(earlyOutput).slice(0, 2000),
+      logPath,
       hint:
         "Read `output` above for the cause: a port already in use, a manifest the build rejects, or a missing browser binary are the common ones. " +
         "Fix it and call extension_dev again; extension_doctor with this projectPath will also report what the last session recorded.",
@@ -153,6 +147,7 @@ export async function handler(
       error:
         "The dev server started but the FIRST COMPILE FAILED, so the browser has nothing usable to load. The session is running; the extension is not.",
       output: denoiseEarlyOutput(earlyOutput).slice(0, 2000),
+      logPath,
       hint: "Fix the compile error in `output` above and save: the dev server is still running and will recompile. Do not call extension_wait yet, it will report ready for a build that failed.",
     });
   }
@@ -183,6 +178,7 @@ export async function handler(
         : "Control channel is OFF: extension_storage/reload/open/dom_inspect need allowControl: true, and extension_eval needs allowEval: true (which also implies allowControl). Restart extension_dev with the flag you need.") +
       " When you are done, call extension_stop to shut down the dev server and browser.",
     earlyOutput: denoiseEarlyOutput(earlyOutput).slice(0, 500),
+    logPath,
   });
 }
 

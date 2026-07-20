@@ -53,10 +53,12 @@ export interface TemplatesMetaV2 {
 }
 
 export interface ReadyContract {
-  status: "ready" | "error";
+  status: "ready" | "error" | "stopped";
   message?: string;
   errors?: string[];
   code?: string;
+  browserExitCode?: number | null;
+  browserExitedAt?: string;
   command: "dev" | "start";
   browser: string;
   runId?: string;
