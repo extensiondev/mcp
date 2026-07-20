@@ -270,7 +270,9 @@ function surfaceDocument(
           : surface === "sidebar"
             ? (manifest.side_panel?.default_path ??
               manifest.sidebar_action?.default_panel)
-            : null;
+            : surface === "newtab" || surface === "history" || surface === "bookmarks"
+              ? manifest.chrome_url_overrides?.[surface]
+              : null;
     if (typeof ref === "string" && ref) return ref.replace(/^\.?\//, "");
   }
   return null;
@@ -311,9 +313,26 @@ async function applyPopupBounds(
     const ws = await CDPClient.discoverBrowserWsUrl(resolved.port);
     await cdp.connect(ws);
     const sessionId = await cdp.attachToTarget(targetId);
+    // scrollWidth on a block document reports the VIEWPORT width, not the
+    // content's preferred width (live run: a 320x180 popup measured as the
+    // full window and clamped to 800x600). Chrome sizes popups to the
+    // content's preferred/intrinsic size, so measure with a temporary
+    // fit-content override on the root only: an inline override on BODY
+    // would beat the popup's own authored width (body { width: 320px }
+    // measured 127px, shrink-wrapped to its text) and popups conventionally
+    // size through body/root CSS.
     const measured = (await cdp.evaluate(
       sessionId,
-      "(() => { const d = document.documentElement, b = document.body; return { w: Math.max(d ? d.scrollWidth : 0, b ? b.scrollWidth : 0), h: Math.max(d ? d.scrollHeight : 0, b ? b.scrollHeight : 0) }; })()",
+      `(() => {
+        const de = document.documentElement, b = document.body;
+        if (!de || !b) return null;
+        const prev = de.style.width;
+        de.style.width = "fit-content";
+        const w = Math.max(de.getBoundingClientRect().width, b.getBoundingClientRect().width);
+        const h = Math.max(de.getBoundingClientRect().height, b.getBoundingClientRect().height, b.scrollHeight);
+        de.style.width = prev;
+        return { w: Math.ceil(w), h: Math.ceil(h) };
+      })()`,
     )) as { w?: number; h?: number } | undefined;
     if (
       !measured ||
@@ -427,7 +446,7 @@ async function openSurfaceAsTab(
 export const schema = {
   name: "extension_open",
   description:
-    "Open an extension surface or replay an event in a running session. 'popup'/'options'/'sidebar' open UI surfaces. 'action' triggers the toolbar action: opens the action's popup, or (no popup) replays chrome.action.onClicked. 'command' replays a chrome.commands.onCommand keyboard shortcut (pass `name`). NOTE: action/command replay invokes your listener WITHOUT a user gesture, so the gesture-derived activeTab grant does not apply (the result includes gesture:false and a warning when activeTab is declared). Requires the dev session to be started with allowControl: true (extension_dev). Wraps `extension open`.",
+    "Open an extension surface or replay an event in a running session. 'popup'/'options'/'sidebar' open UI surfaces; 'newtab'/'history'/'bookmarks' open the extension's chrome_url_overrides page in a tab. 'action' triggers the toolbar action: opens the action's popup, or (no popup) replays chrome.action.onClicked. 'command' replays a chrome.commands.onCommand keyboard shortcut (pass `name`). NOTE: action/command replay invokes your listener WITHOUT a user gesture, so the gesture-derived activeTab grant does not apply (the result includes gesture:false and a warning when activeTab is declared). Requires the dev session to be started with allowControl: true (extension_dev). Wraps `extension open`.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -437,8 +456,8 @@ export const schema = {
       },
       surface: {
         type: "string",
-        enum: ["popup", "options", "sidebar", "action", "command"],
-        description: "Which surface to open or event to replay. 'action' triggers the toolbar action; 'command' replays a keyboard-shortcut command (requires `name`).",
+        enum: ["popup", "options", "sidebar", "newtab", "history", "bookmarks", "action", "command"],
+        description: "Which surface to open or event to replay. 'newtab'/'history'/'bookmarks' open the matching chrome_url_overrides page. 'action' triggers the toolbar action; 'command' replays a keyboard-shortcut command (requires `name`).",
       },
       name: {
         type: "string",
@@ -479,7 +498,7 @@ export async function handler(
   // `url` drives a tab navigation over CDP; `surface` opens an extension surface.
   if (args.url) return navigateToUrl(args.projectPath, browser, args.url);
 
-  const AS_TAB_SURFACES = ["popup", "options", "sidebar"];
+  const AS_TAB_SURFACES = ["popup", "options", "sidebar", "newtab", "history", "bookmarks"];
   if (args.asTab && args.surface && AS_TAB_SURFACES.includes(args.surface)) {
     return openSurfaceAsTab(args.projectPath, browser, args.surface);
   }
