@@ -109,6 +109,32 @@ export async function handler(
   child.stdout?.off("data", collector);
   child.stderr?.off("data", collector);
 
+  // Health tick before claiming "started". This used to report status:"started"
+  // unconditionally after the fixed 3s wait, so a dev server that died on boot
+  // (port taken, bad manifest, missing binary) still read as a healthy session —
+  // and every later tool call then failed against a session that was never
+  // alive. Report the death honestly, with the child's own output as evidence.
+  if (child.exitCode !== null || child.signalCode !== null) {
+    const code = child.exitCode;
+    const signal = child.signalCode;
+    return JSON.stringify({
+      ok: false,
+      status: "exited",
+      projectPath: args.projectPath,
+      browser,
+      pid,
+      exitCode: code,
+      signal,
+      error:
+        `The dev server exited during startup (${signal ? `signal ${signal}` : `exit code ${code}`}). ` +
+        "No session is running, so extension_logs/wait/eval and the control verbs have nothing to attach to.",
+      output: denoiseEarlyOutput(earlyOutput).slice(0, 2000),
+      hint:
+        "Read `output` above for the cause: a port already in use, a manifest the build rejects, or a missing browser binary are the common ones. " +
+        "Fix it and call extension_dev again; extension_doctor with this projectPath will also report what the last session recorded.",
+    });
+  }
+
   const controlVerbs = "storage, reload, open, dom_inspect";
   const capabilities = {
     allowControl,
@@ -121,6 +147,7 @@ export async function handler(
   };
 
   return JSON.stringify({
+    ok: true,
     pid,
     browser,
     port: args.port ?? 8080,

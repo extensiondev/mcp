@@ -13,6 +13,21 @@ import { extensionCreate } from "extension-create";
 // Map the lockfile the installer actually wrote to the package manager that
 // owns it, so the run command we hand back matches what created node_modules
 // (extension-create may pick bun/pnpm/yarn/npm depending on the environment).
+// The `extension` devDependency the scaffold actually wrote, or null when the
+// package.json is unreadable or does not pin one.
+function scaffoldEnginePin(projectPath: string): string | null {
+  try {
+    const pkg = JSON.parse(
+      fs.readFileSync(path.join(projectPath, "package.json"), "utf8"),
+    );
+    const spec =
+      pkg?.devDependencies?.extension ?? pkg?.dependencies?.extension ?? null;
+    return typeof spec === "string" ? spec : null;
+  } catch {
+    return null;
+  }
+}
+
 function detectPackageManager(projectPath: string): string {
   const byLockfile: Array<[string, string]> = [
     ["bun.lock", "bun"],
@@ -143,18 +158,32 @@ export async function handler(args: {
     }
   }
 
-  const packageManager = result.depsInstalled
-    ? detectPackageManager(result.projectPath)
-    : "npm";
+  // extension-create reports the package manager it actually used (upstream
+  // #47), which is authoritative and available even when deps were not
+  // installed. Lockfile sniffing is the fallback for older engines. Guessing
+  // "npm" made every hint wrong for a bun scaffold.
+  const packageManager =
+    (result as { packageManager?: string }).packageManager ||
+    (result.depsInstalled ? detectPackageManager(result.projectPath) : "npm");
   const runDev = `${packageManager} run dev`;
+  const addDev = (spec: string): string =>
+    packageManager === "npm"
+      ? `npm i -D ${spec}`
+      : packageManager === "yarn"
+        ? `yarn add -D ${spec}`
+        : `${packageManager} add -D ${spec}`;
 
-  // The scaffold pins extension@latest, which beats EXTENSION_MCP_CLI_VERSION, so
-  // the dev loop may run a different engine than the pinned CLI. Warn so callers
-  // can reconcile (extension_doctor also flags the mismatch).
+  // The project-local engine beats EXTENSION_MCP_CLI_VERSION, so the dev loop
+  // can run a different engine than the pinned CLI. Read the pin the scaffold
+  // ACTUALLY wrote rather than assuming "latest": upstream #57 made create pin a
+  // resolved version, so assuming latest would cry wolf on a matching scaffold.
   const pin = String(process.env.EXTENSION_MCP_CLI_VERSION || "").trim();
+  const scaffoldPin = scaffoldEnginePin(result.projectPath);
+  const pinMatches =
+    scaffoldPin !== null && pin !== "" && scaffoldPin.includes(pin);
   const engineWarning =
-    pin && pin !== "latest"
-      ? `The scaffold pins "extension": "latest"; the project-local engine wins over EXTENSION_MCP_CLI_VERSION=${pin}. Run \`(cd ${result.projectPath} && npm i -D extension@${pin})\` to match the pinned engine.`
+    pin && pin !== "latest" && !pinMatches
+      ? `The scaffold pins "extension": "${scaffoldPin ?? "unknown"}"; the project-local engine wins over EXTENSION_MCP_CLI_VERSION=${pin}. Run \`(cd ${result.projectPath} && ${addDev(`extension@${pin}`)})\` to match the pinned engine.`
       : undefined;
 
   return JSON.stringify({
@@ -166,7 +195,7 @@ export async function handler(args: {
     duration: Date.now() - start,
     nextSteps: result.depsInstalled
       ? [`cd ${result.projectPath}`, runDev]
-      : [`cd ${result.projectPath}`, "npm install", "npm run dev"],
+      : [`cd ${result.projectPath}`, `${packageManager} install`, runDev],
     ...(engineWarning ? { engineWarning } : {}),
     // Present only when install produced diagnostics worth seeing.
     ...(result.depsInstalled ? {} : { warnings: logTail() }),

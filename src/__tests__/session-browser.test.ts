@@ -51,14 +51,14 @@ describe("resolveSessionBrowser", () => {
     });
   });
 
-  it("falls back to the tool default with no session anywhere", () => {
+  it("falls back to chrome, not chromium, with no session anywhere", () => {
     const project = tmpProject();
     expect(resolveSessionBrowser(project, undefined)).toEqual({
-      browser: "chromium",
+      browser: "chrome",
       source: "fallback",
     });
-    expect(resolveSessionBrowser(project, undefined, "chrome")).toEqual({
-      browser: "chrome",
+    expect(resolveSessionBrowser(project, undefined, "firefox")).toEqual({
+      browser: "firefox",
       source: "fallback",
     });
   });
@@ -101,11 +101,35 @@ describe("resolveSessionBrowser", () => {
     });
   });
 
-  it("skips contracts whose pid is dead and non-ready contracts", () => {
+  it("prefers a live contract over a dead one", () => {
+    const project = tmpProject();
+    writeContract(project, "chrome", { status: "ready", pid: 2 ** 30 });
+    writeContract(project, "firefox", { status: "ready", pid: process.pid });
+    expect(resolveSessionBrowser(project, undefined)).toEqual({
+      browser: "firefox",
+      source: "contract",
+    });
+  });
+
+  // A dead session used to fall through to the blind "chromium" default, which
+  // made every downstream tool complain about a browser the user never ran.
+  it("keeps targeting a dead session's browser instead of the blind default", () => {
     const project = tmpProject();
     writeContract(project, "chrome", { status: "ready", pid: 2 ** 30 });
     writeContract(project, "edge", { status: "error" });
-    expect(resolveSessionBrowser(project, undefined).source).toBe("fallback");
+    expect(resolveSessionBrowser(project, undefined)).toEqual({
+      browser: "chrome",
+      source: "stale",
+    });
+  });
+
+  it("ignores non-ready contracts entirely", () => {
+    const project = tmpProject();
+    writeContract(project, "edge", { status: "error" });
+    expect(resolveSessionBrowser(project, undefined)).toEqual({
+      browser: "chrome",
+      source: "fallback",
+    });
   });
 });
 

@@ -12,7 +12,7 @@ import { listSessions } from "./process-manager";
 
 export interface ResolvedBrowser {
   browser: string;
-  source: "explicit" | "session" | "contract" | "fallback";
+  source: "explicit" | "session" | "contract" | "stale" | "fallback";
 }
 
 interface ContractSighting {
@@ -85,10 +85,15 @@ export function deadReadySession(
   return null;
 }
 
+// "chrome", not "chromium": the blind fallback used to name a browser almost
+// nobody runs, and because a DEAD session left no live sighting, every tool call
+// after the dev server exited silently retargeted chromium. That mismatch was
+// the single largest finding cluster in the 4.9.0 persona swarm (~25), and it is
+// downstream of the dev server dying, not a separate bug.
 export function resolveSessionBrowser(
   projectPath: string,
   explicit: string | undefined,
-  fallback = "chromium",
+  fallback = "chrome",
 ): ResolvedBrowser {
   if (explicit) return { browser: explicit, source: "explicit" };
 
@@ -100,11 +105,20 @@ export function resolveSessionBrowser(
     return { browser: mine[mine.length - 1].browser, source: "session" };
   }
 
-  const sightings = contractSightings(projectPath)
-    .filter((s) => s.pid === undefined || pidAlive(s.pid))
-    .sort((a, b) => b.mtimeMs - a.mtimeMs);
+  const sightings = contractSightings(projectPath).sort(
+    (a, b) => b.mtimeMs - a.mtimeMs,
+  );
+  const live = sightings.filter((s) => s.pid === undefined || pidAlive(s.pid));
+  if (live.length > 0) {
+    return { browser: live[0].browser, source: "contract" };
+  }
+
+  // No live session, but this project HAS been run: keep targeting the browser
+  // the user actually used, so the resulting error is the honest "the dev server
+  // has exited" rather than a confusing complaint about a browser they never
+  // launched. The caller can surface `source: "stale"` to say so.
   if (sightings.length > 0) {
-    return { browser: sightings[0].browser, source: "contract" };
+    return { browser: sightings[0].browser, source: "stale" };
   }
 
   return { browser: fallback, source: "fallback" };

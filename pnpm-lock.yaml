@@ -18,14 +18,14 @@ importers:
         specifier: ^7.0.6
         version: 7.0.6
       extension-create:
-        specifier: ^4.0.11
-        version: 4.0.11
+        specifier: ^4.0.13
+        version: 4.0.13
       extension-develop:
-        specifier: ^4.0.11
-        version: 4.0.11(@swc/helpers@0.5.21)(svelte@5.56.6)(webpack@5.108.4(postcss@8.5.10))
+        specifier: ^4.0.13
+        version: 4.0.13(@swc/helpers@0.5.21)(svelte@5.56.6)(webpack@5.108.4(postcss@8.5.10))
       extension-install:
-        specifier: ^4.0.11
-        version: 4.0.11
+        specifier: ^4.0.13
+        version: 4.0.13
       ws:
         specifier: ^8.20.0
         version: 8.20.0
@@ -984,9 +984,9 @@ packages:
     engines: {node: '>=0.4.0'}
     hasBin: true
 
-  adm-zip@0.5.17:
-    resolution: {integrity: sha512-+Ut8d9LLqwEvHHJl1+PIHqoyDxFgVN847JTVM3Izi3xHDWPE4UtzzXysMZQs64DMcrJfBeS/uoEP4AD3HQHnQQ==}
-    engines: {node: '>=12.0'}
+  adm-zip@0.6.0:
+    resolution: {integrity: sha512-XleryMhbuksdKtofnWZ9Sk+4CUTbms4Mb/EU32SZwToAyZ5RgVos/ki8n+yr0LWHOGKuakbXTuuYNHLQjhddgg==}
+    engines: {node: '>=14.0'}
 
   agent-base@6.0.2:
     resolution: {integrity: sha512-RZNwNclF7+MS/8bDg70amg32dyeZGZxiDuQmZxKLAlQjr3jGyLx+4Kkk58UO7D2QdgFIQCovuSuZESne6RG6XQ==}
@@ -1372,12 +1372,12 @@ packages:
     resolution: {integrity: sha512-hIS4idWWai69NezIdRt2xFVofaF4j+6INOpJlVOLDO8zXGpUVEVzIYk12UUi2JzjEzWL3IOAxcTubgz9Po0yXw==}
     engines: {node: '>= 18'}
 
-  extension-create@4.0.11:
-    resolution: {integrity: sha512-sxQ9itKwOcD2lpoFVkYjzKOD+wkZONN3ta6WpyeBn4WavaghtzWKhibJECR5Aq0WclO9r9WOwf+FZjUXjLeVqg==}
+  extension-create@4.0.13:
+    resolution: {integrity: sha512-icWh625ojoOBPaTfSh5G00t+IUfRMT1zzZF0Es90k939rh6ksdOizew9vinlCrdSU1Y88PRn3T7YbzqHPvG26w==}
     engines: {node: '>=22'}
 
-  extension-develop@4.0.11:
-    resolution: {integrity: sha512-hpCLtIaxjtd5QmltxO9xa+r9wGJWfVDYcs0F5kmH2IMY8rBC+cTXXuduqTCRg2WpcwDLM3Ur/8NFO4FJpU606w==}
+  extension-develop@4.0.13:
+    resolution: {integrity: sha512-KZBKuRT4rg+ZT0XRmJPOpnIXNumQvjRX7CFq9T1zrppM4TQbaoJgAvovi8Gkmjmu10MqtjhCpMwafujBxzUprg==}
     engines: {node: '>=22'}
 
   extension-from-store@0.1.1:
@@ -1385,8 +1385,8 @@ packages:
     engines: {node: '>=16'}
     hasBin: true
 
-  extension-install@4.0.11:
-    resolution: {integrity: sha512-00VEF0hRxg2PDo2AMox4iSuKB4tGi7tVCBFFupgW7JJgUinnyIquOFCDopuHDcTg06EpPdj3ZmunKvbqHWMlGQ==}
+  extension-install@4.0.13:
+    resolution: {integrity: sha512-CdBS+gRO1ETrUan4iyrRNYCHwydGyNr11TdU3gYIQ5s/fUjwfjLF183SWLuAH5i8bEK+Q6hBvJZ+C+o44E9pBA==}
     engines: {node: '>=22'}
 
   extract-zip@2.0.1:
@@ -3482,7 +3482,7 @@ snapshots:
 
   acorn@8.17.0: {}
 
-  adm-zip@0.5.17: {}
+  adm-zip@0.6.0: {}
 
   agent-base@6.0.2:
     dependencies:
@@ -3832,9 +3832,9 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  extension-create@4.0.11:
+  extension-create@4.0.13:
     dependencies:
-      adm-zip: 0.5.17
+      adm-zip: 0.6.0
       axios: 1.18.1
       cross-spawn: 7.0.6
       go-git-it: 5.1.5
@@ -3844,7 +3844,7 @@ snapshots:
       - debug
       - supports-color
 
-  extension-develop@4.0.11(@swc/helpers@0.5.21)(svelte@5.56.6)(webpack@5.108.4(postcss@8.5.10)):
+  extension-develop@4.0.13(@swc/helpers@0.5.21)(svelte@5.56.6)(webpack@5.108.4(postcss@8.5.10)):
     dependencies:
       '@prefresh/core': 1.5.9(preact@10.27.3)
       '@prefresh/utils': 1.2.1
@@ -3853,7 +3853,7 @@ snapshots:
       '@rspack/plugin-preact-refresh': 2.0.1(@prefresh/core@1.5.9(preact@10.27.3))(@prefresh/utils@1.2.1)(@rspack/core@2.1.3(@swc/helpers@0.5.21))
       '@rspack/plugin-react-refresh': 2.0.2(@rspack/core@2.1.3(@swc/helpers@0.5.21))(react-refresh@0.18.0)
       '@vue/compiler-sfc': 3.5.26
-      adm-zip: 0.5.17
+      adm-zip: 0.6.0
       browser-extension-manifest-fields: 2.2.9
       case-sensitive-paths-webpack-plugin: 2.4.0
       content-security-policy-parser: 0.6.0
@@ -3902,7 +3902,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  extension-install@4.0.11:
+  extension-install@4.0.13:
     dependencies:
       cross-spawn: 7.0.6
       pintor: 0.3.0
