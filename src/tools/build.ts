@@ -10,6 +10,33 @@ import fs from "node:fs";
 import path from "node:path";
 import { runExtensionCli } from "../lib/exec";
 
+// The engine's persisted BuildSummary (§73): dist/extension-js/<browser>/
+// build-summary.json, written after a successful build so shell-out hosts get
+// structured warnings instead of scraping stdout. `since` guards against a
+// stale file from an earlier build; absence just means the engine predates
+// the contract, so callers omit the field rather than inventing one.
+function readBuildSummary(
+  projectPath: string,
+  browser: string,
+  since: number,
+): { warnings?: string[]; warnings_count?: number } | null {
+  const file = path.resolve(
+    projectPath,
+    "dist",
+    "extension-js",
+    browser,
+    "build-summary.json",
+  );
+  try {
+    const stat = fs.statSync(file);
+    if (stat.mtimeMs < since) return null;
+    const summary = JSON.parse(fs.readFileSync(file, "utf8"));
+    if (summary && typeof summary === "object") return summary;
+  } catch {
+  }
+  return null;
+}
+
 // Enumerate declared entrypoints from the built manifest so a content-script (or
 // any small entry) is not read as "didn't build" when the CLI's own summary tree
 // omits it. Mirrors extension_inspect's entrypoints list.
@@ -289,6 +316,16 @@ export async function handler(args: {
   if (code === 0) {
     const size = out.match(/Size:\s*([\d.]+\s*[kKmMgG]?B)/)?.[1];
     const status = out.match(/Build Status:\s*(\w+)/)?.[1];
+    const engineSummary = readBuildSummary(args.projectPath, browser, start);
+    const buildWarnings = engineSummary?.warnings?.length
+      ? {
+          buildWarnings: engineSummary.warnings,
+          ...(typeof engineSummary.warnings_count === "number" &&
+          engineSummary.warnings_count > engineSummary.warnings.length
+            ? { buildWarningsTruncated: engineSummary.warnings_count }
+            : {}),
+        }
+      : {};
     const entrypoints = builtEntrypoints(
       path.resolve(args.projectPath, "dist", browser),
     );
@@ -312,6 +349,7 @@ export async function handler(args: {
         ...(preflight?.warnings.length
           ? { manifestWarnings: preflight.warnings }
           : {}),
+        ...buildWarnings,
         duration,
         output: lastLines(out, 12),
         hint: "The bundler exited 0 but did not emit these files. Check that the manifest paths match what the build produces, and that nothing references a file outside the source tree.",
@@ -328,6 +366,9 @@ export async function handler(args: {
       ...(preflight?.warnings.length
         ? { manifestWarnings: preflight.warnings }
         : {}),
+      // Bundler warnings from the engine's persisted BuildSummary contract
+      // (§73), distinct from manifestWarnings (our preflight's findings).
+      ...buildWarnings,
       ...(() => {
         const divergence = manifestDivergence(args.projectPath, browser);
         return divergence.length ? { productionDivergence: divergence } : {};
