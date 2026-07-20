@@ -135,6 +135,28 @@ export async function handler(
     });
   }
 
+  // A FAILED FIRST COMPILE leaves the dev server alive, so the process health
+  // tick above cannot see it: the swarm caught 3 personas being told
+  // status:"started" while the error sat buried in earlyOutput, then being
+  // pointed onward to extension_wait against a session that would never serve
+  // their extension. Surface it as the failure it is.
+  const compileFailed = /compiled with errors|✖✖✖|ERROR in |Module not found|NOT FOUND/i.test(
+    earlyOutput,
+  );
+  if (compileFailed) {
+    return JSON.stringify({
+      ok: false,
+      status: "compile-failed",
+      projectPath: args.projectPath,
+      browser,
+      pid,
+      error:
+        "The dev server started but the FIRST COMPILE FAILED, so the browser has nothing usable to load. The session is running; the extension is not.",
+      output: denoiseEarlyOutput(earlyOutput).slice(0, 2000),
+      hint: "Fix the compile error in `output` above and save: the dev server is still running and will recompile. Do not call extension_wait yet, it will report ready for a build that failed.",
+    });
+  }
+
   const controlVerbs = "storage, reload, open, dom_inspect";
   const capabilities = {
     allowControl,

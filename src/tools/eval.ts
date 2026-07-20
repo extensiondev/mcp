@@ -47,9 +47,29 @@ export async function handler(
   args: ActArgs & { expression: string },
 ): Promise<string> {
   const { browser } = resolveSessionBrowser(args.projectPath, args.browser);
-  return runActVerb(
+  const raw = await runActVerb(
     ["eval", args.expression, args.projectPath, ...commonFlags({ ...args, browser })],
     args.projectPath,
     args.timeout,
   );
+
+  // Engine bug 60 (filed 2026-07-20 against 4.0.14-canary...7d7da9cc):
+  // context:"content" NEVER executes the injection and still replies
+  // ok:true with a null value, on both Chromium and Gecko. We cannot honestly
+  // turn that into a failure here, because null is also a legitimate result,
+  // but passing it through unannotated makes the MCP complicit in the lie: two
+  // swarm personas misdiagnosed their own extension because of it. Annotate.
+  if (args.context === "content") {
+    try {
+      const parsed = JSON.parse(raw);
+      if (parsed?.ok === true && (parsed.value === null || parsed.value === undefined)) {
+        parsed.warning =
+          "context:'content' eval is known-broken in the current engine (Extension.js bug 60): the isolated-world injection does not run, and a null value here may mean 'nothing executed' rather than 'the expression evaluated to null'. Verify with extension_source_inspect or extension_logs, or use context:'page' when the MAIN world is acceptable.";
+        return JSON.stringify(parsed);
+      }
+    } catch {
+      // non-JSON payload; pass through untouched
+    }
+  }
+  return raw;
 }

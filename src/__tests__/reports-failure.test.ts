@@ -195,6 +195,9 @@ describe("build reports failure when the artifact is unusable", () => {
   });
 
   it("refuses to report success when a declared entrypoint never reached dist", async () => {
+    // The SOURCE must be complete, so the manifest gate passes and we are
+    // genuinely testing the dist-completeness path rather than tripping the
+    // dangling-reference error first.
     const dir = projectWithManifest(
       {
         manifest_version: 3,
@@ -204,6 +207,7 @@ describe("build reports failure when the artifact is unusable", () => {
       },
       { manifest: { action: { default_popup: "popup.html" } }, files: [] },
     );
+    fs.writeFileSync(path.join(dir, "src", "popup.html"), "<html></html>");
     // The bundler is happy; the artifact is not loadable.
     cliResult = { code: 0, stdout: "Build Status: success", stderr: "" };
 
@@ -226,6 +230,270 @@ describe("build reports failure when the artifact is unusable", () => {
 
     expect(result.success).toBe(false);
     expect(result.error).toContain("nope.js");
+  });
+});
+
+// Both cases below were found by the API-surface persona swarm (wave 1,
+// 2026-07-20) and verified against the source before fixing.
+describe("swarm-found lies stay fixed", () => {
+  function projectWith(
+    manifest: Record<string, unknown>,
+    presentFiles: string[] = [],
+  ): string {
+    const dir = tmpProject();
+    fs.mkdirSync(path.join(dir, "src"), { recursive: true });
+    fs.writeFileSync(
+      path.join(dir, "src", "manifest.json"),
+      JSON.stringify(manifest),
+    );
+    for (const f of presentFiles) {
+      const full = path.join(dir, "src", f);
+      fs.mkdirSync(path.dirname(full), { recursive: true });
+      fs.writeFileSync(full, "x");
+    }
+    return dir;
+  }
+
+  // B6: an adblocker whose ruleset file is missing got valid:true while
+  // extension_build failed NOT FOUND on the same tree.
+  it("manifest_validate flags a missing declarativeNetRequest ruleset", async () => {
+    const manifestValidate = await import("../tools/manifest-validate");
+    const dir = projectWith({
+      manifest_version: 3,
+      name: "Adblocker",
+      version: "1.0.0",
+      permissions: ["declarativeNetRequest"],
+      declarative_net_request: {
+        rule_resources: [
+          { id: "tracker", enabled: true, path: "rules/tracker-rules.json" },
+        ],
+      },
+    });
+
+    const result = JSON.parse(
+      await manifestValidate.handler({ projectPath: dir, browsers: ["chrome"] }),
+    );
+
+    const text = JSON.stringify(result);
+    expect(text).toContain("tracker-rules.json");
+  });
+
+  it("manifest_validate stays quiet when the ruleset is present", async () => {
+    const manifestValidate = await import("../tools/manifest-validate");
+    const dir = projectWith(
+      {
+        manifest_version: 3,
+        name: "Adblocker",
+        version: "1.0.0",
+        permissions: ["declarativeNetRequest"],
+        declarative_net_request: {
+          rule_resources: [
+            { id: "tracker", enabled: true, path: "rules/tracker-rules.json" },
+          ],
+        },
+      },
+      ["rules/tracker-rules.json"],
+    );
+
+    const result = JSON.parse(
+      await manifestValidate.handler({ projectPath: dir, browsers: ["chrome"] }),
+    );
+
+    expect(JSON.stringify(result)).not.toContain("tracker-rules.json");
+  });
+
+  // A1: a devtools panel that never reached dist still reported
+  // "ready for deployment", because devtools_page was outside the contract.
+  it("build's completeness contract covers every declared surface", async () => {
+    const dir = tmpProject();
+    fs.mkdirSync(path.join(dir, "src"), { recursive: true });
+    fs.writeFileSync(
+      path.join(dir, "src", "manifest.json"),
+      JSON.stringify({ manifest_version: 3, name: "F", version: "1.0.0" }),
+    );
+    const distDir = path.join(dir, "dist", "chrome");
+    fs.mkdirSync(distDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(distDir, "manifest.json"),
+      JSON.stringify({
+        devtools_page: "devtools/panel.html",
+        options_ui: { page: "options/index.html" },
+        side_panel: { default_path: "panel/side.html" },
+        chrome_url_overrides: { newtab: "newtab/index.html" },
+      }),
+    );
+    cliResult = { code: 0, stdout: "Build Status: success", stderr: "" };
+
+    const result = JSON.parse(await build.handler({ projectPath: dir }));
+
+    expect(result.success).toBe(false);
+    expect(result.status).toBe("incomplete");
+    const missing = JSON.stringify(result.entrypoints);
+    expect(missing).toContain("devtools_page");
+    expect(missing).toContain("options_ui.page");
+    expect(missing).toContain("side_panel.default_path");
+    expect(missing).toContain("chrome_url_overrides.newtab");
+  });
+});
+
+// L1: the most corroborated lie in the swarm (6 of 15 personas).
+describe("manifest_validate verdicts are always explainable", () => {
+  it("never returns valid:false with nothing in errors", async () => {
+    const manifestValidate = await import("../tools/manifest-validate");
+    const dir = tmpProject();
+    fs.mkdirSync(path.join(dir, "src"), { recursive: true });
+    // A Chrome-targeted MV3 extension: Firefox support advisories must not
+    // silently decide the headline when the caller never asked about Firefox.
+    fs.writeFileSync(
+      path.join(dir, "src", "manifest.json"),
+      JSON.stringify({
+        manifest_version: 3,
+        name: "Chrome only",
+        version: "1.0.0",
+        background: { service_worker: "sw.js" },
+      }),
+    );
+    fs.writeFileSync(path.join(dir, "src", "sw.js"), "");
+
+    const result = JSON.parse(
+      await manifestValidate.handler({ projectPath: dir }),
+    );
+
+    if (result.valid === false) {
+      expect(result.errors.length).toBeGreaterThan(0);
+    }
+  });
+
+  it("keeps an unrequested target's advisory as a named warning", async () => {
+    const manifestValidate = await import("../tools/manifest-validate");
+    const dir = tmpProject();
+    fs.mkdirSync(path.join(dir, "src"), { recursive: true });
+    fs.writeFileSync(
+      path.join(dir, "src", "manifest.json"),
+      JSON.stringify({
+        manifest_version: 3,
+        name: "Chrome only",
+        version: "1.0.0",
+        background: { service_worker: "sw.js" },
+      }),
+    );
+    fs.writeFileSync(path.join(dir, "src", "sw.js"), "");
+
+    const result = JSON.parse(
+      await manifestValidate.handler({ projectPath: dir }),
+    );
+
+    const unsupported = Object.entries(result.browserSupport || {}).filter(
+      ([, v]: [string, any]) => !v.supported,
+    );
+    for (const [browser] of unsupported) {
+      expect(JSON.stringify(result.warnings)).toContain(browser);
+    }
+  });
+
+  it("makes an explicitly requested unsupported target an error", async () => {
+    const manifestValidate = await import("../tools/manifest-validate");
+    const dir = tmpProject();
+    fs.mkdirSync(path.join(dir, "src"), { recursive: true });
+    fs.writeFileSync(
+      path.join(dir, "src", "manifest.json"),
+      JSON.stringify({
+        manifest_version: 3,
+        name: "Chrome only",
+        version: "1.0.0",
+        background: { service_worker: "sw.js" },
+      }),
+    );
+    fs.writeFileSync(path.join(dir, "src", "sw.js"), "");
+
+    const result = JSON.parse(
+      await manifestValidate.handler({ projectPath: dir, browsers: ["firefox"] }),
+    );
+
+    if (result.browserSupport?.firefox?.supported === false) {
+      expect(result.valid).toBe(false);
+      expect(result.errors.length).toBeGreaterThan(0);
+      expect(JSON.stringify(result.errors)).toContain("firefox");
+    }
+  });
+});
+
+// L8: "ready" meant COMPILED, not usable. B7 got ready in 4ms, then every
+// control verb failed with "no executor connected".
+describe("wait distinguishes compiled from usable", () => {
+  it("does not report ready before the runtime executor attaches", async () => {
+    const project = tmpProject();
+    writeReady(project, "chrome", {
+      status: "ready",
+      pid: process.pid,
+      browser: "chrome",
+      // no runtime:"attached", no executorAttachedAt
+    });
+
+    const result = JSON.parse(
+      await waitTool.handler({
+        projectPath: project,
+        browser: "chrome",
+        timeout: 1000,
+      }),
+    );
+
+    expect(result.status).not.toBe("ready");
+    expect(result.status).toBe("compiled-not-attached");
+    expect(result.message).toContain("no executor connected");
+  }, 15_000);
+
+  it("reports ready once the executor has attached", async () => {
+    const project = tmpProject();
+    writeReady(project, "chrome", {
+      status: "ready",
+      pid: process.pid,
+      browser: "chrome",
+      runtime: "attached",
+      executorAttachedAt: "2026-07-20T12:00:00.000Z",
+    });
+
+    const result = JSON.parse(
+      await waitTool.handler({
+        projectPath: project,
+        browser: "chrome",
+        timeout: 3000,
+      }),
+    );
+
+    expect(result.status).toBe("ready");
+  }, 15_000);
+});
+
+// L2: a green production build that quietly lost permissions or
+// web_accessible_resources relative to the source the developer tested.
+describe("build reports what the production artifact lost", () => {
+  it("flags dropped permissions and stripped web_accessible_resources", async () => {
+    const dir = tmpProject();
+    fs.mkdirSync(path.join(dir, "src"), { recursive: true });
+    fs.writeFileSync(
+      path.join(dir, "src", "manifest.json"),
+      JSON.stringify({
+        manifest_version: 3,
+        name: "F",
+        version: "1.0.0",
+        permissions: ["storage", "tabs"],
+        web_accessible_resources: [{ resources: ["inject.css"], matches: ["<all_urls>"] }],
+      }),
+    );
+    const distDir = path.join(dir, "dist", "chrome");
+    fs.mkdirSync(distDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(distDir, "manifest.json"),
+      JSON.stringify({ permissions: ["storage"] }),
+    );
+    cliResult = { code: 0, stdout: "Build Status: success", stderr: "" };
+
+    const result = JSON.parse(await build.handler({ projectPath: dir }));
+
+    const divergence = JSON.stringify(result.productionDivergence);
+    expect(divergence).toContain("tabs");
+    expect(divergence).toContain("web_accessible_resources");
   });
 });
 

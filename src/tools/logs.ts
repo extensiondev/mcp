@@ -68,6 +68,40 @@ function capRecent(
   return { events: events.slice(events.length - limit), truncated: true };
 }
 
+// When a log read comes back EMPTY, say WHY. extension_logs is the first tool
+// reached for when nothing happens, and returning ok:true/matched:0 for a dead
+// session or a build that never compiled reads as "your extension ran and
+// logged nothing" rather than "there was nothing to log". Four of fifteen
+// personas in the API-surface swarm were misled by exactly this.
+function emptyReason(projectPath: string, browser: string): string | undefined {
+  // Deliberately NOT readReadyContract above: that one narrows the contract to
+  // {controlPort, instanceId, runId} and returns null when a control channel is
+  // absent, which is exactly the dead-session case we need to explain here.
+  let contract: { status?: string; errors?: string[]; pid?: number };
+  try {
+    contract = JSON.parse(
+      fs.readFileSync(
+        path.resolve(projectPath, "dist", "extension-js", browser, "ready.json"),
+        "utf8",
+      ),
+    );
+  } catch {
+    return "No ready.json for this project/browser: no dev session has produced a build here, so there is nothing to log. Start one with extension_dev.";
+  }
+  if (contract.status === "error") {
+    const errs = contract.errors;
+    return `The dev session recorded status:"error"${errs?.length ? ` (${errs.join("; ")})` : ""}, so the extension never ran. There are no logs because there was no working build, not because your code is silent.`;
+  }
+  if (typeof contract.pid === "number") {
+    try {
+      process.kill(contract.pid, 0);
+    } catch {
+      return `ready.json reports ready but its dev-server pid ${contract.pid} is dead: the session exited. Logs stop at the moment it died. Restart with extension_dev; extension_doctor will confirm.`;
+    }
+  }
+  return undefined;
+}
+
 function summarize(
   events: any[],
   source: "file" | "stream",
@@ -75,6 +109,7 @@ function summarize(
   runId: string,
   limit: number,
   dropped: number,
+  projectPath?: string,
 ): string {
   const matched = events.length;
   const { events: out, truncated } = capRecent(events, limit);
@@ -84,6 +119,8 @@ function summarize(
         -1,
       )
     : -1;
+  const reason =
+    matched === 0 && projectPath ? emptyReason(projectPath, browser) : undefined;
   return JSON.stringify({
     ok: true,
     source,
@@ -94,6 +131,7 @@ function summarize(
     truncated,
     dropped: dropped || undefined,
     nextSince: lastSeq >= 0 ? lastSeq : undefined,
+    ...(reason ? { emptyReason: reason } : {}),
     events: out,
   });
 }
@@ -128,7 +166,7 @@ async function readFromFile(
     }
     if (matches(event)) events.push(event);
   }
-  return summarize(events, "file", browser, runId, limit, 0);
+  return summarize(events, "file", browser, runId, limit, 0, args.projectPath);
 }
 
 async function readFromStream(
@@ -184,7 +222,7 @@ async function readFromStream(
         socket.close();
       } catch {
       }
-      resolve(summarize(events, "stream", browser, runId, limit, dropped));
+      resolve(summarize(events, "stream", browser, runId, limit, dropped, args.projectPath));
     };
 
     const timer = setTimeout(finish, followMs);

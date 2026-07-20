@@ -140,8 +140,10 @@ describe("extension_build validation gate", () => {
     expect(result.success).toBe(true);
   });
 
-  it("carries non-blocking manifest warnings out of a green build", async () => {
-    // A dangling path reference: the bundler succeeds, the extension is broken.
+  // A dangling path reference USED to ride out of a green build as a warning.
+  // The swarm proved build actually fails on the same tree (persona C12 had the
+  // warning prose and green machine fields in one payload), so it now blocks.
+  it("blocks on a dangling path reference instead of warning about it", async () => {
     const dir = project({
       manifest_version: 3,
       name: "Fixture",
@@ -151,8 +153,27 @@ describe("extension_build validation gate", () => {
 
     const result = JSON.parse(await build.handler({ projectPath: dir }));
 
+    expect(result.success).toBe(false);
+    expect(result.status).toBe("blocked");
+    expect(result.errors.join(" ")).toContain("nope.html");
+    expect(cliCalls).toHaveLength(0);
+  });
+
+  it("still carries genuinely non-blocking warnings out of a green build", async () => {
+    // Missing version is a store-submission warning, not a load failure.
+    const dir = project(
+      {
+        manifest_version: 3,
+        name: "Fixture",
+        action: { default_popup: "popup.html" },
+      },
+      ["popup.html"],
+    );
+
+    const result = JSON.parse(await build.handler({ projectPath: dir }));
+
     expect(result.success).toBe(true);
     expect(Array.isArray(result.manifestWarnings)).toBe(true);
-    expect(result.manifestWarnings.join(" ")).toContain("nope.html");
+    expect(result.manifestWarnings.join(" ").toLowerCase()).toContain("version");
   });
 });

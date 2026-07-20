@@ -99,6 +99,24 @@ describe("extension_dev health tick", () => {
     expect(result.output).toContain("build failed");
   }, 20_000);
 
+  // L5 from the API-surface swarm: a FAILED FIRST COMPILE leaves the dev server
+  // alive, so the process health tick cannot see it. Three personas were told
+  // status:"started" with the error buried in earlyOutput.
+  it("reports a failed first compile even though the server is alive", async () => {
+    const project = tmpProject();
+    nextChild = () =>
+      fakeCli(
+        'console.log("\\u2716\\u2716\\u2716 Probe compiled with errors in 180 ms. ERROR in ./src/panel.js NOT FOUND"); setTimeout(()=>{}, 60000);',
+      );
+
+    const result = JSON.parse(await dev.handler({ projectPath: project }));
+
+    expect(result.ok).toBe(false);
+    expect(result.status).toBe("compile-failed");
+    expect(result.output).toContain("compiled with errors");
+    expect(result.hint).toContain("extension_wait");
+  }, 20_000);
+
   it("still reports started for a server that survives the tick", async () => {
     const project = tmpProject();
     nextChild = () =>

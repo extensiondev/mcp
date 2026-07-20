@@ -81,6 +81,9 @@ export async function handler(args: {
 
   const start = Date.now();
   const pollInterval = 1000;
+  // Tracks the half-ready state: compiled, but the runtime executor never
+  // attached. Distinguishing it from "still building" is the whole point.
+  let sawCompiledButUnattached = false;
 
   while (Date.now() - start < timeout) {
     try {
@@ -99,6 +102,22 @@ export async function handler(args: {
             pid: contract.pid,
             waitDuration: Date.now() - start,
           });
+        }
+        // "ready" means COMPILED, which is not the same as usable: the runtime
+        // executor attaches separately. Persona B7 got status:"ready" after 4ms
+        // with only the compile done, then every control verb failed with "no
+        // executor connected" until a full restart. Keep waiting for the
+        // attachment rather than declaring victory at compile time.
+        const attached =
+          (contract as { runtime?: string }).runtime === "attached" ||
+          typeof (contract as { executorAttachedAt?: string })
+            .executorAttachedAt === "string";
+        if (!attached) {
+          // Not an error yet: the executor usually attaches a beat later. Only
+          // report the half-ready state if we run out of budget below.
+          await new Promise((r) => setTimeout(r, pollInterval));
+          sawCompiledButUnattached = true;
+          continue;
         }
         return JSON.stringify({
           status: "ready",
@@ -128,6 +147,16 @@ export async function handler(args: {
     }
 
     await new Promise((resolve) => setTimeout(resolve, pollInterval));
+  }
+
+  if (sawCompiledButUnattached) {
+    return JSON.stringify({
+      status: "compiled-not-attached",
+      message: `The extension compiled, but the runtime executor never attached within ${timeout}ms. The build is fine; the browser side is not connected, so extension_eval/storage/reload/open will fail with "no executor connected".`,
+      readyPath,
+      waitDuration: Date.now() - start,
+      hint: "This is usually transient: call extension_wait again. If it persists, stop and restart the session with extension_dev (a restart reliably reattaches); extension_doctor reports the executor leg.",
+    });
   }
 
   return JSON.stringify({
