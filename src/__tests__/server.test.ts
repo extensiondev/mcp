@@ -204,7 +204,9 @@ describe("logs handler", () => {
 
   it("reads, filters, and caps events from logs.ndjson", async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "extjs-logs-"));
-    const dir = path.join(root, "dist", "extension-js", "chromium");
+    // Matches resolveSessionBrowser's fallback, which is "chrome" (not
+    // "chromium") since the 5.0.0 pass.
+    const dir = path.join(root, "dist", "extension-js", "chrome");
     fs.mkdirSync(dir, { recursive: true });
     const lines = [
       { v: 1, type: "header", runId: "run-xyz", startedAt: "2026-05-27T00:00:00.000Z" },

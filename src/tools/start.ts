@@ -88,7 +88,30 @@ export async function handler(
   child.stdout?.off("data", collector);
   child.stderr?.off("data", collector);
 
+  // Same health tick as extension_dev: reporting status:"started" for a process
+  // that already exited sends the caller to extension_wait against a session
+  // that will never be ready.
+  if (child.exitCode !== null || child.signalCode !== null) {
+    const code = child.exitCode;
+    const signal = child.signalCode;
+    return JSON.stringify({
+      ok: false,
+      status: "exited",
+      projectPath: args.projectPath,
+      browser,
+      pid,
+      exitCode: code,
+      signal,
+      error:
+        `The preview server exited during startup (${signal ? `signal ${signal}` : `exit code ${code}`}). ` +
+        "No session is running.",
+      output: earlyOutput.slice(0, 2000),
+      hint: "Read `output` above for the cause: a failed production build, a port already in use, or a missing browser binary are the common ones. extension_build will surface a build error on its own.",
+    });
+  }
+
   return JSON.stringify({
+    ok: true,
     pid,
     browser,
     projectPath: args.projectPath,

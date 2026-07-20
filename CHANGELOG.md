@@ -1,5 +1,68 @@
 # Changelog
 
+## 5.0.0
+
+A pass focused on a single question: when something has gone wrong, does the
+tool say so? Five tools were reporting success over a failure. All five now
+verify before they claim anything.
+
+### Breaking
+
+- **`extension_build` refuses a broken build.** It runs the
+  `extension_manifest_validate` checks as a preflight and returns
+  `status:"blocked"` on build-blocking errors instead of shelling out to a build
+  it knows is broken. Pass `skipValidation: true` for the old behavior. It also
+  returns `success:false` with `status:"incomplete"` when the bundler exits 0 but
+  a declared entrypoint never reached `dist/`, because the browser refuses to
+  load that artifact. Non-blocking findings ride along as `manifestWarnings`.
+- **Browser resolution defaults to `chrome`, not `chromium`.** A dead session
+  used to fall through to a blind default, so every call after a dev server
+  exited silently retargeted a browser the caller never ran. A dead session now
+  resolves to its own browser with `source:"stale"`.
+- **`extension_open` renames `tab` to `target`.** The value is a CDP target id,
+  not a `chrome.tabs` id, and the old name invited callers to pass it straight
+  into tools that need a numeric tab id.
+
+### Fixed
+
+- **`extension_doctor` no longer reports `healthy:true` over a crashing
+  extension.** Its runtime-error check read the wrong field, so every error row
+  in `logs.ndjson` collapsed to an empty string and was skipped. It now reads the
+  engine's `messageParts` payload, with an `errorName`/`stack` fallback, and
+  collapses a throw that repeats on every event.
+- **`extension_dev` and `extension_start` no longer report `status:"started"`
+  for a server that already exited.** Both health-check the child process and
+  return `status:"exited"` with the exit code, signal, and the child's own output
+  as evidence.
+- **`extension_open` no longer reports success for a navigation that failed.**
+  Navigating to a `chrome-extension://` origin is cross process and swaps the
+  render frame, so the pre-navigation session reported a stale error URL on
+  success and success on failure. It now confirms against a fresh target list.
+  This affected the `url` navigation path shipped in 4.9.0, not only the new
+  surface rendering.
+- **`extension_open` targets the right extension.** A dev session also loads
+  Extension.js's own manager extension, and taking the first extension target
+  navigated against the wrong origin. The id is now derived from the dist path
+  the session actually loaded.
+
+### Added
+
+- **Headless surface rendering.** `extension_open` accepts `asTab` for
+  `popup`/`options`/`sidebar`, rendering the surface document in a real tab so it
+  can be inspected where no window exists to host a popup. It is applied
+  automatically when a headless session refuses to open the surface, with a note
+  saying what was substituted.
+- **Tab targeting by url.** `extension_eval` and `extension_dom_inspect` take a
+  `url` and otherwise default to the active tab, and `extension_dom_inspect`
+  gains `listTabs` for discovery. The engine gained this in 4.0.13; the tool
+  descriptions had been telling callers a numeric tab id was required.
+- **Friendlier arguments.** `timeoutMs`, `lines`, `tabId`, `href` and
+  `browserName` fold onto their canonical names, `withConsole` accepts `true`,
+  and the input validator understands union types.
+- **`extension_create` matches your package manager.** Hints and the engine
+  warning now use bun, pnpm or yarn when that is what the scaffold used, and the
+  warning reads the pin the scaffold actually wrote.
+
 ## 4.9.0
 
 A second pass from the persona swarm, closing the gaps 4.8.0 left and the top

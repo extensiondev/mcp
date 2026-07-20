@@ -20,13 +20,20 @@ export const schema = {
         type: "string",
         description: "Path to the extension project root (must have an active dev session)",
       },
-      tab: { type: "number", description: "Tab id (required for content/page; omit for surfaces)" },
+      tab: { type: "number", description: "Numeric chrome.tabs id, for disambiguating when several tabs match. Optional: with neither `tab` nor `url`, content/page target the active tab." },
+      url: { type: "string", description: "For content/page: selects the target tab by url (match pattern, then substring fallback). Preferred over `tab`." },
+      listTabs: {
+        type: "boolean",
+        default: false,
+        description:
+          "Enumerate open tabs as {tabId,url,title} and return, ignoring the other args. The discovery path when you need an explicit numeric tab id.",
+      },
       context: {
         type: "string",
         enum: ["content", "page", "popup", "options", "sidebar", "devtools"],
         default: "content",
         description:
-          "content/page (needs tab) or an OPEN extension surface (popup/options/sidebar/devtools)",
+          "content/page (targets `url`, else the active tab) or an OPEN extension surface (popup/options/sidebar/devtools)",
       },
       include: {
         type: "array",
@@ -36,8 +43,9 @@ export const schema = {
       },
       maxBytes: { type: "number", default: 262144 },
       withConsole: {
-        type: "number",
-        description: "Also include the last N console lines for the target (DOM + recent console in one call)",
+        type: ["number", "boolean"],
+        description:
+          "Also include recent console lines for the target (DOM + console in one call). A number is how many lines; true means 50.",
       },
       browser: {
         type: "string",
@@ -53,30 +61,43 @@ export const schema = {
 export async function handler(
   args: ActArgs & {
     tab?: number;
+    url?: string;
+    listTabs?: boolean;
     include?: string[];
     maxBytes?: number;
-    withConsole?: number;
+    withConsole?: number | boolean;
   },
 ): Promise<string> {
-  const surfaces = ["popup", "options", "sidebar", "devtools"];
-  const isSurface = !!args.context && surfaces.includes(args.context);
-  if (!isSurface && args.tab == null) {
-    return JSON.stringify({
-      ok: false,
-      error: {
-        name: "BadRequest",
-        message:
-          "content/page inspect requires a numeric tab id (chrome.tabs id, not a CDP target id).",
-      },
-      hint: "To inspect a content script's DOM without hunting for a tab id, use extension_source_inspect (it auto-selects the active page and can navigate via its url arg). Use extension_dom_inspect with context popup/options/sidebar/devtools for an open surface (no tab needed).",
-    });
+  // `withConsole: true` reads as the obvious way to ask for console output; it
+  // used to be a type error because the arg only accepted a line count.
+  const withConsole =
+    args.withConsole === true ? 50 : args.withConsole === false ? undefined : args.withConsole;
+  if (args.listTabs) {
+    return runActVerb(
+      [
+        "inspect",
+        args.projectPath,
+        "--list-tabs",
+        "--browser",
+        resolveSessionBrowser(args.projectPath, args.browser).browser,
+        ...(args.timeout != null ? ["--timeout", String(args.timeout)] : []),
+      ],
+      args.projectPath,
+      args.timeout,
+    );
   }
+
+  // No tab-id precondition any more. The engine's executor resolves the target
+  // from `url` and otherwise falls back to the active tab (upstream #51), so
+  // refusing here would block the very path that now works and push callers to
+  // source_inspect for something dom_inspect can do.
   const cli = ["inspect", args.projectPath];
   if (args.tab != null) cli.push("--tab", String(args.tab));
+  if (args.url) cli.push("--url", args.url);
   if (args.context) cli.push("--context", args.context);
   if (args.include?.length) cli.push("--include", args.include.join(","));
   if (args.maxBytes != null) cli.push("--max-bytes", String(args.maxBytes));
-  if (args.withConsole != null) cli.push("--with-console", String(args.withConsole));
+  if (withConsole != null) cli.push("--with-console", String(withConsole));
   cli.push("--browser", resolveSessionBrowser(args.projectPath, args.browser).browser);
   if (args.timeout != null) cli.push("--timeout", String(args.timeout));
   return runActVerb(cli, args.projectPath, args.timeout);

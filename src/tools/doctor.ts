@@ -107,10 +107,18 @@ async function environmentPreflight(): Promise<string> {
   });
 }
 
+function safeStringify(value: unknown): string {
+  try {
+    return JSON.stringify(value) ?? String(value);
+  } catch {
+    return String(value);
+  }
+}
+
 // Recent error-level logs from the dev session, so a runtime crash (background
 // throwing on every event, now captured since engine #55) is surfaced even when
 // ready.json still says "ready" and the harness legs pass.
-function recentErrorLogs(
+export function recentErrorLogs(
   projectPath: string,
   browser: string,
   max = 5,
@@ -130,20 +138,41 @@ function recentErrorLogs(
   }
   const errs: string[] = [];
   for (const line of lines) {
-    let ev: { level?: string; args?: unknown[]; message?: string; text?: string };
+    let ev: {
+      level?: string;
+      messageParts?: unknown[];
+      errorName?: string;
+      stack?: string;
+      // Pre-LOG_EVENT_VERSION shapes, kept as fallbacks.
+      args?: unknown[];
+      message?: string;
+      text?: string;
+    };
     try {
       ev = JSON.parse(line);
     } catch {
       continue;
     }
-    if (ev && ev.level === "error") {
-      const msg = Array.isArray(ev.args)
-        ? ev.args.join(" ")
-        : ev.message || ev.text || "";
-      if (msg) errs.push(String(msg).slice(0, 300));
-    }
+    if (!ev || ev.level !== "error") continue;
+    // The engine's LogEvent carries the payload in `messageParts` (uncaught
+    // errors ship "<message>\n<stack>" as a single part). Reading `args` here
+    // silently dropped every row, which is why doctor still reported
+    // healthy:true over a crashing background in the 4.9.0 swarm.
+    const parts = Array.isArray(ev.messageParts)
+      ? ev.messageParts
+      : Array.isArray(ev.args)
+        ? ev.args
+        : null;
+    let msg = parts
+      ? parts.map((p) => (typeof p === "string" ? p : safeStringify(p))).join(" ")
+      : ev.message || ev.text || "";
+    if (!msg && ev.errorName) msg = ev.stack ? `${ev.errorName}: ${ev.stack}` : ev.errorName;
+    msg = msg.replace(/\s+/g, " ").trim();
+    if (msg) errs.push(msg.slice(0, 300));
   }
-  return errs.slice(-max);
+  // The same throw repeats on every event; show the distinct tail instead of
+  // five copies of one error.
+  return [...new Set(errs)].slice(-max);
 }
 
 function projectEngineVersion(projectPath: string): string | null {

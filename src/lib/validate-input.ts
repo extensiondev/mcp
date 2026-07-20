@@ -12,9 +12,11 @@ export interface InputIssue {
 }
 
 interface PropertySchema {
-  type?: string;
+  // JSON Schema allows a union, e.g. type: ["number", "boolean"] for an arg that
+  // accepts a count or a plain `true`.
+  type?: string | string[];
   enum?: unknown[];
-  items?: { type?: string; enum?: unknown[] };
+  items?: { type?: string | string[]; enum?: unknown[] };
 }
 
 interface ObjectSchema {
@@ -35,16 +37,26 @@ function checkPrimitive(
   schema: PropertySchema,
   issues: InputIssue[],
 ): void {
-  if (schema.type && ["string", "number", "boolean"].includes(schema.type)) {
-    if (typeOf(value) !== schema.type) {
+  const allowed = schema.type === undefined
+    ? []
+    : Array.isArray(schema.type)
+      ? schema.type
+      : [schema.type];
+  const primitives = allowed.filter((t) =>
+    ["string", "number", "boolean"].includes(t),
+  );
+  // Only enforce when EVERY allowed type is a primitive we understand; a union
+  // that mixes in "array"/"object" falls through to the checks below.
+  if (primitives.length > 0 && primitives.length === allowed.length) {
+    if (!primitives.includes(typeOf(value))) {
       issues.push({
         path,
-        message: `expected ${schema.type}, got ${typeOf(value)}`,
+        message: `expected ${primitives.join(" or ")}, got ${typeOf(value)}`,
       });
       return;
     }
   }
-  if (schema.type === "array") {
+  if (allowed.includes("array")) {
     if (!Array.isArray(value)) {
       issues.push({ path, message: `expected array, got ${typeOf(value)}` });
       return;
@@ -80,6 +92,13 @@ const ARG_ALIASES: Record<string, string[]> = {
   expression: ["code", "js", "script"],
   manifestPath: ["manifest"],
   surface: ["view", "target"],
+  // Second alias wave, from the 4.9.0 swarm's arg-name friction: callers reached
+  // for the *other* spelling of the same idea and ate a validation error.
+  timeout: ["timeoutMs", "timeoutMillis"],
+  limit: ["lines", "count", "max", "maxLines"],
+  tab: ["tabId"],
+  url: ["href", "pageUrl"],
+  browser: ["browserName"],
 };
 
 export function normalizeArgAliases(
