@@ -318,7 +318,8 @@ async function openSurfaceAsTab(
       parsed.hint =
         `Rendered the ${surface} document in a real tab, which is how you inspect a surface headlessly. ` +
         "It is the same page with the same extension APIs, but it is NOT hosted in a popup window: no popup sizing, and window.close() closes the tab. " +
-        "Inspect it with extension_dom_inspect or extension_source_inspect (context: 'page').";
+        `Inspect it with extension_dom_inspect context: '${surface}' (include: ['html']), or extension_source_inspect with this url. ` +
+        "Do NOT pass this chrome-extension:// url to extension_dom_inspect or extension_eval as a tab target: script injection cannot reach extension pages, only the surface context or CDP can.";
       return JSON.stringify(parsed);
     }
   } catch {
@@ -433,7 +434,14 @@ export async function handler(
     try {
       const parsed = JSON.parse(raw);
       const msg = String(parsed?.error?.message ?? "");
-      if (parsed?.ok === false && /active browser window|no active|headless/i.test(msg)) {
+      // "user gesture" belongs in this branch too: sidePanel.open() headless
+      // always hits Chrome's gesture wall, and three API-surface-swarm
+      // personas dead-ended on the honest-but-hintless error because this
+      // fallback only matched the no-window phrasing.
+      if (
+        parsed?.ok === false &&
+        /active browser window|no active|headless|user gesture/i.test(msg)
+      ) {
         // Don't just explain the dead end: headless has no window to hang a
         // popup on, but the surface's document renders fine in a tab. Do that
         // automatically for the surfaces that have one, and say what we did.
@@ -455,8 +463,9 @@ export async function handler(
           }
         }
         if (!parsed.hint) {
-          parsed.hint =
-            "The dev browser is running headless (EXTENSION_HEADLESS), which has no visible window to attach a popup/sidebar to. Retry with asTab: true to render the surface document in a tab, or relaunch a headed dev session for a real popup window.";
+          parsed.hint = /user gesture/i.test(msg)
+            ? "This surface can only open from a real user gesture, which headless automation cannot produce. Retry with asTab: true to render the surface document in a tab instead."
+            : "The dev browser is running headless (EXTENSION_HEADLESS), which has no visible window to attach a popup/sidebar to. Retry with asTab: true to render the surface document in a tab, or relaunch a headed dev session for a real popup window.";
         }
         return JSON.stringify(parsed);
       }

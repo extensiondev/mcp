@@ -69,6 +69,20 @@ export async function handler(
         error: { name: "BadRequest", message: "storage set requires a value" },
       });
     }
+    // Without this guard the engine answers in CLI vocabulary ("storage set
+    // requires --key and --value"), flags the MCP caller never typed. Two
+    // API-surface-swarm personas passed a chrome.storage-shaped object and got
+    // stranded on it. Name the MCP args and the one-key-per-call shape here.
+    if (args.key === undefined) {
+      return JSON.stringify({
+        ok: false,
+        error: {
+          name: "BadRequest",
+          message:
+            'storage set requires `key` (string) and `value` args, one key per call. There is no bulk-object set: to seed {a: 1, b: 2}, call once with key: "a" and once with key: "b".',
+        },
+      });
+    }
     cli.push("--value", JSON.stringify(args.value));
   }
   if (args.context) cli.push("--context", args.context);

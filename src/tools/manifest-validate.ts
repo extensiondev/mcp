@@ -56,7 +56,7 @@ export const schema = {
       browsers: {
         type: "array",
         items: { type: "string" },
-        default: ["chrome", "firefox"],
+        default: ["chrome", "firefox", "edge"],
         description: "Browsers to validate against",
       },
       browser: {
@@ -236,7 +236,10 @@ export async function handler(args: {
   // Whether the caller NAMED the targets. When they did not, an advisory about
   // a browser they never asked about must not decide the headline verdict.
   const explicitBrowsers = Array.isArray(args.browsers) && args.browsers.length > 0;
-  const browsers = args.browsers ?? ["chrome", "firefox"];
+  // edge is a first-class build target (the scaffold ships build:edge scripts)
+  // but was missing from the default matrix, so an Edge-first developer got no
+  // edge verdict unless they knew to ask. Persona F28 in the API-surface swarm.
+  const browsers = args.browsers ?? ["chrome", "firefox", "edge"];
   const result: ValidationResult = {
     valid: true,
     errors: [],
@@ -317,17 +320,57 @@ export async function handler(args: {
     }
   }
 
+  // F29: default_locale declared with no catalog behind it. extension_dev
+  // fails its first compile on exactly this tree ("Default locale folder is
+  // missing"), and the zip build hides that root cause behind an ADM-ZIP
+  // warning, so validate staying silent here left no honest surface at all.
+  const defaultLocale = manifest.default_locale;
+  if (typeof defaultLocale === "string" && defaultLocale) {
+    const hasCatalog = roots.some((root) =>
+      fs.existsSync(
+        path.resolve(root, "_locales", defaultLocale, "messages.json"),
+      ),
+    );
+    if (!hasCatalog) {
+      result.errors.push(
+        `default_locale "${defaultLocale}" is declared but _locales/${defaultLocale}/messages.json was not found. The build fails on this; add the catalog or remove default_locale.`,
+      );
+    }
+  }
+
+  // F30: nothing anywhere warned when the 128px icon was missing, and the
+  // Chrome Web Store rejects listings without one. Advisory, not blocking:
+  // the extension loads fine unpacked.
+  const iconMap = chromiumManifest.icons as Record<string, unknown> | undefined;
+  if (!iconMap || typeof iconMap["128"] !== "string") {
+    result.warnings.push(
+      'No 128x128 icon declared ("128" key in icons). The Chrome Web Store requires one for a store listing, and Edge Add-ons expects it too.',
+    );
+  }
+
   // Code-vs-permission coherence: scan the source for permission-gated
   // chrome.*/browser.* usage and flag anything the manifest doesn't declare. A
   // HARD-gated API used without its permission is undefined at runtime and
   // crashes the context, the exact false-green case where validate said valid.
-  const declaredPermSet = new Set<string>(
-    [
-      ...((chromiumManifest.permissions as string[] | undefined) ?? []),
-      ...((chromiumManifest.optional_permissions as string[] | undefined) ?? []),
-    ].filter((p) => typeof p === "string"),
-  );
-  for (const api of scanApiUsage(roots)) {
+  // The declared set is the UNION across the requested targets' effective
+  // views (plus the chromium view), so this top-level error means "missing for
+  // every target"; a permission one target has and another lacks is reported
+  // per target in the loop below.
+  const effectiveByBrowser = new Map<string, Record<string, unknown>>();
+  for (const b of browsers) {
+    effectiveByBrowser.set(b, filterKeysForThisBrowser(manifest, b));
+  }
+  const declaredPermSet = new Set<string>();
+  for (const view of [chromiumManifest, ...effectiveByBrowser.values()]) {
+    for (const p of [
+      ...((view.permissions as string[] | undefined) ?? []),
+      ...((view.optional_permissions as string[] | undefined) ?? []),
+    ]) {
+      if (typeof p === "string") declaredPermSet.add(p);
+    }
+  }
+  const usedApis = scanApiUsage(roots);
+  for (const api of usedApis) {
     const perm = API_PERMISSION[api];
     if (declaredPermSet.has(perm)) continue;
     const base = `Code calls chrome.${api} but "${perm}" is not in permissions`;
@@ -345,6 +388,14 @@ export async function handler(args: {
   if (!chromiumManifest.manifest_version) {
     result.errors.push(
       'Missing manifest_version. Use "chromium:manifest_version": 3 and "firefox:manifest_version": 2 for cross-browser support.',
+    );
+  } else if (
+    chromiumManifest.manifest_version !== 2 &&
+    chromiumManifest.manifest_version !== 3
+  ) {
+    // F27 got valid:true for manifest_version 4. No browser installs that.
+    result.errors.push(
+      `manifest_version must be 2 or 3, got ${JSON.stringify(chromiumManifest.manifest_version)}. No browser installs this manifest.`,
     );
   }
 
@@ -370,7 +421,8 @@ export async function handler(args: {
   for (const browser of browsers) {
     const isChromium = isChromiumFamily(browser);
     const isFirefox = isGeckoFamily(browser);
-    const effective = filterKeysForThisBrowser(manifest, browser);
+    const effective =
+      effectiveByBrowser.get(browser) ?? filterKeysForThisBrowser(manifest, browser);
     const issues: string[] = [];
 
     if (isChromium) {
@@ -427,6 +479,33 @@ export async function handler(args: {
           );
         }
       }
+    }
+
+    // Per-target permission divergence. E25 in the API-surface swarm put proxy
+    // only under chromium:permissions while the code called
+    // chrome.proxy.settings.set: the firefox verdict stayed green because the
+    // code-vs-permission check above only ever sees the chromium view, yet
+    // dist/firefox shipped without proxy and crashed at runtime. Check each
+    // target's EFFECTIVE permission set against the APIs the code actually
+    // uses; a permission another target has and this one lacks is a per-target
+    // crash, reported in this target's own bucket (so multi-browser output maps
+    // errors back to the browser they belong to).
+    const effectivePerms = new Set<string>(
+      [
+        ...((effective.permissions as string[] | undefined) ?? []),
+        ...((effective.optional_permissions as string[] | undefined) ?? []),
+      ].filter((p) => typeof p === "string"),
+    );
+    for (const api of usedApis) {
+      const perm = API_PERMISSION[api];
+      if (effectivePerms.has(perm)) continue;
+      // Missing from every target is already a top-level error above; only the
+      // divergence (declared for another target, absent here) is per-target.
+      if (!declaredPermSet.has(perm)) continue;
+      const ns = isFirefox ? "browser" : "chrome";
+      issues.push(
+        `Code calls ${ns}.${api} but the ${browser} build's permissions do not include "${perm}" (it is declared only under another target's prefixed key, e.g. chromium:permissions). This target crashes at runtime.`,
+      );
     }
 
     result.browserSupport[browser] = {

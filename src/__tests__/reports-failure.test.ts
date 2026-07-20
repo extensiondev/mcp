@@ -524,3 +524,243 @@ describe("logs reports failure rather than empty success", () => {
     }
   });
 });
+
+// WAVE-2 (API-surface swarm, clusters D/E/F) lies stay fixed. Same charter as
+// above: every test breaks something real and asserts the tool SAYS SO.
+describe("wave-2 swarm lies stay fixed", () => {
+  it("manifest_validate reports per-target permission divergence (E25)", async () => {
+    const manifestValidate = await import("../tools/manifest-validate");
+    const dir = tmpProject();
+    fs.mkdirSync(path.join(dir, "src"), { recursive: true });
+    fs.writeFileSync(
+      path.join(dir, "src", "manifest.json"),
+      JSON.stringify({
+        name: "proxy-switcher",
+        version: "1.0.0",
+        manifest_version: 3,
+        "chromium:permissions": ["proxy"],
+      }),
+    );
+    fs.writeFileSync(
+      path.join(dir, "src", "background.js"),
+      "chrome.proxy.settings.set({value: {mode: 'direct'}});\n",
+    );
+
+    const result = JSON.parse(
+      await manifestValidate.handler({ projectPath: dir, browsers: ["firefox"] }),
+    );
+
+    expect(result.valid).toBe(false);
+    expect(result.browserSupport.firefox.supported).toBe(false);
+    const all = [...result.errors, ...result.browserSupport.firefox.issues].join(" ");
+    expect(all).toContain("proxy");
+    expect(all).toContain("firefox");
+  });
+
+  it("manifest_validate rejects an impossible manifest_version (F27)", async () => {
+    const manifestValidate = await import("../tools/manifest-validate");
+    const dir = tmpProject();
+    fs.writeFileSync(
+      path.join(dir, "manifest.json"),
+      JSON.stringify({ name: "x", version: "1.0.0", manifest_version: 4 }),
+    );
+
+    const result = JSON.parse(
+      await manifestValidate.handler({ projectPath: dir, browsers: ["chrome"] }),
+    );
+
+    expect(result.valid).toBe(false);
+    expect(result.errors.join(" ")).toContain("manifest_version must be 2 or 3");
+  });
+
+  it("manifest_validate blocks a default_locale with no catalog (F29)", async () => {
+    const manifestValidate = await import("../tools/manifest-validate");
+    const dir = tmpProject();
+    fs.writeFileSync(
+      path.join(dir, "manifest.json"),
+      JSON.stringify({
+        name: "i18n-ext",
+        version: "1.0.0",
+        manifest_version: 3,
+        default_locale: "en",
+      }),
+    );
+
+    const result = JSON.parse(
+      await manifestValidate.handler({ projectPath: dir, browsers: ["chrome"] }),
+    );
+
+    expect(result.valid).toBe(false);
+    expect(result.errors.join(" ")).toContain("_locales/en/messages.json");
+  });
+
+  it("manifest_validate accepts a default_locale whose catalog exists", async () => {
+    const manifestValidate = await import("../tools/manifest-validate");
+    const dir = tmpProject();
+    fs.mkdirSync(path.join(dir, "_locales", "en"), { recursive: true });
+    fs.writeFileSync(
+      path.join(dir, "_locales", "en", "messages.json"),
+      JSON.stringify({ appName: { message: "ok" } }),
+    );
+    fs.writeFileSync(
+      path.join(dir, "manifest.json"),
+      JSON.stringify({
+        name: "i18n-ext",
+        version: "1.0.0",
+        manifest_version: 3,
+        default_locale: "en",
+      }),
+    );
+
+    const result = JSON.parse(
+      await manifestValidate.handler({ projectPath: dir, browsers: ["chrome"] }),
+    );
+
+    expect(result.errors.join(" ")).not.toContain("_locales");
+  });
+
+  it("manifest_validate warns when the 128px store icon is missing (F30)", async () => {
+    const manifestValidate = await import("../tools/manifest-validate");
+    const dir = tmpProject();
+    fs.writeFileSync(
+      path.join(dir, "manifest.json"),
+      JSON.stringify({
+        name: "store-bound",
+        version: "1.0.0",
+        manifest_version: 3,
+        icons: { "16": "icon16.png", "48": "icon48.png" },
+      }),
+    );
+    fs.writeFileSync(path.join(dir, "icon16.png"), "");
+    fs.writeFileSync(path.join(dir, "icon48.png"), "");
+
+    const result = JSON.parse(
+      await manifestValidate.handler({ projectPath: dir, browsers: ["chrome"] }),
+    );
+
+    expect(result.warnings.join(" ")).toContain("128x128");
+  });
+
+  it("manifest_validate includes edge in the default target matrix (F28)", async () => {
+    const manifestValidate = await import("../tools/manifest-validate");
+    const dir = tmpProject();
+    fs.writeFileSync(
+      path.join(dir, "manifest.json"),
+      JSON.stringify({ name: "x", version: "1.0.0", manifest_version: 3 }),
+    );
+
+    const result = JSON.parse(
+      await manifestValidate.handler({ projectPath: dir }),
+    );
+
+    expect(Object.keys(result.browserSupport)).toContain("edge");
+  });
+
+  it("logs marks events from a dead session as stale instead of serving them as live (D20)", async () => {
+    const project = tmpProject();
+    writeReady(project, "chrome", {
+      status: "ready",
+      pid: DEAD_PID,
+      runId: "old-run",
+    });
+    const dir = path.join(project, "dist", "extension-js", "chrome");
+    fs.writeFileSync(
+      path.join(dir, "logs.ndjson"),
+      [
+        JSON.stringify({ type: "header", runId: "old-run" }),
+        JSON.stringify({
+          v: 1,
+          level: "info",
+          context: "background",
+          messageParts: ["inventory refreshed"],
+          runId: "old-run",
+          seq: 1,
+        }),
+      ].join("\n") + "\n",
+    );
+
+    const result = JSON.parse(
+      await logs.handler({ projectPath: project, browser: "chrome" }),
+    );
+
+    expect(result.matched).toBeGreaterThan(0);
+    expect(result.stale).toBe(true);
+    expect(result.warning).toContain("dead");
+  });
+
+  it("logs does not cry stale over a live session's own events", async () => {
+    const project = tmpProject();
+    writeReady(project, "chrome", {
+      status: "ready",
+      pid: process.pid,
+      runId: "run-1",
+    });
+    const dir = path.join(project, "dist", "extension-js", "chrome");
+    fs.writeFileSync(
+      path.join(dir, "logs.ndjson"),
+      [
+        JSON.stringify({ type: "header", runId: "run-1" }),
+        JSON.stringify({
+          v: 1,
+          level: "info",
+          context: "background",
+          messageParts: ["hello"],
+          runId: "run-1",
+          seq: 1,
+        }),
+      ].join("\n") + "\n",
+    );
+
+    const result = JSON.parse(
+      await logs.handler({ projectPath: project, browser: "chrome" }),
+    );
+
+    expect(result.stale).toBeUndefined();
+  });
+
+  it("wait surfaces runtime errors instead of a bare ready over a crashed worker (E21)", async () => {
+    const project = tmpProject();
+    writeReady(project, "chrome", {
+      status: "ready",
+      pid: process.pid,
+      runtime: "attached",
+      browser: "chrome",
+    });
+    writeLogs(project, "chrome", [
+      {
+        v: 1,
+        level: "error",
+        context: "background",
+        messageParts: ["Uncaught Error: boom at load\n    at service_worker.js:1"],
+        runId: "r1",
+      },
+    ]);
+
+    const result = JSON.parse(
+      await waitTool.handler({ projectPath: project, browser: "chrome" }),
+    );
+
+    expect(result.status).toBe("ready");
+    expect(result.runtimeErrors).toHaveLength(1);
+    expect(result.runtimeErrors[0]).toContain("boom");
+    expect(result.warning).toContain("throwing at runtime");
+  });
+
+  it("storage set without a key answers in MCP vocabulary, not CLI flags (E23/E24)", async () => {
+    const storage = await import("../tools/storage");
+    const project = tmpProject();
+
+    const result = JSON.parse(
+      await storage.handler({
+        projectPath: project,
+        action: "set",
+        value: { a: 1, b: 2 },
+      } as never),
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.error.message).toContain("`key`");
+    expect(result.error.message).toContain("one key per call");
+    expect(result.error.message).not.toContain("--key");
+  });
+});

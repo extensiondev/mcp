@@ -110,6 +110,7 @@ function summarize(
   limit: number,
   dropped: number,
   projectPath?: string,
+  staleNote?: string,
 ): string {
   const matched = events.length;
   const { events: out, truncated } = capRecent(events, limit);
@@ -132,8 +133,47 @@ function summarize(
     dropped: dropped || undefined,
     nextSince: lastSeq >= 0 ? lastSeq : undefined,
     ...(reason ? { emptyReason: reason } : {}),
+    ...(staleNote && matched > 0 ? { stale: true, warning: staleNote } : {}),
     events: out,
   });
+}
+
+// D20 in the API-surface swarm verified a production build with
+// extension_start and read the PREVIOUS dev run's events back as fresh
+// ok:true output. The events file outlives its session; serving history is
+// fine, serving it as if it were live is not. Detect a dead or different
+// producing session and say so.
+function staleFileNote(
+  projectPath: string,
+  browser: string,
+  eventsRunId: string,
+): string | undefined {
+  let contract: { pid?: number; runId?: unknown };
+  try {
+    contract = JSON.parse(
+      fs.readFileSync(
+        path.resolve(projectPath, "dist", "extension-js", browser, "ready.json"),
+        "utf8",
+      ),
+    );
+  } catch {
+    return "These events survive from a previous session: no ready.json exists for this project/browser now, so nothing current is producing logs.";
+  }
+  if (typeof contract.pid === "number") {
+    try {
+      process.kill(contract.pid, 0);
+    } catch {
+      return `These events are from a PAST run: the session that wrote them (pid ${contract.pid}) is dead. Nothing current is producing logs; do not read these as live output.`;
+    }
+  }
+  if (
+    eventsRunId &&
+    contract.runId &&
+    String(contract.runId) !== eventsRunId
+  ) {
+    return `These events carry runId ${eventsRunId} but the current session is run ${String(contract.runId)}, which has written nothing yet. Do not read these as the current run's output.`;
+  }
+  return undefined;
 }
 
 async function readFromFile(
@@ -166,7 +206,16 @@ async function readFromFile(
     }
     if (matches(event)) events.push(event);
   }
-  return summarize(events, "file", browser, runId, limit, 0, args.projectPath);
+  return summarize(
+    events,
+    "file",
+    browser,
+    runId,
+    limit,
+    0,
+    args.projectPath,
+    staleFileNote(args.projectPath, browser, runId),
+  );
 }
 
 async function readFromStream(
