@@ -1,5 +1,17 @@
 # Changelog
 
+## 5.1.2
+
+### Fixed
+
+- `extension_logs` no longer flags a healthy live session as stale. Newer
+  engine canaries stamp log and event rows with ready.json's `instanceId`
+  rather than its `runId`, so the staleness check compared ids from two
+  different spaces and every live read carried `stale: true` with a
+  do-not-trust warning. The comparator now accepts either identity field,
+  pinned by a test against the real contract shapes. (Filed upstream as
+  Extension.js bug 77 so the ready/logs contract agrees on one field.)
+
 ## 5.1.1
 
 ### Added
