@@ -7,13 +7,13 @@
     "source": "github"
   },
   "websiteUrl": "https://extension.dev",
-  "version": "5.1.1",
+  "version": "5.1.2",
   "packages": [
     {
       "registryType": "npm",
       "registryBaseUrl": "https://registry.npmjs.org",
       "identifier": "@extension.dev/mcp",
-      "version": "5.1.1",
+      "version": "5.1.2",
       "runtimeHint": "npx",
       "transport": {
         "type": "stdio"
