@@ -718,6 +718,39 @@ describe("wave-2 swarm lies stay fixed", () => {
     expect(result.stale).toBeUndefined();
   });
 
+  it("logs does not cry stale when events carry the session's instanceId", async () => {
+    // Newer engine canaries stamp events with ready.json's instanceId rather
+    // than its runId; a healthy live session must not be flagged stale.
+    const project = tmpProject();
+    writeReady(project, "chrome", {
+      status: "ready",
+      pid: process.pid,
+      runId: "mrun-abc",
+      instanceId: "7ba4c78fbbe50dc1",
+    });
+    const dir = path.join(project, "dist", "extension-js", "chrome");
+    fs.writeFileSync(
+      path.join(dir, "logs.ndjson"),
+      [
+        JSON.stringify({ type: "header", runId: "7ba4c78fbbe50dc1" }),
+        JSON.stringify({
+          v: 1,
+          level: "info",
+          context: "background",
+          messageParts: ["hello"],
+          runId: "7ba4c78fbbe50dc1",
+          seq: 1,
+        }),
+      ].join("\n") + "\n",
+    );
+
+    const result = JSON.parse(
+      await logs.handler({ projectPath: project, browser: "chrome" }),
+    );
+
+    expect(result.stale).toBeUndefined();
+  });
+
   it("wait surfaces runtime errors instead of a bare ready over a crashed worker (E21)", async () => {
     const project = tmpProject();
     writeReady(project, "chrome", {
