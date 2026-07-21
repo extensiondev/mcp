@@ -14,6 +14,17 @@ import { listTemplates } from "../lib/templates-cache";
 
 // Recognized MV3 API permissions across Chromium and Firefox. Not exhaustive of
 // every experimental flag, but covers the stable surface; unknown values warn.
+// Manifest keys that Chrome honors but Edge ignores (ChromeOS surfaces and
+// Chrome-desktop-only entry points). On the shared chromium key space they
+// resolve onto the edge build but do nothing there, so validate warns rather
+// than errors: the build is fine, the key is just inert.
+const CHROME_DESKTOP_ONLY_KEYS = [
+  "file_browser_handlers",
+  "file_system_provider_capabilities",
+  "input_components",
+  "chrome_os_system_extension",
+];
+
 const KNOWN_PERMISSIONS = new Set<string>([
   "activeTab", "alarms", "background", "bookmarks", "browsingData",
   "certificateProvider", "clipboardRead", "clipboardWrite", "contentSettings",
@@ -447,6 +458,23 @@ export async function handler(args: {
         issues.push(
           'Firefox browser_action found but no chromium:action. Chromium MV3 uses "action" instead of "browser_action".',
         );
+      }
+
+      // Chrome and Edge share the chromium key space, but some keys only do
+      // anything on Chrome (ChromeOS surfaces, Chrome-desktop-only APIs). On
+      // the edge target they are inert: Edge ignores them and the Add-ons
+      // store review can flag an unsupported key. Warn per target rather than
+      // error, since the build is valid and the key is a no-op, not a crash.
+      // Persona F28 in the distribution walk shipped file_browser_handlers to
+      // an Edge target and got no signal at all.
+      if (browser === "edge") {
+        for (const key of CHROME_DESKTOP_ONLY_KEYS) {
+          if (effective[key] !== undefined) {
+            result.warnings.push(
+              `Manifest key "${key}" works on Chrome but is inert on Edge (it is a Chrome-only surface). The edge build ships it as a no-op; move it under "chromium:${key}" only if you also target Chrome, or remove it.`,
+            );
+          }
+        }
       }
     }
 

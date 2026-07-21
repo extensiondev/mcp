@@ -302,6 +302,30 @@ describe("swarm-found lies stay fixed", () => {
     expect(JSON.stringify(result)).not.toContain("tracker-rules.json");
   });
 
+  it("manifest_validate warns that a Chrome-only key is inert on the edge target", async () => {
+    const manifestValidate = await import("../tools/manifest-validate");
+    const dir = projectWith({
+      manifest_version: 3,
+      name: "Kiosk relay",
+      version: "1.0.0",
+      file_browser_handlers: [
+        { id: "upload", default_title: "Relay", file_filters: ["*.json"] },
+      ],
+    });
+
+    const edge = JSON.parse(
+      await manifestValidate.handler({ projectPath: dir, browsers: ["edge"] }),
+    );
+    expect(edge.valid).toBe(true);
+    expect(JSON.stringify(edge.warnings)).toMatch(/file_browser_handlers.*inert on Edge/);
+
+    // Chrome must NOT warn: the key is native there.
+    const chrome = JSON.parse(
+      await manifestValidate.handler({ projectPath: dir, browsers: ["chrome"] }),
+    );
+    expect(JSON.stringify(chrome.warnings)).not.toContain("inert on Edge");
+  });
+
   // A1: a devtools panel that never reached dist still reported
   // "ready for deployment", because devtools_page was outside the contract.
   it("build's completeness contract covers every declared surface", async () => {
