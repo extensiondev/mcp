@@ -148,7 +148,7 @@ function staleFileNote(
   browser: string,
   eventsRunId: string,
 ): string | undefined {
-  let contract: { pid?: number; runId?: unknown };
+  let contract: { pid?: number; runId?: unknown; instanceId?: unknown };
   try {
     contract = JSON.parse(
       fs.readFileSync(
@@ -166,12 +166,15 @@ function staleFileNote(
       return `These events are from a PAST run: the session that wrote them (pid ${contract.pid}) is dead. Nothing current is producing logs; do not read these as live output.`;
     }
   }
-  if (
-    eventsRunId &&
-    contract.runId &&
-    String(contract.runId) !== eventsRunId
-  ) {
-    return `These events carry runId ${eventsRunId} but the current session is run ${String(contract.runId)}, which has written nothing yet. Do not read these as the current run's output.`;
+  // The engine stamps events with its own id, which depending on the engine
+  // version is ready.json's runId OR its instanceId (newer canaries write
+  // instanceId). Treat a match against EITHER as the live session; flagging a
+  // healthy session as stale is the same lie D20 caught, inverted.
+  const liveIds = [contract.runId, contract.instanceId]
+    .map((v) => String(v || ""))
+    .filter(Boolean);
+  if (eventsRunId && liveIds.length > 0 && !liveIds.includes(eventsRunId)) {
+    return `These events carry runId ${eventsRunId} but the current session is run ${liveIds.join(" / ")}, which has written nothing yet. Do not read these as the current run's output.`;
   }
   return undefined;
 }
