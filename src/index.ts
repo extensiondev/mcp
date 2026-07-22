@@ -35,6 +35,7 @@ import * as open from "./tools/open";
 import * as domInspect from "./tools/dom-inspect";
 import * as publish from "./tools/publish";
 import * as releasePromote from "./tools/release-promote";
+import * as releaseList from "./tools/release-list";
 import * as deployTool from "./tools/deploy";
 import * as wait from "./tools/wait";
 import * as addFeature from "./tools/add-feature";
@@ -90,6 +91,7 @@ export const tools: ToolModule[] = [
   open,
   domInspect,
   publish,
+  releaseList,
   releasePromote,
   deployTool,
   wait,

@@ -18,6 +18,13 @@ import fs from "node:fs";
 import path from "node:path";
 import { resolveToken } from "../lib/publish";
 import { safeApiBase } from "../lib/login-flow";
+import {
+  consoleProjectUrl,
+  fetchRegistryJson,
+  parseChannels,
+  registryFileUrl,
+  resolveProjectRef,
+} from "../lib/registry";
 
 const DEFAULT_API = "https://www.extension.dev";
 
@@ -184,14 +191,145 @@ export async function handler(args: DeployToolArgs): Promise<string> {
   }
 
   if (!res.ok) {
+    // Under dryRun nothing was (or could have been) submitted, so the error
+    // must say "preflight failed", never "submit failed".
     return fail(
       "DeployError",
-      `submit failed (${res.status}): ${data?.message || text || "unknown error"}`,
+      `${dryRun ? "preflight" : "submit"} failed (${res.status}): ${data?.message || text || "unknown error"}`,
     );
   }
 
-  const warnings = storeMdWarnings(browsers, process.cwd());
+  const warnings: unknown[] = Array.isArray(data?.warnings)
+    ? [...data.warnings]
+    : [];
+  warnings.push(...storeMdWarnings(browsers, process.cwd()));
+
   const result: Record<string, unknown> = { mode: "platform", dryRun, ...data };
+
+  if (dryRun) {
+    // The platform's preflight verifies auth, project, build, and the store
+    // workflow - but not the consequence it gates: which stores are actually
+    // configured to receive this submission, and in what publish mode. Read
+    // what is knowable from the public registry and never echo an
+    // unqualified "Preflight OK" per browser.
+    const ref = resolveProjectRef();
+    const consoleStoresUrl = consoleProjectUrl(ref, "stores");
+    const storeModeNote = `Store publish mode (draft / skip-publish / live) is not readable with the CLI token, so it cannot be verified from here; check per-store settings at ${consoleStoresUrl}.`;
+
+    let health: Record<string, { ok?: boolean; message?: string }> | null = null;
+    let healthUnreadable: string | null = null;
+    let channelRows: ReturnType<typeof parseChannels> | null = null;
+    if (ref) {
+      const [healthRes, channelsRes] = await Promise.all([
+        fetchRegistryJson(registryFileUrl(ref, "stores/health.json")),
+        fetchRegistryJson(registryFileUrl(ref, "channels.json")),
+      ]);
+      if (healthRes.ok) {
+        const stores = (healthRes.json as { stores?: unknown })?.stores;
+        health =
+          stores && typeof stores === "object"
+            ? (stores as Record<string, { ok?: boolean; message?: string }>)
+            : null;
+        if (!health) healthUnreadable = "stores/health.json had no stores map";
+      } else {
+        healthUnreadable = healthRes.message;
+      }
+      if (channelsRes.ok) channelRows = parseChannels(channelsRes.json);
+    } else {
+      healthUnreadable =
+        "no stored workspace/project to look up (run extension_login)";
+    }
+
+    const preflight = browsers.map((browser) => {
+      if (!health) {
+        return {
+          browser,
+          ok: false,
+          configured: "unknown" as const,
+          publishMode: "unknown",
+          reason: `Store configuration could not be read (${healthUnreadable}); verify the ${browser} store in the console before submitting.`,
+        };
+      }
+      const row = health[browser];
+      if (!row) {
+        return {
+          browser,
+          ok: false,
+          configured: false,
+          publishMode: "unknown",
+          reason: `No ${browser} store is configured on this project; a real submission for ${browser} would fail. Configure it at ${consoleStoresUrl}.`,
+        };
+      }
+      if (row.ok !== true) {
+        return {
+          browser,
+          ok: false,
+          configured: false,
+          publishMode: "unknown",
+          reason:
+            String(row.message || "").trim() ||
+            `The ${browser} store failed its last credential health check.`,
+        };
+      }
+      return {
+        browser,
+        ok: true,
+        configured: true as const,
+        publishMode: "unknown",
+      };
+    });
+
+    const actionable = preflight.filter((p) => p.ok).map((p) => p.browser);
+    const blocked = preflight.filter((p) => !p.ok);
+
+    // Channel disclosure: the platform silently defaults to "stable", which
+    // this project's channels.json may not even contain.
+    const channelDefaulted = !String(args.channel || "").trim();
+    const resolvedChannel =
+      String(data?.channel || "").trim() ||
+      (channelDefaulted ? "stable" : String(args.channel).trim());
+    if (channelRows) {
+      const exists = channelRows.some(
+        (r) =>
+          r.channel === resolvedChannel ||
+          r.channel.endsWith(`-${resolvedChannel}`),
+      );
+      if (!exists) {
+        warnings.push(
+          `Channel "${resolvedChannel}"${channelDefaulted ? " (the default)" : ""} does not exist in this project's channels.json (existing: ${
+            channelRows.map((r) => r.channel).join(", ") || "none"
+          }), so a real submission from it has no promoted build to serve. Promote a build there first (extension_release_promote) or pass an existing channel.`,
+        );
+      }
+    }
+
+    const summaryParts: string[] = [];
+    if (actionable.length > 0) {
+      summaryParts.push(
+        `Preflight passed for ${actionable.join(", ")}: the platform verified auth, the project, build ${
+          data?.buildId ?? buildSha
+        }, and the store workflow, and the store credentials passed their last health check.`,
+      );
+    }
+    for (const p of blocked) {
+      summaryParts.push(
+        `${p.browser}: ${p.configured === "unknown" ? "cannot be verified" : "NOT actionable"} - ${p.reason}`,
+      );
+    }
+    summaryParts.push(storeModeNote);
+
+    result.ok = actionable.length > 0;
+    result.preflight = preflight;
+    result.channel = resolvedChannel;
+    result.channelDefaulted = channelDefaulted;
+    if (channelDefaulted) {
+      result.channelNote = `channel: ${resolvedChannel} (default)`;
+    }
+    result.consoleStoresUrl = consoleStoresUrl;
+    if (typeof data?.message === "string") result.platformMessage = data.message;
+    result.message = summaryParts.join(" ");
+  }
+
   if (warnings.length > 0) result.warnings = warnings;
   return JSON.stringify(result);
 }
