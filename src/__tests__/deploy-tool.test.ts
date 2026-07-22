@@ -117,7 +117,17 @@ describe("extension_deploy: platform submit handler", () => {
     expect(body.buildSha).toBe("abc1234");
     expect(body.dryRun).toBe(true); // irreversible submit -> safe default
     expect(out.mode).toBe("platform");
-    expect(out.message).toBe("Preflight OK");
+    // No stored login in this env, so store config is unverifiable: the
+    // preflight must refuse to echo an unqualified OK (the C2 false
+    // affordance) and keep the platform's own message under its own key.
+    expect(out.ok).toBe(false);
+    expect(out.platformMessage).toBe("Preflight OK");
+    expect(out.preflight).toHaveLength(2);
+    for (const row of out.preflight) {
+      expect(row.ok).toBe(false);
+      expect(row.configured).toBe("unknown");
+    }
+    expect(out.message).toContain("cannot be verified");
   });
 
   it("passes dryRun:false through only when explicitly set", async () => {
@@ -141,9 +151,11 @@ describe("extension_deploy: platform submit handler", () => {
       const out = JSON.parse(
         await handler({ browsers: ["firefox"], buildSha: "abc1234" }),
       );
-      expect(out.ok).toBe(true);
+      // The warning rides the result; it must never be the blocking reason
+      // (any block comes from store verification, not STORE.md).
       expect(out.warnings).toHaveLength(1);
       expect(out.warnings[0]).toContain("No STORE.md");
+      expect(out.preflight[0].reason).not.toContain("STORE.md");
     } finally {
       process.chdir(prevCwd);
     }

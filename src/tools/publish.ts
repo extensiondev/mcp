@@ -7,6 +7,12 @@
 // MIT License (c) Cezar Augusto and the extension.dev collaborators
 
 import { publish, resolveToken } from "../lib/publish";
+import {
+  fetchRegistryJson,
+  parseBuildIndex,
+  registryFileUrl,
+  resolveProjectRef,
+} from "../lib/registry";
 
 export const schema = {
   name: "extension_publish",
@@ -90,6 +96,47 @@ export async function handler(args: {
   if (args.ttlHours != null && data.visibility === "public") {
     data.note =
       "ttlHours was ignored: this is a public project, whose share URL is its canonical public page.";
+  }
+
+  // Say WHAT the link serves, not just where it is: resolve the build behind
+  // the share URL from the public registry's build index (buildSha, builtAt,
+  // version, channel). Additive and best-effort - a registry blip or a
+  // private project must never fail a publish that already succeeded.
+  const ref = resolveProjectRef();
+  if (ref) {
+    const buildsUrl = registryFileUrl(ref, "builds/index.json");
+    const buildsRes = await fetchRegistryJson(buildsUrl);
+    if (buildsRes.ok) {
+      const items = parseBuildIndex(buildsRes.json);
+      const pinned = args.buildSha
+        ? items.find((item) => {
+            const short = String(args.buildSha).slice(0, 7).toLowerCase();
+            return (
+              item.sha.toLowerCase() === short ||
+              String(item.commit ?? "")
+                .toLowerCase()
+                .startsWith(short)
+            );
+          })
+        : undefined;
+      const newestSuccess = items
+        .filter((item) => item.status === "success")
+        .sort((a, b) =>
+          String(b.timestamp ?? "").localeCompare(String(a.timestamp ?? "")),
+        )[0];
+      const served = pinned ?? newestSuccess;
+      if (served) {
+        if (data.buildSha == null) data.buildSha = served.sha;
+        if (data.builtAt == null && served.timestamp) data.builtAt = served.timestamp;
+        if (data.version == null && served.version) data.version = served.version;
+        if (data.channel == null && served.channel) data.channel = served.channel;
+        data.registryUrl = buildsUrl;
+        if (!pinned && args.buildSha == null) {
+          data.buildNote =
+            "buildSha/builtAt/version describe the newest successful build in the project's registry index, which is what the share link serves. Pin buildSha to serve a specific build.";
+        }
+      }
+    }
   }
   return JSON.stringify(data);
 }

@@ -8,6 +8,13 @@
 
 import { resolveToken } from "../lib/publish";
 import { safeApiBase } from "../lib/login-flow";
+import {
+  consoleProjectUrl,
+  fetchRegistryJson,
+  parseChannels,
+  registryFileUrl,
+  resolveProjectRef,
+} from "../lib/registry";
 
 const DEFAULT_API = "https://www.extension.dev";
 
@@ -123,10 +130,39 @@ export async function handler(args: {
   }
 
   if (!res.ok) {
-    return fail(
-      "ReleaseError",
-      `promote failed (${res.status}): ${data?.message || text || "unknown error"}`,
-    );
+    const code = typeof data?.code === "string" ? data.code : undefined;
+    const enrich: Record<string, unknown> = {};
+    const ref = resolveProjectRef();
+
+    // An unknown/invalid sha is the single worst dead end here: no MCP verb
+    // used to list valid shas, so put them (and the console Builds page) in
+    // the error itself instead of pointing at "the Builds page" with no URL.
+    if (res.status === 404 || code === "UNKNOWN_BUILD") {
+      enrich.buildsPageUrl = consoleProjectUrl(ref, "builds");
+      enrich.hint =
+        "Run extension_release_list to see this project's channels, their promoted shas, and recent builds.";
+      if (ref) {
+        const channelsUrl = registryFileUrl(ref, "channels.json");
+        const channelsRes = await fetchRegistryJson(channelsUrl);
+        if (channelsRes.ok) {
+          const rows = parseChannels(channelsRes.json).filter((c) => c.sha);
+          enrich.validChannelShas = Object.fromEntries(
+            rows.map((c) => [c.channel, c.sha]),
+          );
+          enrich.registryChannelsUrl = channelsUrl;
+        }
+      }
+    }
+
+    return JSON.stringify({
+      ok: false,
+      error: {
+        name: "ReleaseError",
+        message: `promote failed (${res.status}): ${data?.message || text || "unknown error"}`,
+        ...(code ? { code } : {}),
+      },
+      ...enrich,
+    });
   }
 
   return JSON.stringify(data);
