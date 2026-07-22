@@ -6,6 +6,9 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // MIT License (c) Cezar Augusto and the extension.dev collaborators
 
+import crypto from "node:crypto";
+import fs from "node:fs";
+import path from "node:path";
 import { CDPClient } from "../lib/cdp";
 import { isChromiumFamily } from "../lib/browser-family";
 import { resolveCdpPort, CDP_PORT_MISSING_HINT } from "../lib/cdp-port";
@@ -14,7 +17,7 @@ import { resolveSessionBrowser } from "../lib/session-browser";
 export const schema = {
   name: "extension_list_extensions",
   description:
-    "List the extensions with a live context in the running dev browser via Chrome DevTools Protocol. Returns each extension's id, name, version, and live contexts (service worker, page). Identity is read read-only via the Extensions domain, other extensions' contexts are never attached to or evaluated in. A dormant MV3 service worker with no open page may be absent until it wakes. Chromium only (Firefox uses RDP, not yet supported). Requires an active dev or start session.",
+    "List the extensions with a live context in the running dev browser via Chrome DevTools Protocol. Returns each extension's id, name, version, and live contexts (service worker, page). The entry for THIS dev session's extension (the project being served) is flagged ownExtension: true, with name and version resolved from the session's ready contract even when the browser exposes no identity. Other extensions resolve via the read-only Extensions domain when available; their contexts are never attached to or evaluated in, so an id that the domain does not describe stays id-only with a note saying why. A dormant MV3 service worker with no open page may be absent until it wakes. Chromium only (Firefox uses RDP, not yet supported). Requires an active dev or start session.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -37,9 +40,106 @@ interface ExtensionEntry {
   id: string;
   name?: string;
   version?: string;
+  ownExtension?: boolean;
   contexts: Array<{ type: string; url: string }>;
-  source: "extensions-domain" | "target-only";
+  source: "extensions-domain" | "session-contract" | "target-only";
+  note?: string;
 }
+
+// Chrome derives an UNPACKED extension's id from the SHA-256 of its absolute
+// directory path: the first 16 bytes, each nibble mapped 0-15 onto 'a'-'p'.
+// Recomputing it is deterministic and needs no browser round-trip. Mirrors
+// resolveExtensionId in open.ts, which caught live that a dev session ALSO
+// loads Extension.js's own manager extension, so "some chrome-extension://
+// target" is frequently not the project's.
+function unpackedExtensionId(distPath: string): string {
+  const digest = crypto.createHash("sha256").update(distPath).digest();
+  let id = "";
+  for (let i = 0; i < 16; i++) {
+    id += String.fromCharCode(97 + (digest[i] >> 4));
+    id += String.fromCharCode(97 + (digest[i] & 0x0f));
+  }
+  return id;
+}
+
+interface OwnIdentity {
+  // Path-derived id candidates: the dist path as the contract records it plus
+  // its realpath, in case the engine loaded through a symlink (/tmp on macOS).
+  ids: string[];
+  name?: string;
+  version?: string;
+}
+
+// The identity of the extension THIS session serves, from the ready contract
+// the engine writes (it stamps extensionName/extensionVersion and the distPath
+// it actually loaded). Falls back to the built manifest next to that distPath
+// for engines that predate the identity stamp.
+function readOwnIdentity(
+  projectPath: string,
+  browser: string,
+): OwnIdentity | null {
+  let contract: Record<string, unknown>;
+  try {
+    const file = path.resolve(
+      projectPath,
+      "dist",
+      "extension-js",
+      browser,
+      "ready.json",
+    );
+    contract = JSON.parse(fs.readFileSync(file, "utf8"));
+  } catch {
+    return null;
+  }
+
+  const distPath =
+    typeof contract?.distPath === "string" ? contract.distPath : null;
+  const ids: string[] = [];
+  if (distPath) {
+    ids.push(unpackedExtensionId(distPath));
+    try {
+      const real = fs.realpathSync(distPath);
+      if (real !== distPath) ids.push(unpackedExtensionId(real));
+    } catch {
+    }
+  }
+
+  let name =
+    typeof contract?.extensionName === "string"
+      ? contract.extensionName
+      : undefined;
+  let version =
+    typeof contract?.extensionVersion === "string"
+      ? contract.extensionVersion
+      : undefined;
+
+  if ((!name || !version) && distPath) {
+    try {
+      const manifest = JSON.parse(
+        fs.readFileSync(path.join(distPath, "manifest.json"), "utf8"),
+      );
+      // A __MSG_*__ placeholder is worse than no name: it is not what the
+      // browser displays. Skip it rather than surface the raw key.
+      if (
+        !name &&
+        typeof manifest?.name === "string" &&
+        !manifest.name.startsWith("__MSG_")
+      ) {
+        name = manifest.name;
+      }
+      if (!version && typeof manifest?.version === "string") {
+        version = manifest.version;
+      }
+    } catch {
+    }
+  }
+
+  if (ids.length === 0 && !name) return null;
+  return { ids, name, version };
+}
+
+const UNRESOLVED_NOTE =
+  "Identity unresolved: the browser's Extensions CDP domain returned nothing for this id, and other extensions' contexts are never attached to or evaluated in to read a manifest.";
 
 export async function handler(args: {
   projectPath: string;
@@ -98,6 +198,8 @@ export async function handler(args: {
       byId.set(id, list);
     }
 
+    const own = readOwnIdentity(args.projectPath, browser);
+
     const extensions: ExtensionEntry[] = [];
     for (const [id, ctxTargets] of byId) {
       const entry: ExtensionEntry = {
@@ -118,18 +220,48 @@ export async function handler(args: {
       } catch {
       }
 
+      if (own?.ids.includes(id)) {
+        entry.ownExtension = true;
+        if (entry.name === undefined && own.name !== undefined) {
+          entry.name = own.name;
+          if (own.version !== undefined) entry.version = own.version;
+          entry.source = "session-contract";
+        }
+      }
+
       extensions.push(entry);
     }
 
-    extensions.sort((a, b) => (a.name ?? a.id).localeCompare(b.name ?? b.id));
+    // The path-derived id can miss (a profile-relocated or key-pinned load).
+    // When it does but the Extensions domain DID resolve a name that matches
+    // the contract's, that entry is the session's extension all the same.
+    if (own?.name && !extensions.some((e) => e.ownExtension)) {
+      const byName = extensions.filter((e) => e.name === own.name);
+      if (byName.length === 1) byName[0].ownExtension = true;
+    }
 
+    for (const entry of extensions) {
+      if (entry.name === undefined) entry.note = UNRESOLVED_NOTE;
+    }
+
+    // Own extension first: it is the one the caller is developing, and the one
+    // every follow-up tool call targets.
+    extensions.sort((a, b) => {
+      if ((a.ownExtension ?? false) !== (b.ownExtension ?? false)) {
+        return a.ownExtension ? -1 : 1;
+      }
+      return (a.name ?? a.id).localeCompare(b.name ?? b.id);
+    });
+
+    const ownEntry = extensions.find((e) => e.ownExtension);
     return JSON.stringify({
       cdpPort,
       browser,
       count: extensions.length,
+      ownExtensionId: ownEntry?.id ?? null,
       extensions,
       note:
-        "Lists extensions that currently have at least one live context (service worker or open page). An MV3 service worker that has gone dormant with no open page may be absent until it wakes. Identity is read read-only via the Extensions domain; other extensions' contexts are never attached to or evaluated in.",
+        "Lists extensions that currently have at least one live context (service worker or open page). An MV3 service worker that has gone dormant with no open page may be absent until it wakes. ownExtension marks the extension this dev session serves, identified from the session's ready contract. Other identity is read read-only via the Extensions domain; other extensions' contexts are never attached to or evaluated in.",
     });
   } catch (error) {
     return JSON.stringify({
