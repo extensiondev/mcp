@@ -102,6 +102,28 @@ export function getSession(
   return sessions.get(sessionKey(projectPath, browser));
 }
 
+// Session info by projectPath+browser from wherever it survives: the in-memory
+// registry first (same MCP process), then the on-disk marker (a fresh MCP
+// process after a restart). extension_wait uses this to learn session facts
+// the ready.json contract does not carry, like noBrowser.
+export function findSessionInfo(
+  projectPath: string,
+  browser: string,
+): ProcessInfo | undefined {
+  const inMemory = sessions.get(sessionKey(projectPath, browser));
+  if (inMemory) return inMemory;
+  const resolved = path.resolve(projectPath);
+  for (const marker of listSessionMarkers()) {
+    if (
+      path.resolve(marker.projectPath) === resolved &&
+      marker.browser === browser
+    ) {
+      return marker;
+    }
+  }
+  return undefined;
+}
+
 // Memory only, deliberately: this fires on child exit, and the child dying
 // says nothing about the browser it launched (Firefox detaches). The marker
 // stays until extension_stop prunes it, or all:true would forget a session

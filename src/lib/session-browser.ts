@@ -162,6 +162,40 @@ export function browserExitStamp(
   return null;
 }
 
+// The engine allocates the real dev-server port BEFORE it creates its metadata
+// writer, so every ready.json stamp (starting, ready, even error) carries the
+// port it actually bound, never the requested one (verified against
+// extension-develop 4.0.x: PortManager.allocatePorts runs first, and a taken
+// 8080 walks to 8081+ with only the contract knowing). That makes the contract
+// the single source of truth for ports: extension_dev reads it here after its
+// health window instead of echoing the requested port back, which is how dev
+// said 8080 while extension_wait said 8081 for the same session (hit by 8 of
+// 10 swarm personas). `since` guards against a stale contract from a previous
+// run: only a stamp written after our own spawn counts.
+export function contractBoundPort(
+  projectPath: string,
+  browser: string,
+  since: number,
+): number | null {
+  const readyPath = path.resolve(
+    projectPath,
+    "dist",
+    "extension-js",
+    browser,
+    "ready.json",
+  );
+  try {
+    const stat = fs.statSync(readyPath);
+    if (stat.mtimeMs < since) return null;
+    const contract = JSON.parse(fs.readFileSync(readyPath, "utf8"));
+    return typeof contract?.port === "number" && Number.isFinite(contract.port)
+      ? contract.port
+      : null;
+  } catch {
+    return null;
+  }
+}
+
 // "chrome", not "chromium": the blind fallback used to name a browser almost
 // nobody runs, and because a DEAD session left no live sighting, every tool call
 // after the dev server exited silently retargeted chromium. That mismatch was

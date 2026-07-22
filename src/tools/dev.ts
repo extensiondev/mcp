@@ -11,6 +11,7 @@ import { spawnExtensionCli } from "../lib/exec";
 import { registerSession, removeSession } from "../lib/process-manager";
 import {
   browserExitStamp,
+  contractBoundPort,
   liveProjectSessions,
 } from "../lib/session-browser";
 import { stopOne } from "./stop";
@@ -139,6 +140,7 @@ export async function handler(
     port: args.port,
     projectPath: args.projectPath,
     command: "dev",
+    noBrowser: Boolean(args.noBrowser),
   });
   child.on("exit", () => removeSession(args.projectPath, browser));
 
@@ -245,11 +247,48 @@ export async function handler(
       : "none (read-only: logs, source_inspect, wait, doctor)",
   };
 
+  // ONE source of truth for ports. The engine allocates the real port before
+  // its first ready.json stamp, so by the end of the health window the
+  // contract usually knows the bound port even when the requested one was
+  // taken (8080 walks to 8081+). Echoing args.port back is how this tool said
+  // port: 8080 while extension_wait said 8081 for the very same session, the
+  // most-corroborated finding of the DevX swarm (8 of 10 personas). When the
+  // engine has not stamped the contract yet, say so honestly with a labeled
+  // requestedPort instead of asserting a port that was never bound.
+  const boundPort = contractBoundPort(args.projectPath, browser, spawnedAt);
+  if (boundPort !== null && boundPort !== args.port) {
+    // Keep the session registry in step with the truth for later tools.
+    registerSession({
+      pid,
+      browser,
+      port: boundPort,
+      projectPath: args.projectPath,
+      command: "dev",
+      noBrowser: Boolean(args.noBrowser),
+    });
+  }
+  const portReport =
+    boundPort !== null
+      ? {
+          port: boundPort,
+          ...(args.port !== undefined && args.port !== boundPort
+            ? {
+                requestedPort: args.port,
+                portNote: `Requested port ${args.port} was not available; the dev server bound ${boundPort} (read from the engine's ready.json contract, the same source extension_wait reports).`,
+              }
+            : {}),
+        }
+      : {
+          requestedPort: args.port ?? 8080,
+          portNote:
+            "The engine has not stamped its ready.json contract yet, so the bound port is not known at response time (a taken port makes the server bind the next free one). extension_wait reports the bound port from that contract once it lands; requestedPort above is only what was asked for.",
+        };
+
   return JSON.stringify({
     ok: true,
     pid,
     browser,
-    port: args.port ?? 8080,
+    ...portReport,
     projectPath: args.projectPath,
     status: "started",
     ...(replaced.length > 0
@@ -259,12 +298,13 @@ export async function handler(
         }
       : {}),
     capabilities,
-    hint:
-      "Use extension_wait to check when the extension is fully loaded, then extension_source_inspect to inspect the live state. " +
-      (allowControl
-        ? `Control channel is ON: extension_${controlVerbs.split(", ").join("/extension_")}${args.allowEval ? "/extension_eval" : ""} will work against this session.`
-        : "Control channel is OFF: extension_storage/reload/open/dom_inspect need allowControl: true, and extension_eval needs allowEval: true (which also implies allowControl). To unlock them, call extension_dev again with the flag you need plus replace: true (it stops this session first); a plain second call is refused so the session does not fork.") +
-      " When you are done, call extension_stop to shut down the dev server and browser.",
+    hint: args.noBrowser
+      ? "Build-only session (noBrowser: true): no browser will launch, so no runtime will ever attach. extension_wait returns as soon as the first compile lands (compiled: true, browserAttached: false) instead of waiting out its budget; do not wait for a browser. The control verbs (storage/reload/open/dom_inspect/eval) need a live browser and will not work against this session. When you are done, call extension_stop to shut down the dev server."
+      : "Use extension_wait to check when the extension is fully loaded, then extension_source_inspect to inspect the live state. " +
+        (allowControl
+          ? `Control channel is ON: extension_${controlVerbs.split(", ").join("/extension_")}${args.allowEval ? "/extension_eval" : ""} will work against this session.`
+          : "Control channel is OFF: extension_storage/reload/open/dom_inspect need allowControl: true, and extension_eval needs allowEval: true (which also implies allowControl). To unlock them, call extension_dev again with the flag you need plus replace: true (it stops this session first); a plain second call is refused so the session does not fork.") +
+        " When you are done, call extension_stop to shut down the dev server and browser.",
     earlyOutput: denoiseEarlyOutput(earlyOutput).slice(0, 500),
     logPath,
   });
@@ -282,6 +322,15 @@ function denoiseEarlyOutput(raw: string): string {
     /V8: .*Invalid asm\.js/i,
     /^\(node:\d+\) V8:/i,
     /Use `node --trace-warnings/i,
+    // V8's asm.js validator verdicts are warnings about DEPENDENCY code (e.g.
+    // es-module-lexer's lexer.asm.js failing validation and falling back to
+    // plain JS). They also arrive without the "(node:pid) V8:" prefix when the
+    // launched browser's stderr shares the log, so match the verdict itself.
+    // These three phrases are emitted only by V8's asm.js pipeline; a real
+    // compile or runtime error never carries them.
+    /Invalid asm\.js:/i,
+    /Linking failure in asm\.js/i,
+    /Successfully compiled asm\.js/i,
   ];
   return raw
     .split("\n")
