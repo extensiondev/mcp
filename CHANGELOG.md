@@ -1,5 +1,30 @@
 # Changelog
 
+## 5.3.1
+
+### Added
+
+- `extension_login` pending results lead with the one-click device link
+  when the flow provides one (RFC 8628 `verification_uri_complete`): the
+  user opens it and approves with the code pre-filled, no typing. The
+  bare URI and code stay in the result as the fallback for flows that
+  cannot prefill.
+- `extension_deploy` and `extension_release_promote` accept each other's
+  spelling for the same build commit: deploy folds a `buildId` argument
+  onto its canonical `buildSha`, and promote folds `buildSha` onto its
+  canonical `buildId`. Full-schema validation errors enumerate the new
+  aliases alongside the rest of the contract.
+
+### Fixed
+
+- Resuming `extension_login` with a `deviceCode` while authorization is
+  still pending no longer claims a userCode of "(see the previous
+  response)". Only a hash of the code is stored, so it cannot be echoed
+  again; the result now says plainly that the one-click link and code
+  from the previous response are still valid, to open that link (or
+  enter the code at the verification URI), then call `extension_login`
+  again with the same deviceCode.
+
 ## 5.3.0
 
 The DevX surprise swarm ran ten personas over the full create-to-release
