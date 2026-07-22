@@ -1,5 +1,58 @@
 # Changelog
 
+## 5.3.0
+
+The DevX surprise swarm ran ten personas over the full create-to-release
+journey and ranked five blocker clusters. All five land here.
+
+### Added
+
+- `extension_release_list`: the discovery sibling of the release verbs.
+  Lists the project's channels (channel to promoted build sha) and recent
+  builds from the public registry (registry.extension.land), so a caller
+  can pick a valid `buildSha` for `extension_release_promote`,
+  `extension_deploy`, or `extension_publish` instead of hunting the
+  console. Read-only, needs no auth for public projects. Tool count is
+  now 32.
+- A shared public-registry client (`src/lib/registry.ts`) that reads
+  meta, channels, the build index, and store credential health. Reads
+  are best-effort: a registry blip never fails the verb it decorates.
+
+### Fixed
+
+- `extension_create` announces every decision it took without being
+  asked. The resolved destination path leads the result, and
+  `defaultsApplied` names each silent choice (server cwd, package
+  manager, browser, git init) as one. Validation errors now teach the
+  full argument schema, required, optional, and aliases, instead of
+  revealing one missing field per attempt.
+- `extension_dev` no longer forks sessions. A second call on the same
+  projectPath used to return ok:true while its browser died on the
+  profile lock; it now detects the live session and refuses, or stops it
+  first with `replace:true` and says so. A dead browser leg no longer
+  rides an ok:true envelope: the ready contract's `browser_exited` stamp
+  and the profile-lock signature both surface as failures.
+- `extension_stop` finds orphaned sessions. It unions the in-memory
+  registry with the on-disk session markers, so a session whose dev
+  child exited (exactly when the orphaned browser most needs stopping)
+  is still found, verified, and reaped. A stale marker yields an honest
+  stopped:false and is pruned, never a phantom kill.
+- `extension_deploy` dry runs stopped echoing an unqualified
+  "Preflight OK". The preflight now reads per-store credential health
+  from the registry and reports each browser as actionable, not
+  configured, or unverifiable, with the console stores URL in the
+  result. The silently defaulted channel is disclosed and checked
+  against channels.json. Under dryRun a platform error now reads
+  "preflight failed", never "submit failed".
+- `extension_release_promote` dead-ends carry the way out: a 404 or
+  UNKNOWN_BUILD error now includes each channel's currently promoted
+  sha, the registry URL it read, and the console Builds page URL, plus
+  a pointer to `extension_release_list`.
+- `extension_publish` says what the share link serves: the build sha,
+  build time, version, and channel behind the URL, resolved from the
+  registry's build index, with a note when it is the newest successful
+  build rather than a pinned one.
+
 ## 5.2.0
 
 ### Added
