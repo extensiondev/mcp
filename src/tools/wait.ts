@@ -9,6 +9,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { ReadyContract } from "../lib/types";
+import { findSessionInfo } from "../lib/process-manager";
 import { resolveSessionBrowser } from "../lib/session-browser";
 import { recentErrorLogs } from "./doctor";
 
@@ -22,6 +23,8 @@ import { recentErrorLogs } from "./doctor";
 // notifications can't fix this: the SDK only resets the client timeout when the
 // CLIENT sets resetTimeoutOnProgress, which the server cannot control.)
 const SAFE_CEILING_MS = 50_000;
+const DEFAULT_TIMEOUT_MS = 45_000;
+const MIN_TIMEOUT_MS = 1_000;
 
 function isAlive(pid: number): boolean {
   try {
@@ -35,7 +38,7 @@ function isAlive(pid: number): boolean {
 export const schema = {
   name: "extension_wait",
   description:
-    "Wait for a running dev or start session to be ready. Polls the ready.json contract file and returns structured status. A single call is bounded to ~50s to stay under the MCP client request timeout; if it returns status:'timeout', call it again to keep waiting (polling resumes on the same contract).",
+    "Wait for a running dev or start session to be ready. Polls the ready.json contract file and returns structured status with two separate facts: compiled (the compiler finished) and browserAttached (the extension's runtime connected from a live browser). Every result reports budgetMs (this call's wait budget) and elapsedMs; on status:'timeout' call again to keep waiting (polling resumes on the same contract). In a noBrowser (build-only) session it returns as soon as the compile lands instead of waiting for a browser that will never attach. Ports in the result come from the ready contract, so they always match what the dev server actually bound.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -48,11 +51,16 @@ export const schema = {
         description:
           "Browser to check readiness for. Defaults to the active dev session's browser for this project.",
       },
+      timeoutMs: {
+        type: "number",
+        default: DEFAULT_TIMEOUT_MS,
+        description:
+          `Wait budget in milliseconds for this call. Default ${DEFAULT_TIMEOUT_MS}; clamped to ${MIN_TIMEOUT_MS}-${SAFE_CEILING_MS} (the ceiling keeps one call under the MCP client's 60s request timeout). On timeout the result reports elapsedMs plus what was observed (compiled, browserAttached); call again to keep waiting, polling resumes on the same contract.`,
+      },
       timeout: {
         type: "number",
-        default: 45000,
         description:
-          "Requested wait in milliseconds. Clamped to ~50s per call so it never exceeds the MCP client request timeout; call again to keep waiting for slower builds.",
+          "Deprecated alias of timeoutMs, kept for callers that already pass it. timeoutMs wins when both are given.",
       },
     },
     required: ["projectPath"],
@@ -62,6 +70,7 @@ export const schema = {
 export async function handler(args: {
   projectPath: string;
   browser?: string;
+  timeoutMs?: number;
   timeout?: number;
 }): Promise<string> {
   const { browser } = resolveSessionBrowser(
@@ -69,8 +78,11 @@ export async function handler(args: {
     args.browser,
     "chrome",
   );
-  const requested = args.timeout ?? 45_000;
-  const timeout = Math.min(Math.max(requested, 1_000), SAFE_CEILING_MS);
+  const requested = args.timeoutMs ?? args.timeout ?? DEFAULT_TIMEOUT_MS;
+  const budgetMs = Math.min(
+    Math.max(requested, MIN_TIMEOUT_MS),
+    SAFE_CEILING_MS,
+  );
   const clamped = requested > SAFE_CEILING_MS;
   const readyPath = path.resolve(
     args.projectPath,
@@ -80,16 +92,27 @@ export async function handler(args: {
     "ready.json",
   );
 
+  // A build-only session (dev with noBrowser: true) never launches a browser,
+  // so no executor will ever attach: waiting for one just burns the whole
+  // budget. The engine's contract does not record the flag, but the session
+  // registry (and its on-disk marker) does.
+  const buildOnly = findSessionInfo(args.projectPath, browser)?.noBrowser === true;
+
   const start = Date.now();
   const pollInterval = 1000;
   // Tracks the half-ready state: compiled, but the runtime executor never
   // attached. Distinguishing it from "still building" is the whole point.
   let sawCompiledButUnattached = false;
+  // The last contract status observed, so a timeout can narrate what WAS seen
+  // ("the server stamped starting but never compiled") instead of an opaque
+  // "not ready".
+  let lastContractStatus: string | null = null;
 
-  while (Date.now() - start < timeout) {
+  while (Date.now() - start < budgetMs) {
     try {
       const raw = fs.readFileSync(readyPath, "utf8");
       const contract: ReadyContract = JSON.parse(raw);
+      lastContractStatus = contract.status;
 
       if (contract.status === "ready") {
         // A ready.json can outlive its dev server (crash/kill). Returning
@@ -101,7 +124,8 @@ export async function handler(args: {
             message: `ready.json reports ready but its dev-server pid ${contract.pid} is dead, the session exited. Restart with extension_dev; extension_doctor will confirm.`,
             browser: contract.browser,
             pid: contract.pid,
-            waitDuration: Date.now() - start,
+            budgetMs,
+            elapsedMs: Date.now() - start,
           });
         }
         // "ready" means COMPILED, which is not the same as usable: the runtime
@@ -110,9 +134,30 @@ export async function handler(args: {
         // executor connected" until a full restart. Keep waiting for the
         // attachment rather than declaring victory at compile time.
         const attached =
-          (contract as { runtime?: string }).runtime === "attached" ||
-          typeof (contract as { executorAttachedAt?: string })
-            .executorAttachedAt === "string";
+          contract.runtime === "attached" ||
+          typeof contract.executorAttachedAt === "string";
+        if (!attached && buildOnly) {
+          // No browser was launched, so the attach this loop would wait for
+          // cannot happen. Say what IS ready and return immediately.
+          return JSON.stringify({
+            status: "ready",
+            buildOnly: true,
+            compiled: true,
+            browserAttached: false,
+            message:
+              "Build-only session (noBrowser): the extension compiled and the dev server is live, but no browser was launched, so browserAttached will never become true. Do not call extension_wait again to wait for a browser. The control verbs (storage/reload/open/dom_inspect/eval) need a live browser and will not work against this session.",
+            command: contract.command,
+            browser: contract.browser,
+            port: contract.port,
+            pid: contract.pid,
+            distPath: contract.distPath,
+            manifestPath: contract.manifestPath,
+            compiledAt: contract.compiledAt,
+            startedAt: contract.startedAt,
+            budgetMs,
+            elapsedMs: Date.now() - start,
+          });
+        }
         if (!attached) {
           // Not an error yet: the executor usually attaches a beat later. Only
           // report the half-ready state if we run out of budget below.
@@ -128,6 +173,8 @@ export async function handler(args: {
         const runtimeErrors = recentErrorLogs(args.projectPath, browser, 3);
         return JSON.stringify({
           status: "ready",
+          compiled: true,
+          browserAttached: true,
           command: contract.command,
           browser: contract.browser,
           port: contract.port,
@@ -136,7 +183,8 @@ export async function handler(args: {
           manifestPath: contract.manifestPath,
           compiledAt: contract.compiledAt,
           startedAt: contract.startedAt,
-          waitDuration: Date.now() - start,
+          budgetMs,
+          elapsedMs: Date.now() - start,
           ...(runtimeErrors.length
             ? {
                 runtimeErrors,
@@ -153,7 +201,8 @@ export async function handler(args: {
           errors: contract.errors,
           code: contract.code,
           browser: contract.browser,
-          waitDuration: Date.now() - start,
+          budgetMs,
+          elapsedMs: Date.now() - start,
         });
       }
     } catch {
@@ -165,18 +214,27 @@ export async function handler(args: {
   if (sawCompiledButUnattached) {
     return JSON.stringify({
       status: "compiled-not-attached",
-      message: `The extension compiled, but the runtime executor never attached within ${timeout}ms. The build is fine; the browser side is not connected, so extension_eval/storage/reload/open will fail with "no executor connected".`,
+      compiled: true,
+      browserAttached: false,
+      message: `The extension compiled, but the runtime executor never attached within this call's ${budgetMs}ms budget. The build is fine; the browser side is not connected, so extension_eval/storage/reload/open will fail with "no executor connected".`,
       readyPath,
-      waitDuration: Date.now() - start,
+      budgetMs,
+      elapsedMs: Date.now() - start,
       hint: "This is usually transient: call extension_wait again. If it persists, stop and restart the session with extension_dev (a restart reliably reattaches); extension_doctor reports the executor leg.",
     });
   }
 
   return JSON.stringify({
     status: "timeout",
-    message: `Extension not ready after ${timeout}ms this call`,
+    compiled: false,
+    browserAttached: false,
+    message:
+      lastContractStatus === "starting"
+        ? `Not ready after ${budgetMs}ms this call: the dev server stamped its contract (status: starting) but the first compile has not landed yet.`
+        : `Not ready after ${budgetMs}ms this call: no ready contract was observed at ${readyPath}, so neither the compile nor a browser attach has been seen.`,
     readyPath,
-    waitDuration: Date.now() - start,
+    budgetMs,
+    elapsedMs: Date.now() - start,
     clamped: clamped
       ? `requested ${requested}ms was clamped to ${SAFE_CEILING_MS}ms to stay under the MCP client request timeout`
       : undefined,

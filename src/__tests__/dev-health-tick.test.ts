@@ -46,7 +46,9 @@ vi.mock("../lib/exec", async (importOriginal) => {
 
 const dev = await import("../tools/dev");
 const start = await import("../tools/start");
+const wait = await import("../tools/wait");
 const { removeSession } = await import("../lib/process-manager");
+const { writeModernContract } = await import("./fixtures/ready-contract");
 
 const tmpDirs: string[] = [];
 function tmpProject(): string {
@@ -144,6 +146,119 @@ describe("extension_dev health tick", () => {
     expect(result.ok).toBe(true);
     expect(result.status).toBe("started");
     expect(result.browser).toBe("chrome");
+    expect(result.earlyOutput).toContain("ready in 300ms");
+  }, 15_000);
+});
+
+// Swarm cluster 19, the most-corroborated finding (8 of 10 personas): dev said
+// port: 8080 while wait said 8081 for the same session, because dev echoed the
+// REQUESTED port back instead of the one the engine actually bound. The engine
+// records the bound port in ready.json from its first stamp, so that contract
+// is the single source of truth for both tools.
+describe("extension_dev port truth", () => {
+  it("reports the bound port from ready.json and never disagrees with wait", async () => {
+    const project = tmpProject();
+    nextChild = () => {
+      const cli = fakeCli(
+        'console.log("ready in 300ms"); setTimeout(()=>{}, 60000);',
+      );
+      // The engine stamps after allocating the real port; requested 8080 was
+      // taken, so it bound 8081. Written mid-tick, as it would be live.
+      setTimeout(() => {
+        writeModernContract(project, "chrome", {
+          command: "dev",
+          port: 8081,
+          pid: process.pid,
+          runtime: "attached",
+          executorAttachedAt: new Date().toISOString(),
+        });
+      }, 1000);
+      return cli;
+    };
+
+    const result = JSON.parse(
+      await dev.handler({ projectPath: project, port: 8080 }),
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.port).toBe(8081);
+    expect(result.requestedPort).toBe(8080);
+    expect(result.portNote).toContain("8081");
+
+    // The never-disagree guarantee: wait reads the same contract.
+    const waited = JSON.parse(
+      await wait.handler({ projectPath: project, browser: "chrome" }),
+    );
+    expect(waited.port).toBe(result.port);
+  }, 20_000);
+
+  it("labels the requested port honestly when the contract has not landed", async () => {
+    const project = tmpProject();
+    nextChild = () =>
+      fakeCli('console.log("ready in 300ms"); setTimeout(()=>{}, 60000);');
+
+    const result = JSON.parse(
+      await dev.handler({ projectPath: project, port: 8080 }),
+    );
+
+    expect(result.ok).toBe(true);
+    // No `port` claim for a port that was never confirmed bound.
+    expect(result.port).toBeUndefined();
+    expect(result.requestedPort).toBe(8080);
+    expect(result.portNote).toContain("extension_wait");
+  }, 15_000);
+});
+
+describe("extension_dev build-only sessions", () => {
+  it("points noBrowser sessions at an immediate wait, not a browser attach", async () => {
+    const project = tmpProject();
+    nextChild = () =>
+      fakeCli('console.log("ready in 300ms"); setTimeout(()=>{}, 60000);');
+
+    const result = JSON.parse(
+      await dev.handler({ projectPath: project, noBrowser: true }),
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.hint).toContain("Build-only");
+    expect(result.hint).toContain("browserAttached: false");
+    expect(result.hint).not.toContain("fully loaded");
+
+    // The registered session carries noBrowser, so extension_wait on the same
+    // project returns at compile time instead of stalling on an attach that
+    // cannot happen.
+    writeModernContract(project, "chrome", { command: "dev", pid: process.pid });
+    const before = Date.now();
+    const waited = JSON.parse(
+      await wait.handler({ projectPath: project, browser: "chrome" }),
+    );
+    expect(waited.status).toBe("ready");
+    expect(waited.buildOnly).toBe(true);
+    expect(waited.compiled).toBe(true);
+    expect(waited.browserAttached).toBe(false);
+    expect(waited.message).toContain("no browser");
+    expect(Date.now() - before).toBeLessThan(10_000);
+  }, 25_000);
+});
+
+describe("extension_dev earlyOutput denoise", () => {
+  it("drops V8 asm.js warning lines but keeps real output", async () => {
+    const project = tmpProject();
+    nextChild = () =>
+      fakeCli(
+        'console.log("(node:66923) V8: file:///x/node_modules/es-module-lexer/dist/lexer.asm.js:2 Invalid asm.js: Invalid return type");' +
+          'console.log("(Use `node --trace-warnings ...` to show where the warning was created)");' +
+          'console.log("Invalid asm.js: Unexpected token");' +
+          'console.log("Linking failure in asm.js: Unexpected stdlib member");' +
+          'console.log("ready in 300ms");' +
+          "setTimeout(()=>{}, 60000);",
+      );
+
+    const result = JSON.parse(await dev.handler({ projectPath: project }));
+
+    expect(result.ok).toBe(true);
+    expect(result.earlyOutput).not.toContain("asm.js");
+    expect(result.earlyOutput).not.toContain("trace-warnings");
     expect(result.earlyOutput).toContain("ready in 300ms");
   }, 15_000);
 });
