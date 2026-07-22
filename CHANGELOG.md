@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 5.5.1
 
 The store journey stops being write-only after submit, and the token
 surfaces start telling the truth about lifetimes and API bases.
@@ -683,7 +683,7 @@ this release graduates that line to stable and becomes `latest`.
 
 # @extension.dev/mcp, Changelog
 
-## Unreleased, agent-bridge tools
+## 5.5.1, agent-bridge tools
 
 Adds the MCP client surface for the Extension.js **agent bridge** (dev-time
 observe + act + inspect). All new tools shell out to the `extension` CLI verbs
@@ -718,7 +718,7 @@ Internal: `lib/act` (CLI shell-out helper), `lib/exec.runExtensionCli` (capture)
 `lib/cdp.getClosedShadowRoots`. Test infra aligned to the workspace vitest
 catalog.
 
-## Unreleased, login (auth tools)
+## 5.5.1, login (auth tools)
 
 Adds the missing `login` flow so `extension_publish` no longer requires the user
 to mint and export `EXTENSION_DEV_TOKEN` by hand. Auth stays auth-AWARE: the
