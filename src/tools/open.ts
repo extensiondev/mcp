@@ -14,6 +14,10 @@ import { resolveSessionBrowser } from "../lib/session-browser";
 import { CDPClient } from "../lib/cdp";
 import { resolveCdpPort, CDP_PORT_MISSING_HINT } from "../lib/cdp-port";
 import { isChromiumFamily } from "../lib/browser-family";
+import {
+  navigateToUrlViaBridge,
+  resolveBridgeBaseUrl,
+} from "../lib/bridge-tabs";
 
 // Poll the browser's target list until a live page target reports the URL we
 // navigated to. This is the only trustworthy success signal for a cross-process
@@ -49,23 +53,19 @@ async function pollForTarget(
   }
 }
 
-// Navigate a real tab to a URL (Chromium, via CDP) so agents can drive a
-// content-script test page, a webNavigation target, or the popup rendered as a
-// page (chrome-extension://<id>/popup.html), the loop the surface-only open
-// could not do. Gecko has no CDP; callers use eval(context:page)/logs there.
+// Navigate a real tab to a URL so agents can drive a content-script test
+// page, a webNavigation target, or the popup rendered as a page
+// (chrome-extension://<id>/popup.html), the loop the surface-only open could
+// not do. Chromium rides CDP; Gecko rides the agent bridge (a background
+// eval of tabs.update), the same navigation with a numeric tab id back.
 async function navigateToUrl(
   projectPath: string,
   browser: string,
   url: string,
+  timeout?: number,
 ): Promise<string> {
   if (!isChromiumFamily(browser)) {
-    return JSON.stringify({
-      ok: false,
-      error: {
-        name: "Unsupported",
-        message: `URL navigation drives a tab over Chrome DevTools Protocol, which ${browser} (Gecko) does not expose. On Firefox, drive the page via extension_eval (context: "page"/"content") or read extension_logs.`,
-      },
-    });
+    return navigateToUrlViaBridge(projectPath, browser, url, timeout);
   }
   const resolved = await resolveCdpPort(projectPath, browser);
   if (!resolved) {
@@ -474,24 +474,46 @@ async function openSurfaceAsTab(
       "so there is no page to render as a tab",
     );
   }
-  const id = await resolveExtensionId(projectPath, browser);
-  if (!id) {
-    return JSON.stringify({
-      ok: false,
-      error: {
-        name: "NoExtensionId",
-        message:
-          "Could not resolve the extension id from the live session's CDP targets.",
-      },
-      hint: `Confirm the session is ready (extension_wait). ${CDP_PORT_MISSING_HINT}`,
-    });
+  // Chromium: derive the chrome-extension:// origin from the loaded dist
+  // path. Gecko: the moz-extension UUID is random per profile, so ask the
+  // running extension itself (runtime.getURL over the bridge).
+  let url: string;
+  let extensionId: string | null = null;
+  if (isChromiumFamily(browser)) {
+    extensionId = await resolveExtensionId(projectPath, browser);
+    if (!extensionId) {
+      return JSON.stringify({
+        ok: false,
+        error: {
+          name: "NoExtensionId",
+          message:
+            "Could not resolve the extension id from the live session's CDP targets.",
+        },
+        hint: `Confirm the session is ready (extension_wait). ${CDP_PORT_MISSING_HINT}`,
+      });
+    }
+    url = `chrome-extension://${extensionId}/${doc}`;
+  } else {
+    const base = await resolveBridgeBaseUrl(projectPath, browser);
+    if (!base) {
+      return JSON.stringify({
+        ok: false,
+        error: {
+          name: "NoExtensionId",
+          message:
+            "Could not resolve the extension's moz-extension:// base URL from the live session (a background eval of runtime.getURL).",
+        },
+        hint: "Confirm the session is ready (extension_wait) and was started with allowEval: true (extension_dev).",
+      });
+    }
+    url = `${base}${doc}`;
+    extensionId = base.replace(/^.*:\/\//, "").replace(/\/$/, "");
   }
-  const url = `chrome-extension://${id}/${doc}`;
   const raw = await navigateToUrl(projectPath, browser, url);
   try {
     const parsed = JSON.parse(raw);
     if (parsed?.ok) {
-      parsed.renderedAsTab = { surface, document: doc, extensionId: id };
+      parsed.renderedAsTab = { surface, document: doc, extensionId };
       // For a popup, go the extra step: size the window like Chrome would
       // size the popup, so content-fit layouts render as they really would.
       let popupBounds: { width: number; height: number; clamped: boolean } | null =
@@ -513,7 +535,7 @@ async function openSurfaceAsTab(
           ? `The window was resized to the popup's content size (${popupBounds.width}x${popupBounds.height}${popupBounds.clamped ? ", clamped to Chrome's 25x25-800x600 popup bounds" : ""}), approximating real popup rendering. This resizes the WHOLE browser window for the session. It is the same page with the same extension APIs, but window.close() closes the tab. `
           : "It is the same page with the same extension APIs, but it is NOT hosted in a popup window: no popup sizing, and window.close() closes the tab. ") +
         `Inspect it with extension_dom_inspect context: '${surface}' (include: ['html']), or extension_source_inspect with this url. ` +
-        "Do NOT pass this chrome-extension:// url to extension_dom_inspect or extension_eval as a tab target: script injection cannot reach extension pages, only the surface context or CDP can.";
+        "Do NOT pass this extension-page url to extension_dom_inspect or extension_eval as a tab target: script injection cannot reach extension pages, only the surface context or CDP can.";
       return JSON.stringify(parsed);
     }
   } catch {
@@ -545,7 +567,7 @@ export const schema = {
       url: {
         type: "string",
         description:
-          "Navigate a real tab to this URL (Chromium only, via CDP) instead of opening a surface. Use for content-script/webNavigation test pages, or the popup as a page: chrome-extension://<id>/popup.html. Alternative to `surface`.",
+          "Navigate a real tab to this URL instead of opening a surface (Chromium via CDP; Firefox via the agent bridge, which needs allowEval: true). Use for content-script/webNavigation test pages, or the popup as a page: chrome-extension://<id>/popup.html. Alternative to `surface`.",
       },
       asTab: {
         type: "boolean",
@@ -574,8 +596,10 @@ export async function handler(
 ): Promise<string> {
   const { browser } = resolveSessionBrowser(args.projectPath, args.browser);
 
-  // `url` drives a tab navigation over CDP; `surface` opens an extension surface.
-  if (args.url) return navigateToUrl(args.projectPath, browser, args.url);
+  // `url` drives a tab navigation (CDP on Chromium, agent bridge on Gecko);
+  // `surface` opens an extension surface.
+  if (args.url)
+    return navigateToUrl(args.projectPath, browser, args.url, args.timeout);
 
   const AS_TAB_SURFACES = ["popup", "options", "sidebar", "newtab", "history", "bookmarks"];
   if (args.asTab && args.surface && AS_TAB_SURFACES.includes(args.surface)) {
@@ -655,7 +679,7 @@ export async function handler(
         // Don't just explain the dead end: headless has no window to hang a
         // popup on, but the surface's document renders fine in a tab. Do that
         // automatically for the surfaces that have one, and say what we did.
-        if (AS_TAB_SURFACES.includes(args.surface) && isChromiumFamily(browser)) {
+        if (AS_TAB_SURFACES.includes(args.surface)) {
           const fallback = await openSurfaceAsTab(
             args.projectPath,
             browser,

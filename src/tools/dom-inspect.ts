@@ -15,6 +15,7 @@ import {
   matchTargetsByUrl,
   TARGET_ID_NOTE,
 } from "../lib/cdp-targets";
+import { listBridgeTabs, matchTabsByUrl } from "../lib/bridge-tabs";
 
 export const schema = {
   name: "extension_dom_inspect",
@@ -32,7 +33,7 @@ export const schema = {
       tabUrl: {
         type: "string",
         description:
-          "Target the tab whose URL contains this substring (case-insensitive; titles are checked only when no url matches). Resolved against the live browser's CDP page targets BEFORE inspecting: exactly one match proceeds; zero or several matches return the candidate targets (targetId/url/title) so you can narrow, never a guess. Chromium sessions only; on Firefox use `url`/`tab`. Alternative to `url`.",
+          "Target the tab whose URL contains this substring (case-insensitive; titles are checked only when no url matches). Resolved against the live browser BEFORE inspecting (Chromium: CDP page targets; Firefox: the agent bridge tab list): exactly one match proceeds; zero or several matches return the candidates so you can narrow, never a guess. Alternative to `url`.",
       },
       listTargets: {
         type: "boolean",
@@ -168,12 +169,13 @@ export async function handler(
   }
 
   // `tabUrl` targets by what a human can see: a substring of the tab's URL,
-  // resolved against the live CDP page targets. It only ever proceeds on a
-  // UNIQUE match; anything else returns the candidates so the caller picks,
-  // because guessing among tabs is how inspection reads the wrong page.
+  // resolved against the live browser (Chromium: CDP page targets; Gecko: the
+  // agent bridge tab list). It only ever proceeds on a UNIQUE match; anything
+  // else returns the candidates so the caller picks, because guessing among
+  // tabs is how inspection reads the wrong page.
   let targetUrl = args.url;
-  let resolvedTarget: { targetId: string; url: string; title: string } | null =
-    null;
+  let targetTab = args.tab;
+  let resolvedTarget: Record<string, unknown> | null = null;
   if (args.tabUrl) {
     if (args.tab != null || args.url) {
       return JSON.stringify({
@@ -186,48 +188,87 @@ export async function handler(
       });
     }
     const { browser } = resolveSessionBrowser(args.projectPath, args.browser);
-    const cdp = await cdpPortOrError(args.projectPath, browser, "tabUrl");
-    if ("error" in cdp) return cdp.error;
-    let targets: Awaited<ReturnType<typeof listPageTargets>>;
-    try {
-      targets = await listPageTargets(cdp.port);
-    } catch (e) {
-      return JSON.stringify({
-        ok: false,
-        error: {
-          name: "CdpError",
-          message: `Could not list page targets to resolve tabUrl: ${e instanceof Error ? e.message : String(e)}`,
-        },
-        hint: "Confirm the session is ready (extension_wait), then retry, or target with `url`/`tab` instead.",
-      });
+    if (!isChromiumFamily(browser)) {
+      // Gecko: same one/zero/many contract, resolved against the bridge tab
+      // list instead of CDP targets. A unique match hands the engine the
+      // NUMERIC tab id (stronger than an exact-url re-match).
+      const listed = await listBridgeTabs(
+        args.projectPath,
+        browser,
+        args.timeout,
+      );
+      if ("error" in listed) return listed.error;
+      const matches = matchTabsByUrl(listed.tabs, args.tabUrl);
+      if (matches.length === 0) {
+        return JSON.stringify({
+          ok: false,
+          error: {
+            name: "NoMatchingTarget",
+            message: `No open tab's url (or title) contains "${args.tabUrl}" (case-insensitive).`,
+          },
+          availableTabs: listed.tabs,
+          hint: "Pick one from availableTabs and retry with a `tabUrl` substring of its url, or open the page first (extension_open with `url`).",
+        });
+      }
+      if (matches.length > 1) {
+        return JSON.stringify({
+          ok: false,
+          error: {
+            name: "AmbiguousTabUrl",
+            message: `${matches.length} tabs match "${args.tabUrl}"; refusing to guess which tab you mean.`,
+          },
+          matchingTabs: matches,
+          hint: "Narrow `tabUrl` to a longer substring that matches exactly one url in matchingTabs, or pass its numeric tabId as `tab`.",
+        });
+      }
+      resolvedTarget = { ...matches[0] };
+      if (matches[0].tabId != null) targetTab = matches[0].tabId;
+      else targetUrl = matches[0].url;
+    } else {
+      const cdp = await cdpPortOrError(args.projectPath, browser, "tabUrl");
+      if ("error" in cdp) return cdp.error;
+      let targets: Awaited<ReturnType<typeof listPageTargets>>;
+      try {
+        targets = await listPageTargets(cdp.port);
+      } catch (e) {
+        return JSON.stringify({
+          ok: false,
+          error: {
+            name: "CdpError",
+            message: `Could not list page targets to resolve tabUrl: ${e instanceof Error ? e.message : String(e)}`,
+          },
+          hint: "Confirm the session is ready (extension_wait), then retry, or target with `url`/`tab` instead.",
+        });
+      }
+      const matches = matchTargetsByUrl(targets, args.tabUrl);
+      if (matches.length === 0) {
+        return JSON.stringify({
+          ok: false,
+          error: {
+            name: "NoMatchingTarget",
+            message: `No open page target's url (or title) contains "${args.tabUrl}" (case-insensitive).`,
+          },
+          availableTargets: targets,
+          hint: `Pick one from availableTargets and retry with a \`tabUrl\` substring of its url, or open the page first (extension_open with \`url\`). ${TARGET_ID_NOTE}`,
+        });
+      }
+      if (matches.length > 1) {
+        return JSON.stringify({
+          ok: false,
+          error: {
+            name: "AmbiguousTabUrl",
+            message: `${matches.length} page targets match "${args.tabUrl}"; refusing to guess which tab you mean.`,
+          },
+          matchingTargets: matches,
+          hint: `Narrow \`tabUrl\` to a longer substring that matches exactly one url in matchingTargets. ${TARGET_ID_NOTE}`,
+        });
+      }
+      resolvedTarget = { ...matches[0] };
+      // Hand the engine the matched tab's EXACT url: uniqueness was just
+      // proven against the live target list, so the engine-side match cannot
+      // fan out.
+      targetUrl = matches[0].url;
     }
-    const matches = matchTargetsByUrl(targets, args.tabUrl);
-    if (matches.length === 0) {
-      return JSON.stringify({
-        ok: false,
-        error: {
-          name: "NoMatchingTarget",
-          message: `No open page target's url (or title) contains "${args.tabUrl}" (case-insensitive).`,
-        },
-        availableTargets: targets,
-        hint: `Pick one from availableTargets and retry with a \`tabUrl\` substring of its url, or open the page first (extension_open with \`url\`). ${TARGET_ID_NOTE}`,
-      });
-    }
-    if (matches.length > 1) {
-      return JSON.stringify({
-        ok: false,
-        error: {
-          name: "AmbiguousTabUrl",
-          message: `${matches.length} page targets match "${args.tabUrl}"; refusing to guess which tab you mean.`,
-        },
-        matchingTargets: matches,
-        hint: `Narrow \`tabUrl\` to a longer substring that matches exactly one url in matchingTargets. ${TARGET_ID_NOTE}`,
-      });
-    }
-    resolvedTarget = matches[0];
-    // Hand the engine the matched tab's EXACT url: uniqueness was just proven
-    // against the live target list, so the engine-side match cannot fan out.
-    targetUrl = resolvedTarget.url;
   }
 
   // No tab-id precondition any more. The engine's executor resolves the target
@@ -235,7 +276,7 @@ export async function handler(
   // refusing here would block the very path that now works and push callers to
   // source_inspect for something dom_inspect can do.
   const cli = ["inspect", args.projectPath];
-  if (args.tab != null) cli.push("--tab", String(args.tab));
+  if (targetTab != null) cli.push("--tab", String(targetTab));
   if (targetUrl) cli.push("--url", targetUrl);
   if (args.context) cli.push("--context", args.context);
   if (args.include?.length) cli.push("--include", args.include.join(","));

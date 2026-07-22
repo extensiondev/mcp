@@ -7,13 +7,14 @@ import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
 // `listTargets` is the discovery path.
 
 const calls: string[][] = [];
+let actResponder: (cli: string[]) => string = () => JSON.stringify({ ok: true });
 vi.mock("../lib/act", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../lib/act")>();
   return {
     ...actual,
     runActVerb: async (cli: string[]) => {
       calls.push(cli);
-      return JSON.stringify({ ok: true });
+      return actResponder(cli);
     },
   };
 });
@@ -40,6 +41,7 @@ const { matchTargetsByUrl, filterPageTargets } = await import(
 );
 
 beforeEach(() => {
+  actResponder = () => JSON.stringify({ ok: true });
   cdpPort = { port: 9222, source: "contract" };
   cdpTargets = [
     { id: "AAA1", type: "page", url: "https://example.com/", title: "Example Domain" },
@@ -204,19 +206,89 @@ describe("dom_inspect tabUrl targeting", () => {
     expect(calls).toHaveLength(0);
   });
 
-  it("tells Gecko callers which args replace tabUrl there", async () => {
+  it("Gecko resolves tabUrl against the bridge tab list and inspects by numeric tab id", async () => {
+    actResponder = (cli) =>
+      cli.includes("--list-tabs")
+        ? JSON.stringify({
+            ok: true,
+            tabs: [
+              { tabId: 7, url: "https://example.com/", title: "Example Domain" },
+              { tabId: 9, url: "https://other.dev/", title: "Other" },
+            ],
+          })
+        : JSON.stringify({ ok: true });
+
     const result = JSON.parse(
       await domInspect.handler({
         projectPath: "/p",
-        tabUrl: "example",
+        tabUrl: "example.com",
+        browser: "firefox",
+      }),
+    );
+
+    expect(calls).toHaveLength(2);
+    expect(calls[0]).toContain("--list-tabs");
+    expect(calls[1][calls[1].indexOf("--tab") + 1]).toBe("7");
+    expect(calls[1]).not.toContain("--url");
+    expect(result.resolvedTarget).toEqual({
+      tabId: 7,
+      url: "https://example.com/",
+      title: "Example Domain",
+      matchedBy: "tabUrl",
+    });
+  });
+
+  it("Gecko zero matches returns the available tabs instead of inspecting", async () => {
+    actResponder = (cli) =>
+      cli.includes("--list-tabs")
+        ? JSON.stringify({
+            ok: true,
+            tabs: [{ tabId: 7, url: "https://example.com/", title: "Example" }],
+          })
+        : JSON.stringify({ ok: true });
+
+    const result = JSON.parse(
+      await domInspect.handler({
+        projectPath: "/p",
+        tabUrl: "no-such-page",
         browser: "firefox",
       }),
     );
 
     expect(result.ok).toBe(false);
-    expect(result.error.name).toBe("Unsupported");
-    expect(result.error.message).toContain("`url`");
-    expect(calls).toHaveLength(0);
+    expect(result.error.name).toBe("NoMatchingTarget");
+    expect(result.availableTabs).toEqual([
+      { tabId: 7, url: "https://example.com/", title: "Example" },
+    ]);
+    expect(calls).toHaveLength(1);
+  });
+
+  it("Gecko several matches refuses to guess and returns tabIds to pick from", async () => {
+    actResponder = (cli) =>
+      cli.includes("--list-tabs")
+        ? JSON.stringify({
+            ok: true,
+            tabs: [
+              { tabId: 7, url: "https://example.com/", title: "Example" },
+              { tabId: 9, url: "https://example.com/other", title: "Other" },
+            ],
+          })
+        : JSON.stringify({ ok: true });
+
+    const result = JSON.parse(
+      await domInspect.handler({
+        projectPath: "/p",
+        tabUrl: "example.com",
+        browser: "firefox",
+      }),
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.error.name).toBe("AmbiguousTabUrl");
+    expect(result.matchingTabs.map((t: { tabId: number }) => t.tabId)).toEqual([
+      7, 9,
+    ]);
+    expect(calls).toHaveLength(1);
   });
 });
 
