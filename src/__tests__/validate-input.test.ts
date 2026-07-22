@@ -5,6 +5,7 @@ import {
   normalizeArgAliases,
 } from "../lib/validate-input";
 import { schema as manifestValidateSchema } from "../tools/manifest-validate";
+import { schema as createSchema } from "../tools/create";
 import { schema as devSchema } from "../tools/dev";
 import { schema as logsSchema } from "../tools/logs";
 
@@ -112,5 +113,41 @@ describe("inputValidationError", () => {
     expect(out.error.name).toBe("InputValidationError");
     expect(out.error.message).toContain("extension_dev");
     expect(out.error.issues).toHaveLength(1);
+  });
+
+  // Swarm C4/C7: a bare "projectName: required argument is missing" taught one
+  // field per failed call and never admitted the `name` alias exists. With the
+  // schema passed along, one error enumerates the whole contract.
+  it("enumerates the complete arg surface with aliases when given the schema", () => {
+    const out = JSON.parse(
+      inputValidationError(
+        "extension_create",
+        [{ path: "projectName", message: "required argument is missing" }],
+        createSchema.inputSchema,
+      ),
+    );
+    expect(out.error.args.required).toEqual(["projectName"]);
+    expect(out.error.args.optional).toEqual(
+      expect.arrayContaining(["parentDir", "template", "install"]),
+    );
+    expect(out.error.args.aliases.projectName).toEqual(["name"]);
+    expect(out.error.args.aliases.parentDir).toEqual(["parent", "into"]);
+  });
+
+  it("does not list an alias word the tool owns as a real property", () => {
+    // A tool with a real `timeoutMs` property keeps that word for itself, so
+    // only `timeoutMillis` remains aliasable onto timeout.
+    const owns = {
+      type: "object",
+      properties: { timeout: { type: "number" }, timeoutMs: { type: "number" } },
+    };
+    const out = JSON.parse(
+      inputValidationError(
+        "extension_probe",
+        [{ path: "bogus", message: "unknown argument" }],
+        owns,
+      ),
+    );
+    expect(out.error.args.aliases.timeout).toEqual(["timeoutMillis"]);
   });
 });
