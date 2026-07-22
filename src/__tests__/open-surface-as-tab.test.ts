@@ -220,7 +220,32 @@ describe("open surface asTab", () => {
 
     expect(result.ok).toBe(false);
     expect(result.error.name).toBe("NoSurfaceDocument");
+    // A missing popup is a fact about the extension, not a tooling defect:
+    // the message must say what is absent and where it would be declared,
+    // and the hint must point at a verb that works, not back at itself.
+    expect(result.error.message).toContain("declares no popup");
+    expect(result.error.message).toContain("action.default_popup");
+    expect(result.error.message).toContain("not a failure");
+    expect(result.hint).toContain('surface: "action"');
     expect(navigations).toEqual([]);
+  });
+
+  it("names the surfaces the extension DOES declare when the popup is absent", async () => {
+    const p = project({
+      manifest_version: 3,
+      name: "F",
+      options_ui: { page: "options.html" },
+      side_panel: { default_path: "panel.html" },
+    });
+    cdpTargets = [{ id: "t1", type: "page", url: "https://example.com" }];
+
+    const result = JSON.parse(
+      await open.handler({ projectPath: p.dir, surface: "popup", asTab: true }),
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.declaredSurfaces).toEqual(["options", "sidebar"]);
+    expect(result.hint).toContain("options, sidebar");
   });
 
   it("falls back to the single live extension when there is no ready contract", async () => {

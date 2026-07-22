@@ -278,6 +278,87 @@ function surfaceDocument(
   return null;
 }
 
+// Where in the manifest each document-backed surface is declared, so a
+// missing-surface error can point at the exact field instead of a vague
+// "check the manifest".
+const SURFACE_MANIFEST_KEYS: Record<string, string> = {
+  popup: "action.default_popup",
+  options: "options_ui.page (or options_page)",
+  sidebar: "side_panel.default_path (or sidebar_action.default_panel)",
+  newtab: "chrome_url_overrides.newtab",
+  history: "chrome_url_overrides.history",
+  bookmarks: "chrome_url_overrides.bookmarks",
+};
+
+// The document-backed surfaces this extension DOES declare, or null when no
+// manifest is readable at all (in which case absence must not be asserted).
+function declaredSurfaces(
+  projectPath: string,
+  browser: string,
+): string[] | null {
+  const candidates = [
+    path.join(projectPath, "dist", browser, "manifest.json"),
+    path.join(projectPath, "dist", "manifest.json"),
+    path.join(projectPath, "src", "manifest.json"),
+    path.join(projectPath, "manifest.json"),
+  ];
+  const readable = candidates.some((file) => {
+    try {
+      JSON.parse(fs.readFileSync(file, "utf8"));
+      return true;
+    } catch {
+      return false;
+    }
+  });
+  if (!readable) return null;
+  return Object.keys(SURFACE_MANIFEST_KEYS).filter(
+    (s) => surfaceDocument(projectPath, browser, s) !== null,
+  );
+}
+
+// A surface the manifest does not back with a document is a fact about the
+// extension, not a defect in the session or the tooling; the old error read as
+// the latter and sent callers in circles. State what is missing and where it
+// would be declared, name the surfaces that DO exist, and point at the verb
+// that works today.
+function missingSurfaceError(
+  projectPath: string,
+  browser: string,
+  surface: string,
+  consequence: string,
+): string {
+  const declared = declaredSurfaces(projectPath, browser);
+  if (declared === null) {
+    return JSON.stringify({
+      ok: false,
+      error: {
+        name: "NoSurfaceDocument",
+        message: `No readable manifest was found for this project (checked dist/${browser}, dist, src, and the project root), so the ${surface} document cannot be resolved.`,
+      },
+      hint: "Check projectPath, or build the project first (extension_build).",
+    });
+  }
+  const key = SURFACE_MANIFEST_KEYS[surface] ?? surface;
+  const others = declared.filter((s) => s !== surface);
+  const nextVerb =
+    surface === "popup"
+      ? 'To exercise the toolbar button of a popup-less extension, call extension_open with surface: "action", which replays chrome.action.onClicked. To give the extension a popup, set action.default_popup in the manifest and rebuild.'
+      : `To add one, set ${key} in the manifest and rebuild.`;
+  return JSON.stringify({
+    ok: false,
+    error: {
+      name: "NoSurfaceDocument",
+      message: `This extension declares no ${surface}: nothing in its manifest sets ${key}, ${consequence}. That is how the extension is built, not a failure of the session or the tooling.`,
+    },
+    ...(others.length ? { declaredSurfaces: others } : {}),
+    hint:
+      (others.length
+        ? `Surfaces this extension does declare: ${others.join(", ")}; extension_open can target those. `
+        : "The manifest declares no other UI surface documents either. ") +
+      nextVerb,
+  });
+}
+
 // Chrome popups auto-size to their content inside hard platform bounds.
 // Rendering the popup document in a full-size tab breaks any layout that
 // depends on that (max-width media queries, fit-content shells), which was the
@@ -386,14 +467,12 @@ async function openSurfaceAsTab(
 ): Promise<string> {
   const doc = surfaceDocument(projectPath, browser, surface);
   if (!doc) {
-    return JSON.stringify({
-      ok: false,
-      error: {
-        name: "NoSurfaceDocument",
-        message: `The manifest declares no document for surface "${surface}", so there is no page to render as a tab.`,
-      },
-      hint: "Check the manifest: popup needs action.default_popup, options needs options_ui.page or options_page, sidebar needs side_panel.default_path.",
-    });
+    return missingSurfaceError(
+      projectPath,
+      browser,
+      surface,
+      "so there is no page to render as a tab",
+    );
   }
   const id = await resolveExtensionId(projectPath, browser);
   if (!id) {
@@ -534,6 +613,22 @@ export async function handler(
     }
   }
 
+  // Opening the popup of an extension that declares none used to surface the
+  // engine's raw openPopup rejection, which reads as a broken session rather
+  // than what it is: the manifest sets no action.default_popup. Say so before
+  // shelling out, but only when a manifest is readable; never block on a guess.
+  if (args.surface === "popup") {
+    const declared = declaredSurfaces(args.projectPath, browser);
+    if (declared && !declared.includes("popup")) {
+      return missingSurfaceError(
+        args.projectPath,
+        browser,
+        "popup",
+        "so there is no popup to open",
+      );
+    }
+  }
+
   const cli = ["open", args.surface, args.projectPath];
   if (args.surface === "command" && args.name) cli.push("--name", args.name);
   cli.push("--browser", browser);
@@ -570,7 +665,7 @@ export async function handler(
             const parsedFallback = JSON.parse(fallback);
             if (parsedFallback?.ok) {
               parsedFallback.note =
-                "The dev browser is headless (EXTENSION_HEADLESS), which has no window to attach a popup/sidebar to, so the surface was rendered as a tab instead. Pass asTab: false and relaunch headed for a real popup window.";
+                "The dev browser is headless (EXTENSION_HEADLESS=1), and a real popup/sidebar window can only open in a headed session, so the surface was rendered as a tab instead. For the real window, start a headed session: extension_dev with replace: true, with EXTENSION_HEADLESS=0 (or unset) in the environment, then open the surface again without asTab.";
               return JSON.stringify(parsedFallback);
             }
           } catch {
@@ -580,7 +675,7 @@ export async function handler(
         if (!parsed.hint) {
           parsed.hint = /user gesture/i.test(msg)
             ? "This surface can only open from a real user gesture, which headless automation cannot produce. Retry with asTab: true to render the surface document in a tab instead."
-            : "The dev browser is running headless (EXTENSION_HEADLESS), which has no visible window to attach a popup/sidebar to. Retry with asTab: true to render the surface document in a tab, or relaunch a headed dev session for a real popup window.";
+            : "The dev browser is running headless (EXTENSION_HEADLESS=1), and a popup/sidebar window needs a headed session. Retry with asTab: true to render the surface document in a tab, or start a headed session for the real window: extension_dev with replace: true, with EXTENSION_HEADLESS=0 (or unset) in the environment.";
         }
         return JSON.stringify(parsed);
       }
