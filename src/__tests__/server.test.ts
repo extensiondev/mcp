@@ -230,17 +230,13 @@ describe("add-feature handler", () => {
 });
 
 describe("source-inspect handler", () => {
-  it("returns a capability-limit error for Firefox and points at a working alternative", async () => {
-    const result = await sourceInspect.handler({
-      projectPath: "/tmp/test",
-      browser: "firefox",
-    });
-    const parsed = JSON.parse(result);
-    expect(parsed.error).toBeDefined();
-    expect(parsed.error).toContain("Chrome DevTools Protocol");
-    // The hint must not send the caller back to a tool that also refuses; it
-    // should name the Firefox-capable alternatives (eval/logs).
-    expect(parsed.hint).toMatch(/extension_eval|extension_logs/);
+  it("documents the Firefox bridge pairing instead of a Chromium-only claim", () => {
+    // Firefox sessions are served over the agent bridge (see
+    // gecko-bridge-pairing.test.ts for the behavior); the description must
+    // say so, and must not read as CDP/Chromium-only.
+    expect(sourceInspect.schema.description).toContain("agent bridge");
+    expect(sourceInspect.schema.description).toContain("Firefox");
+    expect(sourceInspect.schema.description).not.toMatch(/Chromium only/i);
   });
 
   it("returns error when no dev session is running", async () => {

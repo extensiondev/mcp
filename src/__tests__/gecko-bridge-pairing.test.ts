@@ -1,0 +1,244 @@
+import { describe, it, expect, beforeEach, vi } from "vitest";
+
+// Firefox pairing of the Chromium-only CDP extras: URL navigation (extension_open
+// url) and live source inspection ride the agent bridge instead of CDP, so both
+// families share the same flow. True protocol parity (RDP) is upstream entry 78;
+// these tests pin the bridge pairing that ships now.
+
+const calls: string[][] = [];
+let actResponder: (cli: string[]) => string = () => JSON.stringify({ ok: true });
+vi.mock("../lib/act", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../lib/act")>();
+  return {
+    ...actual,
+    runActVerb: async (cli: string[]) => {
+      calls.push(cli);
+      return actResponder(cli);
+    },
+  };
+});
+
+// The session-browser resolver reads ready.json from disk; pin it to the
+// browser the test passes so no filesystem is involved.
+vi.mock("../lib/session-browser", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../lib/session-browser")>();
+  return {
+    ...actual,
+    resolveSessionBrowser: (_p: string, browser?: string, fallback?: string) => ({
+      browser: browser ?? fallback ?? "chrome",
+      source: "arg",
+    }),
+  };
+});
+
+const open = await import("../tools/open");
+const sourceInspect = await import("../tools/source-inspect");
+
+const isEval = (cli: string[]) => cli[0] === "eval";
+const isListTabs = (cli: string[]) => cli.includes("--list-tabs");
+
+beforeEach(() => {
+  calls.length = 0;
+  actResponder = () => JSON.stringify({ ok: true });
+});
+
+describe("extension_open url on Gecko (bridge navigation)", () => {
+  it("navigates via a background tabs.update eval and verifies against the tab list", async () => {
+    actResponder = (cli) => {
+      if (isListTabs(cli)) {
+        return JSON.stringify({
+          ok: true,
+          tabs: [{ tabId: 7, url: "https://example.com/", title: "Example" }],
+        });
+      }
+      if (isEval(cli)) return JSON.stringify({ ok: true, value: { tabId: 7 } });
+      return JSON.stringify({ ok: true });
+    };
+
+    const result = JSON.parse(
+      await open.handler({
+        projectPath: "/p",
+        url: "https://example.com/",
+        browser: "firefox",
+      }),
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.navigated).toBe("https://example.com/");
+    // A NUMERIC chrome.tabs id, unlike the CDP path's targetId.
+    expect(result.tab).toEqual({
+      tabId: 7,
+      url: "https://example.com/",
+      title: "Example",
+    });
+    const evalCall = calls.find(isEval)!;
+    expect(evalCall[1]).toContain("tabs.query");
+    expect(evalCall[1]).toContain("https://example.com/");
+    expect(evalCall[evalCall.indexOf("--context") + 1]).toBe("background");
+  });
+
+  it("passes the engine's own error through with an allowEval hint", async () => {
+    actResponder = (cli) =>
+      isEval(cli)
+        ? JSON.stringify({
+            ok: false,
+            error: { name: "EvalDenied", message: "eval is not allowed" },
+          })
+        : JSON.stringify({ ok: true });
+
+    const result = JSON.parse(
+      await open.handler({
+        projectPath: "/p",
+        url: "https://example.com/",
+        browser: "firefox",
+      }),
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.error.name).toBe("EvalDenied");
+    expect(result.hint).toContain("allowEval");
+  });
+
+  it("reports NavigateFailed when no tab ever reports the URL", async () => {
+    actResponder = (cli) => {
+      if (isListTabs(cli)) {
+        return JSON.stringify({
+          ok: true,
+          tabs: [{ tabId: 7, url: "about:blank", title: "" }],
+        });
+      }
+      return JSON.stringify({ ok: true, value: { tabId: 7 } });
+    };
+
+    const result = JSON.parse(
+      await open.handler({
+        projectPath: "/p",
+        url: "https://example.com/",
+        browser: "firefox",
+        timeout: 300,
+      }),
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.error.name).toBe("NavigateFailed");
+  });
+});
+
+describe("extension_source_inspect on Gecko (bridge inspection)", () => {
+  const pageValue = {
+    meta: { url: "https://example.com/", title: "Example", readyState: "complete" },
+    summary: { htmlLength: 120, scriptCount: 1, styleCount: 0, linkCount: 0, extensionRootCount: 1, bodyChildCount: 2 },
+    html: "<html><body>hi</body></html>",
+  };
+
+  it("returns summary/meta/html over the bridge with the CDP-only gaps named", async () => {
+    actResponder = (cli) => {
+      if (isListTabs(cli)) {
+        return JSON.stringify({
+          ok: true,
+          tabs: [{ tabId: 7, url: "https://example.com/", title: "Example" }],
+        });
+      }
+      if (isEval(cli)) return JSON.stringify({ ok: true, value: pageValue });
+      return JSON.stringify({ ok: true });
+    };
+
+    const result = JSON.parse(
+      await sourceInspect.handler({
+        projectPath: "/p",
+        browser: "firefox",
+        url: "https://example.com/",
+        include: ["summary", "meta", "html", "console"],
+      }),
+    );
+
+    expect(result.transport).toBe("bridge");
+    expect(result.browser).toBe("firefox");
+    expect(result.target).toEqual({ url: "https://example.com/", title: "Example" });
+    expect(result.summary.extensionRootCount).toBe(1);
+    expect(result.html).toContain("<body>hi</body>");
+    expect(String(result.notes)).toContain("extension_logs");
+    const evalCall = calls.find(isEval)!;
+    expect(evalCall[evalCall.indexOf("--context") + 1]).toBe("page");
+    expect(evalCall[evalCall.indexOf("--url") + 1]).toBe("https://example.com/");
+  });
+
+  it("navigates first when the url is not open in any tab", async () => {
+    let navigated = false;
+    actResponder = (cli) => {
+      if (isListTabs(cli)) {
+        return JSON.stringify({
+          ok: true,
+          tabs: navigated
+            ? [{ tabId: 7, url: "https://example.com/", title: "Example" }]
+            : [{ tabId: 7, url: "about:blank", title: "" }],
+        });
+      }
+      if (isEval(cli) && String(cli[1]).includes("tabs.query")) {
+        navigated = true;
+        return JSON.stringify({ ok: true, value: { tabId: 7 } });
+      }
+      if (isEval(cli)) return JSON.stringify({ ok: true, value: pageValue });
+      return JSON.stringify({ ok: true });
+    };
+
+    const result = JSON.parse(
+      await sourceInspect.handler({
+        projectPath: "/p",
+        browser: "firefox",
+        url: "https://example.com/",
+        include: ["summary"],
+      }),
+    );
+
+    expect(result.transport).toBe("bridge");
+    expect(result.summary).toBeTruthy();
+    expect(calls.some((c) => isEval(c) && String(c[1]).includes("tabs.query"))).toBe(true);
+  });
+
+  it("warns when a probe looks like JavaScript instead of a CSS selector", async () => {
+    actResponder = (cli) =>
+      isEval(cli)
+        ? JSON.stringify({
+            ok: true,
+            value: {
+              meta: { url: "https://example.com/", title: "Example" },
+              probes: { "typeof chrome.tts": { count: 0, sample: null } },
+            },
+          })
+        : JSON.stringify({ ok: true });
+
+    const result = JSON.parse(
+      await sourceInspect.handler({
+        projectPath: "/p",
+        browser: "firefox",
+        probe: ["typeof chrome.tts"],
+        include: ["meta"],
+      }),
+    );
+
+    expect(result.probes["typeof chrome.tts"].count).toBe(0);
+    expect(result.probeWarning).toContain("NOT JavaScript");
+  });
+
+  it("passes the engine's eval error frame through untouched", async () => {
+    actResponder = (cli) =>
+      isEval(cli)
+        ? JSON.stringify({
+            ok: false,
+            error: { name: "NoSession", message: "no active control channel" },
+          })
+        : JSON.stringify({ ok: true });
+
+    const result = JSON.parse(
+      await sourceInspect.handler({
+        projectPath: "/p",
+        browser: "firefox",
+        include: ["summary"],
+      }),
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.error.name).toBe("NoSession");
+  });
+});
