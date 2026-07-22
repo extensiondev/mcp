@@ -99,6 +99,19 @@ function pending(start: {
   });
 }
 
+function resumePending(deviceCode: string, verificationUri: string): string {
+  // Resume path: the server stores only a hash of the user code, so the code
+  // (and the prefilled one-click link) cannot be reconstructed here. Both are
+  // still valid from the previous response; point the user back at them.
+  return JSON.stringify({
+    ok: false,
+    status: "authorization_pending",
+    verificationUri,
+    deviceCode,
+    message: `Still waiting for authorization. The one-click link and code from the previous response are still valid: open that link (or enter the code at ${verificationUri}), then call extension_login again with this same deviceCode (and the same project).`,
+  });
+}
+
 export async function handler(args: {
   project: string;
   deviceCode?: string;
@@ -148,11 +161,7 @@ export async function handler(args: {
       if (poll.reason === "error") {
         return fail("LoginError", poll.message || "Device login failed.");
       }
-      return pending({
-        deviceCode: String(args.deviceCode),
-        userCode: "(see the previous response)",
-        verificationUri: config.verificationUri,
-      });
+      return resumePending(String(args.deviceCode), config.verificationUri);
     }
 
     let start;
@@ -206,11 +215,10 @@ export async function handler(args: {
       if (poll.reason === "denied") {
         return fail("LoginDenied", "Authorization was denied on GitHub.");
       }
-      return pending({
-        deviceCode: String(args.deviceCode),
-        userCode: "(see the previous response)",
-        verificationUri: "https://github.com/login/device",
-      });
+      return resumePending(
+        String(args.deviceCode),
+        "https://github.com/login/device",
+      );
     }
     try {
       const creds = await exchangeAndPersist({
