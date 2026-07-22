@@ -71,6 +71,40 @@ export function knownSessionBrowsers(projectPath: string): string[] {
   return Array.from(new Set(browsers));
 }
 
+export interface LiveSession {
+  browser: string;
+  pid: number;
+  source: "registry" | "contract";
+}
+
+// Every live session currently holding this project, from both the in-memory
+// registry and the on-disk ready.json contracts. extension_dev consults this
+// BEFORE spawning: starting a second session on the same project forks it, and
+// the new browser dies on the profile lock while ok reads true (swarm C5).
+export function liveProjectSessions(projectPath: string): LiveSession[] {
+  const resolved = path.resolve(projectPath);
+  const out = new Map<string, LiveSession>();
+  for (const session of listSessions()) {
+    if (path.resolve(session.projectPath) !== resolved) continue;
+    if (!pidAlive(session.pid)) continue;
+    out.set(session.browser, {
+      browser: session.browser,
+      pid: session.pid,
+      source: "registry",
+    });
+  }
+  for (const sighting of contractSightings(projectPath)) {
+    if (sighting.pid === undefined || !pidAlive(sighting.pid)) continue;
+    if (out.has(sighting.browser)) continue;
+    out.set(sighting.browser, {
+      browser: sighting.browser,
+      pid: sighting.pid,
+      source: "contract",
+    });
+  }
+  return [...out.values()];
+}
+
 // A ready.json that says "ready" but whose pid is dead means the dev server
 // exited, the real cause behind most "control channel refused (1006)" errors,
 // which otherwise misleadingly ask "is the session started with allowControl?".

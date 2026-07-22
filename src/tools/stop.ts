@@ -12,8 +12,10 @@ import { execFileSync } from "node:child_process";
 import type { ReadyContract } from "../lib/types";
 import {
   getSession,
+  listSessionMarkers,
   listSessions,
   removeSession,
+  removeSessionMarker,
 } from "../lib/process-manager";
 import { resolveSessionBrowser } from "../lib/session-browser";
 
@@ -37,7 +39,7 @@ export const schema = {
         type: "boolean",
         default: false,
         description:
-          "Stop every session this server started, across projects and browsers. When true, projectPath/browser are ignored.",
+          "Stop every known session, across projects and browsers. Discovers sessions from this server's registry AND the on-disk session markers earlier runs left, so it still finds sessions after an MCP restart or after a dev child exited out from under the registry. When true, projectPath/browser are ignored.",
       },
     },
     required: [],
@@ -140,7 +142,9 @@ function pidFromReadyContract(
   }
 }
 
-async function stopOne(
+// Exported so extension_dev can stop a live session it is about to replace
+// instead of silently forking it (surprise-swarm C5).
+export async function stopOne(
   projectPath: string,
   browser: string,
 ): Promise<StopOutcome> {
@@ -151,6 +155,7 @@ async function stopOne(
     // Even with no registered dev pid, an orphaned browser may still be running
     // under the profile dir; reap those before reporting nothing to do.
     const reaped = reapSessionProcesses(projectPath);
+    removeSessionMarker(projectPath, browser);
     return {
       projectPath,
       browser,
@@ -184,6 +189,7 @@ async function stopOne(
   const reaped = reapSessionProcesses(projectPath);
 
   removeSession(projectPath, browser);
+  removeSessionMarker(projectPath, browser);
   try {
     fs.rmSync(readyJsonPath(projectPath, browser), { force: true });
   } catch {
@@ -208,16 +214,31 @@ export async function handler(args: {
   all?: boolean;
 }): Promise<string> {
   if (args.all) {
-    const sessions = listSessions();
-    if (sessions.length === 0) {
+    // Union of the in-memory registry and the on-disk markers. The registry
+    // alone forgets a session the moment its dev child exits, which is exactly
+    // when the orphaned browser most needs stopping: the swarm watched all:true
+    // claim "No sessions registered" while a session pid was alive. Marker
+    // candidates are then verified against the same ready.json contract and
+    // profile-tree reap the projectPath path uses, so a stale marker yields an
+    // honest stopped:false outcome (and is pruned), never a phantom kill.
+    const candidates = new Map<string, { projectPath: string; browser: string }>();
+    for (const s of listSessions()) {
+      candidates.set(`${path.resolve(s.projectPath)}::${s.browser}`, s);
+    }
+    for (const m of listSessionMarkers()) {
+      const key = `${path.resolve(m.projectPath)}::${m.browser}`;
+      if (!candidates.has(key)) candidates.set(key, m);
+    }
+    if (candidates.size === 0) {
       return JSON.stringify({
         stopped: [],
-        message: "No sessions registered in this server.",
+        message:
+          "No sessions registered in this server and no session markers on disk. Nothing to stop.",
       });
     }
     const outcomes: StopOutcome[] = [];
-    for (const s of sessions) {
-      outcomes.push(await stopOne(s.projectPath, s.browser));
+    for (const c of candidates.values()) {
+      outcomes.push(await stopOne(c.projectPath, c.browser));
     }
     return JSON.stringify({ stopped: outcomes });
   }
