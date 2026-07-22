@@ -40,8 +40,13 @@ export function storeMdWarnings(browsers: string[], cwd: string): string[] {
   try {
     content = fs.readFileSync(path.join(cwd, "STORE.md"), "utf8");
   } catch {
+    // The check reads the LOCAL working directory, but platform submissions
+    // fetch STORE.md from the project's SOURCE repository at submit time, so
+    // a local miss is advisory, not a verdict (operator hit the old wording
+    // claiming notes "will not accompany" a submission whose source repo had
+    // the file).
     return [
-      "No STORE.md found in the project root. Reviewer notes (Firefox) and certification notes (Edge) will not accompany the submission. See the extension-dev skill's store-md reference.",
+      "No STORE.md found in the current working directory. Platform submissions read STORE.md from the project's source repository, so this may not apply here; make sure STORE.md exists there for Firefox reviewer notes and Edge certification notes. See the extension-dev skill's store-md reference.",
     ];
   }
 
