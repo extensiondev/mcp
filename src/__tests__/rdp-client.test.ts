@@ -4,6 +4,7 @@ import {
   encodeRdpPacket,
   RdpPacketDecoder,
   rdpListAddons,
+  rdpListTabs,
 } from "../lib/rdp";
 
 // Firefox RDP parity (upstream entry 78): the engine now stamps rdpPort into
@@ -157,5 +158,24 @@ describe("rdpListAddons", () => {
       if (packet?.type === "listAddons") socket.end();
     });
     await expect(rdpListAddons(port)).rejects.toThrow(/closed before/);
+  });
+});
+
+describe("rdpListTabs", () => {
+  it("requests listTabs and resolves the tab descriptor list", async () => {
+    const tabs = [
+      { actor: "server1.conn0.tabDescriptor4", url: "https://example.com/", title: "Example", selected: true },
+    ];
+    const requests: Array<Record<string, unknown>> = [];
+    const port = await listen((socket, packet) => {
+      if (!packet) return;
+      requests.push(packet);
+      if (packet.type === "listTabs") {
+        socket.write(encodeRdpPacket({ from: "root", tabs }));
+      }
+    });
+
+    await expect(rdpListTabs(port)).resolves.toEqual(tabs);
+    expect(requests).toEqual([{ to: "root", type: "listTabs" }]);
   });
 });
