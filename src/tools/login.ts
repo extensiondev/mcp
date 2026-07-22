@@ -76,14 +76,26 @@ function pending(start: {
   deviceCode: string;
   userCode: string;
   verificationUri: string;
+  verificationUriComplete?: string;
 }): string {
+  // Lead with the one-click link when the flow provides one (RFC 8628
+  // verification_uri_complete, the code already embedded): the user just
+  // opens it and approves, no code typing. The bare URI + code stay in the
+  // result as the fallback for flows (GitHub-direct) that cannot prefill.
+  const complete = String(start.verificationUriComplete || "").trim();
+  const hasCompleteLink =
+    complete.length > 0 && complete !== start.verificationUri;
+  const message = hasCompleteLink
+    ? `Open ${complete} and approve (code ${start.userCode} is pre-filled), then call extension_login again with this deviceCode (and the same project). If the page asks for a code, enter ${start.userCode} at ${start.verificationUri}.`
+    : `Open ${start.verificationUri} and enter code ${start.userCode}, then call extension_login again with this deviceCode (and the same project).`;
   return JSON.stringify({
     ok: false,
     status: "authorization_pending",
     userCode: start.userCode,
     verificationUri: start.verificationUri,
+    ...(hasCompleteLink ? { verificationUriComplete: complete } : {}),
     deviceCode: start.deviceCode,
-    message: `Open ${start.verificationUri} and enter code ${start.userCode}, then call extension_login again with this deviceCode (and the same project).`,
+    message,
   });
 }
 
@@ -172,6 +184,7 @@ export async function handler(args: {
       deviceCode: start.deviceCode,
       userCode: start.userCode,
       verificationUri: start.verificationUri,
+      verificationUriComplete: start.verificationUriComplete,
     });
   }
 
