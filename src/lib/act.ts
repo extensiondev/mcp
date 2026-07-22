@@ -18,13 +18,39 @@ export function toMcpSpeak(text: string): string {
       )
       .replace(/--allow-control/g, "allowControl: true (extension_dev)")
       .replace(/--allow-eval/g, "allowEval: true (extension_dev)")
+      // The engine's MV3 CSP remedy names CLI selector flags; give the MCP
+      // caller the equivalent tool-arg sentence (swarm C20).
+      .replace(
+        /Use --context page --tab <id>/g,
+        'Use context: "page" (targets the active tab; pass url or tab to pick another)',
+      )
       // eval/inspect remediation speaks CLI flags; rewrite to MCP JSON args.
-      .replace(/--context[= ]([\w-]+)/g, 'context: "$1"')
-      .replace(/--tab[= ](\d+)/g, "tab: $1")
-      .replace(/--url[= ](\S+)/g, 'url: "$1"')
-      .replace(/--browser[= ]([\w-]+)/g, 'browser: "$1"')
+      // The valued forms only match plausible values (a context name, a tab
+      // id, something URL-shaped), so prose like "a --url to match" is never
+      // garbled into url: "to"; anything else falls through to the bare
+      // rules below.
+      .replace(
+        /--context[= ](background|popup|options|sidebar|devtools|newtab|history|bookmarks|content|page)\b/g,
+        'context: "$1"',
+      )
+      .replace(/--tab[= ](\d+|<[\w-]+>)/g, "tab: $1")
+      .replace(/--url[= ]"([^"]+)"/g, 'url: "$1"')
+      .replace(/--url[= ](<[\w-]+>|\S*(?:\/\/|\*)\S*)/g, 'url: "$1"')
+      .replace(
+        /--browser[= ]([\w]+-based|chrome|chromium|edge|brave|opera|vivaldi|yandex|firefox|waterfox|librewolf|safari)\b/g,
+        'browser: "$1"',
+      )
+      .replace(/--timeout[= ](\d+)/g, "timeout: $1")
       .replace(/`extension dev`/g, "extension_dev")
       .replace(/\bextension dev\b/g, "extension_dev")
+      // Last-resort: a flag mentioned bare (or with a value the rules above
+      // did not recognize) becomes the arg name, so raw `--flag` CLI syntax
+      // never leaks into an MCP error.
+      .replace(/--tab\b/g, "`tab`")
+      .replace(/--url\b/g, "`url`")
+      .replace(/--context\b/g, "`context`")
+      .replace(/--browser\b/g, "`browser`")
+      .replace(/--timeout\b/g, "`timeout`")
   );
 }
 
