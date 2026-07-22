@@ -8,6 +8,8 @@ import { schema as manifestValidateSchema } from "../tools/manifest-validate";
 import { schema as createSchema } from "../tools/create";
 import { schema as devSchema } from "../tools/dev";
 import { schema as logsSchema } from "../tools/logs";
+import { schema as deploySchema } from "../tools/deploy";
+import { schema as releasePromoteSchema } from "../tools/release-promote";
 
 describe("validateToolInput", () => {
   it("accepts valid args", () => {
@@ -99,6 +101,67 @@ describe("normalizeArgAliases", () => {
     // logs has no projectName, so `name` stays as-is (validation will reject it)
     expect(out.name).toBe("x");
     expect(out.projectName).toBeUndefined();
+  });
+});
+
+// P7 vocabulary fix: deploy and release-promote name the same build commit
+// differently (buildSha vs buildId); each must answer to the other's word.
+describe("buildSha/buildId cross-aliases", () => {
+  it("deploy folds buildId onto buildSha and validates clean", () => {
+    const out = normalizeArgAliases(deploySchema.inputSchema, {
+      browsers: ["chrome"],
+      buildId: "abc1234",
+    });
+    expect(out.buildSha).toBe("abc1234");
+    expect(out.buildId).toBeUndefined();
+    expect(validateToolInput(deploySchema.inputSchema, out)).toEqual([]);
+  });
+
+  it("promote folds buildSha onto buildId and validates clean", () => {
+    const out = normalizeArgAliases(releasePromoteSchema.inputSchema, {
+      buildSha: "abc1234",
+      channel: "stable",
+    });
+    expect(out.buildId).toBe("abc1234");
+    expect(out.buildSha).toBeUndefined();
+    expect(validateToolInput(releasePromoteSchema.inputSchema, out)).toEqual(
+      [],
+    );
+  });
+
+  it("keeps each tool's canonical spelling authoritative", () => {
+    const deployOut = normalizeArgAliases(deploySchema.inputSchema, {
+      buildSha: "keep111",
+      buildId: "ignore2",
+    });
+    expect(deployOut.buildSha).toBe("keep111");
+    const promoteOut = normalizeArgAliases(releasePromoteSchema.inputSchema, {
+      buildId: "keep111",
+      buildSha: "ignore2",
+    });
+    expect(promoteOut.buildId).toBe("keep111");
+  });
+
+  it("lists the cross-alias in each tool's full-schema validation error", () => {
+    const deployErr = JSON.parse(
+      inputValidationError(
+        "extension_deploy",
+        [{ path: "buildSha", message: "required argument is missing" }],
+        deploySchema.inputSchema,
+      ),
+    );
+    expect(deployErr.error.args.aliases.buildSha).toEqual(["buildId"]);
+    expect(deployErr.error.args.aliases.buildId).toBeUndefined();
+
+    const promoteErr = JSON.parse(
+      inputValidationError(
+        "extension_release_promote",
+        [{ path: "buildId", message: "required argument is missing" }],
+        releasePromoteSchema.inputSchema,
+      ),
+    );
+    expect(promoteErr.error.args.aliases.buildId).toEqual(["buildSha"]);
+    expect(promoteErr.error.args.aliases.buildSha).toBeUndefined();
   });
 });
 

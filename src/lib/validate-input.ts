@@ -99,6 +99,12 @@ const ARG_ALIASES: Record<string, string[]> = {
   tab: ["tabId"],
   url: ["href", "pageUrl"],
   browser: ["browserName"],
+  // P7 vocabulary fix: extension_deploy says buildSha while
+  // extension_release_promote says buildId for the same build commit. Each
+  // tool accepts the other's word; the schema-aware rule below keeps a tool's
+  // own spelling authoritative and only folds the spelling it does not own.
+  buildSha: ["buildId"],
+  buildId: ["buildSha"],
 };
 
 export function normalizeArgAliases(
