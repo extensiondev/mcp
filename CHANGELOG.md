@@ -1,5 +1,45 @@
 # Changelog
 
+## 5.5.0
+
+The debug surfaces learn to point at things: tabs are targetable by
+URL, extensions in lists have names, and eval works on the default
+template by default.
+
+### Added
+
+- `extension_dom_inspect` targets tabs by `tabUrl` (case-insensitive
+  URL substring, title as fallback). Exactly one match inspects it and
+  the result names the resolved target; zero or multiple matches return
+  the candidate targets instead of guessing. `listTargets: true` lists
+  the browser's live CDP page targets (targetId, url, title, type) with
+  the standing warning that a CDP targetId is NOT a chrome.tabs id.
+- `extension_list_extensions` names its entries. The dev session's own
+  extension resolves to `name`, `version`, and `ownExtension: true`
+  (identified by recomputing Chrome's unpacked-extension id from the
+  ready contract's distPath) and sorts first; entries that cannot be
+  resolved carry a note saying why instead of a silent bare id. Other
+  extensions' contexts are never attached to or evaluated in.
+
+### Fixed
+
+- `extension_eval` works on the default template by default. On
+  Chromium with an MV3 manifest the default context is now `page` (the
+  MV3 service worker CSP blocks background eval), disclosed in the
+  result as `defaultedContext` with the reason; explicit
+  `context: "background"` is unchanged and keeps its CSP explanation.
+  Firefox and MV2 defaults are untouched. A defaulted eval that lands
+  on an unreachable active tab returns a hint to navigate or pass
+  `url`/`tab`.
+- Error remedies speak tool arguments, never CLI flags: the engine's
+  `--context page --tab <id>` prose is rewritten into `context:`/
+  `tab:`/`url:` vocabulary, with guards so ordinary prose is never
+  garbled by the rewriting.
+- The debugging documentation's headline example now runs on the
+  default template (page-context eval); the background variant is
+  labeled MV2/Firefox, and the cross-browser matrix states per-context
+  eval support honestly with the MV3 CSP footnote.
+
 ## 5.4.0
 
 The DevX swarm's non-blocker friction clusters, cleared: waiting is
