@@ -1,5 +1,26 @@
 # Changelog
 
+## 5.6.0
+
+Firefox reaches protocol parity on extension listing: the last
+Chromium-only tool now works on Gecko.
+
+### Added
+
+- `extension_list_extensions` works on Firefox-family sessions. It rides
+  the Remote Debugging Protocol root actor's `listAddons` over the
+  `rdpPort` the engine stamps into ready.json from extension.js 4.0.15
+  on (upstream entry 78). Entries list INSTALLED add-ons regardless of
+  live contexts, `temporarilyInstalled` marks temporary loads, and the
+  dev session's extension is flagged `ownExtension` by matching the
+  ready contract's identity (with a lone temporary install as the
+  fallback signal). Add-on targets are never attached to or evaluated
+  in; system and hidden add-ons are filtered out. Older engines get a
+  hint naming the 4.0.15 requirement instead of a generic failure. A
+  minimal RDP client (`src/lib/rdp.ts`) carries the handshake; legacy
+  RDP was chosen over WebDriver BiDi on purpose, since BiDi is
+  single-session and would block attaching alongside other consumers.
+
 ## 5.5.2
 
 Honest browser support wording ahead of the Safari lane landing.

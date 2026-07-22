@@ -10,14 +10,20 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { CDPClient } from "../lib/cdp";
-import { isChromiumFamily } from "../lib/browser-family";
-import { resolveCdpPort, CDP_PORT_MISSING_HINT } from "../lib/cdp-port";
+import { isChromiumFamily, isGeckoFamily } from "../lib/browser-family";
+import {
+  resolveCdpPort,
+  resolveRdpPort,
+  CDP_PORT_MISSING_HINT,
+  RDP_PORT_MISSING_HINT,
+} from "../lib/cdp-port";
+import { rdpListAddons } from "../lib/rdp";
 import { resolveSessionBrowser } from "../lib/session-browser";
 
 export const schema = {
   name: "extension_list_extensions",
   description:
-    "List the extensions with a live context in the running dev browser via Chrome DevTools Protocol. Returns each extension's id, name, version, and live contexts (service worker, page). The entry for THIS dev session's extension (the project being served) is flagged ownExtension: true, with name and version resolved from the session's ready contract even when the browser exposes no identity. Other extensions resolve via the read-only Extensions domain when available; their contexts are never attached to or evaluated in, so an id that the domain does not describe stays id-only with a note saying why. A dormant MV3 service worker with no open page may be absent until it wakes. Chromium only (Firefox uses RDP, not yet supported). Requires an active dev or start session.",
+    "List the extensions in the running dev browser. Returns each extension's id, name, version, and (on Chromium) live contexts. The entry for THIS dev session's extension (the project being served) is flagged ownExtension: true, with name and version resolved from the session's ready contract even when the browser exposes no identity. On Chromium this rides the Chrome DevTools Protocol: entries are extensions with at least one live context (a dormant MV3 service worker with no open page may be absent until it wakes), and other extensions resolve via the read-only Extensions domain when available. On Firefox this rides the Remote Debugging Protocol root actor (listAddons, engine 4.0.15+): entries are INSTALLED add-ons regardless of live contexts, with temporarilyInstalled marking temporary loads, and carry no contexts. Either way other extensions' contexts are never attached to or evaluated in. Requires an active dev or start session.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -41,8 +47,9 @@ interface ExtensionEntry {
   name?: string;
   version?: string;
   ownExtension?: boolean;
+  temporarilyInstalled?: boolean;
   contexts: Array<{ type: string; url: string }>;
-  source: "extensions-domain" | "session-contract" | "target-only";
+  source: "extensions-domain" | "session-contract" | "target-only" | "rdp-root";
   note?: string;
 }
 
@@ -150,10 +157,13 @@ export async function handler(args: {
     args.browser,
     "chrome",
   );
+  if (isGeckoFamily(browser)) {
+    return listGeckoExtensions(args.projectPath, browser);
+  }
   if (!isChromiumFamily(browser)) {
     return JSON.stringify({
-      error: `Listing extensions for ${browser} uses RDP (Remote Debug Protocol). Currently only Chromium CDP is supported.`,
-      hint: 'Pass browser: "chrome" (against a Chromium-family dev session).',
+      error: `Listing extensions for ${browser} is not supported: no debugging-protocol pairing exists for this browser family.`,
+      hint: "Target a Chromium-family (CDP) or Firefox-family (RDP) dev session.",
     });
   }
 
@@ -269,5 +279,111 @@ export async function handler(args: {
     });
   } finally {
     cdp.disconnect();
+  }
+}
+
+// Firefox pairing: the RDP root actor's listAddons is the only channel that can
+// see add-ons the in-bundle control relay does not live in (upstream entry 78:
+// the engine stamps rdpPort into ready.json from 4.0.15 on). Root-level listing
+// only; add-on targets are never attached to or evaluated in.
+async function listGeckoExtensions(
+  projectPath: string,
+  browser: string,
+): Promise<string> {
+  const resolved = await resolveRdpPort(projectPath, browser);
+  if (!resolved) {
+    return JSON.stringify({
+      error:
+        "No active dev session with a Firefox debugger server (RDP) found.",
+      hint: `Start a dev session first with extension_dev, then use extension_wait to confirm it is ready. ${RDP_PORT_MISSING_HINT}`,
+    });
+  }
+  const rdpPort = resolved.port;
+
+  try {
+    let addons: Awaited<ReturnType<typeof rdpListAddons>> | null = null;
+    let lastError: unknown = null;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        addons = await rdpListAddons(rdpPort);
+        break;
+      } catch (error) {
+        lastError = error;
+        if (attempt < 2) {
+          await new Promise((resolve) => setTimeout(resolve, 800));
+        }
+      }
+    }
+    if (!addons) throw lastError;
+
+    const own = readOwnIdentity(projectPath, browser);
+
+    const extensions: ExtensionEntry[] = addons
+      // Strictly isWebExtension === true: GMP plugins (Widevine, OpenH264)
+      // come back from listAddons WITHOUT the field at all (verified live
+      // against Firefox via the canary engine), while every real extension
+      // and theme carries it, built-in system add-ons included.
+      .filter(
+        (addon) =>
+          addon.isWebExtension === true &&
+          addon.isSystem !== true &&
+          addon.hidden !== true,
+      )
+      .map((addon) => {
+        const entry: ExtensionEntry = {
+          id: String(addon.id ?? addon.actor ?? ""),
+          contexts: [],
+          source: "rdp-root",
+        };
+        if (typeof addon.name === "string") entry.name = addon.name;
+        if (typeof addon.version === "string") entry.version = addon.version;
+        if (addon.temporarilyInstalled === true) {
+          entry.temporarilyInstalled = true;
+        }
+        return entry;
+      });
+
+    // The Chromium path derives the own id from the dist path; Gecko add-on ids
+    // come from the manifest (or a generated temp id), so match on the identity
+    // the ready contract stamps instead. A temp install is the fallback signal:
+    // the dev session's extension is loaded temporarily, so a lone
+    // temporarilyInstalled entry is it even when the names disagree.
+    if (own?.name) {
+      const byName = extensions.filter((e) => e.name === own.name);
+      if (byName.length === 1) byName[0].ownExtension = true;
+    }
+    if (!extensions.some((e) => e.ownExtension)) {
+      const temporary = extensions.filter((e) => e.temporarilyInstalled);
+      if (temporary.length === 1) {
+        temporary[0].ownExtension = true;
+        if (temporary[0].name === undefined && own?.name !== undefined) {
+          temporary[0].name = own.name;
+          if (own.version !== undefined) temporary[0].version = own.version;
+          temporary[0].source = "session-contract";
+        }
+      }
+    }
+
+    extensions.sort((a, b) => {
+      if ((a.ownExtension ?? false) !== (b.ownExtension ?? false)) {
+        return a.ownExtension ? -1 : 1;
+      }
+      return (a.name ?? a.id).localeCompare(b.name ?? b.id);
+    });
+
+    const ownEntry = extensions.find((e) => e.ownExtension);
+    return JSON.stringify({
+      rdpPort,
+      browser,
+      count: extensions.length,
+      ownExtensionId: ownEntry?.id ?? null,
+      extensions,
+      note:
+        "Lists INSTALLED add-ons via the RDP root actor (listAddons), regardless of whether a context is currently live, so entries carry no contexts. temporarilyInstalled marks temporary loads; ownExtension marks the extension this dev session serves, matched from the session's ready contract. Add-ons are never attached to or evaluated in.",
+    });
+  } catch (error) {
+    return JSON.stringify({
+      error: `Failed to list extensions over RDP: ${(error as Error).message}`,
+    });
   }
 }
