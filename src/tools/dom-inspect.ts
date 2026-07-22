@@ -8,19 +8,30 @@
 
 import { runActVerb, type ActArgs } from "../lib/act";
 import { resolveSessionBrowser } from "../lib/session-browser";
-import { isChromiumFamily } from "../lib/browser-family";
-import { resolveCdpPort, CDP_PORT_MISSING_HINT } from "../lib/cdp-port";
+import { isChromiumFamily, isGeckoFamily } from "../lib/browser-family";
+import {
+  resolveCdpPort,
+  resolveRdpPort,
+  CDP_PORT_MISSING_HINT,
+  RDP_PORT_MISSING_HINT,
+} from "../lib/cdp-port";
 import {
   listPageTargets,
   matchTargetsByUrl,
   TARGET_ID_NOTE,
 } from "../lib/cdp-targets";
+import { rdpListTabs } from "../lib/rdp";
 import { listBridgeTabs, matchTabsByUrl } from "../lib/bridge-tabs";
+
+// The Gecko twin of TARGET_ID_NOTE: same two-id-space trap, RDP wording.
+const RDP_ACTOR_NOTE =
+  "actor is an RDP tab descriptor actor id, NOT a chrome.tabs id: do not pass it as `tab`. " +
+  "Target a tab with `tabUrl` (URL substring) or `url`; if you need a numeric tab id, call extension_dom_inspect with listTabs: true.";
 
 export const schema = {
   name: "extension_dom_inspect",
   description:
-    "Inspect a page/content-script DOM via the agent bridge (CDP-free, localhost). Returns a structured snapshot (counts, extension roots, open shadow roots, optional capped HTML). Target a tab by `tabUrl` (case-insensitive URL substring resolved against the browser's live page targets; zero or several matches return the candidates instead of guessing), by `url`, or by numeric `tab`. Discover what is open with listTargets: true (CDP targetIds) or listTabs: true (numeric chrome.tabs ids). Requires the dev session to be started with allowControl: true (extension_dev). For closed shadow roots or deep CDP inspection use extension_source_inspect. Wraps `extension inspect`.",
+    "Inspect a page/content-script DOM via the agent bridge (CDP-free, localhost). Returns a structured snapshot (counts, extension roots, open shadow roots, optional capped HTML). Target a tab by `tabUrl` (case-insensitive URL substring resolved against the browser's live page targets; zero or several matches return the candidates instead of guessing), by `url`, or by numeric `tab`. Discover what is open with listTargets: true (Chromium CDP targetIds; Firefox RDP tab actors) or listTabs: true (numeric chrome.tabs ids). Requires the dev session to be started with allowControl: true (extension_dev). For closed shadow roots or deep CDP inspection use extension_source_inspect. Wraps `extension inspect`.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -39,7 +50,7 @@ export const schema = {
         type: "boolean",
         default: false,
         description:
-          "Enumerate the browser's CDP page targets as {targetId,url,title,type} and return, ignoring the other args. The discovery path for `tabUrl`. targetId is a CDP target id, NOT a numeric chrome.tabs id (for those use listTabs).",
+          "Enumerate the browser's live page targets and return, ignoring the other args. The discovery path for `tabUrl`. Chromium: CDP page targets as {targetId,url,title,type}. Firefox: RDP tab descriptors as {actor,url,title,type} (engine 4.0.15+). Neither id is a numeric chrome.tabs id (for those use listTabs).",
       },
       listTabs: {
         type: "boolean",
@@ -129,8 +140,47 @@ export async function handler(
 
   // Discovery without a separate tool: the page targets straight from the
   // debugging endpoint, so a caller can see what is open before targeting it.
+  // Gecko rides the RDP root actor's listTabs, so discovery works even
+  // without allowControl (unlike listTabs, which needs the bridge).
   if (args.listTargets) {
     const { browser } = resolveSessionBrowser(args.projectPath, args.browser);
+    if (isGeckoFamily(browser)) {
+      const resolved = await resolveRdpPort(args.projectPath, browser);
+      if (!resolved) {
+        return JSON.stringify({
+          ok: false,
+          error: {
+            name: "NoSession",
+            message: `No active dev session with a Firefox debugger server (RDP) for ${browser}, so listTargets has no browser to ask. Start extension_dev and extension_wait for ready. ${RDP_PORT_MISSING_HINT}`,
+          },
+        });
+      }
+      try {
+        const tabs = await rdpListTabs(resolved.port);
+        return JSON.stringify({
+          ok: true,
+          browser,
+          transport: "rdp",
+          targets: tabs.map((t) => ({
+            actor: String(t.actor ?? ""),
+            type: "tab",
+            url: String(t.url ?? ""),
+            title: String(t.title ?? ""),
+            ...(t.selected === true ? { selected: true } : {}),
+          })),
+          note: RDP_ACTOR_NOTE,
+        });
+      } catch (e) {
+        return JSON.stringify({
+          ok: false,
+          error: {
+            name: "RdpError",
+            message: `Could not list tab targets over RDP: ${e instanceof Error ? e.message : String(e)}`,
+          },
+          hint: "Confirm the session is ready (extension_wait), then retry. listTabs: true is the bridge alternative (needs allowControl).",
+        });
+      }
+    }
     const cdp = await cdpPortOrError(args.projectPath, browser, "listTargets");
     if ("error" in cdp) return cdp.error;
     try {

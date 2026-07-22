@@ -62,13 +62,16 @@ export class RdpPacketDecoder {
   }
 }
 
-// Connect, wait for the root actor's greeting, send listAddons, and resolve
-// with the addon list. Unsolicited root packets (addonListChanged and friends)
-// are skipped: only a root reply carrying `addons` — or an error — settles it.
-export function rdpListAddons(
+// Connect, wait for the root actor's greeting, send one root request, and
+// resolve with the array reply carries under `replyKey`. Unsolicited root
+// packets (addonListChanged, tabListChanged and friends) are skipped: only a
+// root reply carrying the key, or an error, settles it.
+function rdpRootListRequest(
   port: number,
+  requestType: string,
+  replyKey: string,
   options?: { timeoutMs?: number },
-): Promise<RdpAddon[]> {
+): Promise<Array<Record<string, unknown>>> {
   const timeoutMs = options?.timeoutMs ?? 10_000;
   return new Promise((resolve, reject) => {
     const socket = net.connect({ host: "127.0.0.1", port });
@@ -77,15 +80,15 @@ export function rdpListAddons(
     let settled = false;
 
     const timer = setTimeout(() => {
-      fail(new Error(`RDP listAddons timed out after ${timeoutMs}ms`));
+      fail(new Error(`RDP ${requestType} timed out after ${timeoutMs}ms`));
     }, timeoutMs);
 
-    function finish(addons: RdpAddon[]) {
+    function finish(items: Array<Record<string, unknown>>) {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
       socket.destroy();
-      resolve(addons);
+      resolve(items);
     }
 
     function fail(error: Error) {
@@ -110,7 +113,7 @@ export function rdpListAddons(
         if (packet.from !== "root") continue;
         if (!greeted) {
           greeted = true;
-          socket.write(encodeRdpPacket({ to: "root", type: "listAddons" }));
+          socket.write(encodeRdpPacket({ to: "root", type: requestType }));
           continue;
         }
         if (typeof packet.error === "string") {
@@ -123,8 +126,8 @@ export function rdpListAddons(
           );
           return;
         }
-        if (Array.isArray(packet.addons)) {
-          finish(packet.addons as RdpAddon[]);
+        if (Array.isArray(packet[replyKey])) {
+          finish(packet[replyKey] as Array<Record<string, unknown>>);
           return;
         }
       }
@@ -132,7 +135,31 @@ export function rdpListAddons(
 
     socket.on("error", (error) => fail(error));
     socket.on("close", () => {
-      fail(new Error("RDP connection closed before listAddons replied"));
+      fail(new Error(`RDP connection closed before ${requestType} replied`));
     });
   });
+}
+
+export function rdpListAddons(
+  port: number,
+  options?: { timeoutMs?: number },
+): Promise<RdpAddon[]> {
+  return rdpRootListRequest(port, "listAddons", "addons", options);
+}
+
+// A tab descriptor as modern Firefox returns it from root listTabs.
+export interface RdpTab {
+  actor?: string;
+  url?: string;
+  title?: string;
+  selected?: boolean;
+  browserId?: number;
+  [key: string]: unknown;
+}
+
+export function rdpListTabs(
+  port: number,
+  options?: { timeoutMs?: number },
+): Promise<RdpTab[]> {
+  return rdpRootListRequest(port, "listTabs", "tabs", options);
 }
