@@ -90,14 +90,17 @@ describe("dom_inspect listTargets", () => {
     expect(calls).toHaveLength(0);
   });
 
-  it("points Gecko callers at listTabs, which works everywhere", async () => {
+  it("reports a missing Gecko session as NoSession with the rdpPort hint", async () => {
+    // Gecko listTargets is paired via the RDP root actor now; with no live
+    // session there is no rdpPort, and the error must say how to get one
+    // instead of the old "Unsupported" refusal.
     const result = JSON.parse(
       await domInspect.handler({ projectPath: "/p", listTargets: true, browser: "firefox" }),
     );
 
     expect(result.ok).toBe(false);
-    expect(result.error.name).toBe("Unsupported");
-    expect(result.error.message).toContain("listTabs: true");
+    expect(result.error.name).toBe("NoSession");
+    expect(result.error.message).toContain("rdpPort");
     expect(calls).toHaveLength(0);
   });
 });

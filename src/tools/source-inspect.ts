@@ -10,21 +10,12 @@ import { CDPClient } from "../lib/cdp";
 import { isChromiumFamily } from "../lib/browser-family";
 import { resolveCdpPort, CDP_PORT_MISSING_HINT } from "../lib/cdp-port";
 import { resolveSessionBrowser } from "../lib/session-browser";
-import { runActVerb } from "../lib/act";
-import {
-  listBridgeTabs,
-  navigateToUrlViaBridge,
-} from "../lib/bridge-tabs";
-import {
-  PAGE_HTML_SCRIPT,
-  EXTENSION_ROOT_META_SCRIPT,
-  domSnapshotScript,
-} from "../lib/cdp-page-scripts";
+import { inspectViaBridge } from "./source-inspect-gecko";
 
 export const schema = {
   name: "extension_source_inspect",
   description:
-    "Inspect a running extension's live state: full HTML (with shadow DOM), DOM structure, content script injection, console messages, and CSS selector queries. Chromium sessions ride Chrome DevTools Protocol; Firefox sessions ride the agent bridge (needs allowEval: true) and cover summary/meta/html/dom_snapshot/extension_roots/probes, while console and deepDom stay CDP-only. Requires an active dev or start session.",
+    "Inspect a running extension's live state: full HTML (with shadow DOM), DOM structure, content script injection, console messages, and CSS selector queries. Chromium sessions ride Chrome DevTools Protocol. Firefox sessions are fully paired: summary/meta/html/dom_snapshot/extension_roots/probes ride the agent bridge (needs allowEval: true), console rides the RDP watcher replay (engine 4.0.15+), and deepDom walks closed shadow roots via a content-script eval (MV2 sessions with host permissions for the target url; Firefox MV3 background CSP blocks bridge evals entirely). Requires an active dev or start session.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -74,7 +65,7 @@ export const schema = {
         type: "boolean",
         default: false,
         description:
-          "Pierce CLOSED shadow roots via CDP (Chromium only). The default path reads open shadow roots; closed ones need this escape hatch.",
+          "Pierce CLOSED shadow roots. The default path reads open shadow roots; closed ones need this escape hatch. Chromium: CDP DOM pierce. Firefox: a content-script walk via tabs.executeScript (MV2 sessions; the extension needs host permissions for the target url).",
       },
     },
     required: ["projectPath"],
@@ -262,198 +253,4 @@ export async function handler(args: {
   } finally {
     cdp.disconnect();
   }
-}
-
-// One page-context expression gathering everything the caller asked for in a
-// single bridge round-trip: summary metrics, meta, capped HTML, DOM snapshot,
-// extension roots, selector probes. The CDP page scripts are self-contained
-// IIFE expressions, so the dom_snapshot / extension_roots / html parts embed
-// them verbatim rather than re-deriving the logic (one source, two
-// transports). Kept a plain (non-async) IIFE so it works on any engine that
-// evaluates expressions without awaiting promises.
-function buildBridgeInspectExpression(opts: {
-  summary: boolean;
-  meta: boolean;
-  html: boolean;
-  domSnapshot: boolean;
-  extensionRoots: boolean;
-  probes: string[];
-  maxBytes: number;
-}): string {
-  const parts: string[] = ["const out = {};"];
-  if (opts.meta) {
-    parts.push(
-      `try { out.meta = { url: location.href, title: document.title, readyState: document.readyState }; } catch (e) {}`,
-    );
-  }
-  if (opts.summary) {
-    parts.push(
-      `try {
-        const roots = document.querySelectorAll('#extension-root,[data-extension-root]:not([data-extension-root="extension-js-devtools"])');
-        out.summary = {
-          htmlLength: document.documentElement.outerHTML.length,
-          scriptCount: document.querySelectorAll('script').length,
-          styleCount: document.querySelectorAll('style').length,
-          linkCount: document.querySelectorAll('link').length,
-          extensionRootCount: roots.length,
-          bodyChildCount: document.body ? document.body.children.length : 0
-        };
-      } catch (e) { out.summary = {}; }`,
-    );
-  }
-  if (opts.html) {
-    // Same serializer as the CDP path: PAGE_HTML_SCRIPT folds the content of
-    // open extension-root shadow roots into the markup, which a bare
-    // outerHTML read silently drops.
-    parts.push(
-      `try {
-        const html = ${PAGE_HTML_SCRIPT};
-        const cap = ${JSON.stringify(opts.maxBytes)};
-        out.htmlTruncated = cap > 0 && html.length > cap;
-        out.html = out.htmlTruncated ? html.slice(0, cap) : html;
-      } catch (e) {}`,
-    );
-  }
-  if (opts.domSnapshot) {
-    parts.push(`try { out.domSnapshot = ${domSnapshotScript(500)}; } catch (e) {}`);
-  }
-  if (opts.extensionRoots) {
-    parts.push(
-      `try { out.extensionRoots = ${EXTENSION_ROOT_META_SCRIPT}; } catch (e) {}`,
-    );
-  }
-  if (opts.probes.length) {
-    parts.push(
-      `out.probes = {};
-      for (const sel of ${JSON.stringify(opts.probes)}) {
-        try {
-          const nodes = document.querySelectorAll(sel);
-          const first = nodes[0];
-          out.probes[sel] = { count: nodes.length, sample: first ? String(first.outerHTML || "").slice(0, 200) : null };
-        } catch (e) { out.probes[sel] = { error: String((e && e.message) || e) }; }
-      }`,
-    );
-  }
-  parts.push("return out;");
-  return `(() => { ${parts.join("\n")} })()`;
-}
-
-// The Gecko pairing of the CDP inspection: the same result shape, gathered by
-// a page-context eval over the agent bridge. Navigates first (like the CDP
-// path does) when the requested url is not already open in any tab.
-async function inspectViaBridge(
-  args: {
-    projectPath: string;
-    url?: string;
-    probe?: string[];
-    include?: string[];
-    timeout?: number;
-    deepDom?: boolean;
-  },
-  browser: string,
-  include: Set<string>,
-  maxBytes: number,
-): Promise<string> {
-  const notes: string[] = [];
-  if (args.deepDom) {
-    notes.push(
-      "deepDom (closed shadow roots) requires CDP and is Chromium-only.",
-    );
-  }
-  if (include.has("console")) {
-    notes.push(
-      `Console capture rides CDP; on ${browser} read extension_logs, where the engine streams console output.`,
-    );
-  }
-
-  // Parity with the CDP path, which navigates a tab to `url` when it is not
-  // already open: check the live tab list first, navigate over the bridge if
-  // nothing matches, and only then inspect.
-  if (args.url) {
-    const listed = await listBridgeTabs(args.projectPath, browser, args.timeout);
-    if ("error" in listed) return listed.error;
-    const already = listed.tabs.some((t) => t.url.includes(args.url!));
-    if (!already) {
-      const nav = await navigateToUrlViaBridge(
-        args.projectPath,
-        browser,
-        args.url,
-        args.timeout,
-      );
-      try {
-        if (JSON.parse(nav)?.ok !== true) return nav;
-      } catch {
-        return nav;
-      }
-    }
-  }
-
-  const expression = buildBridgeInspectExpression({
-    summary: include.has("summary"),
-    meta: true, // always gathered: meta doubles as the target echo
-    html: include.has("html"),
-    domSnapshot: include.has("dom_snapshot"),
-    extensionRoots: include.has("extension_roots"),
-    probes: args.probe ?? [],
-    maxBytes,
-  });
-  const raw = await runActVerb(
-    [
-      "eval",
-      expression,
-      args.projectPath,
-      "--context",
-      "page",
-      ...(args.url ? ["--url", args.url] : []),
-      "--browser",
-      browser,
-      ...(args.timeout != null ? ["--timeout", String(args.timeout)] : []),
-    ],
-    args.projectPath,
-    args.timeout,
-  );
-  let parsed: any;
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    return raw;
-  }
-  if (parsed?.ok !== true) return raw;
-
-  const value = parsed.value ?? {};
-  const result: Record<string, unknown> = {
-    browser,
-    transport: "bridge",
-  };
-  if (value.meta) {
-    result.target = { url: value.meta.url, title: value.meta.title };
-    if (include.has("meta")) result.meta = value.meta;
-  }
-  if (include.has("summary") && value.summary) result.summary = value.summary;
-  if (include.has("html") && typeof value.html === "string") {
-    result.html = value.html;
-    if (value.htmlTruncated) result.htmlTruncated = true;
-  }
-  if (include.has("dom_snapshot") && value.domSnapshot) {
-    result.domSnapshot = value.domSnapshot;
-  }
-  if (include.has("extension_roots") && value.extensionRoots !== undefined) {
-    result.extensionRoots = value.extensionRoots;
-  }
-  if (value.probes) {
-    result.probes = value.probes;
-    // Same trap as the CDP path: probes are CSS selectors, and API names
-    // happen to parse as descendant selectors. Warn exactly when a probe
-    // looks like code.
-    const jsLooking = (args.probe ?? []).filter((p) =>
-      /^typeof\s|^(chrome|browser|window|document)\.|\(\)|=>|===/.test(p),
-    );
-    if (jsLooking.length) {
-      result.probeWarning =
-        `Probes are CSS selectors run through querySelectorAll against the live page, NOT JavaScript expressions. ` +
-        `${jsLooking.map((s) => `"${s}"`).join(", ")} parsed as selectors and will match nothing. To evaluate JS, use extension_eval.`;
-    }
-  }
-  if (notes.length) result.notes = notes;
-  return JSON.stringify(result);
 }

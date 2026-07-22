@@ -7,6 +7,7 @@
 // MIT License (c) Cezar Augusto and the extension.dev collaborators
 
 import WebSocket from "ws";
+import { summarizeConsoleMessages } from "./console-summary";
 
 const COMMAND_TIMEOUT_MS = 15_000;
 
@@ -169,38 +170,7 @@ export class CDPConnection {
   }
 
   getConsoleSummary(): Record<string, unknown> {
-    const counts: Record<string, number> = {};
-    const uniqueByLevel: Record<string, Map<string, number>> = {};
-
-    for (const msg of this.consoleMessages) {
-      counts[msg.level] = (counts[msg.level] ?? 0) + 1;
-
-      if (!uniqueByLevel[msg.level]) uniqueByLevel[msg.level] = new Map();
-
-      const key = msg.text.slice(0, 200);
-
-      uniqueByLevel[msg.level].set(
-        key,
-        (uniqueByLevel[msg.level].get(key) ?? 0) + 1,
-      );
-    }
-
-    const topMessages: Array<{ level: string; text: string; count: number }> =
-      [];
-
-    for (const [level, msgs] of Object.entries(uniqueByLevel)) {
-      const sorted = [...msgs.entries()].sort((a, b) => b[1] - a[1]);
-
-      for (const [text, count] of sorted.slice(0, 5)) {
-        topMessages.push({ level, text, count });
-      }
-    }
-
-    return {
-      total: this.consoleMessages.length,
-      counts,
-      topMessages: topMessages.sort((a, b) => b.count - a.count).slice(0, 10),
-    };
+    return summarizeConsoleMessages(this.consoleMessages);
   }
 
   protected onEvent(
