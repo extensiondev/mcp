@@ -65,6 +65,7 @@ function walkDir(dir: string, base: string = ""): FileEntry[] {
           type = "font";
         else if ([".wasm"].includes(ext)) type = "wasm";
         else if ([".map"].includes(ext)) type = "sourcemap";
+        else if ([".zip"].includes(ext)) type = "archive";
         entries.push({ path: rel, size: stat.size, type });
       }
     }
@@ -119,7 +120,12 @@ export async function handler(args: {
   // weight, sourcemaps never reach the store zip.
   const sourcemapSize = byType.sourcemap?.size ?? 0;
   const buildType = sourcemapSize > 0 ? "development" : "production";
-  const shippableSize = totalSize - sourcemapSize;
+  // The engine writes the store zip INSIDE dist/<browser>/, so a zip:true
+  // build used to double the reported weight: every file counted once loose
+  // and once again inside its own package (DevX swarm finding). Archives are
+  // packaging output, not shipped content; exclude them like sourcemaps.
+  const archiveSize = byType.archive?.size ?? 0;
+  const shippableSize = totalSize - sourcemapSize - archiveSize;
 
   // Entry points a caller cares about (content scripts, background, popup) are
   // usually small and get buried under assets in the top-10-by-size list, which
@@ -171,7 +177,7 @@ export async function handler(args: {
     /(screenshot|promo|marquee|tile|banner|preview)[-_.]?\d*\.(png|jpe?g|webp|gif)$/i;
   const sizeWarnings: string[] = [];
   for (const f of files) {
-    if (f.type === "sourcemap") continue;
+    if (f.type === "sourcemap" || f.type === "archive") continue;
     if (PROMO_RE.test(f.path)) {
       sizeWarnings.push(
         `${f.path} (${formatBytes(f.size)}) looks like a store-listing promo image shipped inside the extension package, move it out of the bundled sources so it does not inflate the store zip.`,
@@ -205,6 +211,11 @@ export async function handler(args: {
     ...(buildType === "development"
       ? {
           note: `This dist contains ${formatBytes(sourcemapSize)} of sourcemaps and looks like a dev build; run extension_build for production sizes. shippableSize excludes sourcemaps.`,
+        }
+      : {}),
+    ...(archiveSize > 0
+      ? {
+          archiveNote: `This dist contains ${formatBytes(archiveSize)} of .zip archive(s) (store packaging output, written into dist by zip builds). shippableSize excludes them so the packaged copy does not double-count the files it contains.`,
         }
       : {}),
     manifest: {
@@ -253,7 +264,9 @@ export async function handler(args: {
         ] === "string",
       noSourceMaps: !files.some((f) => f.type === "sourcemap"),
       noPromoAssets: !files.some((f) => PROMO_RE.test(f.path)),
-      under10MB: totalSize < 10 * 1024 * 1024,
+      // A store zip sitting in dist must not flip this red: the zip is the
+      // package, not part of the payload the store measures.
+      under10MB: totalSize - archiveSize < 10 * 1024 * 1024,
     },
   };
 
