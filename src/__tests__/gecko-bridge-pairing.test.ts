@@ -18,6 +18,27 @@ vi.mock("../lib/act", async (importOriginal) => {
   };
 });
 
+// RDP console replay, pinned per test: null port = pre-rdpPort engine.
+let mockRdpPort: number | null = null;
+let mockConsoleMessages: Array<{ level: string; text: string }> = [];
+vi.mock("../lib/cdp-port", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../lib/cdp-port")>();
+  return {
+    ...actual,
+    resolveRdpPort: async () =>
+      mockRdpPort == null
+        ? null
+        : { port: mockRdpPort, source: "contract" as const },
+  };
+});
+vi.mock("../lib/rdp", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../lib/rdp")>();
+  return {
+    ...actual,
+    rdpCollectConsoleMessages: async () => mockConsoleMessages,
+  };
+});
+
 // The session-browser resolver reads ready.json from disk; pin it to the
 // browser the test passes so no filesystem is involved.
 vi.mock("../lib/session-browser", async (importOriginal) => {
@@ -40,6 +61,8 @@ const isListTabs = (cli: string[]) => cli.includes("--list-tabs");
 beforeEach(() => {
   calls.length = 0;
   actResponder = () => JSON.stringify({ ok: true });
+  mockRdpPort = null;
+  mockConsoleMessages = [];
 });
 
 describe("extension_open url on Gecko (bridge navigation)", () => {
@@ -235,6 +258,131 @@ describe("extension_source_inspect on Gecko (bridge inspection)", () => {
     expect(evalCall[1]).toContain("domSnapshot");
     expect(evalCall[1]).toContain("data-extjs-reinject-generation");
     expect(evalCall[1]).toContain("XMLSerializer");
+  });
+
+  it("summarizes the RDP console replay when the session publishes rdpPort", async () => {
+    mockRdpPort = 9223;
+    mockConsoleMessages = [
+      { level: "log", text: "hi" },
+      { level: "log", text: "hi" },
+      { level: "error", text: "boom" },
+    ];
+    actResponder = (cli) => {
+      if (isListTabs(cli)) {
+        return JSON.stringify({
+          ok: true,
+          tabs: [{ tabId: 7, url: "https://example.com/", title: "Example" }],
+        });
+      }
+      if (isEval(cli)) return JSON.stringify({ ok: true, value: pageValue });
+      return JSON.stringify({ ok: true });
+    };
+
+    const result = JSON.parse(
+      await sourceInspect.handler({
+        projectPath: "/p",
+        browser: "firefox",
+        url: "https://example.com/",
+        include: ["summary", "console"],
+      }),
+    );
+
+    expect(result.rdpPort).toBe(9223);
+    expect(result.console.total).toBe(3);
+    expect(result.console.counts).toEqual({ log: 2, error: 1 });
+    expect(result.console.topMessages[0]).toEqual({
+      level: "log",
+      text: "hi",
+      count: 2,
+    });
+    // No fallback note once console genuinely rides RDP.
+    expect(JSON.stringify(result.notes ?? [])).not.toContain("extension_logs");
+  });
+
+  it("keeps the extension_logs fallback note on a pre-rdpPort engine", async () => {
+    mockRdpPort = null;
+    actResponder = (cli) =>
+      isEval(cli)
+        ? JSON.stringify({ ok: true, value: pageValue })
+        : JSON.stringify({ ok: true });
+
+    const result = JSON.parse(
+      await sourceInspect.handler({
+        projectPath: "/p",
+        browser: "firefox",
+        include: ["summary", "console"],
+      }),
+    );
+
+    expect(result.console).toBeUndefined();
+    expect(String(result.notes)).toContain("extension_logs");
+  });
+
+  it("walks closed shadow roots via a background executeScript eval", async () => {
+    actResponder = (cli) => {
+      if (!isEval(cli)) return JSON.stringify({ ok: true });
+      const context = cli[cli.indexOf("--context") + 1];
+      if (context === "background") {
+        return JSON.stringify({
+          ok: true,
+          value: {
+            frames: [
+              {
+                api: true,
+                closed: [{ host: "div", html: "<p>secret</p>" }],
+              },
+            ],
+          },
+        });
+      }
+      return JSON.stringify({ ok: true, value: pageValue });
+    };
+
+    const result = JSON.parse(
+      await sourceInspect.handler({
+        projectPath: "/p",
+        browser: "firefox",
+        include: ["summary"],
+        deepDom: true,
+      }),
+    );
+
+    expect(result.deepDom).toBe(true);
+    expect(result.closedShadowRoots).toEqual([
+      { host: "div", type: "closed", html: "<p>secret</p>" },
+    ]);
+    const bgCall = calls.find(
+      (c) => isEval(c) && c[c.indexOf("--context") + 1] === "background",
+    )!;
+    expect(bgCall[1]).toContain("executeScript");
+    expect(bgCall[1]).toContain("openOrClosedShadowRoot");
+  });
+
+  it("notes the deepDom failure with the host-permissions hint", async () => {
+    actResponder = (cli) => {
+      if (!isEval(cli)) return JSON.stringify({ ok: true });
+      const context = cli[cli.indexOf("--context") + 1];
+      if (context === "background") {
+        return JSON.stringify({
+          ok: true,
+          value: { error: "Missing host permission for the tab" },
+        });
+      }
+      return JSON.stringify({ ok: true, value: pageValue });
+    };
+
+    const result = JSON.parse(
+      await sourceInspect.handler({
+        projectPath: "/p",
+        browser: "firefox",
+        include: ["summary"],
+        deepDom: true,
+      }),
+    );
+
+    expect(result.deepDom).toBeUndefined();
+    expect(String(result.notes)).toContain("deepDom failed");
+    expect(String(result.notes)).toContain("host permissions");
   });
 
   it("warns when a probe looks like JavaScript instead of a CSS selector", async () => {

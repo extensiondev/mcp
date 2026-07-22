@@ -5,6 +5,7 @@ import {
   RdpPacketDecoder,
   rdpListAddons,
   rdpListTabs,
+  rdpCollectConsoleMessages,
 } from "../lib/rdp";
 
 // Firefox RDP parity (upstream entry 78): the engine now stamps rdpPort into
@@ -158,6 +159,88 @@ describe("rdpListAddons", () => {
       if (packet?.type === "listAddons") socket.end();
     });
     await expect(rdpListAddons(port)).rejects.toThrow(/closed before/);
+  });
+});
+
+describe("rdpCollectConsoleMessages", () => {
+  // The flow verified live: getWatcher (configured) -> watchTargets ->
+  // watchResources, with the cached console history replayed as
+  // resources-available-array packets. watchTargets emits its
+  // target-available-form event BEFORE its own reply, which is exactly why
+  // replies are matched as typeless packets.
+  it("collects the watcher replay, events-before-reply ordering included", async () => {
+    const port = await listen((socket, packet) => {
+      if (!packet) return;
+      if (packet.type === "listTabs") {
+        socket.write(
+          encodeRdpPacket({
+            from: "root",
+            tabs: [
+              { actor: "tab1", url: "https://example.com/", selected: true },
+            ],
+          }),
+        );
+      }
+      if (packet.type === "getWatcher" && packet.to === "tab1") {
+        socket.write(encodeRdpPacket({ from: "tab1", actor: "watcher1" }));
+      }
+      if (packet.type === "watchTargets") {
+        socket.write(
+          encodeRdpPacket({
+            from: "watcher1",
+            type: "target-available-form",
+            target: {},
+          }),
+        );
+        socket.write(encodeRdpPacket({ from: "watcher1" }));
+      }
+      if (packet.type === "watchResources") {
+        socket.write(
+          encodeRdpPacket({
+            from: "target1",
+            type: "resources-available-array",
+            array: [
+              [
+                "console-message",
+                [
+                  { arguments: ["hello", { class: "Object" }], level: "log" },
+                  { arguments: [42], level: "warn" },
+                ],
+              ],
+              [
+                "error-message",
+                [{ pageError: { errorMessage: "boom", warning: false } }],
+              ],
+            ],
+          }),
+        );
+        socket.write(encodeRdpPacket({ from: "watcher1" }));
+      }
+    });
+
+    const messages = await rdpCollectConsoleMessages(port, { settleMs: 100 });
+    expect(messages).toEqual([
+      { level: "log", text: "hello [Object]" },
+      { level: "warn", text: "42" },
+      { level: "error", text: "boom" },
+    ]);
+  });
+
+  it("rejects when no tab matches the url filter", async () => {
+    const port = await listen((socket, packet) => {
+      if (packet?.type === "listTabs") {
+        socket.write(
+          encodeRdpPacket({
+            from: "root",
+            tabs: [{ actor: "tab1", url: "about:blank" }],
+          }),
+        );
+      }
+    });
+
+    await expect(
+      rdpCollectConsoleMessages(port, { urlFilter: "example.com" }),
+    ).rejects.toThrow(/no open tab matches/);
   });
 });
 
