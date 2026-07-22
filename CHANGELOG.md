@@ -1,5 +1,54 @@
 # Changelog
 
+## 5.4.0
+
+The DevX swarm's non-blocker friction clusters, cleared: waiting is
+narrated, ports tell the truth, artifacts say where they are, and error
+prose explains the extension instead of the engine.
+
+### Added
+
+- `extension_wait` narrates its budget. `timeoutMs` is a documented
+  argument (default 45000, clamped 1000 to 50000; the legacy `timeout`
+  spelling stays as a deprecated alias), every result carries `budgetMs`
+  and `elapsedMs`, and a timeout says what WAS observed plus a
+  call-again hint instead of an opaque failure. The status splits
+  `compiled` from `browserAttached`, and a `noBrowser` build-only
+  session returns immediately with `buildOnly: true` and a plain
+  statement that no browser will ever attach.
+- `extension_build` with `zip: true` returns `zipPath`, the absolute
+  path of the file the engine actually wrote (its name sanitizer strips
+  punctuation, so the filename rarely matches the project name), and
+  `zipSourcePath` for `zipSource: true`. When a zip cannot be located
+  after a successful build the result says so in `zipPathNote` instead
+  of omitting the field silently.
+
+### Fixed
+
+- `extension_dev` reports the actually-bound port. The engine's
+  ready.json carries the bound port from its first stamp, so dev reads
+  it after the health window and re-registers the session with the true
+  port; when the stamp has not landed yet, dev claims no port at all
+  and says `extension_wait` reports the bound one. dev and wait now
+  share one source of truth and cannot disagree about the same session.
+- `extension_build` warns when it writes over a live dev session's
+  dist: the dev browser may serve the production artifact until the
+  next recompile. The build is never blocked; the clobber is named.
+- `extension_inspect` classifies `.zip` files as archives and excludes
+  them from `shippableSize` and the 10MB store gate (the package is not
+  payload), with an `archiveNote` explaining the exclusion.
+- `extension_whoami` anchors its identity to the stored token that
+  `extension_login` minted: it does not follow the current working
+  directory, and the wording now says so.
+- `extension_open` explains a popup-less extension instead of relaying
+  the engine error: a manifest pre-check reports that nothing sets
+  `action.default_popup`, lists the surfaces the manifest DOES declare,
+  and points at the right next verb. Headless popup errors state the
+  exact headed path (`extension_dev` with `replace: true` and
+  `EXTENSION_HEADLESS=0`).
+- `extension_dev`'s `earlyOutput` drops V8 asm.js verdict lines (pure
+  noise); real errors are preserved.
+
 ## 5.3.1
 
 ### Added
