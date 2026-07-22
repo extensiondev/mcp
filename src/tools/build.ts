@@ -9,6 +9,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { runExtensionCli } from "../lib/exec";
+import { liveProjectSessions } from "../lib/session-browser";
 
 // The engine's persisted BuildSummary (§73): dist/extension-js/<browser>/
 // build-summary.json, written after a successful build so shell-out hosts get
@@ -117,6 +118,100 @@ function builtEntrypoints(
     });
   }
   return out;
+}
+
+// The engine names the store zip by sanitizing (lowercase, every character
+// outside [a-z0-9 ] REMOVED, spaces to dashes) the manifest name and appending
+// "-<version>", then writes it INSIDE dist/<browser>/. So "zip-probe-ext"
+// becomes dist/chrome/zipprobeext-1.0.0.zip: the dashes are silently stripped
+// and the file matches neither the project directory nor the manifest name.
+// Swarm personas asked for a store zip and then had to find the artifact by
+// disk search. Mirror the engine's naming to predict the path, and always
+// report the file that actually exists, never a normalized guess.
+function engineSanitize(input: string): string {
+  return input
+    .toLowerCase()
+    .replace(/[^a-z0-9 ]/gi, "")
+    .trim()
+    .replace(/\s+/g, "-");
+}
+
+function newestZip(
+  dir: string,
+  since: number,
+  match?: (name: string) => boolean,
+): string | null {
+  try {
+    const fresh = fs
+      .readdirSync(dir)
+      .filter((name) => name.endsWith(".zip") && (!match || match(name)))
+      .map((name) => {
+        const full = path.join(dir, name);
+        return { full, mtimeMs: fs.statSync(full).mtimeMs };
+      })
+      .filter((entry) => entry.mtimeMs >= since)
+      .sort((a, b) => b.mtimeMs - a.mtimeMs);
+    return fresh[0]?.full ?? null;
+  } catch {
+    return null;
+  }
+}
+
+// `<sanitized manifest name>-<version>`, the base the engine uses for both the
+// dist zip and the "-source" zip. Localized (__MSG_*__) names resolve through
+// the engine's locale files, which we do not reimplement; those fall through to
+// the freshness scan in the locators below.
+function engineZipBase(distDir: string, projectPath: string): string {
+  let manifest: Record<string, unknown> = {};
+  try {
+    manifest = JSON.parse(
+      fs.readFileSync(path.join(distDir, "manifest.json"), "utf8"),
+    );
+  } catch {
+  }
+  const rawName =
+    typeof manifest.name === "string" && !/^__MSG_.+__$/.test(manifest.name)
+      ? manifest.name
+      : path.basename(path.resolve(projectPath));
+  const version =
+    typeof manifest.version === "string" && manifest.version
+      ? manifest.version
+      : "0.0.0";
+  return `${engineSanitize(rawName)}-${version}`;
+}
+
+// Absolute path of the store zip this build wrote into dist/<browser>/, or
+// null when no candidate exists on disk.
+function locateDistZip(
+  projectPath: string,
+  browser: string,
+  zipFilename: string | undefined,
+  since: number,
+): string | null {
+  const distDir = path.resolve(projectPath, "dist", browser);
+  const base = zipFilename
+    ? engineSanitize(zipFilename)
+    : engineZipBase(distDir, projectPath);
+  const expected = path.join(distDir, `${base}.zip`);
+  if (fs.existsSync(expected)) return expected;
+  return newestZip(distDir, since);
+}
+
+// The source zip does NOT live next to the dist zip: the engine writes it one
+// level up, at dist/<base>-source.zip, and zipFilename does not rename it.
+function locateSourceZip(
+  projectPath: string,
+  browser: string,
+  since: number,
+): string | null {
+  const distDir = path.resolve(projectPath, "dist", browser);
+  const distRoot = path.resolve(projectPath, "dist");
+  const expected = path.join(
+    distRoot,
+    `${engineZipBase(distDir, projectPath)}-source.zip`,
+  );
+  if (fs.existsSync(expected)) return expected;
+  return newestZip(distRoot, since, (name) => name.endsWith("-source.zip"));
 }
 
 export const schema = {
@@ -289,6 +384,20 @@ export async function handler(args: {
     });
   }
 
+  // A production build on a project with a LIVE dev session writes over the
+  // session's dist output, and the dev browser then serves the stale or
+  // production artifact until the next recompile: seven personas in the DevX
+  // swarm hit this silently. Detect the session BEFORE building (its pid may
+  // die while the CLI runs) via the same live-session lookup dev.ts's fork
+  // guard uses, and warn honestly without blocking the build.
+  const clobberedSessions = liveProjectSessions(args.projectPath).filter(
+    (session) => session.browser === browser,
+  );
+  const warnings: string[] = clobberedSessions.map(
+    (session) =>
+      `A live dev session (pid ${session.pid}) is running on this project for ${browser}, and this build wrote over its dist/${browser} output. The dev browser may now serve the production artifact instead of the dev build until the next recompile. Run extension_stop, or let dev recompile on the next source change, to resolve it.`,
+  );
+
   // Shell out to the project's own extension CLI (project-local bin when
   // present, else the pinned npx fallback) exactly like dev/start/preview.
   // Running the build in-process against THIS package's extension-develop made
@@ -350,6 +459,7 @@ export async function handler(args: {
           ? { manifestWarnings: preflight.warnings }
           : {}),
         ...buildWarnings,
+        ...(warnings.length ? { warnings } : {}),
         duration,
         output: lastLines(out, 12),
         hint: "The bundler exited 0 but did not emit these files. Check that the manifest paths match what the build produces, and that nothing references a file outside the source tree.",
@@ -373,7 +483,41 @@ export async function handler(args: {
         const divergence = manifestDivergence(args.projectPath, browser);
         return divergence.length ? { productionDivergence: divergence } : {};
       })(),
+      ...(warnings.length ? { warnings } : {}),
       zip: args.zip ?? false,
+      // The caller asked for a zip; hand back the artifact's real path instead
+      // of making them search dist for a filename the engine rewrote. When the
+      // zip cannot be located, say so explicitly rather than omitting the
+      // field silently.
+      ...(args.zip
+        ? (() => {
+            const zipPath = locateDistZip(
+              args.projectPath,
+              browser,
+              args.zipFilename,
+              start,
+            );
+            return zipPath
+              ? { zipPath }
+              : {
+                  zipPathNote: `zip: true was requested and the build succeeded, but no .zip file could be located in dist/${browser}. The engine may not have packaged it; check the build output below.`,
+                };
+          })()
+        : {}),
+      ...(args.zipSource
+        ? (() => {
+            const zipSourcePath = locateSourceZip(
+              args.projectPath,
+              browser,
+              start,
+            );
+            return zipSourcePath
+              ? { zipSourcePath }
+              : {
+                  zipSourcePathNote: `zipSource: true was requested and the build succeeded, but no *-source.zip file could be located in dist/. The engine may not have packaged it; check the build output below.`,
+                };
+          })()
+        : {}),
       duration,
       output: lastLines(out, 12),
     });
@@ -385,6 +529,9 @@ export async function handler(args: {
     success: false,
     browser,
     error: message.slice(0, 1200),
+    // A failed build may still have partially rewritten the live session's
+    // dist before dying, so the clobber warning rides the failure too.
+    ...(warnings.length ? { warnings } : {}),
     duration,
     hint: "Check that the project has a valid src/manifest.json and its dependencies are installed (extension_dev auto-installs; build does not).",
   });
