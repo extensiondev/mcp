@@ -2,8 +2,8 @@
 
 ## 5.6.0
 
-Firefox reaches protocol parity on extension listing: the last
-Chromium-only tool now works on Gecko.
+Firefox reaches full protocol parity: every formerly Chromium-only
+feature now works on Gecko, over RDP or the agent bridge.
 
 ### Added
 
@@ -20,6 +20,49 @@ Chromium-only tool now works on Gecko.
   minimal RDP client (`src/lib/rdp.ts`) carries the handshake; legacy
   RDP was chosen over WebDriver BiDi on purpose, since BiDi is
   single-session and would block attaching alongside other consumers.
+- `extension_dom_inspect` listTargets works on Firefox: RDP tab
+  descriptors as `{actor,url,title,type}`, with the same two-id-space
+  warning as the CDP path (an actor id is not a chrome.tabs id).
+  Discovery therefore needs no allowControl on Gecko, unlike listTabs.
+- `extension_source_inspect` closes its four Gecko gaps. dom_snapshot
+  and extension_roots ride the bridge eval, embedding the same CDP page
+  scripts Chromium uses (the bridge html path also gained the
+  shadow-aware serializer, so open extension-root shadow content is in
+  the markup now). console rides the RDP watcher's cached-resource
+  replay (`getWatcher` with server target switching, then
+  watchResources; verified live that `getCachedMessages` is a dead end
+  on current Firefox), summarized in the same shape as the CDP console
+  buffer. deepDom walks CLOSED shadow roots through
+  `tabs.executeScript`, where Firefox exposes
+  `Element.openOrClosedShadowRoot` to content scripts, so it needs an
+  MV2 session with host permissions for the target url; a failed walk
+  reports why in `notes` instead of silently dropping the field.
+- MV2 page-eval fallback: the engine's page-context eval needs
+  chrome.scripting, an MV3-only API, so Firefox MV2 sessions reported
+  every bridge inspection as Unsupported. The inspect expression now
+  falls back to compiling in the tab's content-script sandbox via
+  `tabs.executeScript`, which reads the identical DOM; callers see the
+  same result shape on both paths.
+
+### Fixed
+
+- Act-verb CLI output over ~8KB no longer truncates. The engine CLI
+  exits without draining stdout, and the socketpair pipe Node hands a
+  child buffers about 8KB, so any larger `--output json` frame (a DOM
+  snapshot, a big html capture) arrived cut mid-JSON and surfaced as
+  "CliError: extension exited with code 0". The MCP now hands the child
+  file descriptors and reads them after exit, which no pipe buffer can
+  truncate. Filed upstream as extension.js ledger entry 79; the
+  workaround stays until the engine flushes before exiting.
+
+### Known limitation
+
+- Firefox MV3 sessions cannot use the bridge extras: the MV3 event page
+  CSP blocks the eval the control bridge dispatches through the
+  background, exactly like Chromium MV3 service workers. MV2 sessions
+  are fully covered via the executeScript fallback. The RDP paths
+  (list_extensions, listTargets, console) work on both manifest
+  versions.
 
 ## 5.5.2
 

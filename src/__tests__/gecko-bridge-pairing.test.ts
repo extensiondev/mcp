@@ -385,6 +385,80 @@ describe("extension_source_inspect on Gecko (bridge inspection)", () => {
     expect(String(result.notes)).toContain("host permissions");
   });
 
+  it("falls back to tabs.executeScript when the engine has no page-context eval (MV2)", async () => {
+    // The live MV2 behavior: page-context eval reports Unsupported because
+    // chrome.scripting is MV3-only; the same expression compiled in the
+    // content-script sandbox returns the identical out object.
+    actResponder = (cli) => {
+      if (isListTabs(cli)) {
+        return JSON.stringify({
+          ok: true,
+          tabs: [{ tabId: 7, url: "https://example.com/", title: "Example" }],
+        });
+      }
+      if (!isEval(cli)) return JSON.stringify({ ok: true });
+      const context = cli[cli.indexOf("--context") + 1];
+      if (context === "page") {
+        return JSON.stringify({
+          ok: false,
+          error: {
+            name: "Unsupported",
+            message:
+              'chrome.scripting is not available on this engine (MV2 has no scripting API); use context: "background"',
+          },
+        });
+      }
+      return JSON.stringify({ ok: true, value: { frames: [pageValue] } });
+    };
+
+    const result = JSON.parse(
+      await sourceInspect.handler({
+        projectPath: "/p",
+        browser: "firefox",
+        url: "https://example.com/",
+        include: ["summary", "html"],
+      }),
+    );
+
+    expect(result.transport).toBe("bridge");
+    expect(result.summary.extensionRootCount).toBe(1);
+    expect(result.html).toContain("<body>hi</body>");
+    const bgCall = calls.filter(isEval).find(
+      (c) => c[c.indexOf("--context") + 1] === "background",
+    )!;
+    expect(bgCall[1]).toContain("executeScript");
+  });
+
+  it("surfaces the MV2 fallback's content-script failure as InspectFailed", async () => {
+    actResponder = (cli) => {
+      if (!isEval(cli)) return JSON.stringify({ ok: true });
+      const context = cli[cli.indexOf("--context") + 1];
+      if (context === "page") {
+        return JSON.stringify({
+          ok: false,
+          error: { name: "Unsupported", message: "chrome.scripting is not available on this engine" },
+        });
+      }
+      return JSON.stringify({
+        ok: true,
+        value: { error: "Missing host permission for the tab" },
+      });
+    };
+
+    const result = JSON.parse(
+      await sourceInspect.handler({
+        projectPath: "/p",
+        browser: "firefox",
+        include: ["summary"],
+      }),
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.error.name).toBe("InspectFailed");
+    expect(result.error.message).toContain("host permission");
+    expect(result.hint).toContain("host permissions");
+  });
+
   it("warns when a probe looks like JavaScript instead of a CSS selector", async () => {
     actResponder = (cli) =>
       isEval(cli)
