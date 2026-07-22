@@ -15,11 +15,16 @@ import {
   listBridgeTabs,
   navigateToUrlViaBridge,
 } from "../lib/bridge-tabs";
+import {
+  PAGE_HTML_SCRIPT,
+  EXTENSION_ROOT_META_SCRIPT,
+  domSnapshotScript,
+} from "../lib/cdp-page-scripts";
 
 export const schema = {
   name: "extension_source_inspect",
   description:
-    "Inspect a running extension's live state: full HTML (with shadow DOM), DOM structure, content script injection, console messages, and CSS selector queries. Chromium sessions ride Chrome DevTools Protocol; Firefox sessions ride the agent bridge (needs allowEval: true) and cover summary/meta/html/probes, while dom_snapshot, extension_roots, console, and deepDom stay CDP-only. Requires an active dev or start session.",
+    "Inspect a running extension's live state: full HTML (with shadow DOM), DOM structure, content script injection, console messages, and CSS selector queries. Chromium sessions ride Chrome DevTools Protocol; Firefox sessions ride the agent bridge (needs allowEval: true) and cover summary/meta/html/dom_snapshot/extension_roots/probes, while console and deepDom stay CDP-only. Requires an active dev or start session.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -260,13 +265,18 @@ export async function handler(args: {
 }
 
 // One page-context expression gathering everything the caller asked for in a
-// single bridge round-trip: summary metrics, meta, capped HTML, selector
-// probes. Kept a plain (non-async) IIFE so it works on any engine that
+// single bridge round-trip: summary metrics, meta, capped HTML, DOM snapshot,
+// extension roots, selector probes. The CDP page scripts are self-contained
+// IIFE expressions, so the dom_snapshot / extension_roots / html parts embed
+// them verbatim rather than re-deriving the logic (one source, two
+// transports). Kept a plain (non-async) IIFE so it works on any engine that
 // evaluates expressions without awaiting promises.
 function buildBridgeInspectExpression(opts: {
   summary: boolean;
   meta: boolean;
   html: boolean;
+  domSnapshot: boolean;
+  extensionRoots: boolean;
   probes: string[];
   maxBytes: number;
 }): string {
@@ -292,13 +302,24 @@ function buildBridgeInspectExpression(opts: {
     );
   }
   if (opts.html) {
+    // Same serializer as the CDP path: PAGE_HTML_SCRIPT folds the content of
+    // open extension-root shadow roots into the markup, which a bare
+    // outerHTML read silently drops.
     parts.push(
       `try {
-        const html = document.documentElement.outerHTML;
+        const html = ${PAGE_HTML_SCRIPT};
         const cap = ${JSON.stringify(opts.maxBytes)};
         out.htmlTruncated = cap > 0 && html.length > cap;
         out.html = out.htmlTruncated ? html.slice(0, cap) : html;
       } catch (e) {}`,
+    );
+  }
+  if (opts.domSnapshot) {
+    parts.push(`try { out.domSnapshot = ${domSnapshotScript(500)}; } catch (e) {}`);
+  }
+  if (opts.extensionRoots) {
+    parts.push(
+      `try { out.extensionRoots = ${EXTENSION_ROOT_META_SCRIPT}; } catch (e) {}`,
     );
   }
   if (opts.probes.length) {
@@ -334,14 +355,6 @@ async function inspectViaBridge(
   maxBytes: number,
 ): Promise<string> {
   const notes: string[] = [];
-  const cdpOnly = ["dom_snapshot", "extension_roots"].filter((k) =>
-    include.has(k),
-  );
-  if (cdpOnly.length) {
-    notes.push(
-      `${cdpOnly.join(" and ")} require CDP and are Chromium-only; on ${browser}, extension_dom_inspect's summary reports extension roots and open shadow roots.`,
-    );
-  }
   if (args.deepDom) {
     notes.push(
       "deepDom (closed shadow roots) requires CDP and is Chromium-only.",
@@ -379,6 +392,8 @@ async function inspectViaBridge(
     summary: include.has("summary"),
     meta: true, // always gathered: meta doubles as the target echo
     html: include.has("html"),
+    domSnapshot: include.has("dom_snapshot"),
+    extensionRoots: include.has("extension_roots"),
     probes: args.probe ?? [],
     maxBytes,
   });
@@ -418,6 +433,12 @@ async function inspectViaBridge(
   if (include.has("html") && typeof value.html === "string") {
     result.html = value.html;
     if (value.htmlTruncated) result.htmlTruncated = true;
+  }
+  if (include.has("dom_snapshot") && value.domSnapshot) {
+    result.domSnapshot = value.domSnapshot;
+  }
+  if (include.has("extension_roots") && value.extensionRoots !== undefined) {
+    result.extensionRoots = value.extensionRoots;
   }
   if (value.probes) {
     result.probes = value.probes;

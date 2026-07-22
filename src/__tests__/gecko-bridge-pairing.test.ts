@@ -196,6 +196,47 @@ describe("extension_source_inspect on Gecko (bridge inspection)", () => {
     expect(calls.some((c) => isEval(c) && String(c[1]).includes("tabs.query"))).toBe(true);
   });
 
+  it("pairs dom_snapshot and extension_roots over the bridge with the CDP page scripts", async () => {
+    const snapshot = [{ tag: "html", depth: 0, childCount: 2 }];
+    const roots = { rootCount: 1, markerCount: 0, latestGeneration: 3, roots: [], markers: [] };
+    actResponder = (cli) => {
+      if (isListTabs(cli)) {
+        return JSON.stringify({
+          ok: true,
+          tabs: [{ tabId: 7, url: "https://example.com/", title: "Example" }],
+        });
+      }
+      if (isEval(cli)) {
+        return JSON.stringify({
+          ok: true,
+          value: { ...pageValue, domSnapshot: snapshot, extensionRoots: roots },
+        });
+      }
+      return JSON.stringify({ ok: true });
+    };
+
+    const result = JSON.parse(
+      await sourceInspect.handler({
+        projectPath: "/p",
+        browser: "firefox",
+        url: "https://example.com/",
+        include: ["summary", "html", "dom_snapshot", "extension_roots"],
+      }),
+    );
+
+    expect(result.transport).toBe("bridge");
+    expect(result.domSnapshot).toEqual(snapshot);
+    expect(result.extensionRoots).toEqual(roots);
+    // No note may claim these are Chromium-only anymore.
+    expect(JSON.stringify(result.notes ?? [])).not.toContain("dom_snapshot");
+    const evalCall = calls.find(isEval)!;
+    // The bridge expression embeds the SAME CDP page scripts: the dom walker,
+    // the reinject-generation reader, and the shadow-aware html serializer.
+    expect(evalCall[1]).toContain("domSnapshot");
+    expect(evalCall[1]).toContain("data-extjs-reinject-generation");
+    expect(evalCall[1]).toContain("XMLSerializer");
+  });
+
   it("warns when a probe looks like JavaScript instead of a CSS selector", async () => {
     actResponder = (cli) =>
       isEval(cli)
