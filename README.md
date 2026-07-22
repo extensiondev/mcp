@@ -7,7 +7,7 @@
 
 # @extension.dev/mcp [![Version][npm-version-image]][npm-version-url] [![Downloads][npm-downloads-image]][npm-downloads-url] [![Discord][discord-image]][discord-url]
 
-> Give your AI agent hands for browser extension development. 30 MCP tools that scaffold, run, inspect, debug, and publish cross-browser extensions.
+> Give your AI agent hands for browser extension development. 33 MCP tools that scaffold, run, inspect, debug, and publish cross-browser extensions.
 
 <img alt="Logo" align="right" src="https://media.extension.land/brand/extension-dev/logo-dock.png" width="15.5%" />
 
@@ -127,7 +127,7 @@ Browser-launching tools (`dev`, `start`, `preview`) shell out to the `extension`
 
 ## From preview to store
 
-The platform tools connect agents to [extension.dev](https://extension.dev): `extension_login` runs a GitHub device-code flow and stores a project-scoped token locally (never returned to the agent), `extension_publish` turns a build into a shareable preview URL, and `extension_release_promote` promotes a tested build to a release channel from CI or an agent session, no browser required. `extension_deploy` submits a built extension to the Chrome Web Store, Edge Add-ons, and Firefox AMO through extension.dev, which holds your store credentials and dispatches the release from your project's mirror CI, it defaults to a dry run and store credentials are never tool arguments.
+The platform tools connect agents to [extension.dev](https://extension.dev): `extension_login` runs a GitHub device-code flow and stores a project-scoped token locally (never returned to the agent), `extension_publish` turns a build into a shareable preview URL, and `extension_release_promote` promotes a tested build to a release channel from CI or an agent session, no browser required. `extension_deploy` submits a built extension to the Chrome Web Store, Edge Add-ons, and Firefox AMO through extension.dev, which holds your store credentials and dispatches the release from your project's mirror CI, it defaults to a dry run and store credentials are never tool arguments. After a real submission, `extension_store_status` reads the recorded outcome, per-store credential health, and review state from the project's public registry, so agents and CI can answer "was it approved?" without a console visit. Access tokens live at most 7 days; CI pipelines re-mint them from the console's Access tokens page.
 
 ## The extension.dev stack
 
