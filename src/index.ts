@@ -37,6 +37,7 @@ import * as publish from "./tools/publish";
 import * as releasePromote from "./tools/release-promote";
 import * as releaseList from "./tools/release-list";
 import * as deployTool from "./tools/deploy";
+import * as storeStatus from "./tools/store-status";
 import * as wait from "./tools/wait";
 import * as addFeature from "./tools/add-feature";
 
@@ -94,6 +95,7 @@ export const tools: ToolModule[] = [
   releaseList,
   releasePromote,
   deployTool,
+  storeStatus,
   wait,
   addFeature,
   login,

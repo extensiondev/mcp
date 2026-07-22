@@ -14,8 +14,8 @@ import * as storage from "../tools/storage";
 import * as addFeature from "../tools/add-feature";
 
 describe("MCP Server tool registry", () => {
-  it("has exactly 32 tools", () => {
-    expect(ALL_TOOLS.length).toBe(32);
+  it("has exactly 33 tools", () => {
+    expect(ALL_TOOLS.length).toBe(33);
   });
 
   for (const tool of ALL_TOOLS) {
