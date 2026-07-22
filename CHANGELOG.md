@@ -1,5 +1,18 @@
 # Changelog
 
+## 5.2.0
+
+### Added
+
+- `extension_manifest_validate` warns when a Chrome-desktop-only manifest
+  key (for example `file_browser_handlers`) rides an Edge target, where it
+  is inert. Family-level prefix resolution already worked; this adds
+  granularity inside the chromium family for Edge-targeted publishers.
+- `extension_logout` now returns `revokeUrl` pointing at the project's
+  access-tokens page and says plainly that the token stays valid
+  server-side until revoked there. The scope is read before the local
+  credentials are cleared so the link can still be built.
+
 ## 5.1.2
 
 ### Fixed
