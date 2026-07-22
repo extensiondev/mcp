@@ -21,7 +21,7 @@ const DEFAULT_API = "https://www.extension.dev";
 export const schema = {
   name: "extension_release_promote",
   description:
-    "Promote a built extension to a release channel (e.g. stable, preview, beta) on extension.dev, headless. Auth-gated: uses your stored login (extension_login) or a release token in EXTENSION_DEV_TOKEN (mint and revoke it in the dashboard under project settings -> Access tokens). Posts to the platform's CLI release endpoint; the project is identified by the token. Cutting a version-bump PR is not available headlessly (it writes to your source repo and needs an interactive login).",
+    "Promote a built extension to a release channel (e.g. stable, preview, beta) on extension.dev, headless. Auth-gated: uses your stored login (extension_login) or a release token in EXTENSION_DEV_TOKEN (mint and revoke it in the dashboard under project settings -> Access tokens; tokens live at most 7 days, so CI must re-mint before expiry). Posts to the platform's CLI release endpoint; the project is identified by the token. Cutting a version-bump PR is not available headlessly (it writes to your source repo and needs an interactive login).",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -78,7 +78,7 @@ export async function handler(args: {
   if (!token) {
     return fail(
       "ReleaseAuthError",
-      "No token. Set EXTENSION_DEV_TOKEN to a release token (create one in the extension.dev dashboard under project settings -> Access tokens), or run extension_login.",
+      "No token. Set EXTENSION_DEV_TOKEN to a release token (create one in the extension.dev dashboard under project settings -> Access tokens; tokens live at most 7 days, so CI must re-mint before expiry), or run extension_login.",
     );
   }
 

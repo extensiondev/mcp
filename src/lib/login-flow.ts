@@ -4,8 +4,30 @@
 // drift.
 
 import { writeCredentials, type StoredCredentials } from "./credentials";
+import { CONSOLE_BASE, consoleProjectUrl } from "./registry";
 
 const DEFAULT_API = "https://www.extension.dev";
+
+/**
+ * The platform clamps CLI token TTL to at most 7 days (server-owned; this
+ * client only states the truth). Every token surface repeats it so CI authors
+ * learn the rotation contract up front instead of from a 401 a week after
+ * wiring the pipeline. Links the console's Access tokens page when the
+ * project is known.
+ */
+export function tokenTtlNote(
+  workspaceSlug?: string,
+  projectSlug?: string,
+): string {
+  const tokensUrl =
+    workspaceSlug && projectSlug
+      ? consoleProjectUrl(
+          { workspace: workspaceSlug, project: projectSlug },
+          "settings/access-tokens",
+        )
+      : CONSOLE_BASE;
+  return `extension.dev CLI tokens live at most 7 days (server-enforced). CI pipelines must re-mint before expiry on the console's Access tokens page: ${tokensUrl}`;
+}
 
 type FetchImpl = typeof fetch;
 
