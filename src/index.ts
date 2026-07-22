@@ -162,7 +162,7 @@ export async function startServer(): Promise<void> {
         content: [
           {
             type: "text" as const,
-            text: inputValidationError(name, issues),
+            text: inputValidationError(name, issues, tool.schema.inputSchema),
           },
         ],
         isError: true,

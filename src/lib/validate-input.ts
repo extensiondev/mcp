@@ -154,9 +154,34 @@ export function validateToolInput(
   return issues;
 }
 
+// The complete argument surface of a tool: required args, optional args, and
+// which of them answer to an alias. Swarm cluster C4/C7: errors that reveal one
+// field at a time ("projectName is required") sent personas probing the schema
+// with invalid calls, while an accepted alias (`name`) went entirely unnamed.
+export function describeToolArgs(inputSchema: Record<string, unknown>): {
+  required: string[];
+  optional: string[];
+  aliases: Record<string, string[]>;
+} {
+  const schema = inputSchema as ObjectSchema;
+  const props = schema.properties ?? {};
+  const required = schema.required ?? [];
+  const optional = Object.keys(props).filter((k) => !required.includes(k));
+  const aliases: Record<string, string[]> = {};
+  for (const [canonical, list] of Object.entries(ARG_ALIASES)) {
+    if (!(canonical in props)) continue;
+    // Same rule normalizeArgAliases applies: an alias the tool owns as a real
+    // property is not an alias for that tool.
+    const usable = list.filter((alias) => !(alias in props));
+    if (usable.length) aliases[canonical] = usable;
+  }
+  return { required, optional, aliases };
+}
+
 export function inputValidationError(
   toolName: string,
   issues: InputIssue[],
+  inputSchema?: Record<string, unknown>,
 ): string {
   return JSON.stringify({
     ok: false,
@@ -166,6 +191,9 @@ export function inputValidationError(
         .map((i) => `${i.path}: ${i.message}`)
         .join("; ")}`,
       issues,
+      // Enumerate the whole schema so one bad call teaches the full contract
+      // instead of doling out one missing field per attempt.
+      ...(inputSchema ? { args: describeToolArgs(inputSchema) } : {}),
     },
   });
 }

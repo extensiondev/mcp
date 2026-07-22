@@ -45,18 +45,19 @@ function detectPackageManager(projectPath: string): string {
 export const schema = {
   name: "extension_create",
   description:
-    "Create a new browser extension project from a template in the extension.dev template catalog. Use extension_list_templates to see available options.",
+    "Create a new browser extension project from a template in the extension.dev template catalog. Use extension_list_templates to see available options. The scaffolder may initialize a git repository in the new project; the result's defaultsApplied block reports whether it did, along with every other decision made without being asked.",
   inputSchema: {
     type: "object" as const,
     properties: {
       projectName: {
         type: "string",
-        description: "Name of the extension project (used as directory name)",
+        description:
+          "Name of the extension project (used as directory name). Alias: name.",
       },
       parentDir: {
         type: "string",
         description:
-          "Directory to create the project inside. Defaults to the MCP server's working directory, which may not be where you expect, pass this explicitly when you care where the project lands.",
+          "Directory to create the project inside. Defaults to the MCP server process cwd (NOT the caller's cwd), which may not be where you expect; pass this explicitly when you care where the project lands. Aliases: parent, into.",
       },
       template: {
         type: "string",
@@ -204,12 +205,31 @@ export async function handler(args: {
       ? `The scaffold pins "extension": "${scaffoldPin ?? "unknown"}"; the project-local engine wins over EXTENSION_MCP_CLI_VERSION=${pin}. Run \`(cd ${result.projectPath} && ${addDev(`extension@${pin}`)})\` to match the pinned engine.`
       : undefined;
 
+  // Every decision create took without being asked, spelled out. The surprise
+  // swarm's C4 blocker: the scaffold landed at the SERVER's cwd, on bun, with
+  // an unrequested git repo, and none of it was said. The resolved destination
+  // leads the result, and defaultsApplied names each silent choice as one.
+  const resolvedParent = args.parentDir
+    ? path.resolve(args.parentDir)
+    : process.cwd();
+  const gitInit = fs.existsSync(path.join(result.projectPath, ".git"));
+
   return JSON.stringify({
+    resolvedPath: result.projectPath,
     projectPath: result.projectPath,
     projectName: result.projectName,
     template: result.template,
     depsInstalled: result.depsInstalled,
     packageManager: result.depsInstalled ? packageManager : null,
+    defaultsApplied: {
+      parentDir: args.parentDir
+        ? `${resolvedParent} (explicit)`
+        : `${resolvedParent} (default: the MCP server process cwd, not yours; pass parentDir to choose)`,
+      packageManager: `${packageManager} (auto-detected by the scaffolder, not asked)`,
+      browser:
+        "chrome (default: extension_dev and extension_build target chrome unless you pass browser)",
+      gitInit,
+    },
     duration: Date.now() - start,
     nextSteps: result.depsInstalled
       ? [`cd ${result.projectPath}`, runDev]
