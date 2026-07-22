@@ -119,13 +119,15 @@ function closedShadowWalkerCode(cap: number): string {
   `;
 }
 
-// Background-context expression: find the target tab, then run the walker in
-// its content-script sandbox. MV2 tabs.executeScript, because Firefox MV3
-// sessions cannot dispatch bridge evals at all (the event page CSP blocks
-// eval), so every Gecko bridge path is MV2 territory today.
-function deepDomBackgroundExpression(
+// Background-context expression: find the target tab, then compile `code` in
+// its content-script sandbox via MV2 tabs.executeScript. The content sandbox
+// shares the page's DOM, so the inspect scripts read the same tree they read
+// under CDP. This is the load-bearing Gecko transport: MV2 has no
+// chrome.scripting (so the engine's page-context eval is Unsupported there),
+// while MV3 event pages CSP-block bridge evals wholesale.
+function executeScriptExpression(
   urlFilter: string | undefined,
-  cap: number,
+  code: string,
 ): string {
   const pick = urlFilter
     ? `tabs.find(function (t) { return String(t.url || "").toLowerCase().indexOf(${JSON.stringify(urlFilter.toLowerCase())}) !== -1; })`
@@ -133,7 +135,7 @@ function deepDomBackgroundExpression(
   return `browser.tabs.query({}).then(function (tabs) {
     var tab = ${pick};
     if (!tab) return { error: "no matching tab" };
-    return browser.tabs.executeScript(tab.id, { code: ${JSON.stringify(closedShadowWalkerCode(cap))} }).then(
+    return browser.tabs.executeScript(tab.id, { code: ${JSON.stringify(code)} }).then(
       function (results) { return { frames: results }; },
       function (err) { return { error: String((err && err.message) || err) }; }
     );
@@ -151,7 +153,7 @@ async function collectGeckoDeepDom(
   const raw = await runActVerb(
     [
       "eval",
-      deepDomBackgroundExpression(urlFilter, cap),
+      executeScriptExpression(urlFilter, closedShadowWalkerCode(cap)),
       args.projectPath,
       "--context",
       "background",
@@ -264,7 +266,7 @@ export async function inspectViaBridge(
     probes: args.probe ?? [],
     maxBytes,
   });
-  const raw = await runActVerb(
+  let raw = await runActVerb(
     [
       "eval",
       expression,
@@ -285,9 +287,56 @@ export async function inspectViaBridge(
   } catch {
     return raw;
   }
-  if (parsed?.ok !== true) return raw;
 
-  const value = parsed.value ?? {};
+  // MV2 fallback: the engine's page-context eval needs chrome.scripting, an
+  // MV3-only API, so MV2 sessions report Unsupported. The same expression
+  // compiled in the tab's content-script sandbox via tabs.executeScript reads
+  // the identical DOM (verified live), so the caller never sees the gap.
+  let value = parsed?.ok === true ? (parsed.value ?? {}) : null;
+  if (
+    value === null &&
+    /scripting is not available/i.test(String(parsed?.error?.message ?? ""))
+  ) {
+    raw = await runActVerb(
+      [
+        "eval",
+        executeScriptExpression(args.url, expression),
+        args.projectPath,
+        "--context",
+        "background",
+        "--browser",
+        browser,
+        ...(args.timeout != null ? ["--timeout", String(args.timeout)] : []),
+      ],
+      args.projectPath,
+      args.timeout,
+    );
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      return raw;
+    }
+    const frame = Array.isArray(parsed?.value?.frames)
+      ? parsed.value.frames[0]
+      : null;
+    if (parsed?.ok === true && frame && typeof frame === "object") {
+      value = frame;
+    } else if (parsed?.ok === true) {
+      // The background leg succeeded but the content-script leg did not; a
+      // bare {ok: true} would misread as a healthy inspection.
+      return JSON.stringify({
+        ok: false,
+        error: {
+          name: "InspectFailed",
+          message: String(
+            parsed?.value?.error ?? "the content-script inspect returned nothing",
+          ),
+        },
+        hint: "The MV2 fallback inspects via tabs.executeScript, which needs the extension to hold host permissions for the target url.",
+      });
+    }
+  }
+  if (value === null) return raw;
   const result: Record<string, unknown> = {
     browser,
     transport: "bridge",
