@@ -148,3 +148,64 @@ describe("open command validates against the manifest", () => {
     expect(result.hint).toContain("no commands at all");
   });
 });
+
+// Opening the popup of an extension whose manifest sets no action.default_popup
+// used to hand back the engine's raw openPopup rejection, which reads as a
+// broken session rather than a fact about the extension. The tool must say
+// what is absent, where it would be declared, and what verb works instead,
+// without ever spawning the CLI for a popup that cannot exist.
+describe("open popup validates against the manifest", () => {
+  const fs = require("node:fs") as typeof import("node:fs");
+  const os = require("node:os") as typeof import("node:os");
+  const nodePath = require("node:path") as typeof import("node:path");
+
+  const dirs: string[] = [];
+  function projectWithManifest(manifest: Record<string, unknown>) {
+    const dir = fs.mkdtempSync(nodePath.join(os.tmpdir(), "mcp-open-popup-"));
+    dirs.push(dir);
+    fs.mkdirSync(nodePath.join(dir, "src"), { recursive: true });
+    fs.writeFileSync(
+      nodePath.join(dir, "src", "manifest.json"),
+      JSON.stringify({ manifest_version: 3, name: "F", ...manifest }),
+    );
+    return dir;
+  }
+
+  afterEach(() => {
+    for (const d of dirs.splice(0)) fs.rmSync(d, { recursive: true, force: true });
+  });
+
+  it("explains a popup-less extension instead of relaying the engine error", async () => {
+    const dir = projectWithManifest({ options_ui: { page: "options.html" } });
+
+    const result = JSON.parse(
+      await openTool.handler({ projectPath: dir, surface: "popup" }),
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.error.name).toBe("NoSurfaceDocument");
+    expect(result.error.message).toContain("declares no popup");
+    expect(result.error.message).toContain("action.default_popup");
+    expect(result.declaredSurfaces).toEqual(["options"]);
+    expect(result.hint).toContain('surface: "action"');
+    expect(calls).toHaveLength(0);
+  });
+
+  it("lets a declared popup through to the engine", async () => {
+    const dir = projectWithManifest({ action: { default_popup: "popup.html" } });
+
+    await openTool.handler({ projectPath: dir, surface: "popup" });
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toContain("popup");
+  });
+
+  it("does not block on a guess when no manifest is readable", async () => {
+    const dir = fs.mkdtempSync(nodePath.join(os.tmpdir(), "mcp-open-popup-"));
+    dirs.push(dir);
+
+    await openTool.handler({ projectPath: dir, surface: "popup" });
+
+    expect(calls).toHaveLength(1);
+  });
+});
