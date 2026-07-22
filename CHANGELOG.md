@@ -1,5 +1,44 @@
 # Changelog
 
+## Unreleased
+
+The store journey stops being write-only after submit, and the token
+surfaces start telling the truth about lifetimes and API bases.
+
+### Added
+
+- `extension_store_status` (tool 33): the post-submit sibling of
+  `extension_deploy`. Reads the project's public registry
+  (`stores/health.json`, `stores/status.json`, `stores/submissions.json`)
+  and reports per store whether it is configured, its latest credential
+  health check, the last recorded submission (version, status, store
+  URL, submitted-at), and the latest review status. Normalizes both the
+  v3 merged status schema and legacy v2 poller documents. Defaults to
+  the logged-in project; accepts `workspace` + `project` overrides like
+  `extension_release_list`. A configured store with a failing credential
+  reports `configured: true` with `health.ok: false` (rotate the
+  credential, deep-linked), never "not configured".
+
+### Fixed
+
+- `extension_whoami` no longer asserts a bare `api` field that could
+  misstate the platform base (a login minted via a localhost dev server
+  kept reporting that dead base for a token that authenticates against
+  production). The recorded login base is now labeled
+  `apiRecordedAtLogin`, `apiDefault` reports what authenticated tools
+  actually target, the message flags any divergence, and a set
+  `EXTENSION_DEV_TOKEN` is disclosed as outranking the stored login.
+- The 7-day token TTL (server-enforced) is now stated everywhere a CI
+  author looks: `extension_login`'s description and success/pending
+  results, `extension_whoami`'s `tokenTtlNote` (with the deep console
+  Access tokens URL), and the auth prose of `extension_deploy` and
+  `extension_release_promote` (`extension_publish`'s auth envelope is
+  byte-frozen and unchanged).
+- `extension_deploy`'s description says the per-store rows in the result
+  are the verdict to trust: the platform's bare preflight line does not
+  check store health. A real (non-dry-run) submission now points at
+  `extension_store_status` for tracking.
+
 ## 5.5.0
 
 The debug surfaces learn to point at things: tabs are targetable by
