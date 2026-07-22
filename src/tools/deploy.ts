@@ -86,7 +86,7 @@ export interface DeployToolArgs {
 export const schema = {
   name: "extension_deploy",
   description:
-    "Submit a built extension to the Chrome Web Store, Firefox AMO, and/or Edge Add-ons THROUGH extension.dev, which holds your store credentials and dispatches the release from your project's mirror CI. DEFAULTS TO A DRY RUN (preflight: verifies auth, the project, that the build exists, and the store workflow - dispatches nothing); pass dryRun:false to actually submit, which is irreversible and enters store review. The target project is identified by your token (extension_login or a release token in EXTENSION_DEV_TOKEN); store credentials are never tool arguments and local files are not uploaded. Pass browsers + buildSha. Posts to the platform's CLI store-submission endpoint.",
+    "Submit a built extension to the Chrome Web Store, Firefox AMO, and/or Edge Add-ons THROUGH extension.dev, which holds your store credentials and dispatches the release from your project's mirror CI. DEFAULTS TO A DRY RUN (preflight - dispatches nothing): the platform side verifies auth, the project, that the build exists, and the store workflow, and this tool then adds the per-store verdict from each store's public credential-health record; trust the per-store rows in the result over the platform's bare preflight line, which does not check store health. Pass dryRun:false to actually submit, which is irreversible and enters store review. The target project is identified by your token (extension_login or a release token in EXTENSION_DEV_TOKEN; tokens live at most 7 days, so CI must re-mint from the console's Access tokens page). Store credentials are never tool arguments and local files are not uploaded. Pass browsers + buildSha (extension_release_list lists valid shas); after a real submission, extension_store_status reads the recorded outcome and review state. Posts to the platform's CLI store-submission endpoint.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -136,7 +136,7 @@ export async function handler(args: DeployToolArgs): Promise<string> {
   if (!token) {
     return fail(
       "DeployAuthError",
-      "No token. Run extension_login, or set EXTENSION_DEV_TOKEN (create one in the extension.dev dashboard under project settings -> Access tokens).",
+      "No token. Run extension_login, or set EXTENSION_DEV_TOKEN (create one in the extension.dev dashboard under project settings -> Access tokens; tokens live at most 7 days, so CI must re-mint before expiry).",
     );
   }
 
@@ -333,6 +333,13 @@ export async function handler(args: DeployToolArgs): Promise<string> {
     result.consoleStoresUrl = consoleStoresUrl;
     if (typeof data?.message === "string") result.platformMessage = data.message;
     result.message = summaryParts.join(" ");
+  }
+
+  if (!dryRun) {
+    // Close the post-submit loop: the store journey continues on the public
+    // registry, and extension_store_status is the verb that reads it.
+    result.statusNote =
+      "Track this submission with extension_store_status: it reads the recorded outcome, per-store credential health, and review state from the public registry.";
   }
 
   if (warnings.length > 0) result.warnings = warnings;
