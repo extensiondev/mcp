@@ -58,18 +58,33 @@ When you've enabled acting for the session, these operations run **inside your e
 | `extension open action` | Trigger the toolbar action, opens its popup, or replays `chrome.action.onClicked`. | `--allow-control` |
 | `extension open command --name <cmd>` | Replay a `chrome.commands.onCommand` keyboard shortcut. | `--allow-control` |
 
-### Example: poke a background function
+### Example: read what your extension did to the page
 
+This runs on the default template as-is. `--context page` evaluates in the active tab's MAIN world, so you can check what your content script actually produced:
 
 ```bash
-extension eval "recomputeIndex()" --context background --allow-eval
+extension eval "document.title" --context page --allow-eval
+```
+
+```json
+{ "ok": true, "value": "Example Domain" }
+```
+
+You get the return value back as JSON. Any `console.log` your expression triggers flows out through [Agent logs](/docs/ai/logs) at the same time, return value and side effects, correlated by sequence.
+
+### Example: poke a background function (MV2/Firefox)
+
+```bash
+extension eval "recomputeIndex()" --context background --allow-eval --browser firefox
 ```
 
 ```json
 { "ok": true, "value": { "indexed": 42 } }
 ```
 
-You get the return value back as JSON. Any `console.log` your expression triggers flows out through [Agent logs](/docs/ai/logs) at the same time, return value and side effects, correlated by sequence.
+<Note>
+**Chromium MV3 blocks eval in the background.** The default template's background is an MV3 service worker, and Chrome's extension CSP rejects `unsafe-eval` there, so `--context background` on a Chromium MV3 build returns an explanatory error instead of a value. Use `--context page` or `--context content` on Chromium MV3, or target the background on a Firefox/MV2 build, where it is an MV2 background page and evaluates normally. For the same reason the `extension_eval` MCP tool defaults to the `page` context on Chromium MV3 sessions; `background` stays the default on Firefox/MV2.
+</Note>
 
 ### Example: inspect storage without building UI
 
