@@ -19,12 +19,13 @@ import {
   exchangeAndPersist,
   fetchLoginConfig,
   resolveApiBase,
+  tokenTtlNote,
 } from "../lib/login-flow";
 
 export const schema = {
   name: "extension_login",
   description:
-    "Authenticate to extension.dev and store a project-scoped access token locally so extension_publish can use it. Two-phase: call with `project` to get a code + URL for the user to authorize, then call again with the returned `deviceCode` to finish. The server picks the flow: the extension.dev-gated device flow (you authorize at extension.dev/device; GitHub federation happens server-side, no GitHub token on this machine) or, as a fallback, the legacy GitHub device flow. Never returns the token. This is the only tool besides extension_publish that talks to the hosted platform.",
+    "Authenticate to extension.dev and store a project-scoped access token locally so extension_publish can use it. Two-phase: call with `project` to get a code + URL for the user to authorize, then call again with the returned `deviceCode` to finish. The server picks the flow: the extension.dev-gated device flow (you authorize at extension.dev/device; GitHub federation happens server-side, no GitHub token on this machine) or, as a fallback, the legacy GitHub device flow. Never returns the token. Minted tokens live at most 7 days (server-enforced), so CI pipelines must re-mint before expiry on the console's Access tokens page (project settings -> Access tokens). This is the only tool besides extension_publish that talks to the hosted platform.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -60,15 +61,19 @@ function success(creds: {
   projectSlug: string;
   expiresAt: number;
 }): string {
+  const expiresAt = creds.expiresAt
+    ? new Date(creds.expiresAt * 1000).toISOString()
+    : null;
   return JSON.stringify({
     ok: true,
     status: "logged-in",
     workspaceSlug: creds.workspaceSlug,
     projectSlug: creds.projectSlug,
-    expiresAt: creds.expiresAt
-      ? new Date(creds.expiresAt * 1000).toISOString()
-      : null,
-    message: `Logged in to ${creds.workspaceSlug}/${creds.projectSlug}. extension_publish can now use the stored token.`,
+    expiresAt,
+    tokenTtlNote: tokenTtlNote(creds.workspaceSlug, creds.projectSlug),
+    message: `Logged in to ${creds.workspaceSlug}/${creds.projectSlug}. extension_publish can now use the stored token. The token expires ${
+      expiresAt ?? "within 7 days"
+    }: extension.dev CLI tokens live at most 7 days, so CI must re-mint before then (console: project settings -> Access tokens).`,
   });
 }
 
@@ -95,6 +100,8 @@ function pending(start: {
     verificationUri: start.verificationUri,
     ...(hasCompleteLink ? { verificationUriComplete: complete } : {}),
     deviceCode: start.deviceCode,
+    tokenTtlNote:
+      "Once authorized, the minted token lives at most 7 days (server-enforced); CI must re-mint before expiry (console: project settings -> Access tokens).",
     message,
   });
 }
@@ -108,6 +115,8 @@ function resumePending(deviceCode: string, verificationUri: string): string {
     status: "authorization_pending",
     verificationUri,
     deviceCode,
+    tokenTtlNote:
+      "Once authorized, the minted token lives at most 7 days (server-enforced); CI must re-mint before expiry (console: project settings -> Access tokens).",
     message: `Still waiting for authorization. The one-click link and code from the previous response are still valid: open that link (or enter the code at ${verificationUri}), then call extension_login again with this same deviceCode (and the same project).`,
   });
 }
