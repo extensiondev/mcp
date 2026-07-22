@@ -1,5 +1,16 @@
 # Changelog
 
+## 5.5.2
+
+Honest browser support wording ahead of the Safari lane landing.
+
+### Changed
+
+- The package description and README now say Safari is coming next
+  instead of listing it alongside the browsers that are store-ready
+  today. Chrome, Edge, Firefox, and every Chromium- or Gecko-based
+  browser remain fully supported; nothing changes functionally.
+
 ## 5.5.1
 
 The store journey stops being write-only after submit, and the token
