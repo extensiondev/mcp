@@ -11,7 +11,7 @@ import { readCredentials } from "../lib/credentials";
 export const schema = {
   name: "extension_whoami",
   description:
-    "Report the locally stored extension.dev login (workspace/project and token expiry) without revealing the token. Returns logged-out status when no credentials are stored.",
+    "Report the identity carried by the locally stored extension.dev token that extension_login minted (workspace/project scoped), plus its expiry, without revealing the token. The identity comes from that stored token alone; it does not change with the current working directory or whichever project folder you are in. Returns logged-out status when no credentials are stored.",
   inputSchema: {
     type: "object" as const,
     properties: {},
@@ -45,7 +45,7 @@ export async function handler(): Promise<string> {
     expiresInSeconds: creds.expiresAt ? creds.expiresAt - now : null,
     expired,
     message: expired
-      ? "Stored token has expired. Run extension_login to refresh it."
-      : `Logged in to ${creds.workspaceSlug}/${creds.projectSlug}.`,
+      ? "The stored token has expired. Run extension_login to refresh it."
+      : `Logged in as ${creds.workspaceSlug}/${creds.projectSlug}, per the token extension_login stored on this machine. That token is what scopes the identity: it does not follow the current working directory or project folder.`,
   });
 }
