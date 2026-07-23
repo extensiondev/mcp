@@ -1,0 +1,28 @@
+<!DOCTYPE html><html lang="en"><head>
+    <meta charset="utf-8">
+    <title>Extension preview host</title>
+  </head>
+  <body>
+    <!--
+      Sandbox execution surface for guest extension code.
+      Declared in manifest.json under chromium:sandbox.pages with a CSP
+      that allows unsafe-eval / blob: so guest code can run for real inside this
+      installed extension. This file exists so the sandbox reference resolves and
+      the build has a host page to mount; the full executor wiring (receiving a
+      guest PreviewSession and running its surfaces here) is the next increment.
+      Until then, guest surfaces still render through the creator-preview iframes.
+    -->
+    <div id="preview-host-root"></div>
+    <script>
+      // Signal the parent (the newtab runtime) that the sandbox host is mounted
+      // and ready to receive a guest preview to execute.
+      if (window.parent) {
+        window.parent.postMessage(
+          { type: "EXTENSION_PREVIEW_HOST_READY" },
+          "*",
+        );
+      }
+    </script>
+  
+
+</body></html>

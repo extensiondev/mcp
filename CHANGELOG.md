@@ -1,5 +1,20 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- `extension_dev` accepts `carrier: true` (Chromium-family sessions): it
+  places the bundled Extension.dev Live Preview carrier in the project's
+  `./extensions` folder, which Extension.js auto-loads as a companion
+  beside the extension under development. Pages the carrier allowlists
+  (inspect.extension.dev, localhost) can then pair with the live session
+  and stream its real-lane chrome.* session trace over the carrier's
+  event port. The copy is marker-guarded: an existing unmanaged
+  `extensions/extension-dev-live-preview` directory is never overwritten,
+  and the tool result reports what happened either way. The prebuilt
+  payload ships in the package under `extensions/live-preview`.
+
 ## 5.6.1
 
 ### Changed
