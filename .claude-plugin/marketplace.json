@@ -10,7 +10,7 @@
       "name": "extension-mcp",
       "source": "./",
       "description": "MCP tools for browser extension development: scaffold from 60+ templates, run the dev server with HMR, inspect the live DOM and logs, and publish store-ready builds for Chrome, Edge, and Firefox.",
-      "version": "5.5.2",
+      "version": "5.6.0",
       "category": "development",
       "author": {
         "name": "Cezar Augusto"
