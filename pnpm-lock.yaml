@@ -18,14 +18,14 @@ importers:
         specifier: ^7.0.6
         version: 7.0.6
       extension-create:
-        specifier: ^4.0.13
-        version: 4.0.13
+        specifier: ^4.0.15
+        version: 4.0.15
       extension-develop:
-        specifier: ^4.0.13
-        version: 4.0.13(@swc/helpers@0.5.21)(svelte@5.56.6)(webpack@5.108.4(postcss@8.5.10))
+        specifier: ^4.0.15
+        version: 4.0.15(@swc/helpers@0.5.21)(svelte@5.56.6)(typescript@6.0.2)(webpack@5.108.4(postcss@8.5.10))
       extension-install:
-        specifier: ^4.0.13
-        version: 4.0.13
+        specifier: ^4.0.15
+        version: 4.0.15
       ws:
         specifier: ^8.20.0
         version: 8.20.0
@@ -1378,22 +1378,22 @@ packages:
     resolution: {integrity: sha512-hIS4idWWai69NezIdRt2xFVofaF4j+6INOpJlVOLDO8zXGpUVEVzIYk12UUi2JzjEzWL3IOAxcTubgz9Po0yXw==}
     engines: {node: '>= 18'}
 
-  extension-create@4.0.13:
-    resolution: {integrity: sha512-icWh625ojoOBPaTfSh5G00t+IUfRMT1zzZF0Es90k939rh6ksdOizew9vinlCrdSU1Y88PRn3T7YbzqHPvG26w==}
-    engines: {node: '>=22'}
+  extension-create@4.0.15:
+    resolution: {integrity: sha512-V41mMehkvfMYTHgvL31HVOSQ7+z5gPFGPIiexkFWV9YjpMpbLeUcabayRs2+GQzDmMLRomtzMawcoulri4H0lA==}
+    engines: {node: '>=22.12'}
 
-  extension-develop@4.0.13:
-    resolution: {integrity: sha512-KZBKuRT4rg+ZT0XRmJPOpnIXNumQvjRX7CFq9T1zrppM4TQbaoJgAvovi8Gkmjmu10MqtjhCpMwafujBxzUprg==}
-    engines: {node: '>=22'}
+  extension-develop@4.0.15:
+    resolution: {integrity: sha512-+eUsyThmEeM5qbvxej5oiXfHu98sR39ZVypvYVlh4zbknQswmLztZUVT8TnxXdqnEfZrh+WMrTrxtJmYCfs5Hw==}
+    engines: {node: '>=22.12'}
 
   extension-from-store@0.1.1:
     resolution: {integrity: sha512-3QuIgV0shHVrd9J1/M/WCvqAsrbC0nJnnbYkrNTjnQ8bvC38S5mRAKBxDPY+ideLP+tFD5y2nC0K4Or+kBHo/g==}
     engines: {node: '>=16'}
     hasBin: true
 
-  extension-install@4.0.13:
-    resolution: {integrity: sha512-CdBS+gRO1ETrUan4iyrRNYCHwydGyNr11TdU3gYIQ5s/fUjwfjLF183SWLuAH5i8bEK+Q6hBvJZ+C+o44E9pBA==}
-    engines: {node: '>=22'}
+  extension-install@4.0.15:
+    resolution: {integrity: sha512-ksuNwJnpc7ee+5JpR8vTlLc8TSFiPj0+f0g2dcpgK4R7LqKe8OFCnmRuJ8NCFjjUhAOBfth8XHe7A0uIS4hQoQ==}
+    engines: {node: '>=22.12'}
 
   extract-zip@2.0.1:
     resolution: {integrity: sha512-GDhU9ntwuKyGXdZBUgTIe+vXnWj0fppUEtMDL0+idd5Sta8TGpHssn/eusA9mrPr9qNDym6SxAYZjNvCn/9RBg==}
@@ -2306,11 +2306,6 @@ packages:
   type-is@2.0.1:
     resolution: {integrity: sha512-OZs6gsjF4vMp32qrCbiVSkrFmXtG/AZhY3t0iAMrMBiAZyV9oALtXO8hsrHbMXF9x6L3grlFuwW2oAz7cav+Gw==}
     engines: {node: '>= 0.6'}
-
-  typescript@5.9.3:
-    resolution: {integrity: sha512-jl1vZzPDinLr9eUt3J/t7V6FgNEw9QjvBPdysz9KfQDD41fQrC2Y4vKQdiaUpFT4bXlb1RHhLpp8wtm6M5TgSw==}
-    engines: {node: '>=14.17'}
-    hasBin: true
 
   typescript@6.0.2:
     resolution: {integrity: sha512-bGdAIrZ0wiGDo5l8c++HWtbaNCWTS4UTv7RaTH/ThVIgjkveJt83m74bBHMJkuCbslY8ixgLBVZJIOiQlQTjfQ==}
@@ -3397,7 +3392,7 @@ snapshots:
     dependencies:
       '@vue/compiler-ssr': 3.5.26
       '@vue/shared': 3.5.26
-      vue: 3.5.26(typescript@5.9.3)
+      vue: 3.5.26(typescript@6.0.2)
 
   '@vue/shared@3.5.26': {}
 
@@ -3655,14 +3650,14 @@ snapshots:
       object-assign: 4.1.1
       vary: 1.1.2
 
-  cosmiconfig@9.0.1(typescript@5.9.3):
+  cosmiconfig@9.0.1(typescript@6.0.2):
     dependencies:
       env-paths: 2.2.1
       import-fresh: 3.3.1
       js-yaml: 4.1.1
       parse-json: 5.2.0
     optionalDependencies:
-      typescript: 5.9.3
+      typescript: 6.0.2
 
   cross-spawn@7.0.6:
     dependencies:
@@ -3842,7 +3837,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  extension-create@4.0.13:
+  extension-create@4.0.15:
     dependencies:
       adm-zip: 0.6.0
       axios: 1.18.1
@@ -3854,7 +3849,7 @@ snapshots:
       - debug
       - supports-color
 
-  extension-develop@4.0.13(@swc/helpers@0.5.21)(svelte@5.56.6)(webpack@5.108.4(postcss@8.5.10)):
+  extension-develop@4.0.15(@swc/helpers@0.5.21)(svelte@5.56.6)(typescript@6.0.2)(webpack@5.108.4(postcss@8.5.10)):
     dependencies:
       '@prefresh/core': 1.5.9(preact@10.27.3)
       '@prefresh/utils': 1.2.1
@@ -3863,6 +3858,7 @@ snapshots:
       '@rspack/plugin-preact-refresh': 2.0.1(@prefresh/core@1.5.9(preact@10.27.3))(@prefresh/utils@1.2.1)(@rspack/core@2.1.3(@swc/helpers@0.5.21))
       '@rspack/plugin-react-refresh': 2.0.2(@rspack/core@2.1.3(@swc/helpers@0.5.21))(react-refresh@0.18.0)
       '@vue/compiler-sfc': 3.5.26
+      acorn: 8.17.0
       adm-zip: 0.6.0
       browser-extension-manifest-fields: 2.2.9
       case-sensitive-paths-webpack-plugin: 2.4.0
@@ -3877,7 +3873,7 @@ snapshots:
       parse5-utilities: 1.0.0
       pintor: 0.3.0
       postcss: 8.5.10
-      postcss-loader: 8.2.1(@rspack/core@2.1.3(@swc/helpers@0.5.21))(postcss@8.5.10)(typescript@5.9.3)(webpack@5.108.4(postcss@8.5.10))
+      postcss-loader: 8.2.1(@rspack/core@2.1.3(@swc/helpers@0.5.21))(postcss@8.5.10)(typescript@6.0.2)(webpack@5.108.4(postcss@8.5.10))
       postcss-preset-env: 11.1.1(postcss@8.5.10)
       postcss-scss: 4.0.9(postcss@8.5.10)
       preact: 10.27.3
@@ -3887,8 +3883,7 @@ snapshots:
       schema-utils: 4.3.3
       svelte-loader: 3.2.4(svelte@5.56.6)
       tiny-glob: 0.2.9
-      typescript: 5.9.3
-      vue: 3.5.26(typescript@5.9.3)
+      vue: 3.5.26(typescript@6.0.2)
       vue-loader: 17.4.2(@vue/compiler-sfc@3.5.26)(vue@3.5.26(typescript@6.0.2))(webpack@5.108.4(postcss@8.5.10))
       webextension-polyfill: 0.12.0
       webpack-merge: 6.0.1
@@ -3903,6 +3898,7 @@ snapshots:
       - selfsigned
       - supports-color
       - svelte
+      - typescript
       - utf-8-validate
       - webpack
 
@@ -3912,7 +3908,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  extension-install@4.0.13:
+  extension-install@4.0.15:
     dependencies:
       cross-spawn: 7.0.6
       pintor: 0.3.0
@@ -4399,9 +4395,9 @@ snapshots:
       '@csstools/utilities': 3.0.0(postcss@8.5.10)
       postcss: 8.5.10
 
-  postcss-loader@8.2.1(@rspack/core@2.1.3(@swc/helpers@0.5.21))(postcss@8.5.10)(typescript@5.9.3)(webpack@5.108.4(postcss@8.5.10)):
+  postcss-loader@8.2.1(@rspack/core@2.1.3(@swc/helpers@0.5.21))(postcss@8.5.10)(typescript@6.0.2)(webpack@5.108.4(postcss@8.5.10)):
     dependencies:
-      cosmiconfig: 9.0.1(typescript@5.9.3)
+      cosmiconfig: 9.0.1(typescript@6.0.2)
       jiti: 2.6.1
       postcss: 8.5.10
       semver: 7.7.4
@@ -4804,8 +4800,6 @@ snapshots:
       media-typer: 1.1.0
       mime-types: 3.0.2
 
-  typescript@5.9.3: {}
-
   typescript@6.0.2: {}
 
   undici-types@7.19.2: {}
@@ -4871,9 +4865,9 @@ snapshots:
       webpack: 5.108.4(postcss@8.5.10)
     optionalDependencies:
       '@vue/compiler-sfc': 3.5.26
-      vue: 3.5.26(typescript@5.9.3)
+      vue: 3.5.26(typescript@6.0.2)
 
-  vue@3.5.26(typescript@5.9.3):
+  vue@3.5.26(typescript@6.0.2):
     dependencies:
       '@vue/compiler-dom': 3.5.26
       '@vue/compiler-sfc': 3.5.26
@@ -4881,7 +4875,7 @@ snapshots:
       '@vue/server-renderer': 3.5.26(vue@3.5.26(typescript@6.0.2))
       '@vue/shared': 3.5.26
     optionalDependencies:
-      typescript: 5.9.3
+      typescript: 6.0.2
 
   watchpack@2.5.2:
     dependencies:
