@@ -23,12 +23,12 @@ import {
   resolveProjectRef,
 } from "../lib/registry";
 
-const KNOWN_STORES = ["chrome", "firefox", "edge"] as const;
+const KNOWN_STORES = ["chrome", "firefox", "edge", "safari"] as const;
 
 export const schema = {
   name: "extension_store_status",
   description:
-    "Report the project's browser-store state after an extension_deploy submission: per store (chrome, firefox, edge) whether it is configured, its latest credential health check, the last recorded submission (version, status, store URL, submitted-at), and the latest review status. Reads the project's public registry (registry.extension.land: stores/health.json, stores/status.json, stores/submissions.json) - read-only, dispatches nothing, no auth needed for public projects. Defaults to the logged-in project (extension_login); pass workspace + project to inspect another public project. Registry state can lag the store dashboards by up to a polling interval.",
+    "Report the project's browser-store state after an extension_deploy submission: per store (chrome, firefox, edge, safari) whether it is configured, its latest credential health check, the last recorded submission (version, status, store URL, submitted-at), and the latest review status. Reads the project's public registry (registry.extension.land: stores/health.json, stores/status.json, stores/submissions.json) - read-only, dispatches nothing, no auth needed for public projects. Defaults to the logged-in project (extension_login); pass workspace + project to inspect another public project. Registry state can lag the store dashboards by up to a polling interval.",
   inputSchema: {
     type: "object" as const,
     properties: {
