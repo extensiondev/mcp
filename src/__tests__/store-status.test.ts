@@ -188,9 +188,10 @@ describe("extension_store_status handler", () => {
     expect(byStore.edge.health.ok).toBe(false);
     expect(byStore.edge.health.message).toContain("Unauthorized");
 
-    // Safari is not a submission lane yet (it ships dark behind the
-    // platform's internal flag), so the report must not advertise it.
-    expect(byStore.safari).toBeUndefined();
+    // Safari is a first-class lane; with no config or submissions in the
+    // fixtures it reports as an unconfigured store, like any other.
+    expect(byStore.safari.configured).toBe(false);
+    expect(byStore.safari.lastSubmission).toBeUndefined();
 
     // Latest submission wins (not the older approved one), with the fields
     // the task contract names: version/status/storeUrl/submittedAt.

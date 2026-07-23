@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Changed
+
+- `extension_deploy` and `extension_store_status` advertise `safari`
+  again: the platform's Safari/App Store submission lane is now enabled
+  for every project, so the store enum and the per-store status report
+  treat it like chrome, firefox, and edge.
+
 ### Added
 
 - `extension_dev` accepts `carrier: true` (Chromium-family sessions): it
