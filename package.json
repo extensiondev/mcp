@@ -88,9 +88,9 @@
     "@modelcontextprotocol/sdk": "^1.12.1",
     "browser-extension-manifest-fields": "^2.2.9",
     "cross-spawn": "^7.0.6",
-    "extension-create": "^4.0.13",
-    "extension-develop": "^4.0.13",
-    "extension-install": "^4.0.13",
+    "extension-create": "^4.0.15",
+    "extension-develop": "^4.0.15",
+    "extension-install": "^4.0.15",
     "ws": "^8.20.0"
   },
   "devDependencies": {
