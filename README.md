@@ -1,3 +1,5 @@
+<a href="https://extension.dev"><img alt="Extension.dev — how AI agents ship browser extensions" src="https://media.extension.land/brand/extension-dev/social/github-banner.png" /></a>
+
 [npm-version-image]: https://img.shields.io/npm/v/%40extension.dev%2Fmcp.svg?color=26FFB8
 [npm-version-url]: https://www.npmjs.com/package/@extension.dev/mcp
 [npm-downloads-image]: https://img.shields.io/npm/dm/%40extension.dev%2Fmcp.svg?color=26FFB8
