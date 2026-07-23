@@ -102,7 +102,7 @@ export function materializeCarrier(
       path: target,
       note:
         "Live-preview carrier placed in ./extensions; Extension.js loads it as a companion beside your extension. " +
-        "Pages it allowlists (inspect.extension.dev, localhost) can pair with the session and stream its real-lane trace.",
+        "Open https://inspect.extension.dev/?session=live in the dev browser to watch the session's real-lane chrome.* trace on the Trace tab.",
     };
   } catch (error) {
     return {
