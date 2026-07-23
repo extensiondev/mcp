@@ -1,5 +1,15 @@
 # Changelog
 
+## 5.6.1
+
+### Changed
+
+- `extension_deploy` and `extension_store_status` no longer advertise
+  `safari` as a store. The Safari/App Store submission lane does not
+  exist yet (the platform now also rejects such submissions server-side
+  with `SAFARI_LANE_DISABLED`), so the tool schemas stop inviting agents
+  to try it. Safari as a build/run target is unchanged.
+
 ## 5.6.0
 
 Firefox reaches full protocol parity: every formerly Chromium-only
