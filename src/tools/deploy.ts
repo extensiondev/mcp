@@ -94,7 +94,7 @@ export const schema = {
         type: "array",
         items: {
           type: "string",
-          enum: ["chrome", "firefox", "edge", "safari"],
+          enum: ["chrome", "firefox", "edge"],
         },
         description: "Stores to submit to.",
       },

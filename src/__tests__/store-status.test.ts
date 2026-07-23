@@ -188,9 +188,9 @@ describe("extension_store_status handler", () => {
     expect(byStore.edge.health.ok).toBe(false);
     expect(byStore.edge.health.message).toContain("Unauthorized");
 
-    // Never-configured store.
-    expect(byStore.safari.configured).toBe(false);
-    expect(byStore.safari.health).toBeUndefined();
+    // Safari is not a submission lane yet (it ships dark behind the
+    // platform's internal flag), so the report must not advertise it.
+    expect(byStore.safari).toBeUndefined();
 
     // Latest submission wins (not the older approved one), with the fields
     // the task contract names: version/status/storeUrl/submittedAt.
@@ -213,6 +213,27 @@ describe("extension_store_status handler", () => {
     // store's deep console route.
     expect(out.message).toContain("FAILED the last health check");
     expect(out.message).toContain("/stores/edge");
+  });
+
+  it("reports a known store missing from the registry as not configured", async () => {
+    global.fetch = fetchByFile({
+      "stores/health.json": {
+        schemaVersion: 1,
+        updatedAt: "2026-07-22T17:05:43.522Z",
+        stores: { chrome: HEALTH.stores.chrome },
+      },
+    });
+
+    const out = JSON.parse(
+      await handler({ workspace: "acme", project: "widget" }),
+    );
+
+    expect(out.ok).toBe(true);
+    const byStore = Object.fromEntries(
+      out.stores.map((r: { store: string }) => [r.store, r]),
+    );
+    expect(byStore.firefox.configured).toBe(false);
+    expect(byStore.edge.configured).toBe(false);
     expect(out.message).toContain("/stores/new");
   });
 
