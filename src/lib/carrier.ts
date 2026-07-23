@@ -29,6 +29,15 @@ export type CarrierMaterialization = {
   loaded: boolean;
   path?: string;
   note: string;
+  /**
+   * What the carrier lane CANNOT do, stated at the moment it is handed over.
+   * The trace swarm's top finding was that the real lane's boundaries were
+   * discoverable only by experiment: 14 personas independently filed the
+   * carrier-identity scoping as a severe bug, and 10 more expected the trace
+   * to show their own extension's calls. Both are honest constraints; neither
+   * was written down anywhere the caller would look.
+   */
+  limitations?: string[];
 };
 
 /** Walk up from this module until the bundled payload directory is found. */
@@ -102,7 +111,13 @@ export function materializeCarrier(
       path: target,
       note:
         "Live-preview carrier placed in ./extensions; Extension.js loads it as a companion beside your extension. " +
-        "Open https://inspect.extension.dev/?session=live in the dev browser to watch the session's real-lane chrome.* trace on the Trace tab.",
+        "Open https://inspect.extension.dev/?session=live in the dev browser (any http://localhost origin works too) " +
+        "to watch the session's real-lane chrome.* trace on the Trace tab.",
+      limitations: [
+        "The trace shows calls a PAGE bridges to the carrier. Your extension's own chrome.* calls run directly in its contexts and never cross the carrier, so they do not appear.",
+        "Bridged calls run under the CARRIER's identity, not your extension's. The preview assumes a single active guest and does not namespace per-extension state, so storage, action/badge state, messaging delivery, offscreen documents and relative script paths belong to the carrier. Rows affected are badged carrier-scoped in the Trace tab.",
+        "Chromium-family only: Firefox has no externally_connectable channel for web pages.",
+      ],
     };
   } catch (error) {
     return {
