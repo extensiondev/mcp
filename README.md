@@ -1,5 +1,3 @@
-<a href="https://extension.dev"><img alt="Extension.dev — how AI agents ship browser extensions" src="https://media.extension.land/brand/extension-dev/social/github-banner.png" /></a>
-
 [npm-version-image]: https://img.shields.io/npm/v/%40extension.dev%2Fmcp.svg?color=26FFB8
 [npm-version-url]: https://www.npmjs.com/package/@extension.dev/mcp
 [npm-downloads-image]: https://img.shields.io/npm/dm/%40extension.dev%2Fmcp.svg?color=26FFB8
@@ -34,6 +32,16 @@ These tools give agents eyes on the live browser, so they debug from evidence in
 - **Ship**: validate the manifest cross-browser, build for production, publish a shareable preview, and promote builds to release channels headlessly
 
 Built on [Extension.js](https://extension.js.org), the open-source cross-browser extension framework.
+
+## Clients
+
+<div align="center">
+
+| <img alt="Claude Code" src="https://media.extension.land/logos/devtools/claude-code.svg" width="70"> | <img alt="Claude Desktop" src="https://media.extension.land/logos/ai/claude.svg" width="70"> | <picture><source media="(prefers-color-scheme: dark)" srcset="https://media.extension.land/logos/devtools/cursor-dark.svg"><img alt="Cursor" src="https://media.extension.land/logos/devtools/cursor.svg" width="70"></picture> |
+| :-: | :-: | :-: |
+| Claude Code | Claude Desktop | Cursor |
+
+</div>
 
 ## Setup
 
