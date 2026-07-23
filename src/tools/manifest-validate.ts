@@ -195,11 +195,23 @@ const HARD_APIS = new Set([
 ]);
 
 // Bounded scan of the project source for permission-gated API usage.
-function scanApiUsage(roots: string[]): Set<string> {
+//
+// `excluded` holds absolute directories whose code is NOT governed by this
+// manifest. Companion extensions under ./extensions are the case that matters:
+// Extension.js loads each of them as a SEPARATE extension with its OWN
+// manifest, so linting their API usage against the root manifest blames the
+// user for permissions somebody else's extension needs. The live-preview
+// carrier made this concrete - it holds every permission and calls
+// chrome.bookmarks/history/cookies/topSites/webNavigation/downloads, so a
+// single `extension_dev carrier: true` left every later build refused with six
+// buildBlocking errors the user's own code could never cause.
+function scanApiUsage(roots: string[], excluded: string[] = []): Set<string> {
   const used = new Set<string>();
+  const skip = new Set(excluded.map((d) => path.resolve(d)));
   let filesRead = 0;
   const walk = (dir: string, depth: number): void => {
     if (depth > 6 || filesRead > 300) return;
+    if (skip.has(path.resolve(dir))) return;
     let entries: fs.Dirent[];
     try {
       entries = fs.readdirSync(dir, { withFileTypes: true });
@@ -380,7 +392,12 @@ export async function handler(args: {
       if (typeof p === "string") declaredPermSet.add(p);
     }
   }
-  const usedApis = scanApiUsage(roots);
+  // Companion extensions (./extensions/*) carry their own manifests, so their
+  // code must not be linted against this one. See scanApiUsage's note.
+  const usedApis = scanApiUsage(
+    roots,
+    roots.map((r) => path.join(r, "extensions")),
+  );
   for (const api of usedApis) {
     const perm = API_PERMISSION[api];
     if (declaredPermSet.has(perm)) continue;
