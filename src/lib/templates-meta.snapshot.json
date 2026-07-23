@@ -2,8 +2,8 @@
   "version": "2",
   "sourceRepo": "extension-js/examples",
   "generatorVersion": "2",
-  "commit": "336cfc03c39f9fa52f4ecffd351313241b5ca0a4",
-  "generatedAt": "2026-07-16T13:47:35.883Z",
+  "commit": "c4965a1445659179edcb9ff3e978b7f237439ef3",
+  "generatedAt": "2026-07-22T15:26:29.090Z",
   "templates": [
     {
       "slug": "action",
@@ -13,12 +13,17 @@
       "manifest_version": 3,
       "description": "Action popup example. Opens a toolbar popup with a simple page.",
       "uiContext": [
+        "action",
         "background"
       ],
       "surfaces": [
+        "action",
         "background"
       ],
-      "entrypoints": [],
+      "entrypoints": [
+        "./action/index.html",
+        "background.js"
+      ],
       "uiFramework": "",
       "css": "css",
       "configFiles": [
@@ -82,12 +87,17 @@
       "manifest_version": 3,
       "description": "Action popup example demonstrating i18n with _locales and message placeholders.",
       "uiContext": [
+        "action",
         "background"
       ],
       "surfaces": [
+        "action",
         "background"
       ],
-      "entrypoints": [],
+      "entrypoints": [
+        "./action/index.html",
+        "background.js"
+      ],
       "uiFramework": "",
       "css": "css",
       "configFiles": [
@@ -135,15 +145,18 @@
       "uiContext": [
         "content",
         "sidebar",
+        "action",
         "background"
       ],
       "surfaces": [
         "content",
+        "action",
         "sidebar",
         "background"
       ],
       "entrypoints": [
         "sidebar/index.html",
+        "background.ts",
         "content/scripts.ts"
       ],
       "uiFramework": "react",
@@ -163,7 +176,13 @@
           "hasEnv": false
         }
       },
-      "permissions": [],
+      "permissions": [
+        "sidePanel",
+        "storage",
+        "activeTab",
+        "scripting",
+        "tabs"
+      ],
       "host_permissions": [
         "<all_urls>"
       ],
@@ -235,15 +254,18 @@
       "uiContext": [
         "content",
         "sidebar",
+        "action",
         "background"
       ],
       "surfaces": [
         "content",
+        "action",
         "sidebar",
         "background"
       ],
       "entrypoints": [
         "sidebar/index.html",
+        "background.ts",
         "content/scripts.ts"
       ],
       "uiFramework": "react",
@@ -263,7 +285,13 @@
           "hasEnv": false
         }
       },
-      "permissions": [],
+      "permissions": [
+        "sidePanel",
+        "storage",
+        "activeTab",
+        "scripting",
+        "tabs"
+      ],
       "host_permissions": [
         "<all_urls>"
       ],
@@ -334,15 +362,18 @@
       "uiContext": [
         "content",
         "sidebar",
+        "action",
         "background"
       ],
       "surfaces": [
         "content",
+        "action",
         "sidebar",
         "background"
       ],
       "entrypoints": [
         "sidebar/index.html",
+        "background.ts",
         "content/scripts.ts"
       ],
       "uiFramework": "react",
@@ -362,7 +393,13 @@
           "hasEnv": false
         }
       },
-      "permissions": [],
+      "permissions": [
+        "sidePanel",
+        "storage",
+        "activeTab",
+        "scripting",
+        "tabs"
+      ],
       "host_permissions": [
         "<all_urls>"
       ],
@@ -433,15 +470,18 @@
       "uiContext": [
         "content",
         "sidebar",
+        "action",
         "background"
       ],
       "surfaces": [
         "content",
+        "action",
         "sidebar",
         "background"
       ],
       "entrypoints": [
         "sidebar/index.html",
+        "background.ts",
         "content/scripts.ts"
       ],
       "uiFramework": "react",
@@ -461,7 +501,13 @@
           "hasEnv": false
         }
       },
-      "permissions": [],
+      "permissions": [
+        "sidePanel",
+        "storage",
+        "activeTab",
+        "scripting",
+        "tabs"
+      ],
       "host_permissions": [
         "<all_urls>"
       ],
@@ -538,6 +584,7 @@
         "background"
       ],
       "entrypoints": [
+        "background.js",
         "content/scripts.js"
       ],
       "uiFramework": "",
@@ -597,6 +644,7 @@
         "background"
       ],
       "entrypoints": [
+        "background.js",
         "content/scripts.js"
       ],
       "uiFramework": "",
@@ -656,6 +704,7 @@
         "background"
       ],
       "entrypoints": [
+        "background.js",
         "content/scripts.js"
       ],
       "uiFramework": "",
@@ -716,6 +765,7 @@
         "background"
       ],
       "entrypoints": [
+        "background.ts",
         "content/scripts.ts"
       ],
       "uiFramework": "",
@@ -776,6 +826,7 @@
         "background"
       ],
       "entrypoints": [
+        "background.js",
         "content/scripts.js"
       ],
       "uiFramework": "",
@@ -835,6 +886,7 @@
         "background"
       ],
       "entrypoints": [
+        "background.js",
         "content/scripts.js"
       ],
       "uiFramework": "",
@@ -894,6 +946,7 @@
         "background"
       ],
       "entrypoints": [
+        "background.js",
         "content/isolated-one.js",
         "content/isolated-two.js",
         "content/scripts.js"
@@ -978,6 +1031,7 @@
         "background"
       ],
       "entrypoints": [
+        "background.js",
         "content/script-top-left.js",
         "content/script-top-right.js",
         "content/script-bottom-left.js",
@@ -1045,6 +1099,7 @@
         "background"
       ],
       "entrypoints": [
+        "background.js",
         "content/script-top-left.js",
         "content/script-top-right.js",
         "content/script-bottom-left.js",
@@ -1131,6 +1186,7 @@
         "background"
       ],
       "entrypoints": [
+        "background.ts",
         "./content/scripts.tsx"
       ],
       "uiFramework": "preact",
@@ -1192,6 +1248,7 @@
         "background"
       ],
       "entrypoints": [
+        "background.ts",
         "./content/scripts.tsx"
       ],
       "uiFramework": "react",
@@ -1253,6 +1310,7 @@
         "background"
       ],
       "entrypoints": [
+        "background.js",
         "content/scripts.js"
       ],
       "uiFramework": "",
@@ -1312,6 +1370,7 @@
         "background"
       ],
       "entrypoints": [
+        "background.js",
         "content/scripts.js"
       ],
       "uiFramework": "",
@@ -1373,6 +1432,7 @@
         "background"
       ],
       "entrypoints": [
+        "background.ts",
         "./content/scripts.ts"
       ],
       "uiFramework": "svelte",
@@ -1435,6 +1495,7 @@
         "background"
       ],
       "entrypoints": [
+        "background.ts",
         "content/scripts.ts"
       ],
       "uiFramework": "",
@@ -1495,6 +1556,7 @@
         "background"
       ],
       "entrypoints": [
+        "background.ts",
         "./content/scripts.ts"
       ],
       "uiFramework": "vue",
@@ -1596,15 +1658,18 @@
       "uiContext": [
         "content",
         "sidebar",
+        "action",
         "background"
       ],
       "surfaces": [
         "content",
+        "action",
         "sidebar",
         "background"
       ],
       "entrypoints": [
         "sidebar/index.html",
+        "background.js",
         "content/scripts.js"
       ],
       "uiFramework": "",
@@ -1622,7 +1687,9 @@
           "hasEnv": false
         }
       },
-      "permissions": [],
+      "permissions": [
+        "sidePanel"
+      ],
       "host_permissions": [],
       "optional_permissions": [],
       "featured": false,
@@ -1664,7 +1731,8 @@
         "background"
       ],
       "entrypoints": [
-        "newtab/index.html"
+        "newtab/index.html",
+        "background.js"
       ],
       "uiFramework": "",
       "css": "css",
@@ -1725,6 +1793,7 @@
       "entrypoints": [
         "newtab/index.html",
         "sidebar/index.html",
+        "background.js",
         "content/content.js"
       ],
       "uiFramework": "",
@@ -1790,7 +1859,8 @@
         "background"
       ],
       "entrypoints": [
-        "newtab/index.html"
+        "newtab/index.html",
+        "background.js"
       ],
       "uiFramework": "",
       "css": "css",
@@ -1847,7 +1917,8 @@
         "background"
       ],
       "entrypoints": [
-        "newtab/index.html"
+        "newtab/index.html",
+        "background.js"
       ],
       "uiFramework": "",
       "css": "css",
@@ -1904,7 +1975,8 @@
         "background"
       ],
       "entrypoints": [
-        "newtab/index.html"
+        "newtab/index.html",
+        "background.js"
       ],
       "uiFramework": "",
       "css": "sass",
@@ -1960,7 +2032,8 @@
         "background"
       ],
       "entrypoints": [
-        "newtab/index.html"
+        "newtab/index.html",
+        "background.js"
       ],
       "uiFramework": "",
       "css": "css",
@@ -2016,7 +2089,8 @@
         "background"
       ],
       "entrypoints": [
-        "newtab/index.html"
+        "newtab/index.html",
+        "background.js"
       ],
       "uiFramework": "",
       "css": "css",
@@ -2091,7 +2165,8 @@
         "background"
       ],
       "entrypoints": [
-        "newtab/index.html"
+        "newtab/index.html",
+        "background.js"
       ],
       "uiFramework": "",
       "css": "less",
@@ -2146,7 +2221,8 @@
         "background"
       ],
       "entrypoints": [
-        "newtab/index.html"
+        "newtab/index.html",
+        "background.js"
       ],
       "uiFramework": "preact",
       "css": "css",
@@ -2203,7 +2279,8 @@
         "background"
       ],
       "entrypoints": [
-        "newtab/index.html"
+        "newtab/index.html",
+        "background.js"
       ],
       "uiFramework": "react",
       "css": "css",
@@ -2260,7 +2337,8 @@
         "background"
       ],
       "entrypoints": [
-        "newtab/index.html"
+        "newtab/index.html",
+        "background.js"
       ],
       "uiFramework": "react",
       "css": "css",
@@ -2317,7 +2395,8 @@
         "background"
       ],
       "entrypoints": [
-        "newtab/index.html"
+        "newtab/index.html",
+        "background.js"
       ],
       "uiFramework": "",
       "css": "sass",
@@ -2372,7 +2451,8 @@
         "background"
       ],
       "entrypoints": [
-        "newtab/index.html"
+        "newtab/index.html",
+        "background.js"
       ],
       "uiFramework": "svelte",
       "css": "css",
@@ -2429,7 +2509,8 @@
         "background"
       ],
       "entrypoints": [
-        "newtab/index.html"
+        "newtab/index.html",
+        "background.js"
       ],
       "uiFramework": "",
       "css": "css",
@@ -2485,7 +2566,8 @@
         "background"
       ],
       "entrypoints": [
-        "newtab/index.html"
+        "newtab/index.html",
+        "background.js"
       ],
       "uiFramework": "vue",
       "css": "css",
@@ -2535,14 +2617,17 @@
       "description": "Sidebar extension example demonstrating Playwright-driven E2E automation.",
       "uiContext": [
         "sidebar",
+        "action",
         "background"
       ],
       "surfaces": [
+        "action",
         "sidebar",
         "background"
       ],
       "entrypoints": [
-        "sidebar/index.html"
+        "sidebar/index.html",
+        "background.ts"
       ],
       "uiFramework": "",
       "css": "css",
@@ -2560,7 +2645,9 @@
           "hasEnv": false
         }
       },
-      "permissions": [],
+      "permissions": [
+        "sidePanel"
+      ],
       "host_permissions": [],
       "optional_permissions": [],
       "featured": true,
@@ -2613,15 +2700,18 @@
       "uiContext": [
         "content",
         "sidebar",
+        "action",
         "background"
       ],
       "surfaces": [
         "content",
+        "action",
         "sidebar",
         "background"
       ],
       "entrypoints": [
         "sidebar/index.html",
+        "background.ts",
         "content/scripts.tsx"
       ],
       "uiFramework": "preact",
@@ -2640,7 +2730,9 @@
           "hasEnv": false
         }
       },
-      "permissions": [],
+      "permissions": [
+        "sidePanel"
+      ],
       "host_permissions": [],
       "optional_permissions": [],
       "featured": true,
@@ -2678,15 +2770,18 @@
       "uiContext": [
         "content",
         "sidebar",
+        "action",
         "background"
       ],
       "surfaces": [
         "content",
+        "action",
         "sidebar",
         "background"
       ],
       "entrypoints": [
         "sidebar/index.html",
+        "background.ts",
         "content/scripts.tsx"
       ],
       "uiFramework": "react",
@@ -2705,7 +2800,9 @@
           "hasEnv": false
         }
       },
-      "permissions": [],
+      "permissions": [
+        "sidePanel"
+      ],
       "host_permissions": [],
       "optional_permissions": [],
       "featured": true,
@@ -2740,14 +2837,17 @@
       "description": "Sidebar panel example. Adds a sidebar to the browser with a simple page.",
       "uiContext": [
         "sidebar",
+        "action",
         "background"
       ],
       "surfaces": [
+        "action",
         "sidebar",
         "background"
       ],
       "entrypoints": [
-        "sidebar/index.html"
+        "sidebar/index.html",
+        "background.js"
       ],
       "uiFramework": "",
       "css": "css",
@@ -2764,7 +2864,9 @@
           "hasEnv": false
         }
       },
-      "permissions": [],
+      "permissions": [
+        "sidePanel"
+      ],
       "host_permissions": [],
       "optional_permissions": [],
       "featured": true,
@@ -2795,14 +2897,17 @@
       "description": "React sidebar using antd and @ant-design/x. Regression coverage for issue #445.",
       "uiContext": [
         "sidebar",
+        "action",
         "background"
       ],
       "surfaces": [
+        "action",
         "sidebar",
         "background"
       ],
       "entrypoints": [
-        "sidebar/index.html"
+        "sidebar/index.html",
+        "background.js"
       ],
       "uiFramework": "react",
       "css": "css",
@@ -2819,7 +2924,9 @@
           "hasEnv": false
         }
       },
-      "permissions": [],
+      "permissions": [
+        "sidePanel"
+      ],
       "host_permissions": [],
       "optional_permissions": [],
       "featured": false,
@@ -2852,15 +2959,18 @@
       "uiContext": [
         "content",
         "sidebar",
+        "action",
         "background"
       ],
       "surfaces": [
         "content",
+        "action",
         "sidebar",
         "background"
       ],
       "entrypoints": [
         "sidebar/index.html",
+        "background.js",
         "content/scripts.js"
       ],
       "uiFramework": "",
@@ -2881,7 +2991,9 @@
           "hasEnv": false
         }
       },
-      "permissions": [],
+      "permissions": [
+        "sidePanel"
+      ],
       "host_permissions": [],
       "optional_permissions": [],
       "featured": true,
@@ -2916,14 +3028,17 @@
       "description": "React sidebar example using shadcn/ui components. Adds a sidebar panel with a simple React page.",
       "uiContext": [
         "sidebar",
+        "action",
         "background"
       ],
       "surfaces": [
+        "action",
         "sidebar",
         "background"
       ],
       "entrypoints": [
-        "sidebar/index.html"
+        "sidebar/index.html",
+        "background.ts"
       ],
       "uiFramework": "react",
       "css": "css",
@@ -2942,7 +3057,9 @@
           "hasEnv": false
         }
       },
-      "permissions": [],
+      "permissions": [
+        "sidePanel"
+      ],
       "host_permissions": [],
       "optional_permissions": [],
       "featured": true,
@@ -2983,7 +3100,9 @@
       "surfaces": [
         "background"
       ],
-      "entrypoints": [],
+      "entrypoints": [
+        "background.js"
+      ],
       "uiFramework": "",
       "css": "css",
       "configFiles": [
@@ -3053,13 +3172,16 @@
       "description": "Demonstrates scripts/ folder organization and how to run standalone scripts via the extension.",
       "uiContext": [
         "content",
+        "action",
         "background"
       ],
       "surfaces": [
         "content",
+        "action",
         "background"
       ],
       "entrypoints": [
+        "background.js",
         "content/scripts.js"
       ],
       "uiFramework": "",
@@ -3114,15 +3236,18 @@
       "uiContext": [
         "content",
         "sidebar",
+        "action",
         "background"
       ],
       "surfaces": [
         "content",
+        "action",
         "sidebar",
         "background"
       ],
       "entrypoints": [
         "sidebar/index.html",
+        "background.ts",
         "content/scripts.ts"
       ],
       "uiFramework": "svelte",
@@ -3141,7 +3266,9 @@
           "hasEnv": false
         }
       },
-      "permissions": [],
+      "permissions": [
+        "sidePanel"
+      ],
       "host_permissions": [],
       "optional_permissions": [],
       "featured": true,
@@ -3178,15 +3305,18 @@
       "uiContext": [
         "content",
         "sidebar",
+        "action",
         "background"
       ],
       "surfaces": [
         "content",
+        "action",
         "sidebar",
         "background"
       ],
       "entrypoints": [
         "sidebar/index.html",
+        "background.js",
         "content/scripts.js"
       ],
       "uiFramework": "",
@@ -3204,7 +3334,15 @@
           "hasEnv": false
         }
       },
-      "permissions": [],
+      "permissions": [
+        "sidePanel",
+        "storage",
+        "unlimitedStorage",
+        "activeTab",
+        "scripting",
+        "tabs",
+        "contextMenus"
+      ],
       "host_permissions": [
         "<all_urls>"
       ],
@@ -3242,15 +3380,18 @@
       "uiContext": [
         "content",
         "sidebar",
+        "action",
         "background"
       ],
       "surfaces": [
         "content",
+        "action",
         "sidebar",
         "background"
       ],
       "entrypoints": [
         "sidebar/index.html",
+        "background.ts",
         "content/scripts.ts"
       ],
       "uiFramework": "",
@@ -3269,7 +3410,9 @@
           "hasEnv": false
         }
       },
-      "permissions": [],
+      "permissions": [
+        "sidePanel"
+      ],
       "host_permissions": [],
       "optional_permissions": [],
       "featured": true,
@@ -3306,15 +3449,18 @@
       "uiContext": [
         "content",
         "sidebar",
+        "action",
         "background"
       ],
       "surfaces": [
         "content",
+        "action",
         "sidebar",
         "background"
       ],
       "entrypoints": [
         "sidebar/index.html",
+        "background.ts",
         "content/scripts.ts"
       ],
       "uiFramework": "vue",
@@ -3333,7 +3479,9 @@
           "hasEnv": false
         }
       },
-      "permissions": [],
+      "permissions": [
+        "sidePanel"
+      ],
       "host_permissions": [],
       "optional_permissions": [],
       "featured": true,
