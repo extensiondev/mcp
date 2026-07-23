@@ -1,0 +1,66 @@
+{
+  "version": "0.0.1",
+  "name": "Extension.dev Live Preview",
+  "author": "Extension.dev",
+  "description": "Lends real browser powers to the extension you are previewing on Extension.dev. Install while building so your popup, content scripts, and APIs run for real.",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA6QM4Vy/P3tIFJ+Jq7VyFEka5PICvw3LelaERWJzfVJ4avVWUfEa6vLX2+3Y21rmZ4nm2HhC203QWWRg24uCFlQWsyE9f3EW8yYR6HDvdTCPQxwq5Fv+d5m3YcNztse5IIf1XgnbZoCurI98CEHVilB4c8m6Yoel+PnPlRSjzkV5TjPyQ1NhZWfYfENAYmbxVzcpHD3eDFc9fveBvALOF9KU+21N2zubeLlnJlLjmDKv+Ud/zRLsMoc/5/zhdSE+rV/8DmA8ghyXeMQJ+WmjMgiBz/7wgg3Q1q0Bx1bzfMl18dO1pUjbW6nQC+CIxDBDthJpN4rSwuE/Xt3nEJZ5HtQIDAQAB",
+  "icons": {
+    "16": "images/icon.png",
+    "32": "images/icon.png",
+    "48": "images/icon.png",
+    "64": "images/icon.png",
+    "128": "images/icon.png"
+  },
+  "background": {
+    "service_worker": "background/service_worker.js"
+  },
+  "manifest_version": 3,
+  "action": {
+    "default_icon": {
+      "16": "images/icon.png",
+      "32": "images/icon.png",
+      "48": "images/icon.png",
+      "64": "images/icon.png",
+      "128": "images/icon.png"
+    },
+    "default_title": "Extension.dev Live Preview",
+    "default_popup": "action/index.html"
+  },
+  "externally_connectable": {
+    "matches": [
+      "https://intelligence.extension.dev/*",
+      "https://inspect.extension.dev/*",
+      "https://themes.extension.dev/*",
+      "http://localhost/*",
+      "http://127.0.0.1/*"
+    ]
+  },
+  "permissions": [
+    "storage",
+    "notifications",
+    "contextMenus",
+    "downloads",
+    "cookies",
+    "scripting",
+    "management",
+    "activeTab",
+    "tabs",
+    "alarms",
+    "offscreen",
+    "webNavigation",
+    "bookmarks",
+    "history",
+    "sidePanel"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "sandbox": {
+    "pages": [
+      "sandbox/page-0.html"
+    ]
+  },
+  "content_security_policy": {
+    "sandbox": "sandbox allow-scripts allow-forms allow-modals allow-popups; script-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob:; child-src data: blob:;"
+  }
+}
