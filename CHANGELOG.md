@@ -14,15 +14,17 @@ bundled Live Preview carrier finally allows the origin that opens it.
   in `inspect.extension.dev` instead, for fixture and forensic work. This tool
   reaches npm for the first time in this release.
 - **`share:true` uploads the build you just made.** It POSTs the resolved
-  `dist/<browser>` to the platform's artifact store and returns a
+  `dist/<browser>` to the platform's artifact store and returns a public
   `preview.extension.dev` link that renders those exact bytes, for a recipient
-  with no install, no sign-in, and no dev server. `share.serves` reports
-  `uploaded-local-build`. Sharing needs auth (`extension_login` or
-  `EXTENSION_DEV_TOKEN`), degrades to a login hint when unauthenticated, and
-  never fails the local preview. `share` also returns `expiresAt` and
-  `revokeUrl`: shared builds expire, and `DELETE`ing `revokeUrl` with the same
-  token kills the link immediately, which is the part a TTL alone cannot do when
-  a link reaches the wrong person.
+  with no install, no sign-in, and no dev server. That link also serves the
+  whole build as a downloadable zip (`share.zipUrl`), so sharing it hands over
+  the built code. `share.serves` reports `uploaded-local-build`. Sharing needs a
+  token scoped to an existing extension.dev workspace and project
+  (`extension_login` or `EXTENSION_DEV_TOKEN`, valid up to 7 days), degrades to
+  a login hint when there is no token, and never fails the local preview.
+  `share` also returns `expiresAt` and `revokeUrl`: shared builds expire, and
+  `DELETE`ing `revokeUrl` with the same token kills the link for good, which is
+  the part a TTL alone cannot do when a link reaches the wrong person.
 - **`extension_theme_verify` settles a Chrome theme manifest before it ships.**
   It derives every color current Chrome would paint from the manifest with a
   transcribed Chromium resolver and reports the divergence class of any problem:
