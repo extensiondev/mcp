@@ -50,12 +50,15 @@ export function resolveExtensionInvocation(projectDir?: string): {
   return { command: "npx", prefixArgs: [`extension@${pinnedCliVersion()}`] };
 }
 
-// stdout/stderr ride FILE fds, not pipes: the engine CLI exits without
-// draining its stdout, and Node hands children a socketpair whose ~8KB buffer
-// truncates any larger --output json frame mid-write (verified live: a 10KB
+// stdout/stderr ride FILE fds, not pipes: Node hands children a socketpair
+// whose ~8KB buffer truncates any larger --output json frame mid-write when the
+// child exits before draining (verified live against extension 4.0.14: a 10KB
 // eval frame arrived as exactly 8192 bytes and failed to parse). A file write
 // completes synchronously from the child's point of view, so frames of any
-// size survive the exit. Same reasoning as spawnExtensionCli's log file.
+// size survive the exit. The engine drains its own stdout since 4.0.15, but
+// this stays as the general guard: EXTENSION_MCP_CLI_VERSION can select an
+// older CLI, and the npx shim exits on its own terms either way.
+// Same reasoning as spawnExtensionCli's log file.
 export function runExtensionCli(
   args: string[],
   options?: { cwd?: string; timeoutMs?: number },
