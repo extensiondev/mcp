@@ -1,0 +1,352 @@
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+import { handler, schema } from "../tools/preview-web";
+
+// "No live dev session" has to be STATED, not assumed. resolveCdpPort falls
+// back to probing port 9222 when a project has no ready contract, so on any
+// machine with a debug browser open (which is most developer machines, and any
+// CI job that ran a browser step earlier) the real resolver finds a session and
+// the no-session assertions below invert. Pinning it here keeps the test about
+// the tool's behavior instead of about what else is running on the box.
+vi.mock("../lib/cdp-port", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../lib/cdp-port")>()),
+  resolveCdpPort: async () => null,
+  resolveRdpPort: async () => null,
+}));
+
+const MANIFEST = {
+  manifest_version: 3,
+  name: "Probe Ext",
+  version: "1.2.3",
+  action: { default_popup: "popup.html" },
+  background: { service_worker: "sw.js" },
+};
+
+function tmpDist(manifest?: unknown): string {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "preview-web-"));
+  if (manifest !== undefined) {
+    fs.writeFileSync(
+      path.join(dir, "manifest.json"),
+      JSON.stringify(manifest),
+    );
+  }
+  return dir;
+}
+
+function jsonFetch(body: unknown, contentType = "application/json"): typeof fetch {
+  return (async () => ({
+    ok: true,
+    status: 200,
+    headers: { get: (k: string) => (k.toLowerCase() === "content-type" ? contentType : null) },
+    json: async () => body,
+  })) as unknown as typeof fetch;
+}
+
+describe("extension_preview_web", () => {
+  const origFetch = global.fetch;
+  afterEach(() => {
+    global.fetch = origFetch;
+    vi.restoreAllMocks();
+  });
+
+  it("names the tool and requires projectPath", () => {
+    expect(schema.name).toBe("extension_preview_web");
+    expect(schema.inputSchema.required).toContain("projectPath");
+  });
+
+  it("defaults to preview and emits a base64url-round-tripping preview://build deep link (probe off)", async () => {
+    const dir = tmpDist(MANIFEST);
+    try {
+      const out = JSON.parse(
+        await handler({ projectPath: dir, build: false, distPath: dir, probe: false }),
+      );
+      expect(out.ok).toBe(true);
+      expect(out.built).toBe(false);
+      expect(out.surface).toBe("preview");
+      expect(out.manifest).toMatchObject({
+        name: "Probe Ext",
+        version: "1.2.3",
+        manifestVersion: 3,
+      });
+      expect(out.surfaces).toEqual(
+        expect.arrayContaining(["popup", "background-worker"]),
+      );
+      // The author's door runs on 3110; the deep link must point there without
+      // the caller having to say so.
+      expect(new URL(out.deepLink).port).toBe("3110");
+      const internal = new URL(out.deepLink).searchParams.get("url") ?? "";
+      expect(internal.startsWith("preview://build/")).toBe(true);
+      const b64 = internal.slice("preview://build/".length);
+      expect(Buffer.from(b64, "base64url").toString("utf8")).toBe(
+        path.resolve(dir),
+      );
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("still targets inspect (and its scheme, port and legacy inspectUrl) on surface:inspect", async () => {
+    const dir = tmpDist(MANIFEST);
+    try {
+      const out = JSON.parse(
+        await handler({
+          projectPath: dir,
+          build: false,
+          distPath: dir,
+          probe: false,
+          surface: "inspect",
+        }),
+      );
+      expect(out.surface).toBe("inspect");
+      expect(new URL(out.deepLink).port).toBe("3106");
+      const internal = new URL(out.deepLink).searchParams.get("url") ?? "";
+      expect(internal.startsWith("inspect://path/")).toBe(true);
+
+      // inspectUrl predates the preview surface, so it only speaks for inspect.
+      const overridden = JSON.parse(
+        await handler({
+          projectPath: dir,
+          build: false,
+          distPath: dir,
+          probe: false,
+          surface: "inspect",
+          inspectUrl: "http://localhost:4321",
+        }),
+      );
+      expect(new URL(overridden.deepLink).port).toBe("4321");
+      const ignored = JSON.parse(
+        await handler({
+          projectPath: dir,
+          build: false,
+          distPath: dir,
+          probe: false,
+          inspectUrl: "http://localhost:4321",
+        }),
+      );
+      expect(new URL(ignored.deepLink).port).toBe("3110");
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("reports previewLoadable when the surface's middleware answers with a payload", async () => {
+    const dir = tmpDist(MANIFEST);
+    global.fetch = jsonFetch({
+      identifier: "preview-abc",
+      version: "1.2.3",
+      manifest: { name: "Probe Ext" },
+      files: [1, 2, 3],
+    });
+    try {
+      const out = JSON.parse(
+        await handler({
+          projectPath: dir,
+          build: false,
+          distPath: dir,
+          hostUrl: "http://localhost:3110",
+        }),
+      );
+      expect(out.hostReachable).toBe(true);
+      expect(out.previewLoadable).toBe(true);
+      expect(out.probe.fileCount).toBe(3);
+      expect(out.probe.identifier).toBe("preview-abc");
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("degrades gracefully when the surface is unreachable", async () => {
+    const dir = tmpDist(MANIFEST);
+    global.fetch = (async () => {
+      throw new Error("fetch failed");
+    }) as unknown as typeof fetch;
+    try {
+      const out = JSON.parse(
+        await handler({ projectPath: dir, build: false, distPath: dir }),
+      );
+      expect(out.ok).toBe(true);
+      expect(out.hostReachable).toBe(false);
+      expect(out.previewLoadable).toBe(false);
+      expect(String(out.probe.note)).toMatch(/Start it/);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("treats a non-JSON answer (deployed static host) as not loadable", async () => {
+    const dir = tmpDist(MANIFEST);
+    global.fetch = jsonFetch("<!doctype html>", "text/html");
+    try {
+      const out = JSON.parse(
+        await handler({ projectPath: dir, build: false, distPath: dir }),
+      );
+      expect(out.hostReachable).toBe(true);
+      expect(out.previewLoadable).toBe(false);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("errors when the dist has no manifest", async () => {
+    const dir = tmpDist();
+    try {
+      const out = JSON.parse(
+        await handler({ projectPath: dir, build: false, distPath: dir, probe: false }),
+      );
+      expect(out.ok).toBe(false);
+      expect(out.stage).toBe("resolve-dist");
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("open:true without a live session reports opened.ok false and keeps the deep link", async () => {
+    const dir = tmpDist(MANIFEST);
+    try {
+      const out = JSON.parse(
+        await handler({
+          projectPath: dir,
+          build: false,
+          distPath: dir,
+          probe: false,
+          open: true,
+        }),
+      );
+      expect(out.deepLink).toBeTruthy();
+      expect(out.opened).toBeDefined();
+      expect(out.opened.ok).not.toBe(true);
+      expect(String(out.openHint)).toMatch(/live dev session/);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  describe("share:true (uploads the local dist)", () => {
+    let prevXdg: string | undefined;
+    let prevToken: string | undefined;
+    let prevApi: string | undefined;
+    let prevPreview: string | undefined;
+    let cfg: string;
+
+    beforeEach(() => {
+      prevXdg = process.env.XDG_CONFIG_HOME;
+      prevToken = process.env.EXTENSION_DEV_TOKEN;
+      prevApi = process.env.EXTENSION_DEV_API_URL;
+      prevPreview = process.env.EXTENSION_DEV_PREVIEW_URL;
+      // Isolate credential resolution so a real login on the dev box never
+      // leaks into these tests.
+      cfg = fs.mkdtempSync(path.join(os.tmpdir(), "preview-web-cfg-"));
+      process.env.XDG_CONFIG_HOME = cfg;
+      delete process.env.EXTENSION_DEV_TOKEN;
+      delete process.env.EXTENSION_DEV_API_URL;
+      delete process.env.EXTENSION_DEV_PREVIEW_URL;
+    });
+
+    afterEach(() => {
+      const restore = (k: string, v: string | undefined) => {
+        if (v === undefined) delete process.env[k];
+        else process.env[k] = v;
+      };
+      restore("XDG_CONFIG_HOME", prevXdg);
+      restore("EXTENSION_DEV_TOKEN", prevToken);
+      restore("EXTENSION_DEV_API_URL", prevApi);
+      restore("EXTENSION_DEV_PREVIEW_URL", prevPreview);
+      fs.rmSync(cfg, { recursive: true, force: true });
+    });
+
+    it("degrades gracefully with a login hint when not authenticated", async () => {
+      const dir = tmpDist(MANIFEST);
+      try {
+        const out = JSON.parse(
+          await handler({ projectPath: dir, build: false, distPath: dir, probe: false, share: true }),
+        );
+        // Local preview still succeeds; share carries the auth verdict.
+        expect(out.ok).toBe(true);
+        expect(out.deepLink).toBeTruthy();
+        expect(out.share.requested).toBe(true);
+        expect(out.share.ok).toBe(false);
+        expect(out.share.supported).toBe(false);
+        expect(String(out.share.loginHint)).toMatch(/extension_login/);
+      } finally {
+        fs.rmSync(dir, { recursive: true, force: true });
+      }
+    });
+
+    it("uploads the local dist and returns the platform's preview link", async () => {
+      const dir = tmpDist(MANIFEST);
+      process.env.EXTENSION_DEV_TOKEN = "tok_test";
+      let uploaded: any = null;
+      // The only network call with probe:false is the artifact upload.
+      global.fetch = (async (url: string, init: any) => {
+        expect(String(url)).toContain("/api/artifacts");
+        expect(init.headers.authorization).toBe("Bearer tok_test");
+        uploaded = JSON.parse(init.body);
+        return {
+          ok: true,
+          status: 201,
+          text: async () =>
+            JSON.stringify({
+              artifactId: "gen_abc123",
+              previewUrl: "https://preview.extension.dev/?preview=gen_abc123",
+              zipUrl: "https://www.extension.dev/api/artifacts/gen_abc123/source.zip",
+              revokeUrl: "https://www.extension.dev/api/artifacts/gen_abc123",
+              expiresAt: "2026-08-23T00:00:00.000Z",
+            }),
+        };
+      }) as unknown as typeof fetch;
+      try {
+        const out = JSON.parse(
+          await handler({ projectPath: dir, build: false, distPath: dir, probe: false, share: true }),
+        );
+        expect(out.share.ok).toBe(true);
+        expect(out.share.previewUrl).toBe(
+          "https://preview.extension.dev/?preview=gen_abc123",
+        );
+        // The whole point: the bytes on disk are what got sent.
+        expect(out.share.serves).toBe("uploaded-local-build");
+        expect(out.share.localBuildUploaded).toBe(true);
+        expect(out.share.revokeUrl).toBeTruthy();
+        expect(out.share.expiresAt).toBeTruthy();
+
+        expect(uploaded.kind).toBe("dist");
+        const paths = uploaded.generation.files.map((f: any) => f.path);
+        expect(paths).toContain("manifest.json");
+        // manifest.json is text, so it must travel readable, not base64.
+        const manifestEntry = uploaded.generation.files.find(
+          (f: any) => f.path === "manifest.json",
+        );
+        expect(manifestEntry.encoding).toBe("utf8");
+        expect(JSON.parse(manifestEntry.content).name).toBe(MANIFEST.name);
+      } finally {
+        fs.rmSync(dir, { recursive: true, force: true });
+      }
+    });
+
+    it("keeps the local preview working when the upload fails", async () => {
+      const dir = tmpDist(MANIFEST);
+      process.env.EXTENSION_DEV_TOKEN = "tok_test";
+      global.fetch = (async () => ({
+        ok: false,
+        status: 413,
+        text: async () => JSON.stringify({ message: "Payload is too large." }),
+      })) as unknown as typeof fetch;
+      try {
+        const out = JSON.parse(
+          await handler({ projectPath: dir, build: false, distPath: dir, probe: false, share: true }),
+        );
+        // A share failure must never cost the caller the local deep link.
+        expect(out.ok).toBe(true);
+        expect(out.deepLink).toBeTruthy();
+        expect(out.share.ok).toBe(false);
+        expect(out.share.supported).toBe(true);
+        expect(String(out.share.reason)).toMatch(/too large/i);
+      } finally {
+        fs.rmSync(dir, { recursive: true, force: true });
+      }
+    });
+  });
+});

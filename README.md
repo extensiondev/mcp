@@ -7,7 +7,7 @@
 
 # @extension.dev/mcp [![Version][npm-version-image]][npm-version-url] [![Downloads][npm-downloads-image]][npm-downloads-url] [![Discord][discord-image]][discord-url]
 
-> Give your AI agent hands for browser extension development. 33 MCP tools that scaffold, run, inspect, debug, and publish cross-browser extensions.
+> Give your AI agent hands for browser extension development. 35 MCP tools that scaffold, run, inspect, debug, and publish cross-browser extensions.
 
 <img alt="Logo" align="right" src="https://media.extension.land/brand/extension-dev/logo-dock.png" width="15.5%" />
 
@@ -118,6 +118,7 @@ cp node_modules/@extension.dev/mcp/claude/commands/*.md ~/my-extension/.claude/c
 | see | `extension_list_extensions` | List loaded extensions (Chromium) |
 | see | `extension_logs` | Stream logs from every context |
 | see | `extension_doctor` | Diagnose the dev session leg by leg (ready contract, ports, token, executor, browser) |
+| see | `extension_theme_verify` | Verify a Chrome theme manifest against the colors Chrome actually paints |
 | act | `extension_eval` | Evaluate in a context (needs `allowEval: true` on `extension_dev`) |
 | act | `extension_storage` | Read/write `chrome.storage` |
 | act | `extension_reload` | Reload extension or tab |
@@ -129,15 +130,22 @@ cp node_modules/@extension.dev/mcp/claude/commands/*.md ~/my-extension/.claude/c
 | platform | `extension_login` | GitHub device-code login, stored token |
 | platform | `extension_whoami` | Show the stored login (never the token) |
 | platform | `extension_logout` | Remove stored credentials |
+| platform | `extension_preview_web` | Render a build in the web emulator, and share it as a link |
 | platform | `extension_publish` | Publish a shareable preview to extension.dev |
 | platform | `extension_release_promote` | Promote a build to a release channel, headless |
 | platform | `extension_deploy` | Submit to the Chrome, Firefox, and Edge stores through extension.dev |
 
 Browser-launching tools (`dev`, `start`, `preview`) shell out to the `extension` CLI, the project's own `node_modules/.bin/extension` when present, otherwise `npx extension@<pinned>` at the version this package is verified against; everything else runs in-process.
 
+## Sharing a build in progress
+
+An unpacked extension is unusually hard to hand to someone: the only way to look at a colleague's work-in-progress has been to take their zip and run untrusted code with real browser permissions on your own machine. `extension_preview_web` with `share: true` uploads the `dist/` it just built and returns a link that renders those exact bytes in the emulator. Whoever opens it installs nothing and signs in to nothing, which is what lets a designer, a PM, or a reviewer into the loop at all. Sharing needs auth (`extension_login` or `EXTENSION_DEV_TOKEN`), the link expires, and `DELETE`ing the returned `revokeUrl` with the same token kills it early. Without `share`, the tool returns a local-only deep link and uploads nothing.
+
+That is a different job from shipping. Use `share` for the build you are holding right now; use `extension_publish` and `extension_release_promote` below for builds your CI has released.
+
 ## From preview to store
 
-The platform tools connect agents to [extension.dev](https://extension.dev): `extension_login` runs a GitHub device-code flow and stores a project-scoped token locally (never returned to the agent), `extension_publish` turns a build into a shareable preview URL, and `extension_release_promote` promotes a tested build to a release channel from CI or an agent session, no browser required. `extension_deploy` submits a built extension to the Chrome Web Store, Edge Add-ons, and Firefox AMO through extension.dev, which holds your store credentials and dispatches the release from your project's mirror CI, it defaults to a dry run and store credentials are never tool arguments. After a real submission, `extension_store_status` reads the recorded outcome, per-store credential health, and review state from the project's public registry, so agents and CI can answer "was it approved?" without a console visit. Access tokens live at most 7 days; CI pipelines re-mint them from the console's Access tokens page.
+The platform tools connect agents to [extension.dev](https://extension.dev): `extension_login` runs a GitHub device-code flow and stores a project-scoped token locally (never returned to the agent), `extension_publish` turns a build your project has already published into a shareable URL, and `extension_release_promote` promotes a tested build to a release channel from CI or an agent session, no browser required. `extension_deploy` submits a built extension to the Chrome Web Store, Edge Add-ons, and Firefox AMO through extension.dev, which holds your store credentials and dispatches the release from your project's mirror CI, it defaults to a dry run and store credentials are never tool arguments. After a real submission, `extension_store_status` reads the recorded outcome, per-store credential health, and review state from the project's public registry, so agents and CI can answer "was it approved?" without a console visit. Access tokens live at most 7 days; CI pipelines re-mint them from the console's Access tokens page.
 
 ## The extension.dev stack
 
