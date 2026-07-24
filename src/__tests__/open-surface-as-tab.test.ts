@@ -18,6 +18,7 @@ let popupMeasure: { w: number; h: number } | null = null;
 let windowResizeHonored = true;
 let windowBounds: { width?: number; height?: number } = {};
 const evaluatedExpressions: string[] = [];
+const createdTabs: Array<{ url: string; background: boolean }> = [];
 
 vi.mock("../lib/cdp-port", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../lib/cdp-port")>();
@@ -56,6 +57,19 @@ vi.mock("../lib/cdp", () => {
       return popupMeasure ? { w: popupMeasure.w, h: popupMeasure.h } : null;
     }
     async sendCommand(method: string, params?: Record<string, unknown>) {
+      // A tab the tool opened for itself, rather than one it took over.
+      if (method === "Target.createTarget") {
+        const url = String(params?.url ?? "");
+        navigations.push(url);
+        createdTabs.push({ url, background: params?.background === true });
+        if (navigationLands) {
+          cdpTargets = [
+            ...cdpTargets,
+            { id: "created", type: "page", url, title: "Landed" },
+          ];
+        }
+        return { targetId: "created" };
+      }
       if (method === "Browser.getWindowForTarget") return { windowId: 7 };
       if (method === "Browser.setWindowBounds") {
         if (windowResizeHonored) {
@@ -120,6 +134,7 @@ afterEach(() => {
   windowResizeHonored = true;
   windowBounds = {};
   evaluatedExpressions.length = 0;
+  createdTabs.length = 0;
   for (const dir of tmpDirs.splice(0)) {
     fs.rmSync(dir, { recursive: true, force: true });
   }
@@ -321,6 +336,118 @@ describe("open surface asTab", () => {
       `chrome-extension://${p.id}/action/index.html`,
     ]);
   });
+});
+
+// T-22: every open used to reuse pageTargets[0], so opening any surface
+// navigated away whatever the caller had been told to watch (the trace page,
+// with the carrier's bridge registration on it) and said nothing about it.
+describe("open never destroys the page you were watching", () => {
+  it("opens a new background tab instead of taking over a real page", async () => {
+    const p = project({
+      manifest_version: 3,
+      name: "F",
+      action: { default_popup: "popup.html" },
+    });
+    cdpTargets = [
+      { id: "watched", type: "page", url: "https://inspect.extension.dev/trace" },
+    ];
+
+    const result = JSON.parse(
+      await open.handler({ projectPath: p.dir, surface: "popup", asTab: true }),
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.openedNewTab).toBe(true);
+    expect(createdTabs).toEqual([
+      { url: `chrome-extension://${p.id}/popup.html`, background: true },
+    ]);
+    // The watched page is still there, still on its own URL.
+    expect(
+      cdpTargets.find((t) => t.id === "watched")?.url,
+    ).toBe("https://inspect.extension.dev/trace");
+  });
+
+  it("reuses a blank tab rather than piling up new ones", async () => {
+    const p = project({
+      manifest_version: 3,
+      name: "F",
+      action: { default_popup: "popup.html" },
+    });
+    cdpTargets = [{ id: "blank", type: "page", url: "about:blank" }];
+
+    const result = JSON.parse(
+      await open.handler({ projectPath: p.dir, surface: "popup", asTab: true }),
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.openedNewTab).toBeUndefined();
+    expect(createdTabs).toEqual([]);
+    expect(navigations).toEqual([`chrome-extension://${p.id}/popup.html`]);
+  });
+
+  it("reuses its own surface tab when the same extension is reopened", async () => {
+    const p = project({
+      manifest_version: 3,
+      name: "F",
+      action: { default_popup: "popup.html" },
+      options_ui: { page: "options.html" },
+    });
+    cdpTargets = [
+      { id: "watched", type: "page", url: "https://example.com" },
+      { id: "surface", type: "page", url: `chrome-extension://${p.id}/popup.html` },
+    ];
+
+    await open.handler({ projectPath: p.dir, surface: "options", asTab: true });
+
+    expect(createdTabs).toEqual([]);
+    expect(navigations).toEqual([`chrome-extension://${p.id}/options.html`]);
+  });
+
+  it("treats a client-side redirect as a landing, not a NavigateFailed", async () => {
+    // The carrier note's own URL client-redirects to /trace?session=live.
+    // Judging the navigation by URL alone reported it dead while the tab was
+    // demonstrably on the page.
+    const p = project({ manifest_version: 3, name: "F" });
+    cdpTargets = [];
+    navigationLands = false;
+    const asked = "https://inspect.extension.dev/?session=live";
+
+    const pending = open.handler({ projectPath: p.dir, url: asked });
+    // The tab appears a moment later, already redirected.
+    await new Promise((r) => setTimeout(r, 300));
+    cdpTargets = [
+      {
+        id: "created",
+        type: "page",
+        url: "https://inspect.extension.dev/trace?session=live",
+        title: "Inspect",
+      },
+    ];
+    const result = JSON.parse(await pending);
+
+    expect(result.ok).toBe(true);
+    expect(result.redirected).toEqual({
+      from: asked,
+      to: "https://inspect.extension.dev/trace?session=live",
+    });
+    expect(result.target.targetId).toBe("created");
+  }, 15_000);
+
+  it("does not blame the extension bundle for a failed http navigation", async () => {
+    const p = project({ manifest_version: 3, name: "F" });
+    cdpTargets = [];
+    navigationLands = false;
+
+    const result = JSON.parse(
+      await open.handler({ projectPath: p.dir, url: "https://example.com/nope" }),
+    );
+
+    expect(result.ok).toBe(false);
+    // It must not send the caller off to debug their own dist for a URL that
+    // has nothing to do with their extension.
+    expect(result.hint).not.toMatch(/built dist|BUILT manifest|entrypoints/);
+    expect(result.hint).toMatch(/Nothing about your extension bundle/);
+  }, 15_000);
 });
 
 // Full headless popup-render: a popup-as-tab is resized to the popup's real
