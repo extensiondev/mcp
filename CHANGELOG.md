@@ -2,6 +2,29 @@
 
 ## Unreleased
 
+### Fixed
+
+- The live-preview carrier is no longer a permanent resident of the
+  project. `extension_stop` removes it, `extension_build` removes it
+  before the build runs (and refuses to call a build clean if it ever
+  finds the carrier in `dist/`), and `extension_dev carrier: true` adds
+  it to `.gitignore` so the first `git add -A` cannot vendor it. Every
+  path is marker-guarded: a directory the tool did not place is reported,
+  never removed.
+- `extension_open` no longer navigates away whatever page the caller was
+  watching. It reuses only a disposable tab (blank, new-tab page, or a
+  tab already on the same extension origin) and otherwise opens a new
+  background tab, so a trace page keeps its carrier registration.
+- `extension_open` treats a client-side redirect as a landing instead of
+  reporting `NavigateFailed`, and reports where the page went. A failed
+  `http(s)` navigation no longer sends the caller off to debug their own
+  bundle.
+- `extension_open` confirms with the browser that a UI surface actually
+  opened. When the engine reports the surface opened and no document
+  target appears, the result says so (`SurfaceDidNotOpen`) and points at
+  `asTab: true`, instead of handing back a green answer for a surface
+  that is not there.
+
 ### Changed
 
 - `extension_deploy` and `extension_store_status` advertise `safari`

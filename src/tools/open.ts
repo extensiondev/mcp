@@ -19,38 +19,76 @@ import {
   resolveBridgeBaseUrl,
 } from "../lib/bridge-tabs";
 
-// Poll the browser's target list until a live page target reports the URL we
-// navigated to. This is the only trustworthy success signal for a cross-process
-// navigation, since the pre-navigation session goes stale.
+type SettledTarget = {
+  id: string;
+  url: string;
+  title?: string;
+  /** The page landed somewhere else than asked (a client-side redirect). */
+  redirectedFrom?: string;
+};
+
+// Poll the browser's target list until the navigation settles. This is the only
+// trustworthy success signal for a cross-process navigation, since the
+// pre-navigation session goes stale.
+//
+// Two ways to settle, in order: a page target reporting the URL we asked for,
+// or the target we navigated reporting a DIFFERENT live URL, which is a
+// redirect and not a failure. Judging by URL alone made every open of
+// https://inspect.extension.dev/?session=live return NavigateFailed, because
+// the page client-redirects to /trace?session=live: seven personas were then
+// sent to debug their own bundle for a URL that had loaded perfectly.
 async function pollForTarget(
   port: number,
   url: string,
   budgetMs: number,
-): Promise<{ id: string; url: string; title?: string } | null> {
+  navigatedTargetId?: string,
+): Promise<SettledTarget | null> {
   const deadline = Date.now() + budgetMs;
   // Chrome normalizes some URLs (trailing slash, escaping); compare on the
   // path prefix rather than requiring a byte-identical match.
   const wanted = url.replace(/#.*$/, "");
+  let redirected: SettledTarget | null = null;
   for (;;) {
     try {
       const targets = await CDPClient.discoverTargets(port);
       for (const t of targets) {
         const tUrl = String(t.url ?? "");
         if (t.type !== "page") continue;
+        const title = typeof t.title === "string" ? t.title : undefined;
         if (tUrl === wanted || tUrl.startsWith(wanted)) {
-          return {
-            id: String(t.id),
-            url: tUrl,
-            title: typeof t.title === "string" ? t.title : undefined,
-          };
+          return { id: String(t.id), url: tUrl, title };
+        }
+        if (
+          navigatedTargetId &&
+          String(t.id) === navigatedTargetId &&
+          tUrl &&
+          tUrl !== "about:blank" &&
+          !tUrl.startsWith("chrome-error://")
+        ) {
+          redirected = { id: String(t.id), url: tUrl, title, redirectedFrom: url };
         }
       }
     } catch {
       // transient during the process swap; keep polling
     }
-    if (Date.now() >= deadline) return null;
+    if (Date.now() >= deadline) return redirected;
     await new Promise((r) => setTimeout(r, 250));
   }
+}
+
+// A tab that may be navigated out from under the caller without destroying
+// anything they care about: a blank tab, a new-tab page, or a page already
+// showing the destination's own extension origin (a surface we opened before).
+//
+// Reusing pageTargets[0] unconditionally meant every extension_open navigated
+// away whatever the caller had been told to watch, silently dropping the
+// carrier's bridge registration on the trace page. Agents re-registered three
+// times in one run without ever learning why.
+function isDisposableTab(tabUrl: string, destination: string): boolean {
+  if (!tabUrl || tabUrl === "about:blank") return true;
+  if (/^chrome:\/\/(newtab|new-tab-page)/.test(tabUrl)) return true;
+  const origin = destination.match(/^chrome-extension:\/\/[a-p]{32}\//)?.[0];
+  return Boolean(origin && tabUrl.startsWith(origin));
 }
 
 // Navigate a real tab to a URL so agents can drive a content-script test
@@ -83,21 +121,32 @@ async function navigateToUrl(
     const pageTargets = targets.filter(
       (t) => t.type === "page" && !String(t.url || "").startsWith("devtools://"),
     );
-    if (pageTargets.length === 0) {
-      return JSON.stringify({
-        ok: false,
-        error: {
-          name: "NoTab",
-          message:
-            "The dev browser has no open page tab to navigate. Trigger one (e.g. extension_open surface, or open the extension) first.",
-        },
-      });
-    }
-    const target = pageTargets[0];
     const browserWsUrl = await CDPClient.discoverBrowserWsUrl(resolved.port);
     await cdp.connect(browserWsUrl);
-    const sessionId = await cdp.attachToTarget(String(target.id));
-    await cdp.navigate(sessionId, url);
+
+    // Navigate a disposable tab if there is one; otherwise open a NEW tab, so
+    // the page the caller is watching survives. `background: true` keeps the
+    // new tab from stealing the foreground (and, on a headed machine, the
+    // keyboard); browsers that reject the flag get a plain createTarget.
+    const reusable = pageTargets.find((t) =>
+      isDisposableTab(String(t.url ?? ""), url),
+    );
+    let navigatedTargetId: string | undefined;
+    let openedNewTab = false;
+    if (reusable) {
+      navigatedTargetId = String(reusable.id);
+      const sessionId = await cdp.attachToTarget(navigatedTargetId);
+      await cdp.navigate(sessionId, url);
+    } else {
+      const created = (await cdp
+        .sendCommand("Target.createTarget", { url, background: true })
+        .catch(() => cdp.sendCommand("Target.createTarget", { url }))) as
+        | { targetId?: string }
+        | undefined;
+      navigatedTargetId =
+        typeof created?.targetId === "string" ? created.targetId : undefined;
+      openedNewTab = true;
+    }
 
     // Verify against a FRESH target list, not the attached session. Navigating
     // to a chrome-extension:// origin is cross-process: Chrome swaps the
@@ -105,20 +154,40 @@ async function navigateToUrl(
     // reports stale state (observed: a real, successful popup navigation whose
     // old session still read chrome-error://chromewebdata/). Reading it made
     // this return ok:true on failure AND a wrong url on success.
-    const settled = await pollForTarget(resolved.port, url, 6000);
+    const settled = await pollForTarget(
+      resolved.port,
+      url,
+      6000,
+      navigatedTargetId,
+    );
     if (!settled) {
+      const isExtensionPage = url.startsWith("chrome-extension://");
       return JSON.stringify({
         ok: false,
         error: {
           name: "NavigateFailed",
-          message: `Navigation to ${url} did not produce a live page target. The URL may not exist in the extension bundle, or Chrome refused the navigation.`,
+          message: `Navigation to ${url} did not produce a live page target. ${
+            isExtensionPage
+              ? "The URL may not exist in the extension bundle, or Chrome refused the navigation."
+              : "The page may have failed to load, or the browser refused the navigation."
+          }`,
         },
-        hint: "Confirm the path exists in the built dist (extension_build / extension_inspect list entrypoints). For an extension page, the path must match the BUILT manifest, which may differ from your source layout.",
+        hint: isExtensionPage
+          ? "Confirm the path exists in the built dist (extension_build / extension_inspect list entrypoints). For an extension page, the path must match the BUILT manifest, which may differ from your source layout."
+          : "Confirm the URL loads in a normal browser and that the dev session's browser has network access. Nothing about your extension bundle is implicated in a failed http(s) navigation.",
       });
     }
     return JSON.stringify({
       ok: true,
       navigated: url,
+      ...(openedNewTab ? { openedNewTab: true } : {}),
+      // A client-side redirect is a landing, not a failure; say where it went
+      // instead of reporting the navigation dead.
+      ...(settled.redirectedFrom
+        ? {
+            redirected: { from: settled.redirectedFrom, to: settled.url },
+          }
+        : {}),
       // NOT a chrome.tabs id. This is a CDP target id (hex), and passing it to
       // extension_dom_inspect/extension_eval as `tab` fails, because those take
       // a NUMERIC chrome.tabs id. Naming it `tab.id` invited exactly that
@@ -544,6 +613,50 @@ async function openSurfaceAsTab(
   return raw;
 }
 
+// Did the surface actually open? `extension open options` answers
+// {"opened":"options"} whether or not a document ever appeared, and the caller
+// then inspects a surface that is not there; extension_dom_inspect's advice in
+// that state is to run the call that already claimed success, which is an
+// infinite loop for an autonomous agent. Ask the browser instead of the CLI.
+async function confirmSurfaceTarget(
+  projectPath: string,
+  browser: string,
+  surface: string,
+  raw: string,
+): Promise<string> {
+  if (!isChromiumFamily(browser)) return raw;
+  const doc = surfaceDocument(projectPath, browser, surface);
+  if (!doc) return raw;
+  let parsed: any;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return raw;
+  }
+  if (parsed?.ok === false) return raw;
+  const resolved = await resolveCdpPort(projectPath, browser);
+  const extensionId = resolved
+    ? await resolveExtensionId(projectPath, browser)
+    : null;
+  // No CDP port or no id: we cannot check, so we must not claim either way.
+  if (!resolved || !extensionId) return raw;
+  const wanted = `chrome-extension://${extensionId}/${doc}`;
+  const settled = await pollForTarget(resolved.port, wanted, 3000);
+  if (settled) {
+    parsed.surfaceTarget = { targetId: settled.id, url: settled.url };
+    return JSON.stringify(parsed);
+  }
+  return JSON.stringify({
+    ok: false,
+    error: {
+      name: "SurfaceDidNotOpen",
+      message: `The engine reported the ${surface} as opened, but no page target for ${wanted} appeared within 3s, so nothing is there to inspect.`,
+    },
+    engineResult: parsed,
+    hint: `Retry with asTab: true to render ${doc} in a real tab, which works headed or headless. If you expected a window, check that the session is headed and that the surface is declared in the BUILT manifest.`,
+  });
+}
+
 export const schema = {
   name: "extension_open",
   description:
@@ -707,5 +820,7 @@ export async function handler(
       // non-JSON payload; return as-is
     }
   }
-  return raw;
+  return AS_TAB_SURFACES.includes(args.surface)
+    ? confirmSurfaceTarget(args.projectPath, browser, args.surface, raw)
+    : raw;
 }
