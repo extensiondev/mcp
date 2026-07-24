@@ -4,7 +4,7 @@
 // drift.
 
 import { writeCredentials, type StoredCredentials } from "./credentials";
-import { PROD_ORIGINS } from "./urls-origins";
+import { PROD_ORIGINS } from "@extension.dev/urls/origins";
 import { consoleBase, consoleProjectUrl } from "./registry";
 
 // Single source of truth for the platform default; shared with the apps.

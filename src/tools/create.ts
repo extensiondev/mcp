@@ -10,7 +10,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { extensionCreate } from "extension-create";
 import { mcpOrigins } from "../lib/registry";
-import { wwwNewPath } from "../lib/urls-paths";
+import { wwwNewPath } from "@extension.dev/urls/paths";
 
 // Map the lockfile the installer actually wrote to the package manager that
 // owns it, so the run command we hand back matches what created node_modules
