@@ -5,11 +5,6 @@ import path from "node:path";
 import { spawn } from "node:child_process";
 import type { ChildProcess } from "node:child_process";
 
-// Surprise-swarm cluster C5: session lifecycle lies. A second extension_dev on
-// the same projectPath returned ok:true while its browser died on the profile
-// lock (a silent fork), a dead browser leg rode a success envelope, and stop
-// all:true claimed "No sessions registered" while a session pid was alive.
-// Real node children stand in for the CLI, as in dev-health-tick.test.ts.
 
 type SpawnedCli = import("../lib/exec").SpawnedCli;
 const spawned: ChildProcess[] = [];
@@ -173,8 +168,6 @@ describe("extension_dev browser leg health", () => {
     const project = tmpProject();
     nextChild = () => {
       const cli = fakeCli("setTimeout(()=>{}, 60000)");
-      // The engine stamps AFTER launch; write it while the tick is waiting so
-      // the stamp is newer than the spawn, as it would be live.
       setTimeout(() => stampBrowserExited(project, "chrome"), 1000);
       return cli;
     };
@@ -212,8 +205,6 @@ describe("extension_stop all:true discovery", () => {
     const pid = spawnVictim();
     registerSession({ pid, browser: "chrome", projectPath: project, command: "dev" });
     writeReadyContract(project, "chrome", pid);
-    // The child-exit handler wipes the in-memory entry even when the browser
-    // leg survives; the swarm hit exactly this before all:true went blind.
     removeSession(project, "chrome");
 
     const result = JSON.parse(await stop.handler({ all: true }));
@@ -226,7 +217,6 @@ describe("extension_stop all:true discovery", () => {
     expect(mine.pid).toBe(pid);
     expect(mine.stopped).toBe(true);
     expect(isAlive(pid)).toBe(false);
-    // The marker is pruned once the session is genuinely stopped.
     const remaining = listSessionMarkers().map((m) =>
       path.resolve(m.projectPath),
     );

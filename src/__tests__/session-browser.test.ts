@@ -111,8 +111,6 @@ describe("resolveSessionBrowser", () => {
     });
   });
 
-  // A dead session used to fall through to the blind "chromium" default, which
-  // made every downstream tool complain about a browser the user never ran.
   it("keeps targeting a dead session's browser instead of the blind default", () => {
     const project = tmpProject();
     writeContract(project, "chrome", { status: "ready", pid: 2 ** 30 });

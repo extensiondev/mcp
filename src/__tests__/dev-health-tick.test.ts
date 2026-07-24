@@ -5,11 +5,6 @@ import path from "node:path";
 import { spawn } from "node:child_process";
 import type { ChildProcess } from "node:child_process";
 
-// Stand in for the extension CLI: `node -e <script>` gives a real child process
-// with real exit semantics, so the health tick is exercised end to end rather
-// than against a hand-rolled EventEmitter. Mirrors the real spawnExtensionCli
-// contract: output goes to a log file, not pipes (the detach-outlives-stdio
-// design), and the handle exposes readOutput().
 type SpawnedCli = import("../lib/exec").SpawnedCli;
 const spawned: ChildProcess[] = [];
 function fakeCli(script: string): SpawnedCli {
@@ -89,7 +84,6 @@ describe("extension_dev health tick", () => {
     expect(result.status).toBe("exited");
     expect(result.exitCode).toBe(1);
     expect(result.error).toContain("exited during startup");
-    // The child's own output is the evidence a caller needs to fix it.
     expect(result.output).toContain("EADDRINUSE");
   }, 15_000);
 
@@ -104,8 +98,6 @@ describe("extension_dev health tick", () => {
     expect(result.signal).toBe("SIGKILL");
   }, 15_000);
 
-  // extension_start had the identical defect, found by sweeping for the pattern
-  // after the dev.ts fix rather than by hitting it.
   it("applies to extension_start too", async () => {
     const project = tmpProject();
     nextChild = () =>
@@ -118,9 +110,6 @@ describe("extension_dev health tick", () => {
     expect(result.output).toContain("build failed");
   }, 20_000);
 
-  // L5 from the API-surface swarm: a FAILED FIRST COMPILE leaves the dev server
-  // alive, so the process health tick cannot see it. Three personas were told
-  // status:"started" with the error buried in earlyOutput.
   it("reports a failed first compile even though the server is alive", async () => {
     const project = tmpProject();
     nextChild = () =>
@@ -150,11 +139,6 @@ describe("extension_dev health tick", () => {
   }, 15_000);
 });
 
-// Swarm cluster 19, the most-corroborated finding (8 of 10 personas): dev said
-// port: 8080 while wait said 8081 for the same session, because dev echoed the
-// REQUESTED port back instead of the one the engine actually bound. The engine
-// records the bound port in ready.json from its first stamp, so that contract
-// is the single source of truth for both tools.
 describe("extension_dev port truth", () => {
   it("reports the bound port from ready.json and never disagrees with wait", async () => {
     const project = tmpProject();
@@ -162,8 +146,6 @@ describe("extension_dev port truth", () => {
       const cli = fakeCli(
         'console.log("ready in 300ms"); setTimeout(()=>{}, 60000);',
       );
-      // The engine stamps after allocating the real port; requested 8080 was
-      // taken, so it bound 8081. Written mid-tick, as it would be live.
       setTimeout(() => {
         writeModernContract(project, "chrome", {
           command: "dev",
@@ -185,7 +167,6 @@ describe("extension_dev port truth", () => {
     expect(result.requestedPort).toBe(8080);
     expect(result.portNote).toContain("8081");
 
-    // The never-disagree guarantee: wait reads the same contract.
     const waited = JSON.parse(
       await wait.handler({ projectPath: project, browser: "chrome" }),
     );
@@ -202,7 +183,6 @@ describe("extension_dev port truth", () => {
     );
 
     expect(result.ok).toBe(true);
-    // No `port` claim for a port that was never confirmed bound.
     expect(result.port).toBeUndefined();
     expect(result.requestedPort).toBe(8080);
     expect(result.portNote).toContain("extension_wait");
@@ -224,9 +204,6 @@ describe("extension_dev build-only sessions", () => {
     expect(result.hint).toContain("browserAttached: false");
     expect(result.hint).not.toContain("fully loaded");
 
-    // The registered session carries noBrowser, so extension_wait on the same
-    // project returns at compile time instead of stalling on an attach that
-    // cannot happen.
     writeModernContract(project, "chrome", { command: "dev", pid: process.pid });
     const before = Date.now();
     const waited = JSON.parse(
@@ -242,11 +219,6 @@ describe("extension_dev build-only sessions", () => {
 });
 
 describe("extension_dev earlyOutput denoise", () => {
-  // Cold-machine first run: npx fetches the engine and prints "npm warn exec The
-  // following package was not found and will be installed: extension@...". The
-  // "not found" in that benign notice tripped the compile-failed classifier, so
-  // the noBrowser smoke reported status:"compile-failed" for an extension that
-  // then compiled clean. Classify on the denoised text; drop the notice.
   it("does not read npm's cold-install notice as a compile failure", async () => {
     const project = tmpProject();
     nextChild = () =>

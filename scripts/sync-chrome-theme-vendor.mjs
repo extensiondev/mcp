@@ -5,22 +5,6 @@
 // ██║ ╚═╝ ██║╚██████╗██║
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
-//
-// Re-sync the vendored Chrome theme resolver into src/lib/vendor/chrome-theme/.
-//
-// WHY THIS EXISTS: extension_theme_verify needs the Chromium-transcribed color
-// resolver (resolveChromeTheme) to compute leg [3] "what Chrome derives" and
-// leg [4] "what Chrome accepts". That resolver lives in @extensiondev/emulator,
-// but the published @extension.dev/mcp DELIBERATELY depends on neither the
-// emulator nor any app: the carrier ships prebuilt to stay decoupled. So we
-// VENDOR a verbatim copy of the three pure, dependency-free source files rather
-// than take a workspace dependency.
-//
-// The three files are pure functions with no imports outside each other, which
-// is why vendoring is lighter than extracting a shared package.
-//
-// Run from the package root:  node scripts/sync-chrome-theme-vendor.mjs
-// Then re-run `pnpm typecheck && pnpm test` and commit the refreshed vendor.
 
 import { promises as fs } from "node:fs";
 import path from "node:path";
@@ -34,8 +18,6 @@ const SOURCE_DIR = path.resolve(
 );
 const VENDOR_DIR = path.resolve(pkgRoot, "src/lib/vendor/chrome-theme");
 
-// Order does not matter (headers are prepended verbatim); listed in dependency
-// order for the reader.
 const FILES = [
   "chrome-theme-color-math.ts",
   "chrome-theme-reference.ts",

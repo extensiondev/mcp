@@ -3,8 +3,6 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-// The carrier must be gone BEFORE the CLI runs, so the CLI is stubbed and the
-// removal is asserted from the callback the stub fires.
 let carrierAtCliTime: boolean | null = null;
 let projectAtCliTime: string | null = null;
 vi.mock("../lib/exec", async (importOriginal) => {
@@ -79,8 +77,6 @@ describe("the carrier never reaches a build", () => {
 
     expect(carrierAtCliTime).toBe(false);
     expect(fs.existsSync(carrierDir(dir))).toBe(false);
-    // The empty scaffolding goes too; the folder was ours only while the
-    // carrier was in it.
     expect(fs.existsSync(path.join(dir, "extensions"))).toBe(false);
     expect((result.warnings ?? []).join(" ")).toMatch(
       /Removed the Extension\.dev live-preview carrier/,
@@ -170,7 +166,6 @@ describe("materializeCarrier", () => {
     expect(fs.readFileSync(path.join(dir, ".gitignore"), "utf-8")).toContain(
       `extensions/${CARRIER_DIR_NAME}/`,
     );
-    // Idempotent: a second run adds nothing.
     materializeCarrier(dir, "chrome");
     const lines = fs
       .readFileSync(path.join(dir, ".gitignore"), "utf-8")

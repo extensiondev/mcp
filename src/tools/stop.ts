@@ -54,13 +54,9 @@ interface StopOutcome {
   stopped: boolean;
   reaped: number[];
   detail: string;
-  /** Set when this stop took the live-preview carrier back out of the project. */
   carrierRemoved?: string;
 }
 
-// The carrier is scoped to a dev session, so stopping the session takes it out
-// of the project again. It used to survive every stop, leaving a companion
-// extension in the user's tree (and in their next `git add -A`) forever.
 function cleanCarrier(projectPath: string): { carrierRemoved?: string } {
   const removal = removeCarrier(projectPath);
   return removal.removed ? { carrierRemoved: removal.path } : {};
@@ -74,19 +70,10 @@ function pgrepPids(pattern: string): number[] {
       .map((s) => parseInt(s.trim(), 10))
       .filter((n) => Number.isInteger(n) && n > 0 && n !== process.pid);
   } catch {
-    // pgrep exits non-zero when nothing matches (or is unavailable on Windows).
     return [];
   }
 }
 
-// Every process this dev session spawned, so stop can actually reap them:
-// - the dev CLI, whose argv is "extension dev <projectPath>" (the launched
-//   browser detaches from it (Firefox especially) so killing the dev pid
-//   alone leaves it, and the dev pid itself sometimes survives);
-// - the launched browser, whose profile (gecko) and --load-extension (chromium)
-//   both live under <projectPath>/dist.
-// Both markers avoid the MCP client (it uses "extension_dev" with an underscore)
-// and this server process (excluded by pid in pgrepPids).
 function sessionProcessPids(projectPath: string): number[] {
   const resolved = path.resolve(projectPath);
   const pids = new Set<number>();
@@ -153,8 +140,6 @@ function pidFromReadyContract(
   }
 }
 
-// Exported so extension_dev can stop a live session it is about to replace
-// instead of silently forking it (surprise-swarm C5).
 export async function stopOne(
   projectPath: string,
   browser: string,
@@ -163,8 +148,6 @@ export async function stopOne(
   const pid = session?.pid ?? pidFromReadyContract(projectPath, browser);
 
   if (pid == null) {
-    // Even with no registered dev pid, an orphaned browser may still be running
-    // under the profile dir; reap those before reporting nothing to do.
     const reaped = reapSessionProcesses(projectPath);
     removeSessionMarker(projectPath, browser);
     return {
@@ -196,8 +179,6 @@ export async function stopOne(
       : "Terminated.";
   }
 
-  // Reap the browser process tree launched under the profile dir; the dev pid
-  // dying does not take these with it (Firefox in particular detaches).
   const reaped = reapSessionProcesses(projectPath);
 
   removeSession(projectPath, browser);
@@ -207,8 +188,6 @@ export async function stopOne(
   } catch {
   }
 
-  // Only claim stopped when the dev pid is gone AND no profile process survived
-  // the reap. A survivor means the caller must not trust the machine is quiet.
   const survivors = sessionProcessPids(projectPath);
   const stopped = !isAlive(pid) && survivors.length === 0;
   if (survivors.length) {
@@ -234,13 +213,6 @@ export async function handler(args: {
   all?: boolean;
 }): Promise<string> {
   if (args.all) {
-    // Union of the in-memory registry and the on-disk markers. The registry
-    // alone forgets a session the moment its dev child exits, which is exactly
-    // when the orphaned browser most needs stopping: the swarm watched all:true
-    // claim "No sessions registered" while a session pid was alive. Marker
-    // candidates are then verified against the same ready.json contract and
-    // profile-tree reap the projectPath path uses, so a stale marker yields an
-    // honest stopped:false outcome (and is pruned), never a phantom kill.
     const candidates = new Map<string, { projectPath: string; browser: string }>();
     for (const s of listSessions()) {
       candidates.set(`${path.resolve(s.projectPath)}::${s.browser}`, s);

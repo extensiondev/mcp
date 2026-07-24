@@ -12,11 +12,6 @@ import { runExtensionCli } from "../lib/exec";
 import { liveProjectSessions } from "../lib/session-browser";
 import { CARRIER_DIR_NAME, removeCarrier } from "../lib/carrier";
 
-// The engine's persisted BuildSummary (§73): dist/extension-js/<browser>/
-// build-summary.json, written after a successful build so shell-out hosts get
-// structured warnings instead of scraping stdout. `since` guards against a
-// stale file from an earlier build; absence just means the engine predates
-// the contract, so callers omit the field rather than inventing one.
 function readBuildSummary(
   projectPath: string,
   browser: string,
@@ -39,9 +34,6 @@ function readBuildSummary(
   return null;
 }
 
-// Enumerate declared entrypoints from the built manifest so a content-script (or
-// any small entry) is not read as "didn't build" when the CLI's own summary tree
-// omits it. Mirrors extension_inspect's entrypoints list.
 function builtEntrypoints(
   distDir: string,
 ): Array<{ role: string; path: string; present: boolean }> {
@@ -84,10 +76,6 @@ function builtEntrypoints(
         c.css.forEach((s) => add(`content_scripts[${i}].css`, s));
     });
   }
-  // Everything below was OUTSIDE the completeness contract, so a build that
-  // dropped a devtools panel, an options page or a side panel still reported
-  // "ready for deployment". Found by persona A1 in the API-surface swarm: its
-  // devtools panel file was never emitted and build stayed green.
   add("devtools_page", manifest.devtools_page);
   add("options_page", manifest.options_page);
   const optionsUi = manifest.options_ui as Record<string, unknown> | undefined;
@@ -121,14 +109,6 @@ function builtEntrypoints(
   return out;
 }
 
-// The engine names the store zip by sanitizing (lowercase, every character
-// outside [a-z0-9 ] REMOVED, spaces to dashes) the manifest name and appending
-// "-<version>", then writes it INSIDE dist/<browser>/. So "zip-probe-ext"
-// becomes dist/chrome/zipprobeext-1.0.0.zip: the dashes are silently stripped
-// and the file matches neither the project directory nor the manifest name.
-// Swarm personas asked for a store zip and then had to find the artifact by
-// disk search. Mirror the engine's naming to predict the path, and always
-// report the file that actually exists, never a normalized guess.
 function engineSanitize(input: string): string {
   return input
     .toLowerCase()
@@ -158,10 +138,6 @@ function newestZip(
   }
 }
 
-// `<sanitized manifest name>-<version>`, the base the engine uses for both the
-// dist zip and the "-source" zip. Localized (__MSG_*__) names resolve through
-// the engine's locale files, which we do not reimplement; those fall through to
-// the freshness scan in the locators below.
 function engineZipBase(distDir: string, projectPath: string): string {
   let manifest: Record<string, unknown> = {};
   try {
@@ -181,8 +157,6 @@ function engineZipBase(distDir: string, projectPath: string): string {
   return `${engineSanitize(rawName)}-${version}`;
 }
 
-// Absolute path of the store zip this build wrote into dist/<browser>/, or
-// null when no candidate exists on disk.
 function locateDistZip(
   projectPath: string,
   browser: string,
@@ -198,8 +172,6 @@ function locateDistZip(
   return newestZip(distDir, since);
 }
 
-// The source zip does NOT live next to the dist zip: the engine writes it one
-// level up, at dist/<base>-source.zip, and zipFilename does not rename it.
 function locateSourceZip(
   projectPath: string,
   browser: string,
@@ -273,12 +245,6 @@ export const schema = {
   },
 };
 
-// A production build can emit a manifest that differs from the source in ways
-// that silently change behavior: personas shipped builds whose
-// web_accessible_resources had been stripped (so insertCSS targets were
-// undeclared) and whose permission set was narrower than the one they had
-// tested against in dev. The build was green both times. Diff the two manifests
-// and report what the production artifact actually lost.
 function manifestDivergence(
   projectPath: string,
   browser: string,
@@ -319,10 +285,6 @@ function manifestDivergence(
   return notes;
 }
 
-// Defense in depth behind the pre-build removal: prove the shipped tree has no
-// carrier in it instead of assuming so. The trace swarm reported that
-// carrier: true "contaminates the shipped artifact"; it did not, but the only
-// way anyone knew was to unzip and look. Now the build looks, every time.
 const MARKER_FILE_NAME = "managed-by-extension-dev-mcp.json";
 
 function carrierEntriesInDist(distDir: string, depth = 0): string[] {
@@ -353,11 +315,6 @@ interface ValidationPreflight {
   warnings: string[];
 }
 
-// The bundler happily emits a bundle for a manifest that names files it does not
-// have, or calls a chrome.* API it never asked permission for: the build goes
-// green and the extension breaks at runtime. Personas repeatedly shipped a
-// broken build off a green `build`, so build now runs the same static checks
-// extension_manifest_validate does and refuses when they are build-blocking.
 async function validationPreflight(
   projectPath: string,
   browser: string,
@@ -374,7 +331,6 @@ async function validationPreflight(
       warnings: Array.isArray(parsed.warnings) ? parsed.warnings : [],
     };
   } catch {
-    // Never let the preflight itself block a build that would otherwise work.
     return null;
   }
 }
@@ -393,12 +349,6 @@ export async function handler(args: {
   const start = Date.now();
   const browser = args.browser ?? "chrome";
 
-  // A build is a release action, so the live-preview carrier must not be in the
-  // tree while it runs. Extension.js auto-scans ./extensions, `--zip-source`
-  // packs the source tree, and every static check walks the project: a debug
-  // flag set hours earlier has no business reaching any of them. The directory
-  // is marker-guarded and `extension_dev carrier: true` puts it back, so this
-  // removes rather than refuses. Anything without our marker is left alone.
   const carrierCleanup = removeCarrier(args.projectPath);
   const carrierNotes: string[] = [];
   if (carrierCleanup.removed) {
@@ -428,12 +378,6 @@ export async function handler(args: {
     });
   }
 
-  // A production build on a project with a LIVE dev session writes over the
-  // session's dist output, and the dev browser then serves the stale or
-  // production artifact until the next recompile: seven personas in the DevX
-  // swarm hit this silently. Detect the session BEFORE building (its pid may
-  // die while the CLI runs) via the same live-session lookup dev.ts's fork
-  // guard uses, and warn honestly without blocking the build.
   const clobberedSessions = liveProjectSessions(args.projectPath).filter(
     (session) => session.browser === browser,
   );
@@ -444,13 +388,6 @@ export async function handler(args: {
     ),
   );
 
-  // Shell out to the project's own extension CLI (project-local bin when
-  // present, else the pinned npx fallback) exactly like dev/start/preview.
-  // Running the build in-process against THIS package's extension-develop made
-  // build the odd tool out: it used a different toolchain than the rest of the
-  // session and inherited the MCP's dependency tree (an rspack core/binding
-  // skew here broke it). Shelling out keeps build consistent with dev/preview
-  // and uses the project's matching dependencies.
   const cliArgs = ["build", args.projectPath, "--browser", browser];
   if (args.zip) cliArgs.push("--zip");
   if (args.zipSource) cliArgs.push("--zip-source");
@@ -483,9 +420,6 @@ export async function handler(args: {
       : {};
     const distDir = path.resolve(args.projectPath, "dist", browser);
     const entrypoints = builtEntrypoints(distDir);
-    // Verified, not assumed: if the carrier ever does reach dist, the build
-    // says so instead of handing over a store artifact with somebody else's
-    // extension in it.
     const contamination = carrierEntriesInDist(distDir);
     if (contamination.length) {
       return JSON.stringify({
@@ -501,11 +435,6 @@ export async function handler(args: {
         hint: "Delete the listed paths from dist and build again. The carrier normally lives in ./extensions and is removed before every build.",
       });
     }
-    // A zero exit code is the BUNDLER's verdict, not the artifact's. If the
-    // built manifest declares a file the dist does not contain, Chrome refuses
-    // to load the extension, so reporting success:true here would be the same
-    // "it built, so it works" lie the manifest gate exists to prevent. We
-    // already computed `present` per entrypoint; act on it.
     const missing = entrypoints.filter((e) => !e.present);
     if (missing.length) {
       return JSON.stringify({
@@ -534,13 +463,9 @@ export async function handler(args: {
       ...(size ? { size } : {}),
       ...(status ? { status } : {}),
       ...(entrypoints.length ? { entrypoints } : {}),
-      // A green build with a dangling path reference is the exact shape of the
-      // "it built, so it works" trap; carry the non-blocking findings out.
       ...(preflight?.warnings.length
         ? { manifestWarnings: preflight.warnings }
         : {}),
-      // Bundler warnings from the engine's persisted BuildSummary contract
-      // (§73), distinct from manifestWarnings (our preflight's findings).
       ...buildWarnings,
       ...(() => {
         const divergence = manifestDivergence(args.projectPath, browser);
@@ -548,10 +473,6 @@ export async function handler(args: {
       })(),
       ...(warnings.length ? { warnings } : {}),
       zip: args.zip ?? false,
-      // The caller asked for a zip; hand back the artifact's real path instead
-      // of making them search dist for a filename the engine rewrote. When the
-      // zip cannot be located, say so explicitly rather than omitting the
-      // field silently.
       ...(args.zip
         ? (() => {
             const zipPath = locateDistZip(
@@ -592,8 +513,6 @@ export async function handler(args: {
     success: false,
     browser,
     error: message.slice(0, 1200),
-    // A failed build may still have partially rewritten the live session's
-    // dist before dying, so the clobber warning rides the failure too.
     ...(warnings.length ? { warnings } : {}),
     duration,
     hint: "Check that the project has a valid src/manifest.json and its dependencies are installed (extension_dev auto-installs; build does not).",

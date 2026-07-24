@@ -1,10 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import type { RdpTab } from "../lib/rdp";
 
-// Firefox parity for extension_dom_inspect listTargets: instead of the
-// "Gecko does not expose CDP targets" refusal, the tool lists RDP tab
-// descriptors from the root actor. Discovery therefore works even without
-// allowControl, which the bridge listTabs path requires.
 
 let rdpTabs: RdpTab[] = [];
 let rdpError: Error | null = null;

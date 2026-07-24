@@ -6,12 +6,6 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-// The discovery sibling of extension_release_promote / extension_deploy /
-// extension_publish: those verbs demand a build sha, and this is the verb
-// that lists the valid ones. Reads the project's public state on
-// registry.extension.land (channels.json + builds/index.json + meta.json),
-// which needs no auth for public projects.
-
 import {
   consoleProjectUrl,
   fetchRegistryJson,
@@ -91,7 +85,6 @@ export async function handler(args: {
 
   const channels = channelsRes.ok ? parseChannels(channelsRes.json) : [];
   const recentBuilds = buildsRes.ok ? parseBuildIndex(buildsRes.json) : [];
-  // Newest first; the index is small (the registry writer caps it).
   recentBuilds.sort((a, b) =>
     String(b.timestamp ?? "").localeCompare(String(a.timestamp ?? "")),
   );
@@ -104,10 +97,6 @@ export async function handler(args: {
     new Set(channels.map((c) => c.sha).filter(Boolean)),
   );
 
-  // The public viewer link for every row, so the caller can hand a human a URL
-  // that opens without a login. Private projects need a `?share=` token on top
-  // (extension_publish mints one), which publicUrlNote states rather than
-  // leaving the bare URL to imply otherwise.
   const isPrivate = String(meta?.visibility || "").toLowerCase() === "private";
   const publicProjectUrl = userlandProjectUrl(ref, "", args.api);
   const channelsWithUrls = channels.map((c) => ({

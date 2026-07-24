@@ -3,12 +3,6 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-// The engine persists its BuildSummary (structured, ANSI-stripped bundler
-// warnings) to dist/extension-js/<browser>/build-summary.json specifically so
-// this tool stops scraping stdout (engine §73). These tests pin the consumer:
-// a FRESH contract is surfaced as `buildWarnings`, a STALE one from an
-// earlier build is ignored, and an engine that predates the contract simply
-// yields no field, never an invented one.
 
 let cliResult = { code: 0, stdout: "Build Status: success", stderr: "" };
 vi.mock("../lib/exec", async (importOriginal) => {
@@ -61,9 +55,6 @@ afterEach(() => {
 describe("build consumes the engine's persisted BuildSummary", () => {
   it("surfaces fresh structured warnings as buildWarnings", async () => {
     const project = completeProject();
-    // The handler stamps `start` before the CLI runs; a summary written during
-    // the (mocked, instant) build must still count as fresh, so nudge the
-    // mtime slightly into the future.
     writeSummary(
       project,
       {
@@ -98,7 +89,6 @@ describe("build consumes the engine's persisted BuildSummary", () => {
 
     const result = JSON.parse(await build.handler({ projectPath: project }));
 
-    // 20-cap honesty: "2 warnings shown" must not read as "2 warnings total".
     expect(result.buildWarnings).toEqual(["w1", "w2"]);
     expect(result.buildWarningsTruncated).toBe(23);
   });

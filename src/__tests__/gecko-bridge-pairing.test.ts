@@ -1,9 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 
-// Firefox pairing of the Chromium-only CDP extras: URL navigation (extension_open
-// url) and live source inspection ride the agent bridge instead of CDP, so both
-// families share the same flow. True protocol parity (RDP) is upstream entry 78;
-// these tests pin the bridge pairing that ships now.
 
 const calls: string[][] = [];
 let actResponder: (cli: string[]) => string = () => JSON.stringify({ ok: true });
@@ -18,7 +14,6 @@ vi.mock("../lib/act", async (importOriginal) => {
   };
 });
 
-// RDP console replay, pinned per test: null port = pre-rdpPort engine.
 let mockRdpPort: number | null = null;
 let mockConsoleMessages: Array<{ level: string; text: string }> = [];
 vi.mock("../lib/cdp-port", async (importOriginal) => {
@@ -39,8 +34,6 @@ vi.mock("../lib/rdp", async (importOriginal) => {
   };
 });
 
-// The session-browser resolver reads ready.json from disk; pin it to the
-// browser the test passes so no filesystem is involved.
 vi.mock("../lib/session-browser", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../lib/session-browser")>();
   return {
@@ -88,7 +81,6 @@ describe("extension_open url on Gecko (bridge navigation)", () => {
 
     expect(result.ok).toBe(true);
     expect(result.navigated).toBe("https://example.com/");
-    // A NUMERIC chrome.tabs id, unlike the CDP path's targetId.
     expect(result.tab).toEqual({
       tabId: 7,
       url: "https://example.com/",
@@ -250,11 +242,8 @@ describe("extension_source_inspect on Gecko (bridge inspection)", () => {
     expect(result.transport).toBe("bridge");
     expect(result.domSnapshot).toEqual(snapshot);
     expect(result.extensionRoots).toEqual(roots);
-    // No note may claim these are Chromium-only anymore.
     expect(JSON.stringify(result.notes ?? [])).not.toContain("dom_snapshot");
     const evalCall = calls.find(isEval)!;
-    // The bridge expression embeds the SAME CDP page scripts: the dom walker,
-    // the reinject-generation reader, and the shadow-aware html serializer.
     expect(evalCall[1]).toContain("domSnapshot");
     expect(evalCall[1]).toContain("data-extjs-reinject-generation");
     expect(evalCall[1]).toContain("XMLSerializer");
@@ -295,7 +284,6 @@ describe("extension_source_inspect on Gecko (bridge inspection)", () => {
       text: "hi",
       count: 2,
     });
-    // No fallback note once console genuinely rides RDP.
     expect(JSON.stringify(result.notes ?? [])).not.toContain("extension_logs");
   });
 
@@ -386,9 +374,6 @@ describe("extension_source_inspect on Gecko (bridge inspection)", () => {
   });
 
   it("falls back to tabs.executeScript when the engine has no page-context eval (MV2)", async () => {
-    // The live MV2 behavior: page-context eval reports Unsupported because
-    // chrome.scripting is MV3-only; the same expression compiled in the
-    // content-script sandbox returns the identical out object.
     actResponder = (cli) => {
       if (isListTabs(cli)) {
         return JSON.stringify({

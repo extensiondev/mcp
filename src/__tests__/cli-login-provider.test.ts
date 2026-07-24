@@ -1,10 +1,5 @@
 import { describe, it, expect, afterEach, vi } from "vitest";
 
-// The shell CLI (`extension-mcp login`) and the MCP tool (extension_login) must
-// pick the SAME auth flow. They drifted once: runCli called the GitHub-direct
-// helpers unconditionally while only the tool branched on config.provider, so a
-// server advertising provider:"extensiondev" still forced the legacy GitHub flow
-// from a shell. Fixed in d3be1ff (v4.7.0); this pins it.
 
 let provider = "extensiondev";
 const flowsUsed: string[] = [];
@@ -80,7 +75,6 @@ describe("extension-mcp login provider branch", () => {
       "extensiondev:request",
       "extensiondev:poll",
     ]);
-    // The regression was silently falling back to GitHub here.
     expect(flowsUsed.some((f) => f.startsWith("github:"))).toBe(false);
   });
 

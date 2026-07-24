@@ -1,20 +1,3 @@
-// FAILURE-REPORTING HARNESS
-//
-// Every other suite asks "does the tool work when things are fine". This one
-// asks the question that actually bit us: WHEN THE UNDERLYING THING FAILED,
-// DOES THE TOOL SAY SO?
-//
-// Motivation (2026-07-20): four separate false greens shipped or nearly
-// shipped in one release cycle, doctor reported healthy over a crashing
-// background, dev and start reported "started" for a process that had already
-// exited, open reported ok:true for a navigation that 404'd, and build reported
-// success for a dist missing a declared entrypoint. A 30-persona swarm found
-// NONE of them, because a persona believes what a tool tells it. Only an
-// adversarial assertion catches a lie.
-//
-// RULE FOR THIS FILE: break something real, then assert the tool reports the
-// failure. Never assert on the happy path here. That is what the other suites
-// are for. A test that passes because nothing was broken is worse than no test.
 import { describe, it, expect, afterEach, vi } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
@@ -50,7 +33,6 @@ function writeLogs(
   );
 }
 
-// A pid that cannot be alive, for "the session died" scenarios.
 const DEAD_PID = 2 ** 30;
 
 let cliResult = { code: 0, stdout: "", stderr: "" };
@@ -90,7 +72,6 @@ describe("doctor reports failure when the extension is broken", () => {
       },
     ]);
 
-    // The exact shape that used to be dropped: payload in messageParts.
     const errs = recentErrorLogs(project, "chrome");
 
     expect(errs).toHaveLength(1);
@@ -137,7 +118,6 @@ describe("wait reports failure when the session is not actually usable", () => {
       await waitTool.handler({ projectPath: project, browser: "chrome" }),
     );
 
-    // The trap: status "ready" on disk while nothing is running.
     expect(result.status).not.toBe("ready");
     expect(result.status).toBe("stale");
     expect(result.message).toMatch(/exited|dead/i);
@@ -185,7 +165,6 @@ describe("build reports failure when the artifact is unusable", () => {
   }
 
   it("refuses a build whose manifest has build-blocking errors", async () => {
-    // No name: a required field.
     const dir = projectWithManifest({ manifest_version: 3, version: "1.0.0" });
 
     const result = JSON.parse(await build.handler({ projectPath: dir }));
@@ -195,9 +174,6 @@ describe("build reports failure when the artifact is unusable", () => {
   });
 
   it("refuses to report success when a declared entrypoint never reached dist", async () => {
-    // The SOURCE must be complete, so the manifest gate passes and we are
-    // genuinely testing the dist-completeness path rather than tripping the
-    // dangling-reference error first.
     const dir = projectWithManifest(
       {
         manifest_version: 3,
@@ -208,7 +184,6 @@ describe("build reports failure when the artifact is unusable", () => {
       { manifest: { action: { default_popup: "popup.html" } }, files: [] },
     );
     fs.writeFileSync(path.join(dir, "src", "popup.html"), "<html></html>");
-    // The bundler is happy; the artifact is not loadable.
     cliResult = { code: 0, stdout: "Build Status: success", stderr: "" };
 
     const result = JSON.parse(await build.handler({ projectPath: dir }));
@@ -233,8 +208,6 @@ describe("build reports failure when the artifact is unusable", () => {
   });
 });
 
-// Both cases below were found by the API-surface persona swarm (wave 1,
-// 2026-07-20) and verified against the source before fixing.
 describe("swarm-found lies stay fixed", () => {
   function projectWith(
     manifest: Record<string, unknown>,
@@ -254,8 +227,6 @@ describe("swarm-found lies stay fixed", () => {
     return dir;
   }
 
-  // B6: an adblocker whose ruleset file is missing got valid:true while
-  // extension_build failed NOT FOUND on the same tree.
   it("manifest_validate flags a missing declarativeNetRequest ruleset", async () => {
     const manifestValidate = await import("../tools/manifest-validate");
     const dir = projectWith({
@@ -319,15 +290,12 @@ describe("swarm-found lies stay fixed", () => {
     expect(edge.valid).toBe(true);
     expect(JSON.stringify(edge.warnings)).toMatch(/file_browser_handlers.*inert on Edge/);
 
-    // Chrome must NOT warn: the key is native there.
     const chrome = JSON.parse(
       await manifestValidate.handler({ projectPath: dir, browsers: ["chrome"] }),
     );
     expect(JSON.stringify(chrome.warnings)).not.toContain("inert on Edge");
   });
 
-  // A1: a devtools panel that never reached dist still reported
-  // "ready for deployment", because devtools_page was outside the contract.
   it("build's completeness contract covers every declared surface", async () => {
     const dir = tmpProject();
     fs.mkdirSync(path.join(dir, "src"), { recursive: true });
@@ -360,14 +328,11 @@ describe("swarm-found lies stay fixed", () => {
   });
 });
 
-// L1: the most corroborated lie in the swarm (6 of 15 personas).
 describe("manifest_validate verdicts are always explainable", () => {
   it("never returns valid:false with nothing in errors", async () => {
     const manifestValidate = await import("../tools/manifest-validate");
     const dir = tmpProject();
     fs.mkdirSync(path.join(dir, "src"), { recursive: true });
-    // A Chrome-targeted MV3 extension: Firefox support advisories must not
-    // silently decide the headline when the caller never asked about Firefox.
     fs.writeFileSync(
       path.join(dir, "src", "manifest.json"),
       JSON.stringify({
@@ -442,8 +407,6 @@ describe("manifest_validate verdicts are always explainable", () => {
   });
 });
 
-// L8: "ready" meant COMPILED, not usable. B7 got ready in 4ms, then every
-// control verb failed with "no executor connected".
 describe("wait distinguishes compiled from usable", () => {
   it("does not report ready before the runtime executor attaches", async () => {
     const project = tmpProject();
@@ -451,7 +414,6 @@ describe("wait distinguishes compiled from usable", () => {
       status: "ready",
       pid: process.pid,
       browser: "chrome",
-      // no runtime:"attached", no executorAttachedAt
     });
 
     const result = JSON.parse(
@@ -489,8 +451,6 @@ describe("wait distinguishes compiled from usable", () => {
   }, 15_000);
 });
 
-// L2: a green production build that quietly lost permissions or
-// web_accessible_resources relative to the source the developer tested.
 describe("build reports what the production artifact lost", () => {
   it("flags dropped permissions and stripped web_accessible_resources", async () => {
     const dir = tmpProject();
@@ -539,8 +499,6 @@ describe("logs reports failure rather than empty success", () => {
       await logs.handler({ projectPath: project, browser: "chrome" }),
     );
 
-    // Reading succeeded and nothing matched: count must make that legible
-    // rather than implying the extension is silent-and-fine.
     if (result.ok) {
       expect(result.count).toBe(0);
     } else {
@@ -549,8 +507,6 @@ describe("logs reports failure rather than empty success", () => {
   });
 });
 
-// WAVE-2 (API-surface swarm, clusters D/E/F) lies stay fixed. Same charter as
-// above: every test breaks something real and asserts the tool SAYS SO.
 describe("wave-2 swarm lies stay fixed", () => {
   it("manifest_validate reports per-target permission divergence (E25)", async () => {
     const manifestValidate = await import("../tools/manifest-validate");
@@ -743,8 +699,6 @@ describe("wave-2 swarm lies stay fixed", () => {
   });
 
   it("logs does not cry stale when events carry the session's instanceId", async () => {
-    // Newer engine canaries stamp events with ready.json's instanceId rather
-    // than its runId; a healthy live session must not be flagged stale.
     const project = tmpProject();
     writeReady(project, "chrome", {
       status: "ready",
@@ -822,16 +776,10 @@ describe("wave-2 swarm lies stay fixed", () => {
   });
 });
 
-// Post-61-73 additions (2026-07-20): the canary closed the engine bugs, so the
-// remaining lies live in how WE relay engine state. Same charter: break
-// something real, assert the tool says so.
 describe("act verbs report the dead session, not a config riddle", () => {
   it("eval's control error names the exited dev server when ready.json outlives it", async () => {
     const evalTool = await import("../tools/eval");
     const project = tmpProject();
-    // The trap: a ready contract whose pid is dead. The engine's error text
-    // asks "is the session started with allowControl?", which is a lie of
-    // omission; nothing is running at all.
     writeReady(project, "chrome", { status: "ready", pid: DEAD_PID });
     cliResult = {
       code: 0,
@@ -873,9 +821,6 @@ describe("act verbs report the dead session, not a config riddle", () => {
       }),
     );
 
-    // The old guard called content eval "known-broken in the current engine"
-    // forever, steering callers off a path bug 61's fix repaired. The note must
-    // be version-honest: trust the null on fixed engines, doubt it on old ones.
     expect(result.ok).toBe(true);
     expect(result.note).toContain(">= 4.0.14");
     expect(result.note).toContain("OLDER engines");
@@ -908,7 +853,6 @@ describe("doctor names a dead browser instead of a generic build failure", () =>
   it("reads the engine's browser_exited stamp and prescribes the right remedy", async () => {
     const doctorTool = await import("../tools/doctor");
     const project = tmpProject();
-    // The engine's bug-71/72 stamp: the CLI lives, the browser died.
     writeReady(project, "chrome", {
       status: "error",
       code: "browser_exited",
@@ -929,8 +873,6 @@ describe("doctor names a dead browser instead of a generic build failure", () =>
     expect(runtime.status).toBe("fail");
     expect(runtime.detail).toContain("browser");
     expect(runtime.detail).toContain("exit code 9");
-    // The generic remedy ("fix the build error") would send the caller in
-    // exactly the wrong direction; the build is fine, the browser is dead.
     expect(runtime.remediation).not.toContain("recompile");
     expect(runtime.remediation).toContain("extension_stop");
   });
@@ -940,8 +882,6 @@ describe("create verifies the scaffold instead of trusting the library", () => {
   it("reports incomplete when extension-create resolves over a manifest-less tree", async () => {
     vi.resetModules();
     const scaffoldDir = tmpProject();
-    // Partial tree: package.json survived the interrupted download,
-    // manifest.json did not.
     fs.writeFileSync(
       path.join(scaffoldDir, "package.json"),
       JSON.stringify({ name: "partial" }),
@@ -964,8 +904,6 @@ describe("create verifies the scaffold instead of trusting the library", () => {
     expect(result.ok).toBe(false);
     expect(result.status).toBe("incomplete");
     expect(result.error).toContain("manifest.json");
-    // The lie we are guarding against: nextSteps pointing a caller at `run dev`
-    // inside a tree that cannot compile.
     expect(result.nextSteps).toBeUndefined();
   });
 });

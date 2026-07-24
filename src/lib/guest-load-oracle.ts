@@ -10,43 +10,24 @@ import { CDPClient } from "./cdp";
 import { resolveCdpPort } from "./cdp-port";
 import { CARRIER_EXTENSION_ID } from "./carrier";
 
-// Extensions ALWAYS present in an extension.js dev session that are not the
-// guest: the engine's own devtools/manager companion, and (with carrier: true)
-// the live-preview carrier. Any OTHER chrome-extension:// target is the guest.
 const ENGINE_COMPANION_IDS = new Set<string>([
-  "kgdaecdpfkikjncaalnmmnjjfpofkcbl", // extension.js devtools/manager companion
+  "kgdaecdpfkikjncaalnmmnjjfpofkcbl",
   CARRIER_EXTENSION_ID,
 ]);
 
-// A Chrome extension id is 32 chars in the a-p alphabet; the target url is
-// chrome-extension://<id>/<path> for pages, service workers and background
-// pages alike.
 const EXTENSION_URL = /^chrome-extension:\/\/([a-p]{32})\//i;
 
 export type GuestTarget = { id: string; type: string; url: string };
 
 export type GuestLoadCheck = {
-  // Could the check run at all (CDP reachable and targets listed)?
   checked: boolean;
-  // A non-companion chrome-extension:// target exists in the browser's own list.
   loaded: boolean;
   guestTargets: GuestTarget[];
-  // Distinct non-companion extension ids seen.
   guestIds: string[];
   cdpPort?: number;
   reason: string;
 };
 
-/**
- * The BUGS_TO_FIX §83 oracle: ask the BROWSER whether the guest actually loaded,
- * instead of trusting the engine's ready.json. Chrome refusing --load-extension
- * is invisible to every engine surface (ready.json stamps status:ready, empty
- * logs), so the only trustworthy "did the guest load" signal is a
- * chrome-extension:// target in the browser's own CDP /json list. The engine's
- * devtools companion is always present and is not the guest; a NON-companion
- * extension target is. Never throws: an unreachable endpoint returns
- * checked:false so callers can degrade instead of failing.
- */
 export async function verifyGuestLoaded(
   projectPath: string,
   browser: string,

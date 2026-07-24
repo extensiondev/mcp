@@ -1,5 +1,3 @@
-// Guards the MCP <-> app link seam: dashboard links the MCP hands back must
-// follow the platform base an operator points at, not silently resolve to prod.
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { consoleBase, consoleProjectUrl, registryBase } from "../lib/registry";
 
@@ -40,7 +38,6 @@ describe("console/registry origin resolution", () => {
 
   it("derives the local console host when the platform base is localhost", () => {
     process.env.EXTENSION_DEV_API_URL = "http://localhost:3100";
-    // THE FIX: this used to stay on prod console regardless of the dev API base.
     expect(consoleBase()).toBe("http://console.extension.localhost");
     expect(consoleProjectUrl(ref, "settings/access-tokens")).toBe(
       "http://console.extension.localhost/acme/widget/settings/access-tokens",
@@ -54,7 +51,6 @@ describe("console/registry origin resolution", () => {
   });
 
   it("lets a per-tool api hint pick the environment for its own link", () => {
-    // env says prod, but this specific call targets a local stack
     expect(consoleProjectUrl(ref, "stores", "http://localhost:3100")).toBe(
       "http://console.extension.localhost/acme/widget/stores",
     );

@@ -17,12 +17,6 @@ export const schema = {
     properties: {
       surface: {
         type: "string",
-        // Only the surfaces the catalog actually tags today. The popup lives
-        // in the 'action' template but is not yet tagged as an 'action'
-        // surface upstream, so filtering surface:'action'/'options'/'devtools'
-        // would silently return nothing; expand this enum once
-        // templates-meta populates those surfaces (see extension.js
-        // BUGS_TO_FIX: template surface tagging).
         enum: ["content", "sidebar", "newtab", "background"],
         description:
           "Filter by extension surface type. For a popup/action starter use the 'action' slug (query:'action'), not a surface filter.",
@@ -63,9 +57,6 @@ export async function handler(args: {
   const results = templates.map((t) => ({
     slug: t.slug,
     description: t.description,
-    // Emit the raw framework value so it round-trips through the `framework`
-    // filter (which matches '' for vanilla) and matches every other surface.
-    // frameworkLabel carries the human-friendly name without breaking that.
     uiFramework: t.uiFramework,
     frameworkLabel: t.uiFramework || "vanilla",
     surfaces: t.surfaces,

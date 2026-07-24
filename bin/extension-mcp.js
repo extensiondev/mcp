@@ -6,6 +6,7 @@
 // ██║ ╚═╝ ██║╚██████╗██║
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
+
 import {startServer, runCli} from '../dist/module.js'
 
 const [, , cmd, ...rest] = process.argv

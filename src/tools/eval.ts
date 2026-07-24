@@ -45,14 +45,6 @@ export const schema = {
   },
 };
 
-// Where a defaulted (no `context` arg) eval should land for this session.
-// On Chromium the default template's background is an MV3 service worker,
-// and Chrome rejects 'unsafe-eval' in MV3 extension contexts, so a
-// background default fails on the most common path (swarm C20). Default to
-// the page context (active tab) there instead; Firefox and MV2 builds keep
-// the background default. Reads the BUILT manifest for the session's browser
-// first (the polyglot source manifest can differ per family), falling back
-// to the source manifest with `chromium:`-prefixed keys.
 export function resolveDefaultEvalContext(
   projectPath: string,
   browser: string,
@@ -83,8 +75,6 @@ export async function handler(
   args: ActArgs & { expression: string },
 ): Promise<string> {
   const { browser } = resolveSessionBrowser(args.projectPath, args.browser);
-  // Only override the CLI's own background default when we KNOW the session
-  // is Chromium MV3; an explicit `context` always wins untouched.
   const defaulted =
     !args.context &&
     resolveDefaultEvalContext(args.projectPath, browser) === "page";
@@ -95,12 +85,6 @@ export async function handler(
     args.timeout,
   );
 
-  // Engines carrying the bug-61 fix (Extension.js >= 4.0.14) reply with an
-  // explicit error when the isolated-world injection never runs, so an ok:true
-  // null from them is a REAL null. Engines older than that could lie
-  // (injection dead, ok:true value:null); keep a soft note for the ambiguous
-  // case only, so an old engine cannot make the MCP complicit without
-  // condemning content eval on engines where it works.
   if (args.context === "content") {
     try {
       const parsed = JSON.parse(raw);
@@ -120,9 +104,6 @@ export async function handler(
         parsed.defaultedContext = "page";
         parsed.contextNote =
           'No context given: defaulted to "page" (the active tab) because this Chromium session\'s MV3 background is a service worker whose CSP blocks eval. Pass context: "background" explicitly to target the worker (works on Firefox/MV2 builds).';
-        // A fresh session's active tab is often the welcome page, which
-        // belongs to the manager extension, so a defaulted page eval fails
-        // with a "different extension" refusal. Say what to do about it.
         if (
           parsed.ok === false &&
           /cannot access|chrome-extension:\/\/|chrome:\/\//i.test(

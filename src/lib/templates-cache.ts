@@ -31,8 +31,6 @@ export async function fetchTemplatesMeta(): Promise<TemplatesMetaV2> {
     return cached as TemplatesMetaV2;
   }
 
-  // Resolve through the owned media release, then the commit-pinned raw
-  // fallback. The first source that returns a valid catalog wins.
   let lastStatus = 0;
   for (const url of await templateMetaUrls()) {
     try {
@@ -50,7 +48,6 @@ export async function fetchTemplatesMeta(): Promise<TemplatesMetaV2> {
     }
   }
 
-  // Every network source failed: serve the last good on-disk cache if present.
   if (fs.existsSync(CACHE_FILE)) {
     return JSON.parse(fs.readFileSync(CACHE_FILE, "utf8")) as TemplatesMetaV2;
   }
@@ -94,11 +91,6 @@ export async function listTemplates(
   }
 
   if (filters?.query) {
-    // Rank by how much of the query a template matches, not exact-phrase
-    // substring. A whole-phrase hit still wins (a natural sentence like
-    // "translate selected text" used to match nothing); otherwise each
-    // meaningful token that appears anywhere in the searchable text adds to
-    // the score, and templates matching more tokens rank first.
     const phrase = filters.query.toLowerCase().trim();
     const STOP = new Set([
       "the", "a", "an", "and", "or", "for", "with", "that", "this",
@@ -124,9 +116,6 @@ export async function listTemplates(
         const body = bodyOf(t);
         const hay = `${slug} ${body}`;
         let score = 0;
-        // Whole-phrase and slug hits are the strongest signal of intent, so
-        // an on-target template (matched by its own name) outranks one that
-        // merely mentions a query word in prose.
         if (phrase && hay.includes(phrase)) score += 100;
         for (const tok of tokens) {
           if (slug.includes(tok)) score += 3;

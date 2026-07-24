@@ -5,11 +5,6 @@ import path from "node:path";
 import { spawn } from "node:child_process";
 import type { ChildProcess } from "node:child_process";
 
-// Stand in for the extension CLI: `node -e <script>` gives a real child process
-// with real exit semantics, so the health tick is exercised end to end rather
-// than against a hand-rolled EventEmitter. Mirrors the real spawnExtensionCli
-// contract: output goes to a log file, not pipes (the detach-outlives-stdio
-// design), and the handle exposes readOutput().
 type SpawnedCli = import("../lib/exec").SpawnedCli;
 const spawned: ChildProcess[] = [];
 function fakeCli(script: string): SpawnedCli {
@@ -87,10 +82,6 @@ afterEach(() => {
   }
 });
 
-// Persona D19 (bug 72): {pid, status:'launched'} was returned for a process
-// that died within seconds. The response shape is ours, so the fix is ours:
-// liveness-tick before claiming launched, and read the engine's
-// browser_exited stamp.
 describe("extension_preview health tick", () => {
   it("reports the death instead of status:launched when the process exits on boot", async () => {
     const project = tmpProject();
@@ -112,8 +103,6 @@ describe("extension_preview health tick", () => {
     const project = tmpProject();
     nextChild = () => {
       const cli = fakeCli("setTimeout(()=>{}, 60000)");
-      // The engine stamps AFTER launch; write it while the tick is waiting so
-      // the stamp is newer than the spawn, as it would be live.
       setTimeout(() => stampBrowserExited(project, "chrome"), 1000);
       return cli;
     };
@@ -128,8 +117,6 @@ describe("extension_preview health tick", () => {
 
   it("ignores a STALE browser_exited stamp from a previous run", async () => {
     const project = tmpProject();
-    // Stamp BEFORE the spawn: a leftover from an earlier dead session must not
-    // condemn a fresh launch.
     stampBrowserExited(project, "chrome");
     const past = Date.now() - 60_000;
     const readyPath = path.join(

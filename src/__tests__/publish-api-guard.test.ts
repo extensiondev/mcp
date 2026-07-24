@@ -1,10 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { safeApiBase } from "../lib/login-flow";
 
-// SECURITY: the publish flow attaches a bearer access token to a request to this
-// base URL. safeApiBase must refuse anything that could exfiltrate the token
-// (non-https, arbitrary schemes) while still allowing the documented https
-// override and localhost dev.
 describe("safeApiBase (publish token egress guard)", () => {
   it("allows the default https platform URL", () => {
     const r = safeApiBase("https://www.extension.dev");

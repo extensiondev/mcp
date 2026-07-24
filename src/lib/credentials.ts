@@ -1,13 +1,10 @@
-// Local credentials store for the `login` flow.
-//
-// `login` persists a project-scoped extension.dev access token here so the
-// publish path can discover it without the user exporting EXTENSION_DEV_TOKEN
-// by hand. The file is the only thing on disk that holds the secret, so it is
-// written 0600 (owner read/write only) and never logged.
-//
-// Location: $XDG_CONFIG_HOME/extension-dev/auth.json (defaulting to
-// ~/.config/extension-dev/auth.json) on macOS/Linux; %APPDATA%\extension-dev\
-// auth.json on Windows. The shape is versioned so the format can evolve.
+// ███╗   ███╗ ██████╗██████╗
+// ████╗ ████║██╔════╝██╔══██╗
+// ██╔████╔██║██║     ██████╔╝
+// ██║╚██╔╝██║██║     ██╔═══╝
+// ██║ ╚═╝ ██║╚██████╗██║
+// ╚═╝     ╚═╝ ╚═════╝╚═╝
+// Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
 import fs from "node:fs";
 import os from "node:os";
@@ -15,15 +12,11 @@ import path from "node:path";
 
 export interface StoredCredentials {
   version: 1;
-  /** The HMAC access token the publish path sends as `Bearer`. */
   token: string;
   workspaceSlug: string;
   projectSlug: string;
-  /** Token expiry as unix epoch seconds (0 if unknown). */
   expiresAt: number;
-  /** Platform base URL the token was minted against. */
   api: string;
-  /** Which device flow minted this token: extension.dev-gated or GitHub-direct. */
   provider?: "extensiondev" | "github";
 }
 
@@ -69,18 +62,12 @@ export function readCredentials(): StoredCredentials | null {
 export function writeCredentials(creds: StoredCredentials): string {
   const file = credentialsPath();
   const dir = path.dirname(file);
-  // Make the directory that holds the secret owner-only (0700) too, not just the
-  // file -- otherwise a world-traversable parent leaks the file's existence and
-  // metadata. `mode` applies only to directories created here; the chmod also
-  // tightens a pre-existing dir. The leading `0o` is the dir mode pre-umask.
   fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
   try {
     fs.chmodSync(dir, 0o700);
   } catch {
     // Best-effort: some filesystems (e.g. Windows) do not support chmod.
   }
-  // The `mode` option only applies when the file is created, so chmod after
-  // writing to also tighten perms on a pre-existing file.
   fs.writeFileSync(file, JSON.stringify(creds, null, 2) + "\n", {
     mode: 0o600,
   });
@@ -102,11 +89,6 @@ export function clearCredentials(): { cleared: boolean; path: string } {
   }
 }
 
-/**
- * Return stored credentials only if the token has not expired. Used by the
- * publish token resolution so an expired local token falls through cleanly to
- * "no token" instead of producing a 401 from the platform.
- */
 export function readValidCredentials(
   nowSeconds: number = Math.floor(Date.now() / 1000),
 ): StoredCredentials | null {

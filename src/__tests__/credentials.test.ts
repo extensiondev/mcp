@@ -42,7 +42,7 @@ describe("credentials store", () => {
   });
 
   it("writes under XDG_CONFIG_HOME and round-trips", () => {
-    if (process.platform === "win32") return; // path uses APPDATA on Windows
+    if (process.platform === "win32") return;
     const file = credentialsPath();
     expect(file).toBe(path.join(tmp, "extension-dev", "auth.json"));
 
@@ -72,14 +72,14 @@ describe("credentials store", () => {
     if (process.platform === "win32") return;
     const dir = path.dirname(credentialsPath());
     fs.mkdirSync(dir, { recursive: true, mode: 0o755 });
-    fs.chmodSync(dir, 0o755); // simulate a loose pre-existing dir
+    fs.chmodSync(dir, 0o755);
     writeCredentials(sample());
     const mode = fs.statSync(dir).mode & 0o777;
     expect(mode).toBe(0o700);
   });
 
   it("readValidCredentials drops an expired token", () => {
-    writeCredentials(sample({ expiresAt: 1000 })); // long past
+    writeCredentials(sample({ expiresAt: 1000 }));
     expect(readCredentials()).not.toBeNull();
     expect(readValidCredentials()).toBeNull();
   });
@@ -100,7 +100,6 @@ describe("credentials store", () => {
     writeCredentials(sample());
     expect(clearCredentials().cleared).toBe(true);
     expect(readCredentials()).toBeNull();
-    // Clearing again is a no-op, not an error.
     expect(clearCredentials().cleared).toBe(false);
   });
 

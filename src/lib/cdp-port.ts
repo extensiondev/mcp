@@ -18,12 +18,6 @@ async function resolveContractPort(
   options?: { waitMs?: number; graceMs?: number },
 ): Promise<{ port: number | null; contractSeen: boolean }> {
   const waitMs = options?.waitMs ?? 20_000;
-  // Once a ready contract exists but carries no debug port, this is almost
-  // always a session type that never exposes one (preview/start shell out to
-  // the project CLI without a debug port, and pre-rdpPort engines never stamp
-  // the Firefox side), not a dev session mid-bind. Cap the wait from that
-  // point to a short grace so list_extensions/source_inspect return their
-  // "needs a dev session" message in ~2.5s instead of burning the full 20s.
   const graceMs = options?.graceMs ?? 2_500;
   const readyPath = path.resolve(
     projectPath,
@@ -78,9 +72,6 @@ export async function resolveCdpPort(
   return null;
 }
 
-// Firefox's debugger server has no conventional default port worth probing:
-// the engine picks a free one at launch, so the ready contract is the only
-// trustworthy source.
 export async function resolveRdpPort(
   projectPath: string,
   browser: string,

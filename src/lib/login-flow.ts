@@ -1,22 +1,17 @@
-// Shared pieces of the `login` flow used by both the MCP tool (two-phase,
-// returns promptly) and the human `extension-mcp login` bin (blocking). Keeps
-// the config fetch and token exchange in one place so the two surfaces cannot
-// drift.
+// ███╗   ███╗ ██████╗██████╗
+// ████╗ ████║██╔════╝██╔══██╗
+// ██╔████╔██║██║     ██████╔╝
+// ██║╚██╔╝██║██║     ██╔═══╝
+// ██║ ╚═╝ ██║╚██████╗██║
+// ╚═╝     ╚═╝ ╚═════╝╚═╝
+// Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
 import { writeCredentials, type StoredCredentials } from "./credentials";
 import { PROD_ORIGINS } from "@extension.dev/urls/origins";
 import { consoleBase, consoleProjectUrl } from "./registry";
 
-// Single source of truth for the platform default; shared with the apps.
 const DEFAULT_API = PROD_ORIGINS.www;
 
-/**
- * The platform clamps CLI token TTL to at most 7 days (server-owned; this
- * client only states the truth). Every token surface repeats it so CI authors
- * learn the rotation contract up front instead of from a 401 a week after
- * wiring the pipeline. Links the console's Access tokens page when the
- * project is known.
- */
 export function tokenTtlNote(
   workspaceSlug?: string,
   projectSlug?: string,
@@ -39,14 +34,6 @@ export function resolveApiBase(api?: string): string {
   ).replace(/\/+$/, "");
 }
 
-/**
- * Validate the platform base URL BEFORE we attach a bearer token to a request to
- * it. SECURITY: the `api` arg / EXTENSION_DEV_API_URL is operator-supplied, but a
- * hostile value (e.g. via prompt-injection in the client) could redirect the
- * token to an attacker. The access token must never leave over plaintext or go to
- * an arbitrary scheme, so we require https -- allowing http only for localhost
- * dev. Returns the normalized base (no trailing slash) or an error message.
- */
 export function safeApiBase(
   raw: string,
 ): { ok: true; base: string } | { ok: false; message: string } {
@@ -71,10 +58,6 @@ export function safeApiBase(
 }
 
 export interface LoginConfig {
-  /**
-   * "extensiondev": the extension.dev-gated device flow (branded /device, GitHub
-   * federated server-side). "github": the legacy GitHub-direct device flow.
-   */
   provider: "extensiondev" | "github";
   clientId: string;
   scope: string;
@@ -83,12 +66,6 @@ export interface LoginConfig {
   verificationUri: string;
 }
 
-/**
- * Resolve how the device flow should authenticate. The server's public config
- * picks the provider (extension.dev-gated once its device endpoints are live,
- * else GitHub-direct). EXTENSION_DEV_GITHUB_CLIENT_ID forces the GitHub flow
- * (useful when pointing at a self-hosted platform).
- */
 export async function fetchLoginConfig(
   apiBase: string,
   fetchImpl: FetchImpl = fetch,
@@ -137,12 +114,6 @@ export async function fetchLoginConfig(
   };
 }
 
-/**
- * Persist a `{ token, expiresAt, workspaceSlug, projectSlug }` response (the
- * shape returned by BOTH the GitHub exchange endpoint and the extension.dev
- * device/token endpoint) to the local credentials file. Records which provider
- * minted it.
- */
 export function persistTokenResponse(args: {
   apiBase: string;
   data: Record<string, unknown>;
@@ -163,11 +134,6 @@ export function persistTokenResponse(args: {
   return creds;
 }
 
-/**
- * Trade a verified GitHub user token for a project-scoped access token and
- * write it to the local credentials file. Returns the stored credentials
- * (token included for the caller's in-memory use; never logged).
- */
 export async function exchangeAndPersist(args: {
   apiBase: string;
   githubToken: string;

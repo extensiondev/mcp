@@ -69,7 +69,6 @@ const ALL_BROWSERS = [
   "safari",
 ] as const;
 
-// Browsers the managed installer (extension_install_browser) can provision.
 const MANAGED_INSTALLABLE = new Set(["chrome", "chromium", "edge", "firefox"]);
 
 const SYSTEM_PATHS: Record<string, Record<string, string[]>> = {
@@ -317,7 +316,6 @@ export async function handler(args: { browsers?: string[] }): Promise<string> {
     }
 
     let version: string | null = null;
-    // Running the Safari binary with --version launches the app, so skip it.
     if (binaryPath && !isWebkit) {
       version = await getVersion(binaryPath, browser);
     }

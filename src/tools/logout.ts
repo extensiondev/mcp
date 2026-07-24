@@ -20,8 +20,6 @@ export const schema = {
 };
 
 export async function handler(): Promise<string> {
-  // Read before clearing: the revoke link needs the workspace/project the
-  // token was scoped to, and after clearCredentials that scope is gone.
   const creds = readCredentials();
   const revokeUrl =
     creds?.workspaceSlug && creds?.projectSlug

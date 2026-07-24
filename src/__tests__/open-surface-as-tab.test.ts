@@ -8,12 +8,7 @@ const navigations: string[] = [];
 let cdpTargets: Array<{ id: string; type: string; url: string; title?: string }> =
   [];
 let cdpPort: { port: number } | null = { port: 9222 };
-// When false, a navigation does NOT produce a live target, the shape of a
-// blocked or 404'd navigation, which must be reported as a failure.
 let navigationLands = true;
-// Popup-render emulation knobs: what the document measures, and whether the
-// browser actually honors Browser.setWindowBounds (a headed window manager
-// can refuse; the tool must then NOT claim popup-faithful rendering).
 let popupMeasure: { w: number; h: number } | null = null;
 let windowResizeHonored = true;
 let windowBounds: { width?: number; height?: number } = {};
@@ -39,9 +34,6 @@ vi.mock("../lib/cdp", () => {
     }
     async navigate(_session: string, url: string) {
       navigations.push(url);
-      // Chrome creates/updates a page target on a successful load. The old
-      // pre-navigation session is NOT a reliable signal (cross-process swap),
-      // which is exactly what the live run exposed.
       if (navigationLands) {
         cdpTargets = [
           ...cdpTargets.filter((t) => t.type !== "page"),
@@ -57,7 +49,6 @@ vi.mock("../lib/cdp", () => {
       return popupMeasure ? { w: popupMeasure.w, h: popupMeasure.h } : null;
     }
     async sendCommand(method: string, params?: Record<string, unknown>) {
-      // A tab the tool opened for itself, rather than one it took over.
       if (method === "Target.createTarget") {
         const url = String(params?.url ?? "");
         navigations.push(url);
@@ -87,9 +78,6 @@ vi.mock("../lib/cdp", () => {
 
 const open = await import("../tools/open");
 
-// Chrome's unpacked-extension id: SHA-256 of the absolute dist path, first 16
-// bytes, nibbles mapped onto a-p. Duplicated here on purpose so the test pins
-// the algorithm independently of the implementation.
 function expectedId(distPath: string): string {
   const d = crypto.createHash("sha256").update(distPath).digest();
   let id = "";
@@ -159,10 +147,6 @@ describe("open surface asTab", () => {
     expect(result.hint).toContain("NOT hosted in a popup window");
   });
 
-  // THE BUG THE LIVE RUN CAUGHT. A dev session also loads Extension.js's own
-  // manager extension; taking the first chrome-extension:// target navigated
-  // the popup path against the WRONG origin and 404'd, while still reporting
-  // ok:true. The id must come from the dist path, not from target order.
   it("picks the project's extension, not another loaded extension", async () => {
     const p = project({
       manifest_version: 3,
@@ -170,7 +154,6 @@ describe("open surface asTab", () => {
       action: { default_popup: "popup.html" },
     });
     cdpTargets = [
-      // The manager extension appears FIRST in the target list.
       {
         id: "mgr",
         type: "service_worker",
@@ -190,7 +173,6 @@ describe("open surface asTab", () => {
     expect(navigations[0]).not.toContain("aaaaaaaa");
   });
 
-  // THE OTHER LIVE BUG: a navigation that never lands used to return ok:true.
   it("reports failure when the navigation does not produce a live target", async () => {
     const p = project({
       manifest_version: 3,
@@ -206,8 +188,6 @@ describe("open surface asTab", () => {
 
     expect(result.ok).toBe(false);
     expect(result.error.name).toBe("NavigateFailed");
-    // Exceeds the 5s default: the handler spends its full 6s poll budget
-    // waiting for a target that never appears.
   }, 15_000);
 
   it("resolves the options document from options_ui.page", async () => {
@@ -235,9 +215,6 @@ describe("open surface asTab", () => {
 
     expect(result.ok).toBe(false);
     expect(result.error.name).toBe("NoSurfaceDocument");
-    // A missing popup is a fact about the extension, not a tooling defect:
-    // the message must say what is absent and where it would be declared,
-    // and the hint must point at a verb that works, not back at itself.
     expect(result.error.message).toContain("declares no popup");
     expect(result.error.message).toContain("action.default_popup");
     expect(result.error.message).toContain("not a failure");
@@ -338,9 +315,6 @@ describe("open surface asTab", () => {
   });
 });
 
-// T-22: every open used to reuse pageTargets[0], so opening any surface
-// navigated away whatever the caller had been told to watch (the trace page,
-// with the carrier's bridge registration on it) and said nothing about it.
 describe("open never destroys the page you were watching", () => {
   it("opens a new background tab instead of taking over a real page", async () => {
     const p = project({
@@ -361,7 +335,6 @@ describe("open never destroys the page you were watching", () => {
     expect(createdTabs).toEqual([
       { url: `chrome-extension://${p.id}/popup.html`, background: true },
     ]);
-    // The watched page is still there, still on its own URL.
     expect(
       cdpTargets.find((t) => t.id === "watched")?.url,
     ).toBe("https://inspect.extension.dev/trace");
@@ -404,16 +377,12 @@ describe("open never destroys the page you were watching", () => {
   });
 
   it("treats a client-side redirect as a landing, not a NavigateFailed", async () => {
-    // The carrier note's own URL client-redirects to /trace?session=live.
-    // Judging the navigation by URL alone reported it dead while the tab was
-    // demonstrably on the page.
     const p = project({ manifest_version: 3, name: "F" });
     cdpTargets = [];
     navigationLands = false;
     const asked = "https://inspect.extension.dev/?session=live";
 
     const pending = open.handler({ projectPath: p.dir, url: asked });
-    // The tab appears a moment later, already redirected.
     await new Promise((r) => setTimeout(r, 300));
     cdpTargets = [
       {
@@ -443,16 +412,11 @@ describe("open never destroys the page you were watching", () => {
     );
 
     expect(result.ok).toBe(false);
-    // It must not send the caller off to debug their own dist for a URL that
-    // has nothing to do with their extension.
     expect(result.hint).not.toMatch(/built dist|BUILT manifest|entrypoints/);
     expect(result.hint).toMatch(/Nothing about your extension bundle/);
   }, 15_000);
 });
 
-// Full headless popup-render: a popup-as-tab is resized to the popup's real
-// content-fit bounds so popup-dependent layouts render as they actually
-// would. The un-deferred remainder of the asTab work.
 describe("popup-as-tab window sizing", () => {
   function popupProject() {
     const p = project({});
@@ -500,10 +464,6 @@ describe("popup-as-tab window sizing", () => {
   });
 
   it("never overrides the BODY width when measuring content size", async () => {
-    // Live run: an inline body { width: fit-content } override beat the
-    // popup's own authored width (body { width: 320px } measured as 127px,
-    // shrink-wrapped to its text). Only the root may take the temporary
-    // fit-content override; body keeps its stylesheet width.
     const p = popupProject();
     popupMeasure = { w: 320, h: 180 };
 
@@ -524,7 +484,6 @@ describe("popup-as-tab window sizing", () => {
       await open.handler({ projectPath: p.dir, surface: "popup", asTab: true }),
     );
 
-    // The navigation itself still succeeded; only the sizing claim must go.
     expect(result.ok).toBe(true);
     expect(result.renderedAsTab.popupBounds).toBeUndefined();
     expect(result.hint).toContain("no popup sizing");

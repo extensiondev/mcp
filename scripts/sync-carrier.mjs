@@ -1,11 +1,11 @@
-// Refresh the bundled live-preview carrier payload from the private
-// extension-core build. Run from inside the extension.dev monorepo after
-// `pnpm build` in apps/extension-core:
-//
-//   node scripts/sync-carrier.mjs
-//
-// The payload ships prebuilt in this public package (extensions/live-preview);
-// the carrier's source stays private.
+// ███╗   ███╗ ██████╗██████╗
+// ████╗ ████║██╔════╝██╔══██╗
+// ██╔████╔██║██║     ██████╔╝
+// ██║╚██╔╝██║██║     ██╔═══╝
+// ██║ ╚═╝ ██║╚██████╗██║
+// ╚═╝     ╚═╝ ╚═════╝╚═╝
+// Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
+
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";

@@ -23,7 +23,6 @@ import {
 import { rdpListTabs } from "../lib/rdp";
 import { listBridgeTabs, matchTabsByUrl } from "../lib/bridge-tabs";
 
-// The Gecko twin of TARGET_ID_NOTE: same two-id-space trap, RDP wording.
 const RDP_ACTOR_NOTE =
   "actor is an RDP tab descriptor actor id, NOT a chrome.tabs id: do not pass it as `tab`. " +
   "Target a tab with `tabUrl` (URL substring) or `url`; if you need a numeric tab id, call extension_dom_inspect with listTabs: true.";
@@ -88,8 +87,6 @@ export const schema = {
   },
 };
 
-// Resolve the session's CDP port, or say precisely which arg gets the caller
-// unstuck. Shared by listTargets and tabUrl, the two CDP-backed paths.
 async function cdpPortOrError(
   projectPath: string,
   browser: string,
@@ -133,15 +130,9 @@ export async function handler(
     withConsole?: number | boolean;
   },
 ): Promise<string> {
-  // `withConsole: true` reads as the obvious way to ask for console output; it
-  // used to be a type error because the arg only accepted a line count.
   const withConsole =
     args.withConsole === true ? 50 : args.withConsole === false ? undefined : args.withConsole;
 
-  // Discovery without a separate tool: the page targets straight from the
-  // debugging endpoint, so a caller can see what is open before targeting it.
-  // Gecko rides the RDP root actor's listTabs, so discovery works even
-  // without allowControl (unlike listTabs, which needs the bridge).
   if (args.listTargets) {
     const { browser } = resolveSessionBrowser(args.projectPath, args.browser);
     if (isGeckoFamily(browser)) {
@@ -218,11 +209,6 @@ export async function handler(
     );
   }
 
-  // `tabUrl` targets by what a human can see: a substring of the tab's URL,
-  // resolved against the live browser (Chromium: CDP page targets; Gecko: the
-  // agent bridge tab list). It only ever proceeds on a UNIQUE match; anything
-  // else returns the candidates so the caller picks, because guessing among
-  // tabs is how inspection reads the wrong page.
   let targetUrl = args.url;
   let targetTab = args.tab;
   let resolvedTarget: Record<string, unknown> | null = null;
@@ -239,9 +225,6 @@ export async function handler(
     }
     const { browser } = resolveSessionBrowser(args.projectPath, args.browser);
     if (!isChromiumFamily(browser)) {
-      // Gecko: same one/zero/many contract, resolved against the bridge tab
-      // list instead of CDP targets. A unique match hands the engine the
-      // NUMERIC tab id (stronger than an exact-url re-match).
       const listed = await listBridgeTabs(
         args.projectPath,
         browser,
@@ -314,17 +297,10 @@ export async function handler(
         });
       }
       resolvedTarget = { ...matches[0] };
-      // Hand the engine the matched tab's EXACT url: uniqueness was just
-      // proven against the live target list, so the engine-side match cannot
-      // fan out.
       targetUrl = matches[0].url;
     }
   }
 
-  // No tab-id precondition any more. The engine's executor resolves the target
-  // from `url` and otherwise falls back to the active tab (upstream #51), so
-  // refusing here would block the very path that now works and push callers to
-  // source_inspect for something dom_inspect can do.
   const cli = ["inspect", args.projectPath];
   if (targetTab != null) cli.push("--tab", String(targetTab));
   if (targetUrl) cli.push("--url", targetUrl);
@@ -336,8 +312,6 @@ export async function handler(
   if (args.timeout != null) cli.push("--timeout", String(args.timeout));
   const raw = await runActVerb(cli, args.projectPath, args.timeout);
   if (!resolvedTarget) return raw;
-  // Say which tab the substring resolved to, so the caller can verify the
-  // match without a second discovery round-trip.
   try {
     const parsed = JSON.parse(raw);
     parsed.resolvedTarget = { ...resolvedTarget, matchedBy: "tabUrl" };

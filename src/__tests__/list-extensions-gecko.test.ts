@@ -4,12 +4,6 @@ import os from "node:os";
 import path from "node:path";
 import type { RdpAddon } from "../lib/rdp";
 
-// Firefox parity for extension_list_extensions (upstream entry 78 landed: the
-// engine stamps rdpPort into ready.json). The Gecko path lists installed
-// add-ons via the RDP root actor instead of erroring "not yet supported".
-// These tests pin the mapping: system/hidden add-ons are filtered, the dev
-// session's extension is flagged ownExtension (contract-name match first, lone
-// temporary install as fallback), and a missing rdpPort explains the upgrade.
 
 let rdpAddons: RdpAddon[] = [];
 let rdpError: Error | null = null;
@@ -41,8 +35,6 @@ const listExtensions = await import("../tools/list-extensions");
 
 const tmpDirs: string[] = [];
 
-// A project whose firefox ready.json stamps the identity fields the engine
-// writes; the browser dir must exist for resolveSessionBrowser's sightings.
 function project(contract: Record<string, unknown> = {}): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-list-gecko-"));
   tmpDirs.push(dir);
@@ -96,7 +88,6 @@ describe("extension_list_extensions on Gecko (RDP root listAddons)", () => {
     expect(result.browser).toBe("firefox");
     expect(result.count).toBe(2);
     expect(result.ownExtensionId).toBe("probe@extension.dev");
-    // Own extension sorts first.
     expect(result.extensions[0]).toEqual({
       id: "probe@extension.dev",
       name: "RDP Probe",
@@ -126,7 +117,6 @@ describe("extension_list_extensions on Gecko (RDP root listAddons)", () => {
         hidden: true,
       },
       { id: "legacy@old", name: "Legacy", isWebExtension: false },
-      // GMP plugins (Widevine, OpenH264) carry NO isWebExtension field at all.
       { id: "gmp-widevinecdm", name: "Widevine CDM" },
       { id: "keep@ext", name: "Keeper", isWebExtension: true },
     ];
@@ -162,7 +152,6 @@ describe("extension_list_extensions on Gecko (RDP root listAddons)", () => {
       (e: { ownExtension?: boolean }) => e.ownExtension,
     );
     expect(own.id).toBe("generated-temp-id@temporary-addon");
-    // Identity backfilled from the contract when RDP exposes none.
     expect(own.name).toBe("My Project");
     expect(own.version).toBe("0.1.0");
     expect(own.source).toBe("session-contract");

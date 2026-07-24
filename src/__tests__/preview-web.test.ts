@@ -6,12 +6,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { handler, schema } from "../tools/preview-web";
 
-// "No live dev session" has to be STATED, not assumed. resolveCdpPort falls
-// back to probing port 9222 when a project has no ready contract, so on any
-// machine with a debug browser open (which is most developer machines, and any
-// CI job that ran a browser step earlier) the real resolver finds a session and
-// the no-session assertions below invert. Pinning it here keeps the test about
-// the tool's behavior instead of about what else is running on the box.
 vi.mock("../lib/cdp-port", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../lib/cdp-port")>()),
   resolveCdpPort: async () => null,
@@ -75,8 +69,6 @@ describe("extension_preview_web", () => {
       expect(out.surfaces).toEqual(
         expect.arrayContaining(["popup", "background-worker"]),
       );
-      // The author's door runs on 3110; the deep link must point there without
-      // the caller having to say so.
       expect(new URL(out.deepLink).port).toBe("3110");
       const internal = new URL(out.deepLink).searchParams.get("url") ?? "";
       expect(internal.startsWith("preview://build/")).toBe(true);
@@ -106,7 +98,6 @@ describe("extension_preview_web", () => {
       const internal = new URL(out.deepLink).searchParams.get("url") ?? "";
       expect(internal.startsWith("inspect://path/")).toBe(true);
 
-      // inspectUrl predates the preview surface, so it only speaks for inspect.
       const overridden = JSON.parse(
         await handler({
           projectPath: dir,
@@ -237,8 +228,6 @@ describe("extension_preview_web", () => {
       prevToken = process.env.EXTENSION_DEV_TOKEN;
       prevApi = process.env.EXTENSION_DEV_API_URL;
       prevPreview = process.env.EXTENSION_DEV_PREVIEW_URL;
-      // Isolate credential resolution so a real login on the dev box never
-      // leaks into these tests.
       cfg = fs.mkdtempSync(path.join(os.tmpdir(), "preview-web-cfg-"));
       process.env.XDG_CONFIG_HOME = cfg;
       delete process.env.EXTENSION_DEV_TOKEN;
@@ -264,7 +253,6 @@ describe("extension_preview_web", () => {
         const out = JSON.parse(
           await handler({ projectPath: dir, build: false, distPath: dir, probe: false, share: true }),
         );
-        // Local preview still succeeds; share carries the auth verdict.
         expect(out.ok).toBe(true);
         expect(out.deepLink).toBeTruthy();
         expect(out.share.requested).toBe(true);
@@ -280,7 +268,6 @@ describe("extension_preview_web", () => {
       const dir = tmpDist(MANIFEST);
       process.env.EXTENSION_DEV_TOKEN = "tok_test";
       let uploaded: any = null;
-      // The only network call with probe:false is the artifact upload.
       global.fetch = (async (url: string, init: any) => {
         expect(String(url)).toContain("/api/artifacts");
         expect(init.headers.authorization).toBe("Bearer tok_test");
@@ -306,7 +293,6 @@ describe("extension_preview_web", () => {
         expect(out.share.previewUrl).toBe(
           "https://preview.extension.dev/?preview=gen_abc123",
         );
-        // The whole point: the bytes on disk are what got sent.
         expect(out.share.serves).toBe("uploaded-local-build");
         expect(out.share.localBuildUploaded).toBe(true);
         expect(out.share.revokeUrl).toBeTruthy();
@@ -315,7 +301,6 @@ describe("extension_preview_web", () => {
         expect(uploaded.kind).toBe("dist");
         const paths = uploaded.generation.files.map((f: any) => f.path);
         expect(paths).toContain("manifest.json");
-        // manifest.json is text, so it must travel readable, not base64.
         const manifestEntry = uploaded.generation.files.find(
           (f: any) => f.path === "manifest.json",
         );
@@ -338,7 +323,6 @@ describe("extension_preview_web", () => {
         const out = JSON.parse(
           await handler({ projectPath: dir, build: false, distPath: dir, probe: false, share: true }),
         );
-        // A share failure must never cost the caller the local deep link.
         expect(out.ok).toBe(true);
         expect(out.deepLink).toBeTruthy();
         expect(out.share.ok).toBe(false);

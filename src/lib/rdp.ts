@@ -9,12 +9,6 @@
 import net from "node:net";
 import type { ConsoleMessage } from "./console-summary";
 
-// Minimal client for Firefox's legacy Remote Debugging Protocol, the server
-// behind -start-debugger-server (what about:debugging and web-ext speak).
-// Deliberately NOT WebDriver BiDi: BiDi is single-session, and this client must
-// be able to attach alongside anything else the session already talks to.
-// Implemented surface: root listAddons/listTabs, and the watcher console
-// resource replay. Page DOM is never driven through the inspector walker.
 
 export interface RdpAddon {
   id?: string;
@@ -29,7 +23,6 @@ export interface RdpAddon {
   [key: string]: unknown;
 }
 
-// A tab descriptor as modern Firefox returns it from root listTabs.
 export interface RdpTab {
   actor?: string;
   url?: string;
@@ -39,8 +32,6 @@ export interface RdpTab {
   [key: string]: unknown;
 }
 
-// RDP framing: the decimal BYTE length of the JSON payload in ASCII, a colon,
-// then the payload. Packets arrive back to back and can split across chunks.
 export function encodeRdpPacket(packet: Record<string, unknown>): Buffer {
   const json = Buffer.from(JSON.stringify(packet), "utf8");
   return Buffer.concat([Buffer.from(`${json.length}:`, "ascii"), json]);
@@ -76,11 +67,6 @@ export class RdpPacketDecoder {
 
 type RdpPacket = Record<string, unknown>;
 
-// A live RDP connection with request/reply plus an event tap. The wire rule
-// that makes correlation safe (verified live): REPLIES carry no `type` field,
-// EVENTS always do, and events from an actor can arrive BEFORE that actor's
-// reply (watchTargets emits target-available-form first), so "next packet from
-// the actor" is not a reply matcher; "next typeless packet from the actor" is.
 export class RdpSession {
   private waiters: Array<{
     match: (p: RdpPacket) => boolean;
@@ -142,8 +128,6 @@ export class RdpSession {
       });
       socket.on("close", () => {
         session.closed = true;
-        // A dying connection must fail pending requests, not strand them
-        // until their timers fire.
         for (const waiter of session.waiters.splice(0)) {
           waiter.reject(
             new Error("RDP connection closed before a reply arrived"),
@@ -153,8 +137,6 @@ export class RdpSession {
     });
   }
 
-  // One request to one actor; resolves with the typeless reply packet, or
-  // rejects on an error reply / timeout / closed connection.
   request(
     actor: string,
     packet: RdpPacket,
@@ -200,7 +182,6 @@ export class RdpSession {
     });
   }
 
-  // Observe every incoming packet (events included). Returns the untap.
   tap(handler: (p: RdpPacket) => void): () => void {
     this.taps.add(handler);
     return () => this.taps.delete(handler);
@@ -247,8 +228,6 @@ export async function rdpListTabs(
   });
 }
 
-// One console-message resource argument, as the watcher serializes it: strings
-// come through verbatim, objects as a grip with a `class`.
 function formatConsoleArg(arg: unknown): string {
   if (arg === null || arg === undefined) return String(arg);
   if (typeof arg === "object") {
@@ -258,12 +237,6 @@ function formatConsoleArg(arg: unknown): string {
   return String(arg);
 }
 
-// Collect the tab's console history over RDP. Modern Firefox replays cached
-// messages through the watcher's resources API, NOT through the console
-// actor's getCachedMessages (verified live: getCachedMessages returns [] while
-// a watcher configured with isServerTargetSwitchingEnabled replays everything
-// on watchResources, no reload needed). The collection window after the
-// watchResources reply exists for stragglers; the replay itself is immediate.
 export async function rdpCollectConsoleMessages(
   port: number,
   options?: {

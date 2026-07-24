@@ -3,14 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-// Surprise-swarm cluster C4: extension_create decided silently (server cwd,
-// auto-picked package manager, unrequested git repo, defaulted browser). These
-// tests pin the fix: the result leads with the resolved destination and a
-// defaultsApplied block that names every decision taken without being asked.
 
-// The scaffold target the fake engine writes to; the handler trusts
-// result.projectPath, so the fake can land the tree in a tmp dir regardless of
-// what cwd-relative input it received.
 let scaffoldTarget = "";
 let withGit = false;
 

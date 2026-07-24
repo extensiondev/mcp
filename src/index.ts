@@ -268,9 +268,6 @@ export async function runCli(cmd: string, args: string[]): Promise<number> {
     try {
       const config = await fetchLoginConfig(apiBase);
 
-      // extension.dev-gated device flow (branded /device, GitHub server-side).
-      // Mirrors the tools/login.ts provider branch so the shell CLI and the MCP
-      // tool authenticate identically instead of the CLI always forcing GitHub.
       if (config.provider === "extensiondev") {
         const start = await requestDeviceCode({
           apiBase,
@@ -303,7 +300,6 @@ export async function runCli(cmd: string, args: string[]): Promise<number> {
         return 0;
       }
 
-      // Legacy GitHub-direct device flow (fallback until the server default flips).
       const start = await startDeviceCode({
         clientId: config.clientId,
         scope: config.scope,

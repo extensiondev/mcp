@@ -58,8 +58,6 @@ export async function handler(args: {
     );
   }
 
-  // Validate ttlHours against the documented range instead of letting an
-  // out-of-range value be silently clamped server-side with no feedback.
   if (args.ttlHours != null) {
     const t = Number(args.ttlHours);
     if (!Number.isInteger(t) || t < 1 || t > 168) {
@@ -70,8 +68,6 @@ export async function handler(args: {
     }
   }
 
-  // Validate buildSha shape (a git sha is 7-40 hex chars) to catch typos; the
-  // build's actual existence is the platform's responsibility (see note below).
   if (args.buildSha != null && args.buildSha !== "") {
     if (!/^[0-9a-f]{7,40}$/i.test(args.buildSha)) {
       return fail(
@@ -90,18 +86,12 @@ export async function handler(args: {
 
   if (!result.ok) return JSON.stringify(result);
 
-  // Surface why ttlHours had no effect rather than accepting it silently: a
-  // public project returns the canonical URL with no ttl/expiresAt.
   const data = result.data as Record<string, unknown>;
   if (args.ttlHours != null && data.visibility === "public") {
     data.note =
       "ttlHours was ignored: this is a public project, whose share URL is its canonical public page.";
   }
 
-  // Say WHAT the link serves, not just where it is: resolve the build behind
-  // the share URL from the public registry's build index (buildSha, builtAt,
-  // version, channel). Additive and best-effort - a registry blip or a
-  // private project must never fail a publish that already succeeded.
   const ref = resolveProjectRef();
   if (ref) {
     const buildsUrl = registryFileUrl(ref, "builds/index.json");

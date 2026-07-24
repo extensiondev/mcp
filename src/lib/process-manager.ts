@@ -18,13 +18,6 @@ function sessionKey(projectPath: string, browser: string): string {
   return `${path.resolve(projectPath)}::${browser}`;
 }
 
-// On-disk session markers, one per projectPath+browser. The in-memory map dies
-// with this process and loses its entry the moment a dev child exits, but the
-// browser leg routinely outlives both: that gap is how extension_stop all:true
-// answered "No sessions registered" while a session pid was demonstrably alive
-// (surprise-swarm C5). Markers persist until an explicit stop prunes them, so
-// all:true can rediscover the projects and then verify liveness through the
-// same ready.json contract the projectPath path uses.
 function markerDir(): string {
   return (
     process.env.EXTENSION_MCP_SESSION_DIR ||
@@ -102,10 +95,6 @@ export function getSession(
   return sessions.get(sessionKey(projectPath, browser));
 }
 
-// Session info by projectPath+browser from wherever it survives: the in-memory
-// registry first (same MCP process), then the on-disk marker (a fresh MCP
-// process after a restart). extension_wait uses this to learn session facts
-// the ready.json contract does not carry, like noBrowser.
 export function findSessionInfo(
   projectPath: string,
   browser: string,
@@ -124,10 +113,6 @@ export function findSessionInfo(
   return undefined;
 }
 
-// Memory only, deliberately: this fires on child exit, and the child dying
-// says nothing about the browser it launched (Firefox detaches). The marker
-// stays until extension_stop prunes it, or all:true would forget a session
-// whose browser is still holding the profile.
 export function removeSession(projectPath: string, browser: string): void {
   sessions.delete(sessionKey(projectPath, browser));
 }

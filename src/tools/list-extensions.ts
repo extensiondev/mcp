@@ -53,12 +53,6 @@ interface ExtensionEntry {
   note?: string;
 }
 
-// Chrome derives an UNPACKED extension's id from the SHA-256 of its absolute
-// directory path: the first 16 bytes, each nibble mapped 0-15 onto 'a'-'p'.
-// Recomputing it is deterministic and needs no browser round-trip. Mirrors
-// resolveExtensionId in open.ts, which caught live that a dev session ALSO
-// loads Extension.js's own manager extension, so "some chrome-extension://
-// target" is frequently not the project's.
 function unpackedExtensionId(distPath: string): string {
   const digest = crypto.createHash("sha256").update(distPath).digest();
   let id = "";
@@ -70,17 +64,11 @@ function unpackedExtensionId(distPath: string): string {
 }
 
 interface OwnIdentity {
-  // Path-derived id candidates: the dist path as the contract records it plus
-  // its realpath, in case the engine loaded through a symlink (/tmp on macOS).
   ids: string[];
   name?: string;
   version?: string;
 }
 
-// The identity of the extension THIS session serves, from the ready contract
-// the engine writes (it stamps extensionName/extensionVersion and the distPath
-// it actually loaded). Falls back to the built manifest next to that distPath
-// for engines that predate the identity stamp.
 function readOwnIdentity(
   projectPath: string,
   browser: string,
@@ -125,8 +113,6 @@ function readOwnIdentity(
       const manifest = JSON.parse(
         fs.readFileSync(path.join(distPath, "manifest.json"), "utf8"),
       );
-      // A __MSG_*__ placeholder is worse than no name: it is not what the
-      // browser displays. Skip it rather than surface the raw key.
       if (
         !name &&
         typeof manifest?.name === "string" &&
@@ -242,9 +228,6 @@ export async function handler(args: {
       extensions.push(entry);
     }
 
-    // The path-derived id can miss (a profile-relocated or key-pinned load).
-    // When it does but the Extensions domain DID resolve a name that matches
-    // the contract's, that entry is the session's extension all the same.
     if (own?.name && !extensions.some((e) => e.ownExtension)) {
       const byName = extensions.filter((e) => e.name === own.name);
       if (byName.length === 1) byName[0].ownExtension = true;
@@ -254,8 +237,6 @@ export async function handler(args: {
       if (entry.name === undefined) entry.note = UNRESOLVED_NOTE;
     }
 
-    // Own extension first: it is the one the caller is developing, and the one
-    // every follow-up tool call targets.
     extensions.sort((a, b) => {
       if ((a.ownExtension ?? false) !== (b.ownExtension ?? false)) {
         return a.ownExtension ? -1 : 1;
@@ -282,10 +263,6 @@ export async function handler(args: {
   }
 }
 
-// Firefox pairing: the RDP root actor's listAddons is the only channel that can
-// see add-ons the in-bundle control relay does not live in (upstream entry 78:
-// the engine stamps rdpPort into ready.json from 4.0.15 on). Root-level listing
-// only; add-on targets are never attached to or evaluated in.
 async function listGeckoExtensions(
   projectPath: string,
   browser: string,
@@ -319,10 +296,6 @@ async function listGeckoExtensions(
     const own = readOwnIdentity(projectPath, browser);
 
     const extensions: ExtensionEntry[] = addons
-      // Strictly isWebExtension === true: GMP plugins (Widevine, OpenH264)
-      // come back from listAddons WITHOUT the field at all (verified live
-      // against Firefox via the canary engine), while every real extension
-      // and theme carries it, built-in system add-ons included.
       .filter(
         (addon) =>
           addon.isWebExtension === true &&
@@ -343,11 +316,6 @@ async function listGeckoExtensions(
         return entry;
       });
 
-    // The Chromium path derives the own id from the dist path; Gecko add-on ids
-    // come from the manifest (or a generated temp id), so match on the identity
-    // the ready contract stamps instead. A temp install is the fallback signal:
-    // the dev session's extension is loaded temporarily, so a lone
-    // temporarilyInstalled entry is it even when the names disagree.
     if (own?.name) {
       const byName = extensions.filter((e) => e.name === own.name);
       if (byName.length === 1) byName[0].ownExtension = true;

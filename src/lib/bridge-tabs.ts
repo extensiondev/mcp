@@ -8,19 +8,12 @@
 
 import { runActVerb } from "./act";
 
-// A tab as the agent bridge reports it. `tabId` is a NUMERIC chrome.tabs id
-// (usable as the `tab` arg everywhere), never a CDP target id; null when the
-// engine did not report one.
 export interface BridgeTab {
   tabId: number | null;
   url: string;
   title: string;
 }
 
-// Enumerate open tabs over the agent bridge (`inspect --list-tabs`), the
-// CDP-free discovery path that works on every browser family. Returns the
-// engine's own error envelope untouched when the call fails, so callers
-// surface the real session diagnosis instead of a re-guessed one.
 export async function listBridgeTabs(
   projectPath: string,
   browser: string,
@@ -67,10 +60,6 @@ export async function listBridgeTabs(
   };
 }
 
-// Case-insensitive substring match, url first and title only as a fallback,
-// mirroring matchTargetsByUrl so `tabUrl` means the same thing on every
-// browser family. Returns the full matching set; the caller decides what
-// one/zero/many means.
 export function matchTabsByUrl(tabs: BridgeTab[], needle: string): BridgeTab[] {
   const wanted = needle.toLowerCase();
   const byUrl = tabs.filter((t) => t.url.toLowerCase().includes(wanted));
@@ -78,10 +67,6 @@ export function matchTabsByUrl(tabs: BridgeTab[], needle: string): BridgeTab[] {
   return tabs.filter((t) => t.title.toLowerCase().includes(wanted));
 }
 
-// Poll the bridge tab list until some tab reports the URL we navigated to,
-// the bridge twin of the CDP pollForTarget: after a cross-process swap the
-// pre-navigation state is stale, so a fresh enumeration is the only
-// trustworthy success signal.
 export async function pollForBridgeTab(
   projectPath: string,
   browser: string,
@@ -102,11 +87,6 @@ export async function pollForBridgeTab(
   }
 }
 
-// Navigate a real tab to a URL over the agent bridge: a background-context
-// eval of tabs.update on the active tab (tabs.create when none exists).
-// This is the Gecko pairing of the CDP navigateToUrl path; tabs.update needs
-// no extra permission, and the settle poll below is the success signal, so
-// the eval's own return value is only used opportunistically.
 export async function navigateToUrlViaBridge(
   projectPath: string,
   browser: string,
@@ -169,17 +149,11 @@ export async function navigateToUrlViaBridge(
   return JSON.stringify({
     ok: true,
     navigated: url,
-    // A NUMERIC chrome.tabs id, directly usable as the `tab` arg of
-    // extension_dom_inspect / extension_eval (unlike the CDP path's targetId).
     tab: { tabId: settled.tabId, url: settled.url, title: settled.title },
     hint: "Inspect it with extension_dom_inspect or extension_eval using url or this numeric tab id (context: 'page'/'content').",
   });
 }
 
-// This extension's own base URL (moz-extension://<uuid>/ on Gecko), read from
-// the live session via runtime.getURL. The Chrome trick of deriving the id
-// from the dist path hash does not exist on Firefox: the internal UUID is
-// random per profile, so the running extension is the only source of truth.
 export async function resolveBridgeBaseUrl(
   projectPath: string,
   browser: string,

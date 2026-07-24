@@ -13,11 +13,6 @@ import * as logs from "../tools/logs";
 import * as storage from "../tools/storage";
 import * as addFeature from "../tools/add-feature";
 
-// Without a ready contract, resolveCdpPort probes port 9222, so any Chrome
-// started with remote debugging on the developer's machine counts as a live
-// session and inverts the "no dev session" assertions below. Stating the
-// precondition here keeps those tests about the handler, not the machine.
-// Same pattern as preview-web.test.ts.
 vi.mock("../lib/cdp-port", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../lib/cdp-port")>()),
   resolveCdpPort: async () => null,

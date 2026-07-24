@@ -42,7 +42,6 @@ describe("extension_deploy: platform submit handler", () => {
   let prevFetch: typeof fetch;
 
   beforeEach(() => {
-    // Isolate resolveToken: empty config dir (no stored login creds) + no env token.
     tmp = fs.mkdtempSync(path.join(os.tmpdir(), "extdev-deploy-"));
     prevXdg = process.env.XDG_CONFIG_HOME;
     prevToken = process.env.EXTENSION_DEV_TOKEN;
@@ -113,13 +112,10 @@ describe("extension_deploy: platform submit handler", () => {
     expect(captured!.init.method).toBe("POST");
     expect(captured!.init.headers.authorization).toBe("Bearer tok-123");
     const body = JSON.parse(captured!.init.body);
-    expect(body.browsers).toEqual(["chrome", "firefox"]); // lower-cased + trimmed
+    expect(body.browsers).toEqual(["chrome", "firefox"]);
     expect(body.buildSha).toBe("abc1234");
-    expect(body.dryRun).toBe(true); // irreversible submit -> safe default
+    expect(body.dryRun).toBe(true);
     expect(out.mode).toBe("platform");
-    // No stored login in this env, so store config is unverifiable: the
-    // preflight must refuse to echo an unqualified OK (the C2 false
-    // affordance) and keep the platform's own message under its own key.
     expect(out.ok).toBe(false);
     expect(out.platformMessage).toBe("Preflight OK");
     expect(out.preflight).toHaveLength(2);
@@ -146,13 +142,11 @@ describe("extension_deploy: platform submit handler", () => {
     global.fetch = (async () =>
       jsonResponse({ ok: true, dryRun: true })) as unknown as typeof fetch;
     const prevCwd = process.cwd();
-    process.chdir(tmp); // no STORE.md here
+    process.chdir(tmp);
     try {
       const out = JSON.parse(
         await handler({ browsers: ["firefox"], buildSha: "abc1234" }),
       );
-      // The warning rides the result; it must never be the blocking reason
-      // (any block comes from store verification, not STORE.md).
       expect(out.warnings).toHaveLength(1);
       expect(out.warnings[0]).toContain("No STORE.md");
       expect(out.preflight[0].reason).not.toContain("STORE.md");

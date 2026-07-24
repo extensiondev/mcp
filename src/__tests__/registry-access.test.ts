@@ -6,13 +6,6 @@ import {
   withAccessToken,
 } from "../lib/registry-access";
 
-/**
- * The point of this path: a private project used to read as "no builds" even
- * for the operator who owns it. These tests pin that it now reads, that a
- * public project still costs exactly one request and never touches the
- * platform, and that a long-lived stored token is never the thing put in the
- * URL.
- */
 
 vi.mock("../lib/credentials", () => ({
   readCredentials: vi.fn(() => ({
@@ -162,7 +155,6 @@ describe("private projects", () => {
     );
     expect(res.ok).toBe(false);
     expect((res as { message: string }).message).toContain("extension_login");
-    // The stored login names a different project, so it must not even ask.
     expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
 

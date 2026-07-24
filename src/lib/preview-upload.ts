@@ -6,18 +6,6 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-// Shareable-preview upload client.
-//
-// Takes the dist directory that was just built on THIS machine and puts it in
-// the platform's artifact store, so the link it returns renders those exact
-// bytes for whoever opens it. This is the piece that makes a local build
-// shareable at all: every other rail here either needs the recipient to be on
-// the author's machine (the preview://build dev scheme) or serves whatever the
-// project's CI last published (/api/cli/publish).
-//
-// Auth is auth-AWARE not auth-HOLDING, matching lib/publish: the token is read
-// at call time, sent once, never persisted or logged.
-
 import fs from "node:fs";
 import path from "node:path";
 
@@ -26,7 +14,6 @@ import { resolveApiBase, safeApiBase } from "./login-flow";
 
 type FetchImpl = typeof fetch;
 
-/** Never worth uploading, and in the case of node_modules actively harmful. */
 const IGNORED_SEGMENTS = new Set([
   "node_modules",
   ".git",
@@ -34,15 +21,8 @@ const IGNORED_SEGMENTS = new Set([
   "__MACOSX",
 ]);
 
-// Text is sent as utf8 so the payload stays readable and small; everything else
-// goes base64 with the encoding stated explicitly, because guessing from the
-// extension breaks on the binaries a real bundler emits (wasm, .map assets,
-// fonts with odd names). The server honors `encoding` over any sniffing.
 const TEXTUAL = /\.(json|js|mjs|cjs|ts|tsx|jsx|html|htm|css|svg|txt|md|map)$/i;
 
-// Mirrors the server's dist caps (apps/www.extension.dev/src/app/api/artifacts).
-// Checked here too so an oversized build fails with a local, actionable message
-// instead of a 413 after uploading tens of megabytes.
 const MAX_FILES = 2_000;
 const MAX_CONTENT_CHARS = 64 * 1024 * 1024;
 
@@ -64,11 +44,6 @@ export type PreviewUploadOutcome =
   | { ok: true; data: PreviewUploadResult }
   | { ok: false; error: { name: string; message: string } };
 
-/**
- * Walk a built extension directory into upload entries with paths relative to
- * its root. Symlinks are not followed: a dist that links outside itself would
- * otherwise pull arbitrary files off the developer's disk into a shared link.
- */
 export function collectDistFiles(distDir: string): PreviewUploadFile[] {
   const files: PreviewUploadFile[] = [];
   const walk = (dir: string) => {
@@ -97,12 +72,6 @@ export function collectDistFiles(distDir: string): PreviewUploadFile[] {
   return files.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
 }
 
-/**
- * Upload a built dist and get back a link that renders it. `idempotencyKey` is
- * deliberately NOT set: the server dedupes on a hash of (owner, metadata,
- * files), so re-sharing an unchanged build resolves the same link and a rebuilt
- * one gets a fresh link, with no bookkeeping on this side.
- */
 export async function uploadPreview(options: {
   distDir: string;
   manifest: Record<string, unknown>;
@@ -123,8 +92,6 @@ export async function uploadPreview(options: {
     };
   }
 
-  // Same egress guard as publish: the base URL is operator-supplied and the
-  // bearer token must never leave over plaintext or an arbitrary scheme.
   const apiCheck = safeApiBase(resolveApiBase(options.api));
   if (!apiCheck.ok) {
     return {

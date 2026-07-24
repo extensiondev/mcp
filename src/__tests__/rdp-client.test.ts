@@ -8,11 +8,6 @@ import {
   rdpCollectConsoleMessages,
 } from "../lib/rdp";
 
-// Firefox RDP parity (upstream entry 78): the engine now stamps rdpPort into
-// ready.json, and the MCP grows this minimal client so list_extensions can ride
-// the root actor's listAddons. These tests pin the wire framing (decimal byte
-// length, colon, JSON) and the greeting -> listAddons -> addons handshake
-// against a real TCP server, chunk splits and unsolicited packets included.
 
 describe("RDP packet framing", () => {
   it("round-trips a packet through encode and decode", () => {
@@ -38,8 +33,6 @@ describe("RDP packet framing", () => {
       encodeRdpPacket({ from: "root", seq: 1 }),
       encodeRdpPacket({ from: "root", seq: 2 }),
     ]);
-    // Cut mid-first-packet: nothing decodes until the rest arrives, then both
-    // packets come out of the second push.
     const cut = 7;
     expect(decoder.push(combined.subarray(0, cut))).toEqual([]);
     expect(decoder.push(combined.subarray(cut))).toEqual([
@@ -71,8 +64,6 @@ afterEach(async () => {
   );
 });
 
-// A scripted RDP server: greets on connect, then hands every decoded client
-// packet to the script.
 function listen(script: ServerScript): Promise<number> {
   const server = net.createServer((socket) => {
     const decoder = new RdpPacketDecoder();
@@ -163,11 +154,6 @@ describe("rdpListAddons", () => {
 });
 
 describe("rdpCollectConsoleMessages", () => {
-  // The flow verified live: getWatcher (configured) -> watchTargets ->
-  // watchResources, with the cached console history replayed as
-  // resources-available-array packets. watchTargets emits its
-  // target-available-form event BEFORE its own reply, which is exactly why
-  // replies are matched as typeless packets.
   it("collects the watcher replay, events-before-reply ordering included", async () => {
     const port = await listen((socket, packet) => {
       if (!packet) return;

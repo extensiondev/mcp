@@ -97,10 +97,6 @@ export async function handler(
 ): Promise<string> {
   const browser = args.browser ?? "chrome";
 
-  // Fork guard (swarm C5): a second dev call on the same projectPath used to
-  // return ok:true while its browser died on the profile lock, leaving two
-  // overlapping sessions. Detect a live session up front and either refuse or,
-  // with replace:true, stop it first and say so.
   const existing = liveProjectSessions(args.projectPath);
   const replaced: Array<{ pid: number; browser: string }> = [];
   if (existing.length > 0) {
@@ -125,15 +121,10 @@ export async function handler(
     }
   }
 
-  // Place the carrier companion before the spawn so Extension.js's
-  // extensions-folder scan (which runs at launch) picks it up first try.
   const carrier = args.carrier
     ? materializeCarrier(args.projectPath, browser)
     : null;
 
-  // allowEval is a superset of allowControl (eval can do anything the control
-  // verbs can), so enabling eval must also open the control channel, otherwise
-  // callers who pass allowEval:true hit silent refusals on storage/reload/open.
   const allowControl = Boolean(args.allowControl || args.allowEval);
   const cliArgs = ["dev", args.projectPath, "--browser", browser];
   if (args.port !== undefined) cliArgs.push("--port", String(args.port));
@@ -160,20 +151,8 @@ export async function handler(
 
   await new Promise((resolve) => setTimeout(resolve, 3000));
   const earlyOutput = spawned.readOutput();
-  // Classify and report on the DENOISED text, never the raw stream. On a cold
-  // machine the engine is fetched on first use and npm prints "npm warn exec The
-  // following package was not found and will be installed: extension@...": the
-  // "not found" in that benign notice matched the compile-failed regex below and
-  // the smoke reported status:"compile-failed" for an extension that then
-  // compiled clean. Denoise first so package-manager chatter cannot masquerade
-  // as a build error.
   const cleanOutput = denoiseEarlyOutput(earlyOutput);
 
-  // Health tick before claiming "started". This used to report status:"started"
-  // unconditionally after the fixed 3s wait, so a dev server that died on boot
-  // (port taken, bad manifest, missing binary) still read as a healthy session,
-  // and every later tool call then failed against a session that was never
-  // alive. Report the death honestly, with the child's own output as evidence.
   if (child.exitCode !== null || child.signalCode !== null) {
     const code = child.exitCode;
     const signal = child.signalCode;
@@ -196,11 +175,6 @@ export async function handler(
     });
   }
 
-  // A FAILED FIRST COMPILE leaves the dev server alive, so the process health
-  // tick above cannot see it: the swarm caught 3 personas being told
-  // status:"started" while the error sat buried in earlyOutput, then being
-  // pointed onward to extension_wait against a session that would never serve
-  // their extension. Surface it as the failure it is.
   const compileFailed = /compiled with errors|✖✖✖|ERROR in |Module not found|NOT FOUND/i.test(
     cleanOutput,
   );
@@ -219,11 +193,6 @@ export async function handler(
     });
   }
 
-  // The dev CLI surviving the tick does not mean the BROWSER did. A dead
-  // browser leg used to ride an ok:true envelope, admitted only in
-  // earlyOutput (swarm C5). Engines with the bug-71/72 fixes stamp ready.json
-  // status:"error" code:"browser_exited" when their browser dies; a locked
-  // profile (the known cause) also announces itself in the early output.
   const exitStamp = args.noBrowser
     ? null
     : browserExitStamp(args.projectPath, browser, spawnedAt);
@@ -269,17 +238,8 @@ export async function handler(
       : "none (read-only: logs, source_inspect, wait, doctor)",
   };
 
-  // ONE source of truth for ports. The engine allocates the real port before
-  // its first ready.json stamp, so by the end of the health window the
-  // contract usually knows the bound port even when the requested one was
-  // taken (8080 walks to 8081+). Echoing args.port back is how this tool said
-  // port: 8080 while extension_wait said 8081 for the very same session, the
-  // most-corroborated finding of the DevX swarm (8 of 10 personas). When the
-  // engine has not stamped the contract yet, say so honestly with a labeled
-  // requestedPort instead of asserting a port that was never bound.
   const boundPort = contractBoundPort(args.projectPath, browser, spawnedAt);
   if (boundPort !== null && boundPort !== args.port) {
-    // Keep the session registry in step with the truth for later tools.
     registerSession({
       pid,
       browser,
@@ -333,30 +293,16 @@ export async function handler(
   });
 }
 
-// Drop benign package-manager chatter (e.g. npm's "Unknown project config
-// auto-install-peers" warning, emitted because pnpm-style config lands in the
-// ambient .npmrc) so earlyOutput carries signal, not noise. Real errors and
-// the extension CLI's own progress lines are preserved.
 function denoiseEarlyOutput(raw: string): string {
   const NOISE = [
     /^npm warn Unknown project config/i,
     /This will stop working in the next major version of npm/i,
     /^npm warn config/i,
-    // Cold-machine first run: `npx`/`npm exec` fetches the engine and prints
-    // "npm warn exec The following package was not found and will be installed:
-    // extension@...". Benign, but its "not found" used to trip the compile-failed
-    // classifier; drop the whole npm-exec notice.
     /^npm warn exec/i,
     /The following package(s)? (was|were) not found and will be installed/i,
     /V8: .*Invalid asm\.js/i,
     /^\(node:\d+\) V8:/i,
     /Use `node --trace-warnings/i,
-    // V8's asm.js validator verdicts are warnings about DEPENDENCY code (e.g.
-    // es-module-lexer's lexer.asm.js failing validation and falling back to
-    // plain JS). They also arrive without the "(node:pid) V8:" prefix when the
-    // launched browser's stderr shares the log, so match the verdict itself.
-    // These three phrases are emitted only by V8's asm.js pipeline; a real
-    // compile or runtime error never carries them.
     /Invalid asm\.js:/i,
     /Linking failure in asm\.js/i,
     /Successfully compiled asm\.js/i,

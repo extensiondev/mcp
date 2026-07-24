@@ -6,12 +6,6 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-// Client for the extension.dev-gated device authorization flow (RFC 8628). The
-// developer authorizes at extension.dev/device; GitHub federation happens
-// server-side, so unlike github-device.ts this client never touches GitHub and
-// never holds a GitHub token. The token endpoint returns the same shape the
-// GitHub exchange returned, so persistence is shared (persistTokenResponse).
-
 import { persistTokenResponse } from "./login-flow";
 import type { StoredCredentials } from "./credentials";
 
@@ -77,12 +71,6 @@ export type DevicePollResult =
   | { ok: true; creds: StoredCredentials }
   | { ok: false; reason: "pending" | "denied" | "expired" | "error"; message?: string };
 
-/**
- * Poll the extension.dev token endpoint until approved or the budget runs out.
- * The budget is kept under the MCP client request timeout; the tool re-invokes
- * with the same deviceCode to keep waiting (idempotent), mirroring the GitHub
- * poll's two-phase contract.
- */
 export async function pollDeviceToken(args: {
   apiBase: string;
   path: string;
@@ -96,7 +84,6 @@ export async function pollDeviceToken(args: {
   const deadline = Date.now() + args.budgetMs;
   let interval = Math.max(1, args.interval);
 
-  // Poll at least once even if the budget is tiny.
   for (;;) {
     const res = await doFetch(`${args.apiBase}${args.path}`, {
       method: "POST",
