@@ -11,6 +11,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { isChromiumFamily } from "./browser-family";
+import { ensureProjectIgnored } from "./project-ignore";
 
 
 export const CARRIER_DIR_NAME = "extension-dev-live-preview";
@@ -82,35 +83,17 @@ export function removeCarrier(projectPath: string): CarrierRemoval {
 }
 
 export function ensureCarrierIgnored(projectPath: string): string | null {
-  if (!fs.existsSync(path.join(projectPath, ".git"))) return null;
-  const entry = `extensions/${CARRIER_DIR_NAME}/`;
-  const file = path.join(projectPath, ".gitignore");
-  let current = "";
-  try {
-    current = fs.readFileSync(file, "utf-8");
-  } catch {
-  }
-  const ignored = current
-    .split("\n")
-    .map((line) => line.trim())
-    .some(
-      (line) =>
-        line === entry ||
-        line === `extensions/${CARRIER_DIR_NAME}` ||
-        line === "extensions/" ||
-        line === "extensions",
-    );
-  if (ignored) return null;
-  try {
-    const prefix = current === "" || current.endsWith("\n") ? "" : "\n";
-    fs.appendFileSync(
-      file,
-      `${prefix}\n# Extension.dev live-preview carrier: a local debug companion, not part of your extension.\n${entry}\n`,
-    );
-    return entry;
-  } catch {
-    return null;
-  }
+  const outcome = ensureProjectIgnored(projectPath, {
+    entry: `extensions/${CARRIER_DIR_NAME}/`,
+    aliases: [
+      `extensions/${CARRIER_DIR_NAME}`,
+      "extensions/",
+      "extensions",
+    ],
+    comment:
+      "# Extension.dev live-preview carrier: a local debug companion, not part of your extension.",
+  });
+  return outcome.state === "added" ? outcome.entry : null;
 }
 
 export type CarrierMaterialization = {

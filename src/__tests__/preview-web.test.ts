@@ -311,6 +311,179 @@ describe("extension_preview_web", () => {
       }
     });
 
+    it("writes the revoke handle to the project's share record and appends on the next share", async () => {
+      const dir = tmpDist(MANIFEST);
+      process.env.EXTENSION_DEV_TOKEN = "tok_test";
+      let served = 0;
+      global.fetch = (async () => {
+        served += 1;
+        return {
+          ok: true,
+          status: 201,
+          text: async () =>
+            JSON.stringify({
+              artifactId: `gen_share${served}`,
+              previewUrl: `https://preview.extension.dev/?preview=gen_share${served}`,
+              zipUrl: `https://www.extension.dev/api/artifacts/gen_share${served}/source.zip`,
+              revokeUrl: `https://www.extension.dev/api/artifacts/gen_share${served}`,
+              expiresAt: "2026-08-23T00:00:00.000Z",
+            }),
+        };
+      }) as unknown as typeof fetch;
+      try {
+        const first = JSON.parse(
+          await handler({ projectPath: dir, build: false, distPath: dir, probe: false, share: true }),
+        );
+        const recordPath = path.join(dir, ".extension.dev", "shared-previews.json");
+        expect(first.share.record.recorded).toBe(true);
+        expect(first.share.record.path).toBe(recordPath);
+        expect(first.share.record.entries).toBe(1);
+        expect(String(first.share.note)).toContain(recordPath);
+
+        const afterFirst = JSON.parse(fs.readFileSync(recordPath, "utf8"));
+        expect(afterFirst.version).toBe(1);
+        expect(afterFirst.shares).toHaveLength(1);
+        expect(afterFirst.shares[0]).toMatchObject({
+          artifactId: "gen_share1",
+          previewUrl: "https://preview.extension.dev/?preview=gen_share1",
+          revokeUrl: "https://www.extension.dev/api/artifacts/gen_share1",
+          expiresAt: "2026-08-23T00:00:00.000Z",
+          name: MANIFEST.name,
+          browser: "chrome",
+        });
+        expect(typeof afterFirst.shares[0].sharedAt).toBe("string");
+
+        const second = JSON.parse(
+          await handler({ projectPath: dir, build: false, distPath: dir, probe: false, share: true }),
+        );
+        expect(second.share.record.entries).toBe(2);
+        const afterSecond = JSON.parse(fs.readFileSync(recordPath, "utf8"));
+        expect(afterSecond.shares.map((s: any) => s.artifactId)).toEqual([
+          "gen_share1",
+          "gen_share2",
+        ]);
+      } finally {
+        fs.rmSync(dir, { recursive: true, force: true });
+      }
+    });
+
+    it("gitignores the share record when the project is a git repository", async () => {
+      const dir = tmpDist(MANIFEST);
+      fs.mkdirSync(path.join(dir, ".git"));
+      process.env.EXTENSION_DEV_TOKEN = "tok_test";
+      global.fetch = (async () => ({
+        ok: true,
+        status: 201,
+        text: async () =>
+          JSON.stringify({
+            artifactId: "gen_ignored",
+            previewUrl: "https://preview.extension.dev/?preview=gen_ignored",
+            revokeUrl: "https://www.extension.dev/api/artifacts/gen_ignored",
+          }),
+      })) as unknown as typeof fetch;
+      try {
+        const out = JSON.parse(
+          await handler({ projectPath: dir, build: false, distPath: dir, probe: false, share: true }),
+        );
+        expect(out.share.record.gitignored).toBe("added");
+        expect(out.share.record.warning).toBeUndefined();
+        expect(fs.readFileSync(path.join(dir, ".gitignore"), "utf8")).toContain(
+          ".extension.dev/",
+        );
+
+        const again = JSON.parse(
+          await handler({ projectPath: dir, build: false, distPath: dir, probe: false, share: true }),
+        );
+        expect(again.share.record.gitignored).toBe("already-ignored");
+        const entries = fs
+          .readFileSync(path.join(dir, ".gitignore"), "utf8")
+          .split("\n")
+          .filter((line) => line.trim() === ".extension.dev/");
+        expect(entries).toHaveLength(1);
+      } finally {
+        fs.rmSync(dir, { recursive: true, force: true });
+      }
+    });
+
+    it("keeps an unreadable record instead of overwriting it", async () => {
+      const dir = tmpDist(MANIFEST);
+      const stateDir = path.join(dir, ".extension.dev");
+      fs.mkdirSync(stateDir);
+      fs.writeFileSync(path.join(stateDir, "shared-previews.json"), "not json");
+      process.env.EXTENSION_DEV_TOKEN = "tok_test";
+      global.fetch = (async () => ({
+        ok: true,
+        status: 201,
+        text: async () =>
+          JSON.stringify({
+            artifactId: "gen_keep",
+            previewUrl: "https://preview.extension.dev/?preview=gen_keep",
+            revokeUrl: "https://www.extension.dev/api/artifacts/gen_keep",
+          }),
+      })) as unknown as typeof fetch;
+      try {
+        const out = JSON.parse(
+          await handler({ projectPath: dir, build: false, distPath: dir, probe: false, share: true }),
+        );
+        expect(out.share.record.recorded).toBe(true);
+        expect(String(out.share.record.preserved)).toMatch(/unreadable\.json$/);
+        expect(fs.readFileSync(out.share.record.preserved, "utf8")).toBe("not json");
+        const written = JSON.parse(
+          fs.readFileSync(out.share.record.path, "utf8"),
+        );
+        expect(written.shares).toHaveLength(1);
+      } finally {
+        fs.rmSync(dir, { recursive: true, force: true });
+      }
+    });
+
+    it("still returns the share when the record cannot be written", async () => {
+      const dir = tmpDist(MANIFEST);
+      fs.writeFileSync(path.join(dir, ".extension.dev"), "in the way");
+      process.env.EXTENSION_DEV_TOKEN = "tok_test";
+      global.fetch = (async () => ({
+        ok: true,
+        status: 201,
+        text: async () =>
+          JSON.stringify({
+            artifactId: "gen_nowrite",
+            previewUrl: "https://preview.extension.dev/?preview=gen_nowrite",
+            revokeUrl: "https://www.extension.dev/api/artifacts/gen_nowrite",
+          }),
+      })) as unknown as typeof fetch;
+      try {
+        const out = JSON.parse(
+          await handler({ projectPath: dir, build: false, distPath: dir, probe: false, share: true }),
+        );
+        expect(out.share.ok).toBe(true);
+        expect(out.share.previewUrl).toBeTruthy();
+        expect(out.share.record.recorded).toBe(false);
+        expect(String(out.share.note)).toMatch(/only copy/);
+      } finally {
+        fs.rmSync(dir, { recursive: true, force: true });
+      }
+    });
+
+    it("writes no record when the upload fails", async () => {
+      const dir = tmpDist(MANIFEST);
+      process.env.EXTENSION_DEV_TOKEN = "tok_test";
+      global.fetch = (async () => ({
+        ok: false,
+        status: 500,
+        text: async () => JSON.stringify({ message: "Server error." }),
+      })) as unknown as typeof fetch;
+      try {
+        const out = JSON.parse(
+          await handler({ projectPath: dir, build: false, distPath: dir, probe: false, share: true }),
+        );
+        expect(out.share.ok).toBe(false);
+        expect(out.share.record).toBeUndefined();
+        expect(fs.existsSync(path.join(dir, ".extension.dev"))).toBe(false);
+      } finally {
+        fs.rmSync(dir, { recursive: true, force: true });
+      }
+    });
+
     it("keeps the local preview working when the upload fails", async () => {
       const dir = tmpDist(MANIFEST);
       process.env.EXTENSION_DEV_TOKEN = "tok_test";
