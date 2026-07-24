@@ -70,6 +70,9 @@ you when the browser turned your extension away.
   raw fallback. Both tools previously read a floating `nightly`/`main`
   ref, so two runs could disagree; they now resolve one immutable
   release whose files are sha256-verified at the origin.
+- Console and dashboard links come from a shared URL contract and are
+  environment aware, so a local or development run no longer hands back
+  hardcoded production console URLs.
 
 ### Added
 
