@@ -1,0 +1,242 @@
+// ███╗   ███╗ ██████╗██████╗
+// ████╗ ████║██╔════╝██╔══██╗
+// ██╔████╔██║██║     ██████╔╝
+// ██║╚██╔╝██║██║     ██╔═══╝
+// ██║ ╚═╝ ██║╚██████╗██║
+// ╚═╝     ╚═╝ ╚═════╝╚═╝
+// Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
+
+import { resolveToken } from "./publish";
+import { resolveApiBase, safeApiBase } from "./login-flow";
+
+type FetchImpl = typeof fetch;
+
+const ARTIFACT_ID = /^gen_[0-9a-f]{32}$/;
+const ARTIFACT_ID_ANYWHERE = /gen_[0-9a-f]{32}/;
+
+export interface ListedArtifact {
+  artifactId: string;
+  kind?: string;
+  name?: string;
+  slug?: string;
+  version?: string;
+  live: boolean;
+  createdAt?: string;
+  expiresAt?: string | null;
+  revokedAt?: string | null;
+  sizeBytes?: number | null;
+  previewUrl?: string | null;
+  viewUrl?: string | null;
+  zipUrl?: string | null;
+  revokeUrl?: string;
+}
+
+export interface ArtifactListing {
+  artifacts: ListedArtifact[];
+  count: number;
+  matched: number;
+  limit: number;
+  truncated: boolean;
+  scanned: number;
+}
+
+export interface ArtifactRevocation {
+  artifactId: string;
+  revoked: boolean;
+  revokedAt?: string;
+}
+
+export type ArtifactsOutcome<T> =
+  | { ok: true; data: T }
+  | { ok: false; error: { name: string; message: string; status?: number } };
+
+export function parseArtifactRef(input: string): string | null {
+  const raw = String(input ?? "").trim();
+  if (!raw) return null;
+  if (ARTIFACT_ID.test(raw)) return raw;
+
+  let parsed: URL | null = null;
+  try {
+    parsed = new URL(raw);
+  } catch {
+    parsed = null;
+  }
+  if (parsed) {
+    const fromQuery = parsed.searchParams.get("preview");
+    if (fromQuery && ARTIFACT_ID.test(fromQuery.trim())) return fromQuery.trim();
+    const segments = parsed.pathname.split("/").filter(Boolean);
+    for (let i = segments.length - 1; i >= 0; i -= 1) {
+      const segment = decodeURIComponent(segments[i]);
+      if (ARTIFACT_ID.test(segment)) return segment;
+    }
+  }
+
+  const loose = ARTIFACT_ID_ANYWHERE.exec(raw);
+  return loose ? loose[0] : null;
+}
+
+function authError(name: string): ArtifactsOutcome<never> {
+  return {
+    ok: false,
+    error: {
+      name,
+      message:
+        "No token. Run extension_login, or set EXTENSION_DEV_TOKEN (create one in the extension.dev dashboard).",
+    },
+  };
+}
+
+async function readBody(res: Response): Promise<Record<string, unknown>> {
+  const text = await res.text();
+  try {
+    return JSON.parse(text) as Record<string, unknown>;
+  } catch {
+    return { message: text };
+  }
+}
+
+export async function listArtifacts(options: {
+  limit?: number;
+  liveOnly?: boolean;
+  api?: string;
+  token?: string;
+  fetchImpl?: FetchImpl;
+} = {}): Promise<ArtifactsOutcome<ArtifactListing>> {
+  const token = options.token ?? resolveToken();
+  if (!token) return authError("SharesAuthError");
+
+  const apiCheck = safeApiBase(resolveApiBase(options.api));
+  if (!apiCheck.ok) {
+    return {
+      ok: false,
+      error: { name: "SharesConfigError", message: apiCheck.message },
+    };
+  }
+
+  const url = new URL(`${apiCheck.base}/api/artifacts`);
+  if (options.limit != null) url.searchParams.set("limit", String(options.limit));
+  if (options.liveOnly) url.searchParams.set("status", "live");
+
+  const doFetch = options.fetchImpl ?? fetch;
+  let res: Response;
+  try {
+    res = await doFetch(url.toString(), {
+      headers: { authorization: `Bearer ${token}`, accept: "application/json" },
+    });
+  } catch (err: any) {
+    return {
+      ok: false,
+      error: {
+        name: "SharesNetworkError",
+        message: `Could not reach ${url.toString()}: ${err?.message || err}`,
+      },
+    };
+  }
+
+  const data = await readBody(res);
+  if (res.status === 401) return authError("SharesAuthError");
+  if (!res.ok) {
+    return {
+      ok: false,
+      error: {
+        name: "SharesListError",
+        status: res.status,
+        message: `Listing shares failed (${res.status}): ${
+          (data?.message as string) || "unknown error"
+        }`,
+      },
+    };
+  }
+
+  const artifacts = Array.isArray(data.artifacts)
+    ? (data.artifacts as ListedArtifact[])
+    : [];
+  const num = (value: unknown, fallback: number): number =>
+    typeof value === "number" && Number.isFinite(value) ? value : fallback;
+
+  return {
+    ok: true,
+    data: {
+      artifacts,
+      count: num(data.count, artifacts.length),
+      matched: num(data.matched, artifacts.length),
+      limit: num(data.limit, artifacts.length),
+      truncated: data.truncated === true,
+      scanned: num(data.scanned, 0),
+    },
+  };
+}
+
+export async function revokeArtifact(options: {
+  artifactId: string;
+  api?: string;
+  token?: string;
+  fetchImpl?: FetchImpl;
+}): Promise<ArtifactsOutcome<ArtifactRevocation>> {
+  const token = options.token ?? resolveToken();
+  if (!token) return authError("SharesAuthError");
+
+  const apiCheck = safeApiBase(resolveApiBase(options.api));
+  if (!apiCheck.ok) {
+    return {
+      ok: false,
+      error: { name: "SharesConfigError", message: apiCheck.message },
+    };
+  }
+
+  const url = `${apiCheck.base}/api/artifacts/${encodeURIComponent(
+    options.artifactId,
+  )}`;
+  const doFetch = options.fetchImpl ?? fetch;
+  let res: Response;
+  try {
+    res = await doFetch(url, {
+      method: "DELETE",
+      headers: { authorization: `Bearer ${token}`, accept: "application/json" },
+    });
+  } catch (err: any) {
+    return {
+      ok: false,
+      error: {
+        name: "SharesNetworkError",
+        message: `Could not reach ${url}: ${err?.message || err}`,
+      },
+    };
+  }
+
+  const data = await readBody(res);
+  if (res.status === 401) return authError("SharesAuthError");
+  if (res.status === 404) {
+    return {
+      ok: false,
+      error: {
+        name: "SharesNotFoundError",
+        status: 404,
+        message: `The platform has no live share ${options.artifactId} for this token. It may already be revoked, already expired, or owned by a different project than the one this token is scoped to.`,
+      },
+    };
+  }
+  if (!res.ok) {
+    return {
+      ok: false,
+      error: {
+        name: "SharesRevokeError",
+        status: res.status,
+        message: `Revoking ${options.artifactId} failed (${res.status}): ${
+          (data?.message as string) || "unknown error"
+        }`,
+      },
+    };
+  }
+
+  return {
+    ok: true,
+    data: {
+      artifactId: options.artifactId,
+      revoked: data.revoked === true,
+      ...(typeof data.revokedAt === "string"
+        ? { revokedAt: data.revokedAt }
+        : {}),
+    },
+  };
+}

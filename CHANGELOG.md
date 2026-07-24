@@ -1,5 +1,53 @@
 # Changelog
 
+## 6.5.0
+
+A link you shared is no longer only as findable as the response that created
+it. The shares you have made are now listable, and revocable, from the tool
+that made them.
+
+### Added
+
+- **`extension_shares` lists and revokes the links you have shared.**
+  `share:true` hands back a public link, an `expiresAt` and a `revokeUrl`, and
+  until now the only copy of that `revokeUrl` was the tool response and the
+  project's own `.extension.dev/shared-previews.json`. Neither could say what
+  was actually still live, and neither existed at all for a link shared from
+  another machine. `action:"list"` (the default) asks the platform for every
+  artifact the logged-in project owns and returns each one's `artifactId`,
+  name, version, live or dead state, `createdAt`, `expiresAt`, `revokedAt`,
+  size, and its `previewUrl`, `zipUrl` and `revokeUrl`. `previewUrl` and
+  `zipUrl` come back null for anything no longer live, because a revoked or
+  expired address resolves for nobody and echoing it back would invite passing
+  on a dead link; `revokeUrl` stays on every row.
+- **`action:"revoke"` kills a link from where it was made.** It takes an
+  `artifactId` or, just as well, any URL of the share (`previewUrl`, `zipUrl`,
+  `viewUrl`, or `revokeUrl`), so the link you sent someone is enough to pull it
+  back without going to find a `curl` command. Revocation is permanent: the zip
+  is deleted and the id is burned, so a revoked link can never resolve again
+  and sharing the same build later mints a different one. The response says so
+  rather than reading like an undoable delete.
+- **The platform's answer is reconciled with the project's record.** Pass
+  `projectPath` and every listed share is matched against
+  `.extension.dev/shared-previews.json`: a share the project recorded carries
+  its local `sharedAt`, `browser` and `distDir`, a share the platform knows
+  about but the project does not is flagged `remoteOnly` (shared from another
+  machine or another checkout), and a local record with no artifact behind it
+  is reported under `localOnly`. The tool only ever reads that file, never
+  rewrites it, so its append-only history stays intact.
+- **A cut list is never passed off as the whole set.** When the platform
+  answers `truncated:true`, the response carries the count that came back
+  against the count that matched, says to raise `limit` or narrow with
+  `status:"live"`, and refuses to call a `localOnly` record dead, because a
+  share missing from a truncated list has not been shown to be gone.
+
+### Changed
+
+- **A successful share now says where to find the link again.** The `share`
+  note and the `extension_preview_web` tool description both point at
+  `extension_shares`, at the moment the link exists and the question of how to
+  reach it later is about to come up.
+
 ## 6.4.0
 
 A build on your machine can now become a link someone else can open, and the

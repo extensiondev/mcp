@@ -1,19 +1,19 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-09-29/server.schema.json",
   "name": "io.github.extensiondev/mcp",
-  "description": "Build, run, inspect, and publish browser extensions from any MCP client. 35 tools, 11 browsers.",
+  "description": "Build, run, inspect, and publish browser extensions from any MCP client. 36 tools, 11 browsers.",
   "repository": {
     "url": "https://github.com/extensiondev/mcp",
     "source": "github"
   },
   "websiteUrl": "https://extension.dev",
-  "version": "6.4.0",
+  "version": "6.5.0",
   "packages": [
     {
       "registryType": "npm",
       "registryBaseUrl": "https://registry.npmjs.org",
       "identifier": "@extension.dev/mcp",
-      "version": "6.4.0",
+      "version": "6.5.0",
       "runtimeHint": "npx",
       "transport": {
         "type": "stdio"

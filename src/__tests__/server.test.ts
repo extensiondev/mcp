@@ -20,8 +20,8 @@ vi.mock("../lib/cdp-port", async (importOriginal) => ({
 }));
 
 describe("MCP Server tool registry", () => {
-  it("has exactly 35 tools", () => {
-    expect(ALL_TOOLS.length).toBe(35);
+  it("has exactly 36 tools", () => {
+    expect(ALL_TOOLS.length).toBe(36);
   });
 
   for (const tool of ALL_TOOLS) {

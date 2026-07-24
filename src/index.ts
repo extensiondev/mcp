@@ -21,6 +21,7 @@ import * as dev from "./tools/dev";
 import * as start from "./tools/start";
 import * as preview from "./tools/preview";
 import * as previewWeb from "./tools/preview-web";
+import * as shares from "./tools/shares";
 import * as stop from "./tools/stop";
 
 import * as getTemplateSource from "./tools/get-template-source";
@@ -82,6 +83,7 @@ export const tools: ToolModule[] = [
   start,
   preview,
   previewWeb,
+  shares,
   stop,
   getTemplateSource,
   manifestValidate,
