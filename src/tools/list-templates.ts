@@ -63,7 +63,11 @@ export async function handler(args: {
   const results = templates.map((t) => ({
     slug: t.slug,
     description: t.description,
-    uiFramework: t.uiFramework || "vanilla",
+    // Emit the raw framework value so it round-trips through the `framework`
+    // filter (which matches '' for vanilla) and matches every other surface.
+    // frameworkLabel carries the human-friendly name without breaking that.
+    uiFramework: t.uiFramework,
+    frameworkLabel: t.uiFramework || "vanilla",
     surfaces: t.surfaces,
     tags: t.tags,
     difficulty: t.difficulty,

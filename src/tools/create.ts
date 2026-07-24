@@ -9,6 +9,8 @@
 import fs from "node:fs";
 import path from "node:path";
 import { extensionCreate } from "extension-create";
+import { mcpOrigins } from "../lib/registry";
+import { wwwNewPath } from "../lib/urls-paths";
 
 // Map the lockfile the installer actually wrote to the package manager that
 // owns it, so the run command we hand back matches what created node_modules
@@ -214,6 +216,12 @@ export async function handler(args: {
     : process.cwd();
   const gitInit = fs.existsSync(path.join(result.projectPath, ".git"));
 
+  // MCP scaffolds and runs a project locally; it does not host or deploy. The
+  // deep link opens the same template on the web so the dead-end at `run dev`
+  // has a clear next hop (dev-aware: follows EXTENSION_DEV_API_URL).
+  const wwwOrigin = mcpOrigins().www;
+  const deployUrl = `${wwwOrigin}${wwwNewPath({ template: result.template })}`;
+
   return JSON.stringify({
     resolvedPath: result.projectPath,
     projectPath: result.projectPath,
@@ -221,19 +229,32 @@ export async function handler(args: {
     template: result.template,
     depsInstalled: result.depsInstalled,
     packageManager: result.depsInstalled ? packageManager : null,
+    deployUrl,
     defaultsApplied: {
       parentDir: args.parentDir
         ? `${resolvedParent} (explicit)`
         : `${resolvedParent} (default: the MCP server process cwd, not yours; pass parentDir to choose)`,
+      // The template is the most consequential silent default; name it when the
+      // caller did not pass one (defaults to typescript even though a plain-JS
+      // slug exists).
+      ...(args.template === undefined
+        ? {
+            template:
+              "typescript (default; run extension_list_templates to pick another, e.g. javascript for plain JS)",
+          }
+        : {}),
       packageManager: `${packageManager} (auto-detected by the scaffolder, not asked)`,
       browser:
         "chrome (default: extension_dev and extension_build target chrome unless you pass browser)",
       gitInit,
     },
     duration: Date.now() - start,
-    nextSteps: result.depsInstalled
-      ? [`cd ${result.projectPath}`, runDev]
-      : [`cd ${result.projectPath}`, `${packageManager} install`, runDev],
+    nextSteps: [
+      ...(result.depsInstalled
+        ? [`cd ${result.projectPath}`, runDev]
+        : [`cd ${result.projectPath}`, `${packageManager} install`, runDev]),
+      `To ship: extension_create scaffolds and runs locally, it does not host. Open ${deployUrl} to deploy this template to the web.`,
+    ],
     ...(engineWarning ? { engineWarning } : {}),
     // Present only when install produced diagnostics worth seeing.
     ...(result.depsInstalled ? {} : { warnings: logTail() }),

@@ -22,7 +22,7 @@ const DEFAULT_CHANNEL = "latest";
 
 // The commit the media `latest` channel points at. Keep in lockstep with
 // apps/media.extension.land/scripts/build-templates-artifact.mjs.
-const PINNED_COMMIT = "2d2ed9668cca002148d9eecd953a08b54d0bad9d";
+export const PINNED_COMMIT = "2d2ed9668cca002148d9eecd953a08b54d0bad9d";
 
 const CHANNEL_CACHE_TTL_MS = 5 * 60 * 1000;
 
@@ -110,16 +110,31 @@ export async function templateMetaUrls(): Promise<string[]> {
   return urls;
 }
 
+// The catalog lists each file prefixed with the corpus layout it was built
+// from (`public/<slug>/...` on media, `examples/<slug>/...` on the raw repo),
+// but both file hosts serve the file at the slug-relative path with that
+// prefix stripped. Drop a leading `public/<slug>/` or `examples/<slug>/` so a
+// caller passing back either the raw listed path OR the stripped path resolves.
+export function stripTemplatePathPrefix(
+  slug: string,
+  relativePath: string,
+): string {
+  for (const dir of ["public", "examples"]) {
+    const prefix = `${dir}/${slug}/`;
+    if (relativePath.startsWith(prefix)) return relativePath.slice(prefix.length);
+  }
+  return relativePath;
+}
+
 // Ordered URLs for one source file: media release first, then commit-pinned raw.
 export async function templateFileUrls(
   slug: string,
   relativePath: string,
 ): Promise<string[]> {
+  const relative = stripTemplatePathPrefix(slug, relativePath);
   const urls: string[] = [];
   const release = await resolveRelease();
-  if (release) urls.push(`${release.filesBaseUrl}/${slug}/${relativePath}`);
-  urls.push(
-    `${rawBaseForCommit(PINNED_COMMIT)}/examples/${slug}/${relativePath}`,
-  );
+  if (release) urls.push(`${release.filesBaseUrl}/${slug}/${relative}`);
+  urls.push(`${rawBaseForCommit(PINNED_COMMIT)}/examples/${slug}/${relative}`);
   return urls;
 }
