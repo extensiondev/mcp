@@ -4,7 +4,7 @@
 // ██║╚██╔╝██║██║     ██╔═══╝
 // ██║ ╚═╝ ██║╚██████╗██║
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
-// MIT License (c) Cezar Augusto and the extension.dev collaborators
+// Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
 import path from "node:path";
 import { materializeCarrier } from "../lib/carrier";
@@ -160,6 +160,14 @@ export async function handler(
 
   await new Promise((resolve) => setTimeout(resolve, 3000));
   const earlyOutput = spawned.readOutput();
+  // Classify and report on the DENOISED text, never the raw stream. On a cold
+  // machine the engine is fetched on first use and npm prints "npm warn exec The
+  // following package was not found and will be installed: extension@...": the
+  // "not found" in that benign notice matched the compile-failed regex below and
+  // the smoke reported status:"compile-failed" for an extension that then
+  // compiled clean. Denoise first so package-manager chatter cannot masquerade
+  // as a build error.
+  const cleanOutput = denoiseEarlyOutput(earlyOutput);
 
   // Health tick before claiming "started". This used to report status:"started"
   // unconditionally after the fixed 3s wait, so a dev server that died on boot
@@ -180,7 +188,7 @@ export async function handler(
       error:
         `The dev server exited during startup (${signal ? `signal ${signal}` : `exit code ${code}`}). ` +
         "No session is running, so extension_logs/wait/eval and the control verbs have nothing to attach to.",
-      output: denoiseEarlyOutput(earlyOutput).slice(0, 2000),
+      output: cleanOutput.slice(0, 2000),
       logPath,
       hint:
         "Read `output` above for the cause: a port already in use, a manifest the build rejects, or a missing browser binary are the common ones. " +
@@ -194,7 +202,7 @@ export async function handler(
   // pointed onward to extension_wait against a session that would never serve
   // their extension. Surface it as the failure it is.
   const compileFailed = /compiled with errors|✖✖✖|ERROR in |Module not found|NOT FOUND/i.test(
-    earlyOutput,
+    cleanOutput,
   );
   if (compileFailed) {
     return JSON.stringify({
@@ -205,7 +213,7 @@ export async function handler(
       pid,
       error:
         "The dev server started but the FIRST COMPILE FAILED, so the browser has nothing usable to load. The session is running; the extension is not.",
-      output: denoiseEarlyOutput(earlyOutput).slice(0, 2000),
+      output: cleanOutput.slice(0, 2000),
       logPath,
       hint: "Fix the compile error in `output` above and save: the dev server is still running and will recompile. Do not call extension_wait yet, it will report ready for a build that failed.",
     });
@@ -222,7 +230,7 @@ export async function handler(
   const profileLockHit =
     !args.noBrowser &&
     /SingletonLock|ProcessSingleton|profile[^\n]*(in use|locked)|already (open|running)/i.test(
-      earlyOutput,
+      cleanOutput,
     );
   if (exitStamp || profileLockHit) {
     const profileDir = path.join(
@@ -242,7 +250,7 @@ export async function handler(
         (profileLockHit
           ? " because its profile is locked by another browser instance."
           : "."),
-      output: denoiseEarlyOutput(earlyOutput).slice(0, 2000),
+      output: cleanOutput.slice(0, 2000),
       logPath,
       hint:
         "A locked profile means another session's browser still holds it: call extension_stop with this projectPath to kill that session, then start extension_dev again. " +
@@ -320,7 +328,7 @@ export async function handler(
           ? `Control channel is ON: extension_${controlVerbs.split(", ").join("/extension_")}${args.allowEval ? "/extension_eval" : ""} will work against this session.`
           : "Control channel is OFF: extension_storage/reload/open/dom_inspect need allowControl: true, and extension_eval needs allowEval: true (which also implies allowControl). To unlock them, call extension_dev again with the flag you need plus replace: true (it stops this session first); a plain second call is refused so the session does not fork.") +
         " When you are done, call extension_stop to shut down the dev server and browser.",
-    earlyOutput: denoiseEarlyOutput(earlyOutput).slice(0, 500),
+    earlyOutput: cleanOutput.slice(0, 500),
     logPath,
   });
 }
@@ -334,6 +342,12 @@ function denoiseEarlyOutput(raw: string): string {
     /^npm warn Unknown project config/i,
     /This will stop working in the next major version of npm/i,
     /^npm warn config/i,
+    // Cold-machine first run: `npx`/`npm exec` fetches the engine and prints
+    // "npm warn exec The following package was not found and will be installed:
+    // extension@...". Benign, but its "not found" used to trip the compile-failed
+    // classifier; drop the whole npm-exec notice.
+    /^npm warn exec/i,
+    /The following package(s)? (was|were) not found and will be installed/i,
     /V8: .*Invalid asm\.js/i,
     /^\(node:\d+\) V8:/i,
     /Use `node --trace-warnings/i,

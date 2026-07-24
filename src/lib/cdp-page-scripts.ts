@@ -4,7 +4,7 @@
 // ██║╚██╔╝██║██║     ██╔═══╝
 // ██║ ╚═╝ ██║╚██████╗██║
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
-// MIT License (c) Cezar Augusto and the extension.dev collaborators
+// Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
 export const PAGE_HTML_SCRIPT = `(() => {
         try {

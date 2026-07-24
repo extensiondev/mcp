@@ -4,7 +4,7 @@
 // ██║╚██╔╝██║██║     ██╔═══╝
 // ██║ ╚═╝ ██║╚██████╗██║
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
-// MIT License (c) Cezar Augusto and the extension.dev collaborators
+// Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
 // The discovery sibling of extension_release_promote / extension_deploy /
 // extension_publish: those verbs demand a build sha, and this is the verb

@@ -156,4 +156,4 @@ All of it rides on [Extension.js](https://github.com/extension-js/extension.js),
 
 ## License
 
-MIT (c) Cezar Augusto and the extension.dev collaborators
+Apache-2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators. See [LICENSE](LICENSE).

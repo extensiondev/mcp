@@ -242,6 +242,29 @@ describe("extension_dev build-only sessions", () => {
 });
 
 describe("extension_dev earlyOutput denoise", () => {
+  // Cold-machine first run: npx fetches the engine and prints "npm warn exec The
+  // following package was not found and will be installed: extension@...". The
+  // "not found" in that benign notice tripped the compile-failed classifier, so
+  // the noBrowser smoke reported status:"compile-failed" for an extension that
+  // then compiled clean. Classify on the denoised text; drop the notice.
+  it("does not read npm's cold-install notice as a compile failure", async () => {
+    const project = tmpProject();
+    nextChild = () =>
+      fakeCli(
+        'console.log("npm warn exec The following package was not found and will be installed: extension@4.0.16-canary.1.abc");' +
+          'console.log("ready in 300ms");' +
+          "setTimeout(()=>{}, 60000);",
+      );
+
+    const result = JSON.parse(await dev.handler({ projectPath: project }));
+
+    expect(result.ok).toBe(true);
+    expect(result.status).toBe("started");
+    expect(result.earlyOutput).not.toContain("will be installed");
+    expect(result.earlyOutput).not.toContain("npm warn exec");
+    expect(result.earlyOutput).toContain("ready in 300ms");
+  }, 15_000);
+
   it("drops V8 asm.js warning lines but keeps real output", async () => {
     const project = tmpProject();
     nextChild = () =>

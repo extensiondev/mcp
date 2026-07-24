@@ -4,7 +4,7 @@
 // ██║╚██╔╝██║██║     ██╔═══╝
 // ██║ ╚═╝ ██║╚██████╗██║
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
-// MIT License (c) Cezar Augusto and the extension.dev collaborators
+// Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
 // The post-submit sibling of extension_deploy: deploy dispatches a store
 // submission and this is the verb that answers "did it land, and was it
