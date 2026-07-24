@@ -7,9 +7,7 @@
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
 import { getTemplateBySlug } from "../lib/templates-cache";
-
-const RAW_BASE =
-  "https://raw.githubusercontent.com/extension-js/examples/main/examples";
+import { templateFileUrls } from "../lib/template-artifact-source";
 
 export const schema = {
   name: "extension_get_template_source",
@@ -70,19 +68,22 @@ export async function handler(args: {
 
   await Promise.all(
     args.files.map(async (filePath) => {
-      const url = `${RAW_BASE}/${args.slug}/${filePath}`;
-      try {
-        const response = await fetch(url);
-        if (response.ok) {
-          fileContents[filePath] = await response.text();
-        } else {
-          errors.push(`${filePath}: ${response.status}`);
+      // Media release first, then commit-pinned raw fallback.
+      const urls = await templateFileUrls(args.slug, filePath);
+      let lastStatus = 0;
+      for (const url of urls) {
+        try {
+          const response = await fetch(url);
+          if (response.ok) {
+            fileContents[filePath] = await response.text();
+            return;
+          }
+          lastStatus = response.status;
+        } catch {
+          // Try the next source.
         }
-      } catch (err) {
-        errors.push(
-          `${filePath}: ${err instanceof Error ? err.message : "fetch failed"}`,
-        );
       }
+      errors.push(`${filePath}: ${lastStatus || "fetch failed"}`);
     }),
   );
 

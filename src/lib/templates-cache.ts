@@ -10,12 +10,11 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import type { TemplatesMetaV2, TemplateMeta } from "./types";
+import { templateMetaUrls } from "./template-artifact-source";
 
 const CACHE_DIR = path.join(os.homedir(), ".cache", "extension-js");
 const CACHE_FILE = path.join(CACHE_DIR, "templates-meta.json");
 const CACHE_TTL_MS = 60 * 60 * 1000;
-const TEMPLATES_META_URL =
-  "https://github.com/extension-js/examples/releases/download/nightly/templates-meta.json";
 
 function isCacheValid(): boolean {
   try {
@@ -32,19 +31,32 @@ export async function fetchTemplatesMeta(): Promise<TemplatesMetaV2> {
     return cached as TemplatesMetaV2;
   }
 
-  const response = await fetch(TEMPLATES_META_URL);
-
-  if (!response.ok) {
-    if (fs.existsSync(CACHE_FILE)) {
-      return JSON.parse(fs.readFileSync(CACHE_FILE, "utf8")) as TemplatesMetaV2;
+  // Resolve through the owned media release, then the commit-pinned raw
+  // fallback. The first source that returns a valid catalog wins.
+  let lastStatus = 0;
+  for (const url of await templateMetaUrls()) {
+    try {
+      const response = await fetch(url);
+      if (!response.ok) {
+        lastStatus = response.status;
+        continue;
+      }
+      const data = (await response.json()) as TemplatesMetaV2;
+      fs.mkdirSync(CACHE_DIR, { recursive: true });
+      fs.writeFileSync(CACHE_FILE, JSON.stringify(data, null, 2));
+      return data;
+    } catch {
+      // Try the next source.
     }
-    throw new Error(`Failed to fetch templates-meta.json: ${response.status}`);
   }
 
-  const data = (await response.json()) as TemplatesMetaV2;
-  fs.mkdirSync(CACHE_DIR, { recursive: true });
-  fs.writeFileSync(CACHE_FILE, JSON.stringify(data, null, 2));
-  return data;
+  // Every network source failed: serve the last good on-disk cache if present.
+  if (fs.existsSync(CACHE_FILE)) {
+    return JSON.parse(fs.readFileSync(CACHE_FILE, "utf8")) as TemplatesMetaV2;
+  }
+  throw new Error(
+    `Failed to fetch templates-meta.json (${lastStatus || "network error"}).`,
+  );
 }
 
 export interface TemplateFilters {
