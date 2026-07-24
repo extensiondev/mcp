@@ -9,9 +9,12 @@
 import fs from "node:fs";
 import path from "node:path";
 import { getTemplateBySlug } from "../lib/templates-cache";
+import { PINNED_COMMIT } from "../lib/template-artifact-source";
 
-const RAW_BASE =
-  "https://raw.githubusercontent.com/extension-js/examples/main/examples";
+// Reference links point at the same commit the template corpus is pinned to,
+// so a link never drifts from the source the catalog was built from (floating
+// `main` could show files that no longer exist at the pinned revision).
+const EXAMPLES_TREE_BASE = `https://github.com/extension-js/examples/tree/${PINNED_COMMIT}/examples`;
 
 export const schema = {
   name: "extension_add_feature",
@@ -276,7 +279,7 @@ export async function handler(args: {
     framework,
     referenceTemplate: {
       slug: templateSlug,
-      repositoryUrl: `https://github.com/extension-js/examples/tree/main/examples/${templateSlug}`,
+      repositoryUrl: `${EXAMPLES_TREE_BASE}/${templateSlug}`,
       referenceFiles: referenceFiles.filter(
         (f: string) => f.includes(featureDir) || f.includes("manifest"),
       ),
@@ -294,7 +297,7 @@ export async function handler(args: {
       args.feature === "sidebar"
         ? "3. Add background.ts to handle sidebar open: chromium uses chrome.sidePanel.setPanelBehavior, firefox uses browser.sidebarAction.open()"
         : "",
-      `4. Reference template source: https://github.com/extension-js/examples/tree/main/examples/${templateSlug}/src`,
+      `4. Reference template source: ${EXAMPLES_TREE_BASE}/${templateSlug}/src`,
       "5. Run npm run dev to test",
     ].filter(Boolean),
     hint: conflicts.length

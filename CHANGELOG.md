@@ -1,5 +1,33 @@
 # Changelog
 
+## 6.1.0
+
+The create flow stops dead-ending at `run dev` and points you to the web to
+host, template source resolves whichever path the catalog listed, and the
+links the server hands back ride the exact corpus commit it built from.
+
+### Added
+
+- **`extension_create` signposts the web deploy.** The result now carries a
+  `deployUrl` and a closing next step that says the scaffold runs locally and
+  where to open the template on the web to host it, so the local scaffold no
+  longer stops at `run dev` with nowhere to ship.
+- **`extension_create` names the template it chose.** When no `template` is
+  passed the response now discloses the silent default instead of quietly
+  scaffolding TypeScript, and points at `extension_list_templates` to pick
+  another.
+
+### Fixed
+
+- **`extension_get_template_source` resolves listed paths.** A file listed
+  with a leading `public/<slug>/` or `examples/<slug>/` prefix now strips to
+  the slug relative path both hosts actually serve, so passing back a listed
+  path no longer 404s.
+- **`extension_list_templates` keeps the vanilla template filterable.** The
+  relabel no longer drops the framework key the filter reads.
+- **`extension_add_feature` links ride the pinned corpus.** Feature links now
+  point at the pinned corpus commit instead of floating on `main`.
+
 ## 6.0.0
 
 The server moves to Apache-2.0, and the live-preview carrier stops living

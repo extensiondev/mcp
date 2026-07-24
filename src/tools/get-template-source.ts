@@ -7,7 +7,10 @@
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
 import { getTemplateBySlug } from "../lib/templates-cache";
-import { templateFileUrls } from "../lib/template-artifact-source";
+import {
+  stripTemplatePathPrefix,
+  templateFileUrls,
+} from "../lib/template-artifact-source";
 
 export const schema = {
   name: "extension_get_template_source",
@@ -56,9 +59,14 @@ export async function handler(args: {
   };
 
   if (!args.files?.length) {
+    // The catalog prefixes each entry with its corpus layout
+    // (`public/<slug>/...`), but the file hosts serve the slug-relative path.
+    // Advertise the paths that actually resolve when passed back in `files`.
     return JSON.stringify({
       ...meta,
-      files: template.files,
+      files: template.files.map((f) =>
+        stripTemplatePathPrefix(template.slug, f),
+      ),
       hint: "Pass specific file paths in the files parameter to read their contents.",
     });
   }
