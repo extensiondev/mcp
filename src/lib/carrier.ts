@@ -23,6 +23,14 @@ import { isChromiumFamily } from "./browser-family";
 
 export const CARRIER_DIR_NAME = "extension-dev-live-preview";
 
+// The carrier's stable extension id. The bundled manifest bakes a fixed key, so
+// Chrome derives this same id every load; deriveCarrierId() recomputes it from a
+// given payload, but this literal is the known-good value for id checks that run
+// without the payload in hand (e.g. telling the carrier apart from the guest in
+// the browser's own target list). It matches the emulator package's constant of
+// the same name; carrier.test.ts guards it against deriveCarrierId drift.
+export const CARRIER_EXTENSION_ID = "ibppeifnekhjjjmpjfiobccjlicbmgcb";
+
 /** Marker proving the directory is ours to overwrite on version updates. */
 const MARKER_FILE = "managed-by-extension-dev-mcp.json";
 

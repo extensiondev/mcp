@@ -11,6 +11,7 @@ import path from "node:path";
 import type { ReadyContract } from "../lib/types";
 import { findSessionInfo } from "../lib/process-manager";
 import { resolveSessionBrowser } from "../lib/session-browser";
+import { verifyGuestLoaded } from "../lib/guest-load-oracle";
 import { recentErrorLogs } from "./doctor";
 
 // A single call is bounded below the MCP client's default request timeout
@@ -38,7 +39,7 @@ function isAlive(pid: number): boolean {
 export const schema = {
   name: "extension_wait",
   description:
-    "Wait for a running dev or start session to be ready. Polls the ready.json contract file and returns structured status with two separate facts: compiled (the compiler finished) and browserAttached (the extension's runtime connected from a live browser). Every result reports budgetMs (this call's wait budget) and elapsedMs; on status:'timeout' call again to keep waiting (polling resumes on the same contract). In a noBrowser (build-only) session it returns as soon as the compile lands instead of waiting for a browser that will never attach. Ports in the result come from the ready contract, so they always match what the dev server actually bound.",
+    "Wait for a running dev or start session to be ready. Polls the ready.json contract file and returns structured status with these facts: compiled (the compiler finished), browserAttached (the engine's runtime executor connected), and for a browser session guestLoaded (the browser's OWN target list actually shows your extension). guestLoaded is the trustworthy load signal: it catches a silently rejected --load-extension that leaves ready.json stamped attached with empty logs (extension.js BUGS_TO_FIX §83); it is null when it could not be checked (no CDP port, e.g. a gecko session). Every result reports budgetMs (this call's wait budget) and elapsedMs; on status:'timeout' call again to keep waiting (polling resumes on the same contract). In a noBrowser (build-only) session it returns as soon as the compile lands instead of waiting for a browser that will never attach. Ports in the result come from the ready contract, so they always match what the dev server actually bound.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -171,10 +172,32 @@ export async function handler(args: {
         // ready that hides a crashing runtime is the false-green class this
         // file exists to prevent, so recent error events ride along.
         const runtimeErrors = recentErrorLogs(args.projectPath, browser, 3);
+        // browserAttached means the engine's executor connected, which §83 shows
+        // is not the same as the guest having loaded: Chrome silently refusing
+        // --load-extension leaves ready.json stamped attached with empty logs.
+        // Ask the browser's own target list for the real answer.
+        const guestCheck = await verifyGuestLoaded(args.projectPath, browser);
+        const warnings: string[] = [];
+        if (runtimeErrors.length) {
+          warnings.push(
+            `Compiled and attached, but the extension is throwing at runtime (${runtimeErrors.length} recent error event${runtimeErrors.length === 1 ? "" : "s"} above). Check extension_logs (level: error) or extension_doctor before trusting this session.`,
+          );
+        }
+        if (guestCheck.checked && !guestCheck.loaded) {
+          warnings.push(
+            "The engine reports the runtime attached, but the browser's own target list shows no chrome-extension:// target for your extension, only the engine companion. This is the signature of a silently rejected --load-extension (extension.js BUGS_TO_FIX §83): the CLI and ready.json cannot see it, and the control verbs will fail against a guest that is not there. Check the manifest and extension_logs.",
+          );
+        }
         return JSON.stringify({
           status: "ready",
           compiled: true,
           browserAttached: true,
+          // The verified fact: null when it could not be checked (no CDP port,
+          // e.g. a gecko session or a browser still binding its debug port).
+          guestLoaded: guestCheck.checked ? guestCheck.loaded : null,
+          ...(guestCheck.checked
+            ? { guestIds: guestCheck.guestIds }
+            : { guestLoadNote: guestCheck.reason }),
           command: contract.command,
           browser: contract.browser,
           port: contract.port,
@@ -185,12 +208,8 @@ export async function handler(args: {
           startedAt: contract.startedAt,
           budgetMs,
           elapsedMs: Date.now() - start,
-          ...(runtimeErrors.length
-            ? {
-                runtimeErrors,
-                warning: `Compiled and attached, but the extension is throwing at runtime (${runtimeErrors.length} recent error event${runtimeErrors.length === 1 ? "" : "s"} above). Check extension_logs (level: error) or extension_doctor before trusting this session.`,
-              }
-            : {}),
+          ...(runtimeErrors.length ? { runtimeErrors } : {}),
+          ...(warnings.length ? { warning: warnings.join(" ") } : {}),
         });
       }
 
