@@ -64,6 +64,12 @@ you when the browser turned your extension away.
   again: the platform's Safari/App Store submission lane is now enabled
   for every project, so the store enum and the per-store status report
   treat it like chrome, firefox, and edge.
+- `extension_list_templates` and `extension_get_template_source` resolve
+  the template catalog and sources from the pinned, content-addressed
+  corpus served at `media.extension.land`, with a commit-pinned GitHub
+  raw fallback. Both tools previously read a floating `nightly`/`main`
+  ref, so two runs could disagree; they now resolve one immutable
+  release whose files are sha256-verified at the origin.
 
 ### Added
 
