@@ -96,7 +96,7 @@ function isDisposableTab(tabUrl: string, destination: string): boolean {
 // (chrome-extension://<id>/popup.html), the loop the surface-only open could
 // not do. Chromium rides CDP; Gecko rides the agent bridge (a background
 // eval of tabs.update), the same navigation with a numeric tab id back.
-async function navigateToUrl(
+export async function navigateToUrl(
   projectPath: string,
   browser: string,
   url: string,

@@ -20,10 +20,12 @@ import * as build from "./tools/build";
 import * as dev from "./tools/dev";
 import * as start from "./tools/start";
 import * as preview from "./tools/preview";
+import * as previewWeb from "./tools/preview-web";
 import * as stop from "./tools/stop";
 
 import * as getTemplateSource from "./tools/get-template-source";
 import * as manifestValidate from "./tools/manifest-validate";
+import * as themeVerify from "./tools/theme-verify";
 import * as inspect from "./tools/inspect";
 import * as sourceInspect from "./tools/source-inspect";
 import * as listExtensions from "./tools/list-extensions";
@@ -79,9 +81,11 @@ export const tools: ToolModule[] = [
   dev,
   start,
   preview,
+  previewWeb,
   stop,
   getTemplateSource,
   manifestValidate,
+  themeVerify,
   inspect,
   sourceInspect,
   listExtensions,
