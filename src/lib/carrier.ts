@@ -163,6 +163,17 @@ export type CarrierMaterialization = {
    */
   limitations?: string[];
   /**
+   * The graduation path, stated next to the shared-identity limitation so the
+   * caller is not left at a dead end. The carrier lane is the SHARED real lane
+   * (calls run as the carrier); but the guest is ALREADY loaded as itself in
+   * this same session, so its OWN storage, identity and messaging are reached by
+   * driving the guest directly with the control verbs, not the carrier bridge.
+   * This is the agent-lane twin of the inspect Trace tab's "load as your own
+   * extension" affordance: here the extension is already loaded, so graduating
+   * means targeting it, not launching it.
+   */
+  graduation?: string;
+  /**
    * How to actually DRIVE the real lane. Seven personas reached a
    * permanently empty trace and concluded the feature was broken, because
    * nothing in the 33 tool schemas, this note, or the rendered page named the
@@ -260,6 +271,8 @@ export function materializeCarrier(
         "Bridged calls run under the CARRIER's identity, not your extension's. The preview assumes a single active guest and does not namespace per-extension state, so storage, action/badge state, messaging delivery, offscreen documents and relative script paths belong to the carrier. Rows affected are badged carrier-scoped in the Trace tab.",
         "Chromium-family only: Firefox has no externally_connectable channel for web pages.",
       ],
+      graduation:
+        "The carrier lane is the SHARED real lane: bridged calls run as the carrier, by design (see limitations). Your guest is already loaded as ITSELF in this same session, so for its own storage, identity, badge and messaging (the isolated real thing), drive the guest directly instead of the carrier bridge: extension_storage, extension_eval and extension_dom_inspect against this projectPath all operate on the guest as itself. Start (or replace) this session with allowControl: true (or allowEval: true) to unlock them. Use the carrier bridge for the shared real-lane TRACE; use the control verbs for the guest's OWN state.",
       ...(carrierId
         ? {
             bridgeProtocol: {
