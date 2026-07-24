@@ -12,38 +12,10 @@ import * as build from "./build";
 import { navigateToUrl } from "./open";
 import { uploadPreview } from "../lib/preview-upload";
 
-// Web preview renders the extension inside the mocked-Chrome emulator instead
-// of launching a real browser. The emulator already loads store URLs, dropped
-// artifacts, and dev fixtures through one pipeline; this tool hands it an
-// in-progress build over the dev-only preview://build scheme, which reads the
-// dist directory straight off disk (no upload, no staging copy). The tool emits
-// the deep link a human/agent opens, and probes the same middleware the browser
-// will hit so a caller learns whether the artifact is loadable without opening
-// anything.
-//
-// SHAREABLE PREVIEW (share:true) UPLOADS THE LOCAL DIST. It POSTs the directory
-// just built to /api/artifacts with kind:"dist" and the project bearer token,
-// and returns the preview.extension.dev link that renders those exact bytes.
-//
-// Read this before changing the share path, because the obvious alternative is
-// wrong: /api/cli/publish (what extension_publish calls) takes no projectPath
-// and uploads nothing. It flips a share link on whatever build the token's
-// project last published from its own CI. Routing share through it, as this
-// tool used to, means the link renders a DIFFERENT build than the one on the
-// developer's disk, which is the opposite of what "share my preview" means.
-// The two rails coexist on purpose:
-//   * share here          -> the bytes you just built, ephemeral, revocable
-//   * extension_publish   -> the project's released CI build, channel-scoped
 
 const DEFAULT_INSPECT_URL = "http://localhost:3106";
 const DEFAULT_PREVIEW_DEV_URL = "http://localhost:3110";
 
-// Which front door renders the build. preview.extension.dev is the author's
-// door (preview YOUR in-progress build) and is therefore the default for this
-// tool; inspect.extension.dev is the evaluator's door (examine someone else's
-// shipped extension) and stays reachable for the fixture/forensic lane. Both
-// run the same emulator engine, so only the origin, the internal scheme and
-// the dev middleware path differ.
 const SURFACES = {
   preview: {
     defaultOrigin: DEFAULT_PREVIEW_DEV_URL,
@@ -63,11 +35,6 @@ const SURFACES = {
 
 type SurfaceKey = keyof typeof SURFACES;
 
-/**
- * Upload the dist that was just built and return the link that renders it.
- * Never throws: a failure here surfaces inside `share` so the local deep link
- * the caller already earned is still returned.
- */
 async function buildShare(
   distDir: string,
   manifest: Record<string, any>,
@@ -79,8 +46,6 @@ async function buildShare(
     return {
       requested: true,
       ok: false,
-      // Distinguish "you are not logged in" (fixable in one step, and the
-      // common case) from "the upload itself failed".
       supported: !isAuth,
       errorName: result.error.name,
       reason: result.error.message,
@@ -101,16 +66,12 @@ async function buildShare(
     ...(result.data.expiresAt ? { expiresAt: result.data.expiresAt } : {}),
     ...(result.data.zipUrl ? { zipUrl: result.data.zipUrl } : {}),
     ...(result.data.revokeUrl ? { revokeUrl: result.data.revokeUrl } : {}),
-    // The claim the old implementation could not make. Stated positively so a
-    // caller can rely on it rather than having to read a caveat.
     serves: "uploaded-local-build",
     localBuildUploaded: true,
-    note: "Anyone with this link can open the build you just made, running in the emulator. No install, no sign-in, no dev server. The link expires (see expiresAt); DELETE revokeUrl with the same token to kill it sooner.",
+    note: "Anyone with this link can open the build you just made, running in the emulator. No install, no sign-in, no dev server. They can also download the whole build as a zip from zipUrl, so the link hands over the built code. It stays live until expiresAt; DELETE revokeUrl with the same token to kill it sooner, and a revoked link stays dead.",
   };
 }
 
-// Mirror of inspect's own surface detection (runtime-fixture-utils.detectSurfaces)
-// so the tool can report what the previewed artifact will render.
 function detectSurfaces(manifest: Record<string, any>): string[] {
   const surfaces: string[] = [];
   const push = (surface: string, condition: unknown) => {
@@ -136,7 +97,7 @@ function detectSurfaces(manifest: Record<string, any>): string[] {
 export const schema = {
   name: "extension_preview_web",
   description:
-    "Preview an in-progress extension in the web emulator (no real browser). Builds the project (unless build:false), points preview.extension.dev at the dist directory over the dev-only preview://build scheme, and returns a deep link plus a loadability check against its dev server. preview is the author's front door: it renders YOUR build and carries the Emulated/Real lane toggle and the Trace tab. Pass surface:\"inspect\" to render in inspect.extension.dev instead (the evaluator's door, for fixture and forensic work). Pass share:true to UPLOAD the dist you just built and get back a link (share.previewUrl) that renders those exact bytes for anyone who opens it, with no install and no dev server; that needs auth (extension_login or EXTENSION_DEV_TOKEN). Use share:true whenever the build has to reach someone who is not at this machine, since the plain deepLink only resolves locally.",
+    "Preview an in-progress extension in the web emulator (no real browser). Builds the project (unless build:false), points preview.extension.dev at the dist directory over the dev-only preview://build scheme, and returns a deep link plus a loadability check against its dev server. preview is the author's front door: it renders YOUR build and carries the Emulated/Real lane toggle and the Trace tab. Pass surface:\"inspect\" to render in inspect.extension.dev instead (the evaluator's door, for fixture and forensic work). Pass share:true to UPLOAD the dist you just built and get back a public link (share.previewUrl) that renders those exact bytes for anyone who opens it, with no install and no dev server, and that also serves the whole build as a downloadable zip. Sharing needs a token scoped to an existing extension.dev workspace and project (extension_login or EXTENSION_DEV_TOKEN, valid up to 7 days), so a local folder with no project on the platform cannot share. Use share:true whenever the build has to reach someone who is not at this machine, since the plain deepLink only resolves locally.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -225,7 +186,7 @@ export const schema = {
         type: "boolean",
         default: false,
         description:
-          "Upload the built dist and return a shareable link (share.previewUrl) that renders those exact bytes in the emulator for anyone who opens it. Requires auth (extension_login or EXTENSION_DEV_TOKEN); degrades gracefully with a login hint when not authenticated, and never fails the local preview. The link expires (share.expiresAt) and can be revoked early by DELETEing share.revokeUrl with the same token.",
+          "Upload the built dist and return a public link (share.previewUrl) that renders those exact bytes in the emulator for anyone who opens it: no install, no sign-in, no dev server. The link also serves the whole build as a downloadable zip (share.zipUrl), so sharing it hands over the built code. Needs a token scoped to an existing extension.dev workspace and project (extension_login or EXTENSION_DEV_TOKEN, valid up to 7 days); without one this returns a login hint and never fails the local preview. The link stays live until share.expiresAt, and DELETEing share.revokeUrl with the same token kills it sooner; a revoked link stays dead, and re-sharing the same build returns a new link.",
       },
     },
     required: ["projectPath"],
@@ -248,14 +209,11 @@ export async function handler(args: {
   const browser = args.browser ?? "chrome";
   const surfaceKey: SurfaceKey = args.surface === "inspect" ? "inspect" : "preview";
   const surface = SURFACES[surfaceKey];
-  // inspectUrl predates the preview surface, so it only speaks for inspect.
   const hostBase = (
     args.hostUrl ??
     (surfaceKey === "inspect" ? args.inspectUrl : undefined) ??
     surface.defaultOrigin
   ).replace(/\/+$/, "");
-  // An explicit distPath is authoritative: the caller already has the artifact,
-  // so building would only overwrite it.
   const shouldBuild = args.distPath ? false : args.build !== false;
 
   let buildResult: Record<string, unknown> | null = null;
@@ -304,8 +262,6 @@ export async function handler(args: {
     });
   }
 
-  // base64url keeps the absolute path a single clean URL segment; the surface's
-  // dev middleware decodes it and reads the dist off disk.
   const encoded = Buffer.from(distDir).toString("base64url");
   const internalUrl = surface.scheme(encoded);
   const deepLink = `${hostBase}/?url=${encodeURIComponent(internalUrl)}`;
@@ -329,12 +285,6 @@ export async function handler(args: {
     }`,
   };
 
-  // Focus-safe auto-open: drive a running dev session's browser to the deep
-  // link in a NEW BACKGROUND tab (reuses extension_open's CDP path, which never
-  // steals the foreground/keyboard). This is the same move extension_open makes
-  // for inspect's trace lane (?session=live), applied to the preview lane. It
-  // needs a live session; without one the deep link is still returned to open
-  // by hand.
   if (args.open) {
     const sessionBrowser = args.openIn ?? browser;
     const navRaw = await navigateToUrl(args.projectPath, sessionBrowser, deepLink);
@@ -352,11 +302,6 @@ export async function handler(args: {
     }
   }
 
-  // Shareable preview: additive, opt-in, and uploads the dist resolved above,
-  // so the link renders the same bytes the local deepLink does. Attached to the
-  // local result so every return path below (probe on/off) carries it. Never
-  // fails the local preview: an upload error surfaces inside share, not as the
-  // tool's verdict.
   if (args.share) {
     result.share = await buildShare(distDir, manifest, browser);
   }
@@ -365,9 +310,6 @@ export async function handler(args: {
     return JSON.stringify(result);
   }
 
-  // Probe the exact middleware the browser will hit. A JSON payload with a
-  // manifest is proof the surface resolved and seeded the artifact; a
-  // connection refusal means the dev server is not up.
   const probeUrl = `${hostBase}${surface.fetchPath}?url=${encodeURIComponent(
     internalUrl,
   )}`;
