@@ -19,12 +19,14 @@ import {
   parseChannels,
   registryFileUrl,
   resolveProjectRef,
+  userlandProjectUrl,
 } from "../lib/registry";
+import { UserlandProjectPage } from "@extension.dev/urls/userland";
 
 export const schema = {
   name: "extension_release_list",
   description:
-    "List the project's release channels (channel -> promoted build sha) and recent builds from the public registry (registry.extension.land), so you can pick a valid buildSha for extension_release_promote, extension_deploy, or extension_publish. Read-only, no dispatch. Defaults to the logged-in project (extension_login); pass workspace + project to inspect another public project. Also returns the registry URLs it read and the console Builds page URL.",
+    "List the project's release channels (channel -> promoted build sha) and recent builds from the registry (registry.extension.land), so you can pick a valid buildSha for extension_release_promote, extension_deploy, or extension_publish. Read-only, no dispatch. Defaults to the logged-in project (extension_login); pass workspace + project to inspect another project. Works for PRIVATE projects too when your stored login covers them. Returns the registry URLs it read, the console Builds page URL (needs a login), and a publicUrl per channel and build on the public viewer (no login needed for a public project).",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -38,6 +40,11 @@ export const schema = {
         description:
           "Project slug override (defaults to the stored login's project).",
       },
+      api: {
+        type: "string",
+        description:
+          "Platform base URL (defaults to https://www.extension.dev or EXTENSION_DEV_API_URL). Used to resolve link origins and, for a private project, to mint a short-lived read token.",
+      },
     },
     required: [],
   },
@@ -50,6 +57,7 @@ function fail(name: string, message: string, extra?: Record<string, unknown>): s
 export async function handler(args: {
   workspace?: string;
   project?: string;
+  api?: string;
 }): Promise<string> {
   const ref = resolveProjectRef(args);
   if (!ref) {
@@ -64,19 +72,19 @@ export async function handler(args: {
   const buildsUrl = registryFileUrl(ref, "builds/index.json");
 
   const [channelsRes, metaRes, buildsRes] = await Promise.all([
-    fetchRegistryJson(channelsUrl),
-    fetchRegistryJson(metaUrl),
-    fetchRegistryJson(buildsUrl),
+    fetchRegistryJson(channelsUrl, fetch, { ref, api: args.api }),
+    fetchRegistryJson(metaUrl, fetch, { ref, api: args.api }),
+    fetchRegistryJson(buildsUrl, fetch, { ref, api: args.api }),
   ]);
 
-  const buildsPageUrl = consoleProjectUrl(ref, "builds");
+  const buildsPageUrl = consoleProjectUrl(ref, "builds", args.api);
 
   if (!channelsRes.ok && !metaRes.ok && !buildsRes.ok) {
     return fail(
       "ReleaseListNotFound",
       `No registry data for ${ref.workspace}/${ref.project} (${channelsUrl} returned ${
         channelsRes.status ?? "no response"
-      }). The project may have no builds yet, be private (private registry data needs a share token), or the workspace/project slugs may be wrong. The console Builds page is the authoritative view: ${buildsPageUrl}`,
+      }). The project may have no builds yet, or the workspace/project slugs may be wrong. If it is private, make sure extension_login covers this exact project (a token scoped elsewhere cannot read it). The console Builds page is the authoritative view: ${buildsPageUrl}`,
       { workspace: ref.workspace, project: ref.project, registryUrl: channelsUrl, buildsPageUrl },
     );
   }
@@ -96,16 +104,47 @@ export async function handler(args: {
     new Set(channels.map((c) => c.sha).filter(Boolean)),
   );
 
+  // The public viewer link for every row, so the caller can hand a human a URL
+  // that opens without a login. Private projects need a `?share=` token on top
+  // (extension_publish mints one), which publicUrlNote states rather than
+  // leaving the bare URL to imply otherwise.
+  const isPrivate = String(meta?.visibility || "").toLowerCase() === "private";
+  const publicProjectUrl = userlandProjectUrl(ref, "", args.api);
+  const channelsWithUrls = channels.map((c) => ({
+    ...c,
+    publicUrl: userlandProjectUrl(
+      ref,
+      UserlandProjectPage.channel(c.channel),
+      args.api,
+    ),
+  }));
+  const buildsWithUrls = recentBuilds.map((b) => ({
+    ...b,
+    publicUrl: userlandProjectUrl(
+      ref,
+      UserlandProjectPage.build(b.sha),
+      args.api,
+    ),
+  }));
+
   const result: Record<string, unknown> = {
     ok: true,
     workspace: ref.workspace,
     project: ref.project,
     ...(meta?.name ? { name: meta.name } : {}),
     ...(meta?.visibility ? { visibility: meta.visibility } : {}),
-    channels,
-    recentBuilds,
+    channels: channelsWithUrls,
+    recentBuilds: buildsWithUrls,
     registryUrl: channelsUrl,
     buildsPageUrl,
+    ...(publicProjectUrl ? { publicProjectUrl } : {}),
+    ...(publicProjectUrl
+      ? {
+          publicUrlNote: isPrivate
+            ? "publicUrl links open only for workspace members. This project is private, so an outside recipient needs a share link from extension_publish."
+            : "publicUrl links are the public build pages: no login needed, and they carry the per-browser downloads and the run locally instructions.",
+        }
+      : {}),
     message:
       promotable.length > 0 || recentBuilds.length > 0
         ? `Promotable shas: channels currently pin ${

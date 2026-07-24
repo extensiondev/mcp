@@ -105,7 +105,10 @@ export async function handler(args: {
   const ref = resolveProjectRef();
   if (ref) {
     const buildsUrl = registryFileUrl(ref, "builds/index.json");
-    const buildsRes = await fetchRegistryJson(buildsUrl);
+    const buildsRes = await fetchRegistryJson(buildsUrl, fetch, {
+      ref,
+      api: args.api,
+    });
     if (buildsRes.ok) {
       const items = parseBuildIndex(buildsRes.json);
       const pinned = args.buildSha

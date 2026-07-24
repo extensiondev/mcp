@@ -222,8 +222,14 @@ export async function handler(args: DeployToolArgs): Promise<string> {
     let channelRows: ReturnType<typeof parseChannels> | null = null;
     if (ref) {
       const [healthRes, channelsRes] = await Promise.all([
-        fetchRegistryJson(registryFileUrl(ref, "stores/health.json")),
-        fetchRegistryJson(registryFileUrl(ref, "channels.json")),
+        fetchRegistryJson(registryFileUrl(ref, "stores/health.json"), fetch, {
+          ref,
+          api: args.api,
+        }),
+        fetchRegistryJson(registryFileUrl(ref, "channels.json"), fetch, {
+          ref,
+          api: args.api,
+        }),
       ]);
       if (healthRes.ok) {
         const stores = (healthRes.json as { stores?: unknown })?.stores;

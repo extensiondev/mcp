@@ -8,12 +8,15 @@
 
 import { resolveToken } from "../lib/publish";
 import { resolveApiBase, safeApiBase } from "../lib/login-flow";
+import { UserlandProjectPage } from "@extension.dev/urls/userland";
+
 import {
   consoleProjectUrl,
   fetchRegistryJson,
   parseChannels,
   registryFileUrl,
   resolveProjectRef,
+  userlandProjectUrl,
 } from "../lib/registry";
 
 export const schema = {
@@ -139,7 +142,10 @@ export async function handler(args: {
         "Run extension_release_list to see this project's channels, their promoted shas, and recent builds.";
       if (ref) {
         const channelsUrl = registryFileUrl(ref, "channels.json");
-        const channelsRes = await fetchRegistryJson(channelsUrl);
+        const channelsRes = await fetchRegistryJson(channelsUrl, fetch, {
+          ref,
+          api: args.api,
+        });
         if (channelsRes.ok) {
           const rows = parseChannels(channelsRes.json).filter((c) => c.sha);
           enrich.validChannelShas = Object.fromEntries(
@@ -161,5 +167,27 @@ export async function handler(args: {
     });
   }
 
-  return JSON.stringify(data);
+  // The promotion landed. Hand back the PUBLIC pages for it as well as the
+  // console ones: the person who needs to see a promoted build is usually not
+  // the operator who ran the promote, and a console link asks them to log in.
+  const promotedRef = resolveProjectRef();
+  const publicChannelUrl = userlandProjectUrl(
+    promotedRef,
+    UserlandProjectPage.channel(channel),
+    args.api,
+  );
+  const publicBuildUrl = userlandProjectUrl(
+    promotedRef,
+    UserlandProjectPage.build(buildId),
+    args.api,
+  );
+  const enriched =
+    data && typeof data === "object" && !Array.isArray(data)
+      ? {
+          ...data,
+          ...(publicChannelUrl ? { publicChannelUrl } : {}),
+          ...(publicBuildUrl ? { publicBuildUrl } : {}),
+        }
+      : data;
+  return JSON.stringify(enriched);
 }
