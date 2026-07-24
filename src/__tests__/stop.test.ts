@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach } from "vitest";
+import { describe, it, expect, afterEach, afterAll } from "vitest";
 import { spawn } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
@@ -6,6 +6,27 @@ import path from "node:path";
 import * as stop from "../tools/stop";
 import { registerSession, getSession } from "../lib/process-manager";
 import { resolveExtensionInvocation } from "../lib/exec";
+
+// stop.handler({all: true}) unions the in-memory registry with the on-disk
+// session markers, and those live in a machine-wide directory by default. A
+// marker left behind by any earlier real dev session would be discovered here
+// and really stopped, which is both wrong and slow enough to blow the test
+// timeout. Point markerDir() at a throwaway directory so this file only ever
+// sees the markers it wrote itself. Keep this even though the shared setup
+// file (setup-session-dir.ts) does the same: the assertions below depend on
+// the isolation, so it is stated where it is relied on.
+const previousSessionDir = process.env.EXTENSION_MCP_SESSION_DIR;
+const sessionDir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-stop-markers-"));
+process.env.EXTENSION_MCP_SESSION_DIR = sessionDir;
+
+afterAll(() => {
+  if (previousSessionDir === undefined) {
+    delete process.env.EXTENSION_MCP_SESSION_DIR;
+  } else {
+    process.env.EXTENSION_MCP_SESSION_DIR = previousSessionDir;
+  }
+  fs.rmSync(sessionDir, { recursive: true, force: true });
+});
 
 function spawnVictim(): number {
   const child = spawn(
@@ -107,6 +128,9 @@ describe("extension_stop", () => {
     expect(fs.existsSync(readyPath)).toBe(false);
   });
 
+  // Relies on the throwaway marker directory set at the top of this file:
+  // all=true sweeps on-disk markers too, so without it this would try to stop
+  // real sessions belonging to the machine.
   it("stops everything with all=true", async () => {
     const projectA = tmpProject();
     const projectB = tmpProject();

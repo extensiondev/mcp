@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -12,6 +12,17 @@ import * as sourceInspect from "../tools/source-inspect";
 import * as logs from "../tools/logs";
 import * as storage from "../tools/storage";
 import * as addFeature from "../tools/add-feature";
+
+// Without a ready contract, resolveCdpPort probes port 9222, so any Chrome
+// started with remote debugging on the developer's machine counts as a live
+// session and inverts the "no dev session" assertions below. Stating the
+// precondition here keeps those tests about the handler, not the machine.
+// Same pattern as preview-web.test.ts.
+vi.mock("../lib/cdp-port", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../lib/cdp-port")>()),
+  resolveCdpPort: async () => null,
+  resolveRdpPort: async () => null,
+}));
 
 describe("MCP Server tool registry", () => {
   it("has exactly 35 tools", () => {
@@ -155,11 +166,6 @@ describe("inspect handler", () => {
     expect(parsed.error).toContain("not found");
   });
 
-  // A zip:true build writes the store zip INSIDE dist/<browser>/, so every
-  // file used to count twice: once loose and once inside its own package,
-  // and the reported size inflated right after packaging (DevX swarm).
-  // Archives follow the sourcemap pattern: counted in totalSize, excluded
-  // from shippableSize.
   it("excludes .zip artifacts from the shippable size", async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-inspect-zip-"));
     try {
@@ -170,8 +176,6 @@ describe("inspect handler", () => {
         JSON.stringify({ manifest_version: 3, name: "F", version: "1.0.0" }),
       );
       fs.writeFileSync(path.join(distDir, "background.js"), "x".repeat(1000));
-      // Big enough to push totalSize past the 10MB store gate on its own, so
-      // the under10MB assertion below proves the archive is excluded there.
       const zipSize = 11 * 1024 * 1024;
       fs.writeFileSync(
         path.join(distDir, "zipprobeext-1.0.0.zip"),
@@ -186,8 +190,6 @@ describe("inspect handler", () => {
         parsed.totalSize - parsed.byType.archive.size,
       );
       expect(parsed.archiveNote).toContain("shippableSize excludes them");
-      // The zip is the package, not payload: it must not read as a dev build
-      // artifact or flip the 10MB store gate.
       expect(parsed.buildType).toBe("production");
       expect(parsed.totalSize).toBeGreaterThan(10 * 1024 * 1024);
       expect(parsed.storeReadiness.under10MB).toBe(true);
@@ -231,9 +233,6 @@ describe("add-feature handler", () => {
 
 describe("source-inspect handler", () => {
   it("documents the Firefox bridge pairing instead of a Chromium-only claim", () => {
-    // Firefox sessions are served over the agent bridge (see
-    // gecko-bridge-pairing.test.ts for the behavior); the description must
-    // say so, and must not read as CDP/Chromium-only.
     expect(sourceInspect.schema.description).toContain("agent bridge");
     expect(sourceInspect.schema.description).toContain("Firefox");
     expect(sourceInspect.schema.description).not.toMatch(/Chromium only/i);
@@ -261,8 +260,6 @@ describe("logs handler", () => {
 
   it("reads, filters, and caps events from logs.ndjson", async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "extjs-logs-"));
-    // Matches resolveSessionBrowser's fallback, which is "chrome" (not
-    // "chromium") since the 5.0.0 pass.
     const dir = path.join(root, "dist", "extension-js", "chrome");
     fs.mkdirSync(dir, { recursive: true });
     const lines = [
