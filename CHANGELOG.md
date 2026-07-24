@@ -1,10 +1,19 @@
 # Changelog
 
-## 5.7.0
+## 6.0.0
 
-The live-preview carrier stops living in your project, reports what it
-refused, and rides an engine that tells you when the browser turned your
-extension away.
+The server moves to Apache-2.0, and the live-preview carrier stops living
+in your project, reports what it refused, and rides an engine that tells
+you when the browser turned your extension away.
+
+### Changed
+
+- **License: MIT is now Apache-2.0.** Everything published up to and
+  including 5.6.1 was released under MIT and stays MIT forever; you keep
+  those rights on those versions. From 6.0.0 forward the license is
+  Apache-2.0, which adds an express patent grant and requires anyone
+  shipping a modified copy to state that they changed the files. For almost
+  every user this changes nothing about what you are allowed to do.
 
 ### Fixed
 
