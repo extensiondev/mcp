@@ -54,10 +54,105 @@ function deriveCarrierId(source: string): string | null {
   }
 }
 
+/** Where the carrier lands inside a project. */
+export function carrierPath(projectPath: string): string {
+  return path.join(projectPath, "extensions", CARRIER_DIR_NAME);
+}
+
+/** True only for a directory carrying our marker, i.e. ours to delete. */
+export function isManagedCarrier(projectPath: string): boolean {
+  return fs.existsSync(path.join(carrierPath(projectPath), MARKER_FILE));
+}
+
+export type CarrierRemoval = {
+  removed: boolean;
+  path: string;
+  /** Present when something was there but was NOT ours to touch. */
+  note?: string;
+};
+
+/**
+ * Remove the carrier from a project, marker-guarded.
+ *
+ * The trace swarm's most release-dangerous finding was that a debugging flag
+ * leaves a permanent companion extension in the project: it survived
+ * extension_stop, Extension.js auto-scans ./extensions, and the first
+ * `git add -A` vendors it. Nothing removed it, ever. Stop and build both call
+ * this now, and `extension_dev carrier: true` puts it back on demand.
+ */
+export function removeCarrier(projectPath: string): CarrierRemoval {
+  const target = carrierPath(projectPath);
+  if (!fs.existsSync(target)) return { removed: false, path: target };
+  if (!fs.existsSync(path.join(target, MARKER_FILE))) {
+    return {
+      removed: false,
+      path: target,
+      note: `extensions/${CARRIER_DIR_NAME} has no ${MARKER_FILE} marker, so it is not the carrier this tool placed and was left untouched.`,
+    };
+  }
+  try {
+    fs.rmSync(target, { recursive: true, force: true });
+  } catch (error) {
+    return {
+      removed: false,
+      path: target,
+      note: `Could not remove the carrier: ${error instanceof Error ? error.message : String(error)}`,
+    };
+  }
+  // Leave no empty scaffolding behind: the folder is ours only while the
+  // carrier is in it.
+  const parent = path.join(projectPath, "extensions");
+  try {
+    if (fs.readdirSync(parent).length === 0) fs.rmdirSync(parent);
+  } catch {
+  }
+  return { removed: true, path: target };
+}
+
+/**
+ * Keep the carrier out of the user's commits. The scaffolder runs `git init`
+ * with no initial commit, so the first `git add -A` in a project that ever ran
+ * with carrier: true vendors 460K of somebody else's extension.
+ * Returns the line added, or null when nothing needed doing.
+ */
+export function ensureCarrierIgnored(projectPath: string): string | null {
+  if (!fs.existsSync(path.join(projectPath, ".git"))) return null;
+  const entry = `extensions/${CARRIER_DIR_NAME}/`;
+  const file = path.join(projectPath, ".gitignore");
+  let current = "";
+  try {
+    current = fs.readFileSync(file, "utf-8");
+  } catch {
+  }
+  const ignored = current
+    .split("\n")
+    .map((line) => line.trim())
+    .some(
+      (line) =>
+        line === entry ||
+        line === `extensions/${CARRIER_DIR_NAME}` ||
+        line === "extensions/" ||
+        line === "extensions",
+    );
+  if (ignored) return null;
+  try {
+    const prefix = current === "" || current.endsWith("\n") ? "" : "\n";
+    fs.appendFileSync(
+      file,
+      `${prefix}\n# Extension.dev live-preview carrier: a local debug companion, not part of your extension.\n${entry}\n`,
+    );
+    return entry;
+  } catch {
+    return null;
+  }
+}
+
 export type CarrierMaterialization = {
   loaded: boolean;
   path?: string;
   note: string;
+  /** The .gitignore entry this run added, when it added one. */
+  gitignored?: string;
   /**
    * What the carrier lane CANNOT do, stated at the moment it is handed over.
    * The trace swarm's top finding was that the real lane's boundaries were
@@ -119,7 +214,7 @@ export function materializeCarrier(
       note: "This install ships no bundled carrier payload (extensions/live-preview/chromium missing from the package).",
     };
   }
-  const target = path.join(projectPath, "extensions", CARRIER_DIR_NAME);
+  const target = carrierPath(projectPath);
   const marker = path.join(target, MARKER_FILE);
   if (fs.existsSync(target) && !fs.existsSync(marker)) {
     return {
@@ -143,19 +238,23 @@ export function materializeCarrier(
         {
           managedBy: "@extension.dev/mcp",
           carrierVersion: manifest.version ?? "unknown",
-          note: "Safe to delete; extension_dev recreates it when carrier: true. Add extensions/ to .gitignore if you do not want it tracked.",
+          note: "Safe to delete; extension_dev recreates it when carrier: true. extension_stop and extension_build remove it for you.",
         },
         null,
         2,
       )}\n`,
     );
+    const ignored = ensureCarrierIgnored(projectPath);
     return {
       loaded: true,
       path: target,
+      ...(ignored ? { gitignored: ignored } : {}),
       note:
         "Live-preview carrier placed in ./extensions; Extension.js loads it as a companion beside your extension. " +
         "Open https://inspect.extension.dev/?session=live in the dev browser (any http://localhost origin works too) " +
-        "to watch the session's real-lane chrome.* trace on the Trace tab.",
+        "to watch the session's real-lane chrome.* trace on the Trace tab. " +
+        "It is a debug companion, never part of a release: extension_stop and extension_build remove it again" +
+        (ignored ? `, and ${ignored} was added to .gitignore.` : "."),
       limitations: [
         "The trace shows calls a PAGE bridges to the carrier. Your extension's own chrome.* calls run directly in its contexts and never cross the carrier, so they do not appear.",
         "Bridged calls run under the CARRIER's identity, not your extension's. The preview assumes a single active guest and does not namespace per-extension state, so storage, action/badge state, messaging delivery, offscreen documents and relative script paths belong to the carrier. Rows affected are badged carrier-scoped in the Trace tab.",

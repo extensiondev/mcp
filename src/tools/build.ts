@@ -10,6 +10,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { runExtensionCli } from "../lib/exec";
 import { liveProjectSessions } from "../lib/session-browser";
+import { CARRIER_DIR_NAME, removeCarrier } from "../lib/carrier";
 
 // The engine's persisted BuildSummary (§73): dist/extension-js/<browser>/
 // build-summary.json, written after a successful build so shell-out hosts get
@@ -318,6 +319,33 @@ function manifestDivergence(
   return notes;
 }
 
+// Defense in depth behind the pre-build removal: prove the shipped tree has no
+// carrier in it instead of assuming so. The trace swarm reported that
+// carrier: true "contaminates the shipped artifact"; it did not, but the only
+// way anyone knew was to unzip and look. Now the build looks, every time.
+const MARKER_FILE_NAME = "managed-by-extension-dev-mcp.json";
+
+function carrierEntriesInDist(distDir: string, depth = 0): string[] {
+  if (depth > 3) return [];
+  let entries: fs.Dirent[];
+  try {
+    entries = fs.readdirSync(distDir, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+  const found: string[] = [];
+  for (const entry of entries) {
+    if (entry.name === CARRIER_DIR_NAME || entry.name === MARKER_FILE_NAME) {
+      found.push(path.join(distDir, entry.name));
+      continue;
+    }
+    if (entry.isDirectory()) {
+      found.push(...carrierEntriesInDist(path.join(distDir, entry.name), depth + 1));
+    }
+  }
+  return found;
+}
+
 interface ValidationPreflight {
   valid: boolean;
   buildBlocking: boolean;
@@ -365,6 +393,22 @@ export async function handler(args: {
   const start = Date.now();
   const browser = args.browser ?? "chrome";
 
+  // A build is a release action, so the live-preview carrier must not be in the
+  // tree while it runs. Extension.js auto-scans ./extensions, `--zip-source`
+  // packs the source tree, and every static check walks the project: a debug
+  // flag set hours earlier has no business reaching any of them. The directory
+  // is marker-guarded and `extension_dev carrier: true` puts it back, so this
+  // removes rather than refuses. Anything without our marker is left alone.
+  const carrierCleanup = removeCarrier(args.projectPath);
+  const carrierNotes: string[] = [];
+  if (carrierCleanup.removed) {
+    carrierNotes.push(
+      "Removed the Extension.dev live-preview carrier from ./extensions before building. It is a debug companion, not part of your extension; run extension_dev with carrier: true to get it back.",
+    );
+  } else if (carrierCleanup.note) {
+    carrierNotes.push(carrierCleanup.note);
+  }
+
   const preflight = args.skipValidation
     ? null
     : await validationPreflight(args.projectPath, browser);
@@ -376,7 +420,7 @@ export async function handler(args: {
       error:
         "Build refused: the manifest has errors that produce a broken extension even when the bundler succeeds.",
       errors: preflight.errors,
-      warnings: preflight.warnings,
+      warnings: [...carrierNotes, ...preflight.warnings],
       duration: Date.now() - start,
       hint:
         "Fix the errors above, then build again. Run extension_manifest_validate for the full report. " +
@@ -393,9 +437,11 @@ export async function handler(args: {
   const clobberedSessions = liveProjectSessions(args.projectPath).filter(
     (session) => session.browser === browser,
   );
-  const warnings: string[] = clobberedSessions.map(
+  const warnings: string[] = carrierNotes.concat(
+    clobberedSessions.map(
     (session) =>
-      `A live dev session (pid ${session.pid}) is running on this project for ${browser}, and this build wrote over its dist/${browser} output. The dev browser may now serve the production artifact instead of the dev build until the next recompile. Run extension_stop, or let dev recompile on the next source change, to resolve it.`,
+        `A live dev session (pid ${session.pid}) is running on this project for ${browser}, and this build wrote over its dist/${browser} output. The dev browser may now serve the production artifact instead of the dev build until the next recompile. Run extension_stop, or let dev recompile on the next source change, to resolve it.`,
+    ),
   );
 
   // Shell out to the project's own extension CLI (project-local bin when
@@ -435,9 +481,26 @@ export async function handler(args: {
             : {}),
         }
       : {};
-    const entrypoints = builtEntrypoints(
-      path.resolve(args.projectPath, "dist", browser),
-    );
+    const distDir = path.resolve(args.projectPath, "dist", browser);
+    const entrypoints = builtEntrypoints(distDir);
+    // Verified, not assumed: if the carrier ever does reach dist, the build
+    // says so instead of handing over a store artifact with somebody else's
+    // extension in it.
+    const contamination = carrierEntriesInDist(distDir);
+    if (contamination.length) {
+      return JSON.stringify({
+        success: false,
+        status: "contaminated",
+        browser,
+        buildExitCode: 0,
+        error:
+          `The build output contains the Extension.dev live-preview carrier: ${contamination.join(", ")}. ` +
+          "That is a local debug companion and must never ship. This artifact is not safe to submit.",
+        ...(warnings.length ? { warnings } : {}),
+        duration,
+        hint: "Delete the listed paths from dist and build again. The carrier normally lives in ./extensions and is removed before every build.",
+      });
+    }
     // A zero exit code is the BUNDLER's verdict, not the artifact's. If the
     // built manifest declares a file the dist does not contain, Chrome refuses
     // to load the extension, so reporting success:true here would be the same

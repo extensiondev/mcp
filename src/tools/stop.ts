@@ -18,11 +18,12 @@ import {
   removeSessionMarker,
 } from "../lib/process-manager";
 import { resolveSessionBrowser } from "../lib/session-browser";
+import { removeCarrier } from "../lib/carrier";
 
 export const schema = {
   name: "extension_stop",
   description:
-    "Stop a running dev, start, or preview session: terminates the dev server and the browser it launched. Counterpart to extension_dev/extension_start. Call it when you are done verifying so sessions do not accumulate.",
+    "Stop a running dev, start, or preview session: terminates the dev server and the browser it launched, and removes the live-preview carrier if extension_dev placed one. Counterpart to extension_dev/extension_start. Call it when you are done verifying so sessions do not accumulate.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -53,6 +54,16 @@ interface StopOutcome {
   stopped: boolean;
   reaped: number[];
   detail: string;
+  /** Set when this stop took the live-preview carrier back out of the project. */
+  carrierRemoved?: string;
+}
+
+// The carrier is scoped to a dev session, so stopping the session takes it out
+// of the project again. It used to survive every stop, leaving a companion
+// extension in the user's tree (and in their next `git add -A`) forever.
+function cleanCarrier(projectPath: string): { carrierRemoved?: string } {
+  const removal = removeCarrier(projectPath);
+  return removal.removed ? { carrierRemoved: removal.path } : {};
 }
 
 function pgrepPids(pattern: string): number[] {
@@ -162,6 +173,7 @@ export async function stopOne(
       pid: null,
       stopped: reaped.length === 0 ? false : true,
       reaped,
+      ...cleanCarrier(projectPath),
       detail:
         reaped.length === 0
           ? "No known session for this project/browser (nothing registered in this server and no ready.json contract found)."
@@ -205,7 +217,15 @@ export async function stopOne(
     detail += ` Reaped ${reaped.length} browser process(es).`;
   }
 
-  return { projectPath, browser, pid, stopped, reaped, detail };
+  return {
+    projectPath,
+    browser,
+    pid,
+    stopped,
+    reaped,
+    detail,
+    ...cleanCarrier(projectPath),
+  };
 }
 
 export async function handler(args: {
