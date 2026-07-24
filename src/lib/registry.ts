@@ -16,8 +16,8 @@
 // fail the verb it decorates.
 
 import { readCredentials } from "./credentials";
-import { PROD_ORIGINS, resolveOrigins, type Origins } from "./urls-origins";
-import { consoleProjectPath } from "./urls-paths";
+import { PROD_ORIGINS, resolveOrigins, type Origins } from "@extension.dev/urls/origins";
+import { consoleProjectPath } from "@extension.dev/urls/paths";
 
 export const REGISTRY_BASE_DEFAULT = PROD_ORIGINS.registry;
 
@@ -28,7 +28,7 @@ export const REGISTRY_BASE_DEFAULT = PROD_ORIGINS.registry;
  * MCP hands back follows to the dev host (`console.extension.localhost`) instead
  * of silently pointing at prod. Explicit per-host env vars still win. Falls back
  * to production when nothing is set. The dev-derivation lives in
- * `@extensiondev/urls` so it stays identical to what the apps resolve.
+ * `@extension.dev/urls` so it stays identical to what the apps resolve.
  */
 export function mcpOrigins(apiHint?: string): Origins {
   const www =
@@ -38,6 +38,7 @@ export function mcpOrigins(apiHint?: string): Origins {
       www,
       console: process.env.EXTENSION_DEV_CONSOLE_URL,
       inspect: process.env.EXTENSION_DEV_INSPECT_URL,
+      preview: process.env.EXTENSION_DEV_PREVIEW_URL,
       registry: process.env.EXTENSION_DEV_REGISTRY_URL,
       media: process.env.EXTENSION_MEDIA_ORIGIN,
     },

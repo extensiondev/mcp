@@ -1,5 +1,23 @@
 # Changelog
 
+## 6.2.0
+
+The URL layer stops being a copy. This server used to carry byte-identical
+vendored mirrors of the fleet's origin resolver and path builders, kept honest
+by a drift guard; it now depends on the published package instead.
+
+### Changed
+
+- **Depends on `@extension.dev/urls` instead of vendoring it.** The mirrors at
+  `lib/urls-origins.ts` and `lib/urls-paths.ts` are gone, and `registry.ts`,
+  `login-flow.ts`, and `create.ts` import the package directly. It is bundled
+  into `dist`, so the install footprint is unchanged: no new runtime
+  dependency, same standalone server.
+- **`preview.extension.dev` resolves like every other fleet origin.** `preview`
+  is now a first-class origin in the shared resolver, so `EXTENSION_DEV_PREVIEW_URL`
+  is honored and an unset preview host follows the same local-vs-prod signal as
+  console, inspect, and registry rather than defaulting to production.
+
 ## 6.1.0
 
 The create flow stops dead-ending at `run dev` and points you to the web to
