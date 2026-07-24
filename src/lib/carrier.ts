@@ -6,6 +6,7 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // MIT License (c) Cezar Augusto and the extension.dev collaborators
 
+import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -25,6 +26,34 @@ export const CARRIER_DIR_NAME = "extension-dev-live-preview";
 /** Marker proving the directory is ours to overwrite on version updates. */
 const MARKER_FILE = "managed-by-extension-dev-mcp.json";
 
+/**
+ * The carrier's extension id, DERIVED from the payload's own manifest key
+ * rather than hardcoded, so it cannot drift if the key is ever regenerated.
+ *
+ * Chrome's rule for a keyed extension: SHA-256 the DER public key, take the
+ * first 16 bytes, and map each nibble onto 'a'-'p'.
+ */
+function deriveCarrierId(source: string): string | null {
+  try {
+    const manifest = JSON.parse(
+      fs.readFileSync(path.join(source, "manifest.json"), "utf-8"),
+    ) as { key?: string };
+    if (!manifest.key) return null;
+    const hash = createHash("sha256")
+      .update(Buffer.from(manifest.key, "base64"))
+      .digest();
+    return [...hash.subarray(0, 16)]
+      .map(
+        (byte) =>
+          String.fromCharCode(97 + (byte >> 4)) +
+          String.fromCharCode(97 + (byte & 15)),
+      )
+      .join("");
+  } catch {
+    return null;
+  }
+}
+
 export type CarrierMaterialization = {
   loaded: boolean;
   path?: string;
@@ -38,6 +67,19 @@ export type CarrierMaterialization = {
    * was written down anywhere the caller would look.
    */
   limitations?: string[];
+  /**
+   * How to actually DRIVE the real lane. Seven personas reached a
+   * permanently empty trace and concluded the feature was broken, because
+   * nothing in the 33 tool schemas, this note, or the rendered page named the
+   * carrier's extension id or its message envelopes. Every persona that did
+   * reach the real lane used out-of-band knowledge of the emulator source.
+   */
+  bridgeProtocol?: {
+    carrierExtensionId: string;
+    allowedOrigins: string;
+    howTo: string;
+    example: string;
+  };
 };
 
 /** Walk up from this module until the bundled payload directory is found. */
@@ -88,6 +130,7 @@ export function materializeCarrier(
         "so it is not managed by this tool and was left untouched. Remove or rename it to let extension_dev place the carrier there.",
     };
   }
+  const carrierId = deriveCarrierId(source);
   try {
     fs.rmSync(target, { recursive: true, force: true });
     fs.cpSync(source, target, { recursive: true });
@@ -118,6 +161,23 @@ export function materializeCarrier(
         "Bridged calls run under the CARRIER's identity, not your extension's. The preview assumes a single active guest and does not namespace per-extension state, so storage, action/badge state, messaging delivery, offscreen documents and relative script paths belong to the carrier. Rows affected are badged carrier-scoped in the Trace tab.",
         "Chromium-family only: Firefox has no externally_connectable channel for web pages.",
       ],
+      ...(carrierId
+        ? {
+            bridgeProtocol: {
+              carrierExtensionId: carrierId,
+              allowedOrigins:
+                "https://inspect.extension.dev, https://intelligence.extension.dev, https://themes.extension.dev, http://localhost/*, http://127.0.0.1/*",
+              howTo:
+                "From a page on an allowed origin, register your guest once with a 'session' message (it declares the permissions the carrier enforces), then send 'bridge' messages to run chrome.* for real; each one streams into the Trace tab. Use the EXACT dotted wire names the bridge dispatcher accepts: storage is storage.get/set/remove/clear with the AREA AS AN ARGUMENT, NOT storage.local.get.",
+              example: [
+                `const id = '${carrierId}'`,
+                "const send = (msg) => new Promise((r) => chrome.runtime.sendMessage(id, msg, r))",
+                "await send({ type: 'extensiondev:session', extensionId: 'my-guest', permissions: ['storage'] })",
+                "await send({ type: 'extensiondev:bridge', request: { type: 'EXTENSION_BRIDGE_REQUEST', extensionId: 'my-guest', requestId: 'r1', api: 'storage.get', args: [null, 'local'] } })",
+              ].join("\n"),
+            },
+          }
+        : {}),
     };
   } catch (error) {
     return {
