@@ -25,6 +25,17 @@ bundled Live Preview carrier finally allows the origin that opens it.
   `share` also returns `expiresAt` and `revokeUrl`: shared builds expire, and
   `DELETE`ing `revokeUrl` with the same token kills the link for good, which is
   the part a TTL alone cannot do when a link reaches the wrong person.
+- **A shared link's revoke handle survives losing the tool output.** Revocation
+  is permanent and re-sharing mints a new artifact id, so `share.revokeUrl` is
+  the only handle that can ever pull a given link, and losing it used to mean
+  waiting out the 30-day TTL. Every successful share is now appended to
+  `.extension.dev/shared-previews.json` in the project, next to the carrier's
+  own project-local state and gitignored the same way: one entry per share with
+  `previewUrl`, `artifactId`, `revokeUrl`, `expiresAt`, `zipUrl` and the time it
+  was shared. The list is only ever appended to, an unreadable file is kept
+  aside instead of overwritten, a write that fails never fails the share, and
+  the returned `share.record` and note say where the handle went. If the entry
+  cannot be added to `.gitignore`, the response says so.
 - **`extension_theme_verify` settles a Chrome theme manifest before it ships.**
   It derives every color current Chrome would paint from the manifest with a
   transcribed Chromium resolver and reports the divergence class of any problem:

@@ -11,6 +11,7 @@ import path from "node:path";
 import * as build from "./build";
 import { navigateToUrl } from "./open";
 import { uploadPreview } from "../lib/preview-upload";
+import { recordSharedPreview } from "../lib/share-record";
 
 
 const DEFAULT_INSPECT_URL = "http://localhost:3106";
@@ -36,6 +37,7 @@ const SURFACES = {
 type SurfaceKey = keyof typeof SURFACES;
 
 async function buildShare(
+  projectPath: string,
   distDir: string,
   manifest: Record<string, any>,
   browser: string,
@@ -58,17 +60,40 @@ async function buildShare(
     };
   }
 
+  const sharedAt = new Date().toISOString();
+  const record = recordSharedPreview(projectPath, {
+    sharedAt,
+    previewUrl: result.data.previewUrl,
+    artifactId: result.data.artifactId,
+    ...(result.data.revokeUrl ? { revokeUrl: result.data.revokeUrl } : {}),
+    ...(result.data.expiresAt ? { expiresAt: result.data.expiresAt } : {}),
+    ...(result.data.zipUrl ? { zipUrl: result.data.zipUrl } : {}),
+    ...(typeof manifest.name === "string" ? { name: manifest.name } : {}),
+    ...(typeof manifest.version === "string"
+      ? { version: manifest.version }
+      : {}),
+    browser,
+    distDir,
+  });
+
   return {
     requested: true,
     ok: true,
     previewUrl: result.data.previewUrl,
     artifactId: result.data.artifactId,
+    sharedAt,
     ...(result.data.expiresAt ? { expiresAt: result.data.expiresAt } : {}),
     ...(result.data.zipUrl ? { zipUrl: result.data.zipUrl } : {}),
     ...(result.data.revokeUrl ? { revokeUrl: result.data.revokeUrl } : {}),
     serves: "uploaded-local-build",
     localBuildUploaded: true,
-    note: "Anyone with this link can open the build you just made, running in the emulator. No install, no sign-in, no dev server. They can also download the whole build as a zip from zipUrl, so the link hands over the built code. It stays live until expiresAt; DELETE revokeUrl with the same token to kill it sooner, and a revoked link stays dead.",
+    record,
+    note:
+      "Anyone with this link can open the build you just made, running in the emulator. No install, no sign-in, no dev server. They can also download the whole build as a zip from zipUrl, so the link hands over the built code. It stays live until expiresAt; DELETE revokeUrl with the same token to kill it sooner, and a revoked link stays dead. revokeUrl is the only handle that pulls this link early and re-sharing mints a different one, so " +
+      (record.recorded
+        ? `it was also written to ${record.path} (record.path), which lists every share from this project.`
+        : `keep it: ${record.note}`) +
+      (record.warning ? ` ${record.warning}` : ""),
   };
 }
 
@@ -186,7 +211,7 @@ export const schema = {
         type: "boolean",
         default: false,
         description:
-          "Upload the built dist and return a public link (share.previewUrl) that renders those exact bytes in the emulator for anyone who opens it: no install, no sign-in, no dev server. The link also serves the whole build as a downloadable zip (share.zipUrl), so sharing it hands over the built code. Needs a token scoped to an existing extension.dev workspace and project (extension_login or EXTENSION_DEV_TOKEN, valid up to 7 days); without one this returns a login hint and never fails the local preview. The link stays live until share.expiresAt, and DELETEing share.revokeUrl with the same token kills it sooner; a revoked link stays dead, and re-sharing the same build returns a new link.",
+          "Upload the built dist and return a public link (share.previewUrl) that renders those exact bytes in the emulator for anyone who opens it: no install, no sign-in, no dev server. The link also serves the whole build as a downloadable zip (share.zipUrl), so sharing it hands over the built code. Needs a token scoped to an existing extension.dev workspace and project (extension_login or EXTENSION_DEV_TOKEN, valid up to 7 days); without one this returns a login hint and never fails the local preview. The link stays live until share.expiresAt, and DELETEing share.revokeUrl with the same token kills it sooner; a revoked link stays dead, and re-sharing the same build returns a new link. Because re-sharing never reproduces the old link, every successful share is also appended to .extension.dev/shared-previews.json in the project (gitignored) so the revoke handle survives losing this response.",
       },
     },
     required: ["projectPath"],
@@ -303,7 +328,12 @@ export async function handler(args: {
   }
 
   if (args.share) {
-    result.share = await buildShare(distDir, manifest, browser);
+    result.share = await buildShare(
+      args.projectPath,
+      distDir,
+      manifest,
+      browser,
+    );
   }
 
   if (args.probe === false) {
