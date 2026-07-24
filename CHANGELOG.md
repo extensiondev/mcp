@@ -2,27 +2,53 @@
 
 ## 6.4.0
 
-A build on your machine can now become a link someone else can open.
+A build on your machine can now become a link someone else can open, and the
+bundled Live Preview carrier finally allows the origin that opens it.
 
-### Changed
+### Added
 
-- **`extension_preview_web` with `share:true` uploads the build you just
-  made.** It used to route sharing through `extension_publish`, which takes no
-  project path and uploads nothing: it flips a share link on whatever build the
-  token's project last pushed from its own CI. So the link rendered a different
-  build than the one on disk, and said so in a caveat. It now POSTs the resolved
+- **`extension_preview_web` renders an in-progress build in the web emulator.**
+  It builds the project, points `preview.extension.dev` at `dist/<browser>` over
+  the dev-only `preview://build` scheme, and returns a deep link plus a
+  loadability check against the preview dev server. `surface:"inspect"` renders
+  in `inspect.extension.dev` instead, for fixture and forensic work. This tool
+  reaches npm for the first time in this release.
+- **`share:true` uploads the build you just made.** It POSTs the resolved
   `dist/<browser>` to the platform's artifact store and returns a
   `preview.extension.dev` link that renders those exact bytes, for a recipient
   with no install, no sign-in, and no dev server. `share.serves` reports
-  `uploaded-local-build`; the `requiredBackend` spec that described this as
-  missing is gone because it is built.
-- `share` now returns `expiresAt` and `revokeUrl`. Shared builds expire, and
-  `DELETE`ing `revokeUrl` with the same token kills the link immediately, which
-  is the part a TTL alone cannot do when a link reaches the wrong person.
-- The `channel` argument is removed from `extension_preview_web`. It only ever
-  selected which promoted CI build to render, and this tool no longer renders
-  promoted builds. `extension_publish` and `extension_release_promote` are
-  unchanged and remain the path for released, channel-scoped builds.
+  `uploaded-local-build`. Sharing needs auth (`extension_login` or
+  `EXTENSION_DEV_TOKEN`), degrades to a login hint when unauthenticated, and
+  never fails the local preview. `share` also returns `expiresAt` and
+  `revokeUrl`: shared builds expire, and `DELETE`ing `revokeUrl` with the same
+  token kills the link immediately, which is the part a TTL alone cannot do when
+  a link reaches the wrong person.
+- **`extension_theme_verify` settles a Chrome theme manifest before it ships.**
+  It derives every color current Chrome would paint from the manifest with a
+  transcribed Chromium resolver and reports the divergence class of any problem:
+  D1 fabrication, D3 parity gap, D4 acceptance gap (keys Chrome silently
+  discards, such as dead legacy keys, incognito keys, unknown keys and
+  out-of-range values). The legs that need a real browser come back as
+  `needsAttended` with a pointer to the attended harnesses, never as passed.
+
+### Fixed
+
+- **The bundled Live Preview carrier reaches `preview.extension.dev`.** This
+  package ships the carrier prebuilt and `extension_dev` materializes it into
+  the project's `./extensions`, so the carrier only changes when the package
+  does. Its `externally_connectable` allowlist had no web preview origin, so a
+  page on `preview.extension.dev` could not talk to the carrier at all. 6.3.0
+  shipped without the fix.
+- The carrier popup requested `icons/icon.png` while the carrier build ships
+  `images/icon.png`, so the popup icon was broken.
+
+### Changed
+
+- `extension_preview_web` takes no `channel` argument. It renders the build on
+  disk, not a promoted CI build. `extension_publish` and
+  `extension_release_promote` are unchanged and remain the path for released,
+  channel-scoped builds.
+- The server advertises 35 tools, up from 33.
 
 ## 6.3.0
 
