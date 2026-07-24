@@ -59,9 +59,6 @@ export async function handler(args: {
   };
 
   if (!args.files?.length) {
-    // The catalog prefixes each entry with its corpus layout
-    // (`public/<slug>/...`), but the file hosts serve the slug-relative path.
-    // Advertise the paths that actually resolve when passed back in `files`.
     return JSON.stringify({
       ...meta,
       files: template.files.map((f) =>
@@ -76,7 +73,6 @@ export async function handler(args: {
 
   await Promise.all(
     args.files.map(async (filePath) => {
-      // Media release first, then commit-pinned raw fallback.
       const urls = await templateFileUrls(args.slug, filePath);
       let lastStatus = 0;
       for (const url of urls) {

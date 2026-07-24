@@ -1,10 +1,5 @@
 import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
 
-// DevX fresh-eyes finding: dom_inspect targets pages, but nothing in the
-// toolset exposed WHICH tab to point it at, and CDP targetIds vs chrome.tabs
-// ids is a known trap. `tabUrl` targets by a URL substring resolved against
-// the live CDP page targets (unique match or enumerate, never guess), and
-// `listTargets` is the discovery path.
 
 const calls: string[][] = [];
 let actResponder: (cli: string[]) => string = () => JSON.stringify({ ok: true });
@@ -91,9 +86,6 @@ describe("dom_inspect listTargets", () => {
   });
 
   it("reports a missing Gecko session as NoSession with the rdpPort hint", async () => {
-    // Gecko listTargets is paired via the RDP root actor now; with no live
-    // session there is no rdpPort, and the error must say how to get one
-    // instead of the old "Unsupported" refusal.
     const result = JSON.parse(
       await domInspect.handler({ projectPath: "/p", listTargets: true, browser: "firefox" }),
     );

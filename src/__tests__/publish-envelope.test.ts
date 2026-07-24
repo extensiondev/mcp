@@ -32,8 +32,6 @@ describe("extension_publish envelope compatibility", () => {
   });
 
   it("returns the frozen PublishAuthError bytes when no token is available", async () => {
-    // publish takes NO projectPath by design: the target is the token's
-    // project, local files are never uploaded.
     const out = await handler({});
     expect(out).toBe(
       JSON.stringify({

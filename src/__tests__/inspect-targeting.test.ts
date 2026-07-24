@@ -21,9 +21,6 @@ afterEach(() => {
 });
 
 describe("dom_inspect targeting", () => {
-  // Upstream #51 made url a first-class selector with an active-tab default.
-  // dom_inspect used to refuse content/page without a numeric tab id, which
-  // blocked the path that now works.
   it("no longer demands a tab id for content", async () => {
     const result = JSON.parse(
       await domInspect.handler({ projectPath: "/p", context: "content" }),
@@ -91,9 +88,6 @@ describe("eval targeting", () => {
   });
 });
 
-// L9: extension_open surface:"command" used to fire a command that the manifest
-// never declares, returning a green "triggered" for a shortcut that can only
-// ever be a no-op.
 describe("open command validates against the manifest", () => {
   const fs = require("node:fs") as typeof import("node:fs");
   const os = require("node:os") as typeof import("node:os");
@@ -149,11 +143,6 @@ describe("open command validates against the manifest", () => {
   });
 });
 
-// Opening the popup of an extension whose manifest sets no action.default_popup
-// used to hand back the engine's raw openPopup rejection, which reads as a
-// broken session rather than a fact about the extension. The tool must say
-// what is absent, where it would be declared, and what verb works instead,
-// without ever spawning the CLI for a popup that cannot exist.
 describe("open popup validates against the manifest", () => {
   const fs = require("node:fs") as typeof import("node:fs");
   const os = require("node:os") as typeof import("node:os");

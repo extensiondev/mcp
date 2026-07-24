@@ -12,8 +12,6 @@ export interface InputIssue {
 }
 
 interface PropertySchema {
-  // JSON Schema allows a union, e.g. type: ["number", "boolean"] for an arg that
-  // accepts a count or a plain `true`.
   type?: string | string[];
   enum?: unknown[];
   items?: { type?: string | string[]; enum?: unknown[] };
@@ -45,8 +43,6 @@ function checkPrimitive(
   const primitives = allowed.filter((t) =>
     ["string", "number", "boolean"].includes(t),
   );
-  // Only enforce when EVERY allowed type is a primitive we understand; a union
-  // that mixes in "array"/"object" falls through to the checks below.
   if (primitives.length > 0 && primitives.length === allowed.length) {
     if (!primitives.includes(typeOf(value))) {
       issues.push({
@@ -79,11 +75,6 @@ function checkPrimitive(
   }
 }
 
-// Common argument synonyms folded to each tool's canonical name before
-// validation, so callers who reach for the obvious word (`name`, `code`,
-// `path`, `template`) are not rejected. Applied schema-aware: an alias is only
-// rewritten when the canonical IS a property of this tool and the alias is NOT
-// (so a tool that legitimately uses the alias word keeps its own meaning).
 const ARG_ALIASES: Record<string, string[]> = {
   projectPath: ["path", "dir", "projectDir", "cwd"],
   projectName: ["name"],
@@ -92,17 +83,11 @@ const ARG_ALIASES: Record<string, string[]> = {
   expression: ["code", "js", "script"],
   manifestPath: ["manifest"],
   surface: ["view", "target"],
-  // Second alias wave, from the 4.9.0 swarm's arg-name friction: callers reached
-  // for the *other* spelling of the same idea and ate a validation error.
   timeout: ["timeoutMs", "timeoutMillis"],
   limit: ["lines", "count", "max", "maxLines"],
   tab: ["tabId"],
   url: ["href", "pageUrl"],
   browser: ["browserName"],
-  // P7 vocabulary fix: extension_deploy says buildSha while
-  // extension_release_promote says buildId for the same build commit. Each
-  // tool accepts the other's word; the schema-aware rule below keeps a tool's
-  // own spelling authoritative and only folds the spelling it does not own.
   buildSha: ["buildId"],
   buildId: ["buildSha"],
 };
@@ -160,10 +145,6 @@ export function validateToolInput(
   return issues;
 }
 
-// The complete argument surface of a tool: required args, optional args, and
-// which of them answer to an alias. Swarm cluster C4/C7: errors that reveal one
-// field at a time ("projectName is required") sent personas probing the schema
-// with invalid calls, while an accepted alias (`name`) went entirely unnamed.
 export function describeToolArgs(inputSchema: Record<string, unknown>): {
   required: string[];
   optional: string[];
@@ -176,8 +157,6 @@ export function describeToolArgs(inputSchema: Record<string, unknown>): {
   const aliases: Record<string, string[]> = {};
   for (const [canonical, list] of Object.entries(ARG_ALIASES)) {
     if (!(canonical in props)) continue;
-    // Same rule normalizeArgAliases applies: an alias the tool owns as a real
-    // property is not an alias for that tool.
     const usable = list.filter((alias) => !(alias in props));
     if (usable.length) aliases[canonical] = usable;
   }
@@ -197,8 +176,6 @@ export function inputValidationError(
         .map((i) => `${i.path}: ${i.message}`)
         .join("; ")}`,
       issues,
-      // Enumerate the whole schema so one bad call teaches the full contract
-      // instead of doling out one missing field per attempt.
       ...(inputSchema ? { args: describeToolArgs(inputSchema) } : {}),
     },
   });

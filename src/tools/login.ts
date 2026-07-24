@@ -83,10 +83,6 @@ function pending(start: {
   verificationUri: string;
   verificationUriComplete?: string;
 }): string {
-  // Lead with the one-click link when the flow provides one (RFC 8628
-  // verification_uri_complete, the code already embedded): the user just
-  // opens it and approves, no code typing. The bare URI + code stay in the
-  // result as the fallback for flows (GitHub-direct) that cannot prefill.
   const complete = String(start.verificationUriComplete || "").trim();
   const hasCompleteLink =
     complete.length > 0 && complete !== start.verificationUri;
@@ -107,9 +103,6 @@ function pending(start: {
 }
 
 function resumePending(deviceCode: string, verificationUri: string): string {
-  // Resume path: the server stores only a hash of the user code, so the code
-  // (and the prefilled one-click link) cannot be reconstructed here. Both are
-  // still valid from the previous response; point the user back at them.
   return JSON.stringify({
     ok: false,
     status: "authorization_pending",
@@ -146,7 +139,6 @@ export async function handler(args: {
     );
   }
 
-  // extension.dev-gated device flow (branded /device, GitHub server-side).
   if (config.provider === "extensiondev") {
     if (args.deviceCode) {
       const poll = await pollDeviceToken({
@@ -206,7 +198,6 @@ export async function handler(args: {
     });
   }
 
-  // Legacy GitHub-direct device flow (fallback).
   if (args.deviceCode) {
     const poll = await pollForToken({
       clientId: config.clientId,

@@ -6,10 +6,6 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-// Browser-launch flags shared by extension_dev, extension_start, and
-// extension_preview. Mirrors the engine CLI surface so agents can drive
-// profiles, custom binaries, and Docker-style host splits.
-
 export const LAUNCH_FLAG_SCHEMA = {
   profile: {
     type: "string",

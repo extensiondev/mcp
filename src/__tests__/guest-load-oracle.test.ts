@@ -1,8 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
 
-// Mock the two seams the oracle depends on: the CDP target list and the port
-// resolver. Mirrors the dev-health-tick mock style (top-level lets captured by
-// the factory, mutated per test).
 type RawTarget = {
   id: string;
   type: string;
@@ -32,8 +29,8 @@ vi.mock("../lib/cdp-port", () => ({
 const { verifyGuestLoaded } = await import("../lib/guest-load-oracle");
 const { CARRIER_EXTENSION_ID } = await import("../lib/carrier");
 
-const GUEST = "abcdefghijklmnopabcdefghijklmnop"; // 32 chars in a-p
-const COMPANION = "kgdaecdpfkikjncaalnmmnjjfpofkcbl"; // engine devtools companion
+const GUEST = "abcdefghijklmnopabcdefghijklmnop";
+const COMPANION = "kgdaecdpfkikjncaalnmmnjjfpofkcbl";
 
 function target(url: string, type = "service_worker"): RawTarget {
   return { id: `t-${url}`, type, url, title: "", webSocketDebuggerUrl: "" };

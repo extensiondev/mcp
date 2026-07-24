@@ -11,9 +11,6 @@ export interface ConsoleMessage {
   text: string;
 }
 
-// The console shape source_inspect reports, shared by both transports (CDP
-// event buffer on Chromium, RDP watcher resources on Firefox): total, counts
-// per level, and the most-repeated messages deduplicated per level.
 export function summarizeConsoleMessages(
   messages: ConsoleMessage[],
 ): Record<string, unknown> {

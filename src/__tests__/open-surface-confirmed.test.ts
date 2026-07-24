@@ -4,10 +4,6 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-// `extension open options` answers {"opened":"options"} whether or not a
-// document ever appears. Four personas took that at face value, inspected a
-// surface that was not there, and were told by dom_inspect to run the call that
-// had already claimed success. Ask the browser, not the CLI.
 let actResult = JSON.stringify({ ok: true, opened: "options" });
 let cdpTargets: Array<{ id: string; type: string; url: string }> = [];
 
@@ -96,7 +92,6 @@ describe("extension_open surface confirmation", () => {
     expect(result.error.name).toBe("SurfaceDidNotOpen");
     expect(result.error.message).toContain("nothing is there to inspect");
     expect(result.hint).toContain("asTab: true");
-    // The engine's own answer is kept, not hidden.
     expect(result.engineResult.opened).toBe("options");
   }, 15_000);
 

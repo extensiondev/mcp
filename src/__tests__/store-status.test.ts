@@ -20,7 +20,6 @@ function jsonResponse(body: unknown, ok = true, status = 200): Response {
   } as unknown as Response;
 }
 
-/** Route registry fetches by URL suffix; unrouted files 404. */
 function fetchByFile(files: Record<string, unknown>): typeof fetch {
   return (async (url: string) => {
     for (const [suffix, body] of Object.entries(files)) {
@@ -118,8 +117,6 @@ describe("extension_store_status: registration + schema", () => {
       (schema.inputSchema as { properties: Record<string, unknown> })
         .properties,
     );
-    // `api` joined workspace/project when these reads became token-aware:
-    // a private project needs a platform base to mint its read token against.
     expect(props.sort()).toEqual(["api", "project", "workspace"]);
     expect((schema.inputSchema as { required: string[] }).required).toEqual([]);
   });
@@ -140,7 +137,7 @@ describe("extension_store_status handler", () => {
   beforeEach(() => {
     tmp = fs.mkdtempSync(path.join(os.tmpdir(), "extdev-store-status-"));
     prevXdg = process.env.XDG_CONFIG_HOME;
-    process.env.XDG_CONFIG_HOME = tmp; // no stored login by default
+    process.env.XDG_CONFIG_HOME = tmp;
     prevFetch = global.fetch;
   });
 
@@ -152,7 +149,7 @@ describe("extension_store_status handler", () => {
   });
 
   it("fails without a project, naming extension_login and the overrides", async () => {
-    if (process.platform === "win32") return; // credentials path uses APPDATA
+    if (process.platform === "win32") return;
     const out = JSON.parse(await handler({}));
     expect(out.ok).toBe(false);
     expect(out.error.name).toBe("StoreStatusInputError");
@@ -179,24 +176,17 @@ describe("extension_store_status handler", () => {
       out.stores.map((r: { store: string }) => [r.store, r]),
     );
 
-    // Healthy configured store, nothing submitted.
     expect(byStore.chrome.configured).toBe(true);
     expect(byStore.chrome.health.ok).toBe(true);
     expect(byStore.chrome.lastSubmission).toBeUndefined();
 
-    // Configured store with a FAILING credential stays configured:true (the
-    // remedy is rotating the credential, not configuring the store).
     expect(byStore.edge.configured).toBe(true);
     expect(byStore.edge.health.ok).toBe(false);
     expect(byStore.edge.health.message).toContain("Unauthorized");
 
-    // Safari is a first-class lane; with no config or submissions in the
-    // fixtures it reports as an unconfigured store, like any other.
     expect(byStore.safari.configured).toBe(false);
     expect(byStore.safari.lastSubmission).toBeUndefined();
 
-    // Latest submission wins (not the older approved one), with the fields
-    // the task contract names: version/status/storeUrl/submittedAt.
     expect(byStore.firefox.lastSubmission.version).toBe("1.0.2");
     expect(byStore.firefox.lastSubmission.status).toBe("submitted");
     expect(byStore.firefox.lastSubmission.storeUrl).toBe(
@@ -212,8 +202,6 @@ describe("extension_store_status handler", () => {
     expect(out.registryUrls.status).toContain(
       "/acme/widget/_extension-dev/stores/status.json",
     );
-    // The summary names the failing store's remedy and the unconfigured
-    // store's deep console route.
     expect(out.message).toContain("FAILED the last health check");
     expect(out.message).toContain("/stores/edge");
   });
@@ -254,7 +242,6 @@ describe("extension_store_status handler", () => {
     );
     expect(firefox.lastSubmission.version).toBe("1.0.2");
     expect(firefox.lastSubmission.submittedAt).toBe("2026-07-22T17:25:08.746Z");
-    // A 404 on the optional submissions.json is normal, not a degradation.
     expect(out.submissionsUnavailable).toBeUndefined();
   });
 

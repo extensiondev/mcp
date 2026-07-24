@@ -42,15 +42,9 @@ describe("materializeCarrier", () => {
   });
 
   it("hands over the protocol needed to actually drive the real lane", () => {
-    // Seven trace-swarm personas reached a permanently empty trace and
-    // concluded the feature was broken: nothing in the tool schemas, the
-    // carrier note or the page named the carrier's id or its message
-    // envelopes, so the only way in was reading emulator source.
     const result = materializeCarrier(projectDir, "chrome");
     const protocol = result.bridgeProtocol;
     expect(protocol).toBeDefined();
-    // Derived from the payload's own manifest key, so it cannot drift from
-    // the extension the browser actually loads.
     const manifest = JSON.parse(
       fs.readFileSync(
         path.join(projectDir, "extensions", CARRIER_DIR_NAME, "manifest.json"),
@@ -71,12 +65,10 @@ describe("materializeCarrier", () => {
       .join("");
     expect(protocol?.carrierExtensionId).toBe(expected);
     expect(protocol?.carrierExtensionId).toMatch(/^[a-p]{32}$/);
-    // The example must be runnable, not gestural.
     expect(protocol?.example).toContain("extensiondev:session");
     expect(protocol?.example).toContain("extensiondev:bridge");
     expect(protocol?.example).toContain("EXTENSION_BRIDGE_REQUEST");
     expect(protocol?.example).toContain(protocol?.carrierExtensionId ?? "");
-    // And it must not teach the wire name that does not exist (F-C5b).
     expect(protocol?.example).not.toContain("storage.local.get");
     expect(protocol?.howTo).toContain("storage.local.get");
   });
@@ -89,8 +81,6 @@ describe("materializeCarrier", () => {
   });
 
   it("keeps the stable carrier id in step with what the payload derives", () => {
-    // The oracle and the emulator both trust the CARRIER_EXTENSION_ID literal to
-    // tell the carrier apart from the guest; guard it against a regenerated key.
     const result = materializeCarrier(projectDir, "chrome");
     expect(result.bridgeProtocol?.carrierExtensionId).toBe(CARRIER_EXTENSION_ID);
   });
@@ -98,8 +88,6 @@ describe("materializeCarrier", () => {
   it("names the graduation path to the guest's own isolated state", () => {
     const result = materializeCarrier(projectDir, "chrome");
     const g = result.graduation ?? "";
-    // The shared-identity limitation must not be a dead end: point the caller at
-    // the guest itself (already loaded), driven by the control verbs.
     expect(g).toMatch(/already loaded as ITSELF/i);
     expect(g).toMatch(
       /extension_storage|extension_eval|extension_dom_inspect/,

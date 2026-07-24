@@ -115,9 +115,6 @@ function safeStringify(value: unknown): string {
   }
 }
 
-// Recent error-level logs from the dev session, so a runtime crash (background
-// throwing on every event, now captured since engine #55) is surfaced even when
-// ready.json still says "ready" and the harness legs pass.
 export function recentErrorLogs(
   projectPath: string,
   browser: string,
@@ -143,7 +140,6 @@ export function recentErrorLogs(
       messageParts?: unknown[];
       errorName?: string;
       stack?: string;
-      // Pre-LOG_EVENT_VERSION shapes, kept as fallbacks.
       args?: unknown[];
       message?: string;
       text?: string;
@@ -154,10 +150,6 @@ export function recentErrorLogs(
       continue;
     }
     if (!ev || ev.level !== "error") continue;
-    // The engine's LogEvent carries the payload in `messageParts` (uncaught
-    // errors ship "<message>\n<stack>" as a single part). Reading `args` here
-    // silently dropped every row, which is why doctor still reported
-    // healthy:true over a crashing background in the 4.9.0 swarm.
     const parts = Array.isArray(ev.messageParts)
       ? ev.messageParts
       : Array.isArray(ev.args)
@@ -170,8 +162,6 @@ export function recentErrorLogs(
     msg = msg.replace(/\s+/g, " ").trim();
     if (msg) errs.push(msg.slice(0, 300));
   }
-  // The same throw repeats on every event; show the distinct tail instead of
-  // five copies of one error.
   return [...new Set(errs)].slice(-max);
 }
 
@@ -214,16 +204,10 @@ export async function handler(args: {
       }
     }
 
-    // The CLI doctor reports harness legs (ports, token, executor) but does not
-    // fail on an error recorded in the ready contract, a build or extension
-    // load failure would otherwise read as healthy. Inline it and downgrade.
     let healthy = code === 0;
     const contract = readReadyContract(projectPath, browser);
     if (contract?.status === "error") {
       healthy = false;
-      // Engines with the bug-71/72 fixes stamp code:"browser_exited" when the
-      // launched browser died; name that instead of the generic build wording,
-      // because the remediation is entirely different.
       const browserExited =
         contract.code === "browser_exited" ||
         contract.browserExitCode !== undefined;
@@ -246,9 +230,6 @@ export async function handler(args: {
           : "The build or extension load failed. Fix the reported error, let the dev server recompile, then re-run doctor.",
       });
     } else {
-      // ready.json says ready, but the extension may still be throwing at
-      // runtime (e.g. a missing permission for a called chrome.* API). Surface
-      // recent error-level logs and downgrade, so doctor isn't falsely healthy.
       const errs = recentErrorLogs(projectPath, browser);
       if (errs.length) {
         healthy = false;
@@ -256,21 +237,12 @@ export async function handler(args: {
           check: "runtime-errors",
           status: "fail",
           detail: `Recent error-level logs: ${errs.join(" | ")}`,
-          // The old copy said manifest_validate "now checks this" for permission
-          // causes without qualification. It checks permissions[] MEMBERSHIP
-          // only: it does not model host-permission scope or gesture
-          // requirements. Two personas followed the pointer, got valid:true, and
-          // burned a debug cycle; in one case it steered them off the real
-          // cause. Say exactly what the check covers.
           remediation:
             "The extension is throwing at runtime. Inspect with extension_logs. A chrome.* API called without its permission is a common cause: extension_manifest_validate catches a permission MISSING FROM permissions[], but it does not model host-permission scope (e.g. webRequest with no matching host_permissions) or gesture requirements (e.g. activeTab without a user gesture), so a valid:true there does not rule those out.",
         });
       }
     }
 
-    // Keep the project-local engine version visible in project mode (env mode
-    // reports it; project mode dropped it) and flag when it differs from a pin
-    // because the project bin, not EXTENSION_MCP_CLI_VERSION, drives the dev loop.
     const engineVersion = projectEngineVersion(projectPath);
     if (engineVersion) {
       const pin = String(process.env.EXTENSION_MCP_CLI_VERSION || "").trim();

@@ -1,9 +1,3 @@
-// extension_theme_verify unit + failure-reporting suite.
-//
-// Charter (THEMES_MCP_SWARM.md section 8, rules 3 and 4): break something real
-// and assert the verb SAYS SO, and never let a leg that did not run read as a
-// pass. So every "diverged/invalid" case below feeds the verb a genuinely
-// broken theme and asserts the divergence surfaces with its class.
 import { describe, it, expect, afterEach } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
@@ -20,8 +14,6 @@ function verify(input: Record<string, unknown>) {
   return handler(input as never).then((s) => JSON.parse(s));
 }
 
-// A minimal theme that Chrome accepts wholesale: two real color keys, valid
-// name/version, no images, no dead keys.
 const CLEAN = {
   name: "Clean",
   version: "1.0",
@@ -42,8 +34,6 @@ describe("happy path is honest about what it did NOT verify", () => {
 
     expect(r.ok).toBe(true);
     expect(r.verdict).toBe("headless-clean");
-    // Rule 4: a truthful surface must state its own limitation. The clean
-    // verdict must NOT read as full verification.
     expect(r.needsAttended).toBe(true);
     expect(r.legs.appShows.status).toBe("needs-attended");
     expect(r.legs.chromePaints.realPaint.status).toBe("needs-attended");
@@ -58,7 +48,6 @@ describe("happy path is honest about what it did NOT verify", () => {
     expect(r.legs.chromePaints.resolver.status).toBe("reported");
     expect(typeof resolved.frameActive).toBe("string");
     expect(resolved.frameActive).toMatch(/^#[0-9a-f]{6}$/);
-    // frame [30,60,90] -> #1e3c5a.
     expect(resolved.frameActive).toBe("#1e3c5a");
   });
 
@@ -102,7 +91,6 @@ describe("leg [4] D4 acceptance gap: keys Chrome silently discards", () => {
     expect(d4.some((f: { key: string }) => f.key === "colors.tab_text_inactive")).toBe(
       true,
     );
-    // It must also appear in the chrome-accepts leg's discarded list.
     expect(
       JSON.stringify(r.legs.chromeAccepts.discarded),
     ).toContain("tab_text_inactive");
@@ -161,9 +149,6 @@ describe("D1 fabrication candidate is advisory, not a false failure", () => {
         theme: { colors: { frame: [30, 60, 90], toolbar_text: [0, 0, 0] } },
       },
     });
-    // [0,0,0] on a Chrome-derived key is the importer's historical fabrication
-    // sentinel: surface it, but only leg [1] can confirm intent, so it stays
-    // advisory and the verdict is still headless-clean.
     expect(r.verdict).toBe("headless-clean");
     const d1 = r.findings.find((f: { class: string }) => f.class === "D1");
     expect(d1).toBeDefined();
@@ -173,8 +158,6 @@ describe("D1 fabrication candidate is advisory, not a false failure", () => {
   });
 
   it("does not cry fabrication over a required frame set to black", async () => {
-    // frame is not in the derivable set (it is the theme's own root), so a
-    // black frame is a deliberate choice, not a fabrication.
     const r = await verify({
       manifest: { name: "Dark", version: "1.0", theme: { colors: { frame: [0, 0, 0] } } },
     });

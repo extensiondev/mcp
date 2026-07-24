@@ -1,19 +1,10 @@
-// Public registry client (registry.extension.land).
-//
-// The platform publishes each project's release state as plain public JSON:
-//
-//   https://registry.extension.land/<workspace>/<project>/_extension-dev/meta.json
-//   https://registry.extension.land/<workspace>/<project>/_extension-dev/channels.json
-//   https://registry.extension.land/<workspace>/<project>/_extension-dev/builds/index.json
-//   https://registry.extension.land/<workspace>/<project>/_extension-dev/stores/health.json
-//   https://registry.extension.land/<workspace>/<project>/_extension-dev/stores/status.json
-//   https://registry.extension.land/<workspace>/<project>/builds/<sha>/build.json
-//
-// No auth is needed for public projects (private ones 404 without a share
-// token), so the release tools use this to answer "which shas exist, where do
-// promotions land, and is a store actually configured" without inventing a
-// new platform endpoint. Reads are best-effort: a registry blip must never
-// fail the verb it decorates.
+// ███╗   ███╗ ██████╗██████╗
+// ████╗ ████║██╔════╝██╔══██╗
+// ██╔████╔██║██║     ██████╔╝
+// ██║╚██╔╝██║██║     ██╔═══╝
+// ██║ ╚═╝ ██║╚██████╗██║
+// ╚═╝     ╚═╝ ╚═════╝╚═╝
+// Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
 import { readCredentials } from "./credentials";
 import {
@@ -30,15 +21,6 @@ import {
 
 export const REGISTRY_BASE_DEFAULT = PROD_ORIGINS.registry;
 
-/**
- * Resolve the fleet origins from the MCP's env vars, once per call. Console,
- * registry, and media all DERIVE from the platform base (`EXTENSION_DEV_API_URL`
- * or a per-tool `api`): point that at a local stack and every dashboard link the
- * MCP hands back follows to the dev host (`console.extension.localhost`) instead
- * of silently pointing at prod. Explicit per-host env vars still win. Falls back
- * to production when nothing is set. The dev-derivation lives in
- * `@extension.dev/urls` so it stays identical to what the apps resolve.
- */
 export function mcpOrigins(apiHint?: string): Origins {
   const www =
     String(apiHint || process.env.EXTENSION_DEV_API_URL || "").trim() || undefined;
@@ -56,7 +38,6 @@ export function mcpOrigins(apiHint?: string): Origins {
   );
 }
 
-/** Base origin of the console dashboard, dev-aware (no trailing slash). */
 export function consoleBase(apiHint?: string): string {
   return mcpOrigins(apiHint).console;
 }
@@ -70,12 +51,6 @@ export interface ProjectRef {
   project: string;
 }
 
-/**
- * Resolve which project registry reads should target: explicit overrides
- * first, then the stored login's workspace/project slugs. Returns null when
- * neither names a project (e.g. token came from EXTENSION_DEV_TOKEN and no
- * login was ever stored).
- */
 export function resolveProjectRef(overrides?: {
   workspace?: string;
   project?: string;
@@ -90,20 +65,12 @@ export function resolveProjectRef(overrides?: {
   return { workspace: ws, project: proj };
 }
 
-/** URL of a file under the project's `_extension-dev/` registry directory. */
 export function registryFileUrl(ref: ProjectRef, file: string): string {
   return `${registryBase()}/${encodeURIComponent(ref.workspace)}/${encodeURIComponent(
     ref.project,
   )}/_extension-dev/${file}`;
 }
 
-/**
- * Console page URL for the project (builds, releases/new, stores, ...). The
- * origin is dev-aware; the path comes from the shared route contract so a
- * console route rename is caught in one place. Pass `apiHint` (a tool's `api`
- * arg) so the link matches that call's environment; otherwise it follows
- * `EXTENSION_DEV_API_URL`/`EXTENSION_DEV_CONSOLE_URL`.
- */
 export function consoleProjectUrl(
   ref: ProjectRef | null,
   page: string,
@@ -114,19 +81,6 @@ export function consoleProjectUrl(
   return `${base}${consoleProjectPath(ref, page)}`;
 }
 
-/**
- * The PUBLIC page for a project, a build, or a channel on userland.
- *
- * The sibling of consoleProjectUrl, and the one to hand to a human who is not
- * the operator: the console links every tool already returns require a login
- * and workspace membership, so they are dead ends for a teammate, a reviewer,
- * or anyone reading a PR. These carry the per-browser downloads, the run
- * locally and integrity dialogs, and the what's new tab.
- *
- * A PRIVATE project's page still needs a `?share=` token, which only
- * extension_publish can mint; callers should say so rather than imply the bare
- * URL will open for anyone.
- */
 export function userlandProjectUrl(
   ref: ProjectRef | null,
   page = "",
@@ -136,8 +90,6 @@ export function userlandProjectUrl(
   try {
     return userlandUrl(ref, page, { base: mcpOrigins(apiHint).userland });
   } catch {
-    // A workspace slug that cannot be a subdomain is not worth failing a verb
-    // over; the tool's other output stays useful without the link.
     return "";
   }
 }
@@ -158,19 +110,6 @@ async function readJson<T>(
   }
 }
 
-/**
- * Fetch a registry JSON file. Never throws: 404s (never-built projects),
- * network failures, and non-JSON bodies all come back as `{ok:false}` so
- * callers can degrade honestly instead of crashing the verb.
- *
- * PRIVATE PROJECTS: a private project answers 401 here. When `ref` is given and
- * the caller holds a credential for that project, the 401 triggers one mint of
- * a short-lived access token and a single retry with `?t=`. Without `ref` the
- * behaviour is exactly as before, so this stays a drop-in for public reads:
- * public projects still complete in one round trip and never touch the
- * platform. See registry-access.ts for why the stored token is traded rather
- * than sent as `?t=` directly.
- */
 export async function fetchRegistryJson<T = unknown>(
   url: string,
   fetchImpl: typeof fetch = fetch,
@@ -179,8 +118,6 @@ export async function fetchRegistryJson<T = unknown>(
   const tokens = options?.tokens ?? defaultRegistryAccessTokens;
   const ref = options?.ref ?? null;
 
-  // A token already minted for this project rides along on the first attempt,
-  // so only the first read of a private project pays the 401 round trip.
   const cached = ref ? tokens.peek(ref) : "";
   const firstUrl = cached ? withAccessToken(url, cached) : url;
 
@@ -192,8 +129,6 @@ export async function fetchRegistryJson<T = unknown>(
   }
   if (res.ok) return readJson<T>(url, res);
 
-  // 403 as well as 401: the Worker uses 403 for a token that verifies but is
-  // no longer allowed (revoked, or minted before a membership change).
   const authFailed = res.status === 401 || res.status === 403;
   if (!authFailed || !ref) {
     return {
@@ -239,17 +174,10 @@ export interface ChannelEntry {
   sha: string;
   buildId?: string;
   version?: string;
-  /** ISO timestamp parsed from the channel row when the writer recorded one. */
   promotedAt?: string;
   description?: string;
 }
 
-/**
- * Normalize the registry's channels.json (a map of channel -> row) into a
- * list. `promotedAt` is not a first-class field in the file today; the
- * promote workflow stamps it into the description ("Promoted from X on
- * <ISO>"), so it is parsed back out when present.
- */
 export function parseChannels(json: unknown): ChannelEntry[] {
   if (!json || typeof json !== "object" || Array.isArray(json)) return [];
   const out: ChannelEntry[] = [];
@@ -288,7 +216,6 @@ export interface BuildIndexItem {
   browsers?: string[];
 }
 
-/** Normalize `_extension-dev/builds/index.json` items (schemaVersion 3). */
 export function parseBuildIndex(json: unknown): BuildIndexItem[] {
   const items = (json as { items?: unknown[] } | null)?.items;
   if (!Array.isArray(items)) return [];
@@ -316,13 +243,6 @@ export function parseBuildIndex(json: unknown): BuildIndexItem[] {
   return out;
 }
 
-/**
- * Derive the project mirror repo's Actions URL from any GitHub run URL the
- * registry exposes (stores/status.json carries one from the mirror's own
- * runs: https://github.com/extensiondev/<ownerGithubId>--<projectId>/actions/
- * runs/<id>). Only trusts the extensiondev org so a user-source-repo run URL
- * (build.json's runUrl) is never mistaken for the mirror.
- */
 export function mirrorActionsUrlFromRunUrl(runUrl: unknown): string | null {
   const match = String(runUrl ?? "").match(
     /^(https:\/\/github\.com\/extensiondev\/[^/]+)\/actions\b/,

@@ -12,12 +12,6 @@ import { filterKeysForThisBrowser } from "browser-extension-manifest-fields";
 import { isChromiumFamily, isGeckoFamily } from "../lib/browser-family";
 import { listTemplates } from "../lib/templates-cache";
 
-// Recognized MV3 API permissions across Chromium and Firefox. Not exhaustive of
-// every experimental flag, but covers the stable surface; unknown values warn.
-// Manifest keys that Chrome honors but Edge ignores (ChromeOS surfaces and
-// Chrome-desktop-only entry points). On the shared chromium key space they
-// resolve onto the edge build but do nothing there, so validate warns rather
-// than errors: the build is fine, the key is just inert.
 const CHROME_DESKTOP_ONLY_KEYS = [
   "file_browser_handlers",
   "file_system_provider_capabilities",
@@ -43,7 +37,6 @@ const KNOWN_PERMISSIONS = new Set<string>([
   "system.storage", "tabCapture", "tabGroups", "tabs", "topSites", "tts",
   "ttsEngine", "unlimitedStorage", "vpnProvider", "wallpaper", "webAuthenticationProxy",
   "webNavigation", "webRequest", "webRequestBlocking", "webRequestAuthProvider",
-  // Firefox-specific
   "browserSettings", "captivePortal", "contextualIdentities", "dns",
   "menus", "menus.overrideContext", "pkcs11", "theme", "webRequestFilterResponse",
 ]);
@@ -80,10 +73,6 @@ export const schema = {
   },
 };
 
-// Manifest fields whose value is a path to a bundled file. Globs, URLs, and
-// data: refs are not local files and are skipped. Extension.js resolves these
-// from a source root, so a miss is reported as a WARNING (verify with build),
-// never a hard error, to avoid false blockers on layouts we don't fully model.
 function collectPathRefs(m: Record<string, unknown>): string[] {
   const refs: string[] = [];
   const push = (v: unknown) => {
@@ -119,22 +108,14 @@ function collectPathRefs(m: Record<string, unknown>): string[] {
   if (sa) push(sa.default_panel);
   const cuo = m.chrome_url_overrides as Record<string, unknown> | undefined;
   if (cuo) Object.values(cuo).forEach(push);
-  // declarativeNetRequest rulesets. Missing these was invisible here while
-  // extension_build failed with NOT FOUND on the same tree, so an adblocker (one
-  // of the largest extension categories) got valid:true for a manifest the
-  // browser cannot load. Found by persona B6 in the API-surface swarm.
   const dnr = m.declarative_net_request as Record<string, unknown> | undefined;
   if (dnr && Array.isArray(dnr.rule_resources)) {
     for (const r of dnr.rule_resources) {
       if (r && typeof r === "object") push((r as Record<string, unknown>).path);
     }
   }
-  // Enterprise policy schema. C15 declared it, the file was never copied into
-  // dist, and validate said nothing at all while the build emitted a NOT FOUND
-  // warning and still reported success.
   const storage = m.storage as Record<string, unknown> | undefined;
   if (storage) push(storage.managed_schema);
-  // devtools_page and the MV2 page-action surface were also unreferenced.
   push(m.devtools_page);
   const pa = m.page_action as Record<string, unknown> | undefined;
   if (pa) {
@@ -158,7 +139,6 @@ function fileResolvesSomewhere(ref: string, roots: string[]): boolean {
   });
 }
 
-// Locate manifest.json from a project root (root first, then src/).
 function findManifest(projectPath: string): string | null {
   for (const rel of ["manifest.json", path.join("src", "manifest.json")]) {
     const candidate = path.resolve(projectPath, rel);
@@ -175,9 +155,6 @@ interface ValidationResult {
   similarTemplates: Array<{ slug: string; surfaces: string[] }>;
 }
 
-// chrome.<ns> / browser.<ns> namespaces that need a manifest permission. Used
-// but not declared = likely runtime failure; for HARD_APIS the namespace is
-// `undefined` and crashes the context at load (the false-green blocker).
 const API_PERMISSION: Record<string, string> = {
   storage: "storage", webNavigation: "webNavigation", history: "history",
   cookies: "cookies", bookmarks: "bookmarks", alarms: "alarms",
@@ -194,17 +171,6 @@ const HARD_APIS = new Set([
   "debugger", "pageCapture", "desktopCapture",
 ]);
 
-// Bounded scan of the project source for permission-gated API usage.
-//
-// `excluded` holds absolute directories whose code is NOT governed by this
-// manifest. Companion extensions under ./extensions are the case that matters:
-// Extension.js loads each of them as a SEPARATE extension with its OWN
-// manifest, so linting their API usage against the root manifest blames the
-// user for permissions somebody else's extension needs. The live-preview
-// carrier made this concrete - it holds every permission and calls
-// chrome.bookmarks/history/cookies/topSites/webNavigation/downloads, so a
-// single `extension_dev carrier: true` left every later build refused with six
-// buildBlocking errors the user's own code could never cause.
 function scanApiUsage(roots: string[], excluded: string[] = []): Set<string> {
   const used = new Set<string>();
   const skip = new Set(excluded.map((d) => path.resolve(d)));
@@ -251,17 +217,10 @@ export async function handler(args: {
   browser?: string;
   browsers?: string[];
 }): Promise<string> {
-  // Accept singular `browser` (every sibling tool uses it) as an alias for the
-  // `browsers` array.
   if (!args.browsers && typeof (args as { browser?: string }).browser === "string") {
     args = { ...args, browsers: [(args as { browser: string }).browser] };
   }
-  // Whether the caller NAMED the targets. When they did not, an advisory about
-  // a browser they never asked about must not decide the headline verdict.
   const explicitBrowsers = Array.isArray(args.browsers) && args.browsers.length > 0;
-  // edge is a first-class build target (the scaffold ships build:edge scripts)
-  // but was missing from the default matrix, so an Edge-first developer got no
-  // edge verdict unless they knew to ask. Persona F28 in the API-surface swarm.
   const browsers = args.browsers ?? ["chrome", "firefox", "edge"];
   const result: ValidationResult = {
     valid: true,
@@ -316,9 +275,6 @@ export async function handler(args: {
 
   const chromiumManifest = filterKeysForThisBrowser(manifest, "chrome");
 
-  // Probe path-valued fields against disk so a manifest pointing at a missing
-  // popup/script/icon no longer gets a clean bill of health. Reported as
-  // warnings (Extension.js resolves from source roots we don't fully model).
   const roots = [
     manifestDir,
     path.join(manifestDir, "src"),
@@ -328,25 +284,12 @@ export async function handler(args: {
   ];
   for (const ref of new Set(collectPathRefs(chromiumManifest))) {
     if (!fileResolvesSomewhere(ref, roots)) {
-      // This used to be a WARNING while `valid` stayed true, so the payload
-      // said "extension_build fails on this" in prose and "buildBlocking:false"
-      // in the machine fields, and any CI gate branching on `valid` shipped a
-      // broken build. The API-surface swarm supplied the evidence that was
-      // missing when this was written as a warning: on the same source tree,
-      // extension_build returns success:false with NOT FOUND. A reference that
-      // resolves nowhere is build-blocking, so say so. fileResolvesSomewhere
-      // already exempts globs, http(s) and data: URIs, which is what kept this
-      // conservative in the first place.
       result.errors.push(
         `Referenced file "${ref}" was not found near the manifest. extension_build fails on this dangling reference.`,
       );
     }
   }
 
-  // F29: default_locale declared with no catalog behind it. extension_dev
-  // fails its first compile on exactly this tree ("Default locale folder is
-  // missing"), and the zip build hides that root cause behind an ADM-ZIP
-  // warning, so validate staying silent here left no honest surface at all.
   const defaultLocale = manifest.default_locale;
   if (typeof defaultLocale === "string" && defaultLocale) {
     const hasCatalog = roots.some((root) =>
@@ -361,9 +304,6 @@ export async function handler(args: {
     }
   }
 
-  // F30: nothing anywhere warned when the 128px icon was missing, and the
-  // Chrome Web Store rejects listings without one. Advisory, not blocking:
-  // the extension loads fine unpacked.
   const iconMap = chromiumManifest.icons as Record<string, unknown> | undefined;
   if (!iconMap || typeof iconMap["128"] !== "string") {
     result.warnings.push(
@@ -371,14 +311,6 @@ export async function handler(args: {
     );
   }
 
-  // Code-vs-permission coherence: scan the source for permission-gated
-  // chrome.*/browser.* usage and flag anything the manifest doesn't declare. A
-  // HARD-gated API used without its permission is undefined at runtime and
-  // crashes the context, the exact false-green case where validate said valid.
-  // The declared set is the UNION across the requested targets' effective
-  // views (plus the chromium view), so this top-level error means "missing for
-  // every target"; a permission one target has and another lacks is reported
-  // per target in the loop below.
   const effectiveByBrowser = new Map<string, Record<string, unknown>>();
   for (const b of browsers) {
     effectiveByBrowser.set(b, filterKeysForThisBrowser(manifest, b));
@@ -392,8 +324,6 @@ export async function handler(args: {
       if (typeof p === "string") declaredPermSet.add(p);
     }
   }
-  // Companion extensions (./extensions/*) carry their own manifests, so their
-  // code must not be linted against this one. See scanApiUsage's note.
   const usedApis = scanApiUsage(
     roots,
     roots.map((r) => path.join(r, "extensions")),
@@ -421,23 +351,18 @@ export async function handler(args: {
     chromiumManifest.manifest_version !== 2 &&
     chromiumManifest.manifest_version !== 3
   ) {
-    // F27 got valid:true for manifest_version 4. No browser installs that.
     result.errors.push(
       `manifest_version must be 2 or 3, got ${JSON.stringify(chromiumManifest.manifest_version)}. No browser installs this manifest.`,
     );
   }
 
-  // Flag permission strings that aren't recognized API permissions (likely
-  // typos). Host/match patterns belong in host_permissions and are skipped
-  // here; unknown-but-plausible values warn rather than error, since the API
-  // surface grows over time.
   const declaredPerms = [
     ...((chromiumManifest.permissions as string[] | undefined) ?? []),
     ...((chromiumManifest.optional_permissions as string[] | undefined) ?? []),
   ].filter((p) => typeof p === "string");
   for (const perm of declaredPerms) {
     if (perm.includes("://") || perm.includes("*") || perm === "<all_urls>") {
-      continue; // host/match pattern, not an API permission
+      continue;
     }
     if (!KNOWN_PERMISSIONS.has(perm)) {
       result.warnings.push(
@@ -477,13 +402,6 @@ export async function handler(args: {
         );
       }
 
-      // Chrome and Edge share the chromium key space, but some keys only do
-      // anything on Chrome (ChromeOS surfaces, Chrome-desktop-only APIs). On
-      // the edge target they are inert: Edge ignores them and the Add-ons
-      // store review can flag an unsupported key. Warn per target rather than
-      // error, since the build is valid and the key is a no-op, not a crash.
-      // Persona F28 in the distribution walk shipped file_browser_handlers to
-      // an Edge target and got no signal at all.
       if (browser === "edge") {
         for (const key of CHROME_DESKTOP_ONLY_KEYS) {
           if (effective[key] !== undefined) {
@@ -526,15 +444,6 @@ export async function handler(args: {
       }
     }
 
-    // Per-target permission divergence. E25 in the API-surface swarm put proxy
-    // only under chromium:permissions while the code called
-    // chrome.proxy.settings.set: the firefox verdict stayed green because the
-    // code-vs-permission check above only ever sees the chromium view, yet
-    // dist/firefox shipped without proxy and crashed at runtime. Check each
-    // target's EFFECTIVE permission set against the APIs the code actually
-    // uses; a permission another target has and this one lacks is a per-target
-    // crash, reported in this target's own bucket (so multi-browser output maps
-    // errors back to the browser they belong to).
     const effectivePerms = new Set<string>(
       [
         ...((effective.permissions as string[] | undefined) ?? []),
@@ -544,8 +453,6 @@ export async function handler(args: {
     for (const api of usedApis) {
       const perm = API_PERMISSION[api];
       if (effectivePerms.has(perm)) continue;
-      // Missing from every target is already a top-level error above; only the
-      // divergence (declared for another target, absent here) is per-target.
       if (!declaredPermSet.has(perm)) continue;
       const ns = isFirefox ? "browser" : "chrome";
       issues.push(
@@ -572,10 +479,6 @@ export async function handler(args: {
     surfaces.push("newtab");
   if (chromiumManifest.background) surfaces.push("background");
 
-  // "background" is present in almost every template, so matching on it makes
-  // every manifest look similar to the same alphabetical first five. Rank by
-  // how many DISTINCTIVE surfaces overlap (content/sidebar/action/newtab) and
-  // only fall back to background when nothing distinctive is declared.
   const distinctive = surfaces.filter((s) => s !== "background");
   const matchOn = distinctive.length ? distinctive : surfaces;
   if (matchOn.length) {
@@ -595,15 +498,6 @@ export async function handler(args: {
     }
   }
 
-  // Errors must make the headline honest: valid only when there are no errors
-  // AND every target is supported (previously errors could coexist with valid).
-  // `valid:false` with an EMPTY errors[] was the single most corroborated lie in
-  // the API-surface swarm (6 of 15 personas). Cause: `browsers` defaults to
-  // ["chrome","firefox"], so a Chrome-targeted extension was ruled invalid
-  // because of a Firefox advisory that appeared nowhere in errors[] or
-  // warnings[]. The verdict must always be explainable by what it reports:
-  // an unsupported target the caller ASKED about is an error, an unsupported
-  // target we merely defaulted to is a named warning.
   for (const [browser, support] of Object.entries(result.browserSupport)) {
     if (support.supported) continue;
     const issues = support.issues?.length

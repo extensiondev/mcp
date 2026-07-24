@@ -4,17 +4,8 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-// DevX fresh-eyes walk: extension_list_extensions returned anonymous entries,
-// a list of opaque 32-char ids with nothing marking WHICH one is the extension
-// the current dev session serves. The handler must resolve the own extension's
-// identity from the session's ready contract (the engine stamps extensionName,
-// extensionVersion, and the distPath it loaded) and flag it ownExtension, and
-// must say WHY when another extension's identity cannot be resolved instead of
-// silently listing a bare id.
 
 let cdpTargets: Array<{ type: string; url: string }> = [];
-// Extensions.getExtensionInfo behavior per id. Missing id = the domain throws,
-// which is what a browser without unsafe extension debugging actually does.
 let domainInfo: Record<string, { name: string; version: string }> = {};
 
 vi.mock("../lib/cdp-port", async (importOriginal) => {
@@ -46,9 +37,6 @@ vi.mock("../lib/cdp", () => {
 
 const listExtensions = await import("../tools/list-extensions");
 
-// Chrome's unpacked-extension id: SHA-256 of the absolute dist path, first 16
-// bytes, nibbles mapped onto a-p. Duplicated here on purpose so the test pins
-// the algorithm independently of the implementation.
 function expectedId(distPath: string): string {
   const d = crypto.createHash("sha256").update(distPath).digest();
   let id = "";
@@ -194,7 +182,6 @@ describe("list-extensions own-extension identity", () => {
     const own = result.extensions[0];
     expect(own.ownExtension).toBe(true);
     expect(own.name).toBeUndefined();
-    // Still honest about the unresolved name rather than silently id-only.
     expect(own.note).toContain("unresolved");
   });
 

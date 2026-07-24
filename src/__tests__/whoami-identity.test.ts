@@ -23,10 +23,6 @@ function sample(overrides: Partial<StoredCredentials> = {}): StoredCredentials {
   };
 }
 
-// extension_whoami reports the STORED login, not anything about the current
-// directory. A fresh-eyes walk read "Logged in to acme/widget" as "this
-// project folder is acme/widget", so both the description and the message
-// must anchor the identity to the token extension_login stored.
 describe("whoami reports the stored token identity, not the cwd", () => {
   let tmp: string;
   let prevXdg: string | undefined;
@@ -44,7 +40,7 @@ describe("whoami reports the stored token identity, not the cwd", () => {
   });
 
   it("says the identity comes from the stored token, not the directory", async () => {
-    if (process.platform === "win32") return; // credentials path uses APPDATA
+    if (process.platform === "win32") return;
     writeCredentials(sample());
 
     const result = JSON.parse(await whoami.handler());
@@ -53,7 +49,6 @@ describe("whoami reports the stored token identity, not the cwd", () => {
     expect(result.message).toContain("acme/widget");
     expect(result.message).toContain("extension_login");
     expect(result.message).toMatch(/not follow|not.*current working directory/i);
-    // The praised expiry fields stay intact.
     expect(result.expiresAt).toBe(new Date(FUTURE * 1000).toISOString());
     expect(typeof result.expiresInSeconds).toBe("number");
   });
@@ -74,11 +69,6 @@ describe("whoami reports the stored token identity, not the cwd", () => {
     expect(result.message).toContain("extension_login");
   });
 
-  // The stored `api` only records which base extension_login was pointed at
-  // when it minted the token; the authenticated tools never read it. A login
-  // minted via a localhost dev server kept reporting `api:
-  // http://localhost:3100` for a token that authenticates against prod, so
-  // the field is now labeled as a record, never asserted as "the api".
   describe("api field honesty", () => {
     let prevApiUrl: string | undefined;
     let prevEnvToken: string | undefined;
@@ -152,9 +142,6 @@ describe("whoami reports the stored token identity, not the cwd", () => {
   });
 });
 
-// The platform clamps CLI tokens to a 7-day TTL (server-owned). The MCP
-// surface cannot change that, but it must SAY it wherever a CI author will
-// look, or pipelines break silently a week after setup.
 describe("7-day token TTL disclosure", () => {
   let tmp: string;
   let prevXdg: string | undefined;

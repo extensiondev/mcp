@@ -17,16 +17,7 @@ import {
 import { rdpCollectConsoleMessages } from "../lib/rdp";
 import { summarizeConsoleMessages } from "../lib/console-summary";
 
-// The Gecko pairing of the CDP inspection, one include at a time:
-// summary/meta/html/dom_snapshot/extension_roots/probes ride a page-context
-// eval over the agent bridge (the CDP page scripts embedded verbatim),
-// console rides the RDP watcher's cached-resource replay, and deepDom rides a
-// tabs.executeScript walk in the content-script sandbox, where Firefox
-// exposes Element.openOrClosedShadowRoot.
 
-// One page-context expression gathering everything the caller asked for in a
-// single bridge round-trip. Kept a plain (non-async) IIFE so it works on any
-// engine that evaluates expressions without awaiting promises.
 function buildBridgeInspectExpression(opts: {
   summary: boolean;
   meta: boolean;
@@ -58,9 +49,6 @@ function buildBridgeInspectExpression(opts: {
     );
   }
   if (opts.html) {
-    // Same serializer as the CDP path: PAGE_HTML_SCRIPT folds the content of
-    // open extension-root shadow roots into the markup, which a bare
-    // outerHTML read silently drops.
     parts.push(
       `try {
         const html = ${PAGE_HTML_SCRIPT};
@@ -94,12 +82,6 @@ function buildBridgeInspectExpression(opts: {
   return `(() => { ${parts.join("\n")} })()`;
 }
 
-// The closed-shadow-root walker, compiled INSIDE the content-script sandbox
-// via tabs.executeScript so it sees Element.openOrClosedShadowRoot (a
-// privileged getter pages have no access to). Plain ES5: executeScript code
-// strings run under the page's parser assumptions. The API check uses the
-// `in` operator on purpose: reading the getter off Element.prototype invokes
-// it on the prototype and throws (verified live).
 function closedShadowWalkerCode(cap: number): string {
   return `
     (function() {
@@ -119,12 +101,6 @@ function closedShadowWalkerCode(cap: number): string {
   `;
 }
 
-// Background-context expression: find the target tab, then compile `code` in
-// its content-script sandbox via MV2 tabs.executeScript. The content sandbox
-// shares the page's DOM, so the inspect scripts read the same tree they read
-// under CDP. This is the load-bearing Gecko transport: MV2 has no
-// chrome.scripting (so the engine's page-context eval is Unsupported there),
-// while MV3 event pages CSP-block bridge evals wholesale.
 function executeScriptExpression(
   urlFilter: string | undefined,
   code: string,
@@ -235,9 +211,6 @@ export async function inspectViaBridge(
 ): Promise<string> {
   const notes: string[] = [];
 
-  // Parity with the CDP path, which navigates a tab to `url` when it is not
-  // already open: check the live tab list first, navigate over the bridge if
-  // nothing matches, and only then inspect.
   if (args.url) {
     const listed = await listBridgeTabs(args.projectPath, browser, args.timeout);
     if ("error" in listed) return listed.error;
@@ -259,7 +232,7 @@ export async function inspectViaBridge(
 
   const expression = buildBridgeInspectExpression({
     summary: include.has("summary"),
-    meta: true, // always gathered: meta doubles as the target echo
+    meta: true,
     html: include.has("html"),
     domSnapshot: include.has("dom_snapshot"),
     extensionRoots: include.has("extension_roots"),
@@ -288,10 +261,6 @@ export async function inspectViaBridge(
     return raw;
   }
 
-  // MV2 fallback: the engine's page-context eval needs chrome.scripting, an
-  // MV3-only API, so MV2 sessions report Unsupported. The same expression
-  // compiled in the tab's content-script sandbox via tabs.executeScript reads
-  // the identical DOM (verified live), so the caller never sees the gap.
   let value = parsed?.ok === true ? (parsed.value ?? {}) : null;
   if (
     value === null &&
@@ -322,8 +291,6 @@ export async function inspectViaBridge(
     if (parsed?.ok === true && frame && typeof frame === "object") {
       value = frame;
     } else if (parsed?.ok === true) {
-      // The background leg succeeded but the content-script leg did not; a
-      // bare {ok: true} would misread as a healthy inspection.
       return JSON.stringify({
         ok: false,
         error: {
@@ -358,9 +325,6 @@ export async function inspectViaBridge(
   }
   if (value.probes) {
     result.probes = value.probes;
-    // Same trap as the CDP path: probes are CSS selectors, and API names
-    // happen to parse as descendant selectors. Warn exactly when a probe
-    // looks like code.
     const jsLooking = (args.probe ?? []).filter((p) =>
       /^typeof\s|^(chrome|browser|window|document)\.|\(\)|=>|===/.test(p),
     );
@@ -371,8 +335,6 @@ export async function inspectViaBridge(
     }
   }
 
-  // The follow-up transports target the tab the eval actually landed on:
-  // args.url when given, else the inspected page's own url from meta.
   const urlFilter =
     args.url ??
     (typeof value.meta?.url === "string" ? value.meta.url : undefined);

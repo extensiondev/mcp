@@ -68,15 +68,7 @@ function capRecent(
   return { events: events.slice(events.length - limit), truncated: true };
 }
 
-// When a log read comes back EMPTY, say WHY. extension_logs is the first tool
-// reached for when nothing happens, and returning ok:true/matched:0 for a dead
-// session or a build that never compiled reads as "your extension ran and
-// logged nothing" rather than "there was nothing to log". Four of fifteen
-// personas in the API-surface swarm were misled by exactly this.
 function emptyReason(projectPath: string, browser: string): string | undefined {
-  // Deliberately NOT readReadyContract above: that one narrows the contract to
-  // {controlPort, instanceId, runId} and returns null when a control channel is
-  // absent, which is exactly the dead-session case we need to explain here.
   let contract: { status?: string; errors?: string[]; pid?: number };
   try {
     contract = JSON.parse(
@@ -138,11 +130,6 @@ function summarize(
   });
 }
 
-// D20 in the API-surface swarm verified a production build with
-// extension_start and read the PREVIOUS dev run's events back as fresh
-// ok:true output. The events file outlives its session; serving history is
-// fine, serving it as if it were live is not. Detect a dead or different
-// producing session and say so.
 function staleFileNote(
   projectPath: string,
   browser: string,
@@ -166,10 +153,6 @@ function staleFileNote(
       return `These events are from a PAST run: the session that wrote them (pid ${contract.pid}) is dead. Nothing current is producing logs; do not read these as live output.`;
     }
   }
-  // The engine stamps events with its own id, which depending on the engine
-  // version is ready.json's runId OR its instanceId (newer canaries write
-  // instanceId). Treat a match against EITHER as the live session; flagging a
-  // healthy session as stale is the same lie D20 caught, inverted.
   const liveIds = [contract.runId, contract.instanceId]
     .map((v) => String(v || ""))
     .filter(Boolean);

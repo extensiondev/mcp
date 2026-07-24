@@ -24,8 +24,6 @@ function writeLogs(
   );
 }
 
-// Mirrors the shape the engine's LogsFileWriter actually emits (LogEvent in
-// dev-server/control-bridge/contracts.ts): the payload lives in messageParts.
 function engineEvent(
   level: string,
   messageParts: unknown[],

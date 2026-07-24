@@ -133,9 +133,6 @@ export async function handler(args: {
     const enrich: Record<string, unknown> = {};
     const ref = resolveProjectRef();
 
-    // An unknown/invalid sha is the single worst dead end here: no MCP verb
-    // used to list valid shas, so put them (and the console Builds page) in
-    // the error itself instead of pointing at "the Builds page" with no URL.
     if (res.status === 404 || code === "UNKNOWN_BUILD") {
       enrich.buildsPageUrl = consoleProjectUrl(ref, "builds", args.api);
       enrich.hint =
@@ -167,9 +164,6 @@ export async function handler(args: {
     });
   }
 
-  // The promotion landed. Hand back the PUBLIC pages for it as well as the
-  // console ones: the person who needs to see a promoted build is usually not
-  // the operator who ran the promote, and a console link asks them to log in.
   const promotedRef = resolveProjectRef();
   const publicChannelUrl = userlandProjectUrl(
     promotedRef,

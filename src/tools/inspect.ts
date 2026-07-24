@@ -115,22 +115,11 @@ export async function handler(args: {
     byType[f.type].size += f.size;
   }
 
-  // A dev dist ships sourcemaps (and inlined HMR runtime); a production build
-  // does not. Surface this so the reported size isn't mistaken for shippable
-  // weight, sourcemaps never reach the store zip.
   const sourcemapSize = byType.sourcemap?.size ?? 0;
   const buildType = sourcemapSize > 0 ? "development" : "production";
-  // The engine writes the store zip INSIDE dist/<browser>/, so a zip:true
-  // build used to double the reported weight: every file counted once loose
-  // and once again inside its own package (DevX swarm finding). Archives are
-  // packaging output, not shipped content; exclude them like sourcemaps.
   const archiveSize = byType.archive?.size ?? 0;
   const shippableSize = totalSize - sourcemapSize - archiveSize;
 
-  // Entry points a caller cares about (content scripts, background, popup) are
-  // usually small and get buried under assets in the top-10-by-size list, which
-  // reads as "my content script didn't ship". List declared entrypoints
-  // explicitly with a present/size flag so their presence is unambiguous.
   const sizeByPath = new Map(files.map((f) => [f.path, f.size]));
   const entrypoints: Array<{
     role: string;
@@ -169,10 +158,6 @@ export async function handler(args: {
     });
   }
 
-  // Flag assets that silently bloat the shipped package: store-listing promo
-  // images (screenshot/promo/marquee) that belong in the listing, not the zip,
-  // and any single non-icon asset that dominates the shippable bundle. These
-  // kept storeReadiness green while inflating size in the swarm findings.
   const PROMO_RE =
     /(screenshot|promo|marquee|tile|banner|preview)[-_.]?\d*\.(png|jpe?g|webp|gif)$/i;
   const sizeWarnings: string[] = [];
@@ -256,16 +241,12 @@ export async function handler(args: {
       hasIcons: files.some(
         (f) => f.type === "image" && f.path.includes("icon"),
       ),
-      // hasIcons alone stayed green when only small icons shipped; the Chrome
-      // Web Store specifically requires a 128x128 manifest icon (persona F30).
       has128Icon:
         typeof (manifest.icons as Record<string, unknown> | undefined)?.[
           "128"
         ] === "string",
       noSourceMaps: !files.some((f) => f.type === "sourcemap"),
       noPromoAssets: !files.some((f) => PROMO_RE.test(f.path)),
-      // A store zip sitting in dist must not flip this red: the zip is the
-      // package, not part of the payload the store measures.
       under10MB: totalSize - archiveSize < 10 * 1024 * 1024,
     },
   };

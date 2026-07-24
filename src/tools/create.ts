@@ -12,11 +12,6 @@ import { extensionCreate } from "extension-create";
 import { mcpOrigins } from "../lib/registry";
 import { wwwNewPath } from "@extension.dev/urls/paths";
 
-// Map the lockfile the installer actually wrote to the package manager that
-// owns it, so the run command we hand back matches what created node_modules
-// (extension-create may pick bun/pnpm/yarn/npm depending on the environment).
-// The `extension` devDependency the scaffold actually wrote, or null when the
-// package.json is unreadable or does not pin one.
 function scaffoldEnginePin(projectPath: string): string | null {
   try {
     const pkg = JSON.parse(
@@ -89,14 +84,9 @@ export async function handler(args: {
     ? path.resolve(args.parentDir, args.projectName)
     : args.projectName;
 
-  // A credential-helper prompt on the git pull go-git-it spawns for template
-  // downloads is a top scaffold-failure trigger (it hangs to the timeout). Force
-  // non-interactive git so the pull fails fast instead of hanging.
   process.env.GIT_TERMINAL_PROMPT = "0";
   if (process.env.GIT_ASKPASS === undefined) process.env.GIT_ASKPASS = "";
 
-  // Capture the create/install output instead of discarding it, so a failed
-  // install surfaces a diagnostic tail instead of failing silently.
   const logLines: string[] = [];
   const capture =
     (stream: "log" | "error") =>
@@ -109,9 +99,6 @@ export async function handler(args: {
     };
   const logTail = (max = 20): string[] => logLines.slice(-max);
 
-  // A template download failing on a transient network/timeout/rate-limit is
-  // surfaced by extension-create as "choose a valid template name". Detect that
-  // so we retry once and report the real cause instead of blaming the slug.
   const looksTransient = (): boolean => {
     const blob = logLines.join("\n").toLowerCase();
     return /timed out|timeout|etimedout|econnreset|rate limit|\b429\b|network|could not resolve host|terminal prompts disabled|authentication failed|early eof|rpc failed|remote end hung up/.test(
@@ -119,7 +106,6 @@ export async function handler(args: {
     );
   };
   const cleanPartial = (): void => {
-    // A leftover partial target dir poisons a retry into the same name.
     try {
       if (args.parentDir && fs.existsSync(projectInput)) {
         fs.rmSync(projectInput, { recursive: true, force: true });
@@ -161,9 +147,6 @@ export async function handler(args: {
     }
   }
 
-  // A resolved promise is extension-create's verdict, not the artifact's: an
-  // interrupted download can resolve over a partial tree. Verify the shape a
-  // dev loop needs before claiming success.
   const hasManifest =
     fs.existsSync(path.join(result.projectPath, "manifest.json")) ||
     fs.existsSync(path.join(result.projectPath, "src", "manifest.json"));
@@ -179,10 +162,6 @@ export async function handler(args: {
     });
   }
 
-  // extension-create reports the package manager it actually used (upstream
-  // #47), which is authoritative and available even when deps were not
-  // installed. Lockfile sniffing is the fallback for older engines. Guessing
-  // "npm" made every hint wrong for a bun scaffold.
   const packageManager =
     (result as { packageManager?: string }).packageManager ||
     (result.depsInstalled ? detectPackageManager(result.projectPath) : "npm");
@@ -194,10 +173,6 @@ export async function handler(args: {
         ? `yarn add -D ${spec}`
         : `${packageManager} add -D ${spec}`;
 
-  // The project-local engine beats EXTENSION_MCP_CLI_VERSION, so the dev loop
-  // can run a different engine than the pinned CLI. Read the pin the scaffold
-  // ACTUALLY wrote rather than assuming "latest": upstream #57 made create pin a
-  // resolved version, so assuming latest would cry wolf on a matching scaffold.
   const pin = String(process.env.EXTENSION_MCP_CLI_VERSION || "").trim();
   const scaffoldPin = scaffoldEnginePin(result.projectPath);
   const pinMatches =
@@ -207,18 +182,11 @@ export async function handler(args: {
       ? `The scaffold pins "extension": "${scaffoldPin ?? "unknown"}"; the project-local engine wins over EXTENSION_MCP_CLI_VERSION=${pin}. Run \`(cd ${result.projectPath} && ${addDev(`extension@${pin}`)})\` to match the pinned engine.`
       : undefined;
 
-  // Every decision create took without being asked, spelled out. The surprise
-  // swarm's C4 blocker: the scaffold landed at the SERVER's cwd, on bun, with
-  // an unrequested git repo, and none of it was said. The resolved destination
-  // leads the result, and defaultsApplied names each silent choice as one.
   const resolvedParent = args.parentDir
     ? path.resolve(args.parentDir)
     : process.cwd();
   const gitInit = fs.existsSync(path.join(result.projectPath, ".git"));
 
-  // MCP scaffolds and runs a project locally; it does not host or deploy. The
-  // deep link opens the same template on the web so the dead-end at `run dev`
-  // has a clear next hop (dev-aware: follows EXTENSION_DEV_API_URL).
   const wwwOrigin = mcpOrigins().www;
   const deployUrl = `${wwwOrigin}${wwwNewPath({ template: result.template })}`;
 
@@ -234,9 +202,6 @@ export async function handler(args: {
       parentDir: args.parentDir
         ? `${resolvedParent} (explicit)`
         : `${resolvedParent} (default: the MCP server process cwd, not yours; pass parentDir to choose)`,
-      // The template is the most consequential silent default; name it when the
-      // caller did not pass one (defaults to typescript even though a plain-JS
-      // slug exists).
       ...(args.template === undefined
         ? {
             template:
@@ -256,7 +221,6 @@ export async function handler(args: {
       `To ship: extension_create scaffolds and runs locally, it does not host. Open ${deployUrl} to deploy this template to the web.`,
     ],
     ...(engineWarning ? { engineWarning } : {}),
-    // Present only when install produced diagnostics worth seeing.
     ...(result.depsInstalled ? {} : { warnings: logTail() }),
   });
 }

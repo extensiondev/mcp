@@ -3,8 +3,6 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-// The gate must decide BEFORE the CLI runs, so the CLI is stubbed: any call to
-// it in a blocked case is itself the failure.
 const cliCalls: string[][] = [];
 let cliResultOverride: { code: number; stdout: string; stderr: string } | null =
   null;
@@ -54,7 +52,6 @@ afterEach(() => {
 
 describe("extension_build validation gate", () => {
   it("refuses to build a manifest with build-blocking errors", async () => {
-    // No name: manifest_validate treats a missing required field as an error.
     const dir = project({ manifest_version: 3, version: "1.0.0" });
 
     const result = JSON.parse(await build.handler({ projectPath: dir }));
@@ -63,7 +60,6 @@ describe("extension_build validation gate", () => {
     expect(result.status).toBe("blocked");
     expect(result.errors.join(" ")).toContain("name");
     expect(result.hint).toContain("skipValidation");
-    // The whole point: we never shelled out to a build we knew was broken.
     expect(cliCalls).toHaveLength(0);
   });
 
@@ -96,9 +92,6 @@ describe("extension_build validation gate", () => {
     expect(cliCalls[0]).toContain("build");
   });
 
-  // A zero exit code is the bundler's verdict, not the artifact's: if a
-  // declared entrypoint never made it into dist, Chrome refuses to load the
-  // build, so success:true would be a lie.
   it("refuses to call a build successful when a declared entrypoint is missing from dist", async () => {
     const dir = project(
       {
@@ -109,7 +102,6 @@ describe("extension_build validation gate", () => {
       },
       ["popup.html"],
     );
-    // Built manifest declares popup.html, but dist never received it.
     const distDir = path.join(dir, "dist", "chrome");
     fs.mkdirSync(distDir, { recursive: true });
     fs.writeFileSync(
@@ -149,9 +141,6 @@ describe("extension_build validation gate", () => {
     expect(result.success).toBe(true);
   });
 
-  // A dangling path reference USED to ride out of a green build as a warning.
-  // The swarm proved build actually fails on the same tree (persona C12 had the
-  // warning prose and green machine fields in one payload), so it now blocks.
   it("blocks on a dangling path reference instead of warning about it", async () => {
     const dir = project({
       manifest_version: 3,
@@ -169,7 +158,6 @@ describe("extension_build validation gate", () => {
   });
 
   it("still carries genuinely non-blocking warnings out of a green build", async () => {
-    // Missing version is a store-submission warning, not a load failure.
     const dir = project(
       {
         manifest_version: 3,
@@ -187,13 +175,6 @@ describe("extension_build validation gate", () => {
   });
 });
 
-// The engine writes the store zip inside dist/<browser>/ under a SANITIZED
-// name: lowercase, every character outside [a-z0-9 ] stripped, spaces to
-// dashes, then "-<version>". "zip-probe-ext" becomes zipprobeext-1.0.0.zip, a
-// name matching neither the project directory nor the manifest, and swarm
-// personas had to find the artifact by disk search because the result echoed
-// zip:true only. The result now reports the path of the file that actually
-// exists, or says explicitly that it could not be located.
 describe("extension_build zip path reporting", () => {
   function builtProject(name: string): string {
     const dir = project({ manifest_version: 3, name, version: "1.0.0" });
@@ -216,8 +197,6 @@ describe("extension_build zip path reporting", () => {
     );
 
     expect(result.success).toBe(true);
-    // The dashes the engine stripped stay stripped: report reality, never a
-    // normalized or renamed path.
     expect(result.zipPath).toBe(zip);
     expect(result.zipPathNote).toBeUndefined();
   });
@@ -239,9 +218,6 @@ describe("extension_build zip path reporting", () => {
   });
 
   it("falls back to the freshest zip when the name cannot be predicted", async () => {
-    // A localized __MSG_*__ name resolves through the engine's locale files,
-    // which the predictor does not reimplement; the scan for a zip written
-    // during THIS build finds the artifact anyway.
     const dir = builtProject("__MSG_appName__");
     const zip = path.join(dir, "dist", "chrome", "meine-erweiterung-1.0.0.zip");
     fs.writeFileSync(zip, "PK");
@@ -290,11 +266,6 @@ describe("extension_build zip path reporting", () => {
   });
 });
 
-// Running extension_build while a dev session is live on the same projectPath
-// silently rewrites the session's dist output, and the dev browser serves the
-// production artifact until the next recompile: seven personas in the DevX
-// swarm hit this without any signal. Build must warn honestly, and must NOT
-// block.
 describe("extension_build warns over a live dev session", () => {
   function writeReadyContract(dir: string, browser: string, pid: number): void {
     const contractDir = path.join(dir, "dist", "extension-js", browser);
@@ -311,7 +282,6 @@ describe("extension_build warns over a live dev session", () => {
 
     const result = JSON.parse(await build.handler({ projectPath: dir }));
 
-    // Warn, never block: the build still ran.
     expect(result.success).toBe(true);
     expect(cliCalls).toHaveLength(1);
     expect(Array.isArray(result.warnings)).toBe(true);

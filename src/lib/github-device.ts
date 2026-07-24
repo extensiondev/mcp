@@ -1,15 +1,10 @@
-// GitHub OAuth device-code client for the `login` flow.
-//
-// Device flow is the right fit for an MCP server / CLI: there is no local
-// callback server and it works headless (over SSH, in a sandbox). The flow:
-//   1. POST /login/device/code -> { device_code, user_code, verification_uri }
-//   2. Show the user the code + URL; they authorize in any browser.
-//   3. Poll /login/oauth/access_token until GitHub returns an access_token.
-//
-// The resulting GitHub *user* token is then handed to the platform's
-// /api/cli/login/exchange endpoint, which trades it for a project-scoped
-// extension.dev token. The client id is non-secret and is fetched from
-// /api/cli/login/config.
+// ███╗   ███╗ ██████╗██████╗
+// ████╗ ████║██╔════╝██╔══██╗
+// ██╔████╔██║██║     ██████╔╝
+// ██║╚██╔╝██║██║     ██╔═══╝
+// ██║ ╚═╝ ██║╚██████╗██║
+// ╚═╝     ╚═╝ ╚═════╝╚═╝
+// Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
 const GITHUB_DEVICE_CODE_URL = "https://github.com/login/device/code";
 const GITHUB_TOKEN_URL = "https://github.com/login/oauth/access_token";
@@ -19,9 +14,7 @@ export interface DeviceCodeStart {
   deviceCode: string;
   userCode: string;
   verificationUri: string;
-  /** Minimum seconds to wait between polls. */
   interval: number;
-  /** Seconds until the device code expires. */
   expiresIn: number;
 }
 
@@ -68,13 +61,6 @@ export async function startDeviceCode(args: {
   };
 }
 
-/**
- * Poll for the access token until the budget elapses. A budget shorter than
- * the device-code lifetime lets a caller (e.g. an MCP tool that must return
- * promptly) poll in bounded slices and report "pending" between calls; a long
- * budget (a blocking CLI) waits the whole time. Returns `pending` only on
- * budget exhaustion; `expired`/`denied` are terminal.
- */
 export async function pollForToken(args: {
   clientId: string;
   deviceCode: string;
@@ -112,7 +98,6 @@ export async function pollForToken(args: {
     const error = String(data.error || "");
     if (error === "authorization_pending") continue;
     if (error === "slow_down") {
-      // GitHub asks us to back off; honor the new interval if provided.
       intervalMs = Math.max(
         intervalMs + 5000,
         Number(data.interval || 0) * 1000,
@@ -121,7 +106,6 @@ export async function pollForToken(args: {
     }
     if (error === "expired_token") return { ok: false, reason: "expired" };
     if (error === "access_denied") return { ok: false, reason: "denied" };
-    // Unknown transient error: keep polling until the budget runs out.
   }
   return { ok: false, reason: "pending" };
 }

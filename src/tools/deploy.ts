@@ -6,14 +6,6 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-// Submit a built extension to the browser stores THROUGH extension.dev. The
-// platform holds the store credentials and dispatches the release from the
-// project's mirror CI, so this tool never handles store secrets - it is a thin
-// authenticated client of the platform's store-submission endpoint, exactly like
-// extension_publish and extension_release_promote. (It previously shelled out to
-// a standalone deploy CLI; routing through the platform is both the correct trust
-// boundary and the only path that works from a hosted MCP client.)
-
 import fs from "node:fs";
 import path from "node:path";
 import { resolveToken } from "../lib/publish";
@@ -26,9 +18,6 @@ import {
   resolveProjectRef,
 } from "../lib/registry";
 
-// Advisory only: the platform's mirror CI reads STORE.md at submission time
-// (Firefox reviewer/release notes, Edge certification notes), so a missing
-// field there means a store submission without them. Never blocks the run.
 export function storeMdWarnings(browsers: string[], cwd: string): string[] {
   const wantsFirefox = browsers.includes("firefox");
   const wantsEdge = browsers.includes("edge");
@@ -38,11 +27,6 @@ export function storeMdWarnings(browsers: string[], cwd: string): string[] {
   try {
     content = fs.readFileSync(path.join(cwd, "STORE.md"), "utf8");
   } catch {
-    // The check reads the LOCAL working directory, but platform submissions
-    // fetch STORE.md from the project's SOURCE repository at submit time, so
-    // a local miss is advisory, not a verdict (operator hit the old wording
-    // claiming notes "will not accompany" a submission whose source repo had
-    // the file).
     return [
       "No STORE.md found in the current working directory. Platform submissions read STORE.md from the project's source repository, so this may not apply here; make sure STORE.md exists there for Firefox reviewer notes and Edge certification notes. See the extension-dev skill's store-md reference.",
     ];
@@ -192,8 +176,6 @@ export async function handler(args: DeployToolArgs): Promise<string> {
   }
 
   if (!res.ok) {
-    // Under dryRun nothing was (or could have been) submitted, so the error
-    // must say "preflight failed", never "submit failed".
     return fail(
       "DeployError",
       `${dryRun ? "preflight" : "submit"} failed (${res.status}): ${data?.message || text || "unknown error"}`,
@@ -208,11 +190,6 @@ export async function handler(args: DeployToolArgs): Promise<string> {
   const result: Record<string, unknown> = { mode: "platform", dryRun, ...data };
 
   if (dryRun) {
-    // The platform's preflight verifies auth, project, build, and the store
-    // workflow - but not the consequence it gates: which stores are actually
-    // configured to receive this submission, and in what publish mode. Read
-    // what is knowable from the public registry and never echo an
-    // unqualified "Preflight OK" per browser.
     const ref = resolveProjectRef();
     const consoleStoresUrl = consoleProjectUrl(ref, "stores", args.api);
     const storeModeNote = `Store publish mode (draft / skip-publish / live) is not readable with the CLI token, so it cannot be verified from here; check per-store settings at ${consoleStoresUrl}.`;
@@ -289,8 +266,6 @@ export async function handler(args: DeployToolArgs): Promise<string> {
     const actionable = preflight.filter((p) => p.ok).map((p) => p.browser);
     const blocked = preflight.filter((p) => !p.ok);
 
-    // Channel disclosure: the platform silently defaults to "stable", which
-    // this project's channels.json may not even contain.
     const channelDefaulted = !String(args.channel || "").trim();
     const resolvedChannel =
       String(data?.channel || "").trim() ||
@@ -338,8 +313,6 @@ export async function handler(args: DeployToolArgs): Promise<string> {
   }
 
   if (!dryRun) {
-    // Close the post-submit loop: the store journey continues on the public
-    // registry, and extension_store_status is the verb that reads it.
     result.statusNote =
       "Track this submission with extension_store_status: it reads the recorded outcome, per-store credential health, and review state from the public registry.";
   }

@@ -11,9 +11,6 @@ import path from "node:path";
 import { getTemplateBySlug } from "../lib/templates-cache";
 import { PINNED_COMMIT } from "../lib/template-artifact-source";
 
-// Reference links point at the same commit the template corpus is pinned to,
-// so a link never drifts from the source the catalog was built from (floating
-// `main` could show files that no longer exist at the pinned revision).
 const EXAMPLES_TREE_BASE = `https://github.com/extension-js/examples/tree/${PINNED_COMMIT}/examples`;
 
 export const schema = {
@@ -173,20 +170,12 @@ export async function handler(args: {
   const template = await getTemplateBySlug(templateSlug);
   const referenceFiles = template?.keyFiles ?? template?.files ?? [];
 
-  // Extension.js keeps some surfaces under a directory that differs from the
-  // feature name (the popup/action surface lives at src/action/, matching the
-  // manifest's default_popup: "action/index.html"). Map those so filesToCreate
-  // and manifestUpdates never disagree.
   const FEATURE_DIR: Record<string, string> = {
     "content-script": "content",
     popup: "action",
   };
   const featureDir = FEATURE_DIR[args.feature] ?? args.feature;
 
-  // Per-framework file conventions (confirmed against the catalog): react/preact
-  // use JSX (.tsx) for both the mount script and the component; vue/svelte use a
-  // .ts mount script plus a single-file component (.vue/.svelte), never .tsx;
-  // vanilla uses a .ts script and no component file.
   const scriptExt =
     framework === "react" || framework === "preact" ? "tsx" : "ts";
   const componentExt =
@@ -237,8 +226,6 @@ export async function handler(args: {
   }
 
   if (args.feature === "content-script") {
-    // scripts.ts stays .ts to match content_scripts.js in the manifest addition;
-    // non-vanilla frameworks mount a component from it (ContentApp.vue/.svelte/.tsx).
     filesToCreate.push(
       {
         path: "src/content/scripts.ts",

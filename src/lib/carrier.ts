@@ -12,35 +12,13 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { isChromiumFamily } from "./browser-family";
 
-/**
- * The Extension.dev Live Preview carrier, bundled prebuilt in this package
- * under extensions/live-preview/<engine>. extension_dev materializes it into
- * the project's ./extensions folder (which Extension.js auto-scans and loads
- * as a companion next to the user's extension), so the dev browser comes up
- * carrier-equipped: web pages the carrier allowlists (inspect.extension.dev,
- * localhost) can then watch the session's real-lane trace and pair with it.
- */
 
 export const CARRIER_DIR_NAME = "extension-dev-live-preview";
 
-// The carrier's stable extension id. The bundled manifest bakes a fixed key, so
-// Chrome derives this same id every load; deriveCarrierId() recomputes it from a
-// given payload, but this literal is the known-good value for id checks that run
-// without the payload in hand (e.g. telling the carrier apart from the guest in
-// the browser's own target list). It matches the emulator package's constant of
-// the same name; carrier.test.ts guards it against deriveCarrierId drift.
 export const CARRIER_EXTENSION_ID = "ibppeifnekhjjjmpjfiobccjlicbmgcb";
 
-/** Marker proving the directory is ours to overwrite on version updates. */
 const MARKER_FILE = "managed-by-extension-dev-mcp.json";
 
-/**
- * The carrier's extension id, DERIVED from the payload's own manifest key
- * rather than hardcoded, so it cannot drift if the key is ever regenerated.
- *
- * Chrome's rule for a keyed extension: SHA-256 the DER public key, take the
- * first 16 bytes, and map each nibble onto 'a'-'p'.
- */
 function deriveCarrierId(source: string): string | null {
   try {
     const manifest = JSON.parse(
@@ -62,12 +40,10 @@ function deriveCarrierId(source: string): string | null {
   }
 }
 
-/** Where the carrier lands inside a project. */
 export function carrierPath(projectPath: string): string {
   return path.join(projectPath, "extensions", CARRIER_DIR_NAME);
 }
 
-/** True only for a directory carrying our marker, i.e. ours to delete. */
 export function isManagedCarrier(projectPath: string): boolean {
   return fs.existsSync(path.join(carrierPath(projectPath), MARKER_FILE));
 }
@@ -75,19 +51,9 @@ export function isManagedCarrier(projectPath: string): boolean {
 export type CarrierRemoval = {
   removed: boolean;
   path: string;
-  /** Present when something was there but was NOT ours to touch. */
   note?: string;
 };
 
-/**
- * Remove the carrier from a project, marker-guarded.
- *
- * The trace swarm's most release-dangerous finding was that a debugging flag
- * leaves a permanent companion extension in the project: it survived
- * extension_stop, Extension.js auto-scans ./extensions, and the first
- * `git add -A` vendors it. Nothing removed it, ever. Stop and build both call
- * this now, and `extension_dev carrier: true` puts it back on demand.
- */
 export function removeCarrier(projectPath: string): CarrierRemoval {
   const target = carrierPath(projectPath);
   if (!fs.existsSync(target)) return { removed: false, path: target };
@@ -107,8 +73,6 @@ export function removeCarrier(projectPath: string): CarrierRemoval {
       note: `Could not remove the carrier: ${error instanceof Error ? error.message : String(error)}`,
     };
   }
-  // Leave no empty scaffolding behind: the folder is ours only while the
-  // carrier is in it.
   const parent = path.join(projectPath, "extensions");
   try {
     if (fs.readdirSync(parent).length === 0) fs.rmdirSync(parent);
@@ -117,12 +81,6 @@ export function removeCarrier(projectPath: string): CarrierRemoval {
   return { removed: true, path: target };
 }
 
-/**
- * Keep the carrier out of the user's commits. The scaffolder runs `git init`
- * with no initial commit, so the first `git add -A` in a project that ever ran
- * with carrier: true vendors 460K of somebody else's extension.
- * Returns the line added, or null when nothing needed doing.
- */
 export function ensureCarrierIgnored(projectPath: string): string | null {
   if (!fs.existsSync(path.join(projectPath, ".git"))) return null;
   const entry = `extensions/${CARRIER_DIR_NAME}/`;
@@ -159,35 +117,9 @@ export type CarrierMaterialization = {
   loaded: boolean;
   path?: string;
   note: string;
-  /** The .gitignore entry this run added, when it added one. */
   gitignored?: string;
-  /**
-   * What the carrier lane CANNOT do, stated at the moment it is handed over.
-   * The trace swarm's top finding was that the real lane's boundaries were
-   * discoverable only by experiment: 14 personas independently filed the
-   * carrier-identity scoping as a severe bug, and 10 more expected the trace
-   * to show their own extension's calls. Both are honest constraints; neither
-   * was written down anywhere the caller would look.
-   */
   limitations?: string[];
-  /**
-   * The graduation path, stated next to the shared-identity limitation so the
-   * caller is not left at a dead end. The carrier lane is the SHARED real lane
-   * (calls run as the carrier); but the guest is ALREADY loaded as itself in
-   * this same session, so its OWN storage, identity and messaging are reached by
-   * driving the guest directly with the control verbs, not the carrier bridge.
-   * This is the agent-lane twin of the inspect Trace tab's "load as your own
-   * extension" affordance: here the extension is already loaded, so graduating
-   * means targeting it, not launching it.
-   */
   graduation?: string;
-  /**
-   * How to actually DRIVE the real lane. Seven personas reached a
-   * permanently empty trace and concluded the feature was broken, because
-   * nothing in the 33 tool schemas, this note, or the rendered page named the
-   * carrier's extension id or its message envelopes. Every persona that did
-   * reach the real lane used out-of-band knowledge of the emulator source.
-   */
   bridgeProtocol?: {
     carrierExtensionId: string;
     allowedOrigins: string;
@@ -196,7 +128,6 @@ export type CarrierMaterialization = {
   };
 };
 
-/** Walk up from this module until the bundled payload directory is found. */
 function findBundledCarrier(engine: string): string | null {
   let dir = path.dirname(fileURLToPath(import.meta.url));
   for (let depth = 0; depth < 6; depth++) {
@@ -209,11 +140,6 @@ function findBundledCarrier(engine: string): string | null {
   return null;
 }
 
-/**
- * Copy the bundled carrier into <projectPath>/extensions/<CARRIER_DIR_NAME>.
- * Refuses to touch an existing directory that lacks our marker file (it is
- * the user's, not ours); otherwise replaces it so version updates propagate.
- */
 export function materializeCarrier(
   projectPath: string,
   browser: string,

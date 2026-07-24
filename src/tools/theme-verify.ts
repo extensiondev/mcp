@@ -5,30 +5,6 @@
 // ██║ ╚═╝ ██║╚██████╗██║
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
-//
-// extension_theme_verify: the first theme-aware verb. Verification IS the
-// product here (an authoring verb is explicitly out of scope for v0).
-//
-// It settles the four-leg WYSIWYG contract from THEMES_MCP_SWARM.md section 4b:
-//
-//   [1] what the APP SHOWS == [2] what manifest.json SAYS == [3] what CHROME
-//   PAINTS  + [4] what CHROME ACCEPTS
-//
-// Two of those legs are reachable HEADLESS and decoupled, which is what this
-// verb computes inline:
-//   [2] manifest-says   - parse + Chrome-grammar check on the manifest.
-//   [3] chrome-paints   - the vendored Chromium-transcribed resolver derives
-//                         every color Chrome would paint (headless proxy).
-//   [4] chrome-accepts  - the resolver's ignored-key set plus the reference
-//                         image/tint/property tables report what Chrome parses
-//                         but discards (the D4 acceptance gap).
-//
-// Two legs need a real browser and are NOT run here (they would steal focus or
-// need a mac-local capture): [1] the app's rendered CSS and [3]'s REAL painted
-// pixels. The verb returns needsAttended:true and points at the existing
-// harnesses (`assert:theme --theme` and install-parity) rather than pretending
-// it verified them. Never answer with the shape of success for a leg that did
-// not run (THEMES_MCP_SWARM.md section 8, rules 3 and 4).
 
 import { promises as fs } from "node:fs";
 import path from "node:path";
@@ -76,11 +52,6 @@ interface Finding {
   detail: string;
 }
 
-// browser_theme_pack.cc: color keys whose value Chrome DERIVES when the manifest
-// omits them, so a literal black ([0,0,0]) is exactly the fabrication the app's
-// importer used to invent for absent keys (THEMES_MCP_SWARM.md D1, and the
-// themes-route-critique #000000 bug). Flagged as a candidate, not a verdict:
-// only leg [1] (app-shows) can confirm it, which is why it is advisory.
 const DERIVABLE_COLOR_KEYS = new Set([
   "frame_inactive",
   "toolbar_text",
@@ -100,12 +71,6 @@ const DERIVABLE_COLOR_KEYS = new Set([
 
 const FABRICATION_SENTINEL = [0, 0, 0];
 
-/**
- * Chrome's manifest version grammar: 1-4 dot-separated integers, each 0-65535,
- * no leading zeros on a non-zero part. Inlined (not vendored) from
- * apps/themes.extension.dev/src/lib/manifest.ts isValidChromeVersion, a pure
- * 6-line check whose source is app-coupled; keep the two in sync by eye.
- */
 function isValidChromeVersion(version: string): boolean {
   const parts = version.split(".");
   if (parts.length < 1 || parts.length > 4) return false;
@@ -119,8 +84,6 @@ function isFabricationBlack(value: unknown): boolean {
     Array.isArray(value) &&
     value.length >= 3 &&
     FABRICATION_SENTINEL.every((c, i) => value[i] === c) &&
-    // A 4-tuple with a real alpha is a deliberate translucent black, not the
-    // importer's opaque #000000 sentinel.
     (value.length === 3 || value[3] === 1 || value[3] === 255)
   );
 }
@@ -134,8 +97,6 @@ function coerceInput(raw: unknown): {
       "Theme manifest must be a JSON object with a `theme` block.",
     );
   }
-  // Accept a { manifest } seed wrapper (mirrors assert:theme --theme), a full
-  // Chrome theme manifest, or a bare theme block.
   const obj = raw as Record<string, unknown>;
   const manifest =
     obj.manifest && typeof obj.manifest === "object"
@@ -144,7 +105,7 @@ function coerceInput(raw: unknown): {
   const themeBlock =
     manifest.theme && typeof manifest.theme === "object"
       ? (manifest.theme as ChromeThemeManifestTheme)
-      : // A bare theme document (colors/tints/images at the top level).
+      :
         manifest.colors || manifest.tints || manifest.images
         ? (manifest as unknown as ChromeThemeManifestTheme)
         : ({} as ChromeThemeManifestTheme);
@@ -208,7 +169,6 @@ export async function handler(args: {
 
   const findings: Finding[] = [];
 
-  // ---- Leg [2] manifest-says: parse + Chrome grammar --------------------
   const name = typeof manifest.name === "string" ? manifest.name : "";
   const version =
     typeof manifest.version === "string" ? manifest.version : "";
@@ -227,13 +187,8 @@ export async function handler(args: {
   const declaredImages = (theme.images ?? {}) as Record<string, unknown>;
   const declaredProps = (theme.properties ?? {}) as Record<string, unknown>;
 
-  // ---- Leg [3] chrome-paints (headless resolver proxy) ------------------
   const resolved = resolveChromeTheme(theme);
 
-  // ---- Leg [4] chrome-accepts (static): the D4 acceptance gap -----------
-  // Colors: the resolver already reports every key Chrome drops. Every reason
-  // (malformed value, out-of-range, dead legacy key, incognito, unknown) means
-  // the same thing for the author - the key does not survive - so all warn.
   for (const { key, reason } of resolved.ignoredKeys) {
     findings.push({
       class: "D4",
@@ -243,8 +198,6 @@ export async function handler(args: {
       detail: `Chrome discards colors.${key}: ${reason}`,
     });
   }
-  // Images: keys outside kPersistingImages are dropped; incognito image keys
-  // parse but never render (incognito windows drop themes).
   const imageKeys = new Set<string>(CHROME_THEME_IMAGE_KEYS);
   for (const key of Object.keys(declaredImages)) {
     if (!imageKeys.has(key)) {
@@ -265,7 +218,6 @@ export async function handler(args: {
       });
     }
   }
-  // Tints: outside kTintTable are ignored; incognito tints parse but are dead.
   const tintKeys = new Set<string>(CHROME_THEME_TINT_KEYS);
   for (const key of Object.keys(declaredTints)) {
     if (!tintKeys.has(key)) {
@@ -286,7 +238,6 @@ export async function handler(args: {
       });
     }
   }
-  // Properties: outside kDisplayProperties are ignored.
   const propKeys = new Set<string>(CHROME_THEME_PROPERTY_KEYS);
   for (const key of Object.keys(declaredProps)) {
     if (!propKeys.has(key)) {
@@ -300,10 +251,6 @@ export async function handler(args: {
     }
   }
 
-  // ---- D1 fabrication candidates (decoupled signal) ---------------------
-  // A derivable key set to opaque black is the exact value the app importer
-  // used to fabricate for absent keys. Only leg [1] can confirm intent, so
-  // this is advisory (info), not a failing verdict.
   for (const [key, value] of Object.entries(declaredColors)) {
     if (DERIVABLE_COLOR_KEYS.has(key) && isFabricationBlack(value)) {
       findings.push({
@@ -316,7 +263,6 @@ export async function handler(args: {
     }
   }
 
-  // ---- D3 parity gap: resolver caveats (image-derived colors, etc.) -----
   for (const caveat of resolved.caveats) {
     findings.push({
       class: "D3",
@@ -326,7 +272,6 @@ export async function handler(args: {
     });
   }
 
-  // ---- Verdict (decoupled only, never overclaimed) ----------------------
   const hasError = grammarErrors.length > 0;
   const hasWarn = findings.some((f) => f.severity === "warn");
   const verdict: "invalid" | "diverged" | "headless-clean" = hasError
@@ -357,7 +302,6 @@ export async function handler(args: {
     ok: true,
     tool: "extension_theme_verify",
     verdict,
-    // The headline never claims full verification: two legs did not run.
     needsAttended: true,
     summary: {
       errors: grammarErrors.length,
@@ -370,14 +314,12 @@ export async function handler(args: {
       },
     },
     legs: {
-      // [1]
       appShows: {
         status: "needs-attended",
         detail:
           "Not run here (needs a browser). The app self-verifies app == resolve(manifest) via the seed door.",
         how: attended[0].how,
       },
-      // [2]
       manifestSays: {
         status: hasError ? "invalid" : "verified",
         name,
@@ -390,7 +332,6 @@ export async function handler(args: {
           properties: Object.keys(declaredProps),
         },
       },
-      // [3]
       chromePaints: {
         resolver: {
           status: "reported",
@@ -400,7 +341,6 @@ export async function handler(args: {
         },
         realPaint: { status: "needs-attended", how: attended[1].how },
       },
-      // [4]
       chromeAccepts: {
         status: "reported",
         detail:

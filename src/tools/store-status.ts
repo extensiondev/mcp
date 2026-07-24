@@ -6,16 +6,6 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-// The post-submit sibling of extension_deploy: deploy dispatches a store
-// submission and this is the verb that answers "did it land, and was it
-// approved?". Reads the project's public store state on
-// registry.extension.land (stores/health.json + stores/status.json +
-// stores/submissions.json), which needs no auth for public projects. The
-// status document has two schema generations in the wild: v3 separates
-// lastSubmission / lastOverride / lastPoll / reviews, while v2 poller
-// documents carried their updates at the top level - both are normalized
-// here so existing mirrors keep answering.
-
 import {
   consoleProjectUrl,
   fetchRegistryJson,
@@ -85,9 +75,6 @@ function str(value: unknown): string | undefined {
   return text || undefined;
 }
 
-/** Map a submissions.json record (or status.json lastSubmission) to the
- * per-store view. The two writers use `buildId` vs `buildSha` and
- * `submittedAt` vs `timestamp`; both are accepted. */
 function submissionView(row: Record<string, unknown>): SubmissionView {
   const view: SubmissionView = {};
   const version = str(row.version);
@@ -109,7 +96,6 @@ function submissionView(row: Record<string, unknown>): SubmissionView {
   return view;
 }
 
-/** Latest submissions.json record per store, newest submittedAt first. */
 export function latestSubmissionsByStore(
   json: unknown,
 ): Record<string, SubmissionView> {
@@ -137,14 +123,6 @@ export interface NormalizedStoresStatus {
   lastPollAt?: string;
 }
 
-/**
- * Accept any historical shape of stores/status.json. SchemaVersion 3 carries
- * lastSubmission / lastOverride / lastPoll / reviews as sections. Legacy v2
- * came in two flavors that used to clobber each other: the submit-path shape
- * (kind "stores_status", lastSubmission only) and the poller shape (kind
- * "store_status" with perStore/updates at the top level) whose updates seed
- * the reviews map here, mirroring the registry template's normalizer.
- */
 export function normalizeStoresStatus(json: unknown): NormalizedStoresStatus {
   const base = isPlainObject(json) ? json : {};
   const out: NormalizedStoresStatus = { reviews: {} };
@@ -244,8 +222,6 @@ export async function handler(args: {
     ? latestSubmissionsByStore(submissionsRes.json)
     : {};
 
-  // status.json's lastSubmission is a single record naming its store; it
-  // backfills a store the (optional) submissions.json has no record for.
   const statusLastStore = str(status.lastSubmission?.store);
   if (statusLastStore && !submissionsByStore[statusLastStore] && status.lastSubmission) {
     submissionsByStore[statusLastStore] = submissionView(status.lastSubmission);
@@ -260,9 +236,6 @@ export async function handler(args: {
 
   const rows = stores.map((store) => {
     const healthRow = healthStores?.[store];
-    // A store with a failing credential is still a CONFIGURED store - the
-    // remedy is rotating its credential, not configuring it. `configured`
-    // stays true there and `health.ok` carries the verdict.
     const configured: boolean | "unknown" = healthStores
       ? Boolean(healthRow)
       : "unknown";

@@ -14,15 +14,6 @@ import { resolveSessionBrowser } from "../lib/session-browser";
 import { verifyGuestLoaded } from "../lib/guest-load-oracle";
 import { recentErrorLogs } from "./doctor";
 
-// A single call is bounded below the MCP client's default request timeout
-// (DEFAULT_REQUEST_TIMEOUT_MSEC = 60_000 in the SDK), with margin for the
-// request round-trip. Waiting longer than the client timeout would surface as
-// an opaque transport error ("-32001 Request timed out") that also loses the
-// session handle, instead of the graceful status below. A caller that needs to
-// wait longer simply calls extension_wait again, it resumes polling the same
-// on-disk contract, so the loop is idempotent and client-agnostic. (Progress
-// notifications can't fix this: the SDK only resets the client timeout when the
-// CLIENT sets resetTimeoutOnProgress, which the server cannot control.)
 const SAFE_CEILING_MS = 50_000;
 const DEFAULT_TIMEOUT_MS = 45_000;
 const MIN_TIMEOUT_MS = 1_000;
@@ -93,20 +84,11 @@ export async function handler(args: {
     "ready.json",
   );
 
-  // A build-only session (dev with noBrowser: true) never launches a browser,
-  // so no executor will ever attach: waiting for one just burns the whole
-  // budget. The engine's contract does not record the flag, but the session
-  // registry (and its on-disk marker) does.
   const buildOnly = findSessionInfo(args.projectPath, browser)?.noBrowser === true;
 
   const start = Date.now();
   const pollInterval = 1000;
-  // Tracks the half-ready state: compiled, but the runtime executor never
-  // attached. Distinguishing it from "still building" is the whole point.
   let sawCompiledButUnattached = false;
-  // The last contract status observed, so a timeout can narrate what WAS seen
-  // ("the server stamped starting but never compiled") instead of an opaque
-  // "not ready".
   let lastContractStatus: string | null = null;
 
   while (Date.now() - start < budgetMs) {
@@ -116,9 +98,6 @@ export async function handler(args: {
       lastContractStatus = contract.status;
 
       if (contract.status === "ready") {
-        // A ready.json can outlive its dev server (crash/kill). Returning
-        // status:ready then would send the caller into reload/eval that fail
-        // with a misleading control-channel error; report the dead session.
         if (typeof contract.pid === "number" && !isAlive(contract.pid)) {
           return JSON.stringify({
             status: "stale",
@@ -129,17 +108,10 @@ export async function handler(args: {
             elapsedMs: Date.now() - start,
           });
         }
-        // "ready" means COMPILED, which is not the same as usable: the runtime
-        // executor attaches separately. Persona B7 got status:"ready" after 4ms
-        // with only the compile done, then every control verb failed with "no
-        // executor connected" until a full restart. Keep waiting for the
-        // attachment rather than declaring victory at compile time.
         const attached =
           contract.runtime === "attached" ||
           typeof contract.executorAttachedAt === "string";
         if (!attached && buildOnly) {
-          // No browser was launched, so the attach this loop would wait for
-          // cannot happen. Say what IS ready and return immediately.
           return JSON.stringify({
             status: "ready",
             buildOnly: true,
@@ -160,22 +132,11 @@ export async function handler(args: {
           });
         }
         if (!attached) {
-          // Not an error yet: the executor usually attaches a beat later. Only
-          // report the half-ready state if we run out of budget below.
           await new Promise((r) => setTimeout(r, pollInterval));
           sawCompiledButUnattached = true;
           continue;
         }
-        // E21 in the API-surface swarm: wait returned a bare status:"ready"
-        // while the service worker had crashed at top level on load, and only
-        // doctor told the truth. "ready" still means compiled+attached, but a
-        // ready that hides a crashing runtime is the false-green class this
-        // file exists to prevent, so recent error events ride along.
         const runtimeErrors = recentErrorLogs(args.projectPath, browser, 3);
-        // browserAttached means the engine's executor connected, which §83 shows
-        // is not the same as the guest having loaded: Chrome silently refusing
-        // --load-extension leaves ready.json stamped attached with empty logs.
-        // Ask the browser's own target list for the real answer.
         const guestCheck = await verifyGuestLoaded(args.projectPath, browser);
         const warnings: string[] = [];
         if (runtimeErrors.length) {
@@ -192,8 +153,6 @@ export async function handler(args: {
           status: "ready",
           compiled: true,
           browserAttached: true,
-          // The verified fact: null when it could not be checked (no CDP port,
-          // e.g. a gecko session or a browser still binding its debug port).
           guestLoaded: guestCheck.checked ? guestCheck.loaded : null,
           ...(guestCheck.checked
             ? { guestIds: guestCheck.guestIds }

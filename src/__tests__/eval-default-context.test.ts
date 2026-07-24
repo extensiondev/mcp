@@ -37,9 +37,6 @@ afterEach(() => {
   for (const d of dirs.splice(0)) fs.rmSync(d, { recursive: true, force: true });
 });
 
-// Swarm C20: the default template is a Chromium MV3 service worker, whose CSP
-// blocks eval, so a background default made the defaults-only call fail on
-// the most common path. The default must land somewhere that works.
 describe("eval default context", () => {
   it("defaults to page on a Chromium MV3 session and says why", async () => {
     const dir = project({
@@ -154,8 +151,6 @@ describe("eval default context", () => {
   });
 });
 
-// Swarm C20: engine remedies leaked raw CLI flag syntax (--tab) into MCP
-// JSON errors. Every remedy must speak tool-arg vocabulary.
 describe("eval error prose speaks tool args, not CLI flags", () => {
   it("rewrites the MV3 CSP remedy without leaking --tab", () => {
     const engine =

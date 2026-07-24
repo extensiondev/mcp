@@ -1,9 +1,3 @@
-// Swarm cluster 16: extension_wait blocked up to 45s with zero narration, a
-// budget learnable only by paying it, and one conflated "ready" that mixed
-// compiler-ready with browser-alive. These tests pin the narrated contract:
-// every result carries budgetMs + elapsedMs, timeouts say what WAS observed,
-// build-only sessions return at compile time, and compiled/browserAttached are
-// separate facts. Fixture contracts stand in for live sessions throughout.
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
@@ -32,7 +26,6 @@ describe("extension_wait budget disclosure", () => {
     expect(timeoutMs.default).toBe(45000);
     expect(timeoutMs.description).toContain("45000");
     expect(timeoutMs.description).toContain("1000-50000");
-    // The legacy spelling stays accepted and says so.
     expect(schema.inputSchema.properties.timeout.description).toContain(
       "timeoutMs",
     );
@@ -101,7 +94,6 @@ describe("extension_wait splits compiled from browserAttached", () => {
     expect(result.status).toBe("ready");
     expect(result.compiled).toBe(true);
     expect(result.browserAttached).toBe(true);
-    // The port comes from the contract, the same source extension_dev reports.
     expect(result.port).toBe(8083);
     expect(result.budgetMs).toBe(45000);
     expect(typeof result.elapsedMs).toBe("number");
@@ -143,7 +135,6 @@ describe("extension_wait in build-only sessions", () => {
     expect(result.compiled).toBe(true);
     expect(result.browserAttached).toBe(false);
     expect(result.message).toContain("no browser was launched");
-    // Immediate, not a 45s stall against an attach that cannot happen.
     expect(Date.now() - before).toBeLessThan(5_000);
   });
 
@@ -155,7 +146,6 @@ describe("extension_wait in build-only sessions", () => {
       command: "dev",
       noBrowser: true,
     });
-    // A fresh MCP process has no in-memory registry; only the marker survives.
     removeSession(dir, "chrome");
     writeModernContract(dir, "chrome", { pid: process.pid });
 

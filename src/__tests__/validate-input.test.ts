@@ -69,7 +69,6 @@ describe("validateToolInput", () => {
 
 describe("normalizeArgAliases", () => {
   it("folds a soft alias to the canonical arg when the tool has it", () => {
-    // dev has projectPath but not `path`; `path` should become projectPath.
     const out = normalizeArgAliases(devSchema.inputSchema, {
       path: "/tmp/x",
     });
@@ -86,8 +85,6 @@ describe("normalizeArgAliases", () => {
   });
 
   it("leaves an alias alone when it is a real arg for that tool", () => {
-    // manifest_validate now has both manifestPath and projectPath as real
-    // props, so projectPath must NOT be rewritten away.
     const out = normalizeArgAliases(manifestValidateSchema.inputSchema, {
       projectPath: "/tmp/proj",
     });
@@ -98,14 +95,11 @@ describe("normalizeArgAliases", () => {
     const out = normalizeArgAliases(logsSchema.inputSchema, {
       name: "x",
     });
-    // logs has no projectName, so `name` stays as-is (validation will reject it)
     expect(out.name).toBe("x");
     expect(out.projectName).toBeUndefined();
   });
 });
 
-// P7 vocabulary fix: deploy and release-promote name the same build commit
-// differently (buildSha vs buildId); each must answer to the other's word.
 describe("buildSha/buildId cross-aliases", () => {
   it("deploy folds buildId onto buildSha and validates clean", () => {
     const out = normalizeArgAliases(deploySchema.inputSchema, {
@@ -178,9 +172,6 @@ describe("inputValidationError", () => {
     expect(out.error.issues).toHaveLength(1);
   });
 
-  // Swarm C4/C7: a bare "projectName: required argument is missing" taught one
-  // field per failed call and never admitted the `name` alias exists. With the
-  // schema passed along, one error enumerates the whole contract.
   it("enumerates the complete arg surface with aliases when given the schema", () => {
     const out = JSON.parse(
       inputValidationError(
@@ -198,8 +189,6 @@ describe("inputValidationError", () => {
   });
 
   it("does not list an alias word the tool owns as a real property", () => {
-    // A tool with a real `timeoutMs` property keeps that word for itself, so
-    // only `timeoutMillis` remains aliasable onto timeout.
     const owns = {
       type: "object",
       properties: { timeout: { type: "number" }, timeoutMs: { type: "number" } },

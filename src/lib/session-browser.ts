@@ -77,10 +77,6 @@ export interface LiveSession {
   source: "registry" | "contract";
 }
 
-// Every live session currently holding this project, from both the in-memory
-// registry and the on-disk ready.json contracts. extension_dev consults this
-// BEFORE spawning: starting a second session on the same project forks it, and
-// the new browser dies on the profile lock while ok reads true (swarm C5).
 export function liveProjectSessions(projectPath: string): LiveSession[] {
   const resolved = path.resolve(projectPath);
   const out = new Map<string, LiveSession>();
@@ -105,9 +101,6 @@ export function liveProjectSessions(projectPath: string): LiveSession[] {
   return [...out.values()];
 }
 
-// A ready.json that says "ready" but whose pid is dead means the dev server
-// exited, the real cause behind most "control channel refused (1006)" errors,
-// which otherwise misleadingly ask "is the session started with allowControl?".
 export function deadReadySession(
   projectPath: string,
 ): { browser: string; pid: number } | null {
@@ -125,11 +118,6 @@ export interface BrowserExitStamp {
   browserExitedAt?: string;
 }
 
-// Engines carrying the bug-71/72 fixes stamp ready.json with status:"error",
-// code:"browser_exited" when the browser they launched dies unexpectedly during
-// preview/start. Launch tools read the stamp so they can report the death
-// instead of "launched". `since` guards against a stale stamp from a previous
-// run: only a stamp written after our own spawn counts.
 export function browserExitStamp(
   projectPath: string,
   browser: string,
@@ -162,16 +150,6 @@ export function browserExitStamp(
   return null;
 }
 
-// The engine allocates the real dev-server port BEFORE it creates its metadata
-// writer, so every ready.json stamp (starting, ready, even error) carries the
-// port it actually bound, never the requested one (verified against
-// extension-develop 4.0.x: PortManager.allocatePorts runs first, and a taken
-// 8080 walks to 8081+ with only the contract knowing). That makes the contract
-// the single source of truth for ports: extension_dev reads it here after its
-// health window instead of echoing the requested port back, which is how dev
-// said 8080 while extension_wait said 8081 for the same session (hit by 8 of
-// 10 swarm personas). `since` guards against a stale contract from a previous
-// run: only a stamp written after our own spawn counts.
 export function contractBoundPort(
   projectPath: string,
   browser: string,
@@ -196,11 +174,6 @@ export function contractBoundPort(
   }
 }
 
-// "chrome", not "chromium": the blind fallback used to name a browser almost
-// nobody runs, and because a DEAD session left no live sighting, every tool call
-// after the dev server exited silently retargeted chromium. That mismatch was
-// the single largest finding cluster in the 4.9.0 persona swarm (~25), and it is
-// downstream of the dev server dying, not a separate bug.
 export function resolveSessionBrowser(
   projectPath: string,
   explicit: string | undefined,
@@ -224,10 +197,6 @@ export function resolveSessionBrowser(
     return { browser: live[0].browser, source: "contract" };
   }
 
-  // No live session, but this project HAS been run: keep targeting the browser
-  // the user actually used, so the resulting error is the honest "the dev server
-  // has exited" rather than a confusing complaint about a browser they never
-  // launched. The caller can surface `source: "stale"` to say so.
   if (sightings.length > 0) {
     return { browser: sightings[0].browser, source: "stale" };
   }

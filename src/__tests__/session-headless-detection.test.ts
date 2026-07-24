@@ -1,12 +1,6 @@
 import { describe, it, expect, afterEach } from "vitest";
 import { sessionIsHeadless } from "../tools/open";
 
-// open.ts skips the popup/sidebar auto-tab fallback for headed sessions. The
-// detection used to key only off EXTENSION_HEADLESS, which is inert on
-// extension@latest (4.0.15); the version-independent lever is
-// EXTENSION_BROWSER_FLAGS=--headless=new, which the project settings.json ships.
-// If detection misses that, a headless session is treated as headed and the
-// caller gets the raw "no active browser window" error the fallback prevents.
 describe("sessionIsHeadless", () => {
   const saved = {
     h: process.env.EXTENSION_HEADLESS,
@@ -53,7 +47,6 @@ describe("sessionIsHeadless", () => {
   it("does not false-positive on unrelated flags", () => {
     set(undefined, "--window-size=1280,800 --disable-gpu");
     expect(sessionIsHeadless()).toBe(false);
-    // A substring like "headlessish" in some other flag must not trip it.
     set(undefined, "--user-agent=headlessishBot");
     expect(sessionIsHeadless()).toBe(false);
   });

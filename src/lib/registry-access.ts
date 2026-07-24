@@ -6,37 +6,17 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-// Short-lived registry access tokens for PRIVATE projects.
-//
-// The public registry answers 200 for public projects with no auth at all, so
-// the read tools were built assuming that is the only case. For a private
-// project every read 401s, which the release tools reported as "no builds" for
-// a project the operator is logged into and owns. This module closes that gap
-// the same way the userland SPA does (see its services/access-token-cache.ts):
-// trade a credential for a 10-minute token and attach it as `?t=`.
-//
-// Why a trade instead of sending the stored token directly: the token the login
-// flow persists and the token the registry Worker accepts are the SAME HMAC
-// primitive, so the stored one WOULD work as `?t=`. It must not be used that
-// way. It is long-lived (days) and a `?t=` value travels in a URL, which means
-// every proxy and access log on the path keeps a copy. The trade narrows a
-// multi-day credential to a ten-minute one before it goes on the wire.
-
 import { readCredentials } from "./credentials";
 import { resolveApiBase, safeApiBase } from "./login-flow";
 
 import type { ProjectRef } from "./registry";
 
-/** Attached slightly early so a token cannot expire mid-request. */
 const REFRESH_LEAD_SECONDS = 60;
 
 export type AccessGrant =
   | { status: "ok"; token: string; expiresAt: number }
-  /** Project is public; no token is needed and none was minted. */
   | { status: "public" }
-  /** No stored credential, or it does not cover the requested project. */
   | { status: "no-credential" }
-  /** Reached the platform and it refused (401/403/5xx, network, bad body). */
   | { status: "denied"; httpStatus?: number; message: string };
 
 type CacheEntry =
@@ -49,16 +29,9 @@ function cacheKey(ref: ProjectRef): string {
 
 export interface AccessTokenCacheOptions {
   fetchImpl?: typeof fetch;
-  /** Test-only clock override, unix epoch seconds. */
   nowSeconds?: () => number;
 }
 
-/**
- * Per-process cache of minted tokens. Concurrent readers of the same project
- * share one in-flight mint: a single tool call fans out over meta.json,
- * channels.json and builds/index.json, and three cold 401s must not become
- * three mint round-trips.
- */
 export class RegistryAccessTokens {
   private readonly cache = new Map<string, CacheEntry>();
   private readonly fetchImpl: typeof fetch;
@@ -70,7 +43,6 @@ export class RegistryAccessTokens {
       options?.nowSeconds ?? (() => Math.floor(Date.now() / 1000));
   }
 
-  /** A cached, still-valid token, or "" if none. Never mints. */
   peek(ref: ProjectRef): string {
     const entry = this.cache.get(cacheKey(ref));
     if (!entry || entry.kind !== "fresh") return "";
@@ -102,8 +74,6 @@ export class RegistryAccessTokens {
         expiresAt: result.expiresAt,
       });
     } else {
-      // Do not cache failures: a project can be made private, or the operator
-      // can log in, between two calls in the same process.
       this.cache.delete(key);
     }
     return result;
@@ -116,10 +86,6 @@ export class RegistryAccessTokens {
     ).trim();
     if (!token) return { status: "no-credential" };
 
-    // The platform refuses to mint for a project the bearer is not scoped to,
-    // so asking for someone else's project is a guaranteed 403. Skip the call
-    // when the stored login already tells us it will not match. A token from
-    // EXTENSION_DEV_TOKEN has no local claims to check, so it still asks.
     if (creds?.workspaceSlug && creds?.projectSlug && !process.env.EXTENSION_DEV_TOKEN) {
       const same =
         creds.workspaceSlug.toLowerCase() === ref.workspace.toLowerCase() &&
@@ -150,8 +116,6 @@ export class RegistryAccessTokens {
       };
     }
 
-    // 400 is the platform saying the project is public. That is not a failure:
-    // the caller's unauthenticated read will succeed on its own.
     if (res.status === 400) return { status: "public" };
     if (!res.ok) {
       return {
@@ -178,10 +142,8 @@ export class RegistryAccessTokens {
   }
 }
 
-/** Process-wide default, so one tool call's fan-out shares one mint. */
 export const defaultRegistryAccessTokens = new RegistryAccessTokens();
 
-/** Append `?t=<token>` to a registry URL. */
 export function withAccessToken(url: string, token: string): string {
   if (!token) return url;
   try {

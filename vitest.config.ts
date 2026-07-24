@@ -1,11 +1,3 @@
-// ███╗   ███╗ ██████╗██████╗
-// ████╗ ████║██╔════╝██╔══██╗
-// ██╔████╔██║██║     ██████╔╝
-// ██║╚██╔╝██║██║     ██╔═══╝
-// ██║ ╚═╝ ██║╚██████╗██║
-// ╚═╝     ╚═╝ ╚═════╝╚═╝
-// Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
-
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, parse } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -13,10 +5,6 @@ import { defineConfig } from "vitest/config";
 
 const here = dirname(fileURLToPath(import.meta.url));
 
-// The engine packages sit in this package's node_modules under a strict
-// linker and in a parent's under a hoisted one, so walk up for them rather
-// than naming one layout. Their `exports` maps omit ./package.json, which
-// rules out require.resolve.
 const findPackageDir = (pkg: string) => {
   const { root } = parse(here);
   for (let dir = here; ; dir = dirname(dir)) {

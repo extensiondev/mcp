@@ -5,6 +5,8 @@
 [discord-image]: https://img.shields.io/discord/1253608412890271755?label=Discord&logo=discord&style=flat&color=26FFB8
 [discord-url]: https://discord.gg/v9h2RgeTSN
 
+<img alt="@extension.dev/mcp" src="https://media.extension.land/brand/repos/mcp/github-banner.png" />
+
 # @extension.dev/mcp [![Version][npm-version-image]][npm-version-url] [![Downloads][npm-downloads-image]][npm-downloads-url] [![Discord][discord-image]][discord-url]
 
 > Give your AI agent hands for browser extension development. 35 MCP tools that scaffold, run, inspect, debug, and publish cross-browser extensions.

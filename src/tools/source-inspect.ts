@@ -106,9 +106,6 @@ export async function handler(args: {
 
   try {
     const allTargets = await CDPClient.discoverTargets(cdpPort);
-    // Chrome renders a chrome_url_overrides page (new tab, bookmarks, history)
-    // at its chrome:// URL, but the DOM is the extension's own surface, so
-    // these must be inspectable, not filtered out with the rest of chrome://.
     const OVERRIDE_PAGES = [
       "chrome://newtab/",
       "chrome://new-tab-page/",
@@ -220,10 +217,6 @@ export async function handler(args: {
 
     if (args.probe?.length) {
       result.probes = await cdp.probeSelectors(sessionId, args.probe);
-      // Three API-surface-swarm personas passed JS expressions ("typeof
-      // chrome.tts") here and read the silent count:0 as "API absent": probes
-      // are CSS selectors, and API names happen to parse as descendant
-      // selectors. Warn exactly when a probe looks like code.
       const jsLooking = args.probe.filter((p) =>
         /^typeof\s|^(chrome|browser|window|document)\.|\(\)|=>|===/.test(p),
       );

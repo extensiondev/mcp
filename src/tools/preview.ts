@@ -76,9 +76,6 @@ export async function handler(
   await new Promise((resolve) => setTimeout(resolve, 5000));
   const earlyOutput = spawned.readOutput();
 
-  // Same health tick as extension_dev/start: this used to return
-  // status:"launched" unconditionally, so a preview process that died within
-  // seconds (nothing ever serving) still read as a live session.
   if (child.exitCode !== null || child.signalCode !== null) {
     const code = child.exitCode;
     const signal = child.signalCode;
@@ -99,9 +96,6 @@ export async function handler(
     });
   }
 
-  // The CLI can outlive the browser it launched. Engines with the bug-71/72
-  // fixes stamp ready.json status:"error" code:"browser_exited" when that
-  // happens; a dead browser IS a dead run-only session, so report it.
   const exitStamp = browserExitStamp(args.projectPath, browser, spawnedAt);
   if (exitStamp) {
     return JSON.stringify({
