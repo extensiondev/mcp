@@ -3,7 +3,11 @@ import { createHash } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { CARRIER_DIR_NAME, materializeCarrier } from "../lib/carrier";
+import {
+  CARRIER_DIR_NAME,
+  CARRIER_EXTENSION_ID,
+  materializeCarrier,
+} from "../lib/carrier";
 
 let projectDir: string;
 
@@ -82,6 +86,13 @@ describe("materializeCarrier", () => {
     const text = (result.limitations ?? []).join(" ");
     expect(text).toMatch(/own chrome\.\* calls .*never cross the carrier/i);
     expect(text).toMatch(/CARRIER's identity/i);
+  });
+
+  it("keeps the stable carrier id in step with what the payload derives", () => {
+    // The oracle and the emulator both trust the CARRIER_EXTENSION_ID literal to
+    // tell the carrier apart from the guest; guard it against a regenerated key.
+    const result = materializeCarrier(projectDir, "chrome");
+    expect(result.bridgeProtocol?.carrierExtensionId).toBe(CARRIER_EXTENSION_ID);
   });
 
   it("names the graduation path to the guest's own isolated state", () => {
