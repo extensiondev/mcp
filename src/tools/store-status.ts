@@ -42,6 +42,11 @@ export const schema = {
         description:
           "Project slug override (defaults to the stored login's project).",
       },
+      api: {
+        type: "string",
+        description:
+          "Platform base URL (defaults to https://www.extension.dev or EXTENSION_DEV_API_URL). Used to resolve link origins and, for a private project, to mint a short-lived read token.",
+      },
     },
     required: [],
   },
@@ -193,6 +198,7 @@ function fail(
 export async function handler(args: {
   workspace?: string;
   project?: string;
+  api?: string;
 }): Promise<string> {
   const ref = resolveProjectRef(args);
   if (!ref) {
@@ -205,12 +211,12 @@ export async function handler(args: {
   const healthUrl = registryFileUrl(ref, "stores/health.json");
   const statusUrl = registryFileUrl(ref, "stores/status.json");
   const submissionsUrl = registryFileUrl(ref, "stores/submissions.json");
-  const consoleStoresUrl = consoleProjectUrl(ref, "stores");
+  const consoleStoresUrl = consoleProjectUrl(ref, "stores", args.api);
 
   const [healthRes, statusRes, submissionsRes] = await Promise.all([
-    fetchRegistryJson(healthUrl),
-    fetchRegistryJson(statusUrl),
-    fetchRegistryJson(submissionsUrl),
+    fetchRegistryJson(healthUrl, fetch, { ref, api: args.api }),
+    fetchRegistryJson(statusUrl, fetch, { ref, api: args.api }),
+    fetchRegistryJson(submissionsUrl, fetch, { ref, api: args.api }),
   ]);
 
   if (!healthRes.ok && !statusRes.ok && !submissionsRes.ok) {

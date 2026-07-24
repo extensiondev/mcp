@@ -16,8 +16,17 @@
 // fail the verb it decorates.
 
 import { readCredentials } from "./credentials";
+import {
+  defaultRegistryAccessTokens,
+  withAccessToken,
+  type RegistryAccessTokens,
+} from "./registry-access";
 import { PROD_ORIGINS, resolveOrigins, type Origins } from "@extension.dev/urls/origins";
 import { consoleProjectPath } from "@extension.dev/urls/paths";
+import {
+  UserlandProjectPage,
+  userlandUrl,
+} from "@extension.dev/urls/userland";
 
 export const REGISTRY_BASE_DEFAULT = PROD_ORIGINS.registry;
 
@@ -39,6 +48,7 @@ export function mcpOrigins(apiHint?: string): Origins {
       console: process.env.EXTENSION_DEV_CONSOLE_URL,
       inspect: process.env.EXTENSION_DEV_INSPECT_URL,
       preview: process.env.EXTENSION_DEV_PREVIEW_URL,
+      userland: process.env.EXTENSION_DEV_USERLAND_URL,
       registry: process.env.EXTENSION_DEV_REGISTRY_URL,
       media: process.env.EXTENSION_MEDIA_ORIGIN,
     },
@@ -104,38 +114,124 @@ export function consoleProjectUrl(
   return `${base}${consoleProjectPath(ref, page)}`;
 }
 
+/**
+ * The PUBLIC page for a project, a build, or a channel on userland.
+ *
+ * The sibling of consoleProjectUrl, and the one to hand to a human who is not
+ * the operator: the console links every tool already returns require a login
+ * and workspace membership, so they are dead ends for a teammate, a reviewer,
+ * or anyone reading a PR. These carry the per-browser downloads, the run
+ * locally and integrity dialogs, and the what's new tab.
+ *
+ * A PRIVATE project's page still needs a `?share=` token, which only
+ * extension_publish can mint; callers should say so rather than imply the bare
+ * URL will open for anyone.
+ */
+export function userlandProjectUrl(
+  ref: ProjectRef | null,
+  page = "",
+  apiHint?: string,
+): string {
+  if (!ref) return "";
+  try {
+    return userlandUrl(ref, page, { base: mcpOrigins(apiHint).userland });
+  } catch {
+    // A workspace slug that cannot be a subdomain is not worth failing a verb
+    // over; the tool's other output stays useful without the link.
+    return "";
+  }
+}
+
 export type RegistryFetchResult<T> =
   | { ok: true; json: T }
   | { ok: false; status?: number; message: string };
 
-/**
- * Fetch a registry JSON file. Never throws: 404s (private or never-built
- * projects), network failures, and non-JSON bodies all come back as
- * `{ok:false}` so callers can degrade honestly instead of crashing the verb.
- */
-export async function fetchRegistryJson<T = unknown>(
+async function readJson<T>(
   url: string,
-  fetchImpl: typeof fetch = fetch,
+  res: Response,
 ): Promise<RegistryFetchResult<T>> {
-  let res: Response;
-  try {
-    res = await fetchImpl(url);
-  } catch (err: any) {
-    return { ok: false, message: `Could not reach ${url}: ${err?.message || err}` };
-  }
-  if (!res.ok) {
-    return {
-      ok: false,
-      status: res.status,
-      message: `${url} returned ${res.status}`,
-    };
-  }
   try {
     const text = await res.text();
     return { ok: true, json: JSON.parse(text) as T };
   } catch {
     return { ok: false, message: `${url} did not return valid JSON` };
   }
+}
+
+/**
+ * Fetch a registry JSON file. Never throws: 404s (never-built projects),
+ * network failures, and non-JSON bodies all come back as `{ok:false}` so
+ * callers can degrade honestly instead of crashing the verb.
+ *
+ * PRIVATE PROJECTS: a private project answers 401 here. When `ref` is given and
+ * the caller holds a credential for that project, the 401 triggers one mint of
+ * a short-lived access token and a single retry with `?t=`. Without `ref` the
+ * behaviour is exactly as before, so this stays a drop-in for public reads:
+ * public projects still complete in one round trip and never touch the
+ * platform. See registry-access.ts for why the stored token is traded rather
+ * than sent as `?t=` directly.
+ */
+export async function fetchRegistryJson<T = unknown>(
+  url: string,
+  fetchImpl: typeof fetch = fetch,
+  options?: { ref?: ProjectRef | null; api?: string; tokens?: RegistryAccessTokens },
+): Promise<RegistryFetchResult<T>> {
+  const tokens = options?.tokens ?? defaultRegistryAccessTokens;
+  const ref = options?.ref ?? null;
+
+  // A token already minted for this project rides along on the first attempt,
+  // so only the first read of a private project pays the 401 round trip.
+  const cached = ref ? tokens.peek(ref) : "";
+  const firstUrl = cached ? withAccessToken(url, cached) : url;
+
+  let res: Response;
+  try {
+    res = await fetchImpl(firstUrl);
+  } catch (err: any) {
+    return { ok: false, message: `Could not reach ${url}: ${err?.message || err}` };
+  }
+  if (res.ok) return readJson<T>(url, res);
+
+  // 403 as well as 401: the Worker uses 403 for a token that verifies but is
+  // no longer allowed (revoked, or minted before a membership change).
+  const authFailed = res.status === 401 || res.status === 403;
+  if (!authFailed || !ref) {
+    return {
+      ok: false,
+      status: res.status,
+      message: `${url} returned ${res.status}`,
+    };
+  }
+
+  const grant = await tokens.get(ref, options?.api);
+  if (grant.status !== "ok") {
+    const detail =
+      grant.status === "no-credential"
+        ? "This project is private. Run extension_login for it, or set EXTENSION_DEV_TOKEN."
+        : grant.status === "public"
+          ? "The platform reports this project is public, but the registry refused the read."
+          : grant.message;
+    return {
+      ok: false,
+      status: res.status,
+      message: `${url} returned ${res.status}. ${detail}`,
+    };
+  }
+
+  let retried: Response;
+  try {
+    retried = await fetchImpl(withAccessToken(url, grant.token));
+  } catch (err: any) {
+    return { ok: false, message: `Could not reach ${url}: ${err?.message || err}` };
+  }
+  if (!retried.ok) {
+    return {
+      ok: false,
+      status: retried.status,
+      message: `${url} returned ${retried.status} even with an access token`,
+    };
+  }
+  return readJson<T>(url, retried);
 }
 
 export interface ChannelEntry {

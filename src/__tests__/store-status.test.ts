@@ -118,7 +118,9 @@ describe("extension_store_status: registration + schema", () => {
       (schema.inputSchema as { properties: Record<string, unknown> })
         .properties,
     );
-    expect(props.sort()).toEqual(["project", "workspace"]);
+    // `api` joined workspace/project when these reads became token-aware:
+    // a private project needs a platform base to mint its read token against.
+    expect(props.sort()).toEqual(["api", "project", "workspace"]);
     expect((schema.inputSchema as { required: string[] }).required).toEqual([]);
   });
 

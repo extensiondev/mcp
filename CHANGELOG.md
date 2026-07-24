@@ -1,5 +1,69 @@
 # Changelog
 
+## 6.4.0
+
+A build on your machine can now become a link someone else can open.
+
+### Changed
+
+- **`extension_preview_web` with `share:true` uploads the build you just
+  made.** It used to route sharing through `extension_publish`, which takes no
+  project path and uploads nothing: it flips a share link on whatever build the
+  token's project last pushed from its own CI. So the link rendered a different
+  build than the one on disk, and said so in a caveat. It now POSTs the resolved
+  `dist/<browser>` to the platform's artifact store and returns a
+  `preview.extension.dev` link that renders those exact bytes, for a recipient
+  with no install, no sign-in, and no dev server. `share.serves` reports
+  `uploaded-local-build`; the `requiredBackend` spec that described this as
+  missing is gone because it is built.
+- `share` now returns `expiresAt` and `revokeUrl`. Shared builds expire, and
+  `DELETE`ing `revokeUrl` with the same token kills the link immediately, which
+  is the part a TTL alone cannot do when a link reaches the wrong person.
+- The `channel` argument is removed from `extension_preview_web`. It only ever
+  selected which promoted CI build to render, and this tool no longer renders
+  promoted builds. `extension_publish` and `extension_release_promote` are
+  unchanged and remain the path for released, channel-scoped builds.
+
+## 6.3.0
+
+Private projects stop reading as empty, and the links this server hands back
+stop being login-only.
+
+### Fixed
+
+- **Registry reads work for PRIVATE projects.** `extension_release_list`,
+  `extension_store_status`, `extension_deploy` and `extension_publish` read the
+  project's state from `registry.extension.land`, which answers 401 for a
+  private project. That 401 was reported as "no registry data", so a project the
+  operator owns and is logged into looked like it had no builds at all. A 401 or
+  403 now mints a short-lived read token and retries once. Public projects are
+  untouched: still one request, still no call to the platform.
+- The stored login token is never used as the `?t=` URL parameter even though it
+  would verify. It is long-lived, and a credential in a query string is kept by
+  every proxy and access log on the path, so it is traded for a ten-minute token
+  first. Requires the bearer path on `POST /api/access-grant`.
+
+### Added
+
+- **Public build links.** `extension_release_list` returns a `publicUrl` for
+  every channel and build plus a `publicProjectUrl`, and
+  `extension_release_promote` returns `publicChannelUrl` and `publicBuildUrl`.
+  Every link these tools returned before pointed at the console, which requires
+  a login and workspace membership, so it was a dead end for the teammate or
+  reviewer the operator wanted to send it to. The public pages carry the
+  per-browser downloads, the run-locally and integrity dialogs, and what's new.
+  For a private project the response says plainly that an outside recipient
+  still needs a share link from `extension_publish`.
+- `api` is accepted by `extension_release_list` and `extension_store_status`,
+  matching the other hosted-facing tools. It picks the platform the read token
+  is minted against and the origin the returned links point at.
+
+### Changed
+
+- Depends on `@extension.dev/urls` `^0.3.0` for the new `userland` origin and
+  its whole-URL builders, so a build link this server returns cannot drift from
+  the routes the viewer serves.
+
 ## 6.2.0
 
 The URL layer stops being a copy. This server used to carry byte-identical
