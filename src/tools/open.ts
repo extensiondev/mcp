@@ -699,6 +699,27 @@ export const schema = {
   },
 };
 
+// A session is headless if EXTENSION_HEADLESS is truthy OR the launch flags
+// carry a headless switch. The second half matters because EXTENSION_HEADLESS
+// is inert on extension@latest (4.0.15), so the version-independent lever is
+// EXTENSION_BROWSER_FLAGS=--headless=new (the project .claude/settings.json ships
+// exactly that). Keying only off EXTENSION_HEADLESS made this detection blind to
+// the common headless setup, so the popup/sidebar auto-tab fallback below was
+// skipped and the caller got the raw "no active browser window" error this block
+// exists to prevent. `--headless=new`, `--headless` and Firefox's `-headless` all
+// contain "headless", so a substring test covers every form.
+export function sessionIsHeadless(): boolean {
+  if (/^(1|true)$/i.test(process.env.EXTENSION_HEADLESS ?? "")) return true;
+  return /(^|\s|=)-{1,2}headless\b/i.test(
+    process.env.EXTENSION_BROWSER_FLAGS ?? "",
+  );
+}
+
+// To restore a real window, EXTENSION_HEADLESS=0 alone is not enough once
+// EXTENSION_BROWSER_FLAGS forces headless; both must be cleared.
+const HEADED_RELAUNCH =
+  "start a headed session: extension_dev with replace: true, and in the environment set EXTENSION_HEADLESS=0 AND clear EXTENSION_BROWSER_FLAGS (it may carry --headless=new, which keeps the window hidden even with EXTENSION_HEADLESS=0)";
+
 export async function handler(
   args: ActArgs & {
     surface?: string;
@@ -772,11 +793,11 @@ export async function handler(
   if (args.timeout != null) cli.push("--timeout", String(args.timeout));
   const raw = await runActVerb(cli, args.projectPath, args.timeout);
 
-  // Opening a UI surface needs a headed window; under EXTENSION_HEADLESS the
+  // Opening a UI surface needs a headed window; when the session is headless the
   // engine reports "no active browser window" with no hint as to why. Name the
   // real cause so the caller knows to relaunch headed rather than debug a
   // phantom failure.
-  const headless = /^(1|true)$/i.test(process.env.EXTENSION_HEADLESS ?? "");
+  const headless = sessionIsHeadless();
   if (headless && ["popup", "action", "sidebar"].includes(args.surface)) {
     try {
       const parsed = JSON.parse(raw);
@@ -802,7 +823,7 @@ export async function handler(
             const parsedFallback = JSON.parse(fallback);
             if (parsedFallback?.ok) {
               parsedFallback.note =
-                "The dev browser is headless (EXTENSION_HEADLESS=1), and a real popup/sidebar window can only open in a headed session, so the surface was rendered as a tab instead. For the real window, start a headed session: extension_dev with replace: true, with EXTENSION_HEADLESS=0 (or unset) in the environment, then open the surface again without asTab.";
+                `The dev browser is headless, and a real popup/sidebar window can only open in a headed session, so the surface was rendered as a tab instead. For the real window, ${HEADED_RELAUNCH}, then open the surface again without asTab.`;
               return JSON.stringify(parsedFallback);
             }
           } catch {
@@ -812,7 +833,7 @@ export async function handler(
         if (!parsed.hint) {
           parsed.hint = /user gesture/i.test(msg)
             ? "This surface can only open from a real user gesture, which headless automation cannot produce. Retry with asTab: true to render the surface document in a tab instead."
-            : "The dev browser is running headless (EXTENSION_HEADLESS=1), and a popup/sidebar window needs a headed session. Retry with asTab: true to render the surface document in a tab, or start a headed session for the real window: extension_dev with replace: true, with EXTENSION_HEADLESS=0 (or unset) in the environment.";
+            : `The dev browser is running headless, and a popup/sidebar window needs a headed session. Retry with asTab: true to render the surface document in a tab, or for the real window, ${HEADED_RELAUNCH}.`;
         }
         return JSON.stringify(parsed);
       }
