@@ -7,6 +7,7 @@
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
 import { clearCredentials, readCredentials } from "../lib/credentials";
+import { consoleProjectUrl } from "../lib/registry";
 
 export const schema = {
   name: "extension_logout",
@@ -24,7 +25,10 @@ export async function handler(): Promise<string> {
   const creds = readCredentials();
   const revokeUrl =
     creds?.workspaceSlug && creds?.projectSlug
-      ? `https://console.extension.dev/${creds.workspaceSlug}/${creds.projectSlug}/settings/access-tokens`
+      ? consoleProjectUrl(
+          { workspace: creds.workspaceSlug, project: creds.projectSlug },
+          "settings/access-tokens",
+        )
       : null;
   const result = clearCredentials();
   return JSON.stringify({

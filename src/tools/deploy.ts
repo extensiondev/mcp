@@ -17,7 +17,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { resolveToken } from "../lib/publish";
-import { safeApiBase } from "../lib/login-flow";
+import { resolveApiBase, safeApiBase } from "../lib/login-flow";
 import {
   consoleProjectUrl,
   fetchRegistryJson,
@@ -25,8 +25,6 @@ import {
   registryFileUrl,
   resolveProjectRef,
 } from "../lib/registry";
-
-const DEFAULT_API = "https://www.extension.dev";
 
 // Advisory only: the platform's mirror CI reads STORE.md at submission time
 // (Firefox reviewer/release notes, Edge certification notes), so a missing
@@ -157,9 +155,7 @@ export async function handler(args: DeployToolArgs): Promise<string> {
     );
   }
 
-  const apiCheck = safeApiBase(
-    String(args.api || process.env.EXTENSION_DEV_API_URL || DEFAULT_API),
-  );
+  const apiCheck = safeApiBase(resolveApiBase(args.api));
   if (!apiCheck.ok) {
     return fail("DeployConfigError", apiCheck.message);
   }
@@ -218,7 +214,7 @@ export async function handler(args: DeployToolArgs): Promise<string> {
     // what is knowable from the public registry and never echo an
     // unqualified "Preflight OK" per browser.
     const ref = resolveProjectRef();
-    const consoleStoresUrl = consoleProjectUrl(ref, "stores");
+    const consoleStoresUrl = consoleProjectUrl(ref, "stores", args.api);
     const storeModeNote = `Store publish mode (draft / skip-publish / live) is not readable with the CLI token, so it cannot be verified from here; check per-store settings at ${consoleStoresUrl}.`;
 
     let health: Record<string, { ok?: boolean; message?: string }> | null = null;

@@ -16,13 +16,42 @@
 // fail the verb it decorates.
 
 import { readCredentials } from "./credentials";
+import { PROD_ORIGINS, resolveOrigins, type Origins } from "./urls-origins";
+import { consoleProjectPath } from "./urls-paths";
 
-export const REGISTRY_BASE_DEFAULT = "https://registry.extension.land";
-export const CONSOLE_BASE = "https://console.extension.dev";
+export const REGISTRY_BASE_DEFAULT = PROD_ORIGINS.registry;
+
+/**
+ * Resolve the fleet origins from the MCP's env vars, once per call. Console,
+ * registry, and media all DERIVE from the platform base (`EXTENSION_DEV_API_URL`
+ * or a per-tool `api`): point that at a local stack and every dashboard link the
+ * MCP hands back follows to the dev host (`console.extension.localhost`) instead
+ * of silently pointing at prod. Explicit per-host env vars still win. Falls back
+ * to production when nothing is set. The dev-derivation lives in
+ * `@extensiondev/urls` so it stays identical to what the apps resolve.
+ */
+export function mcpOrigins(apiHint?: string): Origins {
+  const www =
+    String(apiHint || process.env.EXTENSION_DEV_API_URL || "").trim() || undefined;
+  return resolveOrigins(
+    {
+      www,
+      console: process.env.EXTENSION_DEV_CONSOLE_URL,
+      inspect: process.env.EXTENSION_DEV_INSPECT_URL,
+      registry: process.env.EXTENSION_DEV_REGISTRY_URL,
+      media: process.env.EXTENSION_MEDIA_ORIGIN,
+    },
+    { hint: www },
+  );
+}
+
+/** Base origin of the console dashboard, dev-aware (no trailing slash). */
+export function consoleBase(apiHint?: string): string {
+  return mcpOrigins(apiHint).console;
+}
 
 export function registryBase(): string {
-  const fromEnv = String(process.env.EXTENSION_DEV_REGISTRY_URL || "").trim();
-  return (fromEnv || REGISTRY_BASE_DEFAULT).replace(/\/+$/, "");
+  return mcpOrigins().registry;
 }
 
 export interface ProjectRef {
@@ -57,12 +86,21 @@ export function registryFileUrl(ref: ProjectRef, file: string): string {
   )}/_extension-dev/${file}`;
 }
 
-/** Console page URL for the project (builds, releases/new, stores, ...). */
-export function consoleProjectUrl(ref: ProjectRef | null, page: string): string {
-  if (!ref) return `${CONSOLE_BASE}`;
-  return `${CONSOLE_BASE}/${encodeURIComponent(ref.workspace)}/${encodeURIComponent(
-    ref.project,
-  )}/${page}`;
+/**
+ * Console page URL for the project (builds, releases/new, stores, ...). The
+ * origin is dev-aware; the path comes from the shared route contract so a
+ * console route rename is caught in one place. Pass `apiHint` (a tool's `api`
+ * arg) so the link matches that call's environment; otherwise it follows
+ * `EXTENSION_DEV_API_URL`/`EXTENSION_DEV_CONSOLE_URL`.
+ */
+export function consoleProjectUrl(
+  ref: ProjectRef | null,
+  page: string,
+  apiHint?: string,
+): string {
+  const base = consoleBase(apiHint);
+  if (!ref) return base;
+  return `${base}${consoleProjectPath(ref, page)}`;
 }
 
 export type RegistryFetchResult<T> =
