@@ -72,6 +72,29 @@ function loadExisting(file: string): {
   return { entries: [], unreadable: true };
 }
 
+export interface SharedPreviewsFile {
+  path: string;
+  exists: boolean;
+  unreadable: boolean;
+  entries: SharedPreviewEntry[];
+}
+
+export function readSharedPreviews(projectPath: string): SharedPreviewsFile {
+  const file = sharedPreviewsPath(projectPath);
+  if (!fs.existsSync(file)) {
+    return { path: file, exists: false, unreadable: false, entries: [] };
+  }
+  const existing = loadExisting(file);
+  return {
+    path: file,
+    exists: true,
+    unreadable: existing.unreadable,
+    entries: existing.entries.filter(
+      (entry) => entry && typeof entry.artifactId === "string",
+    ),
+  };
+}
+
 export function recordSharedPreview(
   projectPath: string,
   entry: SharedPreviewEntry,

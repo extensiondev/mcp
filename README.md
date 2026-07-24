@@ -133,6 +133,7 @@ cp node_modules/@extension.dev/mcp/claude/commands/*.md ~/my-extension/.claude/c
 | platform | `extension_whoami` | Show the stored login (never the token) |
 | platform | `extension_logout` | Remove stored credentials |
 | platform | `extension_preview_web` | Render a build in the web emulator, and share it as a link |
+| platform | `extension_shares` | List every link you have shared, and revoke one permanently |
 | platform | `extension_publish` | Publish a shareable preview to extension.dev |
 | platform | `extension_release_promote` | Promote a build to a release channel, headless |
 | platform | `extension_deploy` | Submit to the Chrome, Firefox, and Edge stores through extension.dev |
@@ -142,6 +143,8 @@ Browser-launching tools (`dev`, `start`, `preview`) shell out to the `extension`
 ## Sharing a build in progress
 
 An unpacked extension is unusually hard to hand to someone: the only way to look at a colleague's work-in-progress has been to take their zip and run untrusted code with real browser permissions on your own machine. `extension_preview_web` with `share: true` uploads the `dist/` it just built and returns a link that renders those exact bytes in the emulator. Whoever opens it installs nothing and signs in to nothing, which is what lets a designer, a PM, or a reviewer into the loop at all. Sharing needs auth (`extension_login` or `EXTENSION_DEV_TOKEN`), the link expires, and `DELETE`ing the returned `revokeUrl` with the same token kills it early. Revocation is permanent and re-sharing mints a new link, so that `revokeUrl` is the only handle to the link you just made; every share is also appended to `.extension.dev/shared-previews.json` in the project (gitignored) so it survives losing the tool output. Without `share`, the tool returns a local-only deep link and uploads nothing.
+
+`extension_shares` is the other half of that: it lists every link the token has shared, live and dead, with the `previewUrl` and `revokeUrl` of each, and revokes one by `artifactId` or by pasting any of its URLs. Pass `projectPath` and it reconciles the platform's answer with the project's own record, so a link shared from another machine shows up as `remoteOnly` and a record with nothing behind it any more shows up under `localOnly`. It never rewrites the local file.
 
 That is a different job from shipping. Use `share` for the build you are holding right now; use `extension_publish` and `extension_release_promote` below for builds your CI has released.
 
