@@ -31,6 +31,7 @@
       "https://intelligence.extension.dev/*",
       "https://inspect.extension.dev/*",
       "https://themes.extension.dev/*",
+      "https://preview.extension.dev/*",
       "http://localhost/*",
       "http://127.0.0.1/*"
     ]
