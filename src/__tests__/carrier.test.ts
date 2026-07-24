@@ -84,6 +84,18 @@ describe("materializeCarrier", () => {
     expect(text).toMatch(/CARRIER's identity/i);
   });
 
+  it("names the graduation path to the guest's own isolated state", () => {
+    const result = materializeCarrier(projectDir, "chrome");
+    const g = result.graduation ?? "";
+    // The shared-identity limitation must not be a dead end: point the caller at
+    // the guest itself (already loaded), driven by the control verbs.
+    expect(g).toMatch(/already loaded as ITSELF/i);
+    expect(g).toMatch(
+      /extension_storage|extension_eval|extension_dom_inspect/,
+    );
+    expect(g).toMatch(/allowControl|allowEval/);
+  });
+
   it("replaces its own managed copy on a second run", () => {
     expect(materializeCarrier(projectDir, "chrome").loaded).toBe(true);
     const target = path.join(projectDir, "extensions", CARRIER_DIR_NAME);
