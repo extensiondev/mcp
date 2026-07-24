@@ -1,6 +1,10 @@
 # Changelog
 
-## Unreleased
+## 5.7.0
+
+The live-preview carrier stops living in your project, reports what it
+refused, and rides an engine that tells you when the browser turned your
+extension away.
 
 ### Fixed
 
@@ -25,8 +29,28 @@
   `asTab: true`, instead of handing back a green answer for a surface
   that is not there.
 
+- The bundled carrier payload answers with its real results. Every
+  backend method returns the promise it was given instead of a shape,
+  so a `chrome.*` call that rejects reaches the caller as a failure;
+  `executeScript` refuses `func`/`code` forms it cannot honor, offscreen
+  close is verified, and `downloads.erase` is implemented. A refusal now
+  rides a `refused` disposition from the refusal site through the carrier
+  into the trace, so refused calls stop being badged as real work and
+  stop earning coverage. Storage rows correlate on a canonical key (one
+  call, one row), tab facts survive both directions, and the event port
+  replays its backlog to a page that connects late.
+
 ### Changed
 
+- The engine this server spawns when a project has no local install is
+  pinned to `4.0.16-canary.1784889479.74e12044`. Two behaviors are worth
+  the prerelease: `EXTENSION_HEADLESS` is finally honored, so an agent
+  driving `extension_dev` cannot open a window on the operator's screen,
+  and a browser refusing to load the extension is reported as an error
+  instead of a session that claims to be ready. `extension_wait` already
+  surfaces both through the ready contract. This pin returns to a stable
+  release once 4.0.16 ships. A project with its own `extension` install
+  is unaffected, and `EXTENSION_MCP_CLI_VERSION` still overrides.
 - `extension_deploy` and `extension_store_status` advertise `safari`
   again: the platform's Safari/App Store submission lane is now enabled
   for every project, so the store enum and the per-store status report
