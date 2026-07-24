@@ -18,14 +18,14 @@ importers:
         specifier: ^7.0.6
         version: 7.0.6
       extension-create:
-        specifier: ^4.0.15
-        version: 4.0.15
+        specifier: 4.0.16-canary.1784889479.74e12044
+        version: 4.0.16-canary.1784889479.74e12044
       extension-develop:
-        specifier: ^4.0.15
-        version: 4.0.15(@swc/helpers@0.5.21)(svelte@5.56.6)(typescript@6.0.2)(webpack@5.108.4(postcss@8.5.10))
+        specifier: 4.0.16-canary.1784889479.74e12044
+        version: 4.0.16-canary.1784889479.74e12044(@swc/helpers@0.5.21)(svelte@5.56.6)(typescript@6.0.2)(webpack@5.108.4(postcss@8.5.10))
       extension-install:
-        specifier: ^4.0.15
-        version: 4.0.15
+        specifier: 4.0.16-canary.1784889479.74e12044
+        version: 4.0.16-canary.1784889479.74e12044
       ws:
         specifier: ^8.20.0
         version: 8.20.0
@@ -1378,12 +1378,12 @@ packages:
     resolution: {integrity: sha512-hIS4idWWai69NezIdRt2xFVofaF4j+6INOpJlVOLDO8zXGpUVEVzIYk12UUi2JzjEzWL3IOAxcTubgz9Po0yXw==}
     engines: {node: '>= 18'}
 
-  extension-create@4.0.15:
-    resolution: {integrity: sha512-V41mMehkvfMYTHgvL31HVOSQ7+z5gPFGPIiexkFWV9YjpMpbLeUcabayRs2+GQzDmMLRomtzMawcoulri4H0lA==}
+  extension-create@4.0.16-canary.1784889479.74e12044:
+    resolution: {integrity: sha512-Z2aunsdIueTmdGkiAoRNPPzL+SbvYBjJudNaNHTGZ7kQze4fmTba7cMxCDj4rSQDHO1VMSn8WsGGgGZ8GMqR9g==}
     engines: {node: '>=22.12'}
 
-  extension-develop@4.0.15:
-    resolution: {integrity: sha512-+eUsyThmEeM5qbvxej5oiXfHu98sR39ZVypvYVlh4zbknQswmLztZUVT8TnxXdqnEfZrh+WMrTrxtJmYCfs5Hw==}
+  extension-develop@4.0.16-canary.1784889479.74e12044:
+    resolution: {integrity: sha512-ZT1hnU2QT4QwRkUGwUjGh0be0R8CbGhMtu6nJsH9Hl+Ze99ifUIZ2HUoS9VWnXdm27/Qq2o9JzcHeZsSwPIITQ==}
     engines: {node: '>=22.12'}
 
   extension-from-store@0.1.1:
@@ -1391,8 +1391,8 @@ packages:
     engines: {node: '>=16'}
     hasBin: true
 
-  extension-install@4.0.15:
-    resolution: {integrity: sha512-ksuNwJnpc7ee+5JpR8vTlLc8TSFiPj0+f0g2dcpgK4R7LqKe8OFCnmRuJ8NCFjjUhAOBfth8XHe7A0uIS4hQoQ==}
+  extension-install@4.0.16-canary.1784889479.74e12044:
+    resolution: {integrity: sha512-fBt/GHzM1j4DMdenu8bHzECjnnDjloprIwED0yJb89lnyILXIXqzQLM3rkklN9Yc/ppJpfLYOqI9yGsu/eM5tg==}
     engines: {node: '>=22.12'}
 
   extract-zip@2.0.1:
@@ -3837,7 +3837,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  extension-create@4.0.15:
+  extension-create@4.0.16-canary.1784889479.74e12044:
     dependencies:
       adm-zip: 0.6.0
       axios: 1.18.1
@@ -3849,7 +3849,7 @@ snapshots:
       - debug
       - supports-color
 
-  extension-develop@4.0.15(@swc/helpers@0.5.21)(svelte@5.56.6)(typescript@6.0.2)(webpack@5.108.4(postcss@8.5.10)):
+  extension-develop@4.0.16-canary.1784889479.74e12044(@swc/helpers@0.5.21)(svelte@5.56.6)(typescript@6.0.2)(webpack@5.108.4(postcss@8.5.10)):
     dependencies:
       '@prefresh/core': 1.5.9(preact@10.27.3)
       '@prefresh/utils': 1.2.1
@@ -3908,7 +3908,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  extension-install@4.0.15:
+  extension-install@4.0.16-canary.1784889479.74e12044:
     dependencies:
       cross-spawn: 7.0.6
       pintor: 0.3.0
