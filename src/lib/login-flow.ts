@@ -4,9 +4,11 @@
 // drift.
 
 import { writeCredentials, type StoredCredentials } from "./credentials";
-import { CONSOLE_BASE, consoleProjectUrl } from "./registry";
+import { PROD_ORIGINS } from "./urls-origins";
+import { consoleBase, consoleProjectUrl } from "./registry";
 
-const DEFAULT_API = "https://www.extension.dev";
+// Single source of truth for the platform default; shared with the apps.
+const DEFAULT_API = PROD_ORIGINS.www;
 
 /**
  * The platform clamps CLI token TTL to at most 7 days (server-owned; this
@@ -25,7 +27,7 @@ export function tokenTtlNote(
           { workspace: workspaceSlug, project: projectSlug },
           "settings/access-tokens",
         )
-      : CONSOLE_BASE;
+      : consoleBase();
   return `extension.dev CLI tokens live at most 7 days (server-enforced). CI pipelines must re-mint before expiry on the console's Access tokens page: ${tokensUrl}`;
 }
 

@@ -7,7 +7,7 @@
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
 import { resolveToken } from "../lib/publish";
-import { safeApiBase } from "../lib/login-flow";
+import { resolveApiBase, safeApiBase } from "../lib/login-flow";
 import {
   consoleProjectUrl,
   fetchRegistryJson,
@@ -15,8 +15,6 @@ import {
   registryFileUrl,
   resolveProjectRef,
 } from "../lib/registry";
-
-const DEFAULT_API = "https://www.extension.dev";
 
 export const schema = {
   name: "extension_release_promote",
@@ -88,9 +86,7 @@ export async function handler(args: {
     return fail("ReleaseInputError", "buildId and channel are required.");
   }
 
-  const apiCheck = safeApiBase(
-    String(args.api || process.env.EXTENSION_DEV_API_URL || DEFAULT_API),
-  );
+  const apiCheck = safeApiBase(resolveApiBase(args.api));
   if (!apiCheck.ok) {
     return fail("ReleaseConfigError", apiCheck.message);
   }
@@ -138,7 +134,7 @@ export async function handler(args: {
     // used to list valid shas, so put them (and the console Builds page) in
     // the error itself instead of pointing at "the Builds page" with no URL.
     if (res.status === 404 || code === "UNKNOWN_BUILD") {
-      enrich.buildsPageUrl = consoleProjectUrl(ref, "builds");
+      enrich.buildsPageUrl = consoleProjectUrl(ref, "builds", args.api);
       enrich.hint =
         "Run extension_release_list to see this project's channels, their promoted shas, and recent builds.";
       if (ref) {
