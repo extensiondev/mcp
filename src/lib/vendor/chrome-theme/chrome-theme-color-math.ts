@@ -4,7 +4,7 @@
 // by packages/public-extensiondev-mcp/scripts/sync-chrome-theme-vendor.mjs.
 //
 // The published @extension.dev/mcp must not take a workspace dependency on
-// @extensiondev/emulator (the carrier ships decoupled), so this pure resolver
+// @extension.dev/emulator (the carrier ships decoupled), so this pure resolver
 // is copied in. Edit the emulator source, then re-run the sync script.
 
 /**
