@@ -10,6 +10,8 @@ import {
   listArtifacts,
   parseArtifactRef,
   revokeArtifact,
+  type ArtifactOwner,
+  type ArtifactPublisher,
   type ListedArtifact,
 } from "../lib/artifacts-api";
 import {
@@ -23,7 +25,7 @@ const LOGIN_HINT =
 export const schema = {
   name: "extension_shares",
   description:
-    "List and revoke the public preview links this token has shared (the links extension_preview_web share:true hands out). action:\"list\" (default) asks the platform for every artifact owned by the logged-in project and returns each one's artifactId, name, version, live/dead state, createdAt, expiresAt, revokedAt, size, and its previewUrl, zipUrl and revokeUrl, so a link you lost the response for is findable again. action:\"revoke\" kills one by artifactId or by pasting any of its URLs; revocation is PERMANENT (the id is burned and re-sharing mints a different link), so it cannot be undone. Pass projectPath to reconcile the platform's answer with .extension.dev/shared-previews.json, the project's own append-only record: a share made on another machine shows up as remoteOnly, and a record with no live artifact behind it shows up under localOnly. Needs the same token as sharing (extension_login or EXTENSION_DEV_TOKEN); without one, listing still returns the local record with a login hint instead of failing. Read-only for the local file: this tool never rewrites shared-previews.json.",
+    "List and revoke the public preview links this token has shared (the links extension_preview_web share:true hands out). action:\"list\" (default) asks the platform for every artifact owned by the logged-in project and returns each one's artifactId, name, version, live/dead state, createdAt, expiresAt, revokedAt, size, and its previewUrl, zipUrl and revokeUrl, so a link you lost the response for is findable again. Every row also carries owner and sharedBy as the platform returned them, plus an attribution block: attribution.ownership is \"project\" when the owning workspace holds the share and any member can revoke it, \"personal\" when one person holds it alone and nobody else can, and \"unknown\" when the platform disclosed no owner. attribution.credit names the publisher for credit only and never decides access; it reads \"CLI token <id>\" when the token's issuer could not be resolved and \"not recorded\" for a share made before attribution existed, and neither is a person's name. action:\"revoke\" kills one by artifactId or by pasting any of its URLs; revocation is PERMANENT (the id is burned and re-sharing mints a different link), so it cannot be undone. Pass projectPath to reconcile the platform's answer with .extension.dev/shared-previews.json, the project's own append-only record: a share made on another machine shows up as remoteOnly, and a record with no live artifact behind it shows up under localOnly. Needs the same token as sharing (extension_login or EXTENSION_DEV_TOKEN); without one, listing still returns the local record with a login hint instead of failing. Read-only for the local file: this tool never rewrites shared-previews.json.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -70,6 +72,87 @@ export const schema = {
     required: [],
   },
 };
+
+type Ownership = "project" | "personal" | "unknown";
+
+interface ShareAttribution {
+  ownership: Ownership;
+  ownerPath?: string;
+  credit: string;
+  creditSource: "login" | "tokenId" | "none";
+  revocableBy: string;
+}
+
+const REVOCABLE_BY: Record<Ownership, string> = {
+  project:
+    "Any member of the owning workspace, and any token scoped to the owning project, can revoke this share.",
+  personal:
+    "This is one person's personal share. Only that person can see it and revoke it, so a project token cannot pull it back.",
+  unknown:
+    "The platform did not disclose an owner for this share, so who may revoke it cannot be stated here.",
+};
+
+function text(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+/* @invariant
+ * Ownership is read off `owner` and never off `sharedBy`. The owner decides who
+ * may revoke a share, and the publisher is a separate fact kept for credit
+ * only: a project share stays revocable by the whole workspace no matter who
+ * pressed the button, and a personal share stays that one person's no matter
+ * which project they were working in at the time.
+ */
+function ownershipOf(owner: ArtifactOwner | null | undefined): Ownership {
+  const kind = text(owner?.kind);
+  if (kind === "project") return "project";
+  if (kind === "user") return "personal";
+  return "unknown";
+}
+
+/* @invariant
+ * A login is the only thing that may be printed as a person. A CLI token whose
+ * issuer the platform could not resolve arrives with `login: null`, and a share
+ * made before attribution existed arrives with no `sharedBy` at all. Both are
+ * reported as what they are. The workspace slug, the project slug and the owner
+ * are never substituted, because naming a team where a human is expected reads
+ * as an accusation against whoever the reader assumes that team to be.
+ */
+function creditOf(sharedBy: ArtifactPublisher | null | undefined): {
+  credit: string;
+  creditSource: "login" | "tokenId" | "none";
+} {
+  const login = text(sharedBy?.login);
+  if (login) return { credit: login, creditSource: "login" };
+
+  const tokenId = text(sharedBy?.tokenId);
+  if (tokenId) {
+    return { credit: `CLI token ${tokenId}`, creditSource: "tokenId" };
+  }
+
+  return {
+    credit: sharedBy
+      ? "not recorded: the platform could not resolve who published this share"
+      : "not recorded: this share predates publisher attribution",
+    creditSource: "none",
+  };
+}
+
+function attributionOf(artifact: ListedArtifact): ShareAttribution {
+  const ownership = ownershipOf(artifact.owner);
+  const owner = artifact.owner;
+  const ownerPath =
+    ownership === "project" && owner && owner.kind === "project"
+      ? [text(owner.workspace), text(owner.project)].filter(Boolean).join("/")
+      : "";
+
+  return {
+    ownership,
+    ...(ownerPath ? { ownerPath } : {}),
+    ...creditOf(artifact.sharedBy),
+    revocableBy: REVOCABLE_BY[ownership],
+  };
+}
 
 function localIndex(entries: SharedPreviewEntry[]): Map<string, SharedPreviewEntry> {
   const index = new Map<string, SharedPreviewEntry>();
@@ -158,6 +241,9 @@ async function listShares(args: {
     const entry = byId.get(artifact.artifactId);
     return {
       ...artifact,
+      owner: artifact.owner ?? null,
+      sharedBy: artifact.sharedBy ?? null,
+      attribution: attributionOf(artifact),
       recordedLocally: Boolean(entry),
       ...(entry
         ? {
@@ -182,6 +268,12 @@ async function listShares(args: {
     }));
 
   const liveCount = shares.filter((share) => share.live).length;
+  const ownership = {
+    project: shares.filter((s) => s.attribution.ownership === "project").length,
+    personal: shares.filter((s) => s.attribution.ownership === "personal")
+      .length,
+    unknown: shares.filter((s) => s.attribution.ownership === "unknown").length,
+  };
 
   return JSON.stringify({
     ok: true,
@@ -193,9 +285,10 @@ async function listShares(args: {
       limit: listing.data.limit,
       truncated: listing.data.truncated,
       scanned: listing.data.scanned,
+      ownership,
       ...(listing.data.truncated
         ? {
-            truncatedNote: `This is not the whole set: ${listing.data.count} of ${listing.data.matched} matched shares came back at limit ${listing.data.limit}. Raise limit (max 200) or pass status:"live" to narrow it, and do not read a missing share as revoked.`,
+            truncatedNote: `This is not the whole set: ${listing.data.count} of ${listing.data.matched} matched shares came back at limit ${listing.data.limit}. truncated also goes true when the server spent its budget working out which shares you are entitled to see, so matched is a floor and not a total. Raise limit (max 200) or pass status:"live" to narrow it, and do not read a missing share as revoked.`,
           }
         : {}),
     },
@@ -210,6 +303,8 @@ async function listShares(args: {
         : ""
     }. Revoke one with action:"revoke" and its artifactId or any of its URLs.`,
     note: "previewUrl and zipUrl are null for a share that is no longer live, because a revoked or expired link cannot resolve for anyone. revokeUrl stays on every row. Revocation is permanent: a revoked id is burned and re-sharing the same build mints a different link.",
+    attributionNote:
+      "attribution.ownership says who the share belongs to and therefore who may revoke it: project means the owning workspace holds it and any member can pull it back, personal means one person holds it alone. attribution.credit names the publisher and is attribution only, granting and restricting nothing. A credit of \"CLI token ...\" means the platform could not resolve which human minted that token, and a credit of \"not recorded\" means it never knew; neither is a name, and neither should be reported as one.",
   });
 }
 

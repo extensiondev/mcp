@@ -1,5 +1,53 @@
 # Changelog
 
+## 6.6.0
+
+A shared build belongs to the project that owns it, not to whoever happened to
+press publish. `extension_shares` now says which of the two it is looking at,
+and it names the publisher without ever inventing one.
+
+### Added
+
+- **Every listed share carries its owner and its publisher.** The platform now
+  returns `owner` and `sharedBy` on each row and both come through untouched,
+  alongside an `attribution` block that reads them. `attribution.ownership` is
+  `"project"` when the owning workspace holds the share, `"personal"` when one
+  person holds it alone, and `"unknown"` when the platform disclosed no owner.
+  `attribution.ownerPath` gives the owning `workspace/project` for a project
+  share. Ownership is read off `owner` and never off the publisher, because the
+  owner is what decides who may revoke a share and the publisher is only who
+  made it.
+- **`attribution.revocableBy` says who can actually pull the link back.** A
+  project share is revocable by any member of the owning workspace and by any
+  token scoped to the owning project. A personal share belongs to one person,
+  so nobody else can see it or revoke it and a project token cannot touch it.
+  Knowing which of the two you are holding is the difference between a revoke
+  that will work and a 404 that reads like a bug.
+- **`server.ownership` counts the listed shares by owner.** Project, personal
+  and unknown, so a list can be reasoned about without walking every row.
+
+### Changed
+
+- **A publisher is never guessed.** `attribution.credit` is the GitHub login
+  when the platform resolved one. When a share was made by a CLI token whose
+  issuer could not be resolved it reads `CLI token <id>`, which is exactly what
+  the credential itself proves, and a share made before attribution existed
+  reads as not recorded. The workspace slug, the project slug and the owner are
+  never substituted for a name, because naming a team where a human is expected
+  attributes the share to whoever the reader takes that team to be.
+  `attribution.creditSource` says which of the three it was.
+- **Attribution is stated as attribution.** The response spells out that
+  `sharedBy` records who published a share and grants and restricts nothing, so
+  it is not read as a permission.
+- **A truncated list is more explicit about why.** `truncated` also goes true
+  when the platform spends its budget working out which shares the caller is
+  entitled to see, so the note now says `matched` is a floor rather than a
+  total.
+- **Revoking a share the token does not own explains the personal case.** The
+  404 message already covered a different project and an already dead link; it
+  now also names a teammate's personal share, which no project token can
+  revoke.
+
 ## 6.5.0
 
 A link you shared is no longer only as findable as the response that created

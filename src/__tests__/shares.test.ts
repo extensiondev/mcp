@@ -112,6 +112,186 @@ describe("extension_shares", () => {
     expect(out.localOnly).toEqual([]);
   });
 
+  it("carries owner and sharedBy through and credits a resolved login", async () => {
+    global.fetch = listingFetch({
+      artifacts: [
+        {
+          artifactId: LOCAL_ID,
+          live: true,
+          owner: { kind: "project", workspace: "acme", project: "tab-sorter" },
+          sharedBy: {
+            via: "token",
+            login: "ada",
+            workspace: "acme",
+            project: "tab-sorter",
+            tokenId: "tok_9f3",
+          },
+        },
+      ],
+      count: 1,
+      matched: 1,
+      limit: 100,
+      truncated: false,
+      scanned: 1,
+    });
+
+    const out = JSON.parse(await handler({}));
+    const share = out.shares[0];
+    expect(share.owner).toEqual({
+      kind: "project",
+      workspace: "acme",
+      project: "tab-sorter",
+    });
+    expect(share.sharedBy.tokenId).toBe("tok_9f3");
+    expect(share.attribution).toEqual({
+      ownership: "project",
+      ownerPath: "acme/tab-sorter",
+      credit: "ada",
+      creditSource: "login",
+      revocableBy: expect.stringContaining("Any member of the owning workspace"),
+    });
+    expect(out.server.ownership).toEqual({
+      project: 1,
+      personal: 0,
+      unknown: 0,
+    });
+  });
+
+  it("names the token instead of a person when the issuer is unresolved", async () => {
+    global.fetch = listingFetch({
+      artifacts: [
+        {
+          artifactId: LOCAL_ID,
+          live: true,
+          owner: { kind: "project", workspace: "acme", project: "tab-sorter" },
+          sharedBy: {
+            via: "token",
+            login: null,
+            workspace: "acme",
+            project: "tab-sorter",
+            tokenId: "tok_9f3",
+          },
+        },
+      ],
+      count: 1,
+      matched: 1,
+      limit: 100,
+      truncated: false,
+      scanned: 1,
+    });
+
+    const out = JSON.parse(await handler({}));
+    expect(out.shares[0].attribution.credit).toBe("CLI token tok_9f3");
+    expect(out.shares[0].attribution.creditSource).toBe("tokenId");
+  });
+
+  it("says a personal share cannot be revoked by this project token", async () => {
+    global.fetch = listingFetch({
+      artifacts: [
+        {
+          artifactId: LOCAL_ID,
+          live: true,
+          owner: { kind: "user" },
+          sharedBy: {
+            via: "session",
+            login: "ada",
+            workspace: null,
+            project: null,
+            tokenId: null,
+          },
+        },
+      ],
+      count: 1,
+      matched: 1,
+      limit: 100,
+      truncated: false,
+      scanned: 1,
+    });
+
+    const out = JSON.parse(await handler({}));
+    expect(out.shares[0].attribution.ownership).toBe("personal");
+    expect(out.shares[0].attribution.ownerPath).toBeUndefined();
+    expect(out.shares[0].attribution.revocableBy).toContain(
+      "cannot pull it back",
+    );
+    expect(out.server.ownership.personal).toBe(1);
+  });
+
+  it("reports a legacy share with no attribution as an explicit unknown", async () => {
+    global.fetch = listingFetch({
+      artifacts: [{ artifactId: LOCAL_ID, live: true }],
+      count: 1,
+      matched: 1,
+      limit: 100,
+      truncated: false,
+      scanned: 1,
+    });
+
+    const out = JSON.parse(await handler({}));
+    expect(out.shares[0].owner).toBeNull();
+    expect(out.shares[0].sharedBy).toBeNull();
+    expect(out.shares[0].attribution.ownership).toBe("unknown");
+    expect(out.shares[0].attribution.creditSource).toBe("none");
+    expect(out.shares[0].attribution.credit).toContain(
+      "predates publisher attribution",
+    );
+    expect(out.server.ownership.unknown).toBe(1);
+  });
+
+  it("never turns a workspace, a project or an owner into a publisher", async () => {
+    global.fetch = listingFetch({
+      artifacts: [
+        {
+          artifactId: LOCAL_ID,
+          live: true,
+          owner: { kind: "project", workspace: "acme", project: "tab-sorter" },
+          sharedBy: {
+            via: "token",
+            login: null,
+            workspace: "acme",
+            project: "tab-sorter",
+            tokenId: null,
+          },
+        },
+        {
+          artifactId: REMOTE_ID,
+          live: true,
+          owner: { kind: "project", workspace: "acme", project: "tab-sorter" },
+          sharedBy: null,
+        },
+      ],
+      count: 2,
+      matched: 2,
+      limit: 100,
+      truncated: false,
+      scanned: 2,
+    });
+
+    const out = JSON.parse(await handler({}));
+    for (const share of out.shares) {
+      expect(share.attribution.creditSource).toBe("none");
+      expect(share.attribution.credit).not.toContain("acme");
+      expect(share.attribution.credit).not.toContain("tab-sorter");
+    }
+    expect(out.shares[0].attribution.credit).toContain("could not resolve");
+    expect(out.shares[1].attribution.credit).toContain("predates");
+  });
+
+  it("explains the personal-vs-project split alongside the rows", async () => {
+    global.fetch = listingFetch({
+      artifacts: [{ artifactId: LOCAL_ID, live: true, owner: { kind: "user" } }],
+      count: 1,
+      matched: 1,
+      limit: 100,
+      truncated: false,
+      scanned: 1,
+    });
+
+    const out = JSON.parse(await handler({}));
+    expect(out.attributionNote).toContain("attribution only");
+    expect(out.attributionNote).toContain("any member can pull it back");
+  });
+
   it("calls a past-its-expiry local record expired when the list is whole", async () => {
     const dir = tmpProject();
     seedRecord(dir, GONE_ID, "2026-01-01T00:00:00.000Z");
@@ -146,6 +326,7 @@ describe("extension_shares", () => {
     const out = JSON.parse(await handler({ projectPath: dir }));
     expect(out.server.truncated).toBe(true);
     expect(out.server.truncatedNote).toContain("not the whole set");
+    expect(out.server.truncatedNote).toContain("matched is a floor");
     expect(out.localOnly[0].status).toContain("unknown");
   });
 
