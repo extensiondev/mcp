@@ -26,6 +26,18 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Assert the npm read credential survived
+        shell: bash
+        run: |
+          LINE='//registry.npmjs.org/:_authToken=${NPM_TOKEN}'
+          if ! grep -qxF "$LINE" .npmrc; then
+            echo "::error file=.npmrc::.npmrc is missing the line $LINE" >&2
+            echo "Publishing itself does not need it: npm authenticates through GitHub OIDC trusted publishing." >&2
+            echo "That line is the READ credential for the restricted @extension.dev packages, which this install and every generated customer repo resolve from the registry." >&2
+            echo "'npm logout' deletes it silently. Restore the line and push before releasing." >&2
+            exit 1
+          fi
+
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
