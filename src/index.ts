@@ -47,13 +47,8 @@ import * as addFeature from "./tools/add-feature";
 import * as login from "./tools/login";
 import * as whoami from "./tools/whoami";
 import * as logout from "./tools/logout";
-import { pollForToken, startDeviceCode } from "./lib/github-device";
 import { requestDeviceCode, pollDeviceToken } from "./lib/device-flow";
-import {
-  exchangeAndPersist,
-  fetchLoginConfig,
-  resolveApiBase,
-} from "./lib/login-flow";
+import { fetchLoginConfig, resolveApiBase } from "./lib/login-flow";
 
 import * as installBrowser from "./tools/install-browser";
 import * as uninstallBrowser from "./tools/uninstall-browser";
@@ -270,48 +265,19 @@ export async function runCli(cmd: string, args: string[]): Promise<number> {
     try {
       const config = await fetchLoginConfig(apiBase);
 
-      if (config.provider === "extensiondev") {
-        const start = await requestDeviceCode({
-          apiBase,
-          path: config.deviceCodeUrl,
-          project,
-        });
-        log("");
-        log(`  Open ${start.verificationUri} and enter code: ${start.userCode}`);
-        log("");
-        log("  Waiting for authorization...");
-        const poll = await pollDeviceToken({
-          apiBase,
-          path: config.deviceTokenUrl,
-          project,
-          deviceCode: start.deviceCode,
-          interval: start.interval,
-          budgetMs: start.expiresIn * 1000,
-        });
-        if (!poll.ok) {
-          log(
-            poll.reason === "denied"
-              ? "Authorization was denied at extension.dev/device."
-              : poll.reason === "expired"
-                ? "The device code expired. Run login again."
-                : "Timed out waiting for authorization. Run login again.",
-          );
-          return 1;
-        }
-        log(`Logged in to ${poll.creds.workspaceSlug}/${poll.creds.projectSlug}.`);
-        return 0;
-      }
-
-      const start = await startDeviceCode({
-        clientId: config.clientId,
-        scope: config.scope,
+      const start = await requestDeviceCode({
+        apiBase,
+        path: config.deviceCodeUrl,
+        project,
       });
       log("");
       log(`  Open ${start.verificationUri} and enter code: ${start.userCode}`);
       log("");
       log("  Waiting for authorization...");
-      const poll = await pollForToken({
-        clientId: config.clientId,
+      const poll = await pollDeviceToken({
+        apiBase,
+        path: config.deviceTokenUrl,
+        project,
         deviceCode: start.deviceCode,
         interval: start.interval,
         budgetMs: start.expiresIn * 1000,
@@ -319,17 +285,14 @@ export async function runCli(cmd: string, args: string[]): Promise<number> {
       if (!poll.ok) {
         log(
           poll.reason === "denied"
-            ? "Authorization was denied on GitHub."
-            : "Timed out waiting for authorization. Run login again.",
+            ? "Authorization was denied at extension.dev/device."
+            : poll.reason === "expired"
+              ? "The device code expired. Run login again."
+              : "Timed out waiting for authorization. Run login again.",
         );
         return 1;
       }
-      const creds = await exchangeAndPersist({
-        apiBase,
-        githubToken: poll.githubToken,
-        project,
-      });
-      log(`Logged in to ${creds.workspaceSlug}/${creds.projectSlug}.`);
+      log(`Logged in to ${poll.creds.workspaceSlug}/${poll.creds.projectSlug}.`);
       return 0;
     } catch (err: unknown) {
       log(err instanceof Error ? err.message : String(err));

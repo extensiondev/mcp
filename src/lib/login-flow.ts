@@ -58,9 +58,6 @@ export function safeApiBase(
 }
 
 export interface LoginConfig {
-  provider: "extensiondev" | "github";
-  clientId: string;
-  scope: string;
   deviceCodeUrl: string;
   deviceTokenUrl: string;
   verificationUri: string;
@@ -70,20 +67,6 @@ export async function fetchLoginConfig(
   apiBase: string,
   fetchImpl: FetchImpl = fetch,
 ): Promise<LoginConfig> {
-  const override = String(
-    process.env.EXTENSION_DEV_GITHUB_CLIENT_ID || "",
-  ).trim();
-  if (override) {
-    return {
-      provider: "github",
-      clientId: override,
-      scope: "read:user",
-      deviceCodeUrl: "/api/cli/device/code",
-      deviceTokenUrl: "/api/cli/device/token",
-      verificationUri: "https://github.com/login/device",
-    };
-  }
-
   const res = await fetchImpl(`${apiBase}/api/cli/login/config`, {
     headers: { accept: "application/json" },
   });
@@ -93,23 +76,11 @@ export async function fetchLoginConfig(
     );
   }
   const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
-  const provider = data.provider === "extensiondev" ? "extensiondev" : "github";
-  const clientId = String(data.githubClientId || "").trim();
-
-  if (provider === "github" && !clientId) {
-    throw new Error(
-      "Login is not configured on the server (no GitHub client id). " +
-        "Set EXTENSION_DEV_GITHUB_CLIENT_ID to override.",
-    );
-  }
   return {
-    provider,
-    clientId,
-    scope: String(data.scope || "read:user"),
     deviceCodeUrl: String(data.deviceCodeUrl || "/api/cli/device/code"),
     deviceTokenUrl: String(data.deviceTokenUrl || "/api/cli/device/token"),
     verificationUri: String(
-      data.verificationUri || "https://github.com/login/device",
+      data.verificationUri || `${apiBase.replace(/\/+$/, "")}/device`,
     ),
   };
 }
@@ -117,7 +88,6 @@ export async function fetchLoginConfig(
 export function persistTokenResponse(args: {
   apiBase: string;
   data: Record<string, unknown>;
-  provider: "extensiondev" | "github";
 }): StoredCredentials {
   const token = String(args.data.token || "").trim();
   if (!token) throw new Error("Login returned no token.");
@@ -128,44 +98,8 @@ export function persistTokenResponse(args: {
     projectSlug: String(args.data.projectSlug || ""),
     expiresAt: Number(args.data.expiresAt || 0),
     api: args.apiBase,
-    provider: args.provider,
+    provider: "extensiondev",
   };
   writeCredentials(creds);
   return creds;
-}
-
-export async function exchangeAndPersist(args: {
-  apiBase: string;
-  githubToken: string;
-  project: string;
-  fetchImpl?: FetchImpl;
-}): Promise<StoredCredentials> {
-  const doFetch = args.fetchImpl ?? fetch;
-  const res = await doFetch(`${args.apiBase}/api/cli/login/exchange`, {
-    method: "POST",
-    headers: { "content-type": "application/json", accept: "application/json" },
-    body: JSON.stringify({
-      githubToken: args.githubToken,
-      project: args.project,
-    }),
-  });
-  const text = await res.text();
-  let data: Record<string, unknown>;
-  try {
-    data = JSON.parse(text);
-  } catch {
-    data = { message: text };
-  }
-  if (!res.ok) {
-    throw new Error(
-      `Login exchange failed (${res.status}): ${
-        data.message || "unknown error"
-      }`,
-    );
-  }
-  return persistTokenResponse({
-    apiBase: args.apiBase,
-    data,
-    provider: "github",
-  });
 }

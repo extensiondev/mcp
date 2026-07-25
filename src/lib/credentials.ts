@@ -17,7 +17,7 @@ export interface StoredCredentials {
   projectSlug: string;
   expiresAt: number;
   api: string;
-  provider?: "extensiondev" | "github";
+  provider?: "extensiondev";
 }
 
 export function credentialsPath(): string {
@@ -42,9 +42,7 @@ export function readCredentials(): StoredCredentials | null {
     const token = String(data.token || "").trim();
     if (!token) return null;
     const provider =
-      data.provider === "extensiondev" || data.provider === "github"
-        ? data.provider
-        : undefined;
+      data.provider === "extensiondev" ? data.provider : undefined;
     return {
       version: 1,
       token,

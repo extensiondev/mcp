@@ -7,16 +7,10 @@
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
 import {
-  pollForToken,
-  startDeviceCode,
-  type DeviceCodeStart,
-} from "../lib/github-device";
-import {
   requestDeviceCode,
   pollDeviceToken,
 } from "../lib/device-flow";
 import {
-  exchangeAndPersist,
   fetchLoginConfig,
   resolveApiBase,
   tokenTtlNote,
@@ -25,7 +19,7 @@ import {
 export const schema = {
   name: "extension_login",
   description:
-    "Authenticate to extension.dev and store a project-scoped access token locally so extension_publish can use it. Two-phase: call with `project` to get a code + URL for the user to authorize, then call again with the returned `deviceCode` to finish. The server picks the flow: the extension.dev-gated device flow (you authorize at extension.dev/device; GitHub federation happens server-side, no GitHub token on this machine) or, as a fallback, the legacy GitHub device flow. Never returns the token. Minted tokens live at most 7 days (server-enforced), so CI pipelines must re-mint before expiry on the console's Access tokens page (project settings -> Access tokens). This is the only tool besides extension_publish that talks to the hosted platform.",
+    "Authenticate to extension.dev and store a project-scoped access token locally so extension_publish can use it. Two-phase: call with `project` to get a code + URL for the user to authorize, then call again with the returned `deviceCode` to finish. You authorize at extension.dev/device; GitHub federation happens server-side, so no GitHub token ever lands on this machine. Never returns the token. Minted tokens live at most 7 days (server-enforced), so CI pipelines must re-mint before expiry on the console's Access tokens page (project settings -> Access tokens). This is the only tool besides extension_publish that talks to the hosted platform.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -139,138 +133,60 @@ export async function handler(args: {
     );
   }
 
-  if (config.provider === "extensiondev") {
-    if (args.deviceCode) {
-      const poll = await pollDeviceToken({
-        apiBase,
-        path: config.deviceTokenUrl,
-        project,
-        deviceCode: String(args.deviceCode),
-        interval: 5,
-        budgetMs: RESUME_BUDGET_MS,
-      });
-      if (poll.ok) return success(poll.creds);
-      if (poll.reason === "expired") {
-        return fail(
-          "LoginExpired",
-          "The device code expired. Run extension_login again to restart.",
-        );
-      }
-      if (poll.reason === "denied") {
-        return fail("LoginDenied", "Authorization was denied at extension.dev/device.");
-      }
-      if (poll.reason === "error") {
-        return fail("LoginError", poll.message || "Device login failed.");
-      }
-      return resumePending(String(args.deviceCode), config.verificationUri);
-    }
-
-    let start;
-    try {
-      start = await requestDeviceCode({
-        apiBase,
-        path: config.deviceCodeUrl,
-        project,
-      });
-    } catch (err: any) {
-      return fail(
-        "LoginStartError",
-        err?.message || "Could not start the device flow.",
-      );
-    }
+  if (args.deviceCode) {
     const poll = await pollDeviceToken({
       apiBase,
       path: config.deviceTokenUrl,
       project,
-      deviceCode: start.deviceCode,
-      interval: start.interval,
-      budgetMs: FIRST_CALL_BUDGET_MS,
-    });
-    if (poll.ok) return success(poll.creds);
-    if (poll.reason === "denied") {
-      return fail("LoginDenied", "Authorization was denied at extension.dev/device.");
-    }
-    return pending({
-      deviceCode: start.deviceCode,
-      userCode: start.userCode,
-      verificationUri: start.verificationUri,
-      verificationUriComplete: start.verificationUriComplete,
-    });
-  }
-
-  if (args.deviceCode) {
-    const poll = await pollForToken({
-      clientId: config.clientId,
       deviceCode: String(args.deviceCode),
       interval: 5,
       budgetMs: RESUME_BUDGET_MS,
     });
-    if (!poll.ok) {
-      if (poll.reason === "expired") {
-        return fail(
-          "LoginExpired",
-          "The device code expired. Run extension_login again to restart.",
-        );
-      }
-      if (poll.reason === "denied") {
-        return fail("LoginDenied", "Authorization was denied on GitHub.");
-      }
-      return resumePending(
-        String(args.deviceCode),
-        "https://github.com/login/device",
-      );
-    }
-    try {
-      const creds = await exchangeAndPersist({
-        apiBase,
-        githubToken: poll.githubToken,
-        project,
-      });
-      return success(creds);
-    } catch (err: any) {
+    if (poll.ok) return success(poll.creds);
+    if (poll.reason === "expired") {
       return fail(
-        "LoginExchangeError",
-        err?.message || "Token exchange failed.",
+        "LoginExpired",
+        "The device code expired. Run extension_login again to restart.",
       );
     }
+    if (poll.reason === "denied") {
+      return fail("LoginDenied", "Authorization was denied at extension.dev/device.");
+    }
+    if (poll.reason === "error") {
+      return fail("LoginError", poll.message || "Device login failed.");
+    }
+    return resumePending(String(args.deviceCode), config.verificationUri);
   }
 
-  let start: DeviceCodeStart;
+  let start;
   try {
-    start = await startDeviceCode({
-      clientId: config.clientId,
-      scope: config.scope,
+    start = await requestDeviceCode({
+      apiBase,
+      path: config.deviceCodeUrl,
+      project,
     });
   } catch (err: any) {
     return fail(
       "LoginStartError",
-      err?.message || "Could not start device flow.",
+      err?.message || "Could not start the device flow.",
     );
   }
-
-  const poll = await pollForToken({
-    clientId: config.clientId,
+  const poll = await pollDeviceToken({
+    apiBase,
+    path: config.deviceTokenUrl,
+    project,
     deviceCode: start.deviceCode,
     interval: start.interval,
     budgetMs: FIRST_CALL_BUDGET_MS,
   });
-  if (poll.ok) {
-    try {
-      const creds = await exchangeAndPersist({
-        apiBase,
-        githubToken: poll.githubToken,
-        project,
-      });
-      return success(creds);
-    } catch (err: any) {
-      return fail(
-        "LoginExchangeError",
-        err?.message || "Token exchange failed.",
-      );
-    }
+  if (poll.ok) return success(poll.creds);
+  if (poll.reason === "denied") {
+    return fail("LoginDenied", "Authorization was denied at extension.dev/device.");
   }
-  if (!poll.ok && poll.reason === "denied") {
-    return fail("LoginDenied", "Authorization was denied on GitHub.");
-  }
-  return pending(start);
+  return pending({
+    deviceCode: start.deviceCode,
+    userCode: start.userCode,
+    verificationUri: start.verificationUri,
+    verificationUriComplete: start.verificationUriComplete,
+  });
 }
