@@ -22,6 +22,18 @@ inspect door predates it and had stopped being reachable.
   `carrier: true` and the pairing notes now point at `preview.extension.dev`,
   and the carrier's `externally_connectable` drops the origin that was never
   going to connect.
+- **`extension_login` no longer falls back to the GitHub device flow.**
+  extension.dev hosts the device flow itself and federates GitHub server-side, so
+  the only authorization surface is `extension.dev/device` and no GitHub token
+  ever lands on the caller's machine. The legacy path is gone entirely: the
+  GitHub device-code client, the `provider` fork (which existed twice, once in the
+  tool and once in the `extension-mcp login` bin), the
+  `/api/cli/login/exchange` hop, and the `EXTENSION_DEV_GITHUB_CLIENT_ID`
+  override. Stored credentials record `provider: "extensiondev"` and
+  `extension_whoami` reports that instead of defaulting to `"github"`. Nothing
+  changes for a caller who was already on the branded flow, which is every caller
+  the platform has served since it went live; a self-hosted platform pinned to
+  the old exchange endpoint is no longer supported.
 
 ## 6.6.0
 
