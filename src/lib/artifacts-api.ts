@@ -14,6 +14,18 @@ type FetchImpl = typeof fetch;
 const ARTIFACT_ID = /^gen_[0-9a-f]{32}$/;
 const ARTIFACT_ID_ANYWHERE = /gen_[0-9a-f]{32}/;
 
+export type ArtifactOwner =
+  | { kind: "project"; workspace: string; project: string }
+  | { kind: "user" };
+
+export interface ArtifactPublisher {
+  via: "token" | "session";
+  login: string | null;
+  workspace: string | null;
+  project: string | null;
+  tokenId: string | null;
+}
+
 export interface ListedArtifact {
   artifactId: string;
   kind?: string;
@@ -29,6 +41,8 @@ export interface ListedArtifact {
   viewUrl?: string | null;
   zipUrl?: string | null;
   revokeUrl?: string;
+  owner?: ArtifactOwner | null;
+  sharedBy?: ArtifactPublisher | null;
 }
 
 export interface ArtifactListing {
@@ -212,7 +226,7 @@ export async function revokeArtifact(options: {
       error: {
         name: "SharesNotFoundError",
         status: 404,
-        message: `The platform has no live share ${options.artifactId} for this token. It may already be revoked, already expired, or owned by a different project than the one this token is scoped to.`,
+        message: `The platform has no live share ${options.artifactId} for this token. It may already be revoked, already expired, owned by a different project than the one this token is scoped to, or a teammate's personal share, which belongs to that person alone and no project token can revoke.`,
       },
     };
   }
