@@ -75,7 +75,7 @@ export const schema = {
         type: "boolean",
         default: false,
         description:
-          "Load the bundled Extension.dev Live Preview carrier beside your extension (Chromium-family browsers only). It is placed in the project's ./extensions folder, which Extension.js auto-loads; allowlisted pages (inspect.extension.dev, localhost) can then pair with the session and stream its real-lane chrome.* trace. Writes extensions/extension-dev-live-preview/ into the project, gitignores it, and takes it back out on extension_stop or extension_build: it is a debug companion, never part of a release.",
+          "Load the bundled Extension.dev Live Preview carrier beside your extension (Chromium-family browsers only). It is placed in the project's ./extensions folder, which Extension.js auto-loads; allowlisted pages (preview.extension.dev, localhost) can then pair with the session and stream its real-lane chrome.* trace. Writes extensions/extension-dev-live-preview/ into the project, gitignores it, and takes it back out on extension_stop or extension_build: it is a debug companion, never part of a release.",
       },
     },
     required: ["projectPath"],

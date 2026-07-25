@@ -14,27 +14,15 @@ import { uploadPreview } from "../lib/preview-upload";
 import { recordSharedPreview } from "../lib/share-record";
 
 
-const DEFAULT_INSPECT_URL = "http://localhost:3106";
 const DEFAULT_PREVIEW_DEV_URL = "http://localhost:3110";
 
-const SURFACES = {
-  preview: {
-    defaultOrigin: DEFAULT_PREVIEW_DEV_URL,
-    scheme: (encoded: string) => `preview://build/${encoded}`,
-    fetchPath: "/__preview/fetch",
-    devCommand: "pnpm --filter preview.extension.dev dev",
-    label: "preview.extension.dev",
-  },
-  inspect: {
-    defaultOrigin: DEFAULT_INSPECT_URL,
-    scheme: (encoded: string) => `inspect://path/${encoded}`,
-    fetchPath: "/__inspect/fetch",
-    devCommand: "pnpm --filter inspect.extension.dev dev",
-    label: "inspect.extension.dev",
-  },
+const SURFACE = {
+  defaultOrigin: DEFAULT_PREVIEW_DEV_URL,
+  scheme: (encoded: string) => `preview://build/${encoded}`,
+  fetchPath: "/__preview/fetch",
+  devCommand: "pnpm --filter preview.extension.dev dev",
+  label: "preview.extension.dev",
 } as const;
-
-type SurfaceKey = keyof typeof SURFACES;
 
 async function buildShare(
   projectPath: string,
@@ -123,7 +111,7 @@ function detectSurfaces(manifest: Record<string, any>): string[] {
 export const schema = {
   name: "extension_preview_web",
   description:
-    "Preview an in-progress extension in the web emulator (no real browser). Builds the project (unless build:false), points preview.extension.dev at the dist directory over the dev-only preview://build scheme, and returns a deep link plus a loadability check against its dev server. preview is the author's front door: it renders YOUR build and carries the Emulated/Real lane toggle and the Trace tab. Pass surface:\"inspect\" to render in inspect.extension.dev instead (the evaluator's door, for fixture and forensic work). Pass share:true to UPLOAD the dist you just built and get back a public link (share.previewUrl) that renders those exact bytes for anyone who opens it, with no install and no dev server, and that also serves the whole build as a downloadable zip. Sharing needs a token scoped to an existing extension.dev workspace and project (extension_login or EXTENSION_DEV_TOKEN, valid up to 7 days), so a local folder with no project on the platform cannot share. Use share:true whenever the build has to reach someone who is not at this machine, since the plain deepLink only resolves locally. Shared links do not disappear when this response scrolls away: extension_shares lists every link this token has shared and revokes any of them.",
+    "Preview an in-progress extension in the web emulator (no real browser). Builds the project (unless build:false), points preview.extension.dev at the dist directory over the dev-only preview://build scheme, and returns a deep link plus a loadability check against its dev server. preview.extension.dev is the author's door for a local build: it renders YOUR build and carries the Emulated/Real lane toggle and the Trace tab. Pass share:true to UPLOAD the dist you just built and get back a public link (share.previewUrl) that renders those exact bytes for anyone who opens it, with no install and no dev server, and that also serves the whole build as a downloadable zip. Sharing needs a token scoped to an existing extension.dev workspace and project (extension_login or EXTENSION_DEV_TOKEN, valid up to 7 days), so a local folder with no project on the platform cannot share. Use share:true whenever the build has to reach someone who is not at this machine, since the plain deepLink only resolves locally. Shared links do not disappear when this response scrolls away: extension_shares lists every link this token has shared and revokes any of them.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -148,7 +136,7 @@ export const schema = {
         ],
         default: "chrome",
         description:
-          "Which dist/<browser> output to preview. inspect renders it in the mocked-Chrome emulator regardless.",
+          "Which dist/<browser> output to preview. The emulator renders it as mocked Chrome regardless.",
       },
       build: {
         type: "boolean",
@@ -161,22 +149,10 @@ export const schema = {
         description:
           "Preview this built directory directly instead of resolving dist/<browser> under projectPath. Implies build:false.",
       },
-      surface: {
-        type: "string",
-        enum: ["preview", "inspect"],
-        default: "preview",
-        description:
-          "Which front door renders the build. \"preview\" (default) is preview.extension.dev, the author's door: your own in-progress build, with the Emulated/Real lane toggle and the Trace tab. \"inspect\" is inspect.extension.dev, the evaluator's door.",
-      },
       hostUrl: {
         type: "string",
         description:
-          "Origin of the running dev server for the chosen surface (defaults: http://localhost:3110 for preview, http://localhost:3106 for inspect).",
-      },
-      inspectUrl: {
-        type: "string",
-        description:
-          "Deprecated alias for hostUrl, kept for callers written before the preview surface existed. Only consulted when surface is \"inspect\".",
+          "Origin of the running preview.extension.dev dev server (default http://localhost:3110).",
       },
       probe: {
         type: "boolean",
@@ -224,22 +200,14 @@ export async function handler(args: {
   browser?: string;
   build?: boolean;
   distPath?: string;
-  surface?: string;
   hostUrl?: string;
-  inspectUrl?: string;
   probe?: boolean;
   open?: boolean;
   openIn?: string;
   share?: boolean;
 }): Promise<string> {
   const browser = args.browser ?? "chrome";
-  const surfaceKey: SurfaceKey = args.surface === "inspect" ? "inspect" : "preview";
-  const surface = SURFACES[surfaceKey];
-  const hostBase = (
-    args.hostUrl ??
-    (surfaceKey === "inspect" ? args.inspectUrl : undefined) ??
-    surface.defaultOrigin
-  ).replace(/\/+$/, "");
+  const hostBase = (args.hostUrl ?? SURFACE.defaultOrigin).replace(/\/+$/, "");
   const shouldBuild = args.distPath ? false : args.build !== false;
 
   let buildResult: Record<string, unknown> | null = null;
@@ -289,13 +257,12 @@ export async function handler(args: {
   }
 
   const encoded = Buffer.from(distDir).toString("base64url");
-  const internalUrl = surface.scheme(encoded);
+  const internalUrl = SURFACE.scheme(encoded);
   const deepLink = `${hostBase}/?url=${encodeURIComponent(internalUrl)}`;
 
   const result: Record<string, unknown> = {
     ok: true,
     deepLink,
-    surface: surfaceKey,
     distDir,
     manifest: {
       name: manifest.name ?? path.basename(distDir),
@@ -304,11 +271,7 @@ export async function handler(args: {
     },
     surfaces: detectSurfaces(manifest),
     ...(buildResult ? { built: true } : { built: false }),
-    hint: `Open deepLink in a browser to see the extension render in ${surface.label}'s emulator. It must be running (${surface.devCommand}).${
-      surfaceKey === "preview"
-        ? " Once it renders, the Trace tab shows every chrome.* call it makes, and the lane toggle switches between the emulated backend and a real carrier-equipped browser."
-        : ""
-    }`,
+    hint: `Open deepLink in a browser to see the extension render in ${SURFACE.label}'s emulator. It must be running (${SURFACE.devCommand}). Once it renders, the Trace tab shows every chrome.* call it makes, and the lane toggle switches between the emulated backend and a real carrier-equipped browser.`,
   };
 
   if (args.open) {
@@ -341,7 +304,7 @@ export async function handler(args: {
     return JSON.stringify(result);
   }
 
-  const probeUrl = `${hostBase}${surface.fetchPath}?url=${encodeURIComponent(
+  const probeUrl = `${hostBase}${SURFACE.fetchPath}?url=${encodeURIComponent(
     internalUrl,
   )}`;
   try {
@@ -357,7 +320,7 @@ export async function handler(args: {
         probe: {
           status: res.status,
           contentType,
-          note: `${surface.label} answered but not with a preview payload. On the deployed host ${surface.fetchPath} does not exist (dev-only); run a local dev server (${surface.devCommand}) to use web preview.`,
+          note: `${SURFACE.label} answered but not with a preview payload. On the deployed host ${SURFACE.fetchPath} does not exist (dev-only); run a local dev server (${SURFACE.devCommand}) to use web preview.`,
         },
       });
     }
@@ -385,7 +348,7 @@ export async function handler(args: {
       previewLoadable: false,
       probe: {
         error: err instanceof Error ? err.message : String(err),
-        note: `Could not reach ${surface.label} at ${hostBase}. Start it with '${surface.devCommand}', then open deepLink.`,
+        note: `Could not reach ${SURFACE.label} at ${hostBase}. Start it with '${SURFACE.devCommand}', then open deepLink.`,
       },
     });
   }
