@@ -39,7 +39,7 @@ extension publish --token <token>
 </CodeGroup>
 
 <Note>
-Prefer not to copy tokens by hand? `npx @extension.dev/mcp login` (or the `extension_login` MCP tool) runs a GitHub device-code flow and stores a project-scoped token locally; the publish path picks it up automatically. Precedence: `--token` flag, then `EXTENSION_DEV_TOKEN`, then the stored login.
+Prefer not to copy tokens by hand? `npx @extension.dev/mcp login --project <workspace>/<project>` (or the `extension_login` MCP tool) runs extension.dev's device flow: you approve the printed code at `extension.dev/device` in a browser signed in to extension.dev, and a project-scoped token is stored locally, so the publish path picks it up automatically. GitHub is federated server-side, so no GitHub token reaches your machine. Precedence: `--token` flag, then `EXTENSION_DEV_TOKEN`, then the stored login.
 </Note>
 
 ## Usage

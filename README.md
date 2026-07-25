@@ -127,7 +127,7 @@ cp node_modules/@extension.dev/mcp/claude/commands/*.md ~/my-extension/.claude/c
 | browsers | `extension_uninstall_browser` | Remove a managed browser binary |
 | browsers | `extension_list_browsers` | List managed browsers |
 | browsers | `extension_detect_browsers` | Detect system browsers |
-| platform | `extension_login` | GitHub device-code login, stored token |
+| platform | `extension_login` | Device login at extension.dev, stored token |
 | platform | `extension_whoami` | Show the stored login (never the token) |
 | platform | `extension_logout` | Remove stored credentials |
 | platform | `extension_preview_web` | Render a build in the web emulator, and share it as a link |
@@ -148,7 +148,7 @@ That is a different job from shipping. Use `share` for the build you are holding
 
 ## From preview to store
 
-The platform tools connect agents to [extension.dev](https://extension.dev): `extension_login` runs a GitHub device-code flow and stores a project-scoped token locally (never returned to the agent), `extension_publish` turns a build your project has already published into a shareable URL, and `extension_release_promote` promotes a tested build to a release channel from CI or an agent session, no browser required. `extension_deploy` submits a built extension to the Chrome Web Store, Edge Add-ons, and Firefox AMO through extension.dev, which holds your store credentials and dispatches the release from your project's mirror CI, it defaults to a dry run and store credentials are never tool arguments. After a real submission, `extension_store_status` reads the recorded outcome, per-store credential health, and review state from the project's public registry, so agents and CI can answer "was it approved?" without a console visit. Access tokens live at most 7 days; CI pipelines re-mint them from the console's Access tokens page.
+The platform tools connect agents to [extension.dev](https://extension.dev): `extension_login` runs extension.dev's own device flow (you approve the code at [extension.dev/device](https://extension.dev/device), and GitHub is federated server-side, so no GitHub token ever reaches your machine) and stores a project-scoped token locally (never returned to the agent), `extension_publish` turns a build your project has already published into a shareable URL, and `extension_release_promote` promotes a tested build to a release channel from CI or an agent session, no browser required. `extension_deploy` submits a built extension to the Chrome Web Store, Edge Add-ons, and Firefox AMO through extension.dev, which holds your store credentials and dispatches the release from your project's mirror CI, it defaults to a dry run and store credentials are never tool arguments. After a real submission, `extension_store_status` reads the recorded outcome, per-store credential health, and review state from the project's public registry, so agents and CI can answer "was it approved?" without a console visit. Access tokens live at most 7 days; CI pipelines re-mint them from the console's Access tokens page.
 
 ## The extension.dev stack
 
