@@ -81,44 +81,32 @@ describe("extension_preview_web", () => {
     }
   });
 
-  it("still targets inspect (and its scheme, port and legacy inspectUrl) on surface:inspect", async () => {
+  it("honours hostUrl and keeps preview as the only door", async () => {
     const dir = tmpDist(MANIFEST);
     try {
-      const out = JSON.parse(
-        await handler({
-          projectPath: dir,
-          build: false,
-          distPath: dir,
-          probe: false,
-          surface: "inspect",
-        }),
-      );
-      expect(out.surface).toBe("inspect");
-      expect(new URL(out.deepLink).port).toBe("3106");
-      const internal = new URL(out.deepLink).searchParams.get("url") ?? "";
-      expect(internal.startsWith("inspect://path/")).toBe(true);
-
       const overridden = JSON.parse(
         await handler({
           projectPath: dir,
           build: false,
           distPath: dir,
           probe: false,
-          surface: "inspect",
-          inspectUrl: "http://localhost:4321",
+          hostUrl: "http://localhost:4321/",
         }),
       );
       expect(new URL(overridden.deepLink).port).toBe("4321");
-      const ignored = JSON.parse(
-        await handler({
-          projectPath: dir,
-          build: false,
-          distPath: dir,
-          probe: false,
-          inspectUrl: "http://localhost:4321",
-        }),
-      );
-      expect(new URL(ignored.deepLink).port).toBe("3110");
+
+      const staleArgs = {
+        projectPath: dir,
+        build: false,
+        distPath: dir,
+        probe: false,
+        surface: "inspect",
+        inspectUrl: "http://localhost:3106",
+      };
+      const stale = JSON.parse(await handler(staleArgs));
+      expect(new URL(stale.deepLink).port).toBe("3110");
+      const internal = new URL(stale.deepLink).searchParams.get("url") ?? "";
+      expect(internal.startsWith("preview://build/")).toBe(true);
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }

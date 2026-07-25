@@ -179,7 +179,7 @@ export function materializeCarrier(
       ...(ignored ? { gitignored: ignored } : {}),
       note:
         "Live-preview carrier placed in ./extensions; Extension.js loads it as a companion beside your extension. " +
-        "Open https://inspect.extension.dev/?session=live in the dev browser (any http://localhost origin works too) " +
+        "Open https://preview.extension.dev/?session=live in the dev browser (any http://localhost origin works too) " +
         "to watch the session's real-lane chrome.* trace on the Trace tab. " +
         "It is a debug companion, never part of a release: extension_stop and extension_build remove it again" +
         (ignored ? `, and ${ignored} was added to .gitignore.` : "."),
@@ -195,7 +195,7 @@ export function materializeCarrier(
             bridgeProtocol: {
               carrierExtensionId: carrierId,
               allowedOrigins:
-                "https://inspect.extension.dev, https://intelligence.extension.dev, https://themes.extension.dev, http://localhost/*, http://127.0.0.1/*",
+                "https://preview.extension.dev, https://intelligence.extension.dev, https://themes.extension.dev, http://localhost/*, http://127.0.0.1/*",
               howTo:
                 "From a page on an allowed origin, register your guest once with a 'session' message (it declares the permissions the carrier enforces), then send 'bridge' messages to run chrome.* for real; each one streams into the Trace tab. Use the EXACT dotted wire names the bridge dispatcher accepts: storage is storage.get/set/remove/clear with the AREA AS AN ARGUMENT, NOT storage.local.get.",
               example: [
