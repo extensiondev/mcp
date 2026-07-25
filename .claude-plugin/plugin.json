@@ -9,7 +9,7 @@
   },
   "homepage": "https://github.com/extensiondev/mcp",
   "repository": "https://github.com/extensiondev/mcp",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "keywords": [
     "mcp",
     "browser-extension",

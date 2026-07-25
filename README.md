@@ -7,7 +7,7 @@
 
 # @extension.dev/mcp [![Version][npm-version-image]][npm-version-url] [![Downloads][npm-downloads-image]][npm-downloads-url] [![Discord][discord-image]][discord-url]
 
-> Give your AI agent hands for browser extension development. 35 MCP tools that scaffold, run, inspect, debug, and publish cross-browser extensions.
+> Give your AI agent hands for browser extension development. 36 MCP tools that scaffold, run, inspect, debug, and publish cross-browser extensions.
 
 <img alt="Logo" align="right" src="https://media.extension.land/brand/extension-dev/logo-dock.png" width="15.5%" />
 
@@ -134,7 +134,9 @@ cp node_modules/@extension.dev/mcp/claude/commands/*.md ~/my-extension/.claude/c
 | platform | `extension_shares` | List every link you have shared, and revoke one permanently |
 | platform | `extension_publish` | Publish a shareable preview to extension.dev |
 | platform | `extension_release_promote` | Promote a build to a release channel, headless |
+| platform | `extension_release_list` | List release channels and recent builds, to pick a valid build sha |
 | platform | `extension_deploy` | Submit to the Chrome, Firefox, and Edge stores through extension.dev |
+| platform | `extension_store_status` | Read a submission's outcome, credential health, and review state |
 
 Browser-launching tools (`dev`, `start`, `preview`) shell out to the `extension` CLI, the project's own `node_modules/.bin/extension` when present, otherwise `npx extension@<pinned>` at the version this package is verified against; everything else runs in-process.
 
