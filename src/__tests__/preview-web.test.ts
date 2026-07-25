@@ -60,7 +60,6 @@ describe("extension_preview_web", () => {
       );
       expect(out.ok).toBe(true);
       expect(out.built).toBe(false);
-      expect(out.surface).toBe("preview");
       expect(out.manifest).toMatchObject({
         name: "Probe Ext",
         version: "1.2.3",

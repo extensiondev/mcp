@@ -1,5 +1,28 @@
 # Changelog
 
+## Unreleased
+
+`preview.extension.dev` is the only web door this package knows about. The
+inspect door predates it and had stopped being reachable.
+
+### Removed
+
+- **`extension_preview_web` no longer takes `surface` or `inspectUrl`.**
+  `surface:"inspect"` pointed a local build at `inspect.extension.dev` over the
+  `inspect://path` scheme, which is what the tool did before
+  `preview.extension.dev` existed. Only the inspect dev server ever answered it:
+  the deployed origin serves store listings and has no `/__inspect/fetch`, so
+  the door resolved on one machine and nowhere else. Every build now renders in
+  `preview.extension.dev`, which is also the surface that carries the
+  Emulated/Real lane toggle and the Trace tab. The response no longer carries a
+  `surface` field, and `hostUrl` is the only origin override.
+- **The carrier no longer allowlists `inspect.extension.dev`.** Pairing needs a
+  page that opens the bridge, and inspect never did: it traces the emulated lane
+  of the extension it fetched and has no lane toggle. `extension_dev`
+  `carrier: true` and the pairing notes now point at `preview.extension.dev`,
+  and the carrier's `externally_connectable` drops the origin that was never
+  going to connect.
+
 ## 6.6.0
 
 A shared build belongs to the project that owns it, not to whoever happened to
