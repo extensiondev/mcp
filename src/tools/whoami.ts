@@ -64,7 +64,7 @@ export async function handler(): Promise<string> {
     projectSlug: creds.projectSlug,
     ...(recordedApi ? { apiRecordedAtLogin: recordedApi } : {}),
     apiDefault: effectiveDefaultApi,
-    provider: creds.provider ?? "github",
+    provider: creds.provider ?? "extensiondev",
     expiresAt: creds.expiresAt
       ? new Date(creds.expiresAt * 1000).toISOString()
       : null,

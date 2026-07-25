@@ -105,7 +105,6 @@ export async function pollDeviceToken(args: {
       const creds = persistTokenResponse({
         apiBase: args.apiBase,
         data,
-        provider: "extensiondev",
       });
       return { ok: true, creds };
     }
