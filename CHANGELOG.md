@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 7.0.0
 
 `preview.extension.dev` is the only web door this package knows about. The
 inspect door predates it and had stopped being reachable.
