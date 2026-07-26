@@ -195,7 +195,7 @@ export function materializeCarrier(
             bridgeProtocol: {
               carrierExtensionId: carrierId,
               allowedOrigins:
-                "https://preview.extension.dev, https://intelligence.extension.dev, https://themes.extension.dev, http://localhost/*, http://127.0.0.1/*",
+                "https://preview.extension.dev, https://code.extension.dev, https://themes.extension.dev, http://localhost/*, http://127.0.0.1/*",
               howTo:
                 "From a page on an allowed origin, register your guest once with a 'session' message (it declares the permissions the carrier enforces), then send 'bridge' messages to run chrome.* for real; each one streams into the Trace tab. Use the EXACT dotted wire names the bridge dispatcher accepts: storage is storage.get/set/remove/clear with the AREA AS AN ARGUMENT, NOT storage.local.get.",
               example: [
