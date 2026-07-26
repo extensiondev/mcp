@@ -8,6 +8,7 @@
 
 import { resolveToken } from "./publish";
 import { resolveApiBase, safeApiBase } from "./login-flow";
+import { identityHeaders } from "./session-identity";
 
 type FetchImpl = typeof fetch;
 
@@ -135,7 +136,11 @@ export async function listArtifacts(options: {
   let res: Response;
   try {
     res = await doFetch(url.toString(), {
-      headers: { authorization: `Bearer ${token}`, accept: "application/json" },
+      headers: {
+        authorization: `Bearer ${token}`,
+        accept: "application/json",
+        ...identityHeaders("extension_shares"),
+      },
     });
   } catch (err: any) {
     return {
@@ -206,7 +211,11 @@ export async function revokeArtifact(options: {
   try {
     res = await doFetch(url, {
       method: "DELETE",
-      headers: { authorization: `Bearer ${token}`, accept: "application/json" },
+      headers: {
+        authorization: `Bearer ${token}`,
+        accept: "application/json",
+        ...identityHeaders("extension_shares"),
+      },
     });
   } catch (err: any) {
     return {

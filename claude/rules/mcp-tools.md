@@ -800,12 +800,11 @@ The `similarTemplates` field lists templates from the catalog with similar surfa
 | ------------------------------- | -------------------- | ----------------------------------------- | ------------------------------------------- | ------------------------------------------ |
 | **Tier 1, Core**               |                      |                                           |                                             |                                            |
 | `extension_create`              | `programs/create`    | `extensionCreate()`                       | examples repo via go-git-it                 | Thin wrapper only                          |
-| `extension_templates`      | New                  | n/a                                       | `templates-meta.json` release asset         | Fetch + filter + cache                     |
+| `extension_templates`      | New                  | n/a                                       | `templates-meta.json` release asset + raw GitHub | `list` fetches, filters and caches; `source` reads files |
 | `extension_build`               | `programs/develop`   | `extensionBuild()`                        | n/a                                         | Thin wrapper only                          |
 | `extension_dev`                 | `programs/develop`   | `extensionDev()`                          | n/a                                         | Thin wrapper + process management          |
 | `extension_start`               | `programs/extension` | `extensionBuild()` + `extensionPreview()` | n/a                                         | Thin wrapper; `build: false` calls `extensionPreview()` alone |
 | **Tier 2, Intelligence**       |                      |                                           |                                             |                                            |
-| `extension_templates` | New                  | n/a                                       | `templates-meta.json` + raw GitHub          | Fetch + read files                         |
 | `extension_manifest_validate`   | `programs/develop`   | `plugin-web-extension`                    | `templates-meta.json` for similar templates | Extract validation logic                   |
 | `extension_analyze`             | `programs/develop`   | `--source` flag logic                     | n/a                                         | Extract into callable API                  |
 | `extension_inspect`      | `programs/extension` | CDP client / RDP transport                | Live browser via debugging protocol         | Wire to running session                    |

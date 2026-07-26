@@ -58,7 +58,8 @@ The server doesn't reimplement Extension.js, it **wraps the CLI** and the local 
 
 ## Tools
 
-Most tools are **local and need no account.** Only `extension_publish` is gated.
+The server registers 28 tools. Most are **local and need no account**; the
+platform cluster at the bottom of the table is the part that needs a token.
 
 | Tool | What it does | Auth |
 | --- | --- | --- |
@@ -68,13 +69,22 @@ Most tools are **local and need no account.** Only `extension_publish` is gated.
 | `extension_dev` | Start a dev session (HMR, browser launch) | n/a |
 | `extension_build` / `extension_start` | Build / build+launch (`build: false` launches an existing dist) | n/a |
 | `extension_wait` | Wait for the [`ready.json`](/docs/commands/dev#automation-metadata-recommended-for-scripts-agents) contract | n/a |
+| `extension_stop` | Stop a dev or start session, server and browser | n/a |
 | `extension_logs` | Stream logs from every context ([Agent logs](/docs/ai/logs)) | n/a |
 | `extension_analyze` / `extension_inspect` / `extension_dom_snapshot` | Analyze the built output on disk / deep-inspect a running extension / snapshot a chosen surface ([Inspect and act](/docs/ai/inspect-and-act)) | n/a |
 | `extension_list_extensions` | List extensions with a live context in the dev browser (Chromium) | n/a |
 | `extension_eval` / `extension_storage` / `extension_reload` / `extension_open` | Act on the running extension. `extension_open` surfaces: `popup`/`options`/`sidebar`/`action`/`command` ([Inspect and act](/docs/ai/inspect-and-act#trigger-actions-and-commands)) | session opt-in |
 | `extension_manifest_validate` | Validate the manifest | n/a |
+| `extension_theme_verify` | Verify a Chrome theme manifest against what Chrome paints | n/a |
+| `extension_doctor` | Diagnose a dev session leg by leg | n/a |
 | `extension_browsers` | Detect, list, install, and uninstall browsers | n/a |
+| `extension_auth` | Device login at extension.dev, plus login status and logout | n/a |
+| `extension_preview_web` | Render a build in the web emulator, and share it as a link | share needs a token |
+| `extension_shares` | List and revoke the links this token has shared | **token required** |
 | `extension_publish` | Publish to extension.dev and return a shareable URL ([`publish`](/docs/ai/publish)) | **token required** |
+| `extension_release_status` | Read release channels, recent builds, and store review state | **token required** for private projects |
+| `extension_release_promote` | Promote a build to a release channel, headless | **token required** |
+| `extension_submit` | Submit to the Chrome, Firefox, Edge and Safari stores, dry run by default | **token required** |
 
 ## A typical session
 

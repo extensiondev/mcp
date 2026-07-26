@@ -8,6 +8,7 @@
 
 import { readValidCredentials } from "./credentials";
 import { resolveApiBase, safeApiBase } from "./login-flow";
+import { identityHeaders } from "./session-identity";
 
 type FetchImpl = typeof fetch;
 
@@ -66,6 +67,7 @@ export async function publish(
       headers: {
         authorization: `Bearer ${token}`,
         "content-type": "application/json",
+        ...identityHeaders("extension_publish"),
       },
       body: JSON.stringify(body),
     });

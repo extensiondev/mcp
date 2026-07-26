@@ -11,6 +11,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { resolveToken } from "../lib/publish";
 import { resolveApiBase, safeApiBase } from "../lib/login-flow";
+import { identityHeaders } from "../lib/session-identity";
 import {
   consoleProjectUrl,
   fetchRegistryJson,
@@ -154,6 +155,7 @@ export async function handler(args: SubmitToolArgs): Promise<string> {
       headers: {
         authorization: `Bearer ${token}`,
         "content-type": "application/json",
+        ...identityHeaders("extension_submit"),
       },
       body: JSON.stringify(body),
     });
