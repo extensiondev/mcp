@@ -143,14 +143,14 @@ export async function navigateToUrlViaBridge(
         name: "NavigateFailed",
         message: `Navigation to ${url} did not produce a tab reporting that URL. The URL may not exist, or the browser refused the navigation (Firefox rejects privileged about:/chrome: URLs and other extensions' moz-extension: pages).`,
       },
-      hint: "Confirm the URL, or discover open tabs with extension_dom_inspect listTabs: true. For an extension page, the path must match the BUILT manifest.",
+      hint: "Confirm the URL, or discover open tabs with extension_dom_snapshot listTabs: true. For an extension page, the path must match the BUILT manifest.",
     });
   }
   return JSON.stringify({
     ok: true,
     navigated: url,
     tab: { tabId: settled.tabId, url: settled.url, title: settled.title },
-    hint: "Inspect it with extension_dom_inspect or extension_eval using url or this numeric tab id (context: 'page'/'content').",
+    hint: "Inspect it with extension_dom_snapshot or extension_eval using url or this numeric tab id (context: 'page'/'content').",
   });
 }
 

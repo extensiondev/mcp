@@ -195,9 +195,9 @@ extension inspect --tab 1 --include summary,html --with-console 20
 | `--max-bytes <n>`    | 262144  | Cap on returned HTML bytes                                                                     |
 | `--with-console [n]` | 20      | Also include the last n console lines for the target                                           |
 
-The `extension_dom_inspect` MCP tool wraps this verb one-to-one.
+The `extension_dom_snapshot` MCP tool wraps this verb one-to-one.
 
-**Debugging protocol (Chromium CDP): `extension_source_inspect` MCP tool.** Connects directly to the running session's debug port. Use it when the bridge is not enough: closed shadow roots (`deepDom`), selector probes, DOM snapshots, console summaries, or navigating the tab to a URL before inspecting. Returns structured events:
+**Debugging protocol (Chromium CDP): `extension_inspect` MCP tool.** Connects directly to the running session's debug port. Use it when the bridge is not enough: closed shadow roots (`deepDom`), selector probes, DOM snapshots, console summaries, or navigating the tab to a URL before inspecting. Returns structured events:
 
 - `page_html` - full injected HTML (after content scripts run)
 - `page_html_summary` - root/script/style/link counts

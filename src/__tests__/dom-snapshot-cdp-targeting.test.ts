@@ -30,7 +30,7 @@ vi.mock("../lib/cdp", () => {
   return { CDPClient };
 });
 
-const domInspect = await import("../tools/dom-inspect");
+const domSnapshot = await import("../tools/dom-snapshot");
 const { matchTargetsByUrl, filterPageTargets } = await import(
   "../lib/cdp-targets"
 );
@@ -50,10 +50,10 @@ afterEach(() => {
   calls.length = 0;
 });
 
-describe("dom_inspect listTargets", () => {
+describe("dom_snapshot listTargets", () => {
   it("returns page targets with targetId/url/title/type and never shells out", async () => {
     const result = JSON.parse(
-      await domInspect.handler({ projectPath: "/p", listTargets: true, browser: "chrome" }),
+      await domSnapshot.handler({ projectPath: "/p", listTargets: true, browser: "chrome" }),
     );
 
     expect(result.ok).toBe(true);
@@ -66,7 +66,7 @@ describe("dom_inspect listTargets", () => {
 
   it("carries the targetId-vs-chrome.tabs-id trap warning", async () => {
     const result = JSON.parse(
-      await domInspect.handler({ projectPath: "/p", listTargets: true, browser: "chrome" }),
+      await domSnapshot.handler({ projectPath: "/p", listTargets: true, browser: "chrome" }),
     );
 
     expect(result.note).toContain("NOT a chrome.tabs id");
@@ -77,7 +77,7 @@ describe("dom_inspect listTargets", () => {
     cdpPort = null;
 
     const result = JSON.parse(
-      await domInspect.handler({ projectPath: "/p", listTargets: true, browser: "chrome" }),
+      await domSnapshot.handler({ projectPath: "/p", listTargets: true, browser: "chrome" }),
     );
 
     expect(result.ok).toBe(false);
@@ -87,7 +87,7 @@ describe("dom_inspect listTargets", () => {
 
   it("reports a missing Gecko session as NoSession with the rdpPort hint", async () => {
     const result = JSON.parse(
-      await domInspect.handler({ projectPath: "/p", listTargets: true, browser: "firefox" }),
+      await domSnapshot.handler({ projectPath: "/p", listTargets: true, browser: "firefox" }),
     );
 
     expect(result.ok).toBe(false);
@@ -97,10 +97,10 @@ describe("dom_inspect listTargets", () => {
   });
 });
 
-describe("dom_inspect tabUrl targeting", () => {
+describe("dom_snapshot tabUrl targeting", () => {
   it("a unique substring match inspects that tab via its exact url", async () => {
     const result = JSON.parse(
-      await domInspect.handler({
+      await domSnapshot.handler({
         projectPath: "/p",
         tabUrl: "example.com",
         browser: "chrome",
@@ -120,7 +120,7 @@ describe("dom_inspect tabUrl targeting", () => {
   });
 
   it("matches case-insensitively", async () => {
-    await domInspect.handler({
+    await domSnapshot.handler({
       projectPath: "/p",
       tabUrl: "EXAMPLE.COM",
       browser: "chrome",
@@ -131,7 +131,7 @@ describe("dom_inspect tabUrl targeting", () => {
   });
 
   it("falls back to title matching only when no url matches", async () => {
-    await domInspect.handler({
+    await domSnapshot.handler({
       projectPath: "/p",
       tabUrl: "example domain",
       browser: "chrome",
@@ -143,7 +143,7 @@ describe("dom_inspect tabUrl targeting", () => {
 
   it("zero matches returns the available targets instead of inspecting", async () => {
     const result = JSON.parse(
-      await domInspect.handler({
+      await domSnapshot.handler({
         projectPath: "/p",
         tabUrl: "no-such-page",
         browser: "chrome",
@@ -169,7 +169,7 @@ describe("dom_inspect tabUrl targeting", () => {
     });
 
     const result = JSON.parse(
-      await domInspect.handler({
+      await domSnapshot.handler({
         projectPath: "/p",
         tabUrl: "example.com",
         browser: "chrome",
@@ -188,7 +188,7 @@ describe("dom_inspect tabUrl targeting", () => {
 
   it("rejects tabUrl combined with another tab selector", async () => {
     const result = JSON.parse(
-      await domInspect.handler({
+      await domSnapshot.handler({
         projectPath: "/p",
         tabUrl: "example",
         tab: 7,
@@ -214,7 +214,7 @@ describe("dom_inspect tabUrl targeting", () => {
         : JSON.stringify({ ok: true });
 
     const result = JSON.parse(
-      await domInspect.handler({
+      await domSnapshot.handler({
         projectPath: "/p",
         tabUrl: "example.com",
         browser: "firefox",
@@ -243,7 +243,7 @@ describe("dom_inspect tabUrl targeting", () => {
         : JSON.stringify({ ok: true });
 
     const result = JSON.parse(
-      await domInspect.handler({
+      await domSnapshot.handler({
         projectPath: "/p",
         tabUrl: "no-such-page",
         browser: "firefox",
@@ -271,7 +271,7 @@ describe("dom_inspect tabUrl targeting", () => {
         : JSON.stringify({ ok: true });
 
     const result = JSON.parse(
-      await domInspect.handler({
+      await domSnapshot.handler({
         projectPath: "/p",
         tabUrl: "example.com",
         browser: "firefox",

@@ -25,12 +25,12 @@ import { listBridgeTabs, matchTabsByUrl } from "../lib/bridge-tabs";
 
 const RDP_ACTOR_NOTE =
   "actor is an RDP tab descriptor actor id, NOT a chrome.tabs id: do not pass it as `tab`. " +
-  "Target a tab with `tabUrl` (URL substring) or `url`; if you need a numeric tab id, call extension_dom_inspect with listTabs: true.";
+  "Target a tab with `tabUrl` (URL substring) or `url`; if you need a numeric tab id, call extension_dom_snapshot with listTabs: true.";
 
 export const schema = {
-  name: "extension_dom_inspect",
+  name: "extension_dom_snapshot",
   description:
-    "Inspect a page/content-script DOM via the agent bridge (CDP-free, localhost). Returns a structured snapshot (counts, extension roots, open shadow roots, optional capped HTML). Target a tab by `tabUrl` (case-insensitive URL substring resolved against the browser's live page targets; zero or several matches return the candidates instead of guessing), by `url`, or by numeric `tab`. Discover what is open with listTargets: true (Chromium CDP targetIds; Firefox RDP tab actors) or listTabs: true (numeric chrome.tabs ids). Requires the dev session to be started with allowControl: true (extension_dev). For closed shadow roots or deep CDP inspection use extension_source_inspect. Wraps `extension inspect`.",
+    "Take a SHALLOW structured DOM snapshot of one chosen surface through the agent bridge (CDP-free, localhost): element counts, extension roots, OPEN shadow roots, optional byte-capped HTML, optional recent console lines. This is the SURFACE PICKER: the only tool that can read an OPEN extension surface by name (`context`: popup/options/sidebar/devtools) or an override page (newtab/history/bookmarks), the only one that takes a numeric chrome.tabs id, and the only one that enumerates what is open (listTargets: true for Chromium CDP targetIds and Firefox RDP tab actors, listTabs: true for numeric chrome.tabs ids). Ambiguous `tabUrl` returns the candidates instead of guessing. It does NOT pierce closed shadow roots, does NOT run CSS selector probes, and does NOT navigate; for those, and for a deep read of an already-open web page, use extension_inspect. Requires the dev session to be started with allowControl: true (extension_dev). Wraps `extension inspect`.",
   inputSchema: {
     type: "object" as const,
     properties: {

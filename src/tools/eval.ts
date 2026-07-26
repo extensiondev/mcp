@@ -15,7 +15,7 @@ import { isChromiumFamily } from "../lib/browser-family";
 export const schema = {
   name: "extension_eval",
   description:
-    "Evaluate an expression in a running extension context. Requires the dev session to be started with allowEval: true (extension_dev; writes a 0600 session token the CLI reads). Context default: on a Chromium session whose manifest is MV3 (the default template) the default is `page` (the active tab), because the MV3 background is a service worker whose CSP blocks eval, so a background default would fail on the most common path; on Firefox/MV2 sessions the default stays `background`. Pass `context: \"background\"` explicitly to target the worker anyway (on Chromium MV3 that returns the CSP explanation). Targeting for context content/page: pass `url` to pick the matching tab, or omit both `url` and `tab` to use the ACTIVE tab; a numeric `tab` id is only needed to disambiguate. Extension surfaces (popup/options/sidebar/devtools) and override pages (newtab/history/bookmarks) evaluate over the in-bundle relay and need NO tab id; the surface must be OPEN (extension_open first; a closed surface returns an explicit error). Use extension_dom_inspect with listTabs: true to enumerate {tabId,url,title}. Wraps `extension eval`.",
+    "Evaluate an expression in a running extension context. Requires the dev session to be started with allowEval: true (extension_dev; writes a 0600 session token the CLI reads). Context default: on a Chromium session whose manifest is MV3 (the default template) the default is `page` (the active tab), because the MV3 background is a service worker whose CSP blocks eval, so a background default would fail on the most common path; on Firefox/MV2 sessions the default stays `background`. Pass `context: \"background\"` explicitly to target the worker anyway (on Chromium MV3 that returns the CSP explanation). Targeting for context content/page: pass `url` to pick the matching tab, or omit both `url` and `tab` to use the ACTIVE tab; a numeric `tab` id is only needed to disambiguate. Extension surfaces (popup/options/sidebar/devtools) and override pages (newtab/history/bookmarks) evaluate over the in-bundle relay and need NO tab id; the surface must be OPEN (extension_open first; a closed surface returns an explicit error). Use extension_dom_snapshot with listTabs: true to enumerate {tabId,url,title}. Wraps `extension eval`.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -111,7 +111,7 @@ export async function handler(
           )
         ) {
           parsed.hint =
-            "The active tab is a browser or extension page that eval cannot reach. Navigate the dev browser to a regular web page, or pass url (match pattern) or tab to pick one; extension_dom_inspect with listTabs: true lists open tabs.";
+            "The active tab is a browser or extension page that eval cannot reach. Navigate the dev browser to a regular web page, or pass url (match pattern) or tab to pick one; extension_dom_snapshot with listTabs: true lists open tabs.";
         }
         return JSON.stringify(parsed);
       }

@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 
 import { afterEach, beforeEach, describe, it, expect } from "vitest";
-import { schema, handler, storeMdWarnings } from "../tools/deploy";
+import { schema, handler, storeMdWarnings } from "../tools/submit";
 import { tools as ALL_TOOLS } from "../index";
 
 function jsonResponse(body: unknown, ok = true, status = 200): Response {
@@ -14,10 +14,10 @@ function jsonResponse(body: unknown, ok = true, status = 200): Response {
   } as unknown as Response;
 }
 
-describe("extension_deploy: registration + schema", () => {
-  it("is registered under the extension_deploy name", () => {
-    expect(schema.name).toBe("extension_deploy");
-    expect(ALL_TOOLS.map((t) => t.schema.name)).toContain("extension_deploy");
+describe("extension_submit: registration + schema", () => {
+  it("is registered under the extension_submit name", () => {
+    expect(schema.name).toBe("extension_submit");
+    expect(ALL_TOOLS.map((t) => t.schema.name)).toContain("extension_submit");
   });
 
   it("requires browsers + buildSha and exposes no credential/zip/path property", () => {
@@ -35,14 +35,14 @@ describe("extension_deploy: registration + schema", () => {
   });
 });
 
-describe("extension_deploy: platform submit handler", () => {
+describe("extension_submit: platform submit handler", () => {
   let tmp: string;
   let prevXdg: string | undefined;
   let prevToken: string | undefined;
   let prevFetch: typeof fetch;
 
   beforeEach(() => {
-    tmp = fs.mkdtempSync(path.join(os.tmpdir(), "extdev-deploy-"));
+    tmp = fs.mkdtempSync(path.join(os.tmpdir(), "extdev-submit-"));
     prevXdg = process.env.XDG_CONFIG_HOME;
     prevToken = process.env.EXTENSION_DEV_TOKEN;
     prevFetch = global.fetch;
@@ -59,7 +59,7 @@ describe("extension_deploy: platform submit handler", () => {
     fs.rmSync(tmp, { recursive: true, force: true });
   });
 
-  it("fails with DeployAuthError before any fetch when no token resolves", async () => {
+  it("fails with SubmitAuthError before any fetch when no token resolves", async () => {
     let called = false;
     global.fetch = (async () => {
       called = true;
@@ -69,11 +69,11 @@ describe("extension_deploy: platform submit handler", () => {
       await handler({ browsers: ["chrome"], buildSha: "abc1234" }),
     );
     expect(out.ok).toBe(false);
-    expect(out.error.name).toBe("DeployAuthError");
+    expect(out.error.name).toBe("SubmitAuthError");
     expect(called).toBe(false);
   });
 
-  it("fails with DeployInputError before any fetch when browsers/buildSha missing", async () => {
+  it("fails with SubmitInputError before any fetch when browsers/buildSha missing", async () => {
     process.env.EXTENSION_DEV_TOKEN = "tok";
     let called = false;
     global.fetch = (async () => {
@@ -83,11 +83,11 @@ describe("extension_deploy: platform submit handler", () => {
     const noBrowsers = JSON.parse(
       await handler({ browsers: [], buildSha: "abc1234" }),
     );
-    expect(noBrowsers.error.name).toBe("DeployInputError");
+    expect(noBrowsers.error.name).toBe("SubmitInputError");
     const noSha = JSON.parse(
       await handler({ browsers: ["chrome"], buildSha: "" }),
     );
-    expect(noSha.error.name).toBe("DeployInputError");
+    expect(noSha.error.name).toBe("SubmitInputError");
     expect(called).toBe(false);
   });
 
@@ -155,7 +155,7 @@ describe("extension_deploy: platform submit handler", () => {
     }
   });
 
-  it("surfaces a non-OK response as DeployError", async () => {
+  it("surfaces a non-OK response as SubmitError", async () => {
     process.env.EXTENSION_DEV_TOKEN = "tok";
     global.fetch = (async () =>
       jsonResponse(
@@ -167,7 +167,7 @@ describe("extension_deploy: platform submit handler", () => {
       await handler({ browsers: ["chrome"], buildSha: "deadbeef" }),
     );
     expect(out.ok).toBe(false);
-    expect(out.error.name).toBe("DeployError");
+    expect(out.error.name).toBe("SubmitError");
     expect(out.error.message).toContain("404");
   });
 });

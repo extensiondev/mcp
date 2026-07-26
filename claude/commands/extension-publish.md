@@ -27,7 +27,7 @@ Default to `both` (Chrome + Firefox). If the user specifies `chrome` or `firefox
    ```
 
 3. **Inspect the builds**
-   If MCP tool `extension_inspect` is available, use it for each browser build.
+   If MCP tool `extension_analyze` is available, use it for each browser build.
    Check:
    - Total size under 10MB (store limit)
    - No source maps in production build

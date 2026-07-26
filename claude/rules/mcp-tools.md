@@ -406,7 +406,7 @@ The `similarTemplates` field lists templates from the catalog with similar surfa
 
 ---
 
-#### `extension_inspect`
+#### `extension_analyze`
 
 **Source:** New tool; static analysis of the built `dist/` output
 
@@ -414,8 +414,8 @@ The `similarTemplates` field lists templates from the catalog with similar surfa
 
 ```json
 {
-  "name": "extension_inspect",
-  "description": "Inspect a built extension: file sizes, entry points, permissions used, and dependency analysis.",
+  "name": "extension_analyze",
+  "description": "Analyze a built extension: file sizes, entry points, permissions used, and dependency analysis.",
   "inputSchema": {
     "type": "object",
     "properties": {
@@ -488,7 +488,7 @@ The `similarTemplates` field lists templates from the catalog with similar surfa
 
 ---
 
-#### `extension_source_inspect`
+#### `extension_inspect`
 
 **Source:** `programs/extension/browsers/` → CDP/RDP source inspection system
 
@@ -496,7 +496,7 @@ The `similarTemplates` field lists templates from the catalog with similar surfa
 
 ```json
 {
-  "name": "extension_source_inspect",
+  "name": "extension_inspect",
   "description": "Inspect a running extension's live state: DOM structure, content script injection, console messages, and selector queries. Requires an active dev or start session.",
   "inputSchema": {
     "type": "object",
@@ -626,7 +626,7 @@ The `similarTemplates` field lists templates from the catalog with similar surfa
 }
 ```
 
-**Why this matters for MCP:** When Claude starts a dev session via `extension_dev`, it needs to know when the extension is actually loaded and ready before calling `extension_source_inspect`. This tool provides that gate.
+**Why this matters for MCP:** When Claude starts a dev session via `extension_dev`, it needs to know when the extension is actually loaded and ready before calling `extension_inspect`. This tool provides that gate.
 
 ---
 
@@ -808,8 +808,8 @@ The `similarTemplates` field lists templates from the catalog with similar surfa
 | **Tier 2, Intelligence**       |                      |                                           |                                             |                                            |
 | `extension_get_template_source` | New                  | n/a                                       | `templates-meta.json` + raw GitHub          | Fetch + read files                         |
 | `extension_manifest_validate`   | `programs/develop`   | `plugin-web-extension`                    | `templates-meta.json` for similar templates | Extract validation logic                   |
-| `extension_inspect`             | `programs/develop`   | `--source` flag logic                     | n/a                                         | Extract into callable API                  |
-| `extension_source_inspect`      | `programs/extension` | CDP client / RDP transport                | Live browser via debugging protocol         | Wire to running session                    |
+| `extension_analyze`             | `programs/develop`   | `--source` flag logic                     | n/a                                         | Extract into callable API                  |
+| `extension_inspect`      | `programs/extension` | CDP client / RDP transport                | Live browser via debugging protocol         | Wire to running session                    |
 | `extension_list_extensions`     | MCP `lib/cdp`        | `Extensions.getExtensionInfo` (read-only) | Live browser via CDP (Chromium)             | MCP tool (no CLI verb)                      |
 | `extension_wait`                | `programs/extension` | `dev-wait.ts`                             | `ready.json` contract file                  | Thin wrapper (exists in CLI)               |
 | `extension_stop`                | MCP `lib/process-manager` | session registry + group signal      | Session registry + `ready.json` pid         | MCP tool (no CLI verb)                      |
@@ -946,14 +946,14 @@ These fields enable `extension_list_templates` to match user intent ("I want to 
 ### Phase 3: Live inspection tools
 
 1. `extension_wait`, poll ready.json contract (gate for inspection tools)
-2. `extension_source_inspect`, connect to running session's CDP/RDP port for live DOM inspection
+2. `extension_inspect`, connect to running session's CDP/RDP port for live DOM inspection
 3. `extension_detect_browsers`, system browser detection
 4. `extension_get_template_source`, reads from examples repo via raw.githubusercontent.com
 5. `extension_manifest_validate`, cross-browser validation + similar template suggestions
 
 ### Phase 4: Codegen + advanced tools
 
-1. `extension_inspect`, static build analysis from `--source` extraction
+1. `extension_analyze`, static build analysis from `--source` extraction
 2. `extension_add_feature`, codegen sourced from examples repo patterns
 
 ### Phase 5: Feedback loop
@@ -977,7 +977,7 @@ Typical power-user workflows that drive tool prioritization:
 
 | Workflow                     | Tool                                                         | Why                                                                                                                       |
 | ---------------------------- | ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------- |
-| Debugging injection failures | `extension_source_inspect`                                   | `probe: ["[data-extension-root]"]` shows injection state, reinject generation, console errors, no manual DevTools needed |
+| Debugging injection failures | `extension_inspect`                                   | `probe: ["[data-extension-root]"]` shows injection state, reinject generation, console errors, no manual DevTools needed |
 | Docker/devcontainer          | `extension_detect_browsers` + `extension_wait`               | Check browser availability, gate on dev server readiness                                                                  |
 | Multi-browser                | `extension_manifest_validate` + `extension_build`            | Catch manifest divergence early, build for `chrome,firefox`                                                               |
 | Learning patterns            | `extension_list_templates` + `extension_get_template_source` | Read `content-multi-one-entry`, `content-multi-three-entries` for multi-level import patterns                             |
@@ -985,4 +985,4 @@ Typical power-user workflows that drive tool prioritization:
 
 **Why the examples repo is central:** Complex patterns (multi-level content script imports, MAIN world isolation, cross-browser sidebars) are documented as working examples. `extension_get_template_source` gives Claude the canonical implementation to reference when building or debugging these patterns.
 
-**Why source inspection is the highest-value tool:** The most time-consuming extension debugging failure is "it didn't load." `extension_source_inspect` with `probe` and `console_summary` turns manual Chrome DevTools investigation into a one-call Claude diagnosis.
+**Why source inspection is the highest-value tool:** The most time-consuming extension debugging failure is "it didn't load." `extension_inspect` with `probe` and `console_summary` turns manual Chrome DevTools investigation into a one-call Claude diagnosis.

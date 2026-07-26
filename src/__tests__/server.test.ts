@@ -7,8 +7,8 @@ import { tools as ALL_TOOLS } from "../index";
 import * as listBrowsers from "../tools/list-browsers";
 
 import * as manifestValidate from "../tools/manifest-validate";
-import * as inspect from "../tools/inspect";
-import * as sourceInspect from "../tools/source-inspect";
+import * as analyze from "../tools/analyze";
+import * as inspectTool from "../tools/inspect";
 import * as logs from "../tools/logs";
 import * as storage from "../tools/storage";
 import * as addFeature from "../tools/add-feature";
@@ -151,9 +151,9 @@ describe("manifest-validate handler", () => {
   });
 });
 
-describe("inspect handler", () => {
+describe("analyze handler", () => {
   it("returns error when dist does not exist", async () => {
-    const result = await inspect.handler({
+    const result = await analyze.handler({
       projectPath: "/tmp/nonexistent-project",
     });
     const parsed = JSON.parse(result);
@@ -177,7 +177,7 @@ describe("inspect handler", () => {
         Buffer.alloc(zipSize),
       );
 
-      const parsed = JSON.parse(await inspect.handler({ projectPath: dir }));
+      const parsed = JSON.parse(await analyze.handler({ projectPath: dir }));
 
       expect(parsed.byType.archive.count).toBe(1);
       expect(parsed.totalSize).toBe(parsed.shippableSize + zipSize);
@@ -204,7 +204,7 @@ describe("inspect handler", () => {
       );
       fs.writeFileSync(path.join(distDir, "background.js"), "x".repeat(1000));
 
-      const parsed = JSON.parse(await inspect.handler({ projectPath: dir }));
+      const parsed = JSON.parse(await analyze.handler({ projectPath: dir }));
 
       expect(parsed.shippableSize).toBe(parsed.totalSize);
       expect(parsed.archiveNote).toBeUndefined();
@@ -226,15 +226,15 @@ describe("add-feature handler", () => {
   });
 });
 
-describe("source-inspect handler", () => {
+describe("inspect handler", () => {
   it("documents the Firefox bridge pairing instead of a Chromium-only claim", () => {
-    expect(sourceInspect.schema.description).toContain("agent bridge");
-    expect(sourceInspect.schema.description).toContain("Firefox");
-    expect(sourceInspect.schema.description).not.toMatch(/Chromium only/i);
+    expect(inspectTool.schema.description).toContain("agent bridge");
+    expect(inspectTool.schema.description).toContain("Firefox");
+    expect(inspectTool.schema.description).not.toMatch(/Chromium only/i);
   });
 
   it("returns error when no dev session is running", async () => {
-    const result = await sourceInspect.handler({
+    const result = await inspectTool.handler({
       projectPath: "/tmp/nonexistent-project",
     });
     const parsed = JSON.parse(result);

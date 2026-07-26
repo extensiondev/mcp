@@ -25,7 +25,7 @@ import {
 export const schema = {
   name: "extension_dev",
   description:
-    "Start the extension development server with hot module replacement. Launches a browser with the extension loaded. Returns process info for use with extension_wait and extension_source_inspect.",
+    "Start the extension development server with hot module replacement. Launches a browser with the extension loaded. Returns process info for use with extension_wait and extension_inspect.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -63,13 +63,13 @@ export const schema = {
         type: "boolean",
         default: false,
         description:
-          "Enable the agent-bridge control channel so extension_storage/reload/open/dom_inspect work against this session",
+          "Enable the agent-bridge control channel so extension_storage/reload/open/dom_snapshot work against this session",
       },
       allowEval: {
         type: "boolean",
         default: false,
         description:
-          "Enable extension_eval (runs code in a context; writes a 0600 session token). Implies allowControl, so a single allowEval: true also unlocks storage/reload/open/dom_inspect. You do not need to pass both.",
+          "Enable extension_eval (runs code in a context; writes a 0600 session token). Implies allowControl, so a single allowEval: true also unlocks storage/reload/open/dom_snapshot. You do not need to pass both.",
       },
       carrier: {
         type: "boolean",
@@ -227,7 +227,7 @@ export async function handler(
     });
   }
 
-  const controlVerbs = "storage, reload, open, dom_inspect";
+  const controlVerbs = "storage, reload, open, dom_snapshot";
   const capabilities = {
     allowControl,
     allowEval: Boolean(args.allowEval),
@@ -235,7 +235,7 @@ export async function handler(
       ? args.allowEval
         ? `${controlVerbs}, eval`
         : controlVerbs
-      : "none (read-only: logs, source_inspect, wait, doctor)",
+      : "none (read-only: logs, inspect, wait, doctor)",
   };
 
   const boundPort = contractBoundPort(args.projectPath, browser, spawnedAt);
@@ -282,11 +282,11 @@ export async function handler(
       : {}),
     capabilities,
     hint: args.noBrowser
-      ? "Build-only session (noBrowser: true): no browser will launch, so no runtime will ever attach. extension_wait returns as soon as the first compile lands (compiled: true, browserAttached: false) instead of waiting out its budget; do not wait for a browser. The control verbs (storage/reload/open/dom_inspect/eval) need a live browser and will not work against this session. When you are done, call extension_stop to shut down the dev server."
-      : "Use extension_wait to check when the extension is fully loaded, then extension_source_inspect to inspect the live state. " +
+      ? "Build-only session (noBrowser: true): no browser will launch, so no runtime will ever attach. extension_wait returns as soon as the first compile lands (compiled: true, browserAttached: false) instead of waiting out its budget; do not wait for a browser. The control verbs (storage/reload/open/dom_snapshot/eval) need a live browser and will not work against this session. When you are done, call extension_stop to shut down the dev server."
+      : "Use extension_wait to check when the extension is fully loaded, then extension_inspect to inspect the live state. " +
         (allowControl
           ? `Control channel is ON: extension_${controlVerbs.split(", ").join("/extension_")}${args.allowEval ? "/extension_eval" : ""} will work against this session.`
-          : "Control channel is OFF: extension_storage/reload/open/dom_inspect need allowControl: true, and extension_eval needs allowEval: true (which also implies allowControl). To unlock them, call extension_dev again with the flag you need plus replace: true (it stops this session first); a plain second call is refused so the session does not fork.") +
+          : "Control channel is OFF: extension_storage/reload/open/dom_snapshot need allowControl: true, and extension_eval needs allowEval: true (which also implies allowControl). To unlock them, call extension_dev again with the flag you need plus replace: true (it stops this session first); a plain second call is refused so the session does not fork.") +
         " When you are done, call extension_stop to shut down the dev server and browser.",
     earlyOutput: cleanOutput.slice(0, 500),
     logPath,

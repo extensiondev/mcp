@@ -118,7 +118,7 @@ export async function handler(args: {
             compiled: true,
             browserAttached: false,
             message:
-              "Build-only session (noBrowser): the extension compiled and the dev server is live, but no browser was launched, so browserAttached will never become true. Do not call extension_wait again to wait for a browser. The control verbs (storage/reload/open/dom_inspect/eval) need a live browser and will not work against this session.",
+              "Build-only session (noBrowser): the extension compiled and the dev server is live, but no browser was launched, so browserAttached will never become true. Do not call extension_wait again to wait for a browser. The control verbs (storage/reload/open/dom_snapshot/eval) need a live browser and will not work against this session.",
             command: contract.command,
             browser: contract.browser,
             port: contract.port,

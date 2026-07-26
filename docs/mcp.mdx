@@ -69,7 +69,7 @@ Most tools are **local and need no account.** Only `extension_publish` is gated.
 | `extension_build` / `extension_start` / `extension_preview` | Build / build+launch / preview | n/a |
 | `extension_wait` | Wait for the [`ready.json`](/docs/commands/dev#automation-metadata-recommended-for-scripts-agents) contract | n/a |
 | `extension_logs` | Stream logs from every context ([Agent logs](/docs/ai/logs)) | n/a |
-| `extension_inspect` / `extension_source_inspect` / `extension_dom_inspect` | Analyze build output / read a surface's live DOM ([Inspect and act](/docs/ai/inspect-and-act)) | n/a |
+| `extension_analyze` / `extension_inspect` / `extension_dom_snapshot` | Analyze the built output on disk / deep-inspect a running extension / snapshot a chosen surface ([Inspect and act](/docs/ai/inspect-and-act)) | n/a |
 | `extension_list_extensions` | List extensions with a live context in the dev browser (Chromium) | n/a |
 | `extension_eval` / `extension_storage` / `extension_reload` / `extension_open` | Act on the running extension. `extension_open` surfaces: `popup`/`options`/`sidebar`/`action`/`command` ([Inspect and act](/docs/ai/inspect-and-act#trigger-actions-and-commands)) | session opt-in |
 | `extension_manifest_validate` | Validate the manifest | n/a |

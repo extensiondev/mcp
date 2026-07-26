@@ -56,7 +56,7 @@ export function storeMdWarnings(browsers: string[], cwd: string): string[] {
   return warnings;
 }
 
-export interface DeployToolArgs {
+export interface SubmitToolArgs {
   browsers: string[];
   buildSha: string;
   channel?: string;
@@ -66,9 +66,9 @@ export interface DeployToolArgs {
 }
 
 export const schema = {
-  name: "extension_deploy",
+  name: "extension_submit",
   description:
-    "Submit a built extension to the Chrome Web Store, Firefox AMO, Edge Add-ons, and/or the App Store (Safari) THROUGH extension.dev, which holds your store credentials and dispatches the release from your project's mirror CI. DEFAULTS TO A DRY RUN (preflight - dispatches nothing): the platform side verifies auth, the project, that the build exists, and the store workflow, and this tool then adds the per-store verdict from each store's public credential-health record; trust the per-store rows in the result over the platform's bare preflight line, which does not check store health. Pass dryRun:false to actually submit, which is irreversible and enters store review. The target project is identified by your token (extension_login or a release token in EXTENSION_DEV_TOKEN; tokens live at most 7 days, so CI must re-mint from the console's Access tokens page). Store credentials are never tool arguments and local files are not uploaded. Pass browsers + buildSha (extension_release_list lists valid shas); after a real submission, extension_store_status reads the recorded outcome and review state. Posts to the platform's CLI store-submission endpoint.",
+    "SUBMIT FOR REVIEW: send a built extension to the Chrome Web Store, Firefox AMO, Edge Add-ons, and/or the App Store (Safari) THROUGH extension.dev, which holds your store credentials and dispatches the release from your project's mirror CI. This is the store-review path only. It does NOT push a build to the extension.dev platform and does NOT make a shareable link: that is extension_publish, which is what a request to \"deploy\" or \"ship\" an extension almost always means. Reach for this tool only when the ask is explicitly a store submission. DEFAULTS TO A DRY RUN (preflight - dispatches nothing): the platform side verifies auth, the project, that the build exists, and the store workflow, and this tool then adds the per-store verdict from each store's public credential-health record; trust the per-store rows in the result over the platform's bare preflight line, which does not check store health. Pass dryRun:false to actually submit, which is irreversible and enters store review. The target project is identified by your token (extension_login or a release token in EXTENSION_DEV_TOKEN; tokens live at most 7 days, so CI must re-mint from the console's Access tokens page). Store credentials are never tool arguments and local files are not uploaded. Pass browsers + buildSha (extension_release_list lists valid shas); after a real submission, extension_store_status reads the recorded outcome and review state. Posts to the platform's CLI store-submission endpoint.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -113,11 +113,11 @@ function fail(name: string, message: string): string {
   return JSON.stringify({ ok: false, error: { name, message } });
 }
 
-export async function handler(args: DeployToolArgs): Promise<string> {
+export async function handler(args: SubmitToolArgs): Promise<string> {
   const token = resolveToken();
   if (!token) {
     return fail(
-      "DeployAuthError",
+      "SubmitAuthError",
       "No token. Run extension_login, or set EXTENSION_DEV_TOKEN (create one in the extension.dev dashboard under project settings -> Access tokens; tokens live at most 7 days, so CI must re-mint before expiry).",
     );
   }
@@ -127,21 +127,21 @@ export async function handler(args: DeployToolArgs): Promise<string> {
     .filter(Boolean);
   if (browsers.length === 0) {
     return fail(
-      "DeployInputError",
+      "SubmitInputError",
       'browsers is required (e.g. ["chrome","firefox","edge","safari"]).',
     );
   }
   const buildSha = String(args.buildSha || "").trim();
   if (!buildSha) {
     return fail(
-      "DeployInputError",
+      "SubmitInputError",
       "buildSha is required (the built commit to submit).",
     );
   }
 
   const apiCheck = safeApiBase(resolveApiBase(args.api));
   if (!apiCheck.ok) {
-    return fail("DeployConfigError", apiCheck.message);
+    return fail("SubmitConfigError", apiCheck.message);
   }
   const url = `${apiCheck.base}/api/cli/stores/submit`;
 
@@ -162,7 +162,7 @@ export async function handler(args: DeployToolArgs): Promise<string> {
     });
   } catch (err: any) {
     return fail(
-      "DeployNetworkError",
+      "SubmitNetworkError",
       `Could not reach ${url}: ${err?.message || err}`,
     );
   }
@@ -177,7 +177,7 @@ export async function handler(args: DeployToolArgs): Promise<string> {
 
   if (!res.ok) {
     return fail(
-      "DeployError",
+      "SubmitError",
       `${dryRun ? "preflight" : "submit"} failed (${res.status}): ${data?.message || text || "unknown error"}`,
     );
   }

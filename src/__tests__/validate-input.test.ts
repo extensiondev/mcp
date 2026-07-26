@@ -8,7 +8,7 @@ import { schema as manifestValidateSchema } from "../tools/manifest-validate";
 import { schema as createSchema } from "../tools/create";
 import { schema as devSchema } from "../tools/dev";
 import { schema as logsSchema } from "../tools/logs";
-import { schema as deploySchema } from "../tools/deploy";
+import { schema as submitSchema } from "../tools/submit";
 import { schema as releasePromoteSchema } from "../tools/release-promote";
 
 describe("validateToolInput", () => {
@@ -101,14 +101,14 @@ describe("normalizeArgAliases", () => {
 });
 
 describe("buildSha/buildId cross-aliases", () => {
-  it("deploy folds buildId onto buildSha and validates clean", () => {
-    const out = normalizeArgAliases(deploySchema.inputSchema, {
+  it("submit folds buildId onto buildSha and validates clean", () => {
+    const out = normalizeArgAliases(submitSchema.inputSchema, {
       browsers: ["chrome"],
       buildId: "abc1234",
     });
     expect(out.buildSha).toBe("abc1234");
     expect(out.buildId).toBeUndefined();
-    expect(validateToolInput(deploySchema.inputSchema, out)).toEqual([]);
+    expect(validateToolInput(submitSchema.inputSchema, out)).toEqual([]);
   });
 
   it("promote folds buildSha onto buildId and validates clean", () => {
@@ -124,11 +124,11 @@ describe("buildSha/buildId cross-aliases", () => {
   });
 
   it("keeps each tool's canonical spelling authoritative", () => {
-    const deployOut = normalizeArgAliases(deploySchema.inputSchema, {
+    const submitOut = normalizeArgAliases(submitSchema.inputSchema, {
       buildSha: "keep111",
       buildId: "ignore2",
     });
-    expect(deployOut.buildSha).toBe("keep111");
+    expect(submitOut.buildSha).toBe("keep111");
     const promoteOut = normalizeArgAliases(releasePromoteSchema.inputSchema, {
       buildId: "keep111",
       buildSha: "ignore2",
@@ -137,15 +137,15 @@ describe("buildSha/buildId cross-aliases", () => {
   });
 
   it("lists the cross-alias in each tool's full-schema validation error", () => {
-    const deployErr = JSON.parse(
+    const submitErr = JSON.parse(
       inputValidationError(
-        "extension_deploy",
+        "extension_submit",
         [{ path: "buildSha", message: "required argument is missing" }],
-        deploySchema.inputSchema,
+        submitSchema.inputSchema,
       ),
     );
-    expect(deployErr.error.args.aliases.buildSha).toEqual(["buildId"]);
-    expect(deployErr.error.args.aliases.buildId).toBeUndefined();
+    expect(submitErr.error.args.aliases.buildSha).toEqual(["buildId"]);
+    expect(submitErr.error.args.aliases.buildId).toBeUndefined();
 
     const promoteErr = JSON.parse(
       inputValidationError(

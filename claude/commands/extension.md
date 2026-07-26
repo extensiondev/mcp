@@ -42,7 +42,7 @@ Parse the user's intent from `$ARGUMENTS` and execute the matching action:
 
 ### "debug" or "inspect", Debug a running extension
 
-1. If MCP tool `extension_source_inspect` is available, use it with `include: ["html", "console", "extension_roots"]`
+1. If MCP tool `extension_inspect` is available, use it with `include: ["html", "console", "extension_roots"]`
 2. If there's a URL mentioned, pass it as the target
 3. If there are CSS selectors mentioned, pass them as `probe`
 4. Report: injected HTML, console errors, extension root state

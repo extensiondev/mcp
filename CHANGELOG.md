@@ -1,5 +1,54 @@
 # Changelog
 
+## 8.0.0
+
+Four tools are renamed. Every rename fixes a name that made agents pick the
+wrong tool, and one of them could cost you a store submission you did not ask
+for. No behavior changes, no argument changes.
+
+### Migration
+
+| Old name | New name |
+| --- | --- |
+| `extension_deploy` | `extension_submit` |
+| `extension_inspect` | `extension_analyze` |
+| `extension_source_inspect` | `extension_inspect` |
+| `extension_dom_inspect` | `extension_dom_snapshot` |
+
+`extension_publish` is unchanged.
+
+### Renamed
+
+- **`extension_deploy` is now `extension_submit`.** The pair was inverted
+  against every other developer tool: `extension_publish` pushes a build to the
+  extension.dev platform, while `extension_deploy` submitted to the Chrome Web
+  Store, Firefox AMO, Edge Add-ons and the App Store. An agent told to "deploy
+  my extension" reached for the store tool, and picking wrong there means an
+  unintended store submission, which is irreversible. "Submit" is the stores'
+  own word for it ("submit for review"), so the name now says what happens.
+  `extension_publish` keeps its name and its job. The error names in the
+  response follow: `DeployAuthError`, `DeployInputError`, `DeployConfigError`,
+  `DeployNetworkError` and `DeployError` are now `SubmitAuthError`,
+  `SubmitInputError`, `SubmitConfigError`, `SubmitNetworkError` and
+  `SubmitError`.
+- **Three tools were called inspect; now one is.** `extension_inspect` read a
+  built extension's files off disk, `extension_source_inspect` read a running
+  extension's live state, and `extension_dom_inspect` snapshotted one surface's
+  DOM. The name that reads as the primary one belonged to the static file
+  reader, which is the least of the three. Static analysis is now
+  `extension_analyze`, and the live-state tool takes `extension_inspect`.
+- **`extension_dom_inspect` is now `extension_dom_snapshot`.** It is not a
+  duplicate of the live-state tool and it survives the rename with its
+  capabilities intact, but sharing the word "inspect" was most of why the two
+  were confusable. The descriptions now state the split outright:
+  `extension_dom_snapshot` is the surface picker (it is the only tool that
+  reads an OPEN extension surface by name, the only one that takes a numeric
+  `chrome.tabs` id, and the only one that enumerates what is open) and it
+  returns a shallow snapshot over the CDP-free agent bridge, which needs
+  `allowControl: true`. `extension_inspect` is the deep reader (it is the only
+  tool that pierces CLOSED shadow roots, runs CSS selector probes, and
+  navigates a tab before reading it) and it rides the debugger protocol.
+
 ## 7.0.0
 
 `preview.extension.dev` is the only web door this package knows about. The

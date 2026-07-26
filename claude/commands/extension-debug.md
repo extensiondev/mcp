@@ -13,7 +13,7 @@ Debug the currently running extension dev session. The user said: $ARGUMENTS
    - If no session: tell the user to start one with `/extension dev` or `npm run dev`
 
 2. **Inspect the live state**
-   If MCP tool `extension_source_inspect` is available:
+   If MCP tool `extension_inspect` is available:
    - Pass `include: ["html", "summary", "meta", "console", "extension_roots"]`
    - If the user provided a URL in `$ARGUMENTS`, pass it as `url`
    - If the user provided CSS selectors (strings starting with `#`, `.`, or `[`), pass them as `probe`

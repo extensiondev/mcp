@@ -46,7 +46,7 @@ vi.mock("../lib/session-browser", async (importOriginal) => {
 });
 
 const open = await import("../tools/open");
-const sourceInspect = await import("../tools/source-inspect");
+const inspectTool = await import("../tools/inspect");
 
 const isEval = (cli: string[]) => cli[0] === "eval";
 const isListTabs = (cli: string[]) => cli.includes("--list-tabs");
@@ -139,7 +139,7 @@ describe("extension_open url on Gecko (bridge navigation)", () => {
   });
 });
 
-describe("extension_source_inspect on Gecko (bridge inspection)", () => {
+describe("extension_inspect on Gecko (bridge inspection)", () => {
   const pageValue = {
     meta: { url: "https://example.com/", title: "Example", readyState: "complete" },
     summary: { htmlLength: 120, scriptCount: 1, styleCount: 0, linkCount: 0, extensionRootCount: 1, bodyChildCount: 2 },
@@ -159,7 +159,7 @@ describe("extension_source_inspect on Gecko (bridge inspection)", () => {
     };
 
     const result = JSON.parse(
-      await sourceInspect.handler({
+      await inspectTool.handler({
         projectPath: "/p",
         browser: "firefox",
         url: "https://example.com/",
@@ -198,7 +198,7 @@ describe("extension_source_inspect on Gecko (bridge inspection)", () => {
     };
 
     const result = JSON.parse(
-      await sourceInspect.handler({
+      await inspectTool.handler({
         projectPath: "/p",
         browser: "firefox",
         url: "https://example.com/",
@@ -231,7 +231,7 @@ describe("extension_source_inspect on Gecko (bridge inspection)", () => {
     };
 
     const result = JSON.parse(
-      await sourceInspect.handler({
+      await inspectTool.handler({
         projectPath: "/p",
         browser: "firefox",
         url: "https://example.com/",
@@ -268,7 +268,7 @@ describe("extension_source_inspect on Gecko (bridge inspection)", () => {
     };
 
     const result = JSON.parse(
-      await sourceInspect.handler({
+      await inspectTool.handler({
         projectPath: "/p",
         browser: "firefox",
         url: "https://example.com/",
@@ -295,7 +295,7 @@ describe("extension_source_inspect on Gecko (bridge inspection)", () => {
         : JSON.stringify({ ok: true });
 
     const result = JSON.parse(
-      await sourceInspect.handler({
+      await inspectTool.handler({
         projectPath: "/p",
         browser: "firefox",
         include: ["summary", "console"],
@@ -327,7 +327,7 @@ describe("extension_source_inspect on Gecko (bridge inspection)", () => {
     };
 
     const result = JSON.parse(
-      await sourceInspect.handler({
+      await inspectTool.handler({
         projectPath: "/p",
         browser: "firefox",
         include: ["summary"],
@@ -360,7 +360,7 @@ describe("extension_source_inspect on Gecko (bridge inspection)", () => {
     };
 
     const result = JSON.parse(
-      await sourceInspect.handler({
+      await inspectTool.handler({
         projectPath: "/p",
         browser: "firefox",
         include: ["summary"],
@@ -397,7 +397,7 @@ describe("extension_source_inspect on Gecko (bridge inspection)", () => {
     };
 
     const result = JSON.parse(
-      await sourceInspect.handler({
+      await inspectTool.handler({
         projectPath: "/p",
         browser: "firefox",
         url: "https://example.com/",
@@ -431,7 +431,7 @@ describe("extension_source_inspect on Gecko (bridge inspection)", () => {
     };
 
     const result = JSON.parse(
-      await sourceInspect.handler({
+      await inspectTool.handler({
         projectPath: "/p",
         browser: "firefox",
         include: ["summary"],
@@ -457,7 +457,7 @@ describe("extension_source_inspect on Gecko (bridge inspection)", () => {
         : JSON.stringify({ ok: true });
 
     const result = JSON.parse(
-      await sourceInspect.handler({
+      await inspectTool.handler({
         projectPath: "/p",
         browser: "firefox",
         probe: ["typeof chrome.tts"],
@@ -479,7 +479,7 @@ describe("extension_source_inspect on Gecko (bridge inspection)", () => {
         : JSON.stringify({ ok: true });
 
     const result = JSON.parse(
-      await sourceInspect.handler({
+      await inspectTool.handler({
         projectPath: "/p",
         browser: "firefox",
         include: ["summary"],
