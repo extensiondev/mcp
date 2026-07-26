@@ -11,6 +11,7 @@ import path from "node:path";
 
 import { resolveToken } from "./publish";
 import { resolveApiBase, safeApiBase } from "./login-flow";
+import { identityHeaders } from "./session-identity";
 
 type FetchImpl = typeof fetch;
 
@@ -161,6 +162,7 @@ export async function uploadPreview(options: {
       headers: {
         authorization: `Bearer ${token}`,
         "content-type": "application/json",
+        ...identityHeaders("extension_preview_web"),
       },
       body: JSON.stringify({
         kind: "dist",

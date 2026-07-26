@@ -45,6 +45,66 @@ exactly as before.
 8.0.0 separated them because agents confused them; folding them behind an
 `action` parameter would hide that ambiguity rather than remove it.
 
+### Upgrading from 7.0.0
+
+Most installs are still on 7.0.0 and two majors have landed on top of it. Do
+both in one pass: apply the 8.0.0 renames, then the 9.0.0 merges above. 7.0.0
+advertised 36 tools; 9.0.0 advertises 28, and every capability survived.
+
+| 7.0.0 call | 9.0.0 call | Landed in |
+| --- | --- | --- |
+| `extension_deploy(...)` | `extension_submit(...)` | 8.0.0 |
+| `extension_inspect({ projectPath })` | `extension_analyze({ projectPath })` | 8.0.0 |
+| `extension_source_inspect(...)` | `extension_inspect(...)` | 8.0.0 |
+| `extension_dom_inspect(...)` | `extension_dom_snapshot(...)` | 8.0.0 |
+| `extension_detect_browsers({ browsers })` | `extension_browsers({ action: "detect", browsers })` | 9.0.0 |
+| `extension_list_browsers()` | `extension_browsers({ action: "list" })` | 9.0.0 |
+| `extension_install_browser({ browser })` | `extension_browsers({ action: "install", browser })` | 9.0.0 |
+| `extension_uninstall_browser({ browser, all })` | `extension_browsers({ action: "uninstall", browser, all })` | 9.0.0 |
+| `extension_login({ project, deviceCode, api })` | `extension_auth({ action: "login", project, deviceCode, api })` | 9.0.0 |
+| `extension_whoami()` | `extension_auth({ action: "status" })` | 9.0.0 |
+| `extension_logout()` | `extension_auth({ action: "logout" })` | 9.0.0 |
+| `extension_list_templates({ surface, framework, tags, featured, query })` | `extension_templates({ action: "list", surface, framework, tags, featured, query })` | 9.0.0 |
+| `extension_get_template_source({ slug, files })` | `extension_templates({ action: "source", slug, files })` | 9.0.0 |
+| `extension_release_list({ workspace, project, api })` | `extension_release_status({ include: ["releases"], workspace, project, api })` | 9.0.0 |
+| `extension_store_status({ workspace, project, api })` | `extension_release_status({ include: ["stores"], workspace, project, api })` | 9.0.0 |
+| `extension_preview({ projectPath, browser, port, noBrowser, ...launch })` | `extension_start({ projectPath, build: false, browser, port, noBrowser, ...launch })` | 9.0.0 |
+
+Read the `extension_inspect` row before any of the others. That name exists in
+both versions and does not mean the same thing in each. In 7.0.0 it read a
+BUILT extension's files off disk. In 9.0.0 it reads a RUNNING extension over
+the browser's debugger protocol and needs a live `extension_dev` or
+`extension_start` session. A 7.0.0 call left alone does not fail with an
+unknown-tool error, it silently reaches the wrong tool and reports no dev
+session instead of the file sizes you asked for. The disk reader is
+`extension_analyze` now. Every call that passed a bare `projectPath` and
+expected sizes, permissions and store-readiness back has to move.
+
+`extension_deploy` carried its error names with it into `extension_submit`:
+`DeployAuthError`, `DeployInputError`, `DeployConfigError`,
+`DeployNetworkError` and `DeployError` are now `SubmitAuthError`,
+`SubmitInputError`, `SubmitConfigError`, `SubmitNetworkError` and
+`SubmitError`. Anything branching on those strings has to move with them.
+
+Every argument keeps its name and its meaning across both majors, with two
+exceptions:
+
+- `extension_release_status` nests what the two 7.0.0 tools returned flat,
+  under `releases` and `stores`. The bodies inside are byte-for-byte the old
+  ones. Omitting `include` returns both sections.
+- `extension_start` gained `build`, defaulting to `true`. `build: false` is
+  what `extension_preview` was.
+
+Nothing else moved. `extension_publish`, `extension_preview_web`,
+`extension_shares`, `extension_release_promote`, `extension_dev`,
+`extension_build`, `extension_create`, `extension_add_feature`,
+`extension_wait`, `extension_stop`, `extension_logs`, `extension_eval`,
+`extension_storage`, `extension_reload`, `extension_open`,
+`extension_list_extensions`, `extension_manifest_validate`,
+`extension_theme_verify` and `extension_doctor` are unchanged in name and in
+arguments, and the CLI (`extension-mcp login|logout|whoami|release`) never
+moved at all.
+
 ### Merged
 
 - **Four browser tools are one.** `extension_browsers` detects, lists,

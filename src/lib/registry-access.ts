@@ -8,6 +8,7 @@
 
 import { readCredentials } from "./credentials";
 import { resolveApiBase, safeApiBase } from "./login-flow";
+import { identityHeaders } from "./session-identity";
 
 import type { ProjectRef } from "./registry";
 
@@ -103,6 +104,7 @@ export class RegistryAccessTokens {
         headers: {
           authorization: `Bearer ${token}`,
           "content-type": "application/json",
+          ...identityHeaders("extension_registry_access"),
         },
         body: JSON.stringify({
           workspaceSlug: ref.workspace,

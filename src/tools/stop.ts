@@ -24,7 +24,7 @@ import { removeCarrier } from "../lib/carrier";
 export const schema = {
   name: "extension_stop",
   description:
-    "Stop a running dev, start, or preview session: terminates the dev server and the browser it launched, and removes the live-preview carrier if extension_dev placed one. Counterpart to extension_dev/extension_start. Call it when you are done verifying so sessions do not accumulate.",
+    "Stop a session that extension_dev or extension_start is running: terminates the server and the browser it launched, and removes the live-preview carrier if extension_dev placed one. Covers extension_start build:false too, which the registry still records as a preview session. Call it when you are done verifying so sessions do not accumulate.",
   inputSchema: {
     type: "object" as const,
     properties: {
