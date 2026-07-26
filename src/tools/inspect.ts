@@ -6,6 +6,10 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
+import {
+  SESSION_BROWSER,
+  SESSION_PROJECT_PATH,
+} from "../lib/common-schema";
 import { CDPClient } from "../lib/cdp";
 import { isChromiumFamily } from "../lib/browser-family";
 import { resolveCdpPort, CDP_PORT_MISSING_HINT } from "../lib/cdp-port";
@@ -15,25 +19,21 @@ import { inspectViaBridge } from "./inspect-gecko";
 export const schema = {
   name: "extension_inspect",
   description:
-    "DEEP inspection of a RUNNING extension's live state over the browser's debugger protocol: full HTML including shadow DOM, DOM structure, content-script injection, console messages, and CSS selector queries (`probe`). The ONLY tool that pierces CLOSED shadow roots (`deepDom`), runs selector probes, and NAVIGATES a tab to `url` before reading it. It reads a web/override page target and picks the first inspectable one (or the first whose url contains `url`); it cannot address an extension surface by name and takes no chrome.tabs id. To choose WHICH tab or which OPEN extension surface (popup/options/sidebar/devtools) to read, or to enumerate what is open, use extension_dom_snapshot instead. For a built extension's files and sizes on disk use extension_analyze. Chromium sessions ride Chrome DevTools Protocol (needs the session's debug port, not allowControl). Firefox sessions are fully paired: summary/meta/html/dom_snapshot/extension_roots/probes ride the agent bridge (needs allowEval: true), console rides the RDP watcher replay (engine 4.0.15+), and deepDom walks closed shadow roots via a content-script eval (MV2 sessions with host permissions for the target url; Firefox MV3 background CSP blocks bridge evals entirely). Requires an active dev or start session.",
+    "DEEP inspection of a RUNNING extension over the browser's debugger protocol: full HTML including shadow DOM, DOM structure, content-script injection, console messages, and CSS selector queries (`probe`). The ONLY tool that pierces CLOSED shadow roots (`deepDom`), runs selector probes, and NAVIGATES a tab to `url` before reading it. It reads a web or override page and picks the first inspectable target (or the first whose url contains `url`); it cannot address an extension surface by name and takes no chrome.tabs id. To choose WHICH tab or which OPEN surface (popup/options/sidebar/devtools) to read, or to enumerate what is open, use extension_dom_snapshot. For a built extension's files and sizes on disk use extension_analyze. Chromium rides Chrome DevTools Protocol (needs the session's debug port, not allowControl). Firefox is fully paired: summary/meta/html/dom_snapshot/extension_roots/probes ride the agent bridge (needs allowEval: true), console rides the RDP watcher replay (engine 4.0.15+), and deepDom needs an MV2 session with host permissions for the target url (Firefox MV3 background CSP blocks bridge evals). Requires an active dev or start session.",
   inputSchema: {
     type: "object" as const,
     properties: {
-      projectPath: {
-        type: "string",
-        description:
-          "Path to the extension project root (must have an active dev session)",
-      },
+      projectPath: SESSION_PROJECT_PATH,
       url: {
         type: "string",
         description:
-          "URL to inspect (navigates the browser tab to this URL first)",
+          "URL to inspect; the tab is navigated there first",
       },
       probe: {
         type: "array",
         items: { type: "string" },
         description:
-          "CSS selectors to query, returns element counts and samples for each",
+          "CSS selectors to query; returns counts and samples for each",
       },
       include: {
         type: "array",
@@ -49,13 +49,9 @@ export const schema = {
           ],
         },
         default: ["summary", "meta", "console"],
-        description: "What data to include in the response",
+        description: "What to include",
       },
-      browser: {
-        type: "string",
-        description:
-          "Browser session to target. Defaults to the active dev session's browser for this project.",
-      },
+      browser: SESSION_BROWSER,
       maxBytes: {
         type: "number",
         default: 262144,
@@ -65,7 +61,7 @@ export const schema = {
         type: "boolean",
         default: false,
         description:
-          "Pierce CLOSED shadow roots. The default path reads open shadow roots; closed ones need this escape hatch. Chromium: CDP DOM pierce. Firefox: a content-script walk via tabs.executeScript (MV2 sessions; the extension needs host permissions for the target url).",
+          "Pierce CLOSED shadow roots; open ones are read anyway. Chromium: CDP DOM pierce. Firefox: a content-script walk via tabs.executeScript (MV2 only, needs host permissions for the target url).",
       },
     },
     required: ["projectPath"],

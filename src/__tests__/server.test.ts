@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 
 import { tools as ALL_TOOLS } from "../index";
-import * as listBrowsers from "../tools/list-browsers";
+import * as browsers from "../tools/browsers";
 
 import * as manifestValidate from "../tools/manifest-validate";
 import * as analyze from "../tools/analyze";
@@ -20,8 +20,8 @@ vi.mock("../lib/cdp-port", async (importOriginal) => ({
 }));
 
 describe("MCP Server tool registry", () => {
-  it("has exactly 36 tools", () => {
-    expect(ALL_TOOLS.length).toBe(36);
+  it("has exactly 28 tools", () => {
+    expect(ALL_TOOLS.length).toBe(28);
   });
 
   for (const tool of ALL_TOOLS) {
@@ -66,9 +66,9 @@ describe("Tool schema validation", () => {
   });
 });
 
-describe("list-browsers handler", () => {
+describe("extension_browsers list action", () => {
   it("returns valid JSON with expected fields", async () => {
-    const result = await listBrowsers.handler();
+    const result = await browsers.handler({ action: "list" });
     const parsed = JSON.parse(result);
     expect(typeof parsed.cacheRoot).toBe("string");
     expect(typeof parsed.cacheExists).toBe("boolean");

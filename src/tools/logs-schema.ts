@@ -6,6 +6,7 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
+import { SESSION_PROJECT_PATH } from "../lib/common-schema";
 import {
   DEFAULT_LIMIT,
   DEFAULT_FOLLOW_MS,
@@ -20,22 +21,18 @@ export const schema = {
   inputSchema: {
     type: "object" as const,
     properties: {
-      projectPath: {
-        type: "string",
-        description:
-          "Path to the extension project root (must have an active dev session)",
-      },
+      projectPath: SESSION_PROJECT_PATH,
       browser: {
         type: "string",
         description:
-          "Which dist/extension-js/<browser>/ to read. Defaults to the active dev session's browser for this project (falls back to chromium).",
+          "Which dist/extension-js/<browser>/ to read. Defaults to this project's live session, else chromium.",
       },
       level: {
         type: "string",
         enum: ["off", "error", "warn", "info", "debug", "trace", "all"],
         default: "all",
         description:
-          "Minimum severity to include; selecting a level includes it plus everything more severe.",
+          "Minimum severity; a level includes everything more severe.",
       },
       context: {
         type: "array",
@@ -57,17 +54,17 @@ export const schema = {
         type: "boolean",
         default: false,
         description:
-          "Only structured dx.signal diagnostics (which carry code/status/remediation), skipping plain console lines.",
+          "Only structured dx.signal diagnostics (code/status/remediation), no plain console lines.",
       },
       since: {
         type: "number",
         description:
-          "Only return events with seq greater than this (cursor for polling forward).",
+          "Only events with seq greater than this; the cursor for polling forward.",
       },
       url: {
         type: "string",
         description:
-          "Only events whose url/hostname matches (glob with * or plain substring), e.g. https://shop.example/*.",
+          "Only events whose url/hostname matches (glob or substring), e.g. https://shop.example/*.",
       },
       tab: {
         type: "number",
@@ -77,7 +74,7 @@ export const schema = {
         type: "boolean",
         default: false,
         description:
-          "Collect from the live control channel for a bounded window instead of reading the file. Use with followMs.",
+          "Collect from the live control channel for a bounded window instead of reading the file.",
       },
       followMs: {
         type: "number",
@@ -87,7 +84,7 @@ export const schema = {
       limit: {
         type: "number",
         default: DEFAULT_LIMIT,
-        description: "Maximum number of (most recent) events to return.",
+        description: "How many of the most recent events to return.",
       },
     },
     required: ["projectPath"],

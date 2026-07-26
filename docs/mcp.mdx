@@ -63,17 +63,17 @@ Most tools are **local and need no account.** Only `extension_publish` is gated.
 | Tool | What it does | Auth |
 | --- | --- | --- |
 | `extension_create` | Scaffold from a template | n/a |
-| `extension_list_templates` / `extension_get_template_source` | Browse the catalog / read a template's source | n/a |
+| `extension_templates` | Browse the catalog (`list`) and read a template's source (`source`) | n/a |
 | `extension_add_feature` | Add a feature to an existing project | n/a |
 | `extension_dev` | Start a dev session (HMR, browser launch) | n/a |
-| `extension_build` / `extension_start` / `extension_preview` | Build / build+launch / preview | n/a |
+| `extension_build` / `extension_start` | Build / build+launch (`build: false` launches an existing dist) | n/a |
 | `extension_wait` | Wait for the [`ready.json`](/docs/commands/dev#automation-metadata-recommended-for-scripts-agents) contract | n/a |
 | `extension_logs` | Stream logs from every context ([Agent logs](/docs/ai/logs)) | n/a |
 | `extension_analyze` / `extension_inspect` / `extension_dom_snapshot` | Analyze the built output on disk / deep-inspect a running extension / snapshot a chosen surface ([Inspect and act](/docs/ai/inspect-and-act)) | n/a |
 | `extension_list_extensions` | List extensions with a live context in the dev browser (Chromium) | n/a |
 | `extension_eval` / `extension_storage` / `extension_reload` / `extension_open` | Act on the running extension. `extension_open` surfaces: `popup`/`options`/`sidebar`/`action`/`command` ([Inspect and act](/docs/ai/inspect-and-act#trigger-actions-and-commands)) | session opt-in |
 | `extension_manifest_validate` | Validate the manifest | n/a |
-| `extension_detect_browsers` / `extension_list_browsers` / `extension_install_browser` | Manage browsers for dev/preview | n/a |
+| `extension_browsers` | Detect, list, install, and uninstall browsers | n/a |
 | `extension_publish` | Publish to extension.dev and return a shareable URL ([`publish`](/docs/ai/publish)) | **token required** |
 
 ## A typical session

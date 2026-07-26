@@ -95,7 +95,7 @@ function authError(name: string): ArtifactsOutcome<never> {
     error: {
       name,
       message:
-        "No token. Run extension_login, or set EXTENSION_DEV_TOKEN (create one in the extension.dev dashboard).",
+        "No token. Run extension_auth (action: login), or set EXTENSION_DEV_TOKEN (create one in the extension.dev dashboard).",
     },
   };
 }

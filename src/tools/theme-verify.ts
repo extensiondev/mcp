@@ -22,7 +22,7 @@ import {
 export const schema = {
   name: "extension_theme_verify",
   description:
-    "Verify a Chrome theme manifest before it ships. Settles the four-leg WYSIWYG contract (app-shows == manifest-says == chrome-paints, plus chrome-accepts) as far as is possible headless: it derives every color current Chrome would paint from the manifest (the transcribed Chromium resolver) and reports the divergence class of any problem - D1 fabrication, D3 parity gap, D4 acceptance gap (keys Chrome silently discards: dead legacy keys, incognito keys, unknown keys, out-of-range values). Verification is the product; this verb does not author or mutate a theme. The app-rendered leg [1] and the real-pixel paint leg [3] need a browser and are returned as needsAttended with a pointer to the assert:theme and install-parity harnesses, never reported as passed.",
+    "Verify a Chrome theme manifest before it ships. Settles the four-leg WYSIWYG contract (app-shows == manifest-says == chrome-paints, plus chrome-accepts) as far as is possible headless: it derives every color current Chrome would paint from the manifest (the transcribed Chromium resolver) and classifies any problem as D1 fabrication, D3 parity gap, or D4 acceptance gap (keys Chrome silently discards: dead legacy, incognito, unknown, out-of-range). Verification only: it never authors or mutates a theme. The app-rendered and real-pixel legs need a browser and come back as needsAttended pointing at the assert:theme and install-parity harnesses, never as passed.",
   inputSchema: {
     type: "object" as const,
     properties: {

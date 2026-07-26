@@ -10,7 +10,7 @@ export const LAUNCH_FLAG_SCHEMA = {
   profile: {
     type: "string",
     description:
-      'Browser profile path, or "false" to reuse the default user profile. Omit for a fresh throwaway profile.',
+      'Profile path, or "false" to reuse the real user profile. Omit for a throwaway one.',
   },
   startingUrl: {
     type: "string",
@@ -18,27 +18,27 @@ export const LAUNCH_FLAG_SCHEMA = {
   },
   chromiumBinary: {
     type: "string",
-    description: "Path to a custom Chromium-based binary (overrides browser)",
+    description: "Custom Chromium-based binary (overrides browser)",
   },
   geckoBinary: {
     type: "string",
-    description: "Path to a custom Gecko/Firefox binary (overrides browser)",
+    description: "Custom Gecko/Firefox binary (overrides browser)",
   },
   host: {
     type: "string",
     description:
-      "Dev server bind host. Use 0.0.0.0 for Docker or devcontainers. Defaults to 127.0.0.1",
+      "Bind host, default 127.0.0.1. Use 0.0.0.0 in Docker or devcontainers.",
   },
   publicHost: {
     type: "string",
     description:
-      "Connectable host the browser dials for HMR and reload when it differs from the bind host",
+      "Host the browser dials for HMR and reload when it differs from the bind host",
   },
   extensions: {
     type: "array",
     items: { type: "string" },
     description:
-      "Companion extension paths or store URLs to load alongside the project",
+      "Extra extension paths or store URLs to load alongside the project",
   },
 } as const;
 

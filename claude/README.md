@@ -62,7 +62,7 @@ Claude Code will automatically pick up the instructions and know how to:
 The [examples repo](https://github.com/extension-js/examples) publishes `templates-meta.json` as a nightly release asset. This file is the single source of truth for:
 
 - **CLAUDE.md**, references it so Claude knows all available templates
-- **MCP tools**, `extension_list_templates` fetches and queries it at runtime
+- **MCP tools**, `extension_templates` fetches and queries it at runtime
 - **`extension create`**, resolves template slugs to repo URLs via the same naming convention
 
 When a new template is added to the examples repo, all three layers pick it up automatically.

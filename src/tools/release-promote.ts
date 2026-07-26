@@ -6,6 +6,7 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
+import { API_BASE } from "../lib/common-schema";
 import { resolveToken } from "../lib/publish";
 import { resolveApiBase, safeApiBase } from "../lib/login-flow";
 import { UserlandProjectPage } from "@extension.dev/urls/userland";
@@ -22,7 +23,7 @@ import {
 export const schema = {
   name: "extension_release_promote",
   description:
-    "Promote a built extension to a release channel (e.g. stable, preview, beta) on extension.dev, headless. Auth-gated: uses your stored login (extension_login) or a release token in EXTENSION_DEV_TOKEN (mint and revoke it in the dashboard under project settings -> Access tokens; tokens live at most 7 days, so CI must re-mint before expiry). Posts to the platform's CLI release endpoint; the project is identified by the token. Cutting a version-bump PR is not available headlessly (it writes to your source repo and needs an interactive login).",
+    "Promote a built extension to a release channel (stable, preview, beta, ...) on extension.dev, headless. This WRITES: it is the only verb that changes what a channel points at. Auth-gated by your stored login (extension_auth) or a release token in EXTENSION_DEV_TOKEN, minted and revoked under project settings -> Access tokens; tokens live at most 7 days, so CI must re-mint before expiry. The project comes from the token. Use extension_release_status to find a valid buildId. Cutting a version-bump PR is not available headlessly (it writes to your source repo and needs an interactive login).",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -52,11 +53,7 @@ export const schema = {
         type: "string",
         description: "Release notes markdown (optional)",
       },
-      api: {
-        type: "string",
-        description:
-          "Platform base URL (defaults to https://www.extension.dev or EXTENSION_DEV_API_URL)",
-      },
+      api: API_BASE,
     },
     required: ["buildId", "channel"],
   },
@@ -79,7 +76,7 @@ export async function handler(args: {
   if (!token) {
     return fail(
       "ReleaseAuthError",
-      "No token. Set EXTENSION_DEV_TOKEN to a release token (create one in the extension.dev dashboard under project settings -> Access tokens; tokens live at most 7 days, so CI must re-mint before expiry), or run extension_login.",
+      "No token. Set EXTENSION_DEV_TOKEN to a release token (create one in the extension.dev dashboard under project settings -> Access tokens; tokens live at most 7 days, so CI must re-mint before expiry), or run extension_auth (action: login).",
     );
   }
 
@@ -136,7 +133,7 @@ export async function handler(args: {
     if (res.status === 404 || code === "UNKNOWN_BUILD") {
       enrich.buildsPageUrl = consoleProjectUrl(ref, "builds", args.api);
       enrich.hint =
-        "Run extension_release_list to see this project's channels, their promoted shas, and recent builds.";
+        "Run extension_release_status to see this project's channels, their promoted shas, and recent builds.";
       if (ref) {
         const channelsUrl = registryFileUrl(ref, "channels.json");
         const channelsRes = await fetchRegistryJson(channelsUrl, fetch, {

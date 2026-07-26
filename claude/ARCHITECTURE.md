@@ -88,7 +88,7 @@ Claude now knows:
 **Role in ecosystem:** Programmatic bridge between Claude and the extension.dev platform, sourced from the examples repo.
 
 ```
-Claude (via MCP) calls extension_list_templates({ surface: "sidebar", tags: ["ai"] })
+Claude (via MCP) calls extension_templates({ surface: "sidebar", tags: ["ai"] })
   │
   ▼
 MCP server fetches templates-meta.json (cached, 1hr TTL)
@@ -97,7 +97,7 @@ MCP server fetches templates-meta.json (cached, 1hr TTL)
 Returns: [{ slug: "sidebar-claude", ... }, { slug: "sidebar-transformers-js", ... }]
   │
   ▼
-Claude calls extension_get_template_source({ slug: "sidebar-claude", files: ["src/manifest.json", "src/lib/claude.ts"] })
+Claude calls extension_templates({ action: "source", slug: "sidebar-claude", files: ["src/manifest.json", "src/lib/claude.ts"] })
   │
   ▼
 MCP server fetches from https://raw.githubusercontent.com/extension-js/examples/main/examples/sidebar-claude/<file>
@@ -114,8 +114,8 @@ MCP server calls extensionCreate() → same go-git-it flow as CLI
 
 **How it integrates with the examples repo:**
 
-- `extension_list_templates` → reads `templates-meta.json` release asset
-- `extension_get_template_source` → reads raw files from the examples repo
+- `extension_templates` (`list`) → reads `templates-meta.json` release asset
+- `extension_templates` (`source`) → reads raw files from the examples repo
 - `extension_create` → clones from the examples repo (same as CLI)
 - `extension_add_feature` → sources codegen patterns from example templates
 - `extension_manifest_validate` → cross-references against known-good manifests in the catalog

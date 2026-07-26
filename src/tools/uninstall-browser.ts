@@ -8,29 +8,7 @@
 
 import { extensionUninstall } from "extension-install";
 
-export const schema = {
-  name: "extension_uninstall_browser",
-  description:
-    "Remove a managed browser binary from the Extension.js cache. Only touches the managed cache, never system-installed browsers.",
-  inputSchema: {
-    type: "object" as const,
-    properties: {
-      browser: {
-        type: "string",
-        enum: ["chrome", "chromium", "edge", "firefox"],
-        description: "Managed browser to remove",
-      },
-      all: {
-        type: "boolean",
-        default: false,
-        description: "Remove every managed browser binary",
-      },
-    },
-    required: [],
-  },
-};
-
-export async function handler(args: {
+export async function uninstallManagedBrowser(args: {
   browser?: string;
   all?: boolean;
 }): Promise<string> {
@@ -50,7 +28,7 @@ export async function handler(args: {
       status: "uninstalled",
       target: args.all ? "all" : args.browser,
       duration: Date.now() - start,
-      hint: "Use extension_list_browsers to confirm what remains in the managed cache.",
+      hint: 'Use extension_browsers with action: "list" to confirm what remains in the managed cache.',
     });
   } catch (err) {
     return JSON.stringify({

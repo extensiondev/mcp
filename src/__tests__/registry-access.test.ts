@@ -154,7 +154,7 @@ describe("private projects", () => {
       },
     );
     expect(res.ok).toBe(false);
-    expect((res as { message: string }).message).toContain("extension_login");
+    expect((res as { message: string }).message).toContain("extension_auth");
     expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
 

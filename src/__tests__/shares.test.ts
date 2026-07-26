@@ -338,7 +338,7 @@ describe("extension_shares", () => {
     const out = JSON.parse(await handler({ projectPath: dir }));
     expect(out.ok).toBe(true);
     expect(out.server.listed).toBe(false);
-    expect(out.server.loginHint).toContain("extension_login");
+    expect(out.server.loginHint).toContain("extension_auth");
     expect(out.localOnly).toHaveLength(1);
     expect(out.localOnly[0].revokeUrl).toContain(LOCAL_ID);
   });

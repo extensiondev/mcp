@@ -10,16 +10,6 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { getManagedBrowsersCacheRoot } from "extension-install";
 
-export const schema = {
-  name: "extension_list_browsers",
-  description:
-    "List managed browser binaries installed by the extension.dev platform. Shows what browsers are available in the managed cache without checking system-installed browsers.",
-  inputSchema: {
-    type: "object" as const,
-    properties: {},
-  },
-};
-
 const BROWSER_NAMES = ["chrome", "chromium", "edge", "firefox"] as const;
 
 function getDirSize(dir: string): number {
@@ -49,7 +39,7 @@ function formatBytes(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-export async function handler(): Promise<string> {
+export async function listManagedBrowsers(): Promise<string> {
   const cacheRoot = getManagedBrowsersCacheRoot();
   const installed: Array<{
     browser: string;
@@ -82,7 +72,7 @@ export async function handler(): Promise<string> {
     ),
     hint:
       installed.length === 0
-        ? "No managed browsers found. Use extension_install_browser to install one, or use a system-installed browser."
-        : `${installed.length} managed browser(s) found. Use extension_detect_browsers for a full system scan.`,
+        ? "No managed browsers found. Use extension_browsers with action: \"install\" to install one, or use a system-installed browser."
+        : `${installed.length} managed browser(s) found. Use extension_browsers with action: "detect" for a full system scan.`,
   });
 }

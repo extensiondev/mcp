@@ -6,6 +6,7 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
+import { PROJECT_PATH } from "../lib/common-schema";
 import fs from "node:fs";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
@@ -27,20 +28,17 @@ export const schema = {
   inputSchema: {
     type: "object" as const,
     properties: {
-      projectPath: {
-        type: "string",
-        description: "Path to the extension project root",
-      },
+      projectPath: PROJECT_PATH,
       browser: {
         type: "string",
         description:
-          "Browser of the session to stop (matches the browser passed to extension_dev/extension_start). Defaults to the one live session for this project when omitted, instead of assuming chrome.",
+          "Browser of the session to stop. Defaults to the single live session for this project rather than assuming chrome.",
       },
       all: {
         type: "boolean",
         default: false,
         description:
-          "Stop every known session, across projects and browsers. Discovers sessions from this server's registry AND the on-disk session markers earlier runs left, so it still finds sessions after an MCP restart or after a dev child exited out from under the registry. When true, projectPath/browser are ignored.",
+          "Stop every known session across projects and browsers, found from this server's registry AND the on-disk markers earlier runs left, so it still works after an MCP restart. projectPath/browser are then ignored.",
       },
     },
     required: [],

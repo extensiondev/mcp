@@ -6,6 +6,7 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
+import { PROJECT_PATH, SESSION_BROWSER } from "../lib/common-schema";
 import fs from "node:fs";
 import path from "node:path";
 import type { ReadyContract } from "../lib/types";
@@ -30,29 +31,22 @@ function isAlive(pid: number): boolean {
 export const schema = {
   name: "extension_wait",
   description:
-    "Wait for a running dev or start session to be ready. Polls the ready.json contract file and returns structured status with these facts: compiled (the compiler finished), browserAttached (the engine's runtime executor connected), and for a browser session guestLoaded (the browser's OWN target list actually shows your extension). guestLoaded is the trustworthy load signal: it catches a silently rejected --load-extension that leaves ready.json stamped attached with empty logs (extension.js BUGS_TO_FIX §83); it is null when it could not be checked (no CDP port, e.g. a gecko session). Every result reports budgetMs (this call's wait budget) and elapsedMs; on status:'timeout' call again to keep waiting (polling resumes on the same contract). In a noBrowser (build-only) session it returns as soon as the compile lands instead of waiting for a browser that will never attach. Ports in the result come from the ready contract, so they always match what the dev server actually bound.",
+    "Wait for a running dev or start session to be ready. Polls the ready.json contract and reports compiled (the compiler finished), browserAttached (the runtime executor connected), and guestLoaded (the browser's OWN target list shows your extension). guestLoaded is the trustworthy load signal: it catches a silently rejected --load-extension that leaves ready.json stamped attached with empty logs; it is null when it could not be checked (no CDP port, e.g. a gecko session). Every result reports budgetMs and elapsedMs; on status:'timeout' call again to keep waiting on the same contract. In a noBrowser session it returns as soon as the compile lands instead of waiting for a browser that will never attach. Ports come from the contract, so they match what the server actually bound.",
   inputSchema: {
     type: "object" as const,
     properties: {
-      projectPath: {
-        type: "string",
-        description: "Path to the extension project root",
-      },
-      browser: {
-        type: "string",
-        description:
-          "Browser to check readiness for. Defaults to the active dev session's browser for this project.",
-      },
+      projectPath: PROJECT_PATH,
+      browser: SESSION_BROWSER,
       timeoutMs: {
         type: "number",
         default: DEFAULT_TIMEOUT_MS,
         description:
-          `Wait budget in milliseconds for this call. Default ${DEFAULT_TIMEOUT_MS}; clamped to ${MIN_TIMEOUT_MS}-${SAFE_CEILING_MS} (the ceiling keeps one call under the MCP client's 60s request timeout). On timeout the result reports elapsedMs plus what was observed (compiled, browserAttached); call again to keep waiting, polling resumes on the same contract.`,
+          `Wait budget for this call. Default ${DEFAULT_TIMEOUT_MS}, clamped to ${MIN_TIMEOUT_MS}-${SAFE_CEILING_MS} so one call stays under the client's 60s request timeout. On timeout, call again to keep waiting.`,
       },
       timeout: {
         type: "number",
         description:
-          "Deprecated alias of timeoutMs, kept for callers that already pass it. timeoutMs wins when both are given.",
+          "Deprecated alias of timeoutMs, which wins when both are given.",
       },
     },
     required: ["projectPath"],

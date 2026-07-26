@@ -6,8 +6,7 @@ import {
   writeCredentials,
   type StoredCredentials,
 } from "../lib/credentials";
-import * as whoami from "../tools/whoami";
-import * as login from "../tools/login";
+import * as auth from "../tools/auth";
 
 const FUTURE = Math.floor(Date.now() / 1000) + 3600;
 
@@ -43,19 +42,19 @@ describe("whoami reports the stored token identity, not the cwd", () => {
     if (process.platform === "win32") return;
     writeCredentials(sample());
 
-    const result = JSON.parse(await whoami.handler());
+    const result = JSON.parse(await auth.handler({}));
 
     expect(result.status).toBe("logged-in");
     expect(result.message).toContain("acme/widget");
-    expect(result.message).toContain("extension_login");
+    expect(result.message).toContain("extension_auth");
     expect(result.message).toMatch(/not follow|not.*current working directory/i);
     expect(result.expiresAt).toBe(new Date(FUTURE * 1000).toISOString());
     expect(typeof result.expiresInSeconds).toBe("number");
   });
 
   it("the tool description anchors identity to the stored token", () => {
-    expect(whoami.schema.description).toContain("extension_login");
-    expect(whoami.schema.description).toMatch(
+    expect(auth.schema.description).toContain("extension.dev/device");
+    expect(auth.schema.description).toMatch(
       /does not change with the current working directory/i,
     );
   });
@@ -63,10 +62,10 @@ describe("whoami reports the stored token identity, not the cwd", () => {
   it("still reports logged-out plainly when nothing is stored", async () => {
     if (process.platform === "win32") return;
 
-    const result = JSON.parse(await whoami.handler());
+    const result = JSON.parse(await auth.handler({}));
 
     expect(result.status).toBe("logged-out");
-    expect(result.message).toContain("extension_login");
+    expect(result.message).toContain("extension_auth");
   });
 
   describe("api field honesty", () => {
@@ -91,7 +90,7 @@ describe("whoami reports the stored token identity, not the cwd", () => {
       if (process.platform === "win32") return;
       writeCredentials(sample());
 
-      const result = JSON.parse(await whoami.handler());
+      const result = JSON.parse(await auth.handler({}));
 
       expect(result.api).toBeUndefined();
       expect(result.apiRecordedAtLogin).toBe("https://www.extension.dev");
@@ -102,7 +101,7 @@ describe("whoami reports the stored token identity, not the cwd", () => {
       if (process.platform === "win32") return;
       writeCredentials(sample({ api: "http://localhost:3100" }));
 
-      const result = JSON.parse(await whoami.handler());
+      const result = JSON.parse(await auth.handler({}));
 
       expect(result.api).toBeUndefined();
       expect(result.apiRecordedAtLogin).toBe("http://localhost:3100");
@@ -118,7 +117,7 @@ describe("whoami reports the stored token identity, not the cwd", () => {
       if (process.platform === "win32") return;
       writeCredentials(sample({ api: "" }));
 
-      const result = JSON.parse(await whoami.handler());
+      const result = JSON.parse(await auth.handler({}));
 
       expect(result.api).toBeUndefined();
       expect(result.apiRecordedAtLogin).toBeUndefined();
@@ -131,7 +130,7 @@ describe("whoami reports the stored token identity, not the cwd", () => {
       process.env.EXTENSION_DEV_TOKEN = "env-token";
       try {
         writeCredentials(sample());
-        const result = JSON.parse(await whoami.handler());
+        const result = JSON.parse(await auth.handler({}));
         expect(result.envTokenOverride).toBe(true);
         expect(result.message).toContain("EXTENSION_DEV_TOKEN is set");
       } finally {
@@ -158,9 +157,9 @@ describe("7-day token TTL disclosure", () => {
     fs.rmSync(tmp, { recursive: true, force: true });
   });
 
-  it("extension_login's description states the TTL and where CI re-mints", () => {
-    expect(login.schema.description).toContain("7 days");
-    expect(login.schema.description).toContain("Access tokens");
+  it("extension_auth states the TTL and where CI re-mints", () => {
+    expect(auth.schema.description).toContain("7 days");
+    expect(auth.schema.description).toContain("Access tokens");
   });
 
   it("whoami carries the TTL note with the deep console access-tokens URL", async () => {
@@ -174,7 +173,7 @@ describe("7-day token TTL disclosure", () => {
       api: "https://www.extension.dev",
     });
 
-    const result = JSON.parse(await whoami.handler());
+    const result = JSON.parse(await auth.handler({}));
 
     expect(result.tokenTtlNote).toContain("7 days");
     expect(result.tokenTtlNote).toContain(
