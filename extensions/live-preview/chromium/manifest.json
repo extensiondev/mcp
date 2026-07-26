@@ -28,6 +28,7 @@
   },
   "externally_connectable": {
     "matches": [
+      "https://code.extension.dev/*",
       "https://intelligence.extension.dev/*",
       "https://themes.extension.dev/*",
       "https://preview.extension.dev/*",
