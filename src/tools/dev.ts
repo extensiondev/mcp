@@ -6,6 +6,10 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
+import {
+  LAUNCH_BROWSER,
+  PROJECT_PATH,
+} from "../lib/common-schema";
 import path from "node:path";
 import { materializeCarrier } from "../lib/carrier";
 import { spawnExtensionCli } from "../lib/exec";
@@ -25,19 +29,12 @@ import {
 export const schema = {
   name: "extension_dev",
   description:
-    "Start the extension development server with hot module replacement. Launches a browser with the extension loaded. Returns process info for use with extension_wait and extension_inspect.",
+    "Run the extension WHILE YOU EDIT IT: dev build, hot module replacement, and a browser with it loaded. The default answer to \"run my extension\". Only this tool can unlock the control channel that extension_storage/reload/open/dom_snapshot need (allowControl) and that extension_eval needs (allowEval). For the production build in a browser instead, use extension_start. Returns process info for extension_wait and extension_inspect.",
   inputSchema: {
     type: "object" as const,
     properties: {
-      projectPath: {
-        type: "string",
-        description: "Path to the extension project root",
-      },
-      browser: {
-        type: "string",
-        enum: ["chrome", "chromium", "edge", "brave", "opera", "vivaldi", "yandex", "firefox", "waterfox", "librewolf", "safari", "chromium-based", "gecko-based", "firefox-based", "webkit-based"],
-        default: "chrome",
-      },
+      projectPath: PROJECT_PATH,
+      browser: LAUNCH_BROWSER,
       port: {
         type: "number",
         description: "Dev server port (0 for auto-assign)",
@@ -45,7 +42,7 @@ export const schema = {
       noBrowser: {
         type: "boolean",
         default: false,
-        description: "Start dev server without launching browser",
+        description: "Start the dev server without launching a browser",
       },
       polyfill: {
         type: "boolean",
@@ -57,25 +54,25 @@ export const schema = {
         type: "boolean",
         default: false,
         description:
-          "Stop any live session already running for this projectPath before starting; the result then reports it as replacedSession. Without it, extension_dev refuses to start over a live session instead of silently forking it (two sessions fight over the browser profile and the newer browser dies on the profile lock).",
+          "Stop the live session for this projectPath first, reported as replacedSession. Without it a second call is refused rather than forking: two sessions fight over one profile and the newer browser dies on the lock.",
       },
       allowControl: {
         type: "boolean",
         default: false,
         description:
-          "Enable the agent-bridge control channel so extension_storage/reload/open/dom_snapshot work against this session",
+          "Enable the agent-bridge control channel that extension_storage/reload/open/dom_snapshot need",
       },
       allowEval: {
         type: "boolean",
         default: false,
         description:
-          "Enable extension_eval (runs code in a context; writes a 0600 session token). Implies allowControl, so a single allowEval: true also unlocks storage/reload/open/dom_snapshot. You do not need to pass both.",
+          "Enable extension_eval (runs code in a context; writes a 0600 session token). Implies allowControl, so you never need to pass both.",
       },
       carrier: {
         type: "boolean",
         default: false,
         description:
-          "Load the bundled Extension.dev Live Preview carrier beside your extension (Chromium-family browsers only). It is placed in the project's ./extensions folder, which Extension.js auto-loads; allowlisted pages (preview.extension.dev, localhost) can then pair with the session and stream its real-lane chrome.* trace. Writes extensions/extension-dev-live-preview/ into the project, gitignores it, and takes it back out on extension_stop or extension_build: it is a debug companion, never part of a release.",
+          "Load the bundled Live Preview carrier beside your extension (Chromium only) so allowlisted pages (preview.extension.dev, localhost) can pair with the session and stream its real-lane chrome.* trace. Written into the auto-loaded ./extensions folder, gitignored, and removed on extension_stop or extension_build: never part of a release.",
       },
     },
     required: ["projectPath"],

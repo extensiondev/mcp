@@ -15,33 +15,6 @@ import {
 
 const KNOWN_STORES = ["chrome", "firefox", "edge", "safari"] as const;
 
-export const schema = {
-  name: "extension_store_status",
-  description:
-    "Report the project's browser-store state after an extension_submit submission: per store (chrome, firefox, edge, safari) whether it is configured, its latest credential health check, the last recorded submission (version, status, store URL, submitted-at), and the latest review status. Reads the project's public registry (registry.extension.land: stores/health.json, stores/status.json, stores/submissions.json) - read-only, dispatches nothing, no auth needed for public projects. Defaults to the logged-in project (extension_login); pass workspace + project to inspect another public project. Registry state can lag the store dashboards by up to a polling interval.",
-  inputSchema: {
-    type: "object" as const,
-    properties: {
-      workspace: {
-        type: "string",
-        description:
-          "Workspace slug override (defaults to the stored login's workspace).",
-      },
-      project: {
-        type: "string",
-        description:
-          "Project slug override (defaults to the stored login's project).",
-      },
-      api: {
-        type: "string",
-        description:
-          "Platform base URL (defaults to https://www.extension.dev or EXTENSION_DEV_API_URL). Used to resolve link origins and, for a private project, to mint a short-lived read token.",
-      },
-    },
-    required: [],
-  },
-};
-
 interface HealthRow {
   ok?: boolean;
   message?: string;
@@ -173,7 +146,7 @@ function fail(
   return JSON.stringify({ ok: false, error: { name, message }, ...(extra ?? {}) });
 }
 
-export async function handler(args: {
+export async function readStores(args: {
   workspace?: string;
   project?: string;
   api?: string;
@@ -182,7 +155,7 @@ export async function handler(args: {
   if (!ref) {
     return fail(
       "StoreStatusInputError",
-      "No project to inspect. Run extension_login (the stored login names the project), or pass workspace + project explicitly.",
+      "No project to inspect. Run extension_auth (action: login), which names the project, or pass workspace + project explicitly.",
     );
   }
 

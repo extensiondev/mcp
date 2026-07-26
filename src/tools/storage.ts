@@ -6,20 +6,22 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
+import {
+  CALL_TIMEOUT,
+  SESSION_BROWSER,
+  SESSION_PROJECT_PATH,
+} from "../lib/common-schema";
 import { runActVerb, commonFlags, type ActArgs } from "../lib/act";
 import { resolveSessionBrowser } from "../lib/session-browser";
 
 export const schema = {
   name: "extension_storage",
   description:
-    "Read or write chrome.storage in a running extension. Requires the dev session to be started with allowControl: true (extension_dev). Wraps `extension storage get|set`.",
+    "Read or write chrome.storage in a running extension. Requires the session to have been started with allowControl: true (extension_dev).",
   inputSchema: {
     type: "object" as const,
     properties: {
-      projectPath: {
-        type: "string",
-        description: "Path to the extension project root (must have an active dev session)",
-      },
+      projectPath: SESSION_PROJECT_PATH,
       action: {
         type: "string",
         enum: ["get", "set"],
@@ -39,12 +41,8 @@ export const schema = {
         enum: ["background", "popup", "options", "sidebar", "content"],
         default: "background",
       },
-      browser: {
-        type: "string",
-        description:
-          "Browser session to target. Defaults to the active dev session's browser for this project.",
-      },
-      timeout: { type: "number", description: "Command timeout in ms (default 5000)" },
+      browser: SESSION_BROWSER,
+      timeout: CALL_TIMEOUT,
     },
     required: ["projectPath", "action"],
   },

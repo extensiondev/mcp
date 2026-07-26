@@ -16,33 +16,6 @@ import {
   tokenTtlNote,
 } from "../lib/login-flow";
 
-export const schema = {
-  name: "extension_login",
-  description:
-    "Authenticate to extension.dev and store a project-scoped access token locally so extension_publish can use it. Two-phase: call with `project` to get a code + URL for the user to authorize, then call again with the returned `deviceCode` to finish. You authorize at extension.dev/device; GitHub federation happens server-side, so no GitHub token ever lands on this machine. Never returns the token. Minted tokens live at most 7 days (server-enforced), so CI pipelines must re-mint before expiry on the console's Access tokens page (project settings -> Access tokens). This is the only tool besides extension_publish that talks to the hosted platform.",
-  inputSchema: {
-    type: "object" as const,
-    properties: {
-      project: {
-        type: "string",
-        description:
-          "Target project as '<workspace>/<project>' (the token is scoped to it)",
-      },
-      deviceCode: {
-        type: "string",
-        description:
-          "Resume token from a prior call's `deviceCode`; omit on the first call",
-      },
-      api: {
-        type: "string",
-        description:
-          "Platform base URL (defaults to https://www.extension.dev or EXTENSION_DEV_API_URL)",
-      },
-    },
-    required: ["project"],
-  },
-};
-
 const FIRST_CALL_BUDGET_MS = 8_000;
 const RESUME_BUDGET_MS = 22_000;
 
@@ -81,8 +54,8 @@ function pending(start: {
   const hasCompleteLink =
     complete.length > 0 && complete !== start.verificationUri;
   const message = hasCompleteLink
-    ? `Open ${complete} and approve (code ${start.userCode} is pre-filled), then call extension_login again with this deviceCode (and the same project). If the page asks for a code, enter ${start.userCode} at ${start.verificationUri}.`
-    : `Open ${start.verificationUri} and enter code ${start.userCode}, then call extension_login again with this deviceCode (and the same project).`;
+    ? `Open ${complete} and approve (code ${start.userCode} is pre-filled), then call extension_auth (action: login) again with this deviceCode and the same project. If the page asks for a code, enter ${start.userCode} at ${start.verificationUri}.`
+    : `Open ${start.verificationUri} and enter code ${start.userCode}, then call extension_auth (action: login) again with this deviceCode and the same project.`;
   return JSON.stringify({
     ok: false,
     status: "authorization_pending",
@@ -104,11 +77,11 @@ function resumePending(deviceCode: string, verificationUri: string): string {
     deviceCode,
     tokenTtlNote:
       "Once authorized, the minted token lives at most 7 days (server-enforced); CI must re-mint before expiry (console: project settings -> Access tokens).",
-    message: `Still waiting for authorization. The one-click link and code from the previous response are still valid: open that link (or enter the code at ${verificationUri}), then call extension_login again with this same deviceCode (and the same project).`,
+    message: `Still waiting for authorization. The one-click link and code from the previous response are still valid: open that link (or enter the code at ${verificationUri}), then call extension_auth (action: login) again with this same deviceCode and the same project.`,
   });
 }
 
-export async function handler(args: {
+export async function loginToProject(args: {
   project: string;
   deviceCode?: string;
   api?: string;
@@ -146,7 +119,7 @@ export async function handler(args: {
     if (poll.reason === "expired") {
       return fail(
         "LoginExpired",
-        "The device code expired. Run extension_login again to restart.",
+        "The device code expired. Run extension_auth (action: login) again to restart.",
       );
     }
     if (poll.reason === "denied") {

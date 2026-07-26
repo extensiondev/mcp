@@ -17,38 +17,11 @@ import {
 } from "../lib/registry";
 import { UserlandProjectPage } from "@extension.dev/urls/userland";
 
-export const schema = {
-  name: "extension_release_list",
-  description:
-    "List the project's release channels (channel -> promoted build sha) and recent builds from the registry (registry.extension.land), so you can pick a valid buildSha for extension_release_promote, extension_submit, or extension_publish. Read-only, no dispatch. Defaults to the logged-in project (extension_login); pass workspace + project to inspect another project. Works for PRIVATE projects too when your stored login covers them. Returns the registry URLs it read, the console Builds page URL (needs a login), and a publicUrl per channel and build on the public viewer (no login needed for a public project).",
-  inputSchema: {
-    type: "object" as const,
-    properties: {
-      workspace: {
-        type: "string",
-        description:
-          "Workspace slug override (defaults to the stored login's workspace).",
-      },
-      project: {
-        type: "string",
-        description:
-          "Project slug override (defaults to the stored login's project).",
-      },
-      api: {
-        type: "string",
-        description:
-          "Platform base URL (defaults to https://www.extension.dev or EXTENSION_DEV_API_URL). Used to resolve link origins and, for a private project, to mint a short-lived read token.",
-      },
-    },
-    required: [],
-  },
-};
-
 function fail(name: string, message: string, extra?: Record<string, unknown>): string {
   return JSON.stringify({ ok: false, error: { name, message }, ...(extra ?? {}) });
 }
 
-export async function handler(args: {
+export async function readReleases(args: {
   workspace?: string;
   project?: string;
   api?: string;
@@ -57,7 +30,7 @@ export async function handler(args: {
   if (!ref) {
     return fail(
       "ReleaseListInputError",
-      "No project to list. Run extension_login (the stored login names the project), or pass workspace + project explicitly.",
+      "No project to list. Run extension_auth (action: login), which names the project, or pass workspace + project explicitly.",
     );
   }
 
@@ -78,7 +51,7 @@ export async function handler(args: {
       "ReleaseListNotFound",
       `No registry data for ${ref.workspace}/${ref.project} (${channelsUrl} returned ${
         channelsRes.status ?? "no response"
-      }). The project may have no builds yet, or the workspace/project slugs may be wrong. If it is private, make sure extension_login covers this exact project (a token scoped elsewhere cannot read it). The console Builds page is the authoritative view: ${buildsPageUrl}`,
+      }). The project may have no builds yet, or the workspace/project slugs may be wrong. If it is private, make sure extension_auth covers this exact project (a token scoped elsewhere cannot read it). The console Builds page is the authoritative view: ${buildsPageUrl}`,
       { workspace: ref.workspace, project: ref.project, registryUrl: channelsUrl, buildsPageUrl },
     );
   }

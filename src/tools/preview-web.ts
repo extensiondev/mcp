@@ -6,6 +6,7 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
+import { PROJECT_PATH, REAL_BROWSERS } from "../lib/common-schema";
 import fs from "node:fs";
 import path from "node:path";
 import * as build from "./build";
@@ -42,7 +43,7 @@ async function buildShare(
       ...(isAuth
         ? {
             loginHint:
-              "Run extension_login, or set EXTENSION_DEV_TOKEN (create one in the extension.dev dashboard).",
+              "Run extension_auth (action: login), or set EXTENSION_DEV_TOKEN (create one in the extension.dev dashboard).",
           }
         : {}),
     };
@@ -111,43 +112,28 @@ function detectSurfaces(manifest: Record<string, any>): string[] {
 export const schema = {
   name: "extension_preview_web",
   description:
-    "Preview an in-progress extension in the web emulator (no real browser). Builds the project (unless build:false), points preview.extension.dev at the dist directory over the dev-only preview://build scheme, and returns a deep link plus a loadability check against its dev server. preview.extension.dev is the author's door for a local build: it renders YOUR build and carries the Emulated/Real lane toggle and the Trace tab. Pass share:true to UPLOAD the dist you just built and get back a public link (share.previewUrl) that renders those exact bytes for anyone who opens it, with no install and no dev server, and that also serves the whole build as a downloadable zip. Sharing needs a token scoped to an existing extension.dev workspace and project (extension_login or EXTENSION_DEV_TOKEN, valid up to 7 days), so a local folder with no project on the platform cannot share. Use share:true whenever the build has to reach someone who is not at this machine, since the plain deepLink only resolves locally. Shared links do not disappear when this response scrolls away: extension_shares lists every link this token has shared and revokes any of them.",
+    "Preview an in-progress extension in the web emulator, with no real browser. Builds the project (unless build:false), points preview.extension.dev at dist/<browser> over the dev-only preview://build scheme, and returns a deep link plus a loadability check. This is the author's door for a LOCAL build: it renders your build and carries the Emulated/Real lane toggle and the Trace tab, but the deep link only resolves on this machine. To reach anyone who is not at this machine, pass share:true and hand out the public link it returns. extension_shares lists and revokes every link shared this way, so one does not vanish with this response.",
   inputSchema: {
     type: "object" as const,
     properties: {
-      projectPath: {
-        type: "string",
-        description: "Path to the extension project root",
-      },
+      projectPath: PROJECT_PATH,
       browser: {
         type: "string",
-        enum: [
-          "chrome",
-          "chromium",
-          "edge",
-          "brave",
-          "opera",
-          "vivaldi",
-          "yandex",
-          "firefox",
-          "waterfox",
-          "librewolf",
-          "safari",
-        ],
+        enum: REAL_BROWSERS,
         default: "chrome",
         description:
-          "Which dist/<browser> output to preview. The emulator renders it as mocked Chrome regardless.",
+          "Which dist/<browser> output to preview. The emulator renders it as mocked Chrome either way.",
       },
       build: {
         type: "boolean",
         default: true,
         description:
-          "Build the project before previewing. Set false to preview the existing dist/<browser> as-is.",
+          "Build first. false previews the existing dist/<browser> as-is.",
       },
       distPath: {
         type: "string",
         description:
-          "Preview this built directory directly instead of resolving dist/<browser> under projectPath. Implies build:false.",
+          "Preview this built directory instead of dist/<browser> under projectPath. Implies build:false.",
       },
       hostUrl: {
         type: "string",
@@ -158,37 +144,25 @@ export const schema = {
         type: "boolean",
         default: true,
         description:
-          "Confirm the surface can load the artifact by fetching its dev middleware before returning.",
+          "Fetch the surface's dev middleware first to confirm the artifact loads.",
       },
       open: {
         type: "boolean",
         default: false,
         description:
-          "Open the deep link in a running dev session's browser (a new background tab, focus-safe) instead of only returning the link. Requires a live extension_dev/extension_preview session for the project.",
+          "Also open the deep link in a running session's browser, in a focus-safe background tab. Needs a live extension_dev/extension_start session.",
       },
       openIn: {
         type: "string",
-        enum: [
-          "chrome",
-          "chromium",
-          "edge",
-          "brave",
-          "opera",
-          "vivaldi",
-          "yandex",
-          "firefox",
-          "waterfox",
-          "librewolf",
-          "safari",
-        ],
+        enum: REAL_BROWSERS,
         description:
-          "Which running dev session's browser to open the preview in. Defaults to the `browser` value.",
+          "Which session's browser to open it in. Defaults to `browser`.",
       },
       share: {
         type: "boolean",
         default: false,
         description:
-          "Upload the built dist and return a public link (share.previewUrl) that renders those exact bytes in the emulator for anyone who opens it: no install, no sign-in, no dev server. The link also serves the whole build as a downloadable zip (share.zipUrl), so sharing it hands over the built code. Needs a token scoped to an existing extension.dev workspace and project (extension_login or EXTENSION_DEV_TOKEN, valid up to 7 days); without one this returns a login hint and never fails the local preview. The link stays live until share.expiresAt, and DELETEing share.revokeUrl with the same token kills it sooner; a revoked link stays dead, and re-sharing the same build returns a new link. Because re-sharing never reproduces the old link, every successful share is also appended to .extension.dev/shared-previews.json in the project (gitignored) so the revoke handle survives losing this response, and extension_shares lists what is actually live on the platform and revokes any of it by id or by URL.",
+          "Upload the built dist and return a public link (share.previewUrl) that renders those exact bytes for anyone: no install, sign-in or dev server. It also serves the build as a zip (share.zipUrl), so sharing hands over the code. Needs a token scoped to an extension.dev project (extension_auth or EXTENSION_DEV_TOKEN); without one you get a login hint and the local preview still succeeds. Live until share.expiresAt; DELETE share.revokeUrl to kill it sooner. Revocation is permanent and re-sharing mints a different link, so each share is also appended to the project's gitignored .extension.dev/shared-previews.json.",
       },
     },
     required: ["projectPath"],

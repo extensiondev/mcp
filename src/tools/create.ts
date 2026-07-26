@@ -42,7 +42,7 @@ function detectPackageManager(projectPath: string): string {
 export const schema = {
   name: "extension_create",
   description:
-    "Create a new browser extension project from a template in the extension.dev template catalog. Use extension_list_templates to see available options. The scaffolder may initialize a git repository in the new project; the result's defaultsApplied block reports whether it did, along with every other decision made without being asked.",
+    "Create a new browser extension project from a template in the extension.dev catalog. extension_templates lists what is available. The scaffolder may initialize a git repository in the new project; the result's defaultsApplied block reports whether it did, along with every other decision made without being asked.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -54,13 +54,13 @@ export const schema = {
       parentDir: {
         type: "string",
         description:
-          "Directory to create the project inside. Defaults to the MCP server process cwd (NOT the caller's cwd), which may not be where you expect; pass this explicitly when you care where the project lands. Aliases: parent, into.",
+          "Directory to create the project inside. Defaults to the MCP server process cwd, NOT the caller's cwd, so pass it whenever you care where the project lands. Aliases: parent, into.",
       },
       template: {
         type: "string",
         default: "typescript",
         description:
-          "Template slug from the extension.dev template catalog (e.g. 'react', 'ai-claude', 'content-vue'). Use extension_list_templates to discover options.",
+          "Template slug from the extension.dev catalog (e.g. 'react', 'ai-claude', 'content-vue'). extension_templates discovers them.",
       },
       install: {
         type: "boolean",
@@ -205,7 +205,7 @@ export async function handler(args: {
       ...(args.template === undefined
         ? {
             template:
-              "typescript (default; run extension_list_templates to pick another, e.g. javascript for plain JS)",
+              "typescript (default; call extension_templates to pick another, e.g. javascript for plain JS)",
           }
         : {}),
       packageManager: `${packageManager} (auto-detected by the scaffolder, not asked)`,

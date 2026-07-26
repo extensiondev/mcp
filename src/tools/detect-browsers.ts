@@ -14,37 +14,6 @@ import { isGeckoFamily, WEBKIT_FAMILY } from "../lib/browser-family";
 
 const execFileAsync = promisify(execFile);
 
-export const schema = {
-  name: "extension_detect_browsers",
-  description:
-    "Detect which browsers are available for extension development. Checks both system-installed and managed browsers, returning paths and capabilities for each.",
-  inputSchema: {
-    type: "object" as const,
-    properties: {
-      browsers: {
-        type: "array",
-        items: {
-          type: "string",
-          enum: [
-            "chrome",
-            "chromium",
-            "edge",
-            "brave",
-            "opera",
-            "vivaldi",
-            "yandex",
-            "firefox",
-            "waterfox",
-            "librewolf",
-            "safari",
-          ],
-        },
-        description: "Browsers to check. If omitted, checks all.",
-      },
-    },
-  },
-};
-
 interface DetectedBrowser {
   browser: string;
   binaryPath: string | null;
@@ -288,8 +257,10 @@ async function getVersion(
   }
 }
 
-export async function handler(args: { browsers?: string[] }): Promise<string> {
-  const browsersToCheck = args.browsers ?? [...ALL_BROWSERS];
+export async function detectBrowsers(
+  browsers?: string[],
+): Promise<string> {
+  const browsersToCheck = browsers ?? [...ALL_BROWSERS];
   const detected: DetectedBrowser[] = [];
   const managed: { cacheRoot: string; installed: string[] } = {
     cacheRoot: resolveCacheRoot(),
@@ -344,7 +315,7 @@ export async function handler(args: { browsers?: string[] }): Promise<string> {
     hint: missing.length
       ? `Missing browser(s): ${missing.map((d) => d.browser).join(", ")}.${
           missing.some((d) => MANAGED_INSTALLABLE.has(d.browser))
-            ? ` Use extension_install_browser to install ${missing
+            ? ` Use extension_browsers with action: "install" to install ${missing
                 .filter((d) => MANAGED_INSTALLABLE.has(d.browser))
                 .map((d) => d.browser)
                 .join(", ")}.`

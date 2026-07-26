@@ -53,7 +53,7 @@ These map directly to existing programmatic APIs and provide immediate value.
 ```json
 {
   "name": "extension_create",
-  "description": "Create a new browser extension project from a template in the extension.dev template catalog. Use extension_list_templates to see available options.",
+  "description": "Create a new browser extension project from a template in the extension.dev template catalog. Use extension_templates to see available options.",
   "inputSchema": {
     "type": "object",
     "properties": {
@@ -64,7 +64,7 @@ These map directly to existing programmatic APIs and provide immediate value.
       "template": {
         "type": "string",
         "default": "typescript",
-        "description": "Template slug from the extension.dev template catalog (e.g. 'react', 'sidebar-claude', 'content-vue'). Use extension_list_templates to discover options."
+        "description": "Template slug from the extension.dev template catalog (e.g. 'react', 'sidebar-claude', 'content-vue'). Use extension_templates to discover options."
       },
       "install": {
         "type": "boolean",
@@ -83,7 +83,7 @@ These map directly to existing programmatic APIs and provide immediate value.
 
 ---
 
-#### `extension_list_templates`
+#### `extension_templates` (action: `"list"`)
 
 **Source:** New, fetches and queries `templates-meta.json`
 
@@ -91,7 +91,7 @@ These map directly to existing programmatic APIs and provide immediate value.
 
 ```json
 {
-  "name": "extension_list_templates",
+  "name": "extension_templates",
   "description": "List available extension templates from the extension.dev template catalog. Filter by surface, framework, or tags. Returns structured metadata from templates-meta.json.",
   "inputSchema": {
     "type": "object",
@@ -290,13 +290,13 @@ These map directly to existing programmatic APIs and provide immediate value.
 
 **Returns:** When `wait: true`, returns the `ready.json` contract: `{ status, browser, port, pid, distPath, manifestPath, compiledAt }`. Otherwise returns `{ pid, browser }`.
 
-Both `extension_start` and `extension_preview` also accept `port`, `noBrowser`, and the shared launch flags: `profile`, `startingUrl`, `chromiumBinary`, `geckoBinary`, `host`, `publicHost`, `extensions` (same shapes as on `extension_dev`).
+Both `extension_dev` and `extension_start` also accept `port`, `noBrowser`, and the shared launch flags: `profile`, `startingUrl`, `chromiumBinary`, `geckoBinary`, `host`, `publicHost`, `extensions` (same shapes as on `extension_dev`).
 
 **Why this is distinct from dev:** `dev` uses HMR and watches files. `start` builds once in production mode and launches, what you'd use to verify a production build works before publishing.
 
 ---
 
-#### `extension_preview`
+#### `extension_start` (build: `false`)
 
 **Source:** `programs/develop/module.ts` → `extensionPreview()`
 
@@ -304,7 +304,7 @@ Both `extension_start` and `extension_preview` also accept `port`, `noBrowser`, 
 
 ```json
 {
-  "name": "extension_preview",
+  "name": "extension_start",
   "description": "Preview a production-built extension in a browser. Uses dist/ output directly.",
   "inputSchema": {
     "type": "object",
@@ -330,7 +330,7 @@ Both `extension_start` and `extension_preview` also accept `port`, `noBrowser`, 
 
 These combine extension.dev knowledge with the examples repo to make Claude _smart_ about extensions, not just a CLI wrapper.
 
-#### `extension_get_template_source`
+#### `extension_templates` (action: `"source"`)
 
 **Source:** New, reads files from the examples repo
 
@@ -338,7 +338,7 @@ These combine extension.dev knowledge with the examples repo to make Claude _sma
 
 ```json
 {
-  "name": "extension_get_template_source",
+  "name": "extension_templates",
   "description": "Read source files from a template in the extension.dev template catalog. Use this to learn implementation patterns before building something similar.",
   "inputSchema": {
     "type": "object",
@@ -484,7 +484,7 @@ The `similarTemplates` field lists templates from the catalog with similar surfa
 }
 ```
 
-**Implementation:** Internally calls `extension_get_template_source` to fetch the canonical pattern for the requested surface+framework combination, then generates the files and updates manifest.json. The examples repo is the codegen source, not hard-coded templates.
+**Implementation:** Internally calls `extension_templates` with `action: "source"` to fetch the canonical pattern for the requested surface+framework combination, then generates the files and updates manifest.json. The examples repo is the codegen source, not hard-coded templates.
 
 ---
 
@@ -673,7 +673,7 @@ The `similarTemplates` field lists templates from the catalog with similar surfa
 
 ### Tier 3, Browser management tools
 
-#### `extension_install_browser`
+#### `extension_browsers` (action: `"install"`)
 
 **Source:** `programs/install/module.ts` → `extensionInstall()`
 
@@ -681,7 +681,7 @@ The `similarTemplates` field lists templates from the catalog with similar surfa
 
 ```json
 {
-  "name": "extension_install_browser",
+  "name": "extension_browsers",
   "description": "Install a managed browser binary for extension testing. Useful in CI or fresh environments.",
   "inputSchema": {
     "type": "object",
@@ -696,7 +696,7 @@ The `similarTemplates` field lists templates from the catalog with similar surfa
 }
 ```
 
-#### `extension_list_browsers`
+#### `extension_browsers` (action: `"list"`)
 
 **Source:** `programs/install/module.ts` → `getManagedBrowsersCacheRoot()`
 
@@ -704,7 +704,7 @@ The `similarTemplates` field lists templates from the catalog with similar surfa
 
 ---
 
-#### `extension_detect_browsers`
+#### `extension_browsers` (action: `"detect"`)
 
 **Source:** `programs/extension/browsers/` → binary resolution chain
 
@@ -712,7 +712,7 @@ The `similarTemplates` field lists templates from the catalog with similar surfa
 
 ```json
 {
-  "name": "extension_detect_browsers",
+  "name": "extension_browsers",
   "description": "Detect which browsers are available for extension development. Returns paths and capabilities for each detected browser.",
   "inputSchema": {
     "type": "object",
@@ -758,11 +758,11 @@ The `similarTemplates` field lists templates from the catalog with similar surfa
 }
 ```
 
-**Why this matters:** Before Claude runs `extension_dev --browser=firefox`, it should know if Firefox is actually installed. This prevents "browser not found" errors and lets Claude suggest `extension_install_browser` when needed. Especially important for Docker/devcontainer environments.
+**Why this matters:** Before Claude runs `extension_dev --browser=firefox`, it should know if Firefox is actually installed. This prevents "browser not found" errors and lets Claude suggest `extension_browsers` when needed. Especially important for Docker/devcontainer environments.
 
 ---
 
-#### `extension_uninstall_browser`
+#### `extension_browsers` (action: `"uninstall"`)
 
 **Source:** `extension-install` → `extensionUninstall()`
 
@@ -770,7 +770,7 @@ The `similarTemplates` field lists templates from the catalog with similar surfa
 
 ```json
 {
-  "name": "extension_uninstall_browser",
+  "name": "extension_browsers",
   "inputSchema": {
     "type": "object",
     "properties": {
@@ -800,20 +800,19 @@ The `similarTemplates` field lists templates from the catalog with similar surfa
 | ------------------------------- | -------------------- | ----------------------------------------- | ------------------------------------------- | ------------------------------------------ |
 | **Tier 1, Core**               |                      |                                           |                                             |                                            |
 | `extension_create`              | `programs/create`    | `extensionCreate()`                       | examples repo via go-git-it                 | Thin wrapper only                          |
-| `extension_list_templates`      | New                  | n/a                                       | `templates-meta.json` release asset         | Fetch + filter + cache                     |
+| `extension_templates`      | New                  | n/a                                       | `templates-meta.json` release asset         | Fetch + filter + cache                     |
 | `extension_build`               | `programs/develop`   | `extensionBuild()`                        | n/a                                         | Thin wrapper only                          |
 | `extension_dev`                 | `programs/develop`   | `extensionDev()`                          | n/a                                         | Thin wrapper + process management          |
-| `extension_start`               | `programs/extension` | `extensionBuild()` + `extensionPreview()` | n/a                                         | Thin wrapper (already orchestrated in CLI) |
-| `extension_preview`             | `programs/develop`   | `extensionPreview()`                      | n/a                                         | Thin wrapper only                          |
+| `extension_start`               | `programs/extension` | `extensionBuild()` + `extensionPreview()` | n/a                                         | Thin wrapper; `build: false` calls `extensionPreview()` alone |
 | **Tier 2, Intelligence**       |                      |                                           |                                             |                                            |
-| `extension_get_template_source` | New                  | n/a                                       | `templates-meta.json` + raw GitHub          | Fetch + read files                         |
+| `extension_templates` | New                  | n/a                                       | `templates-meta.json` + raw GitHub          | Fetch + read files                         |
 | `extension_manifest_validate`   | `programs/develop`   | `plugin-web-extension`                    | `templates-meta.json` for similar templates | Extract validation logic                   |
 | `extension_analyze`             | `programs/develop`   | `--source` flag logic                     | n/a                                         | Extract into callable API                  |
 | `extension_inspect`      | `programs/extension` | CDP client / RDP transport                | Live browser via debugging protocol         | Wire to running session                    |
 | `extension_list_extensions`     | MCP `lib/cdp`        | `Extensions.getExtensionInfo` (read-only) | Live browser via CDP (Chromium)             | MCP tool (no CLI verb)                      |
 | `extension_wait`                | `programs/extension` | `dev-wait.ts`                             | `ready.json` contract file                  | Thin wrapper (exists in CLI)               |
 | `extension_stop`                | MCP `lib/process-manager` | session registry + group signal      | Session registry + `ready.json` pid         | MCP tool (no CLI verb)                      |
-| `extension_add_feature`         | New                  | `extension_get_template_source`           | examples repo patterns                      | Codegen from examples                      |
+| `extension_add_feature`         | New                  | `extension_templates`           | examples repo patterns                      | Codegen from examples                      |
 | **Agent bridge, act / triggers** |                    |                                           |                                             |                                            |
 | `extension_eval`                | `programs/extension` | bridge control channel                    | Live extension context                      | Wraps `extension eval` (`--allow-eval`)     |
 | `extension_storage`             | `programs/extension` | bridge control channel                    | `chrome.storage`                            | Wraps `extension storage`                   |
@@ -821,9 +820,7 @@ The `similarTemplates` field lists templates from the catalog with similar surfa
 | `extension_open`                | `programs/extension` | bridge control channel                    | Surfaces + `action`/`command` replay        | Wraps `extension open`                      |
 | `extension_logs`                | `programs/extension` | bridge log/control channel                | `logs.ndjson` + live channel                | Wraps `extension logs`                      |
 | **Tier 3, Browser management** |                      |                                           |                                             |                                            |
-| `extension_install_browser`     | `programs/install`   | `extensionInstall()`                      | n/a                                         | Thin wrapper only                          |
-| `extension_list_browsers`       | `programs/install`   | `getManagedBrowsersCacheRoot()`           | n/a                                         | Thin wrapper only                          |
-| `extension_detect_browsers`     | `programs/extension` | Binary resolution chain                   | System PATH + managed cache                 | Extract from launch logic                  |
+| `extension_browsers`            | `programs/install`   | `extensionInstall()`, `getManagedBrowsersCacheRoot()`, binary resolution chain | System PATH + managed cache | One tool, four actions |
 
 ## Changes needed in existing programs
 
@@ -836,7 +833,7 @@ The `similarTemplates` field lists templates from the catalog with similar surfa
 
 ### `programs/create/`
 
-- **Template listing API.** Add `extensionListTemplates(filters?)` that fetches+caches `templates-meta.json` and returns filtered results. This serves both the MCP `extension_list_templates` tool and any future CLI `extension list` command.
+- **Template listing API.** Add `extensionListTemplates(filters?)` that fetches+caches `templates-meta.json` and returns filtered results. This serves both the MCP `extension_templates` tool and any future CLI `extension list` command.
 - **Dry-run mode.** Add `dryRun` option to `extensionCreate()` that returns the file list without writing. Useful for Claude to explain what will be created before doing it.
 - **Template caching.** The current no-cache approach (re-download from GitHub every time) works but is slow. An MCP server that handles many create calls should cache the examples repo or individual template tarballs with a TTL.
 
@@ -849,7 +846,7 @@ The `similarTemplates` field lists templates from the catalog with similar surfa
 - **`--json` flag for all commands.** Machine-readable output for every command. This benefits not just MCP but any programmatic consumer. The `--ai-help` / `--format json` flags already exist, extend this pattern to command output.
 - **Exit codes.** Ensure distinct exit codes for different failure modes (missing manifest, build error, browser not found, etc.)
 - **`extension list` command.** Expose `extensionListTemplates()` as a CLI command. Shows the catalog in terminal or JSON.
-- **Extract binary detection into callable API.** The browser resolution chain (managed cache → WSL → custom binary → npm location packages) is embedded in `chromium-launch/index.ts` and `firefox-launch/index.ts`. Extract into `extensionDetectBrowsers()` for the `extension_detect_browsers` MCP tool.
+- **Extract binary detection into callable API.** The browser resolution chain (managed cache → WSL → custom binary → npm location packages) is embedded in `chromium-launch/index.ts` and `firefox-launch/index.ts`. Extract into `extensionDetectBrowsers()` for the `extension_browsers` MCP tool.
 - **Extract source inspection into MCP-callable API.** The `--source` system is deeply integrated into the browser launch lifecycle. For MCP, we need a way to call it against an _already-running_ dev session. The ready.json contract already gives us port/pid, the MCP server can connect to the CDP/RDP port directly.
 - **Extract wait mode into callable API.** The `dev-wait.ts` logic is CLI-only. Expose `extensionWait(projectPath, browser, timeout)` as a programmatic function.
 - **Expose the `start` command programmatically.** Currently `start` is CLI-only orchestration (build then preview). Add `extensionStart()` that chains `extensionBuild()` + `extensionPreview()` with the ready.json contract.
@@ -919,7 +916,7 @@ const CURATED_ALLOWED_KEYS = [
 }
 ```
 
-These fields enable `extension_list_templates` to match user intent ("I want to build an AI sidebar") to the right template, and `extension_get_template_source` to read only the key files rather than everything.
+These fields enable `extension_templates` to match user intent ("I want to build an AI sidebar") to the right template with `action: "list"`, and to read only the key files with `action: "source"`.
 
 ---
 
@@ -939,16 +936,16 @@ These fields enable `extension_list_templates` to match user intent ("I want to 
 ### Phase 2: MCP Server package
 
 1. New package: `programs/mcp` or standalone `@extension.dev/mcp`
-2. Implement Tier 1 tools: `extension_create`, `extension_list_templates`, `extension_build`, `extension_dev`, `extension_start`, `extension_preview`
-3. `extension_list_templates` caches `templates-meta.json` with 1-hour TTL
+2. Implement Tier 1 tools: `extension_create`, `extension_templates`, `extension_build`, `extension_dev`, `extension_start`
+3. `extension_templates` caches `templates-meta.json` with 1-hour TTL
 4. Register on MCP directory (npmjs.com + modelcontextprotocol.io)
 
 ### Phase 3: Live inspection tools
 
 1. `extension_wait`, poll ready.json contract (gate for inspection tools)
 2. `extension_inspect`, connect to running session's CDP/RDP port for live DOM inspection
-3. `extension_detect_browsers`, system browser detection
-4. `extension_get_template_source`, reads from examples repo via raw.githubusercontent.com
+3. `extension_browsers`, system browser detection
+4. `extension_templates` `action: "source"`, reads from examples repo via raw.githubusercontent.com
 5. `extension_manifest_validate`, cross-browser validation + similar template suggestions
 
 ### Phase 4: Codegen + advanced tools
@@ -960,7 +957,7 @@ These fields enable `extension_list_templates` to match user intent ("I want to 
 
 1. MCP server reports which templates Claude recommends most → feed into `featured` rankings
 2. Track which `aiPromptExamples` lead to successful creates → improve matching
-3. New templates added to examples repo are immediately available via `extension_list_templates` (no MCP server update needed, it reads `templates-meta.json` at runtime)
+3. New templates added to examples repo are immediately available via `extension_templates` (no MCP server update needed, it reads `templates-meta.json` at runtime)
 
 ---
 
@@ -978,11 +975,11 @@ Typical power-user workflows that drive tool prioritization:
 | Workflow                     | Tool                                                         | Why                                                                                                                       |
 | ---------------------------- | ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------- |
 | Debugging injection failures | `extension_inspect`                                   | `probe: ["[data-extension-root]"]` shows injection state, reinject generation, console errors, no manual DevTools needed |
-| Docker/devcontainer          | `extension_detect_browsers` + `extension_wait`               | Check browser availability, gate on dev server readiness                                                                  |
+| Docker/devcontainer          | `extension_browsers` + `extension_wait`               | Check browser availability, gate on dev server readiness                                                                  |
 | Multi-browser                | `extension_manifest_validate` + `extension_build`            | Catch manifest divergence early, build for `chrome,firefox`                                                               |
-| Learning patterns            | `extension_list_templates` + `extension_get_template_source` | Read `content-multi-one-entry`, `content-multi-three-entries` for multi-level import patterns                             |
+| Learning patterns            | `extension_templates` (`list` then `source`) | Read `content-multi-one-entry`, `content-multi-three-entries` for multi-level import patterns                             |
 | Rapid prototyping            | `extension_add_feature`                                      | "Add a sidebar" generates correct manifest + files + background handler                                                   |
 
-**Why the examples repo is central:** Complex patterns (multi-level content script imports, MAIN world isolation, cross-browser sidebars) are documented as working examples. `extension_get_template_source` gives Claude the canonical implementation to reference when building or debugging these patterns.
+**Why the examples repo is central:** Complex patterns (multi-level content script imports, MAIN world isolation, cross-browser sidebars) are documented as working examples. `extension_templates` gives Claude the canonical implementation to reference when building or debugging these patterns.
 
 **Why source inspection is the highest-value tool:** The most time-consuming extension debugging failure is "it didn't load." `extension_inspect` with `probe` and `console_summary` turns manual Chrome DevTools investigation into a one-call Claude diagnosis.

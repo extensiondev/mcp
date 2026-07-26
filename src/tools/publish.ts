@@ -6,6 +6,7 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
+import { API_BASE } from "../lib/common-schema";
 import { publish, resolveToken } from "../lib/publish";
 import {
   fetchRegistryJson,
@@ -17,7 +18,7 @@ import {
 export const schema = {
   name: "extension_publish",
   description:
-    "Publish the project your stored token is scoped to (from extension_login, or EXTENSION_DEV_TOKEN) to extension.dev and return its shareable URL. The publish target is the token's project -- there is no projectPath, the local files are not uploaded. For a PUBLIC project the URL is the canonical public page and ttlHours does not apply; for a PRIVATE project it is a fresh time-limited share link (?share=) whose lifetime is ttlHours. Posts to the platform's CLI publish endpoint. Besides extension_login this is the only tool that talks to the hosted platform.",
+    "Publish the project your stored token is scoped to (extension_auth, or EXTENSION_DEV_TOKEN) to extension.dev and return its shareable URL. This is what \"deploy\" or \"ship\" an extension usually means; extension_submit is the separate store-review path. The target is the token's project: there is no projectPath and no local file is uploaded. For a PUBLIC project the URL is the canonical public page and ttlHours does not apply; for a PRIVATE one it is a fresh time-limited share link (?share=) whose lifetime is ttlHours.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -29,13 +30,9 @@ export const schema = {
       buildSha: {
         type: "string",
         description:
-          "Pin the share URL to a specific build sha (7-40 hex chars). The platform verifies the build exists in the project's build index and rejects an unknown sha, so the returned URL always points at a real build.",
+          "Pin the URL to a build sha (7-40 hex chars). An unknown sha is rejected, so the returned URL always points at a real build.",
       },
-      api: {
-        type: "string",
-        description:
-          "Platform base URL (defaults to https://www.extension.dev or EXTENSION_DEV_API_URL)",
-      },
+      api: API_BASE,
     },
     required: [],
   },
@@ -54,7 +51,7 @@ export async function handler(args: {
   if (!token) {
     return fail(
       "PublishAuthError",
-      "No token. Run extension_login, or set EXTENSION_DEV_TOKEN (create one in the extension.dev dashboard).",
+      "No token. Run extension_auth (action: login), or set EXTENSION_DEV_TOKEN (create one in the extension.dev dashboard).",
     );
   }
 

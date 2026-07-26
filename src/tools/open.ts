@@ -6,6 +6,11 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
+import {
+  CALL_TIMEOUT,
+  SESSION_BROWSER,
+  SESSION_PROJECT_PATH,
+} from "../lib/common-schema";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
@@ -552,18 +557,15 @@ async function confirmSurfaceTarget(
 export const schema = {
   name: "extension_open",
   description:
-    "Open an extension surface or replay an event in a running session. 'popup'/'options'/'sidebar' open UI surfaces; 'newtab'/'history'/'bookmarks' open the extension's chrome_url_overrides page in a tab. 'action' triggers the toolbar action: opens the action's popup, or (no popup) replays chrome.action.onClicked. 'command' replays a chrome.commands.onCommand keyboard shortcut (pass `name`). NOTE: action/command replay invokes your listener WITHOUT a user gesture, so the gesture-derived activeTab grant does not apply (the result includes gesture:false and a warning when activeTab is declared). Requires the dev session to be started with allowControl: true (extension_dev). Wraps `extension open`.",
+    "Open an extension surface or replay an event in a running session. popup/options/sidebar open UI surfaces; newtab/history/bookmarks open the matching chrome_url_overrides page in a tab. 'action' triggers the toolbar action, opening its popup or replaying chrome.action.onClicked when there is none; 'command' replays a chrome.commands.onCommand shortcut (pass `name`). NOTE: action/command replay invokes your listener WITHOUT a user gesture, so the gesture-derived activeTab grant does not apply (the result reports gesture:false and warns when activeTab is declared). Requires the session to have been started with allowControl: true (extension_dev).",
   inputSchema: {
     type: "object" as const,
     properties: {
-      projectPath: {
-        type: "string",
-        description: "Path to the extension project root (must have an active dev session)",
-      },
+      projectPath: SESSION_PROJECT_PATH,
       surface: {
         type: "string",
         enum: ["popup", "options", "sidebar", "newtab", "history", "bookmarks", "action", "command"],
-        description: "Which surface to open or event to replay. 'newtab'/'history'/'bookmarks' open the matching chrome_url_overrides page. 'action' triggers the toolbar action; 'command' replays a keyboard-shortcut command (requires `name`).",
+        description: "Which surface to open or event to replay.",
       },
       name: {
         type: "string",
@@ -572,20 +574,16 @@ export const schema = {
       url: {
         type: "string",
         description:
-          "Navigate a real tab to this URL instead of opening a surface (Chromium via CDP; Firefox via the agent bridge, which needs allowEval: true). Use for content-script/webNavigation test pages, or the popup as a page: chrome-extension://<id>/popup.html. Alternative to `surface`.",
+          "Navigate a real tab here instead of opening a surface (Firefox needs allowEval: true). Use for content-script test pages, or a surface as a page: chrome-extension://<id>/popup.html.",
       },
       asTab: {
         type: "boolean",
         default: false,
         description:
-          "For surface popup/options/sidebar: render the surface's document in a real tab (chrome-extension://<id>/<doc>) instead of opening a real popup window. This is how you inspect a surface HEADLESSLY, where no window exists to host a popup. Applied automatically as a fallback when a headless session refuses to open the surface. Same page and APIs, but no popup sizing and window.close() closes the tab.",
+          "popup/options/sidebar: render the surface's document in a real tab instead of a popup window. This is how you inspect a surface HEADLESSLY, and it is applied automatically when a headless session refuses to open one. Same page and APIs, but no popup sizing and window.close() closes the tab.",
       },
-      browser: {
-        type: "string",
-        description:
-          "Browser session to target. Defaults to the active dev session's browser for this project.",
-      },
-      timeout: { type: "number", description: "Command timeout in ms (default 5000)" },
+      browser: SESSION_BROWSER,
+      timeout: CALL_TIMEOUT,
     },
     required: ["projectPath"],
   },

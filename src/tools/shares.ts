@@ -6,6 +6,7 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
+import { API_BASE } from "../lib/common-schema";
 import {
   listArtifacts,
   parseArtifactRef,
@@ -20,12 +21,12 @@ import {
 } from "../lib/share-record";
 
 const LOGIN_HINT =
-  "Run extension_login, or set EXTENSION_DEV_TOKEN (create one in the extension.dev dashboard).";
+  "Run extension_auth (action: login), or set EXTENSION_DEV_TOKEN (create one in the extension.dev dashboard).";
 
 export const schema = {
   name: "extension_shares",
   description:
-    "List and revoke the public preview links this token has shared (the links extension_preview_web share:true hands out). action:\"list\" (default) asks the platform for every artifact owned by the logged-in project and returns each one's artifactId, name, version, live/dead state, createdAt, expiresAt, revokedAt, size, and its previewUrl, zipUrl and revokeUrl, so a link you lost the response for is findable again. Every row also carries owner and sharedBy as the platform returned them, plus an attribution block: attribution.ownership is \"project\" when the owning workspace holds the share and any member can revoke it, \"personal\" when one person holds it alone and nobody else can, and \"unknown\" when the platform disclosed no owner. attribution.credit names the publisher for credit only and never decides access; it reads \"CLI token <id>\" when the token's issuer could not be resolved and \"not recorded\" for a share made before attribution existed, and neither is a person's name. action:\"revoke\" kills one by artifactId or by pasting any of its URLs; revocation is PERMANENT (the id is burned and re-sharing mints a different link), so it cannot be undone. Pass projectPath to reconcile the platform's answer with .extension.dev/shared-previews.json, the project's own append-only record: a share made on another machine shows up as remoteOnly, and a record with no live artifact behind it shows up under localOnly. Needs the same token as sharing (extension_login or EXTENSION_DEV_TOKEN); without one, listing still returns the local record with a login hint instead of failing. Read-only for the local file: this tool never rewrites shared-previews.json.",
+    "List and revoke the public preview links this token has shared (what extension_preview_web share:true hands out). action:'list' (default) returns every artifact the logged-in project owns with its artifactId, name, version, live/dead state, createdAt, expiresAt, revokedAt, size, previewUrl, zipUrl and revokeUrl, so a link whose response you lost is findable again. Each row carries owner and sharedBy as the platform returned them plus an attribution block: attribution.ownership is 'project' when the workspace holds the share and any member can revoke it, 'personal' when one person holds it alone, 'unknown' when no owner was disclosed; attribution.credit names the publisher for credit only, never access, and reads 'CLI token <id>' or 'not recorded' when no person can be named. action:'revoke' kills one by artifactId or by pasting any of its URLs, and is PERMANENT. Pass projectPath to reconcile against the project's own append-only .extension.dev/shared-previews.json (read-only, never rewritten): a share made on another machine shows as remoteOnly, a record with no live artifact as localOnly. Needs the same token as sharing (extension_auth or EXTENSION_DEV_TOKEN); without one, listing still returns the local record with a login hint.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -63,11 +64,7 @@ export const schema = {
         description:
           "How many shares to return, 1 to 200 (platform default 100). A cut list comes back with truncated:true.",
       },
-      api: {
-        type: "string",
-        description:
-          "Platform base URL (defaults to https://www.extension.dev or EXTENSION_DEV_API_URL).",
-      },
+      api: API_BASE,
     },
     required: [],
   },

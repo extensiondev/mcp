@@ -245,7 +245,7 @@ describe("extension_preview_web", () => {
         expect(out.share.requested).toBe(true);
         expect(out.share.ok).toBe(false);
         expect(out.share.supported).toBe(false);
-        expect(String(out.share.loginHint)).toMatch(/extension_login/);
+        expect(String(out.share.loginHint)).toMatch(/extension_auth/);
       } finally {
         fs.rmSync(dir, { recursive: true, force: true });
       }

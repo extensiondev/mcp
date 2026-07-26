@@ -6,6 +6,7 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
+import { PROJECT_PATH } from "../lib/common-schema";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -16,10 +17,7 @@ export const schema = {
   inputSchema: {
     type: "object" as const,
     properties: {
-      projectPath: {
-        type: "string",
-        description: "Path to the extension project root",
-      },
+      projectPath: PROJECT_PATH,
       browser: {
         type: "string",
         default: "chrome",

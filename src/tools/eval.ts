@@ -6,6 +6,11 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
+import {
+  CALL_TIMEOUT,
+  SESSION_BROWSER,
+  SESSION_PROJECT_PATH,
+} from "../lib/common-schema";
 import fs from "node:fs";
 import path from "node:path";
 import { runActVerb, commonFlags, type ActArgs } from "../lib/act";
@@ -15,14 +20,11 @@ import { isChromiumFamily } from "../lib/browser-family";
 export const schema = {
   name: "extension_eval",
   description:
-    "Evaluate an expression in a running extension context. Requires the dev session to be started with allowEval: true (extension_dev; writes a 0600 session token the CLI reads). Context default: on a Chromium session whose manifest is MV3 (the default template) the default is `page` (the active tab), because the MV3 background is a service worker whose CSP blocks eval, so a background default would fail on the most common path; on Firefox/MV2 sessions the default stays `background`. Pass `context: \"background\"` explicitly to target the worker anyway (on Chromium MV3 that returns the CSP explanation). Targeting for context content/page: pass `url` to pick the matching tab, or omit both `url` and `tab` to use the ACTIVE tab; a numeric `tab` id is only needed to disambiguate. Extension surfaces (popup/options/sidebar/devtools) and override pages (newtab/history/bookmarks) evaluate over the in-bundle relay and need NO tab id; the surface must be OPEN (extension_open first; a closed surface returns an explicit error). Use extension_dom_snapshot with listTabs: true to enumerate {tabId,url,title}. Wraps `extension eval`.",
+    "Evaluate an expression in a running extension context. Requires the session to have been started with allowEval: true (extension_dev; writes a 0600 session token). Context defaults to `background`, EXCEPT on a Chromium MV3 session (the default template) where it is `page`, the active tab, because the MV3 service worker CSP blocks eval; pass context:'background' to target the worker anyway and get that explanation back. For content/page, pass `url` to pick the tab or omit both `url` and `tab` for the ACTIVE tab; a numeric `tab` only disambiguates. Extension surfaces (popup/options/sidebar/devtools) and override pages evaluate over the in-bundle relay and need NO tab id, but must be OPEN (extension_open first; a closed one returns an explicit error). extension_dom_snapshot with listTabs: true enumerates {tabId,url,title}.",
   inputSchema: {
     type: "object" as const,
     properties: {
-      projectPath: {
-        type: "string",
-        description: "Path to the extension project root (must have an active dev session)",
-      },
+      projectPath: SESSION_PROJECT_PATH,
       expression: {
         type: "string",
         description: "JavaScript expression to evaluate in the target context",
@@ -30,16 +32,12 @@ export const schema = {
       context: {
         type: "string",
         enum: ["background", "popup", "options", "sidebar", "devtools", "newtab", "history", "bookmarks", "content", "page"],
-        description: "Which extension surface to evaluate in. Default: `background`, EXCEPT on Chromium sessions whose manifest is MV3, where the default is `page` (the active tab) because the MV3 service worker CSP blocks eval; pass `context: \"background\"` explicitly to target the worker anyway.",
+        description: "Where to evaluate. Default background, except Chromium MV3 sessions default to page (the active tab).",
       },
-      url: { type: "string", description: "For content/page: selects the target tab by url (match pattern, then substring fallback). Preferred over `tab`. You do not need a numeric id." },
-      tab: { type: "number", description: "Numeric chrome.tabs id, for disambiguating when several tabs match. Optional: with neither `tab` nor `url`, content/page target the active tab." },
-      browser: {
-        type: "string",
-        description:
-          "Browser session to target. Defaults to the active dev session's browser for this project.",
-      },
-      timeout: { type: "number", description: "Command timeout in ms (default 5000)" },
+      url: { type: "string", description: "content/page: pick the tab by url (match pattern, then substring). Preferred over `tab`." },
+      tab: { type: "number", description: "Numeric chrome.tabs id, only to disambiguate when several tabs match." },
+      browser: SESSION_BROWSER,
+      timeout: CALL_TIMEOUT,
     },
     required: ["projectPath", "expression"],
   },

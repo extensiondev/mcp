@@ -4,11 +4,11 @@ import path from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
-  handler,
   latestSubmissionsByStore,
   normalizeStoresStatus,
-  schema,
+  readStores as handler,
 } from "../tools/store-status";
+import { schema } from "../tools/release-status";
 import { tools as ALL_TOOLS } from "../index";
 import { writeCredentials } from "../lib/credentials";
 
@@ -107,29 +107,29 @@ const STATUS_V3 = {
   },
 };
 
-describe("extension_store_status: registration + schema", () => {
+describe("extension_release_status: registration + schema", () => {
   it("is registered and mirrors release_list's project override contract", () => {
-    expect(schema.name).toBe("extension_store_status");
+    expect(schema.name).toBe("extension_release_status");
     expect(ALL_TOOLS.map((t) => t.schema.name)).toContain(
-      "extension_store_status",
+      "extension_release_status",
     );
     const props = Object.keys(
       (schema.inputSchema as { properties: Record<string, unknown> })
         .properties,
     );
-    expect(props.sort()).toEqual(["api", "project", "workspace"]);
+    expect(props.sort()).toEqual(["api", "include", "project", "workspace"]);
     expect((schema.inputSchema as { required: string[] }).required).toEqual([]);
   });
 
   it("describes itself as read-only and names its registry sources", () => {
-    expect(schema.description).toContain("read-only");
+    expect(schema.description).toContain("Read-only");
     expect(schema.description).toContain("stores/health.json");
     expect(schema.description).toContain("stores/status.json");
     expect(schema.description).toContain("stores/submissions.json");
   });
 });
 
-describe("extension_store_status handler", () => {
+describe("store-status reader", () => {
   let tmp: string;
   let prevXdg: string | undefined;
   let prevFetch: typeof fetch;
@@ -148,12 +148,12 @@ describe("extension_store_status handler", () => {
     fs.rmSync(tmp, { recursive: true, force: true });
   });
 
-  it("fails without a project, naming extension_login and the overrides", async () => {
+  it("fails without a project, naming extension_auth and the overrides", async () => {
     if (process.platform === "win32") return;
     const out = JSON.parse(await handler({}));
     expect(out.ok).toBe(false);
     expect(out.error.name).toBe("StoreStatusInputError");
-    expect(out.error.message).toContain("extension_login");
+    expect(out.error.message).toContain("extension_auth");
     expect(out.error.message).toContain("workspace + project");
   });
 

@@ -6,6 +6,11 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
+import {
+  CALL_TIMEOUT,
+  SESSION_BROWSER,
+  SESSION_PROJECT_PATH,
+} from "../lib/common-schema";
 import { runActVerb, type ActArgs } from "../lib/act";
 import { resolveSessionBrowser } from "../lib/session-browser";
 import { isChromiumFamily, isGeckoFamily } from "../lib/browser-family";
@@ -30,39 +35,36 @@ const RDP_ACTOR_NOTE =
 export const schema = {
   name: "extension_dom_snapshot",
   description:
-    "Take a SHALLOW structured DOM snapshot of one chosen surface through the agent bridge (CDP-free, localhost): element counts, extension roots, OPEN shadow roots, optional byte-capped HTML, optional recent console lines. This is the SURFACE PICKER: the only tool that can read an OPEN extension surface by name (`context`: popup/options/sidebar/devtools) or an override page (newtab/history/bookmarks), the only one that takes a numeric chrome.tabs id, and the only one that enumerates what is open (listTargets: true for Chromium CDP targetIds and Firefox RDP tab actors, listTabs: true for numeric chrome.tabs ids). Ambiguous `tabUrl` returns the candidates instead of guessing. It does NOT pierce closed shadow roots, does NOT run CSS selector probes, and does NOT navigate; for those, and for a deep read of an already-open web page, use extension_inspect. Requires the dev session to be started with allowControl: true (extension_dev). Wraps `extension inspect`.",
+    "Take a SHALLOW structured DOM snapshot of ONE CHOSEN surface through the agent bridge (CDP-free, localhost): element counts, extension roots, OPEN shadow roots, optional byte-capped HTML, optional recent console lines. This is the SURFACE PICKER: the only tool that reads an OPEN extension surface by name (`context`: popup/options/sidebar/devtools) or an override page, the only one that takes a numeric chrome.tabs id, and the only one that enumerates what is open (listTargets for CDP targetIds and RDP tab actors, listTabs for numeric tab ids). An ambiguous `tabUrl` returns the candidates instead of guessing. It does NOT pierce closed shadow roots, run selector probes, or navigate: for those, and for a deep read of an already-open web page, use extension_inspect. Requires the session to have been started with allowControl: true (extension_dev).",
   inputSchema: {
     type: "object" as const,
     properties: {
-      projectPath: {
-        type: "string",
-        description: "Path to the extension project root (must have an active dev session)",
-      },
-      tab: { type: "number", description: "Numeric chrome.tabs id, for disambiguating when several tabs match. Optional: with neither `tab` nor `url`, content/page target the active tab." },
-      url: { type: "string", description: "For content/page: selects the target tab by url (match pattern, then substring fallback). Preferred over `tab`." },
+      projectPath: SESSION_PROJECT_PATH,
+      tab: { type: "number", description: "Numeric chrome.tabs id, only to disambiguate when several tabs match. With neither `tab` nor `url`, content/page target the active tab." },
+      url: { type: "string", description: "content/page: pick the tab by url (match pattern, then substring). Preferred over `tab`." },
       tabUrl: {
         type: "string",
         description:
-          "Target the tab whose URL contains this substring (case-insensitive; titles are checked only when no url matches). Resolved against the live browser BEFORE inspecting (Chromium: CDP page targets; Firefox: the agent bridge tab list): exactly one match proceeds; zero or several matches return the candidates so you can narrow, never a guess. Alternative to `url`.",
+          "Target the tab whose URL contains this substring (case-insensitive; titles checked only when no url matches). Resolved against the live browser first: exactly one match proceeds, zero or several return the candidates instead of a guess. Alternative to `url`.",
       },
       listTargets: {
         type: "boolean",
         default: false,
         description:
-          "Enumerate the browser's live page targets and return, ignoring the other args. The discovery path for `tabUrl`. Chromium: CDP page targets as {targetId,url,title,type}. Firefox: RDP tab descriptors as {actor,url,title,type} (engine 4.0.15+). Neither id is a numeric chrome.tabs id (for those use listTabs).",
+          "Enumerate live page targets and return, ignoring the other args. The discovery path for `tabUrl`. Chromium: {targetId,url,title,type}. Firefox: RDP tab descriptors {actor,url,title,type}. Neither id is a numeric chrome.tabs id; for those use listTabs.",
       },
       listTabs: {
         type: "boolean",
         default: false,
         description:
-          "Enumerate open tabs as {tabId,url,title} and return, ignoring the other args. The discovery path when you need an explicit numeric tab id.",
+          "Enumerate open tabs as {tabId,url,title} and return, ignoring the other args. Use when you need a numeric tab id.",
       },
       context: {
         type: "string",
         enum: ["content", "page", "popup", "options", "sidebar", "devtools", "newtab", "history", "bookmarks"],
         default: "content",
         description:
-          "content/page (targets `url`, else the active tab), an OPEN extension surface (popup/options/sidebar/devtools), or an override page (newtab/history/bookmarks)",
+          "content/page targets `url`, else the active tab; the rest must already be OPEN",
       },
       include: {
         type: "array",
@@ -74,14 +76,10 @@ export const schema = {
       withConsole: {
         type: ["number", "boolean"],
         description:
-          "Also include recent console lines for the target (DOM + console in one call). A number is how many lines; true means 50.",
+          "Also include recent console lines. A number is how many; true means 50.",
       },
-      browser: {
-        type: "string",
-        description:
-          "Browser session to target. Defaults to the active dev session's browser for this project.",
-      },
-      timeout: { type: "number", description: "Command timeout in ms (default 5000)" },
+      browser: SESSION_BROWSER,
+      timeout: CALL_TIMEOUT,
     },
     required: ["projectPath"],
   },

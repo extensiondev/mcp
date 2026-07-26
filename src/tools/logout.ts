@@ -9,17 +9,7 @@
 import { clearCredentials, readCredentials } from "../lib/credentials";
 import { consoleProjectUrl } from "../lib/registry";
 
-export const schema = {
-  name: "extension_logout",
-  description:
-    "Delete the locally stored extension.dev credentials. Does not revoke the token server-side (the response includes the dashboard URL where the token can be revoked); only removes it from this machine.",
-  inputSchema: {
-    type: "object" as const,
-    properties: {},
-  },
-};
-
-export async function handler(): Promise<string> {
+export async function clearLocalCredentials(): Promise<string> {
   const creds = readCredentials();
   const revokeUrl =
     creds?.workspaceSlug && creds?.projectSlug

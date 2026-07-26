@@ -1,5 +1,120 @@
 # Changelog
 
+## 9.0.0
+
+Every client pays for this server's tool list at the start of every session,
+whether or not the user ever touches an extension. That list was 36 tools and
+52,403 bytes on the wire (roughly 13,100 tokens). It is now 28 tools and
+43,214 bytes (roughly 10,800 tokens), a 17.5% cut, with no capability removed.
+Eleven tools folded into the four that already owned their resource,
+`extension_preview` folded into `extension_start`, and the prose was tightened
+everywhere it repeated the schema or a parameter name.
+
+9.0.0 lands close behind 8.0.0 on purpose. 8.0.0 renamed four tools for
+disambiguation; this release cuts what the surface costs. Both are breaking,
+adoption is still low, and doing them as one migration is cheaper for early
+users than spacing them out.
+
+### Migration
+
+| Old tool | New call |
+| --- | --- |
+| `extension_detect_browsers({ browsers })` | `extension_browsers({ action: "detect", browsers })` |
+| `extension_list_browsers()` | `extension_browsers({ action: "list" })` |
+| `extension_install_browser({ browser })` | `extension_browsers({ action: "install", browser })` |
+| `extension_uninstall_browser({ browser, all })` | `extension_browsers({ action: "uninstall", browser, all })` |
+| `extension_login({ project, deviceCode, api })` | `extension_auth({ action: "login", project, deviceCode, api })` |
+| `extension_whoami()` | `extension_auth({ action: "status" })` |
+| `extension_logout()` | `extension_auth({ action: "logout" })` |
+| `extension_list_templates({ surface, framework, tags, featured, query })` | `extension_templates({ action: "list", surface, framework, tags, featured, query })` |
+| `extension_get_template_source({ slug, files })` | `extension_templates({ action: "source", slug, files })` |
+| `extension_release_list({ workspace, project, api })` | `extension_release_status({ include: ["releases"], workspace, project, api })` |
+| `extension_store_status({ workspace, project, api })` | `extension_release_status({ include: ["stores"], workspace, project, api })` |
+| `extension_preview({ projectPath, browser, port, noBrowser, ...launch })` | `extension_start({ projectPath, build: false, browser, port, noBrowser, ...launch })` |
+
+Every argument keeps its name and its meaning. `action` defaults to the most
+common case (`detect`, `status`, `list`), so `extension_browsers({})` scans,
+`extension_auth({})` reports the login, and `extension_templates({})` lists.
+`extension_release_status` returns both sections by default and nests each
+under `releases` and `stores`; the old flat bodies are unchanged inside them.
+The CLI is untouched: `extension-mcp login|logout|whoami|release` still work
+exactly as before.
+
+`extension_submit`, `extension_publish`, `extension_analyze`,
+`extension_inspect` and `extension_dom_snapshot` were deliberately NOT merged.
+8.0.0 separated them because agents confused them; folding them behind an
+`action` parameter would hide that ambiguity rather than remove it.
+
+### Merged
+
+- **Four browser tools are one.** `extension_browsers` detects, lists,
+  installs, and uninstalls. `detect` and `list` were the confusable pair: both
+  answered "what browsers do I have", and telling them apart took a sentence of
+  prose in each description. An action enum settles it in the schema.
+- **Three auth tools are one.** `extension_auth` signs in, reports the stored
+  login, and clears it. They were a lifecycle triad that each re-explained the
+  same token model.
+- **Two template tools are one.** `extension_templates` searches the catalog
+  and reads a template's source. The slug you read comes from the list you just
+  searched, so the pair is one resource.
+- **The two read-only release tools are one.** `extension_release_status`
+  returns release channels and recent builds, browser-store submissions and
+  review state, or both. They took identical arguments and read the same
+  registry. `extension_release_promote` stays separate on purpose: it is the
+  only verb that writes, and putting a write behind the same `action`
+  parameter as a read is how an agent promotes a build it meant to list.
+- **`extension_preview` folded into `extension_start`.** Both answered "run the
+  production build in a browser"; the only difference was whether a build ran
+  first. That is now `build`, defaulting to `true`, which matches
+  `extension_preview_web`, where `build: false` already means the same thing.
+
+### Sharpened
+
+- **`extension_dev` and `extension_start` now say which one to pick.**
+  They are not merged: `dev` is the only tool that can unlock the control
+  channel (`allowControl`, `allowEval`) that `extension_storage`,
+  `extension_reload`, `extension_open`, `extension_dom_snapshot` and
+  `extension_eval` need, and `start` runs a production build with none of it.
+  A `mode` parameter would have made those flags look valid on a session that
+  cannot honor them. Instead each description now opens with the thing that
+  decides between them and names the other tool.
+- **Descriptions no longer repeat the schema.** The biggest cuts, in bytes of
+  description: `extension_shares` 1,661 to 1,250, `extension_preview_web`
+  1,151 to 639, `extension_submit` 1,478 to 1,194, `extension_eval` 1,128 to
+  831, `extension_wait` 985 to 784, `extension_list_extensions` 944 to 696,
+  `extension_dom_snapshot` 965 to 854. What was cut was prose that restated a
+  parameter name, repeated a property's own description, or explained the
+  response shape the response already carries. What was kept is anything that
+  stops a tool being misused: the `activeTab` gesture warning on
+  `extension_open`, the MV3 service-worker CSP note on `extension_eval`, the
+  profile-lock explanation on `extension_dev`, and the irreversibility of
+  `extension_submit` and of revoking a share.
+- **Repeated property schemas are shared.** `projectPath`, the session
+  `browser`, the call `timeout`, the platform `api` base and the launch browser
+  enum are defined once in `src/lib/common-schema.ts` instead of being
+  re-typed per tool.
+
+### Considered and rejected
+
+- **A smaller default surface with the rest opt-in.** The platform cluster
+  (`extension_auth`, `extension_publish`, `extension_submit`,
+  `extension_release_status`, `extension_release_promote`, `extension_shares`,
+  `extension_preview_web`) is 13 KB, about 30% of what is left, and is dead
+  weight for anyone building an extension locally without an extension.dev
+  account. Hiding it behind an env flag would cut the default surface by
+  roughly a third. It was not shipped because a hidden tool is an invisible
+  capability: an agent asked to publish would report that it cannot, which is
+  worse than the tokens. The version worth building expands the surface once a
+  login exists and announces it with `notifications/tools/list_changed`, and
+  that needs a client-by-client compatibility check first.
+
+### Added
+
+- `pnpm exec node scripts/tool-surface-size.mjs` starts the server, calls
+  `tools/list`, and reports exactly what a client receives: bytes per tool
+  split into description and schema, and the total. `--json` for the raw rows.
+  Before this, the cost of the tool surface was never measured, only guessed.
+
 ## 8.0.0
 
 Four tools are renamed. Every rename fixes a name that made agents pick the

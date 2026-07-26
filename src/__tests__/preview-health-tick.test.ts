@@ -39,7 +39,6 @@ vi.mock("../lib/exec", async (importOriginal) => {
   };
 });
 
-const preview = await import("../tools/preview");
 const start = await import("../tools/start");
 const { removeSession } = await import("../lib/process-manager");
 
@@ -82,7 +81,7 @@ afterEach(() => {
   }
 });
 
-describe("extension_preview health tick", () => {
+describe("extension_start build:false health tick", () => {
   it("reports the death instead of status:launched when the process exits on boot", async () => {
     const project = tmpProject();
     nextChild = () =>
@@ -90,7 +89,7 @@ describe("extension_preview health tick", () => {
         'console.error("Error: no production build found in dist/"); process.exit(1);',
       );
 
-    const result = JSON.parse(await preview.handler({ projectPath: project }));
+    const result = JSON.parse(await start.handler({ projectPath: project, build: false }));
 
     expect(result.ok).toBe(false);
     expect(result.status).toBe("exited");
@@ -107,7 +106,7 @@ describe("extension_preview health tick", () => {
       return cli;
     };
 
-    const result = JSON.parse(await preview.handler({ projectPath: project }));
+    const result = JSON.parse(await start.handler({ projectPath: project, build: false }));
 
     expect(result.ok).toBe(false);
     expect(result.status).toBe("browser-exited");
@@ -130,7 +129,7 @@ describe("extension_preview health tick", () => {
     nextChild = () =>
       fakeCli('console.log("preview up"); setTimeout(()=>{}, 60000);');
 
-    const result = JSON.parse(await preview.handler({ projectPath: project }));
+    const result = JSON.parse(await start.handler({ projectPath: project, build: false }));
 
     expect(result.ok).toBe(true);
     expect(result.status).toBe("launched");
@@ -141,7 +140,7 @@ describe("extension_preview health tick", () => {
     nextChild = () =>
       fakeCli('console.log("previewing dist/chrome"); setTimeout(()=>{}, 60000);');
 
-    const result = JSON.parse(await preview.handler({ projectPath: project }));
+    const result = JSON.parse(await start.handler({ projectPath: project, build: false }));
 
     expect(result.ok).toBe(true);
     expect(result.status).toBe("launched");

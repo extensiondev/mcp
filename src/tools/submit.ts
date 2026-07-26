@@ -6,6 +6,7 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
+import { API_BASE } from "../lib/common-schema";
 import fs from "node:fs";
 import path from "node:path";
 import { resolveToken } from "../lib/publish";
@@ -68,7 +69,7 @@ export interface SubmitToolArgs {
 export const schema = {
   name: "extension_submit",
   description:
-    "SUBMIT FOR REVIEW: send a built extension to the Chrome Web Store, Firefox AMO, Edge Add-ons, and/or the App Store (Safari) THROUGH extension.dev, which holds your store credentials and dispatches the release from your project's mirror CI. This is the store-review path only. It does NOT push a build to the extension.dev platform and does NOT make a shareable link: that is extension_publish, which is what a request to \"deploy\" or \"ship\" an extension almost always means. Reach for this tool only when the ask is explicitly a store submission. DEFAULTS TO A DRY RUN (preflight - dispatches nothing): the platform side verifies auth, the project, that the build exists, and the store workflow, and this tool then adds the per-store verdict from each store's public credential-health record; trust the per-store rows in the result over the platform's bare preflight line, which does not check store health. Pass dryRun:false to actually submit, which is irreversible and enters store review. The target project is identified by your token (extension_login or a release token in EXTENSION_DEV_TOKEN; tokens live at most 7 days, so CI must re-mint from the console's Access tokens page). Store credentials are never tool arguments and local files are not uploaded. Pass browsers + buildSha (extension_release_list lists valid shas); after a real submission, extension_store_status reads the recorded outcome and review state. Posts to the platform's CLI store-submission endpoint.",
+    "SUBMIT FOR REVIEW: send a built extension to the Chrome Web Store, Firefox AMO, Edge Add-ons and/or the App Store (Safari) THROUGH extension.dev, which holds your store credentials and dispatches from your project's mirror CI. Store review only. It does NOT push a build to the extension.dev platform and does NOT make a shareable link: that is extension_publish, which is what \"deploy\" or \"ship\" an extension almost always means. Reach for this only when the ask is explicitly a store submission. DEFAULTS TO A DRY RUN that dispatches nothing: the platform verifies auth, project, build and store workflow, and this tool adds each store's credential-health verdict; trust those per-store rows over the platform's bare preflight line, which does not check store health. dryRun:false actually submits, which is irreversible and enters store review. The project comes from your token (extension_auth or EXTENSION_DEV_TOKEN; tokens live at most 7 days, so CI must re-mint from the console's Access tokens page). Store credentials are never arguments and no local file is uploaded. extension_release_status lists valid shas and, after a real submission, reads the recorded outcome and review state.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -83,7 +84,7 @@ export const schema = {
       buildSha: {
         type: "string",
         description:
-          "The built commit SHA to submit. It must have a completed build in the project's build index; an unknown sha is rejected.",
+          "The built commit SHA to submit. It needs a completed build in the project's build index; an unknown sha is rejected.",
       },
       channel: {
         type: "string",
@@ -97,13 +98,9 @@ export const schema = {
         type: "boolean",
         default: true,
         description:
-          "Preflight only (verify auth, project, build, and store workflow). Pass false to actually dispatch the submission (irreversible, enters store review).",
+          "Preflight only. Pass false to actually dispatch (irreversible, enters store review).",
       },
-      api: {
-        type: "string",
-        description:
-          "Platform base URL (defaults to https://www.extension.dev or EXTENSION_DEV_API_URL)",
-      },
+      api: API_BASE,
     },
     required: ["browsers", "buildSha"],
   },
@@ -118,7 +115,7 @@ export async function handler(args: SubmitToolArgs): Promise<string> {
   if (!token) {
     return fail(
       "SubmitAuthError",
-      "No token. Run extension_login, or set EXTENSION_DEV_TOKEN (create one in the extension.dev dashboard under project settings -> Access tokens; tokens live at most 7 days, so CI must re-mint before expiry).",
+      "No token. Run extension_auth (action: login), or set EXTENSION_DEV_TOKEN (create one in the extension.dev dashboard under project settings -> Access tokens; tokens live at most 7 days, so CI must re-mint before expiry).",
     );
   }
 
@@ -221,7 +218,7 @@ export async function handler(args: SubmitToolArgs): Promise<string> {
       if (channelsRes.ok) channelRows = parseChannels(channelsRes.json);
     } else {
       healthUnreadable =
-        "no stored workspace/project to look up (run extension_login)";
+        "no stored workspace/project to look up (run extension_auth)";
     }
 
     const preflight = browsers.map((browser) => {
@@ -314,7 +311,7 @@ export async function handler(args: SubmitToolArgs): Promise<string> {
 
   if (!dryRun) {
     result.statusNote =
-      "Track this submission with extension_store_status: it reads the recorded outcome, per-store credential health, and review state from the public registry.";
+      "Track this submission with extension_release_status: it reads the recorded outcome, per-store credential health, and review state from the public registry.";
   }
 
   if (warnings.length > 0) result.warnings = warnings;

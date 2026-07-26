@@ -6,6 +6,10 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
+import {
+  SESSION_BROWSER,
+  SESSION_PROJECT_PATH,
+} from "../lib/common-schema";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
@@ -23,20 +27,12 @@ import { resolveSessionBrowser } from "../lib/session-browser";
 export const schema = {
   name: "extension_list_extensions",
   description:
-    "List the extensions in the running dev browser. Returns each extension's id, name, version, and (on Chromium) live contexts. The entry for THIS dev session's extension (the project being served) is flagged ownExtension: true, with name and version resolved from the session's ready contract even when the browser exposes no identity. On Chromium this rides the Chrome DevTools Protocol: entries are extensions with at least one live context (a dormant MV3 service worker with no open page may be absent until it wakes), and other extensions resolve via the read-only Extensions domain when available. On Firefox this rides the Remote Debugging Protocol root actor (listAddons, engine 4.0.15+): entries are INSTALLED add-ons regardless of live contexts, with temporarilyInstalled marking temporary loads, and carry no contexts. Either way other extensions' contexts are never attached to or evaluated in. Requires an active dev or start session.",
+    "List the extensions in the running dev browser: id, name, version, and (on Chromium) live contexts. THIS session's own extension is flagged ownExtension: true, with name and version from the ready contract even when the browser exposes no identity. Chromium rides the Chrome DevTools Protocol, so an entry needs at least one live context (a dormant MV3 service worker may be absent until it wakes). Firefox rides the RDP root actor (listAddons, engine 4.0.15+), so entries are INSTALLED add-ons regardless of contexts, marked temporarilyInstalled where relevant, and carry none. Either way other extensions' contexts are never attached to or evaluated in. Requires an active dev or start session.",
   inputSchema: {
     type: "object" as const,
     properties: {
-      projectPath: {
-        type: "string",
-        description:
-          "Path to the extension project root (must have an active dev session)",
-      },
-      browser: {
-        type: "string",
-        description:
-          "Browser session to target. Defaults to the active dev session's browser for this project.",
-      },
+      projectPath: SESSION_PROJECT_PATH,
+      browser: SESSION_BROWSER,
     },
     required: ["projectPath"],
   },

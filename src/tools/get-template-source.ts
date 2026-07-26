@@ -12,29 +12,7 @@ import {
   templateFileUrls,
 } from "../lib/template-artifact-source";
 
-export const schema = {
-  name: "extension_get_template_source",
-  description:
-    "Read source files from a template in the extension.dev template catalog. Use this to learn implementation patterns before building something similar.",
-  inputSchema: {
-    type: "object" as const,
-    properties: {
-      slug: {
-        type: "string",
-        description: "Template slug (e.g. 'ai-claude', 'content-react')",
-      },
-      files: {
-        type: "array",
-        items: { type: "string" },
-        description:
-          "Specific files to read (e.g. ['src/manifest.json', 'src/background.ts']). If omitted, returns the file listing from templates-meta.json.",
-      },
-    },
-    required: ["slug"],
-  },
-};
-
-export async function handler(args: {
+export async function readTemplateSource(args: {
   slug: string;
   files?: string[];
 }): Promise<string> {
@@ -43,7 +21,7 @@ export async function handler(args: {
   if (!template) {
     return JSON.stringify({
       error: `Template '${args.slug}' not found in the catalog`,
-      hint: "Use extension_list_templates to see available templates.",
+      hint: 'Use extension_templates with action: "list" to see available templates.',
     });
   }
 

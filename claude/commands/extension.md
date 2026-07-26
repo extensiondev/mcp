@@ -11,7 +11,7 @@ Parse the user's intent from `$ARGUMENTS` and execute the matching action:
 
 ### "create <name>" or "new <name>", Scaffold a new extension
 
-1. If MCP tool `extension_list_templates` is available, use it to find the best template matching the user's description (check for surface type, framework, and keywords)
+1. If MCP tool `extension_templates` is available, use it to find the best template matching the user's description (check for surface type, framework, and keywords)
 2. If not, check the template catalog: `curl -sL https://github.com/extension-js/examples/releases/download/nightly/templates-meta.json | jq '.templates[] | {slug, description, uiFramework, surfaces}'`
 3. Run `npx extension@latest create <name> --template=<best-match>`
 4. Report what was created and suggest `npm run dev`
@@ -58,7 +58,7 @@ Parse the user's intent from `$ARGUMENTS` and execute the matching action:
 
 ### "template <query>", Search for a template
 
-1. If MCP tool `extension_list_templates` is available, use it with the query
+1. If MCP tool `extension_templates` is available, use it with the query
 2. Otherwise, search the catalog JSON
 3. Show matching templates with slug, description, framework, and surfaces
 

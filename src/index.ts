@@ -15,16 +15,14 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 
 import * as create from "./tools/create";
-import * as listTemplates from "./tools/list-templates";
+import * as templates from "./tools/templates";
 import * as build from "./tools/build";
 import * as dev from "./tools/dev";
 import * as start from "./tools/start";
-import * as preview from "./tools/preview";
 import * as previewWeb from "./tools/preview-web";
 import * as shares from "./tools/shares";
 import * as stop from "./tools/stop";
 
-import * as getTemplateSource from "./tools/get-template-source";
 import * as manifestValidate from "./tools/manifest-validate";
 import * as themeVerify from "./tools/theme-verify";
 import * as analyze from "./tools/analyze";
@@ -38,22 +36,18 @@ import * as open from "./tools/open";
 import * as domSnapshot from "./tools/dom-snapshot";
 import * as publish from "./tools/publish";
 import * as releasePromote from "./tools/release-promote";
-import * as releaseList from "./tools/release-list";
+import * as releaseStatus from "./tools/release-status";
 import * as submitTool from "./tools/submit";
-import * as storeStatus from "./tools/store-status";
 import * as wait from "./tools/wait";
 import * as addFeature from "./tools/add-feature";
 
-import * as login from "./tools/login";
-import * as whoami from "./tools/whoami";
-import * as logout from "./tools/logout";
+import * as auth from "./tools/auth";
+import { readIdentity } from "./tools/whoami";
+import { clearLocalCredentials } from "./tools/logout";
 import { requestDeviceCode, pollDeviceToken } from "./lib/device-flow";
 import { fetchLoginConfig, resolveApiBase } from "./lib/login-flow";
 
-import * as installBrowser from "./tools/install-browser";
-import * as uninstallBrowser from "./tools/uninstall-browser";
-import * as listBrowsers from "./tools/list-browsers";
-import * as detectBrowsers from "./tools/detect-browsers";
+import * as browsers from "./tools/browsers";
 import * as doctor from "./tools/doctor";
 import {
   inputValidationError,
@@ -72,15 +66,13 @@ export interface ToolModule {
 
 export const tools: ToolModule[] = [
   create,
-  listTemplates,
+  templates,
   build,
   dev,
   start,
-  preview,
   previewWeb,
   shares,
   stop,
-  getTemplateSource,
   manifestValidate,
   themeVerify,
   analyze,
@@ -93,19 +85,13 @@ export const tools: ToolModule[] = [
   open,
   domSnapshot,
   publish,
-  releaseList,
+  releaseStatus,
   releasePromote,
   submitTool,
-  storeStatus,
   wait,
   addFeature,
-  login,
-  whoami,
-  logout,
-  installBrowser,
-  uninstallBrowser,
-  listBrowsers,
-  detectBrowsers,
+  auth,
+  browsers,
   doctor,
 ];
 
@@ -213,7 +199,7 @@ export async function runCli(cmd: string, args: string[]): Promise<number> {
   };
 
   if (cmd === "whoami") {
-    log(await whoami.handler());
+    log(await readIdentity());
     return 0;
   }
 
@@ -251,7 +237,7 @@ export async function runCli(cmd: string, args: string[]): Promise<number> {
   }
 
   if (cmd === "logout") {
-    log(await logout.handler());
+    log(await clearLocalCredentials());
     return 0;
   }
 

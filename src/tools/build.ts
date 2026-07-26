@@ -6,6 +6,7 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
+import { LAUNCH_BROWSER, PROJECT_PATH } from "../lib/common-schema";
 import fs from "node:fs";
 import path from "node:path";
 import { runExtensionCli } from "../lib/exec";
@@ -194,16 +195,8 @@ export const schema = {
   inputSchema: {
     type: "object" as const,
     properties: {
-      projectPath: {
-        type: "string",
-        description: "Path to the extension project root",
-      },
-      browser: {
-        type: "string",
-        enum: ["chrome", "chromium", "edge", "brave", "opera", "vivaldi", "yandex", "firefox", "waterfox", "librewolf", "safari", "chromium-based", "gecko-based", "firefox-based", "webkit-based"],
-        default: "chrome",
-        description: "Target browser",
-      },
+      projectPath: PROJECT_PATH,
+      browser: LAUNCH_BROWSER,
       zip: {
         type: "boolean",
         default: false,
@@ -238,7 +231,7 @@ export const schema = {
         type: "boolean",
         default: false,
         description:
-          "Build even when extension_manifest_validate reports build-blocking errors. The build normally refuses, because a manifest error means the bundle it produces is broken in ways the bundler itself does not report.",
+          "Build even when extension_manifest_validate reports build-blocking errors. The build normally refuses: a manifest error yields a broken bundle the bundler itself never flags.",
       },
     },
     required: ["projectPath"],

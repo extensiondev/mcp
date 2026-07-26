@@ -32,7 +32,7 @@ function readReadyContract(
 export const schema = {
   name: "extension_doctor",
   description:
-    "Diagnose a dev session end-to-end: ready contract, dev-server process, control-port agreement, control channel, eval token, executor, and browser liveness. Returns one {check, status, detail, remediation?} entry per leg in dependency order, a 'skip' names the check that blocked it and is NOT a pass. Run this first when any act tool (storage/reload/eval/open) errors unexpectedly. Wraps `extension doctor`. Call with no projectPath for a pre-flight environment check (node, extension CLI, template cache) before any project exists.",
+    "Diagnose a dev session end-to-end: ready contract, dev-server process, control-port agreement, control channel, eval token, executor, browser liveness. Returns one {check, status, detail, remediation?} per leg in dependency order; a 'skip' names the check that blocked it and is NOT a pass. Run this first when any act tool (storage/reload/eval/open) errors unexpectedly. Call with no projectPath for a pre-flight environment check (node, extension CLI, template cache) before any project exists.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -95,7 +95,7 @@ async function environmentPreflight(): Promise<string> {
     status: cacheExists ? "pass" : "warn",
     detail: cacheExists
       ? `Template catalog cached at ${cacheFile}`
-      : "Template catalog not cached yet (first extension_list_templates will fetch it)",
+      : "Template catalog not cached yet (extension_templates will fetch it)",
   });
 
   const healthy = checks.every((c) => c.status !== "fail");

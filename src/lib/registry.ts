@@ -142,7 +142,7 @@ export async function fetchRegistryJson<T = unknown>(
   if (grant.status !== "ok") {
     const detail =
       grant.status === "no-credential"
-        ? "This project is private. Run extension_login for it, or set EXTENSION_DEV_TOKEN."
+        ? "This project is private. Run extension_auth (action: login) for it, or set EXTENSION_DEV_TOKEN."
         : grant.status === "public"
           ? "The platform reports this project is public, but the registry refused the read."
           : grant.message;

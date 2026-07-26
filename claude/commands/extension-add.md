@@ -20,7 +20,7 @@ Add a new feature surface to the current extension project. The user said: $ARGU
 2. **Get the reference pattern**
    If MCP tool `extension_add_feature` is available, use it. It returns the exact manifest additions, files to create, and reference template.
 
-   If MCP tool `extension_get_template_source` is available, read the reference template source to get real implementation patterns.
+   If MCP tool `extension_templates` (`action: "source"`) is available, read the reference template source to get real implementation patterns.
 
 3. **Update manifest.json**
    Add the required fields to `src/manifest.json`. Use the extension.dev cross-browser format:
