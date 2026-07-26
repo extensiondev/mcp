@@ -112,9 +112,9 @@ cp node_modules/@extension.dev/mcp/claude/commands/*.md ~/my-extension/.claude/c
 | run | `extension_wait` | Poll the dev-server ready contract |
 | run | `extension_stop` | Stop a dev/start/preview session (server + browser) |
 | see | `extension_manifest_validate` | Cross-browser manifest validation |
-| see | `extension_inspect` | Build output analysis |
-| see | `extension_source_inspect` | Live DOM inspection (CDP) |
-| see | `extension_dom_inspect` | CDP-free DOM snapshot |
+| see | `extension_analyze` | Static analysis of the built extension on disk |
+| see | `extension_inspect` | Deep live inspection of a running extension (closed shadow roots, probes) |
+| see | `extension_dom_snapshot` | Shallow DOM snapshot of a chosen tab or extension surface, CDP-free |
 | see | `extension_list_extensions` | List loaded extensions (Chromium) |
 | see | `extension_logs` | Stream logs from every context |
 | see | `extension_doctor` | Diagnose the dev session leg by leg (ready contract, ports, token, executor, browser) |
@@ -135,7 +135,7 @@ cp node_modules/@extension.dev/mcp/claude/commands/*.md ~/my-extension/.claude/c
 | platform | `extension_publish` | Publish a shareable preview to extension.dev |
 | platform | `extension_release_promote` | Promote a build to a release channel, headless |
 | platform | `extension_release_list` | List release channels and recent builds, to pick a valid build sha |
-| platform | `extension_deploy` | Submit to the Chrome, Firefox, and Edge stores through extension.dev |
+| platform | `extension_submit` | Submit for store review: Chrome, Firefox, Edge, Safari, through extension.dev |
 | platform | `extension_store_status` | Read a submission's outcome, credential health, and review state |
 
 Browser-launching tools (`dev`, `start`, `preview`) shell out to the `extension` CLI, the project's own `node_modules/.bin/extension` when present, otherwise `npx extension@<pinned>` at the version this package is verified against; everything else runs in-process.
@@ -150,7 +150,7 @@ That is a different job from shipping. Use `share` for the build you are holding
 
 ## From preview to store
 
-The platform tools connect agents to [extension.dev](https://extension.dev): `extension_login` runs extension.dev's own device flow (you approve the code at [extension.dev/device](https://extension.dev/device), and GitHub is federated server-side, so no GitHub token ever reaches your machine) and stores a project-scoped token locally (never returned to the agent), `extension_publish` turns a build your project has already published into a shareable URL, and `extension_release_promote` promotes a tested build to a release channel from CI or an agent session, no browser required. `extension_deploy` submits a built extension to the Chrome Web Store, Edge Add-ons, and Firefox AMO through extension.dev, which holds your store credentials and dispatches the release from your project's mirror CI, it defaults to a dry run and store credentials are never tool arguments. After a real submission, `extension_store_status` reads the recorded outcome, per-store credential health, and review state from the project's public registry, so agents and CI can answer "was it approved?" without a console visit. Access tokens live at most 7 days; CI pipelines re-mint them from the console's Access tokens page.
+The platform tools connect agents to [extension.dev](https://extension.dev): `extension_login` runs extension.dev's own device flow (you approve the code at [extension.dev/device](https://extension.dev/device), and GitHub is federated server-side, so no GitHub token ever reaches your machine) and stores a project-scoped token locally (never returned to the agent), `extension_publish` turns a build your project has already published into a shareable URL, and `extension_release_promote` promotes a tested build to a release channel from CI or an agent session, no browser required. `extension_submit` submits a built extension to the Chrome Web Store, Edge Add-ons, and Firefox AMO through extension.dev, which holds your store credentials and dispatches the release from your project's mirror CI, it defaults to a dry run and store credentials are never tool arguments. The two verbs are not interchangeable: `extension_publish` pushes to the extension.dev platform, `extension_submit` sends the build into a store's review queue, which is irreversible. After a real submission, `extension_store_status` reads the recorded outcome, per-store credential health, and review state from the project's public registry, so agents and CI can answer "was it approved?" without a console visit. Access tokens live at most 7 days; CI pipelines re-mint them from the console's Access tokens page.
 
 ## The extension.dev stack
 

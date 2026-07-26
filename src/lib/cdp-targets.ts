@@ -17,7 +17,7 @@ export interface PageTarget {
 
 export const TARGET_ID_NOTE =
   "targetId is a CDP target id, NOT a chrome.tabs id: do not pass it as `tab`. " +
-  "Target a tab with `tabUrl` (URL substring) or `url`; if you need a numeric tab id, call extension_dom_inspect with listTabs: true.";
+  "Target a tab with `tabUrl` (URL substring) or `url`; if you need a numeric tab id, call extension_dom_snapshot with listTabs: true.";
 
 export function filterPageTargets(
   raw: Array<{ id: string; type: string; url: string; title: string }>,

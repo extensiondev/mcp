@@ -37,7 +37,7 @@ vi.mock("../lib/session-browser", async (importOriginal) => {
   };
 });
 
-const domInspect = await import("../tools/dom-inspect");
+const domSnapshot = await import("../tools/dom-snapshot");
 
 beforeEach(() => {
   rdpTabs = [];
@@ -45,7 +45,7 @@ beforeEach(() => {
   rdpPort = 9223;
 });
 
-describe("extension_dom_inspect listTargets on Gecko (RDP root listTabs)", () => {
+describe("extension_dom_snapshot listTargets on Gecko (RDP root listTabs)", () => {
   it("maps tab descriptors to actor targets with the two-id-space note", async () => {
     rdpTabs = [
       {
@@ -63,7 +63,7 @@ describe("extension_dom_inspect listTargets on Gecko (RDP root listTabs)", () =>
     ];
 
     const result = JSON.parse(
-      await domInspect.handler({
+      await domSnapshot.handler({
         projectPath: "/p",
         browser: "firefox",
         listTargets: true,
@@ -94,7 +94,7 @@ describe("extension_dom_inspect listTargets on Gecko (RDP root listTabs)", () =>
     rdpPort = null;
 
     const result = JSON.parse(
-      await domInspect.handler({
+      await domSnapshot.handler({
         projectPath: "/p",
         browser: "firefox",
         listTargets: true,
@@ -110,7 +110,7 @@ describe("extension_dom_inspect listTargets on Gecko (RDP root listTabs)", () =>
     rdpError = new Error("ECONNREFUSED");
 
     const result = JSON.parse(
-      await domInspect.handler({
+      await domSnapshot.handler({
         projectPath: "/p",
         browser: "firefox",
         listTargets: true,

@@ -183,9 +183,9 @@ describe("7-day token TTL disclosure", () => {
   });
 
   it("token-gated tools state the TTL wherever they point at Access tokens", async () => {
-    const deploy = await import("../tools/deploy");
+    const submit = await import("../tools/submit");
     const promote = await import("../tools/release-promote");
-    expect(deploy.schema.description).toContain("7 days");
+    expect(submit.schema.description).toContain("7 days");
     expect(promote.schema.description).toContain("7 days");
   });
 });

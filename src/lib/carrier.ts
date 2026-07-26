@@ -189,7 +189,7 @@ export function materializeCarrier(
         "Chromium-family only: Firefox has no externally_connectable channel for web pages.",
       ],
       graduation:
-        "The carrier lane is the SHARED real lane: bridged calls run as the carrier, by design (see limitations). Your guest is already loaded as ITSELF in this same session, so for its own storage, identity, badge and messaging (the isolated real thing), drive the guest directly instead of the carrier bridge: extension_storage, extension_eval and extension_dom_inspect against this projectPath all operate on the guest as itself. Start (or replace) this session with allowControl: true (or allowEval: true) to unlock them. Use the carrier bridge for the shared real-lane TRACE; use the control verbs for the guest's OWN state.",
+        "The carrier lane is the SHARED real lane: bridged calls run as the carrier, by design (see limitations). Your guest is already loaded as ITSELF in this same session, so for its own storage, identity, badge and messaging (the isolated real thing), drive the guest directly instead of the carrier bridge: extension_storage, extension_eval and extension_dom_snapshot against this projectPath all operate on the guest as itself. Start (or replace) this session with allowControl: true (or allowEval: true) to unlock them. Use the carrier bridge for the shared real-lane TRACE; use the control verbs for the guest's OWN state.",
       ...(carrierId
         ? {
             bridgeProtocol: {

@@ -20,7 +20,7 @@ import { UserlandProjectPage } from "@extension.dev/urls/userland";
 export const schema = {
   name: "extension_release_list",
   description:
-    "List the project's release channels (channel -> promoted build sha) and recent builds from the registry (registry.extension.land), so you can pick a valid buildSha for extension_release_promote, extension_deploy, or extension_publish. Read-only, no dispatch. Defaults to the logged-in project (extension_login); pass workspace + project to inspect another project. Works for PRIVATE projects too when your stored login covers them. Returns the registry URLs it read, the console Builds page URL (needs a login), and a publicUrl per channel and build on the public viewer (no login needed for a public project).",
+    "List the project's release channels (channel -> promoted build sha) and recent builds from the registry (registry.extension.land), so you can pick a valid buildSha for extension_release_promote, extension_submit, or extension_publish. Read-only, no dispatch. Defaults to the logged-in project (extension_login); pass workspace + project to inspect another project. Works for PRIVATE projects too when your stored login covers them. Returns the registry URLs it read, the console Builds page URL (needs a login), and a publicUrl per channel and build on the public viewer (no login needed for a public project).",
   inputSchema: {
     type: "object" as const,
     properties: {

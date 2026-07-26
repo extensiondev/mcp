@@ -12,7 +12,7 @@ vi.mock("../lib/act", async (importOriginal) => {
   };
 });
 
-const domInspect = await import("../tools/dom-inspect");
+const domSnapshot = await import("../tools/dom-snapshot");
 const evalTool = await import("../tools/eval");
 const openTool = await import("../tools/open");
 
@@ -20,10 +20,10 @@ afterEach(() => {
   calls.length = 0;
 });
 
-describe("dom_inspect targeting", () => {
+describe("dom_snapshot targeting", () => {
   it("no longer demands a tab id for content", async () => {
     const result = JSON.parse(
-      await domInspect.handler({ projectPath: "/p", context: "content" }),
+      await domSnapshot.handler({ projectPath: "/p", context: "content" }),
     );
 
     expect(result.ok).toBe(true);
@@ -33,7 +33,7 @@ describe("dom_inspect targeting", () => {
   });
 
   it("passes url through as the target selector", async () => {
-    await domInspect.handler({
+    await domSnapshot.handler({
       projectPath: "/p",
       context: "content",
       url: "https://example.com",
@@ -44,13 +44,13 @@ describe("dom_inspect targeting", () => {
   });
 
   it("still honours an explicit tab id", async () => {
-    await domInspect.handler({ projectPath: "/p", context: "page", tab: 7 });
+    await domSnapshot.handler({ projectPath: "/p", context: "page", tab: 7 });
 
     expect(calls[0][calls[0].indexOf("--tab") + 1]).toBe("7");
   });
 
   it("listTabs is a discovery call that ignores the other args", async () => {
-    await domInspect.handler({
+    await domSnapshot.handler({
       projectPath: "/p",
       listTabs: true,
       context: "content",

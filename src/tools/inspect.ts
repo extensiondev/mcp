@@ -6,250 +6,244 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-import fs from "node:fs";
-import path from "node:path";
+import { CDPClient } from "../lib/cdp";
+import { isChromiumFamily } from "../lib/browser-family";
+import { resolveCdpPort, CDP_PORT_MISSING_HINT } from "../lib/cdp-port";
+import { resolveSessionBrowser } from "../lib/session-browser";
+import { inspectViaBridge } from "./inspect-gecko";
 
 export const schema = {
   name: "extension_inspect",
   description:
-    "Inspect a built extension: file sizes, entry points, permissions used, and structure analysis. The extension must be built first.",
+    "DEEP inspection of a RUNNING extension's live state over the browser's debugger protocol: full HTML including shadow DOM, DOM structure, content-script injection, console messages, and CSS selector queries (`probe`). The ONLY tool that pierces CLOSED shadow roots (`deepDom`), runs selector probes, and NAVIGATES a tab to `url` before reading it. It reads a web/override page target and picks the first inspectable one (or the first whose url contains `url`); it cannot address an extension surface by name and takes no chrome.tabs id. To choose WHICH tab or which OPEN extension surface (popup/options/sidebar/devtools) to read, or to enumerate what is open, use extension_dom_snapshot instead. For a built extension's files and sizes on disk use extension_analyze. Chromium sessions ride Chrome DevTools Protocol (needs the session's debug port, not allowControl). Firefox sessions are fully paired: summary/meta/html/dom_snapshot/extension_roots/probes ride the agent bridge (needs allowEval: true), console rides the RDP watcher replay (engine 4.0.15+), and deepDom walks closed shadow roots via a content-script eval (MV2 sessions with host permissions for the target url; Firefox MV3 background CSP blocks bridge evals entirely). Requires an active dev or start session.",
   inputSchema: {
     type: "object" as const,
     properties: {
       projectPath: {
         type: "string",
-        description: "Path to the extension project root",
+        description:
+          "Path to the extension project root (must have an active dev session)",
+      },
+      url: {
+        type: "string",
+        description:
+          "URL to inspect (navigates the browser tab to this URL first)",
+      },
+      probe: {
+        type: "array",
+        items: { type: "string" },
+        description:
+          "CSS selectors to query, returns element counts and samples for each",
+      },
+      include: {
+        type: "array",
+        items: {
+          type: "string",
+          enum: [
+            "html",
+            "summary",
+            "meta",
+            "dom_snapshot",
+            "console",
+            "extension_roots",
+          ],
+        },
+        default: ["summary", "meta", "console"],
+        description: "What data to include in the response",
       },
       browser: {
         type: "string",
-        default: "chrome",
-        description: "Browser build to inspect",
+        description:
+          "Browser session to target. Defaults to the active dev session's browser for this project.",
       },
-      format: {
-        type: "string",
-        enum: ["summary", "tree", "json"],
-        default: "summary",
+      maxBytes: {
+        type: "number",
+        default: 262144,
+        description: "Truncate HTML output at this byte count (0 = unlimited)",
+      },
+      deepDom: {
+        type: "boolean",
+        default: false,
+        description:
+          "Pierce CLOSED shadow roots. The default path reads open shadow roots; closed ones need this escape hatch. Chromium: CDP DOM pierce. Firefox: a content-script walk via tabs.executeScript (MV2 sessions; the extension needs host permissions for the target url).",
       },
     },
     required: ["projectPath"],
   },
 };
 
-interface FileEntry {
-  path: string;
-  size: number;
-  type: string;
-}
-
-function walkDir(dir: string, base: string = ""): FileEntry[] {
-  const entries: FileEntry[] = [];
-  try {
-    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-      const rel = base ? `${base}/${entry.name}` : entry.name;
-
-      if (entry.isDirectory()) {
-        entries.push(...walkDir(path.join(dir, entry.name), rel));
-      } else {
-        const stat = fs.statSync(path.join(dir, entry.name));
-        const ext = path.extname(entry.name).toLowerCase();
-        let type = "other";
-        if ([".js", ".mjs"].includes(ext)) type = "javascript";
-        else if ([".css"].includes(ext)) type = "stylesheet";
-        else if ([".html", ".htm"].includes(ext)) type = "html";
-        else if ([".json"].includes(ext)) type = "json";
-        else if (
-          [".png", ".jpg", ".svg", ".gif", ".ico", ".webp"].includes(ext)
-        )
-          type = "image";
-        else if ([".woff", ".woff2", ".ttf", ".otf"].includes(ext))
-          type = "font";
-        else if ([".wasm"].includes(ext)) type = "wasm";
-        else if ([".map"].includes(ext)) type = "sourcemap";
-        else if ([".zip"].includes(ext)) type = "archive";
-        entries.push({ path: rel, size: stat.size, type });
-      }
-    }
-  } catch {
-  }
-  return entries;
-}
-
-function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
-
 export async function handler(args: {
   projectPath: string;
+  url?: string;
+  probe?: string[];
+  include?: string[];
   browser?: string;
-  format?: string;
+  maxBytes?: number;
+  deepDom?: boolean;
 }): Promise<string> {
-  const browser = args.browser ?? "chrome";
-  const distPath = path.resolve(args.projectPath, "dist", browser);
-
-  if (!fs.existsSync(distPath)) {
-    return JSON.stringify({
-      error: `Build output not found at ${distPath}. Run extension_build first.`,
-      hint: `Use extension_build with browser: "${browser}" to build the extension.`,
-    });
+  const { browser } = resolveSessionBrowser(
+    args.projectPath,
+    args.browser,
+    "chrome",
+  );
+  const include = new Set(args.include ?? ["summary", "meta", "console"]);
+  const maxBytes = args.maxBytes ?? 262_144;
+  if (!isChromiumFamily(browser)) {
+    return inspectViaBridge(args, browser, include, maxBytes);
   }
 
-  const files = walkDir(distPath);
-  const totalSize = files.reduce((sum, f) => sum + f.size, 0);
+  const resolved = await resolveCdpPort(args.projectPath, browser);
+  if (!resolved) {
+    return JSON.stringify({
+      error:
+        "No active dev session found. Cannot connect to Chrome DevTools Protocol.",
+      hint: `Start a dev session first with extension_dev, then use extension_wait to confirm it is ready. ${CDP_PORT_MISSING_HINT}`,
+    });
+  }
+  const cdpPort = resolved.port;
 
-  let manifest: Record<string, unknown> = {};
-  const manifestPath = path.join(distPath, "manifest.json");
+  const cdp = new CDPClient();
 
   try {
-    manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
-  } catch {
-  }
+    const allTargets = await CDPClient.discoverTargets(cdpPort);
+    const OVERRIDE_PAGES = [
+      "chrome://newtab/",
+      "chrome://new-tab-page/",
+      "chrome://bookmarks/",
+      "chrome://history/",
+    ];
+    const isOverridePage = (url: string): boolean =>
+      OVERRIDE_PAGES.some((p) => url.startsWith(p));
+    const pageTargets = allTargets.filter(
+      (t) =>
+        t.type === "page" &&
+        !t.url.startsWith("devtools://") &&
+        (!t.url.startsWith("chrome://") || isOverridePage(t.url)),
+    );
 
-  const byType: Record<string, { count: number; size: number }> = {};
-
-  for (const f of files) {
-    if (!byType[f.type]) byType[f.type] = { count: 0, size: 0 };
-    byType[f.type].count++;
-    byType[f.type].size += f.size;
-  }
-
-  const sourcemapSize = byType.sourcemap?.size ?? 0;
-  const buildType = sourcemapSize > 0 ? "development" : "production";
-  const archiveSize = byType.archive?.size ?? 0;
-  const shippableSize = totalSize - sourcemapSize - archiveSize;
-
-  const sizeByPath = new Map(files.map((f) => [f.path, f.size]));
-  const entrypoints: Array<{
-    role: string;
-    path: string;
-    present: boolean;
-    sizeFormatted?: string;
-  }> = [];
-  const addEntry = (role: string, ref: unknown) => {
-    if (typeof ref !== "string") return;
-    const size = sizeByPath.get(ref.replace(/^\.?\//, ""));
-    entrypoints.push({
-      role,
-      path: ref,
-      present: size !== undefined,
-      ...(size !== undefined ? { sizeFormatted: formatBytes(size) } : {}),
-    });
-  };
-  const bg = manifest.background as Record<string, unknown> | undefined;
-  if (bg?.service_worker) addEntry("background.service_worker", bg.service_worker);
-  if (Array.isArray(bg?.scripts))
-    bg.scripts.forEach((s) => addEntry("background.scripts", s));
-  const actionField = (manifest.action || manifest.browser_action) as
-    | Record<string, unknown>
-    | undefined;
-  if (actionField?.default_popup)
-    addEntry("action.default_popup", actionField.default_popup);
-  const contentScripts = manifest.content_scripts as
-    | Array<Record<string, unknown>>
-    | undefined;
-  if (Array.isArray(contentScripts)) {
-    contentScripts.forEach((c, i) => {
-      if (Array.isArray(c.js))
-        c.js.forEach((j) => addEntry(`content_scripts[${i}].js`, j));
-      if (Array.isArray(c.css))
-        c.css.forEach((s) => addEntry(`content_scripts[${i}].css`, s));
-    });
-  }
-
-  const PROMO_RE =
-    /(screenshot|promo|marquee|tile|banner|preview)[-_.]?\d*\.(png|jpe?g|webp|gif)$/i;
-  const sizeWarnings: string[] = [];
-  for (const f of files) {
-    if (f.type === "sourcemap" || f.type === "archive") continue;
-    if (PROMO_RE.test(f.path)) {
-      sizeWarnings.push(
-        `${f.path} (${formatBytes(f.size)}) looks like a store-listing promo image shipped inside the extension package, move it out of the bundled sources so it does not inflate the store zip.`,
+    if (pageTargets.length === 0) {
+      const chromeOnly = allTargets.some(
+        (t) => t.type === "page" && t.url.startsWith("chrome://"),
       );
-    } else if (
-      f.type === "image" &&
-      !f.path.includes("icon") &&
-      f.size > 50 * 1024 &&
-      shippableSize > 0 &&
-      f.size / shippableSize > 0.25
-    ) {
-      sizeWarnings.push(
-        `${f.path} (${formatBytes(f.size)}) is ${Math.round(
-          (f.size / shippableSize) * 100,
-        )}% of the shipped bundle, unusually large for a shipped asset.`,
-      );
+      return JSON.stringify({
+        cdpPort,
+        browser,
+        warning: chromeOnly
+          ? "No inspectable page targets found. Only internal chrome:// pages are open; open the extension's surface (or pass a url to navigate a tab) first."
+          : "No inspectable page targets found. The extension may not have opened a page yet.",
+        allTargets: allTargets.map((t) => ({
+          type: t.type,
+          url: t.url?.slice(0, 100),
+        })),
+      });
     }
+
+    const target = args.url
+      ? (pageTargets.find((t) => t.url.includes(args.url!)) ?? pageTargets[0])
+      : pageTargets[0];
+
+    const browserWsUrl = await CDPClient.discoverBrowserWsUrl(cdpPort);
+    await cdp.connect(browserWsUrl);
+
+    const sessionId = await cdp.attachToTarget(target.id);
+    await cdp.enableDomains(sessionId);
+
+    if (args.url && !target.url.includes(args.url)) {
+      await cdp.navigate(sessionId, args.url);
+      await new Promise((r) => setTimeout(r, 1500));
+    } else {
+      await new Promise((r) => setTimeout(r, 500));
+    }
+
+    const result: Record<string, unknown> = {
+      cdpPort,
+      browser,
+      target: {
+        id: target.id,
+        url: target.url,
+        title: target.title,
+      },
+      targets: pageTargets.map((t) => ({
+        id: t.id,
+        url: t.url,
+        title: t.title,
+      })),
+    };
+
+    if (include.has("html")) {
+      let html = await cdp.getPageHTML(sessionId);
+      if (maxBytes > 0 && html.length > maxBytes) {
+        html = html.slice(0, maxBytes);
+        result.htmlTruncated = true;
+      }
+      result.html = html;
+    }
+
+    if (include.has("summary")) {
+      const summary = await cdp.evaluate(
+        sessionId,
+        `(() => {
+          try {
+            const roots = document.querySelectorAll('#extension-root,[data-extension-root]:not([data-extension-root="extension-js-devtools"])');
+            return {
+              htmlLength: document.documentElement.outerHTML.length,
+              scriptCount: document.querySelectorAll('script').length,
+              styleCount: document.querySelectorAll('style').length,
+              linkCount: document.querySelectorAll('link').length,
+              extensionRootCount: roots.length,
+              bodyChildCount: document.body ? document.body.children.length : 0
+            };
+          } catch { return {}; }
+        })()`,
+      );
+      result.summary = summary;
+    }
+
+    if (include.has("meta")) {
+      result.meta = await cdp.getPageMeta(sessionId);
+    }
+
+    if (include.has("dom_snapshot")) {
+      result.domSnapshot = await cdp.getDomSnapshot(sessionId);
+    }
+
+    if (include.has("console")) {
+      result.console = cdp.getConsoleSummary();
+    }
+
+    if (include.has("extension_roots")) {
+      result.extensionRoots = await cdp.getExtensionRootMeta(sessionId);
+    }
+
+    if (args.probe?.length) {
+      result.probes = await cdp.probeSelectors(sessionId, args.probe);
+      const jsLooking = args.probe.filter((p) =>
+        /^typeof\s|^(chrome|browser|window|document)\.|\(\)|=>|===/.test(p),
+      );
+      if (jsLooking.length) {
+        result.probeWarning =
+          `Probes are CSS selectors run through querySelectorAll against the live page, NOT JavaScript expressions. ` +
+          `${jsLooking.map((s) => `"${s}"`).join(", ")} parsed as selectors and will match nothing. To evaluate JS, use extension_eval.`;
+      }
+    }
+
+    if (args.deepDom) {
+      const closed = await cdp.getClosedShadowRoots(
+        sessionId,
+        maxBytes > 0 ? maxBytes : 65536,
+      );
+      result.closedShadowRoots = closed;
+      result.deepDom = true;
+    }
+
+    return JSON.stringify(result);
+  } catch (err) {
+    return JSON.stringify({
+      error: `CDP inspection failed: ${err instanceof Error ? err.message : err}`,
+      cdpPort,
+      hint: "Ensure a dev session is running. The browser may have closed or the CDP port may have changed.",
+    });
+  } finally {
+    cdp.disconnect();
   }
-
-  const result = {
-    browser,
-    distPath,
-    entrypoints,
-    ...(sizeWarnings.length ? { sizeWarnings } : {}),
-    buildType,
-    totalSize,
-    totalSizeFormatted: formatBytes(totalSize),
-    shippableSize,
-    shippableSizeFormatted: formatBytes(shippableSize),
-    fileCount: files.length,
-    ...(buildType === "development"
-      ? {
-          note: `This dist contains ${formatBytes(sourcemapSize)} of sourcemaps and looks like a dev build; run extension_build for production sizes. shippableSize excludes sourcemaps.`,
-        }
-      : {}),
-    ...(archiveSize > 0
-      ? {
-          archiveNote: `This dist contains ${formatBytes(archiveSize)} of .zip archive(s) (store packaging output, written into dist by zip builds). shippableSize excludes them so the packaged copy does not double-count the files it contains.`,
-        }
-      : {}),
-    manifest: {
-      name: manifest.name,
-      version: manifest.version,
-      manifest_version: manifest.manifest_version,
-      permissions: manifest.permissions,
-    },
-    byType: Object.fromEntries(
-      Object.entries(byType).map(([type, data]) => [
-        type,
-        {
-          count: data.count,
-          size: data.size,
-          sizeFormatted: formatBytes(data.size),
-        },
-      ]),
-    ),
-    ...(args.format === "tree" || args.format === "json"
-      ? {
-          files: files.map((f) => ({
-            ...f,
-            sizeFormatted: formatBytes(f.size),
-          })),
-        }
-      : {
-          largestFiles: files
-            .sort((a, b) => b.size - a.size)
-            .slice(0, 10)
-            .map((f) => ({
-              path: f.path,
-              size: f.size,
-              sizeFormatted: formatBytes(f.size),
-            })),
-        }),
-    storeReadiness: {
-      hasManifest: fs.existsSync(manifestPath),
-      hasIcons: files.some(
-        (f) => f.type === "image" && f.path.includes("icon"),
-      ),
-      has128Icon:
-        typeof (manifest.icons as Record<string, unknown> | undefined)?.[
-          "128"
-        ] === "string",
-      noSourceMaps: !files.some((f) => f.type === "sourcemap"),
-      noPromoAssets: !files.some((f) => PROMO_RE.test(f.path)),
-      under10MB: totalSize - archiveSize < 10 * 1024 * 1024,
-    },
-  };
-
-  return JSON.stringify(result);
 }

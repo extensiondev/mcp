@@ -13,7 +13,7 @@ vi.mock("../lib/act", async (importOriginal) => {
   };
 });
 
-const domInspect = await import("../tools/dom-inspect");
+const domSnapshot = await import("../tools/dom-snapshot");
 
 afterEach(() => {
   calls.length = 0;
@@ -81,7 +81,7 @@ describe("union types in the input validator", () => {
 
 describe("withConsole coercion", () => {
   it("treats true as a sensible line count", async () => {
-    await domInspect.handler({
+    await domSnapshot.handler({
       projectPath: "/p",
       context: "content",
       withConsole: true,
@@ -91,7 +91,7 @@ describe("withConsole coercion", () => {
   });
 
   it("passes a number through unchanged", async () => {
-    await domInspect.handler({
+    await domSnapshot.handler({
       projectPath: "/p",
       context: "content",
       withConsole: 5,
@@ -101,7 +101,7 @@ describe("withConsole coercion", () => {
   });
 
   it("omits the flag for false", async () => {
-    await domInspect.handler({
+    await domSnapshot.handler({
       projectPath: "/p",
       context: "content",
       withConsole: false,

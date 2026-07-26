@@ -137,7 +137,7 @@ export async function navigateToUrl(
           }`,
         },
         hint: isExtensionPage
-          ? "Confirm the path exists in the built dist (extension_build / extension_inspect list entrypoints). For an extension page, the path must match the BUILT manifest, which may differ from your source layout."
+          ? "Confirm the path exists in the built dist (extension_build / extension_analyze list entrypoints). For an extension page, the path must match the BUILT manifest, which may differ from your source layout."
           : "Confirm the URL loads in a normal browser and that the dev session's browser has network access. Nothing about your extension bundle is implicated in a failed http(s) navigation.",
       });
     }
@@ -156,8 +156,8 @@ export async function navigateToUrl(
         url: settled.url,
       },
       hint:
-        "Inspect it with extension_dom_inspect or extension_source_inspect using url (context: 'page'), they resolve the tab themselves. " +
-        "`target.targetId` is a CDP target id, NOT a chrome.tabs id: do not pass it as `tab`. If you need a numeric tab id, call extension_dom_inspect with listTabs: true.",
+        "Inspect it with extension_dom_snapshot or extension_inspect using url (context: 'page'), they resolve the tab themselves. " +
+        "`target.targetId` is a CDP target id, NOT a chrome.tabs id: do not pass it as `tab`. If you need a numeric tab id, call extension_dom_snapshot with listTabs: true.",
     });
   } catch (e) {
     return JSON.stringify({
@@ -501,8 +501,8 @@ async function openSurfaceAsTab(
         (popupBounds
           ? `The window was resized to the popup's content size (${popupBounds.width}x${popupBounds.height}${popupBounds.clamped ? ", clamped to Chrome's 25x25-800x600 popup bounds" : ""}), approximating real popup rendering. This resizes the WHOLE browser window for the session. It is the same page with the same extension APIs, but window.close() closes the tab. `
           : "It is the same page with the same extension APIs, but it is NOT hosted in a popup window: no popup sizing, and window.close() closes the tab. ") +
-        `Inspect it with extension_dom_inspect context: '${surface}' (include: ['html']), or extension_source_inspect with this url. ` +
-        "Do NOT pass this extension-page url to extension_dom_inspect or extension_eval as a tab target: script injection cannot reach extension pages, only the surface context or CDP can.";
+        `Inspect it with extension_dom_snapshot context: '${surface}' (include: ['html']), or extension_inspect with this url. ` +
+        "Do NOT pass this extension-page url to extension_dom_snapshot or extension_eval as a tab target: script injection cannot reach extension pages, only the surface context or CDP can.";
       return JSON.stringify(parsed);
     }
   } catch {

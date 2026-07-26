@@ -90,7 +90,7 @@ describe("materializeCarrier", () => {
     const g = result.graduation ?? "";
     expect(g).toMatch(/already loaded as ITSELF/i);
     expect(g).toMatch(
-      /extension_storage|extension_eval|extension_dom_inspect/,
+      /extension_storage|extension_eval|extension_dom_snapshot/,
     );
     expect(g).toMatch(/allowControl|allowEval/);
   });

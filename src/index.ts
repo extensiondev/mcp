@@ -27,19 +27,19 @@ import * as stop from "./tools/stop";
 import * as getTemplateSource from "./tools/get-template-source";
 import * as manifestValidate from "./tools/manifest-validate";
 import * as themeVerify from "./tools/theme-verify";
+import * as analyze from "./tools/analyze";
 import * as inspect from "./tools/inspect";
-import * as sourceInspect from "./tools/source-inspect";
 import * as listExtensions from "./tools/list-extensions";
 import * as logs from "./tools/logs";
 import * as evalTool from "./tools/eval";
 import * as storage from "./tools/storage";
 import * as reload from "./tools/reload";
 import * as open from "./tools/open";
-import * as domInspect from "./tools/dom-inspect";
+import * as domSnapshot from "./tools/dom-snapshot";
 import * as publish from "./tools/publish";
 import * as releasePromote from "./tools/release-promote";
 import * as releaseList from "./tools/release-list";
-import * as deployTool from "./tools/deploy";
+import * as submitTool from "./tools/submit";
 import * as storeStatus from "./tools/store-status";
 import * as wait from "./tools/wait";
 import * as addFeature from "./tools/add-feature";
@@ -83,19 +83,19 @@ export const tools: ToolModule[] = [
   getTemplateSource,
   manifestValidate,
   themeVerify,
+  analyze,
   inspect,
-  sourceInspect,
   listExtensions,
   logs,
   evalTool,
   storage,
   reload,
   open,
-  domInspect,
+  domSnapshot,
   publish,
   releaseList,
   releasePromote,
-  deployTool,
+  submitTool,
   storeStatus,
   wait,
   addFeature,
