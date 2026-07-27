@@ -34,8 +34,14 @@ export function resolveApiBase(api?: string): string {
   ).replace(/\/+$/, "");
 }
 
+function isExtensionDevHost(hostname: string): boolean {
+  const host = hostname.toLowerCase().replace(/\.+$/, "");
+  return host === "extension.dev" || host.endsWith(".extension.dev");
+}
+
 export function safeApiBase(
   raw: string,
+  callerSupplied?: string,
 ): { ok: true; base: string } | { ok: false; message: string } {
   let parsed: URL;
   try {
@@ -52,6 +58,27 @@ export function safeApiBase(
     return {
       ok: false,
       message: `Refusing to send the access token to ${raw}: use https (http is allowed only for localhost).`,
+    };
+  }
+  /* @invariant
+   * An operator may point this anywhere. A tool argument may not.
+   *
+   * Self-hosting is supported, so the platform URL cannot be pinned to
+   * extension.dev outright: EXTENSION_DEV_API_URL and the CLI flag are set by
+   * the person running the server and are trusted to name any https host. The
+   * `api` tool argument is different in kind. A model can be talked into
+   * supplying it by anything it reads, a README, an issue body, a template
+   * description, and what travels here is a live project token that can
+   * publish, list and revoke. A scheme check answers "is this encrypted", not
+   * "is this us", and https is exactly what an attacker's host would offer.
+   * Where the value came from is the only thing that separates the two, so
+   * that is what this branches on.
+   */
+  const fromCaller = String(callerSupplied || "").trim();
+  if (fromCaller && !isLocalhost && !isExtensionDevHost(parsed.hostname)) {
+    return {
+      ok: false,
+      message: `Refusing to send the access token to ${raw}: an api argument may only name an extension.dev host or a local dev server. To use a self-hosted platform, set EXTENSION_DEV_API_URL where the server is launched instead of passing it per call.`,
     };
   }
   return { ok: true, base: `${parsed.origin}${parsed.pathname}`.replace(/\/+$/, "") };

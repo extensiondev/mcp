@@ -120,7 +120,7 @@ export async function listArtifacts(options: {
   const token = options.token ?? resolveToken();
   if (!token) return authError("SharesAuthError");
 
-  const apiCheck = safeApiBase(resolveApiBase(options.api));
+  const apiCheck = safeApiBase(resolveApiBase(options.api), options.api);
   if (!apiCheck.ok) {
     return {
       ok: false,
@@ -195,7 +195,7 @@ export async function revokeArtifact(options: {
   const token = options.token ?? resolveToken();
   if (!token) return authError("SharesAuthError");
 
-  const apiCheck = safeApiBase(resolveApiBase(options.api));
+  const apiCheck = safeApiBase(resolveApiBase(options.api), options.api);
   if (!apiCheck.ok) {
     return {
       ok: false,

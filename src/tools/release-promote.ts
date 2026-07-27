@@ -104,7 +104,7 @@ export async function handler(args: {
     );
   }
 
-  const apiCheck = safeApiBase(resolveApiBase(args.api));
+  const apiCheck = safeApiBase(resolveApiBase(args.api), args.api);
   if (!apiCheck.ok) {
     return fail(
       "ReleaseConfigError",

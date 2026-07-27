@@ -47,7 +47,7 @@ export async function publish(
   }
 
   const doFetch = options.fetchImpl ?? fetch;
-  const apiCheck = safeApiBase(resolveApiBase(options.api));
+  const apiCheck = safeApiBase(resolveApiBase(options.api), options.api);
   if (!apiCheck.ok) {
     return {
       ok: false,

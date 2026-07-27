@@ -355,10 +355,22 @@ export async function handler(args: {
       warnings: previewWarnings,
     });
   } catch (err) {
+    /* @invariant
+     * Nothing rendered, so this is not a success.
+     *
+     * ok:true here reported "previewed" for a run where the host never
+     * answered and the link cannot open. Callers branch on ok before they read
+     * status, so an agent would relay a deep link as though it worked, and the
+     * remedy it then offers is a dev server the caller may not even have.
+     */
     return envelope({
-      ok: true,
+      ok: false,
       command: COMMAND,
       status: "host-unreachable",
+      error: {
+        code: "E_PREVIEW_HOST_UNREACHABLE",
+        message: `Nothing is serving ${SURFACE.label} at ${hostBase}, so deepLink has nothing to open. Pass share:true to get a link that needs no local server, or start the dev server if you are working inside the extension.dev monorepo.`,
+      },
       value: {
         ...result,
         hostReachable: false,

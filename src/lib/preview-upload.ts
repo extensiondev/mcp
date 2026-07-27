@@ -22,6 +22,16 @@ const IGNORED_SEGMENTS = new Set([
   "__MACOSX",
 ]);
 
+/* @invariant
+ * Secrets never ride along into a public share.
+ *
+ * A share link serves the uploaded bytes to anyone who opens it and offers the
+ * whole build as a downloadable zip, so anything a build step copied into
+ * dist/ is published the moment it is shared. A stray .env is the common case
+ * and the expensive one.
+ */
+const IGNORED_FILES = /^\.env(\..*)?$|\.(pem|key|p12|pfx|keystore)$/i;
+
 const TEXTUAL = /\.(json|js|mjs|cjs|ts|tsx|jsx|html|htm|css|svg|txt|md|map)$/i;
 
 const MAX_FILES = 2_000;
@@ -45,6 +55,31 @@ export type PreviewUploadOutcome =
   | { ok: true; data: PreviewUploadResult }
   | { ok: false; error: { name: string; message: string } };
 
+/* @invariant
+ * A file only travels as text if it survives the round trip byte for byte.
+ *
+ * Classifying by extension alone is a guess about encoding, and Buffer's utf8
+ * conversion answers a failed guess by substituting U+FFFD rather than by
+ * failing. The extension list cannot be tightened out of the problem either:
+ * ".ts" is TypeScript here and MPEG transport stream elsewhere, and a
+ * manifest.json written by a PowerShell redirect is UTF-16. Because the
+ * substitution happens before the upload, nothing downstream can undo it, so
+ * the check belongs here: re-encode, compare, and fall back to base64 for
+ * anything that did not survive.
+ */
+function encodeFile(
+  relativePath: string,
+  bytes: Buffer,
+): { content: string; encoding: "utf8" | "base64" } {
+  if (TEXTUAL.test(relativePath)) {
+    const text = bytes.toString("utf8");
+    if (Buffer.from(text, "utf8").equals(bytes)) {
+      return { content: text, encoding: "utf8" };
+    }
+  }
+  return { content: bytes.toString("base64"), encoding: "base64" };
+}
+
 export function collectDistFiles(distDir: string): PreviewUploadFile[] {
   const files: PreviewUploadFile[] = [];
   const walk = (dir: string) => {
@@ -57,16 +92,11 @@ export function collectDistFiles(distDir: string): PreviewUploadFile[] {
         continue;
       }
       if (!entry.isFile()) continue;
+      if (IGNORED_FILES.test(entry.name)) continue;
       const relative = path.relative(distDir, absolute).split(path.sep).join("/");
       const bytes = fs.readFileSync(absolute);
-      const encoding: "utf8" | "base64" = TEXTUAL.test(relative)
-        ? "utf8"
-        : "base64";
-      files.push({
-        path: relative,
-        content: bytes.toString(encoding),
-        encoding,
-      });
+      const { content, encoding } = encodeFile(relative, bytes);
+      files.push({ path: relative, content, encoding });
     }
   };
   walk(distDir);
@@ -93,7 +123,7 @@ export async function uploadPreview(options: {
     };
   }
 
-  const apiCheck = safeApiBase(resolveApiBase(options.api));
+  const apiCheck = safeApiBase(resolveApiBase(options.api), options.api);
   if (!apiCheck.ok) {
     return {
       ok: false,
@@ -134,13 +164,34 @@ export async function uploadPreview(options: {
   }
   const totalChars = files.reduce((sum, file) => sum + file.content.length, 0);
   if (totalChars > MAX_CONTENT_CHARS) {
+    /* @invariant
+     * The number in this message is the budget the caller actually has.
+     *
+     * The cap counts encoded characters, and binary files are base64, which
+     * costs four characters for every three bytes. Quoting the raw cap told
+     * someone whose dist is mostly images and fonts that their 50MB build was
+     * "over 64MB", and pointed them at source maps that were not what filled
+     * the budget. Reporting what was measured, in the units they can act on,
+     * is the difference between an actionable limit and an argument.
+     */
+    const encodedBytes = files.reduce(
+      (sum, file) =>
+        sum + Buffer.byteLength(file.content, file.encoding),
+      0,
+    );
+    const mb = (value: number) => (value / (1024 * 1024)).toFixed(1);
     return {
       ok: false,
       error: {
         name: "PreviewTooLargeError",
-        message: `${options.distDir} is too large to share (over ${Math.floor(
-          MAX_CONTENT_CHARS / (1024 * 1024),
-        )}MB). Build without source maps, or trim the bundled assets.`,
+        message:
+          `${options.distDir} is too large to share: ${mb(encodedBytes)}MB of files. ` +
+          `A shared preview holds about ${mb(
+            MAX_CONTENT_CHARS,
+          )}MB of text, and roughly ${mb(
+            (MAX_CONTENT_CHARS * 3) / 4,
+          )}MB when the build is mostly images, fonts or wasm, which travel base64-encoded. ` +
+          "Trim the bundled assets, or build without source maps if yours are large.",
       },
     };
   }
@@ -162,6 +213,7 @@ export async function uploadPreview(options: {
       headers: {
         authorization: `Bearer ${token}`,
         "content-type": "application/json",
+        "x-extensiondev-origin": "mcp",
         ...identityHeaders("extension_preview_web"),
       },
       body: JSON.stringify({

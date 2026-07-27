@@ -137,7 +137,7 @@ describe("extension_preview_web", () => {
     }
   });
 
-  it("degrades gracefully when the surface is unreachable", async () => {
+  it("fails when the surface is unreachable, rather than reporting a link that cannot open", async () => {
     const dir = tmpDist(MANIFEST);
     global.fetch = (async () => {
       throw new Error("fetch failed");
@@ -146,9 +146,11 @@ describe("extension_preview_web", () => {
       const out = JSON.parse(
         await handler({ projectPath: dir, build: false, distPath: dir }),
       );
-      expect(out.ok).toBe(true);
+      expect(out.ok).toBe(false);
+      expect(out.error.code).toBe("E_PREVIEW_HOST_UNREACHABLE");
       expect(out.value.hostReachable).toBe(false);
       expect(out.value.previewLoadable).toBe(false);
+      expect(out.error.message).toMatch(/share:true/);
       expect(out.warnings.join(" ")).toMatch(/Start it/);
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });

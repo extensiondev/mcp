@@ -160,7 +160,7 @@ export async function handler(args: SubmitToolArgs): Promise<string> {
     );
   }
 
-  const apiCheck = safeApiBase(resolveApiBase(args.api));
+  const apiCheck = safeApiBase(resolveApiBase(args.api), args.api);
   if (!apiCheck.ok) {
     return fail(
       "SubmitConfigError",
