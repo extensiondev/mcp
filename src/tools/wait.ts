@@ -22,6 +22,7 @@ import { recentErrorLogs } from "./doctor";
 const SAFE_CEILING_MS = 50_000;
 const DEFAULT_TIMEOUT_MS = 45_000;
 const MIN_TIMEOUT_MS = 1_000;
+const CONTRACT_FRESHNESS_SLACK_MS = 2_000;
 
 function isAlive(pid: number): boolean {
   try {
@@ -96,7 +97,11 @@ export async function handler(args: {
       const stat = fs.statSync(readyPath);
       const raw = fs.readFileSync(readyPath, "utf8");
       const contract: ReadyContract = JSON.parse(raw);
-      const stampedBeforeSession = since !== null && stat.mtimeMs < since;
+      /* @invariant The slack absorbs filesystem mtime granularity: a
+         contract stamped in the same tick as session registration is fresh,
+         while a genuinely stale one predates the session by seconds. */
+      const stampedBeforeSession =
+        since !== null && stat.mtimeMs < since - CONTRACT_FRESHNESS_SLACK_MS;
       const deadOrphanStamp =
         since === null &&
         contract.status !== "ready" &&
