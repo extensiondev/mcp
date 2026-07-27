@@ -320,7 +320,7 @@ async function listShares(args: {
         : ""
     }. Revoke one with action:"revoke" and its artifactId or any of its URLs.`,
     warnings: [
-      "previewUrl and zipUrl are null for a share that is no longer live, because a revoked or expired link cannot resolve for anyone. revokeUrl stays on every row. Revocation is permanent: a revoked id is burned and re-sharing the same build mints a different link.",
+      "previewUrl and zipUrl are null for a share that is no longer live, because a revoked or expired link cannot resolve for anyone. revokeUrl stays on every row. Revocation is permanent: a revoked id is burned, and re-sharing that build mints a different link. Re-sharing a build that was NOT revoked returns its existing link instead.",
       "attribution.ownership says who the share belongs to and therefore who may revoke it: project means the owning workspace holds it and any member can pull it back, personal means one person holds it alone. attribution.credit names the publisher and is attribution only, granting and restricting nothing. A credit of \"CLI token ...\" means the platform could not resolve which human minted that token, and a credit of \"not recorded\" means it never knew; neither is a name, and neither should be reported as one.",
       truncatedNote,
     ],

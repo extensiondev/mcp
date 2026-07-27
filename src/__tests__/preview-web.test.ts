@@ -500,7 +500,10 @@ describe("extension_preview_web", () => {
         expect(out.value.share.ok).toBe(true);
         expect(out.value.share.previewUrl).toBeTruthy();
         expect(out.value.share.record.recorded).toBe(false);
-        expect(String(out.value.share.note)).toMatch(/only copy/);
+        expect(String(out.value.share.note)).toMatch(
+          /Keep the revokeUrl in this response/,
+        );
+        expect(String(out.value.share.note)).toMatch(/extension_shares/);
       } finally {
         fs.rmSync(dir, { recursive: true, force: true });
       }
