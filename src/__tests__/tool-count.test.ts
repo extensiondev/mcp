@@ -35,12 +35,9 @@ const RETIRED_TOOL_NAMES = [
   "extension_preview",
 ];
 
-const COUNT_BEARING_FILES = [
-  "package.json",
-  "server.json",
-  "README.md",
-  "docs/mcp.mdx",
-];
+// docs/mcp.mdx left this package in 8f69388 when the docs pages moved to
+// docs.extension.dev, so the count it once carried is no longer ours to guard.
+const COUNT_BEARING_FILES = ["package.json", "server.json", "README.md"];
 
 const countsIn = (text: string): number[] =>
   [...text.matchAll(/(\d+)\s+(?:MCP\s+)?tools\b/g)].map((m) => Number(m[1]));
