@@ -32,7 +32,7 @@ function readReadyContract(
 export const schema = {
   name: "extension_doctor",
   description:
-    "Diagnose a dev session end-to-end: ready contract, dev-server process, control-port agreement, control channel, eval token, executor, browser liveness. Returns one {check, status, detail, remediation?} per leg in dependency order; a 'skip' names the check that blocked it and is NOT a pass. Run this first when any act tool (storage/reload/eval/open) errors unexpectedly. Call with no projectPath for a pre-flight environment check (node, extension CLI, template cache) before any project exists.",
+    "Diagnose a dev session end to end: ready contract, dev-server process, control-port agreement, control channel, eval token, executor, browser liveness. This returns one {check, status, detail, remediation?} per leg, in dependency order. Read a 'skip' as blocked, not as a pass: it names the check that blocked it. Run this first when any act tool (storage, reload, eval, open) errors unexpectedly. Call it with no projectPath for a pre-flight environment check (node, the Extension.js CLI, the template cache) before any project exists.",
   inputSchema: {
     type: "object" as const,
     properties: {

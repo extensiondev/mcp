@@ -17,7 +17,7 @@ import { resolveSessionBrowser } from "../lib/session-browser";
 export const schema = {
   name: "extension_reload",
   description:
-    "Reload a running extension (background) or a tab. Requires the session to have been started with allowControl: true (extension_dev).",
+    "Reload a running extension's background context, or a tab. Start the session with allowControl:true (extension_dev).",
   inputSchema: {
     type: "object" as const,
     properties: {

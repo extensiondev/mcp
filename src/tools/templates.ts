@@ -12,7 +12,7 @@ import { readTemplateSource } from "./get-template-source";
 export const schema = {
   name: "extension_templates",
   description:
-    "Browse the extension.dev template catalog. action:'list' (default) searches and filters it and returns metadata per template; action:'source' reads one template's files by `slug`, for learning a pattern before building something similar. `framework` is the UI framework ONLY, never the language: TypeScript and JavaScript templates live under slugs ('typescript', 'content-typescript'), shadcn is a React variant ('sidebar-shadcn'), and provider AIs are tagged 'ai' ('ai-chatgpt', 'ai-claude'). Reach those with query/tags/slug.",
+    "Browse the extension.dev template catalog. Pass action:'list' (the default) to search and filter it and get metadata per template. Pass action:'source' with a `slug` to read one template's files, for learning a pattern before building something similar. Read `framework` as the UI framework only, never the language: TypeScript and JavaScript templates live under slugs ('typescript', 'content-typescript'), shadcn is a React variant ('sidebar-shadcn'), and provider AIs carry the 'ai' tag ('ai-chatgpt', 'ai-claude'). Reach those through query, tags or slug.",
   inputSchema: {
     type: "object" as const,
     properties: {

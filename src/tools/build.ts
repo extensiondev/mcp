@@ -191,7 +191,7 @@ function locateSourceZip(
 export const schema = {
   name: "extension_build",
   description:
-    "Build a browser extension for production. Outputs to dist/<browser>/. Optionally creates .zip for store submission.",
+    "Build a browser extension for production. The output lands in dist/<browser>/. Pass zip:true to also package a .zip for store submission. The build refuses a manifest with build-blocking errors unless you pass skipValidation:true, because such a manifest yields a broken bundle the bundler itself never flags.",
   inputSchema: {
     type: "object" as const,
     properties: {

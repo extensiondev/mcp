@@ -29,7 +29,7 @@ import {
 export const schema = {
   name: "extension_dev",
   description:
-    "Run the extension WHILE YOU EDIT IT: dev build, hot module replacement, and a browser with it loaded. The default answer to \"run my extension\". Only this tool can unlock the control channel that extension_storage/reload/open/dom_snapshot need (allowControl) and that extension_eval needs (allowEval). For the production build in a browser instead, use extension_start. Returns process info for extension_wait and extension_inspect.",
+    "Run the extension while you edit it: dev build, hot module replacement, and a browser with the extension loaded. Reach for this first when the ask is \"run my extension\". ONLY this tool unlocks the control channel that extension_storage, extension_reload, extension_open and extension_dom_snapshot need (allowControl:true) and the eval channel that extension_eval needs (allowEval:true, which implies allowControl, so you never need to pass both). Use extension_start instead to run the production build in a browser. The result carries the process info that extension_wait and extension_inspect need.",
   inputSchema: {
     type: "object" as const,
     properties: {

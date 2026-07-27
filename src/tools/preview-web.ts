@@ -112,7 +112,7 @@ function detectSurfaces(manifest: Record<string, any>): string[] {
 export const schema = {
   name: "extension_preview_web",
   description:
-    "Preview an in-progress extension in the web emulator, with no real browser. Builds the project (unless build:false), points preview.extension.dev at dist/<browser> over the dev-only preview://build scheme, and returns a deep link plus a loadability check. This is the author's door for a LOCAL build: it renders your build and carries the Emulated/Real lane toggle and the Trace tab, but the deep link only resolves on this machine. To reach anyone who is not at this machine, pass share:true and hand out the public link it returns. extension_shares lists and revokes every link shared this way, so one does not vanish with this response.",
+    "Preview an in-progress extension in the web emulator, with no real browser. This builds the project (unless build:false), points preview.extension.dev at dist/<browser> over the dev-only preview://build scheme, and returns a deep link plus a loadability check. Use it as the author's door for a local build: it renders your build and carries the Emulated/Real lane toggle and the Trace tab, but the deep link resolves only on this machine. Pass share:true to get a public link that reaches anyone. Call extension_shares to list and revoke every link shared this way, so one never vanishes with this response.",
   inputSchema: {
     type: "object" as const,
     properties: {

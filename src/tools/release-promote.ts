@@ -23,7 +23,7 @@ import {
 export const schema = {
   name: "extension_release_promote",
   description:
-    "Promote a built extension to a release channel (stable, preview, beta, ...) on extension.dev, headless. This WRITES: it is the only verb that changes what a channel points at. Auth-gated by your stored login (extension_auth) or a release token in EXTENSION_DEV_TOKEN, minted and revoked under project settings -> Access tokens; tokens live at most 7 days, so CI must re-mint before expiry. The project comes from the token. Use extension_release_status to find a valid buildId. Cutting a version-bump PR is not available headlessly (it writes to your source repo and needs an interactive login).",
+    "Promote a built extension to a release channel (stable, preview, beta, …) on extension.dev, headless. This WRITES: it is the only verb that changes what a channel points at. It is auth-gated by your stored login (extension_auth) or a release token in EXTENSION_DEV_TOKEN, minted and revoked under project settings, Access tokens. Tokens live at most 7 days, so CI must re-mint before expiry. The project comes from the token. Call extension_release_status to find a valid buildId. Cutting a version-bump PR is not available headlessly, because it writes to your source repo and needs an interactive login.",
   inputSchema: {
     type: "object" as const,
     properties: {

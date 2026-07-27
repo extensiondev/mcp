@@ -13,7 +13,7 @@ import path from "node:path";
 export const schema = {
   name: "extension_analyze",
   description:
-    "Analyze a BUILT extension on disk: file sizes, declared entry points, permissions, bundle composition, and store-readiness checks. Static only, reads dist/<browser> from the filesystem and never touches a browser. The extension must be built first (extension_build). For a RUNNING extension's live DOM and console use extension_inspect.",
+    "Analyze a BUILT extension on disk: file sizes, declared entry points, permissions, bundle composition, and store-readiness checks. This is static only: it reads dist/<browser> from the filesystem and never touches a browser, so build first with extension_build. Use extension_inspect for a running extension's live DOM and console.",
   inputSchema: {
     type: "object" as const,
     properties: {

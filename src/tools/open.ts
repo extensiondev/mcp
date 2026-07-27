@@ -557,7 +557,7 @@ async function confirmSurfaceTarget(
 export const schema = {
   name: "extension_open",
   description:
-    "Open an extension surface or replay an event in a running session. popup/options/sidebar open UI surfaces; newtab/history/bookmarks open the matching chrome_url_overrides page in a tab. 'action' triggers the toolbar action, opening its popup or replaying chrome.action.onClicked when there is none; 'command' replays a chrome.commands.onCommand shortcut (pass `name`). NOTE: action/command replay invokes your listener WITHOUT a user gesture, so the gesture-derived activeTab grant does not apply (the result reports gesture:false and warns when activeTab is declared). Requires the session to have been started with allowControl: true (extension_dev).",
+    "Open an extension surface, or replay an event, in a running session. Pass surface:'popup', 'options' or 'sidebar' to open a UI surface, or 'newtab', 'history' or 'bookmarks' to open the matching chrome_url_overrides page in a tab. Pass surface:'action' to trigger the toolbar action, which opens its popup or replays chrome.action.onClicked when there is none. Pass surface:'command' with `name` to replay a chrome.commands.onCommand shortcut. Note that action and command replay invoke your listener without a user gesture, so the gesture-derived activeTab grant does not apply; the result reports gesture:false and warns when activeTab is declared. Start the session with allowControl:true (extension_dev).",
   inputSchema: {
     type: "object" as const,
     properties: {

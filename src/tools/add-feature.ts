@@ -17,7 +17,7 @@ const EXAMPLES_TREE_BASE = `https://github.com/extension-js/examples/tree/${PINN
 export const schema = {
   name: "extension_add_feature",
   description:
-    "Plan a new feature surface for an existing extension. Returns step-by-step instructions, the manifest additions to make, and reference templates from the extension.dev catalog. Does not modify files; apply the returned plan yourself.",
+    "Plan a new feature surface for an existing extension. This returns step-by-step instructions, the manifest additions to make, and reference templates from the extension.dev catalog. It modifies no files: apply the returned plan yourself.",
   inputSchema: {
     type: "object" as const,
     properties: {
