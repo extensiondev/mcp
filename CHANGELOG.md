@@ -1,5 +1,50 @@
 # Changelog
 
+## Unreleased
+
+Every tool now returns the same frame. Before this, 28 tools hand-built 142
+different JSON shapes: `ok` appeared on 71 of them, `error` on 67, `hint` on 60,
+`message` on 49, `status` on 46, and five more keys carried the same meaning
+under different names. An agent could not tell success from failure without
+knowing which tool it had called.
+
+The frame is schema 1, the same one the Extension.js CLI emits under
+`--output json`:
+
+```json
+{
+  "schema": 1,
+  "ok": false,
+  "command": "extension_dev",
+  "status": "compile-failed",
+  "value": null,
+  "error": { "code": "E_FIRST_COMPILE", "message": "…" },
+  "hint": "…",
+  "warnings": []
+}
+```
+
+`command` names the tool. `status` is a kebab-case word from that tool's own
+vocabulary. `error.code` is stable and worth branching on; `error.message` is
+free copy and is not. The payload moved under `value`, and every advisory note
+that used to have its own key is now an entry in `warnings`.
+
+**Breaking.** Every payload key moved one level down. `build.success` is now
+`ok`, `doctor.healthy` is now `ok`, `manifest_validate.valid` is now
+`value.valid`, and `wait` gained the `ok` it never had. The ready contract's own
+`command` is carried as `value.sessionCommand`, because the envelope claims that
+key. `authorization_pending` became `authorization-pending`, with the old
+spelling echoed as `value.legacyStatus` for one minor.
+
+`extension_dev` and `extension_start` also stopped reading the dev server's
+prose to decide whether the first compile failed. They poll its `ready.json`
+contract instead, which splits a locked profile out of a dead browser and
+returns the compile errors as a list. The output scrape survives only as a
+fallback for a project whose own CLI predates the contract, is confined to one
+`@deprecated` module, and says so in `warnings` whenever it is used. The choice
+is a capability probe, never a version check: a project-local `extension` binary
+wins over this package's pin, so the version is not knowable in advance.
+
 ## 9.0.0
 
 Every client pays for this server's tool list at the start of every session,
