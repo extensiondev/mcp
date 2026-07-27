@@ -157,6 +157,58 @@ describe("extension_preview_web", () => {
     }
   });
 
+  it("refuses a hostUrl that is not a local preview server", async () => {
+    const dir = tmpDist(MANIFEST);
+    let reached = false;
+    global.fetch = (async () => {
+      reached = true;
+      throw new Error("should never be called");
+    }) as unknown as typeof fetch;
+    try {
+      const out = JSON.parse(
+        await handler({
+          projectPath: dir,
+          build: false,
+          distPath: dir,
+          hostUrl: "https://evil.example",
+        }),
+      );
+      expect(out.ok).toBe(false);
+      expect(out.error.code).toBe("E_BAD_HOST_URL");
+      expect(reached).toBe(false);
+      expect(JSON.stringify(out)).not.toContain(dir);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("still accepts a local preview server on another port", async () => {
+    const dir = tmpDist(MANIFEST);
+    global.fetch = jsonFetch(
+      JSON.stringify({
+        identifier: "preview-abc",
+        version: "1.0.0",
+        manifest: { name: "Fixture" },
+        files: [1, 2, 3],
+      }),
+      "application/json",
+    );
+    try {
+      const out = JSON.parse(
+        await handler({
+          projectPath: dir,
+          build: false,
+          distPath: dir,
+          hostUrl: "http://127.0.0.1:4321",
+        }),
+      );
+      expect(out.ok).toBe(true);
+      expect(out.value.deepLink).toContain("http://127.0.0.1:4321");
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it("treats a non-JSON answer (deployed static host) as not loadable", async () => {
     const dir = tmpDist(MANIFEST);
     global.fetch = jsonFetch("<!doctype html>", "text/html");

@@ -8,6 +8,7 @@
 
 import { LAUNCH_BROWSER, PROJECT_PATH } from "../lib/common-schema";
 import { pollBootVerdict } from "../lib/boot-verdict";
+import { removeCarrier } from "../lib/carrier";
 import { envelope } from "../lib/envelope";
 import { spawnExtensionCli, spawnFailedEnvelope } from "../lib/exec";
 import {
@@ -74,6 +75,17 @@ export async function handler(
   if (args.port !== undefined) cliArgs.push("--port", String(args.port));
   if (args.noBrowser) cliArgs.push("--no-browser");
   cliArgs.push(...launchFlagArgs(args));
+
+  /* @invariant
+   * A carrier left over from a dead dev session does not get loaded here.
+   *
+   * extension_start has no carrier option, but Extension.js auto-loads
+   * everything in ./extensions, so a carrier that outlived its dev session
+   * would be launched beside the extension anyway, silently handing a debug
+   * companion with <all_urls> to a run that never asked for one. Removal is
+   * marker-guarded, so this only ever clears a copy this server placed.
+   */
+  const stale = removeCarrier(args.projectPath);
 
   const spawnedAt = Date.now();
   const spawned = spawnExtensionCli(cliArgs, { projectDir: args.projectPath });
@@ -189,6 +201,10 @@ export async function handler(
     hint: building
       ? "Use extension_wait to check when the build and browser launch are complete. When you are done, call extension_stop to shut down the session."
       : "Call extension_stop when you are done to close the preview browser.",
-    warnings: boot.warnings,
+    warnings: [
+      ...boot.warnings,
+      stale.removed &&
+        "Removed a Live Preview carrier left behind by an earlier dev session, so it was not loaded beside your extension here.",
+    ],
   });
 }

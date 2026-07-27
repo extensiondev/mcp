@@ -20,6 +20,46 @@ const COMMAND = "extension_preview_web";
 
 const DEFAULT_PREVIEW_DEV_URL = "http://localhost:3110";
 
+const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]", "::1"]);
+
+/* @invariant
+ * hostUrl names a preview server, not an arbitrary place to send things.
+ *
+ * This is a tool argument, so a model can be steered into supplying it by
+ * anything it reads. Three things go to whatever it names: the base64url of an
+ * absolute local build path, a deepLink the hint then tells the user to open,
+ * and with open:true a real navigation of the author's session browser. What
+ * comes back is worse, because identifier, loadedName and loadedVersion are
+ * echoed into the tool envelope the model reads next, which makes an arbitrary
+ * host a text channel into the agent's context. A preview dev server is always
+ * local, so requiring that costs nothing real.
+ */
+function safeHostBase(
+  raw: string,
+): { ok: true; base: string } | { ok: false; message: string } {
+  const trimmed = String(raw || "").replace(/\/+$/, "");
+  let parsed: URL;
+  try {
+    parsed = new URL(trimmed);
+  } catch {
+    return {
+      ok: false,
+      message: `hostUrl is not a URL: ${raw}. Leave it unset to use ${DEFAULT_PREVIEW_DEV_URL}.`,
+    };
+  }
+  const isLocal =
+    LOCAL_HOSTS.has(parsed.hostname) ||
+    parsed.hostname.endsWith(".localhost") ||
+    parsed.hostname === "preview.extension.dev";
+  if (!isLocal) {
+    return {
+      ok: false,
+      message: `Refusing to use ${raw} as the preview host: hostUrl may only name a local preview dev server. Leave it unset to use ${DEFAULT_PREVIEW_DEV_URL}, or pass share:true for a link that needs no local server.`,
+    };
+  }
+  return { ok: true, base: trimmed };
+}
+
 const SURFACE = {
   defaultOrigin: DEFAULT_PREVIEW_DEV_URL,
   scheme: (encoded: string) => `preview://build/${encoded}`,
@@ -184,7 +224,17 @@ export async function handler(args: {
   share?: boolean;
 }): Promise<string> {
   const browser = args.browser ?? "chrome";
-  const hostBase = (args.hostUrl ?? SURFACE.defaultOrigin).replace(/\/+$/, "");
+  const host = safeHostBase(args.hostUrl ?? SURFACE.defaultOrigin);
+  if (!host.ok) {
+    return envelope({
+      ok: false,
+      command: COMMAND,
+      status: "bad-host-url",
+      error: { code: "E_BAD_HOST_URL", message: host.message },
+      value: { stage: "resolve-host", hostUrl: args.hostUrl },
+    });
+  }
+  const hostBase = host.base;
   const shouldBuild = args.distPath ? false : args.build !== false;
 
   let buildResult: Record<string, unknown> | null = null;
