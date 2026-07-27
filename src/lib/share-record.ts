@@ -15,8 +15,19 @@ export const SHARE_STATE_DIR = ".extension.dev";
 
 export const SHARE_RECORD_FILE = "shared-previews.json";
 
+/* @invariant
+ * This note is read by people deciding whether they can still pull a link
+ * back, so it has to describe the platform that exists.
+ *
+ * It used to say a new id is minted on every share and that a lost revokeUrl
+ * cannot be recovered. Both were wrong, and wrongly reassuring: ids are
+ * content-addressed, so re-sharing an unchanged build returns the same live
+ * link rather than a second one, and extension_shares lists every share this
+ * token owns with its revokeUrl on each row, so a lost handle is recoverable
+ * whenever the token still owns the project.
+ */
 const FILE_NOTE =
-  "Every preview link shared from this project. revokeUrl is the only handle that kills a link before expiresAt, and the platform mints a new id on every share, so a lost revokeUrl cannot be recovered. Safe to delete once every link below has expired.";
+  "Every preview link shared from this project. revokeUrl is the handle that kills a link before expiresAt. Losing it is recoverable: run extension_shares to list every share this token owns, each with its revokeUrl. Re-sharing an unchanged build returns the same link rather than a new one, and only a revoked link is replaced. Safe to delete once every link below has expired.";
 
 const IGNORE_COMMENT =
   "# Extension.dev local state: revoke handles for shared previews, not part of your extension.";
@@ -123,7 +134,7 @@ export function recordSharedPreview(
       path: file,
       note: `Could not write the share record to ${file}: ${
         error instanceof Error ? error.message : String(error)
-      }. The revokeUrl in this response is then the only copy, so keep it: re-sharing mints a new link and leaves this one live until expiresAt.`,
+      }. Keep the revokeUrl in this response, or run extension_shares later to list every share this token owns with its revokeUrl.`,
     };
   }
 

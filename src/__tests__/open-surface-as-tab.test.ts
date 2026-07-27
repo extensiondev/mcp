@@ -407,7 +407,7 @@ describe("open never destroys the page you were watching", () => {
       action: { default_popup: "popup.html" },
     });
     cdpTargets = [
-      { id: "watched", type: "page", url: "https://preview.extension.dev/trace" },
+      { id: "watched", type: "page", url: "https://example.com/watched" },
     ];
 
     const result = JSON.parse(
@@ -422,7 +422,7 @@ describe("open never destroys the page you were watching", () => {
     ]);
     expect(
       cdpTargets.find((t) => t.id === "watched")?.url,
-    ).toBe("https://preview.extension.dev/trace");
+    ).toBe("https://example.com/watched");
   });
 
   it("reuses a blank tab rather than piling up new ones", async () => {
@@ -465,7 +465,7 @@ describe("open never destroys the page you were watching", () => {
     const p = project({ manifest_version: 3, name: "F" });
     cdpTargets = [];
     navigationLands = false;
-    const asked = "https://preview.extension.dev/?session=live";
+    const asked = "https://example.com/start";
 
     const pending = open.handler({ projectPath: p.dir, url: asked });
     await new Promise((r) => setTimeout(r, 300));
@@ -473,8 +473,8 @@ describe("open never destroys the page you were watching", () => {
       {
         id: "created",
         type: "page",
-        url: "https://preview.extension.dev/trace?session=live",
-        title: "Preview",
+        url: "https://example.com/landed",
+        title: "Landed",
       },
     ];
     const result = JSON.parse(await pending);
@@ -482,7 +482,7 @@ describe("open never destroys the page you were watching", () => {
     expect(result.ok).toBe(true);
     expect(result.value.redirected).toEqual({
       from: asked,
-      to: "https://preview.extension.dev/trace?session=live",
+      to: "https://example.com/landed",
     });
     expect(result.value.target.targetId).toBe("created");
   }, 15_000);

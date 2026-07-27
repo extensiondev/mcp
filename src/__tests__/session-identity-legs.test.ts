@@ -19,6 +19,14 @@ import {
 const API = "https://www.extension.dev";
 const HEX_128 = /^[0-9a-f]{32}$/;
 
+/* The wire names are spelled out rather than imported, because the reader of
+   these headers lives in another repo. Importing the constants from the module
+   under test made a rename update the assertion with it, so the one change
+   that actually breaks the server was the one this file could not see. */
+const WIRE_INSTALL_HEADER = "x-extensiondev-install";
+const WIRE_SESSION_HEADER = "x-extensiondev-session";
+const WIRE_TOOL_HEADER = "x-extensiondev-tool";
+
 function jsonResponse(body: unknown, status = 200) {
   return {
     ok: status >= 200 && status < 300,
@@ -35,11 +43,17 @@ function readIdentity(init: any): {
 } {
   const headers = (init?.headers ?? {}) as Record<string, string>;
   return {
-    install: headers[INSTALL_HEADER] ?? "",
-    session: headers[SESSION_HEADER] ?? "",
-    tool: headers[TOOL_HEADER] ?? "",
+    install: headers[WIRE_INSTALL_HEADER] ?? "",
+    session: headers[WIRE_SESSION_HEADER] ?? "",
+    tool: headers[WIRE_TOOL_HEADER] ?? "",
   };
 }
+
+it("sends the header names the platform actually reads", () => {
+  expect(INSTALL_HEADER).toBe(WIRE_INSTALL_HEADER);
+  expect(SESSION_HEADER).toBe(WIRE_SESSION_HEADER);
+  expect(TOOL_HEADER).toBe(WIRE_TOOL_HEADER);
+});
 
 function expectIdentity(init: any, tool: string) {
   const identity = readIdentity(init);

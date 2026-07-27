@@ -121,7 +121,7 @@ async function buildShare(
     localBuildUploaded: true,
     record,
     note:
-      "Anyone with this link can open the build you just made, running in the emulator. No install, no sign-in, no dev server. They can also download the whole build as a zip from zipUrl, so the link hands over the built code. It stays live until expiresAt; DELETE revokeUrl with the same token to kill it sooner, and a revoked link stays dead. revokeUrl is the only handle that pulls this link early and re-sharing mints a different one, so " +
+      "Anyone with this link can open the build you just made, running in the emulator. No install, no sign-in, no dev server. They can also download the whole build as a zip from zipUrl, so the link hands over the built code. It stays live until expiresAt; DELETE revokeUrl with the same token to kill it sooner, and a revoked link stays dead. revokeUrl is the handle that pulls this link early. Re-sharing an unchanged build returns this same link rather than a second one, and only a revoked link is replaced by a different one, so " +
       (record.recorded
         ? `it was also written to ${record.path} (record.path), which lists every share from this project.`
         : `keep it: ${record.note}`) +
@@ -205,7 +205,7 @@ export const schema = {
         type: "boolean",
         default: false,
         description:
-          "Upload the built dist and return a public link (share.previewUrl) that renders those exact bytes for anyone: no install, sign-in or dev server. It also serves the build as a zip (share.zipUrl), so sharing hands over the code. Needs a token scoped to an extension.dev project (extension_auth or EXTENSION_DEV_TOKEN); without one you get a login hint and the local preview still succeeds. Live until share.expiresAt; DELETE share.revokeUrl to kill it sooner. Revocation is permanent and re-sharing mints a different link, so each share is also appended to the project's gitignored .extension.dev/shared-previews.json.",
+          "Upload the built dist and return a public link (share.previewUrl) that renders those exact bytes for anyone: no install, sign-in or dev server. It also serves the build as a zip (share.zipUrl), so sharing hands over the code. Needs a token scoped to an extension.dev project (extension_auth or EXTENSION_DEV_TOKEN); without one you get a login hint and the local preview still succeeds. Live until share.expiresAt; DELETE share.revokeUrl to kill it sooner. Revocation is permanent, and re-sharing an unchanged build returns the same link unless it was revoked, so each share is also appended to the project's gitignored .extension.dev/shared-previews.json.",
       },
     },
     required: ["projectPath"],
