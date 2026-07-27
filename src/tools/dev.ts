@@ -11,7 +11,7 @@ import {
   PROJECT_PATH,
 } from "../lib/common-schema";
 import path from "node:path";
-import { materializeCarrier } from "../lib/carrier";
+import { materializeCarrier, removeCarrier } from "../lib/carrier";
 import { pollBootVerdict } from "../lib/boot-verdict";
 import { envelope } from "../lib/envelope";
 import { spawnExtensionCli, spawnFailedEnvelope } from "../lib/exec";
@@ -158,9 +158,28 @@ export async function handler(
     command: "dev",
     noBrowser: Boolean(args.noBrowser),
   });
+  /* @invariant
+   * The carrier leaves when the session does, however the session ends.
+   *
+   * It is a debug companion with <all_urls>, cookies, history and management,
+   * and the promise made about it is that it is never part of a release.
+   * Removal used to live only in extension_stop and extension_build, so the
+   * ordinary ways a dev session actually ends, closing the browser, a crash, a
+   * kill, left it sitting in the auto-loaded ./extensions folder for the next
+   * build to pick up. Tying removal to the child's exit covers every one of
+   * those, and removeCarrier only touches a copy this server marked as its
+   * own.
+   */
   child.on("exit", () => {
     removeSession(args.projectPath, browser, pid);
     removeSessionMarker(args.projectPath, browser, pid);
+    if (carrier) {
+      try {
+        removeCarrier(args.projectPath);
+      } catch {
+        // A carrier we cannot remove here is still refused by the build guard.
+      }
+    }
   });
 
   const boot = await pollBootVerdict(args.projectPath, browser, {

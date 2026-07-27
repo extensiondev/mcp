@@ -56,6 +56,7 @@ export type ErrorCode =
   | "E_NO_TARGET"
   | "E_NOT_ATTACHED"
   | "E_PARSE"
+  | "E_PREVIEW_HOST_UNREACHABLE"
   | "E_PLATFORM"
   | "E_PROFILE_LOCKED"
   | "E_RDP"
@@ -113,6 +114,7 @@ export const ERROR_CODES: ErrorCode[] = [
   "E_NO_TARGET",
   "E_NOT_ATTACHED",
   "E_PARSE",
+  "E_PREVIEW_HOST_UNREACHABLE",
   "E_PLATFORM",
   "E_PROFILE_LOCKED",
   "E_RDP",

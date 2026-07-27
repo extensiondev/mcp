@@ -94,7 +94,7 @@ export class RegistryAccessTokens {
       if (!same) return { status: "no-credential" };
     }
 
-    const check = safeApiBase(resolveApiBase(apiHint || creds?.api));
+    const check = safeApiBase(resolveApiBase(apiHint || creds?.api), apiHint);
     if (!check.ok) return { status: "denied", message: check.message };
 
     let res: Response;

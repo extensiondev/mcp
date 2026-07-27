@@ -123,7 +123,7 @@ export async function loginToProject(args: {
     );
   }
 
-  const apiCheck = safeApiBase(resolveApiBase(args.api));
+  const apiCheck = safeApiBase(resolveApiBase(args.api), args.api);
   if (!apiCheck.ok) {
     return fail(
       "LoginConfigError",
