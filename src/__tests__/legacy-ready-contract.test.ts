@@ -62,7 +62,7 @@ describe("legacy ready-contract compatibility", () => {
     const result = JSON.parse(
       await stopHandler({ projectPath: dir, browser: "chrome" }),
     );
-    const outcome = Array.isArray(result.results) ? result.results[0] : result;
+    const outcome = result.value;
     expect(outcome.stopped).toBe(false);
     expect(outcome.pid).toBeNull();
   });

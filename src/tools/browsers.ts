@@ -7,6 +7,7 @@
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
 import { MANAGED_BROWSERS, REAL_BROWSERS } from "../lib/common-schema";
+import { envelope } from "../lib/envelope";
 import { detectBrowsers } from "./detect-browsers";
 import { listManagedBrowsers } from "./list-browsers";
 import { installManagedBrowser } from "./install-browser";
@@ -57,11 +58,15 @@ export async function handler(args: {
 
   if (action === "install") {
     if (!args.browser) {
-      return JSON.stringify({
+      return envelope({
         ok: false,
-        status: "error",
-        message:
-          "action 'install' needs a browser: one of chrome, chromium, edge, firefox.",
+        command: "extension_browsers",
+        status: "bad-request",
+        error: {
+          code: "E_BAD_REQUEST",
+          message:
+            "action 'install' needs a browser: one of chrome, chromium, edge, firefox.",
+        },
       });
     }
     return installManagedBrowser(args.browser);

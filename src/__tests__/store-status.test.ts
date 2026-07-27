@@ -152,6 +152,8 @@ describe("store-status reader", () => {
     if (process.platform === "win32") return;
     const out = JSON.parse(await handler({}));
     expect(out.ok).toBe(false);
+    expect(out.status).toBe("auth-required");
+    expect(out.error.code).toBe("E_AUTH_REQUIRED");
     expect(out.error.name).toBe("StoreStatusInputError");
     expect(out.error.message).toContain("extension_auth");
     expect(out.error.message).toContain("workspace + project");
@@ -169,11 +171,12 @@ describe("store-status reader", () => {
     );
 
     expect(out.ok).toBe(true);
-    expect(out.workspace).toBe("acme");
-    expect(out.project).toBe("widget");
+    expect(out.command).toBe("extension_release_status");
+    expect(out.value.workspace).toBe("acme");
+    expect(out.value.project).toBe("widget");
 
     const byStore = Object.fromEntries(
-      out.stores.map((r: { store: string }) => [r.store, r]),
+      out.value.stores.map((r: { store: string }) => [r.store, r]),
     );
 
     expect(byStore.chrome.configured).toBe(true);
@@ -197,13 +200,13 @@ describe("store-status reader", () => {
     );
     expect(byStore.firefox.review.status).toBe("pending");
 
-    expect(out.lastPollAt).toBe("2026-07-22T18:00:00.000Z");
-    expect(out.consoleStoresUrl).toContain("/acme/widget/stores");
-    expect(out.registryUrls.status).toContain(
+    expect(out.value.lastPollAt).toBe("2026-07-22T18:00:00.000Z");
+    expect(out.value.consoleStoresUrl).toContain("/acme/widget/stores");
+    expect(out.value.registryUrls.status).toContain(
       "/acme/widget/_extension-dev/stores/status.json",
     );
-    expect(out.message).toContain("FAILED the last health check");
-    expect(out.message).toContain("/stores/edge");
+    expect(out.hint).toContain("FAILED the last health check");
+    expect(out.hint).toContain("/stores/edge");
   });
 
   it("reports a known store missing from the registry as not configured", async () => {
@@ -221,11 +224,11 @@ describe("store-status reader", () => {
 
     expect(out.ok).toBe(true);
     const byStore = Object.fromEntries(
-      out.stores.map((r: { store: string }) => [r.store, r]),
+      out.value.stores.map((r: { store: string }) => [r.store, r]),
     );
     expect(byStore.firefox.configured).toBe(false);
     expect(byStore.edge.configured).toBe(false);
-    expect(out.message).toContain("/stores/new");
+    expect(out.hint).toContain("/stores/new");
   });
 
   it("backfills a store's submission from status.json when submissions.json is absent", async () => {
@@ -237,12 +240,14 @@ describe("store-status reader", () => {
     const out = JSON.parse(
       await handler({ workspace: "acme", project: "widget" }),
     );
-    const firefox = out.stores.find(
+    const firefox = out.value.stores.find(
       (r: { store: string }) => r.store === "firefox",
     );
     expect(firefox.lastSubmission.version).toBe("1.0.2");
     expect(firefox.lastSubmission.submittedAt).toBe("2026-07-22T17:25:08.746Z");
-    expect(out.submissionsUnavailable).toBeUndefined();
+    expect(
+      out.warnings.some((w: string) => w.includes("stores/submissions.json")),
+    ).toBe(false);
   });
 
   it("normalizes a legacy v2 poller document into reviews", async () => {
@@ -268,12 +273,12 @@ describe("store-status reader", () => {
     const out = JSON.parse(
       await handler({ workspace: "acme", project: "widget" }),
     );
-    const chrome = out.stores.find(
+    const chrome = out.value.stores.find(
       (r: { store: string }) => r.store === "chrome",
     );
     expect(chrome.review.status).toBe("approved");
     expect(chrome.review.checkedAt).toBe("2026-07-01T00:00:00.000Z");
-    expect(out.lastPollAt).toBe("2026-07-01T00:00:00.000Z");
+    expect(out.value.lastPollAt).toBe("2026-07-01T00:00:00.000Z");
   });
 
   it("degrades to configured unknown when only submissions are readable", async () => {
@@ -285,12 +290,14 @@ describe("store-status reader", () => {
       await handler({ workspace: "acme", project: "widget" }),
     );
     expect(out.ok).toBe(true);
-    const firefox = out.stores.find(
+    const firefox = out.value.stores.find(
       (r: { store: string }) => r.store === "firefox",
     );
     expect(firefox.configured).toBe("unknown");
     expect(firefox.lastSubmission.version).toBe("1.0.2");
-    expect(out.healthUnavailable).toContain("health.json");
+    expect(
+      out.warnings.find((w: string) => w.includes("health.json")),
+    ).toContain("health.json");
   });
 
   it("fails with a console pointer when the registry has no store data at all", async () => {
@@ -299,9 +306,11 @@ describe("store-status reader", () => {
       await handler({ workspace: "acme", project: "widget" }),
     );
     expect(out.ok).toBe(false);
+    expect(out.status).toBe("unavailable");
+    expect(out.error.code).toBe("E_PLATFORM");
     expect(out.error.name).toBe("StoreStatusNotFound");
     expect(out.error.message).toContain("stores/new");
-    expect(out.consoleStoresUrl).toContain("/acme/widget/stores");
+    expect(out.value.consoleStoresUrl).toContain("/acme/widget/stores");
   });
 
   it("defaults to the stored login's project", async () => {

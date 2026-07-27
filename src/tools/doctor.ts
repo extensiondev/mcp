@@ -11,6 +11,7 @@ import path from "node:path";
 import os from "node:os";
 import { runExtensionCli } from "../lib/exec";
 import { toMcpSpeak } from "../lib/act";
+import { envelope, isEnvelope } from "../lib/envelope";
 import { resolveSessionBrowser } from "../lib/session-browser";
 import type { ReadyContract } from "../lib/types";
 
@@ -99,17 +100,19 @@ async function environmentPreflight(): Promise<string> {
   });
 
   const healthy = checks.every((c) => c.status !== "fail");
-  return JSON.stringify({
-    mode: "environment",
-    healthy,
-    checks,
+  return envelope({
+    ok: healthy,
+    command: schema.name,
+    status: healthy ? "healthy" : "unhealthy",
+    value: { mode: "environment", checks },
     hint: "Pass projectPath to diagnose a live dev session end-to-end.",
   });
 }
 
 function safeStringify(value: unknown): string {
   try {
-    return JSON.stringify(value) ?? String(value);
+    const text = JSON.stringify(value);
+    return text ?? String(value);
   } catch {
     return String(value);
   }
@@ -195,7 +198,12 @@ export async function handler(args: {
 
   const out = stdout.trim();
   try {
-    const checks = JSON.parse(out);
+    const parsed = JSON.parse(out);
+    // A capability probe, not a version check: the CLI answers either with a
+    // bare check array or with the same array inside a schema-1 envelope.
+    const checks = isEnvelope(parsed)
+      ? (parsed.value as { checks?: unknown } | null)?.checks
+      : parsed;
     if (!Array.isArray(checks)) throw new Error("not a check array");
     for (const check of checks) {
       if (typeof check.detail === "string") check.detail = toMcpSpeak(check.detail);
@@ -259,21 +267,28 @@ export async function handler(args: {
           : {}),
       });
     }
-    return JSON.stringify({
-      browser,
-      ...(engineVersion ? { engineVersion } : {}),
-      healthy,
-      checks,
+    return envelope({
+      ok: healthy,
+      command: schema.name,
+      status: healthy ? "healthy" : "unhealthy",
+      value: {
+        browser,
+        ...(engineVersion ? { engineVersion } : {}),
+        checks,
+      },
     });
   } catch {
     const message = stderr.trim() || `extension exited with code ${code}`;
-    return JSON.stringify({
+    return envelope({
       ok: false,
+      command: schema.name,
+      status: "cli-failed",
       error: {
+        code: "E_CLI",
         name: "CliError",
         message: toMcpSpeak(message),
-        hint: "extension doctor requires a recent extension CLI, the project's local install may predate it.",
       },
+      hint: "extension doctor requires a recent extension CLI, the project's local install may predate it.",
     });
   }
 }

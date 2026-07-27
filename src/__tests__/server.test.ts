@@ -70,10 +70,10 @@ describe("extension_browsers list action", () => {
   it("returns valid JSON with expected fields", async () => {
     const result = await browsers.handler({ action: "list" });
     const parsed = JSON.parse(result);
-    expect(typeof parsed.cacheRoot).toBe("string");
-    expect(typeof parsed.cacheExists).toBe("boolean");
-    expect(Array.isArray(parsed.installed)).toBe(true);
-    expect(Array.isArray(parsed.availableToInstall)).toBe(true);
+    expect(typeof parsed.value.cacheRoot).toBe("string");
+    expect(typeof parsed.value.cacheExists).toBe("boolean");
+    expect(Array.isArray(parsed.value.installed)).toBe(true);
+    expect(Array.isArray(parsed.value.availableToInstall)).toBe(true);
   });
 });
 
@@ -90,8 +90,8 @@ describe("manifest-validate handler", () => {
       manifestPath: "/tmp/nonexistent-manifest.json",
     });
     const parsed = JSON.parse(result);
-    expect(parsed.valid).toBe(false);
-    expect(parsed.errors.length).toBeGreaterThan(0);
+    expect(parsed.value.valid).toBe(false);
+    expect(parsed.value.errors.length).toBeGreaterThan(0);
   });
 
   it("recognizes chrome:/edge: prefixes, not just chromium:", async () => {
@@ -103,10 +103,10 @@ describe("manifest-validate handler", () => {
     const parsed = JSON.parse(
       await manifestValidate.handler({ manifestPath: file, browsers: ["chrome"] }),
     );
-    expect(parsed.errors).not.toContain(
+    expect(parsed.value.errors).not.toContain(
       expect.stringContaining("Missing manifest_version"),
     );
-    expect(parsed.browserSupport.chrome.issues.join(" ")).toContain(
+    expect(parsed.value.browserSupport.chrome.issues.join(" ")).toContain(
       "Manifest V2 is deprecated",
     );
   });
@@ -127,7 +127,7 @@ describe("manifest-validate handler", () => {
         browsers: ["firefox"],
       }),
     );
-    expect(parsed.browserSupport.firefox.issues.join(" ")).not.toContain(
+    expect(parsed.value.browserSupport.firefox.issues.join(" ")).not.toContain(
       "firefox:scripts",
     );
   });
@@ -145,7 +145,7 @@ describe("manifest-validate handler", () => {
         browsers: ["firefox"],
       }),
     );
-    expect(parsed.browserSupport.firefox.issues.join(" ")).toContain(
+    expect(parsed.value.browserSupport.firefox.issues.join(" ")).toContain(
       "firefox:scripts",
     );
   });
@@ -158,7 +158,7 @@ describe("analyze handler", () => {
     });
     const parsed = JSON.parse(result);
     expect(parsed.error).toBeDefined();
-    expect(parsed.error).toContain("not found");
+    expect(parsed.error.message).toContain("not found");
   });
 
   it("excludes .zip artifacts from the shippable size", async () => {
@@ -179,15 +179,15 @@ describe("analyze handler", () => {
 
       const parsed = JSON.parse(await analyze.handler({ projectPath: dir }));
 
-      expect(parsed.byType.archive.count).toBe(1);
-      expect(parsed.totalSize).toBe(parsed.shippableSize + zipSize);
-      expect(parsed.shippableSize).toBe(
-        parsed.totalSize - parsed.byType.archive.size,
+      expect(parsed.value.byType.archive.count).toBe(1);
+      expect(parsed.value.totalSize).toBe(parsed.value.shippableSize + zipSize);
+      expect(parsed.value.shippableSize).toBe(
+        parsed.value.totalSize - parsed.value.byType.archive.size,
       );
-      expect(parsed.archiveNote).toContain("shippableSize excludes them");
-      expect(parsed.buildType).toBe("production");
-      expect(parsed.totalSize).toBeGreaterThan(10 * 1024 * 1024);
-      expect(parsed.storeReadiness.under10MB).toBe(true);
+      expect(parsed.warnings.join(" ")).toContain("shippableSize excludes them");
+      expect(parsed.value.buildType).toBe("production");
+      expect(parsed.value.totalSize).toBeGreaterThan(10 * 1024 * 1024);
+      expect(parsed.value.storeReadiness.under10MB).toBe(true);
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }
@@ -206,8 +206,8 @@ describe("analyze handler", () => {
 
       const parsed = JSON.parse(await analyze.handler({ projectPath: dir }));
 
-      expect(parsed.shippableSize).toBe(parsed.totalSize);
-      expect(parsed.archiveNote).toBeUndefined();
+      expect(parsed.value.shippableSize).toBe(parsed.value.totalSize);
+      expect(parsed.warnings.join(" ")).not.toContain("shippableSize excludes them");
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }
@@ -222,7 +222,7 @@ describe("add-feature handler", () => {
     });
     const parsed = JSON.parse(result);
     expect(parsed.error).toBeDefined();
-    expect(parsed.error).toContain("manifest.json");
+    expect(parsed.error.message).toContain("manifest.json");
   });
 });
 
@@ -249,8 +249,10 @@ describe("logs handler", () => {
       projectPath: "/tmp/nonexistent-project-logs",
     });
     const parsed = JSON.parse(result);
-    expect(parsed.error).toBeDefined();
-    expect(parsed.error).toContain("No logs found");
+    expect(parsed.ok).toBe(false);
+    expect(parsed.status).toBe("no-log-file");
+    expect(parsed.error.code).toBe("E_LOGS_MISSING");
+    expect(parsed.error.message).toContain("No logs found");
   });
 
   it("reads, filters, and caps events from logs.ndjson", async () => {
@@ -270,40 +272,40 @@ describe("logs handler", () => {
 
     const all = JSON.parse(await logs.handler({ projectPath: root }));
     expect(all.ok).toBe(true);
-    expect(all.source).toBe("file");
-    expect(all.runId).toBe("run-xyz");
-    expect(all.count).toBe(3);
-    expect(all.nextSince).toBe(3);
+    expect(all.value.source).toBe("file");
+    expect(all.value.runId).toBe("run-xyz");
+    expect(all.value.count).toBe(3);
+    expect(all.value.nextSince).toBe(3);
 
     const signals = JSON.parse(await logs.handler({ projectPath: root, signalsOnly: true }));
-    expect(signals.count).toBe(1);
-    expect(signals.events[0].code).toBe("X");
+    expect(signals.value.count).toBe(1);
+    expect(signals.value.events[0].code).toBe("X");
 
     const errors = JSON.parse(await logs.handler({ projectPath: root, level: "error" }));
-    expect(errors.count).toBe(1);
-    expect(errors.events[0].seq).toBe(2);
+    expect(errors.value.count).toBe(1);
+    expect(errors.value.events[0].seq).toBe(2);
 
     const since = JSON.parse(await logs.handler({ projectPath: root, since: 2 }));
-    expect(since.count).toBe(1);
-    expect(since.events[0].seq).toBe(3);
+    expect(since.value.count).toBe(1);
+    expect(since.value.events[0].seq).toBe(3);
 
     const byUrl = JSON.parse(await logs.handler({ projectPath: root, url: "shop.example/*" }));
-    expect(byUrl.count).toBe(1);
-    expect(byUrl.events[0].seq).toBe(2);
+    expect(byUrl.value.count).toBe(1);
+    expect(byUrl.value.events[0].seq).toBe(2);
     const byUrlSubstr = JSON.parse(await logs.handler({ projectPath: root, url: "checkout" }));
-    expect(byUrlSubstr.count).toBe(1);
-    expect(byUrlSubstr.events[0].seq).toBe(2);
+    expect(byUrlSubstr.value.count).toBe(1);
+    expect(byUrlSubstr.value.events[0].seq).toBe(2);
 
     const byTab = JSON.parse(await logs.handler({ projectPath: root, tab: 7 }));
-    expect(byTab.count).toBe(1);
-    expect(byTab.events[0].seq).toBe(2);
+    expect(byTab.value.count).toBe(1);
+    expect(byTab.value.events[0].seq).toBe(2);
     const byTabMiss = JSON.parse(await logs.handler({ projectPath: root, tab: 999 }));
-    expect(byTabMiss.count).toBe(0);
+    expect(byTabMiss.value.count).toBe(0);
 
     const capped = JSON.parse(await logs.handler({ projectPath: root, limit: 1 }));
-    expect(capped.count).toBe(1);
-    expect(capped.truncated).toBe(true);
-    expect(capped.events[0].seq).toBe(3);
+    expect(capped.value.count).toBe(1);
+    expect(capped.value.truncated).toBe(true);
+    expect(capped.value.events[0].seq).toBe(3);
 
     fs.rmSync(root, { recursive: true, force: true });
   });

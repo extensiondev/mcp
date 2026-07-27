@@ -11,7 +11,8 @@ import {
   SESSION_BROWSER,
   SESSION_PROJECT_PATH,
 } from "../lib/common-schema";
-import { runActVerb, commonFlags, type ActArgs } from "../lib/act";
+import { runActVerb, type ActArgs } from "../lib/act";
+import { envelope } from "../lib/envelope";
 import { resolveSessionBrowser } from "../lib/session-browser";
 
 export const schema = {
@@ -62,15 +63,24 @@ export async function handler(
   if (args.key) cli.push("--key", args.key);
   if (args.action === "set") {
     if (args.value === undefined) {
-      return JSON.stringify({
+      return envelope({
         ok: false,
-        error: { name: "BadRequest", message: "storage set requires a value" },
+        command: schema.name,
+        status: "bad-request",
+        error: {
+          code: "E_BAD_REQUEST",
+          name: "BadRequest",
+          message: "storage set requires a value",
+        },
       });
     }
     if (args.key === undefined) {
-      return JSON.stringify({
+      return envelope({
         ok: false,
+        command: schema.name,
+        status: "bad-request",
         error: {
+          code: "E_BAD_REQUEST",
           name: "BadRequest",
           message:
             'storage set requires `key` (string) and `value` args, one key per call. There is no bulk-object set: to seed {a: 1, b: 2}, call once with key: "a" and once with key: "b".',
@@ -82,5 +92,5 @@ export async function handler(
   if (args.context) cli.push("--context", args.context);
   cli.push("--browser", browser);
   if (args.timeout != null) cli.push("--timeout", String(args.timeout));
-  return runActVerb(cli, args.projectPath, args.timeout);
+  return runActVerb(cli, args.projectPath, args.timeout, schema.name);
 }

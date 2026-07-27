@@ -58,9 +58,10 @@ describe("companion extensions are not linted against the root manifest", () => 
       await manifestValidate.handler({ projectPath: projectDir }),
     );
 
-    const blame = [...(parsed.errors ?? []), ...(parsed.warnings ?? [])].join(
-      "\n",
-    );
+    const blame = [
+      ...(parsed.value.errors ?? []),
+      ...(parsed.value.warnings ?? []),
+    ].join("\n");
     for (const api of [
       "bookmarks",
       "history",
@@ -71,7 +72,7 @@ describe("companion extensions are not linted against the root manifest", () => 
     ]) {
       expect(blame).not.toContain(`chrome.${api}`);
     }
-    expect(parsed.buildBlocking).toBeFalsy();
+    expect(parsed.value.buildBlocking).toBeFalsy();
   });
 
   it("still blames the root manifest for the USER's own undeclared calls", async () => {
@@ -81,9 +82,10 @@ describe("companion extensions are not linted against the root manifest", () => 
       await manifestValidate.handler({ projectPath: projectDir }),
     );
 
-    const blame = [...(parsed.errors ?? []), ...(parsed.warnings ?? [])].join(
-      "\n",
-    );
+    const blame = [
+      ...(parsed.value.errors ?? []),
+      ...(parsed.value.warnings ?? []),
+    ].join("\n");
     expect(blame).toContain("chrome.bookmarks");
   });
 });

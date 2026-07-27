@@ -35,12 +35,18 @@ describe("extension_publish envelope compatibility", () => {
     const out = await handler({});
     expect(out).toBe(
       JSON.stringify({
+        schema: 1,
         ok: false,
+        command: "extension_publish",
+        status: "auth-required",
+        value: null,
         error: {
+          code: "E_AUTH_REQUIRED",
           name: "PublishAuthError",
           message:
             "No token. Run extension_auth (action: login), or set EXTENSION_DEV_TOKEN (create one in the extension.dev dashboard).",
         },
+        warnings: [],
       }),
     );
   });
@@ -52,12 +58,18 @@ describe("extension_publish envelope compatibility", () => {
     });
     expect(out).toBe(
       JSON.stringify({
+        schema: 1,
         ok: false,
+        command: "extension_publish",
+        status: "publish-failed",
+        value: null,
         error: {
+          code: "E_PLATFORM",
           name: "PublishConfigError",
           message:
             "Refusing to send the access token to http://evil.example.com: use https (http is allowed only for localhost).",
         },
+        warnings: [],
       }),
     );
   });

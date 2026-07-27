@@ -16,9 +16,22 @@ import {
   userlandProjectUrl,
 } from "../lib/registry";
 import { UserlandProjectPage } from "@extension.dev/urls/userland";
+import { envelope, type ErrorCode } from "../lib/envelope";
 
-function fail(name: string, message: string, extra?: Record<string, unknown>): string {
-  return JSON.stringify({ ok: false, error: { name, message }, ...(extra ?? {}) });
+function fail(
+  name: string,
+  message: string,
+  status: string,
+  code: ErrorCode,
+  extra?: Record<string, unknown>,
+): string {
+  return envelope({
+    ok: false,
+    command: "extension_release_status",
+    status,
+    value: extra ?? {},
+    error: { code, name, message },
+  });
 }
 
 export async function readReleases(args: {
@@ -31,6 +44,8 @@ export async function readReleases(args: {
     return fail(
       "ReleaseListInputError",
       "No project to list. Run extension_auth (action: login), which names the project, or pass workspace + project explicitly.",
+      "auth-required",
+      "E_AUTH_REQUIRED",
     );
   }
 
@@ -52,6 +67,8 @@ export async function readReleases(args: {
       `No registry data for ${ref.workspace}/${ref.project} (${channelsUrl} returned ${
         channelsRes.status ?? "no response"
       }). The project may have no builds yet, or the workspace/project slugs may be wrong. If it is private, make sure extension_auth covers this exact project (a token scoped elsewhere cannot read it). The console Builds page is the authoritative view: ${buildsPageUrl}`,
+      "unavailable",
+      "E_PLATFORM",
       { workspace: ref.workspace, project: ref.project, registryUrl: channelsUrl, buildsPageUrl },
     );
   }
@@ -89,25 +106,34 @@ export async function readReleases(args: {
     ),
   }));
 
-  const result: Record<string, unknown> = {
+  const publicUrlNote = publicProjectUrl
+    ? isPrivate
+      ? "publicUrl links open only for workspace members. This project is private, so an outside recipient needs a share link from extension_publish."
+      : "publicUrl links are the public build pages: no login needed, and they carry the per-browser downloads and the run locally instructions."
+    : null;
+  const channelsUnavailable = channelsRes.ok
+    ? null
+    : `channels.json unreadable: ${channelsRes.message}`;
+  const buildsUnavailable = buildsRes.ok
+    ? null
+    : `builds/index.json unreadable: ${buildsRes.message}`;
+
+  return envelope({
     ok: true,
-    workspace: ref.workspace,
-    project: ref.project,
-    ...(meta?.name ? { name: meta.name } : {}),
-    ...(meta?.visibility ? { visibility: meta.visibility } : {}),
-    channels: channelsWithUrls,
-    recentBuilds: buildsWithUrls,
-    registryUrl: channelsUrl,
-    buildsPageUrl,
-    ...(publicProjectUrl ? { publicProjectUrl } : {}),
-    ...(publicProjectUrl
-      ? {
-          publicUrlNote: isPrivate
-            ? "publicUrl links open only for workspace members. This project is private, so an outside recipient needs a share link from extension_publish."
-            : "publicUrl links are the public build pages: no login needed, and they carry the per-browser downloads and the run locally instructions.",
-        }
-      : {}),
-    message:
+    command: "extension_release_status",
+    status: "read",
+    value: {
+      workspace: ref.workspace,
+      project: ref.project,
+      ...(meta?.name ? { name: meta.name } : {}),
+      ...(meta?.visibility ? { visibility: meta.visibility } : {}),
+      channels: channelsWithUrls,
+      recentBuilds: buildsWithUrls,
+      registryUrl: channelsUrl,
+      buildsPageUrl,
+      ...(publicProjectUrl ? { publicProjectUrl } : {}),
+    },
+    hint:
       promotable.length > 0 || recentBuilds.length > 0
         ? `Promotable shas: channels currently pin ${
             promotable.length > 0 ? promotable.join(", ") : "none"
@@ -118,12 +144,6 @@ export async function readReleases(args: {
               .join(", ") || "none"
           }. Use one of these as buildId/buildSha for promote/deploy/publish.`
         : `No channels or builds are recorded on the registry yet for ${ref.workspace}/${ref.project}. Push a commit to produce a build, then check ${buildsPageUrl}.`,
-  };
-  if (!channelsRes.ok) {
-    result.channelsUnavailable = `channels.json unreadable: ${channelsRes.message}`;
-  }
-  if (!buildsRes.ok) {
-    result.buildsUnavailable = `builds/index.json unreadable: ${buildsRes.message}`;
-  }
-  return JSON.stringify(result);
+    warnings: [publicUrlNote, channelsUnavailable, buildsUnavailable],
+  });
 }

@@ -6,6 +6,8 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
+import { envelope } from "./envelope";
+
 export interface InputIssue {
   path: string;
   message: string;
@@ -168,13 +170,18 @@ export function inputValidationError(
   issues: InputIssue[],
   inputSchema?: Record<string, unknown>,
 ): string {
-  return JSON.stringify({
+  return envelope({
     ok: false,
+    command: toolName,
+    status: "invalid-arguments",
     error: {
+      code: "E_INPUT_VALIDATION",
       name: "InputValidationError",
       message: `Invalid arguments for ${toolName}: ${issues
         .map((i) => `${i.path}: ${i.message}`)
         .join("; ")}`,
+    },
+    value: {
       issues,
       ...(inputSchema ? { args: describeToolArgs(inputSchema) } : {}),
     },

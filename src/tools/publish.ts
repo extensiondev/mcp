@@ -7,6 +7,7 @@
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
 import { API_BASE } from "../lib/common-schema";
+import { envelope, type ErrorCode } from "../lib/envelope";
 import { publish, resolveToken } from "../lib/publish";
 import {
   fetchRegistryJson,
@@ -38,8 +39,18 @@ export const schema = {
   },
 };
 
-function fail(name: string, message: string): string {
-  return JSON.stringify({ ok: false, error: { name, message } });
+function fail(
+  name: string,
+  message: string,
+  status: string,
+  code: ErrorCode,
+): string {
+  return envelope({
+    ok: false,
+    command: "extension_publish",
+    status,
+    error: { code, name, message },
+  });
 }
 
 export async function handler(args: {
@@ -52,6 +63,8 @@ export async function handler(args: {
     return fail(
       "PublishAuthError",
       "No token. Run extension_auth (action: login), or set EXTENSION_DEV_TOKEN (create one in the extension.dev dashboard).",
+      "auth-required",
+      "E_AUTH_REQUIRED",
     );
   }
 
@@ -61,6 +74,8 @@ export async function handler(args: {
       return fail(
         "PublishBadRequest",
         "ttlHours must be an integer between 1 and 168.",
+        "bad-request",
+        "E_BAD_REQUEST",
       );
     }
   }
@@ -70,6 +85,8 @@ export async function handler(args: {
       return fail(
         "PublishBadRequest",
         "buildSha must be a 7-40 character hex git sha.",
+        "bad-request",
+        "E_BAD_REQUEST",
       );
     }
   }
@@ -81,13 +98,26 @@ export async function handler(args: {
     token,
   });
 
-  if (!result.ok) return JSON.stringify(result);
+  if (!result.ok) {
+    return envelope({
+      ok: false,
+      command: "extension_publish",
+      status: "publish-failed",
+      error: {
+        code: "E_PLATFORM",
+        name: result.error.name,
+        message: result.error.message,
+      },
+    });
+  }
 
   const data = result.data as Record<string, unknown>;
+  let note: string | null = null;
   if (args.ttlHours != null && data.visibility === "public") {
-    data.note =
+    note =
       "ttlHours was ignored: this is a public project, whose share URL is its canonical public page.";
   }
+  let buildNote: string | null = null;
 
   const ref = resolveProjectRef();
   if (ref) {
@@ -122,11 +152,17 @@ export async function handler(args: {
         if (data.channel == null && served.channel) data.channel = served.channel;
         data.registryUrl = buildsUrl;
         if (!pinned && args.buildSha == null) {
-          data.buildNote =
+          buildNote =
             "buildSha/builtAt/version describe the newest successful build in the project's registry index, which is what the share link serves. Pin buildSha to serve a specific build.";
         }
       }
     }
   }
-  return JSON.stringify(data);
+  return envelope({
+    ok: true,
+    command: "extension_publish",
+    status: "published",
+    value: data,
+    warnings: [note, buildNote],
+  });
 }

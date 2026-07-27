@@ -11,6 +11,9 @@ import {
   stripTemplatePathPrefix,
   templateFileUrls,
 } from "../lib/template-artifact-source";
+import { envelope } from "../lib/envelope";
+
+const COMMAND = "extension_templates";
 
 export async function readTemplateSource(args: {
   slug: string;
@@ -19,8 +22,14 @@ export async function readTemplateSource(args: {
   const template = await getTemplateBySlug(args.slug);
 
   if (!template) {
-    return JSON.stringify({
-      error: `Template '${args.slug}' not found in the catalog`,
+    return envelope({
+      ok: false,
+      command: COMMAND,
+      status: "template-not-found",
+      error: {
+        code: "E_TEMPLATE_NOT_FOUND",
+        message: `Template '${args.slug}' not found in the catalog`,
+      },
       hint: 'Use extension_templates with action: "list" to see available templates.',
     });
   }
@@ -37,11 +46,16 @@ export async function readTemplateSource(args: {
   };
 
   if (!args.files?.length) {
-    return JSON.stringify({
-      ...meta,
-      files: template.files.map((f) =>
-        stripTemplatePathPrefix(template.slug, f),
-      ),
+    return envelope({
+      ok: true,
+      command: COMMAND,
+      status: "file-list",
+      value: {
+        ...meta,
+        files: template.files.map((f) =>
+          stripTemplatePathPrefix(template.slug, f),
+        ),
+      },
       hint: "Pass specific file paths in the files parameter to read their contents.",
     });
   }
@@ -69,9 +83,20 @@ export async function readTemplateSource(args: {
     }),
   );
 
-  return JSON.stringify({
-    ...meta,
-    fileContents,
-    ...(errors.length ? { errors } : {}),
+  return envelope({
+    ok: errors.length === 0,
+    command: COMMAND,
+    status: errors.length ? "partial" : "read",
+    error: errors.length
+      ? {
+          code: "E_TEMPLATE_FETCH",
+          message: `${errors.length} of ${errors.length + Object.keys(fileContents).length} file(s) could not be read from the template.`,
+        }
+      : null,
+    value: {
+      ...meta,
+      fileContents,
+    },
+    warnings: errors,
   });
 }

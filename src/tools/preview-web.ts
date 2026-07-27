@@ -13,6 +13,9 @@ import * as build from "./build";
 import { navigateToUrl } from "./open";
 import { uploadPreview } from "../lib/preview-upload";
 import { recordSharedPreview } from "../lib/share-record";
+import { envelope } from "../lib/envelope";
+
+const COMMAND = "extension_preview_web";
 
 
 const DEFAULT_PREVIEW_DEV_URL = "http://localhost:3110";
@@ -190,15 +193,19 @@ export async function handler(args: {
     try {
       buildResult = JSON.parse(raw);
     } catch {
-      buildResult = { success: false, raw };
+      buildResult = { ok: false, raw };
     }
-    if (!buildResult || buildResult.success !== true) {
-      return JSON.stringify({
+    if (!buildResult || buildResult.ok !== true) {
+      return envelope({
         ok: false,
-        stage: "build",
-        error:
-          "The build failed, so there is nothing to preview. See buildResult for the cause.",
-        buildResult,
+        command: COMMAND,
+        status: "build-failed",
+        error: {
+          code: "E_BUILD_FAILED",
+          message:
+            "The build failed, so there is nothing to preview. See buildResult for the cause.",
+        },
+        value: { stage: "build", buildResult },
       });
     }
   }
@@ -208,11 +215,15 @@ export async function handler(args: {
     : path.resolve(args.projectPath, "dist", browser);
   const manifestPath = path.join(distDir, "manifest.json");
   if (!fs.existsSync(manifestPath)) {
-    return JSON.stringify({
+    return envelope({
       ok: false,
-      stage: "resolve-dist",
-      distDir,
-      error: `No manifest.json in ${distDir}. Build the project first (build:true), or pass distPath to an already-built directory.`,
+      command: COMMAND,
+      status: "no-dist",
+      error: {
+        code: "E_NO_DIST",
+        message: `No manifest.json in ${distDir}. Build the project first (build:true), or pass distPath to an already-built directory.`,
+      },
+      value: { stage: "resolve-dist", distDir },
     });
   }
 
@@ -220,13 +231,17 @@ export async function handler(args: {
   try {
     manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
   } catch (err) {
-    return JSON.stringify({
+    return envelope({
       ok: false,
-      stage: "resolve-dist",
-      distDir,
-      error: `manifest.json in ${distDir} is not valid JSON: ${
-        err instanceof Error ? err.message : String(err)
-      }`,
+      command: COMMAND,
+      status: "bad-dist-manifest",
+      error: {
+        code: "E_BAD_MANIFEST",
+        message: `manifest.json in ${distDir} is not valid JSON: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      },
+      value: { stage: "resolve-dist", distDir },
     });
   }
 
@@ -235,7 +250,6 @@ export async function handler(args: {
   const deepLink = `${hostBase}/?url=${encodeURIComponent(internalUrl)}`;
 
   const result: Record<string, unknown> = {
-    ok: true,
     deepLink,
     distDir,
     manifest: {
@@ -245,8 +259,9 @@ export async function handler(args: {
     },
     surfaces: detectSurfaces(manifest),
     ...(buildResult ? { built: true } : { built: false }),
-    hint: `Open deepLink in a browser to see the extension render in ${SURFACE.label}'s emulator. It must be running (${SURFACE.devCommand}). Once it renders, the Trace tab shows every chrome.* call it makes, and the lane toggle switches between the emulated backend and a real carrier-equipped browser.`,
   };
+  const hint = `Open deepLink in a browser to see the extension render in ${SURFACE.label}'s emulator. It must be running (${SURFACE.devCommand}). Once it renders, the Trace tab shows every chrome.* call it makes, and the lane toggle switches between the emulated backend and a real carrier-equipped browser.`;
+  const previewWarnings: string[] = [];
 
   if (args.open) {
     const sessionBrowser = args.openIn ?? browser;
@@ -260,8 +275,9 @@ export async function handler(args: {
     result.opened = opened;
     result.openedIn = sessionBrowser;
     if (opened.ok !== true) {
-      result.openHint =
-        "Could not open the preview in a browser. This needs a live dev session (run extension_dev, then extension_wait for ready). The deepLink above still works if you open it yourself.";
+      previewWarnings.push(
+        "Could not open the preview in a browser. This needs a live dev session (run extension_dev, then extension_wait for ready). The deepLink above still works if you open it yourself.",
+      );
     }
   }
 
@@ -275,7 +291,14 @@ export async function handler(args: {
   }
 
   if (args.probe === false) {
-    return JSON.stringify(result);
+    return envelope({
+      ok: true,
+      command: COMMAND,
+      status: "previewed",
+      value: result,
+      hint,
+      warnings: previewWarnings,
+    });
   }
 
   const probeUrl = `${hostBase}${SURFACE.fetchPath}?url=${encodeURIComponent(
@@ -287,15 +310,24 @@ export async function handler(args: {
     });
     const contentType = res.headers.get("content-type") ?? "";
     if (!res.ok || !contentType.includes("application/json")) {
-      return JSON.stringify({
-        ...result,
-        hostReachable: true,
-        previewLoadable: false,
-        probe: {
-          status: res.status,
-          contentType,
-          note: `${SURFACE.label} answered but not with a preview payload. On the deployed host ${SURFACE.fetchPath} does not exist (dev-only); run a local dev server (${SURFACE.devCommand}) to use web preview.`,
+      return envelope({
+        ok: true,
+        command: COMMAND,
+        status: "host-not-serving-preview",
+        value: {
+          ...result,
+          hostReachable: true,
+          previewLoadable: false,
+          probe: {
+            status: res.status,
+            contentType,
+          },
         },
+        hint,
+        warnings: [
+          ...previewWarnings,
+          `${SURFACE.label} answered but not with a preview payload. On the deployed host ${SURFACE.fetchPath} does not exist (dev-only); run a local dev server (${SURFACE.devCommand}) to use web preview.`,
+        ],
       });
     }
     const payload = (await res.json()) as {
@@ -304,26 +336,42 @@ export async function handler(args: {
       manifest?: { name?: string };
       files?: unknown[];
     };
-    return JSON.stringify({
-      ...result,
-      hostReachable: true,
-      previewLoadable: true,
-      probe: {
-        identifier: payload.identifier,
-        loadedName: payload.manifest?.name,
-        loadedVersion: payload.version,
-        fileCount: Array.isArray(payload.files) ? payload.files.length : 0,
+    return envelope({
+      ok: true,
+      command: COMMAND,
+      status: "previewed",
+      value: {
+        ...result,
+        hostReachable: true,
+        previewLoadable: true,
+        probe: {
+          identifier: payload.identifier,
+          loadedName: payload.manifest?.name,
+          loadedVersion: payload.version,
+          fileCount: Array.isArray(payload.files) ? payload.files.length : 0,
+        },
       },
+      hint,
+      warnings: previewWarnings,
     });
   } catch (err) {
-    return JSON.stringify({
-      ...result,
-      hostReachable: false,
-      previewLoadable: false,
-      probe: {
-        error: err instanceof Error ? err.message : String(err),
-        note: `Could not reach ${SURFACE.label} at ${hostBase}. Start it with '${SURFACE.devCommand}', then open deepLink.`,
+    return envelope({
+      ok: true,
+      command: COMMAND,
+      status: "host-unreachable",
+      value: {
+        ...result,
+        hostReachable: false,
+        previewLoadable: false,
+        probe: {
+          error: err instanceof Error ? err.message : String(err),
+        },
       },
+      hint,
+      warnings: [
+        ...previewWarnings,
+        `Could not reach ${SURFACE.label} at ${hostBase}. Start it with '${SURFACE.devCommand}', then open deepLink.`,
+      ],
     });
   }
 }

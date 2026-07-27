@@ -127,7 +127,8 @@ describe("extension_dev fork guard", () => {
 
     expect(result.ok).toBe(false);
     expect(result.status).toBe("session-exists");
-    expect(result.sessions).toEqual([{ pid, browser: "chrome" }]);
+    expect(result.error.code).toBe("E_SESSION_EXISTS");
+    expect(result.value.sessions).toEqual([{ pid, browser: "chrome" }]);
     expect(result.hint).toContain("replace: true");
     expect(result.hint).toContain("extension_stop");
     expect(isAlive(pid)).toBe(true);
@@ -142,7 +143,7 @@ describe("extension_dev fork guard", () => {
 
     expect(result.ok).toBe(false);
     expect(result.status).toBe("session-exists");
-    expect(result.sessions[0].pid).toBe(pid);
+    expect(result.value.sessions[0].pid).toBe(pid);
   });
 
   it("replace:true stops the old session and reports it as replacedSession", async () => {
@@ -158,7 +159,7 @@ describe("extension_dev fork guard", () => {
 
     expect(result.ok).toBe(true);
     expect(result.status).toBe("started");
-    expect(result.replacedSession).toEqual({ pid, browser: "chrome" });
+    expect(result.value.replacedSession).toEqual({ pid, browser: "chrome" });
     expect(isAlive(pid)).toBe(false);
   }, 20_000);
 });
@@ -176,14 +177,15 @@ describe("extension_dev browser leg health", () => {
 
     expect(result.ok).toBe(false);
     expect(result.status).toBe("browser-exited");
-    expect(result.browserExitCode).toBe(1);
-    expect(result.error).toContain("browser");
+    expect(result.error.code).toBe("E_BROWSER_EXITED");
+    expect(result.value.browserExitCode).toBe(1);
+    expect(result.error.message).toContain("browser");
     expect(result.hint).toContain(
       path.join(project, "dist", "extension-profile-chrome"),
     );
   }, 15_000);
 
-  it("recognizes a profile lock in the early output on engines without the stamp", async () => {
+  it("splits a profile lock out of browser-exited, even on engines without the stamp", async () => {
     const project = tmpProject();
     nextChild = () =>
       fakeCli(
@@ -193,9 +195,12 @@ describe("extension_dev browser leg health", () => {
     const result = JSON.parse(await dev.handler({ projectPath: project }));
 
     expect(result.ok).toBe(false);
-    expect(result.status).toBe("browser-exited");
-    expect(result.error).toContain("profile is locked");
+    expect(result.status).toBe("profile-locked");
+    expect(result.error.code).toBe("E_PROFILE_LOCKED");
+    expect(result.error.message).toContain("profile is locked");
     expect(result.hint).toContain("extension-profile-chrome");
+    // No contract said so, so the degraded read is disclosed.
+    expect(result.warnings.join(" ")).toContain("machine contract");
   }, 15_000);
 });
 
@@ -209,8 +214,8 @@ describe("extension_stop all:true discovery", () => {
 
     const result = JSON.parse(await stop.handler({ all: true }));
 
-    expect(result.message).toBeUndefined();
-    const mine = result.stopped.find(
+    expect(result.status).toBe("stopped-all");
+    const mine = result.value.stopped.find(
       (o: { projectPath: string }) => path.resolve(o.projectPath) === project,
     );
     expect(mine).toBeDefined();
@@ -228,7 +233,8 @@ describe("extension_stop all:true discovery", () => {
       await stop.handler({ projectPath: m.projectPath, browser: m.browser, all: false });
     }
     const result = JSON.parse(await stop.handler({ all: true }));
-    expect(result.stopped).toEqual([]);
-    expect(result.message).toContain("no session markers");
+    expect(result.value.stopped).toEqual([]);
+    expect(result.status).toBe("nothing-to-stop");
+    expect(result.hint).toContain("no session markers");
   }, 30_000);
 });

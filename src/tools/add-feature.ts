@@ -11,6 +11,9 @@ import fs from "node:fs";
 import path from "node:path";
 import { getTemplateBySlug } from "../lib/templates-cache";
 import { PINNED_COMMIT } from "../lib/template-artifact-source";
+import { envelope } from "../lib/envelope";
+
+const COMMAND = "extension_add_feature";
 
 const EXAMPLES_TREE_BASE = `https://github.com/extension-js/examples/tree/${PINNED_COMMIT}/examples`;
 
@@ -151,8 +154,14 @@ export async function handler(args: {
   const manifestPath = path.join(srcDir, "manifest.json");
 
   if (!fs.existsSync(manifestPath)) {
-    return JSON.stringify({
-      error: `No manifest.json found at ${manifestPath}`,
+    return envelope({
+      ok: false,
+      command: COMMAND,
+      status: "manifest-not-found",
+      error: {
+        code: "E_MANIFEST_NOT_FOUND",
+        message: `No manifest.json found at ${manifestPath}`,
+      },
       hint: "Ensure projectPath points to an extension project root with src/manifest.json",
     });
   }
@@ -160,8 +169,14 @@ export async function handler(args: {
   const templateSlug = FEATURE_TEMPLATE_MAP[args.feature]?.[framework];
 
   if (!templateSlug) {
-    return JSON.stringify({
-      error: `No reference template for feature "${args.feature}" with framework "${framework}"`,
+    return envelope({
+      ok: false,
+      command: COMMAND,
+      status: "no-reference-template",
+      error: {
+        code: "E_NO_REFERENCE_TEMPLATE",
+        message: `No reference template for feature "${args.feature}" with framework "${framework}"`,
+      },
     });
   }
 
@@ -259,34 +274,42 @@ export async function handler(args: {
     fs.existsSync(path.join(projectPath, f.path)),
   );
 
-  return JSON.stringify({
-    feature: args.feature,
-    framework,
-    referenceTemplate: {
-      slug: templateSlug,
-      repositoryUrl: `${EXAMPLES_TREE_BASE}/${templateSlug}`,
-      referenceFiles: referenceFiles.filter(
-        (f: string) => f.includes(featureDir) || f.includes("manifest"),
-      ),
+  const conflictHint = `Warning: ${conflicts.length} file(s) already exist and would be overwritten.`;
+
+  return envelope({
+    ok: true,
+    command: COMMAND,
+    status: conflicts.length ? "planned-with-conflicts" : "planned",
+    value: {
+      feature: args.feature,
+      framework,
+      referenceTemplate: {
+        slug: templateSlug,
+        repositoryUrl: `${EXAMPLES_TREE_BASE}/${templateSlug}`,
+        referenceFiles: referenceFiles.filter(
+          (f: string) => f.includes(featureDir) || f.includes("manifest"),
+        ),
+      },
+      manifestUpdates,
+      filesToCreate: filesToCreate.map((f) => ({
+        ...f,
+        exists: fs.existsSync(path.join(projectPath, f.path)),
+      })),
+      conflicts: conflicts.map((c) => c.path),
+      instructions: [
+        `1. Add these fields to your src/manifest.json:\n${JSON.stringify(manifestUpdates, null, 2)}`,
+        `2. Create the following files in your project:`,
+        ...filesToCreate.map((f) => `   - ${f.path} (${f.hint})`),
+        args.feature === "sidebar"
+          ? "3. Add background.ts to handle sidebar open: chromium uses chrome.sidePanel.setPanelBehavior, firefox uses browser.sidebarAction.open()"
+          : "",
+        `4. Reference template source: ${EXAMPLES_TREE_BASE}/${templateSlug}/src`,
+        "5. Run npm run dev to test",
+      ].filter(Boolean),
     },
-    manifestUpdates,
-    filesToCreate: filesToCreate.map((f) => ({
-      ...f,
-      exists: fs.existsSync(path.join(projectPath, f.path)),
-    })),
-    conflicts: conflicts.map((c) => c.path),
-    instructions: [
-      `1. Add these fields to your src/manifest.json:\n${JSON.stringify(manifestUpdates, null, 2)}`,
-      `2. Create the following files in your project:`,
-      ...filesToCreate.map((f) => `   - ${f.path} (${f.hint})`),
-      args.feature === "sidebar"
-        ? "3. Add background.ts to handle sidebar open: chromium uses chrome.sidePanel.setPanelBehavior, firefox uses browser.sidebarAction.open()"
-        : "",
-      `4. Reference template source: ${EXAMPLES_TREE_BASE}/${templateSlug}/src`,
-      "5. Run npm run dev to test",
-    ].filter(Boolean),
-    hint: conflicts.length
-      ? `Warning: ${conflicts.length} file(s) already exist and would be overwritten.`
-      : "No conflicts detected. Safe to create all files.",
+    warnings: conflicts.length ? [conflictHint] : [],
+    ...(conflicts.length
+      ? {}
+      : { hint: "No conflicts detected. Safe to create all files." }),
   });
 }

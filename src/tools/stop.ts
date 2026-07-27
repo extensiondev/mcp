@@ -20,6 +20,7 @@ import {
 } from "../lib/process-manager";
 import { resolveSessionBrowser } from "../lib/session-browser";
 import { removeCarrier } from "../lib/carrier";
+import { envelope } from "../lib/envelope";
 
 export const schema = {
   name: "extension_stop",
@@ -220,27 +221,52 @@ export async function handler(args: {
       if (!candidates.has(key)) candidates.set(key, m);
     }
     if (candidates.size === 0) {
-      return JSON.stringify({
-        stopped: [],
-        message:
-          "No sessions registered in this server and no session markers on disk. Nothing to stop.",
+      return envelope({
+        ok: true,
+        command: schema.name,
+        status: "nothing-to-stop",
+        value: { stopped: [] },
+        hint: "No sessions registered in this server and no session markers on disk. Nothing to stop.",
       });
     }
     const outcomes: StopOutcome[] = [];
     for (const c of candidates.values()) {
       outcomes.push(await stopOne(c.projectPath, c.browser));
     }
-    return JSON.stringify({ stopped: outcomes });
+    return envelope({
+      ok: outcomes.every((o) => o.stopped),
+      command: schema.name,
+      status: "stopped-all",
+      value: { stopped: outcomes },
+      warnings: outcomes.map((o) => (o.stopped ? null : o.detail)),
+    });
   }
 
   if (!args.projectPath) {
-    return JSON.stringify({
-      error:
-        "projectPath is required unless all=true. Pass the same projectPath used with extension_dev/extension_start.",
+    return envelope({
+      ok: false,
+      command: schema.name,
+      status: "bad-request",
+      error: {
+        code: "E_BAD_REQUEST",
+        message:
+          "projectPath is required unless all=true. Pass the same projectPath used with extension_dev/extension_start.",
+      },
     });
   }
 
   const { browser } = resolveSessionBrowser(args.projectPath, args.browser);
   const outcome = await stopOne(args.projectPath, browser);
-  return JSON.stringify(outcome);
+  return envelope({
+    ok: outcome.stopped,
+    command: schema.name,
+    status:
+      outcome.pid === null
+        ? "not-found"
+        : outcome.stopped
+          ? "stopped"
+          : "still-alive",
+    value: outcome,
+    warnings: [outcome.stopped ? null : outcome.detail],
+  });
 }

@@ -610,21 +610,33 @@ The `similarTemplates` field lists templates from the catalog with similar surfa
 }
 ```
 
-**Returns:** The `ready.json` contract:
+**Returns:** The schema-1 envelope, carrying the `ready.json` contract under `value`:
 
 ```json
 {
+  "schema": 1,
+  "ok": true,
+  "command": "extension_wait",
   "status": "ready",
-  "command": "dev",
-  "browser": "chrome",
-  "port": 8080,
-  "pid": 12345,
-  "distPath": "/path/to/dist/chrome",
-  "manifestPath": "/path/to/dist/chrome/manifest.json",
-  "compiledAt": "2026-04-14T10:30:00.000Z",
-  "startedAt": "2026-04-14T10:29:55.000Z"
+  "value": {
+    "compiled": true,
+    "browserAttached": true,
+    "sessionCommand": "dev",
+    "browser": "chrome",
+    "port": 8080,
+    "pid": 12345,
+    "distPath": "/path/to/dist/chrome",
+    "manifestPath": "/path/to/dist/chrome/manifest.json",
+    "compiledAt": "2026-04-14T10:30:00.000Z",
+    "startedAt": "2026-04-14T10:29:55.000Z"
+  },
+  "error": null,
+  "warnings": []
 }
 ```
+
+The envelope's `command` names the tool, so the ready contract's own `command`
+is carried as `value.sessionCommand`.
 
 **Why this matters for MCP:** When Claude starts a dev session via `extension_dev`, it needs to know when the extension is actually loaded and ready before calling `extension_inspect`. This tool provides that gate.
 

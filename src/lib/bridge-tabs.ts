@@ -6,7 +6,8 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-import { runActVerb } from "./act";
+import { actFrameJson, runActVerb } from "./act";
+import { envelope } from "./envelope";
 
 export interface BridgeTab {
   tabId: number | null;
@@ -18,6 +19,7 @@ export async function listBridgeTabs(
   projectPath: string,
   browser: string,
   timeout?: number,
+  tool = "extension_dom_snapshot",
 ): Promise<{ tabs: BridgeTab[] } | { error: string }> {
   const raw = await runActVerb(
     [
@@ -30,6 +32,7 @@ export async function listBridgeTabs(
     ],
     projectPath,
     timeout,
+    tool,
   );
   let parsed: any;
   try {
@@ -92,6 +95,7 @@ export async function navigateToUrlViaBridge(
   browser: string,
   url: string,
   timeout?: number,
+  tool = "extension_open",
 ): Promise<string> {
   const expression =
     `(async () => {` +
@@ -116,15 +120,20 @@ export async function navigateToUrlViaBridge(
     ],
     projectPath,
     timeout,
+    tool,
   );
   try {
     const parsed = JSON.parse(raw);
     if (parsed?.ok === false) {
-      if (!parsed.hint) {
-        parsed.hint =
-          "On this browser family URL navigation rides the agent bridge (a background eval of tabs.update), so the dev session must be started with allowEval: true (extension_dev).";
-      }
-      return JSON.stringify(parsed);
+      // runActVerb already shaped this into schema 1; only the hint is added.
+      return actFrameJson(
+        parsed.hint
+          ? parsed
+          : {
+              ...parsed,
+              hint: "On this browser family URL navigation rides the agent bridge (a background eval of tabs.update), so the dev session must be started with allowEval: true (extension_dev).",
+            },
+      );
     }
   } catch {
     return raw;
@@ -137,19 +146,26 @@ export async function navigateToUrlViaBridge(
     timeout != null ? Math.min(timeout, 6000) : 6000,
   );
   if (!settled) {
-    return JSON.stringify({
+    return envelope({
       ok: false,
+      command: tool,
+      status: "navigate-failed",
       error: {
+        code: "E_NAVIGATE_FAILED",
         name: "NavigateFailed",
         message: `Navigation to ${url} did not produce a tab reporting that URL. The URL may not exist, or the browser refused the navigation (Firefox rejects privileged about:/chrome: URLs and other extensions' moz-extension: pages).`,
       },
       hint: "Confirm the URL, or discover open tabs with extension_dom_snapshot listTabs: true. For an extension page, the path must match the BUILT manifest.",
     });
   }
-  return JSON.stringify({
+  return envelope({
     ok: true,
-    navigated: url,
-    tab: { tabId: settled.tabId, url: settled.url, title: settled.title },
+    command: tool,
+    status: "navigated",
+    value: {
+      navigated: url,
+      tab: { tabId: settled.tabId, url: settled.url, title: settled.title },
+    },
     hint: "Inspect it with extension_dom_snapshot or extension_eval using url or this numeric tab id (context: 'page'/'content').",
   });
 }

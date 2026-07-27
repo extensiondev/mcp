@@ -19,6 +19,7 @@ import {
   readSharedPreviews,
   type SharedPreviewEntry,
 } from "../lib/share-record";
+import { envelope } from "../lib/envelope";
 
 const LOGIN_HINT =
   "Run extension_auth (action: login), or set EXTENSION_DEV_TOKEN (create one in the extension.dev dashboard).";
@@ -211,21 +212,27 @@ async function listShares(args: {
 
   if (!listing.ok) {
     const isAuth = listing.error.name === "SharesAuthError";
-    return JSON.stringify({
+    return envelope({
       ok: true,
-      action: "list",
-      server: {
-        listed: false,
-        errorName: listing.error.name,
-        reason: listing.error.message,
-        ...(isAuth ? { loginHint: LOGIN_HINT } : {}),
+      command: "extension_shares",
+      status: "listed-local-only",
+      value: {
+        action: "list",
+        server: {
+          listed: false,
+          errorName: listing.error.name,
+          reason: listing.error.message,
+          ...(isAuth ? { loginHint: LOGIN_HINT } : {}),
+        },
+        shares: [],
+        localOnly: (local?.entries ?? []).map((entry) => ({ ...entry })),
+        localRecord,
       },
-      shares: [],
-      localOnly: (local?.entries ?? []).map((entry) => ({ ...entry })),
-      localRecord,
-      note: isAuth
-        ? `The platform was not asked, so live and dead cannot be told apart here. ${LOGIN_HINT} localOnly is this project's own record of every link it ever shared, revoke handles included.`
-        : "The platform could not be reached, so localOnly below is this project's own record and not a statement about what is still live.",
+      warnings: [
+        isAuth
+          ? `The platform was not asked, so live and dead cannot be told apart here. ${LOGIN_HINT} localOnly is this project's own record of every link it ever shared, revoke handles included.`
+          : "The platform could not be reached, so localOnly below is this project's own record and not a statement about what is still live.",
+      ],
     });
   }
 
@@ -272,36 +279,42 @@ async function listShares(args: {
     unknown: shares.filter((s) => s.attribution.ownership === "unknown").length,
   };
 
-  return JSON.stringify({
+  const truncatedNote = listing.data.truncated
+    ? `This is not the whole set: ${listing.data.count} of ${listing.data.matched} matched shares came back at limit ${listing.data.limit}. truncated also goes true when the server spent its budget working out which shares you are entitled to see, so matched is a floor and not a total. Raise limit (max 200) or pass status:"live" to narrow it, and do not read a missing share as revoked.`
+    : null;
+
+  return envelope({
     ok: true,
-    action: "list",
-    server: {
-      listed: true,
-      count: listing.data.count,
-      matched: listing.data.matched,
-      limit: listing.data.limit,
-      truncated: listing.data.truncated,
-      scanned: listing.data.scanned,
-      ownership,
-      ...(listing.data.truncated
-        ? {
-            truncatedNote: `This is not the whole set: ${listing.data.count} of ${listing.data.matched} matched shares came back at limit ${listing.data.limit}. truncated also goes true when the server spent its budget working out which shares you are entitled to see, so matched is a floor and not a total. Raise limit (max 200) or pass status:"live" to narrow it, and do not read a missing share as revoked.`,
-          }
-        : {}),
+    command: "extension_shares",
+    status: "listed",
+    value: {
+      action: "list",
+      server: {
+        listed: true,
+        count: listing.data.count,
+        matched: listing.data.matched,
+        limit: listing.data.limit,
+        truncated: listing.data.truncated,
+        scanned: listing.data.scanned,
+        ownership,
+        ...(truncatedNote ? { truncatedNote } : {}),
+      },
+      shares,
+      ...(local ? { localOnly } : {}),
+      localRecord,
     },
-    shares,
-    ...(local ? { localOnly } : {}),
-    localRecord,
-    message: `${liveCount} of ${shares.length} listed shares still resolve${
+    hint: `${liveCount} of ${shares.length} listed shares still resolve${
       local
         ? `; ${localOnly.length} local record ${
             localOnly.length === 1 ? "entry has" : "entries have"
           } no artifact behind them`
         : ""
     }. Revoke one with action:"revoke" and its artifactId or any of its URLs.`,
-    note: "previewUrl and zipUrl are null for a share that is no longer live, because a revoked or expired link cannot resolve for anyone. revokeUrl stays on every row. Revocation is permanent: a revoked id is burned and re-sharing the same build mints a different link.",
-    attributionNote:
+    warnings: [
+      "previewUrl and zipUrl are null for a share that is no longer live, because a revoked or expired link cannot resolve for anyone. revokeUrl stays on every row. Revocation is permanent: a revoked id is burned and re-sharing the same build mints a different link.",
       "attribution.ownership says who the share belongs to and therefore who may revoke it: project means the owning workspace holds it and any member can pull it back, personal means one person holds it alone. attribution.credit names the publisher and is attribution only, granting and restricting nothing. A credit of \"CLI token ...\" means the platform could not resolve which human minted that token, and a credit of \"not recorded\" means it never knew; neither is a name, and neither should be reported as one.",
+      truncatedNote,
+    ],
   });
 }
 
@@ -313,10 +326,13 @@ async function revokeShare(args: {
 }): Promise<string> {
   const ref = parseArtifactRef(args.artifactId || args.url || "");
   if (!ref) {
-    return JSON.stringify({
+    return envelope({
       ok: false,
-      action: "revoke",
+      command: "extension_shares",
+      status: "bad-request",
+      value: { action: "revoke" },
       error: {
+        code: "E_BAD_REQUEST",
         name: "SharesInputError",
         message:
           "Nothing to revoke. Pass artifactId (a gen_... id) or url (the previewUrl, zipUrl, viewUrl, or revokeUrl of the share). Run action:\"list\" to see both.",
@@ -341,24 +357,35 @@ async function revokeShare(args: {
 
   if (!result.ok) {
     const isAuth = result.error.name === "SharesAuthError";
-    return JSON.stringify({
+    return envelope({
       ok: false,
-      action: "revoke",
-      artifactId: ref,
-      error: { name: result.error.name, message: result.error.message },
-      ...(isAuth ? { loginHint: LOGIN_HINT } : {}),
-      ...(recordNote ? { recordNote } : {}),
+      command: "extension_shares",
+      status: "revoke-failed",
+      value: { action: "revoke", artifactId: ref },
+      error: {
+        code: isAuth ? "E_AUTH_REQUIRED" : "E_PLATFORM",
+        name: result.error.name,
+        message: result.error.message,
+      },
+      ...(isAuth ? { hint: LOGIN_HINT } : {}),
+      warnings: [recordNote],
     });
   }
 
-  return JSON.stringify({
+  return envelope({
     ok: true,
-    action: "revoke",
-    artifactId: ref,
-    revoked: result.data.revoked,
-    ...(result.data.revokedAt ? { revokedAt: result.data.revokedAt } : {}),
-    ...(recordNote ? { recordNote } : {}),
-    note: "The link is dead for everyone, permanently: the zip is deleted and the id is burned, so it can never resolve again. Sharing the same build later returns a different link, and anyone holding the old one gets nothing.",
+    command: "extension_shares",
+    status: "revoked",
+    value: {
+      action: "revoke",
+      artifactId: ref,
+      revoked: result.data.revoked,
+      ...(result.data.revokedAt ? { revokedAt: result.data.revokedAt } : {}),
+    },
+    warnings: [
+      "The link is dead for everyone, permanently: the zip is deleted and the id is burned, so it can never resolve again. Sharing the same build later returns a different link, and anyone holding the old one gets nothing.",
+      recordNote,
+    ],
   });
 }
 

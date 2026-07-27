@@ -7,6 +7,7 @@
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
 import { API_BASE } from "../lib/common-schema";
+import { envelope, type ErrorCode } from "../lib/envelope";
 import { resolveToken } from "../lib/publish";
 import { resolveApiBase, safeApiBase } from "../lib/login-flow";
 import { UserlandProjectPage } from "@extension.dev/urls/userland";
@@ -59,8 +60,18 @@ export const schema = {
   },
 };
 
-function fail(name: string, message: string): string {
-  return JSON.stringify({ ok: false, error: { name, message } });
+function fail(
+  name: string,
+  message: string,
+  status: string,
+  code: ErrorCode,
+): string {
+  return envelope({
+    ok: false,
+    command: "extension_release_promote",
+    status,
+    error: { code, name, message },
+  });
 }
 
 export async function handler(args: {
@@ -77,18 +88,30 @@ export async function handler(args: {
     return fail(
       "ReleaseAuthError",
       "No token. Set EXTENSION_DEV_TOKEN to a release token (create one in the extension.dev dashboard under project settings -> Access tokens; tokens live at most 7 days, so CI must re-mint before expiry), or run extension_auth (action: login).",
+      "auth-required",
+      "E_AUTH_REQUIRED",
     );
   }
 
   const buildId = String(args.buildId || "").trim();
   const channel = String(args.channel || "").trim();
   if (!buildId || !channel) {
-    return fail("ReleaseInputError", "buildId and channel are required.");
+    return fail(
+      "ReleaseInputError",
+      "buildId and channel are required.",
+      "bad-request",
+      "E_BAD_REQUEST",
+    );
   }
 
   const apiCheck = safeApiBase(resolveApiBase(args.api));
   if (!apiCheck.ok) {
-    return fail("ReleaseConfigError", apiCheck.message);
+    return fail(
+      "ReleaseConfigError",
+      apiCheck.message,
+      "bad-config",
+      "E_CONFIG",
+    );
   }
   const url = `${apiCheck.base}/api/cli/release/promote`;
 
@@ -114,6 +137,8 @@ export async function handler(args: {
     return fail(
       "ReleaseNetworkError",
       `Could not reach ${url}: ${err?.message || err}`,
+      "network-failed",
+      "E_NETWORK",
     );
   }
 
@@ -128,11 +153,12 @@ export async function handler(args: {
   if (!res.ok) {
     const code = typeof data?.code === "string" ? data.code : undefined;
     const enrich: Record<string, unknown> = {};
+    let hint = "";
     const ref = resolveProjectRef();
 
     if (res.status === 404 || code === "UNKNOWN_BUILD") {
       enrich.buildsPageUrl = consoleProjectUrl(ref, "builds", args.api);
-      enrich.hint =
+      hint =
         "Run extension_release_status to see this project's channels, their promoted shas, and recent builds.";
       if (ref) {
         const channelsUrl = registryFileUrl(ref, "channels.json");
@@ -150,14 +176,18 @@ export async function handler(args: {
       }
     }
 
-    return JSON.stringify({
+    return envelope({
       ok: false,
+      command: "extension_release_promote",
+      status: "promote-failed",
       error: {
+        code: "E_PLATFORM",
         name: "ReleaseError",
         message: `promote failed (${res.status}): ${data?.message || text || "unknown error"}`,
-        ...(code ? { code } : {}),
+        ...(code ? { platformCode: code } : {}),
       },
-      ...enrich,
+      value: enrich,
+      hint,
     });
   }
 
@@ -180,5 +210,10 @@ export async function handler(args: {
           ...(publicBuildUrl ? { publicBuildUrl } : {}),
         }
       : data;
-  return JSON.stringify(enriched);
+  return envelope({
+    ok: true,
+    command: "extension_release_promote",
+    status: "promoted",
+    value: enriched,
+  });
 }

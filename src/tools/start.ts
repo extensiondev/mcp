@@ -7,9 +7,10 @@
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
 import { LAUNCH_BROWSER, PROJECT_PATH } from "../lib/common-schema";
+import { pollBootVerdict } from "../lib/boot-verdict";
+import { envelope } from "../lib/envelope";
 import { spawnExtensionCli } from "../lib/exec";
 import { registerSession, removeSession } from "../lib/process-manager";
-import { browserExitStamp } from "../lib/session-browser";
 import {
   LAUNCH_FLAG_SCHEMA,
   launchFlagArgs,
@@ -83,59 +84,103 @@ export async function handler(
   });
   child.on("exit", () => removeSession(args.projectPath, browser));
 
-  await new Promise((resolve) => setTimeout(resolve, 5000));
-  const earlyOutput = spawned.readOutput();
+  const boot = await pollBootVerdict(args.projectPath, browser, {
+    child,
+    readOutput: spawned.readOutput,
+    budgetMs: 5000,
+    since: spawnedAt,
+    noBrowser: Boolean(args.noBrowser),
+  });
+  const cleanOutput = boot.output;
+  const session = { projectPath: args.projectPath, browser, pid, logPath };
 
-  if (child.exitCode !== null || child.signalCode !== null) {
-    const code = child.exitCode;
-    const signal = child.signalCode;
-    return JSON.stringify({
+  if (boot.verdict.kind === "exited") {
+    const { exitCode: code, signal } = boot.verdict;
+    return envelope({
       ok: false,
+      command: schema.name,
       status: "exited",
-      projectPath: args.projectPath,
-      browser,
-      pid,
-      exitCode: code,
-      signal,
-      error:
-        `The ${command} process exited during startup (${signal ? `signal ${signal}` : `exit code ${code}`}). ` +
-        "No session is running.",
-      output: earlyOutput.slice(0, 2000),
-      logPath,
+      error: {
+        code: "E_SESSION_EXITED",
+        message:
+          `The ${command} process exited during startup (${signal ? `signal ${signal}` : `exit code ${code}`}). ` +
+          "No session is running.",
+      },
+      value: {
+        ...session,
+        exitCode: code,
+        signal,
+        output: cleanOutput.slice(0, 2000),
+      },
       hint: building
-        ? "Read `output` above for the cause: a failed production build, a port already in use, or a missing browser binary are the common ones. extension_build will surface a build error on its own."
-        : "Read `output` above for the cause: a missing or broken dist/ (run extension_build first, or drop build:false), or a missing browser binary are the common ones.",
+        ? "Read `value.output` above for the cause: a failed production build, a port already in use, or a missing browser binary are the common ones. extension_build will surface a build error on its own."
+        : "Read `value.output` above for the cause: a missing or broken dist/ (run extension_build first, or drop build:false), or a missing browser binary are the common ones.",
+      warnings: boot.warnings,
     });
   }
 
-  const exitStamp = browserExitStamp(args.projectPath, browser, spawnedAt);
-  if (exitStamp) {
-    return JSON.stringify({
+  // start had no compile leg before the contract was readable: a production
+  // build that failed came back as an exit, or worse as a launched session.
+  if (boot.verdict.kind === "compile-failed") {
+    const { compileErrors } = boot.verdict;
+    return envelope({
       ok: false,
-      status: "browser-exited",
-      projectPath: args.projectPath,
-      browser,
-      pid,
-      ...exitStamp,
-      error:
-        `The ${command} process is running but the browser it launched has exited ` +
-        "(the extension may have been rejected or the browser crashed). The session cannot be driven.",
-      output: earlyOutput.slice(0, 2000),
-      logPath,
-      hint: "Read `output` above and extension_logs for the cause, then call extension_stop to clean up before retrying.",
+      command: schema.name,
+      status: "compile-failed",
+      error: {
+        code: "E_FIRST_COMPILE",
+        message:
+          boot.verdict.message ??
+          `The ${command} process is running but the build failed, so the browser has nothing usable to load.`,
+      },
+      value: {
+        ...session,
+        buildErrors: compileErrors,
+        ...(compileErrors.length ? {} : { output: cleanOutput.slice(0, 2000) }),
+      },
+      hint: "Fix the build error listed in `value.buildErrors`, then call extension_start again. extension_build reports the same failure on its own.",
+      warnings: boot.warnings,
     });
   }
 
-  return JSON.stringify({
+  if (
+    boot.verdict.kind === "browser-exited" ||
+    boot.verdict.kind === "profile-locked"
+  ) {
+    const stamp =
+      boot.verdict.kind === "browser-exited" ? boot.verdict.stamp : {};
+    return envelope({
+      ok: false,
+      command: schema.name,
+      status: boot.verdict.kind,
+      error: {
+        code:
+          boot.verdict.kind === "profile-locked"
+            ? "E_PROFILE_LOCKED"
+            : "E_BROWSER_EXITED",
+        message:
+          `The ${command} process is running but the browser it launched has exited ` +
+          "(the extension may have been rejected or the browser crashed). The session cannot be driven.",
+      },
+      value: { ...session, ...stamp, output: cleanOutput.slice(0, 2000) },
+      hint: "Read `value.output` above and extension_logs for the cause, then call extension_stop to clean up before retrying.",
+      warnings: boot.warnings,
+    });
+  }
+
+  return envelope({
     ok: true,
-    pid,
-    browser,
-    projectPath: args.projectPath,
+    command: schema.name,
     status: building ? "started" : "launched",
+    value: {
+      pid,
+      browser,
+      projectPath: args.projectPath,
+      logPath,
+    },
     hint: building
       ? "Use extension_wait to check when the build and browser launch are complete. When you are done, call extension_stop to shut down the session."
       : "Call extension_stop when you are done to close the preview browser.",
-    earlyOutput: earlyOutput.slice(0, 500),
-    logPath,
+    warnings: boot.warnings,
   });
 }

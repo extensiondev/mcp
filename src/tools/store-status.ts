@@ -12,6 +12,7 @@ import {
   registryFileUrl,
   resolveProjectRef,
 } from "../lib/registry";
+import { envelope, type ErrorCode } from "../lib/envelope";
 
 const KNOWN_STORES = ["chrome", "firefox", "edge", "safari"] as const;
 
@@ -141,9 +142,17 @@ export function normalizeStoresStatus(json: unknown): NormalizedStoresStatus {
 function fail(
   name: string,
   message: string,
+  status: string,
+  code: ErrorCode,
   extra?: Record<string, unknown>,
 ): string {
-  return JSON.stringify({ ok: false, error: { name, message }, ...(extra ?? {}) });
+  return envelope({
+    ok: false,
+    command: "extension_release_status",
+    status,
+    value: extra ?? {},
+    error: { code, name, message },
+  });
 }
 
 export async function readStores(args: {
@@ -156,6 +165,8 @@ export async function readStores(args: {
     return fail(
       "StoreStatusInputError",
       "No project to inspect. Run extension_auth (action: login), which names the project, or pass workspace + project explicitly.",
+      "auth-required",
+      "E_AUTH_REQUIRED",
     );
   }
 
@@ -176,6 +187,8 @@ export async function readStores(args: {
       `No store data on the registry for ${ref.workspace}/${ref.project} (${healthUrl} returned ${
         healthRes.status ?? "no response"
       }). The project may have no stores configured yet, be private (private registry data needs a share token), or the workspace/project slugs may be wrong. Configure stores at ${consoleStoresUrl}/new; the console Stores page is the authoritative view: ${consoleStoresUrl}`,
+      "unavailable",
+      "E_PLATFORM",
       {
         workspace: ref.workspace,
         project: ref.project,
@@ -269,31 +282,37 @@ export async function readStores(args: {
     return tail.length > 0 ? `${head}; ${tail.join("; ")}` : head;
   });
 
-  const result: Record<string, unknown> = {
+  const healthUnavailable = healthRes.ok
+    ? null
+    : `stores/health.json unreadable: ${healthRes.message}`;
+  const statusUnavailable = statusRes.ok
+    ? null
+    : `stores/status.json unreadable: ${statusRes.message}`;
+  const submissionsUnavailable =
+    !submissionsRes.ok && submissionsRes.status !== 404
+      ? `stores/submissions.json unreadable: ${submissionsRes.message}`
+      : null;
+
+  return envelope({
     ok: true,
-    workspace: ref.workspace,
-    project: ref.project,
-    stores: rows,
-    ...(status.lastSubmission
-      ? { lastSubmission: status.lastSubmission }
-      : {}),
-    ...(status.lastPollAt ? { lastPollAt: status.lastPollAt } : {}),
-    registryUrls: {
-      health: healthUrl,
-      status: statusUrl,
-      submissions: submissionsUrl,
+    command: "extension_release_status",
+    status: "read",
+    value: {
+      workspace: ref.workspace,
+      project: ref.project,
+      stores: rows,
+      ...(status.lastSubmission
+        ? { lastSubmission: status.lastSubmission }
+        : {}),
+      ...(status.lastPollAt ? { lastPollAt: status.lastPollAt } : {}),
+      registryUrls: {
+        health: healthUrl,
+        status: statusUrl,
+        submissions: submissionsUrl,
+      },
+      consoleStoresUrl,
     },
-    consoleStoresUrl,
-    message: `${summaryParts.join(". ")}. This is the registry's recorded state (submissions and the review poller write it); the store dashboards are authoritative and may be ahead of it.`,
-  };
-  if (!healthRes.ok) {
-    result.healthUnavailable = `stores/health.json unreadable: ${healthRes.message}`;
-  }
-  if (!statusRes.ok) {
-    result.statusUnavailable = `stores/status.json unreadable: ${statusRes.message}`;
-  }
-  if (!submissionsRes.ok && submissionsRes.status !== 404) {
-    result.submissionsUnavailable = `stores/submissions.json unreadable: ${submissionsRes.message}`;
-  }
-  return JSON.stringify(result);
+    hint: `${summaryParts.join(". ")}. This is the registry's recorded state (submissions and the review poller write it); the store dashboards are authoritative and may be ahead of it.`,
+    warnings: [healthUnavailable, statusUnavailable, submissionsUnavailable],
+  });
 }

@@ -118,7 +118,9 @@ describe("open command validates against the manifest", () => {
 
     expect(result.ok).toBe(false);
     expect(result.error.name).toBe("UnknownCommand");
-    expect(result.declaredCommands).toEqual(["toggle-speed"]);
+    expect(result.error.code).toBe("E_UNKNOWN_COMMAND");
+    expect(result.status).toBe("unknown-command");
+    expect(result.value.declaredCommands).toEqual(["toggle-speed"]);
     expect(calls).toHaveLength(0);
   });
 
@@ -173,9 +175,11 @@ describe("open popup validates against the manifest", () => {
 
     expect(result.ok).toBe(false);
     expect(result.error.name).toBe("NoSurfaceDocument");
+    expect(result.error.code).toBe("E_NO_SURFACE_DOCUMENT");
+    expect(result.status).toBe("no-surface");
     expect(result.error.message).toContain("declares no popup");
     expect(result.error.message).toContain("action.default_popup");
-    expect(result.declaredSurfaces).toEqual(["options"]);
+    expect(result.value.declaredSurfaces).toEqual(["options"]);
     expect(result.hint).toContain('surface: "action"');
     expect(calls).toHaveLength(0);
   });

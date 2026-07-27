@@ -83,12 +83,13 @@ describe("extension_list_extensions on Gecko (RDP root listAddons)", () => {
       await listExtensions.handler({ projectPath: dir, browser: "firefox" }),
     );
 
-    expect(result.error).toBeUndefined();
-    expect(result.rdpPort).toBe(9223);
-    expect(result.browser).toBe("firefox");
-    expect(result.count).toBe(2);
-    expect(result.ownExtensionId).toBe("probe@extension.dev");
-    expect(result.extensions[0]).toEqual({
+    expect(result.error).toBeNull();
+    expect(result.status).toBe("listed");
+    expect(result.value.rdpPort).toBe(9223);
+    expect(result.value.browser).toBe("firefox");
+    expect(result.value.count).toBe(2);
+    expect(result.value.ownExtensionId).toBe("probe@extension.dev");
+    expect(result.value.extensions[0]).toEqual({
       id: "probe@extension.dev",
       name: "RDP Probe",
       version: "1.2.3",
@@ -97,8 +98,8 @@ describe("extension_list_extensions on Gecko (RDP root listAddons)", () => {
       contexts: [],
       source: "rdp-root",
     });
-    expect(result.extensions[1].id).toBe("uBlock0@raymondhill.net");
-    expect(result.extensions[1].ownExtension).toBeUndefined();
+    expect(result.value.extensions[1].id).toBe("uBlock0@raymondhill.net");
+    expect(result.value.extensions[1].ownExtension).toBeUndefined();
     expect(listAddonsCalls).toEqual([9223]);
   });
 
@@ -126,8 +127,8 @@ describe("extension_list_extensions on Gecko (RDP root listAddons)", () => {
       await listExtensions.handler({ projectPath: dir, browser: "firefox" }),
     );
 
-    expect(result.count).toBe(1);
-    expect(result.extensions[0].id).toBe("keep@ext");
+    expect(result.value.count).toBe(1);
+    expect(result.value.extensions[0].id).toBe("keep@ext");
   });
 
   it("falls back to the lone temporary install when the contract name mismatches", async () => {
@@ -148,7 +149,7 @@ describe("extension_list_extensions on Gecko (RDP root listAddons)", () => {
       await listExtensions.handler({ projectPath: dir, browser: "firefox" }),
     );
 
-    const own = result.extensions.find(
+    const own = result.value.extensions.find(
       (e: { ownExtension?: boolean }) => e.ownExtension,
     );
     expect(own.id).toBe("generated-temp-id@temporary-addon");
@@ -165,7 +166,8 @@ describe("extension_list_extensions on Gecko (RDP root listAddons)", () => {
       await listExtensions.handler({ projectPath: dir, browser: "firefox" }),
     );
 
-    expect(result.error).toContain("RDP");
+    expect(result.error.message).toContain("RDP");
+    expect(result.error.code).toBe("E_NO_SESSION");
     expect(result.hint).toContain("rdpPort");
     expect(result.hint).toContain("4.0.15");
     expect(listAddonsCalls).toEqual([]);
@@ -179,8 +181,9 @@ describe("extension_list_extensions on Gecko (RDP root listAddons)", () => {
       await listExtensions.handler({ projectPath: dir, browser: "firefox" }),
     );
 
-    expect(result.error).toContain("Failed to list extensions over RDP");
-    expect(result.error).toContain("ECONNREFUSED");
+    expect(result.status).toBe("rdp-failed");
+    expect(result.error.message).toContain("Failed to list extensions over RDP");
+    expect(result.error.message).toContain("ECONNREFUSED");
     expect(listAddonsCalls.length).toBe(3);
   });
 });

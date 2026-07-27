@@ -57,7 +57,8 @@ describe("dom_snapshot listTargets", () => {
     );
 
     expect(result.ok).toBe(true);
-    expect(result.targets).toEqual([
+    expect(result.status).toBe("listed-targets");
+    expect(result.value.targets).toEqual([
       { targetId: "AAA1", type: "page", url: "https://example.com/", title: "Example Domain" },
       { targetId: "BBB2", type: "page", url: "https://developer.chrome.com/docs", title: "Chrome Docs" },
     ]);
@@ -69,8 +70,8 @@ describe("dom_snapshot listTargets", () => {
       await domSnapshot.handler({ projectPath: "/p", listTargets: true, browser: "chrome" }),
     );
 
-    expect(result.note).toContain("NOT a chrome.tabs id");
-    expect(result.note).toContain("listTabs: true");
+    expect(result.warnings[0]).toContain("NOT a chrome.tabs id");
+    expect(result.warnings[0]).toContain("listTabs: true");
   });
 
   it("says there is no session when no CDP port resolves", async () => {
@@ -110,7 +111,7 @@ describe("dom_snapshot tabUrl targeting", () => {
     expect(calls).toHaveLength(1);
     expect(calls[0][calls[0].indexOf("--url") + 1]).toBe("https://example.com/");
     expect(calls[0]).not.toContain("--tab");
-    expect(result.resolvedTarget).toEqual({
+    expect(result.value.resolvedTarget).toEqual({
       targetId: "AAA1",
       type: "page",
       url: "https://example.com/",
@@ -152,10 +153,12 @@ describe("dom_snapshot tabUrl targeting", () => {
 
     expect(result.ok).toBe(false);
     expect(result.error.name).toBe("NoMatchingTarget");
-    expect(result.availableTargets).toHaveLength(2);
-    expect(result.availableTargets[0]).toHaveProperty("targetId");
-    expect(result.availableTargets[0]).toHaveProperty("url");
-    expect(result.availableTargets[0]).toHaveProperty("title");
+    expect(result.error.code).toBe("E_NO_MATCHING_TARGET");
+    expect(result.status).toBe("no-matching-target");
+    expect(result.value.availableTargets).toHaveLength(2);
+    expect(result.value.availableTargets[0]).toHaveProperty("targetId");
+    expect(result.value.availableTargets[0]).toHaveProperty("url");
+    expect(result.value.availableTargets[0]).toHaveProperty("title");
     expect(result.hint).toContain("tabUrl");
     expect(calls).toHaveLength(0);
   });
@@ -178,7 +181,8 @@ describe("dom_snapshot tabUrl targeting", () => {
 
     expect(result.ok).toBe(false);
     expect(result.error.name).toBe("AmbiguousTabUrl");
-    expect(result.matchingTargets.map((t: { targetId: string }) => t.targetId)).toEqual([
+    expect(result.status).toBe("ambiguous-target");
+    expect(result.value.matchingTargets.map((t: { targetId: string }) => t.targetId)).toEqual([
       "AAA1",
       "EEE5",
     ]);
@@ -225,7 +229,7 @@ describe("dom_snapshot tabUrl targeting", () => {
     expect(calls[0]).toContain("--list-tabs");
     expect(calls[1][calls[1].indexOf("--tab") + 1]).toBe("7");
     expect(calls[1]).not.toContain("--url");
-    expect(result.resolvedTarget).toEqual({
+    expect(result.value.resolvedTarget).toEqual({
       tabId: 7,
       url: "https://example.com/",
       title: "Example Domain",
@@ -252,7 +256,7 @@ describe("dom_snapshot tabUrl targeting", () => {
 
     expect(result.ok).toBe(false);
     expect(result.error.name).toBe("NoMatchingTarget");
-    expect(result.availableTabs).toEqual([
+    expect(result.value.availableTabs).toEqual([
       { tabId: 7, url: "https://example.com/", title: "Example" },
     ]);
     expect(calls).toHaveLength(1);
@@ -280,7 +284,7 @@ describe("dom_snapshot tabUrl targeting", () => {
 
     expect(result.ok).toBe(false);
     expect(result.error.name).toBe("AmbiguousTabUrl");
-    expect(result.matchingTabs.map((t: { tabId: number }) => t.tabId)).toEqual([
+    expect(result.value.matchingTabs.map((t: { tabId: number }) => t.tabId)).toEqual([
       7, 9,
     ]);
     expect(calls).toHaveLength(1);

@@ -7,6 +7,7 @@
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
 import { listTemplates } from "../lib/templates-cache";
+import { envelope } from "../lib/envelope";
 
 export async function searchTemplates(args: {
   surface?: string;
@@ -31,5 +32,10 @@ export async function searchTemplates(args: {
     downloads: t.downloads,
   }));
 
-  return JSON.stringify({ count: results.length, templates: results });
+  return envelope({
+    ok: true,
+    command: "extension_templates",
+    status: "listed",
+    value: { count: results.length, templates: results },
+  });
 }

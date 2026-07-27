@@ -9,6 +9,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { getManagedBrowsersCacheRoot } from "extension-install";
+import { envelope } from "../lib/envelope";
 
 const BROWSER_NAMES = ["chrome", "chromium", "edge", "firefox"] as const;
 
@@ -63,13 +64,18 @@ export async function listManagedBrowsers(): Promise<string> {
     }
   }
 
-  return JSON.stringify({
-    cacheRoot,
-    cacheExists: fs.existsSync(cacheRoot),
-    installed,
-    availableToInstall: BROWSER_NAMES.filter(
-      (b) => !installed.some((i) => i.browser === b),
-    ),
+  return envelope({
+    ok: true,
+    command: "extension_browsers",
+    status: "listed",
+    value: {
+      cacheRoot,
+      cacheExists: fs.existsSync(cacheRoot),
+      installed,
+      availableToInstall: BROWSER_NAMES.filter(
+        (b) => !installed.some((i) => i.browser === b),
+      ),
+    },
     hint:
       installed.length === 0
         ? "No managed browsers found. Use extension_browsers with action: \"install\" to install one, or use a system-installed browser."

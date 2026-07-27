@@ -7,6 +7,7 @@
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
 import { runActVerb } from "../lib/act";
+import { envelope } from "../lib/envelope";
 import { listBridgeTabs, navigateToUrlViaBridge } from "../lib/bridge-tabs";
 import { resolveRdpPort } from "../lib/cdp-port";
 import {
@@ -17,6 +18,9 @@ import {
 import { rdpCollectConsoleMessages } from "../lib/rdp";
 import { summarizeConsoleMessages } from "../lib/console-summary";
 
+// The bridge path answers for extension_inspect, so its frames carry that name
+// (importing the schema from inspect.ts would close an import cycle).
+const TOOL = "extension_inspect";
 
 function buildBridgeInspectExpression(opts: {
   summary: boolean;
@@ -139,6 +143,7 @@ async function collectGeckoDeepDom(
     ],
     args.projectPath,
     args.timeout,
+    TOOL,
   );
   let parsed: any;
   try {
@@ -212,7 +217,12 @@ export async function inspectViaBridge(
   const notes: string[] = [];
 
   if (args.url) {
-    const listed = await listBridgeTabs(args.projectPath, browser, args.timeout);
+    const listed = await listBridgeTabs(
+      args.projectPath,
+      browser,
+      args.timeout,
+      "extension_inspect",
+    );
     if ("error" in listed) return listed.error;
     const already = listed.tabs.some((t) => t.url.includes(args.url!));
     if (!already) {
@@ -221,6 +231,7 @@ export async function inspectViaBridge(
         browser,
         args.url,
         args.timeout,
+        "extension_inspect",
       );
       try {
         if (JSON.parse(nav)?.ok !== true) return nav;
@@ -253,6 +264,7 @@ export async function inspectViaBridge(
     ],
     args.projectPath,
     args.timeout,
+    TOOL,
   );
   let parsed: any;
   try {
@@ -279,6 +291,7 @@ export async function inspectViaBridge(
       ],
       args.projectPath,
       args.timeout,
+      TOOL,
     );
     try {
       parsed = JSON.parse(raw);
@@ -291,9 +304,12 @@ export async function inspectViaBridge(
     if (parsed?.ok === true && frame && typeof frame === "object") {
       value = frame;
     } else if (parsed?.ok === true) {
-      return JSON.stringify({
+      return envelope({
         ok: false,
+        command: TOOL,
+        status: "inspect-failed",
         error: {
+          code: "E_BRIDGE",
           name: "InspectFailed",
           message: String(
             parsed?.value?.error ?? "the content-script inspect returned nothing",
@@ -323,13 +339,14 @@ export async function inspectViaBridge(
   if (include.has("extension_roots") && value.extensionRoots !== undefined) {
     result.extensionRoots = value.extensionRoots;
   }
+  let probeWarning: string | null = null;
   if (value.probes) {
     result.probes = value.probes;
     const jsLooking = (args.probe ?? []).filter((p) =>
       /^typeof\s|^(chrome|browser|window|document)\.|\(\)|=>|===/.test(p),
     );
     if (jsLooking.length) {
-      result.probeWarning =
+      probeWarning =
         `Probes are CSS selectors run through querySelectorAll against the live page, NOT JavaScript expressions. ` +
         `${jsLooking.map((s) => `"${s}"`).join(", ")} parsed as selectors and will match nothing. To evaluate JS, use extension_eval.`;
     }
@@ -347,6 +364,11 @@ export async function inspectViaBridge(
     await collectGeckoDeepDom(args, browser, urlFilter, cap, result, notes);
   }
 
-  if (notes.length) result.notes = notes;
-  return JSON.stringify(result);
+  return envelope({
+    ok: true,
+    command: TOOL,
+    status: "inspected",
+    value: result,
+    warnings: [...notes, probeWarning],
+  });
 }

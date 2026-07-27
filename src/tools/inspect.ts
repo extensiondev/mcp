@@ -11,6 +11,7 @@ import {
   SESSION_PROJECT_PATH,
 } from "../lib/common-schema";
 import { CDPClient } from "../lib/cdp";
+import { envelope } from "../lib/envelope";
 import { isChromiumFamily } from "../lib/browser-family";
 import { resolveCdpPort, CDP_PORT_MISSING_HINT } from "../lib/cdp-port";
 import { resolveSessionBrowser } from "../lib/session-browser";
@@ -90,9 +91,15 @@ export async function handler(args: {
 
   const resolved = await resolveCdpPort(args.projectPath, browser);
   if (!resolved) {
-    return JSON.stringify({
-      error:
-        "No active dev session found. Cannot connect to Chrome DevTools Protocol.",
+    return envelope({
+      ok: false,
+      command: schema.name,
+      status: "no-session",
+      error: {
+        code: "E_NO_SESSION",
+        message:
+          "No active dev session found. Cannot connect to Chrome DevTools Protocol.",
+      },
       hint: `Start a dev session first with extension_dev, then use extension_wait to confirm it is ready. ${CDP_PORT_MISSING_HINT}`,
     });
   }
@@ -121,16 +128,24 @@ export async function handler(args: {
       const chromeOnly = allTargets.some(
         (t) => t.type === "page" && t.url.startsWith("chrome://"),
       );
-      return JSON.stringify({
-        cdpPort,
-        browser,
-        warning: chromeOnly
-          ? "No inspectable page targets found. Only internal chrome:// pages are open; open the extension's surface (or pass a url to navigate a tab) first."
-          : "No inspectable page targets found. The extension may not have opened a page yet.",
-        allTargets: allTargets.map((t) => ({
-          type: t.type,
-          url: t.url?.slice(0, 100),
-        })),
+      return envelope({
+        ok: false,
+        command: schema.name,
+        status: "no-inspectable-target",
+        error: {
+          code: "E_NO_TARGET",
+          message: chromeOnly
+            ? "No inspectable page targets found. Only internal chrome:// pages are open; open the extension's surface (or pass a url to navigate a tab) first."
+            : "No inspectable page targets found. The extension may not have opened a page yet.",
+        },
+        value: {
+          cdpPort,
+          browser,
+          allTargets: allTargets.map((t) => ({
+            type: t.type,
+            url: t.url?.slice(0, 100),
+          })),
+        },
       });
     }
 
@@ -232,11 +247,25 @@ export async function handler(args: {
       result.deepDom = true;
     }
 
-    return JSON.stringify(result);
+    const probeWarning = result.probeWarning;
+    delete result.probeWarning;
+    return envelope({
+      ok: true,
+      command: schema.name,
+      status: "inspected",
+      value: result,
+      warnings: [typeof probeWarning === "string" ? probeWarning : null],
+    });
   } catch (err) {
-    return JSON.stringify({
-      error: `CDP inspection failed: ${err instanceof Error ? err.message : err}`,
-      cdpPort,
+    return envelope({
+      ok: false,
+      command: schema.name,
+      status: "cdp-failed",
+      error: {
+        code: "E_CDP",
+        message: `CDP inspection failed: ${err instanceof Error ? err.message : err}`,
+      },
+      value: { cdpPort },
       hint: "Ensure a dev session is running. The browser may have closed or the CDP port may have changed.",
     });
   } finally {

@@ -56,9 +56,9 @@ describe("extension_build validation gate", () => {
 
     const result = JSON.parse(await build.handler({ projectPath: dir }));
 
-    expect(result.success).toBe(false);
-    expect(result.status).toBe("blocked");
-    expect(result.errors.join(" ")).toContain("name");
+    expect(result.ok).toBe(false);
+    expect(result.status).toBe("manifest-blocked");
+    expect(result.value.errors.join(" ")).toContain("name");
     expect(result.hint).toContain("skipValidation");
     expect(cliCalls).toHaveLength(0);
   });
@@ -70,7 +70,7 @@ describe("extension_build validation gate", () => {
       await build.handler({ projectPath: dir, skipValidation: true }),
     );
 
-    expect(result.success).toBe(true);
+    expect(result.ok).toBe(true);
     expect(cliCalls).toHaveLength(1);
   });
 
@@ -87,7 +87,7 @@ describe("extension_build validation gate", () => {
 
     const result = JSON.parse(await build.handler({ projectPath: dir }));
 
-    expect(result.success).toBe(true);
+    expect(result.ok).toBe(true);
     expect(cliCalls).toHaveLength(1);
     expect(cliCalls[0]).toContain("build");
   });
@@ -111,11 +111,12 @@ describe("extension_build validation gate", () => {
 
     const result = JSON.parse(await build.handler({ projectPath: dir }));
 
-    expect(result.success).toBe(false);
-    expect(result.status).toBe("incomplete");
-    expect(result.buildExitCode).toBe(0);
-    expect(result.error).toContain("popup.html");
-    expect(result.error).toContain("refuse to load");
+    expect(result.ok).toBe(false);
+    expect(result.status).toBe("entrypoint-missing");
+    expect(result.error.code).toBe("E_ENTRYPOINT_MISSING");
+    expect(result.value.buildExitCode).toBe(0);
+    expect(result.error.message).toContain("popup.html");
+    expect(result.error.message).toContain("refuse to load");
   });
 
   it("reports success when every declared entrypoint is present in dist", async () => {
@@ -138,7 +139,7 @@ describe("extension_build validation gate", () => {
 
     const result = JSON.parse(await build.handler({ projectPath: dir }));
 
-    expect(result.success).toBe(true);
+    expect(result.ok).toBe(true);
   });
 
   it("blocks on a dangling path reference instead of warning about it", async () => {
@@ -151,9 +152,9 @@ describe("extension_build validation gate", () => {
 
     const result = JSON.parse(await build.handler({ projectPath: dir }));
 
-    expect(result.success).toBe(false);
-    expect(result.status).toBe("blocked");
-    expect(result.errors.join(" ")).toContain("nope.html");
+    expect(result.ok).toBe(false);
+    expect(result.status).toBe("manifest-blocked");
+    expect(result.value.errors.join(" ")).toContain("nope.html");
     expect(cliCalls).toHaveLength(0);
   });
 
@@ -169,9 +170,9 @@ describe("extension_build validation gate", () => {
 
     const result = JSON.parse(await build.handler({ projectPath: dir }));
 
-    expect(result.success).toBe(true);
-    expect(Array.isArray(result.manifestWarnings)).toBe(true);
-    expect(result.manifestWarnings.join(" ").toLowerCase()).toContain("version");
+    expect(result.ok).toBe(true);
+    expect(Array.isArray(result.warnings)).toBe(true);
+    expect(result.warnings.join(" ").toLowerCase()).toContain("version");
   });
 });
 
@@ -196,9 +197,9 @@ describe("extension_build zip path reporting", () => {
       await build.handler({ projectPath: dir, zip: true }),
     );
 
-    expect(result.success).toBe(true);
-    expect(result.zipPath).toBe(zip);
-    expect(result.zipPathNote).toBeUndefined();
+    expect(result.ok).toBe(true);
+    expect(result.value.zipPath).toBe(zip);
+    expect(result.warnings.join(" ")).not.toContain("no .zip file");
   });
 
   it("mirrors the engine's sanitization of a custom zipFilename", async () => {
@@ -214,7 +215,7 @@ describe("extension_build zip path reporting", () => {
       }),
     );
 
-    expect(result.zipPath).toBe(zip);
+    expect(result.value.zipPath).toBe(zip);
   });
 
   it("falls back to the freshest zip when the name cannot be predicted", async () => {
@@ -228,7 +229,7 @@ describe("extension_build zip path reporting", () => {
       await build.handler({ projectPath: dir, zip: true }),
     );
 
-    expect(result.zipPath).toBe(zip);
+    expect(result.value.zipPath).toBe(zip);
   });
 
   it("says so explicitly when the zip cannot be located", async () => {
@@ -238,9 +239,9 @@ describe("extension_build zip path reporting", () => {
       await build.handler({ projectPath: dir, zip: true }),
     );
 
-    expect(result.success).toBe(true);
-    expect(result.zipPath).toBeUndefined();
-    expect(result.zipPathNote).toContain("dist/chrome");
+    expect(result.ok).toBe(true);
+    expect(result.value.zipPath).toBeUndefined();
+    expect(result.warnings.join(" ")).toContain("dist/chrome");
   });
 
   it("reports the source zip from the dist ROOT, where the engine writes it", async () => {
@@ -252,7 +253,7 @@ describe("extension_build zip path reporting", () => {
       await build.handler({ projectPath: dir, zipSource: true }),
     );
 
-    expect(result.zipSourcePath).toBe(sourceZip);
+    expect(result.value.zipSourcePath).toBe(sourceZip);
   });
 
   it("adds neither field on a build without zip", async () => {
@@ -260,9 +261,9 @@ describe("extension_build zip path reporting", () => {
 
     const result = JSON.parse(await build.handler({ projectPath: dir }));
 
-    expect(result.zipPath).toBeUndefined();
-    expect(result.zipPathNote).toBeUndefined();
-    expect(result.zipSourcePath).toBeUndefined();
+    expect(result.value.zipPath).toBeUndefined();
+    expect(result.value.zipSourcePath).toBeUndefined();
+    expect(result.warnings.join(" ")).not.toContain("zip");
   });
 });
 
@@ -282,7 +283,7 @@ describe("extension_build warns over a live dev session", () => {
 
     const result = JSON.parse(await build.handler({ projectPath: dir }));
 
-    expect(result.success).toBe(true);
+    expect(result.ok).toBe(true);
     expect(cliCalls).toHaveLength(1);
     expect(Array.isArray(result.warnings)).toBe(true);
     const warning = result.warnings.join(" ");
@@ -298,8 +299,8 @@ describe("extension_build warns over a live dev session", () => {
 
     const result = JSON.parse(await build.handler({ projectPath: dir }));
 
-    expect(result.success).toBe(true);
-    expect(result.warnings).toBeUndefined();
+    expect(result.ok).toBe(true);
+    expect(result.warnings.join(" ")).not.toContain("dev session");
   });
 
   it("stays quiet when the live session holds a different browser's dist", async () => {
@@ -310,8 +311,8 @@ describe("extension_build warns over a live dev session", () => {
       await build.handler({ projectPath: dir, browser: "chrome" }),
     );
 
-    expect(result.success).toBe(true);
-    expect(result.warnings).toBeUndefined();
+    expect(result.ok).toBe(true);
+    expect(result.warnings.join(" ")).not.toContain("dev session");
   });
 
   it("carries the warning on a failed build too, the dist may be half rewritten", async () => {
@@ -321,7 +322,7 @@ describe("extension_build warns over a live dev session", () => {
 
     const result = JSON.parse(await build.handler({ projectPath: dir }));
 
-    expect(result.success).toBe(false);
+    expect(result.ok).toBe(false);
     expect(result.warnings.join(" ")).toContain("dev session");
   });
 });

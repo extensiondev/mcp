@@ -11,7 +11,13 @@ import {
   SESSION_BROWSER,
   SESSION_PROJECT_PATH,
 } from "../lib/common-schema";
-import { runActVerb, type ActArgs } from "../lib/act";
+import {
+  runActVerb,
+  actFrameJson,
+  patchValue,
+  type ActArgs,
+} from "../lib/act";
+import { envelope } from "../lib/envelope";
 import { resolveSessionBrowser } from "../lib/session-browser";
 import { isChromiumFamily, isGeckoFamily } from "../lib/browser-family";
 import {
@@ -92,9 +98,12 @@ async function cdpPortOrError(
 ): Promise<{ port: number } | { error: string }> {
   if (!isChromiumFamily(browser)) {
     return {
-      error: JSON.stringify({
+      error: envelope({
         ok: false,
+        command: schema.name,
+        status: "unsupported-browser",
         error: {
+          code: "E_UNSUPPORTED_BROWSER",
           name: "Unsupported",
           message: `${feature} reads the browser's CDP page targets, which ${browser} (Gecko) does not expose. Target the tab with \`url\` or \`tab\` instead, and discover tabs with listTabs: true (agent bridge, works on every browser).`,
         },
@@ -104,9 +113,12 @@ async function cdpPortOrError(
   const resolved = await resolveCdpPort(projectPath, browser);
   if (!resolved) {
     return {
-      error: JSON.stringify({
+      error: envelope({
         ok: false,
+        command: schema.name,
+        status: "no-session",
         error: {
+          code: "E_NO_SESSION",
           name: "NoSession",
           message: `No active dev session / CDP port for ${browser}, so ${feature} has no browser to ask. Start extension_dev and extension_wait for ready. ${CDP_PORT_MISSING_HINT}`,
         },
@@ -136,9 +148,12 @@ export async function handler(
     if (isGeckoFamily(browser)) {
       const resolved = await resolveRdpPort(args.projectPath, browser);
       if (!resolved) {
-        return JSON.stringify({
+        return envelope({
           ok: false,
+          command: schema.name,
+          status: "no-session",
           error: {
+            code: "E_NO_SESSION",
             name: "NoSession",
             message: `No active dev session with a Firefox debugger server (RDP) for ${browser}, so listTargets has no browser to ask. Start extension_dev and extension_wait for ready. ${RDP_PORT_MISSING_HINT}`,
           },
@@ -146,23 +161,30 @@ export async function handler(
       }
       try {
         const tabs = await rdpListTabs(resolved.port);
-        return JSON.stringify({
+        return envelope({
           ok: true,
-          browser,
-          transport: "rdp",
-          targets: tabs.map((t) => ({
-            actor: String(t.actor ?? ""),
-            type: "tab",
-            url: String(t.url ?? ""),
-            title: String(t.title ?? ""),
-            ...(t.selected === true ? { selected: true } : {}),
-          })),
-          note: RDP_ACTOR_NOTE,
+          command: schema.name,
+          status: "listed-targets",
+          value: {
+            browser,
+            transport: "rdp",
+            targets: tabs.map((t) => ({
+              actor: String(t.actor ?? ""),
+              type: "tab",
+              url: String(t.url ?? ""),
+              title: String(t.title ?? ""),
+              ...(t.selected === true ? { selected: true } : {}),
+            })),
+          },
+          warnings: [RDP_ACTOR_NOTE],
         });
       } catch (e) {
-        return JSON.stringify({
+        return envelope({
           ok: false,
+          command: schema.name,
+          status: "rdp-failed",
           error: {
+            code: "E_RDP",
             name: "RdpError",
             message: `Could not list tab targets over RDP: ${e instanceof Error ? e.message : String(e)}`,
           },
@@ -174,16 +196,20 @@ export async function handler(
     if ("error" in cdp) return cdp.error;
     try {
       const targets = await listPageTargets(cdp.port);
-      return JSON.stringify({
+      return envelope({
         ok: true,
-        browser,
-        targets,
-        note: TARGET_ID_NOTE,
+        command: schema.name,
+        status: "listed-targets",
+        value: { browser, targets },
+        warnings: [TARGET_ID_NOTE],
       });
     } catch (e) {
-      return JSON.stringify({
+      return envelope({
         ok: false,
+        command: schema.name,
+        status: "cdp-failed",
         error: {
+          code: "E_CDP",
           name: "CdpError",
           message: `Could not list page targets: ${e instanceof Error ? e.message : String(e)}`,
         },
@@ -204,6 +230,7 @@ export async function handler(
       ],
       args.projectPath,
       args.timeout,
+      schema.name,
     );
   }
 
@@ -212,9 +239,12 @@ export async function handler(
   let resolvedTarget: Record<string, unknown> | null = null;
   if (args.tabUrl) {
     if (args.tab != null || args.url) {
-      return JSON.stringify({
+      return envelope({
         ok: false,
+        command: schema.name,
+        status: "bad-request",
         error: {
+          code: "E_BAD_REQUEST",
           name: "BadRequest",
           message:
             "Pass ONE tab selector: `tabUrl` (URL substring, resolved against live targets), `url` (engine-side match), or `tab` (numeric chrome.tabs id), not several.",
@@ -231,24 +261,30 @@ export async function handler(
       if ("error" in listed) return listed.error;
       const matches = matchTabsByUrl(listed.tabs, args.tabUrl);
       if (matches.length === 0) {
-        return JSON.stringify({
+        return envelope({
           ok: false,
+          command: schema.name,
+          status: "no-matching-target",
           error: {
+            code: "E_NO_MATCHING_TARGET",
             name: "NoMatchingTarget",
             message: `No open tab's url (or title) contains "${args.tabUrl}" (case-insensitive).`,
           },
-          availableTabs: listed.tabs,
+          value: { availableTabs: listed.tabs },
           hint: "Pick one from availableTabs and retry with a `tabUrl` substring of its url, or open the page first (extension_open with `url`).",
         });
       }
       if (matches.length > 1) {
-        return JSON.stringify({
+        return envelope({
           ok: false,
+          command: schema.name,
+          status: "ambiguous-target",
           error: {
+            code: "E_AMBIGUOUS_TARGET",
             name: "AmbiguousTabUrl",
             message: `${matches.length} tabs match "${args.tabUrl}"; refusing to guess which tab you mean.`,
           },
-          matchingTabs: matches,
+          value: { matchingTabs: matches },
           hint: "Narrow `tabUrl` to a longer substring that matches exactly one url in matchingTabs, or pass its numeric tabId as `tab`.",
         });
       }
@@ -262,9 +298,12 @@ export async function handler(
       try {
         targets = await listPageTargets(cdp.port);
       } catch (e) {
-        return JSON.stringify({
+        return envelope({
           ok: false,
+          command: schema.name,
+          status: "cdp-failed",
           error: {
+            code: "E_CDP",
             name: "CdpError",
             message: `Could not list page targets to resolve tabUrl: ${e instanceof Error ? e.message : String(e)}`,
           },
@@ -273,24 +312,30 @@ export async function handler(
       }
       const matches = matchTargetsByUrl(targets, args.tabUrl);
       if (matches.length === 0) {
-        return JSON.stringify({
+        return envelope({
           ok: false,
+          command: schema.name,
+          status: "no-matching-target",
           error: {
+            code: "E_NO_MATCHING_TARGET",
             name: "NoMatchingTarget",
             message: `No open page target's url (or title) contains "${args.tabUrl}" (case-insensitive).`,
           },
-          availableTargets: targets,
+          value: { availableTargets: targets },
           hint: `Pick one from availableTargets and retry with a \`tabUrl\` substring of its url, or open the page first (extension_open with \`url\`). ${TARGET_ID_NOTE}`,
         });
       }
       if (matches.length > 1) {
-        return JSON.stringify({
+        return envelope({
           ok: false,
+          command: schema.name,
+          status: "ambiguous-target",
           error: {
+            code: "E_AMBIGUOUS_TARGET",
             name: "AmbiguousTabUrl",
             message: `${matches.length} page targets match "${args.tabUrl}"; refusing to guess which tab you mean.`,
           },
-          matchingTargets: matches,
+          value: { matchingTargets: matches },
           hint: `Narrow \`tabUrl\` to a longer substring that matches exactly one url in matchingTargets. ${TARGET_ID_NOTE}`,
         });
       }
@@ -308,12 +353,14 @@ export async function handler(
   if (withConsole != null) cli.push("--with-console", String(withConsole));
   cli.push("--browser", resolveSessionBrowser(args.projectPath, args.browser).browser);
   if (args.timeout != null) cli.push("--timeout", String(args.timeout));
-  const raw = await runActVerb(cli, args.projectPath, args.timeout);
+  const raw = await runActVerb(cli, args.projectPath, args.timeout, schema.name);
   if (!resolvedTarget) return raw;
   try {
     const parsed = JSON.parse(raw);
-    parsed.resolvedTarget = { ...resolvedTarget, matchedBy: "tabUrl" };
-    return JSON.stringify(parsed);
+    patchValue(parsed, {
+      resolvedTarget: { ...resolvedTarget, matchedBy: "tabUrl" },
+    });
+    return actFrameJson(parsed);
   } catch {
     return raw;
   }

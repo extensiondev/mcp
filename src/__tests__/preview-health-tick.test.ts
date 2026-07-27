@@ -91,10 +91,13 @@ describe("extension_start build:false health tick", () => {
 
     const result = JSON.parse(await start.handler({ projectPath: project, build: false }));
 
+    expect(result.schema).toBe(1);
+    expect(result.command).toBe("extension_start");
     expect(result.ok).toBe(false);
     expect(result.status).toBe("exited");
-    expect(result.exitCode).toBe(1);
-    expect(result.output).toContain("no production build");
+    expect(result.error.code).toBe("E_SESSION_EXITED");
+    expect(result.value.exitCode).toBe(1);
+    expect(result.value.output).toContain("no production build");
     expect(result.hint).toContain("extension_build");
   }, 15_000);
 
@@ -110,8 +113,9 @@ describe("extension_start build:false health tick", () => {
 
     expect(result.ok).toBe(false);
     expect(result.status).toBe("browser-exited");
-    expect(result.code).toBe("browser_exited");
-    expect(result.error).toContain("browser it launched has exited");
+    expect(result.error.code).toBe("E_BROWSER_EXITED");
+    expect(result.value.code).toBe("browser_exited");
+    expect(result.error.message).toContain("browser it launched has exited");
   }, 15_000);
 
   it("ignores a STALE browser_exited stamp from a previous run", async () => {
@@ -144,7 +148,8 @@ describe("extension_start build:false health tick", () => {
 
     expect(result.ok).toBe(true);
     expect(result.status).toBe("launched");
-    expect(result.earlyOutput).toContain("previewing dist/chrome");
+    expect(result.value.logPath).toBeTruthy();
+    expect(result.earlyOutput).toBeUndefined();
   }, 15_000);
 
   it("extension_start reads the browser_exited stamp too", async () => {
