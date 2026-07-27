@@ -90,6 +90,15 @@ const PLAUSIBLE_SESSION_BINARY =
   /chrom|edge|brave|opera|vivaldi|yandex|firefox|waterfox|librewolf|safari|node|electron|extension/i;
 
 function processCommand(pid: number): string {
+  /* @invariant Linux ps -o comm= reports the thread name (Node stamps
+     "MainThread"), not the binary, so argv[0] from /proc must win where it
+     exists or the plausibility filter rejects every real session process. */
+  try {
+    const cmdline = fs.readFileSync(`/proc/${pid}/cmdline`, "utf8");
+    const argv0 = cmdline.split("\0")[0];
+    if (argv0) return path.basename(argv0);
+  } catch {
+  }
   try {
     return execFileSync("ps", ["-o", "comm=", "-p", String(pid)], {
       encoding: "utf8",
