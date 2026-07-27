@@ -122,7 +122,7 @@ describe("extension_release_status: registration + schema", () => {
   });
 
   it("describes itself as read-only and names its registry sources", () => {
-    expect(schema.description).toContain("Read-only");
+    expect(schema.description).toMatch(/read-only/i);
     expect(schema.description).toContain("stores/health.json");
     expect(schema.description).toContain("stores/status.json");
     expect(schema.description).toContain("stores/submissions.json");

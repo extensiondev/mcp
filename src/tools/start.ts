@@ -19,7 +19,7 @@ import {
 export const schema = {
   name: "extension_start",
   description:
-    "Run the PRODUCTION build in a browser: builds the project, then serves it and launches. No hot module replacement and no control channel, so your edits are not picked up and extension_eval/storage/reload/open/dom_snapshot cannot attach to this session. Use extension_dev while writing code; use this to check what actually ships. Pass build:false to launch on an existing dist/<browser> without rebuilding.",
+    "Run the PRODUCTION build in a browser: build the project, serve it, and launch. There is no hot module replacement and no control channel, so your edits are not picked up and extension_eval, extension_storage, extension_reload, extension_open and extension_dom_snapshot cannot attach to this session. Use extension_dev while writing code, and this to check what actually ships. Pass build:false to launch an existing dist/<browser> without rebuilding.",
   inputSchema: {
     type: "object" as const,
     properties: {

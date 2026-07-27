@@ -17,7 +17,7 @@ import { resolveSessionBrowser } from "../lib/session-browser";
 export const schema = {
   name: "extension_storage",
   description:
-    "Read or write chrome.storage in a running extension. Requires the session to have been started with allowControl: true (extension_dev).",
+    "Read or write chrome.storage in a running extension. Start the session with allowControl:true (extension_dev). Set one key per call: there is no bulk-object set.",
   inputSchema: {
     type: "object" as const,
     properties: {

@@ -17,7 +17,7 @@ import {
 export const schema = {
   name: "extension_logs",
   description:
-    "Read or stream logs from every context of a running dev session (service worker, content scripts, popup, options, sidebar, devtools, pages) in one ordered timeline. Reads the same agent-bridge plane as the `extension logs` CLI: a one-shot returns the most recent matching lines from logs.ndjson; `follow:true` collects from the live control channel for a bounded window. Requires an active `extension dev` session.",
+    "Read or stream logs from every context of a running dev session (service worker, content scripts, popup, options, sidebar, devtools, pages) in one ordered timeline. This reads the same agent-bridge plane as the `extension logs` CLI: a one-shot returns the most recent matching lines from logs.ndjson, and follow:true collects from the live control channel for a bounded window. This requires an active extension_dev session.",
   inputSchema: {
     type: "object" as const,
     properties: {

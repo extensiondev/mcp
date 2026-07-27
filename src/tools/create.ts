@@ -42,7 +42,7 @@ function detectPackageManager(projectPath: string): string {
 export const schema = {
   name: "extension_create",
   description:
-    "Create a new browser extension project from a template in the extension.dev catalog. extension_templates lists what is available. The scaffolder may initialize a git repository in the new project; the result's defaultsApplied block reports whether it did, along with every other decision made without being asked.",
+    "Create a browser extension project from a template in the extension.dev catalog. Call extension_templates first to see what is available. The scaffolder may initialize a git repository in the new project. Read the result's defaultsApplied block for that, and for every other decision made without being asked.",
   inputSchema: {
     type: "object" as const,
     properties: {

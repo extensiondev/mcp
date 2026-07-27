@@ -27,7 +27,7 @@ import { resolveSessionBrowser } from "../lib/session-browser";
 export const schema = {
   name: "extension_list_extensions",
   description:
-    "List the extensions in the running dev browser: id, name, version, and (on Chromium) live contexts. THIS session's own extension is flagged ownExtension: true, with name and version from the ready contract even when the browser exposes no identity. Chromium rides the Chrome DevTools Protocol, so an entry needs at least one live context (a dormant MV3 service worker may be absent until it wakes). Firefox rides the RDP root actor (listAddons, engine 4.0.15+), so entries are INSTALLED add-ons regardless of contexts, marked temporarilyInstalled where relevant, and carry none. Either way other extensions' contexts are never attached to or evaluated in. Requires an active dev or start session.",
+    "List the extensions in the running dev browser: id, name, version, and, on Chromium, live contexts. This session's own extension carries ownExtension:true, with name and version from the ready contract even when the browser exposes no identity. Chromium rides the Chrome DevTools Protocol, so an entry needs at least one live context, and a dormant MV3 service worker may be absent until it wakes. Firefox rides the RDP root actor (listAddons, engine 4.0.15 and later), so entries are installed add-ons regardless of contexts, are marked temporarilyInstalled where relevant, and carry no contexts. Other extensions' contexts are never attached to or evaluated in. This requires an active dev or start session.",
   inputSchema: {
     type: "object" as const,
     properties: {
