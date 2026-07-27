@@ -7,7 +7,7 @@ This document explains how the three Claude integration layers (the template, th
 ```
 examples repo (GitHub)
          │
-         ├── examples/<slug>/           60+ extension templates
+         ├── examples/<slug>/           50+ extension templates
          │     ├── src/manifest.json    Source of truth per template
          │     ├── template.meta.json   Curated metadata (tags, difficulty, useCases, AI fields)
          │     └── ...

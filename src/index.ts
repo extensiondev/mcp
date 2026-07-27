@@ -45,7 +45,7 @@ import * as auth from "./tools/auth";
 import { readIdentity } from "./tools/whoami";
 import { clearLocalCredentials } from "./tools/logout";
 import { requestDeviceCode, pollDeviceToken } from "./lib/device-flow";
-import { fetchLoginConfig, resolveApiBase } from "./lib/login-flow";
+import { fetchLoginConfig, resolveApiBase, safeApiBase } from "./lib/login-flow";
 
 import * as browsers from "./tools/browsers";
 import * as doctor from "./tools/doctor";
@@ -260,7 +260,12 @@ export async function runCli(cmd: string, args: string[]): Promise<number> {
       log("Usage: extension-mcp login --project <workspace>/<project> [--api <url>]");
       return 1;
     }
-    const apiBase = resolveApiBase(flag("api"));
+    const apiCheck = safeApiBase(resolveApiBase(flag("api")));
+    if (!apiCheck.ok) {
+      log(apiCheck.message);
+      return 1;
+    }
+    const apiBase = apiCheck.base;
     try {
       const config = await fetchLoginConfig(apiBase);
 
@@ -269,8 +274,14 @@ export async function runCli(cmd: string, args: string[]): Promise<number> {
         path: config.deviceCodeUrl,
         project,
       });
+      const completeLink = String(start.verificationUriComplete || "").trim();
       log("");
-      log(`  Open ${start.verificationUri} and enter code: ${start.userCode}`);
+      if (completeLink && completeLink !== start.verificationUri) {
+        log(`  Open ${completeLink} to approve (code ${start.userCode} is pre-filled).`);
+        log(`  If the page asks for a code, enter ${start.userCode} at ${start.verificationUri}.`);
+      } else {
+        log(`  Open ${start.verificationUri} and enter code: ${start.userCode}`);
+      }
       log("");
       log("  Waiting for authorization...");
       const poll = await pollDeviceToken({
@@ -287,7 +298,9 @@ export async function runCli(cmd: string, args: string[]): Promise<number> {
             ? "Authorization was denied at extension.dev/device."
             : poll.reason === "expired"
               ? "The device code expired. Run login again."
-              : "Timed out waiting for authorization. Run login again.",
+              : poll.reason === "error"
+                ? poll.message || "Device login failed. Run login again."
+                : "Timed out waiting for authorization. Run login again.",
         );
         return 1;
       }

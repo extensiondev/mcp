@@ -1,5 +1,65 @@
 # Changelog
 
+## 10.1.0
+
+A six-lens audit of the whole surface (auth, platform, run, see, act and
+build, plumbing) followed by a fix pass over everything it confirmed. 33
+fixes, the ones you would notice first:
+
+- A failed spawn of the dev CLI (npx missing from PATH) no longer crashes
+  the whole MCP server; it fails that one call with guidance.
+- `extension_wait` now ignores ready contracts stamped before the current
+  session, so a leftover file from a crashed run can no longer report the
+  previous session's compile error as yours.
+- `extension_create` never deletes a directory it did not create: the
+  transient-failure cleanup used to wipe pre-existing directories, including
+  their `.git`, when scaffolding into one.
+- `extension_submit` dry runs are platform-primary: a platform-reported
+  preflight failure can no longer be overwritten by locally computed store
+  health, and token-only CI callers no longer fail the dry run for lacking a
+  local credentials file. The tool also gained a `projectPath` input so the
+  STORE.md advisory check reads the project, not the server's cwd.
+- `manifest.json` with `world: "MAIN"` no longer fails Firefox validation:
+  Firefox has supported the MAIN world since 128. The rule is now a
+  strict_min_version advisory.
+- Device login reports hard server errors as errors, on both the tool and
+  the CLI paths, instead of authorization-pending or a bogus timeout; the
+  login flow now enforces the same cleartext-http refusal as every other
+  token-bearing path, validates the returned project scope before storing
+  credentials, and the CLI prints the one-click approval link.
+- `extension_publish` with a pinned buildSha no longer fills the response
+  with a different build's metadata when the pin is not in the local index.
+- `extension_shares` no longer labels your own expired shares as "not owned
+  by this token" when listing with `status: "live"`, and revocation is only
+  reported permanent when the platform confirmed it.
+- `extension_logs` accepts the `newtab`, `history`, and `bookmarks`
+  contexts, `level: "off"` silences console output instead of returning all
+  of it, and a stream error mid-follow returns what was collected instead
+  of discarding it.
+- `extension_stop` and session bookkeeping survive an MCP restart: session
+  markers are cleaned when a session exits on its own, single-project stop
+  consults the same on-disk markers as `all: true`, orphan reaping escapes
+  regex metachars in project paths and only kills plausible session
+  processes, and a replaced session can no longer unregister its successor.
+- `extension_open` trusts the live browser over the computed id hash when
+  they disagree (symlinked dist paths), so it no longer navigates to a
+  nonexistent extension id and no longer reports a successfully opened
+  surface as a failure.
+- Offline first runs work: the bundled template catalog snapshot is now the
+  fallback when the network and cache are both unavailable, a corrupted
+  cache file heals instead of erroring, and a shapeless 200 response is no
+  longer cached for an hour.
+- `extension-mcp --help`, `--version`, and unknown commands now answer
+  instead of silently starting a stdio server.
+- The release pipeline bumps the version before building, so the published
+  bundle reports the version it ships as, with an assertion gating publish
+  on it and on the type declarations existing.
+- Docs and drop-ins caught up with the code: template count corrected to
+  50+, the AI template slugs are `ai-claude` and `ai-chatgpt`, Firefox
+  support noted for `extension_list_extensions` and Safari for
+  `extension_submit`, and the `extension_dom_snapshot` description names
+  which subpaths need the debug port.
+
 ## 10.0.0
 
 Every tool now returns the same frame. Before this, 28 tools hand-built 142

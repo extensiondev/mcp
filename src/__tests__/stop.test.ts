@@ -4,7 +4,12 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import * as stop from "../tools/stop";
-import { registerSession, getSession } from "../lib/process-manager";
+import {
+  registerSession,
+  removeSession,
+  getSession,
+  listSessionMarkers,
+} from "../lib/process-manager";
 import { resolveExtensionInvocation } from "../lib/exec";
 
 const previousSessionDir = process.env.EXTENSION_MCP_SESSION_DIR;
@@ -37,6 +42,15 @@ function isAlive(pid: number): boolean {
   } catch {
     return false;
   }
+}
+
+async function waitGone(pid: number, budgetMs = 2_000): Promise<boolean> {
+  const deadline = Date.now() + budgetMs;
+  while (Date.now() < deadline) {
+    if (!isAlive(pid)) return true;
+    await new Promise((r) => setTimeout(r, 50));
+  }
+  return !isAlive(pid);
 }
 
 const tmpDirs: string[] = [];
@@ -148,6 +162,121 @@ describe("extension_stop", () => {
     expect(isAlive(pidA)).toBe(false);
     expect(isAlive(pidB)).toBe(false);
   });
+});
+
+describe("extension_stop after an MCP restart", () => {
+  it("finds a marker-only session that never stamped a ready contract", async () => {
+    const projectPath = tmpProject();
+    const pid = spawnVictim();
+    registerSession({ pid, browser: "chrome", projectPath, command: "dev" });
+    removeSession(projectPath, "chrome");
+
+    const result = JSON.parse(
+      await stop.handler({ projectPath, browser: "chrome" }),
+    );
+
+    expect(result.value.pid).toBe(pid);
+    expect(result.value.stopped).toBe(true);
+    expect(isAlive(pid)).toBe(false);
+    expect(
+      listSessionMarkers().some(
+        (m) => path.resolve(m.projectPath) === path.resolve(projectPath),
+      ),
+    ).toBe(false);
+  });
+});
+
+const posixOnly = process.platform === "win32" ? it.skip : it;
+
+function spawnHolder(command: string, args: string[]): number {
+  const child = spawn(command, args, { detached: true, stdio: "ignore" });
+  child.unref();
+  return child.pid!;
+}
+
+describe("extension_stop orphan reaping", () => {
+  posixOnly(
+    "reaps a profile-dir holder even when the project path carries regex metachars",
+    async () => {
+      const projectPath = path.join(tmpProject(), "weird (c++) [v1]");
+      fs.mkdirSync(projectPath, { recursive: true });
+      const holderArg = path.join(
+        projectPath,
+        "dist",
+        "extension-profile-chrome",
+      );
+      const pid = spawnHolder(process.execPath, [
+        "-e",
+        "setInterval(() => {}, 1000)",
+        holderArg,
+      ]);
+      await new Promise((r) => setTimeout(r, 200));
+
+      const result = JSON.parse(
+        await stop.handler({ projectPath, browser: "chrome" }),
+      );
+
+      expect(result.value.reaped).toContain(pid);
+      expect(await waitGone(pid)).toBe(true);
+    },
+    15_000,
+  );
+
+  posixOnly(
+    "does not SIGKILL an unrelated process that merely mentions the profile path",
+    async () => {
+      const projectPath = tmpProject();
+      const watched = path.join(
+        projectPath,
+        "dist",
+        "extension-profile-chrome",
+        "session.log",
+      );
+      fs.mkdirSync(path.dirname(watched), { recursive: true });
+      fs.writeFileSync(watched, "log line\n");
+      const pid = spawnHolder("tail", ["-f", watched]);
+      await new Promise((r) => setTimeout(r, 200));
+
+      try {
+        const result = JSON.parse(
+          await stop.handler({ projectPath, browser: "chrome" }),
+        );
+
+        expect(result.value.reaped).not.toContain(pid);
+        expect(isAlive(pid)).toBe(true);
+      } finally {
+        try {
+          process.kill(pid, "SIGKILL");
+        } catch {
+        }
+      }
+    },
+    15_000,
+  );
+
+  posixOnly(
+    "matches a dev server spawned with the caller's relative path spelling",
+    async () => {
+      const absolute = tmpProject();
+      const relative = path.relative(process.cwd(), absolute);
+      const pid = spawnHolder(process.execPath, [
+        "-e",
+        "setInterval(() => {}, 1000)",
+        "extension",
+        "dev",
+        relative,
+      ]);
+      await new Promise((r) => setTimeout(r, 200));
+
+      const result = JSON.parse(
+        await stop.handler({ projectPath: relative, browser: "chrome" }),
+      );
+
+      expect(result.value.reaped).toContain(pid);
+      expect(await waitGone(pid)).toBe(true);
+    },
+    15_000,
+  );
 });
 
 describe("resolveExtensionInvocation", () => {

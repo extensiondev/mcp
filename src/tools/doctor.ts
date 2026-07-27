@@ -9,7 +9,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
-import { runExtensionCli } from "../lib/exec";
+import { exactVersion, pinnedCliVersion, runExtensionCli } from "../lib/exec";
 import { toMcpSpeak } from "../lib/act";
 import { envelope, isEnvelope } from "../lib/envelope";
 import { resolveSessionBrowser } from "../lib/session-browser";
@@ -182,6 +182,12 @@ function projectEngineVersion(projectPath: string): string | null {
   }
 }
 
+function capabilityProbeChecks(parsed: unknown): unknown {
+  return isEnvelope(parsed)
+    ? (parsed.value as { checks?: unknown } | null)?.checks
+    : parsed;
+}
+
 export async function handler(args: {
   projectPath?: string;
   browser?: string;
@@ -199,11 +205,7 @@ export async function handler(args: {
   const out = stdout.trim();
   try {
     const parsed = JSON.parse(out);
-    // A capability probe, not a version check: the CLI answers either with a
-    // bare check array or with the same array inside a schema-1 envelope.
-    const checks = isEnvelope(parsed)
-      ? (parsed.value as { checks?: unknown } | null)?.checks
-      : parsed;
+    const checks = capabilityProbeChecks(parsed);
     if (!Array.isArray(checks)) throw new Error("not a check array");
     for (const check of checks) {
       if (typeof check.detail === "string") check.detail = toMcpSpeak(check.detail);
@@ -253,13 +255,15 @@ export async function handler(args: {
 
     const engineVersion = projectEngineVersion(projectPath);
     if (engineVersion) {
-      const pin = String(process.env.EXTENSION_MCP_CLI_VERSION || "").trim();
+      const pin = pinnedCliVersion();
       const mismatch =
-        pin !== "" && pin !== "latest" && !engineVersion.includes(pin);
+        pin !== "" &&
+        pin !== "latest" &&
+        exactVersion(engineVersion) !== exactVersion(pin);
       checks.push({
         check: "project-engine",
         status: mismatch ? "warn" : "pass",
-        detail: `project-local extension@${engineVersion}${mismatch ? `, but EXTENSION_MCP_CLI_VERSION=${pin}; the dev loop uses the project bin, not the pin` : ""}`,
+        detail: `project-local extension@${engineVersion}${mismatch ? `, but the MCP pins extension@${pin}; the dev loop uses the project bin, not the pin` : ""}`,
         ...(mismatch
           ? {
               remediation: `Run \`(cd ${projectPath} && npm i -D extension@${pin})\` to match the pinned engine.`,

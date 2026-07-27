@@ -14,8 +14,12 @@ import path from "node:path";
 import { materializeCarrier } from "../lib/carrier";
 import { pollBootVerdict } from "../lib/boot-verdict";
 import { envelope } from "../lib/envelope";
-import { spawnExtensionCli } from "../lib/exec";
-import { registerSession, removeSession } from "../lib/process-manager";
+import { spawnExtensionCli, spawnFailedEnvelope } from "../lib/exec";
+import {
+  registerSession,
+  removeSession,
+  removeSessionMarker,
+} from "../lib/process-manager";
 import {
   contractBoundPort,
   liveProjectSessions,
@@ -141,7 +145,10 @@ export async function handler(
   const spawnedAt = Date.now();
   const spawned = spawnExtensionCli(cliArgs, { projectDir: args.projectPath });
   const { child, logPath } = spawned;
-  const pid = child.pid!;
+  if (child.pid === undefined) {
+    return spawnFailedEnvelope(schema.name, spawned);
+  }
+  const pid = child.pid;
 
   registerSession({
     pid,
@@ -151,7 +158,10 @@ export async function handler(
     command: "dev",
     noBrowser: Boolean(args.noBrowser),
   });
-  child.on("exit", () => removeSession(args.projectPath, browser));
+  child.on("exit", () => {
+    removeSession(args.projectPath, browser, pid);
+    removeSessionMarker(args.projectPath, browser, pid);
+  });
 
   const boot = await pollBootVerdict(args.projectPath, browser, {
     child,
@@ -160,7 +170,7 @@ export async function handler(
     since: spawnedAt,
     noBrowser: Boolean(args.noBrowser),
   });
-  const cleanOutput = boot.output;
+  const cleanOutput = boot.evidenceTail;
   const session = { projectPath: args.projectPath, browser, pid, logPath };
 
   if (boot.verdict.kind === "exited") {

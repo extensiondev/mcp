@@ -410,8 +410,6 @@ export async function handler(args: {
 
   if (code === 0) {
     // @deprecated Two scrapes of the CLI's own summary line. They stay until
-    // the build command speaks the schema-1 envelope, which carries both facts
-    // as data. Nothing branches on them; they only decorate `value`.
     const size = out.match(/Size:\s*([\d.]+\s*[kKmMgG]?B)/)?.[1];
     const status = out.match(/Build Status:\s*(\w+)/)?.[1];
     const engineSummary = readBuildSummary(args.projectPath, browser, start);

@@ -1,6 +1,3 @@
-// A hand-rolled checker for the one flat schema this package pins. ajv would be
-// a fifth runtime dependency for eight keys, so the schema is walked directly.
-
 export interface JsonSchema {
   required?: string[];
   properties?: Record<string, any>;

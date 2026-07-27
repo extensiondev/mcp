@@ -3,7 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
-import { spawnExtensionCli, type SpawnedCli } from "../lib/exec";
+import { runExtensionCli, spawnExtensionCli, type SpawnedCli } from "../lib/exec";
 
 
 const cleanups: Array<() => void> = [];
@@ -69,4 +69,38 @@ describe("spawnExtensionCli detach contract", () => {
     expect(pgid).toBe(pid);
     expect(pgid).not.toBe(ownPgid);
   });
+
+  posixOnly(
+    "survives a spawn failure instead of crashing the server on an unhandled error event",
+    async () => {
+      const previousPath = process.env.PATH;
+      process.env.PATH = "/nonexistent-mcp-test-bin";
+      try {
+        const spawned = spawnExtensionCli(["--version"]);
+        await new Promise((r) => setTimeout(r, 300));
+        expect(spawned.child.pid).toBeUndefined();
+        expect(spawned.spawnError?.()).toBeInstanceOf(Error);
+      } finally {
+        process.env.PATH = previousPath;
+      }
+    },
+  );
+});
+
+describe("runExtensionCli outer kill timer", () => {
+  posixOnly(
+    "gives the engine's own --timeout envelope headroom to land before the SIGTERM",
+    async () => {
+      const project = fakeProject('sleep 1.5; echo "engine timeout frame"');
+
+      const result = await runExtensionCli(["eval", "1"], {
+        cwd: project,
+        timeoutMs: 500,
+      });
+
+      expect(result.code).toBe(0);
+      expect(result.stdout).toContain("engine timeout frame");
+    },
+    15_000,
+  );
 });

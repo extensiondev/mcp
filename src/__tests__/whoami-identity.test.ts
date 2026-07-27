@@ -108,8 +108,9 @@ describe("whoami reports the stored token identity, not the cwd", () => {
       expect(result.value.apiDefault).toBe("https://www.extension.dev");
       expect(result.hint).toContain("minted via http://localhost:3100");
       expect(result.hint).toContain(
-        "do not read that recorded value",
+        "access grants for private registry reads use that recorded base",
       );
+      expect(result.hint).not.toContain("do not read that recorded value");
       expect(result.hint).toContain("https://www.extension.dev");
       expect(
         result.warnings.some((w: string) =>

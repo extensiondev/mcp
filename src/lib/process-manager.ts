@@ -13,6 +13,7 @@ import path from "node:path";
 import type { ProcessInfo } from "./types";
 
 const sessions = new Map<string, ProcessInfo>();
+const registrationStamps = new Map<string, { pid: number; at: number }>();
 
 function sessionKey(projectPath: string, browser: string): string {
   return `${path.resolve(projectPath)}::${browser}`;
@@ -37,9 +38,18 @@ function markerPath(projectPath: string, browser: string): string {
 export function removeSessionMarker(
   projectPath: string,
   browser: string,
+  pid?: number,
 ): void {
+  const file = markerPath(projectPath, browser);
+  if (pid !== undefined) {
+    try {
+      const parsed = JSON.parse(fs.readFileSync(file, "utf8"));
+      if (typeof parsed?.pid === "number" && parsed.pid !== pid) return;
+    } catch {
+    }
+  }
   try {
-    fs.rmSync(markerPath(projectPath, browser), { force: true });
+    fs.rmSync(file, { force: true });
   } catch {
   }
 }
@@ -70,8 +80,7 @@ export function listSessionMarkers(): ProcessInfo[] {
   return out;
 }
 
-export function registerSession(info: ProcessInfo): void {
-  sessions.set(sessionKey(info.projectPath, info.browser), info);
+function writeMarkerBestEffort(info: ProcessInfo, registeredAtMs: number): void {
   try {
     fs.mkdirSync(markerDir(), { recursive: true });
     fs.writeFileSync(
@@ -79,13 +88,44 @@ export function registerSession(info: ProcessInfo): void {
       JSON.stringify({
         ...info,
         projectPath: path.resolve(info.projectPath),
-        registeredAt: new Date().toISOString(),
+        registeredAt: new Date(registeredAtMs).toISOString(),
       }),
     );
   } catch {
-    // A marker is a best-effort breadcrumb; failing to write one must not
-    // block the session itself.
   }
+}
+
+export function registerSession(info: ProcessInfo): void {
+  const key = sessionKey(info.projectPath, info.browser);
+  const prior = registrationStamps.get(key);
+  const at = prior && prior.pid === info.pid ? prior.at : Date.now();
+  registrationStamps.set(key, { pid: info.pid, at });
+  sessions.set(key, info);
+  writeMarkerBestEffort(info, at);
+}
+
+export function sessionSinceMs(
+  projectPath: string,
+  browser: string,
+): number | null {
+  const stamp = registrationStamps.get(sessionKey(projectPath, browser));
+  if (stamp) return stamp.at;
+  const resolved = path.resolve(projectPath);
+  for (const marker of listSessionMarkers()) {
+    if (
+      path.resolve(marker.projectPath) !== resolved ||
+      marker.browser !== browser
+    ) {
+      continue;
+    }
+    const registeredAt = (marker as ProcessInfo & { registeredAt?: string })
+      .registeredAt;
+    if (typeof registeredAt === "string") {
+      const parsed = Date.parse(registeredAt);
+      if (Number.isFinite(parsed)) return parsed;
+    }
+  }
+  return null;
 }
 
 export function getSession(
@@ -113,8 +153,15 @@ export function findSessionInfo(
   return undefined;
 }
 
-export function removeSession(projectPath: string, browser: string): void {
-  sessions.delete(sessionKey(projectPath, browser));
+export function removeSession(
+  projectPath: string,
+  browser: string,
+  pid?: number,
+): void {
+  const key = sessionKey(projectPath, browser);
+  if (pid !== undefined && sessions.get(key)?.pid !== pid) return;
+  sessions.delete(key);
+  registrationStamps.delete(key);
 }
 
 export function listSessions(): ProcessInfo[] {

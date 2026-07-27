@@ -84,8 +84,17 @@ export async function handler(
     !args.context &&
     resolveDefaultEvalContext(args.projectPath, browser) === "page";
   const context = defaulted ? "page" : args.context;
+  /* @invariant Options before "--", positionals after: the engine's commander
+     parser reads a dash-leading expression as an unknown option unless the
+     separator precedes it, and treats everything after "--" as operands. */
   const raw = await runActVerb(
-    ["eval", args.expression, args.projectPath, ...commonFlags({ ...args, context, browser })],
+    [
+      "eval",
+      ...commonFlags({ ...args, context, browser }),
+      "--",
+      args.expression,
+      args.projectPath,
+    ],
     args.projectPath,
     args.timeout,
     schema.name,
@@ -118,8 +127,7 @@ export async function handler(
           typeof parsed.error?.code === "string" ? parsed.error.code : "";
         const unreachable =
           code === "E_TARGET_NOT_FOUND" ||
-          // Fallback until the CLI stamps a code on every eval failure: the
-          // engine's prose is the only signal that the tab is unreachable.
+          // @deprecated Prose fallback until the CLI stamps a code on every eval failure.
           /cannot access|chrome-extension:\/\/|chrome:\/\//i.test(
             JSON.stringify(parsed.error ?? ""),
           );

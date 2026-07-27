@@ -12,7 +12,7 @@ import path from "node:path";
 import { execFileSync } from "node:child_process";
 import type { ReadyContract } from "../lib/types";
 import {
-  getSession,
+  findSessionInfo,
   listSessionMarkers,
   listSessions,
   removeSession,
@@ -73,13 +73,47 @@ function pgrepPids(pattern: string): number[] {
   }
 }
 
-function sessionProcessPids(projectPath: string): number[] {
-  const resolved = path.resolve(projectPath);
-  const pids = new Set<number>();
-  for (const marker of [`extension dev ${resolved}`, path.join(resolved, "dist")]) {
-    for (const pid of pgrepPids(marker)) pids.add(pid);
+function escapeRegex(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function projectPathForms(projectPath: string): string[] {
+  const forms = new Set([projectPath, path.resolve(projectPath)]);
+  try {
+    forms.add(fs.realpathSync(projectPath));
+  } catch {
   }
-  return [...pids];
+  return [...forms];
+}
+
+const PLAUSIBLE_SESSION_BINARY =
+  /chrom|edge|brave|opera|vivaldi|yandex|firefox|waterfox|librewolf|safari|node|electron|extension/i;
+
+function processCommand(pid: number): string {
+  try {
+    return execFileSync("ps", ["-o", "comm=", "-p", String(pid)], {
+      encoding: "utf8",
+    }).trim();
+  } catch {
+    return "";
+  }
+}
+
+function sessionProcessPids(projectPath: string): number[] {
+  const pids = new Set<number>();
+  for (const form of projectPathForms(projectPath)) {
+    const escaped = escapeRegex(form);
+    const patterns = [
+      `extension[^ ]* (dev|start|preview) ${escaped}`,
+      `${escaped}${escapeRegex(path.sep)}dist${escapeRegex(path.sep)}extension-profile-`,
+    ];
+    for (const pattern of patterns) {
+      for (const pid of pgrepPids(pattern)) pids.add(pid);
+    }
+  }
+  return [...pids].filter((pid) =>
+    PLAUSIBLE_SESSION_BINARY.test(processCommand(pid)),
+  );
 }
 
 function reapSessionProcesses(projectPath: string): number[] {
@@ -143,7 +177,7 @@ export async function stopOne(
   projectPath: string,
   browser: string,
 ): Promise<StopOutcome> {
-  const session = getSession(projectPath, browser);
+  const session = findSessionInfo(projectPath, browser);
   const pid = session?.pid ?? pidFromReadyContract(projectPath, browser);
 
   if (pid == null) {

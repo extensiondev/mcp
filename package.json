@@ -42,9 +42,7 @@
     "server.json",
     "README.md",
     "CHANGELOG.md",
-    "LICENSE",
-    "NOTICE",
-    "TRADEMARK.md"
+    "LICENSE"
   ],
   "scripts": {
     "clean": "rm -rf dist",

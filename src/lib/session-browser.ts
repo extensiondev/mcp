@@ -8,7 +8,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { listSessions } from "./process-manager";
+import { listSessionMarkers, listSessions } from "./process-manager";
 
 export interface ResolvedBrowser {
   browser: string;
@@ -74,7 +74,7 @@ export function knownSessionBrowsers(projectPath: string): string[] {
 export interface LiveSession {
   browser: string;
   pid: number;
-  source: "registry" | "contract";
+  source: "registry" | "contract" | "marker";
 }
 
 export function liveProjectSessions(projectPath: string): LiveSession[] {
@@ -96,6 +96,16 @@ export function liveProjectSessions(projectPath: string): LiveSession[] {
       browser: sighting.browser,
       pid: sighting.pid,
       source: "contract",
+    });
+  }
+  for (const marker of listSessionMarkers()) {
+    if (path.resolve(marker.projectPath) !== resolved) continue;
+    if (out.has(marker.browser)) continue;
+    if (typeof marker.pid !== "number" || !pidAlive(marker.pid)) continue;
+    out.set(marker.browser, {
+      browser: marker.browser,
+      pid: marker.pid,
+      source: "marker",
     });
   }
   return [...out.values()];

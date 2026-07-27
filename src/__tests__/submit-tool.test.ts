@@ -4,6 +4,7 @@ import path from "node:path";
 
 import { afterEach, beforeEach, describe, it, expect } from "vitest";
 import { schema, handler, storeMdWarnings } from "../tools/submit";
+import { writeCredentials } from "../lib/credentials";
 import { tools as ALL_TOOLS } from "../index";
 
 function jsonResponse(body: unknown, ok = true, status = 200): Response {
@@ -29,7 +30,7 @@ describe("extension_submit: registration + schema", () => {
     );
     for (const p of props) {
       expect(p).not.toMatch(
-        /secret|token|apiKey|clientId|clientSecret|refreshToken|serviceAccount|zip|projectPath|publisherId/i,
+        /secret|token|apiKey|clientId|clientSecret|refreshToken|serviceAccount|zip|publisherId/i,
       );
     }
   });
@@ -119,7 +120,7 @@ describe("extension_submit: platform submit handler", () => {
     expect(body.buildSha).toBe("abc1234");
     expect(body.dryRun).toBe(true);
     expect(out.value.mode).toBe("platform");
-    expect(out.ok).toBe(false);
+    expect(out.ok).toBe(true);
     expect(out.status).toBe("preflight");
     expect(out.value.platformMessage).toBe("Preflight OK");
     expect(out.value.preflight).toHaveLength(2);
@@ -128,6 +129,124 @@ describe("extension_submit: platform submit handler", () => {
       expect(row.configured).toBe("unknown");
     }
     expect(out.hint).toContain("cannot be verified");
+    expect(out.hint).toContain("advisory only");
+  });
+
+  it("keeps a platform-reported failure primary when no local ref exists", async () => {
+    process.env.EXTENSION_DEV_TOKEN = "tok";
+    global.fetch = (async () =>
+      jsonResponse({
+        ok: false,
+        dryRun: true,
+        message: "Build abc1234 has no completed build",
+      })) as unknown as typeof fetch;
+    const out = JSON.parse(
+      await handler({ browsers: ["chrome"], buildSha: "abc1234" }),
+    );
+    expect(out.ok).toBe(false);
+    expect(out.hint).toContain("FAILED");
+    expect(out.hint).toContain("Build abc1234 has no completed build");
+    expect(out.hint).not.toContain("the platform verified");
+  });
+
+  it("keeps a platform failure primary even when store credentials are healthy", async () => {
+    process.env.EXTENSION_DEV_TOKEN = "tok";
+    writeCredentials({
+      version: 1,
+      token: "tok",
+      workspaceSlug: "acme",
+      projectSlug: "widget",
+      expiresAt: Math.floor(Date.now() / 1000) + 3600,
+      api: "https://www.extension.dev",
+    });
+    global.fetch = (async (url: string) => {
+      const u = String(url);
+      if (u.includes("/api/cli/stores/submit")) {
+        return jsonResponse({ ok: false, dryRun: true, message: "Denied" });
+      }
+      if (u.includes("stores/health.json")) {
+        return jsonResponse({ stores: { chrome: { ok: true } } });
+      }
+      if (u.includes("channels.json")) {
+        return jsonResponse({ stable: { sha: "abc1234" } });
+      }
+      return jsonResponse({});
+    }) as unknown as typeof fetch;
+    const out = JSON.parse(
+      await handler({ browsers: ["chrome"], buildSha: "abc1234" }),
+    );
+    expect(out.value.preflight[0].ok).toBe(true);
+    expect(out.ok).toBe(false);
+    expect(out.hint).toContain("FAILED");
+    expect(out.hint).not.toContain("the platform verified");
+  });
+
+  it("still fails the dry run when every requested store is definitively blocked", async () => {
+    process.env.EXTENSION_DEV_TOKEN = "tok";
+    writeCredentials({
+      version: 1,
+      token: "tok",
+      workspaceSlug: "acme",
+      projectSlug: "widget",
+      expiresAt: Math.floor(Date.now() / 1000) + 3600,
+      api: "https://www.extension.dev",
+    });
+    global.fetch = (async (url: string) => {
+      const u = String(url);
+      if (u.includes("/api/cli/stores/submit")) {
+        return jsonResponse({ ok: true, dryRun: true });
+      }
+      if (u.includes("stores/health.json")) {
+        return jsonResponse({ stores: {} });
+      }
+      if (u.includes("channels.json")) {
+        return jsonResponse({ stable: { sha: "abc1234" } });
+      }
+      return jsonResponse({});
+    }) as unknown as typeof fetch;
+    const out = JSON.parse(
+      await handler({ browsers: ["chrome"], buildSha: "abc1234" }),
+    );
+    expect(out.ok).toBe(false);
+    expect(out.value.preflight[0].configured).toBe(false);
+    expect(out.hint).toContain("NOT actionable");
+  });
+
+  it("reads STORE.md from projectPath instead of the server's cwd", async () => {
+    process.env.EXTENSION_DEV_TOKEN = "tok";
+    global.fetch = (async () =>
+      jsonResponse({ ok: true, dryRun: true })) as unknown as typeof fetch;
+    const project = path.join(tmp, "project");
+    fs.mkdirSync(project, { recursive: true });
+    fs.writeFileSync(
+      path.join(project, "STORE.md"),
+      [
+        "## firefox-amo",
+        "### Reviewer notes",
+        "Test account and steps.",
+        "## Edge Add-ons",
+        "### Certification notes",
+        "Guidance.",
+      ].join("\n"),
+    );
+    const elsewhere = path.join(tmp, "elsewhere");
+    fs.mkdirSync(elsewhere, { recursive: true });
+    const prevCwd = process.cwd();
+    process.chdir(elsewhere);
+    try {
+      const out = JSON.parse(
+        await handler({
+          browsers: ["firefox", "edge"],
+          buildSha: "abc1234",
+          projectPath: project,
+        }),
+      );
+      expect(
+        out.warnings.some((w: string) => w.includes("No STORE.md")),
+      ).toBe(false);
+    } finally {
+      process.chdir(prevCwd);
+    }
   });
 
   it("passes dryRun:false through only when explicitly set", async () => {

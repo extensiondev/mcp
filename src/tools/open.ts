@@ -26,6 +26,7 @@ import { resolveSessionBrowser } from "../lib/session-browser";
 import { CDPClient } from "../lib/cdp";
 import { resolveCdpPort, CDP_PORT_MISSING_HINT } from "../lib/cdp-port";
 import { isChromiumFamily } from "../lib/browser-family";
+import { verifyGuestLoaded } from "../lib/guest-load-oracle";
 import {
   navigateToUrlViaBridge,
   resolveBridgeBaseUrl,
@@ -215,10 +216,18 @@ async function resolveExtensionId(
   browser: string,
 ): Promise<string | null> {
   const distPath = readDistPath(projectPath, browser);
-  const computed = distPath ? unpackedExtensionId(distPath) : null;
+  const computedIds: string[] = [];
+  if (distPath) {
+    computedIds.push(unpackedExtensionId(distPath));
+    try {
+      const real = fs.realpathSync(distPath);
+      if (real !== distPath) computedIds.push(unpackedExtensionId(real));
+    } catch {
+    }
+  }
 
   const resolved = await resolveCdpPort(projectPath, browser);
-  if (!resolved) return computed;
+  if (!resolved) return computedIds[0] ?? null;
 
   const ids = new Set<string>();
   try {
@@ -229,11 +238,16 @@ async function resolveExtensionId(
       if (id) ids.add(id);
     }
   } catch {
-    // fall through to the computed id
   }
 
-  if (computed && ids.has(computed)) return computed;
-  if (computed) return computed;
+  for (const id of computedIds) {
+    if (ids.has(id)) return id;
+  }
+  if (ids.size > 0) {
+    const guest = await verifyGuestLoaded(projectPath, browser);
+    if (guest.checked && guest.guestIds.length === 1) return guest.guestIds[0];
+  }
+  if (computedIds.length > 0) return computedIds[0];
   return ids.size === 1 ? [...ids][0] : null;
 }
 
@@ -720,8 +734,7 @@ export async function handler(
         typeof parsed?.error?.code === "string" ? parsed.error.code : "";
       const refusedWindow =
         code === "E_NO_TARGET" ||
-        // Fallback until the CLI stamps a code for a window it cannot open:
-        // the engine's prose is the only signal a headless refusal leaves.
+        // @deprecated Prose fallback until the CLI stamps a code for a window it cannot open.
         /active browser window|no active|headless|user gesture/i.test(msg);
       if (parsed?.ok === false && refusedWindow) {
         if (AS_TAB_SURFACES.includes(args.surface)) {

@@ -6,7 +6,7 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-/**
+/* @invariant
  * @deprecated The only module allowed to read the CLI's human output.
  *
  * Every regex here is coupled to first-party CLI copy, so a wording change in
@@ -20,9 +20,7 @@
  * is the floor. Nothing else in `src/` may match on CLI prose.
  */
 
-// npm and V8 chatter, mixed into the session log because the detached child
-// writes stdout and stderr to one fd.
-const NOISE = [
+const MERGED_FD_CHATTER = [
   /^npm warn Unknown project config/i,
   /This will stop working in the next major version of npm/i,
   /^npm warn config/i,
@@ -40,7 +38,7 @@ const NOISE = [
 export function denoiseCliLog(raw: string): string {
   return raw
     .split("\n")
-    .filter((line) => !NOISE.some((re) => re.test(line.trim())))
+    .filter((line) => !MERGED_FD_CHATTER.some((re) => re.test(line.trim())))
     .join("\n")
     .replace(/\n{2,}/g, "\n")
     .trimStart();

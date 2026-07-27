@@ -5,9 +5,14 @@ import path from "node:path";
 import {
   resolveSessionBrowser,
   knownSessionBrowsers,
+  liveProjectSessions,
 } from "../lib/session-browser";
 import { toMcpSpeak } from "../lib/act";
-import { registerSession, removeSession } from "../lib/process-manager";
+import {
+  registerSession,
+  removeSession,
+  removeSessionMarker,
+} from "../lib/process-manager";
 
 const tmpDirs: string[] = [];
 function tmpProject(): string {
@@ -35,6 +40,7 @@ function register(projectPath: string, browser: string): void {
 afterEach(() => {
   for (const { projectPath, browser } of registered.splice(0)) {
     removeSession(projectPath, browser);
+    removeSessionMarker(projectPath, browser);
   }
   for (const dir of tmpDirs.splice(0)) {
     fs.rmSync(dir, { recursive: true, force: true });
@@ -128,6 +134,34 @@ describe("resolveSessionBrowser", () => {
       browser: "chrome",
       source: "fallback",
     });
+  });
+});
+
+describe("liveProjectSessions", () => {
+  it("still sees a live session through its on-disk marker after registry amnesia", () => {
+    const project = tmpProject();
+    register(project, "chrome");
+    removeSession(project, "chrome");
+
+    const sessions = liveProjectSessions(project);
+
+    expect(sessions).toEqual([
+      { browser: "chrome", pid: process.pid, source: "marker" },
+    ]);
+  });
+
+  it("ignores markers whose pid is dead", () => {
+    const project = tmpProject();
+    registerSession({
+      pid: 2 ** 30,
+      browser: "chrome",
+      projectPath: project,
+      command: "dev",
+    });
+    registered.push({ projectPath: project, browser: "chrome" });
+    removeSession(project, "chrome");
+
+    expect(liveProjectSessions(project)).toEqual([]);
   });
 });
 

@@ -66,9 +66,12 @@ function readReadyContract(
 function capRecent(
   events: any[],
   limit: number,
-): { events: any[]; truncated: boolean } {
-  if (events.length <= limit) return { events, truncated: false };
-  return { events: events.slice(events.length - limit), truncated: true };
+): { events: any[]; windowTruncated: boolean } {
+  if (events.length <= limit) return { events, windowTruncated: false };
+  return {
+    events: events.slice(events.length - limit),
+    windowTruncated: true,
+  };
 }
 
 function emptyReason(projectPath: string, browser: string): string | undefined {
@@ -106,9 +109,10 @@ function summarize(
   dropped: number,
   projectPath?: string,
   staleNote?: string,
+  streamNote?: string,
 ): string {
   const matched = events.length;
-  const { events: out, truncated } = capRecent(events, limit);
+  const { events: out, windowTruncated } = capRecent(events, limit);
   const lastSeq = out.length
     ? out.reduce(
         (m, e) => (typeof e.seq === "number" && e.seq > m ? e.seq : m),
@@ -128,14 +132,16 @@ function summarize(
       runId: runId || undefined,
       matched,
       count: out.length,
-      // The log window's own truncation, not the envelope's: it says the reader
-      // capped the events below, so it stays beside them.
-      truncated,
+      windowTruncated,
       dropped: dropped || undefined,
       nextSince: lastSeq >= 0 ? lastSeq : undefined,
       events: out,
     },
-    warnings: [reason ?? null, stale ? (staleNote ?? null) : null],
+    warnings: [
+      reason ?? null,
+      stale ? (staleNote ?? null) : null,
+      streamNote ?? null,
+    ],
   });
 }
 
@@ -276,6 +282,8 @@ async function readFromStream(
       return;
     }
 
+    let streamNote: string | undefined;
+
     const finish = () => {
       if (settled) return;
       settled = true;
@@ -284,7 +292,19 @@ async function readFromStream(
         socket.close();
       } catch {
       }
-      resolve(summarize(events, "stream", browser, runId, limit, dropped, args.projectPath));
+      resolve(
+        summarize(
+          events,
+          "stream",
+          browser,
+          runId,
+          limit,
+          dropped,
+          args.projectPath,
+          undefined,
+          streamNote,
+        ),
+      );
     };
 
     const timer = setTimeout(finish, followMs);
@@ -321,8 +341,17 @@ async function readFromStream(
 
     socket.on("error", () => {
       if (settled) return;
+      if (events.length > 0 || dropped > 0) {
+        streamNote = `The control channel at ${url} errored before the follow window ended, so this is a partial read. The dev session may have stopped or the control port changed; re-check with extension_wait.`;
+        finish();
+        return;
+      }
       settled = true;
       clearTimeout(timer);
+      try {
+        socket.close();
+      } catch {
+      }
       resolve(
         envelope({
           ok: false,

@@ -17,10 +17,9 @@ import {
 } from "../lib/cdp-page-scripts";
 import { rdpCollectConsoleMessages } from "../lib/rdp";
 import { summarizeConsoleMessages } from "../lib/console-summary";
+import { schema as inspectSchema } from "./inspect-schema";
 
-// The bridge path answers for extension_inspect, so its frames carry that name
-// (importing the schema from inspect.ts would close an import cycle).
-const TOOL = "extension_inspect";
+const TOOL = inspectSchema.name;
 
 function buildBridgeInspectExpression(opts: {
   summary: boolean;
@@ -221,7 +220,7 @@ export async function inspectViaBridge(
       args.projectPath,
       browser,
       args.timeout,
-      "extension_inspect",
+      TOOL,
     );
     if ("error" in listed) return listed.error;
     const already = listed.tabs.some((t) => t.url.includes(args.url!));
@@ -231,7 +230,7 @@ export async function inspectViaBridge(
         browser,
         args.url,
         args.timeout,
-        "extension_inspect",
+        TOOL,
       );
       try {
         if (JSON.parse(nav)?.ok !== true) return nav;

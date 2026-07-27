@@ -87,15 +87,32 @@ export async function fetchLoginConfig(
 
 export function persistTokenResponse(args: {
   apiBase: string;
+  project: string;
   data: Record<string, unknown>;
 }): StoredCredentials {
   const token = String(args.data.token || "").trim();
   if (!token) throw new Error("Login returned no token.");
+  const workspaceSlug = String(args.data.workspaceSlug || "").trim();
+  const projectSlug = String(args.data.projectSlug || "").trim();
+  if (!workspaceSlug || !projectSlug) {
+    throw new Error(
+      `Login for ${args.project} returned a token without a workspace/project scope; nothing was stored. Run extension_auth (action: login) again.`,
+    );
+  }
+  const [wantWorkspace = "", wantProject = ""] = args.project.split("/");
+  const matches =
+    workspaceSlug.toLowerCase() === wantWorkspace.toLowerCase() &&
+    projectSlug.toLowerCase() === wantProject.toLowerCase();
+  if (!matches) {
+    throw new Error(
+      `Login returned a token scoped to ${workspaceSlug}/${projectSlug}, not the requested ${args.project}; nothing was stored. Run extension_auth (action: login) again with the intended project.`,
+    );
+  }
   const creds: StoredCredentials = {
     version: 1,
     token,
-    workspaceSlug: String(args.data.workspaceSlug || ""),
-    projectSlug: String(args.data.projectSlug || ""),
+    workspaceSlug,
+    projectSlug,
     expiresAt: Number(args.data.expiresAt || 0),
     api: args.apiBase,
     provider: "extensiondev",

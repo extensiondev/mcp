@@ -128,30 +128,46 @@ export async function handler(args: {
     });
     if (buildsRes.ok) {
       const items = parseBuildIndex(buildsRes.json);
-      const pinned = args.buildSha
-        ? items.find((item) => {
-            const short = String(args.buildSha).slice(0, 7).toLowerCase();
-            return (
-              item.sha.toLowerCase() === short ||
-              String(item.commit ?? "")
-                .toLowerCase()
-                .startsWith(short)
-            );
-          })
-        : undefined;
-      const newestSuccess = items
-        .filter((item) => item.status === "success")
-        .sort((a, b) =>
-          String(b.timestamp ?? "").localeCompare(String(a.timestamp ?? "")),
-        )[0];
-      const served = pinned ?? newestSuccess;
-      if (served) {
-        if (data.buildSha == null) data.buildSha = served.sha;
-        if (data.builtAt == null && served.timestamp) data.builtAt = served.timestamp;
-        if (data.version == null && served.version) data.version = served.version;
-        if (data.channel == null && served.channel) data.channel = served.channel;
-        data.registryUrl = buildsUrl;
-        if (!pinned && args.buildSha == null) {
+      if (args.buildSha) {
+        const pin = String(args.buildSha).toLowerCase();
+        const pinned = items.find((item) => {
+          const sha = item.sha.toLowerCase();
+          const commit = String(item.commit ?? "").toLowerCase();
+          return (
+            sha.startsWith(pin) ||
+            pin.startsWith(sha) ||
+            (commit !== "" && (commit.startsWith(pin) || pin.startsWith(commit)))
+          );
+        });
+        if (pinned) {
+          if (data.buildSha == null) data.buildSha = pinned.sha;
+          if (data.builtAt == null && pinned.timestamp)
+            data.builtAt = pinned.timestamp;
+          if (data.version == null && pinned.version)
+            data.version = pinned.version;
+          if (data.channel == null && pinned.channel)
+            data.channel = pinned.channel;
+          data.registryUrl = buildsUrl;
+        } else {
+          if (data.buildSha == null) data.buildSha = args.buildSha;
+          data.registryUrl = buildsUrl;
+          buildNote = `buildSha ${args.buildSha} is pinned but was not found in the project's registry build index, so builtAt/version/channel are not filled in from another build. The URL still serves the pinned build the platform accepted.`;
+        }
+      } else {
+        const newestSuccess = items
+          .filter((item) => item.status === "success")
+          .sort((a, b) =>
+            String(b.timestamp ?? "").localeCompare(String(a.timestamp ?? "")),
+          )[0];
+        if (newestSuccess) {
+          if (data.buildSha == null) data.buildSha = newestSuccess.sha;
+          if (data.builtAt == null && newestSuccess.timestamp)
+            data.builtAt = newestSuccess.timestamp;
+          if (data.version == null && newestSuccess.version)
+            data.version = newestSuccess.version;
+          if (data.channel == null && newestSuccess.channel)
+            data.channel = newestSuccess.channel;
+          data.registryUrl = buildsUrl;
           buildNote =
             "buildSha/builtAt/version describe the newest successful build in the project's registry index, which is what the share link serves. Pin buildSha to serve a specific build.";
         }

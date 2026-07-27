@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 import { tools as ALL_TOOLS } from "../index";
-import { ERROR_CODES, envelopeObject } from "../lib/envelope";
+import { DECISION_D6, ERROR_CODES, envelopeObject } from "../lib/envelope";
 import { validateAgainstSchema } from "./envelope-validate";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -34,15 +34,15 @@ const sources = [
   text: fs.readFileSync(file, "utf8"),
 }));
 
-// `envelope()` and `envelopeObject()` are the only serializers allowed to
-// produce a handler's return value. These files hand-serialize something that
-// is not a tool result.
-const RAW_SERIALIZER_ALLOWED = new Set([
-  "lib/envelope.ts", // it *is* the serializer
-  "lib/act.ts", // shapes the CLI's own frame
+const RAW_SERIALIZER_ALLOWED = new Map<string, string>([
+  ["lib/envelope.ts", "it is the serializer itself"],
+  [
+    "lib/act.ts",
+    "owns the wire form of an act frame: a tool that annotated the CLI's own frame hands it back through actFrameJson, so no tool hand-builds one",
+  ],
 ]);
 
-describe("every returned frame is the schema-1 envelope", () => {
+describe("envelope() and envelopeObject() are the only serializers allowed to produce a handler's return value", () => {
   it("registers 28 tools, all of them named in an envelope call", () => {
     expect(registered.size).toBe(ALL_TOOLS.length);
   });
@@ -58,7 +58,31 @@ describe("every returned frame is the schema-1 envelope", () => {
     });
   }
 
+  for (const [relative, why] of RAW_SERIALIZER_ALLOWED) {
+    it(`${relative} may hand-serialize because ${why}`, () => {
+      expect(
+        sources.some((s) => s.relative === relative),
+        `${relative} is allowlisted but no longer exists`,
+      ).toBe(true);
+    });
+  }
+
+  it("keeps the legacy `name` key only while lib/act.ts and tools/shares.ts branch on it", () => {
+    const actText = sources.find((s) => s.relative === "lib/act.ts")?.text ?? "";
+    const sharesText =
+      sources.find((s) => s.relative === "tools/shares.ts")?.text ?? "";
+    expect(
+      /LEGACY_NAME_TO_CODE\[/.test(actText),
+      "lib/act.ts no longer maps error.name to a code; retire `name` from EnvelopeError",
+    ).toBe(true);
+    expect(
+      /error\.name ===/.test(sharesText),
+      "tools/shares.ts no longer branches on error.name; retire `name` from EnvelopeError",
+    ).toBe(true);
+  });
+
   it("names only registered tools in `command`, per decision D6", () => {
+    expect(DECISION_D6).toContain("`command`");
     const named = new Set<string>();
     for (const { text } of sources) {
       for (const match of text.matchAll(/command:\s*"(extension_[a-z_]+)"/g)) {

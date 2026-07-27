@@ -22,12 +22,11 @@ export interface ProfileLockOwner {
   pid?: number;
 }
 
-// The engine's own stamp, from browsers-lib/ready-stamp.ts. Matched as a code,
-// never as a sentence.
-const PROFILE_LOCKED_CODE = "profile_locked";
+const READY_STAMP_PROFILE_LOCKED_CODE = "profile_locked";
 
 export type BootVerdict =
   | { kind: "alive" }
+  | { kind: "silent-within-budget" }
   | { kind: "exited"; exitCode: number | null; signal: string | null }
   | { kind: "compile-failed"; message?: string; compileErrors: string[] }
   | {
@@ -47,10 +46,8 @@ export type BootVerdict =
 
 export interface BootReading {
   verdict: BootVerdict;
-  /** The CLI stamped a schema-1 ready contract, so no prose was read. */
   machineContract: boolean;
-  /** Denoised session-log tail, evidence of last resort. Never branched on. */
-  output: string;
+  evidenceTail: string;
   warnings: string[];
 }
 
@@ -59,7 +56,6 @@ export interface PollOptions {
   readOutput: () => string;
   budgetMs: number;
   since: number;
-  /** A build-only session never launches a browser, so it has no browser legs. */
   noBrowser?: boolean;
   intervalMs?: number;
 }
@@ -95,9 +91,9 @@ function readContract(
   }
 }
 
-// The capability probe. It asks the artefact what it speaks, never the pinned
-// version: exec.ts prefers a project-local `.bin/extension` over the pin, so a
-// user project on an older CLI wins and a semver gate would be a lie.
+/* @invariant The capability probe. It asks the artefact what it speaks, never
+   the pinned version: exec.ts prefers a project-local `.bin/extension` over the
+   pin, so a user project on an older CLI wins and a semver gate would be a lie. */
 export function speaksMachineContract(contract: unknown): boolean {
   return (
     !!contract &&
@@ -123,9 +119,7 @@ function contractVerdict(
   if (!fresh) return null;
   if (contract.status !== "error") return null;
 
-  // The engine names the profile path, the holding pid and the host, which is
-  // more than this side can reconstruct. Carry its sentence rather than ours.
-  if (!noBrowser && contract.code === PROFILE_LOCKED_CODE) {
+  if (!noBrowser && contract.code === READY_STAMP_PROFILE_LOCKED_CODE) {
     return {
       kind: "profile-locked",
       owner: profileLockOwner(contract),
@@ -160,11 +154,6 @@ function contractVerdict(
   };
 }
 
-/**
- * Poll the dev server's own contract for a boot verdict, and only fall back to
- * reading its output when the contract never lands. Replaces a blind sleep plus
- * a regex over first-party copy.
- */
 export async function pollBootVerdict(
   projectPath: string,
   browser: string,
@@ -186,7 +175,7 @@ export async function pollBootVerdict(
           signal: child.signalCode,
         },
         machineContract: speaksMachineContract(contractSeen?.contract),
-        output: denoiseCliLog(readOutput()),
+        evidenceTail: denoiseCliLog(readOutput()),
         warnings: [],
       };
     }
@@ -198,7 +187,7 @@ export async function pollBootVerdict(
         return {
           verdict,
           machineContract: speaksMachineContract(contractSeen.contract),
-          output: denoiseCliLog(readOutput()),
+          evidenceTail: denoiseCliLog(readOutput()),
           warnings: [],
         };
       }
@@ -211,32 +200,39 @@ export async function pollBootVerdict(
   }
 
   const machineContract = speaksMachineContract(contractSeen?.contract);
-  const output = denoiseCliLog(readOutput());
+  const evidenceTail = denoiseCliLog(readOutput());
 
-  // The contract said nothing decisive within the budget. On a CLI that speaks
-  // schema 1 that is the truth: the boot is fine so far. On an older one it may
-  // only mean the stamp never came, so the deprecated scrapes get a turn.
   if (machineContract) {
-    return { verdict: { kind: "alive" }, machineContract, output, warnings: [] };
+    return {
+      verdict: { kind: "alive" },
+      machineContract,
+      evidenceTail,
+      warnings: [],
+    };
   }
 
-  if (legacyCompileScrape(output)) {
+  if (legacyCompileScrape(evidenceTail)) {
     return {
       verdict: { kind: "compile-failed", compileErrors: [] },
       machineContract,
-      output,
+      evidenceTail,
       warnings: [LEGACY_FIDELITY_WARNING],
     };
   }
 
-  if (!noBrowser && legacyProfileLockScrape(output)) {
+  if (!noBrowser && legacyProfileLockScrape(evidenceTail)) {
     return {
       verdict: { kind: "profile-locked", owner: null },
       machineContract,
-      output,
+      evidenceTail,
       warnings: [LEGACY_FIDELITY_WARNING],
     };
   }
 
-  return { verdict: { kind: "alive" }, machineContract, output, warnings: [] };
+  return {
+    verdict: { kind: "silent-within-budget" },
+    machineContract,
+    evidenceTail,
+    warnings: [],
+  };
 }

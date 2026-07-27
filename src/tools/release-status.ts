@@ -38,8 +38,6 @@ export const schema = {
   },
 };
 
-// A section that could not be parsed still speaks schema 1, because the section
-// frames nested under `value` carry the same shape as the outer envelope.
 function parse(raw: string): Record<string, unknown> {
   try {
     return JSON.parse(raw) as Record<string, unknown>;

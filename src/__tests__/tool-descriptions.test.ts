@@ -2,8 +2,6 @@ import { describe, expect, it } from "vitest";
 
 import { tools as ALL_TOOLS } from "../index";
 
-// Every description is the first thing an agent reads about a tool, so it
-// follows the same copy rules the CLI applies to its own command help.
 const IMPERATIVE_VERBS = [
   "Analyze",
   "Browse",
@@ -31,9 +29,7 @@ const IMPERATIVE_VERBS = [
   "Wait",
 ];
 
-// Shouted acronyms are names, not emphasis, so they never count against the
-// one-emphasis budget below.
-const ACRONYMS = new Set([
+const ACRONYMS_ARE_NAMES_NOT_EMPHASIS = new Set([
   "AMO",
   "CDP",
   "CI",
@@ -56,8 +52,6 @@ const ACRONYMS = new Set([
   "WYSIWYG",
 ]);
 
-// One emphasis per description, and only on the word that separates a tool
-// from the neighbour it is confused with.
 const EMPHASIS_BUDGET = 1;
 
 const emphasisRuns = (description: string): string[] => {
@@ -66,7 +60,7 @@ const emphasisRuns = (description: string): string[] => {
   let previousEnd = -1;
   for (const match of words) {
     const word = match[0];
-    if (ACRONYMS.has(word)) {
+    if (ACRONYMS_ARE_NAMES_NOT_EMPHASIS.has(word)) {
       previousEnd = -1;
       continue;
     }
@@ -83,7 +77,7 @@ const emphasisRuns = (description: string): string[] => {
   return runs;
 };
 
-describe("every tool description speaks the same imperative voice", () => {
+describe("every tool description is the first thing an agent reads about a tool, so it follows the CLI's own command-help copy rules", () => {
   for (const tool of ALL_TOOLS) {
     const { name, description } = tool.schema;
 
@@ -107,7 +101,7 @@ describe("every tool description speaks the same imperative voice", () => {
       expect(/\bextension\.js\b/.test(description)).toBe(false);
     });
 
-    it(`${name} shouts at most one word`, () => {
+    it(`${name} shouts at most once, only on the word that separates it from the neighbour it is confused with`, () => {
       const runs = emphasisRuns(description);
       expect(
         runs.length,

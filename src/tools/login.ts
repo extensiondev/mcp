@@ -13,6 +13,7 @@ import {
 import {
   fetchLoginConfig,
   resolveApiBase,
+  safeApiBase,
   tokenTtlNote,
 } from "../lib/login-flow";
 import { envelope, type ErrorCode } from "../lib/envelope";
@@ -122,7 +123,16 @@ export async function loginToProject(args: {
     );
   }
 
-  const apiBase = resolveApiBase(args.api);
+  const apiCheck = safeApiBase(resolveApiBase(args.api));
+  if (!apiCheck.ok) {
+    return fail(
+      "LoginConfigError",
+      apiCheck.message,
+      "login-failed",
+      "E_AUTH_FAILED",
+    );
+  }
+  const apiBase = apiCheck.base;
 
   let config;
   try {
@@ -197,12 +207,28 @@ export async function loginToProject(args: {
     budgetMs: FIRST_CALL_BUDGET_MS,
   });
   if (poll.ok) return success(poll.creds);
+  if (poll.reason === "expired") {
+    return fail(
+      "LoginExpired",
+      "The device code expired. Run extension_auth (action: login) again to restart.",
+      "login-expired",
+      "E_AUTH_EXPIRED",
+    );
+  }
   if (poll.reason === "denied") {
     return fail(
       "LoginDenied",
       "Authorization was denied at extension.dev/device.",
       "login-denied",
       "E_AUTH_DENIED",
+    );
+  }
+  if (poll.reason === "error") {
+    return fail(
+      "LoginError",
+      poll.message || "Device login failed.",
+      "login-failed",
+      "E_AUTH_FAILED",
     );
   }
   return pending({

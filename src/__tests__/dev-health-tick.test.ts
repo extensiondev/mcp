@@ -45,8 +45,8 @@ const wait = await import("../tools/wait");
 const { removeSession } = await import("../lib/process-manager");
 const {
   writeModernContract,
-  writeMachineContractError,
-  writeStampedContractError,
+  writeSchema1ContractError,
+  writeShippedEngineContractError,
 } = await import("./fixtures/ready-contract");
 
 const tmpDirs: string[] = [];
@@ -123,7 +123,7 @@ describe("extension_dev health tick", () => {
     nextChild = () => {
       const cli = fakeCli('console.log("building"); setTimeout(()=>{}, 60000);');
       setTimeout(() => {
-        writeMachineContractError(project, "chrome", {
+        writeSchema1ContractError(project, "chrome", {
           code: "first_compile",
           message: "Compile failed",
           errors: ["Module not found: ./src/panel.js"],
@@ -138,7 +138,6 @@ describe("extension_dev health tick", () => {
     expect(result.status).toBe("compile-failed");
     expect(result.error.code).toBe("E_FIRST_COMPILE");
     expect(result.value.compileErrors[0]).toContain("./src/panel.js");
-    // The contract answered, so nothing read the dev server's prose.
     expect(result.warnings).toEqual([]);
     expect(result.hint).toContain("extension_wait");
   }, 20_000);
@@ -148,10 +147,7 @@ describe("extension_dev health tick", () => {
     nextChild = () => {
       const cli = fakeCli('console.log("building"); setTimeout(()=>{}, 60000);');
       setTimeout(() => {
-        // What the shipped engine writes today: schemaVersion 2, no `schema: 1`.
-        // The stamp is still authoritative, so the verdict must not wait for the
-        // capability probe to pass.
-        writeStampedContractError(project, "chrome", {
+        writeShippedEngineContractError(project, "chrome", {
           code: "profile_locked",
           message: "Chromium profile is already in use by process 77 on host h.",
           profileLockOwner: { host: "h", pid: 77 },
@@ -182,7 +178,6 @@ describe("extension_dev health tick", () => {
     expect(result.error.code).toBe("E_FIRST_COMPILE");
     expect(result.value.compileErrors).toEqual([]);
     expect(result.value.output).toContain("compiled with errors");
-    // Degraded fidelity is disclosed rather than silently accepted.
     expect(result.warnings.join(" ")).toContain("machine contract");
   }, 20_000);
 
@@ -191,8 +186,7 @@ describe("extension_dev health tick", () => {
     nextChild = () => {
       const cli = fakeCli('console.log("building"); setTimeout(()=>{}, 60000);');
       setTimeout(() => {
-        // The exact stamp browsers-lib/ready-stamp.ts writes.
-        writeMachineContractError(project, "chrome", {
+        writeSchema1ContractError(project, "chrome", {
           code: "profile_locked",
           message:
             'Chromium profile "/tmp/p/dist/extension-profile-chrome" is already in use by process 4242 on host somehost. Close that browser session or use a different profile before starting Extension.js.',
@@ -208,13 +202,10 @@ describe("extension_dev health tick", () => {
     expect(result.ok).toBe(false);
     expect(result.status).toBe("profile-locked");
     expect(result.error.code).toBe("E_PROFILE_LOCKED");
-    // The engine's own sentence survives; it names the profile path, which
-    // this side cannot reconstruct.
     expect(result.error.message).toContain("already in use by process 4242");
     expect(result.error.message).toContain("extension-profile-chrome");
     expect(result.value.owner).toEqual({ host: "somehost", pid: 4242 });
     expect(result.value.lockedAt).toBe("2026-07-27T09:00:00.000Z");
-    // Nothing was scraped, so no fidelity warning.
     expect(result.warnings).toEqual([]);
   }, 20_000);
 
@@ -229,7 +220,6 @@ describe("extension_dev health tick", () => {
     expect(result.ok).toBe(true);
     expect(result.status).toBe("started");
     expect(result.value.browser).toBe("chrome");
-    // The success frame points at the log instead of echoing a prose tail.
     expect(result.value.logPath).toBeTruthy();
     expect(result.earlyOutput).toBeUndefined();
   }, 15_000);
