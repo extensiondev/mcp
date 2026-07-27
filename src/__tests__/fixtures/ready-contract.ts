@@ -85,6 +85,24 @@ export function writeMachineContractError(
   });
 }
 
+// What the shipped engine writes today: the ready contract's own schemaVersion,
+// with no `schema: 1` machine-contract declaration. Its error stamps are still
+// authoritative, so a verdict must never be gated on the capability probe.
+export function writeStampedContractError(
+  projectPath: string,
+  browser: string,
+  overrides: Record<string, unknown> = {},
+): string {
+  return writeContract(projectPath, browser, {
+    schemaVersion: 2,
+    status: "error",
+    browser,
+    instanceId: "inst-stamped",
+    controlPort: 43210,
+    ...overrides,
+  });
+}
+
 export function writeLegacyEngineState(
   projectPath: string,
   browser: string,

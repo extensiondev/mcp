@@ -43,7 +43,9 @@ returns the compile errors as a list. The output scrape survives only as a
 fallback for a project whose own CLI predates the contract, is confined to one
 `@deprecated` module, and says so in `warnings` whenever it is used. The choice
 is a capability probe, never a version check: a project-local `extension` binary
-wins over this package's pin, so the version is not knowable in advance.
+wins over this package's pin, so the version is not knowable in advance. The
+contract's own error stamps are read whatever the engine's age, so a locked
+profile is named as one the moment the engine records it.
 
 ## 9.0.0
 

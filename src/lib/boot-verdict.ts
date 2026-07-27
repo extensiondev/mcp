@@ -22,6 +22,10 @@ export interface ProfileLockOwner {
   pid?: number;
 }
 
+// The engine's own stamp, from browsers-lib/ready-stamp.ts. Matched as a code,
+// never as a sentence.
+const PROFILE_LOCKED_CODE = "profile_locked";
+
 export type BootVerdict =
   | { kind: "alive" }
   | { kind: "exited"; exitCode: number | null; signal: string | null }
@@ -34,7 +38,12 @@ export type BootVerdict =
         browserExitedAt?: string;
       };
     }
-  | { kind: "profile-locked"; owner: ProfileLockOwner | null };
+  | {
+      kind: "profile-locked";
+      owner: ProfileLockOwner | null;
+      message?: string;
+      lockedAt?: string;
+    };
 
 export interface BootReading {
   verdict: BootVerdict;
@@ -114,8 +123,19 @@ function contractVerdict(
   if (!fresh) return null;
   if (contract.status !== "error") return null;
 
-  if (!noBrowser && contract.code === "profile_locked") {
-    return { kind: "profile-locked", owner: profileLockOwner(contract) };
+  // The engine names the profile path, the holding pid and the host, which is
+  // more than this side can reconstruct. Carry its sentence rather than ours.
+  if (!noBrowser && contract.code === PROFILE_LOCKED_CODE) {
+    return {
+      kind: "profile-locked",
+      owner: profileLockOwner(contract),
+      message:
+        typeof contract.message === "string" ? contract.message : undefined,
+      lockedAt:
+        typeof contract.profileLockedAt === "string"
+          ? contract.profileLockedAt
+          : undefined,
+    };
   }
 
   const browserExited =
