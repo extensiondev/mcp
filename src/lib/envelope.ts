@@ -22,6 +22,7 @@ export type ErrorCode =
   | "E_AUTH_FAILED"
   | "E_AUTH_PENDING"
   | "E_AUTH_REQUIRED"
+  | "E_BAD_HOST_URL"
   | "E_BAD_MANIFEST"
   | "E_BAD_REQUEST"
   | "E_BRIDGE"
@@ -56,8 +57,8 @@ export type ErrorCode =
   | "E_NO_TARGET"
   | "E_NOT_ATTACHED"
   | "E_PARSE"
-  | "E_PREVIEW_HOST_UNREACHABLE"
   | "E_PLATFORM"
+  | "E_PREVIEW_HOST_UNREACHABLE"
   | "E_PROFILE_LOCKED"
   | "E_RDP"
   | "E_SCAFFOLD_FAILED"
@@ -80,6 +81,7 @@ export const ERROR_CODES: ErrorCode[] = [
   "E_AUTH_FAILED",
   "E_AUTH_PENDING",
   "E_AUTH_REQUIRED",
+  "E_BAD_HOST_URL",
   "E_BAD_MANIFEST",
   "E_BAD_REQUEST",
   "E_BRIDGE",
@@ -114,8 +116,8 @@ export const ERROR_CODES: ErrorCode[] = [
   "E_NO_TARGET",
   "E_NOT_ATTACHED",
   "E_PARSE",
-  "E_PREVIEW_HOST_UNREACHABLE",
   "E_PLATFORM",
+  "E_PREVIEW_HOST_UNREACHABLE",
   "E_PROFILE_LOCKED",
   "E_RDP",
   "E_SCAFFOLD_FAILED",
