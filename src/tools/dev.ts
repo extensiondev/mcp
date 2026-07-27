@@ -217,7 +217,7 @@ export async function handler(
   );
 
   if (boot.verdict.kind === "profile-locked") {
-    const { owner } = boot.verdict;
+    const { owner, lockedAt } = boot.verdict;
     return envelope({
       ok: false,
       command: schema.name,
@@ -225,12 +225,21 @@ export async function handler(
       error: {
         code: "E_PROFILE_LOCKED",
         message:
+          boot.verdict.message ??
           `The dev server is running but the ${browser} browser it launched died during startup ` +
-          "because its profile is locked by another browser instance" +
-          (owner?.pid ? ` (pid ${owner.pid}${owner.host ? ` on ${owner.host}` : ""})` : "") +
-          ".",
+            "because its profile is locked by another browser instance" +
+            (owner?.pid
+              ? ` (pid ${owner.pid}${owner.host ? ` on ${owner.host}` : ""})`
+              : "") +
+            ".",
       },
-      value: { ...session, profileDir, owner, output: cleanOutput.slice(0, 2000) },
+      value: {
+        ...session,
+        profileDir,
+        owner,
+        ...(lockedAt ? { lockedAt } : {}),
+        output: cleanOutput.slice(0, 2000),
+      },
       hint:
         "A locked profile means another session's browser still holds it: call extension_stop with this projectPath to kill that session, then start extension_dev again. " +
         `If the lock survives a crash, remove ${profileDir} manually before retrying.`,
