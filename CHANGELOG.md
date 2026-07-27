@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 10.0.0
 
 Every tool now returns the same frame. Before this, 28 tools hand-built 142
 different JSON shapes: `ok` appeared on 71 of them, `error` on 67, `hint` on 60,
