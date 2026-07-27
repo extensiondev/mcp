@@ -41,5 +41,6 @@ export async function handler(args: ActArgs): Promise<string> {
     ["reload", args.projectPath, ...commonFlags({ ...args, browser })],
     args.projectPath,
     args.timeout,
+    schema.name,
   );
 }

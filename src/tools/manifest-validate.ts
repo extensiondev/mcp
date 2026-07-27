@@ -11,6 +11,9 @@ import path from "node:path";
 import { filterKeysForThisBrowser } from "browser-extension-manifest-fields";
 import { isChromiumFamily, isGeckoFamily } from "../lib/browser-family";
 import { listTemplates } from "../lib/templates-cache";
+import { envelope } from "../lib/envelope";
+
+const COMMAND = "extension_manifest_validate";
 
 const CHROME_DESKTOP_ONLY_KEYS = [
   "file_browser_handlers",
@@ -234,16 +237,23 @@ export async function handler(args: {
     args.manifestPath ??
     (args.projectPath ? findManifest(args.projectPath) : null);
   if (!manifestPath) {
-    return JSON.stringify({
-      valid: false,
-      errors: [
-        args.projectPath
-          ? `No manifest.json found under ${args.projectPath} (looked in the root and src/).`
-          : "Pass manifestPath (path to manifest.json) or projectPath (project root).",
-      ],
+    const errors = [
+      args.projectPath
+        ? `No manifest.json found under ${args.projectPath} (looked in the root and src/).`
+        : "Pass manifestPath (path to manifest.json) or projectPath (project root).",
+    ];
+    return envelope({
+      ok: false,
+      command: COMMAND,
+      status: "manifest-not-found",
+      error: { code: "E_MANIFEST_NOT_FOUND", message: errors[0] },
+      value: {
+        valid: false,
+        errors,
+        browserSupport: {},
+        similarTemplates: [],
+      },
       warnings: [],
-      browserSupport: {},
-      similarTemplates: [],
     });
   }
   const manifestDir = path.dirname(path.resolve(manifestPath));
@@ -253,14 +263,21 @@ export async function handler(args: {
     const raw = fs.readFileSync(path.resolve(manifestPath), "utf8");
     manifest = JSON.parse(raw);
   } catch (err) {
-    return JSON.stringify({
-      valid: false,
-      errors: [
-        `Cannot read manifest: ${err instanceof Error ? err.message : err}`,
-      ],
+    const errors = [
+      `Cannot read manifest: ${err instanceof Error ? err.message : err}`,
+    ];
+    return envelope({
+      ok: false,
+      command: COMMAND,
+      status: "manifest-unreadable",
+      error: { code: "E_BAD_MANIFEST", message: errors[0] },
+      value: {
+        valid: false,
+        errors,
+        browserSupport: {},
+        similarTemplates: [],
+      },
       warnings: [],
-      browserSupport: {},
-      similarTemplates: [],
     });
   }
 
@@ -513,8 +530,14 @@ export async function handler(args: {
   }
   result.valid = result.errors.length === 0;
 
-  return JSON.stringify({
-    ...result,
-    buildBlocking: result.errors.length > 0,
+  return envelope({
+    ok: result.valid,
+    command: COMMAND,
+    status: result.valid ? "valid" : "invalid",
+    value: {
+      ...result,
+      buildBlocking: result.errors.length > 0,
+    },
+    warnings: result.warnings,
   });
 }

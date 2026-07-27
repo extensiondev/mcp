@@ -11,6 +11,7 @@ import path from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { isGeckoFamily, WEBKIT_FAMILY } from "../lib/browser-family";
+import { envelope } from "../lib/envelope";
 
 const execFileAsync = promisify(execFile);
 
@@ -305,12 +306,17 @@ export async function detectBrowsers(
   const available = detected.filter((d) => d.source !== "not_found");
   const missing = detected.filter((d) => d.source === "not_found");
 
-  return JSON.stringify({
-    detected,
-    managed,
-    summary: {
-      available: available.map((d) => d.browser),
-      missing: missing.map((d) => d.browser),
+  return envelope({
+    ok: true,
+    command: "extension_browsers",
+    status: "detected",
+    value: {
+      detected,
+      managed,
+      summary: {
+        available: available.map((d) => d.browser),
+        missing: missing.map((d) => d.browser),
+      },
     },
     hint: missing.length
       ? `Missing browser(s): ${missing.map((d) => d.browser).join(", ")}.${

@@ -55,15 +55,18 @@ afterEach(() => {
 describe("extension_stop", () => {
   it("requires projectPath unless all=true", async () => {
     const result = JSON.parse(await stop.handler({}));
-    expect(result.error).toMatch(/projectPath is required/);
+    expect(result.ok).toBe(false);
+    expect(result.status).toBe("bad-request");
+    expect(result.error.code).toBe("E_BAD_REQUEST");
+    expect(result.error.message).toMatch(/projectPath is required/);
   });
 
   it("reports when no session is known", async () => {
     const result = JSON.parse(
       await stop.handler({ projectPath: tmpProject(), browser: "chrome" }),
     );
-    expect(result.stopped).toBe(false);
-    expect(result.pid).toBeNull();
+    expect(result.value.stopped).toBe(false);
+    expect(result.value.pid).toBeNull();
   });
 
   it("kills a registered session and removes it from the registry", async () => {
@@ -75,8 +78,8 @@ describe("extension_stop", () => {
       await stop.handler({ projectPath, browser: "chrome" }),
     );
 
-    expect(result.pid).toBe(pid);
-    expect(result.stopped).toBe(true);
+    expect(result.value.pid).toBe(pid);
+    expect(result.value.stopped).toBe(true);
     expect(isAlive(pid)).toBe(false);
     expect(getSession(projectPath, "chrome")).toBeUndefined();
   });
@@ -95,7 +98,7 @@ describe("extension_stop", () => {
     const result = JSON.parse(
       await stop.handler({ projectPath, browser: "chrome" }),
     );
-    expect(result.stopped).toBe(true);
+    expect(result.value.stopped).toBe(true);
     expect(isAlive(pid)).toBe(false);
   });
 
@@ -114,8 +117,8 @@ describe("extension_stop", () => {
       await stop.handler({ projectPath, browser: "chrome" }),
     );
 
-    expect(result.pid).toBe(pid);
-    expect(result.stopped).toBe(true);
+    expect(result.value.pid).toBe(pid);
+    expect(result.value.stopped).toBe(true);
     expect(isAlive(pid)).toBe(false);
     expect(fs.existsSync(readyPath)).toBe(false);
   });
@@ -139,7 +142,7 @@ describe("extension_stop", () => {
     });
 
     const result = JSON.parse(await stop.handler({ all: true }));
-    const stoppedPids = result.stopped.map((o: { pid: number }) => o.pid);
+    const stoppedPids = result.value.stopped.map((o: { pid: number }) => o.pid);
     expect(stoppedPids).toContain(pidA);
     expect(stoppedPids).toContain(pidB);
     expect(isAlive(pidA)).toBe(false);

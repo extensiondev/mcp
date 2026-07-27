@@ -2,9 +2,13 @@ import { describe, it, expect, afterEach, vi } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { envelope } from "../lib/envelope";
+
+const okFrame = () =>
+  envelope({ ok: true, command: "extension_eval", status: "ok", value: 42 });
 
 const calls: string[][] = [];
-let reply: () => string = () => JSON.stringify({ ok: true, value: 42 });
+let reply: () => string = okFrame;
 vi.mock("../lib/act", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../lib/act")>();
   return {
@@ -33,7 +37,7 @@ function project(manifests: Record<string, Record<string, unknown>>): string {
 
 afterEach(() => {
   calls.length = 0;
-  reply = () => JSON.stringify({ ok: true, value: 42 });
+  reply = okFrame;
   for (const d of dirs.splice(0)) fs.rmSync(d, { recursive: true, force: true });
 });
 
@@ -51,9 +55,10 @@ describe("eval default context", () => {
     expect(idx).toBeGreaterThan(-1);
     expect(calls[0][idx + 1]).toBe("page");
     expect(result.ok).toBe(true);
-    expect(result.defaultedContext).toBe("page");
-    expect(result.contextNote).toContain("CSP");
-    expect(result.contextNote).toContain('context: "background"');
+    expect(result.value.defaultedContext).toBe("page");
+    expect(result.value.result).toBe(42);
+    expect(result.warnings[0]).toContain("CSP");
+    expect(result.warnings[0]).toContain('context: "background"');
   });
 
   it("leaves an explicit background context untouched on Chromium MV3", async () => {
@@ -72,8 +77,8 @@ describe("eval default context", () => {
 
     const idx = calls[0].indexOf("--context");
     expect(calls[0][idx + 1]).toBe("background");
-    expect(result.defaultedContext).toBeUndefined();
-    expect(result.contextNote).toBeUndefined();
+    expect(result.value.defaultedContext).toBeUndefined();
+    expect(result.warnings).toEqual([]);
   });
 
   it("keeps the CLI background default on Firefox", async () => {
@@ -86,7 +91,7 @@ describe("eval default context", () => {
     );
 
     expect(calls[0]).not.toContain("--context");
-    expect(result.defaultedContext).toBeUndefined();
+    expect(result.value.defaultedContext).toBeUndefined();
   });
 
   it("keeps the background default on a Chromium MV2 build", async () => {
@@ -123,9 +128,12 @@ describe("eval default context", () => {
       "dist/chrome": { manifest_version: 3, name: "F", background: { service_worker: "background.js" } },
     });
     reply = () =>
-      JSON.stringify({
+      envelope({
         ok: false,
+        command: "extension_eval",
+        status: "failed",
         error: {
+          code: "E_EVAL",
           name: "EvalError",
           message: "Cannot access a chrome-extension:// URL of different extension",
         },
@@ -136,7 +144,7 @@ describe("eval default context", () => {
     );
 
     expect(result.ok).toBe(false);
-    expect(result.defaultedContext).toBe("page");
+    expect(result.value.defaultedContext).toBe("page");
     expect(result.hint).toContain("Navigate the dev browser");
     expect(result.hint).toContain("listTabs: true");
   });

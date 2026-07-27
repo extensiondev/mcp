@@ -36,12 +36,16 @@ describe("extension_wait budget disclosure", () => {
       await handler({ projectPath: dir, browser: "chrome", timeoutMs: 1200 }),
     );
 
+    expect(result.schema).toBe(1);
+    expect(result.command).toBe("extension_wait");
+    expect(result.ok).toBe(false);
     expect(result.status).toBe("timeout");
-    expect(result.budgetMs).toBe(1200);
-    expect(result.elapsedMs).toBeGreaterThanOrEqual(1200);
-    expect(result.compiled).toBe(false);
-    expect(result.browserAttached).toBe(false);
-    expect(result.message).toContain("no ready contract");
+    expect(result.error.code).toBe("E_WAIT_TIMEOUT");
+    expect(result.value.budgetMs).toBe(1200);
+    expect(result.value.elapsedMs).toBeGreaterThanOrEqual(1200);
+    expect(result.value.compiled).toBe(false);
+    expect(result.value.browserAttached).toBe(false);
+    expect(result.error.message).toContain("no ready contract");
     expect(result.hint).toContain("call extension_wait again");
   }, 10_000);
 
@@ -49,7 +53,7 @@ describe("extension_wait budget disclosure", () => {
     const aliased = JSON.parse(
       await handler({ projectPath: dir, browser: "chrome", timeout: 1100 }),
     );
-    expect(aliased.budgetMs).toBe(1100);
+    expect(aliased.value.budgetMs).toBe(1100);
 
     const both = JSON.parse(
       await handler({
@@ -59,7 +63,7 @@ describe("extension_wait budget disclosure", () => {
         timeout: 9999,
       }),
     );
-    expect(both.budgetMs).toBe(1300);
+    expect(both.value.budgetMs).toBe(1300);
   }, 10_000);
 
   it("says the compile has not landed when only a starting stamp was seen", async () => {
@@ -73,14 +77,15 @@ describe("extension_wait budget disclosure", () => {
     );
 
     expect(result.status).toBe("timeout");
-    expect(result.compiled).toBe(false);
-    expect(result.message).toContain("starting");
+    expect(result.value.compiled).toBe(false);
+    expect(result.error.message).toContain("starting");
   }, 10_000);
 });
 
 describe("extension_wait splits compiled from browserAttached", () => {
   it("reports both facts true on a compiled and attached session", async () => {
     writeModernContract(dir, "chrome", {
+      command: "dev",
       port: 8083,
       pid: process.pid,
       runtime: "attached",
@@ -91,12 +96,16 @@ describe("extension_wait splits compiled from browserAttached", () => {
       await handler({ projectPath: dir, browser: "chrome" }),
     );
 
+    expect(result.ok).toBe(true);
     expect(result.status).toBe("ready");
-    expect(result.compiled).toBe(true);
-    expect(result.browserAttached).toBe(true);
-    expect(result.port).toBe(8083);
-    expect(result.budgetMs).toBe(45000);
-    expect(typeof result.elapsedMs).toBe("number");
+    expect(result.value.compiled).toBe(true);
+    expect(result.value.browserAttached).toBe(true);
+    expect(result.value.port).toBe(8083);
+    expect(result.value.budgetMs).toBe(45000);
+    expect(typeof result.value.elapsedMs).toBe("number");
+    // The ready contract's own `command` is renamed: the envelope owns that key.
+    expect(result.command).toBe("extension_wait");
+    expect(result.value.sessionCommand).toBe("dev");
   });
 
   it("keeps the half-ready state separate when the budget runs out unattached", async () => {
@@ -106,11 +115,13 @@ describe("extension_wait splits compiled from browserAttached", () => {
       await handler({ projectPath: dir, browser: "chrome", timeoutMs: 1500 }),
     );
 
+    expect(result.ok).toBe(false);
     expect(result.status).toBe("compiled-not-attached");
-    expect(result.compiled).toBe(true);
-    expect(result.browserAttached).toBe(false);
-    expect(result.budgetMs).toBe(1500);
-    expect(result.elapsedMs).toBeGreaterThanOrEqual(1500);
+    expect(result.error.code).toBe("E_NOT_ATTACHED");
+    expect(result.value.compiled).toBe(true);
+    expect(result.value.browserAttached).toBe(false);
+    expect(result.value.budgetMs).toBe(1500);
+    expect(result.value.elapsedMs).toBeGreaterThanOrEqual(1500);
   }, 10_000);
 });
 
@@ -131,10 +142,10 @@ describe("extension_wait in build-only sessions", () => {
     );
 
     expect(result.status).toBe("ready");
-    expect(result.buildOnly).toBe(true);
-    expect(result.compiled).toBe(true);
-    expect(result.browserAttached).toBe(false);
-    expect(result.message).toContain("no browser was launched");
+    expect(result.value.buildOnly).toBe(true);
+    expect(result.value.compiled).toBe(true);
+    expect(result.value.browserAttached).toBe(false);
+    expect(result.hint).toContain("no browser was launched");
     expect(Date.now() - before).toBeLessThan(5_000);
   });
 
@@ -154,7 +165,7 @@ describe("extension_wait in build-only sessions", () => {
     );
 
     expect(result.status).toBe("ready");
-    expect(result.buildOnly).toBe(true);
-    expect(result.browserAttached).toBe(false);
+    expect(result.value.buildOnly).toBe(true);
+    expect(result.value.browserAttached).toBe(false);
   });
 });

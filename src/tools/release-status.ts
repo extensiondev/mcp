@@ -7,6 +7,7 @@
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
 import { API_BASE } from "../lib/common-schema";
+import { envelope, envelopeObject } from "../lib/envelope";
 import { readReleases } from "./release-list";
 import { readStores } from "./store-status";
 
@@ -37,11 +38,18 @@ export const schema = {
   },
 };
 
+// A section that could not be parsed still speaks schema 1, because the section
+// frames nested under `value` carry the same shape as the outer envelope.
 function parse(raw: string): Record<string, unknown> {
   try {
     return JSON.parse(raw) as Record<string, unknown>;
   } catch {
-    return { ok: false, error: { name: "ParseError", message: raw } };
+    return envelopeObject({
+      ok: false,
+      command: "extension_release_status",
+      status: "unavailable",
+      error: { code: "E_PARSE", name: "ParseError", message: raw },
+    }) as unknown as Record<string, unknown>;
   }
 }
 
@@ -71,9 +79,15 @@ export async function handler(args: {
     unknown
   >[];
 
-  return JSON.stringify({
-    ok: sections.some((section) => section.ok === true),
-    ...(releases ? { releases } : {}),
-    ...(stores ? { stores } : {}),
+  const ok = sections.some((section) => section.ok === true);
+
+  return envelope({
+    ok,
+    command: "extension_release_status",
+    status: ok ? "read" : "unavailable",
+    value: {
+      ...(releases ? { releases } : {}),
+      ...(stores ? { stores } : {}),
+    },
   });
 }

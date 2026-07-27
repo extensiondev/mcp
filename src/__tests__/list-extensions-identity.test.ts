@@ -106,8 +106,8 @@ describe("list-extensions own-extension identity", () => {
       await listExtensions.handler({ projectPath: p.dir }),
     );
 
-    expect(result.ownExtensionId).toBe(p.id);
-    const own = result.extensions.find(
+    expect(result.value.ownExtensionId).toBe(p.id);
+    const own = result.value.extensions.find(
       (e: Record<string, unknown>) => e.id === p.id,
     );
     expect(own).toMatchObject({
@@ -128,8 +128,8 @@ describe("list-extensions own-extension identity", () => {
       await listExtensions.handler({ projectPath: p.dir }),
     );
 
-    expect(result.extensions[0].id).toBe(p.id);
-    expect(result.extensions[0].ownExtension).toBe(true);
+    expect(result.value.extensions[0].id).toBe(p.id);
+    expect(result.value.extensions[0].ownExtension).toBe(true);
   });
 
   it("keeps the Extensions-domain identity when the browser provides one", async () => {
@@ -141,7 +141,7 @@ describe("list-extensions own-extension identity", () => {
       await listExtensions.handler({ projectPath: p.dir }),
     );
 
-    expect(result.extensions[0]).toMatchObject({
+    expect(result.value.extensions[0]).toMatchObject({
       ownExtension: true,
       name: "Browser Name",
       version: "3.0.0",
@@ -160,7 +160,7 @@ describe("list-extensions own-extension identity", () => {
       await listExtensions.handler({ projectPath: p.dir }),
     );
 
-    expect(result.extensions[0]).toMatchObject({
+    expect(result.value.extensions[0]).toMatchObject({
       ownExtension: true,
       name: "Dist Manifest Ext",
       version: "0.9.0",
@@ -179,7 +179,7 @@ describe("list-extensions own-extension identity", () => {
       await listExtensions.handler({ projectPath: p.dir }),
     );
 
-    const own = result.extensions[0];
+    const own = result.value.extensions[0];
     expect(own.ownExtension).toBe(true);
     expect(own.name).toBeUndefined();
     expect(own.note).toContain("unresolved");
@@ -199,8 +199,8 @@ describe("list-extensions own-extension identity", () => {
       await listExtensions.handler({ projectPath: p.dir }),
     );
 
-    expect(result.ownExtensionId).toBe(liveId);
-    const own = result.extensions.find(
+    expect(result.value.ownExtensionId).toBe(liveId);
+    const own = result.value.extensions.find(
       (e: Record<string, unknown>) => e.id === liveId,
     );
     expect(own.ownExtension).toBe(true);
@@ -214,7 +214,7 @@ describe("list-extensions own-extension identity", () => {
       await listExtensions.handler({ projectPath: p.dir }),
     );
 
-    const other = result.extensions.find(
+    const other = result.value.extensions.find(
       (e: Record<string, unknown>) => e.id === MANAGER_ID,
     );
     expect(other.ownExtension).toBeUndefined();
@@ -232,9 +232,9 @@ describe("list-extensions own-extension identity", () => {
       await listExtensions.handler({ projectPath: dir, browser: "chrome" }),
     );
 
-    expect(result.ownExtensionId).toBeNull();
+    expect(result.value.ownExtensionId).toBeNull();
     expect(
-      result.extensions.every(
+      result.value.extensions.every(
         (e: Record<string, unknown>) => e.ownExtension === undefined,
       ),
     ).toBe(true);

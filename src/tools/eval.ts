@@ -13,7 +13,14 @@ import {
 } from "../lib/common-schema";
 import fs from "node:fs";
 import path from "node:path";
-import { runActVerb, commonFlags, type ActArgs } from "../lib/act";
+import {
+  runActVerb,
+  commonFlags,
+  actFrameJson,
+  addWarning,
+  patchValue,
+  type ActArgs,
+} from "../lib/act";
 import { resolveSessionBrowser } from "../lib/session-browser";
 import { isChromiumFamily } from "../lib/browser-family";
 
@@ -81,15 +88,18 @@ export async function handler(
     ["eval", args.expression, args.projectPath, ...commonFlags({ ...args, context, browser })],
     args.projectPath,
     args.timeout,
+    schema.name,
   );
 
   if (args.context === "content") {
     try {
       const parsed = JSON.parse(raw);
       if (parsed?.ok === true && (parsed.value === null || parsed.value === undefined)) {
-        parsed.note =
-          "On Extension.js >= 4.0.14 a failed injection errors explicitly, so this null is the expression's real result. On OLDER engines (bug 61) it could mean the injection never ran; if this result looks wrong, check the engine version with extension_doctor, or verify with extension_logs or context:'page'.";
-        return JSON.stringify(parsed);
+        addWarning(
+          parsed,
+          "On Extension.js >= 4.0.14 a failed injection errors explicitly, so this null is the expression's real result. On OLDER engines (bug 61) it could mean the injection never ran; if this result looks wrong, check the engine version with extension_doctor, or verify with extension_logs or context:'page'.",
+        );
+        return actFrameJson(parsed);
       }
     } catch {
       // non-JSON payload; pass through untouched
@@ -99,19 +109,25 @@ export async function handler(
     try {
       const parsed = JSON.parse(raw);
       if (parsed && typeof parsed === "object") {
-        parsed.defaultedContext = "page";
-        parsed.contextNote =
-          'No context given: defaulted to "page" (the active tab) because this Chromium session\'s MV3 background is a service worker whose CSP blocks eval. Pass context: "background" explicitly to target the worker (works on Firefox/MV2 builds).';
-        if (
-          parsed.ok === false &&
+        patchValue(parsed, { defaultedContext: "page" });
+        addWarning(
+          parsed,
+          'No context given: defaulted to "page" (the active tab) because this Chromium session\'s MV3 background is a service worker whose CSP blocks eval. Pass context: "background" explicitly to target the worker (works on Firefox/MV2 builds).',
+        );
+        const code =
+          typeof parsed.error?.code === "string" ? parsed.error.code : "";
+        const unreachable =
+          code === "E_TARGET_NOT_FOUND" ||
+          // Fallback until the CLI stamps a code on every eval failure: the
+          // engine's prose is the only signal that the tab is unreachable.
           /cannot access|chrome-extension:\/\/|chrome:\/\//i.test(
             JSON.stringify(parsed.error ?? ""),
-          )
-        ) {
+          );
+        if (parsed.ok === false && unreachable) {
           parsed.hint =
             "The active tab is a browser or extension page that eval cannot reach. Navigate the dev browser to a regular web page, or pass url (match pattern) or tab to pick one; extension_dom_snapshot with listTabs: true lists open tabs.";
         }
-        return JSON.stringify(parsed);
+        return actFrameJson(parsed);
       }
     } catch {
       // non-JSON payload; pass through untouched

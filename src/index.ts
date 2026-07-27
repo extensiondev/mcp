@@ -54,6 +54,7 @@ import {
   normalizeArgAliases,
   validateToolInput,
 } from "./lib/validate-input";
+import { envelope } from "./lib/envelope";
 
 export interface ToolModule {
   schema: {
@@ -133,9 +134,15 @@ export async function startServer(): Promise<void> {
         content: [
           {
             type: "text" as const,
-            text: JSON.stringify({
-              error: `Unknown tool: ${name}`,
-              availableTools: tools.map((t) => t.schema.name),
+            text: envelope({
+              ok: false,
+              command: name,
+              status: "unknown-tool",
+              error: {
+                code: "E_UNKNOWN_TOOL",
+                message: `Unknown tool: ${name}`,
+              },
+              value: { availableTools: tools.map((t) => t.schema.name) },
             }),
           },
         ],
@@ -175,9 +182,15 @@ export async function startServer(): Promise<void> {
         content: [
           {
             type: "text" as const,
-            text: JSON.stringify({
-              error: err instanceof Error ? err.message : String(err),
-              tool: name,
+            text: envelope({
+              ok: false,
+              command: name,
+              status: "internal-error",
+              error: {
+                code: "E_INTERNAL",
+                name: err instanceof Error ? err.name : "Error",
+                message: err instanceof Error ? err.message : String(err),
+              },
             }),
           },
         ],

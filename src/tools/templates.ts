@@ -8,6 +8,7 @@
 
 import { searchTemplates } from "./list-templates";
 import { readTemplateSource } from "./get-template-source";
+import { envelope } from "../lib/envelope";
 
 export const schema = {
   name: "extension_templates",
@@ -74,9 +75,14 @@ export async function handler(args: {
 }): Promise<string> {
   if ((args.action ?? "list") === "source" || (!args.action && args.slug)) {
     if (!args.slug) {
-      return JSON.stringify({
+      return envelope({
         ok: false,
-        error: "action 'source' needs a slug.",
+        command: "extension_templates",
+        status: "bad-request",
+        error: {
+          code: "E_BAD_REQUEST",
+          message: "action 'source' needs a slug.",
+        },
         hint: 'Call extension_templates with action: "list" to find one.',
       });
     }

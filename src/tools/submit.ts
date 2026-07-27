@@ -7,6 +7,7 @@
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
 import { API_BASE } from "../lib/common-schema";
+import { envelope, type ErrorCode } from "../lib/envelope";
 import fs from "node:fs";
 import path from "node:path";
 import { resolveToken } from "../lib/publish";
@@ -107,8 +108,18 @@ export const schema = {
   },
 };
 
-function fail(name: string, message: string): string {
-  return JSON.stringify({ ok: false, error: { name, message } });
+function fail(
+  name: string,
+  message: string,
+  status: string,
+  code: ErrorCode,
+): string {
+  return envelope({
+    ok: false,
+    command: "extension_submit",
+    status,
+    error: { code, name, message },
+  });
 }
 
 export async function handler(args: SubmitToolArgs): Promise<string> {
@@ -117,6 +128,8 @@ export async function handler(args: SubmitToolArgs): Promise<string> {
     return fail(
       "SubmitAuthError",
       "No token. Run extension_auth (action: login), or set EXTENSION_DEV_TOKEN (create one in the extension.dev dashboard under project settings -> Access tokens; tokens live at most 7 days, so CI must re-mint before expiry).",
+      "auth-required",
+      "E_AUTH_REQUIRED",
     );
   }
 
@@ -127,6 +140,8 @@ export async function handler(args: SubmitToolArgs): Promise<string> {
     return fail(
       "SubmitInputError",
       'browsers is required (e.g. ["chrome","firefox","edge","safari"]).',
+      "bad-request",
+      "E_BAD_REQUEST",
     );
   }
   const buildSha = String(args.buildSha || "").trim();
@@ -134,12 +149,19 @@ export async function handler(args: SubmitToolArgs): Promise<string> {
     return fail(
       "SubmitInputError",
       "buildSha is required (the built commit to submit).",
+      "bad-request",
+      "E_BAD_REQUEST",
     );
   }
 
   const apiCheck = safeApiBase(resolveApiBase(args.api));
   if (!apiCheck.ok) {
-    return fail("SubmitConfigError", apiCheck.message);
+    return fail(
+      "SubmitConfigError",
+      apiCheck.message,
+      "bad-config",
+      "E_CONFIG",
+    );
   }
   const url = `${apiCheck.base}/api/cli/stores/submit`;
 
@@ -163,6 +185,8 @@ export async function handler(args: SubmitToolArgs): Promise<string> {
     return fail(
       "SubmitNetworkError",
       `Could not reach ${url}: ${err?.message || err}`,
+      "network-failed",
+      "E_NETWORK",
     );
   }
 
@@ -178,15 +202,27 @@ export async function handler(args: SubmitToolArgs): Promise<string> {
     return fail(
       "SubmitError",
       `${dryRun ? "preflight" : "submit"} failed (${res.status}): ${data?.message || text || "unknown error"}`,
+      "submit-failed",
+      "E_PLATFORM",
     );
   }
 
-  const warnings: unknown[] = Array.isArray(data?.warnings)
+  const warnings: (string | null | undefined | false)[] = Array.isArray(
+    data?.warnings,
+  )
     ? [...data.warnings]
     : [];
   warnings.push(...storeMdWarnings(browsers, process.cwd()));
 
   const result: Record<string, unknown> = { mode: "platform", dryRun, ...data };
+  // The envelope carries these itself, so they never ride along inside `value`.
+  delete result.ok;
+  delete result.warnings;
+  delete result.message;
+  let ok = data?.ok !== false;
+  let message = typeof data?.message === "string" ? data.message : "";
+  let channelNote: string | null = null;
+  let statusNote: string | null = null;
 
   if (dryRun) {
     const ref = resolveProjectRef();
@@ -299,23 +335,29 @@ export async function handler(args: SubmitToolArgs): Promise<string> {
     }
     summaryParts.push(storeModeNote);
 
-    result.ok = actionable.length > 0;
+    ok = actionable.length > 0;
     result.preflight = preflight;
     result.channel = resolvedChannel;
     result.channelDefaulted = channelDefaulted;
     if (channelDefaulted) {
-      result.channelNote = `channel: ${resolvedChannel} (default)`;
+      channelNote = `channel: ${resolvedChannel} (default)`;
     }
     result.consoleStoresUrl = consoleStoresUrl;
     if (typeof data?.message === "string") result.platformMessage = data.message;
-    result.message = summaryParts.join(" ");
+    message = summaryParts.join(" ");
   }
 
   if (!dryRun) {
-    result.statusNote =
+    statusNote =
       "Track this submission with extension_release_status: it reads the recorded outcome, per-store credential health, and review state from the public registry.";
   }
 
-  if (warnings.length > 0) result.warnings = warnings;
-  return JSON.stringify(result);
+  return envelope({
+    ok,
+    command: "extension_submit",
+    status: dryRun ? "preflight" : "submitted",
+    value: result,
+    hint: message,
+    warnings: [...warnings, channelNote, statusNote],
+  });
 }

@@ -62,20 +62,23 @@ describe("extension_browsers dispatch", () => {
   it("refuses install without a browser and names the valid ones", async () => {
     const out = JSON.parse(await browsers.handler({ action: "install" }));
     expect(out.ok).toBe(false);
-    expect(out.message).toContain("chrome");
-    expect(out.message).toContain("firefox");
+    expect(out.status).toBe("bad-request");
+    expect(out.error.code).toBe("E_BAD_REQUEST");
+    expect(out.error.message).toContain("chrome");
+    expect(out.error.message).toContain("firefox");
   });
 
   it("refuses uninstall with neither a browser nor all", async () => {
     const out = JSON.parse(await browsers.handler({ action: "uninstall" }));
-    expect(out.status).toBe("error");
+    expect(out.ok).toBe(false);
+    expect(out.status).toBe("bad-request");
   });
 
   it("defaults to the detect scan", async () => {
     const out = JSON.parse(await browsers.handler({ browsers: ["chrome"] }));
-    expect(Array.isArray(out.detected)).toBe(true);
-    expect(out.detected).toHaveLength(1);
-    expect(out.detected[0].browser).toBe("chrome");
+    expect(Array.isArray(out.value.detected)).toBe(true);
+    expect(out.value.detected).toHaveLength(1);
+    expect(out.value.detected[0].browser).toBe("chrome");
   });
 });
 
@@ -118,8 +121,8 @@ describe("extension_release_status sections", () => {
           project: "widget",
         }),
       );
-      expect(out.stores).toBeDefined();
-      expect(out.releases).toBeUndefined();
+      expect(out.value.stores).toBeDefined();
+      expect(out.value.releases).toBeUndefined();
     } finally {
       global.fetch = prevFetch;
     }

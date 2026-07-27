@@ -67,6 +67,24 @@ export function writeErrorContract(
   });
 }
 
+// A CLI that carries the machine contract stamps `schema: 1`, which is what the
+// MCP probes for before it trusts the contract over the dev server's output.
+export function writeMachineContractError(
+  projectPath: string,
+  browser: string,
+  overrides: Record<string, unknown> = {},
+): string {
+  return writeContract(projectPath, browser, {
+    schema: 1,
+    schemaVersion: 2,
+    status: "error",
+    browser,
+    instanceId: "inst-machine",
+    controlPort: 43210,
+    ...overrides,
+  });
+}
+
 export function writeLegacyEngineState(
   projectPath: string,
   browser: string,

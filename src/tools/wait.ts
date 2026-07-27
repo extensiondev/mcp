@@ -12,6 +12,7 @@ import path from "node:path";
 import type { ReadyContract } from "../lib/types";
 import { findSessionInfo } from "../lib/process-manager";
 import { resolveSessionBrowser } from "../lib/session-browser";
+import { envelope } from "../lib/envelope";
 import { verifyGuestLoaded } from "../lib/guest-load-oracle";
 import { recentErrorLogs } from "./doctor";
 
@@ -93,36 +94,48 @@ export async function handler(args: {
 
       if (contract.status === "ready") {
         if (typeof contract.pid === "number" && !isAlive(contract.pid)) {
-          return JSON.stringify({
+          return envelope({
+            ok: false,
+            command: schema.name,
             status: "stale",
-            message: `ready.json reports ready but its dev-server pid ${contract.pid} is dead, the session exited. Restart with extension_dev; extension_doctor will confirm.`,
-            browser: contract.browser,
-            pid: contract.pid,
-            budgetMs,
-            elapsedMs: Date.now() - start,
+            error: {
+              code: "E_STALE_CONTRACT",
+              message: `ready.json reports ready but its dev-server pid ${contract.pid} is dead, the session exited. Restart with extension_dev; extension_doctor will confirm.`,
+            },
+            value: {
+              browser: contract.browser,
+              pid: contract.pid,
+              budgetMs,
+              elapsedMs: Date.now() - start,
+            },
           });
         }
         const attached =
           contract.runtime === "attached" ||
           typeof contract.executorAttachedAt === "string";
         if (!attached && buildOnly) {
-          return JSON.stringify({
+          return envelope({
+            ok: true,
+            command: schema.name,
             status: "ready",
-            buildOnly: true,
-            compiled: true,
-            browserAttached: false,
-            message:
-              "Build-only session (noBrowser): the extension compiled and the dev server is live, but no browser was launched, so browserAttached will never become true. Do not call extension_wait again to wait for a browser. The control verbs (storage/reload/open/dom_snapshot/eval) need a live browser and will not work against this session.",
-            command: contract.command,
-            browser: contract.browser,
-            port: contract.port,
-            pid: contract.pid,
-            distPath: contract.distPath,
-            manifestPath: contract.manifestPath,
-            compiledAt: contract.compiledAt,
-            startedAt: contract.startedAt,
-            budgetMs,
-            elapsedMs: Date.now() - start,
+            value: {
+              buildOnly: true,
+              compiled: true,
+              browserAttached: false,
+              // The ready contract calls this `command` too; the envelope owns
+              // that key, so the session's own verb is renamed here.
+              sessionCommand: contract.command,
+              browser: contract.browser,
+              port: contract.port,
+              pid: contract.pid,
+              distPath: contract.distPath,
+              manifestPath: contract.manifestPath,
+              compiledAt: contract.compiledAt,
+              startedAt: contract.startedAt,
+              budgetMs,
+              elapsedMs: Date.now() - start,
+            },
+            hint: "Build-only session (noBrowser): the extension compiled and the dev server is live, but no browser was launched, so browserAttached will never become true. Do not call extension_wait again to wait for a browser. The control verbs (storage/reload/open/dom_snapshot/eval) need a live browser and will not work against this session.",
           });
         }
         if (!attached) {
@@ -143,38 +156,53 @@ export async function handler(args: {
             "The engine reports the runtime attached, but the browser's own target list shows no chrome-extension:// target for your extension, only the engine companion. This is the signature of a silently rejected --load-extension (extension.js BUGS_TO_FIX §83): the CLI and ready.json cannot see it, and the control verbs will fail against a guest that is not there. Check the manifest and extension_logs.",
           );
         }
-        return JSON.stringify({
+        return envelope({
+          ok: true,
+          command: schema.name,
           status: "ready",
-          compiled: true,
-          browserAttached: true,
-          guestLoaded: guestCheck.checked ? guestCheck.loaded : null,
-          ...(guestCheck.checked
-            ? { guestIds: guestCheck.guestIds }
-            : { guestLoadNote: guestCheck.reason }),
-          command: contract.command,
-          browser: contract.browser,
-          port: contract.port,
-          pid: contract.pid,
-          distPath: contract.distPath,
-          manifestPath: contract.manifestPath,
-          compiledAt: contract.compiledAt,
-          startedAt: contract.startedAt,
-          budgetMs,
-          elapsedMs: Date.now() - start,
-          ...(runtimeErrors.length ? { runtimeErrors } : {}),
-          ...(warnings.length ? { warning: warnings.join(" ") } : {}),
+          value: {
+            compiled: true,
+            browserAttached: true,
+            guestLoaded: guestCheck.checked ? guestCheck.loaded : null,
+            ...(guestCheck.checked
+              ? { guestIds: guestCheck.guestIds }
+              : { guestLoadNote: guestCheck.reason }),
+            sessionCommand: contract.command,
+            browser: contract.browser,
+            port: contract.port,
+            pid: contract.pid,
+            distPath: contract.distPath,
+            manifestPath: contract.manifestPath,
+            compiledAt: contract.compiledAt,
+            startedAt: contract.startedAt,
+            budgetMs,
+            elapsedMs: Date.now() - start,
+            ...(runtimeErrors.length ? { runtimeErrors } : {}),
+          },
+          warnings,
         });
       }
 
       if (contract.status === "error") {
-        return JSON.stringify({
-          status: "error",
-          message: contract.message,
-          errors: contract.errors,
-          code: contract.code,
-          browser: contract.browser,
-          budgetMs,
-          elapsedMs: Date.now() - start,
+        return envelope({
+          ok: false,
+          command: schema.name,
+          status: "contract-error",
+          error: {
+            code: contract.code
+              ? `E_${String(contract.code).toUpperCase()}`
+              : "E_CONTRACT_ERROR",
+            message:
+              contract.message ??
+              "The dev server stamped its ready contract with an error.",
+            contractCode: contract.code,
+          },
+          value: {
+            errors: contract.errors,
+            browser: contract.browser,
+            budgetMs,
+            elapsedMs: Date.now() - start,
+          },
         });
       }
     } catch {
@@ -184,32 +212,48 @@ export async function handler(args: {
   }
 
   if (sawCompiledButUnattached) {
-    return JSON.stringify({
+    return envelope({
+      ok: false,
+      command: schema.name,
       status: "compiled-not-attached",
-      compiled: true,
-      browserAttached: false,
-      message: `The extension compiled, but the runtime executor never attached within this call's ${budgetMs}ms budget. The build is fine; the browser side is not connected, so extension_eval/storage/reload/open will fail with "no executor connected".`,
-      readyPath,
-      budgetMs,
-      elapsedMs: Date.now() - start,
+      error: {
+        code: "E_NOT_ATTACHED",
+        message: `The extension compiled, but the runtime executor never attached within this call's ${budgetMs}ms budget. The build is fine; the browser side is not connected, so extension_eval/storage/reload/open will fail with "no executor connected".`,
+      },
+      value: {
+        compiled: true,
+        browserAttached: false,
+        readyPath,
+        budgetMs,
+        elapsedMs: Date.now() - start,
+      },
       hint: "This is usually transient: call extension_wait again. If it persists, stop and restart the session with extension_dev (a restart reliably reattaches); extension_doctor reports the executor leg.",
     });
   }
 
-  return JSON.stringify({
+  return envelope({
+    ok: false,
+    command: schema.name,
     status: "timeout",
-    compiled: false,
-    browserAttached: false,
-    message:
-      lastContractStatus === "starting"
-        ? `Not ready after ${budgetMs}ms this call: the dev server stamped its contract (status: starting) but the first compile has not landed yet.`
-        : `Not ready after ${budgetMs}ms this call: no ready contract was observed at ${readyPath}, so neither the compile nor a browser attach has been seen.`,
-    readyPath,
-    budgetMs,
-    elapsedMs: Date.now() - start,
-    clamped: clamped
-      ? `requested ${requested}ms was clamped to ${SAFE_CEILING_MS}ms to stay under the MCP client request timeout`
-      : undefined,
+    error: {
+      code: "E_WAIT_TIMEOUT",
+      message:
+        lastContractStatus === "starting"
+          ? `Not ready after ${budgetMs}ms this call: the dev server stamped its contract (status: starting) but the first compile has not landed yet.`
+          : `Not ready after ${budgetMs}ms this call: no ready contract was observed at ${readyPath}, so neither the compile nor a browser attach has been seen.`,
+    },
+    value: {
+      compiled: false,
+      browserAttached: false,
+      readyPath,
+      budgetMs,
+      elapsedMs: Date.now() - start,
+    },
+    warnings: [
+      clamped
+        ? `requested ${requested}ms was clamped to ${SAFE_CEILING_MS}ms to stay under the MCP client request timeout`
+        : null,
+    ],
     hint: "Still building, call extension_wait again to keep waiting (it resumes polling the same contract). If it never readies, check the dev process with extension_doctor.",
   });
 }

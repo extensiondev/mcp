@@ -7,6 +7,7 @@
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
 import { extensionUninstall } from "extension-install";
+import { envelope } from "../lib/envelope";
 
 export async function uninstallManagedBrowser(args: {
   browser?: string;
@@ -15,27 +16,43 @@ export async function uninstallManagedBrowser(args: {
   const start = Date.now();
 
   if (!args.browser && !args.all) {
-    return JSON.stringify({
-      status: "error",
-      message: "Provide a browser to remove, or set all: true.",
+    return envelope({
+      ok: false,
+      command: "extension_browsers",
+      status: "bad-request",
+      error: {
+        code: "E_BAD_REQUEST",
+        message: "Provide a browser to remove, or set all: true.",
+      },
     });
   }
 
   try {
     await extensionUninstall({ browser: args.browser, all: args.all });
 
-    return JSON.stringify({
+    return envelope({
+      ok: true,
+      command: "extension_browsers",
       status: "uninstalled",
-      target: args.all ? "all" : args.browser,
-      duration: Date.now() - start,
+      value: {
+        target: args.all ? "all" : args.browser,
+        duration: Date.now() - start,
+      },
       hint: 'Use extension_browsers with action: "list" to confirm what remains in the managed cache.',
     });
   } catch (err) {
-    return JSON.stringify({
-      status: "error",
-      target: args.all ? "all" : args.browser,
-      message: err instanceof Error ? err.message : String(err),
-      duration: Date.now() - start,
+    return envelope({
+      ok: false,
+      command: "extension_browsers",
+      status: "uninstall-failed",
+      value: {
+        target: args.all ? "all" : args.browser,
+        duration: Date.now() - start,
+      },
+      error: {
+        code: "E_BROWSER_UNINSTALL",
+        message: err instanceof Error ? err.message : String(err),
+      },
     });
   }
 }

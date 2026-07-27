@@ -12,10 +12,11 @@ import {
 } from "../lib/common-schema";
 import path from "node:path";
 import { materializeCarrier } from "../lib/carrier";
+import { pollBootVerdict } from "../lib/boot-verdict";
+import { envelope } from "../lib/envelope";
 import { spawnExtensionCli } from "../lib/exec";
 import { registerSession, removeSession } from "../lib/process-manager";
 import {
-  browserExitStamp,
   contractBoundPort,
   liveProjectSessions,
 } from "../lib/session-browser";
@@ -101,14 +102,20 @@ export async function handler(
       const listed = existing
         .map((s) => `pid ${s.pid} (${s.browser})`)
         .join(", ");
-      return JSON.stringify({
+      return envelope({
         ok: false,
+        command: schema.name,
         status: "session-exists",
-        projectPath: args.projectPath,
-        sessions: existing.map((s) => ({ pid: s.pid, browser: s.browser })),
-        error:
-          `A dev session is already running for this project (${listed}). ` +
-          "Starting another would fork the session: both browsers contend for the same profile and the new one dies on the profile lock.",
+        error: {
+          code: "E_SESSION_EXISTS",
+          message:
+            `A dev session is already running for this project (${listed}). ` +
+            "Starting another would fork the session: both browsers contend for the same profile and the new one dies on the profile lock.",
+        },
+        value: {
+          projectPath: args.projectPath,
+          sessions: existing.map((s) => ({ pid: s.pid, browser: s.browser })),
+        },
         hint: "Call extension_stop with this projectPath first, or pass replace: true to have extension_dev stop the old session before starting the new one.",
       });
     }
@@ -146,81 +153,109 @@ export async function handler(
   });
   child.on("exit", () => removeSession(args.projectPath, browser));
 
-  await new Promise((resolve) => setTimeout(resolve, 3000));
-  const earlyOutput = spawned.readOutput();
-  const cleanOutput = denoiseEarlyOutput(earlyOutput);
+  const boot = await pollBootVerdict(args.projectPath, browser, {
+    child,
+    readOutput: spawned.readOutput,
+    budgetMs: 3000,
+    since: spawnedAt,
+    noBrowser: Boolean(args.noBrowser),
+  });
+  const cleanOutput = boot.output;
+  const session = { projectPath: args.projectPath, browser, pid, logPath };
 
-  if (child.exitCode !== null || child.signalCode !== null) {
-    const code = child.exitCode;
-    const signal = child.signalCode;
-    return JSON.stringify({
+  if (boot.verdict.kind === "exited") {
+    const { exitCode: code, signal } = boot.verdict;
+    return envelope({
       ok: false,
+      command: schema.name,
       status: "exited",
-      projectPath: args.projectPath,
-      browser,
-      pid,
-      exitCode: code,
-      signal,
-      error:
-        `The dev server exited during startup (${signal ? `signal ${signal}` : `exit code ${code}`}). ` +
-        "No session is running, so extension_logs/wait/eval and the control verbs have nothing to attach to.",
-      output: cleanOutput.slice(0, 2000),
-      logPath,
+      error: {
+        code: "E_SESSION_EXITED",
+        message:
+          `The dev server exited during startup (${signal ? `signal ${signal}` : `exit code ${code}`}). ` +
+          "No session is running, so extension_logs/wait/eval and the control verbs have nothing to attach to.",
+      },
+      value: {
+        ...session,
+        exitCode: code,
+        signal,
+        output: cleanOutput.slice(0, 2000),
+      },
       hint:
-        "Read `output` above for the cause: a port already in use, a manifest the build rejects, or a missing browser binary are the common ones. " +
+        "Read `value.output` above for the cause: a port already in use, a manifest the build rejects, or a missing browser binary are the common ones. " +
         "Fix it and call extension_dev again; extension_doctor with this projectPath will also report what the last session recorded.",
+      warnings: boot.warnings,
     });
   }
 
-  const compileFailed = /compiled with errors|✖✖✖|ERROR in |Module not found|NOT FOUND/i.test(
-    cleanOutput,
-  );
-  if (compileFailed) {
-    return JSON.stringify({
+  if (boot.verdict.kind === "compile-failed") {
+    const { compileErrors } = boot.verdict;
+    return envelope({
       ok: false,
+      command: schema.name,
       status: "compile-failed",
-      projectPath: args.projectPath,
-      browser,
-      pid,
-      error:
-        "The dev server started but the FIRST COMPILE FAILED, so the browser has nothing usable to load. The session is running; the extension is not.",
-      output: cleanOutput.slice(0, 2000),
-      logPath,
-      hint: "Fix the compile error in `output` above and save: the dev server is still running and will recompile. Do not call extension_wait yet, it will report ready for a build that failed.",
+      error: {
+        code: "E_FIRST_COMPILE",
+        message:
+          boot.verdict.message ??
+          "The dev server started but the first compile failed, so the browser has nothing usable to load. The session is running; the extension is not.",
+      },
+      value: {
+        ...session,
+        compileErrors,
+        ...(compileErrors.length ? {} : { output: cleanOutput.slice(0, 2000) }),
+      },
+      hint: "Fix the compile error listed in `value.compileErrors` and save: the dev server is still running and will recompile. Do not call extension_wait yet, it will report ready for a build that failed.",
+      warnings: boot.warnings,
     });
   }
 
-  const exitStamp = args.noBrowser
-    ? null
-    : browserExitStamp(args.projectPath, browser, spawnedAt);
-  const profileLockHit =
-    !args.noBrowser &&
-    /SingletonLock|ProcessSingleton|profile[^\n]*(in use|locked)|already (open|running)/i.test(
-      cleanOutput,
-    );
-  if (exitStamp || profileLockHit) {
-    const profileDir = path.join(
-      args.projectPath,
-      "dist",
-      `extension-profile-${browser}`,
-    );
-    return JSON.stringify({
+  const profileDir = path.join(
+    args.projectPath,
+    "dist",
+    `extension-profile-${browser}`,
+  );
+
+  if (boot.verdict.kind === "profile-locked") {
+    const { owner } = boot.verdict;
+    return envelope({
       ok: false,
-      status: "browser-exited",
-      projectPath: args.projectPath,
-      browser,
-      pid,
-      ...(exitStamp ?? {}),
-      error:
-        `The dev server is running but the ${browser} browser it launched died during startup` +
-        (profileLockHit
-          ? " because its profile is locked by another browser instance."
-          : "."),
-      output: cleanOutput.slice(0, 2000),
-      logPath,
+      command: schema.name,
+      status: "profile-locked",
+      error: {
+        code: "E_PROFILE_LOCKED",
+        message:
+          `The dev server is running but the ${browser} browser it launched died during startup ` +
+          "because its profile is locked by another browser instance" +
+          (owner?.pid ? ` (pid ${owner.pid}${owner.host ? ` on ${owner.host}` : ""})` : "") +
+          ".",
+      },
+      value: { ...session, profileDir, owner, output: cleanOutput.slice(0, 2000) },
       hint:
         "A locked profile means another session's browser still holds it: call extension_stop with this projectPath to kill that session, then start extension_dev again. " +
         `If the lock survives a crash, remove ${profileDir} manually before retrying.`,
+      warnings: boot.warnings,
+    });
+  }
+
+  if (boot.verdict.kind === "browser-exited") {
+    return envelope({
+      ok: false,
+      command: schema.name,
+      status: "browser-exited",
+      error: {
+        code: "E_BROWSER_EXITED",
+        message: `The dev server is running but the ${browser} browser it launched died during startup.`,
+      },
+      value: {
+        ...session,
+        ...boot.verdict.stamp,
+        output: cleanOutput.slice(0, 2000),
+      },
+      hint:
+        "A locked profile means another session's browser still holds it: call extension_stop with this projectPath to kill that session, then start extension_dev again. " +
+        `If the lock survives a crash, remove ${profileDir} manually before retrying.`,
+      warnings: boot.warnings,
     });
   }
 
@@ -251,33 +286,37 @@ export async function handler(
       ? {
           port: boundPort,
           ...(args.port !== undefined && args.port !== boundPort
-            ? {
-                requestedPort: args.port,
-                portNote: `Requested port ${args.port} was not available; the dev server bound ${boundPort} (read from the engine's ready.json contract, the same source extension_wait reports).`,
-              }
+            ? { requestedPort: args.port }
             : {}),
         }
-      : {
-          requestedPort: args.port ?? 8080,
-          portNote:
-            "The engine has not stamped its ready.json contract yet, so the bound port is not known at response time (a taken port makes the server bind the next free one). extension_wait reports the bound port from that contract once it lands; requestedPort above is only what was asked for.",
-        };
+      : { requestedPort: args.port ?? 8080 };
+  const portNote =
+    boundPort !== null
+      ? args.port !== undefined && args.port !== boundPort
+        ? `Requested port ${args.port} was not available; the dev server bound ${boundPort} (read from the engine's ready.json contract, the same source extension_wait reports).`
+        : null
+      : "The engine has not stamped its ready.json contract yet, so the bound port is not known at response time (a taken port makes the server bind the next free one). extension_wait reports the bound port from that contract once it lands; requestedPort above is only what was asked for.";
 
-  return JSON.stringify({
+  return envelope({
     ok: true,
-    pid,
-    browser,
-    ...portReport,
-    projectPath: args.projectPath,
+    command: schema.name,
     status: "started",
-    ...(carrier ? { carrier } : {}),
-    ...(replaced.length > 0
-      ? {
-          replacedSession: replaced[0],
-          ...(replaced.length > 1 ? { replacedSessions: replaced } : {}),
-        }
-      : {}),
-    capabilities,
+    value: {
+      pid,
+      browser,
+      ...portReport,
+      projectPath: args.projectPath,
+      ...(carrier ? { carrier } : {}),
+      ...(replaced.length > 0
+        ? {
+            replacedSession: replaced[0],
+            ...(replaced.length > 1 ? { replacedSessions: replaced } : {}),
+          }
+        : {}),
+      capabilities,
+      logPath,
+    },
+    warnings: [portNote, ...boot.warnings],
     hint: args.noBrowser
       ? "Build-only session (noBrowser: true): no browser will launch, so no runtime will ever attach. extension_wait returns as soon as the first compile lands (compiled: true, browserAttached: false) instead of waiting out its budget; do not wait for a browser. The control verbs (storage/reload/open/dom_snapshot/eval) need a live browser and will not work against this session. When you are done, call extension_stop to shut down the dev server."
       : "Use extension_wait to check when the extension is fully loaded, then extension_inspect to inspect the live state. " +
@@ -285,29 +324,5 @@ export async function handler(
           ? `Control channel is ON: extension_${controlVerbs.split(", ").join("/extension_")}${args.allowEval ? "/extension_eval" : ""} will work against this session.`
           : "Control channel is OFF: extension_storage/reload/open/dom_snapshot need allowControl: true, and extension_eval needs allowEval: true (which also implies allowControl). To unlock them, call extension_dev again with the flag you need plus replace: true (it stops this session first); a plain second call is refused so the session does not fork.") +
         " When you are done, call extension_stop to shut down the dev server and browser.",
-    earlyOutput: cleanOutput.slice(0, 500),
-    logPath,
   });
-}
-
-function denoiseEarlyOutput(raw: string): string {
-  const NOISE = [
-    /^npm warn Unknown project config/i,
-    /This will stop working in the next major version of npm/i,
-    /^npm warn config/i,
-    /^npm warn exec/i,
-    /The following package(s)? (was|were) not found and will be installed/i,
-    /V8: .*Invalid asm\.js/i,
-    /^\(node:\d+\) V8:/i,
-    /Use `node --trace-warnings/i,
-    /Invalid asm\.js:/i,
-    /Linking failure in asm\.js/i,
-    /Successfully compiled asm\.js/i,
-  ];
-  return raw
-    .split("\n")
-    .filter((line) => !NOISE.some((re) => re.test(line.trim())))
-    .join("\n")
-    .replace(/\n{2,}/g, "\n")
-    .trimStart();
 }

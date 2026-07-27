@@ -45,11 +45,11 @@ describe("whoami reports the stored token identity, not the cwd", () => {
     const result = JSON.parse(await auth.handler({}));
 
     expect(result.status).toBe("logged-in");
-    expect(result.message).toContain("acme/widget");
-    expect(result.message).toContain("extension_auth");
-    expect(result.message).toMatch(/not follow|not.*current working directory/i);
-    expect(result.expiresAt).toBe(new Date(FUTURE * 1000).toISOString());
-    expect(typeof result.expiresInSeconds).toBe("number");
+    expect(result.hint).toContain("acme/widget");
+    expect(result.hint).toContain("extension_auth");
+    expect(result.hint).toMatch(/not follow|not.*current working directory/i);
+    expect(result.value.expiresAt).toBe(new Date(FUTURE * 1000).toISOString());
+    expect(typeof result.value.expiresInSeconds).toBe("number");
   });
 
   it("the tool description anchors identity to the stored token", () => {
@@ -65,7 +65,7 @@ describe("whoami reports the stored token identity, not the cwd", () => {
     const result = JSON.parse(await auth.handler({}));
 
     expect(result.status).toBe("logged-out");
-    expect(result.message).toContain("extension_auth");
+    expect(result.hint).toContain("extension_auth");
   });
 
   describe("api field honesty", () => {
@@ -92,9 +92,9 @@ describe("whoami reports the stored token identity, not the cwd", () => {
 
       const result = JSON.parse(await auth.handler({}));
 
-      expect(result.api).toBeUndefined();
-      expect(result.apiRecordedAtLogin).toBe("https://www.extension.dev");
-      expect(result.apiDefault).toBe("https://www.extension.dev");
+      expect(result.value.api).toBeUndefined();
+      expect(result.value.apiRecordedAtLogin).toBe("https://www.extension.dev");
+      expect(result.value.apiDefault).toBe("https://www.extension.dev");
     });
 
     it("flags a stale localhost login base instead of presenting it as the api", async () => {
@@ -103,14 +103,19 @@ describe("whoami reports the stored token identity, not the cwd", () => {
 
       const result = JSON.parse(await auth.handler({}));
 
-      expect(result.api).toBeUndefined();
-      expect(result.apiRecordedAtLogin).toBe("http://localhost:3100");
-      expect(result.apiDefault).toBe("https://www.extension.dev");
-      expect(result.message).toContain("minted via http://localhost:3100");
-      expect(result.message).toContain(
+      expect(result.value.api).toBeUndefined();
+      expect(result.value.apiRecordedAtLogin).toBe("http://localhost:3100");
+      expect(result.value.apiDefault).toBe("https://www.extension.dev");
+      expect(result.hint).toContain("minted via http://localhost:3100");
+      expect(result.hint).toContain(
         "do not read that recorded value",
       );
-      expect(result.message).toContain("https://www.extension.dev");
+      expect(result.hint).toContain("https://www.extension.dev");
+      expect(
+        result.warnings.some((w: string) =>
+          w.includes("minted via http://localhost:3100"),
+        ),
+      ).toBe(true);
     });
 
     it("omits the recorded base entirely when the stored file never had one", async () => {
@@ -119,9 +124,9 @@ describe("whoami reports the stored token identity, not the cwd", () => {
 
       const result = JSON.parse(await auth.handler({}));
 
-      expect(result.api).toBeUndefined();
-      expect(result.apiRecordedAtLogin).toBeUndefined();
-      expect(result.apiDefault).toBe("https://www.extension.dev");
+      expect(result.value.api).toBeUndefined();
+      expect(result.value.apiRecordedAtLogin).toBeUndefined();
+      expect(result.value.apiDefault).toBe("https://www.extension.dev");
     });
 
     it("discloses that EXTENSION_DEV_TOKEN outranks the stored login", async () => {
@@ -131,8 +136,13 @@ describe("whoami reports the stored token identity, not the cwd", () => {
       try {
         writeCredentials(sample());
         const result = JSON.parse(await auth.handler({}));
-        expect(result.envTokenOverride).toBe(true);
-        expect(result.message).toContain("EXTENSION_DEV_TOKEN is set");
+        expect(result.value.envTokenOverride).toBeUndefined();
+        expect(
+          result.warnings.some((w: string) =>
+            w.includes("EXTENSION_DEV_TOKEN is set"),
+          ),
+        ).toBe(true);
+        expect(result.hint).toContain("EXTENSION_DEV_TOKEN is set");
       } finally {
         if (prevToken === undefined) delete process.env.EXTENSION_DEV_TOKEN;
         else process.env.EXTENSION_DEV_TOKEN = prevToken;
@@ -175,8 +185,9 @@ describe("7-day token TTL disclosure", () => {
 
     const result = JSON.parse(await auth.handler({}));
 
-    expect(result.tokenTtlNote).toContain("7 days");
-    expect(result.tokenTtlNote).toContain(
+    const ttlNote = result.warnings.find((w: string) => w.includes("7 days"));
+    expect(ttlNote).toContain("7 days");
+    expect(ttlNote).toContain(
       "https://console.extension.dev/acme/widget/settings/access-tokens",
     );
   });

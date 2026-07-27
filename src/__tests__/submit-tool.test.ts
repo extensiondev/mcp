@@ -69,6 +69,8 @@ describe("extension_submit: platform submit handler", () => {
       await handler({ browsers: ["chrome"], buildSha: "abc1234" }),
     );
     expect(out.ok).toBe(false);
+    expect(out.status).toBe("auth-required");
+    expect(out.error.code).toBe("E_AUTH_REQUIRED");
     expect(out.error.name).toBe("SubmitAuthError");
     expect(called).toBe(false);
   });
@@ -84,6 +86,7 @@ describe("extension_submit: platform submit handler", () => {
       await handler({ browsers: [], buildSha: "abc1234" }),
     );
     expect(noBrowsers.error.name).toBe("SubmitInputError");
+    expect(noBrowsers.error.code).toBe("E_BAD_REQUEST");
     const noSha = JSON.parse(
       await handler({ browsers: ["chrome"], buildSha: "" }),
     );
@@ -115,15 +118,16 @@ describe("extension_submit: platform submit handler", () => {
     expect(body.browsers).toEqual(["chrome", "firefox"]);
     expect(body.buildSha).toBe("abc1234");
     expect(body.dryRun).toBe(true);
-    expect(out.mode).toBe("platform");
+    expect(out.value.mode).toBe("platform");
     expect(out.ok).toBe(false);
-    expect(out.platformMessage).toBe("Preflight OK");
-    expect(out.preflight).toHaveLength(2);
-    for (const row of out.preflight) {
+    expect(out.status).toBe("preflight");
+    expect(out.value.platformMessage).toBe("Preflight OK");
+    expect(out.value.preflight).toHaveLength(2);
+    for (const row of out.value.preflight) {
       expect(row.ok).toBe(false);
       expect(row.configured).toBe("unknown");
     }
-    expect(out.message).toContain("cannot be verified");
+    expect(out.hint).toContain("cannot be verified");
   });
 
   it("passes dryRun:false through only when explicitly set", async () => {
@@ -147,9 +151,10 @@ describe("extension_submit: platform submit handler", () => {
       const out = JSON.parse(
         await handler({ browsers: ["firefox"], buildSha: "abc1234" }),
       );
-      expect(out.warnings).toHaveLength(1);
+      expect(out.warnings).toHaveLength(2);
       expect(out.warnings[0]).toContain("No STORE.md");
-      expect(out.preflight[0].reason).not.toContain("STORE.md");
+      expect(out.warnings[1]).toBe("channel: stable (default)");
+      expect(out.value.preflight[0].reason).not.toContain("STORE.md");
     } finally {
       process.chdir(prevCwd);
     }
@@ -167,6 +172,8 @@ describe("extension_submit: platform submit handler", () => {
       await handler({ browsers: ["chrome"], buildSha: "deadbeef" }),
     );
     expect(out.ok).toBe(false);
+    expect(out.status).toBe("submit-failed");
+    expect(out.error.code).toBe("E_PLATFORM");
     expect(out.error.name).toBe("SubmitError");
     expect(out.error.message).toContain("404");
   });

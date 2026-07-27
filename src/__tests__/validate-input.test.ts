@@ -144,8 +144,8 @@ describe("buildSha/buildId cross-aliases", () => {
         submitSchema.inputSchema,
       ),
     );
-    expect(submitErr.error.args.aliases.buildSha).toEqual(["buildId"]);
-    expect(submitErr.error.args.aliases.buildId).toBeUndefined();
+    expect(submitErr.value.args.aliases.buildSha).toEqual(["buildId"]);
+    expect(submitErr.value.args.aliases.buildId).toBeUndefined();
 
     const promoteErr = JSON.parse(
       inputValidationError(
@@ -154,8 +154,8 @@ describe("buildSha/buildId cross-aliases", () => {
         releasePromoteSchema.inputSchema,
       ),
     );
-    expect(promoteErr.error.args.aliases.buildId).toEqual(["buildSha"]);
-    expect(promoteErr.error.args.aliases.buildSha).toBeUndefined();
+    expect(promoteErr.value.args.aliases.buildId).toEqual(["buildSha"]);
+    expect(promoteErr.value.args.aliases.buildSha).toBeUndefined();
   });
 });
 
@@ -166,10 +166,14 @@ describe("inputValidationError", () => {
         { path: "projectPath", message: "required argument is missing" },
       ]),
     );
+    expect(out.schema).toBe(1);
     expect(out.ok).toBe(false);
+    expect(out.command).toBe("extension_dev");
+    expect(out.status).toBe("invalid-arguments");
+    expect(out.error.code).toBe("E_INPUT_VALIDATION");
     expect(out.error.name).toBe("InputValidationError");
     expect(out.error.message).toContain("extension_dev");
-    expect(out.error.issues).toHaveLength(1);
+    expect(out.value.issues).toHaveLength(1);
   });
 
   it("enumerates the complete arg surface with aliases when given the schema", () => {
@@ -180,12 +184,12 @@ describe("inputValidationError", () => {
         createSchema.inputSchema,
       ),
     );
-    expect(out.error.args.required).toEqual(["projectName"]);
-    expect(out.error.args.optional).toEqual(
+    expect(out.value.args.required).toEqual(["projectName"]);
+    expect(out.value.args.optional).toEqual(
       expect.arrayContaining(["parentDir", "template", "install"]),
     );
-    expect(out.error.args.aliases.projectName).toEqual(["name"]);
-    expect(out.error.args.aliases.parentDir).toEqual(["parent", "into"]);
+    expect(out.value.args.aliases.projectName).toEqual(["name"]);
+    expect(out.value.args.aliases.parentDir).toEqual(["parent", "into"]);
   });
 
   it("does not list an alias word the tool owns as a real property", () => {
@@ -200,6 +204,6 @@ describe("inputValidationError", () => {
         owns,
       ),
     );
-    expect(out.error.args.aliases.timeout).toEqual(["timeoutMillis"]);
+    expect(out.value.args.aliases.timeout).toEqual(["timeoutMillis"]);
   });
 });

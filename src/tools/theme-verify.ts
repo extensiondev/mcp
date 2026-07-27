@@ -18,6 +18,9 @@ import {
   resolveChromeTheme,
   type ChromeThemeManifestTheme,
 } from "../lib/vendor/chrome-theme/chrome-theme-resolve";
+import { envelope } from "../lib/envelope";
+
+const COMMAND = "extension_theme_verify";
 
 export const schema = {
   name: "extension_theme_verify",
@@ -123,17 +126,26 @@ export async function handler(args: {
     try {
       text = await fs.readFile(abs, "utf8");
     } catch {
-      return JSON.stringify({
+      return envelope({
         ok: false,
-        error: { name: "InputError", message: `Cannot read ${abs}` },
+        command: COMMAND,
+        status: "bad-input",
+        error: {
+          code: "E_BAD_REQUEST",
+          name: "InputError",
+          message: `Cannot read ${abs}`,
+        },
       });
     }
     try {
       raw = JSON.parse(text);
     } catch (err) {
-      return JSON.stringify({
+      return envelope({
         ok: false,
+        command: COMMAND,
+        status: "bad-input",
         error: {
+          code: "E_BAD_REQUEST",
           name: "InputError",
           message: `${abs} is not valid JSON: ${
             err instanceof Error ? err.message : String(err)
@@ -144,9 +156,12 @@ export async function handler(args: {
   } else if (args.manifest) {
     raw = args.manifest;
   } else {
-    return JSON.stringify({
+    return envelope({
       ok: false,
+      command: COMMAND,
+      status: "bad-request",
       error: {
+        code: "E_BAD_REQUEST",
         name: "InputError",
         message: "Pass `manifest` (an object) or `manifestPath` (a file path).",
       },
@@ -158,9 +173,12 @@ export async function handler(args: {
   try {
     ({ manifest, theme } = coerceInput(raw));
   } catch (err) {
-    return JSON.stringify({
+    return envelope({
       ok: false,
+      command: COMMAND,
+      status: "bad-input",
       error: {
+        code: "E_BAD_REQUEST",
         name: "InputError",
         message: err instanceof Error ? err.message : String(err),
       },
@@ -298,60 +316,62 @@ export async function handler(args: {
     },
   ];
 
-  return JSON.stringify({
+  return envelope({
     ok: true,
-    tool: "extension_theme_verify",
-    verdict,
-    needsAttended: true,
-    summary: {
-      errors: grammarErrors.length,
-      warnings: findings.filter((f) => f.severity === "warn").length,
-      advisories: findings.filter((f) => f.severity === "info").length,
-      byClass: {
-        D1: findings.filter((f) => f.class === "D1").length,
-        D3: findings.filter((f) => f.class === "D3").length,
-        D4: findings.filter((f) => f.class === "D4").length,
-      },
-    },
-    legs: {
-      appShows: {
-        status: "needs-attended",
-        detail:
-          "Not run here (needs a browser). The app self-verifies app == resolve(manifest) via the seed door.",
-        how: attended[0].how,
-      },
-      manifestSays: {
-        status: hasError ? "invalid" : "verified",
-        name,
-        version,
-        grammar: { nameValid, versionValid, errors: grammarErrors },
-        declared: {
-          colors: Object.keys(declaredColors),
-          tints: Object.keys(declaredTints),
-          images: Object.keys(declaredImages),
-          properties: Object.keys(declaredProps),
+    command: COMMAND,
+    status: verdict,
+    value: {
+      needsAttended: true,
+      summary: {
+        errors: grammarErrors.length,
+        warnings: findings.filter((f) => f.severity === "warn").length,
+        advisories: findings.filter((f) => f.severity === "info").length,
+        byClass: {
+          D1: findings.filter((f) => f.class === "D1").length,
+          D3: findings.filter((f) => f.class === "D3").length,
+          D4: findings.filter((f) => f.class === "D4").length,
         },
       },
-      chromePaints: {
-        resolver: {
+      legs: {
+        appShows: {
+          status: "needs-attended",
+          detail:
+            "Not run here (needs a browser). The app self-verifies app == resolve(manifest) via the seed door.",
+          how: attended[0].how,
+        },
+        manifestSays: {
+          status: hasError ? "invalid" : "verified",
+          name,
+          version,
+          grammar: { nameValid, versionValid, errors: grammarErrors },
+          declared: {
+            colors: Object.keys(declaredColors),
+            tints: Object.keys(declaredTints),
+            images: Object.keys(declaredImages),
+            properties: Object.keys(declaredProps),
+          },
+        },
+        chromePaints: {
+          resolver: {
+            status: "reported",
+            detail:
+              "Headless proxy: every color current stable Chrome derives from this manifest.",
+            resolved,
+          },
+          realPaint: { status: "needs-attended", how: attended[1].how },
+        },
+        chromeAccepts: {
           status: "reported",
           detail:
-            "Headless proxy: every color current stable Chrome derives from this manifest.",
-          resolved,
+            "Static analysis of what Chrome parses but discards (the D4 acceptance gap).",
+          discarded: findings
+            .filter((f) => f.leg === "chrome-accepts")
+            .map((f) => ({ key: f.key, detail: f.detail })),
+          live: { status: "needs-attended", how: attended[2].how },
         },
-        realPaint: { status: "needs-attended", how: attended[1].how },
       },
-      chromeAccepts: {
-        status: "reported",
-        detail:
-          "Static analysis of what Chrome parses but discards (the D4 acceptance gap).",
-        discarded: findings
-          .filter((f) => f.leg === "chrome-accepts")
-          .map((f) => ({ key: f.key, detail: f.detail })),
-        live: { status: "needs-attended", how: attended[2].how },
-      },
+      findings,
+      attended,
     },
-    findings,
-    attended,
   });
 }

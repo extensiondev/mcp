@@ -11,6 +11,9 @@ import path from "node:path";
 import { extensionCreate } from "extension-create";
 import { mcpOrigins } from "../lib/registry";
 import { wwwNewPath } from "@extension.dev/urls/paths";
+import { envelope } from "../lib/envelope";
+
+const COMMAND = "extension_create";
 
 function scaffoldEnginePin(projectPath: string): string | null {
   try {
@@ -120,18 +123,35 @@ export async function handler(args: {
       logger: { log: capture("log"), error: capture("error") },
     });
   const failure = (err: unknown, transient: boolean): string =>
-    JSON.stringify({
-      error: transient
-        ? "Template download failed (network/timeout/rate-limit). This is not a bad template name. Retry, or check connectivity/GitHub rate limits."
-        : err instanceof Error
-          ? err.message
-          : String(err),
-      ...(transient
-        ? { cause: err instanceof Error ? err.message : String(err) }
-        : {}),
-      duration: Date.now() - start,
-      log: logTail(),
-    });
+    transient
+      ? envelope({
+          ok: false,
+          command: COMMAND,
+          status: "template-fetch-failed",
+          error: {
+            code: "E_TEMPLATE_FETCH",
+            message:
+              "Template download failed (network/timeout/rate-limit). This is not a bad template name. Retry, or check connectivity/GitHub rate limits.",
+          },
+          value: {
+            cause: err instanceof Error ? err.message : String(err),
+            duration: Date.now() - start,
+            log: logTail(),
+          },
+        })
+      : envelope({
+          ok: false,
+          command: COMMAND,
+          status: "scaffold-failed",
+          error: {
+            code: "E_SCAFFOLD_FAILED",
+            message: err instanceof Error ? err.message : String(err),
+          },
+          value: {
+            duration: Date.now() - start,
+            log: logTail(),
+          },
+        });
 
   let result: Awaited<ReturnType<typeof extensionCreate>>;
   try {
@@ -151,13 +171,19 @@ export async function handler(args: {
     fs.existsSync(path.join(result.projectPath, "manifest.json")) ||
     fs.existsSync(path.join(result.projectPath, "src", "manifest.json"));
   if (!hasManifest) {
-    return JSON.stringify({
+    return envelope({
       ok: false,
-      status: "incomplete",
-      projectPath: result.projectPath,
-      error: `The scaffold is incomplete: no manifest.json exists under ${result.projectPath} (checked the root and src/). Do not run extension_dev against it.`,
-      duration: Date.now() - start,
-      log: logTail(),
+      command: COMMAND,
+      status: "scaffold-incomplete",
+      error: {
+        code: "E_SCAFFOLD_INCOMPLETE",
+        message: `The scaffold is incomplete: no manifest.json exists under ${result.projectPath} (checked the root and src/). Do not run extension_dev against it.`,
+      },
+      value: {
+        projectPath: result.projectPath,
+        duration: Date.now() - start,
+        log: logTail(),
+      },
       hint: "Delete the directory and retry extension_create; a template download interrupted mid-way can leave a partial tree.",
     });
   }
@@ -190,37 +216,44 @@ export async function handler(args: {
   const wwwOrigin = mcpOrigins().www;
   const deployUrl = `${wwwOrigin}${wwwNewPath({ template: result.template })}`;
 
-  return JSON.stringify({
-    resolvedPath: result.projectPath,
-    projectPath: result.projectPath,
-    projectName: result.projectName,
-    template: result.template,
-    depsInstalled: result.depsInstalled,
-    packageManager: result.depsInstalled ? packageManager : null,
-    deployUrl,
-    defaultsApplied: {
-      parentDir: args.parentDir
-        ? `${resolvedParent} (explicit)`
-        : `${resolvedParent} (default: the MCP server process cwd, not yours; pass parentDir to choose)`,
-      ...(args.template === undefined
-        ? {
-            template:
-              "typescript (default; call extension_templates to pick another, e.g. javascript for plain JS)",
-          }
-        : {}),
-      packageManager: `${packageManager} (auto-detected by the scaffolder, not asked)`,
-      browser:
-        "chrome (default: extension_dev and extension_build target chrome unless you pass browser)",
-      gitInit,
+  return envelope({
+    ok: true,
+    command: COMMAND,
+    status: "created",
+    value: {
+      resolvedPath: result.projectPath,
+      projectPath: result.projectPath,
+      projectName: result.projectName,
+      template: result.template,
+      depsInstalled: result.depsInstalled,
+      packageManager: result.depsInstalled ? packageManager : null,
+      deployUrl,
+      defaultsApplied: {
+        parentDir: args.parentDir
+          ? `${resolvedParent} (explicit)`
+          : `${resolvedParent} (default: the MCP server process cwd, not yours; pass parentDir to choose)`,
+        ...(args.template === undefined
+          ? {
+              template:
+                "typescript (default; call extension_templates to pick another, e.g. javascript for plain JS)",
+            }
+          : {}),
+        packageManager: `${packageManager} (auto-detected by the scaffolder, not asked)`,
+        browser:
+          "chrome (default: extension_dev and extension_build target chrome unless you pass browser)",
+        gitInit,
+      },
+      duration: Date.now() - start,
+      nextSteps: [
+        ...(result.depsInstalled
+          ? [`cd ${result.projectPath}`, runDev]
+          : [`cd ${result.projectPath}`, `${packageManager} install`, runDev]),
+        `To ship: extension_create scaffolds and runs locally, it does not host. Open ${deployUrl} to deploy this template to the web.`,
+      ],
     },
-    duration: Date.now() - start,
-    nextSteps: [
-      ...(result.depsInstalled
-        ? [`cd ${result.projectPath}`, runDev]
-        : [`cd ${result.projectPath}`, `${packageManager} install`, runDev]),
-      `To ship: extension_create scaffolds and runs locally, it does not host. Open ${deployUrl} to deploy this template to the web.`,
+    warnings: [
+      engineWarning,
+      ...(result.depsInstalled ? [] : logTail()),
     ],
-    ...(engineWarning ? { engineWarning } : {}),
-    ...(result.depsInstalled ? {} : { warnings: logTail() }),
   });
 }

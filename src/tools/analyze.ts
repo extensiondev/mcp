@@ -9,6 +9,9 @@
 import { PROJECT_PATH } from "../lib/common-schema";
 import fs from "node:fs";
 import path from "node:path";
+import { envelope } from "../lib/envelope";
+
+const COMMAND = "extension_analyze";
 
 export const schema = {
   name: "extension_analyze",
@@ -88,8 +91,14 @@ export async function handler(args: {
   const distPath = path.resolve(args.projectPath, "dist", browser);
 
   if (!fs.existsSync(distPath)) {
-    return JSON.stringify({
-      error: `Build output not found at ${distPath}. Run extension_build first.`,
+    return envelope({
+      ok: false,
+      command: COMMAND,
+      status: "no-dist",
+      error: {
+        code: "E_NO_DIST",
+        message: `Build output not found at ${distPath}. Run extension_build first.`,
+      },
       hint: `Use extension_build with browser: "${browser}" to build the extension.`,
     });
   }
@@ -180,27 +189,25 @@ export async function handler(args: {
     }
   }
 
+  const note =
+    buildType === "development"
+      ? `This dist contains ${formatBytes(sourcemapSize)} of sourcemaps and looks like a dev build; run extension_build for production sizes. shippableSize excludes sourcemaps.`
+      : undefined;
+  const archiveNote =
+    archiveSize > 0
+      ? `This dist contains ${formatBytes(archiveSize)} of .zip archive(s) (store packaging output, written into dist by zip builds). shippableSize excludes them so the packaged copy does not double-count the files it contains.`
+      : undefined;
+
   const result = {
     browser,
     distPath,
     entrypoints,
-    ...(sizeWarnings.length ? { sizeWarnings } : {}),
     buildType,
     totalSize,
     totalSizeFormatted: formatBytes(totalSize),
     shippableSize,
     shippableSizeFormatted: formatBytes(shippableSize),
     fileCount: files.length,
-    ...(buildType === "development"
-      ? {
-          note: `This dist contains ${formatBytes(sourcemapSize)} of sourcemaps and looks like a dev build; run extension_build for production sizes. shippableSize excludes sourcemaps.`,
-        }
-      : {}),
-    ...(archiveSize > 0
-      ? {
-          archiveNote: `This dist contains ${formatBytes(archiveSize)} of .zip archive(s) (store packaging output, written into dist by zip builds). shippableSize excludes them so the packaged copy does not double-count the files it contains.`,
-        }
-      : {}),
     manifest: {
       name: manifest.name,
       version: manifest.version,
@@ -249,5 +256,11 @@ export async function handler(args: {
     },
   };
 
-  return JSON.stringify(result);
+  return envelope({
+    ok: true,
+    command: COMMAND,
+    status: "analyzed",
+    value: result,
+    warnings: [...sizeWarnings, note, archiveNote],
+  });
 }

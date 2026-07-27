@@ -15,12 +15,26 @@ import {
   resolveApiBase,
   tokenTtlNote,
 } from "../lib/login-flow";
+import { envelope, type ErrorCode } from "../lib/envelope";
 
 const FIRST_CALL_BUDGET_MS = 8_000;
 const RESUME_BUDGET_MS = 22_000;
 
-function fail(name: string, message: string): string {
-  return JSON.stringify({ ok: false, error: { name, message } });
+const PENDING_TTL_NOTE =
+  "Once authorized, the minted token lives at most 7 days (server-enforced); CI must re-mint before expiry (console: project settings -> Access tokens).";
+
+function fail(
+  name: string,
+  message: string,
+  status: string,
+  code: ErrorCode,
+): string {
+  return envelope({
+    ok: false,
+    command: "extension_auth",
+    status,
+    error: { code, name, message },
+  });
 }
 
 function success(creds: {
@@ -31,16 +45,19 @@ function success(creds: {
   const expiresAt = creds.expiresAt
     ? new Date(creds.expiresAt * 1000).toISOString()
     : null;
-  return JSON.stringify({
+  return envelope({
     ok: true,
+    command: "extension_auth",
     status: "logged-in",
-    workspaceSlug: creds.workspaceSlug,
-    projectSlug: creds.projectSlug,
-    expiresAt,
-    tokenTtlNote: tokenTtlNote(creds.workspaceSlug, creds.projectSlug),
-    message: `Logged in to ${creds.workspaceSlug}/${creds.projectSlug}. extension_publish can now use the stored token. The token expires ${
+    value: {
+      workspaceSlug: creds.workspaceSlug,
+      projectSlug: creds.projectSlug,
+      expiresAt,
+    },
+    hint: `Logged in to ${creds.workspaceSlug}/${creds.projectSlug}. extension_publish can now use the stored token. The token expires ${
       expiresAt ?? "within 7 days"
     }: extension.dev CLI tokens live at most 7 days, so CI must re-mint before then (console: project settings -> Access tokens).`,
+    warnings: [tokenTtlNote(creds.workspaceSlug, creds.projectSlug)],
   });
 }
 
@@ -56,28 +73,37 @@ function pending(start: {
   const message = hasCompleteLink
     ? `Open ${complete} and approve (code ${start.userCode} is pre-filled), then call extension_auth (action: login) again with this deviceCode and the same project. If the page asks for a code, enter ${start.userCode} at ${start.verificationUri}.`
     : `Open ${start.verificationUri} and enter code ${start.userCode}, then call extension_auth (action: login) again with this deviceCode and the same project.`;
-  return JSON.stringify({
+  return envelope({
     ok: false,
-    status: "authorization_pending",
-    userCode: start.userCode,
-    verificationUri: start.verificationUri,
-    ...(hasCompleteLink ? { verificationUriComplete: complete } : {}),
-    deviceCode: start.deviceCode,
-    tokenTtlNote:
-      "Once authorized, the minted token lives at most 7 days (server-enforced); CI must re-mint before expiry (console: project settings -> Access tokens).",
-    message,
+    command: "extension_auth",
+    status: "authorization-pending",
+    error: { code: "E_AUTH_PENDING", message },
+    value: {
+      userCode: start.userCode,
+      verificationUri: start.verificationUri,
+      ...(hasCompleteLink ? { verificationUriComplete: complete } : {}),
+      deviceCode: start.deviceCode,
+      legacyStatus: "authorization_pending",
+    },
+    hint: message,
+    warnings: [PENDING_TTL_NOTE],
   });
 }
 
 function resumePending(deviceCode: string, verificationUri: string): string {
-  return JSON.stringify({
+  const message = `Still waiting for authorization. The one-click link and code from the previous response are still valid: open that link (or enter the code at ${verificationUri}), then call extension_auth (action: login) again with this same deviceCode and the same project.`;
+  return envelope({
     ok: false,
-    status: "authorization_pending",
-    verificationUri,
-    deviceCode,
-    tokenTtlNote:
-      "Once authorized, the minted token lives at most 7 days (server-enforced); CI must re-mint before expiry (console: project settings -> Access tokens).",
-    message: `Still waiting for authorization. The one-click link and code from the previous response are still valid: open that link (or enter the code at ${verificationUri}), then call extension_auth (action: login) again with this same deviceCode and the same project.`,
+    command: "extension_auth",
+    status: "authorization-pending",
+    error: { code: "E_AUTH_PENDING", message },
+    value: {
+      verificationUri,
+      deviceCode,
+      legacyStatus: "authorization_pending",
+    },
+    hint: message,
+    warnings: [PENDING_TTL_NOTE],
   });
 }
 
@@ -91,6 +117,8 @@ export async function loginToProject(args: {
     return fail(
       "BadRequest",
       "project must be in the form '<workspace>/<project>'.",
+      "bad-request",
+      "E_BAD_REQUEST",
     );
   }
 
@@ -103,6 +131,8 @@ export async function loginToProject(args: {
     return fail(
       "LoginConfigError",
       err?.message || "Could not load login config.",
+      "login-failed",
+      "E_AUTH_FAILED",
     );
   }
 
@@ -120,13 +150,25 @@ export async function loginToProject(args: {
       return fail(
         "LoginExpired",
         "The device code expired. Run extension_auth (action: login) again to restart.",
+        "login-expired",
+        "E_AUTH_EXPIRED",
       );
     }
     if (poll.reason === "denied") {
-      return fail("LoginDenied", "Authorization was denied at extension.dev/device.");
+      return fail(
+        "LoginDenied",
+        "Authorization was denied at extension.dev/device.",
+        "login-denied",
+        "E_AUTH_DENIED",
+      );
     }
     if (poll.reason === "error") {
-      return fail("LoginError", poll.message || "Device login failed.");
+      return fail(
+        "LoginError",
+        poll.message || "Device login failed.",
+        "login-failed",
+        "E_AUTH_FAILED",
+      );
     }
     return resumePending(String(args.deviceCode), config.verificationUri);
   }
@@ -142,6 +184,8 @@ export async function loginToProject(args: {
     return fail(
       "LoginStartError",
       err?.message || "Could not start the device flow.",
+      "login-failed",
+      "E_AUTH_FAILED",
     );
   }
   const poll = await pollDeviceToken({
@@ -154,7 +198,12 @@ export async function loginToProject(args: {
   });
   if (poll.ok) return success(poll.creds);
   if (poll.reason === "denied") {
-    return fail("LoginDenied", "Authorization was denied at extension.dev/device.");
+    return fail(
+      "LoginDenied",
+      "Authorization was denied at extension.dev/device.",
+      "login-denied",
+      "E_AUTH_DENIED",
+    );
   }
   return pending({
     deviceCode: start.deviceCode,

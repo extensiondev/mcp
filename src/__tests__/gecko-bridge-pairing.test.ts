@@ -80,8 +80,10 @@ describe("extension_open url on Gecko (bridge navigation)", () => {
     );
 
     expect(result.ok).toBe(true);
-    expect(result.navigated).toBe("https://example.com/");
-    expect(result.tab).toEqual({
+    expect(result.command).toBe("extension_open");
+    expect(result.status).toBe("navigated");
+    expect(result.value.navigated).toBe("https://example.com/");
+    expect(result.value.tab).toEqual({
       tabId: 7,
       url: "https://example.com/",
       title: "Example",
@@ -167,12 +169,13 @@ describe("extension_inspect on Gecko (bridge inspection)", () => {
       }),
     );
 
-    expect(result.transport).toBe("bridge");
-    expect(result.browser).toBe("firefox");
-    expect(result.target).toEqual({ url: "https://example.com/", title: "Example" });
-    expect(result.summary.extensionRootCount).toBe(1);
-    expect(result.html).toContain("<body>hi</body>");
-    expect(String(result.notes)).toContain("extension_logs");
+    expect(result.status).toBe("inspected");
+    expect(result.value.transport).toBe("bridge");
+    expect(result.value.browser).toBe("firefox");
+    expect(result.value.target).toEqual({ url: "https://example.com/", title: "Example" });
+    expect(result.value.summary.extensionRootCount).toBe(1);
+    expect(result.value.html).toContain("<body>hi</body>");
+    expect(String(result.warnings)).toContain("extension_logs");
     const evalCall = calls.find(isEval)!;
     expect(evalCall[evalCall.indexOf("--context") + 1]).toBe("page");
     expect(evalCall[evalCall.indexOf("--url") + 1]).toBe("https://example.com/");
@@ -206,8 +209,8 @@ describe("extension_inspect on Gecko (bridge inspection)", () => {
       }),
     );
 
-    expect(result.transport).toBe("bridge");
-    expect(result.summary).toBeTruthy();
+    expect(result.value.transport).toBe("bridge");
+    expect(result.value.summary).toBeTruthy();
     expect(calls.some((c) => isEval(c) && String(c[1]).includes("tabs.query"))).toBe(true);
   });
 
@@ -239,10 +242,10 @@ describe("extension_inspect on Gecko (bridge inspection)", () => {
       }),
     );
 
-    expect(result.transport).toBe("bridge");
-    expect(result.domSnapshot).toEqual(snapshot);
-    expect(result.extensionRoots).toEqual(roots);
-    expect(JSON.stringify(result.notes ?? [])).not.toContain("dom_snapshot");
+    expect(result.value.transport).toBe("bridge");
+    expect(result.value.domSnapshot).toEqual(snapshot);
+    expect(result.value.extensionRoots).toEqual(roots);
+    expect(JSON.stringify(result.warnings)).not.toContain("dom_snapshot");
     const evalCall = calls.find(isEval)!;
     expect(evalCall[1]).toContain("domSnapshot");
     expect(evalCall[1]).toContain("data-extjs-reinject-generation");
@@ -276,15 +279,15 @@ describe("extension_inspect on Gecko (bridge inspection)", () => {
       }),
     );
 
-    expect(result.rdpPort).toBe(9223);
-    expect(result.console.total).toBe(3);
-    expect(result.console.counts).toEqual({ log: 2, error: 1 });
-    expect(result.console.topMessages[0]).toEqual({
+    expect(result.value.rdpPort).toBe(9223);
+    expect(result.value.console.total).toBe(3);
+    expect(result.value.console.counts).toEqual({ log: 2, error: 1 });
+    expect(result.value.console.topMessages[0]).toEqual({
       level: "log",
       text: "hi",
       count: 2,
     });
-    expect(JSON.stringify(result.notes ?? [])).not.toContain("extension_logs");
+    expect(JSON.stringify(result.warnings)).not.toContain("extension_logs");
   });
 
   it("keeps the extension_logs fallback note on a pre-rdpPort engine", async () => {
@@ -302,8 +305,8 @@ describe("extension_inspect on Gecko (bridge inspection)", () => {
       }),
     );
 
-    expect(result.console).toBeUndefined();
-    expect(String(result.notes)).toContain("extension_logs");
+    expect(result.value.console).toBeUndefined();
+    expect(String(result.warnings)).toContain("extension_logs");
   });
 
   it("walks closed shadow roots via a background executeScript eval", async () => {
@@ -335,8 +338,8 @@ describe("extension_inspect on Gecko (bridge inspection)", () => {
       }),
     );
 
-    expect(result.deepDom).toBe(true);
-    expect(result.closedShadowRoots).toEqual([
+    expect(result.value.deepDom).toBe(true);
+    expect(result.value.closedShadowRoots).toEqual([
       { host: "div", type: "closed", html: "<p>secret</p>" },
     ]);
     const bgCall = calls.find(
@@ -368,9 +371,9 @@ describe("extension_inspect on Gecko (bridge inspection)", () => {
       }),
     );
 
-    expect(result.deepDom).toBeUndefined();
-    expect(String(result.notes)).toContain("deepDom failed");
-    expect(String(result.notes)).toContain("host permissions");
+    expect(result.value.deepDom).toBeUndefined();
+    expect(String(result.warnings)).toContain("deepDom failed");
+    expect(String(result.warnings)).toContain("host permissions");
   });
 
   it("falls back to tabs.executeScript when the engine has no page-context eval (MV2)", async () => {
@@ -405,9 +408,9 @@ describe("extension_inspect on Gecko (bridge inspection)", () => {
       }),
     );
 
-    expect(result.transport).toBe("bridge");
-    expect(result.summary.extensionRootCount).toBe(1);
-    expect(result.html).toContain("<body>hi</body>");
+    expect(result.value.transport).toBe("bridge");
+    expect(result.value.summary.extensionRootCount).toBe(1);
+    expect(result.value.html).toContain("<body>hi</body>");
     const bgCall = calls.filter(isEval).find(
       (c) => c[c.indexOf("--context") + 1] === "background",
     )!;
@@ -439,7 +442,9 @@ describe("extension_inspect on Gecko (bridge inspection)", () => {
     );
 
     expect(result.ok).toBe(false);
+    expect(result.status).toBe("inspect-failed");
     expect(result.error.name).toBe("InspectFailed");
+    expect(result.error.code).toBe("E_BRIDGE");
     expect(result.error.message).toContain("host permission");
     expect(result.hint).toContain("host permissions");
   });
@@ -465,8 +470,8 @@ describe("extension_inspect on Gecko (bridge inspection)", () => {
       }),
     );
 
-    expect(result.probes["typeof chrome.tts"].count).toBe(0);
-    expect(result.probeWarning).toContain("NOT JavaScript");
+    expect(result.value.probes["typeof chrome.tts"].count).toBe(0);
+    expect(String(result.warnings)).toContain("NOT JavaScript");
   });
 
   it("passes the engine's eval error frame through untouched", async () => {

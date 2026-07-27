@@ -47,10 +47,10 @@ describe("extension_create defaultsApplied", () => {
       await create.handler({ projectName: "probe", parentDir: parent }),
     );
 
-    expect(result.resolvedPath).toBe(scaffoldTarget);
-    expect(result.defaultsApplied.parentDir).toContain(parent);
-    expect(result.defaultsApplied.parentDir).toContain("(explicit)");
-    expect(result.defaultsApplied.gitInit).toBe(false);
+    expect(result.value.resolvedPath).toBe(scaffoldTarget);
+    expect(result.value.defaultsApplied.parentDir).toContain(parent);
+    expect(result.value.defaultsApplied.parentDir).toContain("(explicit)");
+    expect(result.value.defaultsApplied.gitInit).toBe(false);
   });
 
   it("names the server-cwd default when parentDir is omitted", async () => {
@@ -58,8 +58,8 @@ describe("extension_create defaultsApplied", () => {
 
     const result = JSON.parse(await create.handler({ projectName: "probe" }));
 
-    expect(result.defaultsApplied.parentDir).toContain(process.cwd());
-    expect(result.defaultsApplied.parentDir).toContain(
+    expect(result.value.defaultsApplied.parentDir).toContain(process.cwd());
+    expect(result.value.defaultsApplied.parentDir).toContain(
       "default: the MCP server process cwd",
     );
   });
@@ -69,10 +69,10 @@ describe("extension_create defaultsApplied", () => {
 
     const result = JSON.parse(await create.handler({ projectName: "probe" }));
 
-    expect(result.defaultsApplied.packageManager).toContain("bun");
-    expect(result.defaultsApplied.packageManager).toContain("auto-detected");
-    expect(result.defaultsApplied.browser).toContain("chrome");
-    expect(result.defaultsApplied.browser).toContain("default");
+    expect(result.value.defaultsApplied.packageManager).toContain("bun");
+    expect(result.value.defaultsApplied.packageManager).toContain("auto-detected");
+    expect(result.value.defaultsApplied.browser).toContain("chrome");
+    expect(result.value.defaultsApplied.browser).toContain("default");
   });
 
   it("admits when the scaffolder initialized a git repository", async () => {
@@ -81,7 +81,7 @@ describe("extension_create defaultsApplied", () => {
 
     const result = JSON.parse(await create.handler({ projectName: "probe" }));
 
-    expect(result.defaultsApplied.gitInit).toBe(true);
+    expect(result.value.defaultsApplied.gitInit).toBe(true);
   });
 
   it("documents the name alias and the cwd default in the schema itself", () => {

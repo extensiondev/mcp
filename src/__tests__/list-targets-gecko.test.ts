@@ -71,8 +71,9 @@ describe("extension_dom_snapshot listTargets on Gecko (RDP root listTabs)", () =
     );
 
     expect(result.ok).toBe(true);
-    expect(result.transport).toBe("rdp");
-    expect(result.targets).toEqual([
+    expect(result.status).toBe("listed-targets");
+    expect(result.value.transport).toBe("rdp");
+    expect(result.value.targets).toEqual([
       {
         actor: "server1.conn0.tabDescriptor4",
         type: "tab",
@@ -87,7 +88,7 @@ describe("extension_dom_snapshot listTargets on Gecko (RDP root listTabs)", () =
         title: "",
       },
     ]);
-    expect(result.note).toContain("NOT a chrome.tabs id");
+    expect(result.warnings[0]).toContain("NOT a chrome.tabs id");
   });
 
   it("explains the missing rdpPort instead of a generic refusal", async () => {
@@ -119,6 +120,7 @@ describe("extension_dom_snapshot listTargets on Gecko (RDP root listTabs)", () =
 
     expect(result.ok).toBe(false);
     expect(result.error.name).toBe("RdpError");
+    expect(result.error.code).toBe("E_RDP");
     expect(result.hint).toContain("listTabs");
   });
 });

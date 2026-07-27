@@ -12,6 +12,9 @@ import path from "node:path";
 import { runExtensionCli } from "../lib/exec";
 import { liveProjectSessions } from "../lib/session-browser";
 import { CARRIER_DIR_NAME, removeCarrier } from "../lib/carrier";
+import { envelope } from "../lib/envelope";
+
+const COMMAND = "extension_build";
 
 function readBuildSummary(
   projectPath: string,
@@ -317,11 +320,12 @@ async function validationPreflight(
     const parsed = JSON.parse(
       await manifestValidate.handler({ projectPath, browsers: [browser] }),
     );
+    const value = parsed?.value ?? {};
     return {
-      valid: Boolean(parsed.valid),
-      buildBlocking: Boolean(parsed.buildBlocking),
-      errors: Array.isArray(parsed.errors) ? parsed.errors : [],
-      warnings: Array.isArray(parsed.warnings) ? parsed.warnings : [],
+      valid: Boolean(value.valid),
+      buildBlocking: Boolean(value.buildBlocking),
+      errors: Array.isArray(value.errors) ? value.errors : [],
+      warnings: Array.isArray(value.warnings) ? value.warnings : [],
     };
   } catch {
     return null;
@@ -356,15 +360,21 @@ export async function handler(args: {
     ? null
     : await validationPreflight(args.projectPath, browser);
   if (preflight?.buildBlocking) {
-    return JSON.stringify({
-      success: false,
-      status: "blocked",
-      browser,
-      error:
-        "Build refused: the manifest has errors that produce a broken extension even when the bundler succeeds.",
-      errors: preflight.errors,
+    return envelope({
+      ok: false,
+      command: COMMAND,
+      status: "manifest-blocked",
+      error: {
+        code: "E_MANIFEST_BLOCKING",
+        message:
+          "Build refused: the manifest has errors that produce a broken extension even when the bundler succeeds.",
+      },
+      value: {
+        browser,
+        errors: preflight.errors,
+        duration: Date.now() - start,
+      },
       warnings: [...carrierNotes, ...preflight.warnings],
-      duration: Date.now() - start,
       hint:
         "Fix the errors above, then build again. Run extension_manifest_validate for the full report. " +
         "To build anyway (for example to inspect the broken output), pass skipValidation: true.",
@@ -399,115 +409,127 @@ export async function handler(args: {
     text.split("\n").slice(-n).join("\n");
 
   if (code === 0) {
+    // @deprecated Two scrapes of the CLI's own summary line. They stay until
+    // the build command speaks the schema-1 envelope, which carries both facts
+    // as data. Nothing branches on them; they only decorate `value`.
     const size = out.match(/Size:\s*([\d.]+\s*[kKmMgG]?B)/)?.[1];
     const status = out.match(/Build Status:\s*(\w+)/)?.[1];
     const engineSummary = readBuildSummary(args.projectPath, browser, start);
     const buildWarnings = engineSummary?.warnings?.length
-      ? {
-          buildWarnings: engineSummary.warnings,
-          ...(typeof engineSummary.warnings_count === "number" &&
-          engineSummary.warnings_count > engineSummary.warnings.length
-            ? { buildWarningsTruncated: engineSummary.warnings_count }
-            : {}),
-        }
-      : {};
+      ? engineSummary.warnings
+      : [];
+    const buildWarningsTruncated =
+      buildWarnings.length &&
+      typeof engineSummary?.warnings_count === "number" &&
+      engineSummary.warnings_count > buildWarnings.length
+        ? engineSummary.warnings_count
+        : undefined;
     const distDir = path.resolve(args.projectPath, "dist", browser);
     const entrypoints = builtEntrypoints(distDir);
     const contamination = carrierEntriesInDist(distDir);
     if (contamination.length) {
-      return JSON.stringify({
-        success: false,
-        status: "contaminated",
-        browser,
-        buildExitCode: 0,
-        error:
-          `The build output contains the Extension.dev live-preview carrier: ${contamination.join(", ")}. ` +
-          "That is a local debug companion and must never ship. This artifact is not safe to submit.",
-        ...(warnings.length ? { warnings } : {}),
-        duration,
+      return envelope({
+        ok: false,
+        command: COMMAND,
+        status: "carrier-in-dist",
+        error: {
+          code: "E_CARRIER_IN_DIST",
+          message:
+            `The build output contains the Extension.dev live-preview carrier: ${contamination.join(", ")}. ` +
+            "That is a local debug companion and must never ship. This artifact is not safe to submit.",
+        },
+        value: {
+          browser,
+          buildExitCode: 0,
+          duration,
+        },
+        warnings,
         hint: "Delete the listed paths from dist and build again. The carrier normally lives in ./extensions and is removed before every build.",
       });
     }
     const missing = entrypoints.filter((e) => !e.present);
     if (missing.length) {
-      return JSON.stringify({
-        success: false,
-        status: "incomplete",
-        browser,
-        buildExitCode: 0,
-        error:
-          `The build reported success but ${missing.length} declared entrypoint(s) are missing from dist/${browser}: ` +
-          missing.map((m) => `${m.role} -> ${m.path}`).join(", ") +
-          ". The browser will refuse to load this build.",
-        entrypoints,
-        ...(preflight?.warnings.length
-          ? { manifestWarnings: preflight.warnings }
-          : {}),
-        ...buildWarnings,
-        ...(warnings.length ? { warnings } : {}),
-        duration,
-        output: lastLines(out, 12),
+      return envelope({
+        ok: false,
+        command: COMMAND,
+        status: "entrypoint-missing",
+        error: {
+          code: "E_ENTRYPOINT_MISSING",
+          message:
+            `The build reported success but ${missing.length} declared entrypoint(s) are missing from dist/${browser}: ` +
+            missing.map((m) => `${m.role} -> ${m.path}`).join(", ") +
+            ". The browser will refuse to load this build.",
+        },
+        value: {
+          browser,
+          buildExitCode: 0,
+          entrypoints,
+          duration,
+          output: lastLines(out, 12),
+        },
+        warnings: [
+          ...warnings,
+          ...(preflight?.warnings ?? []),
+          ...buildWarnings,
+        ],
         hint: "The bundler exited 0 but did not emit these files. Check that the manifest paths match what the build produces, and that nothing references a file outside the source tree.",
       });
     }
-    return JSON.stringify({
-      success: true,
-      browser,
-      ...(size ? { size } : {}),
-      ...(status ? { status } : {}),
-      ...(entrypoints.length ? { entrypoints } : {}),
-      ...(preflight?.warnings.length
-        ? { manifestWarnings: preflight.warnings }
-        : {}),
-      ...buildWarnings,
-      ...(() => {
-        const divergence = manifestDivergence(args.projectPath, browser);
-        return divergence.length ? { productionDivergence: divergence } : {};
-      })(),
-      ...(warnings.length ? { warnings } : {}),
-      zip: args.zip ?? false,
-      ...(args.zip
-        ? (() => {
-            const zipPath = locateDistZip(
-              args.projectPath,
-              browser,
-              args.zipFilename,
-              start,
-            );
-            return zipPath
-              ? { zipPath }
-              : {
-                  zipPathNote: `zip: true was requested and the build succeeded, but no .zip file could be located in dist/${browser}. The engine may not have packaged it; check the build output below.`,
-                };
-          })()
-        : {}),
-      ...(args.zipSource
-        ? (() => {
-            const zipSourcePath = locateSourceZip(
-              args.projectPath,
-              browser,
-              start,
-            );
-            return zipSourcePath
-              ? { zipSourcePath }
-              : {
-                  zipSourcePathNote: `zipSource: true was requested and the build succeeded, but no *-source.zip file could be located in dist/. The engine may not have packaged it; check the build output below.`,
-                };
-          })()
-        : {}),
-      duration,
-      output: lastLines(out, 12),
+    const zipNotes: string[] = [];
+    const zipPath = args.zip
+      ? locateDistZip(args.projectPath, browser, args.zipFilename, start)
+      : null;
+    if (args.zip && !zipPath) {
+      zipNotes.push(
+        `zip: true was requested and the build succeeded, but no .zip file could be located in dist/${browser}. The engine may not have packaged it; check the build output below.`,
+      );
+    }
+    const zipSourcePath = args.zipSource
+      ? locateSourceZip(args.projectPath, browser, start)
+      : null;
+    if (args.zipSource && !zipSourcePath) {
+      zipNotes.push(
+        `zipSource: true was requested and the build succeeded, but no *-source.zip file could be located in dist/. The engine may not have packaged it; check the build output below.`,
+      );
+    }
+    const divergence = manifestDivergence(args.projectPath, browser);
+    return envelope({
+      ok: true,
+      command: COMMAND,
+      status: "built",
+      value: {
+        browser,
+        ...(size ? { size } : {}),
+        ...(status ? { engineBuildStatus: status } : {}),
+        ...(entrypoints.length ? { entrypoints } : {}),
+        ...(buildWarningsTruncated !== undefined
+          ? { buildWarningsTruncated }
+          : {}),
+        ...(divergence.length ? { productionDivergence: divergence } : {}),
+        zip: args.zip ?? false,
+        ...(zipPath ? { zipPath } : {}),
+        ...(zipSourcePath ? { zipSourcePath } : {}),
+        duration,
+        output: lastLines(out, 12),
+      },
+      warnings: [
+        ...warnings,
+        ...(preflight?.warnings ?? []),
+        ...buildWarnings,
+        ...zipNotes,
+      ],
     });
   }
 
   const message =
     stderr.trim() || out || `extension build exited with code ${code}`;
-  return JSON.stringify({
-    success: false,
-    browser,
-    error: message.slice(0, 1200),
-    ...(warnings.length ? { warnings } : {}),
-    duration,
+  return envelope({
+    ok: false,
+    command: COMMAND,
+    status: "build-failed",
+    error: { code: "E_BUILD_FAILED", message: message.slice(0, 1200) },
+    value: { browser, duration },
+    warnings,
     hint: "Check that the project has a valid src/manifest.json and its dependencies are installed (extension_dev auto-installs; build does not).",
   });
 }

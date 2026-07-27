@@ -103,13 +103,13 @@ describe("extension_shares", () => {
 
     const out = JSON.parse(await handler({ projectPath: dir }));
     expect(out.ok).toBe(true);
-    const local = out.shares.find((s: any) => s.artifactId === LOCAL_ID);
-    const remote = out.shares.find((s: any) => s.artifactId === REMOTE_ID);
+    const local = out.value.shares.find((s: any) => s.artifactId === LOCAL_ID);
+    const remote = out.value.shares.find((s: any) => s.artifactId === REMOTE_ID);
     expect(local.recordedLocally).toBe(true);
     expect(local.browser).toBe("chrome");
     expect(remote.recordedLocally).toBe(false);
     expect(remote.remoteOnly).toContain("another machine");
-    expect(out.localOnly).toEqual([]);
+    expect(out.value.localOnly).toEqual([]);
   });
 
   it("carries owner and sharedBy through and credits a resolved login", async () => {
@@ -136,7 +136,7 @@ describe("extension_shares", () => {
     });
 
     const out = JSON.parse(await handler({}));
-    const share = out.shares[0];
+    const share = out.value.shares[0];
     expect(share.owner).toEqual({
       kind: "project",
       workspace: "acme",
@@ -150,7 +150,7 @@ describe("extension_shares", () => {
       creditSource: "login",
       revocableBy: expect.stringContaining("Any member of the owning workspace"),
     });
-    expect(out.server.ownership).toEqual({
+    expect(out.value.server.ownership).toEqual({
       project: 1,
       personal: 0,
       unknown: 0,
@@ -181,8 +181,8 @@ describe("extension_shares", () => {
     });
 
     const out = JSON.parse(await handler({}));
-    expect(out.shares[0].attribution.credit).toBe("CLI token tok_9f3");
-    expect(out.shares[0].attribution.creditSource).toBe("tokenId");
+    expect(out.value.shares[0].attribution.credit).toBe("CLI token tok_9f3");
+    expect(out.value.shares[0].attribution.creditSource).toBe("tokenId");
   });
 
   it("says a personal share cannot be revoked by this project token", async () => {
@@ -209,12 +209,12 @@ describe("extension_shares", () => {
     });
 
     const out = JSON.parse(await handler({}));
-    expect(out.shares[0].attribution.ownership).toBe("personal");
-    expect(out.shares[0].attribution.ownerPath).toBeUndefined();
-    expect(out.shares[0].attribution.revocableBy).toContain(
+    expect(out.value.shares[0].attribution.ownership).toBe("personal");
+    expect(out.value.shares[0].attribution.ownerPath).toBeUndefined();
+    expect(out.value.shares[0].attribution.revocableBy).toContain(
       "cannot pull it back",
     );
-    expect(out.server.ownership.personal).toBe(1);
+    expect(out.value.server.ownership.personal).toBe(1);
   });
 
   it("reports a legacy share with no attribution as an explicit unknown", async () => {
@@ -228,14 +228,14 @@ describe("extension_shares", () => {
     });
 
     const out = JSON.parse(await handler({}));
-    expect(out.shares[0].owner).toBeNull();
-    expect(out.shares[0].sharedBy).toBeNull();
-    expect(out.shares[0].attribution.ownership).toBe("unknown");
-    expect(out.shares[0].attribution.creditSource).toBe("none");
-    expect(out.shares[0].attribution.credit).toContain(
+    expect(out.value.shares[0].owner).toBeNull();
+    expect(out.value.shares[0].sharedBy).toBeNull();
+    expect(out.value.shares[0].attribution.ownership).toBe("unknown");
+    expect(out.value.shares[0].attribution.creditSource).toBe("none");
+    expect(out.value.shares[0].attribution.credit).toContain(
       "predates publisher attribution",
     );
-    expect(out.server.ownership.unknown).toBe(1);
+    expect(out.value.server.ownership.unknown).toBe(1);
   });
 
   it("never turns a workspace, a project or an owner into a publisher", async () => {
@@ -268,13 +268,13 @@ describe("extension_shares", () => {
     });
 
     const out = JSON.parse(await handler({}));
-    for (const share of out.shares) {
+    for (const share of out.value.shares) {
       expect(share.attribution.creditSource).toBe("none");
       expect(share.attribution.credit).not.toContain("acme");
       expect(share.attribution.credit).not.toContain("tab-sorter");
     }
-    expect(out.shares[0].attribution.credit).toContain("could not resolve");
-    expect(out.shares[1].attribution.credit).toContain("predates");
+    expect(out.value.shares[0].attribution.credit).toContain("could not resolve");
+    expect(out.value.shares[1].attribution.credit).toContain("predates");
   });
 
   it("explains the personal-vs-project split alongside the rows", async () => {
@@ -288,8 +288,11 @@ describe("extension_shares", () => {
     });
 
     const out = JSON.parse(await handler({}));
-    expect(out.attributionNote).toContain("attribution only");
-    expect(out.attributionNote).toContain("any member can pull it back");
+    const attributionNote = out.warnings.find((w: string) =>
+      w.includes("attribution.ownership"),
+    );
+    expect(attributionNote).toContain("attribution only");
+    expect(attributionNote).toContain("any member can pull it back");
   });
 
   it("calls a past-its-expiry local record expired when the list is whole", async () => {
@@ -305,10 +308,10 @@ describe("extension_shares", () => {
     });
 
     const out = JSON.parse(await handler({ projectPath: dir }));
-    expect(out.localOnly).toHaveLength(1);
-    expect(out.localOnly[0].artifactId).toBe(GONE_ID);
-    expect(out.localOnly[0].status).toContain("expired");
-    expect(out.server.truncated).toBe(false);
+    expect(out.value.localOnly).toHaveLength(1);
+    expect(out.value.localOnly[0].artifactId).toBe(GONE_ID);
+    expect(out.value.localOnly[0].status).toContain("expired");
+    expect(out.value.server.truncated).toBe(false);
   });
 
   it("refuses to call a local record dead when the server list was cut", async () => {
@@ -324,10 +327,13 @@ describe("extension_shares", () => {
     });
 
     const out = JSON.parse(await handler({ projectPath: dir }));
-    expect(out.server.truncated).toBe(true);
-    expect(out.server.truncatedNote).toContain("not the whole set");
-    expect(out.server.truncatedNote).toContain("matched is a floor");
-    expect(out.localOnly[0].status).toContain("unknown");
+    expect(out.value.server.truncated).toBe(true);
+    expect(out.value.server.truncatedNote).toContain("not the whole set");
+    expect(out.value.server.truncatedNote).toContain("matched is a floor");
+    expect(
+      out.warnings.some((w: string) => w.includes("not the whole set")),
+    ).toBe(true);
+    expect(out.value.localOnly[0].status).toContain("unknown");
   });
 
   it("degrades to the local record plus a login hint with no token", async () => {
@@ -337,10 +343,11 @@ describe("extension_shares", () => {
 
     const out = JSON.parse(await handler({ projectPath: dir }));
     expect(out.ok).toBe(true);
-    expect(out.server.listed).toBe(false);
-    expect(out.server.loginHint).toContain("extension_auth");
-    expect(out.localOnly).toHaveLength(1);
-    expect(out.localOnly[0].revokeUrl).toContain(LOCAL_ID);
+    expect(out.status).toBe("listed-local-only");
+    expect(out.value.server.listed).toBe(false);
+    expect(out.value.server.loginHint).toContain("extension_auth");
+    expect(out.value.localOnly).toHaveLength(1);
+    expect(out.value.localOnly[0].revokeUrl).toContain(LOCAL_ID);
   });
 
   it("revokes by url and leaves the append-only record untouched", async () => {
@@ -361,10 +368,15 @@ describe("extension_shares", () => {
       }),
     );
     expect(out.ok).toBe(true);
-    expect(out.artifactId).toBe(LOCAL_ID);
-    expect(out.revoked).toBe(true);
-    expect(out.note).toContain("permanently");
-    expect(out.recordNote).toContain("not rewritten");
+    expect(out.status).toBe("revoked");
+    expect(out.value.artifactId).toBe(LOCAL_ID);
+    expect(out.value.revoked).toBe(true);
+    expect(
+      out.warnings.some((w: string) => w.includes("permanently")),
+    ).toBe(true);
+    expect(
+      out.warnings.some((w: string) => w.includes("not rewritten")),
+    ).toBe(true);
     expect(fs.readFileSync(sharedPreviewsPath(dir), "utf8")).toBe(before);
   });
 
@@ -373,6 +385,8 @@ describe("extension_shares", () => {
       await handler({ action: "revoke", url: "https://example.com/nope" }),
     );
     expect(out.ok).toBe(false);
+    expect(out.status).toBe("bad-request");
+    expect(out.error.code).toBe("E_BAD_REQUEST");
     expect(out.error.name).toBe("SharesInputError");
   });
 
@@ -382,6 +396,8 @@ describe("extension_shares", () => {
       await handler({ action: "revoke", artifactId: REMOTE_ID }),
     );
     expect(out.ok).toBe(false);
+    expect(out.status).toBe("revoke-failed");
+    expect(out.error.code).toBe("E_PLATFORM");
     expect(out.error.name).toBe("SharesNotFoundError");
     expect(out.error.message).toContain("different project");
   });

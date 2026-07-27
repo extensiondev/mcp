@@ -59,17 +59,17 @@ describe("extension_preview_web", () => {
         await handler({ projectPath: dir, build: false, distPath: dir, probe: false }),
       );
       expect(out.ok).toBe(true);
-      expect(out.built).toBe(false);
-      expect(out.manifest).toMatchObject({
+      expect(out.value.built).toBe(false);
+      expect(out.value.manifest).toMatchObject({
         name: "Probe Ext",
         version: "1.2.3",
         manifestVersion: 3,
       });
-      expect(out.surfaces).toEqual(
+      expect(out.value.surfaces).toEqual(
         expect.arrayContaining(["popup", "background-worker"]),
       );
-      expect(new URL(out.deepLink).port).toBe("3110");
-      const internal = new URL(out.deepLink).searchParams.get("url") ?? "";
+      expect(new URL(out.value.deepLink).port).toBe("3110");
+      const internal = new URL(out.value.deepLink).searchParams.get("url") ?? "";
       expect(internal.startsWith("preview://build/")).toBe(true);
       const b64 = internal.slice("preview://build/".length);
       expect(Buffer.from(b64, "base64url").toString("utf8")).toBe(
@@ -92,7 +92,7 @@ describe("extension_preview_web", () => {
           hostUrl: "http://localhost:4321/",
         }),
       );
-      expect(new URL(overridden.deepLink).port).toBe("4321");
+      expect(new URL(overridden.value.deepLink).port).toBe("4321");
 
       const staleArgs = {
         projectPath: dir,
@@ -103,8 +103,8 @@ describe("extension_preview_web", () => {
         inspectUrl: "http://localhost:3106",
       };
       const stale = JSON.parse(await handler(staleArgs));
-      expect(new URL(stale.deepLink).port).toBe("3110");
-      const internal = new URL(stale.deepLink).searchParams.get("url") ?? "";
+      expect(new URL(stale.value.deepLink).port).toBe("3110");
+      const internal = new URL(stale.value.deepLink).searchParams.get("url") ?? "";
       expect(internal.startsWith("preview://build/")).toBe(true);
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
@@ -128,10 +128,10 @@ describe("extension_preview_web", () => {
           hostUrl: "http://localhost:3110",
         }),
       );
-      expect(out.hostReachable).toBe(true);
-      expect(out.previewLoadable).toBe(true);
-      expect(out.probe.fileCount).toBe(3);
-      expect(out.probe.identifier).toBe("preview-abc");
+      expect(out.value.hostReachable).toBe(true);
+      expect(out.value.previewLoadable).toBe(true);
+      expect(out.value.probe.fileCount).toBe(3);
+      expect(out.value.probe.identifier).toBe("preview-abc");
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }
@@ -147,9 +147,9 @@ describe("extension_preview_web", () => {
         await handler({ projectPath: dir, build: false, distPath: dir }),
       );
       expect(out.ok).toBe(true);
-      expect(out.hostReachable).toBe(false);
-      expect(out.previewLoadable).toBe(false);
-      expect(String(out.probe.note)).toMatch(/Start it/);
+      expect(out.value.hostReachable).toBe(false);
+      expect(out.value.previewLoadable).toBe(false);
+      expect(out.warnings.join(" ")).toMatch(/Start it/);
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }
@@ -162,8 +162,8 @@ describe("extension_preview_web", () => {
       const out = JSON.parse(
         await handler({ projectPath: dir, build: false, distPath: dir }),
       );
-      expect(out.hostReachable).toBe(true);
-      expect(out.previewLoadable).toBe(false);
+      expect(out.value.hostReachable).toBe(true);
+      expect(out.value.previewLoadable).toBe(false);
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }
@@ -176,7 +176,8 @@ describe("extension_preview_web", () => {
         await handler({ projectPath: dir, build: false, distPath: dir, probe: false }),
       );
       expect(out.ok).toBe(false);
-      expect(out.stage).toBe("resolve-dist");
+      expect(out.status).toBe("no-dist");
+      expect(out.value.stage).toBe("resolve-dist");
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }
@@ -194,10 +195,10 @@ describe("extension_preview_web", () => {
           open: true,
         }),
       );
-      expect(out.deepLink).toBeTruthy();
-      expect(out.opened).toBeDefined();
-      expect(out.opened.ok).not.toBe(true);
-      expect(String(out.openHint)).toMatch(/live dev session/);
+      expect(out.value.deepLink).toBeTruthy();
+      expect(out.value.opened).toBeDefined();
+      expect(out.value.opened.ok).not.toBe(true);
+      expect(out.warnings.join(" ")).toMatch(/live dev session/);
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }
@@ -241,11 +242,11 @@ describe("extension_preview_web", () => {
           await handler({ projectPath: dir, build: false, distPath: dir, probe: false, share: true }),
         );
         expect(out.ok).toBe(true);
-        expect(out.deepLink).toBeTruthy();
-        expect(out.share.requested).toBe(true);
-        expect(out.share.ok).toBe(false);
-        expect(out.share.supported).toBe(false);
-        expect(String(out.share.loginHint)).toMatch(/extension_auth/);
+        expect(out.value.deepLink).toBeTruthy();
+        expect(out.value.share.requested).toBe(true);
+        expect(out.value.share.ok).toBe(false);
+        expect(out.value.share.supported).toBe(false);
+        expect(String(out.value.share.loginHint)).toMatch(/extension_auth/);
       } finally {
         fs.rmSync(dir, { recursive: true, force: true });
       }
@@ -276,14 +277,14 @@ describe("extension_preview_web", () => {
         const out = JSON.parse(
           await handler({ projectPath: dir, build: false, distPath: dir, probe: false, share: true }),
         );
-        expect(out.share.ok).toBe(true);
-        expect(out.share.previewUrl).toBe(
+        expect(out.value.share.ok).toBe(true);
+        expect(out.value.share.previewUrl).toBe(
           "https://preview.extension.dev/?preview=gen_abc123",
         );
-        expect(out.share.serves).toBe("uploaded-local-build");
-        expect(out.share.localBuildUploaded).toBe(true);
-        expect(out.share.revokeUrl).toBeTruthy();
-        expect(out.share.expiresAt).toBeTruthy();
+        expect(out.value.share.serves).toBe("uploaded-local-build");
+        expect(out.value.share.localBuildUploaded).toBe(true);
+        expect(out.value.share.revokeUrl).toBeTruthy();
+        expect(out.value.share.expiresAt).toBeTruthy();
 
         expect(uploaded.kind).toBe("dist");
         const paths = uploaded.generation.files.map((f: any) => f.path);
@@ -322,10 +323,10 @@ describe("extension_preview_web", () => {
           await handler({ projectPath: dir, build: false, distPath: dir, probe: false, share: true }),
         );
         const recordPath = path.join(dir, ".extension.dev", "shared-previews.json");
-        expect(first.share.record.recorded).toBe(true);
-        expect(first.share.record.path).toBe(recordPath);
-        expect(first.share.record.entries).toBe(1);
-        expect(String(first.share.note)).toContain(recordPath);
+        expect(first.value.share.record.recorded).toBe(true);
+        expect(first.value.share.record.path).toBe(recordPath);
+        expect(first.value.share.record.entries).toBe(1);
+        expect(String(first.value.share.note)).toContain(recordPath);
 
         const afterFirst = JSON.parse(fs.readFileSync(recordPath, "utf8"));
         expect(afterFirst.version).toBe(1);
@@ -343,7 +344,7 @@ describe("extension_preview_web", () => {
         const second = JSON.parse(
           await handler({ projectPath: dir, build: false, distPath: dir, probe: false, share: true }),
         );
-        expect(second.share.record.entries).toBe(2);
+        expect(second.value.share.record.entries).toBe(2);
         const afterSecond = JSON.parse(fs.readFileSync(recordPath, "utf8"));
         expect(afterSecond.shares.map((s: any) => s.artifactId)).toEqual([
           "gen_share1",
@@ -372,8 +373,8 @@ describe("extension_preview_web", () => {
         const out = JSON.parse(
           await handler({ projectPath: dir, build: false, distPath: dir, probe: false, share: true }),
         );
-        expect(out.share.record.gitignored).toBe("added");
-        expect(out.share.record.warning).toBeUndefined();
+        expect(out.value.share.record.gitignored).toBe("added");
+        expect(out.value.share.record.warning).toBeUndefined();
         expect(fs.readFileSync(path.join(dir, ".gitignore"), "utf8")).toContain(
           ".extension.dev/",
         );
@@ -381,7 +382,7 @@ describe("extension_preview_web", () => {
         const again = JSON.parse(
           await handler({ projectPath: dir, build: false, distPath: dir, probe: false, share: true }),
         );
-        expect(again.share.record.gitignored).toBe("already-ignored");
+        expect(again.value.share.record.gitignored).toBe("already-ignored");
         const entries = fs
           .readFileSync(path.join(dir, ".gitignore"), "utf8")
           .split("\n")
@@ -412,11 +413,11 @@ describe("extension_preview_web", () => {
         const out = JSON.parse(
           await handler({ projectPath: dir, build: false, distPath: dir, probe: false, share: true }),
         );
-        expect(out.share.record.recorded).toBe(true);
-        expect(String(out.share.record.preserved)).toMatch(/unreadable\.json$/);
-        expect(fs.readFileSync(out.share.record.preserved, "utf8")).toBe("not json");
+        expect(out.value.share.record.recorded).toBe(true);
+        expect(String(out.value.share.record.preserved)).toMatch(/unreadable\.json$/);
+        expect(fs.readFileSync(out.value.share.record.preserved, "utf8")).toBe("not json");
         const written = JSON.parse(
-          fs.readFileSync(out.share.record.path, "utf8"),
+          fs.readFileSync(out.value.share.record.path, "utf8"),
         );
         expect(written.shares).toHaveLength(1);
       } finally {
@@ -442,10 +443,10 @@ describe("extension_preview_web", () => {
         const out = JSON.parse(
           await handler({ projectPath: dir, build: false, distPath: dir, probe: false, share: true }),
         );
-        expect(out.share.ok).toBe(true);
-        expect(out.share.previewUrl).toBeTruthy();
-        expect(out.share.record.recorded).toBe(false);
-        expect(String(out.share.note)).toMatch(/only copy/);
+        expect(out.value.share.ok).toBe(true);
+        expect(out.value.share.previewUrl).toBeTruthy();
+        expect(out.value.share.record.recorded).toBe(false);
+        expect(String(out.value.share.note)).toMatch(/only copy/);
       } finally {
         fs.rmSync(dir, { recursive: true, force: true });
       }
@@ -463,8 +464,8 @@ describe("extension_preview_web", () => {
         const out = JSON.parse(
           await handler({ projectPath: dir, build: false, distPath: dir, probe: false, share: true }),
         );
-        expect(out.share.ok).toBe(false);
-        expect(out.share.record).toBeUndefined();
+        expect(out.value.share.ok).toBe(false);
+        expect(out.value.share.record).toBeUndefined();
         expect(fs.existsSync(path.join(dir, ".extension.dev"))).toBe(false);
       } finally {
         fs.rmSync(dir, { recursive: true, force: true });
@@ -484,10 +485,10 @@ describe("extension_preview_web", () => {
           await handler({ projectPath: dir, build: false, distPath: dir, probe: false, share: true }),
         );
         expect(out.ok).toBe(true);
-        expect(out.deepLink).toBeTruthy();
-        expect(out.share.ok).toBe(false);
-        expect(out.share.supported).toBe(true);
-        expect(String(out.share.reason)).toMatch(/too large/i);
+        expect(out.value.deepLink).toBeTruthy();
+        expect(out.value.share.ok).toBe(false);
+        expect(out.value.share.supported).toBe(true);
+        expect(String(out.value.share.reason)).toMatch(/too large/i);
       } finally {
         fs.rmSync(dir, { recursive: true, force: true });
       }

@@ -100,8 +100,9 @@ describe("doctor reports failure when the extension is broken", () => {
       await doctor.handler({ projectPath: project, browser: "chrome" }),
     );
 
-    expect(result.healthy).toBe(false);
-    const runtime = result.checks.find(
+    expect(result.ok).toBe(false);
+    expect(result.status).toBe("unhealthy");
+    const runtime = result.value.checks.find(
       (c: { check: string }) => c.check === "runtime-errors",
     );
     expect(runtime.status).toBe("fail");
@@ -120,7 +121,8 @@ describe("wait reports failure when the session is not actually usable", () => {
 
     expect(result.status).not.toBe("ready");
     expect(result.status).toBe("stale");
-    expect(result.message).toMatch(/exited|dead/i);
+    expect(result.error.code).toBe("E_STALE_CONTRACT");
+    expect(result.error.message).toMatch(/exited|dead/i);
   });
 
   it("reports the recorded build error rather than waiting it out", async () => {
@@ -135,7 +137,7 @@ describe("wait reports failure when the session is not actually usable", () => {
       await waitTool.handler({ projectPath: project, browser: "chrome" }),
     );
 
-    expect(result.status).toBe("error");
+    expect(result.status).toBe("contract-error");
   });
 });
 
@@ -169,8 +171,8 @@ describe("build reports failure when the artifact is unusable", () => {
 
     const result = JSON.parse(await build.handler({ projectPath: dir }));
 
-    expect(result.success).toBe(false);
-    expect(result.status).toBe("blocked");
+    expect(result.ok).toBe(false);
+    expect(result.status).toBe("manifest-blocked");
   });
 
   it("refuses to report success when a declared entrypoint never reached dist", async () => {
@@ -188,9 +190,9 @@ describe("build reports failure when the artifact is unusable", () => {
 
     const result = JSON.parse(await build.handler({ projectPath: dir }));
 
-    expect(result.success).toBe(false);
-    expect(result.status).toBe("incomplete");
-    expect(result.buildExitCode).toBe(0);
+    expect(result.ok).toBe(false);
+    expect(result.status).toBe("entrypoint-missing");
+    expect(result.value.buildExitCode).toBe(0);
   });
 
   it("propagates a non-zero build exit as a failure", async () => {
@@ -203,8 +205,8 @@ describe("build reports failure when the artifact is unusable", () => {
 
     const result = JSON.parse(await build.handler({ projectPath: dir }));
 
-    expect(result.success).toBe(false);
-    expect(result.error).toContain("nope.js");
+    expect(result.ok).toBe(false);
+    expect(result.error.message).toContain("nope.js");
   });
 });
 
@@ -287,7 +289,7 @@ describe("swarm-found lies stay fixed", () => {
     const edge = JSON.parse(
       await manifestValidate.handler({ projectPath: dir, browsers: ["edge"] }),
     );
-    expect(edge.valid).toBe(true);
+    expect(edge.value.valid).toBe(true);
     expect(JSON.stringify(edge.warnings)).toMatch(/file_browser_handlers.*inert on Edge/);
 
     const chrome = JSON.parse(
@@ -318,9 +320,9 @@ describe("swarm-found lies stay fixed", () => {
 
     const result = JSON.parse(await build.handler({ projectPath: dir }));
 
-    expect(result.success).toBe(false);
-    expect(result.status).toBe("incomplete");
-    const missing = JSON.stringify(result.entrypoints);
+    expect(result.ok).toBe(false);
+    expect(result.status).toBe("entrypoint-missing");
+    const missing = JSON.stringify(result.value.entrypoints);
     expect(missing).toContain("devtools_page");
     expect(missing).toContain("options_ui.page");
     expect(missing).toContain("side_panel.default_path");
@@ -348,8 +350,8 @@ describe("manifest_validate verdicts are always explainable", () => {
       await manifestValidate.handler({ projectPath: dir }),
     );
 
-    if (result.valid === false) {
-      expect(result.errors.length).toBeGreaterThan(0);
+    if (result.value.valid === false) {
+      expect(result.value.errors.length).toBeGreaterThan(0);
     }
   });
 
@@ -372,7 +374,7 @@ describe("manifest_validate verdicts are always explainable", () => {
       await manifestValidate.handler({ projectPath: dir }),
     );
 
-    const unsupported = Object.entries(result.browserSupport || {}).filter(
+    const unsupported = Object.entries(result.value.browserSupport || {}).filter(
       ([, v]: [string, any]) => !v.supported,
     );
     for (const [browser] of unsupported) {
@@ -399,10 +401,10 @@ describe("manifest_validate verdicts are always explainable", () => {
       await manifestValidate.handler({ projectPath: dir, browsers: ["firefox"] }),
     );
 
-    if (result.browserSupport?.firefox?.supported === false) {
-      expect(result.valid).toBe(false);
-      expect(result.errors.length).toBeGreaterThan(0);
-      expect(JSON.stringify(result.errors)).toContain("firefox");
+    if (result.value.browserSupport?.firefox?.supported === false) {
+      expect(result.value.valid).toBe(false);
+      expect(result.value.errors.length).toBeGreaterThan(0);
+      expect(JSON.stringify(result.value.errors)).toContain("firefox");
     }
   });
 });
@@ -426,7 +428,7 @@ describe("wait distinguishes compiled from usable", () => {
 
     expect(result.status).not.toBe("ready");
     expect(result.status).toBe("compiled-not-attached");
-    expect(result.message).toContain("no executor connected");
+    expect(result.error.message).toContain("no executor connected");
   }, 15_000);
 
   it("reports ready once the executor has attached", async () => {
@@ -475,7 +477,7 @@ describe("build reports what the production artifact lost", () => {
 
     const result = JSON.parse(await build.handler({ projectPath: dir }));
 
-    const divergence = JSON.stringify(result.productionDivergence);
+    const divergence = JSON.stringify(result.value.productionDivergence);
     expect(divergence).toContain("tabs");
     expect(divergence).toContain("web_accessible_resources");
   });
@@ -487,8 +489,10 @@ describe("logs reports failure rather than empty success", () => {
 
     const result = JSON.parse(await logs.handler({ projectPath: project }));
 
-    expect(result.error).toBeDefined();
-    expect(result.error).toContain("No logs found");
+    expect(result.ok).toBe(false);
+    expect(result.status).toBe("no-log-file");
+    expect(result.error.code).toBe("E_LOGS_MISSING");
+    expect(result.error.message).toContain("No logs found");
   });
 
   it("distinguishes an empty log from a missing one", async () => {
@@ -500,7 +504,7 @@ describe("logs reports failure rather than empty success", () => {
     );
 
     if (result.ok) {
-      expect(result.count).toBe(0);
+      expect(result.value.count).toBe(0);
     } else {
       expect(result.error).toBeDefined();
     }
@@ -530,9 +534,12 @@ describe("wave-2 swarm lies stay fixed", () => {
       await manifestValidate.handler({ projectPath: dir, browsers: ["firefox"] }),
     );
 
-    expect(result.valid).toBe(false);
-    expect(result.browserSupport.firefox.supported).toBe(false);
-    const all = [...result.errors, ...result.browserSupport.firefox.issues].join(" ");
+    expect(result.value.valid).toBe(false);
+    expect(result.value.browserSupport.firefox.supported).toBe(false);
+    const all = [
+      ...result.value.errors,
+      ...result.value.browserSupport.firefox.issues,
+    ].join(" ");
     expect(all).toContain("proxy");
     expect(all).toContain("firefox");
   });
@@ -549,8 +556,10 @@ describe("wave-2 swarm lies stay fixed", () => {
       await manifestValidate.handler({ projectPath: dir, browsers: ["chrome"] }),
     );
 
-    expect(result.valid).toBe(false);
-    expect(result.errors.join(" ")).toContain("manifest_version must be 2 or 3");
+    expect(result.value.valid).toBe(false);
+    expect(result.value.errors.join(" ")).toContain(
+      "manifest_version must be 2 or 3",
+    );
   });
 
   it("manifest_validate blocks a default_locale with no catalog (F29)", async () => {
@@ -570,8 +579,8 @@ describe("wave-2 swarm lies stay fixed", () => {
       await manifestValidate.handler({ projectPath: dir, browsers: ["chrome"] }),
     );
 
-    expect(result.valid).toBe(false);
-    expect(result.errors.join(" ")).toContain("_locales/en/messages.json");
+    expect(result.value.valid).toBe(false);
+    expect(result.value.errors.join(" ")).toContain("_locales/en/messages.json");
   });
 
   it("manifest_validate accepts a default_locale whose catalog exists", async () => {
@@ -596,7 +605,7 @@ describe("wave-2 swarm lies stay fixed", () => {
       await manifestValidate.handler({ projectPath: dir, browsers: ["chrome"] }),
     );
 
-    expect(result.errors.join(" ")).not.toContain("_locales");
+    expect(result.value.errors.join(" ")).not.toContain("_locales");
   });
 
   it("manifest_validate warns when the 128px store icon is missing (F30)", async () => {
@@ -633,7 +642,7 @@ describe("wave-2 swarm lies stay fixed", () => {
       await manifestValidate.handler({ projectPath: dir }),
     );
 
-    expect(Object.keys(result.browserSupport)).toContain("edge");
+    expect(Object.keys(result.value.browserSupport)).toContain("edge");
   });
 
   it("logs marks events from a dead session as stale instead of serving them as live (D20)", async () => {
@@ -663,9 +672,9 @@ describe("wave-2 swarm lies stay fixed", () => {
       await logs.handler({ projectPath: project, browser: "chrome" }),
     );
 
-    expect(result.matched).toBeGreaterThan(0);
-    expect(result.stale).toBe(true);
-    expect(result.warning).toContain("dead");
+    expect(result.value.matched).toBeGreaterThan(0);
+    expect(result.status).toBe("stale");
+    expect(result.warnings.join(" ")).toContain("dead");
   });
 
   it("logs does not cry stale over a live session's own events", async () => {
@@ -752,9 +761,9 @@ describe("wave-2 swarm lies stay fixed", () => {
     );
 
     expect(result.status).toBe("ready");
-    expect(result.runtimeErrors).toHaveLength(1);
-    expect(result.runtimeErrors[0]).toContain("boom");
-    expect(result.warning).toContain("throwing at runtime");
+    expect(result.value.runtimeErrors).toHaveLength(1);
+    expect(result.value.runtimeErrors[0]).toContain("boom");
+    expect(result.warnings.join(" ")).toContain("throwing at runtime");
   });
 
   it("storage set without a key answers in MCP vocabulary, not CLI flags (E23/E24)", async () => {
@@ -822,8 +831,8 @@ describe("act verbs report the dead session, not a config riddle", () => {
     );
 
     expect(result.ok).toBe(true);
-    expect(result.note).toContain(">= 4.0.14");
-    expect(result.note).toContain("OLDER engines");
+    expect(result.warnings.join(" ")).toContain(">= 4.0.14");
+    expect(result.warnings.join(" ")).toContain("OLDER engines");
     expect(JSON.stringify(result)).not.toContain("known-broken");
   });
 
@@ -845,7 +854,7 @@ describe("act verbs report the dead session, not a config riddle", () => {
     );
 
     expect(result.ok).toBe(true);
-    expect(result.note).toBeUndefined();
+    expect(result.warnings.join(" ")).not.toContain("4.0.14");
   });
 });
 
@@ -866,8 +875,9 @@ describe("doctor names a dead browser instead of a generic build failure", () =>
       await doctorTool.handler({ projectPath: project, browser: "chrome" }),
     );
 
-    expect(result.healthy).toBe(false);
-    const runtime = result.checks.find(
+    expect(result.ok).toBe(false);
+    expect(result.status).toBe("unhealthy");
+    const runtime = result.value.checks.find(
       (c: { check: string }) => c.check === "runtime-errors",
     );
     expect(runtime.status).toBe("fail");
@@ -902,8 +912,8 @@ describe("create verifies the scaffold instead of trusting the library", () => {
     vi.doUnmock("extension-create");
 
     expect(result.ok).toBe(false);
-    expect(result.status).toBe("incomplete");
-    expect(result.error).toContain("manifest.json");
-    expect(result.nextSteps).toBeUndefined();
+    expect(result.status).toBe("scaffold-incomplete");
+    expect(result.error.message).toContain("manifest.json");
+    expect(result.value.nextSteps).toBeUndefined();
   });
 });

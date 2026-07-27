@@ -67,12 +67,14 @@ describe("build consumes the engine's persisted BuildSummary", () => {
 
     const result = JSON.parse(await build.handler({ projectPath: project }));
 
-    expect(result.success).toBe(true);
-    expect(result.buildWarnings).toEqual([
-      "Deprecation: legacy API",
-      "asset size limit exceeded",
-    ]);
-    expect(result.buildWarningsTruncated).toBeUndefined();
+    expect(result.ok).toBe(true);
+    expect(result.warnings).toEqual(
+      expect.arrayContaining([
+        "Deprecation: legacy API",
+        "asset size limit exceeded",
+      ]),
+    );
+    expect(result.value.buildWarningsTruncated).toBeUndefined();
   });
 
   it("names the true count when the engine capped the list", async () => {
@@ -89,8 +91,8 @@ describe("build consumes the engine's persisted BuildSummary", () => {
 
     const result = JSON.parse(await build.handler({ projectPath: project }));
 
-    expect(result.buildWarnings).toEqual(["w1", "w2"]);
-    expect(result.buildWarningsTruncated).toBe(23);
+    expect(result.warnings).toEqual(expect.arrayContaining(["w1", "w2"]));
+    expect(result.value.buildWarningsTruncated).toBe(23);
   });
 
   it("ignores a stale summary left by an earlier build", async () => {
@@ -103,8 +105,8 @@ describe("build consumes the engine's persisted BuildSummary", () => {
 
     const result = JSON.parse(await build.handler({ projectPath: project }));
 
-    expect(result.success).toBe(true);
-    expect(result.buildWarnings).toBeUndefined();
+    expect(result.ok).toBe(true);
+    expect(result.warnings).not.toContain("old warning");
   });
 
   it("omits the field entirely on engines that predate the contract", async () => {
@@ -112,7 +114,7 @@ describe("build consumes the engine's persisted BuildSummary", () => {
 
     const result = JSON.parse(await build.handler({ projectPath: project }));
 
-    expect(result.success).toBe(true);
-    expect(result.buildWarnings).toBeUndefined();
+    expect(result.ok).toBe(true);
+    expect(result.value.buildWarningsTruncated).toBeUndefined();
   });
 });

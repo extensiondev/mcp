@@ -14,7 +14,14 @@ import {
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { runActVerb, type ActArgs } from "../lib/act";
+import {
+  runActVerb,
+  actFrameJson,
+  addWarning,
+  patchValue,
+  type ActArgs,
+} from "../lib/act";
+import { envelope } from "../lib/envelope";
 import { resolveSessionBrowser } from "../lib/session-browser";
 import { CDPClient } from "../lib/cdp";
 import { resolveCdpPort, CDP_PORT_MISSING_HINT } from "../lib/cdp-port";
@@ -86,9 +93,12 @@ export async function navigateToUrl(
   }
   const resolved = await resolveCdpPort(projectPath, browser);
   if (!resolved) {
-    return JSON.stringify({
+    return envelope({
       ok: false,
+      command: schema.name,
+      status: "no-session",
       error: {
+        code: "E_NO_SESSION",
         name: "NoSession",
         message: `No active dev session / CDP port for ${browser}. Start extension_dev and extension_wait for ready. ${CDP_PORT_MISSING_HINT}`,
       },
@@ -131,9 +141,12 @@ export async function navigateToUrl(
     );
     if (!settled) {
       const isExtensionPage = url.startsWith("chrome-extension://");
-      return JSON.stringify({
+      return envelope({
         ok: false,
+        command: schema.name,
+        status: "navigate-failed",
         error: {
+          code: "E_NAVIGATE_FAILED",
           name: "NavigateFailed",
           message: `Navigation to ${url} did not produce a live page target. ${
             isExtensionPage
@@ -146,28 +159,35 @@ export async function navigateToUrl(
           : "Confirm the URL loads in a normal browser and that the dev session's browser has network access. Nothing about your extension bundle is implicated in a failed http(s) navigation.",
       });
     }
-    return JSON.stringify({
+    return envelope({
       ok: true,
-      navigated: url,
-      ...(openedNewTab ? { openedNewTab: true } : {}),
-      ...(settled.redirectedFrom
-        ? {
-            redirected: { from: settled.redirectedFrom, to: settled.url },
-          }
-        : {}),
-      target: {
-        targetId: settled.id,
-        title: settled.title,
-        url: settled.url,
+      command: schema.name,
+      status: "navigated",
+      value: {
+        navigated: url,
+        ...(openedNewTab ? { openedNewTab: true } : {}),
+        ...(settled.redirectedFrom
+          ? {
+              redirected: { from: settled.redirectedFrom, to: settled.url },
+            }
+          : {}),
+        target: {
+          targetId: settled.id,
+          title: settled.title,
+          url: settled.url,
+        },
       },
       hint:
         "Inspect it with extension_dom_snapshot or extension_inspect using url (context: 'page'), they resolve the tab themselves. " +
         "`target.targetId` is a CDP target id, NOT a chrome.tabs id: do not pass it as `tab`. If you need a numeric tab id, call extension_dom_snapshot with listTabs: true.",
     });
   } catch (e) {
-    return JSON.stringify({
+    return envelope({
       ok: false,
+      command: schema.name,
+      status: "navigate-failed",
       error: {
+        code: "E_NAVIGATE_ERROR",
         name: "NavigateError",
         message: e instanceof Error ? e.message : String(e),
       },
@@ -331,9 +351,12 @@ function missingSurfaceError(
 ): string {
   const declared = declaredSurfaces(projectPath, browser);
   if (declared === null) {
-    return JSON.stringify({
+    return envelope({
       ok: false,
+      command: schema.name,
+      status: "no-manifest",
       error: {
+        code: "E_MANIFEST_NOT_FOUND",
         name: "NoSurfaceDocument",
         message: `No readable manifest was found for this project (checked dist/${browser}, dist, src, and the project root), so the ${surface} document cannot be resolved.`,
       },
@@ -346,13 +369,16 @@ function missingSurfaceError(
     surface === "popup"
       ? 'To exercise the toolbar button of a popup-less extension, call extension_open with surface: "action", which replays chrome.action.onClicked. To give the extension a popup, set action.default_popup in the manifest and rebuild.'
       : `To add one, set ${key} in the manifest and rebuild.`;
-  return JSON.stringify({
+  return envelope({
     ok: false,
+    command: schema.name,
+    status: "no-surface",
     error: {
+      code: "E_NO_SURFACE_DOCUMENT",
       name: "NoSurfaceDocument",
       message: `This extension declares no ${surface}: nothing in its manifest sets ${key}, ${consequence}. That is how the extension is built, not a failure of the session or the tooling.`,
     },
-    ...(others.length ? { declaredSurfaces: others } : {}),
+    value: others.length ? { declaredSurfaces: others } : null,
     hint:
       (others.length
         ? `Surfaces this extension does declare: ${others.join(", ")}; extension_open can target those. `
@@ -456,9 +482,12 @@ async function openSurfaceAsTab(
   if (isChromiumFamily(browser)) {
     extensionId = await resolveExtensionId(projectPath, browser);
     if (!extensionId) {
-      return JSON.stringify({
+      return envelope({
         ok: false,
+        command: schema.name,
+        status: "no-extension-id",
         error: {
+          code: "E_NO_EXTENSION_ID",
           name: "NoExtensionId",
           message:
             "Could not resolve the extension id from the live session's CDP targets.",
@@ -470,9 +499,12 @@ async function openSurfaceAsTab(
   } else {
     const base = await resolveBridgeBaseUrl(projectPath, browser);
     if (!base) {
-      return JSON.stringify({
+      return envelope({
         ok: false,
+        command: schema.name,
+        status: "no-extension-id",
         error: {
+          code: "E_NO_EXTENSION_ID",
           name: "NoExtensionId",
           message:
             "Could not resolve the extension's moz-extension:// base URL from the live session (a background eval of runtime.getURL).",
@@ -487,19 +519,25 @@ async function openSurfaceAsTab(
   try {
     const parsed = JSON.parse(raw);
     if (parsed?.ok) {
-      parsed.renderedAsTab = { surface, document: doc, extensionId };
+      const renderedAsTab: Record<string, unknown> = {
+        surface,
+        document: doc,
+        extensionId,
+      };
+      patchValue(parsed, { renderedAsTab });
+      const target = parsed.value?.target ?? parsed.target;
       let popupBounds: { width: number; height: number; clamped: boolean } | null =
         null;
       if (
         (surface === "popup" || surface === "action") &&
-        typeof parsed.target?.targetId === "string"
+        typeof target?.targetId === "string"
       ) {
         popupBounds = await applyPopupBounds(
           projectPath,
           browser,
-          parsed.target.targetId,
+          target.targetId,
         );
-        if (popupBounds) parsed.renderedAsTab.popupBounds = popupBounds;
+        if (popupBounds) renderedAsTab.popupBounds = popupBounds;
       }
       parsed.hint =
         `Rendered the ${surface} document in a real tab, which is how you inspect a surface headlessly. ` +
@@ -508,7 +546,7 @@ async function openSurfaceAsTab(
           : "It is the same page with the same extension APIs, but it is NOT hosted in a popup window: no popup sizing, and window.close() closes the tab. ") +
         `Inspect it with extension_dom_snapshot context: '${surface}' (include: ['html']), or extension_inspect with this url. ` +
         "Do NOT pass this extension-page url to extension_dom_snapshot or extension_eval as a tab target: script injection cannot reach extension pages, only the surface context or CDP can.";
-      return JSON.stringify(parsed);
+      return actFrameJson(parsed);
     }
   } catch {
     // non-JSON payload; return as-is
@@ -540,16 +578,21 @@ async function confirmSurfaceTarget(
   const wanted = `chrome-extension://${extensionId}/${doc}`;
   const settled = await pollForTarget(resolved.port, wanted, 3000);
   if (settled) {
-    parsed.surfaceTarget = { targetId: settled.id, url: settled.url };
-    return JSON.stringify(parsed);
+    patchValue(parsed, {
+      surfaceTarget: { targetId: settled.id, url: settled.url },
+    });
+    return actFrameJson(parsed);
   }
-  return JSON.stringify({
+  return envelope({
     ok: false,
+    command: schema.name,
+    status: "surface-did-not-open",
     error: {
+      code: "E_SURFACE_DID_NOT_OPEN",
       name: "SurfaceDidNotOpen",
       message: `The engine reported the ${surface} as opened, but no page target for ${wanted} appeared within 3s, so nothing is there to inspect.`,
     },
-    engineResult: parsed,
+    value: { engineResult: parsed },
     hint: `Retry with asTab: true to render ${doc} in a real tab, which works headed or headless. If you expected a window, check that the session is headed and that the surface is declared in the BUILT manifest.`,
   });
 }
@@ -617,9 +660,12 @@ export async function handler(
     return openSurfaceAsTab(args.projectPath, browser, args.surface);
   }
   if (!args.surface) {
-    return JSON.stringify({
+    return envelope({
       ok: false,
+      command: schema.name,
+      status: "bad-request",
       error: {
+        code: "E_BAD_REQUEST",
         name: "BadRequest",
         message:
           "Pass `surface` (popup/options/sidebar/action/command) to open a surface, or `url` to navigate a tab.",
@@ -630,13 +676,16 @@ export async function handler(
   if (args.surface === "command") {
     const declared = declaredCommands(args.projectPath, browser);
     if (declared && args.name && !declared.includes(args.name)) {
-      return JSON.stringify({
+      return envelope({
         ok: false,
+        command: schema.name,
+        status: "unknown-command",
         error: {
+          code: "E_UNKNOWN_COMMAND",
           name: "UnknownCommand",
           message: `"${args.name}" is not declared in the manifest's \`commands\`, so triggering it can only ever be a no-op.`,
         },
-        declaredCommands: declared,
+        value: { declaredCommands: declared },
         hint: declared.length
           ? `Declared commands are: ${declared.join(", ")}. Check for a typo, or add "${args.name}" to the manifest.`
           : "This manifest declares no commands at all. Add a `commands` block, rebuild, then retry.",
@@ -660,17 +709,21 @@ export async function handler(
   if (args.surface === "command" && args.name) cli.push("--name", args.name);
   cli.push("--browser", browser);
   if (args.timeout != null) cli.push("--timeout", String(args.timeout));
-  const raw = await runActVerb(cli, args.projectPath, args.timeout);
+  const raw = await runActVerb(cli, args.projectPath, args.timeout, schema.name);
 
   const headless = sessionIsHeadless();
   if (headless && ["popup", "action", "sidebar"].includes(args.surface)) {
     try {
       const parsed = JSON.parse(raw);
       const msg = String(parsed?.error?.message ?? "");
-      if (
-        parsed?.ok === false &&
-        /active browser window|no active|headless|user gesture/i.test(msg)
-      ) {
+      const code =
+        typeof parsed?.error?.code === "string" ? parsed.error.code : "";
+      const refusedWindow =
+        code === "E_NO_TARGET" ||
+        // Fallback until the CLI stamps a code for a window it cannot open:
+        // the engine's prose is the only signal a headless refusal leaves.
+        /active browser window|no active|headless|user gesture/i.test(msg);
+      if (parsed?.ok === false && refusedWindow) {
         if (AS_TAB_SURFACES.includes(args.surface)) {
           const fallback = await openSurfaceAsTab(
             args.projectPath,
@@ -680,9 +733,11 @@ export async function handler(
           try {
             const parsedFallback = JSON.parse(fallback);
             if (parsedFallback?.ok) {
-              parsedFallback.note =
-                `The dev browser is headless, and a real popup/sidebar window can only open in a headed session, so the surface was rendered as a tab instead. For the real window, ${HEADED_RELAUNCH}, then open the surface again without asTab.`;
-              return JSON.stringify(parsedFallback);
+              addWarning(
+                parsedFallback,
+                `The dev browser is headless, and a real popup/sidebar window can only open in a headed session, so the surface was rendered as a tab instead. For the real window, ${HEADED_RELAUNCH}, then open the surface again without asTab.`,
+              );
+              return actFrameJson(parsedFallback);
             }
           } catch {
             // fall through to the original error
@@ -693,7 +748,7 @@ export async function handler(
             ? "This surface can only open from a real user gesture, which headless automation cannot produce. Retry with asTab: true to render the surface document in a tab instead."
             : `The dev browser is running headless, and a popup/sidebar window needs a headed session. Retry with asTab: true to render the surface document in a tab, or for the real window, ${HEADED_RELAUNCH}.`;
         }
-        return JSON.stringify(parsed);
+        return actFrameJson(parsed);
       }
     } catch {
       // non-JSON payload; return as-is

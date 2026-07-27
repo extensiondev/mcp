@@ -143,7 +143,7 @@ describe("open surface asTab", () => {
 
     expect(result.ok).toBe(true);
     expect(navigations).toEqual([`chrome-extension://${p.id}/popup.html`]);
-    expect(result.renderedAsTab.extensionId).toBe(p.id);
+    expect(result.value.renderedAsTab.extensionId).toBe(p.id);
     expect(result.hint).toContain("NOT hosted in a popup window");
   });
 
@@ -236,7 +236,7 @@ describe("open surface asTab", () => {
     );
 
     expect(result.ok).toBe(false);
-    expect(result.declaredSurfaces).toEqual(["options", "sidebar"]);
+    expect(result.value.declaredSurfaces).toEqual(["options", "sidebar"]);
     expect(result.hint).toContain("options, sidebar");
   });
 
@@ -331,7 +331,8 @@ describe("open never destroys the page you were watching", () => {
     );
 
     expect(result.ok).toBe(true);
-    expect(result.openedNewTab).toBe(true);
+    expect(result.status).toBe("navigated");
+    expect(result.value.openedNewTab).toBe(true);
     expect(createdTabs).toEqual([
       { url: `chrome-extension://${p.id}/popup.html`, background: true },
     ]);
@@ -353,7 +354,7 @@ describe("open never destroys the page you were watching", () => {
     );
 
     expect(result.ok).toBe(true);
-    expect(result.openedNewTab).toBeUndefined();
+    expect(result.value.openedNewTab).toBeUndefined();
     expect(createdTabs).toEqual([]);
     expect(navigations).toEqual([`chrome-extension://${p.id}/popup.html`]);
   });
@@ -395,11 +396,11 @@ describe("open never destroys the page you were watching", () => {
     const result = JSON.parse(await pending);
 
     expect(result.ok).toBe(true);
-    expect(result.redirected).toEqual({
+    expect(result.value.redirected).toEqual({
       from: asked,
       to: "https://preview.extension.dev/trace?session=live",
     });
-    expect(result.target.targetId).toBe("created");
+    expect(result.value.target.targetId).toBe("created");
   }, 15_000);
 
   it("does not blame the extension bundle for a failed http navigation", async () => {
@@ -438,7 +439,7 @@ describe("popup-as-tab window sizing", () => {
     );
 
     expect(result.ok).toBe(true);
-    expect(result.renderedAsTab.popupBounds).toEqual({
+    expect(result.value.renderedAsTab.popupBounds).toEqual({
       width: 360,
       height: 240,
       clamped: false,
@@ -455,7 +456,7 @@ describe("popup-as-tab window sizing", () => {
       await open.handler({ projectPath: p.dir, surface: "popup", asTab: true }),
     );
 
-    expect(result.renderedAsTab.popupBounds).toEqual({
+    expect(result.value.renderedAsTab.popupBounds).toEqual({
       width: 800,
       height: 600,
       clamped: true,
@@ -485,7 +486,7 @@ describe("popup-as-tab window sizing", () => {
     );
 
     expect(result.ok).toBe(true);
-    expect(result.renderedAsTab.popupBounds).toBeUndefined();
+    expect(result.value.renderedAsTab.popupBounds).toBeUndefined();
     expect(result.hint).toContain("no popup sizing");
   });
 

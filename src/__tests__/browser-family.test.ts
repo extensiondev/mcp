@@ -58,7 +58,7 @@ describe("manifest-validate chromium-family gate", () => {
     const result = JSON.parse(
       await validateManifest({ manifestPath, browsers: ["chromium"] }),
     );
-    expect(result.browserSupport.chromium.issues.join("\n")).toContain(
+    expect(result.value.browserSupport.chromium.issues.join("\n")).toContain(
       "Manifest V2 is deprecated on Chromium",
     );
   });

@@ -1,0 +1,64 @@
+// ███╗   ███╗ ██████╗██████╗
+// ████╗ ████║██╔════╝██╔══██╗
+// ██╔████╔██║██║     ██████╔╝
+// ██║╚██╔╝██║██║     ██╔═══╝
+// ██║ ╚═╝ ██║╚██████╗██║
+// ╚═╝     ╚═╝ ╚═════╝╚═╝
+// Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
+
+/**
+ * @deprecated The only module allowed to read the CLI's human output.
+ *
+ * Every regex here is coupled to first-party CLI copy, so a wording change in
+ * the CLI silently changes agent behaviour. They survive as a fallback for a
+ * project whose own `node_modules/.bin/extension` predates the machine
+ * contract: `resolveExtensionInvocation` prefers that binary over the pinned
+ * version, so the MCP can never assume what it is talking to.
+ *
+ * Delete this file, and the exemption for it in `no-prose-scraping`, one
+ * release cycle after the CLI stable that stamps `schema: 1` into ready.json
+ * is the floor. Nothing else in `src/` may match on CLI prose.
+ */
+
+// npm and V8 chatter, mixed into the session log because the detached child
+// writes stdout and stderr to one fd.
+const NOISE = [
+  /^npm warn Unknown project config/i,
+  /This will stop working in the next major version of npm/i,
+  /^npm warn config/i,
+  /^npm warn exec/i,
+  /The following package(s)? (was|were) not found and will be installed/i,
+  /V8: .*Invalid asm\.js/i,
+  /^\(node:\d+\) V8:/i,
+  /Use `node --trace-warnings/i,
+  /Invalid asm\.js:/i,
+  /Linking failure in asm\.js/i,
+  /Successfully compiled asm\.js/i,
+];
+
+/** @deprecated see the module note. */
+export function denoiseCliLog(raw: string): string {
+  return raw
+    .split("\n")
+    .filter((line) => !NOISE.some((re) => re.test(line.trim())))
+    .join("\n")
+    .replace(/\n{2,}/g, "\n")
+    .trimStart();
+}
+
+/** @deprecated Replaced by `ready.json` `status:"error"`. */
+export function legacyCompileScrape(cleanOutput: string): boolean {
+  return /compiled with errors|✖✖✖|ERROR in |Module not found|NOT FOUND/i.test(
+    cleanOutput,
+  );
+}
+
+/** @deprecated Replaced by `ready.json` `code:"profile_locked"`. */
+export function legacyProfileLockScrape(cleanOutput: string): boolean {
+  return /SingletonLock|ProcessSingleton|profile[^\n]*(in use|locked)|already (open|running)/i.test(
+    cleanOutput,
+  );
+}
+
+export const LEGACY_FIDELITY_WARNING =
+  "This session ran a CLI that does not stamp the machine contract, so the boot verdict was read from the dev server's output instead of its ready contract. Diagnostics are less precise: compile errors come back as a text tail rather than a list. Upgrade the project's extension dependency to get the precise verdict.";

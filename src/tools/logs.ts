@@ -19,12 +19,15 @@ import {
   MAX_FOLLOW_MS,
 } from "./logs-constants";
 import { makeFilter, type LogsArgs } from "./logs-filter";
+import { envelope } from "../lib/envelope";
 import {
   resolveSessionBrowser,
   knownSessionBrowsers,
 } from "../lib/session-browser";
 
 export { schema } from "./logs-schema";
+
+const TOOL = "extension_logs";
 
 function logsFilePath(projectPath: string, browser: string): string {
   return path.resolve(
@@ -114,19 +117,25 @@ function summarize(
     : -1;
   const reason =
     matched === 0 && projectPath ? emptyReason(projectPath, browser) : undefined;
-  return JSON.stringify({
+  const stale = Boolean(staleNote) && matched > 0;
+  return envelope({
     ok: true,
-    source,
-    browser,
-    runId: runId || undefined,
-    matched,
-    count: out.length,
-    truncated,
-    dropped: dropped || undefined,
-    nextSince: lastSeq >= 0 ? lastSeq : undefined,
-    ...(reason ? { emptyReason: reason } : {}),
-    ...(staleNote && matched > 0 ? { stale: true, warning: staleNote } : {}),
-    events: out,
+    command: TOOL,
+    status: matched === 0 ? "empty" : stale ? "stale" : "read",
+    value: {
+      source,
+      browser,
+      runId: runId || undefined,
+      matched,
+      count: out.length,
+      // The log window's own truncation, not the envelope's: it says the reader
+      // capped the events below, so it stays beside them.
+      truncated,
+      dropped: dropped || undefined,
+      nextSince: lastSeq >= 0 ? lastSeq : undefined,
+      events: out,
+    },
+    warnings: [reason ?? null, stale ? (staleNote ?? null) : null],
   });
 }
 
@@ -169,8 +178,14 @@ async function readFromFile(
 ): Promise<string> {
   const file = logsFilePath(args.projectPath, browser);
   if (!fs.existsSync(file)) {
-    return JSON.stringify({
-      error: `No logs found at ${file}.`,
+    return envelope({
+      ok: false,
+      command: TOOL,
+      status: "no-log-file",
+      error: {
+        code: "E_LOGS_MISSING",
+        message: `No logs found at ${file}.`,
+      },
       hint: `Start a dev session first (extension_dev), or pass browser to match it. For live frames before any line is written, use follow:true.`,
     });
   }
@@ -217,8 +232,14 @@ async function readFromStream(
     const retarget = running.length
       ? `An active session exists for browser(s): ${running.join(", ")}, pass that as \`browser\`. Otherwise run`
       : "Run";
-    return JSON.stringify({
-      error: `No active control channel found for ${browser}.`,
+    return envelope({
+      ok: false,
+      command: TOOL,
+      status: "no-control-channel",
+      error: {
+        code: "E_NO_CONTROL_CHANNEL",
+        message: `No active control channel found for ${browser}.`,
+      },
       hint: `${retarget} extension_dev (browser: ${browser}) and wait for it to be ready, then retry. For past logs without a live channel, call without follow.`,
     });
   }
@@ -240,10 +261,16 @@ async function readFromStream(
       socket = new WebSocket(url);
     } catch (err) {
       resolve(
-        JSON.stringify({
-          error: `Could not open control channel at ${url}: ${
-            err instanceof Error ? err.message : String(err)
-          }`,
+        envelope({
+          ok: false,
+          command: TOOL,
+          status: "control-channel-failed",
+          error: {
+            code: "E_CONTROL_CHANNEL",
+            message: `Could not open control channel at ${url}: ${
+              err instanceof Error ? err.message : String(err)
+            }`,
+          },
         }),
       );
       return;
@@ -297,8 +324,14 @@ async function readFromStream(
       settled = true;
       clearTimeout(timer);
       resolve(
-        JSON.stringify({
-          error: `Control channel error at ${url}.`,
+        envelope({
+          ok: false,
+          command: TOOL,
+          status: "control-channel-failed",
+          error: {
+            code: "E_CONTROL_CHANNEL",
+            message: `Control channel error at ${url}.`,
+          },
           hint: "The dev session may have stopped or the control port changed. Re-check with extension_wait.",
         }),
       );

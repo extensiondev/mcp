@@ -112,9 +112,10 @@ describe("the carrier never reaches a build", () => {
       await build.handler({ projectPath: dir, skipValidation: true }),
     );
 
-    expect(result.success).toBe(false);
-    expect(result.status).toBe("contaminated");
-    expect(result.error).toMatch(/not safe to submit/);
+    expect(result.ok).toBe(false);
+    expect(result.status).toBe("carrier-in-dist");
+    expect(result.error.code).toBe("E_CARRIER_IN_DIST");
+    expect(result.error.message).toMatch(/not safe to submit/);
   });
 
   it("says nothing about the carrier when there never was one", async () => {
@@ -125,7 +126,7 @@ describe("the carrier never reaches a build", () => {
       await build.handler({ projectPath: dir, skipValidation: true }),
     );
 
-    expect(result.success).toBe(true);
+    expect(result.ok).toBe(true);
     expect(JSON.stringify(result.warnings ?? [])).not.toMatch(/carrier/i);
   });
 });

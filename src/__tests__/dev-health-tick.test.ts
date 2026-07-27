@@ -43,7 +43,9 @@ const dev = await import("../tools/dev");
 const start = await import("../tools/start");
 const wait = await import("../tools/wait");
 const { removeSession } = await import("../lib/process-manager");
-const { writeModernContract } = await import("./fixtures/ready-contract");
+const { writeModernContract, writeMachineContractError } = await import(
+  "./fixtures/ready-contract"
+);
 
 const tmpDirs: string[] = [];
 function tmpProject(): string {
@@ -80,11 +82,14 @@ describe("extension_dev health tick", () => {
 
     const result = JSON.parse(await dev.handler({ projectPath: project }));
 
+    expect(result.schema).toBe(1);
+    expect(result.command).toBe("extension_dev");
     expect(result.ok).toBe(false);
     expect(result.status).toBe("exited");
-    expect(result.exitCode).toBe(1);
-    expect(result.error).toContain("exited during startup");
-    expect(result.output).toContain("EADDRINUSE");
+    expect(result.error.code).toBe("E_SESSION_EXITED");
+    expect(result.value.exitCode).toBe(1);
+    expect(result.error.message).toContain("exited during startup");
+    expect(result.value.output).toContain("EADDRINUSE");
   }, 15_000);
 
   it("surfaces a signalled death", async () => {
@@ -95,7 +100,7 @@ describe("extension_dev health tick", () => {
 
     expect(result.ok).toBe(false);
     expect(result.status).toBe("exited");
-    expect(result.signal).toBe("SIGKILL");
+    expect(result.value.signal).toBe("SIGKILL");
   }, 15_000);
 
   it("applies to extension_start too", async () => {
@@ -106,11 +111,37 @@ describe("extension_dev health tick", () => {
     const result = JSON.parse(await start.handler({ projectPath: project }));
 
     expect(result.ok).toBe(false);
+    expect(result.command).toBe("extension_start");
     expect(result.status).toBe("exited");
-    expect(result.output).toContain("build failed");
+    expect(result.value.output).toContain("build failed");
   }, 20_000);
 
-  it("reports a failed first compile even though the server is alive", async () => {
+  it("reads a failed first compile off the machine contract, not the output", async () => {
+    const project = tmpProject();
+    nextChild = () => {
+      const cli = fakeCli('console.log("building"); setTimeout(()=>{}, 60000);');
+      setTimeout(() => {
+        writeMachineContractError(project, "chrome", {
+          code: "first_compile",
+          message: "Compile failed",
+          errors: ["Module not found: ./src/panel.js"],
+        });
+      }, 300);
+      return cli;
+    };
+
+    const result = JSON.parse(await dev.handler({ projectPath: project }));
+
+    expect(result.ok).toBe(false);
+    expect(result.status).toBe("compile-failed");
+    expect(result.error.code).toBe("E_FIRST_COMPILE");
+    expect(result.value.compileErrors[0]).toContain("./src/panel.js");
+    // The contract answered, so nothing read the dev server's prose.
+    expect(result.warnings).toEqual([]);
+    expect(result.hint).toContain("extension_wait");
+  }, 20_000);
+
+  it("falls back to the output scrape when the CLI stamps no contract", async () => {
     const project = tmpProject();
     nextChild = () =>
       fakeCli(
@@ -121,8 +152,34 @@ describe("extension_dev health tick", () => {
 
     expect(result.ok).toBe(false);
     expect(result.status).toBe("compile-failed");
-    expect(result.output).toContain("compiled with errors");
-    expect(result.hint).toContain("extension_wait");
+    expect(result.error.code).toBe("E_FIRST_COMPILE");
+    expect(result.value.compileErrors).toEqual([]);
+    expect(result.value.output).toContain("compiled with errors");
+    // Degraded fidelity is disclosed rather than silently accepted.
+    expect(result.warnings.join(" ")).toContain("machine contract");
+  }, 20_000);
+
+  it("splits a locked profile out of browser-exited when the contract says so", async () => {
+    const project = tmpProject();
+    nextChild = () => {
+      const cli = fakeCli('console.log("building"); setTimeout(()=>{}, 60000);');
+      setTimeout(() => {
+        writeMachineContractError(project, "chrome", {
+          code: "profile_locked",
+          message: "Profile is locked",
+          profileLockOwner: { host: "somehost", pid: 4242 },
+        });
+      }, 300);
+      return cli;
+    };
+
+    const result = JSON.parse(await dev.handler({ projectPath: project }));
+
+    expect(result.ok).toBe(false);
+    expect(result.status).toBe("profile-locked");
+    expect(result.error.code).toBe("E_PROFILE_LOCKED");
+    expect(result.error.message).toContain("4242");
+    expect(result.value.owner).toEqual({ host: "somehost", pid: 4242 });
   }, 20_000);
 
   it("still reports started for a server that survives the tick", async () => {
@@ -132,10 +189,13 @@ describe("extension_dev health tick", () => {
 
     const result = JSON.parse(await dev.handler({ projectPath: project }));
 
+    expect(result.schema).toBe(1);
     expect(result.ok).toBe(true);
     expect(result.status).toBe("started");
-    expect(result.browser).toBe("chrome");
-    expect(result.earlyOutput).toContain("ready in 300ms");
+    expect(result.value.browser).toBe("chrome");
+    // The success frame points at the log instead of echoing a prose tail.
+    expect(result.value.logPath).toBeTruthy();
+    expect(result.earlyOutput).toBeUndefined();
   }, 15_000);
 });
 
@@ -163,14 +223,14 @@ describe("extension_dev port truth", () => {
     );
 
     expect(result.ok).toBe(true);
-    expect(result.port).toBe(8081);
-    expect(result.requestedPort).toBe(8080);
-    expect(result.portNote).toContain("8081");
+    expect(result.value.port).toBe(8081);
+    expect(result.value.requestedPort).toBe(8080);
+    expect(result.warnings.join(" ")).toContain("8081");
 
     const waited = JSON.parse(
       await wait.handler({ projectPath: project, browser: "chrome" }),
     );
-    expect(waited.port).toBe(result.port);
+    expect(waited.value.port).toBe(result.value.port);
   }, 20_000);
 
   it("labels the requested port honestly when the contract has not landed", async () => {
@@ -183,9 +243,9 @@ describe("extension_dev port truth", () => {
     );
 
     expect(result.ok).toBe(true);
-    expect(result.port).toBeUndefined();
-    expect(result.requestedPort).toBe(8080);
-    expect(result.portNote).toContain("extension_wait");
+    expect(result.value.port).toBeUndefined();
+    expect(result.value.requestedPort).toBe(8080);
+    expect(result.warnings.join(" ")).toContain("extension_wait");
   }, 15_000);
 });
 
@@ -210,15 +270,15 @@ describe("extension_dev build-only sessions", () => {
       await wait.handler({ projectPath: project, browser: "chrome" }),
     );
     expect(waited.status).toBe("ready");
-    expect(waited.buildOnly).toBe(true);
-    expect(waited.compiled).toBe(true);
-    expect(waited.browserAttached).toBe(false);
-    expect(waited.message).toContain("no browser");
+    expect(waited.value.buildOnly).toBe(true);
+    expect(waited.value.compiled).toBe(true);
+    expect(waited.value.browserAttached).toBe(false);
+    expect(waited.hint).toContain("no browser");
     expect(Date.now() - before).toBeLessThan(10_000);
   }, 25_000);
 });
 
-describe("extension_dev earlyOutput denoise", () => {
+describe("extension_dev boot noise", () => {
   it("does not read npm's cold-install notice as a compile failure", async () => {
     const project = tmpProject();
     nextChild = () =>
@@ -232,12 +292,10 @@ describe("extension_dev earlyOutput denoise", () => {
 
     expect(result.ok).toBe(true);
     expect(result.status).toBe("started");
-    expect(result.earlyOutput).not.toContain("will be installed");
-    expect(result.earlyOutput).not.toContain("npm warn exec");
-    expect(result.earlyOutput).toContain("ready in 300ms");
+    expect(result.error).toBeNull();
   }, 15_000);
 
-  it("drops V8 asm.js warning lines but keeps real output", async () => {
+  it("keeps V8 asm.js chatter out of the failure evidence", async () => {
     const project = tmpProject();
     nextChild = () =>
       fakeCli(
@@ -245,15 +303,15 @@ describe("extension_dev earlyOutput denoise", () => {
           'console.log("(Use `node --trace-warnings ...` to show where the warning was created)");' +
           'console.log("Invalid asm.js: Unexpected token");' +
           'console.log("Linking failure in asm.js: Unexpected stdlib member");' +
-          'console.log("ready in 300ms");' +
-          "setTimeout(()=>{}, 60000);",
+          'console.error("Error: listen EADDRINUSE: address already in use :::8080");' +
+          "process.exit(1);",
       );
 
     const result = JSON.parse(await dev.handler({ projectPath: project }));
 
-    expect(result.ok).toBe(true);
-    expect(result.earlyOutput).not.toContain("asm.js");
-    expect(result.earlyOutput).not.toContain("trace-warnings");
-    expect(result.earlyOutput).toContain("ready in 300ms");
+    expect(result.ok).toBe(false);
+    expect(result.value.output).not.toContain("asm.js");
+    expect(result.value.output).not.toContain("trace-warnings");
+    expect(result.value.output).toContain("EADDRINUSE");
   }, 15_000);
 });

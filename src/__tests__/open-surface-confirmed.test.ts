@@ -3,13 +3,23 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { envelope } from "../lib/envelope";
 
-let actResult = JSON.stringify({ ok: true, opened: "options" });
+const openedFrame = () =>
+  envelope({
+    ok: true,
+    command: "extension_open",
+    status: "ok",
+    value: { opened: "options" },
+  });
+
+let actResult = openedFrame();
 let cdpTargets: Array<{ id: string; type: string; url: string }> = [];
 
-vi.mock("../lib/act", () => ({
-  runActVerb: async () => actResult,
-}));
+vi.mock("../lib/act", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../lib/act")>();
+  return { ...actual, runActVerb: async () => actResult };
+});
 
 vi.mock("../lib/cdp-port", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../lib/cdp-port")>();
@@ -73,7 +83,7 @@ function project(): { dir: string; id: string } {
 }
 
 afterEach(() => {
-  actResult = JSON.stringify({ ok: true, opened: "options" });
+  actResult = openedFrame();
   cdpTargets = [];
   for (const dir of tmpDirs.splice(0)) {
     fs.rmSync(dir, { recursive: true, force: true });
@@ -90,9 +100,11 @@ describe("extension_open surface confirmation", () => {
 
     expect(result.ok).toBe(false);
     expect(result.error.name).toBe("SurfaceDidNotOpen");
+    expect(result.error.code).toBe("E_SURFACE_DID_NOT_OPEN");
+    expect(result.status).toBe("surface-did-not-open");
     expect(result.error.message).toContain("nothing is there to inspect");
     expect(result.hint).toContain("asTab: true");
-    expect(result.engineResult.opened).toBe("options");
+    expect(result.value.engineResult.value.opened).toBe("options");
   }, 15_000);
 
   it("confirms and names the target when the surface really opened", async () => {
@@ -110,7 +122,7 @@ describe("extension_open surface confirmation", () => {
     );
 
     expect(result.ok).toBe(true);
-    expect(result.surfaceTarget).toEqual({
+    expect(result.value.surfaceTarget).toEqual({
       targetId: "opt",
       url: `chrome-extension://${p.id}/options.html`,
     });
@@ -118,9 +130,11 @@ describe("extension_open surface confirmation", () => {
 
   it("passes an engine failure through untouched", async () => {
     const p = project();
-    actResult = JSON.stringify({
+    actResult = envelope({
       ok: false,
-      error: { name: "NoSession", message: "no session" },
+      command: "extension_open",
+      status: "no-session",
+      error: { code: "E_NO_SESSION", name: "NoSession", message: "no session" },
     });
 
     const result = JSON.parse(

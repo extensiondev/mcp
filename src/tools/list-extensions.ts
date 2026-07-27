@@ -14,6 +14,7 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { CDPClient } from "../lib/cdp";
+import { envelope } from "../lib/envelope";
 import { isChromiumFamily, isGeckoFamily } from "../lib/browser-family";
 import {
   resolveCdpPort,
@@ -143,17 +144,29 @@ export async function handler(args: {
     return listGeckoExtensions(args.projectPath, browser);
   }
   if (!isChromiumFamily(browser)) {
-    return JSON.stringify({
-      error: `Listing extensions for ${browser} is not supported: no debugging-protocol pairing exists for this browser family.`,
+    return envelope({
+      ok: false,
+      command: schema.name,
+      status: "unsupported-browser",
+      error: {
+        code: "E_UNSUPPORTED_BROWSER",
+        message: `Listing extensions for ${browser} is not supported: no debugging-protocol pairing exists for this browser family.`,
+      },
       hint: "Target a Chromium-family (CDP) or Firefox-family (RDP) dev session.",
     });
   }
 
   const resolved = await resolveCdpPort(args.projectPath, browser);
   if (!resolved) {
-    return JSON.stringify({
-      error:
-        "No active dev session found. Cannot connect to Chrome DevTools Protocol.",
+    return envelope({
+      ok: false,
+      command: schema.name,
+      status: "no-session",
+      error: {
+        code: "E_NO_SESSION",
+        message:
+          "No active dev session found. Cannot connect to Chrome DevTools Protocol.",
+      },
       hint: `Start a dev session first with extension_dev, then use extension_wait to confirm it is ready. ${CDP_PORT_MISSING_HINT}`,
     });
   }
@@ -241,18 +254,30 @@ export async function handler(args: {
     });
 
     const ownEntry = extensions.find((e) => e.ownExtension);
-    return JSON.stringify({
-      cdpPort,
-      browser,
-      count: extensions.length,
-      ownExtensionId: ownEntry?.id ?? null,
-      extensions,
-      note:
+    return envelope({
+      ok: true,
+      command: schema.name,
+      status: "listed",
+      value: {
+        cdpPort,
+        browser,
+        count: extensions.length,
+        ownExtensionId: ownEntry?.id ?? null,
+        extensions,
+      },
+      warnings: [
         "Lists extensions that currently have at least one live context (service worker or open page). An MV3 service worker that has gone dormant with no open page may be absent until it wakes. ownExtension marks the extension this dev session serves, identified from the session's ready contract. Other identity is read read-only via the Extensions domain; other extensions' contexts are never attached to or evaluated in.",
+      ],
     });
   } catch (error) {
-    return JSON.stringify({
-      error: `Failed to list extensions: ${(error as Error).message}`,
+    return envelope({
+      ok: false,
+      command: schema.name,
+      status: "cdp-failed",
+      error: {
+        code: "E_CDP",
+        message: `Failed to list extensions: ${(error as Error).message}`,
+      },
     });
   } finally {
     cdp.disconnect();
@@ -265,9 +290,15 @@ async function listGeckoExtensions(
 ): Promise<string> {
   const resolved = await resolveRdpPort(projectPath, browser);
   if (!resolved) {
-    return JSON.stringify({
-      error:
-        "No active dev session with a Firefox debugger server (RDP) found.",
+    return envelope({
+      ok: false,
+      command: schema.name,
+      status: "no-session",
+      error: {
+        code: "E_NO_SESSION",
+        message:
+          "No active dev session with a Firefox debugger server (RDP) found.",
+      },
       hint: `Start a dev session first with extension_dev, then use extension_wait to confirm it is ready. ${RDP_PORT_MISSING_HINT}`,
     });
   }
@@ -336,18 +367,30 @@ async function listGeckoExtensions(
     });
 
     const ownEntry = extensions.find((e) => e.ownExtension);
-    return JSON.stringify({
-      rdpPort,
-      browser,
-      count: extensions.length,
-      ownExtensionId: ownEntry?.id ?? null,
-      extensions,
-      note:
+    return envelope({
+      ok: true,
+      command: schema.name,
+      status: "listed",
+      value: {
+        rdpPort,
+        browser,
+        count: extensions.length,
+        ownExtensionId: ownEntry?.id ?? null,
+        extensions,
+      },
+      warnings: [
         "Lists INSTALLED add-ons via the RDP root actor (listAddons), regardless of whether a context is currently live, so entries carry no contexts. temporarilyInstalled marks temporary loads; ownExtension marks the extension this dev session serves, matched from the session's ready contract. Add-ons are never attached to or evaluated in.",
+      ],
     });
   } catch (error) {
-    return JSON.stringify({
-      error: `Failed to list extensions over RDP: ${(error as Error).message}`,
+    return envelope({
+      ok: false,
+      command: schema.name,
+      status: "rdp-failed",
+      error: {
+        code: "E_RDP",
+        message: `Failed to list extensions over RDP: ${(error as Error).message}`,
+      },
     });
   }
 }
