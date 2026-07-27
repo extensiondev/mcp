@@ -7,15 +7,27 @@ import {
 } from "../lib/registry-access";
 
 
-vi.mock("../lib/credentials", () => ({
-  readCredentials: vi.fn(() => ({
+const stored = vi.hoisted(() => ({
+  current: {
     version: 1 as const,
     token: "stored-long-lived-token",
     workspaceSlug: "acme",
     projectSlug: "widget",
     expiresAt: 0,
     api: "https://www.extension.dev",
-  })),
+  },
+}));
+
+vi.mock("../lib/credentials", () => ({
+  readCredentials: vi.fn(() => stored.current),
+  readValidCredentials: vi.fn(() => {
+    const creds = stored.current;
+    if (!creds) return null;
+    if (creds.expiresAt && creds.expiresAt <= Math.floor(Date.now() / 1000)) {
+      return null;
+    }
+    return creds;
+  }),
 }));
 
 const REF = { workspace: "acme", project: "widget" };
@@ -28,6 +40,14 @@ function jsonResponse(body: unknown, status = 200): Response {
 
 beforeEach(() => {
   delete process.env.EXTENSION_DEV_TOKEN;
+  stored.current = {
+    version: 1 as const,
+    token: "stored-long-lived-token",
+    workspaceSlug: "acme",
+    projectSlug: "widget",
+    expiresAt: 0,
+    api: "https://www.extension.dev",
+  };
 });
 
 describe("public projects", () => {
@@ -141,6 +161,21 @@ describe("private projects", () => {
 
     expect(results.every((r) => r.ok)).toBe(true);
     expect(mints).toBe(1);
+  });
+
+  it("never posts an expired stored token; it asks for a fresh login instead", async () => {
+    stored.current = {
+      ...stored.current,
+      expiresAt: Math.floor(Date.now() / 1000) - 60,
+    };
+    const fetchImpl = vi.fn(async () => jsonResponse({}, 401));
+    const res = await fetchRegistryJson(URL_UNDER_TEST, fetchImpl as any, {
+      ref: REF,
+      tokens: new RegistryAccessTokens({ fetchImpl: fetchImpl as any }),
+    });
+    expect(res.ok).toBe(false);
+    expect((res as { message: string }).message).toContain("extension_auth");
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
 
   it("explains what to do when no credential covers the project", async () => {

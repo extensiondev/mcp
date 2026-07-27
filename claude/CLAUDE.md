@@ -11,7 +11,7 @@ You are working on a browser extension project built with the [extension.dev](ht
 
 ## Template catalog
 
-The extension.dev platform ships 60+ templates in the [examples](https://github.com/extension-js/examples) repo. The canonical registry is `templates-meta.json` published as a GitHub release asset and committed to the repo.
+The extension.dev platform ships 50+ templates in the [examples](https://github.com/extension-js/examples) repo. The canonical registry is `templates-meta.json` published as a GitHub release asset and committed to the repo.
 
 **How templates work:**
 
@@ -24,8 +24,8 @@ The extension.dev platform ships 60+ templates in the [examples](https://github.
 | Surface        | Vanilla      | React            | Vue           | Svelte           | AI               |
 | -------------- | ------------ | ---------------- | ------------- | ---------------- | ---------------- |
 | Content script | `content`    | `content-react`  | `content-vue` | `content-svelte` | n/a              |
-| Sidebar        | `sidebar`    | `sidebar-shadcn` | n/a           |, | `sidebar-claude` |
-| Action popup   | `action`     | n/a              |, | n/a              | `action-chatgpt` |
+| Sidebar        | `sidebar`    | `sidebar-shadcn` | n/a           | n/a              | `ai-claude`      |
+| Action popup   | `action`     | n/a              | n/a           | n/a              | `ai-chatgpt`     |
 | New tab        | `new`        | `new-react`      | `new-vue`     | `new-svelte`     | n/a              |
 | Full framework | `javascript` | `react`          | `vue`         | `svelte`         | n/a              |
 
@@ -34,7 +34,7 @@ The extension.dev platform ships 60+ templates in the [examples](https://github.
 1. Match the user's desired surface (sidebar, content script, popup, etc.)
 2. Match their framework preference
 3. Prefer `featured: true` templates for common use cases
-4. For AI-powered extensions, start from `sidebar-claude` or `action-chatgpt`
+4. For AI-powered extensions, start from `ai-claude` or `ai-chatgpt`
 
 **To browse all available templates:**
 
@@ -146,7 +146,7 @@ export default {
 
 ## Important gotchas
 
-1. **world: "MAIN" is Chromium-only.** If your content script uses `"world": "MAIN"`, prefix it with `chromium:` and provide a Firefox fallback or skip.
+1. **world: "MAIN" needs Firefox 128+.** Chromium and current Firefox both support it; only when targeting Firefox older than 128 prefix it with `chromium:` and provide a fallback.
 2. **Side panels vs sidebar actions.** Chromium uses `side_panel` + `sidePanel` permission. Firefox uses `sidebar_action` (no permission needed).
 3. **Service workers vs background scripts.** Chromium uses `service_worker` (single file). Firefox uses `scripts` (array).
 4. **Environment variables.** Use `EXTENSION_PUBLIC_*` prefix for variables accessible in extension code. `import.meta.env.EXTENSION_PUBLIC_BROWSER` gives the current browser.

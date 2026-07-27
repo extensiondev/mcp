@@ -166,6 +166,7 @@ function localIndex(entries: SharedPreviewEntry[]): Map<string, SharedPreviewEnt
 function localOnlyStatus(
   entry: SharedPreviewEntry,
   truncated: boolean,
+  liveFiltered: boolean,
   now: number,
 ): string {
   if (truncated) {
@@ -174,6 +175,9 @@ function localOnlyStatus(
   const expiresAt = entry.expiresAt ? Date.parse(entry.expiresAt) : NaN;
   if (Number.isFinite(expiresAt) && expiresAt <= now) {
     return "expired: its own expiresAt has passed, and the platform no longer lists it.";
+  }
+  if (liveFiltered) {
+    return 'not in this live-only listing: the platform was asked for live shares only, so this one may be expired or revoked rather than not owned. Rerun with status:"all" to tell.';
   }
   return "not owned by this token: expired and pruned, revoked long ago, or shared while logged in to a different project.";
 }
@@ -184,6 +188,7 @@ async function listShares(args: {
   limit?: number;
   api?: string;
 }): Promise<string> {
+  const liveFiltered = args.status === "live";
   const local = args.projectPath
     ? readSharedPreviews(args.projectPath)
     : undefined;
@@ -205,7 +210,7 @@ async function listShares(args: {
       };
 
   const listing = await listArtifacts({
-    liveOnly: args.status === "live",
+    liveOnly: liveFiltered,
     ...(args.limit != null ? { limit: args.limit } : {}),
     ...(args.api ? { api: args.api } : {}),
   });
@@ -268,7 +273,7 @@ async function listShares(args: {
     .filter((entry) => !seen.has(entry.artifactId))
     .map((entry) => ({
       ...entry,
-      status: localOnlyStatus(entry, listing.data.truncated, now),
+      status: localOnlyStatus(entry, listing.data.truncated, liveFiltered, now),
     }));
 
   const liveCount = shares.filter((share) => share.live).length;
@@ -306,8 +311,12 @@ async function listShares(args: {
     hint: `${liveCount} of ${shares.length} listed shares still resolve${
       local
         ? `; ${localOnly.length} local record ${
-            localOnly.length === 1 ? "entry has" : "entries have"
-          } no artifact behind them`
+            localOnly.length === 1 ? "entry is" : "entries are"
+          } ${
+            liveFiltered
+              ? 'not in this live-only listing (possibly dead rather than not owned; rerun with status:"all" to tell)'
+              : "without an artifact behind them"
+          }`
         : ""
     }. Revoke one with action:"revoke" and its artifactId or any of its URLs.`,
     warnings: [
@@ -369,6 +378,24 @@ async function revokeShare(args: {
       },
       ...(isAuth ? { hint: LOGIN_HINT } : {}),
       warnings: [recordNote],
+    });
+  }
+
+  if (result.data.revoked !== true) {
+    return envelope({
+      ok: true,
+      command: "extension_shares",
+      status: "revoke-unconfirmed",
+      value: {
+        action: "revoke",
+        artifactId: ref,
+        revoked: false,
+        ...(result.data.revokedAt ? { revokedAt: result.data.revokedAt } : {}),
+      },
+      warnings: [
+        `The platform accepted the request but did not confirm the revocation (revoked came back false), so do not treat this link as dead yet. Run action:"list" to see whether ${ref} still resolves, and retry the revoke if it does.`,
+        recordNote,
+      ],
     });
   }
 

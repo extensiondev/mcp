@@ -11,10 +11,20 @@ import path from "node:path";
 import os from "node:os";
 import type { TemplatesMetaV2, TemplateMeta } from "./types";
 import { templateMetaUrls } from "./template-artifact-source";
+import bundledSnapshot from "./templates-meta.snapshot.json";
 
 const CACHE_DIR = path.join(os.homedir(), ".cache", "extension-js");
 const CACHE_FILE = path.join(CACHE_DIR, "templates-meta.json");
 const CACHE_TTL_MS = 60 * 60 * 1000;
+
+function isUsableMeta(data: unknown): data is TemplatesMetaV2 {
+  return (
+    typeof data === "object" &&
+    data !== null &&
+    Array.isArray((data as TemplatesMetaV2).templates) &&
+    (data as TemplatesMetaV2).templates.length > 0
+  );
+}
 
 function isCacheValid(): boolean {
   try {
@@ -25,10 +35,19 @@ function isCacheValid(): boolean {
   }
 }
 
+function readCachedMeta(): TemplatesMetaV2 | null {
+  try {
+    const cached = JSON.parse(fs.readFileSync(CACHE_FILE, "utf8"));
+    return isUsableMeta(cached) ? cached : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function fetchTemplatesMeta(): Promise<TemplatesMetaV2> {
   if (isCacheValid()) {
-    const cached = JSON.parse(fs.readFileSync(CACHE_FILE, "utf8"));
-    return cached as TemplatesMetaV2;
+    const cached = readCachedMeta();
+    if (cached) return cached;
   }
 
   let lastStatus = 0;
@@ -39,18 +58,27 @@ export async function fetchTemplatesMeta(): Promise<TemplatesMetaV2> {
         lastStatus = response.status;
         continue;
       }
-      const data = (await response.json()) as TemplatesMetaV2;
+      const data = await response.json();
+      if (!isUsableMeta(data)) {
+        continue;
+      }
       fs.mkdirSync(CACHE_DIR, { recursive: true });
-      fs.writeFileSync(CACHE_FILE, JSON.stringify(data, null, 2));
+      const tmpFile = `${CACHE_FILE}.${process.pid}.tmp`;
+      fs.writeFileSync(tmpFile, JSON.stringify(data, null, 2));
+      fs.renameSync(tmpFile, CACHE_FILE);
       return data;
     } catch {
       // Try the next source.
     }
   }
 
-  if (fs.existsSync(CACHE_FILE)) {
-    return JSON.parse(fs.readFileSync(CACHE_FILE, "utf8")) as TemplatesMetaV2;
+  const stale = readCachedMeta();
+  if (stale) return stale;
+
+  if (isUsableMeta(bundledSnapshot)) {
+    return bundledSnapshot;
   }
+
   throw new Error(
     `Failed to fetch templates-meta.json (${lastStatus || "network error"}).`,
   );

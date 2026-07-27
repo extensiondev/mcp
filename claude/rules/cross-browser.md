@@ -49,7 +49,9 @@ if (isFirefoxLike) {
 
 ## Content scripts with world: "MAIN"
 
-`world: "MAIN"` only works on Chromium. Must be prefixed:
+`world: "MAIN"` works on Chromium and on Firefox 128 or newer. Only when
+supporting Firefox older than 128, prefix it so those versions fall back to
+the isolated world:
 
 ```json
 {
@@ -63,7 +65,7 @@ if (isFirefoxLike) {
 }
 ```
 
-Firefox will ignore the `chromium:world` field and run in the default isolated world.
+Older Firefox ignores the `chromium:world` field and runs in the default isolated world.
 
 ## API differences
 

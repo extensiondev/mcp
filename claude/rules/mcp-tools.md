@@ -19,7 +19,7 @@ This file contains structured metadata for every template: surfaces, framework, 
 **How `extension create` resolves templates today:**
 
 ```
-User: npx extension create my-ext --template=sidebar-claude
+User: npx extension create my-ext --template=ai-claude
                                            │
                                            ▼
 programs/create/steps/import-external-template.ts
@@ -64,7 +64,7 @@ These map directly to existing programmatic APIs and provide immediate value.
       "template": {
         "type": "string",
         "default": "typescript",
-        "description": "Template slug from the extension.dev template catalog (e.g. 'react', 'sidebar-claude', 'content-vue'). Use extension_templates to discover options."
+        "description": "Template slug from the extension.dev template catalog (e.g. 'react', 'ai-claude', 'content-vue'). Use extension_templates to discover options."
       },
       "install": {
         "type": "boolean",
@@ -345,7 +345,7 @@ These combine extension.dev knowledge with the examples repo to make Claude _sma
     "properties": {
       "slug": {
         "type": "string",
-        "description": "Template slug (e.g. 'sidebar-claude', 'content-react')"
+        "description": "Template slug (e.g. 'ai-claude', 'content-react')"
       },
       "files": {
         "type": "array",
@@ -892,7 +892,7 @@ const CURATED_ALLOWED_KEYS = [
 ];
 ```
 
-**Example for `sidebar-claude/template.meta.json`:**
+**Example for `ai-claude/template.meta.json`:**
 
 ```json
 {
@@ -942,7 +942,7 @@ These fields enable `extension_templates` to match user intent ("I want to build
 5. Extract browser detection into `extensionDetectBrowsers()` in `programs/extension`
 6. Extract wait mode into `extensionWait()` in `programs/extension`
 7. Add AI metadata fields to `CURATED_ALLOWED_KEYS` in `generate-templates-meta.mjs`
-8. Populate `template.meta.json` with AI fields for key templates (sidebar-claude, action-chatgpt, sidebar-transformers-js)
+8. Populate `template.meta.json` with AI fields for key templates (ai-claude, ai-chatgpt, sidebar-transformers-js)
 
 ### Phase 2: MCP Server package
 

@@ -50,9 +50,7 @@ export function toMcpSpeak(text: string): string {
   );
 }
 
-// The CLI stamps these on a frame whose control channel is missing, refused or
-// unattached; each one earns the same session narration as the prose match.
-const CONTROL_CODES = new Set([
+const CONTROL_CHANNEL_DOWN_CODES = new Set([
   "E_CONTROL_DENIED",
   "E_CONTROL_UNAVAILABLE",
   "E_NO_CONTROL_CHANNEL",
@@ -60,18 +58,21 @@ const CONTROL_CODES = new Set([
   "E_SESSION_NOT_FOUND",
 ]);
 
+/** @deprecated Prose fallback until every CLI stamps a code on its act frames. */
+function legacyControlChannelScrape(message: string): boolean {
+  return /no active control channel|control channel refused|\b1006\b|no executor connected|is the session started with allowControl/i.test(
+    message,
+  );
+}
+
 function withSessionContext(
   message: string,
   projectPath: string,
   code?: string,
 ): string {
-  // The code decides whenever the frame carries one. The prose match below is
-  // the fallback until every CLI stamps a code on its act frames.
   const isControlError = code
-    ? CONTROL_CODES.has(code)
-    : /no active control channel|control channel refused|\b1006\b|no executor connected|is the session started with allowControl/i.test(
-        message,
-      );
+    ? CONTROL_CHANNEL_DOWN_CODES.has(code)
+    : legacyControlChannelScrape(message);
   if (!isControlError) return message;
   const dead = deadReadySession(projectPath);
   if (dead) {
@@ -102,9 +103,7 @@ function translateFrame(frame: any, projectPath: string): any {
   return frame;
 }
 
-// The MCP tool name owns `command` (D6). A caller that has not been threaded
-// through yet falls back to the tool that owns the CLI verb it ran.
-const VERB_TOOL: Record<string, string> = {
+const TOOL_OWNING_VERB: Record<string, string> = {
   eval: "extension_eval",
   inspect: "extension_dom_snapshot",
   open: "extension_open",
@@ -112,9 +111,11 @@ const VERB_TOOL: Record<string, string> = {
   storage: "extension_storage",
 };
 
-// A legacy act frame carries a class name and no code, so the name is the only
-// signal that maps a failure onto a stable code.
-const LEGACY_CODES: Record<string, ErrorCode> = {
+function commandNamePerD6(verb: string, tool?: string): string {
+  return tool ?? TOOL_OWNING_VERB[verb] ?? "extension_act";
+}
+
+const LEGACY_NAME_TO_CODE: Record<string, ErrorCode> = {
   BadRequest: "E_BAD_REQUEST",
   CliError: "E_CLI",
   NoSession: "E_NO_SESSION",
@@ -146,7 +147,7 @@ function wrapLegacyFrame(frame: any, command: string): Record<string, unknown> {
             code:
               typeof raw.code === "string" && raw.code
                 ? raw.code
-                : (name && LEGACY_CODES[name]) || "E_CLI",
+                : (name && LEGACY_NAME_TO_CODE[name]) || "E_CLI",
             message:
               typeof raw.message === "string" ? raw.message : "command failed",
             ...(name ? { name } : {}),
@@ -162,8 +163,6 @@ function wrapLegacyFrame(frame: any, command: string): Record<string, unknown> {
       ...(Array.isArray(notes) ? notes.map((n) => String(n)) : []),
     ],
   });
-  // The new CLI keeps a verb's own extras (inspect's `console`) beside the
-  // envelope, so a wrapped legacy frame leaves them in the same place.
   return { ...extras, ...wrapped };
 }
 
@@ -173,11 +172,21 @@ export async function runActVerb(
   timeoutMs?: number,
   tool?: string,
 ): Promise<string> {
-  const command = tool ?? VERB_TOOL[args[0]] ?? "extension_act";
-  const { code, stdout, stderr } = await runExtensionCli(
-    [...args, "--output", "json"],
-    { cwd: projectPath, timeoutMs },
-  );
+  const command = commandNamePerD6(args[0], tool);
+  const separatorAt = args.indexOf("--");
+  const cliArgs =
+    separatorAt === -1
+      ? [...args, "--output", "json"]
+      : [
+          ...args.slice(0, separatorAt),
+          "--output",
+          "json",
+          ...args.slice(separatorAt),
+        ];
+  const { code, stdout, stderr } = await runExtensionCli(cliArgs, {
+    cwd: projectPath,
+    timeoutMs,
+  });
   const out = stdout.trim();
   if (out) {
     try {
@@ -206,18 +215,23 @@ export async function runActVerb(
   });
 }
 
-// A tool that annotates an act frame writes into the envelope's own slots:
-// advisory prose joins `warnings`, detail keys go under `value`.
 export function addWarning(frame: any, text: unknown): void {
   if (typeof text !== "string" || !text.trim()) return;
   if (!Array.isArray(frame.warnings)) frame.warnings = [];
   if (!frame.warnings.includes(text)) frame.warnings.push(text);
 }
 
-// A tool that annotated the CLI's own frame hands it back through here: act.ts
-// owns the wire form of an act frame, so no tool hand-builds one.
 export function actFrameJson(frame: unknown): string {
   return JSON.stringify(frame);
+}
+
+function patchKeepingScalarResult(
+  current: unknown,
+  patch: Record<string, unknown>,
+): Record<string, unknown> {
+  return current === null || current === undefined
+    ? { ...patch }
+    : { result: current, ...patch };
 }
 
 export function patchValue(frame: any, patch: Record<string, unknown>): void {
@@ -226,12 +240,7 @@ export function patchValue(frame: any, patch: Record<string, unknown>): void {
     Object.assign(current, patch);
     return;
   }
-  // A verb whose value is a scalar (eval returns the expression's result) keeps
-  // it under `result`, so annotating never drops the payload.
-  frame.value =
-    current === null || current === undefined
-      ? { ...patch }
-      : { result: current, ...patch };
+  frame.value = patchKeepingScalarResult(current, patch);
 }
 
 export interface ActArgs {

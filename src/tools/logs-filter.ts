@@ -66,7 +66,9 @@ export function makeFilter(args: LogsArgs): (event: any) => boolean {
     if (event.type === "header") return false;
     if (args.signalsOnly && event.eventType !== "dx.signal") return false;
     if (contexts && !contexts.has(event.context)) return false;
-    if (minLevel !== "all" && minLevel !== "off") {
+    if (minLevel === "off") {
+      if (event.eventType !== "dx.signal") return false;
+    } else if (minLevel !== "all") {
       if (levelRank(event.level) > levelRank(minLevel)) return false;
     }
     if (

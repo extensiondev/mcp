@@ -91,12 +91,6 @@ jobs:
       - name: Install dependencies
         run: pnpm install --no-frozen-lockfile
 
-      - name: Build
-        run: pnpm compile
-
-      - name: Test
-        run: pnpm test
-
       - name: Read package metadata
         id: meta
         shell: bash
@@ -114,6 +108,9 @@ jobs:
             exit 1
           fi
 
+      # The version bump must precede the build: rslib inlines package.json
+      # into dist, and publish runs with --ignore-scripts, so a post-build
+      # bump ships a server that reports the previous release's version.
       - name: Update package version
         env:
           VERSION: ${{ steps.validate.outputs.version }}
@@ -137,6 +134,24 @@ jobs:
               for (const p of j.plugins || []) p.version = v;
             });
           "
+
+      - name: Build
+        run: pnpm compile
+
+      - name: Test
+        run: pnpm test
+
+      - name: Assert the built server reports the release version
+        env:
+          VERSION: ${{ steps.validate.outputs.version }}
+        run: |
+          if ! grep -qF "\"$VERSION\"" dist/module.js && ! grep -qF "$VERSION" dist/module.js; then
+            echo "dist/module.js does not contain $VERSION; the bundle was built from a stale tree" >&2
+            exit 1
+          fi
+
+      - name: Assert the type declarations were emitted
+        run: test -f dist/module.d.ts
 
       - name: Configure git identity
         run: |

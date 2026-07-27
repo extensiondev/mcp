@@ -6,14 +6,15 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-// The one shape every tool returns. It is duplicated from the CLI's schema-1
-// envelope on purpose: src/__tests__/contract/ holds the bytes that keep the
-// two copies honest, so neither repo gains a dependency on the other.
+/* @invariant The one shape every tool returns. It is duplicated from the CLI's
+   schema-1 envelope on purpose: src/__tests__/contract/ holds the bytes that
+   keep the two copies honest, so neither repo gains a dependency on the other. */
 
 export const ENVELOPE_SCHEMA = 1 as const;
 
-// The MCP fills `command` with the tool name, per decision D6. Forking the key
-// to `tool` would fork the schema the checksum test pins.
+export const DECISION_D6 =
+  "The MCP tool name owns the envelope `command` key; forking the key to `tool` would fork the schema the checksum test pins.";
+
 export type ErrorCode =
   | "E_AMBIGUOUS_TARGET"
   | "E_AUTH_DENIED"
@@ -132,8 +133,6 @@ export const ERROR_CODES: ErrorCode[] = [
 export interface EnvelopeError {
   code: ErrorCode | string;
   message: string;
-  // The legacy act-frame keys. src/lib/act.ts and src/tools/shares.ts still
-  // branch on `name`, so it survives alongside the stable `code`.
   name?: string;
   engine?: string | null;
   hint?: string;
@@ -195,8 +194,14 @@ export function envelope(init: EnvelopeInit): string {
   return JSON.stringify(envelopeObject(init));
 }
 
-// A frame that already speaks schema 1 needs no re-wrapping, only the MCP's own
-// `command` and any warnings the tool wants to add.
+export function sessionCommandSinceEnvelopeOwnsCommand(contract: {
+  command?: string;
+}): { sessionCommand?: string } {
+  return contract.command === undefined
+    ? {}
+    : { sessionCommand: contract.command };
+}
+
 export function isEnvelope(frame: unknown): frame is Envelope {
   return (
     !!frame &&

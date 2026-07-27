@@ -164,6 +164,22 @@ describe("extension_dev fork guard", () => {
   }, 20_000);
 });
 
+describe("extension_dev exit cleanup", () => {
+  it("removes the on-disk session marker when the dev server exits", async () => {
+    const project = tmpProject();
+    nextChild = () => fakeCli('console.log("boot"); process.exit(1);');
+
+    const result = JSON.parse(await dev.handler({ projectPath: project }));
+
+    expect(result.status).toBe("exited");
+    await new Promise((r) => setTimeout(r, 200));
+    const markers = listSessionMarkers().map((m) =>
+      path.resolve(m.projectPath),
+    );
+    expect(markers).not.toContain(path.resolve(project));
+  }, 15_000);
+});
+
 describe("extension_dev browser leg health", () => {
   it("reports ok:false when the browser died behind a surviving dev server", async () => {
     const project = tmpProject();
@@ -199,7 +215,6 @@ describe("extension_dev browser leg health", () => {
     expect(result.error.code).toBe("E_PROFILE_LOCKED");
     expect(result.error.message).toContain("profile is locked");
     expect(result.hint).toContain("extension-profile-chrome");
-    // No contract said so, so the degraded read is disclosed.
     expect(result.warnings.join(" ")).toContain("machine contract");
   }, 15_000);
 });

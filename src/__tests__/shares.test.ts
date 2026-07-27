@@ -336,6 +336,44 @@ describe("extension_shares", () => {
     expect(out.value.localOnly[0].status).toContain("unknown");
   });
 
+  it("labels a live-filtered localOnly entry as possibly dead, not unowned", async () => {
+    const dir = tmpProject();
+    seedRecord(dir, GONE_ID);
+    global.fetch = listingFetch({
+      artifacts: [],
+      count: 0,
+      matched: 0,
+      limit: 100,
+      truncated: false,
+      scanned: 1,
+    });
+
+    const out = JSON.parse(await handler({ projectPath: dir, status: "live" }));
+    expect(out.value.localOnly).toHaveLength(1);
+    expect(out.value.localOnly[0].status).toContain("live-only");
+    expect(out.value.localOnly[0].status).not.toContain("not owned by this token");
+    expect(out.value.localOnly[0].status).toContain('status:"all"');
+    expect(out.hint).not.toContain("without an artifact behind them");
+    expect(out.hint).toContain('status:"all"');
+  });
+
+  it("still calls an unfiltered whole-list miss not owned by this token", async () => {
+    const dir = tmpProject();
+    seedRecord(dir, GONE_ID);
+    global.fetch = listingFetch({
+      artifacts: [],
+      count: 0,
+      matched: 0,
+      limit: 100,
+      truncated: false,
+      scanned: 1,
+    });
+
+    const out = JSON.parse(await handler({ projectPath: dir }));
+    expect(out.value.localOnly[0].status).toContain("not owned by this token");
+    expect(out.hint).toContain("without an artifact behind them");
+  });
+
   it("degrades to the local record plus a login hint with no token", async () => {
     delete process.env.EXTENSION_DEV_TOKEN;
     const dir = tmpProject();
@@ -378,6 +416,22 @@ describe("extension_shares", () => {
       out.warnings.some((w: string) => w.includes("not rewritten")),
     ).toBe(true);
     expect(fs.readFileSync(sharedPreviewsPath(dir), "utf8")).toBe(before);
+  });
+
+  it("does not claim a permanent revocation the platform did not confirm", async () => {
+    global.fetch = listingFetch({ artifactId: LOCAL_ID, revoked: false });
+    const out = JSON.parse(
+      await handler({ action: "revoke", artifactId: LOCAL_ID }),
+    );
+    expect(out.ok).toBe(true);
+    expect(out.status).toBe("revoke-unconfirmed");
+    expect(out.value.revoked).toBe(false);
+    expect(
+      out.warnings.some((w: string) => w.includes("permanently")),
+    ).toBe(false);
+    expect(
+      out.warnings.some((w: string) => w.includes("did not confirm")),
+    ).toBe(true);
   });
 
   it("asks for an id instead of guessing when nothing resolves", async () => {

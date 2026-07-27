@@ -315,6 +315,90 @@ describe("open surface asTab", () => {
   });
 });
 
+describe("open trusts the live browser over the computed id hash", () => {
+  const LIVE_ID = "c".repeat(32);
+  const COMPANION_ID = "kgdaecdpfkikjncaalnmmnjjfpofkcbl";
+
+  it("navigates to the CDP-observed id when the computed hash is not in the target list", async () => {
+    const p = project({
+      manifest_version: 3,
+      name: "F",
+      action: { default_popup: "popup.html" },
+    });
+    cdpTargets = [
+      {
+        id: "live",
+        type: "service_worker",
+        url: `chrome-extension://${LIVE_ID}/background/service_worker.js`,
+      },
+      { id: "t1", type: "page", url: "https://example.com" },
+    ];
+
+    const result = JSON.parse(
+      await open.handler({ projectPath: p.dir, surface: "popup", asTab: true }),
+    );
+
+    expect(result.ok).toBe(true);
+    expect(navigations).toEqual([`chrome-extension://${LIVE_ID}/popup.html`]);
+    expect(result.value.renderedAsTab.extensionId).toBe(LIVE_ID);
+  });
+
+  it("does not mistake the engine companion for the guest when picking the live id", async () => {
+    const p = project({
+      manifest_version: 3,
+      name: "F",
+      action: { default_popup: "popup.html" },
+    });
+    cdpTargets = [
+      {
+        id: "companion",
+        type: "service_worker",
+        url: `chrome-extension://${COMPANION_ID}/sw.js`,
+      },
+      {
+        id: "live",
+        type: "service_worker",
+        url: `chrome-extension://${LIVE_ID}/sw.js`,
+      },
+      { id: "t1", type: "page", url: "https://example.com" },
+    ];
+
+    await open.handler({ projectPath: p.dir, surface: "popup", asTab: true });
+
+    expect(navigations).toEqual([`chrome-extension://${LIVE_ID}/popup.html`]);
+  });
+
+  it("recognizes its own extension through a symlinked dist path", async () => {
+    const p = project({
+      manifest_version: 3,
+      name: "F",
+      action: { default_popup: "popup.html" },
+    });
+    const realDist = path.join(p.dir, "real-dist");
+    fs.mkdirSync(realDist, { recursive: true });
+    const linkedDist = path.join(p.dir, "linked-dist");
+    fs.symlinkSync(realDist, linkedDist);
+    const readyDir = path.join(p.dir, "dist", "extension-js", "chrome");
+    fs.writeFileSync(
+      path.join(readyDir, "ready.json"),
+      JSON.stringify({ status: "ready", distPath: linkedDist }),
+    );
+    const realId = expectedId(fs.realpathSync(linkedDist));
+    cdpTargets = [
+      {
+        id: "live",
+        type: "service_worker",
+        url: `chrome-extension://${realId}/sw.js`,
+      },
+      { id: "t1", type: "page", url: "https://example.com" },
+    ];
+
+    await open.handler({ projectPath: p.dir, surface: "popup", asTab: true });
+
+    expect(navigations).toEqual([`chrome-extension://${realId}/popup.html`]);
+  });
+});
+
 describe("open never destroys the page you were watching", () => {
   it("opens a new background tab instead of taking over a real page", async () => {
     const p = project({

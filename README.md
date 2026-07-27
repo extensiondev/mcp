@@ -25,7 +25,7 @@ Extensions fail silently: content scripts that never inject, panels that never o
 
 These tools give agents eyes on the live browser, so they debug from evidence instead of guessing:
 
-- **Scaffold** from the 60+ template catalog behind [templates.extension.dev](https://templates.extension.dev), or add a popup, sidebar, or content script to an existing project
+- **Scaffold** from the 50+ template catalog behind [templates.extension.dev](https://templates.extension.dev), or add a popup, sidebar, or content script to an existing project
 - **Run** the dev server with HMR in Chrome, Edge, Firefox, Brave, Opera, Vivaldi, Yandex, Waterfox, LibreWolf, or any Chromium- or Gecko-based binary, plus Safari on macOS (no HMR yet), no build config
 - **See** the live DOM, unified logs from every extension context, `chrome.storage` contents, and the loaded-extension list
 - **Act**: evaluate code in any context, trigger the action button and commands, reload the extension, replay events
@@ -102,7 +102,7 @@ cp node_modules/@extension.dev/mcp/claude/commands/*.md ~/my-extension/.claude/c
 | Tier | Tool | Description |
 | ---- | ---- | ----------- |
 | build | `extension_create` | Scaffold from a template |
-| build | `extension_templates` | Browse 60+ templates (`list`) and read one's source (`source`) |
+| build | `extension_templates` | Browse 50+ templates (`list`) and read one's source (`source`) |
 | build | `extension_add_feature` | Add sidebar/popup/content script |
 | build | `extension_build` | Build for production |
 | run | `extension_dev` | Dev server with HMR |
@@ -112,8 +112,8 @@ cp node_modules/@extension.dev/mcp/claude/commands/*.md ~/my-extension/.claude/c
 | see | `extension_manifest_validate` | Cross-browser manifest validation |
 | see | `extension_analyze` | Static analysis of the built extension on disk |
 | see | `extension_inspect` | Deep live inspection of a running extension (closed shadow roots, probes) |
-| see | `extension_dom_snapshot` | Shallow DOM snapshot of a chosen tab or extension surface, CDP-free |
-| see | `extension_list_extensions` | List loaded extensions (Chromium) |
+| see | `extension_dom_snapshot` | Shallow DOM snapshot of a chosen tab or extension surface over the agent bridge |
+| see | `extension_list_extensions` | List loaded extensions (Chromium and Firefox) |
 | see | `extension_logs` | Stream logs from every context |
 | see | `extension_doctor` | Diagnose the dev session leg by leg (ready contract, ports, token, executor, browser) |
 | see | `extension_theme_verify` | Verify a Chrome theme manifest against the colors Chrome actually paints |
@@ -142,7 +142,7 @@ That is a different job from shipping. Use `share` for the build you are holding
 
 ## From preview to store
 
-The platform tools connect agents to [extension.dev](https://extension.dev): `extension_auth` runs extension.dev's own device flow (you approve the code at [extension.dev/device](https://extension.dev/device), and GitHub is federated server-side, so no GitHub token ever reaches your machine) and stores a project-scoped token locally (never returned to the agent), `extension_publish` turns a build your project has already published into a shareable URL, and `extension_release_promote` promotes a tested build to a release channel from CI or an agent session, no browser required. `extension_submit` submits a built extension to the Chrome Web Store, Edge Add-ons, and Firefox AMO through extension.dev, which holds your store credentials and dispatches the release from your project's mirror CI, it defaults to a dry run and store credentials are never tool arguments. The two verbs are not interchangeable: `extension_publish` pushes to the extension.dev platform, `extension_submit` sends the build into a store's review queue, which is irreversible. After a real submission, `extension_release_status` reads the recorded outcome, per-store credential health, and review state from the project's public registry, so agents and CI can answer "was it approved?" without a console visit. Access tokens live at most 7 days; CI pipelines re-mint them from the console's Access tokens page.
+The platform tools connect agents to [extension.dev](https://extension.dev): `extension_auth` runs extension.dev's own device flow (you approve the code at [extension.dev/device](https://extension.dev/device), and GitHub is federated server-side, so no GitHub token ever reaches your machine) and stores a project-scoped token locally (never returned to the agent), `extension_publish` turns a build your project has already published into a shareable URL, and `extension_release_promote` promotes a tested build to a release channel from CI or an agent session, no browser required. `extension_submit` submits a built extension to the Chrome Web Store, Edge Add-ons, Firefox AMO, and the App Store for Safari through extension.dev, which holds your store credentials and dispatches the release from your project's mirror CI, it defaults to a dry run and store credentials are never tool arguments. The two verbs are not interchangeable: `extension_publish` pushes to the extension.dev platform, `extension_submit` sends the build into a store's review queue, which is irreversible. After a real submission, `extension_release_status` reads the recorded outcome, per-store credential health, and review state from the project's public registry, so agents and CI can answer "was it approved?" without a console visit. Access tokens live at most 7 days; CI pipelines re-mint them from the console's Access tokens page.
 
 ## The extension.dev stack
 

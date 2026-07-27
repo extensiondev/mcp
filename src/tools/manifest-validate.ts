@@ -435,13 +435,11 @@ export async function handler(args: {
         | Array<Record<string, unknown>>
         | undefined;
 
-      if (contentScripts) {
-        for (const cs of contentScripts) {
-          if (cs.world === "MAIN" || cs["world"] === "MAIN") {
-            issues.push(
-              'content_scripts.world: "MAIN" is Chromium-only. Use "chromium:world": "MAIN" and provide a Firefox fallback.',
-            );
-          }
+      if (contentScripts?.some((cs) => cs.world === "MAIN")) {
+        const note =
+          'content_scripts.world: "MAIN" needs Firefox 128 or later (earlier Firefox runs the script in the isolated world). If you depend on it, set browser_specific_settings.gecko.strict_min_version to "128.0".';
+        if (!result.warnings.includes(note)) {
+          result.warnings.push(note);
         }
       }
       if (chromiumManifest.side_panel && !effective.sidebar_action) {

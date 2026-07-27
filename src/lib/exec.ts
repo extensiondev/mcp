@@ -12,6 +12,7 @@ import os from "node:os";
 import path from "node:path";
 import spawn from "cross-spawn";
 import { dependencies } from "../../package.json";
+import { envelope } from "./envelope";
 
 export interface CliResult {
   code: number | null;
@@ -19,15 +20,25 @@ export interface CliResult {
   stderr: string;
 }
 
+/* @invariant The outer kill timer must outlive the engine's own --timeout
+   envelope: the same timeoutMs is forwarded as the CLI's --timeout, and a
+   zero-margin race yields "exited with code null" instead of the engine's
+   structured timeout frame. */
+const SPAWN_KILL_HEADROOM_MS = 5_000;
+
 const PINNED_CLI_VERSION = String(
   dependencies["extension-develop"] ?? "latest",
 ).replace(/^[\^~]/, "");
 
-function pinnedCliVersion(): string {
+export function pinnedCliVersion(): string {
   const override = String(
     process.env.EXTENSION_MCP_CLI_VERSION || "",
   ).trim();
   return override || PINNED_CLI_VERSION;
+}
+
+export function exactVersion(spec: string): string {
+  return spec.trim().replace(/^[\^~]/, "").replace(/^v/, "");
 }
 
 export function resolveExtensionInvocation(projectDir?: string): {
@@ -90,7 +101,7 @@ export function runExtensionCli(
       cwd: options?.cwd,
       stdio: ["ignore", outFd, errFd],
       env: { ...process.env, FORCE_COLOR: "0", NO_COLOR: "1" },
-      timeout: options?.timeoutMs ?? 30_000,
+      timeout: (options?.timeoutMs ?? 30_000) + SPAWN_KILL_HEADROOM_MS,
     });
     child.on("close", (code) => {
       const stdout = readAll("stdout");
@@ -111,6 +122,7 @@ export interface SpawnedCli {
   child: ChildProcess;
   logPath: string;
   readOutput: () => string;
+  spawnError?: () => Error | null;
 }
 
 export function spawnExtensionCli(
@@ -131,6 +143,11 @@ export function spawnExtensionCli(
   });
   fs.closeSync(fd);
 
+  let spawnFailure: Error | null = null;
+  child.on("error", (err) => {
+    spawnFailure = err;
+  });
+
   child.unref();
 
   return {
@@ -143,5 +160,29 @@ export function spawnExtensionCli(
         return "";
       }
     },
+    spawnError: () => spawnFailure,
   };
+}
+
+export async function spawnFailedEnvelope(
+  command: string,
+  spawned: SpawnedCli,
+): Promise<string> {
+  const deadline = Date.now() + 500;
+  let cause = spawned.spawnError?.() ?? null;
+  while (!cause && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 25));
+    cause = spawned.spawnError?.() ?? null;
+  }
+  return envelope({
+    ok: false,
+    command,
+    status: "spawn-failed",
+    error: {
+      code: "E_CLI",
+      name: "CliError",
+      message: `The extension CLI process could not be spawned${cause ? ` (${cause.message})` : ""}. No session was started and nothing was registered.`,
+    },
+    hint: "Neither a project-local node_modules/.bin/extension nor npx could be launched. Install the engine in the project (npm i -D extension) or put npx on the PATH the MCP server runs with, then call the tool again.",
+  });
 }

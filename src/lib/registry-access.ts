@@ -6,7 +6,7 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-import { readCredentials } from "./credentials";
+import { readValidCredentials } from "./credentials";
 import { resolveApiBase, safeApiBase } from "./login-flow";
 import { identityHeaders } from "./session-identity";
 
@@ -81,7 +81,7 @@ export class RegistryAccessTokens {
   }
 
   private async mint(ref: ProjectRef, apiHint?: string): Promise<AccessGrant> {
-    const creds = readCredentials();
+    const creds = readValidCredentials();
     const token = String(
       process.env.EXTENSION_DEV_TOKEN || creds?.token || "",
     ).trim();

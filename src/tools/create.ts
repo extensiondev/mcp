@@ -9,6 +9,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { extensionCreate } from "extension-create";
+import { exactVersion } from "../lib/exec";
 import { mcpOrigins } from "../lib/registry";
 import { wwwNewPath } from "@extension.dev/urls/paths";
 import { envelope } from "../lib/envelope";
@@ -108,7 +109,13 @@ export async function handler(args: {
       blob,
     );
   };
+  /* @invariant Only a directory this call created fresh may ever be wiped:
+     the scaffolder accepts pre-existing directories (dotfiles, LICENSE,
+     node_modules, .git), and rmSync on one deletes files the tool never
+     created. */
+  const preExisting = fs.existsSync(projectInput);
   const cleanPartial = (): void => {
+    if (preExisting) return;
     try {
       if (args.parentDir && fs.existsSync(projectInput)) {
         fs.rmSync(projectInput, { recursive: true, force: true });
@@ -202,7 +209,9 @@ export async function handler(args: {
   const pin = String(process.env.EXTENSION_MCP_CLI_VERSION || "").trim();
   const scaffoldPin = scaffoldEnginePin(result.projectPath);
   const pinMatches =
-    scaffoldPin !== null && pin !== "" && scaffoldPin.includes(pin);
+    scaffoldPin !== null &&
+    pin !== "" &&
+    exactVersion(scaffoldPin) === exactVersion(pin);
   const engineWarning =
     pin && pin !== "latest" && !pinMatches
       ? `The scaffold pins "extension": "${scaffoldPin ?? "unknown"}"; the project-local engine wins over EXTENSION_MCP_CLI_VERSION=${pin}. Run \`(cd ${result.projectPath} && ${addDev(`extension@${pin}`)})\` to match the pinned engine.`

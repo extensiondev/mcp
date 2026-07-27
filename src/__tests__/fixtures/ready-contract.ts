@@ -67,9 +67,7 @@ export function writeErrorContract(
   });
 }
 
-// A CLI that carries the machine contract stamps `schema: 1`, which is what the
-// MCP probes for before it trusts the contract over the dev server's output.
-export function writeMachineContractError(
+export function writeSchema1ContractError(
   projectPath: string,
   browser: string,
   overrides: Record<string, unknown> = {},
@@ -85,10 +83,11 @@ export function writeMachineContractError(
   });
 }
 
-// What the shipped engine writes today: the ready contract's own schemaVersion,
-// with no `schema: 1` machine-contract declaration. Its error stamps are still
-// authoritative, so a verdict must never be gated on the capability probe.
-export function writeStampedContractError(
+/* @invariant What the shipped engine writes today: the ready contract's own
+   schemaVersion, with no `schema: 1` machine-contract declaration. Its error
+   stamps are still authoritative, so a verdict must never be gated on the
+   capability probe. */
+export function writeShippedEngineContractError(
   projectPath: string,
   browser: string,
   overrides: Record<string, unknown> = {},

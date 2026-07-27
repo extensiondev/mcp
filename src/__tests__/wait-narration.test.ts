@@ -82,8 +82,98 @@ describe("extension_wait budget disclosure", () => {
   }, 10_000);
 });
 
+describe("extension_wait ignores contracts from a previous run", () => {
+  function backdate(file: string, ms: number): void {
+    const past = new Date(Date.now() - ms);
+    fs.utimesSync(file, past, past);
+  }
+
+  it("does not report the previous run's compile error against a booting session", async () => {
+    const file = writeModernContract(dir, "chrome", {
+      status: "error",
+      message: "old compile failed",
+      errors: ["stale error"],
+      pid: process.pid,
+    });
+    backdate(file, 60_000);
+    registerSession({
+      pid: process.pid,
+      browser: "chrome",
+      projectPath: dir,
+      command: "dev",
+    });
+
+    const result = JSON.parse(
+      await handler({ projectPath: dir, browser: "chrome", timeoutMs: 1200 }),
+    );
+
+    expect(result.status).not.toBe("contract-error");
+    expect(result.status).toBe("timeout");
+    expect(result.warnings.join(" ")).toContain("previous run");
+  }, 10_000);
+
+  it("does not call a healthy booting session stale over a dead leftover ready stamp", async () => {
+    const file = writeModernContract(dir, "chrome", {
+      status: "ready",
+      pid: 2 ** 30,
+    });
+    backdate(file, 60_000);
+    registerSession({
+      pid: process.pid,
+      browser: "chrome",
+      projectPath: dir,
+      command: "dev",
+    });
+
+    const result = JSON.parse(
+      await handler({ projectPath: dir, browser: "chrome", timeoutMs: 1200 }),
+    );
+
+    expect(result.error?.code).not.toBe("E_STALE_CONTRACT");
+    expect(result.status).toBe("timeout");
+  }, 10_000);
+
+  it("does not trust an error stamp whose dev-server pid is dead when no session is known", async () => {
+    writeModernContract(dir, "chrome", {
+      status: "error",
+      message: "compile failed long ago",
+      pid: 2 ** 30,
+    });
+
+    const result = JSON.parse(
+      await handler({ projectPath: dir, browser: "chrome", timeoutMs: 1200 }),
+    );
+
+    expect(result.status).not.toBe("contract-error");
+    expect(result.status).toBe("timeout");
+    expect(result.warnings.join(" ")).toContain("dead");
+  }, 10_000);
+
+  it("still reports a fresh compile error from the live session", async () => {
+    registerSession({
+      pid: process.pid,
+      browser: "chrome",
+      projectPath: dir,
+      command: "dev",
+    });
+    writeModernContract(dir, "chrome", {
+      status: "error",
+      message: "fresh compile failed",
+      errors: ["broken import"],
+      pid: process.pid,
+    });
+
+    const result = JSON.parse(
+      await handler({ projectPath: dir, browser: "chrome", timeoutMs: 2000 }),
+    );
+
+    expect(result.status).toBe("contract-error");
+    expect(result.error.message).toContain("fresh compile failed");
+  }, 10_000);
+});
+
 describe("extension_wait splits compiled from browserAttached", () => {
-  it("reports both facts true on a compiled and attached session", async () => {
+  it("reports both facts true, renaming the contract's own command to sessionCommand since the envelope owns the command key", async () => {
     writeModernContract(dir, "chrome", {
       command: "dev",
       port: 8083,
@@ -103,7 +193,6 @@ describe("extension_wait splits compiled from browserAttached", () => {
     expect(result.value.port).toBe(8083);
     expect(result.value.budgetMs).toBe(45000);
     expect(typeof result.value.elapsedMs).toBe("number");
-    // The ready contract's own `command` is renamed: the envelope owns that key.
     expect(result.command).toBe("extension_wait");
     expect(result.value.sessionCommand).toBe("dev");
   });

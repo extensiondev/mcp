@@ -125,7 +125,6 @@ export async function navigateToUrlViaBridge(
   try {
     const parsed = JSON.parse(raw);
     if (parsed?.ok === false) {
-      // runActVerb already shaped this into schema 1; only the hint is added.
       return actFrameJson(
         parsed.hint
           ? parsed

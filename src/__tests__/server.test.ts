@@ -304,7 +304,7 @@ describe("logs handler", () => {
 
     const capped = JSON.parse(await logs.handler({ projectPath: root, limit: 1 }));
     expect(capped.value.count).toBe(1);
-    expect(capped.value.truncated).toBe(true);
+    expect(capped.value.windowTruncated).toBe(true);
     expect(capped.value.events[0].seq).toBe(3);
 
     fs.rmSync(root, { recursive: true, force: true });

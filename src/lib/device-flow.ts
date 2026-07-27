@@ -102,11 +102,20 @@ export async function pollDeviceToken(args: {
     }
 
     if (res.ok && data.token) {
-      const creds = persistTokenResponse({
-        apiBase: args.apiBase,
-        data,
-      });
-      return { ok: true, creds };
+      try {
+        const creds = persistTokenResponse({
+          apiBase: args.apiBase,
+          project: args.project,
+          data,
+        });
+        return { ok: true, creds };
+      } catch (err: any) {
+        return {
+          ok: false,
+          reason: "error",
+          message: err?.message ? String(err.message) : String(err),
+        };
+      }
     }
 
     const error = String(data.error || "");
@@ -123,6 +132,14 @@ export async function pollDeviceToken(args: {
         ok: false,
         reason: "error",
         message: String(data.message || error),
+      };
+    } else if (!error && !res.ok) {
+      return {
+        ok: false,
+        reason: "error",
+        message: `Device token poll failed (${res.status}): ${String(
+          data.message || text || "no response body",
+        ).slice(0, 200)}`,
       };
     }
 

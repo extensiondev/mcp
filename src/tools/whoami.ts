@@ -37,7 +37,7 @@ export async function readIdentity(): Promise<string> {
     ? "The stored token has expired. Run extension_auth (action: login) to refresh it."
     : `Logged in as ${creds.workspaceSlug}/${creds.projectSlug}, per the token extension_auth stored on this machine. That token is what scopes the identity: it does not follow the current working directory or project folder.`;
   const apiDivergesNote = apiDiverges
-    ? `This login was minted via ${recordedApi}, but authenticated tools do not read that recorded value: they target ${effectiveDefaultApi} unless given an api argument.`
+    ? `This login was minted via ${recordedApi}: access grants for private registry reads use that recorded base when no api argument is given, while other authenticated tools target ${effectiveDefaultApi} unless given one.`
     : null;
   const envTokenNote = envTokenSet
     ? "EXTENSION_DEV_TOKEN is set and takes precedence over this stored login for authenticated tools; this report describes only the stored login."

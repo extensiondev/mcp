@@ -35,8 +35,6 @@ const schema = JSON.parse(
   fs.readFileSync(path.join(contractDir, "envelope.schema.json"), "utf8"),
 );
 
-// The CLI ships its own copy inside extension-develop once it carries phase 4.
-// Until then the directory is simply absent, and the byte comparison skips.
 const resolveShippedContract = (): string | null => {
   for (let dir = here; ; dir = path.dirname(dir)) {
     const candidate = path.join(
@@ -90,9 +88,10 @@ describe("the copied CLI contract is the same bytes on both sides", () => {
   });
 
   it("names the CLI release the copy was cut from", () => {
+    /* @invariant Deliberately NOT read from package.json: MCP CI rewrites the
+       engine pin (`pnpm add extension-develop@<matrix>`) before it runs this
+       suite. */
     expect(pin.cliVersion).toMatch(/^\d+\.\d+\.\d+/);
-    // Deliberately NOT read from package.json: MCP CI rewrites the engine pin
-    // (`pnpm add extension-develop@<matrix>`) before it runs this suite.
     expect(fs.existsSync(path.join(contractDir, PIN_FILE))).toBe(true);
   });
 
@@ -123,7 +122,7 @@ describe("the copied CLI contract is the same bytes on both sides", () => {
   });
 });
 
-describe("this package produces what the copied schema describes", () => {
+describe("this package produces what the copied schema describes, checked by a hand-rolled walker because ajv would be a fifth runtime dependency for eight keys", () => {
   it("declares the same schema version the CLI does", () => {
     expect(schema.properties.schema.const).toBe(ENVELOPE_SCHEMA);
   });

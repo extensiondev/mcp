@@ -5,8 +5,6 @@ import { describe, expect, it } from "vitest";
 
 const srcDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
-// Tokens that only ever appear in first-party CLI copy. Matching on any of them
-// couples agent behaviour to a copy edit in another repo.
 const CLI_COPY_TOKENS = [
   "compiled with errors",
   "✖✖✖",
@@ -20,13 +18,10 @@ const CLI_COPY_TOKENS = [
   "Author says",
 ];
 
-// Every exemption is a fallback for a CLI that does not speak the machine
-// contract yet, and every one of them carries a @deprecated marker naming the
-// condition for its deletion. The list shrinks to zero; it never grows.
 const EXEMPT = new Map<string, string>([
   [
     "lib/legacy-stdout.ts",
-    "the whole module is the deprecated stdout fallback",
+    'the whole module is the deprecated stdout fallback; its compile scrape is replaced by ready.json status:"error" and its profile-lock scrape by ready.json code:"profile_locked"',
   ],
   [
     "lib/act.ts",
@@ -39,6 +34,10 @@ const EXEMPT = new Map<string, string>([
   [
     "tools/build.ts",
     "the Size:/Build Status: scrapes, until build speaks the envelope",
+  ],
+  [
+    "tools/eval.ts",
+    "the tab-unreachable prose match, until the CLI stamps a code on every eval failure",
   ],
 ]);
 
@@ -63,9 +62,13 @@ const sources = [
   text: fs.readFileSync(file, "utf8"),
 }));
 
-describe("no tool reads the CLI's human copy", () => {
+describe("no tool reads the CLI's human copy: each token above appears only in first-party CLI copy, so matching one couples agent behaviour to a copy edit in another repo", () => {
   it("has sources to check", () => {
     expect(sources.length).toBeGreaterThan(20);
+  });
+
+  it("keeps every exemption a @deprecated fallback for a CLI without the machine contract: the list shrinks to zero, it never grows", () => {
+    expect(EXEMPT.size).toBeLessThanOrEqual(5);
   });
 
   for (const { relative, text } of sources) {

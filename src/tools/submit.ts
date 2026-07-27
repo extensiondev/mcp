@@ -65,6 +65,7 @@ export interface SubmitToolArgs {
   channel?: string;
   version?: string;
   dryRun?: boolean;
+  projectPath?: string;
   api?: string;
 }
 
@@ -101,6 +102,11 @@ export const schema = {
         default: true,
         description:
           "Preflight only. Pass false to actually dispatch (irreversible, enters store review).",
+      },
+      projectPath: {
+        type: "string",
+        description:
+          "Path to the extension project root, read only for the local STORE.md advisory check. Nothing local is uploaded; without it the check falls back to the server's working directory.",
       },
       api: API_BASE,
     },
@@ -212,14 +218,19 @@ export async function handler(args: SubmitToolArgs): Promise<string> {
   )
     ? [...data.warnings]
     : [];
-  warnings.push(...storeMdWarnings(browsers, process.cwd()));
+  warnings.push(
+    ...storeMdWarnings(
+      browsers,
+      String(args.projectPath || "").trim() || process.cwd(),
+    ),
+  );
 
   const result: Record<string, unknown> = { mode: "platform", dryRun, ...data };
-  // The envelope carries these itself, so they never ride along inside `value`.
   delete result.ok;
   delete result.warnings;
   delete result.message;
-  let ok = data?.ok !== false;
+  const platformOk = data?.ok !== false;
+  let ok = platformOk;
   let message = typeof data?.message === "string" ? data.message : "";
   let channelNote: string | null = null;
   let statusNote: string | null = null;
@@ -299,7 +310,10 @@ export async function handler(args: SubmitToolArgs): Promise<string> {
     });
 
     const actionable = preflight.filter((p) => p.ok).map((p) => p.browser);
-    const blocked = preflight.filter((p) => !p.ok);
+    const blocked = preflight.filter(
+      (p) => !p.ok && p.configured !== "unknown",
+    );
+    const unverified = preflight.filter((p) => p.configured === "unknown");
 
     const channelDefaulted = !String(args.channel || "").trim();
     const resolvedChannel =
@@ -321,21 +335,39 @@ export async function handler(args: SubmitToolArgs): Promise<string> {
     }
 
     const summaryParts: string[] = [];
+    if (!platformOk) {
+      summaryParts.push(
+        `Preflight FAILED on the platform${
+          typeof data?.message === "string" && data.message
+            ? `: ${data.message}`
+            : ""
+        }. The per-store rows below are advisory and do not override that verdict.`,
+      );
+    }
     if (actionable.length > 0) {
       summaryParts.push(
-        `Preflight passed for ${actionable.join(", ")}: the platform verified auth, the project, build ${
-          data?.buildId ?? buildSha
-        }, and the store workflow, and the store credentials passed their last health check.`,
+        platformOk
+          ? `Preflight passed for ${actionable.join(", ")}: the platform verified auth, the project, build ${
+              data?.buildId ?? buildSha
+            }, and the store workflow, and the store credentials passed their last health check.`
+          : `${actionable.join(", ")}: the store credentials passed their last health check, but the platform failure above still blocks submission.`,
       );
     }
     for (const p of blocked) {
+      summaryParts.push(`${p.browser}: NOT actionable - ${p.reason}`);
+    }
+    for (const p of unverified) {
       summaryParts.push(
-        `${p.browser}: ${p.configured === "unknown" ? "cannot be verified" : "NOT actionable"} - ${p.reason}`,
+        `${p.browser}: cannot be verified - ${p.reason}${
+          platformOk
+            ? ` The platform preflight itself passed, so this is advisory only.`
+            : ""
+        }`,
       );
     }
     summaryParts.push(storeModeNote);
 
-    ok = actionable.length > 0;
+    ok = platformOk && (blocked.length === 0 || actionable.length > 0);
     result.preflight = preflight;
     result.channel = resolvedChannel;
     result.channelDefaulted = channelDefaulted;

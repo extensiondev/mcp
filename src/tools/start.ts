@@ -9,8 +9,12 @@
 import { LAUNCH_BROWSER, PROJECT_PATH } from "../lib/common-schema";
 import { pollBootVerdict } from "../lib/boot-verdict";
 import { envelope } from "../lib/envelope";
-import { spawnExtensionCli } from "../lib/exec";
-import { registerSession, removeSession } from "../lib/process-manager";
+import { spawnExtensionCli, spawnFailedEnvelope } from "../lib/exec";
+import {
+  registerSession,
+  removeSession,
+  removeSessionMarker,
+} from "../lib/process-manager";
 import {
   LAUNCH_FLAG_SCHEMA,
   launchFlagArgs,
@@ -74,7 +78,10 @@ export async function handler(
   const spawnedAt = Date.now();
   const spawned = spawnExtensionCli(cliArgs, { projectDir: args.projectPath });
   const { child, logPath } = spawned;
-  const pid = child.pid!;
+  if (child.pid === undefined) {
+    return spawnFailedEnvelope(schema.name, spawned);
+  }
+  const pid = child.pid;
 
   registerSession({
     pid,
@@ -82,7 +89,10 @@ export async function handler(
     projectPath: args.projectPath,
     command,
   });
-  child.on("exit", () => removeSession(args.projectPath, browser));
+  child.on("exit", () => {
+    removeSession(args.projectPath, browser, pid);
+    removeSessionMarker(args.projectPath, browser, pid);
+  });
 
   const boot = await pollBootVerdict(args.projectPath, browser, {
     child,
@@ -91,7 +101,7 @@ export async function handler(
     since: spawnedAt,
     noBrowser: Boolean(args.noBrowser),
   });
-  const cleanOutput = boot.output;
+  const cleanOutput = boot.evidenceTail;
   const session = { projectPath: args.projectPath, browser, pid, logPath };
 
   if (boot.verdict.kind === "exited") {
@@ -119,8 +129,6 @@ export async function handler(
     });
   }
 
-  // start had no compile leg before the contract was readable: a production
-  // build that failed came back as an exit, or worse as a launched session.
   if (boot.verdict.kind === "compile-failed") {
     const { compileErrors } = boot.verdict;
     return envelope({

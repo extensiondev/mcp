@@ -10,9 +10,12 @@ import { PROJECT_PATH, SESSION_BROWSER } from "../lib/common-schema";
 import fs from "node:fs";
 import path from "node:path";
 import type { ReadyContract } from "../lib/types";
-import { findSessionInfo } from "../lib/process-manager";
+import { findSessionInfo, sessionSinceMs } from "../lib/process-manager";
 import { resolveSessionBrowser } from "../lib/session-browser";
-import { envelope } from "../lib/envelope";
+import {
+  envelope,
+  sessionCommandSinceEnvelopeOwnsCommand,
+} from "../lib/envelope";
 import { verifyGuestLoaded } from "../lib/guest-load-oracle";
 import { recentErrorLogs } from "./doctor";
 
@@ -80,16 +83,32 @@ export async function handler(args: {
   );
 
   const buildOnly = findSessionInfo(args.projectPath, browser)?.noBrowser === true;
+  const since = sessionSinceMs(args.projectPath, browser);
 
   const start = Date.now();
   const pollInterval = 1000;
   let sawCompiledButUnattached = false;
   let lastContractStatus: string | null = null;
+  let staleContractNote: string | null = null;
 
   while (Date.now() - start < budgetMs) {
     try {
+      const stat = fs.statSync(readyPath);
       const raw = fs.readFileSync(readyPath, "utf8");
       const contract: ReadyContract = JSON.parse(raw);
+      const stampedBeforeSession = since !== null && stat.mtimeMs < since;
+      const deadOrphanStamp =
+        since === null &&
+        contract.status !== "ready" &&
+        typeof contract.pid === "number" &&
+        !isAlive(contract.pid);
+      if (stampedBeforeSession || deadOrphanStamp) {
+        staleContractNote = stampedBeforeSession
+          ? `A ready.json contract stamped before this session started (status: ${contract.status}) was ignored; it describes the previous run, not this one.`
+          : `A ready.json contract whose dev-server pid ${contract.pid} is dead (status: ${contract.status}) was ignored; it describes a session that already exited.`;
+        await new Promise((resolve) => setTimeout(resolve, pollInterval));
+        continue;
+      }
       lastContractStatus = contract.status;
 
       if (contract.status === "ready") {
@@ -122,9 +141,7 @@ export async function handler(args: {
               buildOnly: true,
               compiled: true,
               browserAttached: false,
-              // The ready contract calls this `command` too; the envelope owns
-              // that key, so the session's own verb is renamed here.
-              sessionCommand: contract.command,
+              ...sessionCommandSinceEnvelopeOwnsCommand(contract),
               browser: contract.browser,
               port: contract.port,
               pid: contract.pid,
@@ -167,7 +184,7 @@ export async function handler(args: {
             ...(guestCheck.checked
               ? { guestIds: guestCheck.guestIds }
               : { guestLoadNote: guestCheck.reason }),
-            sessionCommand: contract.command,
+            ...sessionCommandSinceEnvelopeOwnsCommand(contract),
             browser: contract.browser,
             port: contract.port,
             pid: contract.pid,
@@ -253,6 +270,7 @@ export async function handler(args: {
       clamped
         ? `requested ${requested}ms was clamped to ${SAFE_CEILING_MS}ms to stay under the MCP client request timeout`
         : null,
+      staleContractNote,
     ],
     hint: "Still building, call extension_wait again to keep waiting (it resumes polling the same contract). If it never readies, check the dev process with extension_doctor.",
   });
