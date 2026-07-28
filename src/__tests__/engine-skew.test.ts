@@ -6,8 +6,12 @@ import { WebSocketServer } from "ws";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import * as bridge from "extension-develop/bridge";
-import { handler, controlRejectionNote } from "../tools/logs";
+import { handler, controlRefusal } from "../tools/logs";
 import {
+  CLOSE_BAD_HELLO,
+  CLOSE_BAD_INSTANCE,
+  CLOSE_CONTROL_UNAVAILABLE,
+  CLOSE_SLOW_CONSUMER,
   CONTROL_ENVELOPE_VERSION,
   CONTROL_WS_PATH,
   LOG_EVENT_VERSION,
@@ -55,6 +59,41 @@ describe("control-channel constants come from the engine, not from literals", ()
     expect(code).toMatch(
       /export\s*\{[^}]*CONTROL_WS_PATH[^}]*\}\s*from\s*["']extension-develop\/bridge["']/s,
     );
+  });
+
+  /* The close codes are the one part of the wire contract this package still
+     spells out, and the ONLY thing that justifies that is the pinned engine not
+     publishing them. This states that condition as an assertion so it expires by
+     itself: the day the pin moves to a release whose bridge entry exports these
+     names, this fails and the copy in logs-constants must become a re-export.
+     The equality arm keeps a future pin from disagreeing silently in between. */
+  it("carries the close codes locally only while the pinned bridge withholds them", () => {
+    const published = bridge as unknown as Record<string, number | undefined>;
+    const local: Record<string, number> = {
+      CLOSE_BAD_INSTANCE,
+      CLOSE_BAD_HELLO,
+      CLOSE_CONTROL_UNAVAILABLE,
+      CLOSE_SLOW_CONSUMER,
+    };
+    for (const [name, value] of Object.entries(local)) {
+      if (published[name] !== undefined) {
+        expect(published[name], `${name} drifted from the engine`).toBe(value);
+      }
+      expect(
+        published[name],
+        `extension-develop/bridge now exports ${name}: import it in tools/logs-constants.ts and delete the local copy`,
+      ).toBeUndefined();
+    }
+  });
+
+  /* Values read off the engine's own contracts.ts. A transposed digit here would
+     hand a slow-consumer drop the version-mismatch remedy, so they are pinned
+     next to the source that makes them meaningful. */
+  it("uses the broker's numbers, not numbers of its own", () => {
+    expect(CLOSE_BAD_INSTANCE).toBe(4001);
+    expect(CLOSE_BAD_HELLO).toBe(4002);
+    expect(CLOSE_CONTROL_UNAVAILABLE).toBe(4003);
+    expect(CLOSE_SLOW_CONSUMER).toBe(4008);
   });
 });
 
@@ -113,23 +152,90 @@ describe("older engine, different session layout", () => {
 
 describe("older engine, different control envelope", () => {
   it("says nothing about a refusal for an ordinary socket close", () => {
-    expect(controlRejectionNote(1000, "", "ws://x", 1)).toBeUndefined();
-    expect(controlRejectionNote(1006, "abnormal", "ws://x", 1)).toBeUndefined();
-    expect(controlRejectionNote(3999, "", "ws://x", 1)).toBeUndefined();
+    expect(controlRefusal(1000, "", "ws://x", 1)).toBeUndefined();
+    expect(controlRefusal(1006, "abnormal", "ws://x", 1)).toBeUndefined();
+    expect(controlRefusal(3999, "", "ws://x", 1)).toBeUndefined();
   });
 
   it("names the code, the broker's reason and the version it dialed with", () => {
-    const note = controlRejectionNote(
-      4002,
+    const refusal = controlRefusal(
+      CLOSE_BAD_HELLO,
       "unsupported envelope version",
       "ws://127.0.0.1:9/extjs-control",
       7,
     );
-    expect(note).toContain("4002");
-    expect(note).toContain("unsupported envelope version");
-    expect(note).toContain("ws://127.0.0.1:9/extjs-control");
-    expect(note).toContain("version 7");
-    expect(note).toMatch(/older/);
+    expect(refusal?.message).toContain("4002");
+    expect(refusal?.message).toContain("unsupported envelope version");
+    expect(refusal?.message).toContain("ws://127.0.0.1:9/extjs-control");
+    expect(refusal?.message).toContain("version 7");
+    expect(refusal?.message).toMatch(/older/);
+  });
+
+  /* The whole point of naming the codes: four refusals, four remedies. Each
+     assertion below pins the ONE action that fixes that close and, where the
+     confusion would be expensive, pins that the wrong action is not suggested. */
+  describe("each refusal names its own remedy", () => {
+    const url = "ws://127.0.0.1:9/extjs-control";
+
+    it("reads 4002 as version skew and sends the caller to the engine", () => {
+      const refusal = controlRefusal(CLOSE_BAD_HELLO, "bad hello", url, 1);
+      expect(refusal?.code).toBe("E_CONTROL_ENVELOPE");
+      expect(refusal?.status).toBe("control-channel-refused");
+      expect(refusal?.hint).toMatch(/Update the project's Extension\.js/);
+    });
+
+    it("reads 4001 as a stale contract, not as an engine to upgrade", () => {
+      const refusal = controlRefusal(
+        CLOSE_BAD_INSTANCE,
+        "instanceId mismatch",
+        url,
+        1,
+      );
+      expect(refusal?.code).toBe("E_STALE_CONTRACT");
+      expect(refusal?.status).toBe("control-channel-stale");
+      expect(refusal?.message).toMatch(/PREVIOUS dev session/);
+      expect(refusal?.hint).toMatch(/extension_wait/);
+      expect(refusal?.hint).not.toMatch(/Update the project's Extension\.js/);
+    });
+
+    it("reads 4003 as a session started without allowControl", () => {
+      const refusal = controlRefusal(
+        CLOSE_CONTROL_UNAVAILABLE,
+        "control channel not available",
+        url,
+        1,
+      );
+      expect(refusal?.code).toBe("E_NO_CONTROL_CHANNEL");
+      expect(refusal?.status).toBe("control-channel-unavailable");
+      expect(refusal?.hint).toMatch(/allowControl: true/);
+      expect(refusal?.hint).not.toMatch(/Update the project's Extension\.js/);
+    });
+
+    it("reads 4008 as this reader falling behind, with the session blameless", () => {
+      const refusal = controlRefusal(CLOSE_SLOW_CONSUMER, "slow consumer", url, 1);
+      expect(refusal?.code).toBe("E_CONTROL_CHANNEL");
+      expect(refusal?.status).toBe("control-channel-dropped");
+      expect(refusal?.message).toMatch(/fell far enough behind/);
+      expect(refusal?.hint).toMatch(/Narrow the query/);
+      expect(refusal?.hint).not.toMatch(/Update the project's Extension\.js/);
+    });
+
+    it("keeps an unknown 4xxx generic instead of guessing a remedy", () => {
+      const refusal = controlRefusal(4099, "something new", url, 1);
+      expect(refusal?.code).toBe("E_CONTROL_CHANNEL");
+      expect(refusal?.message).toMatch(/does not recognise/);
+      expect(refusal?.message).toContain("something new");
+    });
+
+    it("gives no two of them the same status", () => {
+      const statuses = [
+        CLOSE_BAD_INSTANCE,
+        CLOSE_BAD_HELLO,
+        CLOSE_CONTROL_UNAVAILABLE,
+        CLOSE_SLOW_CONSUMER,
+      ].map((code) => controlRefusal(code, "", url, 1)?.status);
+      expect(new Set(statuses).size).toBe(statuses.length);
+    });
   });
 
   describe("end to end against a broker that rejects the hello", () => {
@@ -188,6 +294,55 @@ describe("older engine, different control envelope", () => {
       expect(out.error.message).toContain("4002");
       expect(out.error.message).toContain("unsupported envelope version");
       expect(out.hint).toContain("without follow");
+    }, 15000);
+
+    it("carries the stale-contract diagnosis out through the envelope", async () => {
+      const port = (wss.address() as { port: number }).port;
+      writeReady("chromium", port);
+      wss.on("connection", (conn) => {
+        conn.on("message", () =>
+          conn.close(CLOSE_BAD_INSTANCE, "instanceId mismatch"),
+        );
+      });
+
+      const out = JSON.parse(
+        await handler({
+          projectPath: tmp,
+          browser: "chromium",
+          follow: true,
+          followMs: 6000,
+        }),
+      );
+
+      expect(out.ok).toBe(false);
+      expect(out.status).toBe("control-channel-stale");
+      expect(out.error.code).toBe("E_STALE_CONTRACT");
+      expect(out.error.message).toContain("4001");
+      expect(out.hint).toMatch(/extension_wait/);
+    }, 15000);
+
+    it("carries the slow-consumer diagnosis out through the envelope", async () => {
+      const port = (wss.address() as { port: number }).port;
+      writeReady("chromium", port);
+      wss.on("connection", (conn) => {
+        conn.on("message", () =>
+          conn.close(CLOSE_SLOW_CONSUMER, "slow consumer"),
+        );
+      });
+
+      const out = JSON.parse(
+        await handler({
+          projectPath: tmp,
+          browser: "chromium",
+          follow: true,
+          followMs: 6000,
+        }),
+      );
+
+      expect(out.ok).toBe(false);
+      expect(out.status).toBe("control-channel-dropped");
+      expect(out.error.code).toBe("E_CONTROL_CHANNEL");
+      expect(out.hint).toMatch(/Narrow the query/);
     }, 15000);
 
     it("keeps a clean close resolving as an ordinary empty read", async () => {

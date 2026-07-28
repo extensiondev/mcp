@@ -18,22 +18,21 @@ const CLI_COPY_TOKENS = [
   "Author says",
 ];
 
+/* Three entries left this map the day it was checked against the tokens above:
+   lib/act.ts, tools/open.ts and tools/eval.ts match NONE of them. Their prose
+   fallbacks read broker and browser messages, which is a different and much
+   weaker coupling than reading first-party CLI copy, and the ban was never what
+   held them back. Keeping them listed hid that, filled the cap, and implied a
+   version floor they were waiting on: they are not. The engine at the pin still
+   does not stamp a distinguishing code for a popup it cannot open in a headless
+   session, nor for an active tab eval cannot reach, so those fallbacks are load
+   bearing against the NEWEST engine rather than an old one. Removing the
+   exemption puts all three under the ban, where they pass, and where a future
+   edit that reached for CLI copy would now fail. */
 const EXEMPT = new Map<string, string>([
   [
     "lib/legacy-stdout.ts",
-    'the whole module is the deprecated stdout fallback; its compile scrape is replaced by ready.json status:"error" and its profile-lock scrape by ready.json code:"profile_locked"',
-  ],
-  [
-    "lib/act.ts",
-    "the control-channel prose match, until the CLI act layer stamps error.code",
-  ],
-  [
-    "tools/open.ts",
-    "the headless/gesture prose match, until the CLI act layer stamps error.code",
-  ],
-  [
-    "tools/eval.ts",
-    "the tab-unreachable prose match, until the CLI stamps a code on every eval failure",
+    'the whole module is the deprecated stdout fallback; its compile scrape is replaced by ready.json status:"error", which the engine only ships from 4.0.10, and its profile-lock scrape by ready.json code:"profile_locked", which only lands in 4.0.17 alongside the schema-1 ready contract. 4.0.17 is days old, so a project on 4.0.16 or any 3.x is an ordinary thing to meet and this stays until that floor is old enough to require',
   ],
 ]);
 
@@ -64,7 +63,24 @@ describe("no tool reads the CLI's human copy: each token above appears only in f
   });
 
   it("keeps every exemption a @deprecated fallback for a CLI without the machine contract: the list shrinks to zero, it never grows", () => {
-    expect(EXEMPT.size).toBeLessThanOrEqual(4);
+    expect(EXEMPT.size).toBeLessThanOrEqual(1);
+  });
+
+  /* The cap only means something if it is tight. Naming the files that left
+     stops the next reader from re-adding one on the assumption the slot was
+     always spare, and fails if any of the three quietly starts matching CLI
+     copy again under cover of a fresh exemption. */
+  it("no longer exempts the three files that never matched CLI copy", () => {
+    for (const relative of ["lib/act.ts", "tools/open.ts", "tools/eval.ts"]) {
+      expect(EXEMPT.has(relative), `${relative} is exempt again`).toBe(false);
+      const source = sources.find((s) => s.relative === relative);
+      expect(source, `${relative} no longer exists`).toBeDefined();
+      expect(
+        CLI_COPY_TOKENS.filter((token) =>
+          (source as { text: string }).text.includes(token),
+        ),
+      ).toEqual([]);
+    }
   });
 
   for (const { relative, text } of sources) {

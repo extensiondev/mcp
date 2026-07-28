@@ -10,6 +10,11 @@ import fs from "node:fs";
 import WebSocket from "ws";
 
 import {
+  CLOSE_BAD_HELLO,
+  CLOSE_BAD_INSTANCE,
+  CLOSE_CONTROL_UNAVAILABLE,
+  CLOSE_REFUSAL_FLOOR,
+  CLOSE_SLOW_CONSUMER,
   CONTROL_ENVELOPE_VERSION,
   CONTROL_WS_PATH,
   DEFAULT_LIMIT,
@@ -18,7 +23,7 @@ import {
   MAX_FOLLOW_MS,
 } from "./logs-constants";
 import { makeFilter, type LogsArgs } from "./logs-filter";
-import { envelope } from "../lib/envelope";
+import { envelope, type ErrorCode } from "../lib/envelope";
 import {
   resolveSessionBrowser,
   knownSessionBrowsers,
@@ -207,27 +212,89 @@ async function readFromFile(
   );
 }
 
+export interface ControlRefusal {
+  code: ErrorCode;
+  status: string;
+  message: string;
+  hint: string;
+}
+
 /* @invariant A close code at or above 4000 is an application-level refusal by
-   the engine's broker, not a socket that simply ended. The refusal this package
-   can actually cause is an envelope-version mismatch: the broker compares the
-   hello's `v` against its own CONTROL_ENVELOPE_VERSION and closes with 4002
-   "unsupported envelope version", which happens when the project runs an engine
-   older than the one this package pins. Left unhandled, that close resolves the
-   follow window as an ordinary empty read, and extension_logs reports "no logs"
-   for a session that is logging fine. Reporting the code and the broker's own
-   reason verbatim turns a silent wrong answer into a diagnosis. The code is not
-   compared against a copied 4002 constant: the engine does not publish its close
-   codes on the bridge entry, and a copied number would be the same frozen
-   literal this refactor exists to remove. */
-export function controlRejectionNote(
-  code: number,
+   the engine's broker, not a socket that simply ended, and WHICH refusal decides
+   what the caller should do next. Reporting only "close code N" was already
+   better than the silent empty read it replaced, but it collapsed four
+   unrelated faults into one sentence about version skew.
+
+   They are four different problems with four different remedies. 4002 is the
+   hello being rejected outright, and since this reader always dials as a
+   consumer the only part that can differ is the envelope version, so the remedy
+   is to align the project's engine with this server's pin. 4001 is an
+   instanceId from a previous session, meaning the ready.json this read trusted
+   is stale because the dev server restarted, so the remedy is to re-read the
+   contract, not to touch any version. 4003 is a broker with no control channel
+   to give because the session was started without allowControl, so the remedy is
+   to relaunch the session with it. 4008 is this reader being dropped for falling
+   behind, where nothing is wrong with the engine at all and the remedy is a
+   narrower query or a file read. Telling someone whose session simply restarted
+   to upgrade their engine sends them to the wrong repository for an afternoon.
+
+   An unrecognised 4xxx keeps the old generic wording, because a code this
+   package has never met is exactly the case where the broker's own reason
+   string is the only trustworthy part of the diagnosis. */
+export function controlRefusal(
+  closeCode: number,
   reason: string,
   url: string,
   sentVersion: number,
-): string | undefined {
-  if (!Number.isFinite(code) || code < 4000) return undefined;
+): ControlRefusal | undefined {
+  if (!Number.isFinite(closeCode) || closeCode < CLOSE_REFUSAL_FLOOR) {
+    return undefined;
+  }
   const said = reason.trim();
-  return `The dev server refused the control channel at ${url}: close code ${code}${said ? ` ("${said}")` : ""}. This MCP dialed with control envelope version ${sentVersion}, the version its pinned Extension.js speaks. A refusal here usually means the engine installed in this project is older and speaks a different one; the session may be logging normally even though this read returned nothing. Check the engine version with extension_doctor.`;
+  const preamble = `The dev server refused the control channel at ${url}: close code ${closeCode}${said ? ` ("${said}")` : ""}.`;
+
+  if (closeCode === CLOSE_BAD_HELLO) {
+    return {
+      code: "E_CONTROL_ENVELOPE",
+      status: "control-channel-refused",
+      message: `${preamble} That code is the broker rejecting the hello frame itself. This MCP dialed as a consumer with control envelope version ${sentVersion}, the version its pinned Extension.js speaks, and the role is one the broker always accepts, so the envelope version is the part that differs: the engine installed in this project is older or newer and speaks a different one. The session may be logging normally even though this read returned nothing.`,
+      hint: "Update the project's Extension.js so its control envelope matches this MCP's pinned engine, or read the file instead by calling extension_logs without follow. extension_doctor reports both versions.",
+    };
+  }
+
+  if (closeCode === CLOSE_BAD_INSTANCE) {
+    return {
+      code: "E_STALE_CONTRACT",
+      status: "control-channel-stale",
+      message: `${preamble} That code means the instanceId this MCP sent belongs to a PREVIOUS dev session: the ready.json it read is stale, so the dev server was replaced after that file was written. Nothing here is a version problem, and the engine is not at fault; the session that is running now has an instance this read never named.`,
+      hint: "Wait for the current session to publish its contract with extension_wait and retry, or start one with extension_dev if none is running. extension_stop clears a contract left behind by a session that has gone away.",
+    };
+  }
+
+  if (closeCode === CLOSE_CONTROL_UNAVAILABLE) {
+    return {
+      code: "E_NO_CONTROL_CHANNEL",
+      status: "control-channel-unavailable",
+      message: `${preamble} That code means the broker has no control channel to hand out: the session was started without allowControl, so it turns controlling clients away. Following logs is a read, not a control operation, so a session that refuses this connection cannot be streamed at all until it is relaunched.`,
+      hint: "Relaunch the session with extension_dev and allowControl: true, or read the file instead by calling extension_logs without follow.",
+    };
+  }
+
+  if (closeCode === CLOSE_SLOW_CONSUMER) {
+    return {
+      code: "E_CONTROL_CHANNEL",
+      status: "control-channel-dropped",
+      message: `${preamble} That code means this reader fell far enough behind that the broker dropped it to protect itself. The session, the engine version and the control envelope are all fine: the log volume simply outran this follow window, and whatever came back stops at the moment of the drop rather than at the end of the window.`,
+      hint: "Narrow the query before following again (level, context, url or tab), lower followMs, or read the completed file by calling extension_logs without follow.",
+    };
+  }
+
+  return {
+    code: "E_CONTROL_CHANNEL",
+    status: "control-channel-refused",
+    message: `${preamble} That code is an application-level refusal this MCP does not recognise, so the broker's own reason above is the whole diagnosis. It dialed as a consumer with control envelope version ${sentVersion}, the version its pinned Extension.js speaks; an engine newer than the pin can refuse for reasons this release has never seen.`,
+    hint: "Read the file instead by calling extension_logs without follow, and compare the engine versions with extension_doctor.",
+  };
 }
 
 async function readFromStream(
@@ -373,7 +440,7 @@ async function readFromStream(
 
     socket.on("close", (code: number, reason: Buffer) => {
       if (settled) return;
-      const refusal = controlRejectionNote(
+      const refusal = controlRefusal(
         code,
         reason?.toString() ?? "",
         url,
@@ -384,7 +451,7 @@ async function readFromStream(
         return;
       }
       if (events.length > 0 || dropped > 0) {
-        streamNote = refusal;
+        streamNote = refusal.message;
         finish();
         return;
       }
@@ -394,12 +461,12 @@ async function readFromStream(
         envelope({
           ok: false,
           command: TOOL,
-          status: "control-channel-refused",
+          status: refusal.status,
           error: {
-            code: "E_CONTROL_ENVELOPE",
-            message: refusal,
+            code: refusal.code,
+            message: refusal.message,
           },
-          hint: "Update the project's Extension.js so its control envelope matches this MCP's pinned engine, or read the file instead by calling extension_logs without follow.",
+          hint: refusal.hint,
         }),
       );
     });
