@@ -11,6 +11,7 @@ import {
   CLOSE_BAD_HELLO,
   CLOSE_BAD_INSTANCE,
   CLOSE_CONTROL_UNAVAILABLE,
+  CLOSE_REFUSAL_FLOOR,
   CLOSE_SLOW_CONSUMER,
   CONTROL_ENVELOPE_VERSION,
   CONTROL_WS_PATH,
@@ -53,47 +54,81 @@ describe("control-channel constants come from the engine, not from literals", ()
       "CONTROL_WS_PATH",
       "CONTROL_ENVELOPE_VERSION",
       "LOG_EVENT_VERSION",
+      "CLOSE_BAD_INSTANCE",
+      "CLOSE_BAD_HELLO",
+      "CLOSE_CONTROL_UNAVAILABLE",
+      "CLOSE_SLOW_CONSUMER",
     ]) {
       expect(code).not.toMatch(new RegExp(`(const|let|var)\\s+${name}\\s*=`));
     }
     expect(code).toMatch(
       /export\s*\{[^}]*CONTROL_WS_PATH[^}]*\}\s*from\s*["']extension-develop\/bridge["']/s,
     );
+    expect(code).toMatch(
+      /export\s*\{[^}]*CLOSE_SLOW_CONSUMER[^}]*\}\s*from\s*["']extension-develop\/bridge["']/s,
+    );
   });
 
-  /* @invariant The close codes are the one part of the wire contract this package still
-     spells out, and the ONLY thing that justifies that is the pinned engine not
-     publishing them. This states that condition as an assertion so it expires by
-     itself: the day the pin moves to a release whose bridge entry exports these
-     names, this fails and the copy in logs-constants must become a re-export.
-     The equality arm keeps a future pin from disagreeing silently in between. */
-  it("carries the close codes locally only while the pinned bridge withholds them", () => {
+  /* @invariant This used to assert the pinned bridge WITHHELD the close codes, which was
+     the condition that justified carrying them as literals. The pin moved to
+     4.0.19, that assertion fired, and the copy became a re-export. What it
+     asserts now is the risk that survives the adoption: an import cannot be a
+     transposed digit, but it CAN quietly become undefined if a future pin walks
+     back the export or renames one, and undefined compares equal to nothing, so
+     every refusal would fall through to the generic 4xxx remedy while the four
+     tests below still pass on their own literals. Identity against the module
+     namespace is what proves the value is the engine's and not a fallback. */
+  it("takes the close codes from the engine, by identity", () => {
     const published = bridge as unknown as Record<string, number | undefined>;
-    const local: Record<string, number> = {
+    const adopted: Record<string, number> = {
       CLOSE_BAD_INSTANCE,
       CLOSE_BAD_HELLO,
       CLOSE_CONTROL_UNAVAILABLE,
       CLOSE_SLOW_CONSUMER,
     };
-    for (const [name, value] of Object.entries(local)) {
-      if (published[name] !== undefined) {
-        expect(published[name], `${name} drifted from the engine`).toBe(value);
-      }
+    for (const [name, value] of Object.entries(adopted)) {
       expect(
         published[name],
-        `extension-develop/bridge now exports ${name}: import it in tools/logs-constants.ts and delete the local copy`,
-      ).toBeUndefined();
+        `extension-develop/bridge no longer exports ${name}: every refusal would read as an unrecognised close`,
+      ).toBeTypeOf("number");
+      expect(value, `${name} is not the engine's own value`).toBe(
+        published[name],
+      );
     }
   });
 
-  /* @invariant Values read off the engine's own contracts.ts. A transposed digit here would
-     hand a slow-consumer drop the version-mismatch remedy, so they are pinned
-     next to the source that makes them meaningful. */
+  /* @invariant The numbers the four remedies in tools/logs.ts were written against, kept
+     as literals HERE precisely because logs-constants no longer has any. An
+     engine that renumbers a close code under a compatible-looking version bump
+     would keep every identity assertion above green while handing a
+     slow-consumer drop the version-mismatch remedy, and this is the only place
+     that would notice. Read off the engine's own contracts.ts. */
   it("uses the broker's numbers, not numbers of its own", () => {
     expect(CLOSE_BAD_INSTANCE).toBe(4001);
     expect(CLOSE_BAD_HELLO).toBe(4002);
     expect(CLOSE_CONTROL_UNAVAILABLE).toBe(4003);
     expect(CLOSE_SLOW_CONSUMER).toBe(4008);
+  });
+
+  /* @invariant The floor is deliberately NOT adopted: the engine publishes no such
+     constant, and 4000 here is this package's reading rule for a code it does
+     not recognise, not a number the broker sends. It still has to sit below
+     every code it is meant to admit, or a real refusal would be read as an
+     ordinary transport close and reported as an empty log. */
+  it("keeps the refusal floor local and below every code it admits", () => {
+    expect(
+      (bridge as unknown as Record<string, unknown>).CLOSE_REFUSAL_FLOOR,
+    ).toBeUndefined();
+    for (const code of [
+      CLOSE_BAD_INSTANCE,
+      CLOSE_BAD_HELLO,
+      CLOSE_CONTROL_UNAVAILABLE,
+      CLOSE_SLOW_CONSUMER,
+    ]) {
+      expect(code).toBeGreaterThanOrEqual(CLOSE_REFUSAL_FLOOR);
+      expect(controlRefusal(code, "", "ws://x", 1)).toBeDefined();
+    }
+    expect(controlRefusal(CLOSE_REFUSAL_FLOOR - 1, "", "ws://x", 1)).toBeUndefined();
   });
 });
 

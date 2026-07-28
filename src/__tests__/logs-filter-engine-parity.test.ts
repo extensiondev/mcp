@@ -2,7 +2,11 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { matchesLogQuery, readLogEvents } from "extension-develop/bridge";
+import {
+  LOG_LEVEL_ORDER,
+  matchesLogQuery,
+  readLogEvents,
+} from "extension-develop/bridge";
 import { makeFilter } from "../tools/logs-filter";
 import { logsPath } from "../lib/session-paths";
 import { schema as logsSchema } from "../tools/logs-schema";
@@ -169,14 +173,25 @@ describe("level off is this package's meaning, not the engine's", () => {
    is a separate copy of the same ordering, written as a JSON Schema enum.
    Reordering the engine's rank without touching the enum would leave the schema
    promising "a level includes everything more severe" about an order that is no
-   longer the one being applied, so the enum is checked against the engine's
-   observable rank rather than against LOG_LEVEL_ORDER, which the pinned bridge
-   entry does not export. */
+   longer the one being applied, so the enum is checked against the engine.
+
+   It is checked twice, because the two checks catch different things and
+   neither subsumes the other. LOG_LEVEL_ORDER is the engine's DECLARED
+   ordering, and comparing the enum to it catches a level added, dropped or
+   swapped even where this corpus cannot tell two levels apart. The count
+   comparison then catches the case the declared array cannot: an ordering that
+   matchesLogQuery does not actually apply. Only the first was unavailable while
+   the pin withheld LOG_LEVEL_ORDER, which is why this used to lean entirely on
+   the second. */
 describe("the schema's level vocabulary matches the engine's rank", () => {
   const severities = (logsSchema.inputSchema.properties.level.enum as string[])
     .filter((level) => level !== "all" && level !== "off");
 
-  it("offers exactly the levels the engine ranks, in the engine's order", () => {
+  it("offers exactly the levels the engine declares, in the engine's order", () => {
+    expect(severities).toEqual([...LOG_LEVEL_ORDER]);
+  });
+
+  it("orders them the way the engine actually applies them", () => {
     const selected = severities.map(
       (level) =>
         CORPUS.filter((event) =>
