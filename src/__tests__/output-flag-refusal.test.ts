@@ -31,7 +31,7 @@ const UNKNOWN_OUTPUT = "error: unknown option '--output'";
 
 const tmpDirs: string[] = [];
 
-/* The probe reads the project's OWN binary, so a project without one resolves
+/* @invariant The probe reads the project's OWN binary, so a project without one resolves
    to `npx extension@<pin>` and answers from the pin without spawning anything.
    These tests are about what a project's installed engine says, so they give it
    a binary to resolve and let the mocked exec answer for it. */
@@ -75,7 +75,7 @@ afterEach(() => {
   }
 });
 
-/* `--output json` is a flag this server adds behind the caller's back, so an
+/* @invariant `--output json` is a flag this server adds behind the caller's back, so an
    engine that refuses it produces an error about something the user never did.
    build answers that by rebuilding without the flag; doctor and the act family
    have no second source and can only answer with a truthful diagnosis. These
@@ -142,7 +142,7 @@ describe("the act family explains a refused --output instead of relaying it", ()
     expect(out.error.message).not.toContain("unknown option");
   });
 
-  /* A version at or above the floor that still refuses the flag is not a user
+  /* @invariant A version at or above the floor that still refuses the flag is not a user
      who needs to upgrade; it is a binary that is not what it claims to be.
      Telling them to upgrade would send them round a loop with no exit. */
   it("reports a refusal from an engine that claims to be new enough as a contradiction", async () => {

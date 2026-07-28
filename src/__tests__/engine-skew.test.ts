@@ -31,7 +31,7 @@ describe("control-channel constants come from the engine, not from literals", ()
     expect(Number.isInteger(LOG_EVENT_VERSION)).toBe(true);
   });
 
-  /* A value comparison alone cannot catch a regression here: a re-hardcoded
+  /* @invariant A value comparison alone cannot catch a regression here: a re-hardcoded
      "/extjs-control" equals the engine's constant today and the assertion above
      stays green while the coupling is gone. The source is what proves the
      coupling, so this reads it. */
@@ -61,7 +61,7 @@ describe("control-channel constants come from the engine, not from literals", ()
     );
   });
 
-  /* The close codes are the one part of the wire contract this package still
+  /* @invariant The close codes are the one part of the wire contract this package still
      spells out, and the ONLY thing that justifies that is the pinned engine not
      publishing them. This states that condition as an assertion so it expires by
      itself: the day the pin moves to a release whose bridge entry exports these
@@ -86,7 +86,7 @@ describe("control-channel constants come from the engine, not from literals", ()
     }
   });
 
-  /* Values read off the engine's own contracts.ts. A transposed digit here would
+  /* @invariant Values read off the engine's own contracts.ts. A transposed digit here would
      hand a slow-consumer drop the version-mismatch remedy, so they are pinned
      next to the source that makes them meaningful. */
   it("uses the broker's numbers, not numbers of its own", () => {
@@ -97,7 +97,7 @@ describe("control-channel constants come from the engine, not from literals", ()
   });
 });
 
-/* Version skew: this MCP drives whatever engine the project has installed,
+/* @invariant Version skew: this MCP drives whatever engine the project has installed,
    which can be OLDER than the one this package pins. These are the two shapes
    that failure takes, and both must produce a sentence a caller can act on
    rather than an answer that looks correct. */
@@ -171,7 +171,7 @@ describe("older engine, different control envelope", () => {
     expect(refusal?.message).toMatch(/older/);
   });
 
-  /* The whole point of naming the codes: four refusals, four remedies. Each
+  /* @invariant The whole point of naming the codes: four refusals, four remedies. Each
      assertion below pins the ONE action that fixes that close and, where the
      confusion would be expensive, pins that the wrong action is not suggested. */
   describe("each refusal names its own remedy", () => {

@@ -34,7 +34,7 @@ function select(predicate: (event: unknown) => boolean): number[] {
   );
 }
 
-/* Every clause below is now the engine's. These assertions are what makes
+/* @invariant Every clause below is now the engine's. These assertions are what makes
    deleting this package's copy of the level ranking, the glob matcher, the
    context set and the header rule safe: they pin makeFilter to
    matchesLogQuery's answer on the same corpus, so a divergence in either
@@ -127,7 +127,7 @@ describe("makeFilter agrees with the engine's matchesLogQuery", () => {
   });
 });
 
-/* The one clause deliberately NOT delegated. extension_logs and `extension
+/* @invariant The one clause deliberately NOT delegated. extension_logs and `extension
    logs` mean opposite things by level 'off', and this test states which is
    which so nobody "fixes" the divergence by accident. */
 describe("level off is this package's meaning, not the engine's", () => {
@@ -162,7 +162,7 @@ describe("level off is this package's meaning, not the engine's", () => {
   });
 });
 
-/* The engine publishes logLevelRank and LOG_LEVEL_ORDER, and nothing in this
+/* @invariant The engine publishes logLevelRank and LOG_LEVEL_ORDER, and nothing in this
    package ranks or orders levels by hand: makeFilter hands every severity
    comparison to matchesLogQuery, which applies the engine's rank. What this
    package does own is the VOCABULARY the tool schema offers an agent, and that
@@ -192,7 +192,7 @@ describe("the schema's level vocabulary matches the engine's rank", () => {
     expect(selected[0]).toBeLessThan(selected[selected.length - 1]);
   });
 
-  /* The console emits `log`; the filter vocabulary calls it `info`, and the
+  /* @invariant The console emits `log`; the filter vocabulary calls it `info`, and the
      engine's rank is what aliases the two. Offering `log` in the enum would
      imply a sixth level that ranks separately, which it does not. */
   it("does not offer log as a level of its own", () => {
