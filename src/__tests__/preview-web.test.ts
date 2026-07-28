@@ -413,6 +413,96 @@ describe("extension_preview_web", () => {
       }
     });
 
+    function shareFleet(zipHops: Record<string, Response | (() => Response)>) {
+      const uploaded = {
+        artifactId: "gen_cors",
+        previewUrl: "https://preview.extension.dev/?preview=gen_cors",
+        zipUrl: "https://www.extension.dev/api/artifacts/gen_cors/source.zip",
+        revokeUrl: "https://www.extension.dev/api/artifacts/gen_cors",
+        expiresAt: "2026-08-23T00:00:00.000Z",
+      };
+      global.fetch = (async (input: any, init: any) => {
+        const url = String(input);
+        if (init?.method === "POST") {
+          return new Response(JSON.stringify(uploaded), {
+            status: 201,
+            headers: { "content-type": "application/json" },
+          });
+        }
+        if (url.includes("/__preview/fetch")) {
+          return new Response("not here", {
+            status: 404,
+            headers: { "content-type": "text/plain" },
+          });
+        }
+        const hop = zipHops[url];
+        if (!hop) throw new Error(`unrouted ${url}`);
+        return typeof hop === "function" ? hop() : hop;
+      }) as unknown as typeof fetch;
+      return uploaded;
+    }
+
+    it("refuses to certify a share whose zip a browser cannot read", async () => {
+      const dir = tmpDist(MANIFEST);
+      process.env.EXTENSION_DEV_TOKEN = "tok_test";
+      const signed = "https://acct.r2.cloudflarestorage.com/b/gen_cors.zip?s=1";
+      const uploaded = shareFleet({
+        ["https://www.extension.dev/api/artifacts/gen_cors/source.zip"]: () =>
+          new Response(null, {
+            status: 302,
+            headers: {
+              location: signed,
+              "access-control-allow-origin": "*",
+            },
+          }),
+        [signed]: () =>
+          new Response(null, {
+            status: 200,
+            headers: { "content-type": "application/zip" },
+          }),
+      });
+      try {
+        const out = JSON.parse(
+          await handler({ projectPath: dir, build: false, distPath: dir, share: true }),
+        );
+        expect(out.value.share.ok).toBe(true);
+        expect(out.value.share.previewUrl).toBe(uploaded.previewUrl);
+        expect(out.value.share.browserLoadable).toBe(false);
+        expect(out.value.share.browserCheck.finalUrl).toBe(signed);
+        expect(out.value.share.browserCheck.finalStatus).toBe(200);
+        expect(out.value.share.browserCheck.allowOrigin).toBeNull();
+        expect(out.value.previewLoadable).not.toBe(true);
+        expect(out.warnings.join(" ")).toMatch(/will not render for anyone/);
+      } finally {
+        fs.rmSync(dir, { recursive: true, force: true });
+      }
+    });
+
+    it("certifies a share when the final hop allows the preview origin", async () => {
+      const dir = tmpDist(MANIFEST);
+      process.env.EXTENSION_DEV_TOKEN = "tok_test";
+      shareFleet({
+        ["https://www.extension.dev/api/artifacts/gen_cors/source.zip"]: () =>
+          new Response(null, {
+            status: 200,
+            headers: {
+              "content-type": "application/zip",
+              "access-control-allow-origin": "*",
+            },
+          }),
+      });
+      try {
+        const out = JSON.parse(
+          await handler({ projectPath: dir, build: false, distPath: dir, share: true }),
+        );
+        expect(out.value.share.browserLoadable).toBe(true);
+        expect(out.value.share.browserCheck.redirects).toBe(0);
+        expect(out.warnings.join(" ")).not.toMatch(/will not render/);
+      } finally {
+        fs.rmSync(dir, { recursive: true, force: true });
+      }
+    });
+
     it("uploads the local dist and returns the platform's preview link", async () => {
       const dir = tmpDist(MANIFEST);
       process.env.EXTENSION_DEV_TOKEN = "tok_test";
