@@ -83,6 +83,40 @@ describe("only lib/session-paths.ts knows the session-state layout", () => {
     expect(offenders).toEqual([]);
   });
 
+  /* @invariant The profile layout is a guess, not an adoption: the engine
+     publishes no helper for it, so the only defence against the guess drifting
+     is that there is exactly one of it. Two copies is how it broke. The retired
+     dist/extension-profile-<browser> shape is banned outright, and so is any
+     fresh hand-join of the "profiles" segment or a `${browser}-profile`
+     directory. The `--profile` CLI flag in lib/launch-flags.ts is not a path and
+     is deliberately not matched. */
+  it("has no production file rebuilding a managed profile path by hand", () => {
+    const handBuilt = [/extension-profile-/, /["'`]profiles["'`]/, /(?<!-)-profile[`"']/];
+    const offenders: string[] = [];
+    for (const file of scanned) {
+      const source = fs.readFileSync(file, "utf8");
+      for (const [index, line] of source.split("\n").entries()) {
+        if (line.trimStart().startsWith("//")) continue;
+        if (!handBuilt.some((pattern) => pattern.test(line))) continue;
+        offenders.push(`${path.relative(SRC, file)}:${index + 1}: ${line.trim()}`);
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+
+  it("has stop.ts matching the session's browser through the owner module", () => {
+    const source = fs.readFileSync(path.join(SRC, "tools", "stop.ts"), "utf8");
+    expect(source).toContain("profilesRootDir(form)");
+    expect(source).toContain('from "../lib/session-paths"');
+  });
+
+  it("has dev.ts naming the profile through the owner module", () => {
+    const source = fs.readFileSync(path.join(SRC, "tools", "dev.ts"), "utf8");
+    expect(source).toContain("profileRemediation({");
+    expect(source).toContain("browserProfileRootDir(args.projectPath, browser)");
+    expect(source).toContain('from "../lib/session-paths"');
+  });
+
   it("scans every production file, with nothing held back", () => {
     expect(NOT_YET_MIGRATED.size).toBe(0);
     expect(scanned).toEqual(files);

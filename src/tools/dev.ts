@@ -10,8 +10,11 @@ import {
   LAUNCH_BROWSER,
   PROJECT_PATH,
 } from "../lib/common-schema";
-import path from "node:path";
 import { materializeCarrier, removeCarrier } from "../lib/carrier";
+import {
+  browserProfileRootDir,
+  profileRemediation,
+} from "../lib/session-paths";
 import { pollBootVerdict } from "../lib/boot-verdict";
 import { envelope } from "../lib/envelope";
 import { spawnExtensionCli, spawnFailedEnvelope } from "../lib/exec";
@@ -239,11 +242,16 @@ export async function handler(
     });
   }
 
-  const profileDir = path.join(
-    args.projectPath,
-    "dist",
-    `extension-profile-${browser}`,
-  );
+  const usesManagedProfile =
+    typeof args.profile !== "string" || args.profile.trim().length === 0;
+  const profileRootDir = usesManagedProfile
+    ? browserProfileRootDir(args.projectPath, browser)
+    : null;
+  const profileAdvice = profileRemediation({
+    projectPath: args.projectPath,
+    browser,
+    profile: args.profile,
+  });
 
   if (boot.verdict.kind === "profile-locked") {
     const { owner, lockedAt } = boot.verdict;
@@ -264,14 +272,14 @@ export async function handler(
       },
       value: {
         ...session,
-        profileDir,
+        ...(profileRootDir ? { profileRootDir } : {}),
         owner,
         ...(lockedAt ? { lockedAt } : {}),
         output: cleanOutput.slice(0, 2000),
       },
       hint:
         "A locked profile means another session's browser still holds it: call extension_stop with this projectPath to kill that session, then start extension_dev again. " +
-        `If the lock survives a crash, remove ${profileDir} manually before retrying.`,
+        `If the lock survives a crash, clear it by hand before retrying. ${profileAdvice}`,
       warnings: boot.warnings,
     });
   }
@@ -292,7 +300,7 @@ export async function handler(
       },
       hint:
         "A locked profile means another session's browser still holds it: call extension_stop with this projectPath to kill that session, then start extension_dev again. " +
-        `If the lock survives a crash, remove ${profileDir} manually before retrying.`,
+        `If the lock survives a crash, clear it by hand before retrying. ${profileAdvice}`,
       warnings: boot.warnings,
     });
   }
