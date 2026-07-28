@@ -11,11 +11,21 @@ import { resolveExtensionInvocation, runExtensionCli } from "./exec";
 /* @invariant
  * The floor for each command is the release that first accepted --output json,
  * read off the engine's own history rather than assumed from the pin this
- * package carries. `act` and its family got the flag in 3.18.1, `doctor` in
- * 4.0.11, and `dev` and `build` only in 4.0.17. They are listed together
- * because a single table is the honest record of what was verified; only the
- * entry a caller asks for is ever consulted, so listing a floor here does not
- * put the flag in front of any command that is not already sending it.
+ * package carries. `doctor` got the flag in 4.0.11, and `dev` and `build` only
+ * in 4.0.17. They are listed together because a single table is the honest
+ * record of what was verified; only the entry a caller asks for is ever
+ * consulted, so listing a floor here does not put the flag in front of any
+ * command that is not already sending it.
+ *
+ * The `act` entry is the one number here that is NOT the release it claims to
+ * be. `programs/extension/commands/act.ts` does not exist before 3.18.0 and
+ * already registers `--output <pretty|json>` in that first release, so the true
+ * floor is 3.18.0 and the 3.18.1 below is one patch high. It is left alone
+ * rather than quietly corrected because the error is conservative in the only
+ * direction that matters: too high means a 3.18.0 engine is judged "too old",
+ * and the act family never acts on that verdict except to explain a refusal
+ * that a 3.18.0 engine will not produce, since it accepts the flag. Moving it
+ * is a behaviour change and wants its own commit, not a comment sweep.
  */
 export const OUTPUT_JSON_FLOOR = {
   act: "3.18.1",

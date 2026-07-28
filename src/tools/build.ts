@@ -412,8 +412,9 @@ const SAFARI_VENDORS = new Set(["safari", "webkit-based"]);
  * on. The pattern is Apple's: dot-separated segments of letters, digits and
  * hyphens, each beginning with a letter, at least two of them.
  *
- * The engine now exports the same check as isValidBundleId from `extension`,
- * and this copy stays anyway. Importing it would make the CLI package a
+ * The engine now exports the same check as isValidBundleId, from `extension`'s
+ * ./browsers subpath rather than its root entry, and this copy stays anyway.
+ * Importing it would make the CLI package a
  * dependency of this one, and the whole point of resolveExtensionInvocation is
  * that this server drives whichever engine the user's project has installed
  * rather than one it bundles; a pinned second engine in the tree would be a
