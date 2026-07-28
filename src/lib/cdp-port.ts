@@ -7,9 +7,9 @@
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
 import fs from "node:fs";
-import path from "node:path";
 import http from "node:http";
 import type { ReadyContract } from "./types";
+import { readyContractPath } from "./session-paths";
 
 async function resolveContractPort(
   projectPath: string,
@@ -19,13 +19,7 @@ async function resolveContractPort(
 ): Promise<{ port: number | null; contractSeen: boolean }> {
   const waitMs = options?.waitMs ?? 20_000;
   const graceMs = options?.graceMs ?? 2_500;
-  const readyPath = path.resolve(
-    projectPath,
-    "dist",
-    "extension-js",
-    browser,
-    "ready.json",
-  );
+  const readyPath = readyContractPath(projectPath, browser);
 
   const deadline = Date.now() + waitMs;
   let contractSeen = false;

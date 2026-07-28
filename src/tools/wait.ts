@@ -8,10 +8,10 @@
 
 import { PROJECT_PATH, SESSION_BROWSER } from "../lib/common-schema";
 import fs from "node:fs";
-import path from "node:path";
 import type { ReadyContract } from "../lib/types";
 import { findSessionInfo, sessionSinceMs } from "../lib/process-manager";
 import { resolveSessionBrowser } from "../lib/session-browser";
+import { readyContractPath } from "../lib/session-paths";
 import {
   envelope,
   sessionCommandSinceEnvelopeOwnsCommand,
@@ -75,13 +75,7 @@ export async function handler(args: {
     SAFE_CEILING_MS,
   );
   const clamped = requested > SAFE_CEILING_MS;
-  const readyPath = path.resolve(
-    args.projectPath,
-    "dist",
-    "extension-js",
-    browser,
-    "ready.json",
-  );
+  const readyPath = readyContractPath(args.projectPath, browser);
 
   const buildOnly = findSessionInfo(args.projectPath, browser)?.noBrowser === true;
   const since = sessionSinceMs(args.projectPath, browser);

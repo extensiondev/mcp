@@ -89,9 +89,9 @@
     "@modelcontextprotocol/sdk": "^1.12.1",
     "browser-extension-manifest-fields": "^2.2.9",
     "cross-spawn": "^7.0.6",
-    "extension-create": "4.0.17",
-    "extension-develop": "4.0.17",
-    "extension-install": "4.0.17",
+    "extension-create": "4.0.19-canary.1785200797.ce99a79e",
+    "extension-develop": "4.0.19-canary.1785200797.ce99a79e",
+    "extension-install": "4.0.19-canary.1785200797.ce99a79e",
     "ws": "^8.20.0"
   },
   "devDependencies": {

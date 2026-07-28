@@ -24,6 +24,7 @@ import {
 } from "../lib/cdp-port";
 import { rdpListAddons } from "../lib/rdp";
 import { resolveSessionBrowser } from "../lib/session-browser";
+import { readyContractPath } from "../lib/session-paths";
 
 export const schema = {
   name: "extension_list_extensions",
@@ -72,14 +73,9 @@ function readOwnIdentity(
 ): OwnIdentity | null {
   let contract: Record<string, unknown>;
   try {
-    const file = path.resolve(
-      projectPath,
-      "dist",
-      "extension-js",
-      browser,
-      "ready.json",
+    contract = JSON.parse(
+      fs.readFileSync(readyContractPath(projectPath, browser), "utf8"),
     );
-    contract = JSON.parse(fs.readFileSync(file, "utf8"));
   } catch {
     return null;
   }

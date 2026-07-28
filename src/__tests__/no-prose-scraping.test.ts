@@ -32,10 +32,6 @@ const EXEMPT = new Map<string, string>([
     "the headless/gesture prose match, until the CLI act layer stamps error.code",
   ],
   [
-    "tools/build.ts",
-    "the Size:/Build Status: scrapes, until build speaks the envelope",
-  ],
-  [
     "tools/eval.ts",
     "the tab-unreachable prose match, until the CLI stamps a code on every eval failure",
   ],
@@ -68,7 +64,7 @@ describe("no tool reads the CLI's human copy: each token above appears only in f
   });
 
   it("keeps every exemption a @deprecated fallback for a CLI without the machine contract: the list shrinks to zero, it never grows", () => {
-    expect(EXEMPT.size).toBeLessThanOrEqual(5);
+    expect(EXEMPT.size).toBeLessThanOrEqual(4);
   });
 
   for (const { relative, text } of sources) {

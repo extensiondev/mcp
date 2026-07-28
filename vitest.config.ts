@@ -16,16 +16,28 @@ const findPackageDir = (pkg: string) => {
   }
 };
 
-const aliasToDist = (pkg: string) => {
+const aliasToDist = (pkg: string, subpath = ".") => {
   const pkgDir = findPackageDir(pkg);
   const pkgJson = JSON.parse(
     readFileSync(join(pkgDir, "package.json"), "utf8"),
   );
-  const root = pkgJson.exports?.["."];
+  const target = pkgJson.exports?.[subpath];
   const entry =
-    (typeof root === "string" ? root : root?.import) ?? pkgJson.main;
+    (typeof target === "string" ? target : target?.import) ??
+    (subpath === "." ? pkgJson.main : undefined);
+  if (!entry) {
+    throw new Error(`${pkg} does not export "${subpath}"`);
+  }
   return join(pkgDir, entry);
 };
+
+/* @invariant An exact-match RegExp, not a bare string key. Vite's string
+   aliases are PREFIX replacements, so a plain "extension-develop" entry also
+   swallows "extension-develop/bridge" and rewrites it to
+   <pkg>/dist/module.mjs/bridge, which resolves to nothing. Anchoring each
+   specifier keeps the subpath export reachable. */
+const exact = (specifier: string) =>
+  new RegExp(`^${specifier.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`);
 
 export default defineConfig({
   test: {
@@ -34,10 +46,23 @@ export default defineConfig({
     setupFiles: ["src/__tests__/setup-session-dir.ts"],
   },
   resolve: {
-    alias: {
-      "extension-develop": aliasToDist("extension-develop"),
-      "extension-create": aliasToDist("extension-create"),
-      "extension-install": aliasToDist("extension-install"),
-    },
+    alias: [
+      {
+        find: exact("extension-develop/bridge"),
+        replacement: aliasToDist("extension-develop", "./bridge"),
+      },
+      {
+        find: exact("extension-develop"),
+        replacement: aliasToDist("extension-develop"),
+      },
+      {
+        find: exact("extension-create"),
+        replacement: aliasToDist("extension-create"),
+      },
+      {
+        find: exact("extension-install"),
+        replacement: aliasToDist("extension-install"),
+      },
+    ],
   },
 });

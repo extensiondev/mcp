@@ -7,9 +7,9 @@
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
 import fs from "node:fs";
-import path from "node:path";
 import type { ChildProcess } from "node:child_process";
 import type { ReadyContract } from "./types";
+import { readyContractPath } from "./session-paths";
 import {
   LEGACY_FIDELITY_WARNING,
   denoiseCliLog,
@@ -60,15 +60,7 @@ export interface PollOptions {
   intervalMs?: number;
 }
 
-export function readyContractPath(projectPath: string, browser: string): string {
-  return path.resolve(
-    projectPath,
-    "dist",
-    "extension-js",
-    browser,
-    "ready.json",
-  );
-}
+
 
 interface ContractReading {
   contract: ReadyContract & Record<string, unknown>;

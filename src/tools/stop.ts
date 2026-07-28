@@ -19,6 +19,7 @@ import {
   removeSessionMarker,
 } from "../lib/process-manager";
 import { resolveSessionBrowser } from "../lib/session-browser";
+import { readyContractPath } from "../lib/session-paths";
 import { removeCarrier } from "../lib/carrier";
 import { sweepCarriers, type CarrierSweepEntry } from "../lib/carrier-exit";
 import { rememberedCarriers } from "../lib/carrier-registry";
@@ -161,22 +162,12 @@ function signal(pid: number, sig: NodeJS.Signals): boolean {
   }
 }
 
-function readyJsonPath(projectPath: string, browser: string): string {
-  return path.resolve(
-    projectPath,
-    "dist",
-    "extension-js",
-    browser,
-    "ready.json",
-  );
-}
-
 function pidFromReadyContract(
   projectPath: string,
   browser: string,
 ): number | null {
   try {
-    const raw = fs.readFileSync(readyJsonPath(projectPath, browser), "utf8");
+    const raw = fs.readFileSync(readyContractPath(projectPath, browser), "utf8");
     const contract: ReadyContract = JSON.parse(raw);
     return typeof contract.pid === "number" ? contract.pid : null;
   } catch {
@@ -228,7 +219,7 @@ export async function stopOne(
   removeSession(projectPath, browser);
   removeSessionMarker(projectPath, browser);
   try {
-    fs.rmSync(readyJsonPath(projectPath, browser), { force: true });
+    fs.rmSync(readyContractPath(projectPath, browser), { force: true });
   } catch {
   }
 

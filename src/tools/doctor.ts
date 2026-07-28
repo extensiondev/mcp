@@ -13,6 +13,8 @@ import { exactVersion, pinnedCliVersion, runExtensionCli } from "../lib/exec";
 import { toMcpSpeak } from "../lib/act";
 import { envelope, isEnvelope } from "../lib/envelope";
 import { resolveSessionBrowser } from "../lib/session-browser";
+import { readLogEvents } from "./logs-filter";
+import { readyContractPath } from "../lib/session-paths";
 import type { ReadyContract } from "../lib/types";
 
 function readReadyContract(
@@ -21,7 +23,7 @@ function readReadyContract(
 ): ReadyContract | null {
   try {
     const raw = fs.readFileSync(
-      path.resolve(projectPath, "dist", "extension-js", browser, "ready.json"),
+      readyContractPath(projectPath, browser),
       "utf8",
     );
     return JSON.parse(raw) as ReadyContract;
@@ -123,23 +125,9 @@ export function recentErrorLogs(
   browser: string,
   max = 5,
 ): string[] {
-  const file = path.resolve(
-    projectPath,
-    "dist",
-    "extension-js",
-    browser,
-    "logs.ndjson",
-  );
-  let lines: string[];
-  try {
-    lines = fs.readFileSync(file, "utf8").split("\n").filter(Boolean);
-  } catch {
-    return [];
-  }
   const errs: string[] = [];
-  for (const line of lines) {
-    let ev: {
-      level?: string;
+  for (const event of readLogEvents(projectPath, browser, { level: "error" })) {
+    const ev = event as {
       messageParts?: unknown[];
       errorName?: string;
       stack?: string;
@@ -147,12 +135,6 @@ export function recentErrorLogs(
       message?: string;
       text?: string;
     };
-    try {
-      ev = JSON.parse(line);
-    } catch {
-      continue;
-    }
-    if (!ev || ev.level !== "error") continue;
     const parts = Array.isArray(ev.messageParts)
       ? ev.messageParts
       : Array.isArray(ev.args)

@@ -6,13 +6,9 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-const LEVEL_ORDER = ["error", "warn", "info", "debug", "trace"];
+import { matchesLogQuery, readLogEvents } from "extension-develop/bridge";
 
-function levelRank(level: string): number {
-  const l = level === "log" ? "info" : level;
-  const i = LEVEL_ORDER.indexOf(l);
-  return i === -1 ? LEVEL_ORDER.length : i;
-}
+export { readLogEvents };
 
 export interface LogsArgs {
   projectPath: string;
@@ -28,61 +24,36 @@ export interface LogsArgs {
   limit?: number;
 }
 
-function makeUrlMatcher(pattern: string): (event: any) => boolean {
-  const hasGlob = pattern.includes("*");
-  let re: RegExp | null = null;
-  if (hasGlob) {
-    const escaped = pattern
-      .replace(/[.+?^${}()|[\]\\]/g, "\\$&")
-      .replace(/\*/g, ".*");
-    re = new RegExp(escaped);
-  }
-  return (event: any): boolean => {
-    const candidates = [event.url, event.hostname].filter(
-      (v) => typeof v === "string",
-    ) as string[];
-    if (candidates.length === 0) return false;
-    return candidates.some((c) => (re ? re.test(c) : c.includes(pattern)));
-  };
-}
+/* @invariant `level: "off"` is the ONE clause this package does not hand to the
+   engine unchanged, and the difference is deliberate, not a bug on either side.
 
-export function makeFilter(args: LogsArgs): (event: any) => boolean {
-  const minLevel = String(args.level || "all").toLowerCase();
-  const rawContexts = Array.isArray(args.context)
-    ? args.context
-    : typeof args.context === "string"
-      ? args.context.split(",")
-      : null;
-  const contexts =
-    rawContexts && rawContexts.length
-      ? new Set(rawContexts.map((c) => c.trim()).filter(Boolean))
-      : null;
-  const sinceSeq = args.since != null ? Number(args.since) : null;
-  const urlMatches = args.url ? makeUrlMatcher(args.url) : null;
-  const tabId = args.tab != null ? Number(args.tab) : null;
+   The engine's matchesLogQuery treats 'off' as a synonym for 'all': its `if
+   (minLevel !== 'all' && minLevel !== 'off')` skips the severity comparison
+   entirely, so `extension logs --level off` returns every line. extension_logs
+   has always meant the opposite by 'off', and its schema documents 'off' as a
+   distinct choice next to 'all': logging is disabled, so plain console lines are
+   suppressed and only structured dx.signal diagnostics survive. An agent that
+   asks for 'off' and receives every console line back would be getting the exact
+   inverse of what it asked for.
 
-  return (event: any): boolean => {
-    if (!event || typeof event !== "object") return false;
-    if (event.type === "header") return false;
-    if (args.signalsOnly && event.eventType !== "dx.signal") return false;
-    if (contexts && !contexts.has(event.context)) return false;
-    if (minLevel === "off") {
-      if (event.eventType !== "dx.signal") return false;
-    } else if (minLevel !== "all") {
-      if (levelRank(event.level) > levelRank(minLevel)) return false;
-    }
-    if (
-      sinceSeq != null &&
-      Number.isFinite(sinceSeq) &&
-      typeof event.seq === "number" &&
-      event.seq <= sinceSeq
-    ) {
-      return false;
-    }
-    if (urlMatches && !urlMatches(event)) return false;
-    if (tabId != null && Number.isFinite(tabId) && event.tabId !== tabId) {
-      return false;
-    }
-    return true;
+   The two are reconciled here rather than by editing either side, because 'off'
+   and 'all' map cleanly onto clauses the engine already owns: MCP 'off' IS
+   {level: 'all', signalsOnly: true}, since 'off' also skips the severity
+   threshold. Every other clause (level ranking with log-as-info, the context
+   set, the `*` glob over url then hostname with substring fallback, the
+   exclusive `since` cursor, the tab match, and the rule that a `type: "header"`
+   record is never a log) is now the engine's, so `extension logs` and
+   extension_logs cannot answer the same query two different ways. */
+export function makeFilter(args: LogsArgs): (event: unknown) => boolean {
+  const level = String(args.level || "all").toLowerCase();
+  const loggingOff = level === "off";
+  const query = {
+    context: args.context,
+    level: loggingOff ? "all" : level,
+    signalsOnly: Boolean(args.signalsOnly) || loggingOff,
+    since: args.since,
+    url: args.url,
+    tab: args.tab,
   };
+  return (event: unknown): boolean => matchesLogQuery(event as never, query);
 }
