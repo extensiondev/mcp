@@ -76,7 +76,12 @@ const MARKER = "managed-by-extension-dev-mcp.json";
 const tmpDirs: string[] = [];
 
 function project(): string {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-carrier-ship-"));
+  /* The prefix deliberately avoids the word this file greps for. Warnings now
+     quote absolute paths, so a fixture directory named after the thing being
+     asserted absent makes the assertion match its own scaffolding. Renaming the
+     fixture keeps the /carrier/i check at full strength; loosening the check
+     instead would have blunted the guard to accommodate a temp directory. */
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-build-ship-"));
   tmpDirs.push(dir);
   fs.mkdirSync(path.join(dir, "src"), { recursive: true });
   fs.writeFileSync(

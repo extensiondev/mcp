@@ -31,14 +31,14 @@ importers:
         specifier: ^7.0.6
         version: 7.0.6
       extension-create:
-        specifier: 4.0.17
-        version: 4.0.17
+        specifier: 4.0.19-canary.1785200797.ce99a79e
+        version: 4.0.19-canary.1785200797.ce99a79e
       extension-develop:
-        specifier: 4.0.17
-        version: 4.0.17(@swc/helpers@0.5.21)(svelte@5.56.6)(typescript@6.0.2)(webpack@5.108.4(postcss@8.5.23))
+        specifier: 4.0.19-canary.1785200797.ce99a79e
+        version: 4.0.19-canary.1785200797.ce99a79e(@swc/helpers@0.5.21)(svelte@5.56.6)(typescript@6.0.2)(webpack@5.108.4(postcss@8.5.23))
       extension-install:
-        specifier: 4.0.17
-        version: 4.0.17
+        specifier: 4.0.19-canary.1785200797.ce99a79e
+        version: 4.0.19-canary.1785200797.ce99a79e
       ws:
         specifier: ^8.21.0
         version: 8.21.0
@@ -62,7 +62,7 @@ importers:
         specifier: 6.0.2
         version: 6.0.2
       vite:
-        specifier: ^8.1.5
+        specifier: ^8.0.16
         version: 8.1.5(@types/node@25.6.0)(jiti@2.6.1)(less@4.6.7)(terser@5.49.0)
       vitest:
         specifier: ^4.1.3
@@ -1077,11 +1077,6 @@ packages:
     resolution: {integrity: sha512-qIj0G9wZbMGNLjLmg1PT6v2mE9AH2zlnADJD/2tC6E00hgmhUOfEB6greHPAfLRSufHqROIUTkw6E+M3lH0PTQ==}
     engines: {node: '>= 0.4'}
 
-  baseline-browser-mapping@2.10.19:
-    resolution: {integrity: sha512-qCkNLi2sfBOn8XhZQ0FXsT1Ki/Yo5P90hrkRamVFRS7/KV9hpfA4HkoWNU152+8w0zPjnxo5psx5NL3PSGgv5g==}
-    engines: {node: '>=6.0.0'}
-    hasBin: true
-
   baseline-browser-mapping@2.11.5:
     resolution: {integrity: sha512-xJo6a6YZnwZfnyGmQKWMbVOcii7XRibjOskRh+WJ9UHQoX16xrQrcIgAMQOzfvs8XiLMx6ih/fsLPF73iY2D1A==}
     engines: {node: '>=6.0.0'}
@@ -1097,11 +1092,6 @@ packages:
   browser-extension-manifest-fields@2.2.9:
     resolution: {integrity: sha512-1s3ISUcO4A+Ml2842+xV5fNmRFqv4y7D6WktnoOdUu4b4VfmOrdcfrOftLI3WTkSaxLpUJX5ahA8Ic7YuFAdXw==}
     engines: {node: '>=18'}
-
-  browserslist@4.28.2:
-    resolution: {integrity: sha512-48xSriZYYg+8qXna9kwqjIVzuQxi+KYWp2+5nCYnYKPTr0LvD89Jqk2Or5ogxz0NUMfIjhh2lIUX/LyX9B4oIg==}
-    engines: {node: ^6 || ^7 || ^8 || ^9 || ^10 || ^11 || ^12 || >=13.7}
-    hasBin: true
 
   browserslist@4.28.7:
     resolution: {integrity: sha512-JxV13hNrFxqjOc8alRbq9dK1MM79NEXYpma2B2J4wAtpWS5zIEIKqWPGCl7N4o7Uc7B7itylh7SuDujATRyyTw==}
@@ -1129,9 +1119,6 @@ packages:
   callsites@3.1.0:
     resolution: {integrity: sha512-P8BjAsXvZS+VIDUI11hHCQEv74YT67YUi5JJFNWIqL235sBmjX4+qx9Muvls5ivyNENctx46xQLQ3aTuE7ssaQ==}
     engines: {node: '>=6'}
-
-  caniuse-lite@1.0.30001788:
-    resolution: {integrity: sha512-6q8HFp+lOQtcf7wBK+uEenxymVWkGKkjFpCvw5W25cmMwEDU45p1xQFBQv8JDlMMry7eNxyBaR+qxgmTUZkIRQ==}
 
   caniuse-lite@1.0.30001806:
     resolution: {integrity: sha512-72Cuvd95zbSYPKq6Fhg8eDJRlzgWDf7/mtoZv6Qe/DYNCEBdNxoA3+rZAU2ZhGCpZlns3EssFavaZomckT5Uuw==}
@@ -1289,9 +1276,6 @@ packages:
   ee-first@1.1.1:
     resolution: {integrity: sha512-WMwm9LhRUo+WUaRN+vRuETqG89IgZphVSNkdFgeb6sS/E4OrDIN7t48CAewSHXc6C8lefD8KKfr5vY61brQlow==}
 
-  electron-to-chromium@1.5.338:
-    resolution: {integrity: sha512-KVQQ3xko9/coDX3qXLUEEbqkKT8L+1DyAovrtu0Khtrt9wjSZ+7CZV4GVzxFy9Oe1NbrIU1oVXCwHJruIA1PNg==}
-
   electron-to-chromium@1.5.396:
     resolution: {integrity: sha512-yHiw2Y3C3H9U6TMbOfoWK/BPreiOPXRfTWPBwQBoZG6/8TB6eOPnsy5oaRYuatR7Fw2SJ4kKforgufeo7fq0EQ==}
 
@@ -1339,9 +1323,6 @@ packages:
 
   es-module-lexer@2.0.0:
     resolution: {integrity: sha512-5POEcUuZybH7IdmGsD8wlf0AI55wMecM9rVBTI/qEAy2c1kTOm3DjFYjrBdI2K3BaJjJYfYFeRtM0t9ssnRuxw==}
-
-  es-module-lexer@2.1.0:
-    resolution: {integrity: sha512-n27zTYMjYu1aj4MjCWzSP7G9r75utsaoc8m61weK+W8JMBGGQybd43GstCXZ3WNmSFtGT9wi59qQTW6mhTR5LQ==}
 
   es-module-lexer@2.3.1:
     resolution: {integrity: sha512-shc1dbU90Yl/xq1QrC7QRtfcwURZuVRfPhZbDoldJ1cn1gzDvBaBWlv0eFolj5+0znnPJz5TXLxsN77X/12KTA==}
@@ -1424,12 +1405,12 @@ packages:
     resolution: {integrity: sha512-hIS4idWWai69NezIdRt2xFVofaF4j+6INOpJlVOLDO8zXGpUVEVzIYk12UUi2JzjEzWL3IOAxcTubgz9Po0yXw==}
     engines: {node: '>= 18'}
 
-  extension-create@4.0.17:
-    resolution: {integrity: sha512-hcgDu1Em1w+pM+bkqY93+VNJU9WhL+KeNiRCn8WNcETSshxBi3vSWrdA+kt0eV/RPKf9ss+gXomPf+7z7PoRDg==}
+  extension-create@4.0.19-canary.1785200797.ce99a79e:
+    resolution: {integrity: sha512-ozhdQAumVp3goFUIpdBk1hUcNok0Gdbg9d/bVVPGV4u+ZwK+tUinEV+ii5432A9RYiKx9I+KRegEEDrJ63hELA==}
     engines: {node: '>=22.12'}
 
-  extension-develop@4.0.17:
-    resolution: {integrity: sha512-uwX3/mZRN/cFLsBpRd94tPE0seQF8JNSPZNE/N5Koa+burqcp+dRgbwOYc4JfDhYYNow1CoZt8m//EKRNxjyKw==}
+  extension-develop@4.0.19-canary.1785200797.ce99a79e:
+    resolution: {integrity: sha512-Rczj4Z/q2zOas78S0puQR0csosgrxVLe3N6bQkW7TAeCgU/pGgS9WZZ8t5lrBPAtpOs9VAJxC42HsElrC5vYqg==}
     engines: {node: '>=22.12'}
 
   extension-from-store@0.1.1:
@@ -1437,8 +1418,8 @@ packages:
     engines: {node: '>=16'}
     hasBin: true
 
-  extension-install@4.0.17:
-    resolution: {integrity: sha512-svfeYWmlHrT8nWV/fJTTdWuLbO7fy2KnL9quSlUEFeabL0u1NeEzImfA+yFVFLgIaSEpVICUPhZB0PdFYI7u+A==}
+  extension-install@4.0.19-canary.1785200797.ce99a79e:
+    resolution: {integrity: sha512-JSftldWOFmHvi1ZM8Nyl+pjH7+fgm8g6xQjR4j1RXEM/RXyyWlW2nrRh77QXVT+yDa70Pekp73ZhjpGJWig4CA==}
     engines: {node: '>=22.12'}
 
   extract-zip@2.0.1:
@@ -1863,9 +1844,6 @@ packages:
 
   neo-async@2.6.2:
     resolution: {integrity: sha512-Yd3UES5mWCSqR+qNT93S3UoYUkqAZ9lLg8a7g9rimsWmYGK8cVToA4/sF3RrshdyV3sAGMXVUmpMYOw+dLpOuw==}
-
-  node-releases@2.0.37:
-    resolution: {integrity: sha512-1h5gKZCF+pO/o3Iqt5Jp7wc9rH3eJJ0+nh/CIoiRwjRxde/hAHyLPXYN4V3CqKAbiZPSeJFSWHmJsbkicta0Eg==}
 
   node-releases@2.0.51:
     resolution: {integrity: sha512-wRNIrw4DmVLKQlbgOMdkMx27Wrpzes2hh5Jtbi2bjPd+4wJstWIqP5A+lscnqbm0xxmT5Bpg8Lec5ItEBwx6BQ==}
@@ -3341,7 +3319,7 @@ snapshots:
 
   '@types/yauzl@2.10.3':
     dependencies:
-      '@types/node': 25.6.0
+      '@types/node': 25.9.5
     optional: true
 
   '@vitest/expect@4.1.4':
@@ -3572,8 +3550,8 @@ snapshots:
 
   autoprefixer@10.5.0(postcss@8.5.23):
     dependencies:
-      browserslist: 4.28.2
-      caniuse-lite: 1.0.30001788
+      browserslist: 4.28.7
+      caniuse-lite: 1.0.30001806
       fraction.js: 5.3.4
       picocolors: 1.1.1
       postcss: 8.5.23
@@ -3590,8 +3568,6 @@ snapshots:
       - supports-color
 
   axobject-query@4.1.0: {}
-
-  baseline-browser-mapping@2.10.19: {}
 
   baseline-browser-mapping@2.11.5: {}
 
@@ -3612,14 +3588,6 @@ snapshots:
       - supports-color
 
   browser-extension-manifest-fields@2.2.9: {}
-
-  browserslist@4.28.2:
-    dependencies:
-      baseline-browser-mapping: 2.10.19
-      caniuse-lite: 1.0.30001788
-      electron-to-chromium: 1.5.338
-      node-releases: 2.0.37
-      update-browserslist-db: 1.2.3(browserslist@4.28.2)
 
   browserslist@4.28.7:
     dependencies:
@@ -3646,8 +3614,6 @@ snapshots:
       get-intrinsic: 1.3.0
 
   callsites@3.1.0: {}
-
-  caniuse-lite@1.0.30001788: {}
 
   caniuse-lite@1.0.30001806: {}
 
@@ -3766,8 +3732,6 @@ snapshots:
 
   ee-first@1.1.1: {}
 
-  electron-to-chromium@1.5.338: {}
-
   electron-to-chromium@1.5.396: {}
 
   emojis-list@3.0.0: {}
@@ -3803,8 +3767,6 @@ snapshots:
   es-errors@1.3.0: {}
 
   es-module-lexer@2.0.0: {}
-
-  es-module-lexer@2.1.0: {}
 
   es-module-lexer@2.3.1: {}
 
@@ -3898,7 +3860,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  extension-create@4.0.17:
+  extension-create@4.0.19-canary.1785200797.ce99a79e:
     dependencies:
       adm-zip: 0.6.0
       axios: 1.18.1
@@ -3910,7 +3872,7 @@ snapshots:
       - debug
       - supports-color
 
-  extension-develop@4.0.17(@swc/helpers@0.5.21)(svelte@5.56.6)(typescript@6.0.2)(webpack@5.108.4(postcss@8.5.23)):
+  extension-develop@4.0.19-canary.1785200797.ce99a79e(@swc/helpers@0.5.21)(svelte@5.56.6)(typescript@6.0.2)(webpack@5.108.4(postcss@8.5.23)):
     dependencies:
       '@prefresh/core': 1.5.9(preact@10.27.3)
       '@prefresh/utils': 1.2.1
@@ -3925,7 +3887,7 @@ snapshots:
       case-sensitive-paths-webpack-plugin: 2.4.0
       content-security-policy-parser: 0.6.0
       dotenv: 17.4.2
-      es-module-lexer: 2.1.0
+      es-module-lexer: 2.3.1
       extension-from-store: 0.1.1
       go-git-it: 5.1.5
       ignore: 7.0.5
@@ -3969,7 +3931,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  extension-install@4.0.17:
+  extension-install@4.0.19-canary.1785200797.ce99a79e:
     dependencies:
       cross-spawn: 7.0.6
       pintor: 0.3.0
@@ -4304,8 +4266,6 @@ snapshots:
 
   neo-async@2.6.2: {}
 
-  node-releases@2.0.37: {}
-
   node-releases@2.0.51: {}
 
   object-assign@4.1.1: {}
@@ -4550,7 +4510,7 @@ snapshots:
       '@csstools/postcss-trigonometric-functions': 5.0.2(postcss@8.5.23)
       '@csstools/postcss-unset-value': 5.0.0(postcss@8.5.23)
       autoprefixer: 10.5.0(postcss@8.5.23)
-      browserslist: 4.28.2
+      browserslist: 4.28.7
       css-blank-pseudo: 8.0.1(postcss@8.5.23)
       css-has-pseudo: 8.0.0(postcss@8.5.23)
       css-prefers-color-scheme: 11.0.0(postcss@8.5.23)
@@ -4888,12 +4848,6 @@ snapshots:
   undici-types@7.24.6: {}
 
   unpipe@1.0.0: {}
-
-  update-browserslist-db@1.2.3(browserslist@4.28.2):
-    dependencies:
-      browserslist: 4.28.2
-      escalade: 3.2.0
-      picocolors: 1.1.1
 
   update-browserslist-db@1.2.3(browserslist@4.28.7):
     dependencies:

@@ -13,30 +13,156 @@ import { runExtensionCli } from "../lib/exec";
 import { liveProjectSessions } from "../lib/session-browser";
 import { CARRIER_DIR_NAME, removeCarrier } from "../lib/carrier";
 import { readZipEntryNames } from "../lib/zip-entries";
-import { envelope } from "../lib/envelope";
+import { buildSummaryPath, sessionPathHint } from "../lib/session-paths";
+import { type Envelope, envelope, isEnvelope } from "../lib/envelope";
 
 const COMMAND = "extension_build";
+
+interface EngineSafariSummary {
+  appName?: string;
+  bundleId?: string;
+  bundleIdDerived?: boolean;
+  appPath?: string;
+  xcodeProjectPath?: string;
+  macOsOnly?: boolean;
+}
+
+interface EngineBuildSummary {
+  browser?: string;
+  output_path?: string;
+  total_assets?: number;
+  total_bytes?: number;
+  largest_asset_bytes?: number;
+  warnings_count?: number;
+  errors_count?: number;
+  warnings?: string[];
+  safari?: EngineSafariSummary;
+}
+
+/* @invariant
+ * Two readers for one BuildSummary, because the engine that answers is not
+ * the engine this package pins.
+ *
+ * `extension build --output json` returns the summary inline as
+ * value.summaries[], and that is the reading this tool prefers: it belongs to
+ * the run that just finished, so no freshness guess is involved. Engines older
+ * than the summaries contract answer the same flag with an envelope that has no
+ * summaries at all, and those still persist the identical BuildSummary to
+ * a build summary on disk. Reading that file second keeps warnings, byte totals
+ * and the output path alive against such a project instead of silently
+ * reporting a build with no numbers on it. The file is mtime-guarded because it
+ * outlives the build that wrote it.
+ *
+ * Where that file lives is asked of the engine's buildSummaryPath through the
+ * one module allowed to know the session layout, never rebuilt from string
+ * literals here. The helper describes the layout of the engine this package
+ * pins, which against an older project is a claim rather than a fact, and it is
+ * still the better of the two options: a literal is wrong in exactly the same
+ * case, frozen at whatever the layout was the day someone typed it, and gives a
+ * reviewer nothing to notice. What the helper cannot do is make a mismatch
+ * visible, and this is the one reader that runs precisely when the engine is
+ * already known to disagree with the pin, so a miss carries the absolute path
+ * it tried back to the caller instead of reading as an empty answer.
+ */
+interface PersistedSummary {
+  file: string;
+  summary: EngineBuildSummary | null;
+}
 
 function readBuildSummary(
   projectPath: string,
   browser: string,
   since: number,
-): { warnings?: string[]; warnings_count?: number } | null {
-  const file = path.resolve(
-    projectPath,
-    "dist",
-    "extension-js",
-    browser,
-    "build-summary.json",
-  );
+): PersistedSummary {
+  const file = buildSummaryPath(projectPath, browser);
   try {
     const stat = fs.statSync(file);
-    if (stat.mtimeMs < since) return null;
-    const summary = JSON.parse(fs.readFileSync(file, "utf8"));
-    if (summary && typeof summary === "object") return summary;
+    if (stat.mtimeMs >= since) {
+      const summary = JSON.parse(fs.readFileSync(file, "utf8"));
+      if (summary && typeof summary === "object") return { file, summary };
+    }
   } catch {
   }
-  return null;
+  return { file, summary: null };
+}
+
+interface EngineOutput {
+  frame: Envelope | null;
+  narration: string;
+}
+
+function readEngineOutput(stdout: string, stderr: string): EngineOutput {
+  let frame: Envelope | null = null;
+  const rest: string[] = [];
+  for (const line of stdout.split("\n")) {
+    const text = line.trim();
+    if (!frame && text.startsWith("{")) {
+      let parsed: unknown = null;
+      try {
+        parsed = JSON.parse(text);
+      } catch {
+      }
+      if (isEnvelope(parsed)) {
+        frame = parsed;
+        continue;
+      }
+    }
+    rest.push(line);
+  }
+  const narration = [rest.join("\n").trim(), stderr.trim()]
+    .filter(Boolean)
+    .join("\n");
+  return { frame, narration };
+}
+
+/* @invariant
+ * One retry, and only for the one flag this server adds behind the caller's
+ * back.
+ *
+ * `--output json` reached `extension build` in 4.0.17. A project pinned to
+ * anything older has working builds today, and commander answers an
+ * unrecognised flag by writing one line to stderr and exiting 1 before any
+ * compile starts. Sending the flag unconditionally would therefore turn every
+ * build in such a project into E_BUILD_FAILED carrying an error about a flag
+ * the user never typed, which is breaking a working build to delete a regex.
+ *
+ * So the refusal is detected and the build is run once more without the flag,
+ * where the persisted build summary still answers everything the envelope
+ * would have. The match is deliberately narrow: it needs a non-zero exit AND
+ * commander's own unknown-option line AND that line to name --output. A real
+ * compile failure exits non-zero without ever printing that, so it is reported
+ * as the failure it is rather than being retried. There is no loop: the second
+ * run omits the only flag that can produce this line, so its result is final
+ * whatever it says.
+ *
+ * The scope is the point. --macos-only is just as new, and it is NOT retried
+ * away, because the caller asked for it: dropping it would build a macOS-only
+ * project for someone who asked for a universal one and call that success.
+ * A flag the caller chose fails loudly; a flag this server chose gets a second
+ * chance without it.
+ */
+const UNKNOWN_OUTPUT_FLAG = /unknown option[^\n]*--output\b/;
+
+function refusedTheOutputFlag(stderr: string): boolean {
+  return UNKNOWN_OUTPUT_FLAG.test(stderr);
+}
+
+function engineSummaries(frame: Envelope | null): EngineBuildSummary[] {
+  const value = frame?.value as { summaries?: unknown } | null | undefined;
+  if (!value || !Array.isArray(value.summaries)) return [];
+  return value.summaries.filter(
+    (entry): entry is EngineBuildSummary =>
+      Boolean(entry) && typeof entry === "object",
+  );
+}
+
+function summaryForBrowser(
+  summaries: EngineBuildSummary[],
+  browser: string,
+): EngineBuildSummary | null {
+  return (
+    summaries.find((entry) => entry.browser === browser) ?? summaries[0] ?? null
+  );
 }
 
 function builtEntrypoints(
@@ -247,6 +373,12 @@ export const schema = {
         description:
           "Safari targets only: a reverse-DNS bundle identifier you own, such as com.acme.readinglist. Without one the app is packaged under a generated dev.extensionjs.* identifier that Apple will not accept for distribution.",
       },
+      macOsOnly: {
+        type: "boolean",
+        default: true,
+        description:
+          "Safari targets only: generate a macOS-only Xcode project. Pass false for a universal project that also targets iOS and iPadOS, which is what you want if the extension ships on iPhone or iPad.",
+      },
       forceRegenerate: {
         type: "boolean",
         default: false,
@@ -268,79 +400,20 @@ const SAFARI_VENDORS = new Set(["safari", "webkit-based"]);
  * after a full compile has already been paid for. Checking the same shape
  * before the spawn turns a wasted build into a named refusal the model can act
  * on. The pattern is Apple's: dot-separated segments of letters, digits and
- * hyphens, each beginning with a letter, at least two of them. It mirrors
- * isValidBundleId in the engine's safari-config, which is not importable from
- * here, so it is duplicated rather than drifted: loosening this copy would only
- * move the rejection back to where it is expensive, never accept more.
+ * hyphens, each beginning with a letter, at least two of them.
+ *
+ * The engine now exports the same check as isValidBundleId from `extension`,
+ * and this copy stays anyway. Importing it would make the CLI package a
+ * dependency of this one, and the whole point of resolveExtensionInvocation is
+ * that this server drives whichever engine the user's project has installed
+ * rather than one it bundles; a pinned second engine in the tree would be a
+ * copy that validates nothing anybody runs. One regex is the cheaper duplicate.
+ * It is duplicated rather than drifted: loosening this copy would only move the
+ * rejection back to where it is expensive, never accept more. The parity test
+ * in build-safari-packaging pins the pattern to the engine's own literal.
  */
-const BUNDLE_ID_PATTERN = /^[A-Za-z][A-Za-z0-9-]*(\.[A-Za-z][A-Za-z0-9-]*)+$/;
-
-const DERIVED_BUNDLE_ID_PREFIX = "dev.extensionjs.";
-
-interface SafariIdentity {
-  appName: string;
-  bundleId: string;
-  xcodeProject: string;
-  appPath?: string;
-}
-
-function readSafariIdentity(
-  projectPath: string,
-  browser: string,
-): SafariIdentity | null {
-  const projectLocation = path.resolve(
-    projectPath,
-    "dist",
-    `${browser}-xcode`,
-  );
-  let appDirs: string[];
-  try {
-    appDirs = fs
-      .readdirSync(projectLocation, { withFileTypes: true })
-      .filter((entry) => entry.isDirectory())
-      .map((entry) => entry.name);
-  } catch {
-    return null;
-  }
-  for (const appName of appDirs) {
-    const xcodeProject = path.join(
-      projectLocation,
-      appName,
-      `${appName}.xcodeproj`,
-    );
-    let pbxproj: string;
-    try {
-      pbxproj = fs.readFileSync(
-        path.join(xcodeProject, "project.pbxproj"),
-        "utf8",
-      );
-    } catch {
-      continue;
-    }
-    const ids = [
-      ...pbxproj.matchAll(
-        /PRODUCT_BUNDLE_IDENTIFIER = ("?)([^;"]+)\1;/g,
-      ),
-    ].map((match) => match[2]);
-    const bundleId = ids.find((id) => !/\.Extension$/.test(id)) ?? ids[0];
-    if (!bundleId) continue;
-    const appPath = path.join(
-      projectLocation,
-      ".derived",
-      "Build",
-      "Products",
-      "Release",
-      `${appName}.app`,
-    );
-    return {
-      appName,
-      bundleId,
-      xcodeProject,
-      ...(fs.existsSync(appPath) ? { appPath } : {}),
-    };
-  }
-  return null;
-}
+export const BUNDLE_ID_PATTERN =
+  /^[A-Za-z][A-Za-z0-9-]*(\.[A-Za-z][A-Za-z0-9-]*)+$/;
 
 function manifestDivergence(
   projectPath: string,
@@ -485,16 +558,30 @@ export async function handler(args: {
   skipValidation?: boolean;
   appName?: string;
   bundleId?: string;
+  macOsOnly?: boolean;
   forceRegenerate?: boolean;
 }): Promise<string> {
   const start = Date.now();
   const browser = args.browser ?? "chrome";
   const safari = SAFARI_VENDORS.has(browser);
 
+  /* @invariant
+   * macOsOnly is listed raw while forceRegenerate is normalised to undefined
+   * when false, because the two flags carry different amounts of meaning.
+   * forceRegenerate: false is the default and asks for nothing, so refusing a
+   * chrome build over it would be refusing an empty request. macOsOnly: false
+   * is the caller asking for a universal macOS and iOS Xcode project, a real
+   * instruction this tool cannot honour for chrome, so it has to be refused
+   * rather than dropped. A truthy filter here would drop exactly that value and
+   * silently build for chrome instead; the engine shipped that bug on its own
+   * --macos-only and fixed it by testing for undefined, which is what the
+   * filter below does.
+   */
   const safariOnly = (
     [
       ["appName", args.appName],
       ["bundleId", args.bundleId],
+      ["macOsOnly", args.macOsOnly],
       ["forceRegenerate", args.forceRegenerate === true ? true : undefined],
     ] as Array<[string, unknown]>
   )
@@ -588,22 +675,55 @@ export async function handler(args: {
   if (args.mode) cliArgs.push("--mode", args.mode);
   if (args.appName) cliArgs.push("--app-name", args.appName);
   if (args.bundleId) cliArgs.push("--bundle-id", args.bundleId);
+  if (args.macOsOnly !== undefined)
+    cliArgs.push("--macos-only", String(args.macOsOnly));
   if (args.forceRegenerate) cliArgs.push("--force-regenerate");
 
-  const { code, stdout, stderr } = await runExtensionCli(cliArgs, {
-    cwd: args.projectPath,
-    timeoutMs: 180_000,
-  });
+  const spawn = { cwd: args.projectPath, timeoutMs: 180_000 };
+  let attempt = await runExtensionCli([...cliArgs, "--output", "json"], spawn);
+  const engineRefusedJsonOutput =
+    attempt.code !== 0 && refusedTheOutputFlag(attempt.stderr ?? "");
+  if (engineRefusedJsonOutput) {
+    attempt = await runExtensionCli(cliArgs, spawn);
+  }
+  const { code, stdout, stderr } = attempt;
+  if (engineRefusedJsonOutput) {
+    warnings.push(
+      "The Extension.js installed in this project is older than the one this server expects: it rejected --output json on build, so the build was run a second time without that flag and the result was read from the build summary the engine writes into dist/extension-js/. The extension that came out is exactly the same one. Upgrade the project's Extension.js to get the richer report back, including the Safari app identity and the byte totals from the run that just happened, and to stop paying for the second build.",
+    );
+  }
   const duration = Date.now() - start;
-  const out = (stdout ?? "").trim();
+  const engine = readEngineOutput(stdout ?? "", stderr ?? "");
+  const out = engine.narration;
   const lastLines = (text: string, n: number): string =>
     text.split("\n").slice(-n).join("\n");
 
   if (code === 0) {
-    // @deprecated Two scrapes of the CLI's own summary line. They stay until
-    const size = out.match(/Size:\s*([\d.]+\s*[kKmMgG]?B)/)?.[1];
-    const status = out.match(/Build Status:\s*(\w+)/)?.[1];
-    const engineSummary = readBuildSummary(args.projectPath, browser, start);
+    const inlineSummary = summaryForBrowser(
+      engineSummaries(engine.frame),
+      browser,
+    );
+    const persisted = inlineSummary
+      ? null
+      : readBuildSummary(args.projectPath, browser, start);
+    const engineSummary = inlineSummary ?? persisted?.summary ?? null;
+    /* @invariant
+     * A fallback that finds nothing says where it looked.
+     *
+     * The disk read only happens when the engine reported no summary inline,
+     * which already means the engine disagrees with the version this package
+     * pins. The path it reads comes from the pinned engine's layout helper, so
+     * an older project whose layout differs is exactly the case where the file
+     * is not there. Reporting no numbers without naming the path reads as "the
+     * build produced nothing", which sends the reader off to inspect a build
+     * that is in fact fine, so the path is stated and the note says plainly
+     * that the extension is unaffected.
+     */
+    const summaryPathNote =
+      persisted && !persisted.summary
+        ? `This build reported no summary of its own, and no summary from this run was found on disk either, so the byte totals and the engine's structured warnings are missing from the result below. The extension that was built is unaffected. ${sessionPathHint(persisted.file)}`
+        : null;
+    const status = engine.frame?.status;
     const buildWarnings = engineSummary?.warnings?.length
       ? engineSummary.warnings
       : [];
@@ -688,26 +808,29 @@ export async function handler(args: {
     }
     const divergence = manifestDivergence(args.projectPath, browser);
     /* @invariant
-     * A Safari build reports the identity it actually packaged, read back from
-     * the generated Xcode project rather than from what was asked for.
+     * A Safari build reports the identity the packager says it produced, and
+     * the derived-identifier warning is driven by bundleIdDerived rather than by
+     * the shape of the identifier.
      *
      * The identifier can come from three places, in this order: the bundleId
-     * option, `browser.safari.bundleId` in the project config, and finally a
-     * dev.extensionjs.* identifier the engine derives from the app name. The
-     * engine announces that last case on its own stdout, which this tool keeps
-     * only the tail of, so an agent could package under a squatted identifier
-     * and never be told. Apple will not distribute an app under a bundle id the
-     * developer does not own, and the identity is baked into the fingerprint, so
-     * discovering it at submission time means regenerating the project. Reading
-     * PRODUCT_BUNDLE_IDENTIFIER out of project.pbxproj is the only ground truth
-     * that covers all three sources.
+     * option, `browser.safari.bundleId` in the project config, and finally an
+     * identifier the engine derives from the app name. Only the packager knows
+     * which of the three it used. Matching a `dev.extensionjs.` prefix instead
+     * would get the answer right today and wrong twice over: a developer who
+     * legitimately owns that namespace would be warned about their own id, and
+     * the day the engine derives under a different prefix the warning goes
+     * quiet. Apple will not distribute an app under a bundle id the developer
+     * does not own, and the identity is baked into the project fingerprint, so
+     * discovering it at submission time means regenerating the project.
      */
-    const safariIdentity = safari
-      ? readSafariIdentity(args.projectPath, browser)
-      : null;
+    const safariIdentity = safari ? (engineSummary?.safari ?? null) : null;
     const derivedBundleIdNote =
-      safariIdentity?.bundleId.startsWith(DERIVED_BUNDLE_ID_PREFIX)
-        ? `The Safari app was packaged under the generated bundle identifier ${safariIdentity.bundleId}, which belongs to Extension.js and not to you. It is fine for running the app locally, and Apple will reject it for distribution. Rebuild with bundleId set to a reverse-DNS identifier under a domain you own to fix it, which regenerates the Xcode project.`
+      safariIdentity?.bundleIdDerived === true
+        ? `The Safari app was packaged under the generated bundle identifier ${safariIdentity.bundleId ?? "the engine derived for you"}, which belongs to Extension.js and not to you. It is fine for running the app locally, and Apple will reject it for distribution. Rebuild with bundleId set to a reverse-DNS identifier under a domain you own to fix it, which regenerates the Xcode project.`
+        : null;
+    const safariIdentityMissingNote =
+      safari && !safariIdentity
+        ? `The build succeeded but reported no Safari app identity, so this run cannot tell you which bundle identifier the app carries. Either the packager did not run (a non-macOS host, or Xcode missing, skips packaging and leaves a plain bundle in dist/${browser}), or the engine installed in this project predates the reporting contract. Check the build output below, and run extension_doctor if you expected an app.`
         : null;
     return envelope({
       ok: true,
@@ -716,8 +839,20 @@ export async function handler(args: {
       value: {
         browser,
         ...(safariIdentity ? { safariApp: safariIdentity } : {}),
-        ...(size ? { size } : {}),
+        ...(typeof engineSummary?.output_path === "string"
+          ? { outputPath: engineSummary.output_path }
+          : {}),
+        ...(typeof engineSummary?.total_bytes === "number"
+          ? { totalBytes: engineSummary.total_bytes }
+          : {}),
+        ...(typeof engineSummary?.total_assets === "number"
+          ? { totalAssets: engineSummary.total_assets }
+          : {}),
+        ...(typeof engineSummary?.largest_asset_bytes === "number"
+          ? { largestAssetBytes: engineSummary.largest_asset_bytes }
+          : {}),
         ...(status ? { engineBuildStatus: status } : {}),
+        ...(engineRefusedJsonOutput ? { engineRejectedJsonOutput: true } : {}),
         ...(entrypoints.length ? { entrypoints } : {}),
         ...(buildWarningsTruncated !== undefined
           ? { buildWarningsTruncated }
@@ -736,12 +871,21 @@ export async function handler(args: {
         ...zipNotes,
         uncheckedNote,
         derivedBundleIdNote,
+        safariIdentityMissingNote,
+        summaryPathNote,
       ],
     });
   }
 
+  const engineFailure =
+    typeof engine.frame?.error?.message === "string"
+      ? engine.frame.error.message.trim()
+      : "";
   const message =
-    stderr.trim() || out || `extension build exited with code ${code}`;
+    engineFailure ||
+    stderr.trim() ||
+    out ||
+    `extension build exited with code ${code}`;
   return envelope({
     ok: false,
     command: COMMAND,

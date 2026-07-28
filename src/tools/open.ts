@@ -23,6 +23,7 @@ import {
 } from "../lib/act";
 import { envelope } from "../lib/envelope";
 import { resolveSessionBrowser } from "../lib/session-browser";
+import { readyContractPath } from "../lib/session-paths";
 import { CDPClient } from "../lib/cdp";
 import { resolveCdpPort, CDP_PORT_MISSING_HINT } from "../lib/cdp-port";
 import { isChromiumFamily } from "../lib/browser-family";
@@ -275,13 +276,7 @@ function declaredCommands(projectPath: string, browser: string): string[] | null
 
 function readDistPath(projectPath: string, browser: string): string | null {
   try {
-    const file = path.resolve(
-      projectPath,
-      "dist",
-      "extension-js",
-      browser,
-      "ready.json",
-    );
+    const file = readyContractPath(projectPath, browser);
     const contract = JSON.parse(fs.readFileSync(file, "utf8"));
     return typeof contract?.distPath === "string" ? contract.distPath : null;
   } catch {

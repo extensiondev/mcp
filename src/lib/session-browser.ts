@@ -9,6 +9,10 @@
 import fs from "node:fs";
 import path from "node:path";
 import { listSessionMarkers, listSessions } from "./process-manager";
+import {
+  readyContractPath,
+  sessionArtifactsRootDir,
+} from "./session-paths";
 
 export interface ResolvedBrowser {
   browser: string;
@@ -22,7 +26,7 @@ interface ContractSighting {
 }
 
 function contractSightings(projectPath: string): ContractSighting[] {
-  const root = path.resolve(projectPath, "dist", "extension-js");
+  const root = sessionArtifactsRootDir(projectPath);
   let dirs: string[];
   try {
     dirs = fs.readdirSync(root);
@@ -31,7 +35,7 @@ function contractSightings(projectPath: string): ContractSighting[] {
   }
   const sightings: ContractSighting[] = [];
   for (const dir of dirs) {
-    const readyPath = path.join(root, dir, "ready.json");
+    const readyPath = readyContractPath(projectPath, dir);
     try {
       const stat = fs.statSync(readyPath);
       const contract = JSON.parse(fs.readFileSync(readyPath, "utf8"));
@@ -133,13 +137,7 @@ export function browserExitStamp(
   browser: string,
   since: number,
 ): BrowserExitStamp | null {
-  const readyPath = path.resolve(
-    projectPath,
-    "dist",
-    "extension-js",
-    browser,
-    "ready.json",
-  );
+  const readyPath = readyContractPath(projectPath, browser);
   try {
     const stat = fs.statSync(readyPath);
     if (stat.mtimeMs < since) return null;
@@ -165,13 +163,7 @@ export function contractBoundPort(
   browser: string,
   since: number,
 ): number | null {
-  const readyPath = path.resolve(
-    projectPath,
-    "dist",
-    "extension-js",
-    browser,
-    "ready.json",
-  );
+  const readyPath = readyContractPath(projectPath, browser);
   try {
     const stat = fs.statSync(readyPath);
     if (stat.mtimeMs < since) return null;
