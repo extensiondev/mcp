@@ -13,6 +13,7 @@ import * as build from "./build";
 import { navigateToUrl } from "./open";
 import { uploadPreview } from "../lib/preview-upload";
 import { recordSharedPreview } from "../lib/share-record";
+import { probeShareCors } from "../lib/share-cors-probe";
 import { envelope } from "../lib/envelope";
 
 const COMMAND = "extension_preview_web";
@@ -123,11 +124,20 @@ function localLaneRemedy(checkout: string | null): string {
     : `${SURFACE.label} is a private app of the extension.dev monorepo and no npm install of this server can start it, so the default lane cannot resolve on this machine. ${shareOut}`;
 }
 
+function previewOriginOf(previewUrl: string): string | null {
+  try {
+    return new URL(previewUrl).origin;
+  } catch {
+    return null;
+  }
+}
+
 async function buildShare(
   projectPath: string,
   distDir: string,
   manifest: Record<string, any>,
   browser: string,
+  verifyInBrowserTerms: boolean,
 ): Promise<Record<string, unknown>> {
   const result = await uploadPreview({ distDir, manifest, browser });
   if (!result.ok) {
@@ -146,6 +156,12 @@ async function buildShare(
         : {}),
     };
   }
+
+  const origin = previewOriginOf(result.data.previewUrl);
+  const browserCheck =
+    verifyInBrowserTerms && result.data.zipUrl && origin
+      ? await probeShareCors({ zipUrl: result.data.zipUrl, origin })
+      : null;
 
   const sharedAt = new Date().toISOString();
   const record = recordSharedPreview(projectPath, {
@@ -174,6 +190,9 @@ async function buildShare(
     ...(result.data.revokeUrl ? { revokeUrl: result.data.revokeUrl } : {}),
     serves: "uploaded-local-build",
     localBuildUploaded: true,
+    ...(browserCheck
+      ? { browserLoadable: browserCheck.ok, browserCheck }
+      : { browserLoadable: null }),
     record,
     note:
       "Anyone with this link can open the build you just made, running in the emulator. No install, no sign-in, no dev server. They can also download the whole build as a zip from zipUrl, so the link hands over the built code. It stays live until expiresAt; DELETE revokeUrl with the same token to kill it sooner, and a revoked link stays dead. revokeUrl is the handle that pulls this link early. Re-sharing an unchanged build returns this same link rather than a second one, and only a revoked link is replaced by a different one, so " +
@@ -242,7 +261,7 @@ export const schema = {
         type: "boolean",
         default: true,
         description:
-          "Fetch the surface's dev middleware first to confirm the artifact loads.",
+          "Fetch the surface's dev middleware first to confirm the artifact loads on the local host. With share:true it also checks the shared link the way a browser would, following the zip's redirects and asserting the final response allows the preview origin, and reports that as share.browserLoadable.",
       },
       open: {
         type: "boolean",
@@ -389,12 +408,22 @@ export async function handler(args: {
   }
 
   if (args.share) {
-    result.share = await buildShare(
+    const share = await buildShare(
       args.projectPath,
       distDir,
       manifest,
       browser,
+      args.probe !== false,
     );
+    result.share = share;
+    if (share.ok === true && share.browserLoadable === false) {
+      const check = share.browserCheck as { reason?: string } | undefined;
+      previewWarnings.push(
+        `The link uploaded, but it will not render for anyone: ${
+          check?.reason ?? "its zip is not readable from the preview origin."
+        } Do not hand this link out as working until that is fixed.`,
+      );
+    }
   }
 
   if (args.probe === false) {
@@ -451,11 +480,25 @@ export async function handler(args: {
         ...result,
         hostReachable: true,
         previewLoadable: true,
+        /* @invariant
+         * previewLoadable says what this probe proved, and no more.
+         *
+         * It is a server-side fetch of a dev-only middleware on this machine,
+         * so it proves the local host parsed the build; it cannot see a CORS
+         * refusal, because a server does not enforce one. It sat one key away
+         * from share.previewUrl in the same envelope, and readers took it as a
+         * verdict on the shared link, which it never was: that link is read
+         * cross-origin by a browser, and only share.browserCheck asks that
+         * question. Naming the lane keeps the two apart.
+         */
+        previewLoadableLane: "local-dev-host",
         probe: {
           identifier: payload.identifier,
           loadedName: payload.manifest?.name,
           loadedVersion: payload.version,
           fileCount: Array.isArray(payload.files) ? payload.files.length : 0,
+          method: "server-fetch",
+          provesBrowserLoad: false,
         },
       },
       hint,
