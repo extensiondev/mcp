@@ -10,6 +10,7 @@ import { LAUNCH_BROWSER, PROJECT_PATH } from "../lib/common-schema";
 import fs from "node:fs";
 import path from "node:path";
 import { runExtensionCli } from "../lib/exec";
+import { outputJsonVerdict } from "../lib/engine-version";
 import { liveProjectSessions } from "../lib/session-browser";
 import { CARRIER_DIR_NAME, removeCarrier } from "../lib/carrier";
 import { readZipEntryNames } from "../lib/zip-entries";
@@ -140,6 +141,13 @@ function readEngineOutput(stdout: string, stderr: string): EngineOutput {
  * project for someone who asked for a universal one and call that success.
  * A flag the caller chose fails loudly; a flag this server chose gets a second
  * chance without it.
+ *
+ * The version probe in front of this retry means it should almost never fire,
+ * because an engine known to be below the floor is simply not sent the flag.
+ * The retry stays anyway, and stays load-bearing: the probe answers "unknown"
+ * whenever the version cannot be read or parsed, and an engine could in
+ * principle report a version whose flag support does not match what the tag
+ * history says. The probe removes a cost; only this retry removes a failure.
  */
 const UNKNOWN_OUTPUT_FLAG = /unknown option[^\n]*--output\b/;
 
@@ -680,9 +688,26 @@ export async function handler(args: {
   if (args.forceRegenerate) cliArgs.push("--force-regenerate");
 
   const spawn = { cwd: args.projectPath, timeoutMs: 180_000 };
-  let attempt = await runExtensionCli([...cliArgs, "--output", "json"], spawn);
+  /* @invariant
+   * Decide the version before spending a compile, not after.
+   *
+   * Discovering the engine is too old by watching it refuse the flag costs a
+   * whole second build, and a build is the most expensive thing this server
+   * does. Asking the resolved binary its version first costs one non-compiling
+   * exec, cached for a minute, which is nothing beside the compile it saves.
+   * Only a definite "too old" changes behaviour: an unknown verdict sends the
+   * flag exactly as before, so a probe that fails costs the optimisation and
+   * never the build.
+   */
+  const verdict = await outputJsonVerdict("build", args.projectPath);
+  const engineKnownTooOld = verdict.supported === false;
+  let attempt = engineKnownTooOld
+    ? await runExtensionCli(cliArgs, spawn)
+    : await runExtensionCli([...cliArgs, "--output", "json"], spawn);
   const engineRefusedJsonOutput =
-    attempt.code !== 0 && refusedTheOutputFlag(attempt.stderr ?? "");
+    !engineKnownTooOld &&
+    attempt.code !== 0 &&
+    refusedTheOutputFlag(attempt.stderr ?? "");
   if (engineRefusedJsonOutput) {
     attempt = await runExtensionCli(cliArgs, spawn);
   }
@@ -690,6 +715,19 @@ export async function handler(args: {
   if (engineRefusedJsonOutput) {
     warnings.push(
       "The Extension.js installed in this project is older than the one this server expects: it rejected --output json on build, so the build was run a second time without that flag and the result was read from the build summary the engine writes into dist/extension-js/. The extension that came out is exactly the same one. Upgrade the project's Extension.js to get the richer report back, including the Safari app identity and the byte totals from the run that just happened, and to stop paying for the second build.",
+    );
+  } else if (engineKnownTooOld) {
+    /* @invariant
+     * The same warning, minus the claim that is no longer true.
+     *
+     * Both paths land on an engine below the floor and both read the result off
+     * the persisted summary, so both must tell the user to upgrade. What the
+     * probe path must not say is that a second build was paid for, because the
+     * probe is precisely what stopped that from happening. Repeating the retry
+     * wording here would teach the user to expect a cost this code just removed.
+     */
+    warnings.push(
+      `The Extension.js installed in this project is older than the one this server expects: it reports ${verdict.version}, and --output json only reached extension build in ${verdict.floor}, so the build was run without that flag and the result was read from the build summary the engine writes into dist/extension-js/. The extension that came out is exactly the same one, and nothing was built twice. Upgrade the project's Extension.js to get the richer report back, including the Safari app identity and the byte totals from the run that just happened.`,
     );
   }
   const duration = Date.now() - start;
