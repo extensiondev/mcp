@@ -139,10 +139,12 @@ describe("extension_preview_web", () => {
 
   it("fails when the surface is unreachable, rather than reporting a link that cannot open", async () => {
     const dir = tmpDist(MANIFEST);
+    const cwd = process.cwd();
     global.fetch = (async () => {
       throw new Error("fetch failed");
     }) as unknown as typeof fetch;
     try {
+      process.chdir(os.tmpdir());
       const out = JSON.parse(
         await handler({ projectPath: dir, build: false, distPath: dir }),
       );
@@ -151,9 +153,37 @@ describe("extension_preview_web", () => {
       expect(out.value.hostReachable).toBe(false);
       expect(out.value.previewLoadable).toBe(false);
       expect(out.error.message).toMatch(/share:true/);
+      expect(out.warnings.join(" ")).toMatch(/no npm install of this server/);
+    } finally {
+      process.chdir(cwd);
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("names the dev command only when a monorepo checkout is actually present", async () => {
+    const dir = tmpDist(MANIFEST);
+    const checkout = fs.mkdtempSync(path.join(os.tmpdir(), "preview-checkout-"));
+    const appDir = path.join(checkout, "apps", "web", "preview.extension.dev");
+    fs.mkdirSync(appDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(appDir, "package.json"),
+      JSON.stringify({ name: "preview.extension.dev" }),
+    );
+    const nested = path.join(checkout, "packages", "probe");
+    fs.mkdirSync(nested, { recursive: true });
+    global.fetch = (async () => {
+      throw new Error("fetch failed");
+    }) as unknown as typeof fetch;
+    try {
+      const out = JSON.parse(
+        await handler({ projectPath: nested, build: false, distPath: dir }),
+      );
+      expect(out.ok).toBe(false);
       expect(out.warnings.join(" ")).toMatch(/Start it/);
+      expect(out.warnings.join(" ")).toContain(checkout);
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
+      fs.rmSync(checkout, { recursive: true, force: true });
     }
   });
 
