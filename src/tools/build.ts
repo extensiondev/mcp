@@ -195,7 +195,7 @@ function locateSourceZip(
 export const schema = {
   name: "extension_build",
   description:
-    "Build a browser extension for production. The output lands in dist/<browser>/. Pass zip:true to also package a .zip for store submission. The build refuses a manifest with build-blocking errors unless you pass skipValidation:true, because such a manifest yields a broken bundle the bundler itself never flags.",
+    "Build a browser extension for production. The output lands in dist/<browser>/. Pass zip:true to also package a .zip for store submission. With browser:'safari' the build converts the extension into a macOS app through Xcode, and bundleId sets the identifier it ships under. The build refuses a manifest with build-blocking errors unless you pass skipValidation:true, because such a manifest yields a broken bundle the bundler itself never flags.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -237,10 +237,110 @@ export const schema = {
         description:
           "Build even when extension_manifest_validate reports build-blocking errors. The build normally refuses: a manifest error yields a broken bundle the bundler itself never flags.",
       },
+      appName: {
+        type: "string",
+        description:
+          "Safari targets only: name of the generated macOS app, which also names the Xcode scheme and the .app on disk. Defaults to the manifest name.",
+      },
+      bundleId: {
+        type: "string",
+        description:
+          "Safari targets only: a reverse-DNS bundle identifier you own, such as com.acme.readinglist. Without one the app is packaged under a generated dev.extensionjs.* identifier that Apple will not accept for distribution.",
+      },
+      forceRegenerate: {
+        type: "boolean",
+        default: false,
+        description:
+          "Safari targets only: regenerate the Xcode project even when the engine considers it up to date. Use it when an earlier packaging run left the project broken.",
+      },
     },
     required: ["projectPath"],
   },
 };
+
+const SAFARI_VENDORS = new Set(["safari", "webkit-based"]);
+
+/* @invariant
+ * The bundle identifier is checked here as well as in the engine, on purpose.
+ *
+ * `extension build` rejects a malformed --bundle-id by writing one line to
+ * stderr and exiting 1, which reaches an agent as a generic E_BUILD_FAILED
+ * after a full compile has already been paid for. Checking the same shape
+ * before the spawn turns a wasted build into a named refusal the model can act
+ * on. The pattern is Apple's: dot-separated segments of letters, digits and
+ * hyphens, each beginning with a letter, at least two of them. It mirrors
+ * isValidBundleId in the engine's safari-config, which is not importable from
+ * here, so it is duplicated rather than drifted: loosening this copy would only
+ * move the rejection back to where it is expensive, never accept more.
+ */
+const BUNDLE_ID_PATTERN = /^[A-Za-z][A-Za-z0-9-]*(\.[A-Za-z][A-Za-z0-9-]*)+$/;
+
+const DERIVED_BUNDLE_ID_PREFIX = "dev.extensionjs.";
+
+interface SafariIdentity {
+  appName: string;
+  bundleId: string;
+  xcodeProject: string;
+  appPath?: string;
+}
+
+function readSafariIdentity(
+  projectPath: string,
+  browser: string,
+): SafariIdentity | null {
+  const projectLocation = path.resolve(
+    projectPath,
+    "dist",
+    `${browser}-xcode`,
+  );
+  let appDirs: string[];
+  try {
+    appDirs = fs
+      .readdirSync(projectLocation, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => entry.name);
+  } catch {
+    return null;
+  }
+  for (const appName of appDirs) {
+    const xcodeProject = path.join(
+      projectLocation,
+      appName,
+      `${appName}.xcodeproj`,
+    );
+    let pbxproj: string;
+    try {
+      pbxproj = fs.readFileSync(
+        path.join(xcodeProject, "project.pbxproj"),
+        "utf8",
+      );
+    } catch {
+      continue;
+    }
+    const ids = [
+      ...pbxproj.matchAll(
+        /PRODUCT_BUNDLE_IDENTIFIER = ("?)([^;"]+)\1;/g,
+      ),
+    ].map((match) => match[2]);
+    const bundleId = ids.find((id) => !/\.Extension$/.test(id)) ?? ids[0];
+    if (!bundleId) continue;
+    const appPath = path.join(
+      projectLocation,
+      ".derived",
+      "Build",
+      "Products",
+      "Release",
+      `${appName}.app`,
+    );
+    return {
+      appName,
+      bundleId,
+      xcodeProject,
+      ...(fs.existsSync(appPath) ? { appPath } : {}),
+    };
+  }
+  return null;
+}
 
 function manifestDivergence(
   projectPath: string,
@@ -383,9 +483,56 @@ export async function handler(args: {
   silent?: boolean;
   mode?: "development" | "production" | "none";
   skipValidation?: boolean;
+  appName?: string;
+  bundleId?: string;
+  forceRegenerate?: boolean;
 }): Promise<string> {
   const start = Date.now();
   const browser = args.browser ?? "chrome";
+  const safari = SAFARI_VENDORS.has(browser);
+
+  const safariOnly = (
+    [
+      ["appName", args.appName],
+      ["bundleId", args.bundleId],
+      ["forceRegenerate", args.forceRegenerate === true ? true : undefined],
+    ] as Array<[string, unknown]>
+  )
+    .filter(([, value]) => value !== undefined)
+    .map(([name]) => name);
+
+  if (safariOnly.length > 0 && !safari) {
+    return envelope({
+      ok: false,
+      command: COMMAND,
+      status: "safari-only-option",
+      error: {
+        code: "E_SAFARI_ONLY_OPTION",
+        message:
+          `${safariOnly.join(", ")} configure the Safari web-extension conversion and mean nothing for a ${browser} build. ` +
+          "Nothing was built, so the options were not silently ignored.",
+      },
+      value: { browser, options: safariOnly, duration: Date.now() - start },
+      hint: 'Pass browser: "safari" to package a Safari app, or drop these options to build for ' +
+        `${browser}.`,
+    });
+  }
+
+  if (args.bundleId !== undefined && !BUNDLE_ID_PATTERN.test(args.bundleId)) {
+    return envelope({
+      ok: false,
+      command: COMMAND,
+      status: "invalid-bundle-id",
+      error: {
+        code: "E_INVALID_BUNDLE_ID",
+        message:
+          `bundleId ${JSON.stringify(args.bundleId)} is not a reverse-DNS identifier, so Xcode would reject it. ` +
+          "Expected two or more dot-separated segments of letters, digits and hyphens, each starting with a letter.",
+      },
+      value: { browser, bundleId: args.bundleId, duration: Date.now() - start },
+      hint: 'Use an identifier under a domain you own, for example "com.acme.readinglist".',
+    });
+  }
 
   const carrierCleanup = removeCarrier(args.projectPath);
   const carrierNotes: string[] = [];
@@ -439,6 +586,9 @@ export async function handler(args: {
   if (args.polyfill) cliArgs.push("--polyfill");
   if (args.silent) cliArgs.push("--silent");
   if (args.mode) cliArgs.push("--mode", args.mode);
+  if (args.appName) cliArgs.push("--app-name", args.appName);
+  if (args.bundleId) cliArgs.push("--bundle-id", args.bundleId);
+  if (args.forceRegenerate) cliArgs.push("--force-regenerate");
 
   const { code, stdout, stderr } = await runExtensionCli(cliArgs, {
     cwd: args.projectPath,
@@ -537,12 +687,35 @@ export async function handler(args: {
       );
     }
     const divergence = manifestDivergence(args.projectPath, browser);
+    /* @invariant
+     * A Safari build reports the identity it actually packaged, read back from
+     * the generated Xcode project rather than from what was asked for.
+     *
+     * The identifier can come from three places, in this order: the bundleId
+     * option, `browser.safari.bundleId` in the project config, and finally a
+     * dev.extensionjs.* identifier the engine derives from the app name. The
+     * engine announces that last case on its own stdout, which this tool keeps
+     * only the tail of, so an agent could package under a squatted identifier
+     * and never be told. Apple will not distribute an app under a bundle id the
+     * developer does not own, and the identity is baked into the fingerprint, so
+     * discovering it at submission time means regenerating the project. Reading
+     * PRODUCT_BUNDLE_IDENTIFIER out of project.pbxproj is the only ground truth
+     * that covers all three sources.
+     */
+    const safariIdentity = safari
+      ? readSafariIdentity(args.projectPath, browser)
+      : null;
+    const derivedBundleIdNote =
+      safariIdentity?.bundleId.startsWith(DERIVED_BUNDLE_ID_PREFIX)
+        ? `The Safari app was packaged under the generated bundle identifier ${safariIdentity.bundleId}, which belongs to Extension.js and not to you. It is fine for running the app locally, and Apple will reject it for distribution. Rebuild with bundleId set to a reverse-DNS identifier under a domain you own to fix it, which regenerates the Xcode project.`
+        : null;
     return envelope({
       ok: true,
       command: COMMAND,
       status: "built",
       value: {
         browser,
+        ...(safariIdentity ? { safariApp: safariIdentity } : {}),
         ...(size ? { size } : {}),
         ...(status ? { engineBuildStatus: status } : {}),
         ...(entrypoints.length ? { entrypoints } : {}),
@@ -562,6 +735,7 @@ export async function handler(args: {
         ...buildWarnings,
         ...zipNotes,
         uncheckedNote,
+        derivedBundleIdNote,
       ],
     });
   }
@@ -575,6 +749,6 @@ export async function handler(args: {
     error: { code: "E_BUILD_FAILED", message: message.slice(0, 1200) },
     value: { browser, duration },
     warnings,
-    hint: "Check that the project has a valid src/manifest.json and its dependencies are installed (extension_dev auto-installs; build does not).",
+    hint: "Check that the project has a valid src/manifest.json. Missing dependencies are installed by the build itself, so a failure here is usually the manifest, a compile error, or a Safari toolchain the host does not have.",
   });
 }
