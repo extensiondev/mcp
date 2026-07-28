@@ -12,6 +12,7 @@ import path from "node:path";
 import { runExtensionCli } from "../lib/exec";
 import { liveProjectSessions } from "../lib/session-browser";
 import { CARRIER_DIR_NAME, removeCarrier } from "../lib/carrier";
+import { readZipEntryNames } from "../lib/zip-entries";
 import { envelope } from "../lib/envelope";
 
 const COMMAND = "extension_build";
@@ -283,22 +284,62 @@ function manifestDivergence(
 
 const MARKER_FILE_NAME = "managed-by-extension-dev-mcp.json";
 
-function carrierEntriesInDist(distDir: string, depth = 0): string[] {
-  if (depth > 3) return [];
+interface Contamination {
+  paths: string[];
+  unchecked: string[];
+}
+
+function namesCarrier(entryName: string): boolean {
+  return entryName === CARRIER_DIR_NAME || entryName === MARKER_FILE_NAME;
+}
+
+function carrierEntriesInZip(zipPath: string): Contamination {
+  const listing = readZipEntryNames(zipPath);
+  if (!listing.readable) return { paths: [], unchecked: [zipPath] };
+  const hits = listing.names
+    .filter((name) => name.split("/").some(namesCarrier))
+    .map((name) => `${zipPath} -> ${name}`);
+  return { paths: hits, unchecked: [] };
+}
+
+/* @invariant
+ * The guard looks at the whole of dist, and inside the archives it holds.
+ *
+ * It used to walk dist/<browser> only, and only from inside extension_build,
+ * which removes the carrier before it runs the engine. The leak it therefore
+ * could not see is `extension build --zip-source` driven straight at the
+ * engine: that packs the project's own tree, ./extensions and all, so the
+ * carrier ends up inside a source zip at the root of dist rather than loose in
+ * the browser output. A carrier a reviewer can unzip out of a submission is
+ * exactly the thing this must never let past, so both the loose walk and the
+ * archives are checked, and a zip whose entry table cannot be read is reported
+ * as unchecked rather than silently passed.
+ */
+function carrierContamination(dir: string, depth = 0): Contamination {
+  if (depth > 4) return { paths: [], unchecked: [] };
   let entries: fs.Dirent[];
   try {
-    entries = fs.readdirSync(distDir, { withFileTypes: true });
+    entries = fs.readdirSync(dir, { withFileTypes: true });
   } catch {
-    return [];
+    return { paths: [], unchecked: [] };
   }
-  const found: string[] = [];
+  const found: Contamination = { paths: [], unchecked: [] };
+  const absorb = (other: Contamination) => {
+    found.paths.push(...other.paths);
+    found.unchecked.push(...other.unchecked);
+  };
   for (const entry of entries) {
-    if (entry.name === CARRIER_DIR_NAME || entry.name === MARKER_FILE_NAME) {
-      found.push(path.join(distDir, entry.name));
+    const full = path.join(dir, entry.name);
+    if (namesCarrier(entry.name)) {
+      found.paths.push(full);
       continue;
     }
     if (entry.isDirectory()) {
-      found.push(...carrierEntriesInDist(path.join(distDir, entry.name), depth + 1));
+      absorb(carrierContamination(full, depth + 1));
+      continue;
+    }
+    if (entry.isFile() && entry.name.endsWith(".zip")) {
+      absorb(carrierEntriesInZip(full));
     }
   }
   return found;
@@ -424,8 +465,13 @@ export async function handler(args: {
         : undefined;
     const distDir = path.resolve(args.projectPath, "dist", browser);
     const entrypoints = builtEntrypoints(distDir);
-    const contamination = carrierEntriesInDist(distDir);
-    if (contamination.length) {
+    const contamination = carrierContamination(
+      path.resolve(args.projectPath, "dist"),
+    );
+    const uncheckedNote = contamination.unchecked.length
+      ? `Could not read the entry table of ${contamination.unchecked.join(", ")}, so those archives were not checked for the live-preview carrier. Unpack and check them yourself before submitting.`
+      : null;
+    if (contamination.paths.length) {
       return envelope({
         ok: false,
         command: COMMAND,
@@ -433,7 +479,7 @@ export async function handler(args: {
         error: {
           code: "E_CARRIER_IN_DIST",
           message:
-            `The build output contains the Extension.dev live-preview carrier: ${contamination.join(", ")}. ` +
+            `The build output contains the Extension.dev live-preview carrier: ${contamination.paths.join(", ")}. ` +
             "That is a local debug companion and must never ship. This artifact is not safe to submit.",
         },
         value: {
@@ -441,8 +487,8 @@ export async function handler(args: {
           buildExitCode: 0,
           duration,
         },
-        warnings,
-        hint: "Delete the listed paths from dist and build again. The carrier normally lives in ./extensions and is removed before every build.",
+        warnings: [...warnings, uncheckedNote],
+        hint: "Delete the listed paths from dist and build again. The carrier lives in ./extensions and is taken back before every build run through this tool, so an entry inside a zip means that archive was packed by something else, usually 'extension build --zip-source' driven straight at the engine while a dev session had the carrier in place.",
       });
     }
     const missing = entrypoints.filter((e) => !e.present);
@@ -515,6 +561,7 @@ export async function handler(args: {
         ...(preflight?.warnings ?? []),
         ...buildWarnings,
         ...zipNotes,
+        uncheckedNote,
       ],
     });
   }

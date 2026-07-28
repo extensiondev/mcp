@@ -12,6 +12,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { isChromiumFamily } from "./browser-family";
 import { ensureProjectIgnored } from "./project-ignore";
+import { forgetCarrier, rememberCarrier } from "./carrier-registry";
 
 
 export const CARRIER_DIR_NAME = "extension-dev-live-preview";
@@ -46,8 +47,78 @@ export function carrierPath(projectPath: string): string {
 }
 
 export function isManagedCarrier(projectPath: string): boolean {
-  return fs.existsSync(path.join(carrierPath(projectPath), MARKER_FILE));
+  return claimCarrier(carrierPath(projectPath)).ours;
 }
+
+function relativeFiles(dir: string, base = dir, depth = 0): string[] | null {
+  if (depth > 4) return null;
+  let entries: fs.Dirent[];
+  try {
+    entries = fs.readdirSync(dir, { withFileTypes: true });
+  } catch {
+    return null;
+  }
+  const out: string[] = [];
+  for (const entry of entries) {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      const nested = relativeFiles(full, base, depth + 1);
+      if (nested === null) return null;
+      out.push(...nested);
+      continue;
+    }
+    out.push(path.relative(base, full));
+    if (out.length > 500) return null;
+  }
+  return out;
+}
+
+export type CarrierClaim =
+  | { ours: true; how: "marker" | "payload" | "partial" }
+  | { ours: false; how: "foreign" };
+
+/* @invariant
+ * The marker is the usual proof of ownership, never the only one.
+ *
+ * Removal and replacement were both gated on managed-by-extension-dev-mcp.json
+ * alone, so a copy, a mv or a materialization that died between cpSync and the
+ * marker write left a directory this tool had placed and could then never take
+ * back: extension_stop and extension_build refused it forever, and
+ * materializeCarrier refused to overwrite it, which locks the carrier lane out
+ * of that project with no way forward that does not ask the user to delete
+ * something by hand. The payload itself carries proof the marker cannot beat: a
+ * manifest key that hashes to the carrier's own extension id, which nothing but
+ * this package's payload has. A half-copied directory has no manifest at all,
+ * so the second recogniser accepts one only when every file in it is also a
+ * file of the bundled payload. Anything else stays foreign and is never
+ * touched.
+ */
+export function claimCarrier(target: string): CarrierClaim {
+  if (fs.existsSync(path.join(target, MARKER_FILE))) {
+    return { ours: true, how: "marker" };
+  }
+  if (deriveCarrierId(target) === CARRIER_EXTENSION_ID) {
+    return { ours: true, how: "payload" };
+  }
+  if (fs.existsSync(path.join(target, "manifest.json"))) {
+    return { ours: false, how: "foreign" };
+  }
+  const source = findBundledCarrier("chromium");
+  const bundled = source ? relativeFiles(source) : null;
+  const present = relativeFiles(target);
+  if (!bundled || !present) return { ours: false, how: "foreign" };
+  const known = new Set(bundled);
+  return present.every((file) => known.has(file))
+    ? { ours: true, how: "partial" }
+    : { ours: false, how: "foreign" };
+}
+
+const RECOVERY_NOTE: Record<"payload" | "partial", string> = {
+  payload: `Its ${MARKER_FILE} marker was missing, but its manifest key derives the carrier's own extension id ${CARRIER_EXTENSION_ID}, which only this package's payload has, so it was recognised as ours and taken back.`,
+  partial: `Its ${MARKER_FILE} marker was missing and it holds no manifest, but every file in it belongs to the bundled carrier payload, so it was recognised as a half-written copy of ours and taken back.`,
+};
+
+const FOREIGN_NOTE = `extensions/${CARRIER_DIR_NAME} has no ${MARKER_FILE} marker, does not carry the carrier's own manifest key, and holds files this package never ships, so it is not the carrier this tool placed and was left untouched. Nothing here deletes a directory this tool did not write: rename it or move it out of ./extensions yourself if you want the carrier to live at that path.`;
 
 export type CarrierRemoval = {
   removed: boolean;
@@ -57,13 +128,13 @@ export type CarrierRemoval = {
 
 export function removeCarrier(projectPath: string): CarrierRemoval {
   const target = carrierPath(projectPath);
-  if (!fs.existsSync(target)) return { removed: false, path: target };
-  if (!fs.existsSync(path.join(target, MARKER_FILE))) {
-    return {
-      removed: false,
-      path: target,
-      note: `extensions/${CARRIER_DIR_NAME} has no ${MARKER_FILE} marker, so it is not the carrier this tool placed and was left untouched.`,
-    };
+  if (!fs.existsSync(target)) {
+    forgetCarrier(projectPath);
+    return { removed: false, path: target };
+  }
+  const claim = claimCarrier(target);
+  if (!claim.ours) {
+    return { removed: false, path: target, note: FOREIGN_NOTE };
   }
   try {
     fs.rmSync(target, { recursive: true, force: true });
@@ -74,12 +145,17 @@ export function removeCarrier(projectPath: string): CarrierRemoval {
       note: `Could not remove the carrier: ${error instanceof Error ? error.message : String(error)}`,
     };
   }
+  forgetCarrier(projectPath);
   const parent = path.join(projectPath, "extensions");
   try {
     if (fs.readdirSync(parent).length === 0) fs.rmdirSync(parent);
   } catch {
   }
-  return { removed: true, path: target };
+  return {
+    removed: true,
+    path: target,
+    ...(claim.how === "marker" ? {} : { note: RECOVERY_NOTE[claim.how] }),
+  };
 }
 
 export function ensureCarrierIgnored(projectPath: string): string | null {
@@ -144,13 +220,17 @@ export function materializeCarrier(
   }
   const target = carrierPath(projectPath);
   const marker = path.join(target, MARKER_FILE);
-  if (fs.existsSync(target) && !fs.existsSync(marker)) {
+  const claim = fs.existsSync(target)
+    ? claimCarrier(target)
+    : ({ ours: true, how: "marker" } as CarrierClaim);
+  if (!claim.ours) {
     return {
       loaded: false,
       path: target,
       note:
-        `A directory already exists at extensions/${CARRIER_DIR_NAME} without the ${MARKER_FILE} marker, ` +
-        "so it is not managed by this tool and was left untouched. Remove or rename it to let extension_dev place the carrier there.",
+        `A directory already exists at extensions/${CARRIER_DIR_NAME} that this tool did not place: ` +
+        `no ${MARKER_FILE} marker, no carrier manifest key, and files this package never ships. ` +
+        "It was left untouched. Rename it or move it out of ./extensions to let extension_dev place the carrier there.",
     };
   }
   const carrierId = deriveCarrierId(source);
@@ -172,6 +252,7 @@ export function materializeCarrier(
         2,
       )}\n`,
     );
+    rememberCarrier(projectPath);
     const ignored = ensureCarrierIgnored(projectPath);
     return {
       loaded: true,

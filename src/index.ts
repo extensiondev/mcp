@@ -55,6 +55,7 @@ import {
   validateToolInput,
 } from "./lib/validate-input";
 import { envelope } from "./lib/envelope";
+import { installCarrierExitCleanup } from "./lib/carrier-exit";
 
 export interface ToolModule {
   schema: {
@@ -103,6 +104,7 @@ for (const tool of tools) {
 }
 
 export async function startServer(): Promise<void> {
+  installCarrierExitCleanup();
   const server = new Server(
     {
       name: "extension-dev",

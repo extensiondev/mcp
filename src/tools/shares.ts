@@ -163,14 +163,19 @@ function localIndex(entries: SharedPreviewEntry[]): Map<string, SharedPreviewEnt
   return index;
 }
 
+type Completeness = "whole" | "cut" | "unsaid";
+
 function localOnlyStatus(
   entry: SharedPreviewEntry,
-  truncated: boolean,
+  completeness: Completeness,
   liveFiltered: boolean,
   now: number,
 ): string {
-  if (truncated) {
+  if (completeness === "cut") {
     return "unknown: the platform list was cut short, so this share may simply be past the returned window.";
+  }
+  if (completeness === "unsaid") {
+    return "unknown: the platform did not say whether that list was whole, so this share may simply be past the returned window.";
   }
   const expiresAt = entry.expiresAt ? Date.parse(entry.expiresAt) : NaN;
   if (Number.isFinite(expiresAt) && expiresAt <= now) {
@@ -269,11 +274,17 @@ async function listShares(args: {
     };
   });
 
+  const completeness: Completeness = !listing.data.truncatedReported
+    ? "unsaid"
+    : listing.data.truncated
+      ? "cut"
+      : "whole";
+
   const localOnly = (local?.entries ?? [])
     .filter((entry) => !seen.has(entry.artifactId))
     .map((entry) => ({
       ...entry,
-      status: localOnlyStatus(entry, listing.data.truncated, liveFiltered, now),
+      status: localOnlyStatus(entry, completeness, liveFiltered, now),
     }));
 
   const liveCount = shares.filter((share) => share.live).length;
@@ -284,9 +295,12 @@ async function listShares(args: {
     unknown: shares.filter((s) => s.attribution.ownership === "unknown").length,
   };
 
-  const truncatedNote = listing.data.truncated
-    ? `This is not the whole set: ${listing.data.count} of ${listing.data.matched} matched shares came back at limit ${listing.data.limit}. truncated also goes true when the server spent its budget working out which shares you are entitled to see, so matched is a floor and not a total. Raise limit (max 200) or pass status:"live" to narrow it, and do not read a missing share as revoked.`
-    : null;
+  const truncatedNote =
+    completeness === "cut"
+      ? `This is not the whole set: ${listing.data.count} of ${listing.data.matched} matched shares came back at limit ${listing.data.limit}. truncated also goes true when the server spent its budget working out which shares you are entitled to see, so matched is a floor and not a total. Raise limit (max 200) or pass status:"live" to narrow it, and do not read a missing share as revoked.`
+      : completeness === "unsaid"
+        ? `This listing cannot be called whole: the platform returned no truncated field, so whether ${listing.data.count} shares are all of them is unstated. A share missing from it is unaccounted for rather than dead, and no missing share is reported as revoked or unowned here.`
+        : null;
 
   return envelope({
     ok: true,
@@ -300,6 +314,7 @@ async function listShares(args: {
         matched: listing.data.matched,
         limit: listing.data.limit,
         truncated: listing.data.truncated,
+        truncatedReported: listing.data.truncatedReported,
         scanned: listing.data.scanned,
         ownership,
         ...(truncatedNote ? { truncatedNote } : {}),

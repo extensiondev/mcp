@@ -370,8 +370,76 @@ describe("extension_shares", () => {
     });
 
     const out = JSON.parse(await handler({ projectPath: dir }));
+    expect(out.value.server.truncatedReported).toBe(true);
     expect(out.value.localOnly[0].status).toContain("not owned by this token");
     expect(out.hint).toContain("without an artifact behind them");
+  });
+
+  it("refuses that same verdict when the server never sent truncated at all", async () => {
+    const dir = tmpProject();
+    seedRecord(dir, GONE_ID);
+    global.fetch = listingFetch({
+      artifacts: [],
+      count: 0,
+      matched: 0,
+      limit: 100,
+      scanned: 1,
+    });
+
+    const out = JSON.parse(await handler({ projectPath: dir }));
+    expect(out.value.server.truncatedReported).toBe(false);
+    expect(out.value.localOnly[0].status).toContain("unknown");
+    expect(out.value.localOnly[0].status).not.toContain(
+      "not owned by this token",
+    );
+    expect(out.value.server.truncatedNote).toContain("cannot be called whole");
+    expect(
+      out.warnings.some((w: string) => w.includes("cannot be called whole")),
+    ).toBe(true);
+  });
+
+  it("does not call a past-its-expiry record expired on a listing it cannot call whole", async () => {
+    const dir = tmpProject();
+    seedRecord(dir, GONE_ID, "2026-01-01T00:00:00.000Z");
+    global.fetch = listingFetch({
+      artifacts: [],
+      count: 0,
+      matched: 0,
+      limit: 100,
+      scanned: 4,
+    });
+
+    const out = JSON.parse(await handler({ projectPath: dir }));
+    expect(out.value.localOnly[0].status).toContain("unknown");
+  });
+
+  it("keeps truncated:true distinguishable from truncated absent", async () => {
+    const dir = tmpProject();
+    seedRecord(dir, GONE_ID);
+    global.fetch = listingFetch({
+      artifacts: [],
+      count: 0,
+      matched: 40,
+      limit: 100,
+      truncated: true,
+      scanned: 200,
+    });
+
+    const cut = JSON.parse(await handler({ projectPath: dir }));
+    expect(cut.value.server.truncated).toBe(true);
+    expect(cut.value.server.truncatedReported).toBe(true);
+    expect(cut.value.localOnly[0].status).toContain("cut short");
+
+    global.fetch = listingFetch({
+      artifacts: [],
+      count: 0,
+      matched: 0,
+      limit: 100,
+      scanned: 1,
+    });
+    const unsaid = JSON.parse(await handler({ projectPath: dir }));
+    expect(unsaid.value.server.truncated).toBe(false);
+    expect(unsaid.value.localOnly[0].status).toContain("did not say");
   });
 
   it("degrades to the local record plus a login hint with no token", async () => {
