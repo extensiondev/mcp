@@ -22,42 +22,36 @@
    speak two protocol versions at once. What closes the gap is legibility, so
    readFromStream reports the close code and reason verbatim instead of
    returning an empty read: a 4xxx close naming the envelope version is a
-   diagnosis, an empty log is not. */
+   diagnosis, an empty log is not.
+
+   The four CLOSE_ codes belong to the same contract and arrive the same way.
+   They were carried as literals here while the pinned bridge withheld them,
+   because a refusal that names the wrong remedy is worse than a copied number:
+   an envelope-version mismatch, a stale instance, an unavailable control
+   channel and a dropped slow reader need four different actions from the
+   caller, and the close code is the only thing that tells them apart. The pin
+   now resolves 4.0.19, whose bridge entry publishes all four, so the copy is
+   gone and the numbers move with the engine. */
 export {
+  CLOSE_BAD_HELLO,
+  CLOSE_BAD_INSTANCE,
+  CLOSE_CONTROL_UNAVAILABLE,
+  CLOSE_SLOW_CONSUMER,
   CONTROL_ENVELOPE_VERSION,
   CONTROL_WS_PATH,
   LOG_EVENT_VERSION,
 } from "extension-develop/bridge";
 
-/* @invariant The broker's refusal codes, copied rather than imported, and the
-   copy is the smaller of two wrongs only for as long as the pin says so.
-
-   The engine publishes these on `extension-develop/bridge` as CLOSE_BAD_INSTANCE,
-   CLOSE_BAD_HELLO, CLOSE_CONTROL_UNAVAILABLE and CLOSE_SLOW_CONSUMER, but that
-   export landed AFTER the release this package pins: the bridge entry of
-   extension-develop 4.0.19-canary.1785200797.ce99a79e re-exports
-   CONTROL_ENVELOPE_VERSION, CONTROL_WS_PATH and LOG_EVENT_VERSION and nothing
-   else, and the package's `exports` map has no deep path that would reach
-   dev-server/control-bridge/contracts. So an import of these names does not
-   typecheck and evaluates to undefined at runtime against the engine actually
-   installed here, which would make every refusal compare equal to undefined and
-   read as an unrecognised close.
-
-   The values below were read off the engine's own
-   programs/develop/dev-server/control-bridge/contracts.ts, not inferred from
-   behaviour, and engine-skew asserts that the pinned bridge still does NOT
-   publish them. That assertion fails the day the pin moves past the publishing
-   release, which is the day this block must become a re-export next to the
-   three constants above. Until then a refusal that names the wrong remedy is a
-   worse failure than a copied number: an envelope-version mismatch, an
-   unavailable control channel and a dropped slow reader need three different
-   actions from the caller, and the code is the only thing that tells them
-   apart. */
+/* @invariant 4000 is not one of the engine's constants and must not become a
+   re-export by analogy with the four above. It is RFC 6455's floor for the
+   private application range, and what this package does with it is its own
+   policy: below the floor the close is the transport's business and gets no
+   refusal narrative, at or above it the broker hung up deliberately and the
+   caller is told so even when the specific code is one this build has never
+   heard of. Importing a floor from the engine would tie that reading rule to
+   whatever range the engine happens to use, when the rule is about what a
+   consumer may safely assume from a number it does not recognise. */
 export const CLOSE_REFUSAL_FLOOR = 4000;
-export const CLOSE_BAD_INSTANCE = 4001;
-export const CLOSE_BAD_HELLO = 4002;
-export const CLOSE_CONTROL_UNAVAILABLE = 4003;
-export const CLOSE_SLOW_CONSUMER = 4008;
 
 export const DEFAULT_LIMIT = 200;
 export const DEFAULT_FOLLOW_MS = 4000;
