@@ -10,6 +10,10 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import { exactVersion, pinnedCliVersion, runExtensionCli } from "../lib/exec";
+import {
+  outputFlagRefusalMessage,
+  refusedTheOutputFlag,
+} from "../lib/engine-version";
 import { toMcpSpeak } from "../lib/act";
 import { envelope, isEnvelope } from "../lib/envelope";
 import { resolveSessionBrowser } from "../lib/session-browser";
@@ -183,6 +187,29 @@ export async function handler(args: {
     ["doctor", projectPath, "--browser", browser, "--output", "json"],
     { cwd: projectPath },
   );
+
+  /* @invariant The refusal is checked before the parse, not caught by it.
+   *
+   * A refused flag would otherwise fall through to the catch below and be
+   * reported as E_CLI carrying commander's line about `--output`, under a hint
+   * that only guesses the install "may predate it". That is the diagnosis this
+   * tool exists to give other tools, so it is the last place that should be
+   * guessing: doctor is what an agent is told to run when anything else looks
+   * wrong, and it has the floor table and the version probe in hand.
+   */
+  if (refusedTheOutputFlag(stderr ?? "")) {
+    return envelope({
+      ok: false,
+      command: schema.name,
+      status: "engine-too-old",
+      error: {
+        code: "E_ENGINE_TOO_OLD",
+        name: "CliError",
+        message: await outputFlagRefusalMessage("doctor", "doctor", projectPath),
+      },
+      hint: "Until then, extension_logs without follow still reads this project's log file, and the session's ready.json still records how the last build ended.",
+    });
+  }
 
   const out = stdout.trim();
   try {

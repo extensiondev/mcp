@@ -727,9 +727,24 @@ export async function handler(
       const msg = String(parsed?.error?.message ?? "");
       const code =
         typeof parsed?.error?.code === "string" ? parsed.error.code : "";
+      /* @invariant The structured arm reads E_TARGET_NOT_FOUND, not E_NO_TARGET.
+         E_NO_TARGET is this package's own code, emitted by extension_inspect;
+         no engine has ever put it on a frame, so testing an engine's error
+         against it was a branch that could not be taken and it made the prose
+         match below look like a fallback when it was the whole test.
+
+         E_TARGET_NOT_FOUND is the engine's real code and is read here for
+         honesty rather than coverage, because it still does not arrive for this
+         failure. A popup that will not open headless comes back from the guest
+         as Unsupported("openPopup: <the browser's own words>"), which the CLI's
+         codeForBridgeError maps to E_NOT_IMPLEMENTED, indistinguishable from a
+         surface the engine cannot drive at all. So the match below is load
+         bearing against the newest engine, not a legacy path waiting on a
+         version floor, and it reads the BROWSER's message rather than any CLI
+         copy. It retires when the engine names this refusal, not when a pin
+         moves. */
       const refusedWindow =
-        code === "E_NO_TARGET" ||
-        // @deprecated Prose fallback until the CLI stamps a code for a window it cannot open.
+        code === "E_TARGET_NOT_FOUND" ||
         /active browser window|no active|headless|user gesture/i.test(msg);
       if (parsed?.ok === false && refusedWindow) {
         if (AS_TAB_SURFACES.includes(args.surface)) {

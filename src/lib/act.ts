@@ -7,6 +7,10 @@
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
 import { runExtensionCli } from "./exec";
+import {
+  outputFlagRefusalMessage,
+  refusedTheOutputFlag,
+} from "./engine-version";
 import { knownSessionBrowsers, deadReadySession } from "./session-browser";
 import {
   envelope,
@@ -58,7 +62,24 @@ const CONTROL_CHANNEL_DOWN_CODES = new Set([
   "E_SESSION_NOT_FOUND",
 ]);
 
-/** @deprecated Prose fallback until every CLI stamps a code on its act frames. */
+/* @invariant The prose match reached when there is no code to read, which is
+   two situations and only one of them is about an old engine.
+
+   From 4.0.17 the CLI's act layer stamps a code on every failing frame, and the
+   control-channel ones land in the set above: E_SESSION_NOT_FOUND when no ready
+   contract exists, E_CONTROL_DENIED for a 40xx close, E_CONTROL_UNAVAILABLE for
+   a handshake that never completed. An engine at or above that floor never
+   reaches this function through translateFrame. The floor is days old, though,
+   and this server drives whatever binary the project has in node_modules/.bin,
+   so a 3.x or early-4.x project is an ordinary thing to meet and the scrape is
+   what keeps its errors legible.
+
+   The second situation does not expire with any version. When the CLI writes
+   nothing parseable to stdout, runActVerb builds its own frame out of stderr,
+   and stderr is text: there is no code on it to consult, whatever engine
+   produced it. So this stays after the version argument is gone, and it is
+   deliberately matched against the engine's message and not the CLI's decorated
+   copy, which is why it trips none of the tokens no-prose-scraping bans. */
 function legacyControlChannelScrape(message: string): boolean {
   return /no active control channel|control channel refused|\b1006\b|no executor connected|is the session started with allowControl/i.test(
     message,
@@ -201,6 +222,30 @@ export async function runActVerb(
       }
     } catch {
     }
+  }
+  /* @invariant Diagnose the refusal only once it has happened.
+   *
+   * `build` probes the version BEFORE it runs, because discovering the floor by
+   * watching a refusal costs it a second compile. Nothing here compiles: an act
+   * verb that is refused its flag has exited without touching the session, so
+   * the probe buys no time and would instead put an extra exec in front of every
+   * eval, open, reload and storage call on every engine, to serve a case that
+   * only arises below the floor. Asking after the refusal costs a probe exactly
+   * when the answer is needed, and the probe's own cache means a project that
+   * keeps failing pays for one.
+   */
+  if (refusedTheOutputFlag(stderr ?? "")) {
+    return envelope({
+      ok: false,
+      command,
+      status: "engine-too-old",
+      error: {
+        code: "E_ENGINE_TOO_OLD",
+        name: "CliError",
+        message: await outputFlagRefusalMessage("act", args[0], projectPath),
+      },
+      hint: "extension_doctor reports the project's engine version next to the one this server pins.",
+    });
   }
   const message = stderr.trim() || `extension exited with code ${code}`;
   return envelope({

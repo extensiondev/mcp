@@ -125,9 +125,19 @@ export async function handler(
         );
         const code =
           typeof parsed.error?.code === "string" ? parsed.error.code : "";
+        /* @invariant The code arm is the right one to read and still is not the
+           one that fires. An active tab eval cannot reach is refused by Chrome
+           inside chrome.scripting.executeScript, so the guest replies
+           EvalError("Cannot access a chrome:// URL") and the CLI maps every
+           EvalError to E_EVAL; the engine's E_TARGET_NOT_FOUND is reserved for
+           a surface that is not open or a call with no tab id. That is true of
+           the engine pinned here, not only of old ones, so this match retires
+           when the engine distinguishes an unreachable target from a thrown
+           expression, which no version has done yet. What it matches is the
+           browser's own refusal and the scheme in the url, neither of which is
+           CLI copy. */
         const unreachable =
           code === "E_TARGET_NOT_FOUND" ||
-          // @deprecated Prose fallback until the CLI stamps a code on every eval failure.
           /cannot access|chrome-extension:\/\/|chrome:\/\//i.test(
             JSON.stringify(parsed.error ?? ""),
           );

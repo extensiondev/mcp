@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import { matchesLogQuery, readLogEvents } from "extension-develop/bridge";
 import { makeFilter } from "../tools/logs-filter";
 import { logsPath } from "../lib/session-paths";
+import { schema as logsSchema } from "../tools/logs-schema";
 
 type Event = Record<string, unknown>;
 
@@ -158,6 +159,45 @@ describe("level off is this package's meaning, not the engine's", () => {
       context: ["popup"],
     });
     expect(select(scoped)).toEqual([]);
+  });
+});
+
+/* The engine publishes logLevelRank and LOG_LEVEL_ORDER, and nothing in this
+   package ranks or orders levels by hand: makeFilter hands every severity
+   comparison to matchesLogQuery, which applies the engine's rank. What this
+   package does own is the VOCABULARY the tool schema offers an agent, and that
+   is a separate copy of the same ordering, written as a JSON Schema enum.
+   Reordering the engine's rank without touching the enum would leave the schema
+   promising "a level includes everything more severe" about an order that is no
+   longer the one being applied, so the enum is checked against the engine's
+   observable rank rather than against LOG_LEVEL_ORDER, which the pinned bridge
+   entry does not export. */
+describe("the schema's level vocabulary matches the engine's rank", () => {
+  const severities = (logsSchema.inputSchema.properties.level.enum as string[])
+    .filter((level) => level !== "all" && level !== "off");
+
+  it("offers exactly the levels the engine ranks, in the engine's order", () => {
+    const selected = severities.map(
+      (level) =>
+        CORPUS.filter((event) =>
+          matchesLogQuery(event as never, { level }),
+        ).length,
+    );
+    for (let i = 1; i < selected.length; i += 1) {
+      expect(
+        selected[i],
+        `${severities[i]} must select at least as much as ${severities[i - 1]}`,
+      ).toBeGreaterThanOrEqual(selected[i - 1]);
+    }
+    expect(selected[0]).toBeLessThan(selected[selected.length - 1]);
+  });
+
+  /* The console emits `log`; the filter vocabulary calls it `info`, and the
+     engine's rank is what aliases the two. Offering `log` in the enum would
+     imply a sixth level that ranks separately, which it does not. */
+  it("does not offer log as a level of its own", () => {
+    expect(severities).not.toContain("log");
+    expect(severities).toContain("info");
   });
 });
 

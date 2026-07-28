@@ -10,7 +10,10 @@ import { LAUNCH_BROWSER, PROJECT_PATH } from "../lib/common-schema";
 import fs from "node:fs";
 import path from "node:path";
 import { runExtensionCli } from "../lib/exec";
-import { outputJsonVerdict } from "../lib/engine-version";
+import {
+  outputJsonVerdict,
+  refusedTheOutputFlag,
+} from "../lib/engine-version";
 import { liveProjectSessions } from "../lib/session-browser";
 import { CARRIER_DIR_NAME, removeCarrier } from "../lib/carrier";
 import { readZipEntryNames } from "../lib/zip-entries";
@@ -148,12 +151,11 @@ function readEngineOutput(stdout: string, stderr: string): EngineOutput {
  * whenever the version cannot be read or parsed, and an engine could in
  * principle report a version whose flag support does not match what the tag
  * history says. The probe removes a cost; only this retry removes a failure.
+ *
+ * The detector itself lives in lib/engine-version next to the floor table,
+ * because doctor and the act family meet the same refusal and must explain it
+ * against the same numbers. Only build can answer it by retrying.
  */
-const UNKNOWN_OUTPUT_FLAG = /unknown option[^\n]*--output\b/;
-
-function refusedTheOutputFlag(stderr: string): boolean {
-  return UNKNOWN_OUTPUT_FLAG.test(stderr);
-}
 
 function engineSummaries(frame: Envelope | null): EngineBuildSummary[] {
   const value = frame?.value as { summaries?: unknown } | null | undefined;
