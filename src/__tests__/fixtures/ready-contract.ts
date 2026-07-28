@@ -1,18 +1,21 @@
 import fs from "node:fs";
 import path from "node:path";
 
-function contractDir(projectPath: string, browser: string): string {
-  return path.join(projectPath, "dist", "extension-js", browser);
-}
+import { browserArtifactsDir, readyContractPath } from "../../lib/session-paths";
 
+/* @invariant These fixtures go through the same owner module the production
+   readers use, so a layout change in the engine moves the code and its fixtures
+   together. Building dist/extension-js/<browser>/ready.json by hand here would
+   survive such a change and keep every suite green while writing files no reader
+   could find, which is the one failure the single-owner guard exists to prevent
+   and the one it cannot see, because it does not scan __tests__. */
 function writeContract(
   projectPath: string,
   browser: string,
   contract: Record<string, unknown>,
 ): string {
-  const dir = contractDir(projectPath, browser);
-  fs.mkdirSync(dir, { recursive: true });
-  const file = path.join(dir, "ready.json");
+  const file = readyContractPath(projectPath, browser);
+  fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, JSON.stringify(contract, null, 2));
   return file;
 }
@@ -83,11 +86,19 @@ export function writeSchema1ContractError(
   });
 }
 
-/* @invariant What the shipped engine writes today: the ready contract's own
-   schemaVersion, with no `schema: 1` machine-contract declaration. Its error
-   stamps are still authoritative, so a verdict must never be gated on the
-   capability probe. */
-export function writeShippedEngineContractError(
+/* @invariant An engine BELOW 4.0.17: the ready contract's own schemaVersion,
+   with no `schema: 1` machine-contract declaration. This used to say "what the
+   shipped engine writes today", which stopped being true the moment 4.0.17
+   added the stamp, and the name that went with it (writeShippedEngineContract-
+   Error) then read as the current shape rather than the old one.
+
+   The fixture is worth more than the wrong label was. Every release before
+   4.0.17 is still an ordinary thing for a user's project to have, and this is
+   the shape those sessions write. What it pins is that such a contract's error
+   stamps are authoritative on their own: a verdict must never be gated on the
+   capability probe, because the probe is about how much detail the contract can
+   carry, not about whether to believe it. */
+export function writePreSchema1ContractError(
   projectPath: string,
   browser: string,
   overrides: Record<string, unknown> = {},
@@ -106,8 +117,12 @@ export function writeLegacyEngineState(
   projectPath: string,
   browser: string,
 ): { legacyPortFile: string; legacyTokenFile: string } {
+  /* @invariant The file NAMES here are deliberately literal: these are the slots
+     an OLD engine wrote, so they must not move when the current layout does. The
+     directory still comes from the owner module, because the legacy slots sat
+     inside the same per-browser artifacts dir the engine still uses. */
   const legacyPortFile = path.join(
-    contractDir(projectPath, browser),
+    browserArtifactsDir(projectPath, browser),
     "control-port",
   );
   fs.mkdirSync(path.dirname(legacyPortFile), { recursive: true });

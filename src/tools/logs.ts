@@ -30,6 +30,7 @@ import {
 } from "../lib/session-browser";
 import {
   logsPath,
+  readReadyContract,
   readyContractPath,
   sessionPathHint,
 } from "../lib/session-paths";
@@ -37,24 +38,6 @@ import {
 export { schema } from "./logs-schema";
 
 const TOOL = "extension_logs";
-
-function readReadyContract(
-  projectPath: string,
-  browser: string,
-): { controlPort: number; instanceId: string; runId: string } | null {
-  const readyPath = readyContractPath(projectPath, browser);
-  try {
-    const c = JSON.parse(fs.readFileSync(readyPath, "utf8"));
-    if (typeof c.controlPort !== "number" || !c.instanceId) return null;
-    return {
-      controlPort: c.controlPort,
-      instanceId: String(c.instanceId),
-      runId: String(c.runId || ""),
-    };
-  } catch {
-    return null;
-  }
-}
 
 function capRecent(
   events: any[],

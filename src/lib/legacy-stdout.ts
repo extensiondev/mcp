@@ -15,9 +15,17 @@
  * contract: `resolveExtensionInvocation` prefers that binary over the pinned
  * version, so the MCP can never assume what it is talking to.
  *
- * Delete this file, and the exemption for it in `no-prose-scraping`, one
- * release cycle after the CLI stable that stamps `schema: 1` into ready.json
- * is the floor. Nothing else in `src/` may match on CLI prose.
+ * The condition for deleting this file, and the exemption for it in
+ * `no-prose-scraping`: when the OLDEST engine this server still means to
+ * support stamps `schema: 1` into ready.json. That stamp arrived in 4.0.17.
+ * The condition is about the floor, NOT about the pin: a reader who checks
+ * whether the pinned engine stamps it will always find that it does, and will
+ * delete a fallback that only ever runs against engines older than the pin. It
+ * has already been misread that way once. `legacy-stdout.test.ts` holds the
+ * proof to re-run first: it shows what a pre-4.0.17 session's failure
+ * degrades to without these, which is "started fine".
+ *
+ * Nothing else in `src/` may match on CLI prose.
  */
 
 const MERGED_FD_CHATTER = [

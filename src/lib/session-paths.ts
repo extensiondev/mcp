@@ -38,6 +38,27 @@ export {
   sessionStateDir,
 } from "extension-develop/bridge";
 
+/* @invariant The engine's own reader for the contract those paths point at,
+   re-exported here rather than imported directly so the path and the parse stay
+   in one place. It answers exactly one question, "can this process dial the
+   control channel", and it answers null whenever controlPort is not a number or
+   instanceId is missing. It also drops code, errors, message, status and pid.
+
+   So it is right for a follow read and wrong for anything that has to form a
+   verdict about a session, which is why adopting it here does NOT make it the
+   one reader. Several callers still parse ready.json themselves on purpose:
+   tools/doctor.ts (needs code, errors and message, and must not vanish on a
+   session with no control port), lib/boot-verdict.ts (needs the file's mtime for
+   freshness), lib/cdp-port.ts (needs cdpPort and rdpPort), tools/wait.ts and
+   tools/stop.ts (need status and pid). tools/logs.ts uses both: this reader to
+   dial, and its own parse for the pid-and-status warnings. Only the PATH has a
+   single owner; the shape does not, and a sweep that consolidates on that
+   assumption will delete a check rather than a copy. */
+export {
+  readReadyContract,
+  type ReadyContractInfo,
+} from "extension-develop/bridge";
+
 /* @invariant
  * The sentence a caller appends when a session artifact is missing, so a
  * layout mismatch between this package's pinned engine and the engine actually

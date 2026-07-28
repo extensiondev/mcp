@@ -46,7 +46,7 @@ const { removeSession } = await import("../lib/process-manager");
 const {
   writeModernContract,
   writeSchema1ContractError,
-  writeShippedEngineContractError,
+  writePreSchema1ContractError,
 } = await import("./fixtures/ready-contract");
 
 const tmpDirs: string[] = [];
@@ -147,7 +147,7 @@ describe("extension_dev health tick", () => {
     nextChild = () => {
       const cli = fakeCli('console.log("building"); setTimeout(()=>{}, 60000);');
       setTimeout(() => {
-        writeShippedEngineContractError(project, "chrome", {
+        writePreSchema1ContractError(project, "chrome", {
           code: "profile_locked",
           message: "Chromium profile is already in use by process 77 on host h.",
           profileLockOwner: { host: "h", pid: 77 },
