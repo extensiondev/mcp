@@ -7,7 +7,7 @@ const SRC = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 const OWNER = path.join(SRC, "lib", "session-paths.ts");
 
-/* Empty, and it stays empty. It held tools/build.ts while that file was being
+/* @invariant Empty, and it stays empty. It held tools/build.ts while that file was being
    rewritten by another author; build.ts now calls buildSummaryPath like every
    other reader, so there is nothing left to excuse. An entry here is a file
    allowed to rebuild the session layout by hand, which is the thing this test
@@ -30,7 +30,7 @@ function productionFiles(dir: string, out: string[] = []): string[] {
   return out;
 }
 
-/* The engine's own layout spec fails any path join that bypasses its
+/* @invariant The engine's own layout spec fails any path join that bypasses its
    session-paths module. This is the same guard on this side of the wire: the
    hand-built dist/extension-js/<browser>/... joins are gone, and this test is
    what stops the next one from appearing. It deliberately does NOT flag
@@ -43,7 +43,7 @@ describe("only lib/session-paths.ts knows the session-state layout", () => {
     expect(scanned.length).toBeGreaterThan(30);
   });
 
-  /* Only the path-join form is an offence. Prose that NAMES dist/extension-js
+  /* @invariant Only the path-join form is an offence. Prose that NAMES dist/extension-js
      in a tool description or an error message is the opposite of the problem:
      telling the caller which path was read is exactly how a layout mismatch
      stops being silent. */

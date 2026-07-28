@@ -38,7 +38,7 @@ export {
   sessionStateDir,
 } from "extension-develop/bridge";
 
-/**
+/* @invariant
  * The sentence a caller appends when a session artifact is missing, so a
  * layout mismatch between this package's pinned engine and the engine actually
  * installed in the project reads as a wrong-path problem instead of silence.

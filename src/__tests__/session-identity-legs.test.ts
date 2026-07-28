@@ -19,7 +19,7 @@ import {
 const API = "https://www.extension.dev";
 const HEX_128 = /^[0-9a-f]{32}$/;
 
-/* The wire names are spelled out rather than imported, because the reader of
+/* @invariant The wire names are spelled out rather than imported, because the reader of
    these headers lives in another repo. Importing the constants from the module
    under test made a rename update the assertion with it, so the one change
    that actually breaks the server was the one this file could not see. */

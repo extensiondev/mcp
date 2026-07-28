@@ -18,7 +18,7 @@ const CLI_COPY_TOKENS = [
   "Author says",
 ];
 
-/* Three entries left this map the day it was checked against the tokens above:
+/* @invariant Three entries left this map the day it was checked against the tokens above:
    lib/act.ts, tools/open.ts and tools/eval.ts match NONE of them. Their prose
    fallbacks read broker and browser messages, which is a different and much
    weaker coupling than reading first-party CLI copy, and the ban was never what
@@ -66,7 +66,7 @@ describe("no tool reads the CLI's human copy: each token above appears only in f
     expect(EXEMPT.size).toBeLessThanOrEqual(1);
   });
 
-  /* The cap only means something if it is tight. Naming the files that left
+  /* @invariant The cap only means something if it is tight. Naming the files that left
      stops the next reader from re-adding one on the assumption the slot was
      always spare, and fails if any of the three quietly starts matching CLI
      copy again under cover of a fresh exemption. */
