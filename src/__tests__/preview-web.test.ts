@@ -223,6 +223,39 @@ describe("extension_preview_web", () => {
     }
   });
 
+  it("errors when the dist manifest is not valid JSON", async () => {
+    const dir = tmpDist();
+    fs.writeFileSync(path.join(dir, "manifest.json"), "{ not json");
+    try {
+      const out = JSON.parse(
+        await handler({ projectPath: dir, build: false, distPath: dir, probe: false }),
+      );
+      expect(out.ok).toBe(false);
+      expect(out.status).toBe("bad-dist-manifest");
+      expect(out.error.code).toBe("E_BAD_MANIFEST");
+      expect(out.value.stage).toBe("resolve-dist");
+      expect(out.value.distDir).toBe(path.resolve(dir));
+      expect(out.error.message).toContain("not valid JSON");
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("does not read a directory of the same name as a manifest", async () => {
+    const dir = tmpDist();
+    fs.mkdirSync(path.join(dir, "manifest.json"));
+    try {
+      const out = JSON.parse(
+        await handler({ projectPath: dir, build: false, distPath: dir, probe: false }),
+      );
+      expect(out.ok).toBe(false);
+      expect(out.status).toBe("bad-dist-manifest");
+      expect(out.error.code).toBe("E_BAD_MANIFEST");
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it("errors when the dist has no manifest", async () => {
     const dir = tmpDist();
     try {
@@ -256,6 +289,80 @@ describe("extension_preview_web", () => {
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }
+  });
+
+  describe("the remedy it prints is one the reader could actually run", () => {
+    function unreachable() {
+      global.fetch = (async () => {
+        throw new Error("fetch failed");
+      }) as unknown as typeof fetch;
+    }
+
+    function fakeCheckout(): string {
+      const root = fs.mkdtempSync(path.join(os.tmpdir(), "preview-monorepo-"));
+      const app = path.join(root, "apps", "web", "preview.extension.dev");
+      fs.mkdirSync(app, { recursive: true });
+      fs.writeFileSync(
+        path.join(app, "package.json"),
+        JSON.stringify({ name: "preview.extension.dev" }),
+      );
+      return root;
+    }
+
+    it("sends an npm install to share:true and never to a pnpm filter", async () => {
+      const dir = tmpDist(MANIFEST);
+      vi.spyOn(process, "cwd").mockReturnValue(dir);
+      unreachable();
+      try {
+        const out = JSON.parse(
+          await handler({ projectPath: dir, build: false, distPath: dir }),
+        );
+        const everything = [
+          out.error.message,
+          out.hint,
+          ...(out.warnings ?? []),
+        ].join(" ");
+        expect(everything).not.toContain("pnpm");
+        expect(out.error.message).toContain("share:true");
+        expect(out.hint).toContain("share:true");
+        expect(out.warnings.join(" ")).toContain("share:true");
+      } finally {
+        fs.rmSync(dir, { recursive: true, force: true });
+      }
+    });
+
+    it("names the dev command only from a checkout that carries the app", async () => {
+      const root = fakeCheckout();
+      const dir = path.join(root, "widget", "dist", "chrome");
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(path.join(dir, "manifest.json"), JSON.stringify(MANIFEST));
+      vi.spyOn(process, "cwd").mockReturnValue(os.tmpdir());
+      unreachable();
+      try {
+        const out = JSON.parse(
+          await handler({ projectPath: dir, build: false, distPath: dir }),
+        );
+        expect(out.error.message).toContain(
+          "pnpm --filter preview.extension.dev dev",
+        );
+        expect(out.error.message).toContain(root);
+        expect(out.error.message).toContain("share:true");
+      } finally {
+        fs.rmSync(root, { recursive: true, force: true });
+      }
+    });
+
+    it("puts the lane that works for everyone first in the description", () => {
+      expect(schema.description).not.toContain("pnpm");
+      const share = schema.description.indexOf("share:true");
+      const local = schema.description.indexOf("preview://build");
+      expect(share).toBeGreaterThan(-1);
+      expect(share).toBeLessThan(local);
+      expect(schema.description).toMatch(/developing extension\.dev itself/);
+      expect(
+        (schema.inputSchema.properties as any).share.description,
+      ).toMatch(/zip|hands over/i);
+    });
   });
 
   describe("share:true (uploads the local dist)", () => {

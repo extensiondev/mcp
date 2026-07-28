@@ -68,6 +68,61 @@ const SURFACE = {
   label: "preview.extension.dev",
 } as const;
 
+const PREVIEW_APP_LOCATIONS = [
+  ["apps", "web", "preview.extension.dev"],
+  ["apps", "preview.extension.dev"],
+  ["preview.extension.dev"],
+];
+
+/* @invariant
+ * The pnpm command is only ever printed to someone who could run it.
+ *
+ * preview.extension.dev is a private app of the extension.dev monorepo, so
+ * `pnpm --filter preview.extension.dev dev` is unrunnable for everyone who
+ * installed @extension.dev/mcp from npm. Printing it as the remedy sent that
+ * majority down a road with no end, and an agent relaying it burns a turn
+ * proving the filter matches nothing. Finding the app's own package.json is
+ * the only honest evidence that the command exists here, so the remedy for
+ * everyone else names share:true instead, which needs no local server at all.
+ */
+function previewDevCheckout(startPaths: string[]): string | null {
+  const seen = new Set<string>();
+  for (const start of startPaths) {
+    let dir: string;
+    try {
+      dir = path.resolve(start);
+    } catch {
+      continue;
+    }
+    for (let depth = 0; depth < 8; depth++) {
+      if (seen.has(dir)) break;
+      seen.add(dir);
+      for (const location of PREVIEW_APP_LOCATIONS) {
+        const manifest = path.join(dir, ...location, "package.json");
+        try {
+          const parsed = JSON.parse(fs.readFileSync(manifest, "utf8")) as {
+            name?: string;
+          };
+          if (parsed.name === SURFACE.label) return dir;
+        } catch {
+        }
+      }
+      const parent = path.dirname(dir);
+      if (parent === dir) break;
+      dir = parent;
+    }
+  }
+  return null;
+}
+
+function localLaneRemedy(checkout: string | null): string {
+  const shareOut =
+    "Pass share:true for a link that needs no local server and opens for anyone.";
+  return checkout
+    ? `Start it with '${SURFACE.devCommand}' in ${checkout}. ${shareOut}`
+    : `${SURFACE.label} is a private app of the extension.dev monorepo and no npm install of this server can start it, so the default lane cannot resolve on this machine. ${shareOut}`;
+}
+
 async function buildShare(
   projectPath: string,
   distDir: string,
@@ -155,7 +210,7 @@ function detectSurfaces(manifest: Record<string, any>): string[] {
 export const schema = {
   name: "extension_preview_web",
   description:
-    "Preview an in-progress extension in the web emulator, with no real browser. This builds the project (unless build:false), points preview.extension.dev at dist/<browser> over the dev-only preview://build scheme, and returns a deep link plus a loadability check. Use it as the author's door for a local build: it renders your build and carries the Emulated/Real lane toggle and the Trace tab, but the deep link resolves only on this machine. Pass share:true to get a public link that reaches anyone. Call extension_shares to list and revoke every link shared this way, so one never vanishes with this response.",
+    "Preview an in-progress extension in the web emulator, with no real browser. This builds the project (unless build:false) and previews dist/<browser>. Pass share:true unless you are working inside the extension.dev monorepo: it uploads the build and returns a link anyone can open, with no install, sign-in or dev server, and it is the only lane that works from an npm install of this server. Sharing also serves the build as a zip, so it hands over the built code; read the share property before using it. The default lane instead returns a deep link over the dev-only preview://build scheme, which resolves only against a preview.extension.dev dev server on this machine, so it is for people developing extension.dev itself. Call extension_shares to list and revoke every link shared this way, so one never vanishes with this response.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -310,7 +365,9 @@ export async function handler(args: {
     surfaces: detectSurfaces(manifest),
     ...(buildResult ? { built: true } : { built: false }),
   };
-  const hint = `Open deepLink in a browser to see the extension render in ${SURFACE.label}'s emulator. It must be running (${SURFACE.devCommand}). Once it renders, the Trace tab shows every chrome.* call it makes, and the lane toggle switches between the emulated backend and a real carrier-equipped browser.`;
+  const checkout = previewDevCheckout([args.projectPath, process.cwd()]);
+  const remedy = localLaneRemedy(checkout);
+  const hint = `Open deepLink in a browser to see the extension render in ${SURFACE.label}'s emulator, where the Trace tab shows every chrome.* call it makes and the lane toggle switches between the emulated backend and a real carrier-equipped browser. It needs that surface's dev server running on this machine. ${remedy}`;
   const previewWarnings: string[] = [];
 
   if (args.open) {
@@ -376,7 +433,7 @@ export async function handler(args: {
         hint,
         warnings: [
           ...previewWarnings,
-          `${SURFACE.label} answered but not with a preview payload. On the deployed host ${SURFACE.fetchPath} does not exist (dev-only); run a local dev server (${SURFACE.devCommand}) to use web preview.`,
+          `${SURFACE.label} answered but not with a preview payload. On the deployed host ${SURFACE.fetchPath} does not exist, because it is dev-only. ${remedy}`,
         ],
       });
     }
@@ -419,7 +476,7 @@ export async function handler(args: {
       status: "host-unreachable",
       error: {
         code: "E_PREVIEW_HOST_UNREACHABLE",
-        message: `Nothing is serving ${SURFACE.label} at ${hostBase}, so deepLink has nothing to open. Pass share:true to get a link that needs no local server, or start the dev server if you are working inside the extension.dev monorepo.`,
+        message: `Nothing is serving ${SURFACE.label} at ${hostBase}, so deepLink has nothing to open. ${remedy}`,
       },
       value: {
         ...result,
@@ -432,7 +489,7 @@ export async function handler(args: {
       hint,
       warnings: [
         ...previewWarnings,
-        `Could not reach ${SURFACE.label} at ${hostBase}. Start it with '${SURFACE.devCommand}', then open deepLink.`,
+        `Could not reach ${SURFACE.label} at ${hostBase}. ${remedy}`,
       ],
     });
   }

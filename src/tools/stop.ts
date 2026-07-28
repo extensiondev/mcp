@@ -20,6 +20,8 @@ import {
 } from "../lib/process-manager";
 import { resolveSessionBrowser } from "../lib/session-browser";
 import { removeCarrier } from "../lib/carrier";
+import { sweepCarriers, type CarrierSweepEntry } from "../lib/carrier-exit";
+import { rememberedCarriers } from "../lib/carrier-registry";
 import { envelope } from "../lib/envelope";
 
 export const schema = {
@@ -39,7 +41,7 @@ export const schema = {
         type: "boolean",
         default: false,
         description:
-          "Stop every known session across projects and browsers, found from this server's registry AND the on-disk markers earlier runs left, so it still works after an MCP restart. projectPath/browser are then ignored.",
+          "Stop every known session across projects and browsers, found from this server's registry AND the on-disk markers earlier runs left, so it still works after an MCP restart. It also takes back every live-preview carrier still recorded on this machine, including one in a project whose session was never stopped. projectPath/browser are then ignored.",
       },
     },
     required: [],
@@ -263,25 +265,52 @@ export async function handler(args: {
       const key = `${path.resolve(m.projectPath)}::${m.browser}`;
       if (!candidates.has(key)) candidates.set(key, m);
     }
-    if (candidates.size === 0) {
+    const outcomes: StopOutcome[] = [];
+    for (const c of candidates.values()) {
+      outcomes.push(await stopOne(c.projectPath, c.browser));
+    }
+    /* @invariant
+     * A carrier is swept even where no session was ever registered for it.
+     *
+     * A project the user simply walked away from keeps its carrier: the dev
+     * child's exit handler dies with the server, and the session marker for it
+     * is removed the moment the session is reaped, so a later all=true had
+     * nothing left pointing at that project. The carrier record outlives the
+     * session record for exactly this case, and sweeping it is safe because
+     * removeCarrier still refuses anything it cannot recognise as ours.
+     */
+    const visited = new Set(
+      outcomes.map((outcome) => path.resolve(outcome.projectPath)),
+    );
+    const carriers: CarrierSweepEntry[] = sweepCarriers(
+      rememberedCarriers().filter((p) => !visited.has(path.resolve(p))),
+    );
+
+    if (candidates.size === 0 && carriers.length === 0) {
       return envelope({
         ok: true,
         command: schema.name,
         status: "nothing-to-stop",
         value: { stopped: [] },
-        hint: "No sessions registered in this server and no session markers on disk. Nothing to stop.",
+        hint: "No sessions registered in this server, no session markers on disk, and no carrier left in any project this machine recorded. Nothing to stop.",
       });
-    }
-    const outcomes: StopOutcome[] = [];
-    for (const c of candidates.values()) {
-      outcomes.push(await stopOne(c.projectPath, c.browser));
     }
     return envelope({
       ok: outcomes.every((o) => o.stopped),
       command: schema.name,
       status: "stopped-all",
-      value: { stopped: outcomes },
-      warnings: outcomes.map((o) => (o.stopped ? null : o.detail)),
+      value: {
+        stopped: outcomes,
+        ...(carriers.length ? { carriersSwept: carriers } : {}),
+      },
+      warnings: [
+        ...outcomes.map((o) => (o.stopped ? null : o.detail)),
+        ...carriers.map((c) =>
+          c.removed
+            ? `Took the live-preview carrier back out of ${c.projectPath}, which had no session left to stop it.`
+            : `Left the carrier in ${c.projectPath} alone: ${c.note ?? "unknown reason"}`,
+        ),
+      ],
     });
   }
 

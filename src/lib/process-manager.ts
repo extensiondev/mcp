@@ -19,11 +19,15 @@ function sessionKey(projectPath: string, browser: string): string {
   return `${path.resolve(projectPath)}::${browser}`;
 }
 
-function markerDir(): string {
+export function sessionStateDir(): string {
   return (
     process.env.EXTENSION_MCP_SESSION_DIR ||
     path.join(os.tmpdir(), "extension-dev-mcp-sessions")
   );
+}
+
+function markerDir(): string {
+  return sessionStateDir();
 }
 
 function markerPath(projectPath: string, browser: string): string {
