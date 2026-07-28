@@ -32,7 +32,7 @@ const CLI_COPY_TOKENS = [
 const EXEMPT = new Map<string, string>([
   [
     "lib/legacy-stdout.ts",
-    'the whole module is the deprecated stdout fallback; its compile scrape is replaced by ready.json status:"error", which the engine only ships from 4.0.10, and its profile-lock scrape by ready.json code:"profile_locked", which only lands in 4.0.17 alongside the schema-1 ready contract. 4.0.17 is days old, so a project on 4.0.16 or any 3.x is an ordinary thing to meet and this stays until that floor is old enough to require',
+    'the whole module is the deprecated stdout fallback, and boot-verdict reaches it only when speaksMachineContract is false. That probe keys on ready.json schema:1, which the engine first stamps in 4.0.17, so 4.0.17 is the floor for BOTH scrapes: the earlier 4.0.10 figure recorded here for the compile one was never the gate, since status:"error" long predates it and the scrape runs anyway on a contract that does not advertise schema 1. 4.0.17 was tagged 2026-07-27, so a project on 4.0.16 or any 3.x is an ordinary thing to meet, and this stays until that floor is old enough to require. legacy-stdout.test.ts holds the reachability proof to re-run before deleting',
   ],
 ]);
 

@@ -21,7 +21,21 @@ import { readLogEvents } from "./logs-filter";
 import { readyContractPath } from "../lib/session-paths";
 import type { ReadyContract } from "../lib/types";
 
-function readReadyContract(
+/* @invariant Deliberately NOT the engine's readReadyContract, which
+   lib/session-paths.ts re-exports and tools/logs.ts uses. That one exists to
+   answer whether this process can dial the control channel, so it returns null
+   whenever controlPort is not a number or instanceId is missing, and the
+   ReadyContractInfo it returns has no code, errors or message.
+
+   Both are wrong for a diagnosis. A session whose build failed and which has no
+   control port is the ordinary case here, not a corner: the engine's dev server
+   catches a failure to bind the control server and keeps running with its
+   control port left null, and a one-shot build receipt never sets one at all.
+   Either way ready.json says status:"error" and carries the build errors, and
+   either way the engine's reader answers null. Calling it here would drop the
+   runtime-errors check on exactly the session someone ran doctor to understand,
+   and report healthy. This parse is unconditional for that reason. */
+function readContractForDiagnosis(
   projectPath: string,
   browser: string,
 ): ReadyContract | null {
@@ -224,7 +238,7 @@ export async function handler(args: {
     }
 
     let healthy = code === 0;
-    const contract = readReadyContract(projectPath, browser);
+    const contract = readContractForDiagnosis(projectPath, browser);
     if (contract?.status === "error") {
       healthy = false;
       const browserExited =
