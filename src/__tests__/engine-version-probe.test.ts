@@ -364,13 +364,29 @@ describe("the verdict is cached so a build does not pay for a probe", () => {
     expect(probeCalls()).toHaveLength(2);
   });
 
+  /* @invariant
+   * The expected version is read from the pin, never retyped beside it.
+   *
+   * With no project-local binary the invocation is `npx extension@<spec>`, so
+   * the version about to run is already in the argument and no probe is needed.
+   * Writing that version into the assertion as a literal made this test fail
+   * the moment the pin moved from a canary to its release, reporting a broken
+   * probe when the only thing that had changed was a dependency bump. Reading
+   * the same source the code reads keeps the test about the behaviour.
+   */
   it("answers the npx fallback from the pinned spec without spawning", async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-probe-npx-"));
     tmpDirs.push(dir);
+    const pinned = JSON.parse(
+      fs.readFileSync(
+        path.join(import.meta.dirname, "..", "..", "package.json"),
+        "utf8",
+      ),
+    ).dependencies["extension-develop"];
 
     const version = await engineVersion.resolvedEngineVersion(dir);
 
     expect(probeCalls()).toHaveLength(0);
-    expect(version).toBe("4.0.19-canary.1785200797.ce99a79e");
+    expect(version).toBe(pinned);
   });
 });
