@@ -19,7 +19,7 @@ import {
   removeSessionMarker,
 } from "../lib/process-manager";
 import { resolveSessionBrowser } from "../lib/session-browser";
-import { readyContractPath } from "../lib/session-paths";
+import { profilesRootDir, readyContractPath } from "../lib/session-paths";
 import { removeCarrier } from "../lib/carrier";
 import { sweepCarriers, type CarrierSweepEntry } from "../lib/carrier-exit";
 import { rememberedCarriers } from "../lib/carrier-registry";
@@ -115,9 +115,20 @@ function sessionProcessPids(projectPath: string): number[] {
   const pids = new Set<number>();
   for (const form of projectPathForms(projectPath)) {
     const escaped = escapeRegex(form);
+    /* @invariant The second pattern is the only thing that reaps the session's
+       BROWSER. The first one matches the CLI's own command line, and killing the
+       dev server does not take the browser with it, so a stale pattern here does
+       not fail loudly: sessionProcessPids returns fewer pids, `survivors` comes
+       back empty, and stopOne reports stopped:true over a browser that is still
+       running and still holding its profile. It stayed broken for exactly that
+       reason. It matches on the managed profile directory because that is the
+       one thing the launched browser carries in its argv (Chromium as
+       --user-data-dir=<path>, Firefox as --profile "<path>"), and it stops at the
+       profiles root so it covers every browser and every per-run directory
+       underneath, whose names are random. */
     const patterns = [
       `extension[^ ]* (dev|start|preview) ${escaped}`,
-      `${escaped}${escapeRegex(path.sep)}dist${escapeRegex(path.sep)}extension-profile-`,
+      `${escapeRegex(profilesRootDir(form))}${escapeRegex(path.sep)}`,
     ];
     for (const pattern of patterns) {
       for (const pid of pgrepPids(pattern)) pids.add(pid);

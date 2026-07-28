@@ -189,7 +189,7 @@ describe("extension_dev health tick", () => {
         writeSchema1ContractError(project, "chrome", {
           code: "profile_locked",
           message:
-            'Chromium profile "/tmp/p/dist/extension-profile-chrome" is already in use by process 4242 on host somehost. Close that browser session or use a different profile before starting Extension.js.',
+            'Chromium profile "/tmp/p/dist/extension-js/profiles/chrome-profile/tidy-amber-otter" is already in use by process 4242 on host somehost. Close that browser session or use a different profile before starting Extension.js.',
           profileLockedAt: "2026-07-27T09:00:00.000Z",
           profileLockOwner: { host: "somehost", pid: 4242 },
         });
@@ -203,7 +203,9 @@ describe("extension_dev health tick", () => {
     expect(result.status).toBe("profile-locked");
     expect(result.error.code).toBe("E_PROFILE_LOCKED");
     expect(result.error.message).toContain("already in use by process 4242");
-    expect(result.error.message).toContain("extension-profile-chrome");
+    expect(result.error.message).toContain(
+      "/dist/extension-js/profiles/chrome-profile/tidy-amber-otter",
+    );
     expect(result.value.owner).toEqual({ host: "somehost", pid: 4242 });
     expect(result.value.lockedAt).toBe("2026-07-27T09:00:00.000Z");
     expect(result.warnings).toEqual([]);

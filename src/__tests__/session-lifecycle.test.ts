@@ -197,7 +197,7 @@ describe("extension_dev browser leg health", () => {
     expect(result.value.browserExitCode).toBe(1);
     expect(result.error.message).toContain("browser");
     expect(result.hint).toContain(
-      path.join(project, "dist", "extension-profile-chrome"),
+      path.join(project, "dist", "extension-js", "profiles", "chrome-profile"),
     );
   }, 15_000);
 
@@ -214,7 +214,10 @@ describe("extension_dev browser leg health", () => {
     expect(result.status).toBe("profile-locked");
     expect(result.error.code).toBe("E_PROFILE_LOCKED");
     expect(result.error.message).toContain("profile is locked");
-    expect(result.hint).toContain("extension-profile-chrome");
+    expect(result.hint).toContain(
+      path.join(project, "dist", "extension-js", "profiles", "chrome-profile"),
+    );
+    expect(result.hint).not.toContain("extension-profile-chrome");
     expect(result.warnings.join(" ")).toContain("machine contract");
   }, 15_000);
 });
