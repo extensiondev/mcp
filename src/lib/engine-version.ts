@@ -13,9 +13,18 @@ import { resolveExtensionInvocation, runExtensionCli } from "./exec";
  * read off the engine's own history rather than assumed from the pin this
  * package carries. `doctor` got the flag in 4.0.11, and `dev` and `build` only
  * in 4.0.17. They are listed together because a single table is the honest
- * record of what was verified; only the entry a caller asks for is ever
+ * record of what was verified. Only the entry a caller asks for is ever
  * consulted, so listing a floor here does not put the flag in front of any
  * command that is not already sending it.
+ *
+ * Since 4.0.20 this table is the fallback, not the authority. An engine from
+ * 4.0.20 on answers `extension capabilities` with the roster of commands that
+ * accept --output json, read off its own live registrations, and an engine
+ * that answers is judged from that roster instead of these hand-kept numbers.
+ * Only engines that predate the command, which is every release below 4.0.20,
+ * are still judged here, and that set is closed: no release that will ever
+ * need a new row can be cut again, so the table is finished rather than
+ * merely current.
  *
  * The `act` entry is the one number here that is NOT the release it claims to
  * be. `programs/extension/commands/act.ts` does not exist before 3.18.0 and
@@ -161,12 +170,27 @@ export function compareVersions(a: string, b: string): number | null {
   return 0;
 }
 
-interface CachedVerdict {
+/* @invariant
+ * One record answers both questions, or the cache would double the probes.
+ *
+ * The version and the roster arrive from the same exec when the engine can
+ * answer `capabilities`, and from execs against the same binary when it
+ * cannot, so caching them separately would let their TTLs drift apart and a
+ * support question land on a version the roster no longer describes. A null
+ * roster is itself an answer: this binary was probed and did not produce one,
+ * so support questions must fall back to the floor table rather than probing
+ * again inside the TTL.
+ */
+export interface EngineFacts {
   version: string | null;
+  outputJsonCommands: readonly string[] | null;
+}
+
+interface CachedFacts extends EngineFacts {
   expiresAt: number;
 }
 
-const verdicts = new Map<string, CachedVerdict>();
+const verdicts = new Map<string, CachedFacts>();
 
 export function resetEngineVersionCache(): void {
   verdicts.clear();
@@ -201,6 +225,53 @@ function invocationKey(command: string, prefixArgs: string[]): string {
 const NPX_PIN = /^extension@(.+)$/;
 
 /* @invariant
+ * A roster is only believed from a frame that is unmistakably the answer.
+ *
+ * `extension capabilities` compiles nothing, opens no session, and prints one
+ * schema-1 envelope on stdout. An engine that predates the command exits
+ * non-zero without a frame, and an engine broken enough to print something
+ * else must not have that something read as a roster, so every gate is
+ * checked: a line that parses as JSON, schema 1, ok true, command
+ * "capabilities", a version that parses as one, and a roster that is an array
+ * of strings. Anything less answers null, which is the answer that falls back
+ * to the floor table rather than the answer that invents a capability set.
+ */
+function parseCapabilities(stdout: string): EngineFacts | null {
+  for (const line of stdout.split("\n")) {
+    const candidate = line.trim();
+    if (!candidate.startsWith("{")) continue;
+    let frame: unknown;
+    try {
+      frame = JSON.parse(candidate);
+    } catch {
+      continue;
+    }
+    if (!frame || typeof frame !== "object") continue;
+    const envelope = frame as {
+      schema?: unknown;
+      ok?: unknown;
+      command?: unknown;
+      value?: unknown;
+    };
+    if (envelope.schema !== 1) continue;
+    if (envelope.ok !== true) continue;
+    if (envelope.command !== "capabilities") continue;
+    const value = envelope.value as {
+      version?: unknown;
+      outputJsonCommands?: unknown;
+    } | null;
+    if (!value || typeof value !== "object") continue;
+    const version =
+      typeof value.version === "string" ? parseVersion(value.version) : null;
+    const roster = value.outputJsonCommands;
+    if (!version || !Array.isArray(roster)) continue;
+    if (!roster.every((name) => typeof name === "string")) continue;
+    return { version, outputJsonCommands: roster };
+  }
+  return null;
+}
+
+/* @invariant
  * The npx fallback answers without spawning anything.
  *
  * When no project-local binary exists the invocation is `npx extension@<spec>`
@@ -208,25 +279,61 @@ const NPX_PIN = /^extension@(.+)$/;
  * written in the arguments about to be passed. Reading it out of the argument
  * rather than off a probe is both free and more truthful than a second source
  * would be. A spec that is not an exact version, such as `latest` or an
- * operator override, parses to null and falls through to a real probe.
+ * operator override, parses to null and falls through to a real probe. The pin
+ * carries no roster, so support questions about it are answered from the floor
+ * table, which is exact for a version this package chose itself.
  */
-export async function resolvedEngineVersion(
+/* @invariant
+ * Ask the engine what it can do before deducing it from what it is.
+ *
+ * Since 4.0.20 the engine has `extension capabilities` for exactly this
+ * caller: one non-compiling, session-free exec that prints the running
+ * artifact's version and the full roster of commands accepting --output json,
+ * read off its live registrations rather than kept by hand in another
+ * repository. An engine that answers settles both questions in one exec and
+ * makes the floor table below it unnecessary. An engine that does not answer,
+ * which is every release before 4.0.20, exits non-zero with no frame and
+ * falls through to the --version probe and the floor table exactly as the
+ * world was before capabilities existed. Both probes share one cache record
+ * per invocation key and one TTL, so a cache miss on a pre-capabilities
+ * engine costs two bounded execs for a minute of answers and a modern engine
+ * costs one.
+ */
+export async function resolvedEngineFacts(
   projectPath?: string,
-): Promise<string | null> {
+): Promise<EngineFacts> {
   const { command, prefixArgs } = resolveExtensionInvocation(projectPath);
   const key = invocationKey(command, prefixArgs);
   const cached = verdicts.get(key);
-  if (cached && cached.expiresAt > Date.now()) return cached.version;
+  if (cached && cached.expiresAt > Date.now()) {
+    return {
+      version: cached.version,
+      outputJsonCommands: cached.outputJsonCommands,
+    };
+  }
 
-  const remember = (version: string | null): string | null => {
-    verdicts.set(key, { version, expiresAt: Date.now() + VERDICT_TTL_MS });
-    return version;
+  const remember = (found: EngineFacts): EngineFacts => {
+    verdicts.set(key, { ...found, expiresAt: Date.now() + VERDICT_TTL_MS });
+    return found;
   };
 
   for (const arg of prefixArgs) {
     const pin = NPX_PIN.exec(arg);
     const pinned = pin ? parseVersion(pin[1]) : null;
-    if (pinned) return remember(pinned);
+    if (pinned) return remember({ version: pinned, outputJsonCommands: null });
+  }
+
+  try {
+    const probe = await runExtensionCli(["capabilities"], {
+      cwd: projectPath,
+      timeoutMs: PROBE_TIMEOUT_MS,
+    });
+    if (probe.code === 0) {
+      const answered = parseCapabilities(probe.stdout ?? "");
+      if (answered) return remember(answered);
+    }
+  } catch {
+    // An exec that falls over is an engine that cannot answer capabilities
   }
 
   try {
@@ -234,13 +341,23 @@ export async function resolvedEngineVersion(
       cwd: projectPath,
       timeoutMs: PROBE_TIMEOUT_MS,
     });
-    if (probe.code !== 0) return remember(null);
-    return remember(
-      parseVersion(probe.stdout ?? "") ?? parseVersion(probe.stderr ?? ""),
-    );
+    if (probe.code !== 0) {
+      return remember({ version: null, outputJsonCommands: null });
+    }
+    return remember({
+      version:
+        parseVersion(probe.stdout ?? "") ?? parseVersion(probe.stderr ?? ""),
+      outputJsonCommands: null,
+    });
   } catch {
-    return remember(null);
+    return remember({ version: null, outputJsonCommands: null });
   }
+}
+
+export async function resolvedEngineVersion(
+  projectPath?: string,
+): Promise<string | null> {
+  return (await resolvedEngineFacts(projectPath)).version;
 }
 
 export interface OutputJsonVerdict {
@@ -248,6 +365,22 @@ export interface OutputJsonVerdict {
   version: string | null;
   floor: string;
 }
+
+/* @invariant
+ * The floor table keys `act` as one family because its verbs gained the flag
+ * together, but the engine's roster names every verb individually, since it
+ * is read off the live commander registrations. This map is the bridge: a
+ * family is supported when every verb it covers is in the roster, so a roster
+ * that ever drops one verb downgrades the whole family rather than vouching
+ * for a verb it cannot see. The single-name rows exist so the lookup has one
+ * shape for every key.
+ */
+const ROSTER_NAMES: Record<OutputJsonCommand, readonly string[]> = {
+  act: ["eval", "inspect", "open", "reload", "storage"],
+  doctor: ["doctor"],
+  dev: ["dev"],
+  build: ["build"],
+} as const;
 
 /* @invariant
  * Three answers, and the third one is the whole safety story.
@@ -259,18 +392,34 @@ export interface OutputJsonVerdict {
  * existed: send the flag and let the refusal retry catch it. The probe is an
  * optimisation, so its failure mode is losing the optimisation and never
  * breaking the build.
+ *
+ * When the engine answered `capabilities`, `true` and `false` come straight
+ * off its roster and the floor table is not consulted at all, because the
+ * engine's own registrations outrank a table kept by hand in this repository.
+ * The floor comparison below the roster check is the pre-capabilities path,
+ * and the floor still travels in the verdict either way so a refusal message
+ * can name the release where the flag arrived.
  */
 export async function outputJsonVerdict(
   command: OutputJsonCommand,
   projectPath?: string,
 ): Promise<OutputJsonVerdict> {
   const floor = OUTPUT_JSON_FLOOR[command];
-  let version: string | null = null;
+  let engine: EngineFacts;
   try {
-    version = await resolvedEngineVersion(projectPath);
+    engine = await resolvedEngineFacts(projectPath);
   } catch {
     return { supported: null, version: null, floor };
   }
+  const roster = engine.outputJsonCommands;
+  if (roster) {
+    return {
+      supported: ROSTER_NAMES[command].every((name) => roster.includes(name)),
+      version: engine.version,
+      floor,
+    };
+  }
+  const version = engine.version;
   if (version === null) return { supported: null, version: null, floor };
   const ordering = compareVersions(version, floor);
   if (ordering === null) return { supported: null, version, floor };

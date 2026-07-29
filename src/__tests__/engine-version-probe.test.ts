@@ -78,8 +78,59 @@ function persistSummary(dir: string, summary: Record<string, unknown>): void {
   fs.utimesSync(file, ahead, ahead);
 }
 
+/* @invariant Every pre-capabilities engine these helpers simulate must refuse
+   `capabilities` the way a real one does, with a non-zero exit and no schema-1
+   frame, or the tests would quietly stop exercising the fallback chain they
+   exist to pin. */
+const CAPABILITIES_UNKNOWN: CliResponse = {
+  code: 1,
+  stdout: "",
+  stderr: "error: unknown command 'capabilities'",
+};
+
+const CAPABILITIES_ROSTER = [
+  "build",
+  "capabilities",
+  "create",
+  "dev",
+  "doctor",
+  "eval",
+  "inspect",
+  "install",
+  "logs",
+  "open",
+  "preview",
+  "publish",
+  "reload",
+  "start",
+  "storage",
+  "telemetry",
+];
+
+function capabilitiesFrame(
+  version: string,
+  roster: string[] = CAPABILITIES_ROSTER,
+): string {
+  return JSON.stringify({
+    schema: 1,
+    ok: true,
+    command: "capabilities",
+    status: "ok",
+    value: {
+      name: "extension",
+      version,
+      envelopeSchema: 1,
+      readySchemaVersion: 2,
+      outputJsonCommands: roster,
+    },
+    error: null,
+    warnings: [],
+  });
+}
+
 function engine(version: string, onBuild: CliResponse) {
   return (args: string[]): CliResponse => {
+    if (args[0] === "capabilities") return CAPABILITIES_UNKNOWN;
     if (args[0] === "--version") {
       return { code: 0, stdout: `${version}\n`, stderr: "" };
     }
@@ -89,6 +140,7 @@ function engine(version: string, onBuild: CliResponse) {
 
 function engineBelowTheFloor(version: string, onBuild: CliResponse) {
   return (args: string[]): CliResponse => {
+    if (args[0] === "capabilities") return CAPABILITIES_UNKNOWN;
     if (args[0] === "--version") {
       return { code: 0, stdout: `${version}\n`, stderr: "" };
     }
@@ -99,8 +151,27 @@ function engineBelowTheFloor(version: string, onBuild: CliResponse) {
   };
 }
 
-const buildCalls = () => cliCalls.filter((args) => args[0] !== "--version");
+function engineWithCapabilities(
+  version: string,
+  onBuild: CliResponse,
+  roster: string[] = CAPABILITIES_ROSTER,
+) {
+  return (args: string[]): CliResponse => {
+    if (args[0] === "capabilities") {
+      return { code: 0, stdout: `${capabilitiesFrame(version, roster)}\n`, stderr: "" };
+    }
+    if (args[0] === "--version") {
+      return { code: 0, stdout: `${version}\n`, stderr: "" };
+    }
+    return onBuild;
+  };
+}
+
+const PROBE_ARGS = new Set(["--version", "capabilities"]);
+const buildCalls = () => cliCalls.filter((args) => !PROBE_ARGS.has(args[0]));
 const probeCalls = () => cliCalls.filter((args) => args[0] === "--version");
+const capabilityCalls = () =>
+  cliCalls.filter((args) => args[0] === "capabilities");
 
 const run = async (args: Parameters<typeof build.handler>[0]) =>
   JSON.parse(await build.handler(args));
@@ -324,6 +395,7 @@ describe("the build probes the engine before it spends a compile", () => {
     const dir = projectWithLocalEngine();
     persistSummary(dir, { browser: "chrome", size: 1234, warnings: [] });
     cliResponder = (args) => {
+      if (args[0] === "capabilities") return CAPABILITIES_UNKNOWN;
       if (args[0] === "--version") {
         return { code: 0, stdout: "unknown\n", stderr: "" };
       }
@@ -353,6 +425,147 @@ describe("the build probes the engine before it spends a compile", () => {
     expect(result.ok).toBe(false);
     expect(result.error.code).toBe("E_BUILD_FAILED");
     expect(buildCalls()).toHaveLength(1);
+  });
+});
+
+describe("an engine that answers capabilities is judged from its own roster", () => {
+  it("reads the version and the roster from one exec and never asks --version", async () => {
+    const dir = projectWithLocalEngine();
+    cliResponder = engineWithCapabilities("4.0.20", {
+      code: 0,
+      stdout: "",
+      stderr: "",
+    });
+
+    const result = await run({ projectPath: dir, browser: "chrome" });
+
+    expect(result.ok).toBe(true);
+    expect(capabilityCalls()).toHaveLength(1);
+    expect(probeCalls()).toHaveLength(0);
+    expect(buildCalls()).toHaveLength(1);
+    expect(buildCalls()[0]).toContain("--output");
+  });
+
+  it("answers resolvedEngineVersion from the envelope's own version", async () => {
+    const dir = projectWithLocalEngine();
+    cliResponder = engineWithCapabilities("4.0.20", {
+      code: 0,
+      stdout: "",
+      stderr: "",
+    });
+
+    const version = await engineVersion.resolvedEngineVersion(dir);
+
+    expect(version).toBe("4.0.20");
+    expect(capabilityCalls()).toHaveLength(1);
+    expect(probeCalls()).toHaveLength(0);
+  });
+
+  /* @invariant The roster outranks the floor table. A version far above every
+     floor whose roster does not name the command must still be judged
+     unsupported, because the roster is read off the engine's live
+     registrations and the table is kept by hand in this repository. */
+  it("lets the roster overrule a version the floor table would wave through", async () => {
+    const dir = projectWithLocalEngine();
+    cliResponder = engineWithCapabilities(
+      "9.9.9",
+      { code: 0, stdout: "", stderr: "" },
+      ["capabilities", "doctor"],
+    );
+
+    const verdict = await engineVersion.outputJsonVerdict("build", dir);
+
+    expect(verdict.supported).toBe(false);
+    expect(verdict.version).toBe("9.9.9");
+  });
+
+  it("judges the act family by every verb it covers", async () => {
+    const dir = projectWithLocalEngine();
+    cliResponder = engineWithCapabilities("4.0.20", {
+      code: 0,
+      stdout: "",
+      stderr: "",
+    });
+
+    const verdict = await engineVersion.outputJsonVerdict("act", dir);
+
+    expect(verdict.supported).toBe(true);
+  });
+
+  it("downgrades the act family when the roster drops one verb", async () => {
+    const dir = projectWithLocalEngine();
+    cliResponder = engineWithCapabilities(
+      "4.0.20",
+      { code: 0, stdout: "", stderr: "" },
+      CAPABILITIES_ROSTER.filter((name) => name !== "reload"),
+    );
+
+    const verdict = await engineVersion.outputJsonVerdict("act", dir);
+
+    expect(verdict.supported).toBe(false);
+  });
+
+  it("caches the capabilities answer for a burst of builds", async () => {
+    const dir = projectWithLocalEngine();
+    cliResponder = engineWithCapabilities("4.0.20", {
+      code: 0,
+      stdout: "",
+      stderr: "",
+    });
+
+    await run({ projectPath: dir, browser: "chrome" });
+    await run({ projectPath: dir, browser: "chrome" });
+
+    expect(capabilityCalls()).toHaveLength(1);
+    expect(buildCalls()).toHaveLength(2);
+  });
+
+  it("falls back to the version probe when the command is unknown", async () => {
+    const dir = projectWithLocalEngine();
+    cliResponder = engineBelowTheFloor("4.0.16", {
+      code: 0,
+      stdout: "",
+      stderr: "",
+    });
+    persistSummary(dir, { browser: "chrome", size: 1234, warnings: [] });
+
+    const result = await run({ projectPath: dir, browser: "chrome" });
+
+    expect(result.ok).toBe(true);
+    expect(capabilityCalls()).toHaveLength(1);
+    expect(probeCalls()).toHaveLength(1);
+    expect(buildCalls()[0]).not.toContain("--output");
+  });
+
+  it("does not believe an exit-zero frame that is not the capabilities answer", async () => {
+    const dir = projectWithLocalEngine();
+    cliResponder = (args) => {
+      if (args[0] === "capabilities") {
+        return {
+          code: 0,
+          stdout: JSON.stringify({
+            schema: 1,
+            ok: true,
+            command: "build",
+            status: "ok",
+            value: null,
+            error: null,
+            warnings: [],
+          }),
+          stderr: "",
+        };
+      }
+      if (args[0] === "--version") {
+        return { code: 0, stdout: "4.0.18\n", stderr: "" };
+      }
+      return { code: 0, stdout: "", stderr: "" };
+    };
+
+    const verdict = await engineVersion.outputJsonVerdict("build", dir);
+
+    expect(verdict.supported).toBe(true);
+    expect(verdict.version).toBe("4.0.18");
+    expect(probeCalls()).toHaveLength(1);
   });
 });
 
