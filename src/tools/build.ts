@@ -381,7 +381,7 @@ export const schema = {
       bundleId: {
         type: "string",
         description:
-          "Safari targets only: a reverse-DNS bundle identifier you own, such as com.acme.readinglist. Without one the app is packaged under a generated dev.extensionjs.* identifier that Apple will not accept for distribution.",
+          "Safari targets only: a reverse-DNS bundle identifier you own, such as com.acme.readinglist. Without one the app is packaged under a generated dev.extensionjs.* identifier derived from the app name, which every project built from the same template shares, and the first team to register it takes it.",
       },
       macOsOnly: {
         type: "boolean",
