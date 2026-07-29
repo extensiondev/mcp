@@ -31,14 +31,14 @@ importers:
         specifier: ^7.0.6
         version: 7.0.6
       extension-create:
-        specifier: 4.0.19
-        version: 4.0.19
+        specifier: 4.0.20
+        version: 4.0.20
       extension-develop:
-        specifier: 4.0.19
-        version: 4.0.19(@swc/helpers@0.5.21)(svelte@5.56.6)(typescript@6.0.2)(webpack@5.108.4(postcss@8.5.23))
+        specifier: 4.0.20
+        version: 4.0.20(@swc/helpers@0.5.21)(svelte@5.56.6)(typescript@6.0.2)(webpack@5.108.4(postcss@8.5.23))
       extension-install:
-        specifier: 4.0.19
-        version: 4.0.19
+        specifier: 4.0.20
+        version: 4.0.20
       ws:
         specifier: ^8.21.0
         version: 8.21.0
@@ -1405,12 +1405,12 @@ packages:
     resolution: {integrity: sha512-hIS4idWWai69NezIdRt2xFVofaF4j+6INOpJlVOLDO8zXGpUVEVzIYk12UUi2JzjEzWL3IOAxcTubgz9Po0yXw==}
     engines: {node: '>= 18'}
 
-  extension-create@4.0.19:
-    resolution: {integrity: sha512-nI3qCeR3rA5Pbjo+G++QBjvvcGzTtUMJpZZ/XsnaEZO3sClKiPjm04x4Ys2tz4vwPF3bIx2gGqBaMg46Teaafw==}
+  extension-create@4.0.20:
+    resolution: {integrity: sha512-/5pH0AgVIMes985VoTqDG/mhzweW1sc12EK6eS4voAHHF6klYWcB2z0eNFnb12oE3ZWcailmE7EXlGe1tfepTw==}
     engines: {node: '>=22.12'}
 
-  extension-develop@4.0.19:
-    resolution: {integrity: sha512-1CqN2+v0ErKfifugd8JobeiLpdsA573TLHJbcdrm32Quc2lvrNRpkOsYnyc9uyqmpmPR883GhwzKPd8W3wyrPA==}
+  extension-develop@4.0.20:
+    resolution: {integrity: sha512-9DoHESU50qBMsz4KVeY3AxENS4scO8/tYt5NMeBI8Im6jS9o+SUF43OTrS5lr05Zhfhh4lt5O5tkEn5NVzLF1g==}
     engines: {node: '>=22.12'}
 
   extension-from-store@0.1.1:
@@ -1418,8 +1418,8 @@ packages:
     engines: {node: '>=16'}
     hasBin: true
 
-  extension-install@4.0.19:
-    resolution: {integrity: sha512-m8B4ohJVFqzkdlJufVomkG/rchFakMvTuSMxsk575LEPc+MemRzyO19XHLtOrIT9YYSKsKEASRo1BY/8ZHMYXA==}
+  extension-install@4.0.20:
+    resolution: {integrity: sha512-bsgVf6xEbED0tmj3PFuU/eBirkuuOWfuIn+fKE+hYaNJ1CboRZWOyx34/R5cuYn70qQhU6pc/11C/RKO3HZ1Gg==}
     engines: {node: '>=22.12'}
 
   extract-zip@2.0.1:
@@ -3860,7 +3860,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  extension-create@4.0.19:
+  extension-create@4.0.20:
     dependencies:
       adm-zip: 0.6.0
       axios: 1.18.1
@@ -3872,7 +3872,7 @@ snapshots:
       - debug
       - supports-color
 
-  extension-develop@4.0.19(@swc/helpers@0.5.21)(svelte@5.56.6)(typescript@6.0.2)(webpack@5.108.4(postcss@8.5.23)):
+  extension-develop@4.0.20(@swc/helpers@0.5.21)(svelte@5.56.6)(typescript@6.0.2)(webpack@5.108.4(postcss@8.5.23)):
     dependencies:
       '@prefresh/core': 1.5.9(preact@10.27.3)
       '@prefresh/utils': 1.2.1
@@ -3931,7 +3931,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  extension-install@4.0.19:
+  extension-install@4.0.20:
     dependencies:
       cross-spawn: 7.0.6
       pintor: 0.3.0
