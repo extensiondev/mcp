@@ -205,9 +205,7 @@ describe("extension_build drives the Safari web-extension conversion", () => {
       xcodeProjectPath: "/tmp/safari-xcode/Reading List.xcodeproj",
       macOsOnly: true,
     });
-    expect((result.warnings ?? []).join(" ")).not.toContain(
-      "reject it for distribution",
-    );
+    expect((result.warnings ?? []).join(" ")).not.toContain("locked out");
   });
 
   it("picks the summary for the browser that was asked for", async () => {
@@ -243,10 +241,37 @@ describe("extension_build drives the Safari web-extension conversion", () => {
     const result = await run({ projectPath: dir, browser: "safari" });
 
     expect(result.ok).toBe(true);
-    expect(result.value.safariApp.bundleId).toBe("dev.extensionjs.Reading-List");
+    expect(result.value.safariApp.bundleId).toBe(
+      "dev.extensionjs.Reading-List",
+    );
     const warnings = (result.warnings ?? []).join(" ");
     expect(warnings).toContain("dev.extensionjs.Reading-List");
-    expect(warnings).toContain("reject it for distribution");
+    expect(warnings).toContain("locked out");
+  });
+
+  it("never claims an Apple outcome it did not read", async () => {
+    const dir = project();
+    distFor(dir, "safari");
+    cliResponse = summariesOf({
+      browser: "safari",
+      safari: {
+        appName: "Reading List",
+        bundleId: "dev.extensionjs.Reading-List",
+        bundleIdDerived: true,
+      },
+    });
+    const warnings = (
+      (await run({ projectPath: dir, browser: "safari" })).warnings ?? []
+    ).join(" ");
+
+    expect(warnings).toContain("locked out");
+    for (const claim of [
+      "reject it for distribution",
+      "Apple will reject",
+      "will not distribute",
+    ]) {
+      expect(warnings).not.toContain(claim);
+    }
   });
 
   it("stays quiet about a dev.extensionjs id the developer actually owns", async () => {
@@ -268,9 +293,7 @@ describe("extension_build drives the Safari web-extension conversion", () => {
     });
 
     expect(result.ok).toBe(true);
-    expect((result.warnings ?? []).join(" ")).not.toContain(
-      "reject it for distribution",
-    );
+    expect((result.warnings ?? []).join(" ")).not.toContain("locked out");
   });
 
   it("warns about a derived id that carries no dev.extensionjs prefix at all", async () => {
@@ -289,7 +312,7 @@ describe("extension_build drives the Safari web-extension conversion", () => {
 
     const warnings = (result.warnings ?? []).join(" ");
     expect(warnings).toContain("com.example.generated");
-    expect(warnings).toContain("reject it for distribution");
+    expect(warnings).toContain("locked out");
   });
 
   it("never reads project.pbxproj to invent an identity the engine did not report", async () => {
@@ -321,9 +344,7 @@ describe("extension_build drives the Safari web-extension conversion", () => {
 
     expect(result.ok).toBe(true);
     expect(result.value.safariApp).toBeUndefined();
-    expect((result.warnings ?? []).join(" ")).not.toContain(
-      "reject it for distribution",
-    );
+    expect((result.warnings ?? []).join(" ")).not.toContain("locked out");
   });
 });
 
@@ -457,10 +478,10 @@ describe("extension_build against an engine older than the summaries contract", 
 
     const result = await run({ projectPath: dir, browser: "safari" });
 
-    expect(result.value.safariApp.bundleId).toBe("dev.extensionjs.Reading-List");
-    expect((result.warnings ?? []).join(" ")).toContain(
-      "reject it for distribution",
+    expect(result.value.safariApp.bundleId).toBe(
+      "dev.extensionjs.Reading-List",
     );
+    expect((result.warnings ?? []).join(" ")).toContain("locked out");
   });
 
   it("names the absolute path it read when no summary is anywhere to be found", async () => {
@@ -738,10 +759,12 @@ describe("extension_build refuses a Safari packaging option it cannot honour", (
   });
 
   it("offers macOsOnly on the tool schema, gated to Safari like the rest", async () => {
-    const macOsOnly = (build.schema.inputSchema.properties as Record<
-      string,
-      { type?: string; description?: string }
-    >).macOsOnly;
+    const macOsOnly = (
+      build.schema.inputSchema.properties as Record<
+        string,
+        { type?: string; description?: string }
+      >
+    ).macOsOnly;
 
     expect(macOsOnly?.type).toBe("boolean");
     expect(macOsOnly?.description).toContain("Safari targets only");
@@ -751,7 +774,12 @@ describe("extension_build refuses a Safari packaging option it cannot honour", (
     const dir = project();
     distFor(dir, "safari");
 
-    for (const bad of ["notreversedns", "com.acme.", "1com.acme", "com..acme"]) {
+    for (const bad of [
+      "notreversedns",
+      "com.acme.",
+      "1com.acme",
+      "com..acme",
+    ]) {
       cliCalls.length = 0;
       const result = await run({
         projectPath: dir,

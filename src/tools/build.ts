@@ -10,10 +10,7 @@ import { LAUNCH_BROWSER, PROJECT_PATH } from "../lib/common-schema";
 import fs from "node:fs";
 import path from "node:path";
 import { runExtensionCli } from "../lib/exec";
-import {
-  outputJsonVerdict,
-  refusedTheOutputFlag,
-} from "../lib/engine-version";
+import { outputJsonVerdict, refusedTheOutputFlag } from "../lib/engine-version";
 import { liveProjectSessions } from "../lib/session-browser";
 import { CARRIER_DIR_NAME, removeCarrier } from "../lib/carrier";
 import { readZipEntryNames } from "../lib/zip-entries";
@@ -85,8 +82,7 @@ function readBuildSummary(
       const summary = JSON.parse(fs.readFileSync(file, "utf8"));
       if (summary && typeof summary === "object") return { file, summary };
     }
-  } catch {
-  }
+  } catch {}
   return { file, summary: null };
 }
 
@@ -104,8 +100,7 @@ function readEngineOutput(stdout: string, stderr: string): EngineOutput {
       let parsed: unknown = null;
       try {
         parsed = JSON.parse(text);
-      } catch {
-      }
+      } catch {}
       if (isEnvelope(parsed)) {
         frame = parsed;
         continue;
@@ -198,12 +193,15 @@ function builtEntrypoints(
   const bg = manifest.background as Record<string, unknown> | undefined;
   if (bg?.service_worker) add("background.service_worker", bg.service_worker);
   if (bg?.page) add("background.page", bg.page);
-  if (Array.isArray(bg?.scripts)) bg.scripts.forEach((s) => add("background.scripts", s));
+  if (Array.isArray(bg?.scripts))
+    bg.scripts.forEach((s) => add("background.scripts", s));
   const action = (manifest.action || manifest.browser_action) as
     | Record<string, unknown>
     | undefined;
   if (action?.default_popup) add("action.default_popup", action.default_popup);
-  const pageAction = manifest.page_action as Record<string, unknown> | undefined;
+  const pageAction = manifest.page_action as
+    | Record<string, unknown>
+    | undefined;
   if (pageAction?.default_popup)
     add("page_action.default_popup", pageAction.default_popup);
   const cs = manifest.content_scripts as
@@ -243,7 +241,10 @@ function builtEntrypoints(
   if (dnr && Array.isArray(dnr.rule_resources)) {
     dnr.rule_resources.forEach((r, i) => {
       if (r && typeof r === "object") {
-        add(`declarative_net_request[${i}].path`, (r as Record<string, unknown>).path);
+        add(
+          `declarative_net_request[${i}].path`,
+          (r as Record<string, unknown>).path,
+        );
       }
     });
   }
@@ -285,8 +286,7 @@ function engineZipBase(distDir: string, projectPath: string): string {
     manifest = JSON.parse(
       fs.readFileSync(path.join(distDir, "manifest.json"), "utf8"),
     );
-  } catch {
-  }
+  } catch {}
   const rawName =
     typeof manifest.name === "string" && !/^__MSG_.+__$/.test(manifest.name)
       ? manifest.name
@@ -426,10 +426,7 @@ const SAFARI_VENDORS = new Set(["safari", "webkit-based"]);
 export const BUNDLE_ID_PATTERN =
   /^[A-Za-z][A-Za-z0-9-]*(\.[A-Za-z][A-Za-z0-9-]*)+$/;
 
-function manifestDivergence(
-  projectPath: string,
-  browser: string,
-): string[] {
+function manifestDivergence(projectPath: string, browser: string): string[] {
   const read = (p: string): Record<string, any> | null => {
     try {
       return JSON.parse(fs.readFileSync(p, "utf8"));
@@ -437,7 +434,9 @@ function manifestDivergence(
       return null;
     }
   };
-  const built = read(path.resolve(projectPath, "dist", browser, "manifest.json"));
+  const built = read(
+    path.resolve(projectPath, "dist", browser, "manifest.json"),
+  );
   const source =
     read(path.resolve(projectPath, "src", "manifest.json")) ??
     read(path.resolve(projectPath, "manifest.json"));
@@ -445,10 +444,18 @@ function manifestDivergence(
 
   const notes: string[] = [];
   const listOf = (m: Record<string, any>, key: string): string[] =>
-    Array.isArray(m[key]) ? m[key].filter((x: unknown) => typeof x === "string") : [];
+    Array.isArray(m[key])
+      ? m[key].filter((x: unknown) => typeof x === "string")
+      : [];
 
-  for (const key of ["permissions", "host_permissions", "optional_permissions"]) {
-    const lost = listOf(source, key).filter((p) => !listOf(built, key).includes(p));
+  for (const key of [
+    "permissions",
+    "host_permissions",
+    "optional_permissions",
+  ]) {
+    const lost = listOf(source, key).filter(
+      (p) => !listOf(built, key).includes(p),
+    );
     if (lost.length) {
       notes.push(
         `The built manifest drops ${key}: ${lost.join(", ")}. The production build has narrower access than the source you tested in dev.`,
@@ -458,7 +465,11 @@ function manifestDivergence(
 
   const sourceWar = source.web_accessible_resources;
   const builtWar = built.web_accessible_resources;
-  if (Array.isArray(sourceWar) && sourceWar.length && !Array.isArray(builtWar)) {
+  if (
+    Array.isArray(sourceWar) &&
+    sourceWar.length &&
+    !Array.isArray(builtWar)
+  ) {
     notes.push(
       "The built manifest has no web_accessible_resources although the source declares them. Anything injected into a page (scripting.insertCSS targets, injected scripts, images) will be blocked at runtime.",
     );
@@ -611,7 +622,8 @@ export async function handler(args: {
           "Nothing was built, so the options were not silently ignored.",
       },
       value: { browser, options: safariOnly, duration: Date.now() - start },
-      hint: 'Pass browser: "safari" to package a Safari app, or drop these options to build for ' +
+      hint:
+        'Pass browser: "safari" to package a Safari app, or drop these options to build for ' +
         `${browser}.`,
     });
   }
@@ -672,7 +684,7 @@ export async function handler(args: {
   );
   const warnings: string[] = carrierNotes.concat(
     clobberedSessions.map(
-    (session) =>
+      (session) =>
         `A live dev session (pid ${session.pid}) is running on this project for ${browser}, and this build wrote over its dist/${browser} output. The dev browser may now serve the production artifact instead of the dev build until the next recompile. Run extension_stop, or let dev recompile on the next source change, to resolve it.`,
     ),
   );
@@ -860,14 +872,21 @@ export async function handler(args: {
      * would get the answer right today and wrong twice over: a developer who
      * legitimately owns that namespace would be warned about their own id, and
      * the day the engine derives under a different prefix the warning goes
-     * quiet. Apple will not distribute an app under a bundle id the developer
-     * does not own, and the identity is baked into the project fingerprint, so
-     * discovering it at submission time means regenerating the project.
+     * quiet.
+     *
+     * What the cost actually is: Apple does NOT verify who owns the domain in a
+     * bundle id, so a foreign namespace is not rejected for being foreign. It
+     * binds an identifier permanently to the FIRST team that registers it, and
+     * a derived id is shared by every project built from the same template, so
+     * the real risk is a collision that locks out everyone after the first.
+     * Two pairs in the shipped template corpus already derive one id. The
+     * identity is baked into the project fingerprint, so discovering it at
+     * submission time means regenerating the project.
      */
     const safariIdentity = safari ? (engineSummary?.safari ?? null) : null;
     const derivedBundleIdNote =
       safariIdentity?.bundleIdDerived === true
-        ? `The Safari app was packaged under the generated bundle identifier ${safariIdentity.bundleId ?? "the engine derived for you"}, which belongs to Extension.js and not to you. It is fine for running the app locally, and Apple will reject it for distribution. Rebuild with bundleId set to a reverse-DNS identifier under a domain you own to fix it, which regenerates the Xcode project.`
+        ? `The Safari app was packaged under the generated bundle identifier ${safariIdentity.bundleId ?? "the engine derived for you"}, which the engine derived from your app name rather than one you chose. It is fine for running the app locally. Every project built from the same template derives the same identifier, and Apple binds one permanently to the first team that registers it, so whoever submits first takes it and everyone after is locked out. Rebuild with bundleId set to a reverse-DNS identifier under a domain you own, which regenerates the Xcode project, and do it before your first submission: afterwards a new identifier is a new extension carrying none of your users.`
         : null;
     const safariIdentityMissingNote =
       safari && !safariIdentity
