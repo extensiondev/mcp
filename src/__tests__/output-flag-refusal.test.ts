@@ -60,6 +60,13 @@ function engineThatRefusesTheFlag(
   refusal: string = UNKNOWN_OUTPUT,
 ) {
   return (args: string[]): CliResponse => {
+    if (args[0] === "capabilities") {
+      return {
+        code: 1,
+        stdout: "",
+        stderr: "error: unknown command 'capabilities'",
+      };
+    }
     if (args[0] === "--version") {
       return version === null
         ? { code: 1, stdout: "", stderr: "not a version" }
