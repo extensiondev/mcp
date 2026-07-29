@@ -1,5 +1,14 @@
 name: CI
 
+# The scheduled run is this repository's deep tier: it is the only event that
+# sets RUN_CLI_SMOKE, and it resolves the engine matrix live, so canary can go
+# red here for reasons no push ever reproduces. That tier reported to nobody
+# until 2026-07-28. It had been red three consecutive nights (07-26, 07-27,
+# 07-28) on an assertion the tool's reworded message no longer matched, and
+# nothing carried the news out of the Actions tab. A red nightly nobody reads
+# is worse than no nightly: it spends the budget and buys the belief that
+# something is watched. The nightly-alert job at the bottom is what carries it.
+
 on:
   push:
     branches:
@@ -84,3 +93,99 @@ jobs:
           RUN_CLI_SMOKE: ${{ github.event_name == 'schedule' && '1' || '' }}
           EXTENSION_MCP_CLI_VERSION: ${{ matrix.version }}
         run: pnpm test
+
+  # Opens one tracking issue when the deep tier fails, comments on it while it
+  # stays failing, and closes it on the first clean run. Ported from the
+  # monorepo's deep-tier-alert with two changes this repository needs.
+  #
+  # It reads the run's own job list instead of `needs.verify.result`, because
+  # verify is a matrix and the aggregate cannot say WHICH engine broke. Canary
+  # and stable fail for different reasons and want different responses, so the
+  # alert names the leg.
+  #
+  # A cancelled run closes nothing. `cancelled` is neither failure nor success,
+  # and a run that was killed mid-flight is not evidence that the deep tier is
+  # healthy; treating it as green is how an alert learns to lie. It reports the
+  # ambiguity and leaves any open issue alone.
+  #
+  # workflow_dispatch alerts on the same terms as the schedule, deliberately.
+  # A dispatch runs the identical matrix, and a separate drill-only switch
+  # would mean the path exercised by hand is not the path that runs at 06:00.
+  # It is also how this job was proven: dispatched once against a branch with a
+  # deliberately broken test to watch the issue open, then once against green
+  # main to watch it close.
+  nightly-alert:
+    if: always() && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+    needs: [engines, verify]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: File or close the nightly alert
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const title = "🚨 the nightly CI is failing";
+            const { owner, repo } = context.repo;
+            const runUrl = `${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}`;
+            const jobs = await github.paginate(
+              github.rest.actions.listJobsForWorkflowRun,
+              { owner, repo, run_id: context.runId, per_page: 100 },
+            );
+            const others = jobs.filter(
+              (j) => j.name !== context.job && j.status === "completed",
+            );
+            const failed = others.filter(
+              (j) => j.conclusion === "failure" || j.conclusion === "timed_out",
+            );
+            const unclear = others.filter(
+              (j) => j.conclusion === "cancelled" || j.conclusion === "action_required",
+            );
+            const open = await github.paginate(github.rest.issues.listForRepo, {
+              owner, repo, state: "open", per_page: 100,
+            });
+            const found = open.find((i) => i.title === title);
+            if (failed.length === 0 && unclear.length > 0) {
+              core.notice(
+                `${unclear.length} job(s) did not reach a verdict (${unclear
+                  .map((j) => `${j.name}: ${j.conclusion}`)
+                  .join(", ")}). A cancelled run is not a green one, so nothing is being closed.`,
+              );
+              return;
+            }
+            if (failed.length === 0) {
+              if (found) {
+                await github.rest.issues.createComment({
+                  owner, repo, issue_number: found.number,
+                  body: `The nightly is green again (${runUrl}). Closing.`,
+                });
+                await github.rest.issues.update({
+                  owner, repo, issue_number: found.number, state: "closed",
+                });
+              }
+              return;
+            }
+            const detail = failed
+              .map((j) => `- \`${j.name}\`: **${j.conclusion}** (${j.html_url})`)
+              .join("\n");
+            if (found) {
+              await github.rest.issues.createComment({
+                owner, repo, issue_number: found.number,
+                body: `Still failing.\n\n${detail}\n\nRun: ${runUrl}`,
+              });
+              return;
+            }
+            await github.rest.issues.create({
+              owner, repo, title,
+              body: [
+                `The ${context.eventName} run of CI did not pass. The scheduled tier is the only one that sets \`RUN_CLI_SMOKE\` and the only one that resolves the engine matrix against whatever npm is publishing today, so nothing on a push reports what breaks here.`,
+                ``,
+                detail,
+                ``,
+                `- Run: ${runUrl}`,
+                ``,
+                `_Filed automatically by the CI nightly alert; it closes itself on the next clean run._`,
+              ].join("\n"),
+            });
