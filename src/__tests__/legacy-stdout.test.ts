@@ -193,7 +193,18 @@ describe("the scrapes are still reachable, and only below the schema-1 floor", (
   /* @invariant The floor is a claim about the USER'S engine, not about the pin.
      The pin is comfortably above it, which is exactly why the pin cannot be the
      thing that retires the module: this server drives whatever
-     node_modules/.bin/extension the project has. */
+     node_modules/.bin/extension the project has.
+
+     The version is read through a semver release match because CI pins the
+     canary tag, whose versions carry a prerelease suffix
+     (4.0.20-canary.<ts>.<sha>). Splitting on "." made patch the string
+     "20-canary", Number() made it NaN, and the comparison below failed with
+     "expected NaN to be greater than or equal to 4000017" every night the
+     canary lane ran. The guard that was supposed to catch that,
+     expect([major, minor, patch]).not.toContain(NaN), CANNOT catch it:
+     toContain compares with ===, and NaN === NaN is false, so it passed on
+     [4, 0, NaN]. Measured, not reasoned about. A version that does not match
+     the release shape now throws by name instead of arriving as NaN. */
   it("pins an engine above the floor, and still cannot assume the project runs it", () => {
     const installed = JSON.parse(
       fs.readFileSync(
@@ -207,8 +218,11 @@ describe("the scrapes are still reachable, and only below the schema-1 floor", (
         "utf8",
       ),
     ).version as string;
-    const [major, minor, patch] = installed.split(".").map(Number);
-    expect([major, minor, patch]).not.toContain(NaN);
+    const release = /^(\d+)\.(\d+)\.(\d+)(?:[-+].*)?$/.exec(installed);
+    if (!release) {
+      throw new Error(`engine version is not a semver release: ${installed}`);
+    }
+    const [major, minor, patch] = release.slice(1).map(Number);
     expect(major * 1_000_000 + minor * 1_000 + patch).toBeGreaterThanOrEqual(
       4 * 1_000_000 + 0 * 1_000 + 17,
     );
