@@ -24,7 +24,14 @@ vi.mock("../lib/exec", async (importOriginal) => {
   };
 });
 
+/* @invariant Two fixtures for one refusal, because two generations of engine
+   word it differently. The lowercase commander line is the old-engine
+   simulation every retry test here leans on. The styled line with the glyph
+   prefix and the remedy after it is the redesigned CLI's wording, kept beside
+   the old one so the retry path is pinned against both. */
 const UNKNOWN_OUTPUT = "error: unknown option '--output'";
+const UNKNOWN_OUTPUT_REDESIGNED =
+  "⏵⏵⏵ Unknown option --output.\nRun extension build --help to see the options.";
 
 function engineTooOldFor(pretty: CliResponse): (args: string[]) => CliResponse {
   return (args) =>
@@ -655,6 +662,20 @@ describe("extension_build survives an engine that has no --output flag at all", 
     const dir = project();
     distFor(dir, "chrome");
     cliResponse = { code: 1, stdout: "", stderr: UNKNOWN_OUTPUT };
+
+    const result = await run({ projectPath: dir, browser: "chrome" });
+
+    expect(cliCalls).toHaveLength(2);
+    expect(result.ok).toBe(false);
+    expect((result.warnings ?? []).join(" ")).toContain(
+      "older than the one this server expects",
+    );
+  });
+
+  it("recognises the redesigned wording of the refusal and still retries", async () => {
+    const dir = project();
+    distFor(dir, "chrome");
+    cliResponse = { code: 1, stdout: "", stderr: UNKNOWN_OUTPUT_REDESIGNED };
 
     const result = await run({ projectPath: dir, browser: "chrome" });
 

@@ -27,7 +27,13 @@ const engineVersion = await import("../lib/engine-version");
 const act = await import("../lib/act");
 const doctor = await import("../tools/doctor");
 
+/* @invariant Old and new wordings of the same refusal, kept side by side. The
+   lowercase commander line is what pre-redesign engines print and stays as the
+   old-engine simulation. The styled line is the redesigned CLI's wording, held
+   here so the detector these tests exercise stays pinned to both. */
 const UNKNOWN_OUTPUT = "error: unknown option '--output'";
+const UNKNOWN_OUTPUT_REDESIGNED =
+  "⏵⏵⏵ Unknown option --output.\nRun extension doctor --help to see the options.";
 
 const tmpDirs: string[] = [];
 
@@ -49,14 +55,17 @@ function projectWithLocalEngine(): string {
   return dir;
 }
 
-function engineThatRefusesTheFlag(version: string | null) {
+function engineThatRefusesTheFlag(
+  version: string | null,
+  refusal: string = UNKNOWN_OUTPUT,
+) {
   return (args: string[]): CliResponse => {
     if (args[0] === "--version") {
       return version === null
         ? { code: 1, stdout: "", stderr: "not a version" }
         : { code: 0, stdout: `${version}\n`, stderr: "" };
     }
-    return { code: 1, stdout: "", stderr: UNKNOWN_OUTPUT };
+    return { code: 1, stdout: "", stderr: refusal };
   };
 }
 
@@ -105,6 +114,20 @@ describe("extension_doctor explains a refused --output instead of relaying it", 
     expect(out.error.code).toBe("E_ENGINE_TOO_OLD");
     expect(out.error.message).toMatch(/could not be read/);
     expect(out.error.message).toContain("4.0.11");
+  });
+
+  it("reads the refusal in its redesigned wording too", async () => {
+    const dir = projectWithLocalEngine();
+    cliResponder = engineThatRefusesTheFlag("4.0.10", UNKNOWN_OUTPUT_REDESIGNED);
+
+    const out = JSON.parse(await doctor.handler({ projectPath: dir }));
+
+    expect(out.ok).toBe(false);
+    expect(out.status).toBe("engine-too-old");
+    expect(out.error.code).toBe("E_ENGINE_TOO_OLD");
+    expect(out.error.message).toContain("4.0.10");
+    expect(out.error.message).toContain("4.0.11");
+    expect(out.error.message.toLowerCase()).not.toContain("unknown option");
   });
 
   it("keeps the probe off the path where nothing was refused", async () => {
