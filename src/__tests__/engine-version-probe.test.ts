@@ -28,7 +28,15 @@ vi.mock("../lib/exec", async (importOriginal) => {
 const engineVersion = await import("../lib/engine-version");
 const build = await import("../tools/build");
 
+/* @invariant Two fixtures because two generations of engine word the refusal
+   differently. The lowercase commander line is what every pre-redesign engine
+   actually prints and stays as the old-engine simulation. The styled line with
+   the glyph prefix and the remedy after it is what the redesigned CLI prints
+   for an unknown option, held here so the matcher cannot quietly narrow back
+   to one phrasing. */
 const UNKNOWN_OUTPUT = "error: unknown option '--output'";
+const UNKNOWN_OUTPUT_REDESIGNED =
+  "⏵⏵⏵ Unknown option --output.\nRun extension build --help to see the options.";
 
 const MANIFEST = {
   manifest_version: 3,
@@ -183,6 +191,33 @@ describe("parseVersion only trusts a line that is a version", () => {
   });
 });
 
+describe("refusedTheOutputFlag reads both generations of the refusal", () => {
+  const refused = engineVersion.refusedTheOutputFlag;
+
+  it("matches the pre-redesign commander phrasing", () => {
+    expect(refused(UNKNOWN_OUTPUT)).toBe(true);
+  });
+
+  it("matches the redesigned styled phrasing", () => {
+    expect(refused(UNKNOWN_OUTPUT_REDESIGNED)).toBe(true);
+  });
+
+  it("ignores a refusal of a flag the caller chose", () => {
+    expect(refused("error: unknown option '--macos-only'")).toBe(false);
+    expect(
+      refused(
+        "⏵⏵⏵ Unknown option --macos-only.\nRun extension build --help to see the options.",
+      ),
+    ).toBe(false);
+  });
+
+  it("ignores a failure that merely mentions the word output", () => {
+    expect(
+      refused("ERROR in ./src/output.js: cannot resolve --output-path"),
+    ).toBe(false);
+  });
+});
+
 describe("the build probes the engine before it spends a compile", () => {
   it("skips the flag entirely when the probe says the engine is too old", async () => {
     const dir = projectWithLocalEngine();
@@ -283,6 +318,26 @@ describe("the build probes the engine before it spends a compile", () => {
 
     expect(result.ok).toBe(true);
     expect(buildCalls()).toHaveLength(2);
+  });
+
+  it("retries a refusal worded the redesigned way just like the old one", async () => {
+    const dir = projectWithLocalEngine();
+    persistSummary(dir, { browser: "chrome", size: 1234, warnings: [] });
+    cliResponder = (args) => {
+      if (args[0] === "--version") {
+        return { code: 0, stdout: "unknown\n", stderr: "" };
+      }
+      return args.includes("--output")
+        ? { code: 1, stdout: "", stderr: UNKNOWN_OUTPUT_REDESIGNED }
+        : { code: 0, stdout: "", stderr: "" };
+    };
+
+    const result = await run({ projectPath: dir, browser: "chrome" });
+
+    expect(result.ok).toBe(true);
+    expect(buildCalls()).toHaveLength(2);
+    expect(buildCalls()[0]).toContain("--output");
+    expect(buildCalls()[1]).not.toContain("--output");
   });
 
   it("still reports a real compile failure rather than probing it away", async () => {

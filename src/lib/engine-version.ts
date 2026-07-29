@@ -277,14 +277,22 @@ export async function outputJsonVerdict(
   return { supported: ordering >= 0, version, floor };
 }
 
-/* @invariant Commander's refusal, matched in one place because the floors it
+/* @invariant The engine's refusal, matched in one place because the floors it
    has to be explained against live here.
 
    An engine that does not know --output json answers with one line on stderr
-   and exits before doing any work. The match needs commander's own phrasing AND
-   that line to name --output, so a command that fails for a real reason is
-   never mistaken for one that refused a flag. */
-const UNKNOWN_OUTPUT_FLAG = /unknown option[^\n]*--output\b/;
+   and exits before doing any work, but two generations of engine word that
+   line differently. Before the messaging redesign it is commander's own
+   lowercase "error: unknown option '--output'". From the redesign on it is
+   the styled "Unknown option --output." with a glyph prefix on the line and a
+   suggestion or remedy line after it. Today only pre-redesign engines can
+   refuse --output on the commands this package sends it to, so the second
+   phrasing is defence for the day a command gains the flag after the
+   redesign, bought now while both phrasings are in front of us. The match is
+   case-insensitive to cover both and still requires the line to name
+   --output, so a command that fails for a real reason is never mistaken for
+   one that refused a flag. */
+const UNKNOWN_OUTPUT_FLAG = /unknown option[^\n]*--output\b/i;
 
 export function refusedTheOutputFlag(stderr: string): boolean {
   return UNKNOWN_OUTPUT_FLAG.test(stderr);

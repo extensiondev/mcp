@@ -128,11 +128,11 @@ function readEngineOutput(stdout: string, stderr: string): EngineOutput {
  * So the refusal is detected and the build is run once more without the flag,
  * where the persisted build summary still answers everything the envelope
  * would have. The match is deliberately narrow: it needs a non-zero exit AND
- * commander's own unknown-option line AND that line to name --output. A real
- * compile failure exits non-zero without ever printing that, so it is reported
- * as the failure it is rather than being retried. There is no loop: the second
- * run omits the only flag that can produce this line, so its result is final
- * whatever it says.
+ * the engine's unknown-option line, in either of the two phrasings the
+ * detector pins, AND that line to name --output. A real compile failure exits
+ * non-zero without ever printing that, so it is reported as the failure it is
+ * rather than being retried. There is no loop: the second run omits the only
+ * flag that can produce this line, so its result is final whatever it says.
  *
  * The scope is the point. --macos-only is just as new, and it is NOT retried
  * away, because the caller asked for it: dropping it would build a macOS-only
