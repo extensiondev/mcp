@@ -9,7 +9,7 @@
 const DEFAULT_MEDIA_ORIGIN = "https://media.extension.land";
 const DEFAULT_CHANNEL = "latest";
 
-export const PINNED_COMMIT = "2d2ed9668cca002148d9eecd953a08b54d0bad9d";
+export const PINNED_COMMIT = "520a8ede767fe1937c7184f4857408caf9c5934f";
 
 const CHANNEL_CACHE_TTL_MS = 5 * 60 * 1000;
 
