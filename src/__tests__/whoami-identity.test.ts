@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -30,12 +30,19 @@ describe("whoami reports the stored token identity, not the cwd", () => {
     tmp = fs.mkdtempSync(path.join(os.tmpdir(), "extdev-whoami-"));
     prevXdg = process.env.XDG_CONFIG_HOME;
     process.env.XDG_CONFIG_HOME = tmp;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        throw new Error("offline in tests");
+      }),
+    );
   });
 
   afterEach(() => {
     if (prevXdg === undefined) delete process.env.XDG_CONFIG_HOME;
     else process.env.XDG_CONFIG_HOME = prevXdg;
     fs.rmSync(tmp, { recursive: true, force: true });
+    vi.unstubAllGlobals();
   });
 
   it("says the identity comes from the stored token, not the directory", async () => {
@@ -160,12 +167,19 @@ describe("7-day token TTL disclosure", () => {
     tmp = fs.mkdtempSync(path.join(os.tmpdir(), "extdev-ttl-"));
     prevXdg = process.env.XDG_CONFIG_HOME;
     process.env.XDG_CONFIG_HOME = tmp;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        throw new Error("offline in tests");
+      }),
+    );
   });
 
   afterEach(() => {
     if (prevXdg === undefined) delete process.env.XDG_CONFIG_HOME;
     else process.env.XDG_CONFIG_HOME = prevXdg;
     fs.rmSync(tmp, { recursive: true, force: true });
+    vi.unstubAllGlobals();
   });
 
   it("extension_auth states the TTL and where CI re-mints", () => {
