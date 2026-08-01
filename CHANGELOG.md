@@ -1,5 +1,65 @@
 # Changelog
 
+## 10.2.0
+
+A production walk of the full share-and-publish loop, then a fix for every
+roughness it surfaced, on top of a week of engine tracking and preview
+hardening. Everything landed since 10.1.0 ships here; the 10.1.1 version
+bump was never published and is folded in.
+
+- Revoking a share accepts the ids the platform actually mints: `gen_` plus
+  64 hex characters, with the older 32-character form still valid. A
+  malformed reference is refused by name, with what a real id looks like,
+  instead of being silently cut down to a 32-character prefix that revokes
+  nothing while reporting the wrong cause.
+- Every revoke handle the tools return points at `www.extension.dev`
+  directly, so one plain DELETE works. The apex `extension.dev` answers
+  DELETE with a redirect, and a caller that does not follow redirects got
+  "Redirecting..." back while the share stayed live.
+- `extension_doctor` hands over the CLI's own report when the engine exits
+  nonzero with output the server cannot parse: the response carries
+  `cliReport`, the doctor's actual check list and remediations, instead of
+  discarding it and guessing that the local CLI is stale.
+- `extension_inspect` with no `url` ranks the extension's own surfaces
+  first and the toolchain's pages last, so it no longer inspects the
+  Extension.js welcome surface and reports on the wrong document. When only
+  toolchain or override pages are open, a warning names exactly which page
+  was inspected and how to target yours.
+- `extension_publish` against a host where the token's project does not
+  exist now says what to do: check the token's scope with `extension_auth`,
+  create the project first at extension.dev/new, or log in against a
+  project that exists there.
+- `extension_auth status` asks the platform who the stored credential
+  really is instead of trusting the file on this machine, and reports the
+  three answers apart: the server confirmed it, the server refused it and
+  the workspace shown is only a local claim, or the server could not be
+  reached and nothing here is server confirmed. A credential minted against
+  a development deployment reads as refused where production refuses it,
+  which is what it always was and never said.
+- The MCP `isError` flag now agrees with the envelope: every `ok: false`
+  result is marked `isError: true`, so an agent branching on the transport
+  flag no longer reads a platform refusal, a publish 404 or an auth 401, as
+  success.
+- `extension_preview_web` with `share: true` no longer fails a working
+  share because the local dev lane is dead: the uploaded link is what was
+  asked for, so the result is `ok: true` with status `shared` and a warning
+  naming the unreachable local leg, which is expected outside the
+  extension.dev monorepo.
+- The Extension.js engine pin moved to 4.0.20, the server asks the engine
+  its version and JSON support from its published capabilities instead of
+  paying for a second build to find out, and a canary pin no longer parses
+  to NaN.
+- Safari packaging lets an agent name the app and bundle id it is
+  packaging, and the docs say what a derived bundle id actually costs a
+  developer instead of claiming Apple rejects it.
+- Preview and share housekeeping: `hostUrl` is pinned to a local server,
+  stale carriers are cleared on start and swept on every exit, re-sharing
+  is documented for what it really does, and the CORS verdict is read off
+  the last hop a browser would follow.
+- The offline template fallback points at the published corpus, three
+  control refusals are told apart instead of sharing one message, and a
+  stray binary file no longer ships in the package.
+
 ## 10.1.0
 
 A six-lens audit of the whole surface (auth, platform, run, see, act and
