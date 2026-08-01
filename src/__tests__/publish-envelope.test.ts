@@ -74,6 +74,26 @@ describe("extension_publish envelope compatibility", () => {
     );
   });
 
+  it("names the remedy when the platform answers 404 for the token's project", async () => {
+    process.env.EXTENSION_DEV_TOKEN = "tok_test";
+    const origFetch = global.fetch;
+    global.fetch = (async () =>
+      new Response(JSON.stringify({ message: "Project not found" }), {
+        status: 404,
+        headers: { "content-type": "application/json" },
+      })) as unknown as typeof fetch;
+    try {
+      const out = JSON.parse(await handler({}));
+      expect(out.ok).toBe(false);
+      expect(out.status).toBe("publish-failed");
+      expect(out.error.message).toContain("(404)");
+      expect(out.hint).toMatch(/extension\.dev\/new/);
+      expect(out.hint).toMatch(/extension_auth \(action: status\)/);
+    } finally {
+      global.fetch = origFetch;
+    }
+  });
+
   it("prefers EXTENSION_DEV_TOKEN over stored credentials (resolution order)", async () => {
     writeCredentials({
       version: 1,

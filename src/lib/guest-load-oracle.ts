@@ -17,6 +17,11 @@ const ENGINE_COMPANION_IDS = new Set<string>([
 
 const EXTENSION_URL = /^chrome-extension:\/\/([a-p]{32})\//i;
 
+export function isEngineCompanionUrl(url: string): boolean {
+  const match = EXTENSION_URL.exec(String(url ?? ""));
+  return match ? ENGINE_COMPANION_IDS.has(match[1].toLowerCase()) : false;
+}
+
 export type GuestTarget = { id: string; type: string; url: string };
 
 export type GuestLoadCheck = {
