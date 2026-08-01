@@ -93,7 +93,9 @@ export function parseArtifactRef(input: string): string | null {
     if (fromQuery && ARTIFACT_ID.test(fromQuery.trim())) return fromQuery.trim();
     const segments = parsed.pathname.split("/").filter(Boolean);
     for (let i = segments.length - 1; i >= 0; i -= 1) {
-      const segment = decodeURIComponent(segments[i]);
+      const raw = segments[i];
+      if (!raw) continue;
+      const segment = decodeURIComponent(raw);
       if (ARTIFACT_ID.test(segment)) return segment;
     }
   }
