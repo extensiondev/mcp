@@ -580,6 +580,38 @@ describe("extension_preview_web", () => {
       }
     });
 
+    it("returns and records a www revoke handle when the platform mints the apex host", async () => {
+      const dir = tmpDist(MANIFEST);
+      process.env.EXTENSION_DEV_TOKEN = "tok_test";
+      global.fetch = (async () => ({
+        ok: true,
+        status: 201,
+        text: async () =>
+          JSON.stringify({
+            artifactId: "gen_apex1",
+            previewUrl: "https://preview.extension.dev/?preview=gen_apex1",
+            zipUrl: "https://extension.dev/api/artifacts/gen_apex1/source.zip",
+            revokeUrl: "https://extension.dev/api/artifacts/gen_apex1",
+            expiresAt: "2026-08-23T00:00:00.000Z",
+          }),
+      })) as unknown as typeof fetch;
+      try {
+        const out = JSON.parse(
+          await handler({ projectPath: dir, build: false, distPath: dir, probe: false, share: true }),
+        );
+        expect(out.value.share.revokeUrl).toBe(
+          "https://www.extension.dev/api/artifacts/gen_apex1",
+        );
+        const recordPath = path.join(dir, ".extension.dev", "shared-previews.json");
+        const record = JSON.parse(fs.readFileSync(recordPath, "utf8"));
+        expect(record.shares[0].revokeUrl).toBe(
+          "https://www.extension.dev/api/artifacts/gen_apex1",
+        );
+      } finally {
+        fs.rmSync(dir, { recursive: true, force: true });
+      }
+    });
+
     it("writes the revoke handle to the project's share record and appends on the next share", async () => {
       const dir = tmpDist(MANIFEST);
       process.env.EXTENSION_DEV_TOKEN = "tok_test";

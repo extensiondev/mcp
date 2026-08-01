@@ -12,8 +12,19 @@ import { identityHeaders } from "./session-identity";
 
 type FetchImpl = typeof fetch;
 
-const ARTIFACT_ID = /^gen_[0-9a-f]{32}$/;
-const ARTIFACT_ID_ANYWHERE = /gen_[0-9a-f]{32}/;
+/* @invariant
+ * The id shape below is the mint's, not this file's. www mints gen_ plus
+ * crypto.randomBytes(32) as hex, 64 characters, and the only other width the
+ * platform ever issued is the retired 32-character derived form. A width the
+ * mint never produced is refused whole: the fallback extracts the maximal hex
+ * run and accepts it only if the entire run is a minted width, because a
+ * pattern that stops early turns a pasted 64-character id into its 32-character
+ * prefix, and that truncated id then revokes nothing while reporting the wrong
+ * causes. A ref that does not match is a named refusal, never a quiet
+ * substring.
+ */
+const ARTIFACT_ID = /^gen_(?:[0-9a-f]{32}|[0-9a-f]{64})$/;
+const ARTIFACT_ID_CANDIDATE = /gen_[0-9a-f]+/;
 
 export type ArtifactOwner =
   | { kind: "project"; workspace: string; project: string }
@@ -87,8 +98,29 @@ export function parseArtifactRef(input: string): string | null {
     }
   }
 
-  const loose = ARTIFACT_ID_ANYWHERE.exec(raw);
-  return loose ? loose[0] : null;
+  const loose = ARTIFACT_ID_CANDIDATE.exec(raw);
+  return loose && ARTIFACT_ID.test(loose[0]) ? loose[0] : null;
+}
+
+/* @invariant
+ * A revoke handle this package hands out must work with one plain DELETE.
+ * The platform builds revokeUrl from its configured public origin, which in
+ * production is the apex extension.dev, and the apex answers DELETE with a 307
+ * to www.extension.dev. A caller who does not follow redirects gets
+ * "Redirecting..." back and the share stays live, silently. Rewriting the apex
+ * to the www host here makes the handle honest; any other host, including
+ * localhost and self-hosted bases, passes through untouched.
+ */
+export function wwwRevokeUrl(value: string): string {
+  let parsed: URL;
+  try {
+    parsed = new URL(value);
+  } catch {
+    return value;
+  }
+  if (parsed.hostname.toLowerCase() !== "extension.dev") return value;
+  parsed.hostname = "www.extension.dev";
+  return parsed.toString();
 }
 
 function authError(name: string): ArtifactsOutcome<never> {
@@ -169,7 +201,11 @@ export async function listArtifacts(options: {
   }
 
   const artifacts = Array.isArray(data.artifacts)
-    ? (data.artifacts as ListedArtifact[])
+    ? (data.artifacts as ListedArtifact[]).map((artifact) =>
+        artifact && typeof artifact.revokeUrl === "string"
+          ? { ...artifact, revokeUrl: wwwRevokeUrl(artifact.revokeUrl) }
+          : artifact,
+      )
     : [];
   const num = (value: unknown, fallback: number): number =>
     typeof value === "number" && Number.isFinite(value) ? value : fallback;
