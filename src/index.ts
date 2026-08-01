@@ -54,7 +54,7 @@ import {
   normalizeArgAliases,
   validateToolInput,
 } from "./lib/validate-input";
-import { envelope } from "./lib/envelope";
+import { envelope, isEnvelope } from "./lib/envelope";
 import { installCarrierExitCleanup } from "./lib/carrier-exit";
 
 export interface ToolModule {
@@ -96,6 +96,35 @@ export const tools: ToolModule[] = [
   browsers,
   doctor,
 ];
+
+/* @invariant isError agrees with the envelope's own ok.
+ *
+ * Input-validation failures and thrown errors always carried isError:true,
+ * while a tool-level refusal (publish 404, auth 401) returned with the flag
+ * absent, so an agent branching on isError read a platform refusal as
+ * success. The envelope's ok field is the one verdict every tool already
+ * emits; the transport flag must repeat it, not contradict it. */
+export function toolResultFrame(result: string): {
+  content: Array<{ type: "text"; text: string }>;
+  isError?: boolean;
+} {
+  let refused = false;
+  try {
+    const parsed: unknown = JSON.parse(result);
+    refused = isEnvelope(parsed) && parsed.ok === false;
+  } catch {
+    refused = false;
+  }
+  return {
+    content: [
+      {
+        type: "text" as const,
+        text: result,
+      },
+    ],
+    ...(refused ? { isError: true } : {}),
+  };
+}
 
 const toolMap = new Map<string, ToolModule>();
 
@@ -171,14 +200,7 @@ export async function startServer(): Promise<void> {
 
     try {
       const result = await tool.handler(normalizedArgs);
-      return {
-        content: [
-          {
-            type: "text" as const,
-            text: result,
-          },
-        ],
-      };
+      return toolResultFrame(result);
     } catch (err) {
       return {
         content: [

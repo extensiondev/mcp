@@ -99,6 +99,7 @@ export async function handler(args: {
   });
 
   if (!result.ok) {
+    const projectMissing = /\(404\)/.test(result.error.message);
     return envelope({
       ok: false,
       command: "extension_publish",
@@ -108,6 +109,12 @@ export async function handler(args: {
         name: result.error.name,
         message: result.error.message,
       },
+      ...(projectMissing
+        ? {
+            hint:
+              "The token's project does not exist on the host this call targeted. Run extension_auth (action: status) to see which workspace/project the token is scoped to, create that project first (import a repo or a template at extension.dev/new), or run extension_auth (action: login) against a project that exists there.",
+          }
+        : {}),
     });
   }
 

@@ -305,7 +305,16 @@ export async function handler(args: {
       },
     });
   } catch {
+    /* @invariant The CLI's own report survives the parse failure.
+     *
+     * Doctor is what an agent runs when everything else looks wrong, so this
+     * is the last envelope allowed to swallow a diagnosis. When the engine
+     * exits nonzero its stdout usually carries the full check list and the
+     * real remediation in prose; discarding it and guessing "stale CLI"
+     * reported the one tool built to explain failures as itself unexplained.
+     * The stale-CLI guess is only offered when there is no output to show. */
     const message = stderr.trim() || `extension exited with code ${code}`;
+    const cliReport = toMcpSpeak(out).trim().slice(0, 4000);
     return envelope({
       ok: false,
       command: schema.name,
@@ -315,7 +324,13 @@ export async function handler(args: {
         name: "CliError",
         message: toMcpSpeak(message),
       },
-      hint: "extension doctor requires a recent extension CLI, the project's local install may predate it.",
+      value: {
+        browser,
+        ...(cliReport ? { cliReport } : {}),
+      },
+      hint: cliReport
+        ? "cliReport is the doctor's own output, unparsed: read the failing checks and remediations there."
+        : "extension doctor requires a recent extension CLI, the project's local install may predate it.",
     });
   }
 }

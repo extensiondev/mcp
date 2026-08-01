@@ -8,6 +8,7 @@
 
 import { CDPClient } from "../lib/cdp";
 import { envelope } from "../lib/envelope";
+import { isEngineCompanionUrl } from "../lib/guest-load-oracle";
 import { isChromiumFamily } from "../lib/browser-family";
 import { resolveCdpPort, CDP_PORT_MISSING_HINT } from "../lib/cdp-port";
 import { resolveSessionBrowser } from "../lib/session-browser";
@@ -98,11 +99,30 @@ export async function handler(args: {
 
     const isExtensionSurface = (u: string): boolean =>
       u.startsWith("chrome-extension://") || u.startsWith("moz-extension://");
+    /* @invariant With no url, the guest outranks the toolchain.
+     *
+     * The dev session's first page target is routinely the Extension.js
+     * welcome surface: the engine companion's own pages, or the newtab
+     * override it installs when the guest has none. Taking pageTargets[0]
+     * made this tool silently inspect that toolchain page and report "your
+     * extension renders fine" about the wrong document while the guest sat
+     * loaded one target over. Default selection therefore ranks the guest's
+     * own chrome-extension:// surfaces first, plain web pages second, and
+     * override or companion pages last, and anything still ambiguous is
+     * named in a warning instead of passed off as the extension. */
+    const defaultRank = (u: string): number => {
+      if (isEngineCompanionUrl(u)) return 3;
+      if (isOverridePage(u)) return 2;
+      if (isExtensionSurface(u)) return 0;
+      return 1;
+    };
     const target = args.url
       ? (pageTargets.find((t) => t.url.includes(args.url!)) ??
         pageTargets.find((t) => !isExtensionSurface(t.url)) ??
         pageTargets[0])
-      : pageTargets[0];
+      : pageTargets
+          .map((t, index) => ({ t, index, rank: defaultRank(t.url) }))
+          .sort((a, b) => a.rank - b.rank || a.index - b.index)[0].t;
 
     const browserWsUrl = await CDPClient.discoverBrowserWsUrl(cdpPort);
     await cdp.connect(browserWsUrl);
@@ -117,6 +137,21 @@ export async function handler(args: {
       await new Promise((r) => setTimeout(r, 500));
     }
 
+    let documentUrl = "";
+    let toolchainWarning: string | null = null;
+    if (!args.url && defaultRank(target.url) >= 2) {
+      try {
+        const href = await cdp.evaluate(sessionId, "location.href");
+        documentUrl = typeof href === "string" ? href : "";
+      } catch {
+        documentUrl = "";
+      }
+      toolchainWarning =
+        isEngineCompanionUrl(documentUrl) || isEngineCompanionUrl(target.url)
+          ? `Inspected ${target.url}, which is rendered by the Extension.js toolchain's own companion extension, not by this project. Pass url, or open one of the extension's surfaces first (extension_open), then inspect again.`
+          : `No url was given and only override pages were open, so this inspected ${target.url}. Unless this extension provides that override itself, this is the toolchain's welcome surface, not your extension: pass url or open a surface with extension_open.`;
+    }
+
     const result: Record<string, unknown> = {
       cdpPort,
       browser,
@@ -124,6 +159,7 @@ export async function handler(args: {
         id: target.id,
         url: target.url,
         title: target.title,
+        ...(documentUrl && documentUrl !== target.url ? { documentUrl } : {}),
       },
       targets: pageTargets.map((t) => ({
         id: t.id,
@@ -205,7 +241,10 @@ export async function handler(args: {
       command: schema.name,
       status: "inspected",
       value: result,
-      warnings: [typeof probeWarning === "string" ? probeWarning : null],
+      warnings: [
+        typeof probeWarning === "string" ? probeWarning : null,
+        toolchainWarning,
+      ],
     });
   } catch (err) {
     return envelope({

@@ -512,7 +512,35 @@ export async function handler(args: {
      * answered and the link cannot open. Callers branch on ok before they read
      * status, so an agent would relay a deep link as though it worked, and the
      * remedy it then offers is a dev server the caller may not even have.
+     *
+     * The share lane is the one exception, in the other direction. With
+     * share:true the thing the caller asked for is the uploaded link, and on
+     * any machine outside the monorepo the local dev host is expected to be
+     * absent; failing the whole envelope over that leg reported a working
+     * share as a failure. When the share succeeded, the local lane's absence
+     * is a warning on a success, not a verdict.
      */
+    const shared = result.share as { ok?: unknown } | undefined;
+    if (args.share && shared?.ok === true) {
+      return envelope({
+        ok: true,
+        command: COMMAND,
+        status: "shared",
+        value: {
+          ...result,
+          hostReachable: false,
+          previewLoadable: false,
+          probe: {
+            error: err instanceof Error ? err.message : String(err),
+          },
+        },
+        hint: "share.previewUrl is live and needs no local server. The deepLink lane is separate: it only resolves against a preview.extension.dev dev server on this machine, and none answered.",
+        warnings: [
+          ...previewWarnings,
+          `The share link works; only the local ${SURFACE.label} dev lane at ${hostBase} is unreachable, which is expected outside the extension.dev monorepo.`,
+        ],
+      });
+    }
     return envelope({
       ok: false,
       command: COMMAND,

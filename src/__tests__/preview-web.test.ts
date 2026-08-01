@@ -580,6 +580,56 @@ describe("extension_preview_web", () => {
       }
     });
 
+    it("keeps a successful share ok when the local dev lane is unreachable", async () => {
+      const dir = tmpDist(MANIFEST);
+      process.env.EXTENSION_DEV_TOKEN = "tok_test";
+      global.fetch = (async (url: string, init: any) => {
+        if (init?.method === "POST") {
+          return {
+            ok: true,
+            status: 201,
+            text: async () =>
+              JSON.stringify({
+                artifactId: "gen_abc123",
+                previewUrl: "https://preview.extension.dev/?preview=gen_abc123",
+                zipUrl:
+                  "https://www.extension.dev/api/artifacts/gen_abc123/source.zip",
+                revokeUrl: "https://www.extension.dev/api/artifacts/gen_abc123",
+                expiresAt: "2026-08-23T00:00:00.000Z",
+              }),
+          };
+        }
+        if (String(url).includes("/source.zip")) {
+          return {
+            ok: true,
+            status: 200,
+            headers: {
+              get: (k: string) =>
+                k.toLowerCase() === "access-control-allow-origin" ? "*" : null,
+            },
+          };
+        }
+        throw new Error("fetch failed");
+      }) as unknown as typeof fetch;
+      try {
+        const out = JSON.parse(
+          await handler({ projectPath: dir, build: false, distPath: dir, share: true, probe: true }),
+        );
+        expect(out.ok).toBe(true);
+        expect(out.status).toBe("shared");
+        expect(out.value.share.ok).toBe(true);
+        expect(out.value.share.previewUrl).toBe(
+          "https://preview.extension.dev/?preview=gen_abc123",
+        );
+        expect(out.value.hostReachable).toBe(false);
+        expect(out.value.previewLoadable).toBe(false);
+        expect(out.warnings.join(" ")).toMatch(/share link works/);
+        expect(out.hint).toMatch(/needs no local server/);
+      } finally {
+        fs.rmSync(dir, { recursive: true, force: true });
+      }
+    });
+
     it("returns and records a www revoke handle when the platform mints the apex host", async () => {
       const dir = tmpDist(MANIFEST);
       process.env.EXTENSION_DEV_TOKEN = "tok_test";
