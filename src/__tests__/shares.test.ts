@@ -16,6 +16,7 @@ import { recordSharedPreview, sharedPreviewsPath } from "../lib/share-record";
 const LOCAL_ID = "gen_00000000000000000000000000000001";
 const REMOTE_ID = "gen_00000000000000000000000000000002";
 const GONE_ID = "gen_00000000000000000000000000000003";
+const FULL_ID = `gen_${"0123456789abcdef".repeat(4)}`;
 
 function tmpProject(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), "shares-tool-"));
@@ -84,6 +85,111 @@ describe("extension_shares", () => {
     );
     expect(parseArtifactRef("not-a-share")).toBeNull();
     expect(parseArtifactRef("")).toBeNull();
+  });
+
+  it("round-trips a full 64-hex id unmangled, bare and inside every url", () => {
+    expect(FULL_ID).toHaveLength(68);
+    expect(parseArtifactRef(FULL_ID)).toBe(FULL_ID);
+    expect(
+      parseArtifactRef(`https://preview.extension.dev/?preview=${FULL_ID}`),
+    ).toBe(FULL_ID);
+    expect(
+      parseArtifactRef(`https://www.extension.dev/api/artifacts/${FULL_ID}`),
+    ).toBe(FULL_ID);
+    expect(
+      parseArtifactRef(
+        `https://www.extension.dev/api/artifacts/${FULL_ID}/source.zip`,
+      ),
+    ).toBe(FULL_ID);
+    expect(parseArtifactRef(`revoke ${FULL_ID} please`)).toBe(FULL_ID);
+  });
+
+  it("refuses a width the mint never issued instead of taking a substring", () => {
+    const hex63 = FULL_ID.slice(0, -1);
+    const hex65 = `${FULL_ID}0`;
+    const hex40 = `gen_${"a".repeat(40)}`;
+    expect(parseArtifactRef(hex63)).toBeNull();
+    expect(parseArtifactRef(hex65)).toBeNull();
+    expect(parseArtifactRef(hex40)).toBeNull();
+    expect(
+      parseArtifactRef(`https://preview.extension.dev/?preview=${hex65}`),
+    ).toBeNull();
+  });
+
+  it("sends the whole 64-hex id to the platform when revoking", async () => {
+    let requested = "";
+    global.fetch = (async (url: unknown) => {
+      requested = String(url);
+      return {
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify({ artifactId: FULL_ID, revoked: true }),
+      };
+    }) as unknown as typeof fetch;
+
+    const out = JSON.parse(
+      await handler({
+        action: "revoke",
+        url: `https://preview.extension.dev/?preview=${FULL_ID}`,
+      }),
+    );
+    expect(out.ok).toBe(true);
+    expect(out.status).toBe("revoked");
+    expect(out.value.artifactId).toBe(FULL_ID);
+    expect(requested).toContain(`/api/artifacts/${FULL_ID}`);
+  });
+
+  it("calls a malformed ref malformed instead of guessing at causes", async () => {
+    const out = JSON.parse(
+      await handler({ action: "revoke", artifactId: FULL_ID.slice(0, -1) }),
+    );
+    expect(out.ok).toBe(false);
+    expect(out.status).toBe("bad-request");
+    expect(out.error.name).toBe("SharesInputError");
+    expect(out.error.message).toContain("malformed");
+    expect(out.error.message).toContain("64");
+    expect(out.error.message).not.toContain("already revoked");
+    expect(out.error.message).not.toContain("different project");
+  });
+
+  it("hands out the www revoke handle even when the platform sends the apex", async () => {
+    global.fetch = listingFetch({
+      artifacts: [
+        {
+          artifactId: FULL_ID,
+          live: true,
+          revokeUrl: `https://extension.dev/api/artifacts/${FULL_ID}`,
+        },
+      ],
+      count: 1,
+      matched: 1,
+      limit: 100,
+      truncated: false,
+      scanned: 1,
+    });
+
+    const out = JSON.parse(await handler({}));
+    expect(out.value.shares[0].revokeUrl).toBe(
+      `https://www.extension.dev/api/artifacts/${FULL_ID}`,
+    );
+  });
+
+  it("rewrites an apex revoke handle in the local record to the www host", async () => {
+    delete process.env.EXTENSION_DEV_TOKEN;
+    const dir = tmpProject();
+    recordSharedPreview(dir, {
+      sharedAt: "2026-07-20T10:00:00.000Z",
+      previewUrl: `https://preview.extension.dev/?preview=${FULL_ID}`,
+      artifactId: FULL_ID,
+      revokeUrl: `https://extension.dev/api/artifacts/${FULL_ID}`,
+      browser: "chrome",
+      distDir: path.join(dir, "dist", "chrome"),
+    });
+
+    const out = JSON.parse(await handler({ projectPath: dir }));
+    expect(out.value.localOnly[0].revokeUrl).toBe(
+      `https://www.extension.dev/api/artifacts/${FULL_ID}`,
+    );
   });
 
   it("marks a server share the project never recorded as remoteOnly", async () => {

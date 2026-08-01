@@ -11,6 +11,7 @@ import {
   listArtifacts,
   parseArtifactRef,
   revokeArtifact,
+  wwwRevokeUrl,
   type ArtifactOwner,
   type ArtifactPublisher,
   type ListedArtifact,
@@ -235,7 +236,12 @@ async function listShares(args: {
           ...(isAuth ? { loginHint: LOGIN_HINT } : {}),
         },
         shares: [],
-        localOnly: (local?.entries ?? []).map((entry) => ({ ...entry })),
+        localOnly: (local?.entries ?? []).map((entry) => ({
+          ...entry,
+          ...(entry.revokeUrl
+            ? { revokeUrl: wwwRevokeUrl(entry.revokeUrl) }
+            : {}),
+        })),
         localRecord,
       },
       warnings: [
@@ -284,6 +290,7 @@ async function listShares(args: {
     .filter((entry) => !seen.has(entry.artifactId))
     .map((entry) => ({
       ...entry,
+      ...(entry.revokeUrl ? { revokeUrl: wwwRevokeUrl(entry.revokeUrl) } : {}),
       status: localOnlyStatus(entry, completeness, liveFiltered, now),
     }));
 
@@ -348,18 +355,22 @@ async function revokeShare(args: {
   projectPath?: string;
   api?: string;
 }): Promise<string> {
-  const ref = parseArtifactRef(args.artifactId || args.url || "");
+  const supplied = String(args.artifactId || args.url || "").trim();
+  const ref = parseArtifactRef(supplied);
   if (!ref) {
     return envelope({
       ok: false,
       command: "extension_shares",
       status: "bad-request",
-      value: { action: "revoke" },
+      value: { action: "revoke", ...(supplied ? { ref: supplied } : {}) },
       error: {
         code: "E_BAD_REQUEST",
         name: "SharesInputError",
-        message:
-          "Nothing to revoke. Pass artifactId (a gen_... id) or url (the previewUrl, zipUrl, viewUrl, or revokeUrl of the share). Run action:\"list\" to see both.",
+        message: supplied
+          ? `The reference is malformed and nothing was sent to the platform: no share id could be read out of ${JSON.stringify(
+              supplied.length > 200 ? `${supplied.slice(0, 200)}...` : supplied,
+            )}. A share id is gen_ followed by exactly 64 lowercase hex characters (32 on shares minted before 2026-07-30), and a url revokes only when it contains one whole. Check the ref for a copy-paste cut, or run action:"list" and copy the exact artifactId.`
+          : 'Nothing to revoke. Pass artifactId (a gen_... id) or url (the previewUrl, zipUrl, viewUrl, or revokeUrl of the share). Run action:"list" to see both.',
       },
     });
   }

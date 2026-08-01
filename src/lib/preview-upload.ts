@@ -12,6 +12,7 @@ import path from "node:path";
 import { resolveToken } from "./publish";
 import { resolveApiBase, safeApiBase } from "./login-flow";
 import { identityHeaders } from "./session-identity";
+import { wwwRevokeUrl } from "./artifacts-api";
 
 type FetchImpl = typeof fetch;
 
@@ -278,7 +279,10 @@ export async function uploadPreview(options: {
       artifactId,
       previewUrl,
       zipUrl: typeof data.zipUrl === "string" ? data.zipUrl : undefined,
-      revokeUrl: typeof data.revokeUrl === "string" ? data.revokeUrl : undefined,
+      revokeUrl:
+        typeof data.revokeUrl === "string"
+          ? wwwRevokeUrl(data.revokeUrl)
+          : undefined,
       expiresAt: typeof data.expiresAt === "string" ? data.expiresAt : undefined,
     },
   };
