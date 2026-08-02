@@ -141,12 +141,17 @@ jobs:
       - name: Test
         run: pnpm test
 
+      # A substring grep over the bundle greenwashes: the package pins other
+      # tools at fixed versions, so any of those matching $VERSION would pass
+      # the gate over a stale dist. The bundle exports the manifest version it
+      # inlined at build time; ask it directly.
       - name: Assert the built server reports the release version
         env:
           VERSION: ${{ steps.validate.outputs.version }}
         run: |
-          if ! grep -qF "\"$VERSION\"" dist/module.js && ! grep -qF "$VERSION" dist/module.js; then
-            echo "dist/module.js does not contain $VERSION; the bundle was built from a stale tree" >&2
+          BUILT="$(node -e 'import("./dist/module.js").then((m) => process.stdout.write(String(m.version)))')"
+          if [ "$BUILT" != "$VERSION" ]; then
+            echo "dist/module.js reports version ${BUILT:-<none>}, not $VERSION; the bundle was built from a stale tree" >&2
             exit 1
           fi
 
