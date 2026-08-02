@@ -11,6 +11,7 @@ import fs from "node:fs";
 import path from "node:path";
 import * as build from "./build";
 import { navigateToUrl } from "./open";
+import { ZIP_URL_REDIRECT_NOTE } from "../lib/artifacts-api";
 import { uploadPreview } from "../lib/preview-upload";
 import { recordSharedPreview } from "../lib/share-record";
 import { probeShareCors } from "../lib/share-cors-probe";
@@ -236,6 +237,7 @@ async function buildShare(
         ? `it was also written to ${record.path} (record.path), which lists every share from this project.`
         : `keep it: ${record.note}`) +
       " To find this link again later, or to pull it back once it has left this conversation, run extension_shares: it lists every link this token has shared with its live or dead state, and revokes one by artifactId or by pasting any of its URLs." +
+      (result.data.zipUrl ? ` ${ZIP_URL_REDIRECT_NOTE}` : "") +
       (record.warning ? ` ${record.warning}` : ""),
   };
 }

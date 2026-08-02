@@ -38,6 +38,19 @@ export interface ArtifactPublisher {
   tokenId: string | null;
 }
 
+/* @invariant Any zipUrl this package hands out travels with this sentence.
+ *
+ * The platform does not serve the archive from that address: it answers 302
+ * and puts a short-lived presigned storage URL in Location, so a caller that
+ * does not follow redirects reads an empty body and concludes the share is
+ * empty when it is whole. This package's own read already follows the hops
+ * (share-cors-probe walks them by hand), but the URL is also copied out to
+ * humans and to agents that will curl it, and to them the 302 is invisible
+ * until it costs them the download. Naming the redirect is the only part of
+ * this that belongs here: the server's arm is www's to change, not ours. */
+export const ZIP_URL_REDIRECT_NOTE =
+  "zipUrl does not serve the archive itself: it answers 302 with a short-lived presigned storage URL in Location. Follow redirects when you fetch it (curl -L; fetch and most HTTP clients already do), because a client that does not follow them reads 0 bytes and reports the share as empty when it is not.";
+
 export interface ListedArtifact {
   artifactId: string;
   kind?: string;
