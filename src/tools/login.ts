@@ -117,7 +117,7 @@ export async function loginToProject(args: {
   if (!/^[^/]+\/[^/]+$/.test(project)) {
     return fail(
       "BadRequest",
-      "project must be in the form '<workspace>/<project>'.",
+      "project must be in the form '<workspace>/<project>'. The slug pair is the console address bar: an existing project's page is console.extension.dev/<workspace>/<project>. If the project does not exist yet, create it at extension.dev/new, then log in with the slugs the console shows.",
       "bad-request",
       "E_BAD_REQUEST",
     );

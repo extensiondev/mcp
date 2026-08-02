@@ -26,7 +26,7 @@ export const schema = {
       project: {
         type: "string",
         description:
-          "login: target project as '<workspace>/<project>'; the token is scoped to it.",
+          "login: target project as '<workspace>/<project>'; the token is scoped to it. The slug pair is the console address bar: an existing project's page is console.extension.dev/<workspace>/<project>. Create one at extension.dev/new if none exists yet.",
       },
       deviceCode: {
         type: "string",
