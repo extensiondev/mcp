@@ -87,7 +87,7 @@ function sightedContractBrowser(projectPath: string): string | null {
 export const schema = {
   name: "extension_doctor",
   description:
-    "Diagnose a dev session end to end: ready contract, dev-server process, control-port agreement, control channel, eval token, executor, browser liveness. This returns one {check, status, detail, remediation?} per leg, in dependency order. Read a 'skip' as blocked, not as a pass: it names the check that blocked it. Run this first when any act tool (storage, reload, eval, open) errors unexpectedly. Call it with no projectPath for a pre-flight environment check (node, the Extension.js CLI, the template cache) before any project exists.",
+    "Diagnose a dev session end to end: ready contract, dev-server process, control-port agreement, control channel, eval token, executor, browser liveness. This returns one {check, status, detail, remediation?} per leg, in dependency order. Read a 'skip' as blocked, not as a pass: it names the check that blocked it. A session started without allowControl comes back ok:true with status 'read-only', not as an error: its control channel is off by choice. Run this first when any act tool (storage, reload, eval, open) errors unexpectedly. Call it with no projectPath for a pre-flight environment check (node, the Extension.js CLI, the template cache) before any project exists.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -216,10 +216,44 @@ function projectEngineVersion(projectPath: string): string | null {
   }
 }
 
+/* @invariant Both engine shapes are read, because the shipped one is the
+   envelope. `extension doctor --output json` on the pinned CLI prints a
+   schema-1 envelope whose `value` IS the check array, not an object carrying
+   `checks`. Reading only `value.checks` found undefined there, threw "not a
+   check array", and dropped the whole diagnosis into the E_CLI catch below:
+   the walk saw the generic "extension exited with code 1" over a report that
+   had every answer in it. A bare array is still accepted for the engines that
+   print one. */
 function capabilityProbeChecks(parsed: unknown): unknown {
-  return isEnvelope(parsed)
-    ? (parsed.value as { checks?: unknown } | null)?.checks
-    : parsed;
+  if (!isEnvelope(parsed)) return parsed;
+  const value = parsed.value;
+  if (Array.isArray(value)) return value;
+  return (value as { checks?: unknown } | null)?.checks;
+}
+
+interface DoctorCheck {
+  check: string;
+  status: string;
+  detail?: string;
+  remediation?: string;
+}
+
+/* @invariant Only the engine's definitive 4003 wording counts as a choice.
+   Its 1006 leg asks "Is the session started with --allow-control?" as a guess
+   over a channel that may equally have died, so matching the flag name alone
+   would launder a dead session into a healthy verdict. */
+const CONTROL_OFF_BY_CHOICE = /\bwas not started with --allow-control\b/i;
+
+function controlOffByChoiceLeg(checks: DoctorCheck[]): DoctorCheck | null {
+  return (
+    checks.find(
+      (leg) =>
+        leg.check === "control-channel" &&
+        leg.status === "fail" &&
+        typeof leg.detail === "string" &&
+        CONTROL_OFF_BY_CHOICE.test(leg.detail),
+    ) ?? null
+  );
 }
 
 export async function handler(args: {
@@ -266,8 +300,10 @@ export async function handler(args: {
   const out = stdout.trim();
   try {
     const parsed = JSON.parse(out);
-    const checks = capabilityProbeChecks(parsed);
-    if (!Array.isArray(checks)) throw new Error("not a check array");
+    const probed = capabilityProbeChecks(parsed);
+    if (!Array.isArray(probed)) throw new Error("not a check array");
+    const checks = probed as DoctorCheck[];
+    const readOnlyLeg = controlOffByChoiceLeg(checks);
     for (const check of checks) {
       if (typeof check.detail === "string") check.detail = toMcpSpeak(check.detail);
       if (typeof check.remediation === "string") {
@@ -332,15 +368,39 @@ export async function handler(args: {
           : {}),
       });
     }
+    /* @invariant Read-only BY CHOICE is a condition, not a failure.
+     *
+     * A session started without allowControl refuses the control channel
+     * because it was asked to, and the engine has no way to say so: it exits
+     * 1 over a single failing leg, which made ok:false and so isError:true on
+     * the wire, and an agent branching on isError read a perfectly good
+     * read-only session as broken. The narrowing is deliberate. Only the
+     * definitive 4003 leg qualifies, and only when it is the ONLY failure, so
+     * a build error, a dead browser or a runtime-error log still refuses. */
+    const failures = checks.filter((leg) => leg.status === "fail");
+    const readOnly =
+      readOnlyLeg !== null && failures.length === 1 && failures[0] === readOnlyLeg;
+    if (readOnly && readOnlyLeg) {
+      readOnlyLeg.status = "warn";
+      readOnlyLeg.detail = `read-only by choice: ${readOnlyLeg.detail}`;
+      readOnlyLeg.remediation =
+        "Nothing failed. To unlock the control verbs, call extension_dev again with allowControl: true (or allowEval: true) plus replace: true, which stops this session first; a plain second call is refused so the session does not fork.";
+    }
     return envelope({
-      ok: healthy,
+      ok: healthy || readOnly,
       command: schema.name,
-      status: healthy ? "healthy" : "unhealthy",
+      status: healthy ? "healthy" : readOnly ? "read-only" : "unhealthy",
       value: {
         browser,
         ...(engineVersion ? { engineVersion } : {}),
+        ...(readOnly ? { readOnly: true } : {}),
         checks,
       },
+      ...(readOnly
+        ? {
+            hint: "This session is read-only because it was started without allowControl, not because anything is wrong: logs, inspect, wait and doctor all work, while storage, reload, open, dom_snapshot and eval stay locked.",
+          }
+        : {}),
     });
   } catch {
     /* @invariant The CLI's own report survives the parse failure.
