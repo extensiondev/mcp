@@ -1,0 +1,38 @@
+name: Publish MCP registry listing
+
+# The repair lane. Releases publish the listing themselves, so this exists for
+# the two cases a release cannot cover: a listing that drifted before the
+# release lane learned to publish it, and a publish that failed after the npm
+# tarball was already out, where re-running the release is not an option.
+#
+# It republishes the server.json currently on the default branch. The script it
+# calls refuses to announce a version npm is not serving, so there is no way to
+# use this to push a listing ahead of the package.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: publish-mcp-registry
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Publish the listing to the MCP registry
+        run: ./scripts/publish-mcp-registry.sh

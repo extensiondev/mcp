@@ -200,3 +200,20 @@ jobs:
             --verify-tag \
             --title "v$VERSION" \
             --notes-file "${{ steps.notes.outputs.file }}"
+
+      # The MCP registry entry is a third surface this release moves, alongside
+      # npm and the plugin marketplace, and it is the one an agent reads before
+      # it installs anything. It sat at 5.1.2 announcing "31 tools, 11 browsers"
+      # for twelve days after 10.3.0 shipped, because publishing it had never
+      # been anything but a hand step somebody had to remember. It runs here, in
+      # the same job that published the tarball it describes.
+      #
+      # A tag-triggered workflow would not do: this job pushes the tag with the
+      # default GITHUB_TOKEN, and GitHub does not fire workflows on refs pushed
+      # by that token, so the publish would silently never run.
+      #
+      # login github-oidc needs no secret. The registry grants
+      # io.github.<owner>/* off the OIDC token's repository_owner claim, and
+      # this repository is owned by extensiondev.
+      - name: Publish the listing to the MCP registry
+        run: ./scripts/publish-mcp-registry.sh

@@ -94,6 +94,65 @@ jobs:
           EXTENSION_MCP_CLI_VERSION: ${{ matrix.version }}
         run: pnpm test
 
+  # The MCP registry listing is the one surface that can go stale without any
+  # commit going wrong: nothing in this repository changes when it drifts. It
+  # spent twelve days announcing 5.1.2 and "31 tools, 11 browsers" while npm
+  # served 10.3.0 with 28, and the only reason anyone found out was a walk of
+  # the docs page that cites it by name. The release lane publishes it now, but
+  # a lane that publishes is not a lane that is watched, so this reads the two
+  # public surfaces against each other and lets the nightly alert carry the
+  # news. It compares the registry to npm rather than to the working tree, so a
+  # bumped-but-unreleased version never reds it.
+  registry-listing:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: The registry listing matches what npm serves
+        run: |
+          NAME="$(node -p 'require("./package.json").name')"
+          MCP_NAME="$(node -p 'require("./package.json").mcpName')"
+          NPM_LATEST="$(npm view "$NAME" version --registry https://registry.npmjs.org/)"
+          curl -fsSL "https://registry.modelcontextprotocol.io/v0/servers?search=$MCP_NAME" > listing.json
+          node -e '
+            const fs = require("node:fs");
+            const [name, npmLatest] = process.argv.slice(1);
+            const meta = "io.modelcontextprotocol.registry/official";
+            const body = JSON.parse(fs.readFileSync("listing.json", "utf8"));
+            const latest = (body.servers || []).find(
+              (entry) => entry.server?.name === name && entry._meta?.[meta]?.isLatest,
+            );
+            if (!latest) {
+              console.error(`${name} has no entry flagged isLatest in the registry`);
+              process.exit(1);
+            }
+            const problems = [];
+            if (latest.server.version !== npmLatest) {
+              problems.push(
+                `the registry serves ${latest.server.version} as latest while npm serves ${npmLatest}`,
+              );
+            }
+            const pinned = (latest.server.packages || []).filter((p) => p.version !== npmLatest);
+            for (const p of pinned) {
+              problems.push(`the listing points install at ${p.identifier}@${p.version}`);
+            }
+            if (problems.length) {
+              console.error(
+                [
+                  `The MCP registry listing for ${name} has drifted from npm.`,
+                  ...problems.map((p) => `- ${p}`),
+                  "",
+                  "Run the Publish MCP registry listing workflow to republish server.json from main.",
+                ].join("\n"),
+              );
+              process.exit(1);
+            }
+            console.log(`${name} is listed at ${npmLatest}: ${latest.server.description}`);
+          ' "$MCP_NAME" "$NPM_LATEST"
+
   # Opens one tracking issue when the deep tier fails, comments on it while it
   # stays failing, and closes it on the first clean run. Ported from the
   # monorepo's deep-tier-alert with two changes this repository needs.
@@ -116,7 +175,7 @@ jobs:
   # main to watch it close.
   nightly-alert:
     if: always() && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
-    needs: [engines, verify]
+    needs: [engines, verify, registry-listing]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
