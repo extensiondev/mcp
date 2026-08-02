@@ -82,6 +82,7 @@ export interface ProcessInfo {
   projectPath: string;
   command: "dev" | "start" | "preview";
   noBrowser?: boolean;
+  profileReused?: boolean;
 }
 
 export type BrowserType =

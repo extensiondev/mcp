@@ -8,6 +8,7 @@
 
 import { LAUNCH_BROWSER, PROJECT_PATH } from "../lib/common-schema";
 import { pollBootVerdict } from "../lib/boot-verdict";
+import { profileCarriesTabsOver } from "../lib/profile-carryover";
 import { removeCarrier } from "../lib/carrier";
 import { envelope } from "../lib/envelope";
 import { spawnExtensionCli, spawnFailedEnvelope } from "../lib/exec";
@@ -87,6 +88,11 @@ export async function handler(
    */
   const stale = removeCarrier(args.projectPath);
 
+  const profileReused = profileCarriesTabsOver(
+    args.projectPath,
+    browser,
+    args.profile,
+  );
   const spawnedAt = Date.now();
   const spawned = spawnExtensionCli(cliArgs, { projectDir: args.projectPath });
   const { child, logPath } = spawned;
@@ -100,6 +106,7 @@ export async function handler(
     browser,
     projectPath: args.projectPath,
     command,
+    profileReused,
   });
   child.on("exit", () => {
     removeSession(args.projectPath, browser, pid);

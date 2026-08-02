@@ -16,6 +16,7 @@ import {
   profileRemediation,
 } from "../lib/session-paths";
 import { pollBootVerdict } from "../lib/boot-verdict";
+import { profileCarriesTabsOver } from "../lib/profile-carryover";
 import { envelope } from "../lib/envelope";
 import { spawnExtensionCli, spawnFailedEnvelope } from "../lib/exec";
 import {
@@ -33,6 +34,9 @@ import {
   launchFlagArgs,
   type LaunchFlagArgs,
 } from "../lib/launch-flags";
+
+const REUSED_PROFILE_NOTE =
+  "This session reuses a browser profile that already held a previous session's state, so the browser may restore that session's tabs alongside the extension. extension_inspect with no target ranks whatever is open and can land on one of them; it flags this session as profileReused for that reason. Pass url, or open the surface you mean with extension_open, before reading anything.";
 
 export const schema = {
   name: "extension_dev",
@@ -137,6 +141,11 @@ export async function handler(
     : null;
 
   const allowControl = Boolean(args.allowControl || args.allowEval);
+  const profileReused = profileCarriesTabsOver(
+    args.projectPath,
+    browser,
+    args.profile,
+  );
   const cliArgs = ["dev", args.projectPath, "--browser", browser];
   if (args.port !== undefined) cliArgs.push("--port", String(args.port));
   if (args.noBrowser) cliArgs.push("--no-browser");
@@ -160,6 +169,7 @@ export async function handler(
     projectPath: args.projectPath,
     command: "dev",
     noBrowser: Boolean(args.noBrowser),
+    profileReused,
   });
   /* @invariant
    * The carrier leaves when the session does, however the session ends.
@@ -325,6 +335,7 @@ export async function handler(
       projectPath: args.projectPath,
       command: "dev",
       noBrowser: Boolean(args.noBrowser),
+      profileReused,
     });
   }
   const portReport =
@@ -362,7 +373,11 @@ export async function handler(
       capabilities,
       logPath,
     },
-    warnings: [portNote, ...boot.warnings],
+    warnings: [
+      portNote,
+      profileReused && !args.noBrowser ? REUSED_PROFILE_NOTE : null,
+      ...boot.warnings,
+    ],
     hint: args.noBrowser
       ? "Build-only session (noBrowser: true): no browser will launch, so no runtime will ever attach. extension_wait returns as soon as the first compile lands (compiled: true, browserAttached: false) instead of waiting out its budget; do not wait for a browser. The control verbs (storage/reload/open/dom_snapshot/eval) need a live browser and will not work against this session. When you are done, call extension_stop to shut down the dev server."
       : "Use extension_wait to check when the extension is fully loaded, then extension_inspect to inspect the live state. " +

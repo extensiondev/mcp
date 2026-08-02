@@ -15,6 +15,10 @@ import {
   EXTENSION_ROOT_META_SCRIPT,
   domSnapshotScript,
 } from "../lib/cdp-page-scripts";
+import {
+  restoredTabWarning,
+  sessionProfileReused,
+} from "../lib/profile-carryover";
 import { rdpCollectConsoleMessages } from "../lib/rdp";
 import { summarizeConsoleMessages } from "../lib/console-summary";
 import { schema as inspectSchema } from "./inspect-schema";
@@ -354,6 +358,11 @@ export async function inspectViaBridge(
   const urlFilter =
     args.url ??
     (typeof value.meta?.url === "string" ? value.meta.url : undefined);
+
+  if (!args.url && sessionProfileReused(args.projectPath, browser)) {
+    result.profileReused = true;
+    notes.push(restoredTabWarning(urlFilter ?? "the tab this read landed on"));
+  }
 
   if (include.has("console")) {
     await collectGeckoConsole(args, browser, urlFilter, result, notes);
