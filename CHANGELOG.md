@@ -1,5 +1,45 @@
 # Changelog
 
+## 10.3.0
+
+Four fixes for places where a tool answered confidently about something it
+had not actually checked: a login refusal that never said where the slugs
+come from, a doctor report labelled with a browser that had no session, a
+preview probe that certified whatever was listening on the port, and a
+release gate that passed on a stale bundle.
+
+- `extension_auth login` refused a malformed `project` without saying
+  where the two slugs come from. Both the refusal and the input schema now
+  name the console address bar as the source: an existing project's page is
+  `console.extension.dev/<workspace>/<project>`, and a project that does
+  not exist yet is created at extension.dev/new first.
+- `extension_doctor` diagnoses the session that exists, not a hardcoded
+  default. The shared session resolver only counts contracts marked
+  "ready", which is exactly wrong for the tool you reach for when a session
+  failed: doctor fell back to chrome, labelled the report with it, read the
+  absent contract, and returned a healthy verdict over a session that had
+  errored. When there is no ready session, the browser with a contract on
+  disk wins, newest first and whatever its status.
+- `extension_preview_web` certifies the probe against the build the call
+  just minted instead of against the port. Anything can be listening on the
+  local preview port, and the old probe read `hostReachable` and
+  `previewLoadable` as true off whatever JSON came back, then echoed that
+  server's `identifier`, name and version into the envelope unmarked, which
+  made any local server a text channel into the agent's context. The name
+  and version must now match the `dist` manifest read off disk, and the
+  identifier is echoed only when it matches the derivation the real
+  middleware uses. A mismatch returns the status
+  `host-serving-different-artifact` with `previewLoadable: false`, and
+  anything the host claimed that could not be confirmed locally travels
+  clipped under `probe.hostReported`, named as the host's claim.
+- The release gate asserts the version the built bundle exports rather than
+  grepping the bundle for the version string. The grep greenwashed: the
+  bundle carries the pinned engine version and fifty-two `"version":"1.0.0"`
+  strings from the template corpus, so a release cut at any of those
+  numbers passed the gate over a stale `dist`. `dist/module.js` now exports
+  the manifest version it inlined at build time, and the gate reads it back
+  and compares.
+
 ## 10.2.0
 
 A production walk of the full share-and-publish loop, then a fix for every
