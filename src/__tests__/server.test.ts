@@ -92,6 +92,22 @@ describe("manifest-validate handler", () => {
     const parsed = JSON.parse(result);
     expect(parsed.value.valid).toBe(false);
     expect(parsed.value.errors.length).toBeGreaterThan(0);
+    expect(parsed.ok).toBe(false);
+    expect(parsed.status).toBe("manifest-unreadable");
+    expect(parsed.error.code).toBe("E_BAD_MANIFEST");
+  });
+
+  it("names an unparseable manifest E_BAD_MANIFEST, not a validation failure", async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "extjs-manifest-"));
+    const file = path.join(dir, "manifest.json");
+    fs.writeFileSync(file, "{ not json");
+    const parsed = JSON.parse(
+      await manifestValidate.handler({ manifestPath: file }),
+    );
+    expect(parsed.ok).toBe(false);
+    expect(parsed.status).toBe("manifest-unreadable");
+    expect(parsed.error.code).toBe("E_BAD_MANIFEST");
+    expect(parsed.value.valid).toBe(false);
   });
 
   it("recognizes chrome:/edge: prefixes, not just chromium:", async () => {
