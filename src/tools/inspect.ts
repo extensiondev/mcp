@@ -11,6 +11,10 @@ import { envelope } from "../lib/envelope";
 import { isEngineCompanionUrl } from "../lib/guest-load-oracle";
 import { isChromiumFamily } from "../lib/browser-family";
 import { resolveCdpPort, CDP_PORT_MISSING_HINT } from "../lib/cdp-port";
+import {
+  restoredTabWarning,
+  sessionProfileReused,
+} from "../lib/profile-carryover";
 import { resolveSessionBrowser } from "../lib/session-browser";
 import { inspectViaBridge } from "./inspect-gecko";
 import { schema } from "./inspect-schema";
@@ -152,9 +156,24 @@ export async function handler(args: {
           : `No url was given and only override pages were open, so this inspected ${target.url}. Unless this extension provides that override itself, this is the toolchain's welcome surface, not your extension: pass url or open a surface with extension_open.`;
     }
 
+    /* @invariant A no-target read never passes off a survivor as this run's.
+     *
+     * Tab state rides the browser profile, so a session on a profile that
+     * already held an earlier run comes up with that run's tabs restored, and
+     * the ranking above happily picks one: it sorts by what a url LOOKS like,
+     * and a stale chrome-extension:// surface or web page looks exactly like a
+     * fresh one. The walk saw a second extension_dev restore the first
+     * session's tab and a no-target inspect report on it with nothing said.
+     * The rank >= 2 toolchain warning below cannot cover this, because the
+     * tabs that survive are precisely the rank 0 and rank 1 ones it stays
+     * quiet about. */
+    const profileReused =
+      !args.url && sessionProfileReused(args.projectPath, browser);
+
     const result: Record<string, unknown> = {
       cdpPort,
       browser,
+      ...(profileReused ? { profileReused: true } : {}),
       target: {
         id: target.id,
         url: target.url,
@@ -244,6 +263,7 @@ export async function handler(args: {
       warnings: [
         typeof probeWarning === "string" ? probeWarning : null,
         toolchainWarning,
+        profileReused ? restoredTabWarning(documentUrl || target.url) : null,
       ],
     });
   } catch (err) {
