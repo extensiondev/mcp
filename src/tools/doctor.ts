@@ -18,7 +18,10 @@ import { toMcpSpeak } from "../lib/act";
 import { envelope, isEnvelope } from "../lib/envelope";
 import { resolveSessionBrowser } from "../lib/session-browser";
 import { readLogEvents } from "./logs-filter";
-import { readyContractPath } from "../lib/session-paths";
+import {
+  readyContractPath,
+  sessionArtifactsRootDir,
+} from "../lib/session-paths";
 import type { ReadyContract } from "../lib/types";
 
 /* @invariant Deliberately NOT the engine's readReadyContract, which
@@ -48,6 +51,37 @@ function readContractForDiagnosis(
   } catch {
     return null;
   }
+}
+
+/* @invariant The session diagnosed is the one that exists, ready or not.
+
+   resolveSessionBrowser only counts contracts whose status is "ready", which
+   is right for every tool that needs a drivable session and wrong for this
+   one: the session someone runs doctor on is routinely the one whose contract
+   says "error". Letting the shared resolver fall back to chrome made doctor
+   diagnose a browser with no session at all, label the report with it, and
+   read the wrong (absent) contract, so the walk saw a chromium label and a
+   healthy verdict over a chrome session that had failed. When the resolver
+   answers "fallback", any browser with a ready.json on disk, newest first and
+   whatever its status, outranks the hardcoded default. */
+function sightedContractBrowser(projectPath: string): string | null {
+  let dirs: string[];
+  try {
+    dirs = fs.readdirSync(sessionArtifactsRootDir(projectPath));
+  } catch {
+    return null;
+  }
+  let best: { browser: string; mtimeMs: number } | null = null;
+  for (const dir of dirs) {
+    try {
+      const stat = fs.statSync(readyContractPath(projectPath, dir));
+      if (!best || stat.mtimeMs > best.mtimeMs) {
+        best = { browser: dir, mtimeMs: stat.mtimeMs };
+      }
+    } catch {
+    }
+  }
+  return best ? best.browser : null;
 }
 
 export const schema = {
@@ -196,7 +230,11 @@ export async function handler(args: {
     return environmentPreflight();
   }
   const projectPath = args.projectPath;
-  const { browser } = resolveSessionBrowser(projectPath, args.browser);
+  const resolved = resolveSessionBrowser(projectPath, args.browser);
+  const browser =
+    resolved.source === "fallback"
+      ? (sightedContractBrowser(projectPath) ?? resolved.browser)
+      : resolved.browser;
   const { code, stdout, stderr } = await runExtensionCli(
     ["doctor", projectPath, "--browser", browser, "--output", "json"],
     { cwd: projectPath },
