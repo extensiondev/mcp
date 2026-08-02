@@ -61,6 +61,42 @@ function safeHostBase(
   return { ok: true, base: trimmed };
 }
 
+/* @invariant
+ * The probe certifies the artifact this call minted, never the port.
+ *
+ * Anything can be listening on the probed local port: this repo's own dev
+ * fleet serves 3110 when preview's server is down, and hostReachable and
+ * previewLoadable read true off whatever JSON it happened to answer. Worse,
+ * the strings that JSON carried (identifier, loadedName, loadedVersion) were
+ * echoed into the tool envelope the model reads next, unmarked, which makes
+ * any local server a text channel into the agent's context. So the payload is
+ * only certified when it describes the minted build: name and version must
+ * match the dist manifest read off disk, and the identifier is echoed only
+ * when it equals the derivation the real middleware uses (local-<slug of the
+ * manifest name>). Everything the host claimed that could not be confirmed
+ * locally travels clipped under probe.hostReported, named as the host's own
+ * claim, or not at all.
+ */
+const HOST_CLAIM_MAX_CHARS = 120;
+
+function clipHostClaim(value: string): string {
+  return value.length > HOST_CLAIM_MAX_CHARS
+    ? value.slice(0, HOST_CLAIM_MAX_CHARS)
+    : value;
+}
+
+function expectedPreviewIdentifier(
+  name: string | null,
+  distDir: string,
+): string {
+  const base =
+    (name ?? path.basename(distDir))
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-|-$/g, "") || "extension";
+  return base.startsWith("local-") ? base : `local-${base}`;
+}
+
 const SURFACE = {
   defaultOrigin: DEFAULT_PREVIEW_DEV_URL,
   scheme: (encoded: string) => `preview://build/${encoded}`,
@@ -445,7 +481,24 @@ export async function handler(args: {
       headers: { accept: "application/json" },
     });
     const contentType = res.headers.get("content-type") ?? "";
-    if (!res.ok || !contentType.includes("application/json")) {
+    let raw: unknown = null;
+    if (res.ok && contentType.includes("application/json")) {
+      try {
+        raw = await res.json();
+      } catch {
+        raw = null;
+      }
+    }
+    const payload =
+      raw && typeof raw === "object" && !Array.isArray(raw)
+        ? (raw as {
+            identifier?: unknown;
+            version?: unknown;
+            manifest?: { name?: unknown } | null;
+            files?: unknown;
+          })
+        : null;
+    if (!payload) {
       return envelope({
         ok: true,
         command: COMMAND,
@@ -466,11 +519,65 @@ export async function handler(args: {
         ],
       });
     }
-    const payload = (await res.json()) as {
-      identifier?: string;
-      version?: string;
-      manifest?: { name?: string };
-      files?: unknown[];
+    const localName = typeof manifest.name === "string" ? manifest.name : null;
+    const localVersion =
+      typeof manifest.version === "string" ? manifest.version : null;
+    const remoteName =
+      typeof payload.manifest?.name === "string" ? payload.manifest.name : null;
+    const remoteVersion =
+      typeof payload.version === "string" ? payload.version : null;
+    const remoteIdentifier =
+      typeof payload.identifier === "string" ? payload.identifier : null;
+    const fileCount = Array.isArray(payload.files) ? payload.files.length : 0;
+    const matchesDist =
+      (localName === null || remoteName === localName) &&
+      (localVersion === null || remoteVersion === localVersion);
+    if (!matchesDist) {
+      const hostReported = {
+        ...(remoteIdentifier !== null
+          ? { identifier: clipHostClaim(remoteIdentifier) }
+          : {}),
+        ...(remoteName !== null ? { name: clipHostClaim(remoteName) } : {}),
+        ...(remoteVersion !== null
+          ? { version: clipHostClaim(remoteVersion) }
+          : {}),
+      };
+      return envelope({
+        ok: true,
+        command: COMMAND,
+        status: "host-serving-different-artifact",
+        value: {
+          ...result,
+          hostReachable: true,
+          previewLoadable: false,
+          probe: {
+            method: "server-fetch",
+            provesBrowserLoad: false,
+            matchesDist: false,
+            fileCount,
+            ...(Object.keys(hostReported).length ? { hostReported } : {}),
+          },
+        },
+        hint,
+        warnings: [
+          ...previewWarnings,
+          `Something answered at ${hostBase}${SURFACE.fetchPath} but described a different artifact than the build this call minted, so previewLoadable stays false. probe.hostReported carries that host's own claims, clipped and unverified, not facts about your build; another local server on this port is the usual cause. ${remedy}`,
+        ],
+      });
+    }
+    const identifierConfirmed =
+      remoteIdentifier !== null &&
+      remoteIdentifier === expectedPreviewIdentifier(localName, distDir);
+    const unconfirmed = {
+      ...(!identifierConfirmed && remoteIdentifier !== null
+        ? { identifier: clipHostClaim(remoteIdentifier) }
+        : {}),
+      ...(localName === null && remoteName !== null
+        ? { name: clipHostClaim(remoteName) }
+        : {}),
+      ...(localVersion === null && remoteVersion !== null
+        ? { version: clipHostClaim(remoteVersion) }
+        : {}),
     };
     return envelope({
       ok: true,
@@ -493,12 +600,16 @@ export async function handler(args: {
          */
         previewLoadableLane: "local-dev-host",
         probe: {
-          identifier: payload.identifier,
-          loadedName: payload.manifest?.name,
-          loadedVersion: payload.version,
-          fileCount: Array.isArray(payload.files) ? payload.files.length : 0,
+          ...(identifierConfirmed ? { identifier: remoteIdentifier } : {}),
+          ...(localName !== null ? { loadedName: localName } : {}),
+          ...(localVersion !== null ? { loadedVersion: localVersion } : {}),
+          fileCount,
           method: "server-fetch",
           provesBrowserLoad: false,
+          matchesDist: true,
+          ...(Object.keys(unconfirmed).length
+            ? { hostReported: unconfirmed }
+            : {}),
         },
       },
       hint,

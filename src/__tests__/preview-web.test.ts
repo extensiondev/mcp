@@ -111,10 +111,10 @@ describe("extension_preview_web", () => {
     }
   });
 
-  it("reports previewLoadable when the surface's middleware answers with a payload", async () => {
+  it("reports previewLoadable when the middleware answers with the minted build", async () => {
     const dir = tmpDist(MANIFEST);
     global.fetch = jsonFetch({
-      identifier: "preview-abc",
+      identifier: "local-probe-ext",
       version: "1.2.3",
       manifest: { name: "Probe Ext" },
       files: [1, 2, 3],
@@ -131,7 +131,102 @@ describe("extension_preview_web", () => {
       expect(out.value.hostReachable).toBe(true);
       expect(out.value.previewLoadable).toBe(true);
       expect(out.value.probe.fileCount).toBe(3);
-      expect(out.value.probe.identifier).toBe("preview-abc");
+      expect(out.value.probe.matchesDist).toBe(true);
+      expect(out.value.probe.identifier).toBe("local-probe-ext");
+      expect(out.value.probe.loadedName).toBe("Probe Ext");
+      expect(out.value.probe.loadedVersion).toBe("1.2.3");
+      expect(out.value.probe.hostReported).toBeUndefined();
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("marks an unexpected identifier as the host's own claim even when the build matches", async () => {
+    const dir = tmpDist(MANIFEST);
+    global.fetch = jsonFetch({
+      identifier: "preview-abc",
+      version: "1.2.3",
+      manifest: { name: "Probe Ext" },
+      files: [1, 2, 3],
+    });
+    try {
+      const out = JSON.parse(
+        await handler({
+          projectPath: dir,
+          build: false,
+          distPath: dir,
+          hostUrl: "http://localhost:3110",
+        }),
+      );
+      expect(out.value.previewLoadable).toBe(true);
+      expect(out.value.probe.matchesDist).toBe(true);
+      expect(out.value.probe.identifier).toBeUndefined();
+      expect(out.value.probe.hostReported.identifier).toBe("preview-abc");
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("refuses to certify a coincidental JSON server as the minted preview", async () => {
+    const dir = tmpDist(MANIFEST);
+    global.fetch = jsonFetch({
+      identifier: "api",
+      version: "9.9.9",
+      manifest: { name: "Some Fleet App" },
+      files: [1],
+    });
+    try {
+      const out = JSON.parse(
+        await handler({ projectPath: dir, build: false, distPath: dir }),
+      );
+      expect(out.ok).toBe(true);
+      expect(out.status).toBe("host-serving-different-artifact");
+      expect(out.value.hostReachable).toBe(true);
+      expect(out.value.previewLoadable).toBe(false);
+      expect(out.value.probe.matchesDist).toBe(false);
+      expect(out.value.probe.loadedName).toBeUndefined();
+      expect(out.value.probe.identifier).toBeUndefined();
+      expect(out.value.probe.hostReported.name).toBe("Some Fleet App");
+      expect(out.value.probe.hostReported.version).toBe("9.9.9");
+      expect(out.warnings.join(" ")).toMatch(/different artifact/);
+      expect(out.warnings.join(" ")).toMatch(/own claims/);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("clips the host's claims before they enter the envelope", async () => {
+    const dir = tmpDist(MANIFEST);
+    global.fetch = jsonFetch({
+      identifier: "x".repeat(500),
+      version: "9.9.9",
+      manifest: { name: "y".repeat(500) },
+      files: [],
+    });
+    try {
+      const out = JSON.parse(
+        await handler({ projectPath: dir, build: false, distPath: dir }),
+      );
+      expect(out.value.probe.hostReported.name.length).toBeLessThanOrEqual(120);
+      expect(
+        out.value.probe.hostReported.identifier.length,
+      ).toBeLessThanOrEqual(120);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("treats a JSON answer that is not a preview payload as not loadable", async () => {
+    const dir = tmpDist(MANIFEST);
+    global.fetch = jsonFetch("just a string");
+    try {
+      const out = JSON.parse(
+        await handler({ projectPath: dir, build: false, distPath: dir }),
+      );
+      expect(out.ok).toBe(true);
+      expect(out.status).toBe("host-not-serving-preview");
+      expect(out.value.hostReachable).toBe(true);
+      expect(out.value.previewLoadable).toBe(false);
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }
@@ -214,15 +309,12 @@ describe("extension_preview_web", () => {
 
   it("still accepts a local preview server on another port", async () => {
     const dir = tmpDist(MANIFEST);
-    global.fetch = jsonFetch(
-      JSON.stringify({
-        identifier: "preview-abc",
-        version: "1.0.0",
-        manifest: { name: "Fixture" },
-        files: [1, 2, 3],
-      }),
-      "application/json",
-    );
+    global.fetch = jsonFetch({
+      identifier: "local-probe-ext",
+      version: "1.2.3",
+      manifest: { name: "Probe Ext" },
+      files: [1, 2, 3],
+    });
     try {
       const out = JSON.parse(
         await handler({
@@ -233,6 +325,7 @@ describe("extension_preview_web", () => {
         }),
       );
       expect(out.ok).toBe(true);
+      expect(out.value.previewLoadable).toBe(true);
       expect(out.value.deepLink).toContain("http://127.0.0.1:4321");
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
