@@ -6,6 +6,8 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
+import { mcpOrigins } from "./registry";
+
 const DEFAULT_MEDIA_ORIGIN = "https://media.extension.land";
 const DEFAULT_CHANNEL = "latest";
 
@@ -85,6 +87,16 @@ async function resolveRelease(): Promise<ResolvedRelease | null> {
   } finally {
     releaseRequest = null;
   }
+}
+
+export type TemplateCatalogUtmSource = "mcp" | "mcp-create";
+
+export function templateCatalogUrl(
+  slug: string,
+  utmSource: TemplateCatalogUtmSource = "mcp",
+): string {
+  const origin = mcpOrigins().templates.replace(/\/+$/, "");
+  return `${origin}/${encodeURIComponent(slug)}?utm_source=${utmSource}&utm_medium=tool`;
 }
 
 export async function templateMetaUrls(): Promise<string[]> {

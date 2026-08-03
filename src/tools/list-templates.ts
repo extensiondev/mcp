@@ -7,6 +7,7 @@
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
 import { listTemplates } from "../lib/templates-cache";
+import { templateCatalogUrl } from "../lib/template-artifact-source";
 import { envelope } from "../lib/envelope";
 
 export async function searchTemplates(args: {
@@ -29,6 +30,7 @@ export async function searchTemplates(args: {
     featured: t.featured,
     useCases: t.useCases,
     repositoryUrl: t.repositoryUrl,
+    catalogUrl: templateCatalogUrl(t.slug),
     downloads: t.downloads,
   }));
 
