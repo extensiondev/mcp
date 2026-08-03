@@ -1,5 +1,18 @@
 # Changelog
 
+## 10.3.1
+
+The 10.3.0 tarball shipped two comments a stranger could read: an HTML
+comment in the popup markup naming a private package, and an eight line
+internal roadmap comment plus two inline script comments in the live
+preview sandbox page. Both were removed at source right after that
+release. This release exists to take them off the registry, because a
+published tarball cannot be edited in place.
+
+- The popup markup no longer names any private package.
+- `extensions/live-preview/chromium/sandbox/page-0.html` ships exactly
+  the markup it runs, with no comments at all.
+
 ## 10.3.0
 
 Four fixes for places where a tool answered confidently about something it
