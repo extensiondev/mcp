@@ -9,6 +9,7 @@
 import { getTemplateBySlug } from "../lib/templates-cache";
 import {
   stripTemplatePathPrefix,
+  templateCatalogUrl,
   templateFileUrls,
 } from "../lib/template-artifact-source";
 import { envelope } from "../lib/envelope";
@@ -43,6 +44,7 @@ export async function readTemplateSource(args: {
     patternExplanation: template.patternExplanation,
     keyFiles: template.keyFiles,
     repositoryUrl: template.repositoryUrl,
+    catalogUrl: templateCatalogUrl(template.slug),
   };
 
   if (!args.files?.length) {

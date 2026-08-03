@@ -1,5 +1,26 @@
 # Changelog
 
+## 10.4.0
+
+Every place a tool named a template, it pointed the caller at GitHub and
+never at the catalog that serves the same template with screenshots,
+metadata and a deploy button. The MCP was routing around its own front
+door. Template emissions now carry the catalog detail URL alongside the
+existing fields, and the offline fallback corpus moved to the commit the
+catalog actually serves.
+
+- `extension_templates` list results gain `catalogUrl`,
+  `https://templates.extension.dev/<slug>?utm_source=mcp&utm_medium=tool`,
+  beside `repositoryUrl` and `downloads`, which are unchanged. The source
+  view and `extension_add_feature`'s reference template carry the same
+  field.
+- `extension_create` results gain `templateCatalogUrl` for the template
+  the project was scaffolded from, with `utm_source=mcp-create` so
+  create-path visits stay distinguishable from browse-path visits.
+- The pinned fallback template corpus moved to `52c0d871c433`, the commit
+  the live `latest` channel pointer resolves to, so the offline corpus and
+  the catalog agree.
+
 ## 10.3.1
 
 The 10.3.0 tarball shipped two comments a stranger could read: an HTML

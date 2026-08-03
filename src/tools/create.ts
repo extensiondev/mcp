@@ -11,6 +11,7 @@ import path from "node:path";
 import { extensionCreate } from "extension-create";
 import { exactVersion } from "../lib/exec";
 import { mcpOrigins } from "../lib/registry";
+import { templateCatalogUrl } from "../lib/template-artifact-source";
 import { wwwNewPath } from "@extension.dev/urls/paths";
 import { envelope } from "../lib/envelope";
 
@@ -224,6 +225,7 @@ export async function handler(args: {
 
   const wwwOrigin = mcpOrigins().www;
   const deployUrl = `${wwwOrigin}${wwwNewPath({ template: result.template })}`;
+  const catalogUrl = templateCatalogUrl(result.template, "mcp-create");
 
   return envelope({
     ok: true,
@@ -234,6 +236,7 @@ export async function handler(args: {
       projectPath: result.projectPath,
       projectName: result.projectName,
       template: result.template,
+      templateCatalogUrl: catalogUrl,
       depsInstalled: result.depsInstalled,
       packageManager: result.depsInstalled ? packageManager : null,
       deployUrl,

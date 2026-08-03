@@ -10,7 +10,10 @@ import { PROJECT_PATH } from "../lib/common-schema";
 import fs from "node:fs";
 import path from "node:path";
 import { getTemplateBySlug } from "../lib/templates-cache";
-import { PINNED_COMMIT } from "../lib/template-artifact-source";
+import {
+  PINNED_COMMIT,
+  templateCatalogUrl,
+} from "../lib/template-artifact-source";
 import { envelope } from "../lib/envelope";
 
 const COMMAND = "extension_add_feature";
@@ -286,6 +289,7 @@ export async function handler(args: {
       referenceTemplate: {
         slug: templateSlug,
         repositoryUrl: `${EXAMPLES_TREE_BASE}/${templateSlug}`,
+        catalogUrl: templateCatalogUrl(templateSlug),
         referenceFiles: referenceFiles.filter(
           (f: string) => f.includes(featureDir) || f.includes("manifest"),
         ),
