@@ -1,5 +1,24 @@
 # Changelog
 
+## 10.4.1
+
+The engine this server spawns had drifted nine releases behind the one a
+human gets from `npx extension@latest`. Agents were building on 4.0.20
+while the published CLI was 4.0.29, so every engine fix in that range was
+missing from the agent lane, including both theme-colour conversions
+shipped this week: a `theme.colors` project a human built green still
+failed when an agent built it. Nothing in this repository changed when
+the engine shipped, which is why it went unnoticed until a walk of the
+MCP journey read `extension_doctor` closely.
+
+- `extension-create`, `extension-develop` and `extension-install` move
+  from 4.0.20 to 4.0.29, so the agent lane spawns the engine npm serves.
+- A nightly `engine-pin` job now reads npm rather than the working tree
+  and fails when a pin trails the published engine, when a pin is a range
+  or a dist tag, or when it is missing. It sits beside the existing
+  registry-listing watch, because the event that invalidates both happens
+  in another repository.
+
 ## 10.4.0
 
 Every place a tool named a template, it pointed the caller at GitHub and
