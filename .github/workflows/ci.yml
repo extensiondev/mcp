@@ -94,6 +94,57 @@ jobs:
           EXTENSION_MCP_CLI_VERSION: ${{ matrix.version }}
         run: pnpm test
 
+  # The engine pin is the second surface that goes stale without any commit
+  # going wrong. This package spawns whatever `extension-develop` its own
+  # dependencies name, so an engine release that nobody mirrors here leaves
+  # every agent building on an old engine while a human on `npx extension`
+  # builds on the new one. It sat nine releases behind before a C4 walk of the
+  # MCP journey caught it (2026-08-04, engine 4.0.20 against npm 4.0.29), and
+  # by then two shipped theme-colour fixes were missing from the agent lane
+  # entirely. Like the listing check below, this reads npm rather than the
+  # working tree, and it runs nightly because the event that invalidates it
+  # happens in another repository.
+  engine-pin:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: The pinned engine matches what npm serves
+        run: |
+          node -e '
+            const { execFileSync } = require("node:child_process");
+            const deps = require("./package.json").dependencies || {};
+            const engines = ["extension-create", "extension-develop", "extension-install"];
+            const problems = [];
+            for (const name of engines) {
+              const pinned = String(deps[name] || "").trim();
+              if (!pinned) { problems.push(`${name} is not pinned at all`); continue; }
+              if (!/^\d+\.\d+\.\d+(-[\w.]+)?$/.test(pinned)) {
+                problems.push(`${name} is pinned to "${pinned}", which is a range or a tag, not an exact version`);
+                continue;
+              }
+              const latest = execFileSync("npm", ["view", name, "version", "--registry", "https://registry.npmjs.org/"], { encoding: "utf8" }).trim();
+              if (pinned !== latest) {
+                problems.push(`${name} is pinned at ${pinned} while npm serves ${latest}`);
+              }
+            }
+            if (problems.length) {
+              console.error([
+                "The engine this server spawns has drifted from the published engine.",
+                ...problems.map((p) => `- ${p}`),
+                "",
+                "Agents driving this MCP build with the pinned engine, so every fix",
+                "released since the pin is missing from the agent lane. Bump the",
+                "engine dependencies in package.json and cut a release.",
+              ].join("\n"));
+              process.exit(1);
+            }
+            console.log("engine pin matches npm for: " + engines.join(", "));
+          '
+
   # The MCP registry listing is the one surface that can go stale without any
   # commit going wrong: nothing in this repository changes when it drifts. It
   # spent twelve days announcing 5.1.2 and "31 tools, 11 browsers" while npm
