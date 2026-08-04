@@ -1,5 +1,17 @@
 # Changelog
 
+## 10.4.2
+
+The engine moved twice in a day and the agent lane has to move with it.
+`extension-develop` 4.0.30 carries the MAIN-world public path fix: a
+content script running in the page's own world now resolves extension
+assets through the isolated-world bridge base instead of falling back to
+the host page, where it 404'd.
+
+- `extension-create`, `extension-develop` and `extension-install` move
+  from 4.0.29 to 4.0.30. The nightly `engine-pin` job added in 10.4.1 is
+  what would have caught this drift; the bump is the first it prompted.
+
 ## 10.4.1
 
 The engine this server spawns had drifted nine releases behind the one a
