@@ -12,6 +12,7 @@ import * as inspectTool from "../tools/inspect";
 import * as logs from "../tools/logs";
 import * as storage from "../tools/storage";
 import * as addFeature from "../tools/add-feature";
+import templatesSnapshot from "../lib/templates-meta.snapshot.json";
 
 vi.mock("../lib/cdp-port", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../lib/cdp-port")>()),
@@ -239,6 +240,65 @@ describe("add-feature handler", () => {
     const parsed = JSON.parse(result);
     expect(parsed.error).toBeDefined();
     expect(parsed.error.message).toContain("manifest.json");
+  });
+
+  it("maps every feature and framework to a template that carries the surface", () => {
+    const FEATURE_SURFACE: Record<string, string> = {
+      sidebar: "sidebar",
+      popup: "action",
+      "content-script": "content",
+      newtab: "newtab",
+      background: "background",
+    };
+    const bySlug = new Map(
+      templatesSnapshot.templates.map((t) => [t.slug, t]),
+    );
+    for (const [feature, frameworks] of Object.entries(
+      addFeature.FEATURE_TEMPLATE_MAP,
+    )) {
+      const surface = FEATURE_SURFACE[feature];
+      expect(surface, `feature "${feature}" has no carrier surface`).toBeDefined();
+      for (const [framework, slug] of Object.entries(frameworks)) {
+        const template = bySlug.get(slug);
+        expect(
+          template,
+          `${feature}/${framework} -> ${slug} not in corpus`,
+        ).toBeDefined();
+        expect(
+          template!.surfaces,
+          `${feature}/${framework} -> ${slug} does not carry ${surface}`,
+        ).toContain(surface);
+        if (template!.uiFramework) {
+          expect(
+            template!.uiFramework,
+            `${feature}/${framework} -> ${slug} is a ${template!.uiFramework} template`,
+          ).toBe(framework);
+        }
+      }
+    }
+  });
+
+  it("plans options and devtools without a reference template", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "extjs-addfeat-"));
+    try {
+      fs.mkdirSync(path.join(root, "src"), { recursive: true });
+      fs.writeFileSync(path.join(root, "src", "manifest.json"), "{}");
+      for (const feature of ["options", "devtools"]) {
+        const parsed = JSON.parse(
+          await addFeature.handler({ projectPath: root, feature }),
+        );
+        expect(parsed.ok).toBe(true);
+        expect(parsed.status).toBe("planned");
+        expect(parsed.value.referenceTemplate).toBeUndefined();
+        const instructions = parsed.value.instructions.join("\n");
+        expect(instructions).not.toContain("Reference template source");
+        expect(instructions).toContain("manifest additions");
+        expect(parsed.value.filesToCreate.length).toBeGreaterThan(0);
+        expect(Object.keys(parsed.value.manifestUpdates).length).toBeGreaterThan(0);
+      }
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
   });
 });
 
