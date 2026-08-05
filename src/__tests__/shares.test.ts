@@ -618,6 +618,148 @@ describe("extension_shares", () => {
     expect(out.error.name).toBe("SharesInputError");
   });
 
+  it("counts localOnly by share when the record holds a re-share and a re-mint", async () => {
+    const dir = tmpProject();
+    const reshared = `gen_${"a".repeat(64)}`;
+    const burned = `gen_${"b".repeat(64)}`;
+    const minted = `gen_${"c".repeat(64)}`;
+    const row = (
+      artifactId: string,
+      sharedAt: string,
+      expiresAt: string,
+    ) => {
+      recordSharedPreview(dir, {
+        sharedAt,
+        previewUrl: `https://preview.extension.dev/?preview=${artifactId}`,
+        artifactId,
+        revokeUrl: `https://www.extension.dev/api/artifacts/${artifactId}`,
+        expiresAt,
+        browser: "chrome",
+        distDir: path.join(dir, "dist", "chrome"),
+      });
+    };
+
+    row(reshared, "2026-08-01T10:00:00.000Z", "2036-08-08T10:00:00.000Z");
+    row(burned, "2026-08-02T10:00:00.000Z", "2036-08-09T10:00:00.000Z");
+    row(reshared, "2026-08-03T10:00:00.000Z", "2036-08-10T10:00:00.000Z");
+    row(minted, "2026-08-04T10:00:00.000Z", "2036-08-11T10:00:00.000Z");
+
+    const before = fs.readFileSync(sharedPreviewsPath(dir), "utf8");
+    expect(JSON.parse(before).shares).toHaveLength(4);
+
+    global.fetch = listingFetch({
+      artifacts: [
+        {
+          artifactId: minted,
+          live: true,
+          previewUrl: `https://preview.extension.dev/?preview=${minted}`,
+          owner: { kind: "project", workspace: "acme", project: "tab-sorter" },
+        },
+      ],
+      count: 1,
+      matched: 1,
+      limit: 100,
+      truncated: false,
+      scanned: 5,
+    });
+
+    const out = JSON.parse(
+      await handler({ projectPath: dir, status: "live" }),
+    );
+
+    const ids = out.value.localOnly.map((e: any) => e.artifactId);
+    expect(ids).toEqual([reshared, burned]);
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(out.value.localOnly).toHaveLength(2);
+    expect(out.value.localOnly[0].sharedAt).toBe("2026-08-03T10:00:00.000Z");
+    expect(out.value.localOnly[0].expiresAt).toBe("2036-08-10T10:00:00.000Z");
+
+    expect(out.hint).toContain("2 recorded shares are");
+    expect(out.hint).not.toContain("3 ");
+    expect(out.hint).not.toContain("record entries");
+
+    expect(out.value.localRecord.entries).toBe(4);
+    expect(out.value.localRecord.shares).toBe(3);
+    expect(out.value.localRecord.countsNote).toContain("distinct artifact ids");
+
+    expect(fs.readFileSync(sharedPreviewsPath(dir), "utf8")).toBe(before);
+  });
+
+  it("keeps the sibling counts honest beside a deduped localOnly", async () => {
+    const dir = tmpProject();
+    const reshared = `gen_${"a".repeat(64)}`;
+    const listed = `gen_${"d".repeat(64)}`;
+    for (const sharedAt of [
+      "2026-08-01T10:00:00.000Z",
+      "2026-08-03T10:00:00.000Z",
+    ]) {
+      recordSharedPreview(dir, {
+        sharedAt,
+        previewUrl: `https://preview.extension.dev/?preview=${reshared}`,
+        artifactId: reshared,
+        revokeUrl: `https://www.extension.dev/api/artifacts/${reshared}`,
+      });
+    }
+
+    global.fetch = listingFetch({
+      artifacts: [
+        {
+          artifactId: listed,
+          live: true,
+          previewUrl: `https://preview.extension.dev/?preview=${listed}`,
+          owner: { kind: "project", workspace: "acme", project: "tab-sorter" },
+        },
+      ],
+      count: 1,
+      matched: 1,
+      limit: 100,
+      truncated: false,
+      scanned: 5,
+    });
+
+    const out = JSON.parse(await handler({ projectPath: dir }));
+    const server = out.value.server;
+    const ownershipTotal =
+      server.ownership.project +
+      server.ownership.personal +
+      server.ownership.unknown;
+
+    expect(ownershipTotal).toBe(out.value.shares.length);
+    expect(server.ownership.project).toBe(1);
+    expect(server.count).toBe(out.value.shares.length);
+    expect(server.scanned).toBe(5);
+    expect(server.scannedNote).toContain("scanned is not a share count");
+    expect(server.scannedNote).toContain("count and matched are shares");
+    expect(out.value.localOnly).toHaveLength(1);
+  });
+
+  it("dedupes the no-token local listing by share as well", async () => {
+    delete process.env.EXTENSION_DEV_TOKEN;
+    const dir = tmpProject();
+    const reshared = `gen_${"a".repeat(64)}`;
+    for (const sharedAt of [
+      "2026-08-01T10:00:00.000Z",
+      "2026-08-03T10:00:00.000Z",
+    ]) {
+      recordSharedPreview(dir, {
+        sharedAt,
+        previewUrl: `https://preview.extension.dev/?preview=${reshared}`,
+        artifactId: reshared,
+        revokeUrl: `https://extension.dev/api/artifacts/${reshared}`,
+      });
+    }
+
+    const out = JSON.parse(await handler({ projectPath: dir }));
+    expect(out.status).toBe("listed-local-only");
+    expect(out.value.localOnly).toHaveLength(1);
+    expect(out.value.localOnly[0].sharedAt).toBe("2026-08-03T10:00:00.000Z");
+    expect(out.value.localOnly[0].revokeUrl).toBe(
+      `https://www.extension.dev/api/artifacts/${reshared}`,
+    );
+    expect(out.value.localRecord.entries).toBe(2);
+    expect(out.value.localRecord.shares).toBe(1);
+  });
+
   it("reports a 404 revoke as a share this token does not own", async () => {
     global.fetch = listingFetch({ message: "Artifact not found." }, 404);
     const out = JSON.parse(
