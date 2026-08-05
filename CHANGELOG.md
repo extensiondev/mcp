@@ -1,5 +1,27 @@
 # Changelog
 
+## 10.4.3
+
+Four truths an agent reads got sharper. A share recorded twice is one
+share, a feature map that points at source without the feature is a lie,
+and a stale corpus snapshot makes both worse.
+
+- `extension_shares` dedupes `localOnly` by artifactId and counts distinct
+  shares in its hint; the append-only record file is untouched and
+  `localRecord` reports entries beside shares so both readings stay
+  available.
+- `add_feature` stops pointing options and devtools at a template that
+  carries neither surface, returning the full plan with an honest note
+  instead of a wrong reference; the vue, svelte and preact sidebar rows
+  point at their real in-framework files. A guard test now validates
+  every mapping against the bundled snapshot.
+- The offline template snapshot moves from the July 16 corpus to the
+  current nightly: 52 templates, the renamed sidebar-monorepo-turborepo,
+  sane surface data.
+- `@extension.dev/urls` moves from 0.3.0 to the published 0.6.0, ending
+  the last published-versus-checkout divergence the provenance guard
+  tracked.
+
 ## 10.4.2
 
 The engine moved twice in a day and the agent lane has to move with it.
