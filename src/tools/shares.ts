@@ -29,7 +29,7 @@ const LOGIN_HINT =
 export const schema = {
   name: "extension_shares",
   description:
-    "List and revoke the public preview links this token has shared, which is what extension_preview_web share:true hands out. Pass action:'list' (the default) for every artifact the logged-in project owns, with its artifactId, name, version, live or dead state, createdAt, expiresAt, revokedAt, size, previewUrl, zipUrl and revokeUrl, so a link whose response you lost is findable again. Each row carries owner and sharedBy as the platform returned them. Read attribution.ownership for who may revoke a share: 'project' means the workspace holds it and any member can pull it back, 'personal' means one person holds it alone, 'unknown' means no owner was disclosed. Read attribution.credit as credit only, never access; it names the publisher, and reads 'CLI token <id>' or 'not recorded' when no person can be named. Pass action:'revoke' with an artifactId, or with any URL of the share, to kill one permanently. Pass projectPath to reconcile against the project's own append-only .extension.dev/shared-previews.json, which is read and never rewritten: a share made on another machine shows as remoteOnly, a record with no live artifact as localOnly. This needs the same token as sharing (extension_auth or EXTENSION_DEV_TOKEN); without one, listing still returns the local record with a login hint.",
+    "List and revoke the public preview links this token has shared, which is what extension_preview_web share:true hands out. Pass action:'list' (the default) for every artifact the logged-in project owns, with its artifactId, name, version, live or dead state, createdAt, expiresAt, revokedAt, size, previewUrl, zipUrl and revokeUrl, so a link whose response you lost is findable again. Each row carries owner and sharedBy as the platform returned them. Read attribution.ownership for who may revoke a share: 'project' means the workspace holds it and any member can pull it back, 'personal' means one person holds it alone, 'unknown' means no owner was disclosed. Read attribution.credit as credit only, never access; it names the publisher, and reads 'CLI token <id>' or 'not recorded' when no person can be named. Pass action:'revoke' with an artifactId, or with any URL of the share, to kill one permanently. Pass projectPath to reconcile against the project's own append-only .extension.dev/shared-previews.json, which is read and never rewritten: a share made on another machine shows as remoteOnly, a record with no live artifact as localOnly. That record is append-only, so localOnly is counted by distinct artifactId and a build re-shared unchanged is one share, not two; server.count and server.matched are share counts, while server.scanned counts records the platform read and is never a share count. This needs the same token as sharing (extension_auth or EXTENSION_DEV_TOKEN); without one, listing still returns the local record with a login hint.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -154,6 +154,19 @@ function attributionOf(artifact: ListedArtifact): ShareAttribution {
   };
 }
 
+/* @invariant
+ * The unit of everything this tool counts is one artifactId, which is one live
+ * address and one revoke handle, and never one row of the record file.
+ *
+ * `.extension.dev/shared-previews.json` is append-only by design, so re-sharing
+ * an unchanged build writes a second row for the SAME id, and revoking then
+ * re-sharing writes a row for a DIFFERENT id because a revoked id is burned.
+ * Rows therefore over-count the first case and correctly count the second, and
+ * a reader auditing what is still out there is asking about addresses. Mapping
+ * rows straight to output made a project with four rows over three shares
+ * report three dead links where two existed (B4 walk, 2026-08-04). The newest
+ * row per id wins, because a later re-share carries the later expiresAt.
+ */
 function localIndex(entries: SharedPreviewEntry[]): Map<string, SharedPreviewEntry> {
   const index = new Map<string, SharedPreviewEntry>();
   for (const entry of entries) {
@@ -163,6 +176,10 @@ function localIndex(entries: SharedPreviewEntry[]): Map<string, SharedPreviewEnt
     }
   }
   return index;
+}
+
+function localShares(entries: SharedPreviewEntry[]): SharedPreviewEntry[] {
+  return [...localIndex(entries).values()];
 }
 
 type Completeness = "whole" | "cut" | "unsaid";
@@ -204,6 +221,9 @@ async function listShares(args: {
         path: local.path,
         exists: local.exists,
         entries: local.entries.length,
+        shares: localIndex(local.entries).size,
+        countsNote:
+          "entries is rows in the append-only file and shares is distinct artifact ids in it. They differ when a build was re-shared unchanged, which appends a second row for the same link. shares is the number of links this project ever minted.",
         ...(local.unreadable
           ? {
               unreadable:
@@ -237,7 +257,7 @@ async function listShares(args: {
           ...(isAuth ? { loginHint: LOGIN_HINT } : {}),
         },
         shares: [],
-        localOnly: (local?.entries ?? []).map((entry) => ({
+        localOnly: localShares(local?.entries ?? []).map((entry) => ({
           ...entry,
           ...(entry.revokeUrl
             ? { revokeUrl: wwwRevokeUrl(entry.revokeUrl) }
@@ -287,7 +307,7 @@ async function listShares(args: {
       ? "cut"
       : "whole";
 
-  const localOnly = (local?.entries ?? [])
+  const localOnly = [...byId.values()]
     .filter((entry) => !seen.has(entry.artifactId))
     .map((entry) => ({
       ...entry,
@@ -328,6 +348,8 @@ async function listShares(args: {
         truncated: listing.data.truncated,
         truncatedReported: listing.data.truncatedReported,
         scanned: listing.data.scanned,
+        scannedNote:
+          "count and matched are shares: count is the shares on this page, matched is how many shares the filter found, and matched is a floor when truncated is true. scanned is not a share count and must not be read as one: it is how many stored records the platform opened to answer, including records that turned out to belong to someone else or to be filtered out. It tracks the platform's work, so it can sit above or beside these numbers by coincidence. ownership breaks the shares on this page down by who may revoke them and sums to the number of rows in shares.",
         ownership,
         ...(truncatedNote ? { truncatedNote } : {}),
       },
@@ -337,8 +359,8 @@ async function listShares(args: {
     },
     hint: `${liveCount} of ${shares.length} listed shares still resolve${
       local
-        ? `; ${localOnly.length} local record ${
-            localOnly.length === 1 ? "entry is" : "entries are"
+        ? `; ${localOnly.length} recorded ${
+            localOnly.length === 1 ? "share is" : "shares are"
           } ${
             liveFiltered
               ? 'not in this live-only listing (possibly dead rather than not owned; rerun with status:"all" to tell)'
