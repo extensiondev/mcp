@@ -44,8 +44,8 @@ importers:
         version: 8.21.0
     devDependencies:
       '@extension.dev/urls':
-        specifier: ^0.3.0
-        version: 0.3.0
+        specifier: ^0.6.0
+        version: 0.6.0
       '@rslib/core':
         specifier: ^0.19.4
         version: 0.19.6(typescript@6.0.2)
@@ -473,8 +473,8 @@ packages:
   '@emnapi/wasi-threads@1.2.2':
     resolution: {integrity: sha512-c95qOXkHdydNKhscBTebqEC1CVAZpyqOfVfBzQ1qgzyl3gfeldUjIggDbIZgDKsHLgnsM+igH7TJ/eAasaVuMA==}
 
-  '@extension.dev/urls@0.3.0':
-    resolution: {integrity: sha512-kK3WHDajG8jXWjfhymHhk9OmQZr7kxrgOCQX2xEarUyxeFQEbnO3WkOK1dHd7swXb0MF9cP91BNRouzKja4sLQ==}
+  '@extension.dev/urls@0.6.0':
+    resolution: {integrity: sha512-+zFeyLlEsqgpIKKhQQJQ0MBfDcmaXoZ9nQWq1+4sp4jSrDarFni5S26Z1P6DLtcYj7vhSJcBkWdf7sd8JgiLeQ==}
     engines: {node: '>=20.18'}
 
   '@hono/node-server@2.0.12':
@@ -2959,7 +2959,7 @@ snapshots:
       tslib: 2.8.1
     optional: true
 
-  '@extension.dev/urls@0.3.0': {}
+  '@extension.dev/urls@0.6.0': {}
 
   '@hono/node-server@2.0.12(hono@4.12.32)':
     dependencies:
