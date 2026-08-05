@@ -149,7 +149,7 @@ The platform tools connect agents to [extension.dev](https://extension.dev): `ex
 | Package | Use it to |
 | --- | --- |
 | [`@extension.dev/skill`](https://www.npmjs.com/package/@extension.dev/skill) | Teach AI agents the judgment half: cross-browser rules, gotchas, playbooks |
-| [`@extension.dev/artifact-integrity`](https://www.npmjs.com/package/@extension.dev/artifact-integrity) | Verify extension artifacts and gate CI on tampered bytes before they ship |
+| [`@extension.dev/artifact-integrity`](https://www.npmjs.com/package/@extension.dev/artifact-integrity) | Check an artifact against a declared SHA-256 and gate CI on the result|
 
 All of it rides on [Extension.js](https://github.com/extension-js/extension.js), the open-source cross-browser extension framework.
 
