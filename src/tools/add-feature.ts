@@ -51,13 +51,13 @@ export const schema = {
   },
 };
 
-const FEATURE_TEMPLATE_MAP: Record<string, Record<string, string>> = {
+export const FEATURE_TEMPLATE_MAP: Record<string, Record<string, string>> = {
   sidebar: {
     react: "sidebar-shadcn",
     vanilla: "sidebar",
-    vue: "sidebar",
-    svelte: "sidebar",
-    preact: "sidebar",
+    vue: "vue",
+    svelte: "svelte",
+    preact: "preact",
   },
   "content-script": {
     react: "content-react",
@@ -81,20 +81,6 @@ const FEATURE_TEMPLATE_MAP: Record<string, Record<string, string>> = {
     vanilla: "new",
   },
   background: {
-    react: "javascript",
-    vanilla: "javascript",
-    vue: "javascript",
-    svelte: "javascript",
-    preact: "javascript",
-  },
-  options: {
-    react: "javascript",
-    vanilla: "javascript",
-    vue: "javascript",
-    svelte: "javascript",
-    preact: "javascript",
-  },
-  devtools: {
     react: "javascript",
     vanilla: "javascript",
     vue: "javascript",
@@ -170,20 +156,9 @@ export async function handler(args: {
   }
 
   const templateSlug = FEATURE_TEMPLATE_MAP[args.feature]?.[framework];
-
-  if (!templateSlug) {
-    return envelope({
-      ok: false,
-      command: COMMAND,
-      status: "no-reference-template",
-      error: {
-        code: "E_NO_REFERENCE_TEMPLATE",
-        message: `No reference template for feature "${args.feature}" with framework "${framework}"`,
-      },
-    });
-  }
-
-  const template = await getTemplateBySlug(templateSlug);
+  const template = templateSlug
+    ? await getTemplateBySlug(templateSlug)
+    : undefined;
   const referenceFiles = template?.keyFiles ?? template?.files ?? [];
 
   const FEATURE_DIR: Record<string, string> = {
@@ -286,14 +261,19 @@ export async function handler(args: {
     value: {
       feature: args.feature,
       framework,
-      referenceTemplate: {
-        slug: templateSlug,
-        repositoryUrl: `${EXAMPLES_TREE_BASE}/${templateSlug}`,
-        catalogUrl: templateCatalogUrl(templateSlug),
-        referenceFiles: referenceFiles.filter(
-          (f: string) => f.includes(featureDir) || f.includes("manifest"),
-        ),
-      },
+      ...(templateSlug
+        ? {
+            referenceTemplate: {
+              slug: templateSlug,
+              repositoryUrl: `${EXAMPLES_TREE_BASE}/${templateSlug}`,
+              catalogUrl: templateCatalogUrl(templateSlug),
+              referenceFiles: referenceFiles.filter(
+                (f: string) =>
+                  f.includes(featureDir) || f.includes("manifest"),
+              ),
+            },
+          }
+        : {}),
       manifestUpdates,
       filesToCreate: filesToCreate.map((f) => ({
         ...f,
@@ -307,7 +287,9 @@ export async function handler(args: {
         args.feature === "sidebar"
           ? "3. Add background.ts to handle sidebar open: chromium uses chrome.sidePanel.setPanelBehavior, firefox uses browser.sidebarAction.open()"
           : "",
-        `4. Reference template source: ${EXAMPLES_TREE_BASE}/${templateSlug}/src`,
+        templateSlug
+          ? `4. Reference template source: ${EXAMPLES_TREE_BASE}/${templateSlug}/src`
+          : "4. No catalog template ships this surface yet: build from the manifest additions and file hints above",
         "5. Run npm run dev to test",
       ].filter(Boolean),
     },
