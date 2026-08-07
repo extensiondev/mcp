@@ -86,7 +86,7 @@
     "extension.js"
   ],
   "dependencies": {
-    "@extension.dev/urls": "^0.7.0",
+    "@extension.dev/urls": "^0.8.0",
     "@modelcontextprotocol/sdk": "^1.12.1",
     "browser-extension-manifest-fields": "^2.2.9",
     "cross-spawn": "^7.0.6",
