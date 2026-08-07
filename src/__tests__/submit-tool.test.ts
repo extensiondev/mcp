@@ -336,7 +336,7 @@ describe("storeMdWarnings", () => {
     expect(warnings[0]).toContain("Firefox reviewer notes");
   });
 
-  it("stays silent when the fields are filled in", () => {
+  it("names the file it read when the fields are filled in", () => {
     fs.writeFileSync(
       path.join(tmp, "STORE.md"),
       [
@@ -348,6 +348,27 @@ describe("storeMdWarnings", () => {
         "Guidance.",
       ].join("\n"),
     );
-    expect(storeMdWarnings(["firefox", "edge"], tmp)).toEqual([]);
+    const warnings = storeMdWarnings(["firefox", "edge"], tmp);
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain(path.join(tmp, "STORE.md"));
+    expect(warnings[0]).toContain("source repository at the built commit");
+  });
+
+  it("warns on prefixed note headings, which the platform does not read", () => {
+    fs.writeFileSync(
+      path.join(tmp, "STORE.md"),
+      [
+        "## Firefox",
+        "### AMO reviewer notes",
+        "Test account and steps.",
+        "## Edge",
+        "### Edge certification notes",
+        "Guidance.",
+      ].join("\n"),
+    );
+    const warnings = storeMdWarnings(["firefox", "edge"], tmp);
+    expect(warnings).toHaveLength(2);
+    expect(warnings[0]).toContain("no Firefox reviewer notes");
+    expect(warnings[1]).toContain("no Edge certification notes");
   });
 });

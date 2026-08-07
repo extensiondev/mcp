@@ -13,6 +13,7 @@ import path from "node:path";
 import { resolveToken } from "../lib/publish";
 import { resolveApiBase, safeApiBase } from "../lib/login-flow";
 import { identityHeaders } from "../lib/session-identity";
+import { STORE_MD_FILENAME, parseStoreMd } from "../lib/store-md";
 import {
   consoleProjectUrl,
   fetchRegistryJson,
@@ -26,34 +27,31 @@ export function storeMdWarnings(browsers: string[], cwd: string): string[] {
   const wantsEdge = browsers.includes("edge");
   if (!wantsFirefox && !wantsEdge) return [];
 
+  const filePath = path.join(cwd, STORE_MD_FILENAME);
   let content: string;
   try {
-    content = fs.readFileSync(path.join(cwd, "STORE.md"), "utf8");
+    content = fs.readFileSync(filePath, "utf8");
   } catch {
     return [
-      "No STORE.md found in the current working directory. Platform submissions read STORE.md from the project's source repository, so this may not apply here; make sure STORE.md exists there for Firefox reviewer notes and Edge certification notes. See the extension-dev skill's store-md reference.",
+      `No ${STORE_MD_FILENAME} found in the current working directory. Platform submissions read ${STORE_MD_FILENAME} from the project's source repository at the built commit, so this may not apply here; make sure ${STORE_MD_FILENAME} exists there for Firefox reviewer notes and Edge certification notes. See the extension-dev skill's store-md reference.`,
     ];
   }
 
-  const hasField = (section: RegExp, field: RegExp): boolean => {
-    const parts = content.split(/^## +/m);
-    const match = parts.find((p) => section.test(p.split("\n", 1)[0] ?? ""));
-    if (!match) return false;
-    const sub = match.split(/^### +/m).find((p) => field.test(p.split("\n", 1)[0] ?? ""));
-    if (!sub) return false;
-    const body = sub.split("\n").slice(1).join("\n");
-    return body.replace(/<!--[\s\S]*?-->/g, "").trim().length > 0;
-  };
-
+  const data = parseStoreMd(content);
   const warnings: string[] = [];
-  if (wantsFirefox && !hasField(/firefox|amo/i, /reviewer notes/i)) {
+  if (wantsFirefox && !data.firefox?.approvalNotes) {
     warnings.push(
-      "STORE.md has no Firefox reviewer notes; AMO reviews go faster with test credentials and steps.",
+      `${STORE_MD_FILENAME} has no Firefox reviewer notes; AMO reviews go faster with test credentials and steps.`,
     );
   }
-  if (wantsEdge && !hasField(/edge/i, /certification notes/i)) {
+  if (wantsEdge && !data.edge?.certificationNotes) {
     warnings.push(
-      "STORE.md has no Edge certification notes; the certification team gets no testing guidance.",
+      `${STORE_MD_FILENAME} has no Edge certification notes; the certification team gets no testing guidance.`,
+    );
+  }
+  if (warnings.length === 0) {
+    warnings.push(
+      `The notes above were read from ${filePath}. The submission reads ${STORE_MD_FILENAME} from the project's source repository at the built commit, so an uncommitted or unpushed edit here does not travel with it.`,
     );
   }
   return warnings;
