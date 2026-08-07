@@ -1,5 +1,27 @@
 # Changelog
 
+## 10.5.0
+
+`extension_submit`'s STORE.md advisory and the platform parser that feeds
+AMO and Partner Center disagreed, and the disagreement ran in the
+dangerous direction: the advisory stayed silent about notes the
+submission would never carry.
+
+- The hand-rolled section and field probing in `extension_submit` is
+  replaced by `src/lib/store-md.ts`, an exact port of the parser the
+  submission runs. Headings the platform ignores, such as
+  `### AMO reviewer notes` or a Firefox-naming Edge section, now raise
+  the warning they always should have.
+- A contract corpus of 14 STORE.md fixtures and a pin generated from the
+  platform parser hold the two implementations together: the pin carries
+  the upstream file's sha256 and its answer for every fixture, and the
+  suite replays both parsers over the corpus whenever the upstream
+  checkout is reachable. Neither side can move alone.
+- When the notes are found, the advisory now names the file it read and
+  says the submission reads STORE.md from the source repository at the
+  built commit, so an uncommitted edit is never mistaken for a
+  submission that carries it.
+
 ## 10.4.3
 
 Four truths an agent reads got sharper. A share recorded twice is one
