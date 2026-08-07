@@ -7,7 +7,7 @@
 
 # @extension.dev/mcp [![Version][npm-version-image]][npm-version-url] [![Downloads][npm-downloads-image]][npm-downloads-url] [![Discord][discord-image]][discord-url]
 
-> Give your AI agent hands for browser extension development. 29 MCP tools that scaffold, run, inspect, debug, and publish cross-browser extensions.
+> Give your AI agent hands for browser extension development. 30 MCP tools that scaffold, run, inspect, debug, and publish cross-browser extensions.
 
 <img alt="Logo" align="right" src="https://media.extension.land/brand/extension-dev/logo-dock.png" width="15.5%" />
 
@@ -117,6 +117,7 @@ cp node_modules/@extension.dev/mcp/claude/commands/*.md ~/my-extension/.claude/c
 | see | `extension_logs` | Stream logs from every context |
 | see | `extension_doctor` | Diagnose the dev session leg by leg (ready contract, ports, token, executor, browser) |
 | see | `extension_theme_verify` | Verify a Chrome theme manifest against the colors Chrome actually paints |
+| test | `extension_assert` | State expectations about a running extension and get one verdict each: pass, fail, or inconclusive |
 | act | `extension_eval` | Evaluate in a context (needs `allowEval: true` on `extension_dev`) |
 | act | `extension_storage` | Read/write `chrome.storage` |
 | act | `extension_reload` | Reload extension or tab |
@@ -132,6 +133,45 @@ cp node_modules/@extension.dev/mcp/claude/commands/*.md ~/my-extension/.claude/c
 | platform | `extension_release_status` | Read release channels, recent builds, and store submission and review state |
 
 Browser-launching tools (`dev`, `start`) shell out to the `extension` CLI, the project's own `node_modules/.bin/extension` when present, otherwise `npx extension@<pinned>` at the version this package is verified against; everything else runs in-process.
+
+## Asserting instead of guessing
+
+Every other tool here hands back a reading: a DOM, a log window, an evaluated
+expression. Turning a reading into "the popup works" was left to the agent, as
+a string of JavaScript it wrote on the spot, which is the guesswork the paired
+skill exists to prevent. `extension_assert` states the expectation and returns
+the verdict.
+
+```jsonc
+{
+  "projectPath": "/path/to/extension",
+  "expect": [
+    { "assert": "background-worker-booted" },
+    { "assert": "surface-rendered", "surface": "popup", "selector": "[data-testid=root]" },
+    { "assert": "storage-key-present", "key": "settings", "area": "local" },
+    { "assert": "console-errors-empty", "context": ["background", "popup"] },
+    { "assert": "content-script-injected", "url": "https://shop.example/cart" }
+  ]
+}
+```
+
+Each check comes back as `pass`, `fail` or `inconclusive`, and the run is a
+pass only when every check passed. `inconclusive` is the part that matters: it
+means this platform cannot cover the question today, and the check carries a
+`settledBy` naming the evidence that would answer it. A content script's
+execution is not observable from outside its isolated world, so
+`content-script-injected` passes only on a line the script itself wrote and is
+inconclusive over a declared match, never a pass. "No console errors" over a
+session that never built is inconclusive too, because zero errors and zero
+events are the same number. A read the platform refuses, such as
+`chrome.storage` on a session started without `allowControl`, is inconclusive
+rather than a failure: nothing was learned about the extension.
+
+The verdict document is the same grammar the preview lane's CI verdict uses
+(`@extension.dev/preview-verdict`), with its own contract name and its own
+check registry, so a document from one lane can never be mistaken for the
+other's. Each check here names the preview check it is the live-browser
+counterpart of, and a contract test holds the two grammars together.
 
 ## Sharing a build in progress
 

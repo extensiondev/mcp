@@ -1,0 +1,47 @@
+{
+  "upstreamPackage": "@extension.dev/preview-verdict",
+  "upstreamPath": "packages/extensiondev-preview-verdict/src/index.js",
+  "why": "That package is private to the monorepo (C11) and this one publishes to npm, so its grammar is ported here and pinned rather than imported. Regenerate this pin only after reading the upstream and deciding, check by check, that the port still means the same thing.",
+  "outcomes": ["pass", "fail", "inconclusive", "skipped"],
+  "verdictOutcomes": ["pass", "fail", "inconclusive"],
+  "checkDeclarationKeys": ["id", "since", "severity", "title", "reads"],
+  "checkResultKeys": [
+    "id",
+    "since",
+    "severity",
+    "outcome",
+    "detail",
+    "evidence"
+  ],
+  "documentKeys": [
+    "contract",
+    "contractVersion",
+    "producer",
+    "subject",
+    "generatedAt",
+    "outcome",
+    "passed",
+    "checks",
+    "failures",
+    "inconclusive"
+  ],
+  "aggregation": [
+    { "outcomes": ["pass", "pass"], "verdict": "pass" },
+    { "outcomes": ["pass", "fail"], "verdict": "fail" },
+    { "outcomes": ["pass", "inconclusive"], "verdict": "inconclusive" },
+    { "outcomes": ["pass", "skipped"], "verdict": "inconclusive" },
+    { "outcomes": ["fail", "inconclusive"], "verdict": "fail" }
+  ],
+  "counterparts": {
+    "background-worker-booted": "background-worker-ready",
+    "surface-rendered": "declared-surfaces-booted",
+    "content-script-injected": null,
+    "storage-key-present": null,
+    "console-errors-empty": "frame-errors-empty"
+  },
+  "divergences": [
+    "a different contract name and registry, because these checks judge a real browser over the DevTools protocol and reusing an upstream id would redefine what that id promises",
+    "a check is keyed by id and subject, because one stage asserts the same check over several surfaces or urls in one run",
+    "a document with no checks is inconclusive, because nothing downstream recomputes coverage from a pin the way the upstream verifier does for the preview lane"
+  ]
+}

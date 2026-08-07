@@ -13,7 +13,6 @@ import {
 } from "../lib/common-schema";
 import crypto from "node:crypto";
 import fs from "node:fs";
-import path from "node:path";
 import {
   runActVerb,
   actFrameJson,
@@ -28,6 +27,7 @@ import { CDPClient } from "../lib/cdp";
 import { resolveCdpPort, CDP_PORT_MISSING_HINT } from "../lib/cdp-port";
 import { isChromiumFamily } from "../lib/browser-family";
 import { verifyGuestLoaded } from "../lib/guest-load-oracle";
+import { manifestCandidates } from "../lib/project-manifest";
 import {
   navigateToUrlViaBridge,
   resolveBridgeBaseUrl,
@@ -212,7 +212,7 @@ function unpackedExtensionId(distPath: string): string {
   return id;
 }
 
-async function resolveExtensionId(
+export async function resolveExtensionId(
   projectPath: string,
   browser: string,
 ): Promise<string | null> {
@@ -253,13 +253,7 @@ async function resolveExtensionId(
 }
 
 function declaredCommands(projectPath: string, browser: string): string[] | null {
-  const candidates = [
-    path.join(projectPath, "dist", browser, "manifest.json"),
-    path.join(projectPath, "dist", "manifest.json"),
-    path.join(projectPath, "src", "manifest.json"),
-    path.join(projectPath, "manifest.json"),
-  ];
-  for (const file of candidates) {
+  for (const file of manifestCandidates(projectPath, browser)) {
     try {
       const manifest = JSON.parse(fs.readFileSync(file, "utf8"));
       const commands = manifest?.commands;
@@ -284,18 +278,12 @@ function readDistPath(projectPath: string, browser: string): string | null {
   }
 }
 
-function surfaceDocument(
+export function surfaceDocument(
   projectPath: string,
   browser: string,
   surface: string,
 ): string | null {
-  const candidates = [
-    path.join(projectPath, "dist", browser, "manifest.json"),
-    path.join(projectPath, "dist", "manifest.json"),
-    path.join(projectPath, "src", "manifest.json"),
-    path.join(projectPath, "manifest.json"),
-  ];
-  for (const file of candidates) {
+  for (const file of manifestCandidates(projectPath, browser)) {
     let manifest: Record<string, any>;
     try {
       manifest = JSON.parse(fs.readFileSync(file, "utf8"));
@@ -319,7 +307,7 @@ function surfaceDocument(
   return null;
 }
 
-const SURFACE_MANIFEST_KEYS: Record<string, string> = {
+export const SURFACE_MANIFEST_KEYS: Record<string, string> = {
   popup: "action.default_popup",
   options: "options_ui.page (or options_page)",
   sidebar: "side_panel.default_path (or sidebar_action.default_panel)",
@@ -328,17 +316,11 @@ const SURFACE_MANIFEST_KEYS: Record<string, string> = {
   bookmarks: "chrome_url_overrides.bookmarks",
 };
 
-function declaredSurfaces(
+export function declaredSurfaces(
   projectPath: string,
   browser: string,
 ): string[] | null {
-  const candidates = [
-    path.join(projectPath, "dist", browser, "manifest.json"),
-    path.join(projectPath, "dist", "manifest.json"),
-    path.join(projectPath, "src", "manifest.json"),
-    path.join(projectPath, "manifest.json"),
-  ];
-  const readable = candidates.some((file) => {
+  const readable = manifestCandidates(projectPath, browser).some((file) => {
     try {
       JSON.parse(fs.readFileSync(file, "utf8"));
       return true;

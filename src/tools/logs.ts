@@ -50,7 +50,10 @@ function capRecent(
   };
 }
 
-function emptyReason(projectPath: string, browser: string): string | undefined {
+export function emptyReason(
+  projectPath: string,
+  browser: string,
+): string | undefined {
   let contract: { status?: string; errors?: string[]; pid?: number };
   try {
     contract = JSON.parse(
@@ -118,7 +121,7 @@ function summarize(
   });
 }
 
-function staleFileNote(
+export function staleFileNote(
   projectPath: string,
   browser: string,
   eventsRunId: string,
@@ -145,6 +148,34 @@ function staleFileNote(
     return `These events carry runId ${eventsRunId} but the current session is run ${liveIds.join(" / ")}, which has written nothing yet. Do not read these as the current run's output.`;
   }
   return undefined;
+}
+
+/* @invariant The run a log FILE belongs to is the last header record in it,
+   which is the same record and the same rule readFromFile below applies while
+   it collects events. Callers outside this tool need the run id on its own, to
+   hand to staleFileNote before they treat a line as evidence about the session
+   they are judging; they must not re-derive it from a different field. */
+export function readLogRunId(projectPath: string, browser: string): string {
+  let text: string;
+  try {
+    text = fs.readFileSync(logsPath(projectPath, browser), "utf8");
+  } catch {
+    return "";
+  }
+  let runId = "";
+  for (const line of text.split("\n")) {
+    if (!line) continue;
+    let event: { type?: unknown; runId?: unknown };
+    try {
+      event = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    if (event && event.type === "header" && event.runId) {
+      runId = String(event.runId);
+    }
+  }
+  return runId;
 }
 
 async function readFromFile(
