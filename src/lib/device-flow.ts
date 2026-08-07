@@ -25,6 +25,7 @@ export async function requestDeviceCode(args: {
   path: string;
   project: string;
   clientName?: string;
+  intent?: "login" | "create";
   fetchImpl?: FetchImpl;
 }): Promise<DeviceCodeStart> {
   const doFetch = args.fetchImpl ?? fetch;
@@ -34,6 +35,7 @@ export async function requestDeviceCode(args: {
     body: JSON.stringify({
       project: args.project,
       clientName: args.clientName ?? "extension-mcp",
+      ...(args.intent ? { intent: args.intent } : {}),
     }),
   });
   const text = await res.text();
@@ -71,7 +73,18 @@ export type DevicePollResult =
   | { ok: true; creds: StoredCredentials }
   | { ok: false; reason: "pending" | "denied" | "expired" | "error"; message?: string };
 
-export async function pollDeviceToken(args: {
+export type DeviceGrantPollResult =
+  | { ok: true; data: Record<string, unknown> }
+  | { ok: false; reason: "pending" | "denied" | "expired" | "error"; message?: string };
+
+/* @invariant This poll returns the raw token response and PERSISTS NOTHING.
+ * The provisioning lane rides it: a provisioning grant lives minutes, opens
+ * exactly one endpoint, and writing it into the credentials file would
+ * overwrite a real project login with a credential every other tool's door
+ * refuses. Only pollDeviceToken, the login lane, may persist, and it does so
+ * by delegating here and writing afterwards.
+ */
+export async function pollDeviceGrant(args: {
   apiBase: string;
   path: string;
   project: string;
@@ -79,7 +92,7 @@ export async function pollDeviceToken(args: {
   interval: number;
   budgetMs: number;
   fetchImpl?: FetchImpl;
-}): Promise<DevicePollResult> {
+}): Promise<DeviceGrantPollResult> {
   const doFetch = args.fetchImpl ?? fetch;
   const deadline = Date.now() + args.budgetMs;
   let interval = Math.max(1, args.interval);
@@ -102,20 +115,7 @@ export async function pollDeviceToken(args: {
     }
 
     if (res.ok && data.token) {
-      try {
-        const creds = persistTokenResponse({
-          apiBase: args.apiBase,
-          project: args.project,
-          data,
-        });
-        return { ok: true, creds };
-      } catch (err: any) {
-        return {
-          ok: false,
-          reason: "error",
-          message: err?.message ? String(err.message) : String(err),
-        };
-      }
+      return { ok: true, data };
     }
 
     const error = String(data.error || "");
@@ -147,5 +147,32 @@ export async function pollDeviceToken(args: {
       return { ok: false, reason: "pending" };
     }
     await new Promise((r) => setTimeout(r, interval * 1000));
+  }
+}
+
+export async function pollDeviceToken(args: {
+  apiBase: string;
+  path: string;
+  project: string;
+  deviceCode: string;
+  interval: number;
+  budgetMs: number;
+  fetchImpl?: FetchImpl;
+}): Promise<DevicePollResult> {
+  const polled = await pollDeviceGrant(args);
+  if (!polled.ok) return polled;
+  try {
+    const creds = persistTokenResponse({
+      apiBase: args.apiBase,
+      project: args.project,
+      data: polled.data,
+    });
+    return { ok: true, creds };
+  } catch (err: any) {
+    return {
+      ok: false,
+      reason: "error",
+      message: err?.message ? String(err.message) : String(err),
+    };
   }
 }
