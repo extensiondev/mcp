@@ -17,7 +17,7 @@ import {
 import { toMcpSpeak } from "../lib/act";
 import { envelope, isEnvelope } from "../lib/envelope";
 import { resolveSessionBrowser } from "../lib/session-browser";
-import { readLogEvents } from "./logs-filter";
+import { readLogEvents, type LogQuery } from "./logs-filter";
 import {
   readyContractPath,
   sessionArtifactsRootDir,
@@ -176,9 +176,13 @@ export function recentErrorLogs(
   projectPath: string,
   browser: string,
   max = 5,
+  query: Omit<LogQuery, "level"> = {},
 ): string[] {
   const errs: string[] = [];
-  for (const event of readLogEvents(projectPath, browser, { level: "error" })) {
+  for (const event of readLogEvents(projectPath, browser, {
+    ...query,
+    level: "error",
+  })) {
     const ev = event as {
       messageParts?: unknown[];
       errorName?: string;

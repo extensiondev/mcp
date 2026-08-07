@@ -1,5 +1,37 @@
 # Changelog
 
+## 10.6.0
+
+The server covered every stage of the lifecycle except the one an agent
+needs most. It could read anything, so every expectation had to be
+hand-rolled as a string of JavaScript over a blob, which is the guessing
+the paired skill exists to prevent.
+
+- `extension_assert` is the test stage: a list of expectations in, one
+  verdict each out. Five checks ship, `background-worker-booted`,
+  `surface-rendered`, `content-script-injected`, `storage-key-present`
+  and `console-errors-empty`, and the run is a pass only when every one
+  of them passed.
+- A check that the platform cannot cover comes back `inconclusive`, never
+  a pass and never a red against the extension, and carries a `settledBy`
+  naming the evidence that would answer it. A content script's execution
+  is not observable from outside its isolated world, so a declared
+  `content_scripts` match is inconclusive rather than a pass; an absent
+  MV3 worker target is inconclusive because Chrome delists an idle one;
+  zero errors over a session that never wrote a log line is inconclusive
+  because zero errors and zero events are the same number; a read the
+  platform refuses, such as `chrome.storage` without `allowControl`, is
+  inconclusive because nothing was learned about the extension.
+- The verdict document is a port of the preview lane's own contract, with
+  its own contract name and check registry so the two can never be
+  confused, and each check names the preview check it is the
+  live-browser counterpart of. A contract test pins the outcome
+  vocabulary, the check and document shapes, and the aggregation rule
+  against that package's own code whenever a monorepo checkout is
+  reachable, the way the STORE.md corpus pins its parser.
+- The manifest candidate list, which `extension_open` held three copies
+  of, moves to one reader that every caller shares.
+
 ## 10.5.0
 
 `extension_submit`'s STORE.md advisory and the platform parser that feeds

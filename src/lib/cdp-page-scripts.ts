@@ -93,6 +93,24 @@ export const EXTENSION_ROOT_META_SCRIPT = `(() => {
         } catch { return null; }
       })()`;
 
+export const RENDER_EVIDENCE_SCRIPT = `(() => {
+        try {
+          const body = document.body;
+          const roots = document.querySelectorAll(
+            '#extension-root,[data-extension-root]:not([data-extension-root="extension-js-devtools"])'
+          );
+          const text = body ? (body.innerText || body.textContent || '') : '';
+          return {
+            readyState: document.readyState,
+            title: document.title,
+            bodyChildCount: body ? body.children.length : 0,
+            bodyElementCount: body ? body.querySelectorAll('*').length : 0,
+            textLength: text.trim().length,
+            extensionRootCount: roots.length
+          };
+        } catch { return null; }
+      })()`;
+
 export function probeSelectorsScript(selectors: string[]) {
   return `(() => {
         const selectors = ${JSON.stringify(selectors)};

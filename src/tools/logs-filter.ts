@@ -6,9 +6,13 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-import { matchesLogQuery, readLogEvents } from "extension-develop/bridge";
+import {
+  matchesLogQuery,
+  readLogEvents,
+  type LogQuery,
+} from "extension-develop/bridge";
 
-export { readLogEvents };
+export { readLogEvents, type LogQuery };
 
 export interface LogsArgs {
   projectPath: string;

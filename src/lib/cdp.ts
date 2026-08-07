@@ -11,9 +11,19 @@ import {
   PAGE_HTML_SCRIPT,
   PAGE_META_SCRIPT,
   EXTENSION_ROOT_META_SCRIPT,
+  RENDER_EVIDENCE_SCRIPT,
   probeSelectorsScript,
   domSnapshotScript,
 } from "./cdp-page-scripts";
+
+export interface RenderEvidence {
+  readyState?: string;
+  title?: string;
+  bodyChildCount?: number;
+  bodyElementCount?: number;
+  textLength?: number;
+  extensionRootCount?: number;
+}
 
 export class CDPClient extends CDPConnection {
   static async discoverBrowserWsUrl(
@@ -216,6 +226,11 @@ export class CDPClient extends CDPConnection {
   ): Promise<Array<Record<string, unknown>>> {
     const result = await this.evaluate(sessionId, domSnapshotScript(maxNodes));
     return (result as Array<Record<string, unknown>>) ?? [];
+  }
+
+  async getRenderEvidence(sessionId: string): Promise<RenderEvidence | null> {
+    const result = await this.evaluate(sessionId, RENDER_EVIDENCE_SCRIPT);
+    return (result as RenderEvidence) ?? null;
   }
 
   async getExtensionRootMeta(

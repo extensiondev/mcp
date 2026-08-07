@@ -26,6 +26,7 @@ import * as previewWeb from "./tools/preview-web";
 import * as shares from "./tools/shares";
 import * as stop from "./tools/stop";
 
+import * as assertTool from "./tools/assert";
 import * as manifestValidate from "./tools/manifest-validate";
 import * as themeVerify from "./tools/theme-verify";
 import * as analyze from "./tools/analyze";
@@ -81,6 +82,7 @@ export const tools: ToolModule[] = [
   manifestValidate,
   themeVerify,
   analyze,
+  assertTool,
   inspect,
   listExtensions,
   logs,
