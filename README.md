@@ -7,7 +7,7 @@
 
 # @extension.dev/mcp [![Version][npm-version-image]][npm-version-url] [![Downloads][npm-downloads-image]][npm-downloads-url] [![Discord][discord-image]][discord-url]
 
-> Give your AI agent hands for browser extension development. 28 MCP tools that scaffold, run, inspect, debug, and publish cross-browser extensions.
+> Give your AI agent hands for browser extension development. 29 MCP tools that scaffold, run, inspect, debug, and publish cross-browser extensions.
 
 <img alt="Logo" align="right" src="https://media.extension.land/brand/extension-dev/logo-dock.png" width="15.5%" />
 
@@ -123,6 +123,7 @@ cp node_modules/@extension.dev/mcp/claude/commands/*.md ~/my-extension/.claude/c
 | act | `extension_open` | Open a surface / trigger `action`, `command` |
 | browsers | `extension_browsers` | Detect, list, install, and uninstall browsers |
 | platform | `extension_auth` | Device login at extension.dev, plus login status and logout |
+| platform | `extension_project_create` | Create the extension.dev project for a built extension, headless, via device approval |
 | platform | `extension_preview_web` | Render a build in the web emulator, and share it as a link |
 | platform | `extension_shares` | List every link you have shared, and revoke one permanently |
 | platform | `extension_publish` | Publish a shareable preview to extension.dev |

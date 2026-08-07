@@ -17,6 +17,7 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 
 import * as create from "./tools/create";
+import * as projectCreate from "./tools/project-create";
 import * as templates from "./tools/templates";
 import * as build from "./tools/build";
 import * as dev from "./tools/dev";
@@ -95,6 +96,7 @@ export const tools: ToolModule[] = [
   wait,
   addFeature,
   auth,
+  projectCreate,
   browsers,
   doctor,
 ];
