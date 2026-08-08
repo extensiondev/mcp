@@ -14,6 +14,7 @@ import { resolveToken } from "../lib/publish";
 import { resolveApiBase, safeApiBase } from "../lib/login-flow";
 import { identityHeaders } from "../lib/session-identity";
 import { STORE_MD_FILENAME, parseStoreMd } from "../lib/store-md";
+import { platformHoldEnvelope, sawPlatformHold } from "../lib/platform-hold";
 import {
   consoleProjectUrl,
   fetchRegistryJson,
@@ -203,6 +204,15 @@ export async function handler(args: SubmitToolArgs): Promise<string> {
   }
 
   if (!res.ok) {
+    if (sawPlatformHold(res, data)) {
+      return platformHoldEnvelope({
+        command: "extension_submit",
+        name: "SubmitHeld",
+        body: data,
+        api: args.api,
+        value: { browsers, buildSha, dryRun },
+      });
+    }
     return fail(
       "SubmitError",
       `${dryRun ? "preflight" : "submit"} failed (${res.status}): ${data?.message || text || "unknown error"}`,

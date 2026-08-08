@@ -1,5 +1,51 @@
 # Changelog
 
+## 10.7.0
+
+The published client had no idea the platform could be held, so on the five
+lanes that run on our machines a reader met either a bare status code or an
+honest refusal that then sent them to a page answering 503. That is what
+makes someone conclude the product is broken.
+
+- A held lane now answers one shape on `extension_publish`,
+  `extension_release_promote`, `extension_submit`,
+  `extension_project_create`, `extension_shares`, `extension_preview_web`
+  and the registry reads behind `extension_release_status`: status
+  `platform-held`, `error.platformCode` set to `PLATFORM_NOT_OPEN`, and a
+  message carrying the condition, what still works, and a way back.
+- What still works is the part that was missing. Creating, developing and
+  packaging an extension run on your own machine, they are free forever, and
+  the hold does not touch them, so `extension_create`, `extension_dev`,
+  `extension_build`, `extension_manifest_validate` and `extension_doctor`
+  are named in the refusal and repeated in `value.stillWorks`.
+- A held refusal may not point at a held surface, so the only link it
+  carries is `templates.extension.dev`, the one surface that stays open,
+  and no refusal names a date.
+- Registry reads no longer collapse a non-ok response to
+  `<url> returned <status>`. The body is read once and its message travels
+  with the result, so a refusal the platform wrote reaches the reader
+  instead of a number. A held read is answered without buying an access
+  grant first, because a shut lane is not an auth problem.
+- The hold is recognised by the `code` field and the `x-extensiondev-hold`
+  header rather than by matching the sentence, so the wording can change on
+  the server without a client release.
+
+## 10.6.1
+
+Two reply strings pointed a stranger at surfaces the public hold keeps
+dark, so the remedy they named was a dead end wearing an instruction.
+
+- The closed-lane refusal in `extension_project_create` now relays the
+  server's own message verbatim whenever the server sends one, so the
+  platform decides what a caller reads there. The hardcoded console
+  pointer survives only as the fallback for a refusal that carries no
+  message field.
+- `extension_release_status` no longer promises that publicUrl links
+  need no login today. They are the public build pages and open without
+  login once the project is publicly reachable, and the console Builds
+  page is described as the authoritative record rather than a view the
+  caller is promised to see render.
+
 ## 10.6.0
 
 The server covered every stage of the lifecycle except the one an agent

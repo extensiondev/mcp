@@ -9,6 +9,7 @@
 import { resolveToken } from "./publish";
 import { resolveApiBase, safeApiBase } from "./login-flow";
 import { identityHeaders } from "./session-identity";
+import { platformHoldMessage, sawPlatformHold } from "./platform-hold";
 
 type FetchImpl = typeof fetch;
 
@@ -88,7 +89,26 @@ export interface ArtifactRevocation {
 
 export type ArtifactsOutcome<T> =
   | { ok: true; data: T }
-  | { ok: false; error: { name: string; message: string; status?: number } };
+  | {
+      ok: false;
+      error: { name: string; message: string; status?: number };
+      held?: boolean;
+      body?: unknown;
+    };
+
+function heldOutcome(
+  name: string,
+  res: Response,
+  data: unknown,
+  api?: string,
+): ArtifactsOutcome<never> {
+  return {
+    ok: false,
+    held: true,
+    body: data,
+    error: { name, status: res.status, message: platformHoldMessage(data, api) },
+  };
+}
 
 export function parseArtifactRef(input: string): string | null {
   const raw = String(input ?? "").trim();
@@ -201,6 +221,9 @@ export async function listArtifacts(options: {
   }
 
   const data = await readBody(res);
+  if (sawPlatformHold(res, data)) {
+    return heldOutcome("SharesHeld", res, data, options.api);
+  }
   if (res.status === 401) return authError("SharesAuthError");
   if (!res.ok) {
     return {
@@ -292,6 +315,9 @@ export async function revokeArtifact(options: {
   }
 
   const data = await readBody(res);
+  if (sawPlatformHold(res, data)) {
+    return heldOutcome("SharesHeld", res, data, options.api);
+  }
   if (res.status === 401) return authError("SharesAuthError");
   if (res.status === 404) {
     return {

@@ -9,6 +9,7 @@
 import { API_BASE } from "../lib/common-schema";
 import { envelope, type ErrorCode } from "../lib/envelope";
 import { publish, resolveToken } from "../lib/publish";
+import { platformHoldEnvelope } from "../lib/platform-hold";
 import {
   fetchRegistryJson,
   parseBuildIndex,
@@ -99,6 +100,17 @@ export async function handler(args: {
   });
 
   if (!result.ok) {
+    /* @invariant The held branch precedes the 404 branch because its hint sends
+     * the reader to extension.dev/new, which the public hold answers with 503.
+     * A refusal may not hand somebody an error page as its way forward. */
+    if (result.held) {
+      return platformHoldEnvelope({
+        command: "extension_publish",
+        name: result.error.name,
+        body: result.body,
+        api: args.api,
+      });
+    }
     const projectMissing = /\(404\)/.test(result.error.message);
     return envelope({
       ok: false,

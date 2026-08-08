@@ -13,6 +13,7 @@ import { resolveToken } from "./publish";
 import { resolveApiBase, safeApiBase } from "./login-flow";
 import { identityHeaders } from "./session-identity";
 import { wwwRevokeUrl } from "./artifacts-api";
+import { platformHoldMessage, sawPlatformHold } from "./platform-hold";
 
 type FetchImpl = typeof fetch;
 
@@ -54,7 +55,12 @@ export interface PreviewUploadResult {
 
 export type PreviewUploadOutcome =
   | { ok: true; data: PreviewUploadResult }
-  | { ok: false; error: { name: string; message: string } };
+  | {
+      ok: false;
+      error: { name: string; message: string };
+      held?: boolean;
+      body?: unknown;
+    };
 
 /* @invariant
  * A file only travels as text if it survives the round trip byte for byte.
@@ -249,6 +255,17 @@ export async function uploadPreview(options: {
   }
 
   if (!res.ok) {
+    if (sawPlatformHold(res, data)) {
+      return {
+        ok: false,
+        held: true,
+        body: data,
+        error: {
+          name: "PreviewHeld",
+          message: platformHoldMessage(data, options.api),
+        },
+      };
+    }
     return {
       ok: false,
       error: {

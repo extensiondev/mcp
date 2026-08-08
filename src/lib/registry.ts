@@ -12,31 +12,23 @@ import {
   withAccessToken,
   type RegistryAccessTokens,
 } from "./registry-access";
-import { PROD_ORIGINS, resolveOrigins, type Origins } from "@extension.dev/urls/origins";
+import { PROD_ORIGINS } from "@extension.dev/urls/origins";
 import { consoleProjectPath } from "@extension.dev/urls/paths";
 import {
   UserlandProjectPage,
   userlandUrl,
 } from "@extension.dev/urls/userland";
+import { mcpOrigins } from "./origins";
+import {
+  platformHoldMessage,
+  readPlatformCode,
+  readPlatformMessage,
+  sawPlatformHold,
+} from "./platform-hold";
 
 export const REGISTRY_BASE_DEFAULT = PROD_ORIGINS.registry;
 
-export function mcpOrigins(apiHint?: string): Origins {
-  const www =
-    String(apiHint || process.env.EXTENSION_DEV_API_URL || "").trim() || undefined;
-  return resolveOrigins(
-    {
-      www,
-      console: process.env.EXTENSION_DEV_CONSOLE_URL,
-      inspect: process.env.EXTENSION_DEV_INSPECT_URL,
-      preview: process.env.EXTENSION_DEV_PREVIEW_URL,
-      userland: process.env.EXTENSION_DEV_USERLAND_URL,
-      registry: process.env.EXTENSION_DEV_REGISTRY_URL,
-      media: process.env.EXTENSION_MEDIA_ORIGIN,
-    },
-    { hint: www },
-  );
-}
+export { mcpOrigins };
 
 export function consoleBase(apiHint?: string): string {
   return mcpOrigins(apiHint).console;
@@ -94,9 +86,16 @@ export function userlandProjectUrl(
   }
 }
 
-export type RegistryFetchResult<T> =
-  | { ok: true; json: T }
-  | { ok: false; status?: number; message: string };
+export interface RegistryFetchRefusal {
+  ok: false;
+  status?: number;
+  message: string;
+  code?: string;
+  held?: boolean;
+  body?: unknown;
+}
+
+export type RegistryFetchResult<T> = { ok: true; json: T } | RegistryFetchRefusal;
 
 async function readJson<T>(
   url: string,
@@ -108,6 +107,61 @@ async function readJson<T>(
   } catch {
     return { ok: false, message: `${url} did not return valid JSON` };
   }
+}
+
+/* @invariant
+ * A REFUSAL BODY SURVIVES THE HOP OR THE READER GETS A NUMBER.
+ *
+ * This function used to answer `${url} returned ${status}` and never open the
+ * body at all, so every sentence the platform wrote to explain itself, the
+ * hold's PLATFORM_NOT_OPEN refusal included, was thrown away one line before it
+ * reached a person. Measured against the published 10.4.3 tarball: an agent
+ * asking why a read failed was handed "https://... returned 403" and nothing
+ * else. Reading the body costs one await on a path that has already failed.
+ *
+ * It is read ONCE and carried, because a Response body is a stream and a second
+ * read throws. Everything downstream reads `body` from the result rather than
+ * touching the response again.
+ */
+async function readRefusal(
+  res: Response,
+): Promise<{ body: unknown; message: string; code: string }> {
+  let text = "";
+  try {
+    text = await res.text();
+  } catch {
+    return { body: null, message: "", code: "" };
+  }
+  let body: unknown = null;
+  try {
+    body = JSON.parse(text);
+  } catch {
+    body = null;
+  }
+  const message = readPlatformMessage(body) || text.trim().slice(0, 500);
+  return { body, message, code: readPlatformCode(body) };
+}
+
+function refusalResult(
+  url: string,
+  res: Response,
+  refusal: { body: unknown; message: string; code: string },
+  suffix = "",
+): RegistryFetchRefusal {
+  const held = sawPlatformHold(res, refusal.body);
+  const base = `${url} returned ${res.status}${suffix}`;
+  return {
+    ok: false,
+    status: res.status,
+    ...(refusal.code ? { code: refusal.code } : {}),
+    ...(held ? { held: true } : {}),
+    body: refusal.body,
+    message: held
+      ? platformHoldMessage(refusal.body)
+      : refusal.message
+        ? `${base}: ${refusal.message}`
+        : base,
+  };
 }
 
 export async function fetchRegistryJson<T = unknown>(
@@ -129,13 +183,18 @@ export async function fetchRegistryJson<T = unknown>(
   }
   if (res.ok) return readJson<T>(url, res);
 
+  const refusal = await readRefusal(res);
+  const held = sawPlatformHold(res, refusal.body);
+
   const authFailed = res.status === 401 || res.status === 403;
-  if (!authFailed || !ref) {
-    return {
-      ok: false,
-      status: res.status,
-      message: `${url} returned ${res.status}`,
-    };
+  /* @invariant A held lane is not an auth problem, so it never buys a grant.
+   * The hold answers 403, which is the same status a private project answers,
+   * and minting an access token to retry a lane the platform has shut spends a
+   * round trip to be refused identically. Reading the code first also keeps the
+   * refusal the reader sees the platform's own, rather than the "this project
+   * is private" guess the grant path would attach to it. */
+  if (held || !authFailed || !ref) {
+    return refusalResult(url, res, refusal);
   }
 
   const grant = await tokens.get(ref, options?.api);
@@ -146,11 +205,8 @@ export async function fetchRegistryJson<T = unknown>(
         : grant.status === "public"
           ? "The platform reports this project is public, but the registry refused the read."
           : grant.message;
-    return {
-      ok: false,
-      status: res.status,
-      message: `${url} returned ${res.status}. ${detail}`,
-    };
+    const carried = refusalResult(url, res, refusal);
+    return { ...carried, message: `${carried.message} ${detail}` };
   }
 
   let retried: Response;
@@ -160,11 +216,13 @@ export async function fetchRegistryJson<T = unknown>(
     return { ok: false, message: `Could not reach ${url}: ${err?.message || err}` };
   }
   if (!retried.ok) {
-    return {
-      ok: false,
-      status: retried.status,
-      message: `${url} returned ${retried.status} even with an access token`,
-    };
+    const retriedRefusal = await readRefusal(retried);
+    return refusalResult(
+      url,
+      retried,
+      retriedRefusal,
+      " even with an access token",
+    );
   }
   return readJson<T>(url, retried);
 }

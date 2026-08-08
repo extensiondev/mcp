@@ -13,6 +13,7 @@ import {
   resolveProjectRef,
 } from "../lib/registry";
 import { envelope, type ErrorCode } from "../lib/envelope";
+import { platformHoldEnvelope } from "../lib/platform-hold";
 
 const KNOWN_STORES = ["chrome", "firefox", "edge", "safari"] as const;
 
@@ -181,12 +182,25 @@ export async function readStores(args: {
     fetchRegistryJson(submissionsUrl, fetch, { ref, api: args.api }),
   ]);
 
+  /* @invariant A held refusal names no console page, and the Stores page is on
+   * console.extension.dev, which the public hold answers with 503. */
+  const heldRead = [healthRes, statusRes, submissionsRes].find(
+    (res) => !res.ok && res.held === true,
+  );
+  if (heldRead && !heldRead.ok) {
+    return platformHoldEnvelope({
+      command: "extension_release_status",
+      name: "StoreStatusHeld",
+      body: heldRead.body,
+      api: args.api,
+      value: { workspace: ref.workspace, project: ref.project },
+    });
+  }
+
   if (!healthRes.ok && !statusRes.ok && !submissionsRes.ok) {
     return fail(
       "StoreStatusNotFound",
-      `No store data on the registry for ${ref.workspace}/${ref.project} (${healthUrl} returned ${
-        healthRes.status ?? "no response"
-      }). The project may have no stores configured yet, be private (private registry data needs a share token), or the workspace/project slugs may be wrong. Configure stores at ${consoleStoresUrl}/new; the console Stores page is the authoritative view: ${consoleStoresUrl}`,
+      `No store data on the registry for ${ref.workspace}/${ref.project} (${healthRes.message}). The project may have no stores configured yet, be private (private registry data needs a share token), or the workspace/project slugs may be wrong. Configure stores at ${consoleStoresUrl}/new; the console Stores page is the authoritative view: ${consoleStoresUrl}`,
       "unavailable",
       "E_PLATFORM",
       {

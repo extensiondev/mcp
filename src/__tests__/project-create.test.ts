@@ -153,13 +153,15 @@ describe("extension_project_create", () => {
     expect(out.value.verificationUriComplete).toContain("ABCD-1234");
   });
 
-  it("surfaces a closed lane as a refusal that names the console", async () => {
+  it("relays the server's closed-lane message verbatim", async () => {
+    const serverSentence =
+      "extension.dev is not open to the public yet. Project creation will be available when the platform opens.";
     const { fn } = createFetch({
       code: {
         status: 403,
         body: {
           error: "access_denied",
-          message: "Headless project creation is not open on this host yet.",
+          message: serverSentence,
           code: "CLI_PROJECT_CREATE_DISABLED",
         },
       },
@@ -169,6 +171,28 @@ describe("extension_project_create", () => {
     const out = JSON.parse(await handler(baseArgs));
     expect(out.ok).toBe(false);
     expect(out.status).toBe("lane-closed");
+    expect(out.error.message).toBe(serverSentence);
+    expect(out.error.message.toLowerCase()).not.toContain("console");
+  });
+
+  it("falls back to the console pointer only when the server sends no message", async () => {
+    const { fn } = createFetch({
+      code: {
+        status: 403,
+        body: {
+          error: "access_denied",
+          code: "CLI_PROJECT_CREATE_DISABLED",
+        },
+      },
+      token: [],
+    });
+    vi.stubGlobal("fetch", fn);
+    const out = JSON.parse(await handler(baseArgs));
+    expect(out.ok).toBe(false);
+    expect(out.status).toBe("lane-closed");
+    expect(out.error.message).toContain(
+      "Create the project in the console instead",
+    );
   });
 
   it("creates the project with the provisioning grant and stores nothing locally", async () => {
