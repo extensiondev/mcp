@@ -11,6 +11,7 @@ import { envelope, type ErrorCode } from "../lib/envelope";
 import { resolveToken } from "../lib/publish";
 import { resolveApiBase, safeApiBase } from "../lib/login-flow";
 import { UserlandProjectPage } from "@extension.dev/urls/userland";
+import { platformHoldEnvelope, sawPlatformHold } from "../lib/platform-hold";
 
 import {
   consoleProjectUrl,
@@ -151,6 +152,17 @@ export async function handler(args: {
   }
 
   if (!res.ok) {
+    /* @invariant Held first: every other branch below enriches with a console
+     * Builds URL, and console answers 503 while the hold is on. */
+    if (sawPlatformHold(res, data)) {
+      return platformHoldEnvelope({
+        command: "extension_release_promote",
+        name: "ReleaseHeld",
+        body: data,
+        api: args.api,
+        value: { channel, buildId },
+      });
+    }
     const code = typeof data?.code === "string" ? data.code : undefined;
     const enrich: Record<string, unknown> = {};
     let hint = "";

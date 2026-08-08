@@ -16,6 +16,11 @@ import { uploadPreview } from "../lib/preview-upload";
 import { recordSharedPreview } from "../lib/share-record";
 import { probeShareCors } from "../lib/share-cors-probe";
 import { envelope } from "../lib/envelope";
+import {
+  PLATFORM_HOLD_CODE,
+  PLATFORM_HOLD_STILL_WORKS,
+  templatesOrigin,
+} from "../lib/platform-hold";
 
 const COMMAND = "extension_preview_web";
 
@@ -185,6 +190,14 @@ async function buildShare(
       supported: !isAuth,
       errorName: result.error.name,
       reason: result.error.message,
+      ...(result.held
+        ? {
+            held: true,
+            platformCode: PLATFORM_HOLD_CODE,
+            stillWorks: PLATFORM_HOLD_STILL_WORKS,
+            openSurface: templatesOrigin(),
+          }
+        : {}),
       ...(isAuth
         ? {
             loginHint:

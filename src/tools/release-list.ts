@@ -17,6 +17,7 @@ import {
 } from "../lib/registry";
 import { UserlandProjectPage } from "@extension.dev/urls/userland";
 import { envelope, type ErrorCode } from "../lib/envelope";
+import { platformHoldEnvelope } from "../lib/platform-hold";
 
 function fail(
   name: string,
@@ -61,12 +62,27 @@ export async function readReleases(args: {
 
   const buildsPageUrl = consoleProjectUrl(ref, "builds", args.api);
 
+  /* @invariant A held refusal names no console page. The Builds page is on
+   * console.extension.dev, which the public hold answers with 503, so quoting
+   * it here would refuse honestly and then send the reader to an error. The
+   * hold branch is tested first for that reason. */
+  const heldRead = [channelsRes, metaRes, buildsRes].find(
+    (res) => !res.ok && res.held === true,
+  );
+  if (heldRead && !heldRead.ok) {
+    return platformHoldEnvelope({
+      command: "extension_release_status",
+      name: "ReleaseListHeld",
+      body: heldRead.body,
+      api: args.api,
+      value: { workspace: ref.workspace, project: ref.project },
+    });
+  }
+
   if (!channelsRes.ok && !metaRes.ok && !buildsRes.ok) {
     return fail(
       "ReleaseListNotFound",
-      `No registry data for ${ref.workspace}/${ref.project} (${channelsUrl} returned ${
-        channelsRes.status ?? "no response"
-      }). The project may have no builds yet, or the workspace/project slugs may be wrong. If it is private, make sure extension_auth covers this exact project (a token scoped elsewhere cannot read it). The console Builds page is the authoritative view: ${buildsPageUrl}`,
+      `No registry data for ${ref.workspace}/${ref.project} (${channelsRes.message}). The project may have no builds yet, or the workspace/project slugs may be wrong. If it is private, make sure extension_auth covers this exact project (a token scoped elsewhere cannot read it). The console Builds page is the authoritative record: ${buildsPageUrl}`,
       "unavailable",
       "E_PLATFORM",
       { workspace: ref.workspace, project: ref.project, registryUrl: channelsUrl, buildsPageUrl },
@@ -109,7 +125,7 @@ export async function readReleases(args: {
   const publicUrlNote = publicProjectUrl
     ? isPrivate
       ? "publicUrl links open only for workspace members. This project is private, so an outside recipient needs a share link from extension_publish."
-      : "publicUrl links are the public build pages: no login needed, and they carry the per-browser downloads and the run locally instructions."
+      : "publicUrl links are the public build pages: they open without login once the project is publicly reachable, and they carry the per-browser downloads and the run locally instructions."
     : null;
   const channelsUnavailable = channelsRes.ok
     ? null

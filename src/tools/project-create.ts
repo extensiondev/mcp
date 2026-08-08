@@ -15,6 +15,7 @@ import {
   safeApiBase,
 } from "../lib/login-flow";
 import { consoleProjectUrl } from "../lib/registry";
+import { platformHoldEnvelope, sawPlatformHold } from "../lib/platform-hold";
 import { identityHeaders } from "../lib/session-identity";
 
 const COMMAND = "extension_project_create";
@@ -252,10 +253,13 @@ export async function handler(args: {
       const laneClosed = /CLI_PROJECT_CREATE_DISABLED|403/.test(
         String(message),
       );
+      const serverMessage =
+        typeof err?.serverMessage === "string" ? err.serverMessage.trim() : "";
       return fail(
         "CreateStartError",
         laneClosed
-          ? `Headless project creation is not open on this host yet. Create the project in the console instead, then run extension_auth (action: login) against it. (${message})`
+          ? serverMessage ||
+              `Headless project creation is not open on this host yet. Create the project in the console instead, then run extension_auth (action: login) against it. (${message})`
           : String(message),
         laneClosed ? "lane-closed" : "create-failed",
         "E_PLATFORM",
@@ -433,6 +437,16 @@ async function finishFromPoll(
 
   if (!res.ok) {
     const code = String(data.code || "");
+    /* @invariant Held first. Every branch under it points somewhere on the
+     * platform, and the platform is what has been shut. */
+    if (sawPlatformHold(res, data)) {
+      return platformHoldEnvelope({
+        command: COMMAND,
+        name: "CreateHeld",
+        body: data,
+        value: { workspace: wantWorkspace, project: wantProject },
+      });
+    }
     if (code === "CLI_PROJECT_CREATE_DISABLED") {
       return fail(
         "CreateClosed",

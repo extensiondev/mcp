@@ -22,6 +22,12 @@ import {
   type SharedPreviewEntry,
 } from "../lib/share-record";
 import { envelope } from "../lib/envelope";
+import {
+  PLATFORM_HOLD_CODE,
+  PLATFORM_HOLD_STILL_WORKS,
+  platformHoldEnvelope,
+  templatesOrigin,
+} from "../lib/platform-hold";
 
 const LOGIN_HINT =
   "Run extension_auth (action: login), or set EXTENSION_DEV_TOKEN (create one in the extension.dev dashboard).";
@@ -254,6 +260,14 @@ async function listShares(args: {
           listed: false,
           errorName: listing.error.name,
           reason: listing.error.message,
+          ...(listing.held
+            ? {
+                held: true,
+                platformCode: PLATFORM_HOLD_CODE,
+                stillWorks: PLATFORM_HOLD_STILL_WORKS,
+                openSurface: templatesOrigin(args.api),
+              }
+            : {}),
           ...(isAuth ? { loginHint: LOGIN_HINT } : {}),
         },
         shares: [],
@@ -419,6 +433,15 @@ async function revokeShare(args: {
     : undefined;
 
   if (!result.ok) {
+    if (result.held) {
+      return platformHoldEnvelope({
+        command: "extension_shares",
+        name: result.error.name,
+        body: result.body,
+        api: args.api,
+        value: { action: "revoke", artifactId: ref },
+      });
+    }
     const isAuth = result.error.name === "SharesAuthError";
     return envelope({
       ok: false,

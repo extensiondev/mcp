@@ -9,6 +9,7 @@
 import { readValidCredentials } from "./credentials";
 import { resolveApiBase, safeApiBase } from "./login-flow";
 import { identityHeaders } from "./session-identity";
+import { platformHoldMessage, sawPlatformHold } from "./platform-hold";
 
 type FetchImpl = typeof fetch;
 
@@ -29,7 +30,12 @@ export interface PublishOptions {
 
 export type PublishResult =
   | { ok: true; data: Record<string, unknown> }
-  | { ok: false; error: { name: string; message: string } };
+  | {
+      ok: false;
+      error: { name: string; message: string };
+      held?: boolean;
+      body?: unknown;
+    };
 
 export async function publish(
   options: PublishOptions = {},
@@ -90,6 +96,17 @@ export async function publish(
   }
 
   if (!res.ok) {
+    if (sawPlatformHold(res, data)) {
+      return {
+        ok: false,
+        held: true,
+        body: data,
+        error: {
+          name: "PublishHeld",
+          message: platformHoldMessage(data, options.api),
+        },
+      };
+    }
     return {
       ok: false,
       error: {

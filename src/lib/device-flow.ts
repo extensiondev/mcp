@@ -46,9 +46,13 @@ export async function requestDeviceCode(args: {
     data = { message: text };
   }
   if (!res.ok) {
-    throw new Error(
+    const error = new Error(
       `Device code request failed (${res.status}): ${data.message || "unknown error"}`,
-    );
+    ) as Error & { serverMessage?: string };
+    if (typeof data.message === "string" && data.message.trim()) {
+      error.serverMessage = data.message.trim();
+    }
+    throw error;
   }
   const deviceCode = String(data.device_code || "").trim();
   const userCode = String(data.user_code || "").trim();
