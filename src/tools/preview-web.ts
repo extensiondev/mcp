@@ -241,7 +241,9 @@ async function buildShare(
     serves: "uploaded-local-build",
     localBuildUploaded: true,
     ...(browserCheck
-      ? { browserLoadable: browserCheck.ok, browserCheck }
+      ? browserCheck.held
+        ? { browserLoadable: null, heldFromPublic: true, browserCheck }
+        : { browserLoadable: browserCheck.ok, browserCheck }
       : { browserLoadable: null }),
     record,
     note:

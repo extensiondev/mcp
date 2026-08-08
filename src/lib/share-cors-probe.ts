@@ -6,6 +6,8 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
+import { sawPlatformHold } from "./platform-hold";
+
 type FetchImpl = typeof fetch;
 
 const MAX_HOPS = 4;
@@ -18,6 +20,7 @@ export interface ShareCorsVerdict {
   finalStatus: number;
   redirects: number;
   allowOrigin: string | null;
+  held: boolean;
   reason: string;
 }
 
@@ -59,6 +62,7 @@ export async function probeShareCors(options: {
     finalStatus: 0,
     redirects,
     allowOrigin: null,
+    held: false,
     ...extra,
   });
 
@@ -89,6 +93,35 @@ export async function probeShareCors(options: {
 
     const status = res.status;
     const allowOrigin = res.headers.get("access-control-allow-origin");
+
+    /* @invariant
+     * A HOLD IS NOT A BROKEN LINK, AND THIS PROBE MUST NOT REPORT IT AS ONE.
+     *
+     * This fetch carries no Authorization on purpose: it stands in for the
+     * public browser that will open the share, so it measures what that browser
+     * can read and nothing else. During the public hold the platform can answer
+     * this document with its hold signal rather than the zip, and the plain
+     * status branches below would read that as "the link has nothing to
+     * render", which is the exact conflation between held-for-the-public and
+     * broken that makes an operator conclude their working share is dead. The
+     * signal is the machine field, never the status number or the prose, so a
+     * held response is recognised by sawPlatformHold and answered as held. It is
+     * still not ok, because the public genuinely cannot read it yet, but the
+     * reason says why and stops short of calling the link broken.
+     */
+    if (sawPlatformHold(res)) {
+      return verdict({
+        ok: false,
+        held: true,
+        finalStatus: status,
+        allowOrigin,
+        reason:
+          `${url} answered ${status} with the platform hold, so this link is held ` +
+          `from the public until extension.dev opens. It is not broken: the share ` +
+          `was created and will open once the platform is open. A signed-in ` +
+          `operator can still reach it.`,
+      });
+    }
 
     if (status >= 300 && status < 400) {
       const location = res.headers.get("location");
