@@ -112,6 +112,42 @@ describe("probeShareCors", () => {
     expect(verdict.reason).toContain("does not cover");
   });
 
+  it("reads a held response as held rather than as a broken link", async () => {
+    const { impl } = router({
+      [ZIP]: () =>
+        respond(503, { "x-extensiondev-hold": "held" }),
+    });
+
+    const verdict = await probeShareCors({
+      zipUrl: ZIP,
+      origin: ORIGIN,
+      fetchImpl: impl,
+    });
+
+    expect(verdict.ok).toBe(false);
+    expect(verdict.held).toBe(true);
+    expect(verdict.finalStatus).toBe(503);
+    expect(verdict.reason).toContain("held");
+    expect(verdict.reason).toContain("not broken");
+    expect(verdict.reason).not.toContain("nothing to render");
+  });
+
+  it("does not call an ordinary 503 held when the hold signal is absent", async () => {
+    const { impl } = router({
+      [ZIP]: () => respond(503, { "access-control-allow-origin": "*" }),
+    });
+
+    const verdict = await probeShareCors({
+      zipUrl: ZIP,
+      origin: ORIGIN,
+      fetchImpl: impl,
+    });
+
+    expect(verdict.ok).toBe(false);
+    expect(verdict.held).toBe(false);
+    expect(verdict.reason).toContain("nothing to render");
+  });
+
   it("fails a dead artifact rather than reporting a CORS problem", async () => {
     const { impl } = router({
       [ZIP]: () => respond(404, { "access-control-allow-origin": "*" }),
