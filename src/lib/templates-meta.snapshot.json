@@ -2,8 +2,8 @@
   "version": "2",
   "sourceRepo": "extension-js/examples",
   "generatorVersion": "2",
-  "commit": "8a565020924a0f8be3ae9fa1c807999ba1b938e4",
-  "generatedAt": "2026-08-05T08:25:06.981Z",
+  "commit": "cdd147da52a89cc4ca603f0529831c46c4896f0d",
+  "generatedAt": "2026-08-07T07:04:20.215Z",
   "templates": [
     {
       "slug": "action",
