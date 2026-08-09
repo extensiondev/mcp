@@ -11,6 +11,7 @@ import path from "node:path";
 import { extensionCreate } from "extension-create";
 import { exactVersion } from "../lib/exec";
 import { mcpOrigins } from "../lib/registry";
+import { captureTemplateSeed } from "../lib/funnel-telemetry";
 import { templateCatalogUrl } from "../lib/template-artifact-source";
 import { wwwNewPath } from "@extension.dev/urls/paths";
 import { envelope } from "../lib/envelope";
@@ -195,6 +196,12 @@ export async function handler(args: {
       hint: "Delete the directory and retry extension_create; a template download interrupted mid-way can leave a partial tree.",
     });
   }
+
+  /* @invariant The seed fires here and nowhere earlier: a scaffold with no
+     manifest is a failed start, and counting it would put starts in the
+     denominator that the funnel's other end can never reach. Discarded on
+     purpose so no scaffold waits on it or dies with it. */
+  void captureTemplateSeed({ slug: result.template, source: "template" });
 
   const packageManager =
     (result as { packageManager?: string }).packageManager ||

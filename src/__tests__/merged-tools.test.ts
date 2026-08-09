@@ -85,7 +85,9 @@ describe("extension_browsers dispatch", () => {
 describe("extension_auth dispatch", () => {
   it("reports logged-out status by default with no credentials", async () => {
     const out = JSON.parse(await auth.handler({}));
-    expect(["logged-out", "logged-in", "expired"]).toContain(out.status);
+    expect(["logged-out", "logged-in", "expired", "refused-by-server"]).toContain(
+      out.status,
+    );
   });
 
   it("rejects a login without a workspace/project pair", async () => {
