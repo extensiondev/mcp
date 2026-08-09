@@ -11,7 +11,7 @@ import { mcpOrigins } from "./registry";
 const DEFAULT_MEDIA_ORIGIN = "https://media.extension.land";
 const DEFAULT_CHANNEL = "latest";
 
-export const PINNED_COMMIT = "f7f4e6efb56a7e5ae08d58dbff3972d94af7d021";
+export const PINNED_COMMIT = "1d04a3d62f4d82ab3f13a3388800d517d1627707";
 
 const CHANNEL_CACHE_TTL_MS = 5 * 60 * 1000;
 
@@ -97,6 +97,11 @@ export function templateCatalogUrl(
 ): string {
   const origin = mcpOrigins().templates.replace(/\/+$/, "");
   return `${origin}/${encodeURIComponent(slug)}?utm_source=${utmSource}&utm_medium=tool`;
+}
+
+export async function resolvedTemplateCommit(): Promise<string> {
+  const release = await resolveRelease();
+  return release?.commit || PINNED_COMMIT;
 }
 
 export async function templateMetaUrls(): Promise<string[]> {
