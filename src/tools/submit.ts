@@ -15,6 +15,7 @@ import { resolveApiBase, safeApiBase } from "../lib/login-flow";
 import { identityHeaders } from "../lib/session-identity";
 import { STORE_MD_FILENAME, parseStoreMd } from "../lib/store-md";
 import { platformHoldEnvelope, sawPlatformHold } from "../lib/platform-hold";
+import { evaluateApproval } from "../lib/approval-gate";
 import {
   consoleProjectUrl,
   fetchRegistryJson,
@@ -65,6 +66,7 @@ export interface SubmitToolArgs {
   version?: string;
   dryRun?: boolean;
   projectPath?: string;
+  approvalId?: string;
   api?: string;
 }
 
@@ -106,6 +108,11 @@ export const schema = {
         type: "string",
         description:
           "Path to the extension project root, read only for the local STORE.md advisory check. Nothing local is uploaded; without it the check falls back to the server's working directory.",
+      },
+      approvalId: {
+        type: "string",
+        description:
+          "The approval handle returned by a prior approval-required response for a real submission. A real submission (dryRun:false) is irreversible and needs a human approval when the platform's approval gate is on: call once without this to get an approval id and URL, have a human approve at extension.dev, then call again with the same id. A dry run never needs it.",
       },
       api: API_BASE,
     },
@@ -171,9 +178,28 @@ export async function handler(args: SubmitToolArgs): Promise<string> {
   const url = `${apiCheck.base}/api/cli/stores/submit`;
 
   const dryRun = args.dryRun !== false;
+  const channel = args.channel ? String(args.channel).trim() : "stable";
   const body: Record<string, unknown> = { browsers, buildSha, dryRun };
   if (args.channel) body.channel = String(args.channel).trim();
   if (args.version) body.version = String(args.version).trim();
+
+  if (!dryRun) {
+    const gate = await evaluateApproval({
+      command: "extension_submit",
+      action: "extension_submit",
+      scope: {
+        browsers: [...browsers].sort(),
+        buildSha: buildSha.toLowerCase(),
+        channel,
+      },
+      description: `Submit build ${buildSha} to ${browsers.join(", ")} for store review.`,
+      approvalId: args.approvalId,
+      token,
+      api: args.api,
+    });
+    if (gate.blocked) return gate.envelope;
+    if (gate.approvalId) body.approvalId = gate.approvalId;
+  }
 
   let res: Response;
   try {

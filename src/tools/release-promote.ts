@@ -12,6 +12,7 @@ import { resolveToken } from "../lib/publish";
 import { resolveApiBase, safeApiBase } from "../lib/login-flow";
 import { UserlandProjectPage } from "@extension.dev/urls/userland";
 import { platformHoldEnvelope, sawPlatformHold } from "../lib/platform-hold";
+import { evaluateApproval } from "../lib/approval-gate";
 
 import {
   consoleProjectUrl,
@@ -55,6 +56,11 @@ export const schema = {
         type: "string",
         description: "Release notes markdown (optional)",
       },
+      approvalId: {
+        type: "string",
+        description:
+          "The approval handle returned by a prior approval-required response. Promoting changes what a public channel serves and is not reversible in place, so when the platform's approval gate is on this needs a human approval: call once without this to get an approval id and URL, have a human approve at extension.dev, then call again with the same id.",
+      },
       api: API_BASE,
     },
     required: ["buildId", "channel"],
@@ -82,6 +88,7 @@ export async function handler(args: {
   browsers?: string[];
   version?: string;
   releaseNotes?: string;
+  approvalId?: string;
   api?: string;
 }): Promise<string> {
   const token = resolveToken();
@@ -116,7 +123,30 @@ export async function handler(args: {
   }
   const url = `${apiCheck.base}/api/cli/release/promote`;
 
+  const sourceChannel = args.sourceChannel
+    ? String(args.sourceChannel).trim()
+    : "";
+  const gateBrowsers = (Array.isArray(args.browsers) ? args.browsers : [])
+    .map((b) => String(b).trim())
+    .filter(Boolean);
+  const gate = await evaluateApproval({
+    command: "extension_release_promote",
+    action: "extension_release_promote",
+    scope: {
+      buildId: buildId.toLowerCase(),
+      channel,
+      ...(sourceChannel ? { sourceChannel } : {}),
+      ...(gateBrowsers.length ? { browsers: [...gateBrowsers].sort() } : {}),
+    },
+    description: `Promote build ${buildId} to the ${channel} channel, changing what ${channel} serves.`,
+    approvalId: args.approvalId,
+    token,
+    api: args.api,
+  });
+  if (gate.blocked) return gate.envelope;
+
   const body: Record<string, unknown> = { buildId, channel };
+  if (gate.approvalId) body.approvalId = gate.approvalId;
   if (args.sourceChannel) body.sourceChannel = String(args.sourceChannel).trim();
   if (Array.isArray(args.browsers) && args.browsers.length) {
     body.browsers = args.browsers.map((b) => String(b).trim()).filter(Boolean);

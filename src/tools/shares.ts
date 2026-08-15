@@ -22,6 +22,8 @@ import {
   type SharedPreviewEntry,
 } from "../lib/share-record";
 import { envelope } from "../lib/envelope";
+import { resolveToken } from "../lib/publish";
+import { evaluateApproval } from "../lib/approval-gate";
 import {
   PLATFORM_HOLD_CODE,
   PLATFORM_HOLD_STILL_WORKS,
@@ -55,6 +57,11 @@ export const schema = {
         type: "string",
         description:
           "Any URL of the share to revoke (previewUrl, zipUrl, viewUrl, or revokeUrl). The artifact id is read out of it, so the link you sent someone is enough to pull it back.",
+      },
+      approvalId: {
+        type: "string",
+        description:
+          "The approval handle returned by a prior approval-required response for a revoke. Revoking permanently burns a share and cannot be undone, so when the platform's approval gate is on this needs a human approval: call revoke once without this to get an approval id and URL, have a human approve at extension.dev, then call revoke again with the same id. Listing never needs it.",
       },
       projectPath: {
         type: "string",
@@ -395,6 +402,7 @@ async function revokeShare(args: {
   artifactId?: string;
   url?: string;
   projectPath?: string;
+  approvalId?: string;
   api?: string;
 }): Promise<string> {
   const supplied = String(args.artifactId || args.url || "").trim();
@@ -417,8 +425,23 @@ async function revokeShare(args: {
     });
   }
 
+  const token = resolveToken();
+  if (token) {
+    const gate = await evaluateApproval({
+      command: "extension_shares",
+      action: "extension_shares.revoke",
+      scope: { artifactId: ref },
+      description: `Permanently revoke share ${ref}, killing the link for everyone with no way to restore it.`,
+      approvalId: args.approvalId,
+      token,
+      api: args.api,
+    });
+    if (gate.blocked) return gate.envelope;
+  }
+
   const result = await revokeArtifact({
     artifactId: ref,
+    ...(args.approvalId ? { approvalId: args.approvalId } : {}),
     ...(args.api ? { api: args.api } : {}),
   });
 
@@ -498,6 +521,7 @@ export async function handler(args: {
   artifactId?: string;
   url?: string;
   projectPath?: string;
+  approvalId?: string;
   status?: string;
   limit?: number;
   api?: string;
@@ -507,6 +531,7 @@ export async function handler(args: {
       ...(args.artifactId ? { artifactId: args.artifactId } : {}),
       ...(args.url ? { url: args.url } : {}),
       ...(args.projectPath ? { projectPath: args.projectPath } : {}),
+      ...(args.approvalId ? { approvalId: args.approvalId } : {}),
       ...(args.api ? { api: args.api } : {}),
     });
   }
