@@ -17,6 +17,9 @@ export const DECISION_D6 =
 
 export type ErrorCode =
   | "E_AMBIGUOUS_TARGET"
+  | "E_APPROVAL_PENDING"
+  | "E_APPROVAL_REJECTED"
+  | "E_APPROVAL_REQUIRED"
   | "E_AUTH_DENIED"
   | "E_AUTH_EXPIRED"
   | "E_AUTH_FAILED"
@@ -80,6 +83,9 @@ export type ErrorCode =
 
 export const ERROR_CODES: ErrorCode[] = [
   "E_AMBIGUOUS_TARGET",
+  "E_APPROVAL_PENDING",
+  "E_APPROVAL_REJECTED",
+  "E_APPROVAL_REQUIRED",
   "E_AUTH_DENIED",
   "E_AUTH_EXPIRED",
   "E_AUTH_FAILED",

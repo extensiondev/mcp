@@ -277,6 +277,7 @@ export async function revokeArtifact(options: {
   artifactId: string;
   api?: string;
   token?: string;
+  approvalId?: string;
   fetchImpl?: FetchImpl;
 }): Promise<ArtifactsOutcome<ArtifactRevocation>> {
   const token = options.token ?? resolveToken();
@@ -293,6 +294,7 @@ export async function revokeArtifact(options: {
   const url = `${apiCheck.base}/api/artifacts/${encodeURIComponent(
     options.artifactId,
   )}`;
+  const approvalId = String(options.approvalId || "").trim();
   const doFetch = options.fetchImpl ?? fetch;
   let res: Response;
   try {
@@ -301,6 +303,7 @@ export async function revokeArtifact(options: {
       headers: {
         authorization: `Bearer ${token}`,
         accept: "application/json",
+        ...(approvalId ? { "x-extensiondev-approval": approvalId } : {}),
         ...identityHeaders("extension_shares"),
       },
     });
