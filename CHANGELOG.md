@@ -1,5 +1,23 @@
 # Changelog
 
+## 10.8.0
+
+Some MCP actions change what a public channel serves or hand something to a
+store, and none of those can be taken back in place. The client now carries
+an approval gate for exactly those actions, so a human can stand between an
+agent's proposal and the write when the platform asks for one.
+
+- `extension_submit`, `extension_release_promote` and the destructive
+  `extension_shares` actions accept an `approvalId`. When the platform's
+  approval gate is on, the first call answers `approval-required` with an
+  approval id and a URL a human approves at extension.dev; the same call
+  repeated with that id performs the action. Rejections and pending
+  approvals answer as themselves, never as a bare error.
+- Approvals are bound to an action fingerprint, so an approval for one
+  promote cannot be replayed on another.
+- The gate is off unless the platform enables it; every existing flow is
+  unchanged by default.
+
 ## 10.7.0
 
 The published client had no idea the platform could be held, so on the five
