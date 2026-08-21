@@ -8,6 +8,7 @@
 
 import { PROD_ORIGINS } from "@extension.dev/urls/origins";
 
+import { sanitizeMcpProperties } from "./analytics-scrub";
 import { mcpOrigins } from "./registry";
 import { sessionId, telemetryDisabled } from "./session-identity";
 import { resolvedTemplateCommit } from "./template-artifact-source";
@@ -133,7 +134,7 @@ export function creationFunnelPayload(
     timestamp: now.toISOString(),
     properties: {
       draft_id: null,
-      ...properties,
+      ...sanitizeMcpProperties(properties),
       source: FUNNEL_SOURCE,
       entry: FUNNEL_ENTRY,
       session_id: session,
