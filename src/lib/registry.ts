@@ -15,7 +15,6 @@ import {
 import { PROD_ORIGINS } from "@extension.dev/urls/origins";
 import { consoleProjectPath } from "@extension.dev/urls/paths";
 import {
-  UserlandProjectPage,
   userlandUrl,
 } from "@extension.dev/urls/userland";
 import { mcpOrigins } from "./origins";
@@ -126,13 +125,13 @@ async function readJson<T>(
 async function readRefusal(
   res: Response,
 ): Promise<{ body: unknown; message: string; code: string }> {
-  let text = "";
+  let text: string;
   try {
     text = await res.text();
   } catch {
     return { body: null, message: "", code: "" };
   }
-  let body: unknown = null;
+  let body: unknown;
   try {
     body = JSON.parse(text);
   } catch {

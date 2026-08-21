@@ -15,7 +15,7 @@ const shouldGenerateDts = (() => {
   try {
     require("@ast-grep/napi");
     return true;
-  } catch (_error) {
+  } catch {
     console.warn(
       "[Extension.js] Skipping d.ts generation: @ast-grep/napi failed to load.",
     );
