@@ -488,6 +488,73 @@ describe("extension_preview_web", () => {
     });
   });
 
+  describe("the defaulted-false share flag explains what it spends, in the result", () => {
+    it("carries the allowance sentence and the exact share call with zero network", async () => {
+      const dir = tmpDist(MANIFEST);
+      let reached = false;
+      global.fetch = (async () => {
+        reached = true;
+        throw new Error("network is forbidden here");
+      }) as unknown as typeof fetch;
+      try {
+        const out = JSON.parse(
+          await handler({ projectPath: dir, build: false, distPath: dir, probe: false }),
+        );
+        expect(out.ok).toBe(true);
+        expect(reached).toBe(false);
+        const share = out.value.share;
+        expect(share.requested).toBe(false);
+        expect(share.localLinkNeeds).toContain("preview.extension.dev dev server");
+        expect(share.localLinkNeeds).toContain("this machine");
+        expect(share.shareSpends).toContain("extension.dev's machines");
+        expect(share.shareSpends).toContain("counts against your free allowance");
+        expect(share.shareCall.startsWith("extension_preview_web ")).toBe(true);
+        const call = JSON.parse(
+          share.shareCall.slice(share.shareCall.indexOf("{")),
+        );
+        expect(call).toEqual({
+          projectPath: dir,
+          build: false,
+          distPath: dir,
+          share: true,
+        });
+      } finally {
+        fs.rmSync(dir, { recursive: true, force: true });
+      }
+    });
+
+    it("still explains the next step when a stranger's first call finds no local host", async () => {
+      const dir = tmpDist(MANIFEST);
+      vi.spyOn(process, "cwd").mockReturnValue(os.tmpdir());
+      global.fetch = (async () => {
+        throw new Error("fetch failed");
+      }) as unknown as typeof fetch;
+      try {
+        const out = JSON.parse(
+          await handler({ projectPath: dir, build: false, distPath: dir }),
+        );
+        expect(out.ok).toBe(false);
+        expect(out.error.code).toBe("E_PREVIEW_HOST_UNREACHABLE");
+        const share = out.value.share;
+        expect(share.requested).toBe(false);
+        expect(share.shareSpends).toContain("counts against your free allowance");
+        const call = JSON.parse(
+          share.shareCall.slice(share.shareCall.indexOf("{")),
+        );
+        expect(call.projectPath).toBe(dir);
+        expect(call.share).toBe(true);
+      } finally {
+        fs.rmSync(dir, { recursive: true, force: true });
+      }
+    });
+
+    it("keeps the tool description in sync with the sentence the result carries", () => {
+      const shareDescription = (schema.inputSchema.properties as any).share
+        .description as string;
+      expect(shareDescription).toContain("counts against your free allowance");
+    });
+  });
+
   describe("share:true (uploads the local dist)", () => {
     let prevXdg: string | undefined;
     let prevToken: string | undefined;
