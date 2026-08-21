@@ -1,5 +1,18 @@
 # Changelog
 
+## 10.9.0
+
+The client ran its browser work through CLI packages pinned three minor
+releases back, so an agent driving the MCP got 4.0.30's behavior while the
+same person running `extension` on their own machine got 4.1.2's. Every fix
+shipped in between reached the terminal and stopped at the MCP.
+
+- `extension-create`, `extension-develop` and `extension-install` move from
+  4.0.30 to 4.1.2. The browser, logging and install paths the MCP tools call
+  into now behave the way the documented CLI does.
+- No tool surface changes: the same tools take the same inputs and answer the
+  same shapes.
+
 ## 10.8.0
 
 Some MCP actions change what a public channel serves or hand something to a
