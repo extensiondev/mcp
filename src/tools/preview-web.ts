@@ -404,7 +404,7 @@ export async function handler(args: {
     });
   }
 
-  let manifest: Record<string, any> = {};
+  let manifest: Record<string, any>;
   try {
     manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
   } catch (err) {

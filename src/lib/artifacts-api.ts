@@ -115,7 +115,7 @@ export function parseArtifactRef(input: string): string | null {
   if (!raw) return null;
   if (ARTIFACT_ID.test(raw)) return raw;
 
-  let parsed: URL | null = null;
+  let parsed: URL | null;
   try {
     parsed = new URL(raw);
   } catch {

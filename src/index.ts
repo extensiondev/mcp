@@ -114,7 +114,7 @@ export function toolResultFrame(result: string): {
   content: Array<{ type: "text"; text: string }>;
   isError?: boolean;
 } {
-  let refused = false;
+  let refused: boolean;
   try {
     const parsed: unknown = JSON.parse(result);
     refused = isEnvelope(parsed) && parsed.ok === false;
@@ -265,7 +265,7 @@ export async function runCli(cmd: string, args: string[]): Promise<number> {
         api: flag("api"),
       });
       log(out);
-      let parsed: any = null;
+      let parsed: any;
       try {
         parsed = JSON.parse(out);
       } catch {

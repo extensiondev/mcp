@@ -469,7 +469,7 @@ async function openSurfaceAsTab(
     );
   }
   let url: string;
-  let extensionId: string | null = null;
+  let extensionId: string | null;
   if (isChromiumFamily(browser)) {
     extensionId = await resolveExtensionId(projectPath, browser);
     if (!extensionId) {
