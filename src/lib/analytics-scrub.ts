@@ -103,8 +103,8 @@ export function sanitizeMcpProperties<T extends ScrubbableProperties>(
   for (const [key, value] of Object.entries(sanitized)) {
     sanitized[key] = maskDeep(value, DEPTH);
   }
-  /* Both passes are value-preserving on this lane's property type: the query
-     scrub and the repository mask each map a string to a string and leave every
-     other scalar untouched, so the widened walk cannot broaden the shape. */
+  /* @invariant Both passes are value-preserving on this lane's property type:
+   * the query scrub and the repository mask each map a string to a string and
+   * leave every other scalar untouched, so neither can broaden the shape. */
   return sanitized as T;
 }
