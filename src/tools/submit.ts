@@ -16,6 +16,7 @@ import { identityHeaders } from "../lib/session-identity";
 import { STORE_MD_FILENAME, parseStoreMd } from "../lib/store-md";
 import { platformHoldEnvelope, sawPlatformHold } from "../lib/platform-hold";
 import { evaluateApproval } from "../lib/approval-gate";
+import { spendNarration } from "../lib/allowance";
 import {
   consoleProjectUrl,
   fetchRegistryJson,
@@ -416,6 +417,13 @@ export async function handler(args: SubmitToolArgs): Promise<string> {
   if (!dryRun) {
     statusNote =
       "Track this submission with extension_release_status: it reads the recorded outcome, per-store credential health, and review state from the public registry.";
+    if (platformOk) {
+      result.allowance = spendNarration({
+        what: "This submission",
+        body: data,
+        api: args.api,
+      });
+    }
   }
 
   return envelope({

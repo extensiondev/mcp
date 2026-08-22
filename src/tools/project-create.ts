@@ -17,6 +17,7 @@ import {
 import { consoleProjectUrl } from "../lib/registry";
 import { platformHoldEnvelope, sawPlatformHold } from "../lib/platform-hold";
 import { identityHeaders } from "../lib/session-identity";
+import { spendNarration } from "../lib/allowance";
 
 const COMMAND = "extension_project_create";
 
@@ -522,6 +523,11 @@ async function finishFromPoll(
       projectId: data.projectId ?? null,
       consoleUrl,
       sourceRepo: ctx.args.repo,
+      allowance: spendNarration({
+        what: "This project creation, including its first build,",
+        body: data,
+        api: ctx.apiBase,
+      }),
       nextSteps: [
         `extension_auth (action: login, project: '${finalWorkspace}/${finalProject}')`,
         "extension_publish",

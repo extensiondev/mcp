@@ -54,7 +54,7 @@ export interface PreviewUploadResult {
 }
 
 export type PreviewUploadOutcome =
-  | { ok: true; data: PreviewUploadResult }
+  | { ok: true; data: PreviewUploadResult; body: unknown }
   | {
       ok: false;
       error: { name: string; message: string };
@@ -292,6 +292,7 @@ export async function uploadPreview(options: {
 
   return {
     ok: true,
+    body: data,
     data: {
       artifactId,
       previewUrl,
