@@ -13,6 +13,7 @@ import * as build from "./build";
 import { navigateToUrl } from "./open";
 import { ZIP_URL_REDIRECT_NOTE } from "../lib/artifacts-api";
 import { uploadPreview } from "../lib/preview-upload";
+import { spendNarration } from "../lib/allowance";
 import { recordSharedPreview } from "../lib/share-record";
 import { probeShareCors } from "../lib/share-cors-probe";
 import { envelope } from "../lib/envelope";
@@ -260,6 +261,7 @@ async function buildShare(
     ...(result.data.revokeUrl ? { revokeUrl: result.data.revokeUrl } : {}),
     serves: "uploaded-local-build",
     localBuildUploaded: true,
+    allowance: spendNarration({ what: "This share upload", body: result.body }),
     ...(browserCheck
       ? browserCheck.held
         ? { browserLoadable: null, heldFromPublic: true, browserCheck }

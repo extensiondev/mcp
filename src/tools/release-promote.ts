@@ -13,6 +13,7 @@ import { resolveApiBase, safeApiBase } from "../lib/login-flow";
 import { UserlandProjectPage } from "@extension.dev/urls/userland";
 import { platformHoldEnvelope, sawPlatformHold } from "../lib/platform-hold";
 import { evaluateApproval } from "../lib/approval-gate";
+import { spendNarration } from "../lib/allowance";
 
 import {
   consoleProjectUrl,
@@ -244,14 +245,20 @@ export async function handler(args: {
     UserlandProjectPage.build(buildId),
     args.api,
   );
+  const allowance = spendNarration({
+    what: "This promote",
+    body: data,
+    api: args.api,
+  });
   const enriched =
     data && typeof data === "object" && !Array.isArray(data)
       ? {
           ...data,
           ...(publicChannelUrl ? { publicChannelUrl } : {}),
           ...(publicBuildUrl ? { publicBuildUrl } : {}),
+          allowance,
         }
-      : data;
+      : { platform: data, allowance };
   return envelope({
     ok: true,
     command: "extension_release_promote",

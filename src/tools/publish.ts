@@ -8,6 +8,7 @@
 
 import { API_BASE } from "../lib/common-schema";
 import { envelope, type ErrorCode } from "../lib/envelope";
+import { spendNarration } from "../lib/allowance";
 import { publish, resolveToken } from "../lib/publish";
 import { platformHoldEnvelope } from "../lib/platform-hold";
 import {
@@ -193,6 +194,11 @@ export async function handler(args: {
       }
     }
   }
+  data.allowance = spendNarration({
+    what: "This publish",
+    body: data,
+    api: args.api,
+  });
   return envelope({
     ok: true,
     command: "extension_publish",
