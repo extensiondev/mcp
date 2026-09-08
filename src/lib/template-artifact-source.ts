@@ -11,7 +11,7 @@ import { mcpOrigins } from "./registry";
 const DEFAULT_MEDIA_ORIGIN = "https://media.extension.land";
 const DEFAULT_CHANNEL = "latest";
 
-export const PINNED_COMMIT = "0d7f24526eb96871b07f58ecc4d88e91c642d127";
+export const PINNED_COMMIT = "c4209587c290687384bcf616c8bef5017219c760";
 
 const CHANNEL_CACHE_TTL_MS = 5 * 60 * 1000;
 
