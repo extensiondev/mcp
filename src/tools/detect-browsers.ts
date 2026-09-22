@@ -12,6 +12,12 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { isGeckoFamily, WEBKIT_FAMILY } from "../lib/browser-family";
 import { envelope } from "../lib/envelope";
+import {
+  detectSafariAutomation,
+  readSafariVersion,
+  safariAutomationHint,
+  type SafariAutomation,
+} from "../lib/safari-automation";
 
 const execFileAsync = promisify(execFile);
 
@@ -23,6 +29,7 @@ interface DetectedBrowser {
   version: string | null;
   cdpSupport: boolean;
   rdpSupport: boolean;
+  automation?: SafariAutomation;
 }
 
 const ALL_BROWSERS = [
@@ -290,7 +297,12 @@ export async function detectBrowsers(
     let version: string | null = null;
     if (binaryPath && !isWebkit) {
       version = await getVersion(binaryPath, browser);
+    } else if (binaryPath && isWebkit) {
+      version = await readSafariVersion(binaryPath);
     }
+
+    const automation =
+      isWebkit && binaryPath ? await detectSafariAutomation(binaryPath) : null;
 
     detected.push({
       browser,
@@ -300,11 +312,16 @@ export async function detectBrowsers(
       version,
       cdpSupport: !isGecko && !isWebkit,
       rdpSupport: isGecko,
+      ...(automation ? { automation } : {}),
     });
   }
 
   const available = detected.filter((d) => d.source !== "not_found");
   const missing = detected.filter((d) => d.source === "not_found");
+  const safari = detected.find((d) => d.automation);
+  const safariHint = safari?.automation
+    ? ` ${safariAutomationHint(safari.automation)}`
+    : "";
 
   return envelope({
     ok: true,
@@ -326,7 +343,7 @@ export async function detectBrowsers(
                 .map((d) => d.browser)
                 .join(", ")}.`
             : ""
-        }`
-      : "All requested browsers are available.",
+        }${safariHint}`
+      : `All requested browsers are available.${safariHint}`,
   });
 }

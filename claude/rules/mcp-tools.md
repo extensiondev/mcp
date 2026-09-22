@@ -761,6 +761,20 @@ is carried as `value.sessionCommand`.
       "engine": "gecko",
       "cdpSupport": false,
       "rdpSupport": true
+    },
+    {
+      "browser": "safari",
+      "binaryPath": "/Applications/Safari.app/Contents/MacOS/Safari",
+      "source": "system",
+      "engine": "webkit",
+      "version": "27.0",
+      "cdpSupport": false,
+      "rdpSupport": false,
+      "automation": {
+        "safaridriver": "/usr/bin/safaridriver",
+        "mcp": true,
+        "bidi": true
+      }
     }
   ],
   "managed": {
@@ -769,6 +783,8 @@ is carried as `value.sessionCommand`.
   }
 }
 ```
+
+`automation` appears on Safari only (macOS): whether the safaridriver beside it speaks `--mcp` (Apple's Safari MCP server, Safari 27+) and `--bidi`. The hint says how to pair that server when it is there.
 
 **Why this matters:** Before Claude runs `extension_dev --browser=firefox`, it should know if Firefox is actually installed. This prevents "browser not found" errors and lets Claude suggest `extension_browsers` when needed. Especially important for Docker/devcontainer environments.
 

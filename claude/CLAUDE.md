@@ -228,6 +228,7 @@ npm run dev -- --logs info --log-url "example.com"
 ### Other debugging tools
 
 - Use `--browser=firefox` to test cross-browser compatibility
+- **Safari (macOS, Safari 27+).** This server builds, opens and guides the enable step for `--browser=safari`, but reads nothing back: Safari has no CDP or RDP. Pair Apple's Safari MCP server (`claude mcp add safari-mcp -- "/usr/bin/safaridriver" --mcp`, after enabling Safari > Settings > Developer > "Allow remote automation and external agents"). It drives an isolated automation window with page-level tools (tabs, `evaluate_javascript`, `browser_console_messages`, network, screenshots) and has no extension-aware tool, so use it to read a page a content script touches: open a matching URL, then look for a line the script itself logged. `extension_doctor` with no `projectPath` reports whether this machine's safaridriver has `--mcp`.
 - Check `dist/<browser>/` for build output
 - Use `--wait` flag to check if dev session is ready (outputs ready.json contract)
 - Use `npm run start` to test production builds (builds first, then launches)
