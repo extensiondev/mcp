@@ -173,6 +173,27 @@ check registry, so a document from one lane can never be mistaken for the
 other's. Each check here names the preview check it is the live-browser
 counterpart of, and a contract test holds the two grammars together.
 
+## Safari: pair with Apple's Safari MCP server
+
+Safari has no CDP and no RDP, so a `--browser=safari` session builds the app,
+opens it and guides the enable step, and reads nothing back. Safari 27 and
+Safari Technology Preview 247 ship Apple's own MCP server inside
+`safaridriver`; enable Safari > Settings > Developer > "Allow remote
+automation and external agents", then add it beside this one:
+
+```bash
+claude mcp add safari-mcp -- "/usr/bin/safaridriver" --mcp
+```
+
+It drives an isolated automation window with page-level tools (tabs,
+`evaluate_javascript`, console, network, screenshots) and has no
+extension-aware tool: it cannot open a popup or background page or list
+extensions. What it can do is read a page a content script touches, so the
+same evidence rule applies as on the other engines: a line the script itself
+logged, or the DOM it changed. `extension_browsers` reports whether the
+safaridriver on the machine has `--mcp`, and `extension_doctor` with no
+`projectPath` says the same in its `safari-agent` leg.
+
 ## Sharing a build in progress
 
 An unpacked extension is unusually hard to hand to someone: the only way to look at a colleague's work-in-progress has been to take their zip and run untrusted code with real browser permissions on your own machine. `extension_preview_web` with `share: true` uploads the `dist/` it just built and returns a link that renders those exact bytes in the emulator. Whoever opens it installs nothing and signs in to nothing, which is what lets a designer, a PM, or a reviewer into the loop at all. Those bytes run in an isolated sandbox origin or they do not run at all: preview refuses a shared build rather than serving it in its own renderer. Sharing needs auth (`extension_auth` or `EXTENSION_DEV_TOKEN`), the link lives 30 days, and `DELETE`ing the returned `revokeUrl` with the same token kills it early. Re-sharing an unchanged build returns that same link rather than a second one, and only a revoked link is replaced by a different one, because revocation is permanent: the address is burned and never resolves again. That makes `revokeUrl` the handle to the link you just made, so every share is also appended to `.extension.dev/shared-previews.json` in the project (gitignored) so it survives losing the tool output. The upload holds up to 2,000 files and about 64MB of text, or roughly 48MB when the build is mostly images, fonts or wasm, which travel base64-encoded. Without `share`, the tool returns a local-only deep link and uploads nothing.

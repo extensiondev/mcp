@@ -17,6 +17,11 @@ import {
 import { toMcpSpeak } from "../lib/act";
 import { envelope, isEnvelope } from "../lib/envelope";
 import { resolveSessionBrowser } from "../lib/session-browser";
+import {
+  detectSafariAutomation,
+  SAFARI_MCP_ADD_COMMAND,
+  SAFARI_MCP_SETTING,
+} from "../lib/safari-automation";
 import { readLogEvents, type LogQuery } from "./logs-filter";
 import {
   readyContractPath,
@@ -152,6 +157,25 @@ async function environmentPreflight(): Promise<string> {
       ? `Template catalog cached at ${cacheFile}`
       : "Template catalog not cached yet (extension_templates will fetch it)",
   });
+
+  if (process.platform === "darwin") {
+    const safariBinary = "/Applications/Safari.app/Contents/MacOS/Safari";
+    const automation = await detectSafariAutomation(
+      fs.existsSync(safariBinary) ? safariBinary : null,
+    );
+    checks.push({
+      check: "safari-agent",
+      status: automation.mcp ? "pass" : "warn",
+      detail: automation.mcp
+        ? `Apple's Safari MCP server is available (${automation.safaridriver} --mcp)`
+        : automation.safaridriver
+          ? `${automation.safaridriver} has no --mcp flag, so Safari has no agent-readable window from this machine`
+          : "No safaridriver found, so Safari has no agent-readable window from this machine",
+      remediation: automation.mcp
+        ? `Enable ${SAFARI_MCP_SETTING}, then add it beside this server: ${SAFARI_MCP_ADD_COMMAND}. It reads pages in an isolated automation window and has no extension-aware tool.`
+        : "Install Safari 27 (Software Update) or Safari Technology Preview 247+ for Apple's Safari MCP server. A Safari dev session still builds, opens and guides the enable step without it.",
+    });
+  }
 
   const healthy = checks.every((c) => c.status !== "fail");
   return envelope({

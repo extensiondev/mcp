@@ -33,6 +33,8 @@ Debug the currently running extension dev session. The user said: $ARGUMENTS
 
    To see what else is loaded in the browser (Chromium): `extension_list_extensions`.
 
+   **Safari sessions** have none of the above: no bridge, no CDP, no logs. If Apple's Safari MCP server is installed (`safari-mcp`, Safari 27+), use its `create_tab` on a URL the content script matches, then `browser_console_messages` for a line the script logged and `evaluate_javascript` for the DOM it changed. It cannot open the popup or background page. Without it, the evidence is Web Inspector, attended.
+
 4. **Diagnose common issues**
    Based on what you find, check for:
    - **"It didn't load"**: Check extension root count. If 0, content scripts may not be injecting. Check manifest `content_scripts` matches patterns and the target URL.

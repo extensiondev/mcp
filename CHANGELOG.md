@@ -1,5 +1,23 @@
 # Changelog
 
+## 10.10.0
+
+Safari 27 ships Apple's Safari MCP server inside safaridriver, the first
+agent-readable window Safari has had. This server still cannot read a Safari
+session itself, so it now says when that pairing is available instead of
+leaving a Safari session silent.
+
+- `extension_browsers` reports Safari's version and an `automation` block:
+  the safaridriver beside it, and whether it speaks `--mcp` and `--bidi`.
+  The hint names the Safari setting and the `claude mcp add` line when
+  `--mcp` is there, and the Safari 27 floor when it is not.
+- `extension_doctor` with no `projectPath` gains a `safari-agent` leg on
+  macOS: pass with Apple's server available, warn with the remediation
+  otherwise. It never fails the preflight.
+- The packaged CLAUDE.md, `/extension-debug` and the tool reference say what
+  the pairing can and cannot do: page-level reads in an isolated automation
+  window, no popup, background or extension list.
+
 ## 10.9.0
 
 The client ran its browser work through CLI packages pinned three minor
