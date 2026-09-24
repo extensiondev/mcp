@@ -24,6 +24,7 @@ import {
 } from "./logs-constants";
 import { makeFilter, type LogsArgs } from "./logs-filter";
 import { envelope, type ErrorCode } from "../lib/envelope";
+import { WEBKIT_FAMILY } from "../lib/browser-family";
 import {
   resolveSessionBrowser,
   knownSessionBrowsers,
@@ -490,6 +491,20 @@ async function readFromStream(
 export async function handler(args: LogsArgs): Promise<string> {
   const { browser } = resolveSessionBrowser(args.projectPath, args.browser);
   const limit = args.limit && args.limit > 0 ? args.limit : DEFAULT_LIMIT;
+
+  if (WEBKIT_FAMILY.has(browser)) {
+    return envelope({
+      ok: false,
+      command: TOOL,
+      status: "unsupported-browser",
+      error: {
+        code: "E_UNSUPPORTED_BROWSER",
+        name: "Unsupported",
+        message: `${browser} writes no log stream: Safari has no CDP or RDP, and its automation session carries no console feed over WebDriver, so nothing this tool could read exists for it.`,
+      },
+      hint: "Read the DOM a content script changes with extension_eval (context: 'page') or extension_assert content-script-injected, or open Web Inspector (Develop > Web Extension Background Content) by hand. A console feed needs the WebDriver BiDi log domain, which this server does not speak yet.",
+    });
+  }
 
   if (args.follow) {
     return readFromStream(args, browser, limit);

@@ -12,7 +12,15 @@ import {
   SESSION_PROJECT_PATH,
 } from "../lib/common-schema";
 import { runActVerb } from "../lib/act";
-import { isChromiumFamily } from "../lib/browser-family";
+import { isChromiumFamily, WEBKIT_FAMILY } from "../lib/browser-family";
+import {
+  readExtensionRoots,
+  readWebDriverSession,
+  readyExtensionId,
+  sameDocument,
+  WEBDRIVER_SESSION_MISSING_HINT,
+  WebDriverClient,
+} from "../lib/webdriver";
 import { CDPClient } from "../lib/cdp";
 import { CDP_PORT_MISSING_HINT, resolveCdpPort } from "../lib/cdp-port";
 import { envelope, isEnvelope } from "../lib/envelope";
@@ -313,6 +321,7 @@ const NO_SESSION_SETTLED_BY =
 
 class Stage {
   readonly chromium: boolean;
+  readonly webkit: boolean;
   private cdpPort: number | null | undefined;
   private discovered: CdpTarget[] | null = null;
   private manifestRead: ReadManifest | null | undefined;
@@ -325,6 +334,25 @@ class Stage {
     readonly timeout?: number,
   ) {
     this.chromium = isChromiumFamily(browser);
+    this.webkit = WEBKIT_FAMILY.has(browser);
+  }
+
+  webdriver(): WebDriverClient | null {
+    const info = readWebDriverSession(this.projectPath, this.browser);
+    return info ? new WebDriverClient(info) : null;
+  }
+
+  notReadableOnWebKit(
+    id: string,
+    subject: string | null,
+    instead: string,
+  ): CheckResult {
+    return inconclusiveCheck(
+      id,
+      subject,
+      `${this.browser} exposes no debugging protocol and no log stream to this server: a Safari automation session reaches the page's main world only, never the background, an extension page, chrome.storage or the console.`,
+      instead,
+    );
   }
 
   async port(): Promise<number | null> {
@@ -702,6 +730,13 @@ async function assertContentScriptInjected(
   const patterns = scripts.flatMap((entry) => entry.matches);
   const covering = coveringMatches(patterns, clause.url);
 
+  if (stage.webkit) {
+    return assertContentScriptInjectedOnWebKit(clause, stage, {
+      covering,
+      patterns,
+    });
+  }
+
   const runId = readLogRunId(stage.projectPath, stage.browser);
   const stale = staleFileNote(stage.projectPath, stage.browser, runId);
   const lines = readLogEvents(stage.projectPath, stage.browser, {
@@ -731,6 +766,97 @@ async function assertContentScriptInjected(
       : `The built manifest (${read.file}) declares no content_scripts match covering ${clause.url}${patterns.length ? ` (declared: ${patterns.join(", ")})` : " and declares no content script at all"}. That is not proof of non-injection either: scripts registered at runtime with chrome.scripting.registerContentScripts are invisible to this reader.`,
     "Have the content script write one line, a console call or a dx.signal, and this check reads it from the log stream. To settle it now, read a marker the script sets with extension_eval (context: 'content', url: the page), which runs in the same isolated world the content script does.",
     { coveringMatches: covering, declaredMatches: patterns, runId },
+  );
+}
+
+/* @invariant On Safari the evidence is a DOM root the script mounted, read
+ * from the page's main world through the dev session's automation window,
+ * because that window is the only reach Safari grants and it carries no
+ * console feed. An Extension.js content script stamps each root it mounts
+ * with an owner naming the extension, so an owned root is proof the script
+ * ran on this page. A page with no root is not proof it did not: a script
+ * that mounts nothing leaves nothing to read, so that reading stays
+ * inconclusive and names the marker that would settle it.
+ */
+async function assertContentScriptInjectedOnWebKit(
+  clause: ContentScriptClause,
+  stage: Stage,
+  declared: { covering: string[]; patterns: string[] },
+): Promise<CheckResult> {
+  const id = CONTENT_SCRIPT;
+  const subject = clause.subject;
+  const client = stage.webdriver();
+  if (!client) {
+    return inconclusiveCheck(
+      id,
+      subject,
+      `No Safari automation session is recorded for ${stage.browser}, so no page was read.`,
+      WEBDRIVER_SESSION_MISSING_HINT,
+      { coveringMatches: declared.covering, declaredMatches: declared.patterns },
+    );
+  }
+
+  let reading: Awaited<ReturnType<typeof readExtensionRoots>>;
+  try {
+    const current = await client.currentUrl();
+    if (!sameDocument(current, clause.url)) {
+      await client.navigate(clause.url);
+      await new Promise((resolve) => setTimeout(resolve, 1200));
+    }
+    reading = await readExtensionRoots(client);
+  } catch (error) {
+    return inconclusiveCheck(
+      id,
+      subject,
+      `The Safari automation window could not be read: ${error instanceof Error ? error.message : String(error)}.`,
+      "Confirm the dev session still holds its window with extension_doctor, restart extension_dev --browser=safari if it ended, then assert again.",
+      { coveringMatches: declared.covering, declaredMatches: declared.patterns },
+    );
+  }
+
+  const extensionId =
+    readyExtensionId(stage.projectPath, stage.browser) ??
+    (await stage.extensionId());
+  if (!extensionId) {
+    return inconclusiveCheck(
+      id,
+      subject,
+      `The Safari automation window shows ${reading.roots} extension root(s) at ${reading.url}, but this session recorded no extension id, so none of them can be attributed to this extension rather than another one.`,
+      "Restart extension_dev --browser=safari on an Extension.js that stamps extensionId into ready.json, then assert again.",
+      { roots: reading.roots, owners: reading.owners, url: reading.url },
+    );
+  }
+  const owned = reading.owners.filter(
+    (owner) => owner.length > 0 && owner.includes(extensionId),
+  );
+  if (owned.length > 0) {
+    return passCheck(
+      id,
+      subject,
+      `${owned.length} extension root(s) mounted by this extension's content script are in the DOM at ${reading.url}, read from the Safari automation window; only an injected content script mounts them.`,
+      {
+        roots: reading.roots,
+        owners: owned,
+        url: reading.url,
+        coveringMatches: declared.covering,
+      },
+    );
+  }
+
+  return inconclusiveCheck(
+    id,
+    subject,
+    declared.covering.length > 0
+      ? `${declared.covering.length} declared content_scripts match(es) cover ${clause.url} (${declared.covering.join(", ")}), and the Safari automation window shows ${reading.roots} extension root(s) at ${reading.url}${reading.roots > 0 ? " none of which names this extension as owner" : ""}. A script that mounts no root leaves nothing this reader can see, and Safari carries no console feed over WebDriver to read a line instead.`
+      : `The built manifest declares no content_scripts match covering ${clause.url}${declared.patterns.length ? ` (declared: ${declared.patterns.join(", ")})` : " and declares no content script at all"}, and the Safari automation window shows ${reading.roots} extension root(s) there.`,
+    "Have the content script mount an element with data-extension-root (Extension.js stamps the owner on it), or set any DOM marker and read it with extension_eval (context: 'page', url: the page). A console line would need the WebDriver BiDi log domain, which this server does not speak yet.",
+    {
+      roots: reading.roots,
+      owners: reading.owners,
+      url: reading.url,
+      coveringMatches: declared.covering,
+      declaredMatches: declared.patterns,
+    },
   );
 }
 
@@ -931,6 +1057,19 @@ async function evaluateClause(
   clause: Clause,
   stage: Stage,
 ): Promise<CheckResult> {
+  if (stage.webkit && clause.assert !== CONTENT_SCRIPT) {
+    return stage.notReadableOnWebKit(
+      clause.assert,
+      clause.subject,
+      clause.assert === STORAGE
+        ? "Read the value through the extension's own UI, or in Web Inspector (Develop > Web Extension Background Content) with browser.storage.local.get, attended."
+        : clause.assert === BACKGROUND
+          ? "Open Web Inspector (Develop > Web Extension Background Content) and look for the background's first line, attended; or have the background mark a page the content script reads, and assert content-script-injected there."
+          : clause.assert === SURFACE
+            ? "Open the surface in Safari and inspect it (right-click > Inspect Element), attended; the automation window cannot show an extension page."
+            : "A console feed on Safari needs the WebDriver BiDi log domain, which this server does not speak yet; read errors in Web Inspector, attended.",
+    );
+  }
   switch (clause.assert) {
     case BACKGROUND:
       return assertBackgroundWorker(clause, stage);

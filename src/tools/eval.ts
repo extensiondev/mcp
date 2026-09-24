@@ -21,8 +21,14 @@ import {
   patchValue,
   type ActArgs,
 } from "../lib/act";
+import { envelope } from "../lib/envelope";
 import { resolveSessionBrowser } from "../lib/session-browser";
-import { isChromiumFamily } from "../lib/browser-family";
+import { isChromiumFamily, WEBKIT_FAMILY } from "../lib/browser-family";
+import {
+  readWebDriverSession,
+  WEBDRIVER_SESSION_MISSING_HINT,
+  WebDriverClient,
+} from "../lib/webdriver";
 
 export const schema = {
   name: "extension_eval",
@@ -76,10 +82,85 @@ export function resolveDefaultEvalContext(
   return "background";
 }
 
+/* @invariant A Safari session evaluates in the page's main world and nowhere
+ * else. The automation window is the only reach Safari grants, and WebDriver's
+ * execute cannot enter a content script's isolated world, the background, or
+ * any extension page, so every other context is refused by name rather than
+ * answered from the wrong world.
+ */
+async function evaluateOnWebKit(
+  args: ActArgs & { expression: string },
+  browser: string,
+): Promise<string> {
+  const context = args.context || "page";
+  if (context !== "page") {
+    return envelope({
+      ok: false,
+      command: schema.name,
+      status: "unsupported-context",
+      error: {
+        code: "E_UNSUPPORTED_BROWSER",
+        name: "Unsupported",
+        message: `${browser} evaluates only in context "page": Safari's automation session runs in the page's main world and cannot enter "${context}". Popup, options, sidebar, devtools and the background are readable in Web Inspector only.`,
+      },
+      hint: "Pass context: 'page' (or omit it) to evaluate in the automation window's page. To test a content script, read a marker it sets in the DOM.",
+    });
+  }
+  const info = readWebDriverSession(args.projectPath, browser);
+  if (!info) {
+    return envelope({
+      ok: false,
+      command: schema.name,
+      status: "no-session",
+      error: {
+        code: "E_NO_SESSION",
+        name: "NoSession",
+        message: `No Safari automation session is recorded for ${browser} in this project's ready.json (webdriverPort and webdriverSessionId).`,
+      },
+      hint: WEBDRIVER_SESSION_MISSING_HINT,
+    });
+  }
+  const client = new WebDriverClient(info);
+  if (args.url) {
+    const current = await client.currentUrl().catch(() => null);
+    if (!current || !current.startsWith(args.url)) {
+      await client.navigate(args.url);
+    }
+  }
+  try {
+    const value = await client.execute(`return (${args.expression});`);
+    return envelope({
+      ok: true,
+      command: schema.name,
+      status: "evaluated",
+      value: {
+        context: "page",
+        browser,
+        url: await client.currentUrl().catch(() => null),
+        result: value,
+      },
+      hint: "Evaluated in the Safari automation window's main world over the dev session's WebDriver connection.",
+    });
+  } catch (error) {
+    return envelope({
+      ok: false,
+      command: schema.name,
+      status: "eval-failed",
+      error: {
+        code: "E_EVAL",
+        name: "EvalError",
+        message: error instanceof Error ? error.message : String(error),
+      },
+      hint: "The expression threw, or the automation window is gone. extension_doctor names which; a session that ended needs extension_dev again.",
+    });
+  }
+}
+
 export async function handler(
   args: ActArgs & { expression: string },
 ): Promise<string> {
   const { browser } = resolveSessionBrowser(args.projectPath, args.browser);
+  if (WEBKIT_FAMILY.has(browser)) return evaluateOnWebKit(args, browser);
   const defaulted =
     !args.context &&
     resolveDefaultEvalContext(args.projectPath, browser) === "page";
