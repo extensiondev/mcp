@@ -17,13 +17,14 @@ leaving a Safari session silent.
 - The packaged CLAUDE.md, `/extension-debug` and the tool reference say what
   the pairing can and cannot do: page-level reads in an isolated automation
   window, no popup, background or extension list.
-- A Safari dev session is now readable from this server. Extension.js with
-  Safari live reload records the `safaridriver` port and session id of the
-  window it holds in `ready.json`, and `extension_eval` (context `page`),
-  `extension_assert` `content-script-injected` (a DOM root owned by this
-  extension, read from the window), `extension_open` with `url`, and a
-  `safari-window` doctor leg all ride that one session. Safari allows one
-  automation session at a time, so the server never opens its own.
+- A Safari page becomes readable when a dev session records a `safaridriver`
+  session in `ready.json` (`webdriverPort`, `webdriverSessionId`): then
+  `extension_eval` (context `page`), `extension_assert`
+  `content-script-injected` (a DOM root owned by this extension, read from
+  the window), `extension_open` with `url`, and a `safari-window` doctor leg
+  ride that one session. Safari allows one automation session at a time, so
+  the server never opens its own, and no Extension.js release records one
+  today; without it these answer no-session with that explanation.
 - Safari's log file is read like every other engine's: Extension.js 4.1.28
   streams background and content lines through the extension's bridge, so
   `extension_logs`, `background-worker-booted`, `content-script-injected`
