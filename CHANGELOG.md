@@ -8,10 +8,12 @@ now rides that loop, and its pinned CLI packages move to the release that
 has it.
 
 - `extension-create`, `extension-develop` and `extension-install` move from
-  4.1.2 to 4.1.28. On Safari that release reloads the extension on every
-  save through the extension's own bridge and streams background and
-  content lines into the session's log file; a project with no local
-  Extension.js now gets that loop from the pin.
+  4.1.2 to the 4.1.28 canary that carries the `navigate` verb
+  (4.1.28-canary.412.2533754). On Safari that engine reloads the extension
+  on every save through the extension's own bridge, streams background and
+  content lines into the session's log file, and points a tab at a url
+  without eval; a project with no local Extension.js now gets all of that
+  from the pin.
 - The bridge tools work on a Safari dev session started with
   `allowControl` or `allowEval`: `extension_storage`, `extension_reload`,
   `extension_open` for surfaces, `extension_dom_snapshot` by tab id,

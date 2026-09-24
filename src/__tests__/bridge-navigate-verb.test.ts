@@ -29,7 +29,8 @@ describe("navigateToUrlViaBridge asks the engine's navigate verb first", () => {
     reset({ ok: true, command: "navigate", status: "ok", value: { tabId: 7, url: "https://a.test/", created: false } });
     const parsed = JSON.parse(await navigateToUrlViaBridge("/p", "safari", "https://a.test/"));
     expect(parsed.ok).toBe(true);
-    expect(parsed.value.tabId).toBe(7);
+    expect(parsed.status).toBe("navigated");
+    expect(parsed.value).toMatchObject({ navigated: "https://a.test/", tabId: 7, created: false, via: "navigate" });
     expect(act.calls).toHaveLength(1);
     expect(act.calls[0].slice(0, 2)).toEqual(["navigate", "https://a.test/"]);
   });

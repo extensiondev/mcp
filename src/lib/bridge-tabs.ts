@@ -139,17 +139,21 @@ export async function navigateToUrlViaBridge(
             },
       );
     }
-    return actFrameJson({
-      ...verbFrame,
+    const value =
+      verbFrame.value && typeof verbFrame.value === "object"
+        ? verbFrame.value
+        : {};
+    return envelope({
+      ok: true,
+      command: tool,
+      status: "navigated",
       value: {
-        tabId:
-          typeof verbFrame.value?.tabId === "number"
-            ? verbFrame.value.tabId
-            : null,
-        ...(verbFrame.value && typeof verbFrame.value === "object"
-          ? verbFrame.value
-          : {}),
+        navigated: url,
+        tabId: typeof value.tabId === "number" ? value.tabId : null,
+        created: value.created === true,
+        via: "navigate",
       },
+      hint: "The tab now shows this page. Content scripts that match it ran on load; read them with extension_eval (context: 'content', url) or extension_assert content-script-injected.",
     });
   }
   return navigateToUrlViaBackgroundEval(projectPath, browser, url, timeout, tool);
