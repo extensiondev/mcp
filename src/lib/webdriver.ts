@@ -11,7 +11,7 @@ import { readyContractPath } from "./session-paths";
 import type { ReadyContract } from "./types";
 
 export const WEBDRIVER_SESSION_MISSING_HINT =
-  "A Safari session is readable only through the automation window extension_dev opens (Extension.js with Safari live reload, Safari 27 or Safari Technology Preview 247, and Safari > Settings > Developer > \"Allow remote automation and external agents\" on). Safari grants one automation session at a time, so this server never opens its own; start extension_dev --browser=safari, wait for ready, and retry.";
+  "A Safari page is readable only through a safaridriver session the dev session records in ready.json (webdriverPort and webdriverSessionId), and no Extension.js release opens one today: Safari grants one automation session at a time, so this server never opens its own. What Safari does give you is the dev session's log file, which extension_logs and the log-based assertions read once the extension is enabled; the rest is Web Inspector, attended.";
 
 export interface WebDriverSessionInfo {
   port: number;

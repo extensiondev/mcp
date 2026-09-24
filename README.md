@@ -194,12 +194,10 @@ logged, or the DOM it changed. `extension_browsers` reports whether the
 safaridriver on the machine has `--mcp`, and `extension_doctor` with no
 `projectPath` says the same in its `safari-agent` leg.
 
-Safari grants one automation session at a time, and `extension_dev
---browser=safari` (Extension.js with Safari live reload) holds it: the dev
-loop opens a window through `safaridriver`, reloads it on every save, and
-records the port and session id in `ready.json`. This server reads through
-that same session instead of asking for a second one, so while a Safari dev
-session runs, Apple's server cannot open a window and does not need to:
+Safari grants one automation session at a time, so this server never opens
+one of its own. When a dev session records a `safaridriver` session in
+`ready.json` (`webdriverPort` and `webdriverSessionId`; no Extension.js
+release does this today), the server reads through it:
 
 - `extension_eval` evaluates in the window's page (context `page` only; the
   background and every extension page are out of reach by Safari's design)
@@ -211,10 +209,12 @@ session runs, Apple's server cannot open a window and does not need to:
 - `extension_doctor` adds a `safari-window` leg that says whether the
   recorded session still answers
 
-Safari's logs need no protocol at all: on Extension.js 4.1.28 or newer the
-dev session streams background and content lines through the extension's
-own bridge into the same log file the other engines use, so `extension_logs`
-reads it and `background-worker-booted` and `console-errors-empty` judge it.
+What Safari gives every session is its log file: on Extension.js 4.1.28 or
+newer the dev session streams background and content lines through the
+extension's own bridge into the same log file the other engines use, and
+reloads the extension on every save the same way. `extension_logs` reads
+that file, and `background-worker-booted`, `content-script-injected` and
+`console-errors-empty` judge it, with no window involved.
 `extension_storage`, `extension_reload`, `surface-rendered` and
 `storage-key-present` stay inconclusive or unsupported on Safari, each naming
 the attended Web Inspector path that would settle it.
