@@ -110,13 +110,14 @@ describe("extension_doctor's safari-window leg", () => {
     expect(parsed.ok).toBe(false);
   });
 
-  it("fails with the Safari hint when no session was recorded", async () => {
+  it("skips, without failing the session, when no window was recorded", async () => {
     const dir = tmpProject();
     writeContract(dir, { status: "ready", browser: "safari", pid: process.pid });
     const parsed = JSON.parse(await handler({ projectPath: dir, browser: "safari" }));
     const leg = legOf(parsed);
-    expect(leg?.status).toBe("fail");
-    expect(leg?.remediation).toContain("one automation session");
+    expect(leg?.status).toBe("skip");
+    expect(leg?.detail).toContain("bridge");
+    expect(parsed.ok).toBe(true);
   });
 
   it("adds no such leg on a Chromium session", async () => {
