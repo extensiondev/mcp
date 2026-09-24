@@ -9,6 +9,12 @@ vi.mock("../lib/act", async (importOriginal) => {
     ...actual,
     runActVerb: async (cli: string[]) => {
       calls.push(cli);
+      if (cli[0] === "navigate") {
+        return JSON.stringify({
+          ok: false,
+          error: { code: "E_CLI", message: "error: unknown command 'navigate'" },
+        });
+      }
       return actResponder(cli);
     },
   };
@@ -45,6 +51,10 @@ vi.mock("../lib/session-browser", async (importOriginal) => {
   };
 });
 
+/* @invariant These cases model the engine before the navigate verb, so the
+   mock refuses that verb the way commander does and every navigation below
+   rides the background eval it was written against. The verb-first path has
+   its own file, bridge-navigate-verb.test.ts. */
 const open = await import("../tools/open");
 const inspectTool = await import("../tools/inspect");
 
