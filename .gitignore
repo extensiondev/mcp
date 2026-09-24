@@ -17,3 +17,4 @@ test-results/
 
 # Local working docs (docs policy: knowledge -> memory, ledgers gitignored)
 BUGS_TO_FIX.md
+BUGS_TO_FIX_MCP.md
