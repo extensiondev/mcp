@@ -90,7 +90,72 @@ export async function pollForBridgeTab(
   }
 }
 
+/* @invariant The engine's own `navigate` verb is asked first. It is a static
+ * tabs call inside the extension, so it works where an MV3 background refuses
+ * eval, which is every Safari session and any Chromium build with a strict
+ * CSP. Only an engine that does not know the verb yet falls back to the
+ * background eval, and that fallback is recognised by the engine's own
+ * "unknown command" refusal, never by its version number.
+ */
+const UNKNOWN_VERB = /unknown command/i;
+
 export async function navigateToUrlViaBridge(
+  projectPath: string,
+  browser: string,
+  url: string,
+  timeout?: number,
+  tool = "extension_open",
+): Promise<string> {
+  const viaVerb = await runActVerb(
+    [
+      "navigate",
+      url,
+      projectPath,
+      "--browser",
+      browser,
+      ...(timeout != null ? ["--timeout", String(timeout)] : []),
+    ],
+    projectPath,
+    timeout,
+    tool,
+  );
+  let verbFrame: any;
+  try {
+    verbFrame = JSON.parse(viaVerb);
+  } catch {
+    verbFrame = null;
+  }
+  const verbUnknown =
+    verbFrame?.ok === false &&
+    UNKNOWN_VERB.test(String(verbFrame?.error?.message ?? ""));
+  if (verbFrame && !verbUnknown) {
+    if (verbFrame.ok === false) {
+      return actFrameJson(
+        verbFrame.hint
+          ? verbFrame
+          : {
+              ...verbFrame,
+              hint: "URL navigation rides the agent bridge, so the dev session must be started with allowControl: true (extension_dev).",
+            },
+      );
+    }
+    return actFrameJson({
+      ...verbFrame,
+      value: {
+        tabId:
+          typeof verbFrame.value?.tabId === "number"
+            ? verbFrame.value.tabId
+            : null,
+        ...(verbFrame.value && typeof verbFrame.value === "object"
+          ? verbFrame.value
+          : {}),
+      },
+    });
+  }
+  return navigateToUrlViaBackgroundEval(projectPath, browser, url, timeout, tool);
+}
+
+async function navigateToUrlViaBackgroundEval(
   projectPath: string,
   browser: string,
   url: string,
@@ -130,7 +195,7 @@ export async function navigateToUrlViaBridge(
           ? parsed
           : {
               ...parsed,
-              hint: "On this browser family URL navigation rides the agent bridge (a background eval of tabs.update), so the dev session must be started with allowEval: true (extension_dev).",
+              hint: "This engine predates the navigate verb, so URL navigation rides a background eval of tabs.update: the dev session must be started with allowEval: true (extension_dev), and an MV3 background that refuses eval by CSP (Safari, strict Chromium builds) cannot navigate this way at all; upgrade the project's Extension.js to one with `extension navigate`.",
             },
       );
     }
