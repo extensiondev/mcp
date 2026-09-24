@@ -173,51 +173,39 @@ check registry, so a document from one lane can never be mistaken for the
 other's. Each check here names the preview check it is the live-browser
 counterpart of, and a contract test holds the two grammars together.
 
-## Safari: pair with Apple's Safari MCP server
+## Safari
 
-Safari has no CDP and no RDP, so a `--browser=safari` session builds the app,
-opens it and guides the enable step, and reads nothing back. Safari 27 and
-Safari Technology Preview 247 ship Apple's own MCP server inside
-`safaridriver`; enable Safari > Settings > Developer > "Allow remote
-automation and external agents", then add it beside this one:
+A Safari dev session runs on the same bridge as every other engine. On
+Extension.js 4.1.28 or newer, `extension_dev --browser=safari` (macOS with
+Xcode) builds the app, opens it, and, once you enable the extension in
+Safari > Settings > Extensions, reloads it on every save through the
+extension's own socket to the dev server and streams its background and
+content lines into the session's log file. With `allowControl` or
+`allowEval`, the control channel is on too: `extension_storage`,
+`extension_reload`, `extension_dom_snapshot` (by tab id), `extension_open`
+for surfaces, `extension_logs`, and the assertions `content-script-injected`
+(on a content line at the url), `background-worker-booted`,
+`storage-key-present` and `console-errors-empty` all work against it.
+`extension_eval` in `content` or `page` needs a tab already open at the url,
+and `extension_open` with `url` cannot open one on Safari: the bridge
+navigates through a background eval, and Safari's MV3 background CSP blocks
+eval, which also blocks `extension_eval` in `background`. Open the page in
+Safari by hand, then read it. Safari has no CDP or RDP, so
+`extension_inspect` has no Safari path and `surface-rendered` answers
+inconclusive, pointing at `extension_dom_snapshot` with a `context`.
 
-```bash
-claude mcp add safari-mcp -- "/usr/bin/safaridriver" --mcp
-```
-
-It drives an isolated automation window with page-level tools (tabs,
-`evaluate_javascript`, console, network, screenshots) and has no
-extension-aware tool: it cannot open a popup or background page or list
-extensions. What it can do is read a page a content script touches, so the
-same evidence rule applies as on the other engines: a line the script itself
-logged, or the DOM it changed. `extension_browsers` reports whether the
-safaridriver on the machine has `--mcp`, and `extension_doctor` with no
-`projectPath` says the same in its `safari-agent` leg.
-
-Safari grants one automation session at a time, so this server never opens
-one of its own. When a dev session records a `safaridriver` session in
-`ready.json` (`webdriverPort` and `webdriverSessionId`; no Extension.js
-release does this today), the server reads through it:
-
-- `extension_eval` evaluates in the window's page (context `page` only; the
-  background and every extension page are out of reach by Safari's design)
-- `extension_assert` `content-script-injected` passes on a content line in
-  the dev session's log, as on every engine, and otherwise navigates the
-  window to the URL and passes on a DOM root the content script mounted and
-  stamped with this extension's id; a page with neither stays inconclusive
-- `extension_open` with `url` navigates the window
-- `extension_doctor` adds a `safari-window` leg that says whether the
-  recorded session still answers
-
-What Safari gives every session is its log file: on Extension.js 4.1.28 or
-newer the dev session streams background and content lines through the
-extension's own bridge into the same log file the other engines use, and
-reloads the extension on every save the same way. `extension_logs` reads
-that file, and `background-worker-booted`, `content-script-injected` and
-`console-errors-empty` judge it, with no window involved.
-`extension_storage`, `extension_reload`, `surface-rendered` and
-`storage-key-present` stay inconclusive or unsupported on Safari, each naming
-the attended Web Inspector path that would settle it.
+Safari 27 and Safari Technology Preview 247 also ship Apple's own MCP server
+inside `safaridriver` (enable Safari > Settings > Developer > "Allow remote
+automation and external agents", then
+`claude mcp add safari-mcp -- "/usr/bin/safaridriver" --mcp`). It drives an
+isolated automation window with page-level tools and has no extension-aware
+tool. It runs beside a Safari dev session, because this server never opens
+an automation session of its own: if a dev session ever records one in
+`ready.json` (`webdriverPort`, `webdriverSessionId`), `extension_eval` with
+context `page` and `extension_open` with `url` use it for the page's main
+world, and `extension_doctor` shows it as a `safari-window` leg; today no
+Extension.js release records one, and that leg reads `skip`.
+`extension_browsers` reports whether the machine's safaridriver has `--mcp`.
 
 ## Sharing a build in progress
 

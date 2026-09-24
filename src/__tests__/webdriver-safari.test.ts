@@ -3,7 +3,19 @@ import http from "node:http";
 import os from "node:os";
 import path from "node:path";
 
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+const act = vi.hoisted(() => ({ calls: [] as string[][] }));
+vi.mock("../lib/act", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../lib/act")>();
+  return {
+    ...actual,
+    runActVerb: async (cli: string[]) => {
+      act.calls.push(cli);
+      return JSON.stringify({ ok: true, command: cli[0], status: "ok", value: { via: "bridge", cli } });
+    },
+  };
+});
 
 import { logsPath, readyContractPath } from "../lib/session-paths";
 import {
@@ -169,6 +181,7 @@ describe("Safari sessions over the dev window's WebDriver connection", () => {
       await evalTool.handler({
         projectPath: project,
         browser: BROWSER,
+        context: "page",
         expression: "1 + 1",
       }),
     );
@@ -183,6 +196,7 @@ describe("Safari sessions over the dev window's WebDriver connection", () => {
     await evalTool.handler({
       projectPath: project,
       browser: BROWSER,
+      context: "page",
       expression: "document.title",
       url: "https://example.test/page",
     });
@@ -196,34 +210,37 @@ describe("Safari sessions over the dev window's WebDriver connection", () => {
     ).toBe(true);
   });
 
-  it("refuses every context but page, by name", async () => {
+  it("sends content and background eval down the bridge, not the window", async () => {
     withWindow();
-    const parsed = JSON.parse(
-      await evalTool.handler({
-        projectPath: project,
-        browser: BROWSER,
-        expression: "1",
-        context: "background",
-      }),
-    );
-    expect(parsed.ok).toBe(false);
-    expect(parsed.status).toBe("unsupported-context");
-    expect(parsed.error.message).toContain('"background"');
+    act.calls.length = 0;
+    for (const context of ["content", "background", undefined]) {
+      const parsed = JSON.parse(
+        await evalTool.handler({
+          projectPath: project,
+          browser: BROWSER,
+          expression: "1",
+          ...(context ? { context } : {}),
+        }),
+      );
+      expect(parsed.value.via).toBe("bridge");
+    }
+    expect(act.calls).toHaveLength(3);
     expect(safari.calls).toHaveLength(0);
   });
 
-  it("answers no-session with the Safari hint when nothing is recorded", async () => {
+  it("sends an explicit page eval down the bridge when no window is recorded", async () => {
     writeReady({});
+    act.calls.length = 0;
     const parsed = JSON.parse(
       await evalTool.handler({
         projectPath: project,
         browser: BROWSER,
+        context: "page",
         expression: "1",
       }),
     );
-    expect(parsed.ok).toBe(false);
-    expect(parsed.status).toBe("no-session");
-    expect(parsed.hint).toContain("one automation session");
+    expect(parsed.value.via).toBe("bridge");
+    expect(act.calls).toHaveLength(1);
   });
 
   it("reports a thrown expression as an eval failure, not a crash", async () => {
@@ -232,6 +249,7 @@ describe("Safari sessions over the dev window's WebDriver connection", () => {
       await evalTool.handler({
         projectPath: project,
         browser: BROWSER,
+        context: "page",
         expression: "(() => { throw 1 })()",
       }),
     );
@@ -354,7 +372,7 @@ describe("Safari sessions over the dev window's WebDriver connection", () => {
     expect(parsed.value.checks[0].detail).toContain("bridge");
   });
 
-  it("stays inconclusive on Safari where nothing observable exists, naming the attended path", async () => {
+  it("stays inconclusive on Safari where no log line exists, naming the bridge", async () => {
     withWindow();
     const parsed = JSON.parse(
       await assertTool.handler({
@@ -362,30 +380,32 @@ describe("Safari sessions over the dev window's WebDriver connection", () => {
         browser: BROWSER,
         expect: [
           { assert: "background-worker-booted" },
-          { assert: "surface-rendered", surface: "popup" },
-          { assert: "storage-key-present", key: "settings" },
           { assert: "console-errors-empty" },
         ],
       }),
     );
     const checks = parsed.value.checks as Array<{
-      id: string;
       outcome: string;
-      detail: string;
       settledBy: string;
     }>;
-    expect(checks.map((c) => c.outcome)).toEqual([
-      "inconclusive",
-      "inconclusive",
-      "inconclusive",
-      "inconclusive",
-    ]);
+    expect(checks.map((c) => c.outcome)).toEqual(["inconclusive", "inconclusive"]);
     for (const check of checks) expect(check.settledBy.length).toBeGreaterThan(10);
     expect(checks[0].settledBy).toContain("bridge");
-    expect(checks[1].detail).toContain("main world only");
-    expect(checks[2].detail).toContain("main world only");
     expect(safari.calls).toHaveLength(0);
   });
+
+  it("reads storage-key-present over the bridge on Safari", async () => {
+    withWindow();
+    act.calls.length = 0;
+    await assertTool.handler({
+      projectPath: project,
+      browser: BROWSER,
+      expect: [{ assert: "storage-key-present", key: "settings" }],
+    });
+    expect(act.calls.some((cli) => cli[0] === "storage")).toBe(true);
+    expect(safari.calls).toHaveLength(0);
+  });
+
 
   it("explains a missing Safari log file in Safari's terms", async () => {
     withWindow();

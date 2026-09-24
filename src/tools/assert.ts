@@ -342,18 +342,6 @@ class Stage {
     return info ? new WebDriverClient(info) : null;
   }
 
-  notReadableOnWebKit(
-    id: string,
-    subject: string | null,
-    instead: string,
-  ): CheckResult {
-    return inconclusiveCheck(
-      id,
-      subject,
-      `${this.browser} exposes no debugging protocol and no log stream to this server: a Safari automation session reaches the page's main world only, never the background, an extension page, chrome.storage or the console.`,
-      instead,
-    );
-  }
 
   async port(): Promise<number | null> {
     if (this.cdpPort === undefined) {
@@ -824,8 +812,8 @@ async function assertContentScriptInjectedOnWebKit(
     return inconclusiveCheck(
       id,
       subject,
-      `No Safari automation session is recorded for ${stage.browser}, so no page was read.`,
-      WEBDRIVER_SESSION_MISSING_HINT,
+      `The content context logged nothing at ${clause.url} in this run, and no safaridriver session is recorded for ${stage.browser}, so no page was read either.${declared.covering.length ? ` ${declared.covering.length} declared match(es) cover the url (${declared.covering.join(", ")}), which is not proof the script ran.` : ""}`,
+      `Open ${clause.url} in Safari with the extension enabled, have the content script write one line (a console call), and assert again: the line reaches the dev session's log over the bridge. ${WEBDRIVER_SESSION_MISSING_HINT}`,
       { coveringMatches: declared.covering, declaredMatches: declared.patterns },
     );
   }
@@ -1093,15 +1081,6 @@ async function evaluateClause(
 ): Promise<CheckResult> {
   if (stage.webkit && clause.assert === BACKGROUND) {
     return assertBackgroundOnWebKit(clause, stage);
-  }
-  if (stage.webkit && (clause.assert === SURFACE || clause.assert === STORAGE)) {
-    return stage.notReadableOnWebKit(
-      clause.assert,
-      clause.subject,
-      clause.assert === STORAGE
-        ? "Read the value through the extension's own UI, or in Web Inspector (Develop > Web Extension Background Content) with browser.storage.local.get, attended."
-        : "Open the surface in Safari and inspect it (right-click > Inspect Element), attended; the automation window cannot show an extension page.",
-    );
   }
   switch (clause.assert) {
     case BACKGROUND:

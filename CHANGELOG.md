@@ -2,35 +2,37 @@
 
 ## 10.10.0
 
-Safari 27 ships Apple's Safari MCP server inside safaridriver, the first
-agent-readable window Safari has had. This server still cannot read a Safari
-session itself, so it now says when that pairing is available instead of
-leaving a Safari session silent.
+Safari was the one engine this server treated as a dead end, while the
+Extension.js it shells out to had grown a working Safari dev loop. The client
+now rides that loop, and its pinned CLI packages move to the release that
+has it.
 
-- `extension_browsers` reports Safari's version and an `automation` block:
-  the safaridriver beside it, and whether it speaks `--mcp` and `--bidi`.
-  The hint names the Safari setting and the `claude mcp add` line when
-  `--mcp` is there, and the Safari 27 floor when it is not.
-- `extension_doctor` with no `projectPath` gains a `safari-agent` leg on
-  macOS: pass with Apple's server available, warn with the remediation
-  otherwise. It never fails the preflight.
-- The packaged CLAUDE.md, `/extension-debug` and the tool reference say what
-  the pairing can and cannot do: page-level reads in an isolated automation
-  window, no popup, background or extension list.
-- A Safari page becomes readable when a dev session records a `safaridriver`
-  session in `ready.json` (`webdriverPort`, `webdriverSessionId`): then
-  `extension_eval` (context `page`), `extension_assert`
-  `content-script-injected` (a DOM root owned by this extension, read from
-  the window), `extension_open` with `url`, and a `safari-window` doctor leg
-  ride that one session. Safari allows one automation session at a time, so
-  the server never opens its own, and no Extension.js release records one
-  today; without it these answer no-session with that explanation.
-- Safari's log file is read like every other engine's: Extension.js 4.1.28
-  streams background and content lines through the extension's bridge, so
-  `extension_logs`, `background-worker-booted`, `content-script-injected`
-  and `console-errors-empty` take that evidence first. Only a missing log
-  file, `surface-rendered` and `storage-key-present` answer in Safari's
-  terms, each pointing at the attended Web Inspector path.
+- `extension-create`, `extension-develop` and `extension-install` move from
+  4.1.2 to 4.1.28. On Safari that release reloads the extension on every
+  save through the extension's own bridge and streams background and
+  content lines into the session's log file; a project with no local
+  Extension.js now gets that loop from the pin.
+- The bridge tools work on a Safari dev session started with
+  `allowControl` or `allowEval`: `extension_storage`, `extension_reload`,
+  `extension_open` for surfaces, `extension_dom_snapshot` by tab id,
+  `extension_logs`, and the assertions `content-script-injected`,
+  `background-worker-booted`, `storage-key-present` and
+  `console-errors-empty`, measured live on Safari 27. `extension_eval` in
+  `content` or `page` needs a tab already open at the url, and Safari's MV3
+  background CSP blocks eval in `background` and the bridge's `url`
+  navigation, which the engine reports by name. `surface-rendered` and
+  `extension_inspect` still need a target list Safari does not expose, and
+  say so.
+- `extension_browsers` reports Safari's version and an `automation` block
+  (the safaridriver beside it and whether it speaks `--mcp` and `--bidi`),
+  and `extension_doctor` with no `projectPath` gains a `safari-agent` leg,
+  so an agent learns when Apple's Safari MCP server can pair with this one.
+  The packaged CLAUDE.md and `/extension-debug` describe that pairing.
+- If a dev session records a safaridriver session in `ready.json`
+  (`webdriverPort`, `webdriverSessionId`), `extension_eval` with context
+  `page` and `extension_open` with `url` use it for the page's main world,
+  and `extension_doctor` adds a `safari-window` leg; with no such record
+  the leg is a skip and both tools take the bridge.
 
 ## 10.9.0
 

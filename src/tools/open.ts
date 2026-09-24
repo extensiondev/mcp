@@ -26,11 +26,7 @@ import { readyContractPath } from "../lib/session-paths";
 import { CDPClient } from "../lib/cdp";
 import { resolveCdpPort, CDP_PORT_MISSING_HINT } from "../lib/cdp-port";
 import { isChromiumFamily, WEBKIT_FAMILY } from "../lib/browser-family";
-import {
-  readWebDriverSession,
-  WEBDRIVER_SESSION_MISSING_HINT,
-  WebDriverClient,
-} from "../lib/webdriver";
+import { readWebDriverSession, WebDriverClient } from "../lib/webdriver";
 import { verifyGuestLoaded } from "../lib/guest-load-oracle";
 import { manifestCandidates } from "../lib/project-manifest";
 import {
@@ -95,19 +91,7 @@ async function navigateToUrlViaWebDriver(
   url: string,
 ): Promise<string> {
   const info = readWebDriverSession(projectPath, browser);
-  if (!info) {
-    return envelope({
-      ok: false,
-      command: schema.name,
-      status: "no-session",
-      error: {
-        code: "E_NO_SESSION",
-        name: "NoSession",
-        message: `No Safari automation session is recorded for ${browser} in this project's ready.json.`,
-      },
-      hint: WEBDRIVER_SESSION_MISSING_HINT,
-    });
-  }
+  if (!info) return navigateToUrlViaBridge(projectPath, browser, url);
   const client = new WebDriverClient(info);
   try {
     await client.navigate(url);
@@ -139,7 +123,7 @@ export async function navigateToUrl(
   url: string,
   timeout?: number,
 ): Promise<string> {
-  if (WEBKIT_FAMILY.has(browser)) {
+  if (WEBKIT_FAMILY.has(browser) && readWebDriverSession(projectPath, browser)) {
     return navigateToUrlViaWebDriver(projectPath, browser, url);
   }
   if (!isChromiumFamily(browser)) {
