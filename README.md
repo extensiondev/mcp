@@ -194,6 +194,27 @@ logged, or the DOM it changed. `extension_browsers` reports whether the
 safaridriver on the machine has `--mcp`, and `extension_doctor` with no
 `projectPath` says the same in its `safari-agent` leg.
 
+Safari grants one automation session at a time, and `extension_dev
+--browser=safari` (Extension.js with Safari live reload) holds it: the dev
+loop opens a window through `safaridriver`, reloads it on every save, and
+records the port and session id in `ready.json`. This server reads through
+that same session instead of asking for a second one, so while a Safari dev
+session runs, Apple's server cannot open a window and does not need to:
+
+- `extension_eval` evaluates in the window's page (context `page` only; the
+  background and every extension page are out of reach by Safari's design)
+- `extension_assert` `content-script-injected` navigates the window to the
+  URL and passes on a DOM root the content script mounted and stamped with
+  this extension's id; a page with no such root stays inconclusive, because
+  Safari carries no console feed over WebDriver to read a line instead
+- `extension_open` with `url` navigates the window
+- `extension_doctor` adds a `safari-window` leg that says whether the
+  recorded session still answers
+
+`extension_logs`, `extension_storage`, `extension_reload` and the other
+assertions answer inconclusive or unsupported on Safari, each naming the
+attended Web Inspector path that would settle it.
+
 ## Sharing a build in progress
 
 An unpacked extension is unusually hard to hand to someone: the only way to look at a colleague's work-in-progress has been to take their zip and run untrusted code with real browser permissions on your own machine. `extension_preview_web` with `share: true` uploads the `dist/` it just built and returns a link that renders those exact bytes in the emulator. Whoever opens it installs nothing and signs in to nothing, which is what lets a designer, a PM, or a reviewer into the loop at all. Those bytes run in an isolated sandbox origin or they do not run at all: preview refuses a shared build rather than serving it in its own renderer. Sharing needs auth (`extension_auth` or `EXTENSION_DEV_TOKEN`), the link lives 30 days, and `DELETE`ing the returned `revokeUrl` with the same token kills it early. Re-sharing an unchanged build returns that same link rather than a second one, and only a revoked link is replaced by a different one, because revocation is permanent: the address is burned and never resolves again. That makes `revokeUrl` the handle to the link you just made, so every share is also appended to `.extension.dev/shared-previews.json` in the project (gitignored) so it survives losing the tool output. The upload holds up to 2,000 files and about 64MB of text, or roughly 48MB when the build is mostly images, fonts or wasm, which travel base64-encoded. Without `share`, the tool returns a local-only deep link and uploads nothing.

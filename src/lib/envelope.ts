@@ -68,6 +68,7 @@ export type ErrorCode =
   | "E_PROFILE_LOCKED"
   | "E_RDP"
   | "E_SAFARI_ONLY_OPTION"
+  | "E_EVAL"
   | "E_SCAFFOLD_FAILED"
   | "E_SCAFFOLD_INCOMPLETE"
   | "E_SESSION_EXISTS"
@@ -134,6 +135,7 @@ export const ERROR_CODES: ErrorCode[] = [
   "E_PROFILE_LOCKED",
   "E_RDP",
   "E_SAFARI_ONLY_OPTION",
+  "E_EVAL",
   "E_SCAFFOLD_FAILED",
   "E_SCAFFOLD_INCOMPLETE",
   "E_SESSION_EXISTS",

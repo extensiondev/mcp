@@ -17,6 +17,12 @@ import {
 import { toMcpSpeak } from "../lib/act";
 import { envelope, isEnvelope } from "../lib/envelope";
 import { resolveSessionBrowser } from "../lib/session-browser";
+import { WEBKIT_FAMILY } from "../lib/browser-family";
+import {
+  readWebDriverSession,
+  WEBDRIVER_SESSION_MISSING_HINT,
+  WebDriverClient,
+} from "../lib/webdriver";
 import {
   detectSafariAutomation,
   SAFARI_MCP_ADD_COMMAND,
@@ -396,6 +402,26 @@ export async function handler(args: {
           : {}),
       });
     }
+    if (WEBKIT_FAMILY.has(browser)) {
+      const info = readWebDriverSession(projectPath, browser);
+      const alive = info ? await new WebDriverClient(info).alive() : false;
+      if (!alive) healthy = false;
+      checks.push({
+        check: "safari-window",
+        status: alive ? "pass" : "fail",
+        detail: info
+          ? alive
+            ? `Safari automation window held by the dev session (safaridriver on port ${info.port}, session ${info.sessionId})`
+            : `ready.json records a Safari automation session on port ${info.port}, but it no longer answers: the window or the driver is gone`
+          : "ready.json records no Safari automation session, so no tool can read a page for this session",
+        remediation: alive
+          ? undefined
+          : info
+            ? "Stop and restart extension_dev --browser=safari; the dev loop opens the window again on the first package."
+            : WEBDRIVER_SESSION_MISSING_HINT,
+      });
+    }
+
     /* @invariant Read-only BY CHOICE is a condition, not a failure.
      *
      * A session started without allowControl refuses the control channel

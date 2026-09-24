@@ -33,7 +33,7 @@ Debug the currently running extension dev session. The user said: $ARGUMENTS
 
    To see what else is loaded in the browser (Chromium): `extension_list_extensions`.
 
-   **Safari sessions** have none of the above: no bridge, no CDP, no logs. If Apple's Safari MCP server is installed (`safari-mcp`, Safari 27+), use its `create_tab` on a URL the content script matches, then `browser_console_messages` for a line the script logged and `evaluate_javascript` for the DOM it changed. It cannot open the popup or background page. Without it, the evidence is Web Inspector, attended.
+   **Safari sessions** have no bridge, no CDP and no logs. A dev session started with `extension_dev --browser=safari` holds a Safari automation window; read it with `extension_assert` `content-script-injected` (navigates the window to the URL and looks for a DOM root the script mounted), `extension_eval` with context `page`, and `extension_open` with `url`. `extension_doctor` shows a `safari-window` leg. Neither this server nor Apple's `safari-mcp` can open the popup or background page, and Safari grants one automation session at a time, so `safari-mcp` only works while no dev session holds the window. Everything else is Web Inspector, attended.
 
 4. **Diagnose common issues**
    Based on what you find, check for:

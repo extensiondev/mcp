@@ -68,6 +68,8 @@ export interface ReadyContract {
   port?: number | null;
   host?: string;
   cdpPort?: number;
+  webdriverPort?: number;
+  webdriverSessionId?: string;
   pid?: number;
   ts?: string;
   compiledAt?: string | null;

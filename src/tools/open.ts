@@ -25,7 +25,12 @@ import { resolveSessionBrowser } from "../lib/session-browser";
 import { readyContractPath } from "../lib/session-paths";
 import { CDPClient } from "../lib/cdp";
 import { resolveCdpPort, CDP_PORT_MISSING_HINT } from "../lib/cdp-port";
-import { isChromiumFamily } from "../lib/browser-family";
+import { isChromiumFamily, WEBKIT_FAMILY } from "../lib/browser-family";
+import {
+  readWebDriverSession,
+  WEBDRIVER_SESSION_MISSING_HINT,
+  WebDriverClient,
+} from "../lib/webdriver";
 import { verifyGuestLoaded } from "../lib/guest-load-oracle";
 import { manifestCandidates } from "../lib/project-manifest";
 import {
@@ -84,12 +89,59 @@ function isDisposableTab(tabUrl: string, destination: string): boolean {
   return Boolean(origin && tabUrl.startsWith(origin));
 }
 
+async function navigateToUrlViaWebDriver(
+  projectPath: string,
+  browser: string,
+  url: string,
+): Promise<string> {
+  const info = readWebDriverSession(projectPath, browser);
+  if (!info) {
+    return envelope({
+      ok: false,
+      command: schema.name,
+      status: "no-session",
+      error: {
+        code: "E_NO_SESSION",
+        name: "NoSession",
+        message: `No Safari automation session is recorded for ${browser} in this project's ready.json.`,
+      },
+      hint: WEBDRIVER_SESSION_MISSING_HINT,
+    });
+  }
+  const client = new WebDriverClient(info);
+  try {
+    await client.navigate(url);
+    return envelope({
+      ok: true,
+      command: schema.name,
+      status: "navigated",
+      value: { browser, url: await client.currentUrl().catch(() => url) },
+      hint: "The Safari automation window now shows this page. Content scripts that match it ran on load; read their DOM with extension_eval or extension_assert.",
+    });
+  } catch (error) {
+    return envelope({
+      ok: false,
+      command: schema.name,
+      status: "navigate-failed",
+      error: {
+        code: "E_NAVIGATE_FAILED",
+        name: "NavigateError",
+        message: error instanceof Error ? error.message : String(error),
+      },
+      hint: "The automation window refused the URL or is gone. extension_doctor names which.",
+    });
+  }
+}
+
 export async function navigateToUrl(
   projectPath: string,
   browser: string,
   url: string,
   timeout?: number,
 ): Promise<string> {
+  if (WEBKIT_FAMILY.has(browser)) {
+    return navigateToUrlViaWebDriver(projectPath, browser, url);
+  }
   if (!isChromiumFamily(browser)) {
     return navigateToUrlViaBridge(projectPath, browser, url, timeout);
   }
