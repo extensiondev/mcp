@@ -28,6 +28,11 @@ has it.
   and `extension_doctor` with no `projectPath` gains a `safari-agent` leg,
   so an agent learns when Apple's Safari MCP server can pair with this one.
   The packaged CLAUDE.md and `/extension-debug` describe that pairing.
+- `extension_open` with `url` asks the engine's `navigate` verb first, a
+  static tabs call inside the extension that works where an MV3 background
+  refuses eval, which is every Safari session. Only an engine that does not
+  know the verb yet falls back to the background eval, and that fallback
+  names the upgrade when Safari's CSP refuses it.
 - If a dev session records a safaridriver session in `ready.json`
   (`webdriverPort`, `webdriverSessionId`), `extension_eval` with context
   `page` and `extension_open` with `url` use it for the page's main world,
