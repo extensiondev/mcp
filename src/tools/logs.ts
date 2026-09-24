@@ -492,17 +492,22 @@ export async function handler(args: LogsArgs): Promise<string> {
   const { browser } = resolveSessionBrowser(args.projectPath, args.browser);
   const limit = args.limit && args.limit > 0 ? args.limit : DEFAULT_LIMIT;
 
-  if (WEBKIT_FAMILY.has(browser)) {
+  /* @invariant Safari has no CDP or RDP, but a dev session on an Extension.js
+   * that streams Safari logs (4.1.28) writes the same log file the other
+   * engines do, through the extension's own bridge to the dev server, with
+   * background and content contexts. So the file is read whenever it exists,
+   * and only a missing file is explained in Safari's terms.
+   */
+  if (WEBKIT_FAMILY.has(browser) && !fs.existsSync(logsPath(args.projectPath, browser))) {
     return envelope({
       ok: false,
       command: TOOL,
-      status: "unsupported-browser",
+      status: "no-log-file",
       error: {
-        code: "E_UNSUPPORTED_BROWSER",
-        name: "Unsupported",
-        message: `${browser} writes no log stream: Safari has no CDP or RDP, and its automation session carries no console feed over WebDriver, so nothing this tool could read exists for it.`,
+        code: "E_LOGS_MISSING",
+        message: `No logs found at ${logsPath(args.projectPath, browser)}, and ${browser} has no CDP or RDP to read instead.`,
       },
-      hint: "Read the DOM a content script changes with extension_eval (context: 'page') or extension_assert content-script-injected, or open Web Inspector (Develop > Web Extension Background Content) by hand. A console feed needs the WebDriver BiDi log domain, which this server does not speak yet.",
+      hint: "Safari logs arrive through the extension's bridge to the dev server, with background and content contexts, once the extension is enabled and a dev session from an Extension.js that streams Safari logs (4.1.28 or newer) is running. Start extension_dev --browser=safari, enable the extension in Safari > Settings > Extensions, then read again. The page a content script changes is also readable with extension_eval (context: 'page') or extension_assert content-script-injected.",
     });
   }
 

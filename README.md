@@ -203,17 +203,21 @@ session runs, Apple's server cannot open a window and does not need to:
 
 - `extension_eval` evaluates in the window's page (context `page` only; the
   background and every extension page are out of reach by Safari's design)
-- `extension_assert` `content-script-injected` navigates the window to the
-  URL and passes on a DOM root the content script mounted and stamped with
-  this extension's id; a page with no such root stays inconclusive, because
-  Safari carries no console feed over WebDriver to read a line instead
+- `extension_assert` `content-script-injected` passes on a content line in
+  the dev session's log, as on every engine, and otherwise navigates the
+  window to the URL and passes on a DOM root the content script mounted and
+  stamped with this extension's id; a page with neither stays inconclusive
 - `extension_open` with `url` navigates the window
 - `extension_doctor` adds a `safari-window` leg that says whether the
   recorded session still answers
 
-`extension_logs`, `extension_storage`, `extension_reload` and the other
-assertions answer inconclusive or unsupported on Safari, each naming the
-attended Web Inspector path that would settle it.
+Safari's logs need no protocol at all: on Extension.js 4.1.28 or newer the
+dev session streams background and content lines through the extension's
+own bridge into the same log file the other engines use, so `extension_logs`
+reads it and `background-worker-booted` and `console-errors-empty` judge it.
+`extension_storage`, `extension_reload`, `surface-rendered` and
+`storage-key-present` stay inconclusive or unsupported on Safari, each naming
+the attended Web Inspector path that would settle it.
 
 ## Sharing a build in progress
 

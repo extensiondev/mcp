@@ -730,13 +730,6 @@ async function assertContentScriptInjected(
   const patterns = scripts.flatMap((entry) => entry.matches);
   const covering = coveringMatches(patterns, clause.url);
 
-  if (stage.webkit) {
-    return assertContentScriptInjectedOnWebKit(clause, stage, {
-      covering,
-      patterns,
-    });
-  }
-
   const runId = readLogRunId(stage.projectPath, stage.browser);
   const stale = staleFileNote(stage.projectPath, stage.browser, runId);
   const lines = readLogEvents(stage.projectPath, stage.browser, {
@@ -753,6 +746,13 @@ async function assertContentScriptInjected(
     );
   }
 
+  if (stage.webkit) {
+    return assertContentScriptInjectedOnWebKit(clause, stage, {
+      covering,
+      patterns,
+    });
+  }
+
   /* @invariant A declared match is never a pass. Whether a content script ran
      on a given page is not observable from outside its isolated world, so the
      only positive evidence this platform holds is a line the script itself
@@ -766,6 +766,40 @@ async function assertContentScriptInjected(
       : `The built manifest (${read.file}) declares no content_scripts match covering ${clause.url}${patterns.length ? ` (declared: ${patterns.join(", ")})` : " and declares no content script at all"}. That is not proof of non-injection either: scripts registered at runtime with chrome.scripting.registerContentScripts are invisible to this reader.`,
     "Have the content script write one line, a console call or a dx.signal, and this check reads it from the log stream. To settle it now, read a marker the script sets with extension_eval (context: 'content', url: the page), which runs in the same isolated world the content script does.",
     { coveringMatches: covering, declaredMatches: patterns, runId },
+  );
+}
+
+/* @invariant On Safari the background is observable only through the line
+ * it writes into the dev session's log stream over the extension's bridge,
+ * because no debugging protocol lists its worker. A written line is a booted
+ * background; silence is inconclusive, since a background that logs nothing
+ * looks identical to one that never started.
+ */
+async function assertBackgroundOnWebKit(
+  clause: BackgroundClause,
+  stage: Stage,
+): Promise<CheckResult> {
+  const id = BACKGROUND;
+  const subject = clause.subject;
+  const runId = readLogRunId(stage.projectPath, stage.browser);
+  const stale = staleFileNote(stage.projectPath, stage.browser, runId);
+  const lines = readLogEvents(stage.projectPath, stage.browser, {
+    context: ["background"],
+  });
+  if (lines.length > 0 && !stale) {
+    return passCheck(
+      id,
+      subject,
+      `The background context wrote ${lines.length} log line(s) in run ${runId || "(unnamed)"} over the extension's bridge, and only a running background writes from that context.`,
+      { lines: lines.length, runId },
+    );
+  }
+  return inconclusiveCheck(
+    id,
+    subject,
+    `${stage.browser} lists no background worker to this server, and the background context logged nothing in run ${runId || "(unnamed)"}${stale ? ` (${stale})` : ""}.`,
+    "Have the background write one line on start (a console call), which reaches the dev session's log over the bridge once the extension is enabled; or open Web Inspector (Develop > Web Extension Background Content), attended.",
+    { runId },
   );
 }
 
@@ -1057,17 +1091,16 @@ async function evaluateClause(
   clause: Clause,
   stage: Stage,
 ): Promise<CheckResult> {
-  if (stage.webkit && clause.assert !== CONTENT_SCRIPT) {
+  if (stage.webkit && clause.assert === BACKGROUND) {
+    return assertBackgroundOnWebKit(clause, stage);
+  }
+  if (stage.webkit && (clause.assert === SURFACE || clause.assert === STORAGE)) {
     return stage.notReadableOnWebKit(
       clause.assert,
       clause.subject,
       clause.assert === STORAGE
         ? "Read the value through the extension's own UI, or in Web Inspector (Develop > Web Extension Background Content) with browser.storage.local.get, attended."
-        : clause.assert === BACKGROUND
-          ? "Open Web Inspector (Develop > Web Extension Background Content) and look for the background's first line, attended; or have the background mark a page the content script reads, and assert content-script-injected there."
-          : clause.assert === SURFACE
-            ? "Open the surface in Safari and inspect it (right-click > Inspect Element), attended; the automation window cannot show an extension page."
-            : "A console feed on Safari needs the WebDriver BiDi log domain, which this server does not speak yet; read errors in Web Inspector, attended.",
+        : "Open the surface in Safari and inspect it (right-click > Inspect Element), attended; the automation window cannot show an extension page.",
     );
   }
   switch (clause.assert) {

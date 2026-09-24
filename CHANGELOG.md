@@ -24,9 +24,12 @@ leaving a Safari session silent.
   extension, read from the window), `extension_open` with `url`, and a
   `safari-window` doctor leg all ride that one session. Safari allows one
   automation session at a time, so the server never opens its own.
-- `extension_logs` and the other assertions answer unsupported or
-  inconclusive on Safari by name, each pointing at the attended Web Inspector
-  path, instead of reading an empty log file as silence.
+- Safari's log file is read like every other engine's: Extension.js 4.1.28
+  streams background and content lines through the extension's bridge, so
+  `extension_logs`, `background-worker-booted`, `content-script-injected`
+  and `console-errors-empty` take that evidence first. Only a missing log
+  file, `surface-rendered` and `storage-key-present` answer in Safari's
+  terms, each pointing at the attended Web Inspector path.
 
 ## 10.9.0
 

@@ -5,7 +5,7 @@ import path from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { readyContractPath } from "../lib/session-paths";
+import { logsPath, readyContractPath } from "../lib/session-paths";
 import {
   readWebDriverSession,
   sameDocument,
@@ -132,6 +132,15 @@ describe("Safari sessions over the dev window's WebDriver connection", () => {
 
   function withWindow(): void {
     writeReady({ webdriverPort: safari.port, webdriverSessionId: "S-9" });
+  }
+
+  function writeLogs(events: Array<Record<string, unknown>>): void {
+    const file = logsPath(project, BROWSER);
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(
+      file,
+      `${events.map((e) => JSON.stringify(e)).join("\n")}\n`,
+    );
   }
 
   it("reads the session only when ready.json carries both fields", () => {
@@ -295,7 +304,57 @@ describe("Safari sessions over the dev window's WebDriver connection", () => {
     ).toHaveLength(0);
   });
 
-  it("marks every other check inconclusive on Safari with an attended path", async () => {
+  it("passes content-script-injected on a bridge log line before touching the window", async () => {
+    withWindow();
+    writeLogs([
+      { type: "header", runId: "run-safari", v: 1 },
+      {
+        context: "content",
+        level: "log",
+        seq: 1,
+        url: "https://example.test/page",
+        message: "[From the page context] Hello from content_scripts!",
+        runId: "run-safari",
+      },
+    ]);
+    const parsed = JSON.parse(
+      await assertTool.handler({
+        projectPath: project,
+        browser: BROWSER,
+        expect: [
+          { assert: "content-script-injected", url: "https://example.test/page" },
+        ],
+      }),
+    );
+    expect(parsed.value.checks[0].outcome).toBe("pass");
+    expect(parsed.value.checks[0].detail).toContain("log line");
+    expect(safari.calls).toHaveLength(0);
+  });
+
+  it("passes background-worker-booted on a background line from the bridge", async () => {
+    withWindow();
+    writeLogs([
+      { type: "header", runId: "run-safari", v: 1 },
+      {
+        context: "background",
+        level: "log",
+        seq: 1,
+        message: "[From the background context] Hello",
+        runId: "run-safari",
+      },
+    ]);
+    const parsed = JSON.parse(
+      await assertTool.handler({
+        projectPath: project,
+        browser: BROWSER,
+        expect: [{ assert: "background-worker-booted" }],
+      }),
+    );
+    expect(parsed.value.checks[0].outcome).toBe("pass");
+    expect(parsed.value.checks[0].detail).toContain("bridge");
+  });
+
+  it("stays inconclusive on Safari where nothing observable exists, naming the attended path", async () => {
     withWindow();
     const parsed = JSON.parse(
       await assertTool.handler({
@@ -309,30 +368,54 @@ describe("Safari sessions over the dev window's WebDriver connection", () => {
         ],
       }),
     );
-    const outcomes = parsed.value.checks.map(
-      (c: { outcome: string }) => c.outcome,
-    );
-    expect(outcomes).toEqual([
+    const checks = parsed.value.checks as Array<{
+      id: string;
+      outcome: string;
+      detail: string;
+      settledBy: string;
+    }>;
+    expect(checks.map((c) => c.outcome)).toEqual([
       "inconclusive",
       "inconclusive",
       "inconclusive",
       "inconclusive",
     ]);
-    for (const check of parsed.value.checks) {
-      expect(check.settledBy.length).toBeGreaterThan(10);
-      expect(check.detail).toContain("main world only");
-    }
+    for (const check of checks) expect(check.settledBy.length).toBeGreaterThan(10);
+    expect(checks[0].settledBy).toContain("bridge");
+    expect(checks[1].detail).toContain("main world only");
+    expect(checks[2].detail).toContain("main world only");
     expect(safari.calls).toHaveLength(0);
   });
 
-  it("refuses logs on Safari and points at the DOM readers", async () => {
+  it("explains a missing Safari log file in Safari's terms", async () => {
     withWindow();
     const parsed = JSON.parse(
       await logsTool.handler({ projectPath: project, browser: BROWSER }),
     );
     expect(parsed.ok).toBe(false);
-    expect(parsed.status).toBe("unsupported-browser");
-    expect(parsed.hint).toContain("extension_eval");
+    expect(parsed.status).toBe("no-log-file");
+    expect(parsed.error.code).toBe("E_LOGS_MISSING");
+    expect(parsed.hint).toContain("bridge");
+  });
+
+  it("reads the bridge log file on Safari like any other engine", async () => {
+    withWindow();
+    writeLogs([
+      { type: "header", runId: "run-safari", v: 1 },
+      {
+        context: "content",
+        level: "log",
+        seq: 1,
+        url: "https://example.test/page",
+        message: "hello from safari content",
+        runId: "run-safari",
+      },
+    ]);
+    const parsed = JSON.parse(
+      await logsTool.handler({ projectPath: project, browser: BROWSER }),
+    );
+    expect(parsed.ok).toBe(true);
+    expect(JSON.stringify(parsed.value)).toContain("hello from safari content");
   });
 
   it("navigates the window through extension_open url", async () => {
