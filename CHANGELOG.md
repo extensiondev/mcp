@@ -74,8 +74,10 @@ Four defects agents met while driving the server on real extension work
   extension page at all, which is where the misleading "Extension manifest
   must request permission to access this host" came from. A page that is
   not open answers `E_NO_TARGET` with the `extension_open` call that opens
-  it; a thrown expression answers `E_EVAL` with the exception text;
-  MV2 Chromium and Gecko sessions keep the relay.
+  it; a thrown expression answers `E_EVAL` with the exception text; a bare
+  top-level `await` parses, as in the DevTools console; MV2 Chromium and
+  Gecko sessions keep the relay. Both this path and the sidebar gesture were
+  measured live on Chrome for Testing 151 before release.
 
 ## 10.9.0
 
