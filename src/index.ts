@@ -138,8 +138,21 @@ for (const tool of tools) {
   toolMap.set(tool.schema.name, tool);
 }
 
-export async function startServer(): Promise<void> {
-  installCarrierExitCleanup();
+/* @invariant A client that hides tool descriptions behind a search step shows
+   the model nothing of this server but its name and tool count, and a frontier
+   agent with the server attached built a whole session by hand (ps, curl on
+   the debug port, inline CDP scripts) without ever searching it. The initialize
+   result's `instructions` is the one field such a client may place in the
+   system prompt, so it names the moments and the tools; the tool descriptions
+   stay the detailed contract. */
+export const SERVER_INSTRUCTIONS = [
+  "extension-dev runs, inspects, drives, builds and publishes browser extensions (Chrome, Edge, Firefox, Safari and the other Chromium and Gecko browsers) through Extension.js and extension.dev.",
+  "When the ask is to run, start, wait for, watch, inspect, drive, test, debug or build a browser extension, search this server first and use its tools: extension_dev starts the dev session (allowEval: true also turns on control), extension_wait blocks until it is ready, extension_logs streams its console, extension_open opens a surface or a url, extension_dom_snapshot and extension_inspect read a live page, extension_eval runs code in a context, extension_build makes a store-ready bundle, extension_stop ends the session.",
+  "These replace hand-rolled ps, curl, remote-debugging-port lookups and CDP or Playwright scripts: the server already holds the session's debug port, the extension id and the session token.",
+  "Every tool answers one JSON envelope {ok, status, value, error, hint, warnings}; read hint and warnings before choosing the next call, and treat ok: false as the answer, not a transport error.",
+].join("\n");
+
+export function createServer(): Server {
   const server = new Server(
     {
       name: "extension-dev",
@@ -149,6 +162,7 @@ export async function startServer(): Promise<void> {
       capabilities: {
         tools: {},
       },
+      instructions: SERVER_INSTRUCTIONS,
     },
   );
 
@@ -229,6 +243,12 @@ export async function startServer(): Promise<void> {
     }
   });
 
+  return server;
+}
+
+export async function startServer(): Promise<void> {
+  installCarrierExitCleanup();
+  const server = createServer();
   const transport = new StdioServerTransport();
   await server.connect(transport);
 }
