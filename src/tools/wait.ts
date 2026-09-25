@@ -189,6 +189,12 @@ export async function handler(args: {
             pid: contract.pid,
             distPath: contract.distPath,
             manifestPath: contract.manifestPath,
+            ...(typeof contract.browserPid === "number"
+              ? { browserPid: contract.browserPid }
+              : {}),
+            ...(typeof contract.profilePath === "string" && contract.profilePath
+              ? { profilePath: contract.profilePath }
+              : {}),
             compiledAt: contract.compiledAt,
             startedAt: contract.startedAt,
             budgetMs,

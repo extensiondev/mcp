@@ -30,6 +30,8 @@ interface DetectedBrowser {
   cdpSupport: boolean;
   rdpSupport: boolean;
   automation?: SafariAutomation;
+  systemBinaryPath?: string;
+  devLaunches?: string;
 }
 
 const ALL_BROWSERS = [
@@ -197,34 +199,56 @@ function resolveCacheRoot(): string {
   return path.resolve(process.cwd(), ".cache", "extension.js", "browsers");
 }
 
-function findManagedBinary(browser: string): string | null {
-  const browserDir = path.join(resolveCacheRoot(), browser);
+/* @invariant The managed cache nests a binary six levels under its browser
+   directory on macOS (firefox/<channel>_<version>/<Name>.app/Contents/MacOS/
+   <exe>), and a search that gave up at four reported "no managed firefox"
+   while extension_dev launched exactly that Nightly a moment later (ledger
+   entry 7). The depth covers the deepest layout the engine writes, and an
+   app bundle is resolved to the executable it wraps rather than matched by a
+   fixed bundle name, so a Nightly or Developer Edition bundle counts. */
+const MANAGED_SEARCH_DEPTH = 8;
+
+const MANAGED_EXEC_NAMES: Record<string, string[]> = {
+  chrome: ["chrome", "chrome.exe", "Google Chrome for Testing"],
+  chromium: ["chrome", "chromium", "chrome.exe", "chromium.exe", "Chromium"],
+  edge: ["msedge", "msedge.exe", "microsoft-edge", "Microsoft Edge"],
+  firefox: ["firefox", "firefox.exe", "firefox-bin"],
+};
+
+function executableInsideBundle(bundle: string, names: string[]): string | null {
+  const macos = path.join(bundle, "Contents", "MacOS");
+  try {
+    for (const entry of fs.readdirSync(macos, { withFileTypes: true })) {
+      if (entry.isFile() && names.includes(entry.name)) {
+        return path.join(macos, entry.name);
+      }
+    }
+  } catch {
+  }
+  return null;
+}
+
+export function findManagedBinary(
+  browser: string,
+  cacheRoot: string = resolveCacheRoot(),
+): string | null {
+  const browserDir = path.join(cacheRoot, browser);
   if (!fs.existsSync(browserDir)) return null;
-
-  const execNames: Record<string, string[]> = {
-    chrome: ["chrome", "chrome.exe", "Google Chrome for Testing"],
-    chromium: [
-      "chrome",
-      "chromium",
-      "chrome.exe",
-      "chromium.exe",
-      "Chromium.app",
-    ],
-    edge: ["msedge", "msedge.exe", "microsoft-edge", "Microsoft Edge"],
-    firefox: ["firefox", "firefox.exe", "Firefox.app"],
-  };
-
-  const names = execNames[browser] ?? [];
+  const names = MANAGED_EXEC_NAMES[browser] ?? [];
 
   function search(dir: string, depth: number): string | null {
-    if (depth > 4) return null;
+    if (depth > MANAGED_SEARCH_DEPTH) return null;
     try {
       for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
         const full = path.join(dir, entry.name);
         if (entry.isFile() && names.includes(entry.name)) {
           return full;
         }
-        if (entry.isDirectory() && depth < 4) {
+        if (entry.isDirectory() && entry.name.endsWith(".app")) {
+          const inside = executableInsideBundle(full, names);
+          if (inside) return inside;
+        }
+        if (entry.isDirectory() && depth < MANAGED_SEARCH_DEPTH) {
           const found = search(full, depth + 1);
           if (found) return found;
         }
@@ -288,9 +312,10 @@ export async function detectBrowsers(
 
     let binaryPath = findManagedBinary(browser);
     let source: DetectedBrowser["source"] = "managed";
+    const systemBinaryPath = findSystemBinary(browser);
 
     if (!binaryPath) {
-      binaryPath = findSystemBinary(browser);
+      binaryPath = systemBinaryPath;
       source = binaryPath ? "system" : "not_found";
     }
 
@@ -304,6 +329,10 @@ export async function detectBrowsers(
     const automation =
       isWebkit && binaryPath ? await detectSafariAutomation(binaryPath) : null;
 
+    const shadowedSystem =
+      source === "managed" && systemBinaryPath && systemBinaryPath !== binaryPath
+        ? systemBinaryPath
+        : null;
     detected.push({
       browser,
       binaryPath,
@@ -313,6 +342,13 @@ export async function detectBrowsers(
       cdpSupport: !isGecko && !isWebkit,
       rdpSupport: isGecko,
       ...(automation ? { automation } : {}),
+      ...(shadowedSystem
+        ? {
+            systemBinaryPath: shadowedSystem,
+            devLaunches:
+              `extension_dev launches the managed binary above, not the system install at ${shadowedSystem}; pass ${isGecko ? "geckoBinary" : "chromiumBinary"} to extension_dev to use the system one.`,
+          }
+        : {}),
     });
   }
 

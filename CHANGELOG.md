@@ -1,5 +1,47 @@
 # Changelog
 
+## 10.10.1
+
+Five Gecko findings from one agent session on Firefox and Waterfox
+(BUGS_TO_FIX_MCP.md entries 5 to 9), each replayed against a live Firefox
+Nightly before and after the fix where the shape allowed it.
+
+- `extension_eval` on a surface that answers through the in-bundle relay
+  (every Gecko session, and Chromium MV2) never hands the relay a promise.
+  The relay evaluates synchronously and passes the raw value to
+  `sendResponse`; a promise is not cloneable, Firefox reports that to the
+  sender as no reply, and the bridge then called the surface "not open"
+  while the page was still running the expression. The wrapper now settles
+  a thenable inside the page under a token, and the tool polls until it is
+  done: an async expression returns its value, a rejection answers `E_EVAL`
+  with the page's own message, and one that never settles answers
+  `E_WAIT_TIMEOUT` naming where the result will land. The engine's "open it
+  first: extension open newtab" hint is now spoken as the tool call it means.
+- `extension_inspect` on Gecko reads a page inside the extension through
+  its surface relay: a url that matches a declared surface document (the
+  full `moz-extension://` address, the document path, or its file name)
+  routes to that context instead of the tab injection, which Firefox
+  refuses into extension pages with "Missing host permission for the tab".
+  An extension url that matches no declared surface says so and names the
+  ones the manifest declares.
+- `extension_stop` reaps the browser the launcher recorded in `ready.json`
+  (`browserPid`, `launcherPid`, and any process holding `profilePath`), so
+  a Firefox started on a custom profile, or one whose argv never names the
+  project, no longer survives a `stopped` answer with `reaped: []`.
+- `extension_doctor` no longer calls a Gecko session unhealthy over a
+  browser exit that the executor outlived: Firefox hands a fresh profile to
+  a relaunched process and the first one exits 0, which the engine's browser
+  leg reports as a failure while storage probes and evals keep answering.
+  That leg becomes a warning that says so, and any other failure still
+  counts.
+- `extension_browsers` detect finds a managed binary as deep as the cache
+  writes it (a Firefox Nightly sits six levels down inside its app bundle),
+  so it no longer reports the system Firefox as available while
+  `extension_dev` launches the cached Nightly. When both exist, the entry
+  carries `systemBinaryPath` and a `devLaunches` line saying which one dev
+  starts and how to choose the other. `extension_wait` reports `browserPid`
+  and `profilePath` from the contract.
+
 ## 10.10.0
 
 Safari was the one engine this server treated as a dead end, while the
