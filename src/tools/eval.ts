@@ -11,7 +11,14 @@ import {
   SESSION_BROWSER,
   SESSION_PROJECT_PATH,
 } from "../lib/common-schema";
+import crypto from "node:crypto";
 import fs from "node:fs";
+import {
+  RELAY_MARK,
+  readRelayFrame,
+  relayPollExpression,
+  relaySafeExpression,
+} from "../lib/relay-eval";
 import {
   runActVerb,
   commonFlags,
@@ -276,6 +283,91 @@ async function evaluateOnWebKitPage(
   }
 }
 
+const RELAY_POLL_MS = 300;
+const RELAY_DEFAULT_BUDGET_MS = 30_000;
+
+function tryParseFrame(raw: string): Record<string, any> | null {
+  try {
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === "object" ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+async function evaluateThroughRelay(
+  args: ActArgs & { expression: string },
+  browser: string,
+  context: string,
+): Promise<string> {
+  const token = crypto.randomUUID();
+  const budgetMs = args.timeout ?? RELAY_DEFAULT_BUDGET_MS;
+  const deadline = Date.now() + budgetMs;
+  const run = (expression: string): Promise<string> =>
+    runActVerb(
+      [
+        "eval",
+        ...commonFlags({ ...args, context, browser }),
+        "--",
+        expression,
+        args.projectPath,
+      ],
+      args.projectPath,
+      args.timeout,
+      schema.name,
+    );
+  let raw = await run(relaySafeExpression(args.expression, token));
+  let parsed = tryParseFrame(raw);
+  if (!parsed || parsed.ok !== true) return raw;
+  let frame = readRelayFrame(parsed.value);
+  if (!frame) return raw;
+  let polls = 0;
+  while (!frame.done) {
+    if (Date.now() >= deadline) {
+      return envelope({
+        ok: false,
+        command: schema.name,
+        status: "eval-pending",
+        error: {
+          code: "E_WAIT_TIMEOUT",
+          name: "EvalPending",
+          message: `The expression returned a promise that had not settled after ${budgetMs} ms; it is still running in the ${context} page.`,
+        },
+        value: { context, token, polls },
+        hint: `Its outcome lands in globalThis.${RELAY_MARK}[${JSON.stringify(token)}] inside the ${context} page when it settles ({done, ok, value}): read it with extension_eval in the same context, or pass a larger timeout to wait here.`,
+      });
+    }
+    await new Promise((r) => setTimeout(r, RELAY_POLL_MS));
+    polls += 1;
+    raw = await run(relayPollExpression(token));
+    parsed = tryParseFrame(raw);
+    if (!parsed || parsed.ok !== true) return raw;
+    const next = readRelayFrame(parsed.value);
+    if (!next) return raw;
+    frame = next;
+  }
+  if (frame.ok === false) {
+    return envelope({
+      ok: false,
+      command: schema.name,
+      status: "eval-failed",
+      error: {
+        code: "E_EVAL",
+        name: frame.name || "EvalError",
+        message: frame.message || "the expression rejected",
+      },
+      hint: `The expression threw, or the promise it returned rejected, inside the ${context} page.`,
+    });
+  }
+  parsed.value = frame.value === undefined ? null : frame.value;
+  if (polls > 0) {
+    parsed.hint =
+      `The expression returned a promise; the ${context} page settled it and this call polled ${polls} time${polls === 1 ? "" : "s"} for the result. ` +
+      (typeof parsed.hint === "string" ? parsed.hint : "");
+  }
+  return actFrameJson(parsed);
+}
+
 export async function handler(
   args: ActArgs & { expression: string },
 ): Promise<string> {
@@ -290,6 +382,9 @@ export async function handler(
   const context = defaulted ? "page" : args.context;
   if (wantsExtensionPageOverCdp(args.projectPath, browser, context, args.url)) {
     return evaluateOnChromiumExtensionPage(args, browser, context as string);
+  }
+  if (context && EXTENSION_PAGE_CONTEXTS.includes(context)) {
+    return evaluateThroughRelay(args, browser, context);
   }
   /* @invariant Options before "--", positionals after: the engine's commander
      parser reads a dash-leading expression as an unknown option unless the
