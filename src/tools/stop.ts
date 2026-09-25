@@ -111,8 +111,53 @@ function processCommand(pid: number): string {
   }
 }
 
-function sessionProcessPids(projectPath: string): number[] {
+export interface ContractProcessHints {
+  profilePath?: string;
+  pids: number[];
+}
+
+/* @invariant The launcher stamps the browser it started into ready.json
+   (profilePath, browserPid, and launcherPid once Firefox hands the session
+   to a relaunched process), and those are the only handles that survive a
+   custom --profile or a browser whose argv never names the project: the
+   pgrep pattern below matches the managed profiles root, which such a
+   browser does not carry, so it answered reaped: [] over a Firefox still
+   holding its profile (ledger entry 6). Read before the kill: the engine's
+   shutdown and this tool's own cleanup both remove the contract. */
+export function contractProcessHints(
+  projectPath: string,
+  browser: string,
+): ContractProcessHints {
+  try {
+    const contract: ReadyContract = JSON.parse(
+      fs.readFileSync(readyContractPath(projectPath, browser), "utf8"),
+    );
+    const pids = [contract.browserPid, contract.launcherPid].filter(
+      (pid): pid is number =>
+        typeof pid === "number" && Number.isInteger(pid) && pid > 0,
+    );
+    return {
+      ...(typeof contract.profilePath === "string" && contract.profilePath.trim()
+        ? { profilePath: contract.profilePath }
+        : {}),
+      pids,
+    };
+  } catch {
+    return { pids: [] };
+  }
+}
+
+function sessionProcessPids(
+  projectPath: string,
+  hints: ContractProcessHints = { pids: [] },
+): number[] {
   const pids = new Set<number>();
+  if (hints.profilePath) {
+    for (const pid of pgrepPids(escapeRegex(hints.profilePath))) pids.add(pid);
+  }
+  for (const pid of hints.pids) {
+    if (pid !== process.pid && isAlive(pid)) pids.add(pid);
+  }
   for (const form of projectPathForms(projectPath)) {
     const escaped = escapeRegex(form);
     /* @invariant The second pattern is the only thing that reaps the session's
@@ -139,8 +184,11 @@ function sessionProcessPids(projectPath: string): number[] {
   );
 }
 
-function reapSessionProcesses(projectPath: string): number[] {
-  const pids = sessionProcessPids(projectPath);
+function reapSessionProcesses(
+  projectPath: string,
+  hints: ContractProcessHints = { pids: [] },
+): number[] {
+  const pids = sessionProcessPids(projectPath, hints);
   for (const pid of pids) {
     try {
       process.kill(pid, "SIGKILL");
@@ -192,9 +240,10 @@ export async function stopOne(
 ): Promise<StopOutcome> {
   const session = findSessionInfo(projectPath, browser);
   const pid = session?.pid ?? pidFromReadyContract(projectPath, browser);
+  const hints = contractProcessHints(projectPath, browser);
 
   if (pid == null) {
-    const reaped = reapSessionProcesses(projectPath);
+    const reaped = reapSessionProcesses(projectPath, hints);
     removeSessionMarker(projectPath, browser);
     return {
       projectPath,
@@ -225,7 +274,7 @@ export async function stopOne(
       : "Terminated.";
   }
 
-  const reaped = reapSessionProcesses(projectPath);
+  const reaped = reapSessionProcesses(projectPath, hints);
 
   removeSession(projectPath, browser);
   removeSessionMarker(projectPath, browser);
@@ -234,7 +283,7 @@ export async function stopOne(
   } catch {
   }
 
-  const survivors = sessionProcessPids(projectPath);
+  const survivors = sessionProcessPids(projectPath, hints);
   const stopped = !isAlive(pid) && survivors.length === 0;
   if (survivors.length) {
     detail += ` Warning: ${survivors.length} browser process(es) still alive after reap (pids ${survivors.join(", ")}).`;

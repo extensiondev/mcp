@@ -75,6 +75,9 @@ export interface ReadyContract {
   compiledAt?: string | null;
   executorAttachedAt?: string;
   runtime?: string;
+  profilePath?: string;
+  browserPid?: number | null;
+  launcherPid?: number;
 }
 
 export interface ProcessInfo {
