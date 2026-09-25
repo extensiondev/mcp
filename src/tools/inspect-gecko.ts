@@ -22,8 +22,37 @@ import {
 import { rdpCollectConsoleMessages } from "../lib/rdp";
 import { summarizeConsoleMessages } from "../lib/console-summary";
 import { schema as inspectSchema } from "./inspect-schema";
+import { declaredSurfaces, surfaceDocument } from "./open";
+import { EXTENSION_PAGE_CONTEXTS } from "./eval";
 
 const TOOL = inspectSchema.name;
+
+const EXTENSION_ORIGIN = /^(moz|chrome|safari-web)-extension:\/\//;
+
+export function surfaceForExtensionUrl(
+  projectPath: string,
+  browser: string,
+  url: string,
+): { context: string; document: string } | null {
+  const bare = url
+    .replace(EXTENSION_ORIGIN, "")
+    .replace(/^[^/]*\//, (m) => (EXTENSION_ORIGIN.test(url) ? "" : m))
+    .replace(/^\.?\//, "")
+    .replace(/[?#].*$/, "");
+  if (!bare) return null;
+  for (const context of EXTENSION_PAGE_CONTEXTS) {
+    const document = surfaceDocument(projectPath, browser, context);
+    if (!document) continue;
+    if (
+      bare === document ||
+      bare.endsWith(`/${document}`) ||
+      document.endsWith(`/${bare}`)
+    ) {
+      return { context, document };
+    }
+  }
+  return null;
+}
 
 function buildBridgeInspectExpression(opts: {
   summary: boolean;
@@ -219,7 +248,27 @@ export async function inspectViaBridge(
 ): Promise<string> {
   const notes: string[] = [];
 
-  if (args.url) {
+  const surface = args.url
+    ? surfaceForExtensionUrl(args.projectPath, browser, args.url)
+    : null;
+  if (args.url && !surface && EXTENSION_ORIGIN.test(args.url)) {
+    const declared = declaredSurfaces(args.projectPath, browser) ?? [];
+    return envelope({
+      ok: false,
+      command: TOOL,
+      status: "no-surface",
+      error: {
+        code: "E_NO_SURFACE_DOCUMENT",
+        name: "NoSurfaceDocument",
+        message: `${args.url} is a page inside the extension, and on ${browser} a page inside the extension is read through its own surface relay, but that path matches none of the surface documents the manifest declares${declared.length ? ` (${declared.join(", ")})` : ""}. Script injection cannot reach an extension page at all.`,
+      },
+      hint: declared.length
+        ? `Pass the declared document path (extension_open surface: "${declared[0]}" opens one), or read it with extension_dom_snapshot context: "${declared[0]}".`
+        : "Declare the page as a surface in the manifest (action.default_popup, options_ui.page, sidebar_action.default_panel or chrome_url_overrides) and rebuild.",
+    });
+  }
+
+  if (args.url && !surface) {
     const listed = await listBridgeTabs(
       args.projectPath,
       browser,
@@ -253,14 +302,19 @@ export async function inspectViaBridge(
     probes: args.probe ?? [],
     maxBytes,
   });
+  /* @invariant A page inside the extension is asked through its surface
+     relay, never through a tab injection: Firefox refuses executeScript into
+     moz-extension:// documents whatever host permissions the manifest holds,
+     so the page path's MV2 fallback answers "Missing host permission for the
+     tab" for a page the relay reads without complaint (ledger entry 8). */
   let raw = await runActVerb(
     [
       "eval",
       expression,
       args.projectPath,
       "--context",
-      "page",
-      ...(args.url ? ["--url", args.url] : []),
+      surface ? surface.context : "page",
+      ...(args.url && !surface ? ["--url", args.url] : []),
       "--browser",
       browser,
       ...(args.timeout != null ? ["--timeout", String(args.timeout)] : []),
@@ -326,6 +380,7 @@ export async function inspectViaBridge(
   const result: Record<string, unknown> = {
     browser,
     transport: "bridge",
+    ...(surface ? { surface: surface.context, document: surface.document } : {}),
   };
   if (value.meta) {
     result.target = { url: value.meta.url, title: value.meta.title };
