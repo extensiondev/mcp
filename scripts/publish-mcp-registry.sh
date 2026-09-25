@@ -33,13 +33,18 @@ if [ "$SERVER_NAME" != "$PKG_MCP_NAME" ]; then
   exit 1
 fi
 
-echo "Waiting for npm to serve $PKG_NAME@$PKG_VERSION with mcpName $SERVER_NAME"
+# npm took longer than 150 s to serve 10.10.0 on 2026-09-25 and the release's
+# listing step gave up while the tarball was already out; the repair lane had
+# to publish it. Twelve minutes covers every propagation seen so far.
+NPM_WAIT_ATTEMPTS=24
+NPM_WAIT_SECONDS=30
+echo "Waiting for npm to serve $PKG_NAME@$PKG_VERSION with mcpName $SERVER_NAME (up to $((NPM_WAIT_ATTEMPTS * NPM_WAIT_SECONDS)) s)"
 PUBLISHED_MCP_NAME=""
-for attempt in 1 2 3 4 5 6 7 8 9 10; do
+for attempt in $(seq 1 "$NPM_WAIT_ATTEMPTS"); do
   PUBLISHED_MCP_NAME="$(npm view "$PKG_NAME@$PKG_VERSION" mcpName --registry https://registry.npmjs.org/ 2>/dev/null || true)"
   if [ -n "$PUBLISHED_MCP_NAME" ]; then break; fi
-  echo "  attempt $attempt: not visible yet, retrying in 15s"
-  sleep 15
+  echo "  attempt $attempt of $NPM_WAIT_ATTEMPTS: not visible yet, retrying in ${NPM_WAIT_SECONDS}s"
+  sleep "$NPM_WAIT_SECONDS"
 done
 
 if [ "$PUBLISHED_MCP_NAME" != "$SERVER_NAME" ]; then
