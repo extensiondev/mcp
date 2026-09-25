@@ -42,10 +42,16 @@ import {
   findExtensionPageTargets,
 } from "../lib/cdp-extension-page";
 import {
+  declaredSurfaces,
   resolveExtensionId,
   surfaceDocument,
   SURFACE_MANIFEST_KEYS,
 } from "./open";
+import {
+  EXTENSION_PAGE_CONTEXTS,
+  isExtensionUrl,
+  surfaceForExtensionUrl,
+} from "../lib/extension-surfaces";
 
 export const schema = {
   name: "extension_eval",
@@ -102,14 +108,7 @@ export function resolveDefaultEvalContext(
     : "background";
 }
 
-export const EXTENSION_PAGE_CONTEXTS = [
-  "popup",
-  "options",
-  "sidebar",
-  "newtab",
-  "history",
-  "bookmarks",
-];
+export { EXTENSION_PAGE_CONTEXTS };
 
 export function wantsExtensionPageOverCdp(
   projectPath: string,
@@ -382,6 +381,49 @@ export async function handler(
   const context = defaulted ? "page" : args.context;
   if (wantsExtensionPageOverCdp(args.projectPath, browser, context, args.url)) {
     return evaluateOnChromiumExtensionPage(args, browser, context as string);
+  }
+  /* @invariant On an engine with no CDP, a page inside the extension has one
+     door: the surface relay of the context that document belongs to. The
+     engine's page path answers "chrome.scripting is not available ... use
+     context background" for a moz-extension:// url, Chromium vocabulary on
+     Gecko pointing at a context that cannot read the page (ledger entry 12);
+     the url is mapped to its surface here and the relay is asked instead. */
+  if (context === "page" && isExtensionUrl(args.url)) {
+    const surface = surfaceForExtensionUrl(
+      args.projectPath,
+      browser,
+      args.url as string,
+    );
+    if (surface) {
+      const raw = await evaluateThroughRelay(
+        { ...args, url: undefined, tab: undefined },
+        browser,
+        surface.context,
+      );
+      const parsed = tryParseFrame(raw);
+      if (parsed) {
+        addWarning(
+          parsed,
+          `${args.url} is the extension's own ${surface.context} document (${surface.document}), which script injection cannot reach on any engine, so this evaluated through the ${surface.context} surface relay. Pass context: "${surface.context}" directly next time.`,
+        );
+        return actFrameJson(parsed);
+      }
+      return raw;
+    }
+    const declared = declaredSurfaces(args.projectPath, browser) ?? [];
+    return envelope({
+      ok: false,
+      command: schema.name,
+      status: "no-surface",
+      error: {
+        code: "E_NO_SURFACE_DOCUMENT",
+        name: "NoSurfaceDocument",
+        message: `${args.url} is a page inside the extension, which script injection cannot reach, and it matches none of the surface documents the manifest declares${declared.length ? ` (${declared.join(", ")})` : ""}.`,
+      },
+      hint: declared.length
+        ? `Evaluate in a declared surface with context: "${declared[0]}" (open it first with extension_open), or read a web page by url.`
+        : "Declare the page as a surface in the manifest (action.default_popup, options_ui.page, sidebar_action.default_panel or chrome_url_overrides) and rebuild.",
+    });
   }
   if (context && EXTENSION_PAGE_CONTEXTS.includes(context)) {
     return evaluateThroughRelay(args, browser, context);

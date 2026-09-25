@@ -22,37 +22,15 @@ import {
 import { rdpCollectConsoleMessages } from "../lib/rdp";
 import { summarizeConsoleMessages } from "../lib/console-summary";
 import { schema as inspectSchema } from "./inspect-schema";
-import { declaredSurfaces, surfaceDocument } from "./open";
-import { EXTENSION_PAGE_CONTEXTS } from "./eval";
+import { declaredSurfaces } from "./open";
+import {
+  EXTENSION_ORIGIN,
+  surfaceForExtensionUrl,
+} from "../lib/extension-surfaces";
 
 const TOOL = inspectSchema.name;
 
-const EXTENSION_ORIGIN = /^(moz|chrome|safari-web)-extension:\/\//;
-
-export function surfaceForExtensionUrl(
-  projectPath: string,
-  browser: string,
-  url: string,
-): { context: string; document: string } | null {
-  const bare = url
-    .replace(EXTENSION_ORIGIN, "")
-    .replace(/^[^/]*\//, (m) => (EXTENSION_ORIGIN.test(url) ? "" : m))
-    .replace(/^\.?\//, "")
-    .replace(/[?#].*$/, "");
-  if (!bare) return null;
-  for (const context of EXTENSION_PAGE_CONTEXTS) {
-    const document = surfaceDocument(projectPath, browser, context);
-    if (!document) continue;
-    if (
-      bare === document ||
-      bare.endsWith(`/${document}`) ||
-      document.endsWith(`/${bare}`)
-    ) {
-      return { context, document };
-    }
-  }
-  return null;
-}
+export { surfaceForExtensionUrl };
 
 function buildBridgeInspectExpression(opts: {
   summary: boolean;
