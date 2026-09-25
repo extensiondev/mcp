@@ -149,6 +149,7 @@ describe("extension_eval reaches an MV3 extension page over CDP, which the page 
       returnByValue: true,
       awaitPromise: true,
       userGesture: true,
+      replMode: true,
     });
   });
 

@@ -17,10 +17,14 @@ import { listPageTargets, type PageTarget } from "./cdp-targets";
    session already publishes the debug port it needs. Everything here speaks to
    an extension page over that port and nothing else. */
 
+/* @invariant replMode is what lets a bare top-level `await` parse, the way the
+   DevTools console accepts it; without it Runtime.evaluate answers
+   "await is only valid in async functions", measured on Chrome 151. */
 const RUNTIME_EVALUATE_DEFAULTS = {
   returnByValue: true,
   awaitPromise: true,
   userGesture: true,
+  replMode: true,
 };
 
 type RemoteObject = {
