@@ -12,7 +12,6 @@ import {
   SESSION_PROJECT_PATH,
 } from "../lib/common-schema";
 import fs from "node:fs";
-import path from "node:path";
 import {
   runActVerb,
   commonFlags,
@@ -29,11 +28,22 @@ import {
   WebDriverClient,
   type WebDriverSessionInfo,
 } from "../lib/webdriver";
+import { manifestCandidates } from "../lib/project-manifest";
+import { resolveCdpPort, CDP_PORT_MISSING_HINT } from "../lib/cdp-port";
+import {
+  evaluateOnExtensionPage,
+  findExtensionPageTargets,
+} from "../lib/cdp-extension-page";
+import {
+  resolveExtensionId,
+  surfaceDocument,
+  SURFACE_MANIFEST_KEYS,
+} from "./open";
 
 export const schema = {
   name: "extension_eval",
   description:
-    "Evaluate an expression in a running extension context. Start the session with allowEval:true (extension_dev), which writes a 0600 session token. Context defaults to 'background', except on a Chromium MV3 session (the default template) where it defaults to 'page', the active tab, because the MV3 service worker CSP blocks eval; pass context:'background' to target the worker anyway and get that explanation back. For content and page, pass `url` to pick the tab, or omit both `url` and `tab` for the active tab; a numeric `tab` only disambiguates. Extension surfaces (popup, options, sidebar, devtools) and override pages evaluate over the in-bundle relay and need no tab id, but must already be open: open one with extension_open first, because a closed one returns an explicit error. Call extension_dom_snapshot with listTabs:true to enumerate {tabId, url, title}.",
+    "Evaluate an expression in a running extension context. Start the session with allowEval:true (extension_dev), which writes a 0600 session token. Context defaults to 'background', except on a Chromium MV3 session (the default template) where it defaults to 'page', the active tab, because the MV3 service worker CSP blocks eval; pass context:'background' to target the worker anyway and get that explanation back. For content and page, pass `url` to pick the tab, or omit both `url` and `tab` for the active tab; a numeric `tab` only disambiguates. Extension surfaces (popup, options, sidebar, devtools) and override pages (newtab, history, bookmarks) need no tab id but must already be open: open one with extension_open first, because a closed one returns an explicit error. On a Chromium MV3 session those pages, and context:'page' with a chrome-extension:// url, evaluate over CDP, the inspector path the extension page CSP does not govern; elsewhere they evaluate over the in-bundle relay. Call extension_dom_snapshot with listTabs:true to enumerate {tabId, url, title}.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -56,18 +66,11 @@ export const schema = {
   },
 };
 
-export function resolveDefaultEvalContext(
+export function chromiumManifestVersion(
   projectPath: string,
   browser: string,
-): "background" | "page" {
-  if (!isChromiumFamily(browser)) return "background";
-  const candidates = [
-    path.join(projectPath, "dist", browser, "manifest.json"),
-    path.join(projectPath, "dist", "manifest.json"),
-    path.join(projectPath, "src", "manifest.json"),
-    path.join(projectPath, "manifest.json"),
-  ];
-  for (const file of candidates) {
+): 2 | 3 | null {
+  for (const file of manifestCandidates(projectPath, browser)) {
     let manifest: Record<string, any>;
     try {
       manifest = JSON.parse(fs.readFileSync(file, "utf8"));
@@ -76,10 +79,154 @@ export function resolveDefaultEvalContext(
     }
     const version =
       manifest["chromium:manifest_version"] ?? manifest.manifest_version;
-    if (version === 3) return "page";
-    if (version === 2) return "background";
+    if (version === 3) return 3;
+    if (version === 2) return 2;
   }
-  return "background";
+  return null;
+}
+
+export function resolveDefaultEvalContext(
+  projectPath: string,
+  browser: string,
+): "background" | "page" {
+  if (!isChromiumFamily(browser)) return "background";
+  return chromiumManifestVersion(projectPath, browser) === 3
+    ? "page"
+    : "background";
+}
+
+export const EXTENSION_PAGE_CONTEXTS = [
+  "popup",
+  "options",
+  "sidebar",
+  "newtab",
+  "history",
+  "bookmarks",
+];
+
+export function wantsExtensionPageOverCdp(
+  projectPath: string,
+  browser: string,
+  context: string | undefined,
+  url: string | undefined,
+): boolean {
+  if (!isChromiumFamily(browser) || !context) return false;
+  if (context === "page") {
+    return typeof url === "string" && /^chrome-extension:\/\//.test(url);
+  }
+  return (
+    EXTENSION_PAGE_CONTEXTS.includes(context) &&
+    chromiumManifestVersion(projectPath, browser) === 3
+  );
+}
+
+async function evaluateOnChromiumExtensionPage(
+  args: ActArgs & { expression: string },
+  browser: string,
+  context: string,
+): Promise<string> {
+  const resolved = await resolveCdpPort(args.projectPath, browser);
+  if (!resolved) {
+    return envelope({
+      ok: false,
+      command: schema.name,
+      status: "no-session",
+      error: {
+        code: "E_NO_SESSION",
+        name: "NoSession",
+        message: `No active dev session / CDP port for ${browser}, and an extension page evaluates over CDP. Start extension_dev with allowEval: true and extension_wait for ready. ${CDP_PORT_MISSING_HINT}`,
+      },
+    });
+  }
+  let wanted: string;
+  if (context === "page") {
+    wanted = args.url as string;
+  } else {
+    const doc = surfaceDocument(args.projectPath, browser, context);
+    if (!doc) {
+      const key = SURFACE_MANIFEST_KEYS[context] ?? context;
+      return envelope({
+        ok: false,
+        command: schema.name,
+        status: "no-surface",
+        error: {
+          code: "E_NO_SURFACE_DOCUMENT",
+          name: "NoSurfaceDocument",
+          message: `This extension declares no ${context}: nothing in its manifest sets ${key}, so there is no ${context} page to evaluate in.`,
+        },
+        hint: `To add one, set ${key} in the manifest and rebuild.`,
+      });
+    }
+    const extensionId = await resolveExtensionId(args.projectPath, browser);
+    if (!extensionId) {
+      return envelope({
+        ok: false,
+        command: schema.name,
+        status: "no-extension-id",
+        error: {
+          code: "E_NO_EXTENSION_ID",
+          name: "NoExtensionId",
+          message:
+            "Could not resolve the extension id from the live session's CDP targets.",
+        },
+        hint: `Confirm the session is ready (extension_wait). ${CDP_PORT_MISSING_HINT}`,
+      });
+    }
+    wanted = `chrome-extension://${extensionId}/${doc}`;
+  }
+  const targets = await findExtensionPageTargets(resolved.port, wanted);
+  if (targets.length === 0) {
+    return envelope({
+      ok: false,
+      command: schema.name,
+      status: "no-target",
+      error: {
+        code: "E_NO_TARGET",
+        name: "NoTarget",
+        message: `No open page at ${wanted}, so there is nothing to evaluate in. An extension page evaluates over CDP on its own target, which exists only while the page is open.`,
+      },
+      hint:
+        context === "page"
+          ? "Open it first with extension_open (url: this address), then retry. extension_dom_snapshot with listTargets: true lists what is open."
+          : `Open it first with extension_open surface: "${context}", then retry. extension_dom_snapshot with listTargets: true lists what is open.`,
+    });
+  }
+  const target = targets[0];
+  const outcome = await evaluateOnExtensionPage(
+    resolved.port,
+    target.targetId,
+    args.expression,
+  );
+  const others = targets.slice(1);
+  const warnings = others.length
+    ? [
+        `${targets.length} open pages match ${wanted}; evaluated in target ${target.targetId} (${target.url}). The others: ${others.map((t) => t.targetId).join(", ")}. Close the copies you do not mean, or navigate away from them.`,
+      ]
+    : [];
+  if (!outcome.ok) {
+    return envelope({
+      ok: false,
+      command: schema.name,
+      status: outcome.thrown ? "eval-failed" : "cdp-failed",
+      error: {
+        code: outcome.thrown ? "E_EVAL" : "E_CDP",
+        name: outcome.thrown ? "EvalError" : "CdpError",
+        message: outcome.message,
+      },
+      warnings,
+      hint: outcome.thrown
+        ? `The expression threw inside ${target.url}. It ran over CDP in the page's main world with extension APIs available; a promise is awaited, so an async expression can be returned directly.`
+        : "The session's debug port refused the call or the target went away. extension_doctor names which; a session that ended needs extension_dev again.",
+    });
+  }
+  return envelope({
+    ok: true,
+    command: schema.name,
+    status: "evaluated",
+    value: outcome.value,
+    warnings,
+    hint: `Evaluated over CDP in ${target.url} (target ${target.targetId}), the inspector path the extension page CSP does not govern. The result is serialized by value, so return plain data rather than DOM nodes; a promise is awaited before returning.`,
+  });
 }
 
 /* @invariant On Safari the extension's own bridge is the eval channel, the
@@ -141,6 +288,9 @@ export async function handler(
     !args.context &&
     resolveDefaultEvalContext(args.projectPath, browser) === "page";
   const context = defaulted ? "page" : args.context;
+  if (wantsExtensionPageOverCdp(args.projectPath, browser, context, args.url)) {
+    return evaluateOnChromiumExtensionPage(args, browser, context as string);
+  }
   /* @invariant Options before "--", positionals after: the engine's commander
      parser reads a dash-leading expression as an unknown option unless the
      separator precedes it, and treats everything after "--" as operands. */
