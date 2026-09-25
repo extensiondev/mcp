@@ -44,6 +44,10 @@ export function toMcpSpeak(text: string): string {
         'browser: "$1"',
       )
       .replace(/--timeout[= ](\d+)/g, "timeout: $1")
+      .replace(
+        /\bextension open (popup|options|sidebar|newtab|history|bookmarks)\b/g,
+        'extension_open with surface: "$1"',
+      )
       .replace(/`extension dev`/g, "extension_dev")
       .replace(/\bextension dev\b/g, "extension_dev")
       .replace(/--tab\b/g, "`tab`")
