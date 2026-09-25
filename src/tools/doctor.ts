@@ -274,6 +274,52 @@ interface DoctorCheck {
    would launder a dead session into a healthy verdict. */
 const CONTROL_OFF_BY_CHOICE = /\bwas not started with --allow-control\b/i;
 
+function pidIsAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/* @invariant An exit the executor outlived was not the session's browser.
+   Firefox on macOS hands a fresh profile to a relaunched process and the
+   first one exits 0, which the launcher stamps as browser_exited; the engine's
+   doctor then fails its browser leg while the same session keeps answering
+   storage probes and evals (ledger entry 9). The executor leg is the live
+   reading, and the contract's browserPid is the second: either one alive
+   after the recorded exit makes that exit history, not a verdict. */
+function reconcileRelaunchedBrowser(
+  checks: DoctorCheck[],
+  contract: { browserPid?: number | null } | null,
+): boolean {
+  const exitedLeg = checks.find(
+    (leg) =>
+      leg.check === "browser" &&
+      leg.status === "fail" &&
+      /\bexited\b/i.test(String(leg.detail ?? "")),
+  );
+  if (!exitedLeg) return false;
+  const executorAnswered = checks.some(
+    (leg) =>
+      (leg.check === "executor" || leg.check === "control-channel") &&
+      leg.status === "pass",
+  );
+  const browserAlive =
+    typeof contract?.browserPid === "number" && pidIsAlive(contract.browserPid);
+  if (!executorAnswered && !browserAlive) return false;
+  exitedLeg.status = "warn";
+  exitedLeg.detail = `${exitedLeg.detail ?? "browser exited"}. ${
+    browserAlive
+      ? `The browser pid the launcher recorded (${contract?.browserPid}) is alive`
+      : "The executor answered a probe after that exit"
+  }, so the session is live and the recorded exit was an earlier process: Firefox hands a fresh profile to a relaunched process and the first one exits 0.`;
+  exitedLeg.remediation =
+    "Nothing to do. If a later call finds the session unreachable, extension_stop and extension_dev again.";
+  return true;
+}
+
 function controlOffByChoiceLeg(checks: DoctorCheck[]): DoctorCheck | null {
   return (
     checks.find(
@@ -343,7 +389,11 @@ export async function handler(args: {
 
     let healthy = code === 0;
     const contract = readContractForDiagnosis(projectPath, browser);
-    if (contract?.status === "error") {
+    const relaunched = reconcileRelaunchedBrowser(checks, contract);
+    if (relaunched) {
+      healthy = !checks.some((leg) => leg.status === "fail");
+    }
+    if (contract?.status === "error" && !relaunched) {
       healthy = false;
       const browserExited =
         contract.code === "browser_exited" ||
