@@ -41,6 +41,20 @@ Nightly before and after the fix where the shape allowed it.
   carries `systemBinaryPath` and a `devLaunches` line saying which one dev
   starts and how to choose the other. `extension_wait` reports `browserPid`
   and `profilePath` from the contract.
+- `extension_open` with surface `sidebar` on Gecko no longer stops at the
+  engine's "sidePanel not available", a Chromium API named on a Firefox
+  engine. It asks the sidebar relay whether the `sidebar_action` panel is
+  open and reports `status: "already-open"` when it is (Firefox opens the
+  panel at install, so it usually is); when it is not, the document is
+  rendered as a tab with the gesture rule stated (Firefox opens the panel
+  only from the toolbar button or View > Sidebar, Bugzilla 1392624).
+- `extension_eval` with context `page` and a `moz-extension://` url on
+  Gecko evaluates through the surface relay of the document that url names,
+  with a warning naming the context to pass next time, instead of "chrome.
+  scripting is not available ... use context background". An extension url
+  that matches no declared surface says which surfaces the manifest
+  declares. The url-to-surface mapping now lives in one place for inspect
+  and eval.
 
 ## 10.10.0
 
