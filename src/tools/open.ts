@@ -25,7 +25,11 @@ import { resolveSessionBrowser } from "../lib/session-browser";
 import { readyContractPath } from "../lib/session-paths";
 import { CDPClient } from "../lib/cdp";
 import { resolveCdpPort, CDP_PORT_MISSING_HINT } from "../lib/cdp-port";
-import { isChromiumFamily, WEBKIT_FAMILY } from "../lib/browser-family";
+import {
+  isChromiumFamily,
+  isGeckoFamily,
+  WEBKIT_FAMILY,
+} from "../lib/browser-family";
 import { readWebDriverSession, WebDriverClient } from "../lib/webdriver";
 import { verifyGuestLoaded } from "../lib/guest-load-oracle";
 import { manifestCandidates } from "../lib/project-manifest";
@@ -817,6 +821,12 @@ export async function handler(
       return openSidebarThroughGesture(args.projectPath, browser, refusal);
     }
   }
+  if (args.surface === "sidebar" && isGeckoFamily(browser)) {
+    const refusal = readUnsupportedRefusal(raw);
+    if (refusal) {
+      return openGeckoSidebar(args.projectPath, browser, refusal, args.timeout);
+    }
+  }
   return AS_TAB_SURFACES.includes(args.surface)
     ? confirmSurfaceTarget(args.projectPath, browser, args.surface, raw)
     : raw;
@@ -840,6 +850,109 @@ function readGestureRefusal(raw: string): Record<string, any> | null {
   return code === E_USER_GESTURE_REQUIRED || /user gesture/i.test(message)
     ? parsed
     : null;
+}
+
+function readUnsupportedRefusal(raw: string): Record<string, any> | null {
+  let parsed: any;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  if (parsed?.ok !== false) return null;
+  const code = typeof parsed.error?.code === "string" ? parsed.error.code : "";
+  const message = String(parsed.error?.message ?? "");
+  return code === "E_NOT_IMPLEMENTED" || /not available/i.test(message)
+    ? parsed
+    : null;
+}
+
+const GECKO_SIDEBAR_GESTURE =
+  "Firefox opens a sidebar_action panel only from a user gesture (the toolbar button or View > Sidebar; Bugzilla 1392624), and the engine's open verb carries none, so it cannot open the panel";
+
+/* @invariant The engine names a Chromium API on a Gecko engine ("sidePanel
+   not available (engine: firefox)") and stops there, while the relay can say
+   whether the sidebar_action panel is open: an inspect in the sidebar context
+   answers only from an open panel. So the panel is asked before anything is
+   rendered, an open one is reported as open, and a closed one gets its
+   document as a tab through the same path the override pages use, with the
+   gesture rule stated instead of a foreign API name (ledger entry 11). */
+async function openGeckoSidebar(
+  projectPath: string,
+  browser: string,
+  refusal: Record<string, any>,
+  timeout?: number,
+): Promise<string> {
+  const doc = surfaceDocument(projectPath, browser, "sidebar");
+  if (!doc) {
+    return missingSurfaceError(
+      projectPath,
+      browser,
+      "sidebar",
+      "so there is no sidebar panel to open",
+    );
+  }
+  const probe = await runActVerb(
+    [
+      "inspect",
+      projectPath,
+      "--context",
+      "sidebar",
+      "--include",
+      "summary",
+      "--browser",
+      browser,
+      ...(timeout != null ? ["--timeout", String(timeout)] : []),
+    ],
+    projectPath,
+    timeout,
+    schema.name,
+  );
+  let open: Record<string, any> | null = null;
+  try {
+    const parsed = JSON.parse(probe);
+    if (parsed?.ok === true) open = parsed;
+  } catch {
+  }
+  if (open) {
+    const url =
+      typeof open.value?.url === "string"
+        ? open.value.url
+        : typeof open.value?.meta?.url === "string"
+          ? open.value.meta.url
+          : undefined;
+    return envelope({
+      ok: true,
+      command: schema.name,
+      status: "already-open",
+      value: {
+        surface: "sidebar",
+        document: doc,
+        alreadyOpen: true,
+        ...(url ? { url } : {}),
+      },
+      hint: `The sidebar panel is open in the ${browser} window already: read it with extension_dom_snapshot context: 'sidebar' or run code in it with extension_eval context: 'sidebar'. ${GECKO_SIDEBAR_GESTURE}, and it did not need to.`,
+    });
+  }
+  const fallback = await openSurfaceAsTab(projectPath, browser, "sidebar");
+  try {
+    const parsedFallback = JSON.parse(fallback);
+    if (parsedFallback?.ok) {
+      addWarning(
+        parsedFallback,
+        `${GECKO_SIDEBAR_GESTURE}, and the panel is not open now, so the sidebar document was rendered as a tab instead. The DOM is the same document the panel would show; the panel hosting stays unverified. A person opens the real panel from the toolbar button or View > Sidebar.`,
+      );
+      return actFrameJson(parsedFallback);
+    }
+  } catch {
+  }
+  refusal.error = {
+    ...(refusal.error ?? {}),
+    message: `${GECKO_SIDEBAR_GESTURE}. Rendering the document ${doc} as a tab failed as well.`,
+  };
+  refusal.hint =
+    "Start the session with allowEval: true so the document can be opened by url through the bridge, or open the panel from the toolbar button in the dev browser and read it with extension_dom_snapshot context: 'sidebar'.";
+  return actFrameJson(refusal);
 }
 
 const SIDEBAR_GESTURE_WARNING =
