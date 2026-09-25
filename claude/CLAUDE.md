@@ -241,6 +241,10 @@ npm run dev -- --logs info --log-url "example.com"
 
 These replay your captured listeners, so they work on Chrome and Firefox, but carry **no user gesture**, so `activeTab` is not granted (the result reports `gesture: false`, plus a `warning` when the manifest declares `activeTab`). If you need a genuine-gesture click (activeTab granted), use [chrome-devtools-mcp](https://github.com/ChromeDevTools/chrome-devtools-mcp)'s `trigger_extension_action` (Chromium only) alongside this server.
 
+Two surfaces the engine's `open` verb cannot serve are handled by the MCP tool itself. `extension_open` with `surface: "newtab"`, `"history"` or `"bookmarks"` resolves the `chrome_url_overrides` page and opens it in a tab, which is the only place the browser renders it. `extension_open` with `surface: "sidebar"` on Chromium, when Chrome refuses `sidePanel.open()` for lack of a user gesture, opens the extension's own sidebar page in a tab, dispatches a synthetic click on it over CDP, calls `chrome.sidePanel.open` from inside that click and closes the tab: the real panel opens, the result says `gesture: "synthetic-click"`, and a warning notes that the toolbar wiring was not exercised. If that fails too, the sidebar document is rendered as a tab and the warning names the reason.
+
+On a Chromium MV3 session, `extension_eval` reaches extension pages over CDP rather than the in-bundle relay: contexts `popup`, `options`, `sidebar`, `newtab`, `history`, `bookmarks`, and `context: "page"` with a `chrome-extension://` url. The MV3 extension CSP blocks the relay's string eval and script injection cannot reach an extension page at all, while the inspector path is governed by neither. The page must already be open (`extension_open` first); a closed one answers `E_NO_TARGET` with the call that opens it.
+
 ## Contributing templates to the examples repo
 
 If you create a new extension pattern worth sharing:

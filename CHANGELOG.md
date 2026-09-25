@@ -41,6 +41,42 @@ has it.
   and `extension_doctor` adds a `safari-window` leg; with no such record
   the leg is a skip and both tools take the bridge.
 
+Four defects agents met while driving the server on real extension work
+(BUGS_TO_FIX_MCP.md entries 1 to 4) close in the same release.
+
+- The initialize result now carries `instructions`: four lines that name
+  the moments (run, wait, inspect, drive, build an extension) and the tools
+  that own them, for clients that hide tool descriptions behind a search
+  step and would otherwise show the model only a server name and a tool
+  count. `createServer()` is exported so a client can initialize against
+  the same server object the stdio path connects.
+- `extension_open` with surface `newtab`, `history` or `bookmarks` resolves
+  the `chrome_url_overrides` page itself and opens it by url. The engine's
+  `open` verb never knew those surfaces and answered `E_ARGS` "unknown
+  surface" to exactly what the tool description promised; an override page
+  is only ever a tab, so this is the surface, not a fallback, and the hint
+  says so.
+- `extension_open` with surface `sidebar` on Chromium, when Chrome refuses
+  `sidePanel.open()` for lack of a user gesture, opens the extension's own
+  sidebar page in a tab, dispatches a synthetic click on it over CDP, calls
+  `chrome.sidePanel.open` from inside that click and closes the tab. The
+  panel that opens is the real one; the result reports `gesture:
+  "synthetic-click"` and a warning that the toolbar wiring was not
+  exercised. If the click does not open it either, the sidebar document is
+  rendered as a tab with the reason in a warning, and if even that fails
+  the refusal gains a hint naming the url to read instead of ending the
+  road. Headless sessions keep their tab fallback and never click.
+- `extension_eval` on a Chromium MV3 session evaluates extension pages over
+  CDP: contexts `popup`, `options`, `sidebar`, `newtab`, `history` and
+  `bookmarks`, and context `page` with a `chrome-extension://` url. The
+  inspector path is not governed by the extension page CSP that blocks the
+  in-bundle relay's string eval, and script injection could never reach an
+  extension page at all, which is where the misleading "Extension manifest
+  must request permission to access this host" came from. A page that is
+  not open answers `E_NO_TARGET` with the `extension_open` call that opens
+  it; a thrown expression answers `E_EVAL` with the exception text;
+  MV2 Chromium and Gecko sessions keep the relay.
+
 ## 10.9.0
 
 The client ran its browser work through CLI packages pinned three minor
