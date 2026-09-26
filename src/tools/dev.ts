@@ -347,12 +347,21 @@ export async function handler(
             : {}),
         }
       : { requestedPort: args.port ?? 8080 };
+  /* @invariant Port 0 is the request for any free port on every socket API,
+     so a bound port that differs from it is the answer, not a collision. The
+     collision wording is for a numbered request the server could not bind
+     (ledger entry 13). */
+  const autoAssigned = args.port === 0;
   const portNote =
     boundPort !== null
       ? args.port !== undefined && args.port !== boundPort
-        ? `Requested port ${args.port} was not available; the dev server bound ${boundPort} (read from the engine's ready.json contract, the same source extension_wait reports).`
+        ? autoAssigned
+          ? `Port 0 asked the engine for any free port and it picked ${boundPort} (read from the engine's ready.json contract, the same source extension_wait reports).`
+          : `Requested port ${args.port} was not available; the dev server bound ${boundPort} (read from the engine's ready.json contract, the same source extension_wait reports).`
         : null
-      : "The engine has not stamped its ready.json contract yet, so the bound port is not known at response time (a taken port makes the server bind the next free one). extension_wait reports the bound port from that contract once it lands; requestedPort above is only what was asked for.";
+      : autoAssigned
+        ? "Port 0 asked the engine for any free port, and it has not stamped its ready.json contract yet, so the port it picked is not known at response time. extension_wait reports it from that contract once it lands."
+        : "The engine has not stamped its ready.json contract yet, so the bound port is not known at response time (a taken port makes the server bind the next free one). extension_wait reports the bound port from that contract once it lands; requestedPort above is only what was asked for.";
 
   return envelope({
     ok: true,
