@@ -55,6 +55,10 @@ Nightly before and after the fix where the shape allowed it.
   that matches no declared surface says which surfaces the manifest
   declares. The url-to-surface mapping now lives in one place for inspect
   and eval.
+- `extension_dev` with `port: 0` no longer warns "Requested port 0 was not
+  available": 0 asks the engine for any free port, so the note now says
+  which port it picked, and the collision wording stays for a numbered port
+  the server could not bind.
 
 ## 10.10.0
 
