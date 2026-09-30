@@ -1,5 +1,14 @@
 # Changelog
 
+## 10.10.2
+
+- The dependency floors move past every advisory `pnpm audit` reported on
+  2026-09-30 (42: 18 high, 22 moderate, 2 low, all transitive): axios,
+  brace-expansion, fast-uri, js-yaml, nanoid, devalue, hono, ip-address,
+  qs and postcss-selector-parser through `pnpm.overrides`, vitest to 4.1.11
+  as a dev dependency. The audit reads zero; nothing the server does
+  changes.
+
 ## 10.10.1
 
 Five Gecko findings from one agent session on Firefox and Waterfox
