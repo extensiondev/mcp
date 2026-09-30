@@ -8,6 +8,12 @@
   qs and postcss-selector-parser through `pnpm.overrides`, vitest to 4.1.11
   as a dev dependency. The audit reads zero; nothing the server does
   changes.
+- The bundled template catalog moves to the corpus at `2c3a486a`, which
+  renamed the `new-*` examples to `newtab-*` and added the `devtools-*`
+  family and `sidebar-monorepo-nx`. `extension_add_feature`'s newtab row
+  now names `newtab`, `newtab-react`, `newtab-vue`, `newtab-svelte` and
+  `newtab-preact`; the catalog-sync PR had failed on the old names every
+  day since 2026-09-26.
 
 ## 10.10.1
 

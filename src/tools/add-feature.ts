@@ -74,11 +74,11 @@ export const FEATURE_TEMPLATE_MAP: Record<string, Record<string, string>> = {
     preact: "action",
   },
   newtab: {
-    react: "new-react",
-    vue: "new-vue",
-    svelte: "new-svelte",
-    preact: "new-preact",
-    vanilla: "new",
+    react: "newtab-react",
+    vue: "newtab-vue",
+    svelte: "newtab-svelte",
+    preact: "newtab-preact",
+    vanilla: "newtab",
   },
   background: {
     react: "javascript",

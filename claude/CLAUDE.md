@@ -26,7 +26,8 @@ The extension.dev platform ships 50+ templates in the [examples](https://github.
 | Content script | `content`    | `content-react`  | `content-vue` | `content-svelte` | n/a              |
 | Sidebar        | `sidebar`    | `sidebar-shadcn` | n/a           | n/a              | `ai-claude`      |
 | Action popup   | `action`     | n/a              | n/a           | n/a              | `ai-chatgpt`     |
-| New tab        | `new`        | `new-react`      | `new-vue`     | `new-svelte`     | n/a              |
+| New tab        | `newtab`     | `newtab-react`   | `newtab-vue`  | `newtab-svelte`  | n/a              |
+| DevTools       | `devtools`   | `devtools-react` | `devtools-vue`| `devtools-svelte`| n/a              |
 | Full framework | `javascript` | `react`          | `vue`         | `svelte`         | n/a              |
 
 **When recommending a template:**
