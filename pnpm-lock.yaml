@@ -34,14 +34,14 @@ importers:
         specifier: ^7.0.6
         version: 7.0.6
       extension-create:
-        specifier: 4.1.29
-        version: 4.1.29
+        specifier: 4.1.30
+        version: 4.1.30
       extension-develop:
-        specifier: 4.1.29
-        version: 4.1.29(@swc/helpers@0.5.21)(svelte@5.56.6(@typescript-eslint/types@8.67.0))(typescript@6.0.2)(webpack@5.108.4(postcss@8.5.23))
+        specifier: 4.1.30
+        version: 4.1.30(@swc/helpers@0.5.21)(svelte@5.56.6(@typescript-eslint/types@8.67.0))(typescript@6.0.2)(webpack@5.108.4(postcss@8.5.23))
       extension-install:
-        specifier: 4.1.29
-        version: 4.1.29
+        specifier: 4.1.30
+        version: 4.1.30
       ws:
         specifier: ^8.21.0
         version: 8.21.0
@@ -1616,12 +1616,12 @@ packages:
     resolution: {integrity: sha512-hIS4idWWai69NezIdRt2xFVofaF4j+6INOpJlVOLDO8zXGpUVEVzIYk12UUi2JzjEzWL3IOAxcTubgz9Po0yXw==}
     engines: {node: '>= 18'}
 
-  extension-create@4.1.29:
-    resolution: {integrity: sha512-4dbqJ/YySVANX/ARDtpibpWSeU2hwrLvao5+a0RrvM9bsayJ/PWViBo364FnZSG8NxqGiFRzdXvMeS1DBsCgWQ==}
+  extension-create@4.1.30:
+    resolution: {integrity: sha512-LXn88E6yGRE4WLfL6dVuqH3Oywl8kmJuIMAuoOXCgE+ievaV0elFKSBSpitnMfpQsvb1UgHWwM2yGbR96aO6nA==}
     engines: {node: '>=22.12'}
 
-  extension-develop@4.1.29:
-    resolution: {integrity: sha512-koFOLPyMYxeXAswK+7Q6U4H2ic/vJyrq/7aXDrI+BktLUNO4SxOah1IR+oHJM9ug7455+XhrcgW05ZUaWfeJ+Q==}
+  extension-develop@4.1.30:
+    resolution: {integrity: sha512-4K0DLRJLjUSjOE+ku9Mczn7ynFd380bmYxikN2FBcyB9ipa60VCIWMBxDx+/7nyV0TCT7jj8muaO89X5NENmAg==}
     engines: {node: '>=22.12'}
 
   extension-from-store@0.2.5:
@@ -1629,8 +1629,8 @@ packages:
     engines: {node: '>=16'}
     hasBin: true
 
-  extension-install@4.1.29:
-    resolution: {integrity: sha512-r/yCfg5dw0umCFMa3609dbYwKW/8vCHxUAZDTyuH6ZAGqTuCPcpaorF/YXjjucIhy1B/mVRjiZtvoz3RHoj6Pg==}
+  extension-install@4.1.30:
+    resolution: {integrity: sha512-gRU+LaVuR9vf/v4KBrAnqVwUBn7+yoJImFqO9kJBFPk1CrpgsHgah7USDF5m18iDFplSlFKrw9Oc0R6ZFGbJNg==}
     engines: {node: '>=22.12'}
 
   fast-deep-equal@3.1.3:
@@ -4435,7 +4435,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  extension-create@4.1.29:
+  extension-create@4.1.30:
     dependencies:
       axios: 1.18.1
       cross-spawn: 7.0.6
@@ -4447,7 +4447,7 @@ snapshots:
       - debug
       - supports-color
 
-  extension-develop@4.1.29(@swc/helpers@0.5.21)(svelte@5.56.6(@typescript-eslint/types@8.67.0))(typescript@6.0.2)(webpack@5.108.4(postcss@8.5.23)):
+  extension-develop@4.1.30(@swc/helpers@0.5.21)(svelte@5.56.6(@typescript-eslint/types@8.67.0))(typescript@6.0.2)(webpack@5.108.4(postcss@8.5.23)):
     dependencies:
       '@prefresh/core': 1.5.9(preact@10.27.3)
       '@prefresh/utils': 1.2.1
@@ -4505,7 +4505,7 @@ snapshots:
     dependencies:
       fflate: 0.8.3
 
-  extension-install@4.1.29:
+  extension-install@4.1.30:
     dependencies:
       cross-spawn: 7.0.6
       pintor: 0.3.0
