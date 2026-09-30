@@ -4,7 +4,18 @@
 
 Five Gecko findings from one agent session on Firefox and Waterfox
 (BUGS_TO_FIX_MCP.md entries 5 to 9), each replayed against a live Firefox
-Nightly before and after the fix where the shape allowed it.
+Nightly before and after the fix where the shape allowed it, plus four more
+that followed them the same week, and the engine release that carries the
+root-cause fix for the first of them.
+
+- `extension-create`, `extension-develop` and `extension-install` move from
+  4.1.29 to 4.1.30. That engine settles a promise before a surface relay
+  replies to an eval (the root cause behind the first entry below, filed
+  from this repo as extension.js 512), names a missing tab, a refused url,
+  a closed surface and a browser exit on every act verb instead of a
+  generic refusal, and lets `reload` resolve a surface's tab. The relay
+  wrapper below stays: a project that pins an older engine in its own
+  node_modules still drives that engine.
 
 - `extension_eval` on a surface that answers through the in-bundle relay
   (every Gecko session, and Chromium MV2) never hands the relay a promise.
