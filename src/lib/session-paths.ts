@@ -27,19 +27,50 @@
    that reports "nothing found" MUST name the absolute path it looked at.
    sessionPathHint exists for exactly that. */
 
+import fs from "node:fs";
 import path from "node:path";
-import { sessionArtifactsRootDir } from "extension-develop/bridge";
+import * as bridge from "extension-develop/bridge";
 
-export {
-  actionsPath,
-  browserArtifactsDir,
-  buildSummaryPath,
-  eventsPath,
-  logsPath,
-  readyContractPath,
-  sessionArtifactsRootDir,
-  sessionStateDir,
-} from "extension-develop/bridge";
+/* @invariant The engine's project is the directory of the nearest
+   package.json, deno.json or deno.jsonc at or above the manifest, not the
+   directory the manifest sits in (develop/lib/project.ts resolves it with
+   findNearestPackageJsonSync from the manifest path), and every session
+   artifact lands under THAT directory's dist/. A caller that hands this
+   module a manifest subfolder as projectPath would otherwise wait on a
+   ready.json the engine never writes and time out with compiled: false while
+   the session runs (ledger entry 23). The same walk is applied here, in the
+   one module that knows the layout, so every reader agrees with the writer. */
+const PROJECT_MANIFEST_FILENAMES = ["package.json", "deno.jsonc", "deno.json"];
+
+export function engineProjectRoot(projectPath: string): string {
+  const start = path.resolve(projectPath);
+  let current = start;
+  for (;;) {
+    for (const name of PROJECT_MANIFEST_FILENAMES) {
+      try {
+        if (fs.statSync(path.join(current, name)).isFile()) return current;
+      } catch {
+      }
+    }
+    const parent = path.dirname(current);
+    if (parent === current) return start;
+    current = parent;
+  }
+}
+
+const rooted =
+  <T extends unknown[], R>(fn: (projectPath: string, ...rest: T) => R) =>
+  (projectPath: string, ...rest: T): R =>
+    fn(engineProjectRoot(projectPath), ...rest);
+
+export const actionsPath = rooted(bridge.actionsPath);
+export const browserArtifactsDir = rooted(bridge.browserArtifactsDir);
+export const buildSummaryPath = rooted(bridge.buildSummaryPath);
+export const eventsPath = rooted(bridge.eventsPath);
+export const logsPath = rooted(bridge.logsPath);
+export const readyContractPath = rooted(bridge.readyContractPath);
+export const sessionArtifactsRootDir = rooted(bridge.sessionArtifactsRootDir);
+export const sessionStateDir = rooted(bridge.sessionStateDir);
 
 /* @invariant The engine's own reader for the contract those paths point at,
    re-exported here rather than imported directly so the path and the parse stay
