@@ -6,6 +6,8 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
+import fs from "node:fs";
+import path from "node:path";
 import { LAUNCH_BROWSER, PROJECT_PATH } from "../lib/common-schema";
 import { pollBootVerdict } from "../lib/boot-verdict";
 import { profileCarriesTabsOver } from "../lib/profile-carryover";
@@ -26,7 +28,7 @@ import {
 export const schema = {
   name: "extension_start",
   description:
-    "Run the PRODUCTION build in a browser: build the project, serve it, and launch. There is no hot module replacement and no control channel, so your edits are not picked up and extension_eval, extension_storage, extension_reload, extension_open and extension_dom_snapshot cannot attach to this session. Use extension_dev while writing code, and this to check what actually ships. Pass build:false to launch an existing dist/<browser> without rebuilding.",
+    "Run the PRODUCTION build in a browser: build the project, serve it, and launch. There is no hot module replacement and no control channel, so your edits are not picked up and extension_eval, extension_storage, extension_reload, extension_open and extension_dom_snapshot cannot attach to this session. Use extension_dev while writing code, and this to check what actually ships. Pass build:false to launch an existing dist/<browser> without rebuilding, or outputPath to launch any prebuilt unpacked extension directory, one another toolchain produced included, which implies build:false.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -52,6 +54,11 @@ export const schema = {
         default: false,
         description: "Serve without launching a browser",
       },
+      outputPath: {
+        type: "string",
+        description:
+          "An existing unpacked extension directory to launch as it is (a manifest.json at its root), for an artifact built by another toolchain or an exact release candidate. Implies build:false; projectPath still names the project the session belongs to. Relative paths resolve against projectPath.",
+      },
       ...LAUNCH_FLAG_SCHEMA,
     },
     required: ["projectPath"],
@@ -66,12 +73,39 @@ export async function handler(
     polyfill?: boolean;
     port?: number;
     noBrowser?: boolean;
+    outputPath?: string;
   } & LaunchFlagArgs,
 ): Promise<string> {
   const browser = args.browser ?? "chrome";
-  const building = args.build !== false;
+  /* @invariant A prebuilt directory is the engine's preview verb with
+     --output-path: nothing is built, so the directory is read as it is and
+     an extension another toolchain produced can be run and watched here
+    . The path is checked first, because the engine would
+     otherwise fall back to dist/<browser> and launch something else. */
+  const outputPath =
+    typeof args.outputPath === "string" && args.outputPath.trim()
+      ? path.resolve(args.projectPath, args.outputPath.trim())
+      : null;
+  if (outputPath) {
+    const manifest = path.join(outputPath, "manifest.json");
+    if (!fs.existsSync(manifest)) {
+      return envelope({
+        ok: false,
+        command: schema.name,
+        status: "no-unpacked-extension",
+        error: {
+          code: "E_NO_DIST",
+          name: "NoUnpackedExtension",
+          message: `outputPath ${outputPath} holds no manifest.json, so there is no unpacked extension to launch.`,
+        },
+        hint: "Point outputPath at the directory that holds the built manifest.json (for an Extension.js project that is dist/<browser>; for another toolchain, its build output), or omit it to build and run the project.",
+      });
+    }
+  }
+  const building = args.build !== false && !outputPath;
   const command = building ? "start" : "preview";
   const cliArgs = [command, args.projectPath, "--browser", browser];
+  if (outputPath) cliArgs.push("--output-path", outputPath);
   if (building && args.polyfill === false) cliArgs.push("--polyfill", "false");
   if (args.port !== undefined) cliArgs.push("--port", String(args.port));
   if (args.noBrowser) cliArgs.push("--no-browser");
