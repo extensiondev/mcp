@@ -41,6 +41,13 @@ export function exactVersion(spec: string): string {
   return spec.trim().replace(/^[\^~]/, "").replace(/^v/, "");
 }
 
+export function describeExtensionInvocation(projectDir?: string): string {
+  const { command, prefixArgs } = resolveExtensionInvocation(projectDir);
+  return prefixArgs.length
+    ? `${command} ${prefixArgs.join(" ")} (this server's pinned engine; the project has no node_modules/.bin/extension)`
+    : `${command} (the project's own Extension.js)`;
+}
+
 export function resolveExtensionInvocation(projectDir?: string): {
   command: string;
   prefixArgs: string[];
@@ -135,8 +142,13 @@ export function spawnExtensionCli(
   const logDir = fs.mkdtempSync(path.join(os.tmpdir(), "extension-mcp-"));
   const logPath = path.join(logDir, "session.log");
   const fd = fs.openSync(logPath, "a");
+  /* @invariant The engine runs in the project, never where the MCP client
+     happened to start this server: a bare npx in the server's cwd resolved
+     the engine against that directory's package.json, so the engine version
+     an agent drove depended on the client's working directory and the session
+     log named a package the project never heard of. */
   const child = spawn(command, [...prefixArgs, ...args], {
-    cwd: options?.cwd,
+    cwd: options?.cwd ?? options?.projectDir,
     detached: true,
     stdio: ["ignore", fd, fd],
     env: { ...process.env, FORCE_COLOR: "0", NO_COLOR: "1" },

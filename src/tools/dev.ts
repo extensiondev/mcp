@@ -18,7 +18,11 @@ import {
 import { pollBootVerdict } from "../lib/boot-verdict";
 import { profileCarriesTabsOver } from "../lib/profile-carryover";
 import { envelope } from "../lib/envelope";
-import { spawnExtensionCli, spawnFailedEnvelope } from "../lib/exec";
+import {
+  describeExtensionInvocation,
+  spawnExtensionCli,
+  spawnFailedEnvelope,
+} from "../lib/exec";
 import {
   registerSession,
   removeSession,
@@ -380,6 +384,7 @@ export async function handler(
           }
         : {}),
       capabilities,
+      engine: describeExtensionInvocation(args.projectPath),
       logPath,
     },
     warnings: [
