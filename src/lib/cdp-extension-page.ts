@@ -93,6 +93,65 @@ export async function findExtensionWorkerTargets(
   }
 }
 
+export type WorkerWake =
+  | { woken: true; targets: Array<{ targetId: string; type: string; url: string }> }
+  | { woken: false; reason: string };
+
+/* @invariant An idle MV3 worker is the normal state of an extension, not a
+   fault: Chrome stops it after about 30 s without events and lists no target
+   for it. The ServiceWorker domain is not on the browser session, but any
+   page session carries it, and ServiceWorker.startWorker on the extension's
+   scope brings the worker back and relists it, measured on Chrome 151
+  . The page the command is issued from is incidental; an
+   extension page is preferred only because it certainly exists in the same
+   profile. */
+export async function wakeExtensionWorker(
+  port: number,
+  extensionId: string,
+): Promise<WorkerWake> {
+  const cdp = new CDPClient();
+  const scopeURL = `chrome-extension://${extensionId}/`;
+  try {
+    await cdp.connect(await CDPClient.discoverBrowserWsUrl(port));
+    const pages = (await CDPClient.discoverTargets(port)).filter(
+      (t) => t.type === "page" && !String(t.url ?? "").startsWith("devtools://"),
+    );
+    const host =
+      pages.find((t) => String(t.url ?? "").startsWith(scopeURL)) ?? pages[0];
+    if (!host) {
+      return {
+        woken: false,
+        reason: "the session has no page target to issue ServiceWorker.startWorker from",
+      };
+    }
+    const sessionId = await cdp.attachToTarget(String(host.id));
+    await cdp.sendCommand("ServiceWorker.enable", {}, sessionId);
+    await cdp.sendCommand("ServiceWorker.startWorker", { scopeURL }, sessionId);
+    const deadline = Date.now() + 3000;
+    for (;;) {
+      const targets = await findExtensionWorkerTargets(port, extensionId);
+      if (targets.length > 0) return { woken: true, targets };
+      if (Date.now() >= deadline) break;
+      await new Promise((r) => setTimeout(r, 150));
+    }
+    return {
+      woken: false,
+      reason:
+        "ServiceWorker.startWorker answered but no worker target was listed within 3s (the extension may declare no background, or the worker exited at once)",
+    };
+  } catch (error) {
+    return {
+      woken: false,
+      reason: error instanceof Error ? error.message : String(error),
+    };
+  } finally {
+    try {
+      cdp.disconnect();
+    } catch {
+    }
+  }
+}
+
 export async function findExtensionPageTargets(
   port: number,
   wantedUrl: string,

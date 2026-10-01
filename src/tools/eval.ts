@@ -41,6 +41,7 @@ import {
   evaluateOnExtensionPage,
   findExtensionPageTargets,
   findExtensionWorkerTargets,
+  wakeExtensionWorker,
 } from "../lib/cdp-extension-page";
 import { listPageTargets, matchTargetsByUrl } from "../lib/cdp-targets";
 import {
@@ -95,6 +96,27 @@ export function chromiumManifestVersion(
     }
     const version =
       manifest["chromium:manifest_version"] ?? manifest.manifest_version;
+    if (version === 3) return 3;
+    if (version === 2) return 2;
+  }
+  return null;
+}
+
+export function geckoManifestVersion(
+  projectPath: string,
+  browser: string,
+): 2 | 3 | null {
+  for (const file of manifestCandidates(projectPath, browser)) {
+    let manifest: Record<string, any>;
+    try {
+      manifest = JSON.parse(fs.readFileSync(file, "utf8"));
+    } catch {
+      continue;
+    }
+    const version =
+      manifest["firefox:manifest_version"] ??
+      manifest["gecko:manifest_version"] ??
+      manifest.manifest_version;
     if (version === 3) return 3;
     if (version === 2) return 2;
   }
@@ -160,19 +182,28 @@ async function evaluateOnChromiumExtensionPage(
         hint: `Confirm the session is ready (extension_wait). ${CDP_PORT_MISSING_HINT}`,
       });
     }
-    const workers = await findExtensionWorkerTargets(resolved.port, extensionId);
+    let workers = await findExtensionWorkerTargets(resolved.port, extensionId);
+    const wakeWarnings: string[] = [];
     if (workers.length === 0) {
-      return envelope({
-        ok: false,
-        command: schema.name,
-        status: "no-target",
-        error: {
-          code: "E_NO_TARGET",
-          name: "NoTarget",
-          message: `No running background for chrome-extension://${extensionId}/: Chrome stops an idle MV3 service worker and lists no target for it until something wakes it.`,
-        },
-        hint: "Wake the worker and retry: extension_reload, or an event it listens to (open a surface with extension_open, navigate a matching tab). extension_logs (context: ['background']) holds what it wrote before it idled.",
-      });
+      const wake = await wakeExtensionWorker(resolved.port, extensionId);
+      if (wake.woken) {
+        workers = wake.targets;
+        wakeWarnings.push(
+          "The background worker was idle (Chrome stops an MV3 service worker after about 30 s without events) and was started through ServiceWorker.startWorker before evaluating; state it held before idling is gone unless it was persisted.",
+        );
+      } else {
+        return envelope({
+          ok: false,
+          command: schema.name,
+          status: "no-target",
+          error: {
+            code: "E_NO_TARGET",
+            name: "NoTarget",
+            message: `No running background for chrome-extension://${extensionId}/: Chrome stops an idle MV3 service worker and lists no target for it, and starting it through ServiceWorker.startWorker did not bring one back: ${wake.reason}.`,
+          },
+          hint: "Check the extension declares a background (extension_manifest_validate), then wake it with an event it listens to (extension_reload, open a surface with extension_open, navigate a matching tab) and retry. extension_logs (context: ['background']) holds what it wrote before it idled.",
+        });
+      }
     }
     const target = workers[0];
     const outcome = await evaluateOnExtensionPage(
@@ -200,12 +231,14 @@ async function evaluateOnChromiumExtensionPage(
       command: schema.name,
       status: "evaluated",
       value: outcome.value,
-      warnings:
-        workers.length > 1
+      warnings: [
+        ...wakeWarnings,
+        ...(workers.length > 1
           ? [
               `${workers.length} background targets match the extension; evaluated in ${target.type} ${target.targetId}.`,
             ]
-          : [],
+          : []),
+      ],
       hint: `Evaluated over CDP in the extension's ${target.type} (${target.url}), the inspector path the extension CSP does not govern; a returned promise is awaited.`,
     });
   }
@@ -535,6 +568,16 @@ function explainCspRefusal(raw: string, context: string | undefined): string | n
    value, the way executeScript defines it. */
 const NO_SCRIPTING_API = /scripting is not available/i;
 
+/* @invariant The same wrapper is the answer when the PAGE refuses: a site
+   whose CSP forbids eval (YouTube) makes the in-page string executor fail
+   with "call to eval() blocked by CSP" on Gecko, while tabs.executeScript
+   injects as the extension and the page policy does not govern it. Only an MV2 build has tabs.executeScript; an MV3 Gecko build
+   keeps the policy explanation, since protocol-level eval there is the engine's own concern. */
+function pageEvalRefusedByCsp(parsed: Record<string, any>): boolean {
+  const code = typeof parsed.error?.code === "string" ? parsed.error.code : "";
+  return code === "E_EVAL" && CSP_EVAL_REFUSAL.test(String(parsed.error?.message ?? ""));
+}
+
 function isSingleExpression(source: string): boolean {
   try {
     new Function(`return (${source}\n)`);
@@ -554,7 +597,15 @@ async function evaluateThroughExecuteScript(
   if (isChromiumFamily(browser)) return null;
   const parsed = tryParseFrame(raw);
   if (!parsed || parsed.ok !== false) return null;
-  if (!NO_SCRIPTING_API.test(String(parsed.error?.message ?? ""))) return null;
+  const noScriptingApi = NO_SCRIPTING_API.test(String(parsed.error?.message ?? ""));
+  const cspRefused =
+    !noScriptingApi &&
+    pageEvalRefusedByCsp(parsed) &&
+    geckoManifestVersion(args.projectPath, browser) === 2;
+  if (!noScriptingApi && !cspRefused) return null;
+  const why = cspRefused
+    ? "the page's content security policy refused the in-page eval"
+    : `${browser} MV2 has no scripting API`;
   const code = isSingleExpression(args.expression)
     ? `(function () { try { return { __extensionDevExec: 1, ok: true, value: (${args.expression}\n) }; } catch (e) { return { __extensionDevExec: 1, ok: false, name: (e && e.name) || "EvalError", message: (e && e.message) || String(e) }; } })()`
     : args.expression;
@@ -579,7 +630,7 @@ async function evaluateThroughExecuteScript(
       command: schema.name,
       status: "eval-failed",
       error: { code: "E_EVAL", name: "EvalError", message: value.error },
-      hint: `The engine has no scripting API on ${browser} MV2, so the expression went through tabs.executeScript from the background and that call failed. The tab must be a web page the extension holds host permissions for; extension pages cannot be injected into.`,
+      hint: `Because ${why}, the expression went through tabs.executeScript from the background and that call failed. The tab must be a web page the extension holds host permissions for; extension pages cannot be injected into.`,
     });
   }
   const first = Array.isArray(value?.frames) ? value.frames[0] : undefined;
@@ -606,7 +657,7 @@ async function evaluateThroughExecuteScript(
     status: "evaluated",
     value: result.value === undefined ? null : result.value,
     warnings: [
-      `${browser} MV2 has no scripting API, so this ran through tabs.executeScript from the background: the content script world of the tab, not the page's MAIN world, so globals the page defines are not visible${context === "page" ? ' even though context: "page" was asked' : ""}.`,
+      `Because ${why}, this ran through tabs.executeScript from the background: the content script world of the tab, not the page's MAIN world, so globals the page defines are not visible${context === "page" ? ' even though context: "page" was asked' : ""}. An empty string or null here is the content world's reading at call time; if the element renders late, wait and retry.`,
     ],
     hint: "Pass url to pick the tab; the extension needs host permissions for it.",
   });
