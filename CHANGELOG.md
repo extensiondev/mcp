@@ -2,6 +2,23 @@
 
 ## 10.10.2
 
+- `extension_open` takes `surface: "devtools"` on Chromium: it opens the
+  browser's real DevTools on a tab (the one `url` matches, else the first
+  web page) through CDP `Target.openDevTools`, waits for the extension's
+  `devtools_page` to register its panel, shows it (`panel` picks a title
+  when there are several) and hands back the panel document's url, which
+  `extension_eval` reads with context `page` and that url, with
+  `chrome.devtools` available. Context `devtools` on `extension_eval` now
+  evaluates over CDP on an MV3 session like the other surfaces, and an
+  extension document lookup matches the iframe targets a DevTools panel
+  and its devtools page are. Works headed or headless (measured Chrome
+  151). Gecko gets a refusal that says no protocol opens its developer
+  tools (BUGS_TO_FIX_MCP.md entry 38).
+- `zen` and `floorp` join the browser enum of `extension_dev`,
+  `extension_start` and friends, the Gecko family, `extension_browsers`
+  detection (app bundles, Linux and Windows paths) and the process match
+  `extension_stop` uses, the same way waterfox is listed; the engine has
+  launched both since 4.1.26 (entry 37).
 - The dependency floors move past every advisory `pnpm audit` reported on
   2026-09-30 (42: 18 high, 22 moderate, 2 low, all transitive): axios,
   brace-expansion, fast-uri, js-yaml, nanoid, devalue, hono, ip-address,

@@ -12,6 +12,7 @@ export const EXTENSION_PAGE_CONTEXTS = [
   "popup",
   "options",
   "sidebar",
+  "devtools",
   "newtab",
   "history",
   "bookmarks",
