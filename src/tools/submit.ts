@@ -11,6 +11,7 @@ import { envelope, type ErrorCode } from "../lib/envelope";
 import fs from "node:fs";
 import path from "node:path";
 import { resolveToken } from "../lib/publish";
+import { PROJECT_TOKEN_INPUT, noStoredLoginHint } from "../lib/credentials";
 import { resolveApiBase, safeApiBase } from "../lib/login-flow";
 import { identityHeaders } from "../lib/session-identity";
 import { STORE_MD_FILENAME, parseStoreMd } from "../lib/store-md";
@@ -61,6 +62,7 @@ export function storeMdWarnings(browsers: string[], cwd: string): string[] {
 }
 
 export interface SubmitToolArgs {
+  project?: string;
   browsers: string[];
   buildSha: string;
   channel?: string;
@@ -74,10 +76,11 @@ export interface SubmitToolArgs {
 export const schema = {
   name: "extension_submit",
   description:
-    "Submit a built extension for store REVIEW through extension.dev, which holds your store credentials and dispatches from your project's mirror CI: the Chrome Web Store, Firefox AMO, Edge Add-ons and the App Store (Safari). This is store review only. It does not push a build to the extension.dev platform, and it does not make a shareable link: that is extension_publish, which is what \"deploy\" or \"ship\" an extension almost always means. Reach for this only when the ask is explicitly a store submission. It defaults to a dry run that dispatches nothing: the platform verifies auth, project, build and store workflow, and this tool adds each store's credential-health verdict. Trust those per-store rows over the platform's bare preflight line, which does not check store health. Pass dryRun:false to actually submit, which is irreversible and enters store review. The project comes from your token (extension_auth or EXTENSION_DEV_TOKEN; tokens live at most 7 days, so CI must re-mint from the console's Access tokens page). Store credentials are never arguments, and no local file is uploaded. Call extension_release_status for valid shas, and, after a real submission, for the recorded outcome and review state.",
+    "Submit a built extension for store REVIEW through extension.dev, which holds your store credentials and dispatches from your project's mirror CI: the Chrome Web Store, Firefox AMO, Edge Add-ons and the App Store (Safari). This is store review only. It does not push a build to the extension.dev platform, and it does not make a shareable link: that is extension_publish, which is what \"deploy\" or \"ship\" an extension almost always means. Reach for this only when the ask is explicitly a store submission. It defaults to a dry run that dispatches nothing: the platform verifies auth, project, build and store workflow, and this tool adds each store's credential-health verdict. Trust those per-store rows over the platform's bare preflight line, which does not check store health. Pass dryRun:false to actually submit, which is irreversible and enters store review. The project comes from your token (extension_auth or EXTENSION_DEV_TOKEN; tokens live at most 7 days, so CI must re-mint from the console's Access tokens page); with several logins stored, `project` picks which one. Store credentials are never arguments, and no local file is uploaded. Call extension_release_status for valid shas, and, after a real submission, for the recorded outcome and review state.",
   inputSchema: {
     type: "object" as const,
     properties: {
+      project: PROJECT_TOKEN_INPUT,
       browsers: {
         type: "array",
         items: {
@@ -136,7 +139,10 @@ function fail(
 }
 
 export async function handler(args: SubmitToolArgs): Promise<string> {
-  const token = resolveToken();
+  const token = resolveToken({ project: args.project });
+  if (!token && args.project) {
+    return fail("SubmitAuthError", noStoredLoginHint(args.project), "auth-required", "E_AUTH_REQUIRED");
+  }
   if (!token) {
     return fail(
       "SubmitAuthError",

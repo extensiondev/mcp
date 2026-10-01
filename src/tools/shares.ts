@@ -23,6 +23,7 @@ import {
 } from "../lib/share-record";
 import { envelope } from "../lib/envelope";
 import { resolveToken } from "../lib/publish";
+import { PROJECT_TOKEN_INPUT } from "../lib/credentials";
 import { evaluateApproval } from "../lib/approval-gate";
 import {
   PLATFORM_HOLD_CODE,
@@ -41,6 +42,7 @@ export const schema = {
   inputSchema: {
     type: "object" as const,
     properties: {
+      project: PROJECT_TOKEN_INPUT,
       action: {
         type: "string",
         enum: ["list", "revoke"],
@@ -224,6 +226,7 @@ async function listShares(args: {
   status?: string;
   limit?: number;
   api?: string;
+  project?: string;
 }): Promise<string> {
   const liveFiltered = args.status === "live";
   const local = args.projectPath
@@ -253,6 +256,7 @@ async function listShares(args: {
     liveOnly: liveFiltered,
     ...(args.limit != null ? { limit: args.limit } : {}),
     ...(args.api ? { api: args.api } : {}),
+    ...(args.project ? { token: resolveToken({ project: args.project }) } : {}),
   });
 
   if (!listing.ok) {
@@ -404,6 +408,7 @@ async function revokeShare(args: {
   projectPath?: string;
   approvalId?: string;
   api?: string;
+  project?: string;
 }): Promise<string> {
   const supplied = String(args.artifactId || args.url || "").trim();
   const ref = parseArtifactRef(supplied);
@@ -425,7 +430,7 @@ async function revokeShare(args: {
     });
   }
 
-  const token = resolveToken();
+  const token = resolveToken({ project: args.project });
   if (token) {
     const gate = await evaluateApproval({
       command: "extension_shares",
@@ -525,6 +530,7 @@ export async function handler(args: {
   status?: string;
   limit?: number;
   api?: string;
+  project?: string;
 }): Promise<string> {
   if (args.action === "revoke") {
     return revokeShare({
@@ -533,6 +539,7 @@ export async function handler(args: {
       ...(args.projectPath ? { projectPath: args.projectPath } : {}),
       ...(args.approvalId ? { approvalId: args.approvalId } : {}),
       ...(args.api ? { api: args.api } : {}),
+      ...(args.project ? { project: args.project } : {}),
     });
   }
   return listShares({
@@ -540,5 +547,6 @@ export async function handler(args: {
     ...(args.status ? { status: args.status } : {}),
     ...(args.limit != null ? { limit: args.limit } : {}),
     ...(args.api ? { api: args.api } : {}),
+    ...(args.project ? { project: args.project } : {}),
   });
 }

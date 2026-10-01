@@ -5,6 +5,7 @@ import path from "node:path";
 import {
   clearCredentials,
   credentialsPath,
+  listCredentials,
   readCredentials,
   readValidCredentials,
   writeCredentials,
@@ -105,5 +106,93 @@ describe("credentials store", () => {
 
   it("returns null when nothing is stored", () => {
     expect(readCredentials()).toBeNull();
+  });
+});
+
+describe("several logins live side by side, one per workspace/project", () => {
+  let tmp: string;
+  let prevXdg: string | undefined;
+
+  beforeEach(() => {
+    tmp = fs.mkdtempSync(path.join(os.tmpdir(), "extdev-creds-multi-"));
+    prevXdg = process.env.XDG_CONFIG_HOME;
+    process.env.XDG_CONFIG_HOME = tmp;
+  });
+
+  afterEach(() => {
+    if (prevXdg === undefined) delete process.env.XDG_CONFIG_HOME;
+    else process.env.XDG_CONFIG_HOME = prevXdg;
+    fs.rmSync(tmp, { recursive: true, force: true });
+  });
+
+  it("keeps the first login when a second project logs in, and makes the latest the default", () => {
+    if (process.platform === "win32") return;
+    writeCredentials(sample({ token: "t-widget", projectSlug: "widget" }));
+    writeCredentials(sample({ token: "t-gadget", projectSlug: "gadget" }));
+
+    expect(readCredentials()?.token).toBe("t-gadget");
+    expect(readCredentials({ project: "acme/widget" })?.token).toBe("t-widget");
+    expect(readCredentials({ project: "ACME/Widget" })?.token).toBe("t-widget");
+    expect(readCredentials({ project: "widget" })?.token).toBe("t-widget");
+    expect(readCredentials({ project: "acme/nothing" })).toBeNull();
+    expect(listCredentials().map((e) => [e.key, e.active])).toEqual([
+      ["acme/widget", false],
+      ["acme/gadget", true],
+    ]);
+  });
+
+  it("re-login to a known project replaces only that entry", () => {
+    if (process.platform === "win32") return;
+    writeCredentials(sample({ token: "t-widget", projectSlug: "widget" }));
+    writeCredentials(sample({ token: "t-gadget", projectSlug: "gadget" }));
+    writeCredentials(sample({ token: "t-widget-2", projectSlug: "widget" }));
+
+    expect(listCredentials()).toHaveLength(2);
+    expect(readCredentials({ project: "acme/widget" })?.token).toBe("t-widget-2");
+    expect(readCredentials()?.token).toBe("t-widget-2");
+  });
+
+  it("reads a version 1 file as a store of one and rewrites it as version 2 on the next login", () => {
+    if (process.platform === "win32") return;
+    const file = credentialsPath();
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, JSON.stringify(sample({ token: "legacy" })));
+
+    expect(readCredentials()?.token).toBe("legacy");
+    expect(readCredentials({ project: "acme/widget" })?.token).toBe("legacy");
+
+    writeCredentials(sample({ token: "t-gadget", projectSlug: "gadget" }));
+    const written = JSON.parse(fs.readFileSync(file, "utf8"));
+    expect(written.version).toBe(2);
+    expect(Object.keys(written.entries).sort()).toEqual(["acme/gadget", "acme/widget"]);
+    expect(readCredentials({ project: "acme/widget" })?.token).toBe("legacy");
+  });
+
+  it("logs one project out and leaves the others, moving the default when needed", () => {
+    if (process.platform === "win32") return;
+    writeCredentials(sample({ token: "t-widget", projectSlug: "widget" }));
+    writeCredentials(sample({ token: "t-gadget", projectSlug: "gadget" }));
+
+    const one = clearCredentials({ project: "acme/gadget" });
+    expect(one.cleared).toBe(true);
+    expect(one.removed).toEqual(["acme/gadget"]);
+    expect(one.remaining).toEqual(["acme/widget"]);
+    expect(readCredentials()?.token).toBe("t-widget");
+
+    const missing = clearCredentials({ project: "acme/nothing" });
+    expect(missing.cleared).toBe(false);
+
+    const all = clearCredentials();
+    expect(all.cleared).toBe(true);
+    expect(fs.existsSync(credentialsPath())).toBe(false);
+  });
+
+  it("selects by project for the validity read too", () => {
+    if (process.platform === "win32") return;
+    writeCredentials(sample({ token: "fresh", projectSlug: "widget" }));
+    writeCredentials(sample({ token: "stale", projectSlug: "gadget", expiresAt: 10 }));
+
+    expect(readValidCredentials(undefined, { project: "acme/widget" })?.token).toBe("fresh");
+    expect(readValidCredentials(undefined, { project: "acme/gadget" })).toBeNull();
   });
 });

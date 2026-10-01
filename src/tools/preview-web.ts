@@ -12,6 +12,8 @@ import path from "node:path";
 import * as build from "./build";
 import { navigateToUrl } from "./open";
 import { ZIP_URL_REDIRECT_NOTE } from "../lib/artifacts-api";
+import { resolveToken } from "../lib/publish";
+import { PROJECT_TOKEN_INPUT } from "../lib/credentials";
 import { uploadPreview } from "../lib/preview-upload";
 import { spendNarration } from "../lib/allowance";
 import { recordSharedPreview } from "../lib/share-record";
@@ -201,8 +203,14 @@ async function buildShare(
   manifest: Record<string, any>,
   browser: string,
   verifyInBrowserTerms: boolean,
+  project?: string,
 ): Promise<Record<string, unknown>> {
-  const result = await uploadPreview({ distDir, manifest, browser });
+  const result = await uploadPreview({
+    distDir,
+    manifest,
+    browser,
+    ...(project ? { token: resolveToken({ project }) } : {}),
+  });
   if (!result.ok) {
     const isAuth = result.error.name === "PreviewAuthError";
     return {
@@ -309,6 +317,7 @@ export const schema = {
     type: "object" as const,
     properties: {
       projectPath: PROJECT_PATH,
+      project: PROJECT_TOKEN_INPUT,
       browser: {
         type: "string",
         enum: REAL_BROWSERS,
@@ -371,6 +380,7 @@ export async function handler(args: {
   open?: boolean;
   openIn?: string;
   share?: boolean;
+  project?: string;
 }): Promise<string> {
   const browser = args.browser ?? "chrome";
   const host = safeHostBase(args.hostUrl ?? SURFACE.defaultOrigin);
@@ -492,6 +502,7 @@ export async function handler(args: {
       manifest,
       browser,
       args.probe !== false,
+      args.project,
     );
     result.share = share;
     if (share.ok === true && share.browserLoadable === false) {

@@ -10,6 +10,7 @@ import { API_BASE } from "../lib/common-schema";
 import { envelope, type ErrorCode } from "../lib/envelope";
 import { spendNarration } from "../lib/allowance";
 import { publish, resolveToken } from "../lib/publish";
+import { PROJECT_TOKEN_INPUT, noStoredLoginHint } from "../lib/credentials";
 import { platformHoldEnvelope } from "../lib/platform-hold";
 import {
   fetchRegistryJson,
@@ -22,10 +23,11 @@ import {
 export const schema = {
   name: "extension_publish",
   description:
-    "Publish the project your stored token is scoped to (extension_auth, or EXTENSION_DEV_TOKEN) to extension.dev, and return its shareable URL. This is what \"deploy\" or \"ship\" an extension usually means; extension_submit is the separate store-review path. The target is the token's project: there is no projectPath, and no local file is uploaded. For a public project the URL is the canonical public page and ttlHours does not apply. For a private one it is a fresh time-limited share link (?share=) whose lifetime is ttlHours.",
+    "Publish the project your stored token is scoped to (extension_auth, or EXTENSION_DEV_TOKEN) to extension.dev, and return its shareable URL. This is what \"deploy\" or \"ship\" an extension usually means; extension_submit is the separate store-review path. The target is the token's project: there is no projectPath, and no local file is uploaded. With several logins stored, pass `project` ('<workspace>/<project>') to pick which one; it outranks EXTENSION_DEV_TOKEN. For a public project the URL is the canonical public page and ttlHours does not apply. For a private one it is a fresh time-limited share link (?share=) whose lifetime is ttlHours.",
   inputSchema: {
     type: "object" as const,
     properties: {
+      project: PROJECT_TOKEN_INPUT,
       ttlHours: {
         type: "number",
         description:
@@ -70,11 +72,15 @@ function fail(
 }
 
 export async function handler(args: {
+  project?: string;
   ttlHours?: number;
   buildSha?: string;
   api?: string;
 }): Promise<string> {
-  const token = resolveToken();
+  const token = resolveToken({ project: args.project });
+  if (!token && args.project) {
+    return fail("PublishAuthError", noStoredLoginHint(args.project), "auth-required", "E_AUTH_REQUIRED");
+  }
   if (!token) {
     return fail(
       "PublishAuthError",

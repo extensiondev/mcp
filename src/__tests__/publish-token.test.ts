@@ -64,4 +64,25 @@ describe("publish resolveToken precedence", () => {
     if (process.platform === "win32") return;
     expect(resolveToken()).toBe("");
   });
+
+  it("lets an explicit project outrank EXTENSION_DEV_TOKEN and pick among stored logins", () => {
+    if (process.platform === "win32") return;
+    const future = Math.floor(Date.now() / 1000) + 3600;
+    for (const [token, projectSlug] of [["t-widget", "widget"], ["t-gadget", "gadget"]] as const) {
+      writeCredentials({
+        version: 1,
+        token,
+        workspaceSlug: "acme",
+        projectSlug,
+        expiresAt: future,
+        api: "https://www.extension.dev",
+      });
+    }
+    process.env.EXTENSION_DEV_TOKEN = "from-env";
+
+    expect(resolveToken()).toBe("from-env");
+    expect(resolveToken({ project: "acme/widget" })).toBe("t-widget");
+    expect(resolveToken({ project: "gadget" })).toBe("t-gadget");
+    expect(resolveToken({ project: "acme/nothing" })).toBe("");
+  });
 });
