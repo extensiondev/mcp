@@ -12,6 +12,7 @@ import {
   SESSION_PROJECT_PATH,
 } from "../lib/common-schema";
 import { runActVerb } from "../lib/act";
+import { listBridgeTabs } from "../lib/bridge-tabs";
 import { isChromiumFamily, WEBKIT_FAMILY } from "../lib/browser-family";
 import {
   readExtensionRoots,
@@ -478,10 +479,30 @@ async function assertBackgroundWorker(
     );
   }
   if (!stage.chromium) {
-    return stage.notChromium(
+    /* @invariant On Gecko the proof is the control channel itself: the
+       bridge executor that answers it runs inside the extension's background,
+       so a tabs query that comes back is a background that booted (ledger
+       entry 33). Silence is inconclusive, since the channel may be off by
+       choice or the session not attached yet. */
+    const listed = await listBridgeTabs(
+      stage.projectPath,
+      stage.browser,
+      stage.timeout,
+      "extension_assert",
+    );
+    if ("tabs" in listed) {
+      return passCheck(
+        id,
+        null,
+        `The ${background.kind} answered a tabs query over the control channel; the bridge executor runs inside the background, so it has booted.`,
+        { backgroundKind: background.kind, tabsSeen: listed.tabs.length },
+      );
+    }
+    return inconclusiveCheck(
       id,
       null,
-      "On this browser family the MCP reads the debugger's root actor, which lists installed add-ons and no contexts. Read what the background itself wrote with extension_logs (context: ['background']); a line there is proof it ran.",
+      `The control channel did not answer on ${stage.browser}, so the background could not be asked.`,
+      "Start the session with allowControl: true (extension_dev) and extension_wait for ready, then assert again; extension_logs (context: ['background']) shows what the background wrote meanwhile.",
     );
   }
 
@@ -590,10 +611,72 @@ async function assertSurfaceRendered(
     );
   }
   if (!stage.chromium) {
-    return stage.notChromium(
+    /* @invariant On Gecko the surface relay answers only from an open
+       document, so an inspect in that context is the rendering proof (ledger
+       entry 33). A selector cannot be probed through that verb, so a clause
+       with one stays inconclusive and says which tool reads it. */
+    const raw = await runActVerb(
+      [
+        "inspect",
+        stage.projectPath,
+        "--context",
+        clause.surface,
+        "--include",
+        "summary",
+        "--browser",
+        stage.browser,
+        ...(stage.timeout != null ? ["--timeout", String(stage.timeout)] : []),
+      ],
+      stage.projectPath,
+      stage.timeout,
+      "extension_assert",
+    );
+    let parsed: any = null;
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+    }
+    if (parsed?.ok === true) {
+      const summary = parsed.value?.summary ?? {};
+      const children = Number(summary.bodyChildCount ?? 0);
+      if (clause.selector) {
+        return inconclusiveCheck(
+          id,
+          subject,
+          `The ${clause.surface} document is open (${parsed.value?.url ?? document}), but a selector cannot be probed through the surface relay on ${stage.browser}.`,
+          `Read it with extension_inspect (url: the document's moz-extension:// address, probe: ['${clause.selector}']) or extension_eval context: '${clause.surface}'.`,
+          { url: parsed.value?.url, summary },
+        );
+      }
+      if (clause.minNodes != null && children < clause.minNodes) {
+        return failCheck(
+          id,
+          subject,
+          `The ${clause.surface} document is open but its body has ${children} child element${children === 1 ? "" : "s"}, fewer than the ${clause.minNodes} expected.`,
+          { url: parsed.value?.url, summary },
+        );
+      }
+      return passCheck(
+        id,
+        subject,
+        `The ${clause.surface} document (${document}) is open and rendering: the surface relay answered with ${children} body child element${children === 1 ? "" : "s"}.`,
+        { url: parsed.value?.url, summary },
+      );
+    }
+    const message = String(parsed?.error?.message ?? raw);
+    if (/not open|E_TARGET_NOT_FOUND|not found/i.test(message) || parsed?.error?.code === "E_TARGET_NOT_FOUND") {
+      return failCheck(
+        id,
+        subject,
+        `The ${clause.surface} is declared (${document}) but nothing is rendering it: the surface relay has no open document to answer from. Open it with extension_open (surface: '${clause.surface}') before asserting.`,
+        { document },
+      );
+    }
+    return inconclusiveCheck(
       id,
       subject,
-      `Read the surface over the agent bridge instead: extension_dom_snapshot with context: '${clause.surface}' returns the rendered document on this browser family.`,
+      `The surface relay could not be asked on ${stage.browser}: ${message.slice(0, 200)}`,
+      "Start the session with allowControl: true (extension_dev) and extension_wait for ready, then assert again.",
     );
   }
 
