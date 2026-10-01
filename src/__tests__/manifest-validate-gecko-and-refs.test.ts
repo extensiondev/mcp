@@ -94,7 +94,7 @@ describe("the Firefox report names what Firefox itself would say", () => {
     expect(warnings.find((w) => w.includes("side_panel declared but no firefox:sidebar_action"))).toBeDefined();
   });
 
-  it("is quiet about the gecko id when the manifest sets it", async () => {
+  it("is quiet about the gecko id when the manifest sets it, and asks for data_collection_permissions until it is there", async () => {
     const dir = project(
       {
         ...BASE,
@@ -106,6 +106,19 @@ describe("the Firefox report names what Firefox itself would say", () => {
     const result = JSON.parse(await manifestValidate.handler({ projectPath: dir, browsers: ["firefox"] }));
 
     expect(result.warnings.find((w: string) => w.includes("gecko.id"))).toBeUndefined();
+    expect(result.warnings.find((w: string) => w.includes("data_collection_permissions"))).toContain('{"required": ["none"]}');
+
+    const complete = project(
+      {
+        ...BASE,
+        "firefox:browser_specific_settings": {
+          gecko: { id: "f@example.com", data_collection_permissions: { required: ["none"] } },
+        },
+      },
+      ["public/images/icon-16.png"],
+    );
+    const quiet = JSON.parse(await manifestValidate.handler({ projectPath: complete, browsers: ["firefox"] }));
+    expect(quiet.warnings.find((w: string) => w.includes("data_collection_permissions"))).toBeUndefined();
   });
 
   it("gives an MV2 Firefox manifest the keys to port for Chromium", async () => {
