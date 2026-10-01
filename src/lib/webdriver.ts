@@ -43,9 +43,6 @@ export function readWebDriverSession(
   return null;
 }
 
-// Safari's dev session stamps the appex identifier (<bundle id>.Extension)
-// into ready.json, and an Extension.js content script writes that same id
-// into the owner attribute of every root it mounts.
 export function readyExtensionId(
   projectPath: string,
   browser: string,
@@ -134,9 +131,6 @@ export class WebDriverClient {
     await this.call("POST", "/refresh", {}, timeoutMs);
   }
 
-  // Runs a function body in the page's main world. WebDriver's execute has
-  // no reach into an extension's isolated world or any extension page, so
-  // what it returns is what the page and the DOM show.
   async execute(
     script: string,
     args: unknown[] = [],
