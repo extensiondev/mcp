@@ -14,7 +14,11 @@ import { outputJsonVerdict, refusedTheOutputFlag } from "../lib/engine-version";
 import { liveProjectSessions } from "../lib/session-browser";
 import { CARRIER_DIR_NAME, removeCarrier } from "../lib/carrier";
 import { readZipEntryNames } from "../lib/zip-entries";
-import { buildSummaryPath, sessionPathHint } from "../lib/session-paths";
+import {
+  buildSummaryPath,
+  readyContractPath,
+  sessionPathHint,
+} from "../lib/session-paths";
 import { type Envelope, envelope, isEnvelope } from "../lib/envelope";
 
 const COMMAND = "extension_build";
@@ -946,13 +950,49 @@ export async function handler(args: {
     stderr.trim() ||
     out ||
     `extension build exited with code ${code}`;
+  /* @invariant A failed build used to answer "Build failed with errors" and a
+     hint about src/manifest.json, a location the engine does not require, so
+     an agent had to leave the server to see a single compiler error (ledger
+     entry 16). The one-shot build stamps the same ready.json a dev session
+     does, with the compile errors on it, so those are read back here; when
+     the contract carries none, the engine's own output tail travels instead. */
+  const compileErrors = buildCompileErrors(args.projectPath, browser, start);
+  const tail = [out, stderr.trim()].filter(Boolean).join("\n").trim();
   return envelope({
     ok: false,
     command: COMMAND,
     status: "build-failed",
     error: { code: "E_BUILD_FAILED", message: message.slice(0, 1200) },
-    value: { browser, duration },
+    value: {
+      browser,
+      duration,
+      ...(compileErrors.length ? { errors: compileErrors } : {}),
+      ...(tail && !compileErrors.length ? { output: tail.slice(-4000) } : {}),
+    },
     warnings,
-    hint: "Check that the project has a valid src/manifest.json. Missing dependencies are installed by the build itself, so a failure here is usually the manifest, a compile error, or a Safari toolchain the host does not have.",
+    hint: compileErrors.length
+      ? `Fix the ${compileErrors.length} compile error${compileErrors.length === 1 ? "" : "s"} in value.errors (file, loader and message as the bundler printed them) and build again. extension_manifest_validate covers the manifest; a missing dependency is installed by the build itself.`
+      : "Read value.output for the bundler's own report. The manifest may live at the project root or under src; a failure here is usually a compile error, a manifest the engine refuses, or a Safari toolchain the host does not have.",
   });
+}
+
+const ANSI_SEQUENCE = new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*m`, "g");
+
+function buildCompileErrors(
+  projectPath: string,
+  browser: string,
+  since: number,
+): string[] {
+  try {
+    const file = readyContractPath(projectPath, browser);
+    if (fs.statSync(file).mtimeMs < since) return [];
+    const contract = JSON.parse(fs.readFileSync(file, "utf8"));
+    const errors = Array.isArray(contract?.errors) ? contract.errors : [];
+    return errors
+      .filter((e: unknown) => typeof e === "string" && e.trim())
+      .map((e: string) => e.replace(ANSI_SEQUENCE, "").trim())
+      .slice(0, 20);
+  } catch {
+    return [];
+  }
 }
