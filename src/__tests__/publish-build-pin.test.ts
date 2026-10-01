@@ -117,4 +117,55 @@ describe("extension_publish build pin enrichment", () => {
       out.warnings.some((w: string) => w.includes("newest successful build")),
     ).toBe(true);
   });
+
+  /*
+   * @invariant the deploy lane marks a finished build
+   * `ready`, which this tool used to skip, so a project with three READY
+   * builds published with buildSha and version null.
+   */
+  it("reads a build the index marks ready as the newest successful build", async () => {
+    global.fetch = registryFetch({
+      items: [
+        {
+          id: "a8a86d7",
+          commit: "a8a86d7c0ffee000000000000000000000000001",
+          status: "ready",
+          timestamp: "2026-10-01T10:00:00.000Z",
+          version: "9.0.0.0",
+          browsers: ["chrome", "edge", "firefox"],
+        },
+        {
+          id: "bead5ee",
+          commit: "bead5eedc0ffeebabe990000000000000000000",
+          status: "failed",
+          timestamp: "2026-10-01T11:00:00.000Z",
+          version: "9.0.0.1",
+        },
+      ],
+    });
+
+    const out = JSON.parse(await handler({}));
+    expect(out.ok).toBe(true);
+    expect(out.value.buildSha).toBe("a8a86d7");
+    expect(out.value.version).toBe("9.0.0.0");
+    expect(out.value.builtAt).toBe("2026-10-01T10:00:00.000Z");
+  });
+
+  it("keeps the platform's own buildSha, version and builtAt when the envelope carries them", async () => {
+    platform.result = {
+      ok: true,
+      data: {
+        buildSha: "a8a86d7c0ffee000000000000000000000000001",
+        version: "9.0.0.0",
+        builtAt: "2026-10-01T10:00:00.000Z",
+      },
+    };
+
+    const out = JSON.parse(await handler({}));
+    expect(out.value.buildSha).toBe(
+      "a8a86d7c0ffee000000000000000000000000001",
+    );
+    expect(out.value.version).toBe("9.0.0.0");
+    expect(out.value.builtAt).toBe("2026-10-01T10:00:00.000Z");
+  });
 });

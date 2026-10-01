@@ -18,6 +18,7 @@ import {
 
 import * as create from "./tools/create";
 import * as projectCreate from "./tools/project-create";
+import * as workspaceCreate from "./tools/workspace-create";
 import * as templates from "./tools/templates";
 import * as build from "./tools/build";
 import * as dev from "./tools/dev";
@@ -99,6 +100,7 @@ export const tools: ToolModule[] = [
   addFeature,
   auth,
   projectCreate,
+  workspaceCreate,
   browsers,
   doctor,
 ];

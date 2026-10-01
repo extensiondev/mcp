@@ -9,6 +9,7 @@
 import {
   consoleProjectUrl,
   fetchRegistryJson,
+  isSuccessfulBuild,
   parseBuildIndex,
   parseChannels,
   registryFileUrl,
@@ -155,7 +156,7 @@ export async function readReleases(args: {
             promotable.length > 0 ? promotable.join(", ") : "none"
           }; recent builds add ${
             recentBuilds
-              .filter((b) => b.status === "success")
+              .filter(isSuccessfulBuild)
               .map((b) => b.sha)
               .join(", ") || "none"
           }. Use one of these as buildId/buildSha for promote/deploy/publish.`

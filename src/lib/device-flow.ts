@@ -20,12 +20,19 @@ export interface DeviceCodeStart {
   expiresIn: number;
 }
 
+export type DeviceIntent = "login" | "create" | "create-workspace";
+
+/* @invariant A workspace create names a workspace and no project, so the
+ * request carries `workspace` instead of `project`; every other intent keeps
+ * the `project` field byte for byte. The platform refuses a create-workspace
+ * request whose slug has a slash, so the two shapes cannot be confused. */
 export async function requestDeviceCode(args: {
   apiBase: string;
   path: string;
-  project: string;
+  project?: string;
+  workspace?: string;
   clientName?: string;
-  intent?: "login" | "create";
+  intent?: DeviceIntent;
   fetchImpl?: FetchImpl;
 }): Promise<DeviceCodeStart> {
   const doFetch = args.fetchImpl ?? fetch;
@@ -33,7 +40,8 @@ export async function requestDeviceCode(args: {
     method: "POST",
     headers: { "content-type": "application/json", accept: "application/json" },
     body: JSON.stringify({
-      project: args.project,
+      ...(args.project ? { project: args.project } : {}),
+      ...(args.workspace ? { workspace: args.workspace } : {}),
       clientName: args.clientName ?? "extension-mcp",
       ...(args.intent ? { intent: args.intent } : {}),
     }),
@@ -91,7 +99,8 @@ export type DeviceGrantPollResult =
 export async function pollDeviceGrant(args: {
   apiBase: string;
   path: string;
-  project: string;
+  project?: string;
+  workspace?: string;
   deviceCode: string;
   interval: number;
   budgetMs: number;
@@ -107,7 +116,8 @@ export async function pollDeviceGrant(args: {
       headers: { "content-type": "application/json", accept: "application/json" },
       body: JSON.stringify({
         device_code: args.deviceCode,
-        project: args.project,
+        ...(args.project ? { project: args.project } : {}),
+        ...(args.workspace ? { workspace: args.workspace } : {}),
       }),
     });
     const text = await res.text();
