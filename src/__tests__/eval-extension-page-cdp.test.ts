@@ -310,7 +310,7 @@ describe("extension_eval reaches an MV3 extension page over CDP, which the page 
     expect(result.error.message).toContain("side_panel.default_path");
   });
 
-  it("says there is no session when no CDP port resolves", async () => {
+  it("falls back to the in-bundle relay when no CDP port resolves", async () => {
     const p = project(MV3);
     cdpPort = null;
 
@@ -323,9 +323,10 @@ describe("extension_eval reaches an MV3 extension page over CDP, which the page 
       }),
     );
 
-    expect(cliCalls).toEqual([]);
-    expect(result.ok).toBe(false);
-    expect(result.error.code).toBe("E_NO_SESSION");
+    expect(cliCalls).toHaveLength(1);
+    expect(cliCalls[0][cliCalls[0].indexOf("--context") + 1]).toBe("popup");
+    expect(evaluations).toEqual([]);
+    expect(result.ok).toBe(true);
   });
 
   it("keeps the in-bundle relay for an MV2 Chromium surface, where eval is allowed", async () => {
