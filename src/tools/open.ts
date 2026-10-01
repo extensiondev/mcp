@@ -38,6 +38,8 @@ import {
   resolveBridgeBaseUrl,
 } from "../lib/bridge-tabs";
 import { openSidePanelWithSyntheticGesture } from "../lib/cdp-extension-page";
+import { openDevToolsPanel } from "../lib/cdp-devtools";
+import { listPageTargets, matchTargetsByUrl } from "../lib/cdp-targets";
 
 export const OVERRIDE_SURFACES = ["newtab", "history", "bookmarks"];
 
@@ -425,9 +427,11 @@ export function surfaceDocument(
           : surface === "sidebar"
             ? (manifest.side_panel?.default_path ??
               manifest.sidebar_action?.default_panel)
-            : surface === "newtab" || surface === "history" || surface === "bookmarks"
-              ? manifest.chrome_url_overrides?.[surface]
-              : null;
+            : surface === "devtools"
+              ? manifest.devtools_page
+              : surface === "newtab" || surface === "history" || surface === "bookmarks"
+                ? manifest.chrome_url_overrides?.[surface]
+                : null;
     if (typeof ref === "string" && ref) return ref.replace(/^\.?\//, "");
   }
   return null;
@@ -437,6 +441,7 @@ export const SURFACE_MANIFEST_KEYS: Record<string, string> = {
   popup: "action.default_popup",
   options: "options_ui.page (or options_page)",
   sidebar: "side_panel.default_path (or sidebar_action.default_panel)",
+  devtools: "devtools_page",
   newtab: "chrome_url_overrides.newtab",
   history: "chrome_url_overrides.history",
   bookmarks: "chrome_url_overrides.bookmarks",
@@ -724,19 +729,24 @@ async function confirmSurfaceTarget(
 export const schema = {
   name: "extension_open",
   description:
-    "Open an extension surface, or replay an event, in a running session. Pass surface:'popup', 'options' or 'sidebar' to open a UI surface, or 'newtab', 'history' or 'bookmarks' to open the matching chrome_url_overrides page in a tab (always a tab, resolved by the server, never sent to the engine). On Chromium, when Chrome refuses the sidebar for lack of a user gesture, the server opens the real panel through a synthetic click on the extension's own page and says so in warnings; if that fails too it renders the sidebar document as a tab. Pass surface:'action' to trigger the toolbar action, which opens its popup or replays chrome.action.onClicked when there is none. Pass surface:'command' with `name` to replay a chrome.commands.onCommand shortcut. Note that action and command replay invoke your listener without a user gesture, so the gesture-derived activeTab grant does not apply; the result reports gesture:false and warns when activeTab is declared. Start the session with allowControl:true (extension_dev).",
+    "Open an extension surface, or replay an event, in a running session. Pass surface:'popup', 'options' or 'sidebar' to open a UI surface, or 'newtab', 'history' or 'bookmarks' to open the matching chrome_url_overrides page in a tab (always a tab, resolved by the server, never sent to the engine). On Chromium, when Chrome refuses the sidebar for lack of a user gesture, the server opens the real panel through a synthetic click on the extension's own page and says so in warnings; if that fails too it renders the sidebar document as a tab. Pass surface:'devtools' to open the browser's DevTools on a tab (the one `url` matches, else the first web page) and show the extension's panel there, picked by `panel` title when there are several: Chromium only, over CDP Target.openDevTools, headed or headless; the result names the panel document's url, which extension_eval reads with context 'page' and that url (the panel is no tab, so the tab-based readers do not reach it). Pass surface:'action' to trigger the toolbar action, which opens its popup or replays chrome.action.onClicked when there is none. Pass surface:'command' with `name` to replay a chrome.commands.onCommand shortcut. Note that action and command replay invoke your listener without a user gesture, so the gesture-derived activeTab grant does not apply; the result reports gesture:false and warns when activeTab is declared. Start the session with allowControl:true (extension_dev).",
   inputSchema: {
     type: "object" as const,
     properties: {
       projectPath: SESSION_PROJECT_PATH,
       surface: {
         type: "string",
-        enum: ["popup", "options", "sidebar", "newtab", "history", "bookmarks", "action", "command"],
+        enum: ["popup", "options", "sidebar", "devtools", "newtab", "history", "bookmarks", "action", "command"],
         description: "Which surface to open or event to replay.",
       },
       name: {
         type: "string",
         description: "For surface 'command': the chrome.commands name to trigger.",
+      },
+      panel: {
+        type: "string",
+        description:
+          "For surface 'devtools': the title the extension gave chrome.devtools.panels.create, when it registers more than one panel. Omitted, the extension's first panel is shown.",
       },
       url: {
         type: "string",
@@ -820,11 +830,16 @@ export async function handler(
   args: ActArgs & {
     surface?: string;
     name?: string;
+    panel?: string;
     url?: string;
     asTab?: boolean;
   },
 ): Promise<string> {
   const { browser } = resolveSessionBrowser(args.projectPath, args.browser);
+
+  if (args.surface === "devtools") {
+    return openDevToolsSurface(args, browser);
+  }
 
   if (args.url) {
     const absolute = /^[a-z][a-z0-9+.-]*:/i.test(args.url)
@@ -991,6 +1006,178 @@ export async function handler(
   return AS_TAB_SURFACES.includes(args.surface)
     ? confirmSurfaceTarget(args.projectPath, browser, args.surface, raw)
     : raw;
+}
+
+const DEVTOOLS_PANEL_BUDGET_MS = 15_000;
+
+/* @invariant Chromium's browser-level CDP has Target.openDevTools, which opens
+   the real DevTools frontend on a target, headed or headless, and the
+   extension's devtools_page loads inside it like it would from a keyboard
+   shortcut; the frontend's own panel registry then shows the panel. Firefox's
+   protocols have no command that opens its developer tools, so on Gecko the
+   honest answer is a refusal, not a stand-in tab (a panel page outside DevTools
+   has no chrome.devtools and proves nothing). */
+async function openDevToolsSurface(
+  args: ActArgs & { panel?: string },
+  browser: string,
+): Promise<string> {
+  if (!isChromiumFamily(browser)) {
+    return envelope({
+      ok: false,
+      command: schema.name,
+      status: "unsupported",
+      error: {
+        code: "E_UNSUPPORTED_BROWSER",
+        name: "NoDevToolsAutomation",
+        message: `${browser} exposes no protocol command that opens its developer tools or an extension panel, so this server cannot open the devtools surface there; Target.openDevTools is Chromium's.`,
+      },
+      hint: WEBKIT_FAMILY.has(browser)
+        ? "Open the Web Inspector by hand in the headed Safari window and switch to the panel; extension_logs shows what the devtools page writes."
+        : "Open the developer tools by hand in the headed Firefox window (F12) and switch to the panel, or run the same project on chrome to drive the panel from here; extension_logs (context: ['devtools']) shows what the devtools page writes either way.",
+    });
+  }
+  const doc = surfaceDocument(args.projectPath, browser, "devtools");
+  if (!doc) {
+    return missingSurfaceError(
+      args.projectPath,
+      browser,
+      "devtools",
+      "so there is no DevTools page to register a panel",
+    );
+  }
+  const resolved = await resolveCdpPort(args.projectPath, browser);
+  if (!resolved) {
+    return envelope({
+      ok: false,
+      command: schema.name,
+      status: "no-session",
+      error: {
+        code: "E_NO_SESSION",
+        name: "NoSession",
+        message: `No active dev session / CDP port for ${browser}. Start extension_dev and extension_wait for ready. ${CDP_PORT_MISSING_HINT}`,
+      },
+    });
+  }
+  const extensionId = await resolveExtensionId(args.projectPath, browser);
+  if (!extensionId) {
+    return envelope({
+      ok: false,
+      command: schema.name,
+      status: "no-extension-id",
+      error: {
+        code: "E_NO_EXTENSION_ID",
+        name: "NoExtensionId",
+        message:
+          "Could not resolve the extension id from the live session's CDP targets.",
+      },
+      hint: `Confirm the session is ready (extension_wait). ${CDP_PORT_MISSING_HINT}`,
+    });
+  }
+  const pages = await listPageTargets(resolved.port).catch(() => []);
+  const candidates = args.url
+    ? matchTargetsByUrl(pages, args.url)
+    : pages.filter(
+        (t) =>
+          /^https?:/i.test(t.url) ||
+          (!t.url.startsWith("chrome-extension://") &&
+            !t.url.startsWith("chrome://") &&
+            t.url !== "about:blank"),
+      );
+  const inspected = candidates[0] ?? (args.url ? undefined : pages[0]);
+  if (!inspected) {
+    return envelope({
+      ok: false,
+      command: schema.name,
+      status: "no-target",
+      error: {
+        code: "E_NO_TARGET",
+        name: "NoTarget",
+        message: args.url
+          ? `No open tab matches ${args.url}, so there is nothing to open DevTools on.`
+          : "No open tab to inspect: the session has no page target.",
+      },
+      hint: "Open the page first with extension_open (url: the address), then open the devtools surface with the same url. extension_dom_snapshot with listTargets: true lists what is open.",
+    });
+  }
+  const devtoolsPageUrl = `chrome-extension://${extensionId}/${doc}`;
+  const budgetMs =
+    typeof args.timeout === "number" && args.timeout > 0
+      ? Math.min(args.timeout, DEVTOOLS_PANEL_BUDGET_MS)
+      : DEVTOOLS_PANEL_BUDGET_MS;
+  const outcome = await openDevToolsPanel(resolved.port, {
+    inspectedTargetId: inspected.targetId,
+    extensionId,
+    devtoolsPageUrl,
+    panelTitle: args.panel,
+    budgetMs,
+  });
+  if (!outcome.opened) {
+    if (outcome.stage === "open" || outcome.stage === "frontend") {
+      return envelope({
+        ok: false,
+        command: schema.name,
+        status: "cdp-failed",
+        error: {
+          code: "E_CDP",
+          name: "CdpError",
+          message: `Target.openDevTools on ${inspected.url} did not open a DevTools frontend: ${outcome.reason}.`,
+        },
+        hint: "This browser build's protocol lacks or refused Target.openDevTools (Chrome 151 and Edge 154 honor it, headed or headless). Open DevTools by hand in a headed session, or run the project on a current Chrome; extension_logs (context: ['devtools']) reads the devtools page either way.",
+      });
+    }
+    const registered = (outcome.panels ?? []).filter((id) =>
+      id.startsWith(`chrome-extension://${extensionId}`),
+    );
+    return envelope({
+      ok: false,
+      command: schema.name,
+      status: "surface-did-not-open",
+      error: {
+        code: "E_SURFACE_DID_NOT_OPEN",
+        name: "PanelDidNotRegister",
+        message:
+          outcome.stage === "panel"
+            ? `DevTools opened on ${inspected.url} and ${doc} loaded in it, but ${outcome.reason}.${registered.length ? ` Panels this extension did register: ${registered.map((id) => id.slice(`chrome-extension://${extensionId}`.length)).join(", ")}.` : ""}`
+            : `DevTools opened on ${inspected.url} and the panel registered, but ${outcome.reason}.`,
+      },
+      value: {
+        inspected: { targetId: inspected.targetId, url: inspected.url },
+        devtoolsTargetId: outcome.devtoolsTargetId ?? null,
+        panels: outcome.panels ?? [],
+      },
+      hint:
+        args.panel && registered.length
+          ? `No panel is titled "${args.panel}"; pass one of the registered titles as \`panel\`, or omit it for the first.`
+          : `The devtools page registers panels with chrome.devtools.panels.create; extension_logs (context: ['devtools']) shows what ${doc} wrote or threw. DevTools stays open on the tab.`,
+    });
+  }
+  const panelUrl = outcome.panelTarget?.url ?? null;
+  return envelope({
+    ok: true,
+    command: schema.name,
+    status: "opened",
+    value: {
+      surface: "devtools",
+      inspected: { targetId: inspected.targetId, url: inspected.url, title: inspected.title },
+      devtoolsTargetId: outcome.devtoolsTargetId,
+      panel: {
+        title: outcome.panelTitle,
+        id: outcome.panelId,
+        targetId: outcome.panelTarget?.targetId ?? null,
+        url: panelUrl,
+      },
+      panels: outcome.panels,
+      devtoolsPage: devtoolsPageUrl,
+    },
+    warnings: outcome.panelTarget
+      ? []
+      : [
+          "The panel is shown but its document target had not appeared within 3s; call extension_open surface: \"devtools\" again once it loads to get its url.",
+        ],
+    hint: panelUrl
+      ? `DevTools is open on ${inspected.url} with the "${outcome.panelTitle}" panel shown. Read the panel with extension_eval context: "page", url: "${panelUrl}" (over CDP, with chrome.devtools available); context: "devtools" reads the devtools page itself (${doc}), the hidden document that registered the panel. The panel is an iframe inside DevTools, not a tab, so extension_dom_snapshot and extension_inspect do not reach it.`
+      : `DevTools is open on ${inspected.url} with the "${outcome.panelTitle}" panel shown. context: "devtools" on extension_eval reads the devtools page itself (${doc}).`,
+  });
 }
 
 export const E_USER_GESTURE_REQUIRED = "E_USER_GESTURE_REQUIRED";

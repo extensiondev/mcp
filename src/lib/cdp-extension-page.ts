@@ -7,7 +7,7 @@
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
 import { CDPClient } from "./cdp";
-import { listPageTargets, type PageTarget } from "./cdp-targets";
+import { listDocumentTargets, type PageTarget } from "./cdp-targets";
 
 /* @invariant Chrome's MV3 extension CSP governs scripts the page runs, and
    chrome.scripting cannot inject into another extension's origin at all, so
@@ -95,7 +95,7 @@ export async function findExtensionPageTargets(
   wantedUrl: string,
 ): Promise<PageTarget[]> {
   try {
-    return matchExtensionPageTargets(await listPageTargets(port), wantedUrl);
+    return matchExtensionPageTargets(await listDocumentTargets(port), wantedUrl);
   } catch {
     return [];
   }
