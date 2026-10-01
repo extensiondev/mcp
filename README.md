@@ -106,7 +106,7 @@ cp node_modules/@extension.dev/mcp/claude/commands/*.md ~/my-extension/.claude/c
 | build | `extension_add_feature` | Add sidebar/popup/content script |
 | build | `extension_build` | Build for production |
 | run | `extension_dev` | Dev server with HMR |
-| run | `extension_start` | Build + launch the production build (`build: false` launches the existing dist) |
+| run | `extension_start` | Build + launch the production build (`build: false` launches the existing dist; `outputPath` launches any prebuilt unpacked directory) |
 | run | `extension_wait` | Poll the dev-server ready contract |
 | run | `extension_stop` | Stop a dev/start/preview session (server + browser) |
 | see | `extension_manifest_validate` | Cross-browser manifest validation |
