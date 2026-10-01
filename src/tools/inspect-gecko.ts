@@ -11,6 +11,7 @@ import { envelope } from "../lib/envelope";
 import { listBridgeTabs, navigateToUrlViaBridge } from "../lib/bridge-tabs";
 import { resolveRdpPort } from "../lib/cdp-port";
 import {
+  probeSelectorsScript,
   PAGE_HTML_SCRIPT,
   EXTENSION_ROOT_META_SCRIPT,
   domSnapshotScript,
@@ -82,14 +83,7 @@ function buildBridgeInspectExpression(opts: {
   }
   if (opts.probes.length) {
     parts.push(
-      `out.probes = {};
-      for (const sel of ${JSON.stringify(opts.probes)}) {
-        try {
-          const nodes = document.querySelectorAll(sel);
-          const first = nodes[0];
-          out.probes[sel] = { count: nodes.length, sample: first ? String(first.outerHTML || "").slice(0, 200) : null };
-        } catch (e) { out.probes[sel] = { error: String((e && e.message) || e) }; }
-      }`,
+      `out.probes = ${probeSelectorsScript(opts.probes)};`,
     );
   }
   parts.push("return out;");

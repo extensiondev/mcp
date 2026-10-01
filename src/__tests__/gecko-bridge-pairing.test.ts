@@ -466,7 +466,7 @@ describe("extension_inspect on Gecko (bridge inspection)", () => {
             ok: true,
             value: {
               meta: { url: "https://example.com/", title: "Example" },
-              probes: { "typeof chrome.tts": { count: 0, sample: null } },
+              probes: [{ selector: "typeof chrome.tts", count: 0, samples: [] }],
             },
           })
         : JSON.stringify({ ok: true });
@@ -480,7 +480,7 @@ describe("extension_inspect on Gecko (bridge inspection)", () => {
       }),
     );
 
-    expect(result.value.probes["typeof chrome.tts"].count).toBe(0);
+    expect(result.value.probes[0]).toMatchObject({ selector: "typeof chrome.tts", count: 0 });
     expect(String(result.warnings)).toContain("NOT JavaScript");
   });
 
