@@ -20,6 +20,11 @@ vi.mock("../lib/act", async (importOriginal) => {
   };
 });
 
+vi.mock("../lib/cdp-port", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../lib/cdp-port")>();
+  return { ...actual, resolveCdpPort: async () => null };
+});
+
 const evalTool = await import("../tools/eval");
 const { toMcpSpeak } = await import("../lib/act");
 

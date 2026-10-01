@@ -62,6 +62,34 @@ export function matchExtensionPageTargets(
   });
 }
 
+export const WORKER_TARGET_TYPES = new Set([
+  "service_worker",
+  "background_page",
+  "worker",
+]);
+
+/* @invariant The background has no page target: an MV3 service worker and an
+   MV2 background page are targets of their own types, and Runtime.evaluate on
+   them is the inspector path the extension CSP does not govern, the same way
+   it is for the extension's pages. */
+export async function findExtensionWorkerTargets(
+  port: number,
+  extensionId: string,
+): Promise<Array<{ targetId: string; type: string; url: string }>> {
+  try {
+    const origin = `chrome-extension://${extensionId}/`;
+    return (await CDPClient.discoverTargets(port))
+      .filter(
+        (t) =>
+          WORKER_TARGET_TYPES.has(String(t.type)) &&
+          String(t.url ?? "").startsWith(origin),
+      )
+      .map((t) => ({ targetId: String(t.id), type: String(t.type), url: String(t.url ?? "") }));
+  } catch {
+    return [];
+  }
+}
+
 export async function findExtensionPageTargets(
   port: number,
   wantedUrl: string,

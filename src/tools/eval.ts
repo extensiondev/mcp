@@ -40,7 +40,9 @@ import { resolveCdpPort, CDP_PORT_MISSING_HINT } from "../lib/cdp-port";
 import {
   evaluateOnExtensionPage,
   findExtensionPageTargets,
+  findExtensionWorkerTargets,
 } from "../lib/cdp-extension-page";
+import { listPageTargets, matchTargetsByUrl } from "../lib/cdp-targets";
 import {
   declaredSurfaces,
   resolveExtensionId,
@@ -111,6 +113,15 @@ export function resolveDefaultEvalContext(
 
 export { EXTENSION_PAGE_CONTEXTS };
 
+/* @invariant On Chromium every context the server can name is a CDP target:
+   the extension's pages, its background (a service worker on MV3, a
+   background page on MV2) and any web tab. Runtime.evaluate on the target
+   is the inspector path, which neither the extension's CSP nor a site's
+   Trusted Types policy governs, while the in-page string eval the relay and
+   chrome.scripting use is refused by both. So on
+   Chromium the background always goes over CDP, a page named by url goes
+   over CDP, and the relay is kept for content (the isolated world only the
+   extension has) and for the active tab when no url names it. */
 export function wantsExtensionPageOverCdp(
   projectPath: string,
   browser: string,
@@ -118,9 +129,8 @@ export function wantsExtensionPageOverCdp(
   url: string | undefined,
 ): boolean {
   if (!isChromiumFamily(browser) || !context) return false;
-  if (context === "page") {
-    return typeof url === "string" && /^chrome-extension:\/\//.test(url);
-  }
+  if (context === "background") return true;
+  if (context === "page") return typeof url === "string" && url.length > 0;
   return (
     EXTENSION_PAGE_CONTEXTS.includes(context) &&
     chromiumManifestVersion(projectPath, browser) === 3
@@ -131,21 +141,80 @@ async function evaluateOnChromiumExtensionPage(
   args: ActArgs & { expression: string },
   browser: string,
   context: string,
+  resolved: { port: number },
 ): Promise<string> {
-  const resolved = await resolveCdpPort(args.projectPath, browser);
-  if (!resolved) {
+  let wanted: string;
+  if (context === "background") {
+    const extensionId = await resolveExtensionId(args.projectPath, browser);
+    if (!extensionId) {
+      return envelope({
+        ok: false,
+        command: schema.name,
+        status: "no-extension-id",
+        error: {
+          code: "E_NO_EXTENSION_ID",
+          name: "NoExtensionId",
+          message:
+            "Could not resolve the extension id from the live session's CDP targets.",
+        },
+        hint: `Confirm the session is ready (extension_wait). ${CDP_PORT_MISSING_HINT}`,
+      });
+    }
+    const workers = await findExtensionWorkerTargets(resolved.port, extensionId);
+    if (workers.length === 0) {
+      return envelope({
+        ok: false,
+        command: schema.name,
+        status: "no-target",
+        error: {
+          code: "E_NO_TARGET",
+          name: "NoTarget",
+          message: `No running background for chrome-extension://${extensionId}/: Chrome stops an idle MV3 service worker and lists no target for it until something wakes it.`,
+        },
+        hint: "Wake the worker and retry: extension_reload, or an event it listens to (open a surface with extension_open, navigate a matching tab). extension_logs (context: ['background']) holds what it wrote before it idled.",
+      });
+    }
+    const target = workers[0];
+    const outcome = await evaluateOnExtensionPage(
+      resolved.port,
+      target.targetId,
+      args.expression,
+    );
+    if (!outcome.ok) {
+      return envelope({
+        ok: false,
+        command: schema.name,
+        status: outcome.thrown ? "eval-failed" : "cdp-failed",
+        error: {
+          code: outcome.thrown ? "E_EVAL" : "E_CDP",
+          name: outcome.thrown ? "EvalError" : "CdpError",
+          message: outcome.message,
+        },
+        hint: outcome.thrown
+          ? `The expression threw inside the ${target.type} at ${target.url}; it ran over CDP with the extension APIs available and a returned promise awaited.`
+          : "The session's debug port refused the call or the worker went away mid-call. extension_doctor names which.",
+      });
+    }
     return envelope({
-      ok: false,
+      ok: true,
       command: schema.name,
-      status: "no-session",
-      error: {
-        code: "E_NO_SESSION",
-        name: "NoSession",
-        message: `No active dev session / CDP port for ${browser}, and an extension page evaluates over CDP. Start extension_dev with allowEval: true and extension_wait for ready. ${CDP_PORT_MISSING_HINT}`,
-      },
+      status: "evaluated",
+      value: outcome.value,
+      warnings:
+        workers.length > 1
+          ? [
+              `${workers.length} background targets match the extension; evaluated in ${target.type} ${target.targetId}.`,
+            ]
+          : [],
+      hint: `Evaluated over CDP in the extension's ${target.type} (${target.url}), the inspector path the extension CSP does not govern; a returned promise is awaited.`,
     });
   }
-  let wanted: string;
+  if (context === "page" && !isExtensionUrl(args.url)) {
+    const url = args.url as string;
+    const matches = matchTargetsByUrl(await listPageTargets(resolved.port), url);
+    if (matches.length === 0) return RELAY_INSTEAD;
+    return evaluateOnWebTarget(args, matches, url);
+  }
   if (context === "page") {
     wanted = args.url as string;
   } else {
@@ -181,7 +250,9 @@ async function evaluateOnChromiumExtensionPage(
     }
     wanted = `chrome-extension://${extensionId}/${doc}`;
   }
-  const targets = await findExtensionPageTargets(resolved.port, wanted);
+  const targets = (await findExtensionPageTargets(resolved.port, wanted)).filter(
+    (t) => !isBrowserErrorPage(t.url),
+  );
   if (targets.length === 0) {
     return envelope({
       ok: false,
@@ -282,6 +353,71 @@ async function evaluateOnWebKitPage(
     });
   }
 }
+
+const RELAY_INSTEAD = "__relay_instead__";
+
+export function isBrowserErrorPage(url: string): boolean {
+  return /^(chrome|edge)-error:\/\//.test(url);
+}
+
+/* @invariant A web tab named by url evaluates on its own CDP target, so a
+   site's Trusted Types policy (YouTube, Gmail, most Google properties) or
+   CSP never sees the expression; the in-page string eval the relay performs
+   is exactly what those policies refuse. */
+async function evaluateOnWebTarget(
+  args: ActArgs & { expression: string },
+  matches: Array<{ targetId: string; url: string; title: string }>,
+  url: string,
+): Promise<string> {
+  const resolved = await resolveCdpPort(args.projectPath, args.browser ?? "chrome");
+  if (!resolved) return RELAY_INSTEAD;
+  const live = matches.filter((t) => !isBrowserErrorPage(t.url));
+  if (live.length === 0) {
+    return envelope({
+      ok: false,
+      command: schema.name,
+      status: "no-target",
+      error: {
+        code: "E_NO_TARGET",
+        name: "NoTarget",
+        message: `The tab matching ${url} shows the browser's own error page (${matches[0].title || matches[0].url}), so there is no document to evaluate in.`,
+      },
+      hint: "The page was blocked or failed to load; open it again with extension_open and read the browser's reason in the tab title.",
+    });
+  }
+  const target = live[0];
+  const outcome = await evaluateOnExtensionPage(resolved.port, target.targetId, args.expression);
+  if (!outcome.ok) {
+    return envelope({
+      ok: false,
+      command: schema.name,
+      status: outcome.thrown ? "eval-failed" : "cdp-failed",
+      error: {
+        code: outcome.thrown ? "E_EVAL" : "E_CDP",
+        name: outcome.thrown ? "EvalError" : "CdpError",
+        message: outcome.message,
+      },
+      hint: outcome.thrown
+        ? `The expression threw inside ${target.url}; it ran over CDP in the page's main world.`
+        : "The session's debug port refused the call or the tab went away. extension_doctor names which.",
+    });
+  }
+  return envelope({
+    ok: true,
+    command: schema.name,
+    status: "evaluated",
+    value: outcome.value,
+    warnings:
+      live.length > 1
+        ? [
+            `${live.length} tabs match ${url}; evaluated in ${target.url} (target ${target.targetId}). Narrow the url to pick another.`,
+          ]
+        : [],
+    hint: `Evaluated over CDP in ${target.url} (target ${target.targetId}), the page's main world through the inspector, which the site's CSP and Trusted Types do not govern. Pass context: "content" for the extension's isolated world instead.`,
+  });
+}
+
+const TRUSTED_TYPES_REFUSAL = /Trusted Type/i;
 
 const RELAY_POLL_MS = 300;
 const RELAY_DEFAULT_BUDGET_MS = 30_000;
@@ -489,7 +625,16 @@ export async function handler(
     resolveDefaultEvalContext(args.projectPath, browser) === "page";
   const context = defaulted ? "page" : args.context;
   if (wantsExtensionPageOverCdp(args.projectPath, browser, context, args.url)) {
-    return evaluateOnChromiumExtensionPage(args, browser, context as string);
+    const resolved = await resolveCdpPort(args.projectPath, browser);
+    if (resolved) {
+      const overCdp = await evaluateOnChromiumExtensionPage(
+        args,
+        browser,
+        context as string,
+        resolved,
+      );
+      if (overCdp !== RELAY_INSTEAD) return overCdp;
+    }
   }
   /* @invariant On an engine with no CDP, a page inside the extension has one
      door: the surface relay of the context that document belongs to. The
@@ -557,6 +702,15 @@ export async function handler(
   if (mv2Fallback !== null) return mv2Fallback;
   const cspRefusal = explainCspRefusal(raw, context);
   if (cspRefusal !== null) return cspRefusal;
+  const trustedTypes = tryParseFrame(raw);
+  if (
+    trustedTypes?.ok === false &&
+    TRUSTED_TYPES_REFUSAL.test(String(trustedTypes.error?.message ?? ""))
+  ) {
+    trustedTypes.hint =
+      "This site enforces Trusted Types, which refuse a string evaluated inside the page. Pass url so the tab is evaluated over CDP (the inspector path the policy does not govern), or use context: \"content\" for a DOM read from the extension's isolated world.";
+    return actFrameJson(trustedTypes);
+  }
   if (args.context === "content") {
     try {
       const parsed = JSON.parse(raw);
