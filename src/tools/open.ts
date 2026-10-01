@@ -91,6 +91,44 @@ async function pollForTarget(
    surface is the thing being replaced. A url navigation never takes an
    extension page over: the tab it replaced held the Redux store the panel
    under test was meant to show (ledger entry 21). */
+async function landedOnErrorPage(
+  port: number,
+  targetId: string,
+): Promise<{ url: string; title?: string } | null> {
+  await new Promise((r) => setTimeout(r, 400));
+  try {
+    const target = (await CDPClient.discoverTargets(port)).find(
+      (t) => String(t.id) === targetId,
+    );
+    const url = String(target?.url ?? "");
+    if (/^(chrome|edge)-error:\/\//.test(url)) {
+      return { url, title: typeof target?.title === "string" ? target.title : undefined };
+    }
+  } catch {
+  }
+  return null;
+}
+
+/* @invariant The browser is asked whether it is headless, because the
+   environment this server reads only describes the request: a launcher shim
+   on this machine adds --headless=new behind every caller, and a headless
+   Chrome closes a popup window before the next call can read it (ledger
+   entry 32). HeadlessChrome names itself in /json/version. */
+async function browserRunsHeadless(
+  projectPath: string,
+  browser: string,
+): Promise<boolean> {
+  if (!isChromiumFamily(browser)) return false;
+  try {
+    const resolved = await resolveCdpPort(projectPath, browser, { waitMs: 2000 });
+    if (!resolved) return false;
+    const product = await CDPClient.discoverBrowserVersion(resolved.port);
+    return typeof product === "string" && /headless/i.test(product);
+  } catch {
+    return false;
+  }
+}
+
 function isDisposableTab(
   tabUrl: string,
   destination: string,
@@ -209,6 +247,28 @@ export async function navigateToUrl(
       6000,
       navigatedTargetId,
     );
+    /* @invariant A target can match the requested url for an instant and then
+       be swapped to the browser's own error page: Edge answered a blocked
+       extension page that way and the tool reported it navigated (ledger
+       entry 35). The landed target is read once more after it settles, and
+       an error page is a refusal with the browser's title as the reason. */
+    const blocked = settled
+      ? await landedOnErrorPage(resolved.port, settled.id)
+      : null;
+    if (blocked) {
+      return envelope({
+        ok: false,
+        command: schema.name,
+        status: "navigate-blocked",
+        error: {
+          code: "E_NAVIGATE_FAILED",
+          name: "PageBlocked",
+          message: `The browser refused ${url} and shows its own error page instead${blocked.title ? ` ("${blocked.title}")` : ""}.`,
+        },
+        value: { navigated: url, target: { targetId: settled!.id, url: blocked.url, title: blocked.title } },
+        hint: "Nothing is rendering the requested document. Read the tab title for the browser's reason (Edge, for one, blocks some extension pages with ERR_BLOCKED_BY_CLIENT); try another browser with extension_dev, or a different document of the same extension.",
+      });
+    }
     if (!settled) {
       const isExtensionPage = url.startsWith("chrome-extension://");
       return envelope({
@@ -833,6 +893,25 @@ export async function handler(
         "popup",
         "so there is no popup to open",
       );
+    }
+  }
+
+  if (
+    ["popup", "options", "sidebar"].includes(args.surface) &&
+    !sessionIsHeadless() &&
+    (await browserRunsHeadless(args.projectPath, browser))
+  ) {
+    const asTab = await openSurfaceAsTab(args.projectPath, browser, args.surface);
+    try {
+      const parsedTab = JSON.parse(asTab);
+      if (parsedTab?.ok) {
+        addWarning(
+          parsedTab,
+          `The dev browser reports itself headless, and a headless browser closes a popup window before the next call and never shows an options or sidebar window, so the ${args.surface} was rendered as a tab instead (the same document and APIs). For the real window, ${HEADED_RELAUNCH}.`,
+        );
+        return actFrameJson(parsedTab);
+      }
+    } catch {
     }
   }
 
