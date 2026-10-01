@@ -241,6 +241,67 @@ describe("extension_project_create", () => {
     expect(readCredentials()).toBeNull();
   });
 
+  async function createBodyFor(extra: Record<string, unknown>) {
+    const { fn, calls } = createFetch({
+      token: [{ status: 200, body: grantBody }],
+      create: {
+        status: 200,
+        body: {
+          success: true,
+          projectId: "prj_new",
+          projectSlug: "ghost-app",
+          workspaceSlug: "acme",
+        },
+      },
+    });
+    vi.stubGlobal("fetch", fn);
+    await handler({ ...baseArgs, deviceCode: "dev-code", ...extra });
+    const createCall = calls.find((c) =>
+      c.url.endsWith("/api/cli/projects/create"),
+    );
+
+    return JSON.parse(String(createCall!.init?.body));
+  }
+
+  it("keeps the Chrome-only default when no browsers are named", async () => {
+    const body = await createBodyFor({});
+    expect(body.build.chrome).toMatchObject({
+      enabled: true,
+      outputDirectory: "dist/chrome",
+    });
+    expect(body.build.edge.enabled).toBe(false);
+    expect(body.build.firefox.enabled).toBe(false);
+  });
+
+  it("enables every named browser with its own Extension.js output", async () => {
+    const body = await createBodyFor({
+      browsers: ["chrome", "edge", "firefox"],
+      installCommand: "pnpm install",
+      buildCommand: "pnpm build",
+    });
+    for (const name of ["chrome", "edge", "firefox"]) {
+      expect(body.build[name]).toEqual({
+        enabled: true,
+        installCommand: "pnpm install",
+        buildCommand: "pnpm build",
+        outputDirectory: `dist/${name}`,
+      });
+    }
+  });
+
+  it("fills a <browser> placeholder and lets a per-browser override win", async () => {
+    const body = await createBodyFor({
+      browsers: ["chrome", "edge", "firefox"],
+      outputDirectory: "packages/ext/dist/<browser>",
+      outputDirectories: { edge: "build/manifestv3" },
+    });
+    expect(body.build.chrome.outputDirectory).toBe("packages/ext/dist/chrome");
+    expect(body.build.edge.outputDirectory).toBe("build/manifestv3");
+    expect(body.build.firefox.outputDirectory).toBe(
+      "packages/ext/dist/firefox",
+    );
+  });
+
   it("sends intent create when starting the device flow", async () => {
     const { fn, calls } = createFetch({
       token: [{ status: 400, body: { error: "authorization_pending" } }],

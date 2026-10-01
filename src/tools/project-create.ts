@@ -68,7 +68,20 @@ export const schema = {
       outputDirectory: {
         type: "string",
         default: "dist/chrome",
-        description: "Directory the build writes the loadable extension into.",
+        description:
+          "Directory the build writes the loadable extension into. With more than one browser, `<browser>` in the path becomes each browser's name (Extension.js writes `dist/<browser>`), and when it is left out every browser defaults to `dist/<browser>`.",
+      },
+      browsers: {
+        type: "array",
+        items: { type: "string", enum: ["chrome", "edge", "firefox"] },
+        default: ["chrome"],
+        description:
+          "Browsers the platform builds, each enabled with the same install and build command and its own output directory. Pass every browser the extension targets, for example [\"chrome\", \"edge\", \"firefox\"], so the project needs no console visit to go cross-browser.",
+      },
+      outputDirectories: {
+        type: "object",
+        description:
+          "Per-browser output directory overrides, for example {\"edge\": \"build/manifestv3\"}. A browser named here wins over `outputDirectory`.",
       },
       deviceCode: {
         type: "string",
@@ -144,17 +157,32 @@ function buildCreateBody(args: {
   installCommand?: string;
   buildCommand?: string;
   outputDirectory?: string;
+  browsers?: string[];
+  outputDirectories?: Record<string, unknown>;
 }): Record<string, unknown> {
   const installCommand = String(args.installCommand || "npm install").trim();
   const buildCommand = String(args.buildCommand || "npm run build").trim();
-  const outputDirectory = String(
-    args.outputDirectory || "dist/chrome",
-  ).trim();
-  const browser = (enabled: boolean) => ({
-    enabled,
+  const wanted = new Set(
+    (Array.isArray(args.browsers) && args.browsers.length
+      ? args.browsers
+      : ["chrome"]
+    ).map((name) => String(name).trim().toLowerCase()),
+  );
+  const several = wanted.size > 1;
+  const outputFor = (name: string) => {
+    const override = args.outputDirectories?.[name];
+    if (typeof override === "string" && override.trim()) return override.trim();
+    const pattern = String(args.outputDirectory || "").trim();
+    if (pattern.includes("<browser>")) return pattern.replaceAll("<browser>", name);
+    if (pattern && !several) return pattern;
+
+    return `dist/${name}`;
+  };
+  const browser = (name: string) => ({
+    enabled: wanted.has(name),
     installCommand,
     buildCommand,
-    outputDirectory,
+    outputDirectory: outputFor(name),
   });
   return {
     info: {
@@ -167,9 +195,9 @@ function buildCreateBody(args: {
       ).trim(),
     },
     build: {
-      chrome: browser(true),
-      edge: browser(false),
-      firefox: browser(false),
+      chrome: browser("chrome"),
+      edge: browser("edge"),
+      firefox: browser("firefox"),
     },
     deployment: {
       branch: "",
@@ -199,6 +227,8 @@ export async function handler(args: {
   installCommand?: string;
   buildCommand?: string;
   outputDirectory?: string;
+  browsers?: string[];
+  outputDirectories?: Record<string, unknown>;
   deviceCode?: string;
   api?: string;
 }): Promise<string> {
@@ -331,6 +361,8 @@ async function finishFromPoll(
       installCommand?: string;
       buildCommand?: string;
       outputDirectory?: string;
+      browsers?: string[];
+      outputDirectories?: Record<string, unknown>;
     };
     verificationUri: string;
     deviceCode: string;
@@ -417,6 +449,8 @@ async function finishFromPoll(
     installCommand: ctx.args.installCommand,
     buildCommand: ctx.args.buildCommand,
     outputDirectory: ctx.args.outputDirectory,
+    browsers: ctx.args.browsers,
+    outputDirectories: ctx.args.outputDirectories,
   });
 
   const url = `${ctx.apiBase}/api/cli/projects/create`;
