@@ -15,6 +15,17 @@
   into the manifest's own folder; the session artifact resolver here
   applies the same four tests, so `extension_wait` and `extension_logs`
   keep reading the ready.json the engine writes.
+- Logins to several projects now live side by side in `auth.json`, one
+  entry per workspace/project with the latest marked active, instead of
+  one slot the next login overwrote. `extension_publish`,
+  `extension_release_promote`, `extension_submit`, `extension_shares` and
+  `extension_preview_web` take `project` ('<workspace>/<project>', or a
+  project slug that matches one login) to pick a stored login, which
+  outranks `EXTENSION_DEV_TOKEN`; omitted, the order stays environment
+  first, then the active login. `extension_auth` status lists every login
+  under `logins`, and logout with `project` removes just that one. A
+  version 1 file is read as a store of one and rewritten on the next login
+ .
 - Four findings from the six-browser sweep: `extension_open` reads new headless off the `User-Agent` field
   of `/json/version` as well (`--headless=new` keeps `Chrome/151` in the
   `Browser` field) and, whatever the launch flags said, falls back to the

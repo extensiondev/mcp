@@ -9,6 +9,7 @@
 import { API_BASE } from "../lib/common-schema";
 import { envelope, type ErrorCode } from "../lib/envelope";
 import { resolveToken } from "../lib/publish";
+import { PROJECT_TOKEN_INPUT, noStoredLoginHint } from "../lib/credentials";
 import { resolveApiBase, safeApiBase } from "../lib/login-flow";
 import { UserlandProjectPage } from "@extension.dev/urls/userland";
 import { platformHoldEnvelope, sawPlatformHold } from "../lib/platform-hold";
@@ -27,10 +28,11 @@ import {
 export const schema = {
   name: "extension_release_promote",
   description:
-    "Promote a built extension to a release channel (stable, preview, beta, …) on extension.dev, headless. This WRITES: it is the only verb that changes what a channel points at. It is auth-gated by your stored login (extension_auth) or a release token in EXTENSION_DEV_TOKEN, minted and revoked under project settings, Access tokens. Tokens live at most 7 days, so CI must re-mint before expiry. The project comes from the token. Call extension_release_status to find a valid buildId. Cutting a version-bump PR is not available headlessly, because it writes to your source repo and needs an interactive login.",
+    "Promote a built extension to a release channel (stable, preview, beta, …) on extension.dev, headless. This WRITES: it is the only verb that changes what a channel points at. It is auth-gated by your stored login (extension_auth) or a release token in EXTENSION_DEV_TOKEN, minted and revoked under project settings, Access tokens. Tokens live at most 7 days, so CI must re-mint before expiry. The project comes from the token; with several logins stored, `project` picks which one. Call extension_release_status to find a valid buildId. Cutting a version-bump PR is not available headlessly, because it writes to your source repo and needs an interactive login.",
   inputSchema: {
     type: "object" as const,
     properties: {
+      project: PROJECT_TOKEN_INPUT,
       buildId: {
         type: "string",
         description: "Build commit SHA to promote (a 7-char short SHA is fine)",
@@ -91,8 +93,12 @@ export async function handler(args: {
   releaseNotes?: string;
   approvalId?: string;
   api?: string;
+  project?: string;
 }): Promise<string> {
-  const token = resolveToken();
+  const token = resolveToken({ project: args.project });
+  if (!token && args.project) {
+    return fail("PromoteAuthError", noStoredLoginHint(args.project), "auth-required", "E_AUTH_REQUIRED");
+  }
   if (!token) {
     return fail(
       "ReleaseAuthError",

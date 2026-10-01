@@ -6,7 +6,7 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-import { readCredentials } from "../lib/credentials";
+import { listCredentials, readCredentials } from "../lib/credentials";
 import { envelope } from "../lib/envelope";
 import { resolveApiBase, safeApiBase, tokenTtlNote } from "../lib/login-flow";
 import {
@@ -122,6 +122,16 @@ export async function readIdentity(deps?: {
   const envTokenNote = envTokenSet
     ? "EXTENSION_DEV_TOKEN is set and takes precedence over this stored login for authenticated tools; this report describes only the stored login."
     : null;
+  const logins = listCredentials().map((entry) => ({
+    project: `${entry.workspaceSlug}/${entry.projectSlug}`,
+    active: entry.active,
+    expiresAt: entry.expiresAt ? new Date(entry.expiresAt * 1000).toISOString() : null,
+    expired: Boolean(entry.expiresAt && entry.expiresAt <= now),
+  }));
+  const loginsNote =
+    logins.length > 1
+      ? `${logins.length} logins are stored on this machine (${logins.map((l) => l.project).join(", ")}); the active one above is the default for token-scoped tools, and each of them takes \`project\` to use another.`
+      : null;
 
   const message = [
     identityNote,
@@ -129,6 +139,7 @@ export async function readIdentity(deps?: {
     server.warning,
     apiDivergesNote,
     envTokenNote,
+    loginsNote,
   ]
     .filter(Boolean)
     .join(" ");
@@ -149,6 +160,7 @@ export async function readIdentity(deps?: {
       expiresInSeconds: creds.expiresAt ? creds.expiresAt - now : null,
       expired,
       server: server.value,
+      logins,
     },
     hint: message,
     warnings: [

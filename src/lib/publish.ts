@@ -13,7 +13,17 @@ import { platformHoldMessage, sawPlatformHold } from "./platform-hold";
 
 type FetchImpl = typeof fetch;
 
-export function resolveToken(): string {
+/* @invariant A `project` named by the caller is the one thing that outranks
+   EXTENSION_DEV_TOKEN: the variable is the CI route and names no project,
+   while an explicit project is a statement about which stored login this
+   call is for. With no project, the order stays
+   environment first, then the active stored login. */
+export function resolveToken(options: { project?: string } = {}): string {
+  const project = String(options.project ?? "").trim();
+  if (project) {
+    const creds = readValidCredentials(undefined, { project });
+    return creds?.token ? String(creds.token).trim() : "";
+  }
   const fromEnv = String(process.env.EXTENSION_DEV_TOKEN || "").trim();
   if (fromEnv) return fromEnv;
   const creds = readValidCredentials();
