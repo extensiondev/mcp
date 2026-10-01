@@ -28,7 +28,8 @@ vi.mock("../lib/cdp-port", async (importOriginal) => {
 type Target = { id: string; type: string; url: string; title: string };
 let cdpTargets: Target[] = [];
 const evaluations: Array<{ params: Record<string, unknown>; sessionId?: string }> = [];
-let evaluateResponse: () => Record<string, unknown> = () => ({
+const awaited: Array<Record<string, unknown>> = [];
+let evaluateResponse: (params: Record<string, unknown>) => Record<string, unknown> = () => ({
   result: { type: "number", value: 7 },
 });
 vi.mock("../lib/cdp", () => {
@@ -46,7 +47,11 @@ vi.mock("../lib/cdp", () => {
     async sendCommand(method: string, params: Record<string, unknown> = {}, sessionId?: string) {
       if (method === "Runtime.evaluate") {
         evaluations.push({ params, sessionId });
-        return evaluateResponse();
+        return evaluateResponse(params);
+      }
+      if (method === "Runtime.awaitPromise") {
+        awaited.push(params);
+        return { result: { type: "number", value: 42 } };
       }
       return {};
     }
@@ -90,6 +95,7 @@ const MV3 = {
 afterEach(() => {
   cliCalls.length = 0;
   evaluations.length = 0;
+  awaited.length = 0;
   cdpTargets = [];
   cdpPort = { port: 9222 };
   relayReply = () => envelope({ ok: true, command: "extension_eval", status: "ok", value: "relay" });
@@ -120,6 +126,98 @@ describe("extension_eval reaches the Chromium background over CDP, where the ext
     expect(evaluations[0].sessionId).toBe("session-sw");
     expect(result.hint).toContain("service_worker");
     expect(result.hint).toContain("CSP does not govern");
+  });
+
+  it("evaluates a worker without replMode so a returned promise is awaited, not serialized as {}", async () => {
+    const p = project(MV3);
+    cdpTargets = [
+      { id: "sw", type: "service_worker", url: `chrome-extension://${p.id}/background.js`, title: "" },
+    ];
+    evaluateResponse = (params) =>
+      params.replMode === true
+        ? { result: { type: "object", value: {} } }
+        : { result: { type: "number", value: 42 } };
+
+    const result = JSON.parse(
+      await evalTool.handler({
+        projectPath: p.dir,
+        browser: "chrome",
+        context: "background",
+        expression: "Promise.resolve(42)",
+      }),
+    );
+
+    expect(result.value).toBe(42);
+    expect(evaluations).toHaveLength(1);
+    expect(evaluations[0].params.replMode).toBeUndefined();
+    expect(evaluations[0].params.awaitPromise).toBe(true);
+    expect(evaluations[0].params.returnByValue).toBe(true);
+  });
+
+  it("settles a worker expression that needs top-level await through Runtime.awaitPromise", async () => {
+    const p = project(MV3);
+    cdpTargets = [
+      { id: "sw", type: "service_worker", url: `chrome-extension://${p.id}/background.js`, title: "" },
+    ];
+    evaluateResponse = (params) =>
+      params.replMode === true
+        ? { result: { type: "object", subtype: "promise", objectId: "promise-1" } }
+        : { exceptionDetails: { text: "Uncaught", exception: { description: "SyntaxError: await is only valid in async functions and the top level bodies of modules" } } };
+
+    const result = JSON.parse(
+      await evalTool.handler({
+        projectPath: p.dir,
+        browser: "chrome",
+        context: "background",
+        expression: "const tabs = await chrome.tabs.query({}); tabs.length",
+      }),
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.value).toBe(42);
+    expect(evaluations).toHaveLength(2);
+    expect(evaluations[1].params.replMode).toBe(true);
+    expect(evaluations[1].params.returnByValue).toBe(false);
+    expect(awaited).toEqual([{ promiseObjectId: "promise-1", returnByValue: true }]);
+  });
+
+  it("awaits a bare promise on a page target too, and retries a top-level await there the same way", async () => {
+    const p = project(MV3);
+    cdpTargets = [
+      { id: "web", type: "page", url: "https://example.com/", title: "Example" },
+    ];
+    evaluateResponse = (params) =>
+      params.replMode === true
+        ? { result: { type: "object", subtype: "promise", objectId: "promise-2" } }
+        : String(params.expression).startsWith("await ")
+          ? { exceptionDetails: { text: "Uncaught", exception: { description: "SyntaxError: await is only valid in async functions and the top level bodies of modules" } } }
+          : { result: { type: "number", value: 42 } };
+
+    const bare = JSON.parse(
+      await evalTool.handler({
+        projectPath: p.dir,
+        browser: "chrome",
+        context: "page",
+        url: "https://example.com/",
+        expression: "Promise.resolve(42)",
+      }),
+    );
+    expect(bare.value).toBe(42);
+    expect(evaluations[0].params.replMode).toBeUndefined();
+    expect(evaluations[0].params.awaitPromise).toBe(true);
+
+    const awaitedResult = JSON.parse(
+      await evalTool.handler({
+        projectPath: p.dir,
+        browser: "chrome",
+        context: "page",
+        url: "https://example.com/",
+        expression: "await fetch('/').then(r => r.status)",
+      }),
+    );
+    expect(awaitedResult.value).toBe(42);
+    expect(evaluations[2].params.replMode).toBe(true);
+    expect(awaited[awaited.length - 1]).toEqual({ promiseObjectId: "promise-2", returnByValue: true });
   });
 
   it("uses the MV2 background page target too", async () => {
