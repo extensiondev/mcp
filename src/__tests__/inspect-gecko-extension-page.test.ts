@@ -130,6 +130,24 @@ describe("extension_inspect on Gecko reads a page inside the extension through i
     expect(calls).toEqual([]);
   });
 
+  it("asks for probes in the same shape the Chromium path returns", async () => {
+    const dir = project(MANIFEST);
+
+    await inspect.handler({
+      projectPath: dir,
+      browser: "firefox",
+      url: "chrome_url_overrides/newtab.html",
+      include: ["summary"],
+      probe: ["#ryd-bar-container", "dislike-button-view-model"],
+    });
+
+    const expression = calls[0][1];
+    expect(expression).toContain("samples: els.slice(0, 3)");
+    expect(expression).toContain("textSnippet");
+    expect(expression).toContain('"#ryd-bar-container"');
+    expect(expression).not.toContain("outerHTML || \"\").slice(0, 200)");
+  });
+
   it("still inspects a web page by url through the page context", async () => {
     const dir = project(MANIFEST);
     listed.push({ url: "https://example.com/", title: "Example", id: 1 });
