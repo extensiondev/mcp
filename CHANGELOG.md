@@ -53,6 +53,14 @@ release closes are 16 to 19 and 21 to 25):
   and on Firefox warns on a missing `browser_specific_settings.gecko.id`,
   on Chromium-only keys and on `extension_ids`, and gives an MV2 manifest
   the keys to port for MV3 (entries 17 and 22).
+- `extension_start` takes `outputPath`, an existing unpacked extension
+  directory to launch as it is through the engine's preview verb, so an
+  artifact another toolchain produced, or the exact release candidate, can
+  be run and watched without an Extension.js build (entry 26). A directory
+  with no manifest.json is refused before anything launches.
+- `extension_manifest_validate` warns on Firefox when
+  `browser_specific_settings.gecko.data_collection_permissions` is missing,
+  which AMO now requires for new add-ons, and shows the minimal form.
 
 ## 10.10.1
 

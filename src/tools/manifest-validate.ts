@@ -523,6 +523,13 @@ export async function handler(args: {
           'Firefox: no browser_specific_settings.gecko.id. A temporary add-on without one gets a new internal id on every launch, so storage and the moz-extension:// origin do not survive a relaunch, and a store upload needs the id. Set firefox:browser_specific_settings.gecko.id (any "name@domain" string).',
         );
       }
+      const dataCollection = (bss?.gecko as Record<string, unknown> | undefined)
+        ?.data_collection_permissions;
+      if (!dataCollection || typeof dataCollection !== "object") {
+        result.warnings.push(
+          'Firefox: no browser_specific_settings.gecko.data_collection_permissions. AMO requires it for new add-ons and the Firefox build warns on every run; the minimal form is firefox:browser_specific_settings.gecko.data_collection_permissions: {"required": ["none"]}.',
+        );
+      }
       for (const key of CHROMIUM_ONLY_KEYS) {
         if (effective[key] !== undefined) {
           result.warnings.push(
