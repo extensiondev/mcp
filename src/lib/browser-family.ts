@@ -21,6 +21,8 @@ export const GECKO_FAMILY: ReadonlySet<string> = new Set([
   "firefox",
   "waterfox",
   "librewolf",
+  "zen",
+  "floorp",
   "gecko-based",
   "firefox-based",
 ]);

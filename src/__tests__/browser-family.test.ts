@@ -24,6 +24,8 @@ describe("browser-family", () => {
       "firefox",
       "waterfox",
       "librewolf",
+      "zen",
+      "floorp",
       "gecko-based",
       "firefox-based",
     ]) {

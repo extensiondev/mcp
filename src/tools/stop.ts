@@ -90,7 +90,7 @@ function projectPathForms(projectPath: string): string[] {
 }
 
 const PLAUSIBLE_SESSION_BINARY =
-  /chrom|edge|brave|opera|vivaldi|yandex|firefox|waterfox|librewolf|safari|node|electron|extension/i;
+  /chrom|edge|brave|opera|vivaldi|yandex|firefox|waterfox|librewolf|zen|floorp|safari|node|electron|extension/i;
 
 function processCommand(pid: number): string {
   /* @invariant Linux ps -o comm= reports the thread name (Node stamps

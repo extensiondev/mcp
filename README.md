@@ -26,7 +26,7 @@ Extensions fail silently: content scripts that never inject, panels that never o
 These tools give agents eyes on the live browser, so they debug from evidence instead of guessing:
 
 - **Scaffold** from the 50+ template catalog behind [templates.extension.dev](https://templates.extension.dev), or add a popup, sidebar, or content script to an existing project
-- **Run** the dev server with HMR in Chrome, Edge, Firefox, Brave, Opera, Vivaldi, Yandex, Waterfox, LibreWolf, or any Chromium- or Gecko-based binary, plus Safari on macOS (no HMR yet), no build config
+- **Run** the dev server with HMR in Chrome, Edge, Firefox, Brave, Opera, Vivaldi, Yandex, Waterfox, LibreWolf, Zen, Floorp, or any Chromium- or Gecko-based binary, plus Safari on macOS (no HMR yet), no build config
 - **See** the live DOM, unified logs from every extension context, `chrome.storage` contents, and the loaded-extension list
 - **Act**: evaluate code in any context, trigger the action button and commands, reload the extension, replay events
 - **Ship**: validate the manifest cross-browser, build for production, publish a shareable preview, and promote builds to release channels headlessly
@@ -121,7 +121,7 @@ cp node_modules/@extension.dev/mcp/claude/commands/*.md ~/my-extension/.claude/c
 | act | `extension_eval` | Evaluate in a context (needs `allowEval: true` on `extension_dev`) |
 | act | `extension_storage` | Read/write `chrome.storage` |
 | act | `extension_reload` | Reload extension or tab |
-| act | `extension_open` | Open a surface / trigger `action`, `command` |
+| act | `extension_open` | Open a surface (popup, options, sidebar, devtools panel, override pages) / trigger `action`, `command` |
 | browsers | `extension_browsers` | Detect, list, install, and uninstall browsers |
 | platform | `extension_auth` | Device login at extension.dev, plus login status and logout |
 | platform | `extension_workspace_create` | Create an extension.dev workspace, headless, via device approval; the approver becomes its owner |
