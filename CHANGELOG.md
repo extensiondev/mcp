@@ -22,7 +22,11 @@
   an options or popup window the engine called opened but no document
   appeared for within 3 s, and Gecko's "Popup is disabled"; a Gecko
   browser that gets Chromium's gesture sentence is answered with
-  Gecko wording (40). `extension_eval` context `background` wakes an idle
+  Gecko wording; and when the background refuses the `runtime.getURL` eval
+  the tab route needs (an extension CSP that forbids eval), the
+  `moz-extension://` base is read off the profile's
+  `extensions.webextensions.uuids` pref through the add-on id the built
+  manifest declares, so the fallback still lands (40). `extension_eval` context `background` wakes an idle
   MV3 worker through `ServiceWorker.startWorker` from a page session
   before evaluating, with a warning that it was idle, instead of answering
   `E_NO_TARGET` (41). `extension_open surface: "devtools"` takes `waitMs`

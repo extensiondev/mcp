@@ -212,14 +212,14 @@ describe("extension_open surface devtools opens the real DevTools and shows the 
     cdpTargets = [{ id: "web", type: "page", url: "https://example.com/", title: "Example" }];
 
     const result = JSON.parse(
-      await open.handler({ projectPath: p.dir, surface: "devtools", reload: true, waitMs: 5000 }),
+      await open.handler({ projectPath: p.dir, surface: "devtools", reload: true, waitMs: 12000 }),
     );
 
     expect(result.ok).toBe(true);
     expect(result.value.panel.title).toBe("Live");
     expect(result.value.reloadedInspected).toBe(true);
     expect(otherCommands).toContainEqual({ method: "Page.reload", sessionId: "session-web" });
-  });
+  }, 20_000);
 
   it("waits waitMs for a late panel and, when none comes, points at reload and waitMs", async () => {
     const p = project();

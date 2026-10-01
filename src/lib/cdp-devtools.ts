@@ -123,6 +123,21 @@ export async function openDevToolsPanel(
        the frontend is up is that load; it is opt-in because it discards the
        page state under test. */
     if (options.reloadInspected) {
+      /* @invariant The reload is useful only once the extension's devtools
+         page is up and its port to the inspected tab is connected (Preact
+         registers its MAIN-world hook on that connection); a reload sent the
+         instant the frontend attaches lands before that and the panel never
+         comes. So the devtools_page frame is awaited first, then a settle,
+         measured at about 3 s after open by the hand driver that works. */
+      const frameDeadline = Date.now() + Math.min(5000, budgetMs / 2);
+      while (Date.now() < frameDeadline) {
+        const frame = (await listTargets().catch(() => [])).find(
+          (t) => t.type === "iframe" && String(t.url ?? "").startsWith(options.devtoolsPageUrl),
+        );
+        if (frame) break;
+        await sleep(200);
+      }
+      await sleep(Math.min(2500, budgetMs / 4));
       try {
         const inspectedSession = await cdp.attachToTarget(options.inspectedTargetId);
         await cdp.sendCommand("Page.reload", {}, inspectedSession);

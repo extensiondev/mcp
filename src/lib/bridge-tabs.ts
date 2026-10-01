@@ -6,8 +6,12 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
+import fs from "node:fs";
+import path from "node:path";
 import { actFrameJson, runActVerb } from "./act";
 import { envelope } from "./envelope";
+import { readyContractPath } from "./session-paths";
+import { readBuiltManifest } from "./project-manifest";
 
 export interface BridgeTab {
   tabId: number | null;
@@ -246,7 +250,76 @@ async function navigateToUrlViaBackgroundEval(
   });
 }
 
+/* @invariant The relay resolves the base with a background eval of
+   runtime.getURL, and an extension whose CSP forbids eval (every MV3 Gecko
+   build with an explicit policy, Redux, Preact, Web Scrobbler) refuses that
+   eval, so the tab route for its surfaces died before it started. Firefox writes the same answer to disk: the
+   profile's prefs.js holds extensions.webextensions.uuids, a JSON map from
+   the add-on id the built manifest declares (or the engine injected) to the
+   moz-extension host, and the session contract names the profile. That read
+   needs no eval and no permission, so it is the fallback whenever the relay
+   does not answer. */
+const UUIDS_PREF = /user_pref\("extensions\.webextensions\.uuids",\s*"((?:[^"\\]|\\.)*)"\)/;
+
+export function geckoAddonId(projectPath: string, browser: string): string | null {
+  const read = readBuiltManifest(projectPath, browser);
+  const manifest = read?.manifest as Record<string, any> | undefined;
+  const settings =
+    manifest?.browser_specific_settings ??
+    manifest?.["firefox:browser_specific_settings"] ??
+    manifest?.["gecko:browser_specific_settings"] ??
+    manifest?.applications;
+  const id = settings?.gecko?.id;
+  return typeof id === "string" && id ? id : null;
+}
+
+export function sessionProfilePath(projectPath: string, browser: string): string | null {
+  try {
+    const contract = JSON.parse(
+      fs.readFileSync(readyContractPath(projectPath, browser), "utf8"),
+    ) as Record<string, unknown>;
+    return typeof contract.profilePath === "string" && contract.profilePath.trim()
+      ? contract.profilePath
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+export function readGeckoBaseUrlFromProfile(
+  projectPath: string,
+  browser: string,
+): string | null {
+  const addonId = geckoAddonId(projectPath, browser);
+  const profile = sessionProfilePath(projectPath, browser);
+  if (!addonId || !profile) return null;
+  let prefs: string;
+  try {
+    prefs = fs.readFileSync(path.join(profile, "prefs.js"), "utf8");
+  } catch {
+    return null;
+  }
+  const match = UUIDS_PREF.exec(prefs);
+  if (!match) return null;
+  try {
+    const map = JSON.parse(JSON.parse(`"${match[1]}"`)) as Record<string, unknown>;
+    const uuid = map[addonId];
+    return typeof uuid === "string" && uuid ? `moz-extension://${uuid}/` : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function resolveBridgeBaseUrl(
+  projectPath: string,
+  browser: string,
+  timeout?: number,
+): Promise<string | null> {
+  const fromRelay = await resolveBridgeBaseUrlThroughRelay(projectPath, browser, timeout);
+  return fromRelay ?? readGeckoBaseUrlFromProfile(projectPath, browser);
+}
+
+async function resolveBridgeBaseUrlThroughRelay(
   projectPath: string,
   browser: string,
   timeout?: number,
