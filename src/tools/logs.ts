@@ -34,6 +34,7 @@ import {
   readReadyContract,
   readyContractPath,
   sessionPathHint,
+  engineProjectRoot,
 } from "../lib/session-paths";
 
 export { schema } from "./logs-schema";
@@ -317,7 +318,7 @@ async function readFromStream(
   browser: string,
   limit: number,
 ): Promise<string> {
-  const ready = readReadyContract(args.projectPath, browser);
+  const ready = readReadyContract(engineProjectRoot(args.projectPath), browser);
   if (!ready) {
     const running = knownSessionBrowsers(args.projectPath).filter(
       (b) => b !== browser,
