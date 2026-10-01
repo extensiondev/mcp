@@ -173,6 +173,9 @@ describe("extension_project_create", () => {
     expect(out.status).toBe("lane-closed");
     expect(out.error.message).toBe(serverSentence);
     expect(out.error.message.toLowerCase()).not.toContain("console");
+    expect(out.hint).toContain("Create the project in the console");
+    expect(out.hint).toContain("extension_auth");
+    expect(out.hint).toContain("hold before the allowlist");
   });
 
   it("falls back to the console pointer only when the server sends no message", async () => {
