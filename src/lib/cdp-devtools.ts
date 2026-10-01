@@ -72,6 +72,7 @@ export async function openDevToolsPanel(
     devtoolsPageUrl: string;
     panelTitle?: string;
     budgetMs?: number;
+    reloadInspected?: boolean;
   },
 ): Promise<DevToolsPanelOutcome> {
   const budgetMs = options.budgetMs ?? 15_000;
@@ -115,6 +116,19 @@ export async function openDevToolsPanel(
     }
 
     const sessionId = await cdp.attachToTarget(devtoolsTargetId);
+    /* @invariant Some extensions register their panel only when the page
+       reports to them (Preact Devtools creates it once the page's debug hook
+       speaks through the content script), which happens on a load that
+       starts with DevTools already open. A reload of the inspected tab after
+       the frontend is up is that load; it is opt-in because it discards the
+       page state under test (ledger entry 42). */
+    if (options.reloadInspected) {
+      try {
+        const inspectedSession = await cdp.attachToTarget(options.inspectedTargetId);
+        await cdp.sendCommand("Page.reload", {}, inspectedSession);
+      } catch {
+      }
+    }
     const evaluate = async (expression: string): Promise<EvaluateResponse | null> =>
       ((await cdp
         .sendCommand(

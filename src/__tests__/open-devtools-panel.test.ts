@@ -25,7 +25,9 @@ vi.mock("../lib/cdp-port", async (importOriginal) => {
 type Target = { id: string; type: string; url: string; title: string };
 let cdpTargets: Target[] = [];
 let openDevToolsSupported = true;
-let panelRegisters = true;
+let panelRegisters: boolean | "after-reload" = true;
+let reloaded = false;
+const otherCommands: Array<{ method: string; sessionId?: string }> = [];
 let extensionId = "";
 const commands: string[] = [];
 vi.mock("../lib/cdp", () => {
@@ -58,9 +60,10 @@ vi.mock("../lib/cdp", () => {
         const expression = String(params?.expression ?? "");
         if (expression.includes("tabIds()")) {
           expect(sessionId).toBe("session-dt");
+          const registered = panelRegisters === true || (panelRegisters === "after-reload" && reloaded);
           return {
             result: {
-              value: panelRegisters
+              value: registered
                 ? ["elements", "console", `chrome-extension://${extensionId}Live`, `chrome-extension://${extensionId}Second`]
                 : ["elements", "console"],
             },
@@ -77,6 +80,8 @@ vi.mock("../lib/cdp", () => {
         }
         return { result: { value: 1 } };
       }
+      otherCommands.push({ method, sessionId });
+      if (method === "Page.reload") reloaded = true;
       return {};
     }
     disconnect() {}
@@ -127,6 +132,8 @@ afterEach(() => {
   cdpTargets = [];
   openDevToolsSupported = true;
   panelRegisters = true;
+  reloaded = false;
+  otherCommands.length = 0;
   for (const d of dirs.splice(0)) fs.rmSync(d, { recursive: true, force: true });
 });
 
@@ -197,6 +204,38 @@ describe("extension_open surface devtools opens the real DevTools and shows the 
     expect(result.status).toBe("surface-did-not-open");
     expect(result.error.message).toContain("devtools/index.html loaded in it");
     expect(result.hint).toContain("extension_logs");
+  }, 15_000);
+
+  it("reloads the inspected tab on request so a panel created on a page event registers", async () => {
+    const p = project();
+    panelRegisters = "after-reload";
+    cdpTargets = [{ id: "web", type: "page", url: "https://example.com/", title: "Example" }];
+
+    const result = JSON.parse(
+      await open.handler({ projectPath: p.dir, surface: "devtools", reload: true, waitMs: 5000 }),
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.value.panel.title).toBe("Live");
+    expect(result.value.reloadedInspected).toBe(true);
+    expect(otherCommands).toContainEqual({ method: "Page.reload", sessionId: "session-web" });
+  });
+
+  it("waits waitMs for a late panel and, when none comes, points at reload and waitMs", async () => {
+    const p = project();
+    panelRegisters = false;
+    cdpTargets = [{ id: "web", type: "page", url: "https://example.com/", title: "Example" }];
+
+    const started = Date.now();
+    const result = JSON.parse(
+      await open.handler({ projectPath: p.dir, surface: "devtools", waitMs: 900 }),
+    );
+
+    expect(Date.now() - started).toBeGreaterThanOrEqual(850);
+    expect(result.status).toBe("surface-did-not-open");
+    expect(result.hint).toContain("reload: true");
+    expect(result.hint).toContain("waitMs");
+    expect(otherCommands.map((c) => c.method)).not.toContain("Page.reload");
   }, 15_000);
 
   it("refuses on Gecko without touching the protocol, naming what to do instead", async () => {
