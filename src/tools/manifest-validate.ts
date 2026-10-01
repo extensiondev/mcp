@@ -15,6 +15,18 @@ import { envelope } from "../lib/envelope";
 
 const COMMAND = "extension_manifest_validate";
 
+const CHROMIUM_ONLY_KEYS = [
+  "version_name",
+  "minimum_chrome_version",
+  "key",
+  "update_url",
+  "offline_enabled",
+  "side_panel",
+  "declarative_net_request",
+  "cross_origin_embedder_policy",
+  "cross_origin_opener_policy",
+];
+
 const CHROME_DESKTOP_ONLY_KEYS = [
   "file_browser_handlers",
   "file_system_provider_capabilities",
@@ -126,6 +138,26 @@ function collectPathRefs(m: Record<string, unknown>): string[] {
     if (typeof pa.default_icon === "string") push(pa.default_icon);
     else if (pa.default_icon)
       Object.values(pa.default_icon as Record<string, unknown>).forEach(push);
+  }
+  return refs;
+}
+
+/* @invariant A web-accessible resource the manifest names and the tree lacks
+   is a runtime 404, not a build failure: the engine builds it and its
+   runtime-risk scan reports it, so it is a warning here, where a blocking
+   error would refuse a build the engine runs. */
+function collectWebAccessibleRefs(m: Record<string, unknown>): string[] {
+  const refs: string[] = [];
+  const war = m.web_accessible_resources;
+  if (!Array.isArray(war)) return refs;
+  for (const entry of war) {
+    if (typeof entry === "string") refs.push(entry);
+    else if (entry && typeof entry === "object") {
+      const resources = (entry as Record<string, unknown>).resources;
+      if (Array.isArray(resources)) {
+        for (const r of resources) if (typeof r === "string") refs.push(r);
+      }
+    }
   }
   return refs;
 }
@@ -292,17 +324,30 @@ export async function handler(args: {
 
   const chromiumManifest = filterKeysForThisBrowser(manifest, "chrome");
 
+  /* @invariant The engine serves public/ at the dist root, so an icon the
+     manifest names as images/icon.png may live at public/images/icon.png and
+     build fine; a check that never looked there called shipped icons dangling
+    . */
+  const projectRoot =
+    path.basename(manifestDir) === "src" ? path.dirname(manifestDir) : manifestDir;
   const roots = [
     manifestDir,
     path.join(manifestDir, "src"),
-    ...(path.basename(manifestDir) === "src"
-      ? [path.dirname(manifestDir)]
-      : []),
+    ...(projectRoot !== manifestDir ? [projectRoot] : []),
+    path.join(manifestDir, "public"),
+    path.join(projectRoot, "public"),
   ];
   for (const ref of new Set(collectPathRefs(chromiumManifest))) {
     if (!fileResolvesSomewhere(ref, roots)) {
       result.errors.push(
         `Referenced file "${ref}" was not found near the manifest. extension_build fails on this dangling reference.`,
+      );
+    }
+  }
+  for (const ref of new Set(collectWebAccessibleRefs(chromiumManifest))) {
+    if (!fileResolvesSomewhere(ref, roots)) {
+      result.warnings.push(
+        `web_accessible_resources names "${ref}", which was not found near the manifest. The build ships without it and the browser answers 404 when the extension or a page asks for it.`,
       );
     }
   }
@@ -395,9 +440,31 @@ export async function handler(args: {
       effectiveByBrowser.get(browser) ?? filterKeysForThisBrowser(manifest, browser);
     const issues: string[] = [];
 
+    if (isFirefox && (effective.manifest_version as number) === 2) {
+      const porting: string[] = [];
+      const bg2 = effective.background as Record<string, unknown> | undefined;
+      if (bg2 && Array.isArray(bg2.scripts))
+        porting.push("background.scripts to a single chromium:service_worker");
+      if (effective.browser_action)
+        porting.push("browser_action to chromium:action");
+      if (
+        Array.isArray(effective.web_accessible_resources) &&
+        effective.web_accessible_resources.some((e) => typeof e === "string")
+      )
+        porting.push("web_accessible_resources strings to [{resources, matches}] objects");
+      const perms2 = (effective.permissions as string[] | undefined) ?? [];
+      if (perms2.some((p) => typeof p === "string" && (p.includes("://") || p === "<all_urls>")))
+        porting.push("host patterns out of permissions into host_permissions");
+      if (perms2.includes("webRequestBlocking"))
+        porting.push("webRequestBlocking to declarativeNetRequest rules");
+      if (porting.length) {
+        result.warnings.push(
+          `${browser} stays on Manifest V2 here, and Firefox still runs it. To also target Chromium, which only loads MV3, the keys to port are: ${porting.join("; ")}. Keep both by prefixing the Chromium variants with chromium:.`,
+        );
+      }
+    }
     if (isChromium) {
       const mv = effective.manifest_version as number;
-
       if (mv && mv < 3) {
         issues.push(
           "Manifest V2 is deprecated on Chromium. Use chromium:manifest_version: 3.",
@@ -443,11 +510,40 @@ export async function handler(args: {
         }
       }
       if (chromiumManifest.side_panel && !effective.sidebar_action) {
-        issues.push(
-          "Chromium side_panel declared but no firefox:sidebar_action. Firefox uses sidebar_action for sidebars.",
+        result.warnings.push(
+          "Chromium side_panel declared but no firefox:sidebar_action: the Firefox build ships without a sidebar. If you want one there, Firefox uses sidebar_action.",
         );
       }
-
+      const bss = effective.browser_specific_settings as
+        | Record<string, unknown>
+        | undefined;
+      const geckoId = (bss?.gecko as Record<string, unknown> | undefined)?.id;
+      if (typeof geckoId !== "string" || !geckoId) {
+        result.warnings.push(
+          'Firefox: no browser_specific_settings.gecko.id. A temporary add-on without one gets a new internal id on every launch, so storage and the moz-extension:// origin do not survive a relaunch, and a store upload needs the id. Set firefox:browser_specific_settings.gecko.id (any "name@domain" string).',
+        );
+      }
+      for (const key of CHROMIUM_ONLY_KEYS) {
+        if (effective[key] !== undefined) {
+          result.warnings.push(
+            `Firefox: manifest key "${key}" is Chromium-only and is ignored or refused by Firefox. Move it under "chromium:${key}".`,
+          );
+        }
+      }
+      const warEntries = effective.web_accessible_resources;
+      if (
+        Array.isArray(warEntries) &&
+        warEntries.some(
+          (entry) =>
+            entry &&
+            typeof entry === "object" &&
+            (entry as Record<string, unknown>).extension_ids !== undefined,
+        )
+      ) {
+        result.warnings.push(
+          'Firefox: web_accessible_resources[].extension_ids is Chromium-only; Firefox accepts only "matches" there.',
+        );
+      }
       const bg = effective.background as Record<string, unknown> | undefined;
 
       if (bg) {
@@ -468,10 +564,11 @@ export async function handler(args: {
     for (const api of usedApis) {
       const perm = API_PERMISSION[api];
       if (effectivePerms.has(perm)) continue;
+
       if (!declaredPermSet.has(perm)) continue;
       const ns = isFirefox ? "browser" : "chrome";
       issues.push(
-        `Code calls ${ns}.${api} but the ${browser} build's permissions do not include "${perm}" (it is declared only under another target's prefixed key, e.g. chromium:permissions). This target crashes at runtime.`,
+        `Code calls ${ns}.${api} but the ${browser} build's permissions do not include "${perm}" (it is declared only under another target's prefixed key, e.g. chromium:permissions). An unguarded call crashes this target at runtime. If every call sits behind a feature check (typeof ${ns}.${api} !== "undefined"), the build is sound: pass skipValidation: true to extension_build, or grant "${perm}" to this target too.`,
       );
     }
 
@@ -487,11 +584,15 @@ export async function handler(args: {
 
   const surfaces: string[] = [];
   if (chromiumManifest.content_scripts) surfaces.push("content");
-  if (chromiumManifest.side_panel) surfaces.push("sidebar");
+  if (chromiumManifest.side_panel || manifest["firefox:sidebar_action"])
+    surfaces.push("sidebar");
   if (chromiumManifest.action || manifest["firefox:browser_action"])
     surfaces.push("action");
   if ((chromiumManifest.chrome_url_overrides as Record<string, unknown>)?.newtab)
     surfaces.push("newtab");
+  if (chromiumManifest.devtools_page) surfaces.push("devtools");
+  if (chromiumManifest.options_ui || chromiumManifest.options_page)
+    surfaces.push("options");
   if (chromiumManifest.background) surfaces.push("background");
 
   const distinctive = surfaces.filter((s) => s !== "background");
@@ -499,12 +600,20 @@ export async function handler(args: {
   if (matchOn.length) {
     try {
       const templates = await listTemplates();
+      /* @invariant Overlap alone ranked four-surface AI chat templates beside
+         a one-surface devtools template for a devtools extension, since each
+         shared one surface. The ratio of shared surfaces to
+         the union rewards the template that is about the same thing. */
       result.similarTemplates = templates
-        .map((t) => ({
-          slug: t.slug,
-          surfaces: t.surfaces,
-          score: t.surfaces.filter((s) => matchOn.includes(s)).length,
-        }))
+        .map((t) => {
+          const shared = t.surfaces.filter((s) => matchOn.includes(s)).length;
+          const union = new Set([...t.surfaces, ...matchOn]).size;
+          return {
+            slug: t.slug,
+            surfaces: t.surfaces,
+            score: union ? shared / union : 0,
+          };
+        })
         .filter((t) => t.score > 0)
         .sort((a, b) => b.score - a.score)
         .slice(0, 5)
