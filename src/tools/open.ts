@@ -85,11 +85,27 @@ async function pollForTarget(
   }
 }
 
-function isDisposableTab(tabUrl: string, destination: string): boolean {
+/* @invariant A tab is disposable when nothing of the user's is in it: a
+   blank or new-tab page always, and a page of the extension's own origin only
+   when the caller is re-rendering a surface, where the earlier copy of that
+   surface is the thing being replaced. A url navigation never takes an
+   extension page over: the tab it replaced held the Redux store the panel
+   under test was meant to show. */
+function isDisposableTab(
+  tabUrl: string,
+  destination: string,
+  reuse: "blank" | "surface",
+): boolean {
   if (!tabUrl || tabUrl === "about:blank") return true;
   if (/^chrome:\/\/(newtab|new-tab-page)/.test(tabUrl)) return true;
+  if (reuse === "blank") return false;
   const origin = destination.match(/^chrome-extension:\/\/[a-p]{32}\//)?.[0];
   return Boolean(origin && tabUrl.startsWith(origin));
+}
+
+export interface NavigateOptions {
+  reuse?: "blank" | "surface";
+  tab?: number;
 }
 
 async function navigateToUrlViaWebDriver(
@@ -129,12 +145,21 @@ export async function navigateToUrl(
   browser: string,
   url: string,
   timeout?: number,
+  options: NavigateOptions = {},
 ): Promise<string> {
+  const reuse = options.reuse ?? "blank";
+  if (options.tab != null) {
+    return navigateToUrlViaBridge(projectPath, browser, url, timeout, schema.name, {
+      tab: options.tab,
+    });
+  }
   if (WEBKIT_FAMILY.has(browser) && readWebDriverSession(projectPath, browser)) {
     return navigateToUrlViaWebDriver(projectPath, browser, url);
   }
   if (!isChromiumFamily(browser)) {
-    return navigateToUrlViaBridge(projectPath, browser, url, timeout);
+    return navigateToUrlViaBridge(projectPath, browser, url, timeout, schema.name, {
+      newTab: true,
+    });
   }
   const resolved = await resolveCdpPort(projectPath, browser);
   if (!resolved) {
@@ -159,7 +184,7 @@ export async function navigateToUrl(
     await cdp.connect(browserWsUrl);
 
     const reusable = pageTargets.find((t) =>
-      isDisposableTab(String(t.url ?? ""), url),
+      isDisposableTab(String(t.url ?? ""), url, reuse),
     );
     let navigatedTargetId: string | undefined;
     let openedNewTab = false;
@@ -549,7 +574,9 @@ async function openSurfaceAsTab(
     url = `${base}${doc}`;
     extensionId = base.replace(/^.*:\/\//, "").replace(/\/$/, "");
   }
-  const raw = await navigateToUrl(projectPath, browser, url);
+  const raw = await navigateToUrl(projectPath, browser, url, undefined, {
+    reuse: "surface",
+  });
   try {
     const parsed = JSON.parse(raw);
     if (parsed?.ok) {
@@ -656,7 +683,12 @@ export const schema = {
       url: {
         type: "string",
         description:
-          "Navigate a real tab here instead of opening a surface (Firefox needs allowEval: true). Use for content-script test pages, or a surface as a page: chrome-extension://<id>/popup.html.",
+          "Navigate a real tab here instead of opening a surface, in a NEW tab unless `tab` names one (a blank or new-tab page is reused). An absolute url opens as given; a path with no scheme, such as pages/options.html, is resolved against the extension's own origin. Use for content-script test pages, or a surface as a page.",
+      },
+      tab: {
+        type: "number",
+        description:
+          "With `url`: navigate this chrome.tabs id in place instead of opening a new tab (rides the engine's navigate verb, so the session needs allowControl: true). Without it an existing page is never taken over.",
       },
       asTab: {
         type: "boolean",
@@ -681,6 +713,51 @@ export function sessionIsHeadless(): boolean {
 const HEADED_RELAUNCH =
   "start a headed session: extension_dev with replace: true, and in the environment set EXTENSION_HEADLESS=0 AND clear EXTENSION_BROWSER_FLAGS (it may carry --headless=new, which keeps the window hidden even with EXTENSION_HEADLESS=0)";
 
+/* @invariant A path with no scheme names a document inside the extension,
+   whatever the manifest declares about it: pages/options.html is reachable
+   by url even when no surface key points at it. The origin comes from the
+   live session (the Chromium id from CDP, the moz-extension base from the
+   bridge), the same way the surfaces resolve theirs. */
+async function resolveExtensionDocumentUrl(
+  projectPath: string,
+  browser: string,
+  relative: string,
+): Promise<string | { refusal: string }> {
+  const doc = relative.replace(/^\.?\//, "");
+  if (isChromiumFamily(browser)) {
+    const extensionId = await resolveExtensionId(projectPath, browser);
+    if (extensionId) return `chrome-extension://${extensionId}/${doc}`;
+    return {
+      refusal: envelope({
+        ok: false,
+        command: schema.name,
+        status: "no-extension-id",
+        error: {
+          code: "E_NO_EXTENSION_ID",
+          name: "NoExtensionId",
+          message: `"${relative}" has no scheme, so it was read as a document inside the extension, but the extension id could not be resolved from the live session's CDP targets.`,
+        },
+        hint: `Confirm the session is ready (extension_wait), or pass the full chrome-extension://<id>/${doc} url. ${CDP_PORT_MISSING_HINT}`,
+      }),
+    };
+  }
+  const base = await resolveBridgeBaseUrl(projectPath, browser);
+  if (base) return `${base}${doc}`;
+  return {
+    refusal: envelope({
+      ok: false,
+      command: schema.name,
+      status: "no-extension-id",
+      error: {
+        code: "E_NO_EXTENSION_ID",
+        name: "NoExtensionId",
+        message: `"${relative}" has no scheme, so it was read as a document inside the extension, but the extension's moz-extension:// base could not be resolved from the live session.`,
+      },
+      hint: `Pass the full moz-extension://<uuid>/${doc} url (extension_list_extensions reports the uuid), or start the session with allowEval: true so the base can be read from the background.`,
+    }),
+  };
+}
+
 export async function handler(
   args: ActArgs & {
     surface?: string;
@@ -691,8 +768,15 @@ export async function handler(
 ): Promise<string> {
   const { browser } = resolveSessionBrowser(args.projectPath, args.browser);
 
-  if (args.url)
-    return navigateToUrl(args.projectPath, browser, args.url, args.timeout);
+  if (args.url) {
+    const absolute = /^[a-z][a-z0-9+.-]*:/i.test(args.url)
+      ? args.url
+      : await resolveExtensionDocumentUrl(args.projectPath, browser, args.url);
+    if (typeof absolute !== "string") return absolute.refusal;
+    return navigateToUrl(args.projectPath, browser, absolute, args.timeout, {
+      tab: args.tab,
+    });
+  }
 
   const AS_TAB_SURFACES = ["popup", "options", "sidebar", ...OVERRIDE_SURFACES];
   /* @invariant An override page has no window of its own: the browser renders

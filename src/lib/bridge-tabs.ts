@@ -99,18 +99,26 @@ export async function pollForBridgeTab(
  */
 const UNKNOWN_VERB = /unknown command/i;
 
+export interface NavigateTarget {
+  tab?: number;
+  newTab?: boolean;
+}
+
 export async function navigateToUrlViaBridge(
   projectPath: string,
   browser: string,
   url: string,
   timeout?: number,
   tool = "extension_open",
+  target: NavigateTarget = {},
 ): Promise<string> {
   const viaVerb = await runActVerb(
     [
       "navigate",
       url,
       projectPath,
+      ...(target.tab != null ? ["--tab", String(target.tab)] : []),
+      ...(target.tab == null && target.newTab ? ["--new-tab"] : []),
       "--browser",
       browser,
       ...(timeout != null ? ["--timeout", String(timeout)] : []),
