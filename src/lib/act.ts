@@ -40,7 +40,7 @@ export function toMcpSpeak(text: string): string {
       .replace(/--url[= ]"([^"]+)"/g, 'url: "$1"')
       .replace(/--url[= ](<[\w-]+>|\S*(?:\/\/|\*)\S*)/g, 'url: "$1"')
       .replace(
-        /--browser[= ]([\w]+-based|chrome|chromium|edge|brave|opera|vivaldi|yandex|firefox|waterfox|librewolf|safari)\b/g,
+        /--browser[= ]([\w]+-based|chrome|chromium|edge|brave|opera|vivaldi|yandex|firefox|waterfox|librewolf|zen|floorp|safari)\b/g,
         'browser: "$1"',
       )
       .replace(/--timeout[= ](\d+)/g, "timeout: $1")

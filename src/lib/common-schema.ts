@@ -17,6 +17,8 @@ export const LAUNCHABLE_BROWSERS = [
   "firefox",
   "waterfox",
   "librewolf",
+  "zen",
+  "floorp",
   "safari",
   "chromium-based",
   "gecko-based",
@@ -35,6 +37,8 @@ export const REAL_BROWSERS = [
   "firefox",
   "waterfox",
   "librewolf",
+  "zen",
+  "floorp",
   "safari",
 ] as const;
 

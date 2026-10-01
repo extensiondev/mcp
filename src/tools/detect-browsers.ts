@@ -45,6 +45,8 @@ const ALL_BROWSERS = [
   "firefox",
   "waterfox",
   "librewolf",
+  "zen",
+  "floorp",
   "safari",
 ] as const;
 
@@ -92,6 +94,14 @@ const SYSTEM_PATHS: Record<string, Record<string, string[]>> = {
       "/Applications/LibreWolf.app/Contents/MacOS/librewolf",
       `${process.env.HOME}/Applications/LibreWolf.app/Contents/MacOS/librewolf`,
     ],
+    zen: [
+      "/Applications/Zen.app/Contents/MacOS/zen",
+      `${process.env.HOME}/Applications/Zen.app/Contents/MacOS/zen`,
+    ],
+    floorp: [
+      "/Applications/Floorp.app/Contents/MacOS/floorp",
+      `${process.env.HOME}/Applications/Floorp.app/Contents/MacOS/floorp`,
+    ],
     safari: ["/Applications/Safari.app/Contents/MacOS/Safari"],
   },
   linux: {
@@ -121,6 +131,8 @@ const SYSTEM_PATHS: Record<string, Record<string, string[]>> = {
     yandex: ["/usr/bin/yandex-browser", "/usr/bin/yandex-browser-stable"],
     waterfox: ["/usr/bin/waterfox", "/opt/waterfox/waterfox"],
     librewolf: ["/usr/bin/librewolf", "/opt/librewolf/librewolf"],
+    zen: ["/usr/bin/zen", "/usr/bin/zen-browser", "/opt/zen/zen", "/opt/zen-browser/zen"],
+    floorp: ["/usr/bin/floorp", "/opt/floorp/floorp"],
   },
   win32: {
     chrome: [
@@ -159,6 +171,14 @@ const SYSTEM_PATHS: Record<string, Record<string, string[]>> = {
     librewolf: [
       "C:\\Program Files\\LibreWolf\\librewolf.exe",
       "C:\\Program Files (x86)\\LibreWolf\\librewolf.exe",
+    ],
+    zen: [
+      "C:\\Program Files\\Zen Browser\\zen.exe",
+      `${process.env.LOCALAPPDATA || ""}\\Zen Browser\\zen.exe`,
+    ],
+    floorp: [
+      "C:\\Program Files\\Floorp\\floorp.exe",
+      "C:\\Program Files (x86)\\Floorp\\floorp.exe",
     ],
   },
 };
