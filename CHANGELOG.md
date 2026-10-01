@@ -15,6 +15,45 @@
   `newtab-preact`; the catalog-sync PR had failed on the old names every
   day since 2026-09-26 (BUGS_TO_FIX_MCP.md entry 14).
 
+Nine findings from a session that brought ten third-party extensions under
+the server in one day (BUGS_TO_FIX_MCP.md entries 15 to 27; the ones this
+release closes are 16 to 19 and 21 to 25):
+
+- `extension_dev` and `extension_start` spawn the engine in the project
+  directory, not where the MCP client started the server, so the engine a
+  session drives is the project's own and the started envelope names it
+  under `value.engine` (entry 25).
+- Every session artifact path (ready.json, logs, the build summary) now
+  resolves from the engine's project root, the nearest package.json,
+  deno.json or deno.jsonc at or above the manifest, so a project whose
+  manifest sits in a subfolder no longer makes `extension_wait` watch a
+  contract the engine never writes (entry 23).
+- A failed `extension_build` carries the compiler errors the engine stamped
+  on its contract under `value.errors`, or the bundler's own output under
+  `value.output`, and its hint no longer asserts a manifest location the
+  engine does not require (entry 16).
+- `extension_wait` on an `extension_start` session answers `launched` at
+  once with the production-build guidance instead of spending its budget on
+  a "transient" `E_NOT_ATTACHED` that is permanent there; a clamped budget
+  is reported in `warnings` on every exit; and a dead-contract note names
+  only the browser the call asked about (entry 18).
+- `extension_eval` names the extension's own content security policy when
+  the engine refuses with "call to eval() blocked by CSP", instead of
+  blaming the expression (entry 19), and on MV2 Gecko a page or content
+  eval goes through `tabs.executeScript` from the background when the
+  engine has no scripting API, with the content-world caveat stated
+  (entry 24).
+- `extension_open` with a `url` opens a new tab unless `tab` names one, so
+  a page under test is never taken over; a path with no scheme resolves
+  against the extension's own origin on Chromium and Gecko (entry 21).
+- `extension_manifest_validate` reads `public/` when resolving manifest
+  references, warns rather than blocks on a missing web-accessible resource
+  and on a Chromium-only side panel, counts `devtools_page` and options
+  pages when ranking similar templates and ranks by surface overlap ratio,
+  and on Firefox warns on a missing `browser_specific_settings.gecko.id`,
+  on Chromium-only keys and on `extension_ids`, and gives an MV2 manifest
+  the keys to port for MV3 (entries 17 and 22).
+
 ## 10.10.1
 
 Five Gecko findings from one agent session on Firefox and Waterfox
