@@ -114,7 +114,9 @@ async function landedOnErrorPage(
 /* @invariant The browser is asked whether it is headless, because the
    environment this server reads only describes the request: a launcher shim
    on this machine adds --headless=new behind every caller, and a headless
-   Chrome closes a popup window before the next call can read it. HeadlessChrome names itself in /json/version. */
+   Chrome closes a popup window before the next call can read it. HeadlessChrome names itself in /json/version: old headless in
+   the Browser field, new headless (--headless=new) only in the User-Agent
+   field, so both are read. */
 async function browserRunsHeadless(
   projectPath: string,
   browser: string,
@@ -124,7 +126,12 @@ async function browserRunsHeadless(
     const resolved = await resolveCdpPort(projectPath, browser, { waitMs: 2000 });
     if (!resolved) return false;
     const product = await CDPClient.discoverBrowserVersion(resolved.port);
-    return typeof product === "string" && /headless/i.test(product);
+    if (typeof product === "string" && /headless/i.test(product)) return true;
+    const agent =
+      typeof CDPClient.discoverUserAgent === "function"
+        ? await CDPClient.discoverUserAgent(resolved.port)
+        : null;
+    return typeof agent === "string" && /headless/i.test(agent);
   } catch {
     return false;
   }
@@ -748,6 +755,17 @@ export const schema = {
         description:
           "For surface 'devtools': the title the extension gave chrome.devtools.panels.create, when it registers more than one panel. Omitted, the extension's first panel is shown.",
       },
+      waitMs: {
+        type: "number",
+        description:
+          "For surface 'devtools': how long to wait for the panel to register after DevTools opens (default 15000, up to 120000). Extensions that create their panel on a page event need longer, or `reload`.",
+      },
+      reload: {
+        type: "boolean",
+        default: false,
+        description:
+          "For surface 'devtools': reload the inspected tab once DevTools is open, for extensions that create their panel only when the page reports to them on a load that starts with DevTools open (Preact Devtools). Discards the page state under test.",
+      },
       url: {
         type: "string",
         description:
@@ -831,6 +849,8 @@ export async function handler(
     surface?: string;
     name?: string;
     panel?: string;
+    waitMs?: number;
+    reload?: boolean;
     url?: string;
     asTab?: boolean;
   },
@@ -934,78 +954,114 @@ export async function handler(
   if (args.timeout != null) cli.push("--timeout", String(args.timeout));
   const raw = await runActVerb(cli, args.projectPath, args.timeout, schema.name);
 
-  const headless = sessionIsHeadless();
-  if (headless && ["popup", "action", "sidebar"].includes(args.surface)) {
-    try {
-      const parsed = JSON.parse(raw);
-      const msg = String(parsed?.error?.message ?? "");
-      const code =
-        typeof parsed?.error?.code === "string" ? parsed.error.code : "";
-      /* @invariant The structured arm reads E_TARGET_NOT_FOUND, not E_NO_TARGET.
-         E_NO_TARGET is this package's own code, emitted by extension_inspect;
-         no engine has ever put it on a frame, so testing an engine's error
-         against it was a branch that could not be taken and it made the prose
-         match below look like a fallback when it was the whole test.
+  const refusal = readWindowRefusal(raw, args.surface, browser);
+  if (refusal) {
+    if (
+      args.surface === "sidebar" &&
+      isChromiumFamily(browser) &&
+      refusal.kind === "gesture" &&
+      !sessionIsHeadless() &&
+      !(await browserRunsHeadless(args.projectPath, browser))
+    ) {
+      return openSidebarThroughGesture(args.projectPath, browser, refusal.frame);
+    }
+    if (args.surface === "sidebar" && isGeckoFamily(browser)) {
+      return openGeckoSidebar(args.projectPath, browser, refusal.frame, args.timeout);
+    }
+    const fallback = await openSurfaceAsTab(args.projectPath, browser, args.surface);
+    const parsedFallback = tryParseEnvelope(fallback);
+    if (parsedFallback?.ok) {
+      addWarning(parsedFallback, windowRefusalWarning(refusal, args.surface, browser));
+      return actFrameJson(parsedFallback);
+    }
+    if (!refusal.frame.hint) {
+      refusal.frame.hint =
+        refusal.kind === "gesture"
+          ? "This surface can only open from a real user gesture, which automation cannot produce. Retry with asTab: true to render the surface document in a tab instead."
+          : `The dev browser has no window for this surface. Retry with asTab: true to render the surface document in a tab, or for the real window, ${HEADED_RELAUNCH}.`;
+    }
+    return actFrameJson(refusal.frame);
+  }
+  if (!AS_TAB_SURFACES.includes(args.surface)) return raw;
+  const confirmed = await confirmSurfaceTarget(args.projectPath, browser, args.surface, raw);
+  const parsedConfirmed = tryParseEnvelope(confirmed);
+  if (parsedConfirmed?.status !== "surface-did-not-open") return confirmed;
+  /* @invariant An engine "opened" with no document behind it within 3s is a
+     window the browser never showed, which is what a headless browser does
+     with an options or popup window whatever the launch flags said. The document is rendered in a tab instead and the
+     warning says so; the engine's answer rides along for the record. */
+  const fallback = await openSurfaceAsTab(args.projectPath, browser, args.surface);
+  const parsedFallback = tryParseEnvelope(fallback);
+  if (parsedFallback?.ok) {
+    addWarning(
+      parsedFallback,
+      `The engine reported the ${args.surface} as opened, but no document for it appeared within 3s (a headless browser never shows an options or popup window), so the ${args.surface} document was rendered in a tab instead (the same document and APIs). For the real window, ${HEADED_RELAUNCH}.`,
+    );
+    patchValue(parsedFallback, { engineResult: parsedConfirmed.value?.engineResult ?? null });
+    return actFrameJson(parsedFallback);
+  }
+  return confirmed;
+}
 
-         E_TARGET_NOT_FOUND is the engine's real code and is read here for
-         honesty rather than coverage, because it still does not arrive for this
-         failure. A popup that will not open headless comes back from the guest
-         as Unsupported("openPopup: <the browser's own words>"), which the CLI's
-         codeForBridgeError maps to E_NOT_IMPLEMENTED, indistinguishable from a
-         surface the engine cannot drive at all. So the match below is load
-         bearing against the newest engine, not a legacy path waiting on a
-         version floor, and it reads the BROWSER's message rather than any CLI
-         copy. It retires when the engine names this refusal, not when a pin
-         moves. */
-      const refusedWindow =
-        code === "E_TARGET_NOT_FOUND" ||
-        /active browser window|no active|headless|user gesture/i.test(msg);
-      if (parsed?.ok === false && refusedWindow) {
-        if (AS_TAB_SURFACES.includes(args.surface)) {
-          const fallback = await openSurfaceAsTab(
-            args.projectPath,
-            browser,
-            args.surface,
-          );
-          try {
-            const parsedFallback = JSON.parse(fallback);
-            if (parsedFallback?.ok) {
-              addWarning(
-                parsedFallback,
-                `The dev browser is headless, and a real popup/sidebar window can only open in a headed session, so the surface was rendered as a tab instead. For the real window, ${HEADED_RELAUNCH}, then open the surface again without asTab.`,
-              );
-              return actFrameJson(parsedFallback);
-            }
-          } catch {
-            // fall through to the original error
-          }
-        }
-        if (!parsed.hint) {
-          parsed.hint = /user gesture/i.test(msg)
-            ? "This surface can only open from a real user gesture, which headless automation cannot produce. Retry with asTab: true to render the surface document in a tab instead."
-            : `The dev browser is running headless, and a popup/sidebar window needs a headed session. Retry with asTab: true to render the surface document in a tab, or for the real window, ${HEADED_RELAUNCH}.`;
-        }
-        return actFrameJson(parsed);
-      }
-    } catch {
-      // non-JSON payload; return as-is
+type WindowRefusal = {
+  kind: "gesture" | "no-window" | "unsupported";
+  frame: Record<string, any>;
+};
+
+function tryParseEnvelope(raw: string): Record<string, any> | null {
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+/* @invariant Three refusals mean the same thing to the caller, "the window
+   did not open", and the tab route answers all three. The gesture code is the
+   engine's own; the no-window arm reads the BROWSER's words the engine quotes
+   (E_TARGET_NOT_FOUND, "no active browser window", "headless"); the
+   unsupported arm is Gecko answering that it cannot open a popup or sidebar
+   programmatically ("Popup is disabled", E_NOT_IMPLEMENTED). None of these is
+   gated on how the session was launched any more. */
+function readWindowRefusal(
+  raw: string,
+  surface: string,
+  browser: string,
+): WindowRefusal | null {
+  if (!["popup", "action", "sidebar", "options"].includes(surface)) return null;
+  const gesture = readGestureRefusal(raw);
+  if (gesture) return { kind: "gesture", frame: gesture };
+  const parsed = tryParseEnvelope(raw);
+  if (!parsed || parsed.ok !== false) return null;
+  const code = typeof parsed.error?.code === "string" ? parsed.error.code : "";
+  const message = String(parsed.error?.message ?? "");
+  if (code === "E_TARGET_NOT_FOUND" || /active browser window|no active|headless/i.test(message)) {
+    return { kind: "no-window", frame: parsed };
+  }
+  if (isGeckoFamily(browser) && surface !== "options") {
+    const unsupported = readUnsupportedRefusal(raw);
+    if (unsupported || /popup is disabled|not implemented/i.test(message)) {
+      return { kind: "unsupported", frame: parsed };
     }
   }
-  if (!headless && args.surface === "sidebar" && isChromiumFamily(browser)) {
-    const refusal = readGestureRefusal(raw);
-    if (refusal) {
-      return openSidebarThroughGesture(args.projectPath, browser, refusal);
-    }
+  return null;
+}
+
+function windowRefusalWarning(
+  refusal: WindowRefusal,
+  surface: string,
+  browser: string,
+): string {
+  const noun = surface === "sidebar" ? "sidebar" : surface === "options" ? "options page" : "popup";
+  const said = String(refusal.frame.error?.message ?? "").replace(/\s+/g, " ").trim();
+  if (isGeckoFamily(browser)) {
+    return refusal.kind === "gesture"
+      ? `${browser} opens the ${noun} only from its toolbar; the engine refused with Chromium's gesture wording because it counts every non-Firefox name as Chromium. The ${noun} document was rendered in a tab instead: the same document and APIs, without the toolbar anchoring.`
+      : `${browser} cannot open the ${noun} programmatically (${said}), so the ${noun} document was rendered in a tab instead: the same document and APIs, without the toolbar anchoring.`;
   }
-  if (args.surface === "sidebar" && isGeckoFamily(browser)) {
-    const refusal = readUnsupportedRefusal(raw);
-    if (refusal) {
-      return openGeckoSidebar(args.projectPath, browser, refusal, args.timeout);
-    }
-  }
-  return AS_TAB_SURFACES.includes(args.surface)
-    ? confirmSurfaceTarget(args.projectPath, browser, args.surface, raw)
-    : raw;
+  return refusal.kind === "gesture"
+    ? `Chromium opens the ${noun} only from a real user gesture, which automation cannot produce, so the ${noun} document was rendered in a tab instead (the same document and APIs). For the real window, ${HEADED_RELAUNCH} and click the toolbar icon.`
+    : `The dev browser has no window to show the ${noun} in (${said}); a headless browser never shows one, so the ${noun} document was rendered in a tab instead (the same document and APIs). For the real window, ${HEADED_RELAUNCH}.`;
 }
 
 const DEVTOOLS_PANEL_BUDGET_MS = 15_000;
@@ -1017,8 +1073,10 @@ const DEVTOOLS_PANEL_BUDGET_MS = 15_000;
    protocols have no command that opens its developer tools, so on Gecko the
    honest answer is a refusal, not a stand-in tab (a panel page outside DevTools
    has no chrome.devtools and proves nothing). */
+const DEVTOOLS_PANEL_BUDGET_MAX_MS = 120_000;
+
 async function openDevToolsSurface(
-  args: ActArgs & { panel?: string },
+  args: ActArgs & { panel?: string; waitMs?: number; reload?: boolean },
   browser: string,
 ): Promise<string> {
   if (!isChromiumFamily(browser)) {
@@ -1101,15 +1159,18 @@ async function openDevToolsSurface(
   }
   const devtoolsPageUrl = `chrome-extension://${extensionId}/${doc}`;
   const budgetMs =
-    typeof args.timeout === "number" && args.timeout > 0
-      ? Math.min(args.timeout, DEVTOOLS_PANEL_BUDGET_MS)
-      : DEVTOOLS_PANEL_BUDGET_MS;
+    typeof args.waitMs === "number" && args.waitMs > 0
+      ? Math.min(args.waitMs, DEVTOOLS_PANEL_BUDGET_MAX_MS)
+      : typeof args.timeout === "number" && args.timeout > 0
+        ? Math.min(args.timeout, DEVTOOLS_PANEL_BUDGET_MS)
+        : DEVTOOLS_PANEL_BUDGET_MS;
   const outcome = await openDevToolsPanel(resolved.port, {
     inspectedTargetId: inspected.targetId,
     extensionId,
     devtoolsPageUrl,
     panelTitle: args.panel,
     budgetMs,
+    reloadInspected: args.reload === true,
   });
   if (!outcome.opened) {
     if (outcome.stage === "open" || outcome.stage === "frontend") {
@@ -1148,7 +1209,7 @@ async function openDevToolsSurface(
       hint:
         args.panel && registered.length
           ? `No panel is titled "${args.panel}"; pass one of the registered titles as \`panel\`, or omit it for the first.`
-          : `The devtools page registers panels with chrome.devtools.panels.create; extension_logs (context: ['devtools']) shows what ${doc} wrote or threw. DevTools stays open on the tab.`,
+          : `The devtools page registers panels with chrome.devtools.panels.create; extension_logs (context: ['devtools']) shows what ${doc} wrote or threw. An extension that creates its panel only when the page reports to it (Preact Devtools does, through its content script) needs the page loaded with DevTools already open: retry with reload: true, and waitMs for a longer wait. DevTools stays open on the tab.`,
     });
   }
   const panelUrl = outcome.panelTarget?.url ?? null;
@@ -1168,6 +1229,7 @@ async function openDevToolsSurface(
       },
       panels: outcome.panels,
       devtoolsPage: devtoolsPageUrl,
+      reloadedInspected: args.reload === true,
     },
     warnings: outcome.panelTarget
       ? []

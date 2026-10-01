@@ -61,6 +61,24 @@ export class CDPClient extends CDPConnection {
     }
   }
 
+  /* @invariant Chrome's new headless mode (--headless=new, the mode every
+     launcher shim here adds) keeps "Chrome/151..." in the Browser field and
+     says HeadlessChrome only in the User-Agent field of /json/version,
+     measured on Chrome 151. Both fields are read. */
+  static async discoverUserAgent(
+    port: number,
+    host = "127.0.0.1",
+  ): Promise<string | null> {
+    try {
+      const res = await fetch(`http://${host}:${port}/json/version`);
+      if (!res.ok) return null;
+      const data = (await res.json()) as Record<string, unknown>;
+      return typeof data["User-Agent"] === "string" ? data["User-Agent"] : null;
+    } catch {
+      return null;
+    }
+  }
+
   static async discoverTargets(
     port: number,
     host = "127.0.0.1",
