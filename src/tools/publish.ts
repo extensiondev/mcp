@@ -13,6 +13,7 @@ import { publish, resolveToken } from "../lib/publish";
 import { platformHoldEnvelope } from "../lib/platform-hold";
 import {
   fetchRegistryJson,
+  isSuccessfulBuild,
   parseBuildIndex,
   registryFileUrl,
   resolveProjectRef,
@@ -40,6 +41,19 @@ export const schema = {
     required: [],
   },
 };
+
+function previewCommandsOf(value: unknown): Array<[string, string]> {
+  if (!value || typeof value !== "object") return [];
+  return Object.entries(value as Record<string, unknown>)
+    .filter(
+      ([browser, command]) =>
+        typeof browser === "string" &&
+        browser.trim() !== "" &&
+        typeof command === "string" &&
+        command.startsWith("npx -y extension@latest preview "),
+    )
+    .map(([browser, command]) => [browser, command as string]);
+}
 
 function fail(
   name: string,
@@ -175,7 +189,7 @@ export async function handler(args: {
         }
       } else {
         const newestSuccess = items
-          .filter((item) => item.status === "success")
+          .filter(isSuccessfulBuild)
           .sort((a, b) =>
             String(b.timestamp ?? "").localeCompare(String(a.timestamp ?? "")),
           )[0];
@@ -199,11 +213,25 @@ export async function handler(args: {
     body: data,
     api: args.api,
   });
+  /* @invariant The preview commands come from the PLATFORM and are relayed,
+   * never rebuilt here: they carry the share token inside a registry URL, and
+   * a tool that assembled its own would be a tool that could be talked into
+   * pointing the token at another host. While the public hold keeps the share
+   * page dark the command is the only way the link is usable, so the hint
+   * names that outright instead of sending the reader to a 503. */
+  const previewCommands = previewCommandsOf(data.previewCommands);
+  const previewHint =
+    previewCommands.length > 0
+      ? `Run the extension without opening the share page: ${previewCommands
+          .map(([browser, command]) => `${browser}: ${command}`)
+          .join(" | ")}. Each command carries the same share token as the URL and expires with it.`
+      : null;
   return envelope({
     ok: true,
     command: "extension_publish",
     status: "published",
     value: data,
     warnings: [note, buildNote],
+    ...(previewHint ? { hint: previewHint } : {}),
   });
 }

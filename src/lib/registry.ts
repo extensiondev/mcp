@@ -273,6 +273,19 @@ export interface BuildIndexItem {
   browsers?: string[];
 }
 
+/* @invariant THE INDEX SAYS "ready" FOR A FINISHED BUILD. The deploy lane
+ * writes `ready` into builds/index.json and the console reads `ready` and
+ * `success` as one state, while this package only accepted `success`, so
+ * extension_publish answered buildSha/version/builtAt as null for a project
+ * with three READY builds (BUGS_TO_FIX_CONSOLE 10). The vocabulary lives here
+ * once and every "successful build" read goes through it. */
+export function isSuccessfulBuild(item: Pick<BuildIndexItem, "status">): boolean {
+  const status = String(item?.status ?? "")
+    .trim()
+    .toLowerCase();
+  return status === "success" || status === "ready";
+}
+
 export function parseBuildIndex(json: unknown): BuildIndexItem[] {
   const items = (json as { items?: unknown[] } | null)?.items;
   if (!Array.isArray(items)) return [];
