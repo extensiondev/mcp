@@ -149,8 +149,8 @@ describe("extension_eval reaches an MV3 extension page over CDP, which the page 
       returnByValue: true,
       awaitPromise: true,
       userGesture: true,
-      replMode: true,
     });
+    expect(evaluations[0].params.replMode).toBeUndefined();
   });
 
   it("routes context page with a chrome-extension:// url over CDP instead of a host-permission refusal", async () => {
