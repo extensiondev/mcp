@@ -638,9 +638,9 @@ async function openSurfaceAsTab(
           code: "E_NO_EXTENSION_ID",
           name: "NoExtensionId",
           message:
-            "Could not resolve the extension's moz-extension:// base URL from the live session (a background eval of runtime.getURL).",
+            "Could not resolve the extension's moz-extension:// base URL: the background eval of runtime.getURL did not answer (an extension CSP that forbids eval refuses it) and the profile's extensions.webextensions.uuids pref had no entry for the add-on id the built manifest declares.",
         },
-        hint: "Confirm the session is ready (extension_wait) and was started with allowEval: true (extension_dev).",
+        hint: "Confirm the session is ready (extension_wait) and was started with allowEval: true (extension_dev); the profile route needs browser_specific_settings.gecko.id in the built manifest and profilePath in the session contract.",
       });
     }
     url = `${base}${doc}`;
@@ -976,6 +976,10 @@ export async function handler(
       addWarning(parsedFallback, windowRefusalWarning(refusal, args.surface, browser));
       return actFrameJson(parsedFallback);
     }
+    addWarning(
+      refusal.frame,
+      `The browser refused the ${args.surface} window and the tab route failed too: ${String(parsedFallback?.error?.message ?? "no answer")}${typeof parsedFallback?.hint === "string" ? ` ${parsedFallback.hint}` : ""}`,
+    );
     if (!refusal.frame.hint) {
       refusal.frame.hint =
         refusal.kind === "gesture"
