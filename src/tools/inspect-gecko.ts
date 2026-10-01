@@ -115,7 +115,7 @@ function closedShadowWalkerCode(cap: number): string {
   `;
 }
 
-function executeScriptExpression(
+export function executeScriptExpression(
   urlFilter: string | undefined,
   code: string,
 ): string {

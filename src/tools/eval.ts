@@ -52,6 +52,7 @@ import {
   isExtensionUrl,
   surfaceForExtensionUrl,
 } from "../lib/extension-surfaces";
+import { executeScriptExpression } from "./inspect-gecko";
 
 export const schema = {
   name: "extension_eval",
@@ -367,6 +368,114 @@ async function evaluateThroughRelay(
   return actFrameJson(parsed);
 }
 
+/* @invariant The engine blames the expression for the extension's own CSP:
+   "call to eval() blocked by CSP" comes back as E_EVAL with "check the
+   expression itself", while any expression fails the same way in a page whose
+   content_security_policy forbids eval (every MV3 extension page with an
+   explicit policy, and MV3 backgrounds). The hint names the policy and the
+   paths that do not go through eval. */
+const CSP_EVAL_REFUSAL = /blocked by CSP|call to eval|unsafe-eval|Content Security Policy/i;
+
+function explainCspRefusal(raw: string, context: string | undefined): string | null {
+  const parsed = tryParseFrame(raw);
+  if (!parsed || parsed.ok !== false) return null;
+  const code = typeof parsed.error?.code === "string" ? parsed.error.code : "";
+  const message = String(parsed.error?.message ?? "");
+  if (code !== "E_EVAL" || !CSP_EVAL_REFUSAL.test(message)) return null;
+  parsed.error.name = "CspBlocksEval";
+  parsed.hint =
+    `The extension's content_security_policy (or the MV3 default) forbids eval in its own ${context ?? "background"} context, so the in-page executor cannot run any expression there; this is the extension's policy, not a fault in the expression. ` +
+    "Read the page instead with extension_dom_snapshot or extension_inspect, evaluate a web page with context: \"page\" and a url, or read the extension's console with extension_logs. On a Chromium MV3 session the extension's own pages evaluate over CDP, which the page policy does not govern.";
+  if (typeof parsed.error.hint === "string") delete parsed.error.hint;
+  return actFrameJson(parsed);
+}
+
+/* @invariant MV2 Gecko has no scripting API, so the engine refuses a page or
+   content eval with "chrome.scripting is not available ... use context
+   background", which cannot read the tab. tabs.executeScript can: the same
+   background-side wrapper extension_inspect already uses runs the expression
+   in the tab's content world and hands the completion value back. An expression that parses as one expression is wrapped so a
+   throw comes back as data; a statement list runs as the script's completion
+   value, the way executeScript defines it. */
+const NO_SCRIPTING_API = /scripting is not available/i;
+
+function isSingleExpression(source: string): boolean {
+  try {
+    new Function(`return (${source}\n)`);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function evaluateThroughExecuteScript(
+  args: ActArgs & { expression: string },
+  browser: string,
+  context: string | undefined,
+  raw: string,
+): Promise<string | null> {
+  if (context !== "page" && context !== "content") return null;
+  if (isChromiumFamily(browser)) return null;
+  const parsed = tryParseFrame(raw);
+  if (!parsed || parsed.ok !== false) return null;
+  if (!NO_SCRIPTING_API.test(String(parsed.error?.message ?? ""))) return null;
+  const code = isSingleExpression(args.expression)
+    ? `(function () { try { return { __extensionDevExec: 1, ok: true, value: (${args.expression}\n) }; } catch (e) { return { __extensionDevExec: 1, ok: false, name: (e && e.name) || "EvalError", message: (e && e.message) || String(e) }; } })()`
+    : args.expression;
+  const wrapped = await runActVerb(
+    [
+      "eval",
+      ...commonFlags({ ...args, context: "background", url: undefined, tab: undefined, browser }),
+      "--",
+      executeScriptExpression(args.url, code),
+      args.projectPath,
+    ],
+    args.projectPath,
+    args.timeout,
+    schema.name,
+  );
+  const frame = tryParseFrame(wrapped);
+  if (!frame || frame.ok !== true) return wrapped ?? raw;
+  const value = frame.value;
+  if (value && typeof value === "object" && typeof value.error === "string") {
+    return envelope({
+      ok: false,
+      command: schema.name,
+      status: "eval-failed",
+      error: { code: "E_EVAL", name: "EvalError", message: value.error },
+      hint: `The engine has no scripting API on ${browser} MV2, so the expression went through tabs.executeScript from the background and that call failed. The tab must be a web page the extension holds host permissions for; extension pages cannot be injected into.`,
+    });
+  }
+  const first = Array.isArray(value?.frames) ? value.frames[0] : undefined;
+  const result =
+    first && typeof first === "object" && first.__extensionDevExec === 1
+      ? first
+      : { ok: true, value: first === undefined ? null : first };
+  if (result.ok === false) {
+    return envelope({
+      ok: false,
+      command: schema.name,
+      status: "eval-failed",
+      error: {
+        code: "E_EVAL",
+        name: result.name || "EvalError",
+        message: result.message || "the expression threw",
+      },
+      hint: "The expression threw inside the tab (run through tabs.executeScript in the content world).",
+    });
+  }
+  return envelope({
+    ok: true,
+    command: schema.name,
+    status: "evaluated",
+    value: result.value === undefined ? null : result.value,
+    warnings: [
+      `${browser} MV2 has no scripting API, so this ran through tabs.executeScript from the background: the content script world of the tab, not the page's MAIN world, so globals the page defines are not visible${context === "page" ? ' even though context: "page" was asked' : ""}.`,
+    ],
+    hint: "Pass url to pick the tab; the extension needs host permissions for it.",
+  });
+}
+
 export async function handler(
   args: ActArgs & { expression: string },
 ): Promise<string> {
@@ -444,6 +553,10 @@ export async function handler(
     schema.name,
   );
 
+  const mv2Fallback = await evaluateThroughExecuteScript(args, browser, context, raw);
+  if (mv2Fallback !== null) return mv2Fallback;
+  const cspRefusal = explainCspRefusal(raw, context);
+  if (cspRefusal !== null) return cspRefusal;
   if (args.context === "content") {
     try {
       const parsed = JSON.parse(raw);
