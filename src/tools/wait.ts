@@ -85,6 +85,9 @@ export async function handler(args: {
   let sawCompiledButUnattached = false;
   let lastContractStatus: string | null = null;
   let staleContractNote: string | null = null;
+  const clampNote = clamped
+    ? `requested ${requested}ms was clamped to ${SAFE_CEILING_MS}ms to stay under the MCP client request timeout`
+    : null;
 
   while (Date.now() - start < budgetMs) {
     try {
@@ -152,6 +155,29 @@ export async function handler(args: {
               elapsedMs: Date.now() - start,
             },
             hint: "Build-only session (noBrowser): the extension compiled and the dev server is live, but no browser was launched, so browserAttached will never become true. Do not call extension_wait again to wait for a browser. The control verbs (storage/reload/open/dom_snapshot/eval) need a live browser and will not work against this session.",
+          });
+        }
+        if (!attached && contract.command === "start") {
+          /* @invariant A start session runs the production build with no dev
+             bridge in it, so no executor ever attaches and waiting for one is
+             not transient. The build landing is the answer,
+             and it is given at once rather than after the budget. */
+          return envelope({
+            ok: true,
+            command: schema.name,
+            status: "launched",
+            value: {
+              compiled: true,
+              browserAttached: false,
+              sessionCommand: "start",
+              browser: contract.browser,
+              pid: contract.pid,
+              readyPath,
+              budgetMs,
+              elapsedMs: Date.now() - start,
+            },
+            warnings: [clampNote, staleContractNote],
+            hint: "This is an extension_start session: the production build is loaded in the browser, and a production build carries no dev bridge, so browserAttached stays false for good and extension_eval, extension_storage, extension_reload, extension_open and extension_dom_snapshot cannot drive it. Do not call extension_wait again. To drive or read the extension, run it with extension_dev; to check the production artifact, extension_build reports its summary and extension_preview_web renders the built dist.",
           });
         }
         if (!attached) {
@@ -249,6 +275,7 @@ export async function handler(args: {
         budgetMs,
         elapsedMs: Date.now() - start,
       },
+      warnings: [clampNote, staleContractNote],
       hint: "This is usually transient: call extension_wait again. If it persists, stop and restart the session with extension_dev (a restart reliably reattaches); extension_doctor reports the executor leg.",
     });
   }
@@ -271,12 +298,7 @@ export async function handler(args: {
       budgetMs,
       elapsedMs: Date.now() - start,
     },
-    warnings: [
-      clamped
-        ? `requested ${requested}ms was clamped to ${SAFE_CEILING_MS}ms to stay under the MCP client request timeout`
-        : null,
-      staleContractNote,
-    ],
+    warnings: [clampNote, staleContractNote],
     hint: "Still building, call extension_wait again to keep waiting (it resumes polling the same contract). If it never readies, check the dev process with extension_doctor.",
   });
 }

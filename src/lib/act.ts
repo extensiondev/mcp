@@ -94,12 +94,16 @@ function withSessionContext(
   message: string,
   projectPath: string,
   code?: string,
+  browser?: string,
 ): string {
   const isControlError = code
     ? CONTROL_CHANNEL_DOWN_CODES.has(code)
     : legacyControlChannelScrape(message);
   if (!isControlError) return message;
-  const dead = deadReadySession(projectPath);
+  /* @invariant Only the browser the call named may explain the failure: a
+     chrome call once cited "firefox ready.json still says ready but its pid
+     is dead", another session's stale contract. */
+  const dead = deadReadySession(projectPath, browser);
   if (dead) {
     return `${message}\nLikely cause: the dev server has exited, ${dead.browser} ready.json still says ready but its pid ${dead.pid} is dead. Restart with extension_dev (this is not an allowControl problem); extension_doctor confirms.`;
   }
@@ -110,13 +114,19 @@ function withSessionContext(
   )}, pass that as \`browser\`, or restart it via extension_dev with allowControl: true if the control channel is off.`;
 }
 
-function translateFrame(frame: any, projectPath: string): any {
+function browserFlag(args: string[]): string | undefined {
+  const at = args.indexOf("--browser");
+  return at !== -1 && typeof args[at + 1] === "string" ? args[at + 1] : undefined;
+}
+
+function translateFrame(frame: any, projectPath: string, browser?: string): any {
   if (!frame || frame.ok !== false) return frame;
   if (frame.error && typeof frame.error.message === "string") {
     frame.error.message = withSessionContext(
       toMcpSpeak(frame.error.message),
       projectPath,
       typeof frame.error.code === "string" ? frame.error.code : undefined,
+      browser,
     );
   }
   if (typeof frame.error?.hint === "string") {
@@ -215,7 +225,7 @@ export async function runActVerb(
   const out = stdout.trim();
   if (out) {
     try {
-      const frame = translateFrame(JSON.parse(out), projectPath);
+      const frame = translateFrame(JSON.parse(out), projectPath, browserFlag(args));
       if (isEnvelope(frame)) {
         frame.command = command;
         if (!Array.isArray(frame.warnings)) frame.warnings = [];
@@ -259,7 +269,12 @@ export async function runActVerb(
     error: {
       code: "E_CLI",
       name: "CliError",
-      message: withSessionContext(toMcpSpeak(message), projectPath),
+      message: withSessionContext(
+        toMcpSpeak(message),
+        projectPath,
+        undefined,
+        browserFlag(args),
+      ),
     },
   });
 }

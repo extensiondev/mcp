@@ -117,8 +117,10 @@ export function liveProjectSessions(projectPath: string): LiveSession[] {
 
 export function deadReadySession(
   projectPath: string,
+  browser?: string,
 ): { browser: string; pid: number } | null {
   for (const sighting of contractSightings(projectPath)) {
+    if (browser && sighting.browser !== browser) continue;
     if (sighting.pid !== undefined && !pidAlive(sighting.pid)) {
       return { browser: sighting.browser, pid: sighting.pid };
     }
