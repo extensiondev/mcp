@@ -10,6 +10,17 @@ import {
 import { makeFilter } from "../tools/logs-filter";
 import { logsPath } from "../lib/session-paths";
 import { schema as logsSchema } from "../tools/logs-schema";
+import { createRequire } from "node:module";
+
+/* @invariant The CI matrix runs this suite against the stable engine and the
+   canary side by side, and the two answer level 'off' differently, so the
+   expectation is read off the engine actually installed rather than assumed. */
+function engineTreatsOffAsNone(): boolean {
+  const require = createRequire(import.meta.url);
+  const version = String(require("extension-develop/package.json").version);
+  const [major, minor, patch] = version.split("-")[0].split(".").map(Number);
+  return major > 4 || (major === 4 && (minor > 1 || (minor === 1 && patch >= 31)));
+}
 
 type Event = Record<string, unknown>;
 
@@ -137,12 +148,13 @@ describe("makeFilter agrees with the engine's matchesLogQuery", () => {
    gained 'off' as none). Neither reading is this package's, and this test
    states all three so nobody "fixes" the divergence by accident. */
 describe("level off is this package's meaning, not the engine's", () => {
-  it("the engine treats off as none, not as all", () => {
+  it("the engine treats off as all through 4.1.30 and as none from 4.1.31", () => {
     const theirs = select((event) =>
       matchesLogQuery(event as never, { level: "off" }),
     );
-    expect(theirs).toEqual([]);
-    expect(select((event) => matchesLogQuery(event as never, {}))).toContain(1);
+    const everything = select((event) => matchesLogQuery(event as never, {}));
+    expect(everything).toContain(1);
+    expect(theirs).toEqual(engineTreatsOffAsNone() ? [] : everything);
   });
 
   it("extension_logs treats off as logging disabled, signals only", () => {
