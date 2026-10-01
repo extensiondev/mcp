@@ -228,6 +228,18 @@ function executableInsideBundle(bundle: string, names: string[]): string | null 
   return null;
 }
 
+export function compareVersionNames(a: string, b: string): number {
+  const nums = (name: string): number[] =>
+    (name.match(/\d+/g) ?? []).map((n) => Number(n));
+  const left = nums(a);
+  const right = nums(b);
+  for (let i = 0; i < Math.max(left.length, right.length); i += 1) {
+    const diff = (left[i] ?? -1) - (right[i] ?? -1);
+    if (diff !== 0) return diff;
+  }
+  return a.localeCompare(b);
+}
+
 export function findManagedBinary(
   browser: string,
   cacheRoot: string = resolveCacheRoot(),
@@ -236,10 +248,17 @@ export function findManagedBinary(
   if (!fs.existsSync(browserDir)) return null;
   const names = MANAGED_EXEC_NAMES[browser] ?? [];
 
+  /* @invariant Two managed versions sit side by side after an upgrade, and
+     the engine launches the newest; a readdir-ordered search reported the
+     older one as the binary dev would launch (ledger entry 30). Version-like
+     names are visited newest first, so the first hit is the engine's pick. */
   function search(dir: string, depth: number): string | null {
     if (depth > MANAGED_SEARCH_DEPTH) return null;
     try {
-      for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const entries = fs
+        .readdirSync(dir, { withFileTypes: true })
+        .sort((a, b) => compareVersionNames(b.name, a.name));
+      for (const entry of entries) {
         const full = path.join(dir, entry.name);
         if (entry.isFile() && names.includes(entry.name)) {
           return full;

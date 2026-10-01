@@ -3,7 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { findManagedBinary, detectBrowsers } from "../tools/detect-browsers";
+import { findManagedBinary, detectBrowsers, compareVersionNames } from "../tools/detect-browsers";
 
 const tmpDirs: string[] = [];
 function cacheRoot(): string {
@@ -47,6 +47,27 @@ describe("the managed-cache search reaches the binary the engine really launches
     );
 
     expect(findManagedBinary("chrome", root)).toBe(exe);
+  });
+
+  it("picks the newest managed version when two sit side by side, the one the engine launches", () => {
+    const root = cacheRoot();
+    const older = plant(
+      root,
+      "chrome/chrome/mac_arm-151.0.7922.34/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing",
+    );
+    const newer = plant(
+      root,
+      "chrome/chrome/mac_arm-151.0.7922.71/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing",
+    );
+    plant(
+      root,
+      "chrome/chrome/mac_arm-150.0.7001.9/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing",
+    );
+
+    expect(findManagedBinary("chrome", root)).toBe(newer);
+    expect(findManagedBinary("chrome", root)).not.toBe(older);
+    expect(compareVersionNames("mac_arm-151.0.7922.71", "mac_arm-151.0.7922.34")).toBeGreaterThan(0);
+    expect(compareVersionNames("mac_arm-151.0.7922.9", "mac_arm-151.0.7922.34")).toBeLessThan(0);
   });
 
   it("answers null for a browser directory that holds no executable", () => {
