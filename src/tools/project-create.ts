@@ -14,7 +14,7 @@ import {
   resolveApiBase,
   safeApiBase,
 } from "../lib/login-flow";
-import { consoleProjectUrl } from "../lib/registry";
+import { consoleBase, consoleProjectUrl } from "../lib/registry";
 import { platformHoldEnvelope, sawPlatformHold } from "../lib/platform-hold";
 import { identityHeaders } from "../lib/session-identity";
 import { spendNarration } from "../lib/allowance";
@@ -86,13 +86,24 @@ function fail(
   message: string,
   status: string,
   code: ErrorCode,
+  hint?: string,
 ): string {
   return envelope({
     ok: false,
     command: COMMAND,
     status,
     error: { code, name, message },
+    ...(hint ? { hint } : {}),
   });
+}
+
+/* @invariant The console route travels as the hint, whatever sentence the
+   platform sends: under the public hold the server's own refusal drops the
+   "create it in the console" line the open-platform refusal carries, and a
+   workspace on the hold allowlist still cannot create headlessly because the
+   hold flag is read before the allowlist. */
+function laneClosedHint(): string {
+  return `Create the project in the console at ${consoleBase()} (workspace page, New project), then run extension_auth (action: login) against it; publish, submit and promote already work headlessly for an allowlisted workspace. Headless creation stays closed for every workspace while the public hold is on, allowlisted or not: the platform checks the hold before the allowlist.`;
 }
 
 function pendingEnvelope(start: {
@@ -264,6 +275,7 @@ export async function handler(args: {
           : String(message),
         laneClosed ? "lane-closed" : "create-failed",
         "E_PLATFORM",
+        laneClosed ? laneClosedHint() : undefined,
       );
     }
     deviceCode = start.deviceCode;
@@ -454,6 +466,7 @@ async function finishFromPoll(
         String(data.message || "Headless project creation is not open yet."),
         "lane-closed",
         "E_PLATFORM",
+        laneClosedHint(),
       );
     }
     /* @invariant The connect URL is echoed only when the PLATFORM sent one, and
