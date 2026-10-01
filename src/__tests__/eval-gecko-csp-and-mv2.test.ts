@@ -156,6 +156,66 @@ describe("extension_eval on MV2 Gecko reaches a tab through tabs.executeScript",
     expect(result.warnings[0]).toContain("MAIN world");
   });
 
+  it("retries a page eval the PAGE's CSP refused through executeScript on an MV2 build", async () => {
+    const dir = project(MV2);
+    respond = (call, index) =>
+      index === 0
+        ? envelope({
+            ok: false,
+            command: "extension_eval",
+            status: "failed",
+            error: { code: "E_EVAL", name: "EvalError", message: "call to eval() blocked by CSP", engine: "firefox" },
+          })
+        : envelope({
+            ok: true,
+            command: "extension_eval",
+            status: "ok",
+            value: { frames: [{ __extensionDevExec: 1, ok: true, value: 3 }] },
+          });
+
+    const result = JSON.parse(
+      await evalTool.handler({
+        projectPath: dir,
+        browser: "firefox",
+        context: "page",
+        url: "https://www.youtube.com/watch?v=x",
+        expression: "document.querySelectorAll('.playerButton').length",
+      }),
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.value).toBe(3);
+    expect(calls).toHaveLength(2);
+    expect(contextOf(calls[1].cli)).toBe("background");
+    expect(calls[1].expression).toContain("browser.tabs.executeScript");
+    expect(result.warnings[0]).toContain("content security policy refused the in-page eval");
+  });
+
+  it("keeps the CSP explanation on an MV3 Gecko build, which has no tabs.executeScript", async () => {
+    const dir = project({ manifest_version: 3, name: "F", background: { scripts: ["bg.js"] } });
+    respond = () =>
+      envelope({
+        ok: false,
+        command: "extension_eval",
+        status: "failed",
+        error: { code: "E_EVAL", name: "EvalError", message: "call to eval() blocked by CSP", engine: "firefox" },
+      });
+
+    const result = JSON.parse(
+      await evalTool.handler({
+        projectPath: dir,
+        browser: "firefox",
+        context: "page",
+        url: "https://www.youtube.com/watch?v=x",
+        expression: "1",
+      }),
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.error.name).toBe("CspBlocksEval");
+    expect(calls).toHaveLength(1);
+  });
+
   it("reports a throw inside the tab as E_EVAL", async () => {
     const dir = project(MV2);
     respond = (_call, index) =>

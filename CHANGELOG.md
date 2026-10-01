@@ -15,6 +15,25 @@
   into the manifest's own folder; the session artifact resolver here
   applies the same four tests, so `extension_wait` and `extension_logs`
   keep reading the ready.json the engine writes.
+- Four findings from the six-browser sweep (BUGS_TO_FIX_MCP.md entries 40
+  to 43): `extension_open` reads new headless off the `User-Agent` field
+  of `/json/version` as well (`--headless=new` keeps `Chrome/151` in the
+  `Browser` field) and, whatever the launch flags said, falls back to the
+  tab route on any window refusal: Chromium's gesture refusal for a popup,
+  an options or popup window the engine called opened but no document
+  appeared for within 3 s, and Gecko's "Popup is disabled"; a Gecko
+  browser that gets Chromium's gesture sentence (the engine counts every
+  non-Firefox name as Chromium, extension.js ledger 642) is answered with
+  Gecko wording (40). `extension_eval` context `background` wakes an idle
+  MV3 worker through `ServiceWorker.startWorker` from a page session
+  before evaluating, with a warning that it was idle, instead of answering
+  `E_NO_TARGET` (41). `extension_open surface: "devtools"` takes `waitMs`
+  and `reload` (reload the inspected tab once DevTools is open, for
+  extensions that create their panel when the page reports to them) and
+  the missing-panel hint names both (42). A page eval the PAGE's CSP
+  refuses on a Gecko MV2 build is re-run through `tabs.executeScript`, the
+  same wrapper the no-scripting-API case uses (43); an MV3 Gecko build
+  keeps the policy explanation, pending engine ledger 560.
 - `extension_eval` over CDP awaits a promise-valued expression again. The
   CDP routes added for entries 29 and 31 passed `replMode` on every
   `Runtime.evaluate`, and Chrome 151 answers a replMode evaluate with the

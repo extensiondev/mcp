@@ -29,6 +29,7 @@ type Target = { id: string; type: string; url: string; title: string };
 let cdpTargets: Target[] = [];
 const evaluations: Array<{ params: Record<string, unknown>; sessionId?: string }> = [];
 const awaited: Array<Record<string, unknown>> = [];
+const otherCommands: Array<{ method: string; params: Record<string, unknown>; sessionId?: string }> = [];
 let evaluateResponse: (params: Record<string, unknown>) => Record<string, unknown> = () => ({
   result: { type: "number", value: 7 },
 });
@@ -52,6 +53,11 @@ vi.mock("../lib/cdp", () => {
       if (method === "Runtime.awaitPromise") {
         awaited.push(params);
         return { result: { type: "number", value: 42 } };
+      }
+      otherCommands.push({ method, params, sessionId });
+      if (method === "ServiceWorker.startWorker") {
+        const scope = String(params.scopeURL ?? "");
+        cdpTargets = [...cdpTargets, { id: "sw-woken", type: "service_worker", url: `${scope}background.js`, title: "" }];
       }
       return {};
     }
@@ -96,6 +102,7 @@ afterEach(() => {
   cliCalls.length = 0;
   evaluations.length = 0;
   awaited.length = 0;
+  otherCommands.length = 0;
   cdpTargets = [];
   cdpPort = { port: 9222 };
   relayReply = () => envelope({ ok: true, command: "extension_eval", status: "ok", value: "relay" });
@@ -235,9 +242,33 @@ describe("extension_eval reaches the Chromium background over CDP, where the ext
     expect(cliCalls).toEqual([]);
   });
 
+  it("wakes an idle worker through ServiceWorker.startWorker from a page session and evaluates in it", async () => {
+    const p = project(MV3);
+    cdpTargets = [
+      { id: "web", type: "page", url: "https://example.com/", title: "Example" },
+      { id: "nt", type: "page", url: `chrome-extension://${p.id}/newtab.html`, title: "NT" },
+    ];
+
+    const result = JSON.parse(
+      await evalTool.handler({ projectPath: p.dir, browser: "chrome", context: "background", expression: "1" }),
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.value).toBe(7);
+    const methods = otherCommands.map((c) => c.method);
+    expect(methods).toContain("ServiceWorker.enable");
+    expect(methods).toContain("ServiceWorker.startWorker");
+    const start = otherCommands.find((c) => c.method === "ServiceWorker.startWorker");
+    expect(start?.params.scopeURL).toBe(`chrome-extension://${p.id}/`);
+    expect(start?.sessionId).toBe("session-nt");
+    expect(evaluations[0].sessionId).toBe("session-sw-woken");
+    expect(result.warnings.join(" ")).toContain("was idle");
+    expect(result.warnings.join(" ")).toContain("ServiceWorker.startWorker");
+  });
+
   it("says the worker is idle and how to wake it when no background target is listed", async () => {
     const p = project(MV3);
-    cdpTargets = [{ id: "web", type: "page", url: "https://example.com/", title: "Example" }];
+    cdpTargets = [];
 
     const result = JSON.parse(
       await evalTool.handler({ projectPath: p.dir, browser: "chrome", context: "background", expression: "1" }),
@@ -246,6 +277,7 @@ describe("extension_eval reaches the Chromium background over CDP, where the ext
     expect(result.ok).toBe(false);
     expect(result.error.code).toBe("E_NO_TARGET");
     expect(result.error.message).toContain("idle MV3 service worker");
+    expect(result.error.message).toContain("no page target");
     expect(result.hint).toContain("extension_reload");
     expect(evaluations).toEqual([]);
   });
