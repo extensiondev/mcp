@@ -61,6 +61,36 @@ the server in one day:
   `browser_specific_settings.gecko.data_collection_permissions` is missing,
   which AMO now requires for new add-ons, and shows the minimal form.
 
+Seven more from the same session's functional sweep:
+
+- `extension_eval` reaches the Chromium background over CDP: the MV3 service
+  worker or MV2 background page is a target of its own, and evaluating on it
+  is the inspector path the extension's content security policy does not
+  govern, so state only the worker knows is readable again under
+  `script-src 'self'`. An idle worker with no target answers `E_NO_TARGET`
+  with how to wake it.
+- `extension_eval` with context `page` and a url evaluates on the matching
+  tab's CDP target, so a site that enforces Trusted Types (YouTube, Gmail)
+  no longer refuses the string; the active-tab refusal names Trusted Types
+  and the url route. Every CDP route falls back to the in-bundle
+  relay when the session has no debug port.
+- `extension_open` asks the browser whether it is headless (HeadlessChrome
+  names itself) and renders popup, options and sidebar as a tab at once
+  when it is, instead of opening a popup that is gone before the next call
+ . A page the browser swapped for its own error page answers
+  `navigate-blocked` with the browser's title instead of `navigated`, and
+  eval refuses such a tab.
+- `extension_browsers` reports the newest managed version when several sit
+  in the cache, the one the engine launches.
+- `extension_inspect` probes on Gecko return the same shape as on Chromium,
+  `{selector, count, samples[]}` with a text snippet per element
+ .
+- `extension_assert` on Gecko reads `background-worker-booted` off the
+  control channel (the bridge executor runs in the background) and
+  `surface-rendered` off the surface relay, instead of answering
+  inconclusive for want of a CDP target list; a selector clause stays
+  inconclusive there and names the tool that probes it.
+
 ## 10.10.1
 
 Five Gecko findings from one agent session on Firefox and Waterfox
