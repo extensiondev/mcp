@@ -42,6 +42,25 @@ export class CDPClient extends CDPConnection {
     throw new Error("No webSocketDebuggerUrl in /json/version response");
   }
 
+  /* @invariant The browser says whether it is headless in its own product
+     string ("HeadlessChrome/151..."), which is the only reading that survives
+     a launcher shim adding --headless=new behind the caller's back; the
+     environment variables this server also consults describe the request,
+     not the process that came up. */
+  static async discoverBrowserVersion(
+    port: number,
+    host = "127.0.0.1",
+  ): Promise<string | null> {
+    try {
+      const res = await fetch(`http://${host}:${port}/json/version`);
+      if (!res.ok) return null;
+      const data = (await res.json()) as Record<string, unknown>;
+      return typeof data.Browser === "string" ? data.Browser : null;
+    } catch {
+      return null;
+    }
+  }
+
   static async discoverTargets(
     port: number,
     host = "127.0.0.1",
