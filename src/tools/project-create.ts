@@ -112,11 +112,12 @@ function fail(
 
 /* @invariant The console route travels as the hint, whatever sentence the
    platform sends: under the public hold the server's own refusal drops the
-   "create it in the console" line the open-platform refusal carries, and a
-   workspace on the hold allowlist still cannot create headlessly because the
-   hold flag is read before the allowlist. */
+   "create it in the console" line the open-platform refusal carries. Since monorepo c32894d1f the platform consults the hold
+   allowlist before the hold flag, so a workspace on
+   WWW_MCP_ACTION_ALLOWED_WORKSPACES creates headlessly through the hold and
+   this refusal reaches only workspaces that are not on it. */
 function laneClosedHint(): string {
-  return `Create the project in the console at ${consoleBase()} (workspace page, New project), then run extension_auth (action: login) against it; publish, submit and promote already work headlessly for an allowlisted workspace. Headless creation stays closed for every workspace while the public hold is on, allowlisted or not: the platform checks the hold before the allowlist.`;
+  return `Create the project in the console at ${consoleBase()} (workspace page, New project), then run extension_auth (action: login) against it. While the public hold is on, headless creation is open only to workspaces on the platform's allowlist (WWW_MCP_ACTION_ALLOWED_WORKSPACES), the same list that already lets publish, submit and promote run headlessly; this workspace is not on it, so the console is the route.`;
 }
 
 function pendingEnvelope(start: {

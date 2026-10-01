@@ -175,7 +175,9 @@ describe("extension_project_create", () => {
     expect(out.error.message.toLowerCase()).not.toContain("console");
     expect(out.hint).toContain("Create the project in the console");
     expect(out.hint).toContain("extension_auth");
-    expect(out.hint).toContain("hold before the allowlist");
+    expect(out.hint).toContain("WWW_MCP_ACTION_ALLOWED_WORKSPACES");
+    expect(out.hint).toContain("this workspace is not on it");
+    expect(out.hint).not.toContain("every workspace");
   });
 
   it("falls back to the console pointer only when the server sends no message", async () => {
