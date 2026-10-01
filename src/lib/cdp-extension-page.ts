@@ -19,17 +19,20 @@ import { listDocumentTargets, type PageTarget } from "./cdp-targets";
 
 /* @invariant replMode is what lets a bare top-level `await` parse, the way the
    DevTools console accepts it; without it Runtime.evaluate answers
-   "await is only valid in async functions", measured on Chrome 151. */
+   "await is only valid in async functions", measured on Chrome 151. It is NOT
+   in the defaults: with replMode on, Chrome 151 answers a promise-valued
+   expression with the promise object itself and ignores awaitPromise, on
+   pages and workers alike, so every promise serialized to {}. evaluateOnExtensionPage turns it on only for the retry an await needs. */
 const RUNTIME_EVALUATE_DEFAULTS = {
   returnByValue: true,
   awaitPromise: true,
   userGesture: true,
-  replMode: true,
 };
 
 type RemoteObject = {
   type?: string;
   subtype?: string;
+  objectId?: string;
   value?: unknown;
   description?: string;
   unserializableValue?: string;
@@ -122,6 +125,15 @@ function describeException(
   return details?.text || "the expression threw";
 }
 
+const TOP_LEVEL_AWAIT_REFUSAL = /await is only valid in async functions/i;
+
+/* @invariant Two calls are the honest shape. The first evaluate runs without
+   replMode, so awaitPromise settles a promise-valued expression and
+   returnByValue serializes the result. Only when Chrome refuses the parse for
+   a top-level await is the expression re-run in replMode, with the promise
+   handed back by reference and settled through Runtime.awaitPromise, the one
+   call that awaits a replMode result honestly. Measured on Chrome 151 on a
+   page, a DevTools iframe and a service worker. */
 export async function evaluateOnExtensionPage(
   port: number,
   targetId: string,
@@ -131,11 +143,36 @@ export async function evaluateOnExtensionPage(
   try {
     await cdp.connect(await CDPClient.discoverBrowserWsUrl(port));
     const sessionId = await cdp.attachToTarget(targetId);
-    const response = (await cdp.sendCommand(
+    let response = (await cdp.sendCommand(
       "Runtime.evaluate",
       { expression, ...RUNTIME_EVALUATE_DEFAULTS },
       sessionId,
     )) as EvaluateResponse | undefined;
+    if (
+      response?.exceptionDetails &&
+      TOP_LEVEL_AWAIT_REFUSAL.test(describeException(response.exceptionDetails))
+    ) {
+      const asPromise = (await cdp.sendCommand(
+        "Runtime.evaluate",
+        {
+          expression,
+          returnByValue: false,
+          awaitPromise: false,
+          userGesture: true,
+          replMode: true,
+        },
+        sessionId,
+      )) as EvaluateResponse | undefined;
+      const promiseObjectId = asPromise?.result?.objectId;
+      response =
+        !asPromise?.exceptionDetails && typeof promiseObjectId === "string"
+          ? ((await cdp.sendCommand(
+              "Runtime.awaitPromise",
+              { promiseObjectId, returnByValue: true },
+              sessionId,
+            )) as EvaluateResponse | undefined)
+          : asPromise;
+    }
     if (response?.exceptionDetails) {
       return {
         ok: false,

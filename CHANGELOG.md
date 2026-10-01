@@ -15,6 +15,15 @@
   into the manifest's own folder; the session artifact resolver here
   applies the same four tests, so `extension_wait` and `extension_logs`
   keep reading the ready.json the engine writes.
+- `extension_eval` over CDP awaits a promise-valued expression again. The
+  CDP routes added for the background and url reads passed `replMode` on every
+  `Runtime.evaluate`, and Chrome 151 answers a replMode evaluate with the
+  promise object itself, ignoring `awaitPromise`, so `Promise.resolve(42)`,
+  an async IIFE or `chrome.tabs.query({}).then(...)` read as `{}` with
+  `ok: true` on pages and workers alike. The evaluate now runs without
+  replMode, and only an expression Chrome refuses for a top-level `await`
+  is re-run in replMode with the promise settled through
+  `Runtime.awaitPromise`.
 - `extension_open` takes `surface: "devtools"` on Chromium: it opens the
   browser's real DevTools on a tab (the one `url` matches, else the first
   web page) through CDP `Target.openDevTools`, waits for the extension's
