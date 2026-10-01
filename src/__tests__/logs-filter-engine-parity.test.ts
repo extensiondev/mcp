@@ -131,16 +131,18 @@ describe("makeFilter agrees with the engine's matchesLogQuery", () => {
   });
 });
 
-/* @invariant The one clause deliberately NOT delegated. extension_logs and `extension
-   logs` mean opposite things by level 'off', and this test states which is
-   which so nobody "fixes" the divergence by accident. */
+/* @invariant The one clause deliberately NOT delegated. Level 'off' means
+   "logging disabled, signals only" to extension_logs; to the engine it meant
+   "all" through 4.1.30 and selects nothing from 4.1.31 (LOG_LEVEL_FILTERS
+   gained 'off' as none). Neither reading is this package's, and this test
+   states all three so nobody "fixes" the divergence by accident. */
 describe("level off is this package's meaning, not the engine's", () => {
-  it("the engine treats off as a synonym for all", () => {
+  it("the engine treats off as none, not as all", () => {
     const theirs = select((event) =>
       matchesLogQuery(event as never, { level: "off" }),
     );
-    expect(theirs).toEqual(select((event) => matchesLogQuery(event as never, {})));
-    expect(theirs).toContain(1);
+    expect(theirs).toEqual([]);
+    expect(select((event) => matchesLogQuery(event as never, {}))).toContain(1);
   });
 
   it("extension_logs treats off as logging disabled, signals only", () => {

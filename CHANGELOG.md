@@ -2,6 +2,19 @@
 
 ## 10.10.2
 
+- The engine pin moves to the Extension.js canary
+  `4.1.31-canary.1790876576.d8ea8bc5` (ruled 2026-10-01): `extension_dev`,
+  `extension_start` and `extension_build` spawn that build when a project
+  has no engine of its own, and the nightly engine-pin check now reads a
+  canary pin against the canary dist-tag instead of latest. The canary's
+  log query treats level `off` as none (it was a synonym for all), which
+  changes nothing for `extension_logs`, whose `off` stays "signals only".
+  The canary also adopts a project root only when it owns the manifest
+  (same folder, the `src/manifest.json` layout, a dependency on
+  Extension.js, or an `extension.config.*` beside it) and otherwise builds
+  into the manifest's own folder; the session artifact resolver here
+  applies the same four tests, so `extension_wait` and `extension_logs`
+  keep reading the ready.json the engine writes.
 - `extension_open` takes `surface: "devtools"` on Chromium: it opens the
   browser's real DevTools on a tab (the one `url` matches, else the first
   web page) through CDP `Target.openDevTools`, waits for the extension's
