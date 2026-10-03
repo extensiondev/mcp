@@ -45,8 +45,12 @@ import { platformHoldEnvelope, sawPlatformHold } from "./platform-hold";
  * closing the gap between this verify and that write. The client check is for a
  * legible refusal and fail-closed safety; the server is the source of truth.
  *
- * SERVER CONTRACT (www owes this; stubbed behind EXTENSION_DEV_APPROVAL_GATE
- * until it ships, default off so nothing changes for users meanwhile):
+ * SERVER CONTRACT (live in www since 2026-10-03). The gate is ON by default for
+ * a real store submission and a promotion to stable, OFF by default for every
+ * other promotion and for a share revoke, and EXTENSION_DEV_APPROVAL_GATE set to
+ * 1 or 0 overrides both ways. The platform is the authority either way: when it
+ * requires an approval the client did not ask for, it answers APPROVAL_REQUIRED
+ * and the tool turns that refusal into this same two-phase flow.
  *
  *   POST {base}/api/cli/approvals
  *     auth: Bearer <device-auth project token>
@@ -86,11 +90,45 @@ export const APPROVAL_REQUIRED_STATUS = "approval-required";
 export const APPROVAL_PENDING_STATUS = "approval-pending";
 export const APPROVAL_REJECTED_STATUS = "approval-rejected";
 
-export function approvalGateEnabled(): boolean {
+export function approvalGateEnabled(defaultOn = false): boolean {
   const raw = String(process.env[APPROVAL_GATE_ENV] || "")
     .trim()
     .toLowerCase();
-  return raw !== "" && raw !== "0" && raw !== "false" && raw !== "off";
+  if (raw === "") return defaultOn;
+  return raw !== "0" && raw !== "false" && raw !== "off";
+}
+
+export function platformRequiresApproval(
+  res: { status: number },
+  data: unknown,
+): boolean {
+  return (
+    res.status === 403 &&
+    !!data &&
+    typeof data === "object" &&
+    (data as Record<string, unknown>).code === "APPROVAL_REQUIRED"
+  );
+}
+
+export async function requestApprovalAfterRefusal(
+  input: ApprovalGateInput,
+): Promise<string> {
+  const gate = await evaluateApproval({
+    ...input,
+    approvalId: undefined,
+    enabled: true,
+  });
+  return gate.blocked
+    ? gate.envelope
+    : envelope({
+        ok: false,
+        command: input.command,
+        status: APPROVAL_REQUIRED_STATUS,
+        error: {
+          code: "E_APPROVAL_REQUIRED",
+          message: "The platform requires an approval for this action.",
+        },
+      });
 }
 
 export type ApprovalScope = Record<string, string | string[]>;

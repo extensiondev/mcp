@@ -16,7 +16,12 @@ import { resolveApiBase, safeApiBase } from "../lib/login-flow";
 import { identityHeaders } from "../lib/session-identity";
 import { STORE_MD_FILENAME, parseStoreMd } from "../lib/store-md";
 import { platformHoldEnvelope, sawPlatformHold } from "../lib/platform-hold";
-import { evaluateApproval } from "../lib/approval-gate";
+import {
+  approvalGateEnabled,
+  evaluateApproval,
+  platformRequiresApproval,
+  requestApprovalAfterRefusal,
+} from "../lib/approval-gate";
 import { spendNarration } from "../lib/allowance";
 import {
   consoleProjectUrl,
@@ -190,19 +195,24 @@ export async function handler(args: SubmitToolArgs): Promise<string> {
   if (args.channel) body.channel = String(args.channel).trim();
   if (args.version) body.version = String(args.version).trim();
 
+  const gateInput = {
+    command: "extension_submit",
+    action: "extension_submit",
+    scope: {
+      browsers: [...browsers].sort(),
+      buildSha: buildSha.toLowerCase(),
+      channel,
+    },
+    description: `Submit build ${buildSha} to ${browsers.join(", ")} for store review.`,
+    approvalId: args.approvalId,
+    token,
+    api: args.api,
+  };
+
   if (!dryRun) {
     const gate = await evaluateApproval({
-      command: "extension_submit",
-      action: "extension_submit",
-      scope: {
-        browsers: [...browsers].sort(),
-        buildSha: buildSha.toLowerCase(),
-        channel,
-      },
-      description: `Submit build ${buildSha} to ${browsers.join(", ")} for store review.`,
-      approvalId: args.approvalId,
-      token,
-      api: args.api,
+      ...gateInput,
+      enabled: approvalGateEnabled(true),
     });
     if (gate.blocked) return gate.envelope;
     if (gate.approvalId) body.approvalId = gate.approvalId;
@@ -245,6 +255,9 @@ export async function handler(args: SubmitToolArgs): Promise<string> {
         api: args.api,
         value: { browsers, buildSha, dryRun },
       });
+    }
+    if (!dryRun && !args.approvalId && platformRequiresApproval(res, data)) {
+      return requestApprovalAfterRefusal(gateInput);
     }
     return fail(
       "SubmitError",

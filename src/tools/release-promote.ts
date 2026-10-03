@@ -13,7 +13,12 @@ import { PROJECT_TOKEN_INPUT, noStoredLoginHint } from "../lib/credentials";
 import { resolveApiBase, safeApiBase } from "../lib/login-flow";
 import { UserlandProjectPage } from "@extension.dev/urls/userland";
 import { platformHoldEnvelope, sawPlatformHold } from "../lib/platform-hold";
-import { evaluateApproval } from "../lib/approval-gate";
+import {
+  approvalGateEnabled,
+  evaluateApproval,
+  platformRequiresApproval,
+  requestApprovalAfterRefusal,
+} from "../lib/approval-gate";
 import { spendNarration } from "../lib/allowance";
 
 import {
@@ -136,7 +141,7 @@ export async function handler(args: {
   const gateBrowsers = (Array.isArray(args.browsers) ? args.browsers : [])
     .map((b) => String(b).trim())
     .filter(Boolean);
-  const gate = await evaluateApproval({
+  const gateInput = {
     command: "extension_release_promote",
     action: "extension_release_promote",
     scope: {
@@ -149,6 +154,10 @@ export async function handler(args: {
     approvalId: args.approvalId,
     token,
     api: args.api,
+  };
+  const gate = await evaluateApproval({
+    ...gateInput,
+    enabled: approvalGateEnabled(channel === "stable"),
   });
   if (gate.blocked) return gate.envelope;
 
@@ -199,6 +208,9 @@ export async function handler(args: {
         api: args.api,
         value: { channel, buildId },
       });
+    }
+    if (!args.approvalId && platformRequiresApproval(res, data)) {
+      return requestApprovalAfterRefusal(gateInput);
     }
     const code = typeof data?.code === "string" ? data.code : undefined;
     const enrich: Record<string, unknown> = {};

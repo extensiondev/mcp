@@ -40,9 +40,12 @@ describe("extension_submit: platform submit handler", () => {
   let tmp: string;
   let prevXdg: string | undefined;
   let prevToken: string | undefined;
+  let prevGate: string | undefined;
   let prevFetch: typeof fetch;
 
   beforeEach(() => {
+    prevGate = process.env.EXTENSION_DEV_APPROVAL_GATE;
+    process.env.EXTENSION_DEV_APPROVAL_GATE = "0";
     tmp = fs.mkdtempSync(path.join(os.tmpdir(), "extdev-submit-"));
     prevXdg = process.env.XDG_CONFIG_HOME;
     prevToken = process.env.EXTENSION_DEV_TOKEN;
@@ -56,6 +59,8 @@ describe("extension_submit: platform submit handler", () => {
     else process.env.XDG_CONFIG_HOME = prevXdg;
     if (prevToken === undefined) delete process.env.EXTENSION_DEV_TOKEN;
     else process.env.EXTENSION_DEV_TOKEN = prevToken;
+    if (prevGate === undefined) delete process.env.EXTENSION_DEV_APPROVAL_GATE;
+    else process.env.EXTENSION_DEV_APPROVAL_GATE = prevGate;
     global.fetch = prevFetch;
     fs.rmSync(tmp, { recursive: true, force: true });
   });
