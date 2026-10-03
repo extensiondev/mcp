@@ -102,7 +102,7 @@ export function readCredentialStore(): CredentialStore | null {
   const active =
     typeof record.active === "string" && entries[record.active.toLowerCase()]
       ? record.active.toLowerCase()
-      : keys[0];
+      : (keys[0] ?? null);
   return { version: 2, active, entries };
 }
 
@@ -118,7 +118,7 @@ function selectEntry(
   const bySlug = Object.values(store.entries).filter(
     (entry) => entry.projectSlug.toLowerCase() === wanted,
   );
-  return bySlug.length === 1 ? bySlug[0] : null;
+  return bySlug.length === 1 ? (bySlug[0] ?? null) : null;
 }
 
 export function readCredentials(selector?: CredentialSelector): StoredCredentials | null {
@@ -204,7 +204,7 @@ export function clearCredentials(selector?: CredentialSelector): {
   }
   writeStore({
     version: 2,
-    active: store.active === key ? remaining[0] : store.active,
+    active: store.active === key ? (remaining[0] ?? null) : store.active,
     entries,
   });
   return { cleared: true, path: file, removed: [key], remaining };
