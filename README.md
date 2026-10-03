@@ -75,6 +75,26 @@ Or install it as a plugin, the MCP server plus the `/extension`, `/extension-add
 }
 ```
 
+### Choosing what the agent can reach
+
+Two flags (or environment variables) narrow the server before an agent sees it:
+
+- `--features=local` exposes only the tools that work on this machine (create, run, inspect, build), which also cuts the tool list by about 40%. `--features=platform` exposes only the extension.dev account, share, release and store tools. Both are on by default. Env: `EXTENSION_DEV_FEATURES`.
+- `--no-ship` keeps everything that stays on this machine and refuses every call that reaches other people: `extension_publish`, `extension_release_promote`, `extension_submit` with `dryRun: false`, `extension_preview_web` with `share: true`, and a share revoke. Dry runs and share listing still work. Env: `EXTENSION_DEV_NO_SHIP=1`.
+
+A refused call answers `E_TOOL_DISABLED` with the flag to change. Every tool also carries MCP annotations (`readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`), so clients can auto-approve reads and ask before the rest.
+
+```json
+{
+  "mcpServers": {
+    "extension-dev": {
+      "command": "npx",
+      "args": ["@extension.dev/mcp", "--no-ship"]
+    }
+  }
+}
+```
+
 ### Pair with the skill
 
 This server gives agents hands; [`@extension.dev/skill`](https://www.npmjs.com/package/@extension.dev/skill) gives them judgment: the cross-browser rules, silent-failure gotchas, debugging playbooks, and store checklist, packaged in the open [Agent Skills](https://agentskills.io) format. With both installed, agents know to verify against the live browser instead of guessing, and these tools make that a one-call operation.

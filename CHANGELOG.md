@@ -2,6 +2,26 @@
 
 ## 10.10.2
 
+- Two server flags narrow what an agent can reach. `--features=local`
+  or `--features=platform` (env `EXTENSION_DEV_FEATURES`) lists one tool
+  group; `local` alone is about 40% smaller. `--no-ship` (env
+  `EXTENSION_DEV_NO_SHIP`) hides `extension_publish` and
+  `extension_release_promote` and refuses a real submit, a share link and
+  a share revoke, while dry runs and listing keep working. A refused call
+  answers the new code `E_TOOL_DISABLED` with the flag to change. Both
+  default to everything on, so no existing setup changes.
+- Every tool now carries MCP annotations (`readOnlyHint`,
+  `destructiveHint`, `idempotentHint`, `openWorldHint`) from one policy
+  table, so clients can auto-approve reads and ask before the rest. A
+  merged tool takes its worst action: `extension_shares` is destructive
+  because revoke is.
+- A device-flow step waiting on a human (`extension_auth` login,
+  `extension_project_create`, `extension_workspace_create`) now answers
+  `ok: true` with `status: "authorization-pending"` and no error, instead
+  of `ok: false` with `E_AUTH_PENDING`, so clients stop rendering the
+  first login step as a failure. The approval link and code stay in
+  `hint` and `value`; `E_AUTH_PENDING` is retired.
+
 - The engine pin moves to the Extension.js canary
   `4.1.31-canary.1791055414.4bbb683a`: `extension_dev`,
   `extension_start` and `extension_build` spawn that build when a project
