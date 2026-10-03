@@ -1,6 +1,6 @@
 # Changelog
 
-## 10.10.2
+## 10.10.3
 
 - Two server flags narrow what an agent can reach. `--features=local`
   or `--features=platform` (env `EXTENSION_DEV_FEATURES`) lists one tool
@@ -21,6 +21,8 @@
   of `ok: false` with `E_AUTH_PENDING`, so clients stop rendering the
   first login step as a failure. The approval link and code stay in
   `hint` and `value`; `E_AUTH_PENDING` is retired.
+
+## 10.10.2
 
 - The engine pin moves to the Extension.js canary
   `4.1.31-canary.1791055414.4bbb683a` (ruled 2026-10-01, refreshed
