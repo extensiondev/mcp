@@ -27,8 +27,8 @@ importers:
   .:
     dependencies:
       '@extension.dev/urls':
-        specifier: ^0.8.0
-        version: 0.8.0
+        specifier: ^0.8.1
+        version: 0.8.1
       '@modelcontextprotocol/sdk':
         specifier: ^1.12.1
         version: 1.29.0(zod@4.3.6)
@@ -39,14 +39,14 @@ importers:
         specifier: ^7.0.6
         version: 7.0.6
       extension-create:
-        specifier: 4.1.31-canary.1790876576.d8ea8bc5
-        version: 4.1.31-canary.1790876576.d8ea8bc5
+        specifier: 4.1.31-canary.1791055414.4bbb683a
+        version: 4.1.31-canary.1791055414.4bbb683a
       extension-develop:
-        specifier: 4.1.31-canary.1790876576.d8ea8bc5
-        version: 4.1.31-canary.1790876576.d8ea8bc5(@swc/helpers@0.5.21)(svelte@5.56.6(@typescript-eslint/types@8.67.0))(typescript@6.0.2)(webpack@5.108.4(postcss@8.5.23))
+        specifier: 4.1.31-canary.1791055414.4bbb683a
+        version: 4.1.31-canary.1791055414.4bbb683a(@swc/helpers@0.5.21)(svelte@5.56.6(@typescript-eslint/types@8.67.0))(typescript@6.0.2)(webpack@5.108.4(postcss@8.5.23))
       extension-install:
-        specifier: 4.1.31-canary.1790876576.d8ea8bc5
-        version: 4.1.31-canary.1790876576.d8ea8bc5
+        specifier: 4.1.31-canary.1791055414.4bbb683a
+        version: 4.1.31-canary.1791055414.4bbb683a
       ws:
         specifier: ^8.21.0
         version: 8.21.0
@@ -145,10 +145,6 @@ packages:
     resolution: {integrity: sha512-Hb4o6h1Pf6yRUAX07DR4JVY7dmQw+RVQMW5/m55GoiAT/VRoKCWBtIUPPOnqDVhbx1Cjfil9b6EDrgJsUAujEQ==}
     engines: {node: '>= 10'}
 
-  '@babel/code-frame@7.29.0':
-    resolution: {integrity: sha512-9NhCeYjq9+3uxgdtp20LSiJXJvN0FeCtNGpJxuMFZ1Kv3cWUNb6DOhJwUvcVCzKGR66cw4njwM6hrJLqgOwbcw==}
-    engines: {node: '>=6.9.0'}
-
   '@babel/code-frame@7.29.7':
     resolution: {integrity: sha512-Aup7aUOfpbAUg2ROOJN6Iw5f9DMBlzu0mIkm/malLQFN/YQgO48wCj0Kxa3sEHJvPVFg7siR+qRInwXd2qhQKw==}
     engines: {node: '>=6.9.0'}
@@ -219,16 +215,8 @@ packages:
     resolution: {integrity: sha512-brcMGQaVzIeUb+6/bs1Av0f8YuNNjKY2JyvfRCsFuFsdKccEQ5Ges2y74D74NZ1Rz8lKJ9ksJkfqwQFJ/iNEyQ==}
     engines: {node: '>=6.9.0'}
 
-  '@babel/helper-string-parser@7.27.1':
-    resolution: {integrity: sha512-qMlSxKbpRlAridDExk92nSobyDdpPijUq2DW6oDnUqd0iOGxmQjyqhMIihI9+zv4LPyZdRje2cavWPbCbWm3eA==}
-    engines: {node: '>=6.9.0'}
-
   '@babel/helper-string-parser@7.29.7':
     resolution: {integrity: sha512-Pb5ijPrZ89GDH8223L4UP8i6QApWxs04RbPQJTeWDV0/keR2E36MeKnyr6LYmUUvqRRI+Iv87SuF1W6ErINzYw==}
-    engines: {node: '>=6.9.0'}
-
-  '@babel/helper-validator-identifier@7.28.5':
-    resolution: {integrity: sha512-qSs4ifwzKJSV39ucNjsvc6WVHs6b7S03sOh2OcHF9UHfVPqWWALUsNUVzhSBiItjRZoLHx7nIarVjqKVusUZ1Q==}
     engines: {node: '>=6.9.0'}
 
   '@babel/helper-validator-identifier@7.29.7':
@@ -242,11 +230,6 @@ packages:
   '@babel/helpers@7.29.7':
     resolution: {integrity: sha512-1k2lAGRMfHTcwuNYcCNUmaUffmQv8KWMfh2iJUUeRlwlwH4FdNG7mfPI10NPfLHJFThE4Tyr4mv7kTNZOiPuBg==}
     engines: {node: '>=6.9.0'}
-
-  '@babel/parser@7.29.2':
-    resolution: {integrity: sha512-4GgRzy/+fsBa72/RZVJmGKPmZu9Byn8o4MoLpmNe1m8ZfYnz5emHLQz3U4gLud6Zwl0RZIcgiLD7Uq7ySFuDLA==}
-    engines: {node: '>=6.0.0'}
-    hasBin: true
 
   '@babel/parser@7.29.9':
     resolution: {integrity: sha512-CjXrNHTnvqBVqHgdBysY3vk2T8tpJHb5/RMeHJBTyVa9xgugCB0CJTx/3oO8RV2QRQP391RWpB7D6hLjm8V9uA==}
@@ -289,10 +272,6 @@ packages:
 
   '@babel/traverse@7.29.8':
     resolution: {integrity: sha512-I5z7H3bf/41ktsNVLtpN0wAa336HkqIHQ5BuPLEhTkt1jVSyZpeNKIzTgEWmlxjdg81R0IgUCcaE+Ok3NvrfZg==}
-    engines: {node: '>=6.9.0'}
-
-  '@babel/types@7.29.0':
-    resolution: {integrity: sha512-LwdZHpScM4Qz8Xw2iKSzS+cfglZzJGvofQICy7W7v4caru4EaAmyUuO6BGrbyQ2mYV11W0U8j5mBhd14dd3B0A==}
     engines: {node: '>=6.9.0'}
 
   '@babel/types@7.29.8':
@@ -662,8 +641,8 @@ packages:
     resolution: {integrity: sha512-+CNAzxglkrpNf/kKywqQfk74QjtceuOE7Qm+AF8miRvPF/wmmK5+OJOgVh3AVTT3RP2mH3+FOaxlE5v72owk0A==}
     engines: {node: ^20.19.0 || ^22.13.0 || >=24}
 
-  '@extension.dev/urls@0.8.0':
-    resolution: {integrity: sha512-8spC7DxufJnbGVLq8Cs/TcQ2kyS4tff61Q/u4TK8DPD/TLBGgJTEE4yka9zu7sehyPA79ooXZnpaPOk+6Iq9Ag==}
+  '@extension.dev/urls@0.8.1':
+    resolution: {integrity: sha512-xGULBCpd4XJK9N5e4l6EfbiSdTdGD0Zj2sbogCS5KfWTL7+VdQ9T6aQ9V4tio/Lf/phGgSGwlkAghYpiPvQAAA==}
     engines: {node: '>=20.18'}
 
   '@hono/node-server@2.0.12':
@@ -1775,12 +1754,12 @@ packages:
     resolution: {integrity: sha512-hIS4idWWai69NezIdRt2xFVofaF4j+6INOpJlVOLDO8zXGpUVEVzIYk12UUi2JzjEzWL3IOAxcTubgz9Po0yXw==}
     engines: {node: '>= 18'}
 
-  extension-create@4.1.31-canary.1790876576.d8ea8bc5:
-    resolution: {integrity: sha512-9+wyM5FvUQzzxoHOoxO9myDTsO3FWl6HF5ev71hqGH8CtBG6RBvqCIAAjM8AonsmjWRJdBwPJOyYwOlHpvG66w==}
+  extension-create@4.1.31-canary.1791055414.4bbb683a:
+    resolution: {integrity: sha512-gEi/e8iC5HGwj0mlIfGfYSHwCAjIGRIYNT49b/VV0TND4OTL/P/D0KQ0wRcYB6MemoIKi6E2ru0ybmMb44RvbA==}
     engines: {node: '>=22.12'}
 
-  extension-develop@4.1.31-canary.1790876576.d8ea8bc5:
-    resolution: {integrity: sha512-WCQXGidzwtfFovsv0lU2vHrSIQApQR/8cu7fynFEMkDk3kJ3gCd+a72HMRRjDq4Agf6M04j8mOBkQXabdkxrJw==}
+  extension-develop@4.1.31-canary.1791055414.4bbb683a:
+    resolution: {integrity: sha512-1GYkAJD+MGWdaRk/v0GvVAbnK+w4lSWCJWaB3zR2FjicQ6CiYOSxGxlfGBhFOkeW4rn0qIhnuWfx/3tRmfJL2g==}
     engines: {node: '>=22.12'}
 
   extension-from-store@0.2.5:
@@ -1788,8 +1767,8 @@ packages:
     engines: {node: '>=16'}
     hasBin: true
 
-  extension-install@4.1.31-canary.1790876576.d8ea8bc5:
-    resolution: {integrity: sha512-LUPkugcVjxGz0FAK9hsu1S6aRuy293guX9qIa+BctgMVkWo9EswV3sokRz6g95yVpN4sgazFIZ8sJyxOk2JO8w==}
+  extension-install@4.1.31-canary.1791055414.4bbb683a:
+    resolution: {integrity: sha512-pX3nSuf2YawRbZSNXfuF6ZAtx0W0GOVmBRRYmLQowdFqVcuFmvg1WYwKPlHq6dRXmpdICGLotrS8Jvt2JhsGMA==}
     engines: {node: '>=22.12'}
 
   fast-deep-equal@3.1.3:
@@ -3099,12 +3078,6 @@ snapshots:
       '@ast-grep/napi-win32-ia32-msvc': 0.37.0
       '@ast-grep/napi-win32-x64-msvc': 0.37.0
 
-  '@babel/code-frame@7.29.0':
-    dependencies:
-      '@babel/helper-validator-identifier': 7.28.5
-      js-tokens: 4.0.0
-      picocolors: 1.1.1
-
   '@babel/code-frame@7.29.7':
     dependencies:
       '@babel/helper-validator-identifier': 7.29.7
@@ -3177,7 +3150,7 @@ snapshots:
 
   '@babel/helper-module-imports@7.18.6':
     dependencies:
-      '@babel/types': 7.29.0
+      '@babel/types': 7.29.8
 
   '@babel/helper-module-imports@7.29.7':
     dependencies:
@@ -3217,11 +3190,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@babel/helper-string-parser@7.27.1': {}
-
   '@babel/helper-string-parser@7.29.7': {}
-
-  '@babel/helper-validator-identifier@7.28.5': {}
 
   '@babel/helper-validator-identifier@7.29.7': {}
 
@@ -3231,10 +3200,6 @@ snapshots:
     dependencies:
       '@babel/template': 7.29.7
       '@babel/types': 7.29.8
-
-  '@babel/parser@7.29.2':
-    dependencies:
-      '@babel/types': 7.29.0
 
   '@babel/parser@7.29.9':
     dependencies:
@@ -3297,11 +3262,6 @@ snapshots:
       debug: 4.4.3
     transitivePeerDependencies:
       - supports-color
-
-  '@babel/types@7.29.0':
-    dependencies:
-      '@babel/helper-string-parser': 7.27.1
-      '@babel/helper-validator-identifier': 7.28.5
 
   '@babel/types@7.29.8':
     dependencies:
@@ -3689,7 +3649,7 @@ snapshots:
       '@eslint/core': 1.2.1
       levn: 0.4.1
 
-  '@extension.dev/urls@0.8.0': {}
+  '@extension.dev/urls@0.8.1': {}
 
   '@hono/node-server@2.0.12(hono@4.13.12)':
     dependencies:
@@ -4212,7 +4172,7 @@ snapshots:
 
   '@vue/compiler-core@3.5.26':
     dependencies:
-      '@babel/parser': 7.29.2
+      '@babel/parser': 7.29.9
       '@vue/shared': 3.5.26
       entities: 7.0.1
       estree-walker: 2.0.2
@@ -4225,7 +4185,7 @@ snapshots:
 
   '@vue/compiler-sfc@3.5.26':
     dependencies:
-      '@babel/parser': 7.29.2
+      '@babel/parser': 7.29.9
       '@vue/compiler-core': 3.5.26
       '@vue/compiler-dom': 3.5.26
       '@vue/compiler-ssr': 3.5.26
@@ -4438,7 +4398,7 @@ snapshots:
       '@babel/core': 7.29.7
       '@babel/helper-module-imports': 7.18.6
       '@babel/plugin-syntax-jsx': 7.29.7(@babel/core@7.29.7)
-      '@babel/types': 7.29.0
+      '@babel/types': 7.29.8
       html-entities: 2.3.3
       parse5: 7.3.0
 
@@ -4816,7 +4776,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  extension-create@4.1.31-canary.1790876576.d8ea8bc5:
+  extension-create@4.1.31-canary.1791055414.4bbb683a:
     dependencies:
       axios: 1.20.0
       cross-spawn: 7.0.6
@@ -4828,7 +4788,7 @@ snapshots:
       - debug
       - supports-color
 
-  extension-develop@4.1.31-canary.1790876576.d8ea8bc5(@swc/helpers@0.5.21)(svelte@5.56.6(@typescript-eslint/types@8.67.0))(typescript@6.0.2)(webpack@5.108.4(postcss@8.5.23)):
+  extension-develop@4.1.31-canary.1791055414.4bbb683a(@swc/helpers@0.5.21)(svelte@5.56.6(@typescript-eslint/types@8.67.0))(typescript@6.0.2)(webpack@5.108.4(postcss@8.5.23)):
     dependencies:
       '@babel/core': 7.29.7
       '@babel/preset-typescript': 7.29.7(@babel/core@7.29.7)
@@ -4891,7 +4851,7 @@ snapshots:
     dependencies:
       fflate: 0.8.3
 
-  extension-install@4.1.31-canary.1790876576.d8ea8bc5:
+  extension-install@4.1.31-canary.1791055414.4bbb683a:
     dependencies:
       cross-spawn: 7.0.6
       pintor: 0.3.0
@@ -5335,7 +5295,7 @@ snapshots:
 
   parse-json@5.2.0:
     dependencies:
-      '@babel/code-frame': 7.29.0
+      '@babel/code-frame': 7.29.7
       error-ex: 1.3.4
       json-parse-even-better-errors: 2.3.1
       lines-and-columns: 1.2.4

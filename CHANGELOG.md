@@ -3,7 +3,7 @@
 ## 10.10.2
 
 - The engine pin moves to the Extension.js canary
-  `4.1.31-canary.1790876576.d8ea8bc5`: `extension_dev`,
+  `4.1.31-canary.1791055414.4bbb683a`: `extension_dev`,
   `extension_start` and `extension_build` spawn that build when a project
   has no engine of its own, and the nightly engine-pin check now reads a
   canary pin against the canary dist-tag instead of latest. The canary's
@@ -161,6 +161,15 @@ Seven more from the same session's functional sweep:
   `surface-rendered` off the surface relay, instead of answering
   inconclusive for want of a CDP target list; a selector clause stays
   inconclusive there and names the tool that probes it.
+
+- `@extension.dev/urls` moves to `^0.8.1`, which reserves `chromium`,
+  `firefox`, `mcp` and `skill` as mint slugs.
+- `extension_browsers` install hands the canary's installer the server's
+  own managed-binary search as `locateInstalledBinary`, which that
+  installer now requires to verify an install before it reports success.
+- The stored login reader no longer types a missing entry as `undefined`
+  where it promises `null`, so consumers that compile the server's source
+  under `noUncheckedIndexedAccess` typecheck it.
 
 ## 10.10.1
 
