@@ -93,10 +93,9 @@ function pendingEnvelope(start: {
     ? `Open ${complete} and approve creating the workspace (code ${start.userCode} is pre-filled), then call ${COMMAND} again with this deviceCode and the same arguments. If the page asks for a code, enter ${start.userCode} at ${start.verificationUri}. The GitHub account that approves becomes the workspace owner.`
     : `Open ${start.verificationUri}, enter code ${start.userCode}, approve creating the workspace, then call ${COMMAND} again with this deviceCode and the same arguments. The GitHub account that approves becomes the workspace owner.`;
   return envelope({
-    ok: false,
+    ok: true,
     command: COMMAND,
     status: "authorization-pending",
-    error: { code: "E_AUTH_PENDING", message },
     value: {
       userCode: start.userCode,
       verificationUri: start.verificationUri,
@@ -228,17 +227,14 @@ async function finishFromPoll(
   if (!poll.ok) {
     if (poll.reason === "pending") {
       return envelope({
-        ok: false,
+        ok: true,
         command: COMMAND,
         status: "authorization-pending",
-        error: {
-          code: "E_AUTH_PENDING",
-          message: `Still waiting for approval at ${ctx.verificationUri}. Approve there, then call ${COMMAND} again with this same deviceCode.`,
-        },
         value: {
           verificationUri: ctx.verificationUri,
           deviceCode: ctx.deviceCode,
         },
+        hint: `Still waiting for approval at ${ctx.verificationUri}. Approve there, then call ${COMMAND} again with this same deviceCode.`,
       });
     }
     if (poll.reason === "denied") {

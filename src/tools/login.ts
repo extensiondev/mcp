@@ -75,10 +75,9 @@ function pending(start: {
     ? `Open ${complete} and approve (code ${start.userCode} is pre-filled), then call extension_auth (action: login) again with this deviceCode and the same project. If the page asks for a code, enter ${start.userCode} at ${start.verificationUri}.`
     : `Open ${start.verificationUri} and enter code ${start.userCode}, then call extension_auth (action: login) again with this deviceCode and the same project.`;
   return envelope({
-    ok: false,
+    ok: true,
     command: "extension_auth",
     status: "authorization-pending",
-    error: { code: "E_AUTH_PENDING", message },
     value: {
       userCode: start.userCode,
       verificationUri: start.verificationUri,
@@ -94,10 +93,9 @@ function pending(start: {
 function resumePending(deviceCode: string, verificationUri: string): string {
   const message = `Still waiting for authorization. The one-click link and code from the previous response are still valid: open that link (or enter the code at ${verificationUri}), then call extension_auth (action: login) again with this same deviceCode and the same project.`;
   return envelope({
-    ok: false,
+    ok: true,
     command: "extension_auth",
     status: "authorization-pending",
-    error: { code: "E_AUTH_PENDING", message },
     value: {
       verificationUri,
       deviceCode,

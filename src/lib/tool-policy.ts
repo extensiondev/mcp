@@ -1,0 +1,224 @@
+// ███╗   ███╗ ██████╗██████╗
+// ████╗ ████║██╔════╝██╔══██╗
+// ██╔████╔██║██║     ██████╔╝
+// ██║╚██╔╝██║██║     ██╔═══╝
+// ██║ ╚═╝ ██║╚██████╗██║
+// ╚═╝     ╚═╝ ╚═════╝╚═╝
+// Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
+
+import { envelope } from "./envelope";
+
+export type FeatureGroup = "local" | "platform";
+
+export const FEATURE_GROUPS: FeatureGroup[] = ["local", "platform"];
+
+export const FEATURES_ENV = "EXTENSION_DEV_FEATURES";
+export const NO_SHIP_ENV = "EXTENSION_DEV_NO_SHIP";
+
+export interface ToolAnnotations {
+  readOnlyHint: boolean;
+  destructiveHint: boolean;
+  idempotentHint: boolean;
+  openWorldHint: boolean;
+}
+
+type Args = Record<string, unknown>;
+
+export interface ToolPolicy {
+  group: FeatureGroup;
+  annotations: ToolAnnotations;
+  ships?: "always" | ((args: Args) => boolean);
+}
+
+const reads = (openWorld = false): ToolAnnotations => ({
+  readOnlyHint: true,
+  destructiveHint: false,
+  idempotentHint: true,
+  openWorldHint: openWorld,
+});
+
+const acts = (
+  over: Partial<Omit<ToolAnnotations, "readOnlyHint">> = {},
+): ToolAnnotations => ({
+  readOnlyHint: false,
+  destructiveHint: false,
+  idempotentHint: false,
+  openWorldHint: false,
+  ...over,
+});
+
+/* @invariant
+ * EVERY REGISTERED TOOL HAS EXACTLY ONE ROW, AND A MERGED TOOL TAKES ITS
+ * WORST ACTION.
+ *
+ * A client reads these hints once per tool to decide what to auto-approve, so
+ * extension_shares is destructive because revoke is, even though list is the
+ * default. `ships` marks a call that reaches people outside this machine: a
+ * public link, a channel users install from, a store review queue. No-ship mode
+ * hides the tools whose every call ships and refuses the shipping calls of the
+ * rest, so a dry run and a share listing keep working. tool-policy.test.ts
+ * fails a registered tool with no row and a row with no tool.
+ */
+export const TOOL_POLICY: Record<string, ToolPolicy> = {
+  extension_create: { group: "local", annotations: acts({ openWorldHint: true }) },
+  extension_templates: { group: "local", annotations: reads(true) },
+  extension_add_feature: { group: "local", annotations: reads() },
+  extension_build: { group: "local", annotations: acts({ idempotentHint: true }) },
+  extension_dev: { group: "local", annotations: acts() },
+  extension_start: { group: "local", annotations: acts() },
+  extension_wait: { group: "local", annotations: reads() },
+  extension_stop: { group: "local", annotations: acts({ idempotentHint: true }) },
+  extension_manifest_validate: { group: "local", annotations: reads() },
+  extension_theme_verify: { group: "local", annotations: reads() },
+  extension_analyze: { group: "local", annotations: reads() },
+  extension_assert: { group: "local", annotations: acts({ idempotentHint: true }) },
+  extension_inspect: { group: "local", annotations: acts({ idempotentHint: true }) },
+  extension_dom_snapshot: { group: "local", annotations: reads() },
+  extension_list_extensions: { group: "local", annotations: reads() },
+  extension_logs: { group: "local", annotations: reads() },
+  extension_doctor: { group: "local", annotations: reads() },
+  extension_eval: {
+    group: "local",
+    annotations: acts({ destructiveHint: true, openWorldHint: true }),
+  },
+  extension_storage: { group: "local", annotations: acts({ destructiveHint: true }) },
+  extension_reload: { group: "local", annotations: acts({ idempotentHint: true }) },
+  extension_open: { group: "local", annotations: acts({ openWorldHint: true }) },
+  extension_browsers: {
+    group: "local",
+    annotations: acts({ destructiveHint: true, openWorldHint: true }),
+  },
+  extension_auth: { group: "platform", annotations: acts({ openWorldHint: true }) },
+  extension_workspace_create: {
+    group: "platform",
+    annotations: acts({ openWorldHint: true }),
+  },
+  extension_project_create: {
+    group: "platform",
+    annotations: acts({ openWorldHint: true }),
+  },
+  extension_preview_web: {
+    group: "platform",
+    annotations: acts({ openWorldHint: true }),
+    ships: (args) => args.share === true,
+  },
+  extension_shares: {
+    group: "platform",
+    annotations: acts({ destructiveHint: true, openWorldHint: true }),
+    ships: (args) => args.action === "revoke",
+  },
+  extension_publish: {
+    group: "platform",
+    annotations: acts({ openWorldHint: true }),
+    ships: "always",
+  },
+  extension_release_status: { group: "platform", annotations: reads(true) },
+  extension_release_promote: {
+    group: "platform",
+    annotations: acts({ destructiveHint: true, openWorldHint: true }),
+    ships: "always",
+  },
+  extension_submit: {
+    group: "platform",
+    annotations: acts({ destructiveHint: true, openWorldHint: true }),
+    ships: (args) => args.dryRun === false,
+  },
+};
+
+export interface ServerOptions {
+  features: FeatureGroup[];
+  noShip: boolean;
+}
+
+export const DEFAULT_SERVER_OPTIONS: ServerOptions = {
+  features: [...FEATURE_GROUPS],
+  noShip: false,
+};
+
+const truthy = (raw: string | undefined): boolean => {
+  const value = String(raw ?? "").trim().toLowerCase();
+  return value !== "" && value !== "0" && value !== "false" && value !== "off";
+};
+
+export function isServerFlag(arg: string): boolean {
+  return arg === "--no-ship" || arg === "--features" || arg.startsWith("--features=");
+}
+
+export function resolveServerOptions(
+  argv: string[],
+  env: Record<string, string | undefined>,
+): { ok: true; options: ServerOptions } | { ok: false; message: string } {
+  let rawFeatures = env[FEATURES_ENV];
+  let noShip = truthy(env[NO_SHIP_ENV]);
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i];
+    if (arg === "--no-ship") noShip = true;
+    else if (arg === "--features") rawFeatures = argv[++i] ?? "";
+    else if (arg.startsWith("--features=")) rawFeatures = arg.slice("--features=".length);
+    else return { ok: false, message: `Unknown flag "${arg}".` };
+  }
+  if (rawFeatures === undefined || rawFeatures.trim() === "") {
+    return { ok: true, options: { features: [...FEATURE_GROUPS], noShip } };
+  }
+  const names = rawFeatures
+    .split(",")
+    .map((name) => name.trim().toLowerCase())
+    .filter(Boolean);
+  const unknown = names.filter(
+    (name) => !FEATURE_GROUPS.includes(name as FeatureGroup),
+  );
+  if (unknown.length) {
+    return {
+      ok: false,
+      message: `Unknown feature group ${unknown.map((n) => `"${n}"`).join(", ")}. Use ${FEATURE_GROUPS.join(" or ")}, comma-separated.`,
+    };
+  }
+  const features = FEATURE_GROUPS.filter((group) => names.includes(group));
+  return { ok: true, options: { features, noShip } };
+}
+
+export function isToolListed(name: string, options: ServerOptions): boolean {
+  const policy = TOOL_POLICY[name];
+  if (!policy) return false;
+  if (!options.features.includes(policy.group)) return false;
+  return !(options.noShip && policy.ships === "always");
+}
+
+export function disabledToolEnvelope(
+  name: string,
+  args: Args,
+  options: ServerOptions,
+): string | null {
+  const policy = TOOL_POLICY[name];
+  if (!policy) return null;
+  if (!options.features.includes(policy.group)) {
+    return envelope({
+      ok: false,
+      command: name,
+      status: "tool-disabled",
+      error: {
+        code: "E_TOOL_DISABLED",
+        message: `${name} is in the "${policy.group}" feature group, which this server was started without.`,
+      },
+      value: { group: policy.group, features: options.features },
+      hint: `Add ${policy.group} to --features (or ${FEATURES_ENV}) in this server's MCP config, or ask the user to.`,
+    });
+  }
+  const ships =
+    policy.ships === "always" ||
+    (typeof policy.ships === "function" && policy.ships(args));
+  if (options.noShip && ships) {
+    return envelope({
+      ok: false,
+      command: name,
+      status: "tool-disabled",
+      error: {
+        code: "E_TOOL_DISABLED",
+        message: `${name} with these arguments reaches people outside this machine, and this server was started in no-ship mode.`,
+      },
+      value: { noShip: true },
+      hint: `Dry runs, previews without share, and listing still work. To ship, the user removes --no-ship (or ${NO_SHIP_ENV}) from this server's MCP config.`,
+    });
+  }
+  return null;
+}

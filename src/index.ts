@@ -61,6 +61,13 @@ import {
 } from "./lib/validate-input";
 import { envelope, isEnvelope } from "./lib/envelope";
 import { installCarrierExitCleanup } from "./lib/carrier-exit";
+import {
+  DEFAULT_SERVER_OPTIONS,
+  TOOL_POLICY,
+  disabledToolEnvelope,
+  isToolListed,
+  type ServerOptions,
+} from "./lib/tool-policy";
 
 export interface ToolModule {
   schema: {
@@ -151,10 +158,12 @@ export const SERVER_INSTRUCTIONS = [
   "extension-dev runs, inspects, drives, builds and publishes browser extensions (Chrome, Edge, Firefox, Safari and the other Chromium and Gecko browsers) through Extension.js and extension.dev.",
   "When the ask is to run, start, wait for, watch, inspect, drive, test, debug or build a browser extension, search this server first and use its tools: extension_dev starts the dev session (allowEval: true also turns on control), extension_wait blocks until it is ready, extension_logs streams its console, extension_open opens a surface or a url, extension_dom_snapshot and extension_inspect read a live page, extension_eval runs code in a context, extension_build makes a store-ready bundle, extension_stop ends the session.",
   "These replace hand-rolled ps, curl, remote-debugging-port lookups and CDP or Playwright scripts: the server already holds the session's debug port, the extension id and the session token.",
-  "Every tool answers one JSON envelope {ok, status, value, error, hint, warnings}; read hint and warnings before choosing the next call, and treat ok: false as the answer, not a transport error.",
+  "Every tool answers one JSON envelope {ok, status, value, error, hint, warnings}; read hint and warnings before choosing the next call, and treat ok: false as the answer, not a transport error. status authorization-pending is ok: true and means a human approves at the link in hint before you call again; it is not done yet.",
 ].join("\n");
 
-export function createServer(): Server {
+export function createServer(
+  options: ServerOptions = DEFAULT_SERVER_OPTIONS,
+): Server {
   const server = new Server(
     {
       name: "extension-dev",
@@ -170,11 +179,14 @@ export function createServer(): Server {
 
   server.setRequestHandler(ListToolsRequestSchema, async () => {
     return {
-      tools: tools.map((t) => ({
-        name: t.schema.name,
-        description: t.schema.description,
-        inputSchema: t.schema.inputSchema,
-      })),
+      tools: tools
+        .filter((t) => isToolListed(t.schema.name, options))
+        .map((t) => ({
+          name: t.schema.name,
+          description: t.schema.description,
+          inputSchema: t.schema.inputSchema,
+          annotations: TOOL_POLICY[t.schema.name].annotations,
+        })),
     };
   });
 
@@ -195,7 +207,11 @@ export function createServer(): Server {
                 code: "E_UNKNOWN_TOOL",
                 message: `Unknown tool: ${name}`,
               },
-              value: { availableTools: tools.map((t) => t.schema.name) },
+              value: {
+                availableTools: tools
+                  .map((t) => t.schema.name)
+                  .filter((toolName) => isToolListed(toolName, options)),
+              },
             }),
           },
         ],
@@ -207,6 +223,14 @@ export function createServer(): Server {
       tool.schema.inputSchema,
       (args ?? {}) as Record<string, unknown>,
     );
+    const disabled = disabledToolEnvelope(name, normalizedArgs, options);
+    if (disabled) {
+      return {
+        content: [{ type: "text" as const, text: disabled }],
+        isError: true,
+      };
+    }
+
     const issues = validateToolInput(tool.schema.inputSchema, normalizedArgs);
     if (issues.length) {
       return {
@@ -248,9 +272,11 @@ export function createServer(): Server {
   return server;
 }
 
-export async function startServer(): Promise<void> {
+export async function startServer(
+  options: ServerOptions = DEFAULT_SERVER_OPTIONS,
+): Promise<void> {
   installCarrierExitCleanup();
-  const server = createServer();
+  const server = createServer(options);
   const transport = new StdioServerTransport();
   await server.connect(transport);
 }

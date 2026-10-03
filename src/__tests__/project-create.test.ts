@@ -147,8 +147,9 @@ describe("extension_project_create", () => {
     });
     vi.stubGlobal("fetch", fn);
     const out = JSON.parse(await handler(baseArgs));
-    expect(out.ok).toBe(false);
+    expect(out.ok).toBe(true);
     expect(out.status).toBe("authorization-pending");
+    expect(out.error).toBeNull();
     expect(out.value.deviceCode).toBe("dev-code");
     expect(out.value.verificationUriComplete).toContain("ABCD-1234");
   });

@@ -134,10 +134,9 @@ function pendingEnvelope(start: {
     ? `Open ${complete} and approve creating the project (code ${start.userCode} is pre-filled), then call extension_project_create again with this deviceCode and the same arguments. If the page asks for a code, enter ${start.userCode} at ${start.verificationUri}.`
     : `Open ${start.verificationUri}, enter code ${start.userCode}, approve creating the project, then call extension_project_create again with this deviceCode and the same arguments.`;
   return envelope({
-    ok: false,
+    ok: true,
     command: COMMAND,
     status: "authorization-pending",
-    error: { code: "E_AUTH_PENDING", message },
     value: {
       userCode: start.userCode,
       verificationUri: start.verificationUri,
@@ -373,17 +372,14 @@ async function finishFromPoll(
   if (!poll.ok) {
     if (poll.reason === "pending") {
       return envelope({
-        ok: false,
+        ok: true,
         command: COMMAND,
         status: "authorization-pending",
-        error: {
-          code: "E_AUTH_PENDING",
-          message: `Still waiting for approval at ${ctx.verificationUri}. Approve there, then call extension_project_create again with this same deviceCode.`,
-        },
         value: {
           verificationUri: ctx.verificationUri,
           deviceCode: ctx.deviceCode,
         },
+        hint: `Still waiting for approval at ${ctx.verificationUri}. Approve there, then call extension_project_create again with this same deviceCode.`,
       });
     }
     if (poll.reason === "denied") {
