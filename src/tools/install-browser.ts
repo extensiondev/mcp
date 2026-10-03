@@ -8,6 +8,7 @@
 
 import { extensionInstall } from "extension-install";
 import { envelope } from "../lib/envelope";
+import { findManagedBinaryIn } from "./detect-browsers";
 
 export async function installManagedBrowser(
   browser: string,
@@ -15,7 +16,11 @@ export async function installManagedBrowser(
   const start = Date.now();
 
   try {
-    await extensionInstall({ browser });
+    await extensionInstall({
+      browser,
+      locateInstalledBinary: (destination, target) =>
+        findManagedBinaryIn(destination, target),
+    });
 
     return envelope({
       ok: true,

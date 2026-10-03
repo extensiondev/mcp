@@ -264,7 +264,13 @@ export function findManagedBinary(
   browser: string,
   cacheRoot: string = resolveCacheRoot(),
 ): string | null {
-  const browserDir = path.join(cacheRoot, browser);
+  return findManagedBinaryIn(path.join(cacheRoot, browser), browser);
+}
+
+export function findManagedBinaryIn(
+  browserDir: string,
+  browser: string,
+): string | null {
   if (!fs.existsSync(browserDir)) return null;
   const names = MANAGED_EXEC_NAMES[browser] ?? [];
 

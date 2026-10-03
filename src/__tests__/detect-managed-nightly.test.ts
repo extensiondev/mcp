@@ -3,7 +3,12 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { findManagedBinary, detectBrowsers, compareVersionNames } from "../tools/detect-browsers";
+import {
+  findManagedBinary,
+  findManagedBinaryIn,
+  detectBrowsers,
+  compareVersionNames,
+} from "../tools/detect-browsers";
 
 const tmpDirs: string[] = [];
 function cacheRoot(): string {
@@ -99,4 +104,21 @@ describe("the managed-cache search reaches the binary the engine really launches
       expect(firefox.devLaunches).toBeUndefined();
     }
   }, 15_000);
+});
+
+describe("the install locator judges one browser's install directory", () => {
+  it("finds the executable under the directory the engine installed into", () => {
+    const root = cacheRoot();
+    const exe = plant(root, "chrome/mac_arm-151.0.7922.71/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing");
+
+    expect(findManagedBinaryIn(path.join(root, "chrome"), "chrome")).toBe(exe);
+  });
+
+  it("answers null for a directory with no executable, so the engine discards the tree", () => {
+    const root = cacheRoot();
+    plant(root, "firefox/mac_arm-stable_150.0/readme.txt");
+
+    expect(findManagedBinaryIn(path.join(root, "firefox"), "firefox")).toBeNull();
+    expect(findManagedBinaryIn(path.join(root, "missing"), "firefox")).toBeNull();
+  });
 });

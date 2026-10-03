@@ -87,13 +87,13 @@
     "extension.js"
   ],
   "dependencies": {
-    "@extension.dev/urls": "^0.8.0",
+    "@extension.dev/urls": "^0.8.1",
     "@modelcontextprotocol/sdk": "^1.12.1",
     "browser-extension-manifest-fields": "^2.2.9",
     "cross-spawn": "^7.0.6",
-    "extension-create": "4.1.31-canary.1790876576.d8ea8bc5",
-    "extension-develop": "4.1.31-canary.1790876576.d8ea8bc5",
-    "extension-install": "4.1.31-canary.1790876576.d8ea8bc5",
+    "extension-create": "4.1.31-canary.1791055414.4bbb683a",
+    "extension-develop": "4.1.31-canary.1791055414.4bbb683a",
+    "extension-install": "4.1.31-canary.1791055414.4bbb683a",
     "ws": "^8.20.0"
   },
   "devDependencies": {
