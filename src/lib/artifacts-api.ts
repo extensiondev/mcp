@@ -91,7 +91,7 @@ export type ArtifactsOutcome<T> =
   | { ok: true; data: T }
   | {
       ok: false;
-      error: { name: string; message: string; status?: number };
+      error: { name: string; message: string; status?: number; code?: string };
       held?: boolean;
       body?: unknown;
     };
@@ -338,6 +338,7 @@ export async function revokeArtifact(options: {
       error: {
         name: "SharesRevokeError",
         status: res.status,
+        ...(typeof data?.code === "string" ? { code: data.code } : {}),
         message: `Revoking ${options.artifactId} failed (${res.status}): ${
           (data?.message as string) || "unknown error"
         }`,

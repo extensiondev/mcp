@@ -107,21 +107,71 @@ describe("the approval gate guards irreversible outward actions and cannot self-
     });
   });
 
-  describe("gate disabled by default", () => {
-    it("lets a real submission through with no approval, frictionless", async () => {
+  describe("gate defaults", () => {
+    beforeEach(() => {
+      delete process.env.EXTENSION_DEV_APPROVAL_GATE;
+    });
+
+    const approvalRoute = () =>
+      jsonResponse({
+        approvalId: "apr_new",
+        approvalUrl: "https://www.extension.dev/device/approve/apr_new",
+        expiresAt: new Date(Date.now() + 600000).toISOString(),
+      });
+
+    it("asks for an approval before a real submission with no setting at all", async () => {
+      global.fetch = router(calls, {
+        "POST /api/cli/approvals": approvalRoute,
+        "POST /api/cli/stores/submit": () => jsonResponse({ ok: true }),
+      });
+      const out = JSON.parse(
+        await submitHandler({ browsers: ["chrome"], buildSha: "abc1234", dryRun: false }),
+      );
+      expect(out.status).toBe("approval-required");
+      expect(hit("POST /api/cli/stores/submit")).toBe(false);
+    });
+
+    it("asks for an approval before a promotion to stable, and not before one to beta", async () => {
+      global.fetch = router(calls, {
+        "POST /api/cli/approvals": approvalRoute,
+        "POST /api/cli/release/promote": () => jsonResponse({ ok: true }),
+      });
+      const stable = JSON.parse(
+        await promoteHandler({ buildId: "abc1234", channel: "stable" }),
+      );
+      expect(stable.status).toBe("approval-required");
+      expect(hit("POST /api/cli/release/promote")).toBe(false);
+
+      await promoteHandler({ buildId: "abc1234", channel: "beta" });
+      expect(hit("POST /api/cli/release/promote")).toBe(true);
+      expect(calls.filter((c) => c.key === "POST /api/cli/approvals")).toHaveLength(1);
+    });
+
+    it("lets a real submission through when the user turns the gate off", async () => {
+      process.env.EXTENSION_DEV_APPROVAL_GATE = "0";
       global.fetch = router(calls, {
         "POST /api/cli/stores/submit": () => jsonResponse({ ok: true }),
       });
       const out = JSON.parse(
-        await submitHandler({
-          browsers: ["chrome"],
-          buildSha: "abc1234",
-          dryRun: false,
-        }),
+        await submitHandler({ browsers: ["chrome"], buildSha: "abc1234", dryRun: false }),
       );
       expect(hit("POST /api/cli/approvals")).toBe(false);
-      expect(hit("POST /api/cli/stores/submit")).toBe(true);
       expect(out.status).toBe("submitted");
+    });
+
+    it("turns the platform's APPROVAL_REQUIRED into an approval request", async () => {
+      global.fetch = router(calls, {
+        "POST /api/cli/approvals": approvalRoute,
+        "POST /api/cli/release/promote": () =>
+          jsonResponse({ code: "APPROVAL_REQUIRED", message: "needs approval" }, 403),
+      });
+      const out = JSON.parse(
+        await promoteHandler({ buildId: "abc1234", channel: "beta" }),
+      );
+      expect(out.status).toBe("approval-required");
+      expect(out.value.approvalId).toBe("apr_new");
+      const minted = calls.find((c) => c.key === "POST /api/cli/approvals");
+      expect((minted?.body as { action?: string })?.action).toBe("extension_release_promote");
     });
   });
 

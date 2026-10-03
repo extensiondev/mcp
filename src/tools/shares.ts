@@ -24,7 +24,10 @@ import {
 import { envelope } from "../lib/envelope";
 import { resolveToken } from "../lib/publish";
 import { PROJECT_TOKEN_INPUT } from "../lib/credentials";
-import { evaluateApproval } from "../lib/approval-gate";
+import {
+  evaluateApproval,
+  requestApprovalAfterRefusal,
+} from "../lib/approval-gate";
 import {
   PLATFORM_HOLD_CODE,
   PLATFORM_HOLD_STILL_WORKS,
@@ -431,16 +434,17 @@ async function revokeShare(args: {
   }
 
   const token = resolveToken({ project: args.project });
+  const gateInput = {
+    command: "extension_shares",
+    action: "extension_shares.revoke",
+    scope: { artifactId: ref },
+    description: `Permanently revoke share ${ref}, killing the link for everyone with no way to restore it.`,
+    approvalId: args.approvalId,
+    token: token || "",
+    api: args.api,
+  };
   if (token) {
-    const gate = await evaluateApproval({
-      command: "extension_shares",
-      action: "extension_shares.revoke",
-      scope: { artifactId: ref },
-      description: `Permanently revoke share ${ref}, killing the link for everyone with no way to restore it.`,
-      approvalId: args.approvalId,
-      token,
-      api: args.api,
-    });
+    const gate = await evaluateApproval(gateInput);
     if (gate.blocked) return gate.envelope;
   }
 
@@ -469,6 +473,14 @@ async function revokeShare(args: {
         api: args.api,
         value: { action: "revoke", artifactId: ref },
       });
+    }
+    if (
+      token &&
+      !args.approvalId &&
+      result.error.status === 403 &&
+      result.error.code === "APPROVAL_REQUIRED"
+    ) {
+      return requestApprovalAfterRefusal(gateInput);
     }
     const isAuth = result.error.name === "SharesAuthError";
     return envelope({

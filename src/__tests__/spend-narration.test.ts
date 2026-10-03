@@ -53,7 +53,7 @@ describe("every spending lane counts the allowance out loud in its result", () =
     process.env.XDG_CONFIG_HOME = tmp;
     process.env.EXTENSION_DEV_TOKEN = "tok_test";
     process.env.EXTENSION_DEV_API_URL = API;
-    delete process.env.EXTENSION_DEV_APPROVAL_GATE;
+    process.env.EXTENSION_DEV_APPROVAL_GATE = "0";
     delete process.env.EXTENSION_DEV_PREVIEW_URL;
   });
 

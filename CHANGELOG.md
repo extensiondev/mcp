@@ -2,6 +2,17 @@
 
 ## 10.10.3
 
+- A human now approves a real store submission and a promotion to stable
+  before either runs, by default. The first call answers
+  `approval-required` with an `approvalUrl` on extension.dev
+  (`/device/approve/<id>`) and an `approvalId`; once a workspace member
+  approves (an owner, for a submission), the same call with that
+  `approvalId` runs exactly that action, once. Promotions to other channels
+  and share revokes stay ungated unless `EXTENSION_DEV_APPROVAL_GATE=1`;
+  `EXTENSION_DEV_APPROVAL_GATE=0` turns the default off. Whatever the
+  setting, a platform that answers `APPROVAL_REQUIRED` now gets the same
+  approval flow instead of a bare failure.
+
 - Two server flags narrow what an agent can reach. `--features=local`
   or `--features=platform` (env `EXTENSION_DEV_FEATURES`) lists one tool
   group; `local` alone is about 40% smaller. `--no-ship` (env
