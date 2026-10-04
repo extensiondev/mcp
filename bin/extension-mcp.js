@@ -27,6 +27,7 @@ Server flags:
   --features=local,platform     Tool groups to expose (default: both)
   --no-ship                     Refuse publish, promote, real submits,
                                 share links and share revokes
+  --project <workspace>/<proj>  Use only this project's login
 `
 
 const [, , cmd, ...rest] = process.argv

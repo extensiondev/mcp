@@ -26,6 +26,10 @@
     ".": {
       "types": "./dist/module.d.ts",
       "import": "./dist/module.js"
+    },
+    "./clients": {
+      "types": "./dist/src/clients/index.d.ts",
+      "import": "./dist/clients.js"
     }
   },
   "main": "./dist/module.js",
@@ -46,6 +50,7 @@
   ],
   "scripts": {
     "clean": "rm -rf dist",
+    "readme:clients": "UPDATE_README=1 vitest run src/__tests__/readme-clients.test.ts",
     "watch": "rslib build --watch",
     "compile": "rslib build",
     "build": "pnpm run compile",

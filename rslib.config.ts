@@ -27,6 +27,7 @@ export default defineConfig({
   source: {
     entry: {
       module: path.resolve(__dirname, "./module.ts"),
+      clients: path.resolve(__dirname, "./src/clients/index.ts"),
     },
   },
   lib: [

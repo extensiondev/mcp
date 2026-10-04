@@ -45,10 +45,12 @@ Built on [Extension.js](https://extension.js.org), the open-source cross-browser
 
 ## Setup
 
+<!-- setup:start (generated from src/clients, run pnpm readme:clients) -->
+
 ### Claude Code
 
 ```bash
-claude mcp add extension-dev npx @extension.dev/mcp
+claude mcp add extension-dev -- npx @extension.dev/mcp
 ```
 
 Or install it as a plugin, the MCP server plus the `/extension`, `/extension-add`, `/extension-debug`, and `/extension-publish` commands in one step:
@@ -62,18 +64,83 @@ Or install it as a plugin, the MCP server plus the `/extension`, `/extension-add
 
 [![Install MCP Server](https://cursor.com/deeplink/mcp-install-dark.svg)](https://cursor.com/en/install-mcp?name=extension-dev&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyJAZXh0ZW5zaW9uLmRldi9tY3AiXX0%3D)
 
-### Claude Desktop / `.mcp.json`
+`.cursor/mcp.json`:
 
 ```json
 {
   "mcpServers": {
     "extension-dev": {
       "command": "npx",
-      "args": ["@extension.dev/mcp"]
+      "args": [
+        "@extension.dev/mcp"
+      ]
     }
   }
 }
 ```
+
+### VS Code (Also GitHub Copilot)
+
+```bash
+code --add-mcp '{"name":"extension-dev","command":"npx","args":["@extension.dev/mcp"]}'
+```
+
+`.vscode/mcp.json`:
+
+```json
+{
+  "servers": {
+    "extension-dev": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "@extension.dev/mcp"
+      ]
+    }
+  }
+}
+```
+
+### Codex
+
+```bash
+codex mcp add extension-dev -- npx @extension.dev/mcp
+```
+
+`~/.codex/config.toml`:
+
+```toml
+[mcp_servers.extension-dev]
+command = "npx"
+args = ["@extension.dev/mcp"]
+```
+
+### Other clients (Claude Desktop and .mcp.json)
+
+`.mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "extension-dev": {
+      "command": "npx",
+      "args": [
+        "@extension.dev/mcp"
+      ]
+    }
+  }
+}
+```
+
+### Signing in and pinning a project
+
+The platform tools need a login. Sign in once per project, then add `--project <workspace>/<project>` to the server's arguments (or set `EXTENSION_DEV_PROJECT`) so that server only ever acts on that project, however many logins this machine holds. The console's Connect dialog fills both in for your project.
+
+```bash
+npx @extension.dev/mcp login --project <workspace>/<project>
+```
+
+<!-- setup:end -->
 
 ### Choosing what the agent can reach
 

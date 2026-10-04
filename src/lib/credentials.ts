@@ -106,11 +106,37 @@ export function readCredentialStore(): CredentialStore | null {
   return { version: 2, active, entries };
 }
 
+export const PROJECT_PIN_ENV = "EXTENSION_DEV_PROJECT";
+
+export function pinnedProject(): string {
+  return String(process.env[PROJECT_PIN_ENV] || "").trim().toLowerCase();
+}
+
+export function isProjectRef(value: string): boolean {
+  return /^[a-z0-9][a-z0-9-_.]*\/[a-z0-9][a-z0-9-_.]*$/i.test(value);
+}
+
+export function sameProject(named: string, pinned: string): boolean {
+  const a = named.trim().toLowerCase();
+  if (!a || !pinned) return true;
+  return a.includes("/") ? a === pinned : a === pinned.split("/")[1];
+}
+
+/* @invariant
+ * A PINNED SERVER READS ONE PROJECT'S LOGIN AND NO OTHER.
+ *
+ * With several logins stored, an unnamed read used to take the most recent
+ * one, so an agent configured for project A acted on project B the moment the
+ * person signed in to B in another terminal. EXTENSION_DEV_PROJECT (or the
+ * --project flag, which sets it) names the project a server was configured
+ * for; every unnamed read then selects that login. The dispatch layer refuses
+ * a call that names a different project, so the pin cannot be argued around.
+ */
 function selectEntry(
   store: CredentialStore,
   selector: CredentialSelector | undefined,
 ): StoredCredentials | null {
-  const wanted = String(selector?.project ?? "").trim().toLowerCase();
+  const wanted = (String(selector?.project ?? "").trim() || pinnedProject()).toLowerCase();
   if (!wanted) {
     return (store.active && store.entries[store.active]) || Object.values(store.entries)[0] || null;
   }

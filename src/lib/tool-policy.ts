@@ -6,6 +6,7 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
+import { PROJECT_PIN_ENV, isProjectRef, sameProject } from "./credentials";
 import { envelope } from "./envelope";
 
 export type FeatureGroup = "local" | "platform";
@@ -128,6 +129,7 @@ export const TOOL_POLICY: Record<string, ToolPolicy> = {
 export interface ServerOptions {
   features: FeatureGroup[];
   noShip: boolean;
+  project?: string;
 }
 
 export const DEFAULT_SERVER_OPTIONS: ServerOptions = {
@@ -141,7 +143,13 @@ const truthy = (raw: string | undefined): boolean => {
 };
 
 export function isServerFlag(arg: string): boolean {
-  return arg === "--no-ship" || arg === "--features" || arg.startsWith("--features=");
+  return (
+    arg === "--no-ship" ||
+    arg === "--features" ||
+    arg.startsWith("--features=") ||
+    arg === "--project" ||
+    arg.startsWith("--project=")
+  );
 }
 
 export function resolveServerOptions(
@@ -150,15 +158,25 @@ export function resolveServerOptions(
 ): { ok: true; options: ServerOptions } | { ok: false; message: string } {
   let rawFeatures = env[FEATURES_ENV];
   let noShip = truthy(env[NO_SHIP_ENV]);
+  let project = String(env[PROJECT_PIN_ENV] || "").trim().toLowerCase();
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     if (arg === "--no-ship") noShip = true;
     else if (arg === "--features") rawFeatures = argv[++i] ?? "";
     else if (arg.startsWith("--features=")) rawFeatures = arg.slice("--features=".length);
+    else if (arg === "--project") project = String(argv[++i] ?? "").trim().toLowerCase();
+    else if (arg.startsWith("--project=")) project = arg.slice("--project=".length).trim().toLowerCase();
     else return { ok: false, message: `Unknown flag "${arg}".` };
   }
+  if (project && !isProjectRef(project)) {
+    return {
+      ok: false,
+      message: `--project takes "<workspace>/<project>", got "${project}".`,
+    };
+  }
+  const pin = project ? { project } : {};
   if (rawFeatures === undefined || rawFeatures.trim() === "") {
-    return { ok: true, options: { features: [...FEATURE_GROUPS], noShip } };
+    return { ok: true, options: { features: [...FEATURE_GROUPS], noShip, ...pin } };
   }
   const names = rawFeatures
     .split(",")
@@ -174,7 +192,7 @@ export function resolveServerOptions(
     };
   }
   const features = FEATURE_GROUPS.filter((group) => names.includes(group));
-  return { ok: true, options: { features, noShip } };
+  return { ok: true, options: { features, noShip, ...pin } };
 }
 
 export function isToolListed(name: string, options: ServerOptions): boolean {
@@ -221,4 +239,34 @@ export function disabledToolEnvelope(
     });
   }
   return null;
+}
+
+export function pinProjectArgs(
+  name: string,
+  args: Args,
+  inputSchema: Record<string, unknown>,
+  options: ServerOptions,
+): { args: Args } | { refused: string } {
+  const pinned = options.project;
+  if (!pinned) return { args };
+  const named = typeof args.project === "string" ? args.project : "";
+  if (named && !sameProject(named, pinned)) {
+    return {
+      refused: envelope({
+        ok: false,
+        command: name,
+        status: "project-pinned",
+        error: {
+          code: "E_TOOL_DISABLED",
+          message: `This server is pinned to ${pinned} and was asked to act on ${named}.`,
+        },
+        value: { pinned, named },
+        hint: `Work on ${named} through an MCP server configured with --project ${named}, or change this server's --project (or ${PROJECT_PIN_ENV}).`,
+      }),
+    };
+  }
+  const properties = (inputSchema.properties ?? {}) as Record<string, unknown>;
+  const statusOnly = name === "extension_auth" && args.action === "status";
+  if (named || statusOnly || !("project" in properties)) return { args };
+  return { args: { ...args, project: pinned } };
 }

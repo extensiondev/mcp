@@ -66,6 +66,7 @@ import {
   TOOL_POLICY,
   disabledToolEnvelope,
   isToolListed,
+  pinProjectArgs,
   type ServerOptions,
 } from "./lib/tool-policy";
 
@@ -219,17 +220,31 @@ export function createServer(
       };
     }
 
-    const normalizedArgs = normalizeArgAliases(
+    const aliasedArgs = normalizeArgAliases(
       tool.schema.inputSchema,
       (args ?? {}) as Record<string, unknown>,
     );
-    const disabled = disabledToolEnvelope(name, normalizedArgs, options);
+    const disabled = disabledToolEnvelope(name, aliasedArgs, options);
     if (disabled) {
       return {
         content: [{ type: "text" as const, text: disabled }],
         isError: true,
       };
     }
+
+    const pinned = pinProjectArgs(
+      name,
+      aliasedArgs,
+      tool.schema.inputSchema,
+      options,
+    );
+    if ("refused" in pinned) {
+      return {
+        content: [{ type: "text" as const, text: pinned.refused }],
+        isError: true,
+      };
+    }
+    const normalizedArgs = pinned.args;
 
     const issues = validateToolInput(tool.schema.inputSchema, normalizedArgs);
     if (issues.length) {
@@ -276,6 +291,7 @@ export async function startServer(
   options: ServerOptions = DEFAULT_SERVER_OPTIONS,
 ): Promise<void> {
   installCarrierExitCleanup();
+  if (options.project) process.env.EXTENSION_DEV_PROJECT = options.project;
   const server = createServer(options);
   const transport = new StdioServerTransport();
   await server.connect(transport);

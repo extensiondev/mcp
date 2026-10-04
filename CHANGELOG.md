@@ -1,5 +1,22 @@
 # Changelog
 
+## 10.10.4
+
+- `--project <workspace>/<project>` (env `EXTENSION_DEV_PROJECT`) pins a
+  server to one project. Every unnamed credential read takes that
+  project's login instead of the most recent one, an agent signed in to
+  several projects can no longer act on the wrong one, and a call that
+  names a different project is refused with `status: "project-pinned"`.
+  A pinned project with no stored login falls back to
+  `EXTENSION_DEV_TOKEN`, so CI keeps working.
+- New `@extension.dev/mcp/clients` export: `CLIENTS` and
+  `buildRecipe({ client, reach, strictApproval, project })` build the
+  exact setup for Claude Code, Cursor, VS Code, Codex and any
+  `mcpServers` client. The README's Setup section is generated from it
+  (`pnpm readme:clients`, checked by a spec), and the extension.dev
+  console's Connect dialog renders the same recipes, so the instructions
+  cannot drift. It never emits a setting that turns approvals off.
+
 ## 10.10.3
 
 - The engine pin moves off the canary to Extension.js `4.1.31` stable:
