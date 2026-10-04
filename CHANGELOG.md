@@ -2,6 +2,11 @@
 
 ## 10.10.3
 
+- The engine pin moves off the canary to Extension.js `4.1.31` stable:
+  `extension_dev`, `extension_start` and `extension_build` spawn that
+  release when a project has no engine of its own, and the nightly
+  engine-pin check reads it against `latest` again.
+
 - A human now approves a real store submission and a promotion to stable
   before either runs, by default. The first call answers
   `approval-required` with an `approvalUrl` on extension.dev
