@@ -1,5 +1,62 @@
 # Changelog
 
+## 10.10.9
+
+- One approval now covers several projects in one workspace
+ . Onboarding ten projects used to cost
+  twenty visits to extension.dev/device, one to create each project and
+  one to sign in to it, and the ten tokens then expired together and cost
+  ten more. This release is the client half and waits on the platform
+  deploy that accepts a list; against a platform that predates it, both
+  inputs below answer with the refusal the platform sent and the
+  one-project call to use instead.
+- `extension_project_create` takes `projects`, a list of
+  `{ project, repo }` entries in one workspace, in place of `project` and
+  `repo`. The approval page lists every name. Each project is created by
+  its own request and its 7-day token is stored as that project's login,
+  so no `extension_auth` call follows. An entry may carry its own
+  `displayName`, `description`, `installCommand`, `buildCommand`,
+  `outputDirectory`, `browsers` and `outputDirectories`; the same inputs
+  at the top level are the default for entries that leave them out.
+- The answer has one row per project: created and logged in, created
+  with no token (the hint names the batch login to run), refused with the
+  platform's own code, unconfirmed when a request got no answer, or not
+  attempted. A refusal about one project (a name taken, a reserved slug)
+  does not stop the list. A refusal about the approval (an expired grant,
+  the hourly limit, the plan's project limit, a missing GitHub App
+  installation) stops it, and every project not reached still gets a row
+  saying so.
+- A list takes a few calls: creating a project is slow, so while
+  projects remain the answer is `status: "creating"` with the same
+  `deviceCode` to call again. The provisioning grant is held in the
+  server's memory for its 15 minutes and is never written to disk or
+  returned; if the server restarts mid-list the projects already created
+  stay created and the rest need a new approval.
+- One approval creates at most 10 projects, because the platform creates
+  at most 10 per hour for one approving account. A longer create list is
+  refused before any approval is asked for, with that reason; it is never
+  split silently.
+- `extension_auth` with `action: "login"` takes `projects`, a list of up
+  to 20 `<workspace>/<project>` names of existing projects in one
+  workspace, in place of `project`. One approval stores one token per
+  project, which is also how a set of logins that expire together is
+  renewed. One missing project refuses the whole list and stores
+  nothing. The call that completes a batch login can take up to a
+  minute.
+- Both lists are checked before a device code is spent, by the
+  platform's own rules: one workspace, 1 to 20 names, no name twice, and
+  each project by its exact slug (lowercase letters and digits joined by
+  single dashes, at most 48 characters). The refusal names the entry.
+- A batch login or create does not change which login is the default.
+  A single login still does.
+- A server started with `--project` refuses a list that names any other
+  project, the same refusal a single call gets, and takes a list of the
+  pinned project alone. A list on `logout` or `status` is refused rather
+  than ignored.
+- `extension_project_create` no longer lists `project` and `repo` as
+  required in its schema, since a list replaces them. A call with
+  neither form is still refused, by the tool.
+
 ## 10.10.8
 
 - On Firefox, `extension_eval` now reads an extension whose content
