@@ -155,6 +155,33 @@ describe("extension_submit says submitted only for stores the platform recorded"
     expect(out.hint).toContain("extension_release_status");
   });
 
+  it("says a retryable refusal is safe to repeat, because the platform says nothing was dispatched", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(
+            JSON.stringify({
+              ok: false,
+              retryable: true,
+              code: "AUTHORITY_UNAVAILABLE",
+              reason: "The project record could not be read.",
+              message:
+                "The project record could not be read. Nothing was dispatched or recorded; retry the same call in a few seconds.",
+            }),
+            { status: 503, headers: { "retry-after": "10" } },
+          ),
+      ),
+    );
+    const out = await submit(["chrome", "firefox"]);
+
+    expect(out.status).toBe("submit-failed");
+    expect(out.error.platformCode).toBe("AUTHORITY_UNAVAILABLE");
+    expect(out.hint).not.toContain("may already be submitted");
+    expect(out.hint).toContain("can be repeated as it is");
+    expect(out.hint).toContain("after 10 seconds");
+  });
+
   it("does not raise that alarm for a refusal the platform made before dispatching", async () => {
     stubSubmit({ message: "Unsupported store(s): opera" }, 400);
     const out = await submit(["chrome"]);

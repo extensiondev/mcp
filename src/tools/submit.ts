@@ -287,8 +287,13 @@ export async function handler(args: SubmitToolArgs): Promise<string> {
      * dispatch. The platform dispatches each store's workflow and only then
      * records it and moves to the next store, so a 5xx can follow one or more
      * stores already submitted. The failure is reported as a failure and says
-     * that, because the natural next move is to submit again. */
-    const maybeDispatched = !dryRun && res.status >= 500;
+     * that, because the natural next move is to submit again. The exception
+     * is the platform's own `retryable: true`, which it sends only before any
+     * dispatch and which says so; that one is safe to repeat and is told as
+     * such, with the wait it asked for. */
+    const saidNothingDispatched = data?.retryable === true;
+    const maybeDispatched =
+      !dryRun && res.status >= 500 && !saidNothingDispatched;
     return envelope({
       ok: false,
       command: "extension_submit",
@@ -305,7 +310,15 @@ export async function handler(args: SubmitToolArgs): Promise<string> {
               browsers.length === 1 ? browsers[0] : "one or more of " + browsers.join(", ")
             } may already be submitted. Read ${statusRead} before submitting again.`,
           }
-        : {}),
+        : saidNothingDispatched
+          ? {
+              hint: `The platform says nothing was dispatched or recorded and that this call can be repeated as it is${
+                res.headers.get("retry-after")
+                  ? `, after ${res.headers.get("retry-after")} seconds`
+                  : ""
+              }.`,
+            }
+          : {}),
     });
   }
 

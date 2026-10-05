@@ -165,6 +165,7 @@ describe("readPromoteOutcome", () => {
     expect(readPromoteOutcome(promoteAnswer())).toEqual({
       state: "promoted",
       queuedBrowsers: ["chrome"],
+      notarization: { pending: [], refused: null },
     });
   });
 
@@ -174,23 +175,63 @@ describe("readPromoteOutcome", () => {
     );
   });
 
-  it("reads a notarization that did not start as part of the promote missing", () => {
-    const outcome = readPromoteOutcome(
+  it("never lets notarization change the verdict of a whole promote", () => {
+    for (const notarization of [
+      { ok: false, started: [], pending: ["safari"] },
+      { ok: true, started: ["safari"], pending: [] },
+      {
+        ok: true,
+        started: [],
+        pending: [],
+        refused: {
+          browsers: ["safari"],
+          reason: "macos_notarization_not_included",
+          upgradeUrl: "https://extension.dev/pricing",
+        },
+      },
+    ]) {
+      expect(readPromoteOutcome(promoteAnswer({ notarization })).state).toBe(
+        "promoted",
+      );
+    }
+  });
+});
+
+describe("extension_release_promote says what notarization will not do", () => {
+  it("warns on a whole promote whose notarization the plan refused", async () => {
+    stubPromote(
       promoteAnswer({
+        queuedBrowsers: ["chrome", "firefox"],
+        notarization: {
+          ok: true,
+          started: [],
+          pending: [],
+          refused: {
+            browsers: ["safari"],
+            reason: "macos_notarization_not_included",
+            upgradeUrl: "https://extension.dev/pricing",
+          },
+        },
+      }),
+    );
+    const out = await promote();
+
+    expect(out.status).toBe("promoted");
+    expect(out.warnings.join(" ")).toContain("will NOT happen for safari");
+    expect(out.warnings.join(" ")).toContain("macos_notarization_not_included");
+    expect(out.warnings.join(" ")).toContain("https://extension.dev/pricing");
+  });
+
+  it("says a pending notarization is not part of the answer", async () => {
+    stubPromote(
+      promoteAnswer({
+        queuedBrowsers: ["chrome", "firefox"],
         notarization: { ok: false, started: [], pending: ["safari"] },
       }),
     );
+    const out = await promote();
 
-    expect(outcome.state).toBe("partial");
-  });
-
-  it("leaves a notarization that started alone", () => {
-    expect(
-      readPromoteOutcome(
-        promoteAnswer({
-          notarization: { ok: true, started: ["safari"], pending: [] },
-        }),
-      ).state,
-    ).toBe("promoted");
+    expect(out.status).toBe("promoted");
+    expect(out.warnings.join(" ")).toContain("still pending for safari");
   });
 });

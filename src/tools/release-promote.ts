@@ -21,6 +21,7 @@ import {
 } from "../lib/approval-gate";
 import { spendNarration } from "../lib/allowance";
 import {
+  notarizationNotes,
   partialPromoteWarnings,
   readPromoteOutcome,
 } from "../lib/promote-outcome";
@@ -311,7 +312,6 @@ export async function handler(args: {
           pendingMirrors: outcome.pendingMirrors,
           githubReleaseFailed: outcome.githubReleaseFailed,
           githubReleaseAssetErrors: outcome.githubReleaseAssetErrors,
-          notarizationPending: outcome.notarizationPending,
         },
       },
       hint: `The release workflow was dispatched for ${outcome.queuedBrowsers.join(", ")}, and part of this promote did not happen: read the warnings. Do not repeat the whole promote; confirm what ${channel} serves with ${statusRead}.`,
@@ -324,5 +324,6 @@ export async function handler(args: {
     status: "promoted",
     value: enriched,
     hint: `The platform dispatched the release workflow for ${outcome.queuedBrowsers.join(", ")} and moved the ${channel} channel pointer to build ${buildId}. The artifacts land when that workflow finishes; ${statusRead} reads what the channel serves.`,
+    warnings: notarizationNotes(outcome.notarization),
   });
 }

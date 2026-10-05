@@ -16,13 +16,25 @@
  * does NOT name this build), `status: "degraded"` over both, and
  * `githubRelease.ok: false` for a release it could not publish. This client
  * used to print "promoted" on any 2xx, including a body it could not parse.
+ * Notarization is the one field that never changes the verdict: the platform
+ * treats it as a side effect of a promote, completed later by its own sweep,
+ * so a pending or plan-refused notarization is a note on a whole promote.
  * A promote cannot be undone in place and a blind retry dispatches the
  * release again, so the three outcomes are kept apart: whole, partial with
  * each missing piece named, and unconfirmed when the answer does not carry
  * the result at all.
  */
+export interface PromoteNotarization {
+  pending: string[];
+  refused: { browsers: string[]; reason: string; upgradeUrl: string } | null;
+}
+
 export type PromoteOutcome =
-  | { state: "promoted"; queuedBrowsers: string[] }
+  | {
+      state: "promoted";
+      queuedBrowsers: string[];
+      notarization: PromoteNotarization;
+    }
   | {
       state: "partial";
       queuedBrowsers: string[];
@@ -30,7 +42,7 @@ export type PromoteOutcome =
       pendingMirrors: string[];
       githubReleaseFailed: boolean;
       githubReleaseAssetErrors: string[];
-      notarizationPending: string[];
+      notarization: PromoteNotarization;
     }
   | { state: "unconfirmed"; why: string };
 
@@ -70,21 +82,29 @@ export function readPromoteOutcome(body: unknown): PromoteOutcome {
   const release = asRecord(record.githubRelease);
   const releaseFailed = release ? release.ok !== true : false;
   const assetErrors = asStrings(release?.assetErrors) ?? [];
-  const notarization = asRecord(record.notarization);
-  const notarizationPending =
-    notarization && notarization.ok === false
-      ? (asStrings(notarization.pending) ?? [])
-      : [];
+  const notarized = asRecord(record.notarization);
+  const refusal = asRecord(notarized?.refused);
+  const refusedBrowsers = asStrings(refusal?.browsers) ?? [];
+  const notarization: PromoteNotarization = {
+    pending: asStrings(notarized?.pending) ?? [],
+    refused:
+      refusal && refusedBrowsers.length
+        ? {
+            browsers: refusedBrowsers,
+            reason: String(refusal.reason ?? "").trim() || "unstated",
+            upgradeUrl: String(refusal.upgradeUrl ?? "").trim(),
+          }
+        : null,
+  };
   const pendingMirrors = [...pending, ...mirrorUnstated];
 
   if (
     failed.length === 0 &&
     pendingMirrors.length === 0 &&
     !releaseFailed &&
-    assetErrors.length === 0 &&
-    notarizationPending.length === 0
+    assetErrors.length === 0
   ) {
-    return { state: "promoted", queuedBrowsers: queued };
+    return { state: "promoted", queuedBrowsers: queued, notarization };
   }
   return {
     state: "partial",
@@ -93,8 +113,27 @@ export function readPromoteOutcome(body: unknown): PromoteOutcome {
     pendingMirrors,
     githubReleaseFailed: releaseFailed,
     githubReleaseAssetErrors: assetErrors,
-    notarizationPending,
+    notarization,
   };
+}
+
+export function notarizationNotes(notarization: PromoteNotarization): string[] {
+  const notes: string[] = [];
+  if (notarization.refused) {
+    notes.push(
+      `macOS notarization will NOT happen for ${notarization.refused.browsers.join(", ")}: the platform refused it (${notarization.refused.reason})${
+        notarization.refused.upgradeUrl
+          ? `; see ${notarization.refused.upgradeUrl}`
+          : ""
+      }. The release itself is unaffected.`,
+    );
+  }
+  if (notarization.pending.length) {
+    notes.push(
+      `macOS notarization is still pending for ${notarization.pending.join(", ")}; the platform completes it after the release, and it is not part of this answer.`,
+    );
+  }
+  return notes;
 }
 
 export function partialPromoteWarnings(
@@ -133,10 +172,5 @@ export function partialPromoteWarnings(
       `The GitHub Release is missing assets: ${outcome.githubReleaseAssetErrors.join("; ")}.`,
     );
   }
-  if (outcome.notarizationPending.length) {
-    warnings.push(
-      `Notarization did not start for ${outcome.notarizationPending.join(", ")}.`,
-    );
-  }
-  return warnings;
+  return [...warnings, ...notarizationNotes(outcome.notarization)];
 }
