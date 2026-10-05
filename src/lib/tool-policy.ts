@@ -303,6 +303,48 @@ export function pinProjectArgs(
 ): { args: Args } | { refused: string } {
   const pinned = options.project;
   if (!pinned) return { args };
+  /* @invariant A LIST IS HELD TO THE PIN NAME BY NAME, AND THE PIN IS NEVER
+   * INJECTED BESIDE ONE. A pinned server acts on one project, so a batch that
+   * names any other project is refused here exactly as a single call naming
+   * it would be, before validation and before any handler runs. An entry this
+   * layer cannot read a name out of counts as naming something else: the pin
+   * is a refusal unless every entry is provably the pinned project. A list
+   * that passes is handed on untouched, because writing the pinned `project`
+   * beside `projects` would turn a valid batch of one into a call that names
+   * its target twice.
+   */
+  if (args.projects !== undefined && args.projects !== null) {
+    const entries = Array.isArray(args.projects) ? args.projects : [args.projects];
+    const names = entries.map((entry) =>
+      typeof entry === "string"
+        ? entry.trim()
+        : entry && typeof entry === "object" && !Array.isArray(entry)
+          ? String((entry as { project?: unknown }).project ?? "").trim()
+          : "",
+    );
+    const others = names.filter(
+      (entry) => !entry.includes("/") || !sameProject(entry, pinned),
+    );
+    if (others.length > 0 || entries.length === 0) {
+      const shown = others.map((entry) => entry || "(an unnamed entry)");
+      return {
+        refused: envelope({
+          ok: false,
+          command: name,
+          status: "project-pinned",
+          error: {
+            code: "E_TOOL_DISABLED",
+            message: `This server is pinned to ${pinned} and was asked to act on a list naming ${
+              shown.length ? shown.join(", ") : "no project"
+            }.`,
+          },
+          value: { pinned, named: shown },
+          hint: `A pinned server takes a batch only when every entry is ${pinned}. Work on other projects through an MCP server configured without --project, or with its own --project (or ${PROJECT_PIN_ENV}).`,
+        }),
+      };
+    }
+    return { args };
+  }
   const named = typeof args.project === "string" ? args.project : "";
   if (named && !sameProject(named, pinned)) {
     return {

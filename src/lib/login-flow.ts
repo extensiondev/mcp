@@ -6,7 +6,12 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-import { writeCredentials, type StoredCredentials } from "./credentials";
+import {
+  writeCredentialBatch,
+  writeCredentials,
+  type StoredCredentials,
+} from "./credentials";
+import { sameProjectSet } from "./project-batch";
 import { PROD_ORIGINS } from "@extension.dev/urls/origins";
 import { consoleBase, consoleProjectUrl } from "./registry";
 
@@ -146,4 +151,60 @@ export function persistTokenResponse(args: {
   };
   writeCredentials(creds);
   return creds;
+}
+
+/* @invariant A BATCH LOGIN STORES EXACTLY THE LIST IT ASKED FOR, OR NOTHING.
+ * The platform answers one approval of a list with one token per listed
+ * project. Every token is checked before any is written: each must carry a
+ * token string and a workspace/project scope, and the set of scopes must be
+ * the set of names this call sent, no fewer and no others. A token scoped to
+ * a project this call never named is the one thing that must not be stored,
+ * because every later tool would then act on that project as if someone had
+ * signed in to it, so a response that carries one is refused whole rather
+ * than trimmed to the names that match.
+ */
+export function persistBatchTokenResponse(args: {
+  apiBase: string;
+  projects: string[];
+  data: Record<string, unknown>;
+}): StoredCredentials[] {
+  const raw = Array.isArray(args.data.tokens) ? args.data.tokens : null;
+  if (!raw) {
+    throw new Error(
+      "The platform answered this batch login with a single token and no per-project list, so nothing was stored. It may predate batch login: sign in to each project with its own extension_auth (action: login, project) call.",
+    );
+  }
+  const batch: StoredCredentials[] = raw.map((entry) => {
+    const record = (entry ?? {}) as Record<string, unknown>;
+    const token = String(record.token || "").trim();
+    const workspaceSlug = String(record.workspaceSlug || "").trim();
+    const projectSlug = String(record.projectSlug || "").trim();
+    if (!token || !workspaceSlug || !projectSlug) {
+      throw new Error(
+        "The batch login returned an entry without a token or a workspace/project scope; nothing was stored. Run extension_auth (action: login) again.",
+      );
+    }
+    return {
+      version: 1,
+      token,
+      workspaceSlug,
+      projectSlug,
+      expiresAt: Number(record.expiresAt || 0),
+      api: args.apiBase,
+      provider: "extensiondev",
+    };
+  });
+  const returned = batch.map(
+    (creds) => `${creds.workspaceSlug}/${creds.projectSlug}`,
+  );
+  if (
+    new Set(returned.map((ref) => ref.toLowerCase())).size !== returned.length ||
+    !sameProjectSet(args.projects, returned)
+  ) {
+    throw new Error(
+      `The batch login returned tokens scoped to [${returned.join(", ")}], not the requested [${args.projects.join(", ")}]; nothing was stored. Run extension_auth (action: login) again with the intended projects.`,
+    );
+  }
+  writeCredentialBatch(batch);
+  return batch;
 }

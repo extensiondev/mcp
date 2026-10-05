@@ -189,6 +189,30 @@ export function writeCredentials(creds: StoredCredentials): string {
   return writeStore({ version: 2, active: key, entries });
 }
 
+/* @invariant A BATCH ADDS LOGINS AND DOES NOT CHOOSE THE DEFAULT ONE. A
+ * single login makes its project the active entry because signing in to one
+ * project is a statement about which project comes next. One approval for a
+ * list says no such thing, and letting whichever name happened to be written
+ * last become the default would silently repoint every unnamed token read. So
+ * the active entry is kept when there is one, and only an empty store takes
+ * the first name of the batch. Every entry lands in one write, so a reader
+ * never sees half a batch.
+ */
+export function writeCredentialBatch(batch: StoredCredentials[]): string | null {
+  if (batch.length === 0) return null;
+  const existing = readCredentialStore();
+  const entries = { ...(existing?.entries ?? {}) };
+  for (const creds of batch) {
+    entries[credentialKey(creds.workspaceSlug, creds.projectSlug)] = creds;
+  }
+  const first = batch[0] as StoredCredentials;
+  const active =
+    existing?.active && entries[existing.active]
+      ? existing.active
+      : credentialKey(first.workspaceSlug, first.projectSlug);
+  return writeStore({ version: 2, active, entries });
+}
+
 export function clearCredentials(selector?: CredentialSelector): {
   cleared: boolean;
   path: string;
