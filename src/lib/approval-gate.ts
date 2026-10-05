@@ -46,8 +46,9 @@ import { platformHoldEnvelope, sawPlatformHold } from "./platform-hold";
  * legible refusal and fail-closed safety; the server is the source of truth.
  *
  * SERVER CONTRACT (live in www since 2026-10-03). The gate is ON by default for
- * a real store submission and a promotion to stable, OFF by default for every
- * other promotion and for a share revoke, and EXTENSION_DEV_APPROVAL_GATE set to
+ * a real store submission, a promotion to stable and a share revoke (revoke
+ * added 2026-10-05: it is the one outward call nothing can undo), OFF
+ * by default for every other promotion, and EXTENSION_DEV_APPROVAL_GATE set to
  * 1 or 0 overrides both ways. The platform is the authority either way: when it
  * requires an approval the client did not ask for, it answers APPROVAL_REQUIRED
  * and the tool turns that refusal into this same two-phase flow.

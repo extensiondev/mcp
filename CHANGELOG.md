@@ -1,5 +1,14 @@
 # Changelog
 
+## 10.10.7
+
+- A share revoke now waits for a person by default, like a real store
+  submission and a promotion to stable: the first `extension_shares`
+  revoke answers `approval-required` with a link, and the same call with
+  the returned `approvalId` runs it once. A revoke cannot be undone, so
+  it is the one outward call that should never run on an agent's word
+  alone. `EXTENSION_DEV_APPROVAL_GATE=0` still turns the gate off.
+
 ## 10.10.6
 
 - Tools that read a page or an extension (`extension_logs`,

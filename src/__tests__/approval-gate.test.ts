@@ -147,6 +147,16 @@ describe("the approval gate guards irreversible outward actions and cannot self-
       expect(calls.filter((c) => c.key === "POST /api/cli/approvals")).toHaveLength(1);
     });
 
+    it("asks for an approval before a share revoke with no setting at all", async () => {
+      global.fetch = router(calls, {
+        "POST /api/cli/approvals": approvalRoute,
+        "DELETE /api/artifacts": () => jsonResponse({ revoked: true }),
+      });
+      const out = JSON.parse(await sharesHandler({ action: "revoke", artifactId: GEN_ID }));
+      expect(out.status).toBe("approval-required");
+      expect(hit("DELETE /api/artifacts")).toBe(false);
+    });
+
     it("lets a real submission through when the user turns the gate off", async () => {
       process.env.EXTENSION_DEV_APPROVAL_GATE = "0";
       global.fetch = router(calls, {

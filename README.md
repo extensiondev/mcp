@@ -151,7 +151,7 @@ Two flags (or environment variables) narrow the server before an agent sees it:
 
 A refused call answers `E_TOOL_DISABLED` with the flag to change.
 
-A real store submission and a promotion to stable also wait for a person by default: the first call answers `approval-required` with a link on extension.dev, a workspace member approves exactly that action, and the same call with the returned `approvalId` runs it once. `EXTENSION_DEV_APPROVAL_GATE=1` extends this to every promotion and share revoke; `EXTENSION_DEV_APPROVAL_GATE=0` turns it off.
+A real store submission, a promotion to stable and a share revoke also wait for a person by default: the first call answers `approval-required` with a link on extension.dev, a workspace member approves exactly that action, and the same call with the returned `approvalId` runs it once. `EXTENSION_DEV_APPROVAL_GATE=1` extends this to every promotion; `EXTENSION_DEV_APPROVAL_GATE=0` turns it off.
 
 Every tool also carries MCP annotations (`readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`), so clients can auto-approve reads and ask before the rest.
 

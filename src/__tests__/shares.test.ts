@@ -45,9 +45,11 @@ function listingFetch(body: unknown, status = 200): typeof fetch {
 describe("extension_shares", () => {
   const origFetch = global.fetch;
   const origToken = process.env.EXTENSION_DEV_TOKEN;
+  const origGate = process.env.EXTENSION_DEV_APPROVAL_GATE;
 
   beforeEach(() => {
     process.env.EXTENSION_DEV_TOKEN = "test-token";
+    process.env.EXTENSION_DEV_APPROVAL_GATE = "0";
     global.fetch = (async () => {
       throw new Error("no test may reach the real platform");
     }) as unknown as typeof fetch;
@@ -57,6 +59,8 @@ describe("extension_shares", () => {
     global.fetch = origFetch;
     if (origToken === undefined) delete process.env.EXTENSION_DEV_TOKEN;
     else process.env.EXTENSION_DEV_TOKEN = origToken;
+    if (origGate === undefined) delete process.env.EXTENSION_DEV_APPROVAL_GATE;
+    else process.env.EXTENSION_DEV_APPROVAL_GATE = origGate;
   });
 
   it("names the tool and defaults to listing", () => {

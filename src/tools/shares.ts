@@ -25,6 +25,7 @@ import { envelope } from "../lib/envelope";
 import { resolveToken } from "../lib/publish";
 import { PROJECT_TOKEN_INPUT } from "../lib/credentials";
 import {
+  approvalGateEnabled,
   evaluateApproval,
   requestApprovalAfterRefusal,
 } from "../lib/approval-gate";
@@ -444,7 +445,10 @@ async function revokeShare(args: {
     api: args.api,
   };
   if (token) {
-    const gate = await evaluateApproval(gateInput);
+    const gate = await evaluateApproval({
+      ...gateInput,
+      enabled: approvalGateEnabled(true),
+    });
     if (gate.blocked) return gate.envelope;
   }
 
