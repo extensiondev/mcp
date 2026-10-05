@@ -4,7 +4,7 @@ import path from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { FREE_ALLOWANCE_PHRASE } from "../lib/allowance";
+import { ALLOWANCE_PHRASE } from "../lib/allowance";
 import { handler as previewWeb } from "../tools/preview-web";
 import { handler as publish } from "../tools/publish";
 import { handler as promote } from "../tools/release-promote";
@@ -30,7 +30,7 @@ function jsonResponse(body: unknown, status = 200): Response {
 function expectNarrated(allowance: any, what: string) {
   expect(allowance).toBeTruthy();
   expect(allowance.spent).toBe(
-    `${what} ran on extension.dev's machines and ${FREE_ALLOWANCE_PHRASE}.`,
+    `${what} ${ALLOWANCE_PHRASE}.`,
   );
   expect(allowance.remains).toBeTruthy();
   expect(allowance.wall).toContain("/pricing");

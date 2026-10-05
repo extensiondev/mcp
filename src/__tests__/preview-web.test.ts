@@ -506,8 +506,8 @@ describe("extension_preview_web", () => {
         expect(share.requested).toBe(false);
         expect(share.localLinkNeeds).toContain("preview.extension.dev dev server");
         expect(share.localLinkNeeds).toContain("this machine");
-        expect(share.shareSpends).toContain("extension.dev's machines");
-        expect(share.shareSpends).toContain("counts against your free allowance");
+        expect(share.shareSpends).toContain("uploads this build to extension.dev");
+        expect(share.shareSpends).toContain("metered against your plan's allowance");
         expect(share.shareCall.startsWith("extension_preview_web ")).toBe(true);
         const call = JSON.parse(
           share.shareCall.slice(share.shareCall.indexOf("{")),
@@ -537,7 +537,7 @@ describe("extension_preview_web", () => {
         expect(out.error.code).toBe("E_PREVIEW_HOST_UNREACHABLE");
         const share = out.value.share;
         expect(share.requested).toBe(false);
-        expect(share.shareSpends).toContain("counts against your free allowance");
+        expect(share.shareSpends).toContain("metered against your plan's allowance");
         const call = JSON.parse(
           share.shareCall.slice(share.shareCall.indexOf("{")),
         );
@@ -551,7 +551,7 @@ describe("extension_preview_web", () => {
     it("keeps the tool description in sync with the sentence the result carries", () => {
       const shareDescription = (schema.inputSchema.properties as any).share
         .description as string;
-      expect(shareDescription).toContain("counts against your free allowance");
+      expect(shareDescription).toContain("metered against your plan's allowance");
     });
   });
 

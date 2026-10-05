@@ -19,6 +19,7 @@ import { spendNarration } from "../lib/allowance";
 import { recordSharedPreview } from "../lib/share-record";
 import { probeShareCors } from "../lib/share-cors-probe";
 import { envelope } from "../lib/envelope";
+import { ALLOWANCE_PHRASE } from "../lib/allowance";
 import {
   PLATFORM_HOLD_CODE,
   PLATFORM_HOLD_STILL_WORKS,
@@ -184,7 +185,7 @@ function unrequestedShare(args: {
     requested: false,
     localLinkNeeds: `deepLink renders only against a ${SURFACE.label} dev server running on this machine, so to anyone else it is a dead link.`,
     shareSpends:
-      "share:true uploads this build to extension.dev's machines and counts against your free allowance, which is why it is off by default.",
+      `share:true uploads this build to extension.dev, which ${ALLOWANCE_PHRASE}, which is why it is off by default.`,
     shareCall: `extension_preview_web ${JSON.stringify(call)}`,
   };
 }
@@ -363,7 +364,7 @@ export const schema = {
         type: "boolean",
         default: false,
         description:
-          "Upload the built dist and return a public link (share.previewUrl) that renders those exact bytes for anyone: no install, sign-in or dev server. Uploading runs on extension.dev's machines and counts against your free allowance; left false, the result's share property says what the local deepLink needs, what share:true spends, and the exact call to get a shareable link. It also serves the build as a zip (share.zipUrl), so sharing hands over the code. Needs a token scoped to an extension.dev project (extension_auth or EXTENSION_DEV_TOKEN); without one you get a login hint and the local preview still succeeds. Live until share.expiresAt; DELETE share.revokeUrl to kill it sooner. Revocation is permanent, and re-sharing an unchanged build returns the same link unless it was revoked, so each share is also appended to the project's gitignored .extension.dev/shared-previews.json.",
+          "Upload the built dist and return a public link (share.previewUrl) that renders those exact bytes for anyone: no install, sign-in or dev server. Uploading is metered against your plan's allowance on extension.dev; left false, the result's share property says what the local deepLink needs, what share:true spends, and the exact call to get a shareable link. It also serves the build as a zip (share.zipUrl), so sharing hands over the code. Needs a token scoped to an extension.dev project (extension_auth or EXTENSION_DEV_TOKEN); without one you get a login hint and the local preview still succeeds. Live until share.expiresAt; DELETE share.revokeUrl to kill it sooner. Revocation is permanent, and re-sharing an unchanged build returns the same link unless it was revoked, so each share is also appended to the project's gitignored .extension.dev/shared-previews.json.",
       },
     },
     required: ["projectPath"],

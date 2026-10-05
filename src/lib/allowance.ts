@@ -8,7 +8,16 @@
 
 import { mcpOrigins } from "./origins";
 
-export const FREE_ALLOWANCE_PHRASE = "counts against your free allowance";
+/* @invariant ONE SENTENCE ABOUT THE ALLOWANCE, AND IT CLAIMS NOTHING THE
+ * LANES DO DIFFERENTLY. It used to say "counts against your free allowance"
+ * and "when the allowance runs out, the platform refuses with its own
+ * numbers". A share publish is recorded and never refused; a share upload has
+ * caps but no plan allowance; a promote or submit meters each browser or
+ * store dispatched; a create at its build cap is a 200 with the build
+ * withheld; and "free" is wrong on a paid plan. The
+ * sentence now says only what is true on every lane: the act is metered
+ * against the plan's allowance, and the pricing page owns the rest. */
+export const ALLOWANCE_PHRASE = "is metered against your plan's allowance on extension.dev";
 
 /* @invariant
  * THE NUMBERS AND THE DATES ARE THE PLATFORM'S, NEVER THIS TARBALL'S.
@@ -70,11 +79,11 @@ export function spendNarration(options: {
 }): SpendNarration {
   const counted = readPlatformAllowance(options.body);
   return {
-    spent: `${options.what} ran on extension.dev's machines and ${FREE_ALLOWANCE_PHRASE}.`,
+    spent: `${options.what} ${ALLOWANCE_PHRASE}.`,
     remains: counted
       ? `The platform reports ${counted.used} of ${counted.limit} used.`
-      : "The platform sent no remaining count on this call, and this client never invents one. When the allowance runs out, the platform refuses with its own numbers.",
-    wall: `What the free allowance covers and when the paid plan starts are published at ${allowanceWallUrl(
+      : "The platform sent no remaining count on this call, and this client never invents one.",
+    wall: `What the allowance covers and when the paid plan starts are published at ${allowanceWallUrl(
       options.api,
     )}.`,
   };

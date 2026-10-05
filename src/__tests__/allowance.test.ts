@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import {
-  FREE_ALLOWANCE_PHRASE,
+  ALLOWANCE_PHRASE,
   allowanceWallUrl,
   readPlatformAllowance,
   spendNarration,
@@ -10,7 +10,7 @@ import {
 const DATE_TOKEN =
   /\b20\d{2}\b|January|February|March|April|June|July|August|September|October|November|December|\bMay\b/;
 
-describe("the free allowance narration", () => {
+describe("the allowance narration", () => {
   let prevApi: string | undefined;
 
   beforeEach(() => {
@@ -24,13 +24,13 @@ describe("the free allowance narration", () => {
   });
 
   it("keeps the one house phrasing, verbatim", () => {
-    expect(FREE_ALLOWANCE_PHRASE).toBe("counts against your free allowance");
+    expect(ALLOWANCE_PHRASE).toBe("is metered against your plan's allowance on extension.dev");
   });
 
   it("says what was spent using the house phrasing and our machines", () => {
     const n = spendNarration({ what: "This share upload" });
     expect(n.spent).toBe(
-      "This share upload ran on extension.dev's machines and counts against your free allowance.",
+      "This share upload is metered against your plan's allowance on extension.dev.",
     );
   });
 
@@ -38,7 +38,7 @@ describe("the free allowance narration", () => {
     const n = spendNarration({ what: "This publish", body: { shareUrl: "x" } });
     expect(n.remains).not.toMatch(/\d/);
     expect(n.remains).toContain("never invents one");
-    expect(n.remains).toContain("refuses with its own numbers");
+    expect(n.remains).not.toContain("refuses");
   });
 
   it("relays the platform's own count when a response carries one", () => {
@@ -85,7 +85,7 @@ describe("the free allowance narration", () => {
     );
     const n = spendNarration({ what: "This publish" });
     expect(n.wall).toBe(
-      "What the free allowance covers and when the paid plan starts are published at https://www.extension.dev/pricing.",
+      "What the allowance covers and when the paid plan starts are published at https://www.extension.dev/pricing.",
     );
   });
 });

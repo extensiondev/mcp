@@ -111,7 +111,7 @@ describe("extension_submit says submitted only for stores the platform recorded"
     expect(out.error.message).toContain("is unknown");
     expect(out.hint).toContain("Do not submit again blind");
     expect(out.hint).toContain("extension_release_status");
-    expect(JSON.stringify(out.value)).not.toContain("ran on extension.dev");
+    expect(JSON.stringify(out.value)).not.toContain("metered against");
   });
 
   it("never calls a 2xx that says ok false submitted", async () => {
