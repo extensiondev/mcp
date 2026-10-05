@@ -131,6 +131,51 @@ export async function handler(args: {
             },
           });
         }
+        /* @invariant ATTACHED IS THE PRESENT TENSE. The engine keeps
+           `executorAttachedAt` after the executor goes and flips `runtime` to
+           "detached", and a browser that dies after ready leaves `status:
+           "ready"` beside its exit stamps. Reading the attach stamp alone
+           called a dead browser ready. A detached runtime
+           or an exit stamp is the browser gone, said as such. */
+        const browserGone =
+          contract.runtime === "detached" ||
+          typeof (contract as { browserExitedAt?: unknown }).browserExitedAt === "string";
+        if (browserGone) {
+          const exit = contract as {
+            browserExitedAt?: string;
+            browserExitCode?: number | null;
+            browserExitSignal?: string | null;
+            executorDetachedAt?: string;
+          };
+          return envelope({
+            ok: false,
+            command: schema.name,
+            status: "browser-gone",
+            error: {
+              code: "E_SESSION_EXITED",
+              message: `ready.json still reads ready, but the browser is gone: ${
+                exit.browserExitedAt
+                  ? `it exited at ${exit.browserExitedAt}${
+                      exit.browserExitCode != null ? ` with code ${exit.browserExitCode}` : ""
+                    }${exit.browserExitSignal ? ` (${exit.browserExitSignal})` : ""}`
+                  : `the runtime executor detached${exit.executorDetachedAt ? ` at ${exit.executorDetachedAt}` : ""}`
+              }. The dev server is still up, so a build will still land, but nothing is attached to drive or read.`,
+            },
+            value: {
+              compiled: true,
+              browserAttached: false,
+              browserGone: true,
+              ...sessionCommandSinceEnvelopeOwnsCommand(contract),
+              browser: contract.browser,
+              pid: contract.pid,
+              ...(exit.browserExitedAt ? { browserExitedAt: exit.browserExitedAt } : {}),
+              ...(exit.executorDetachedAt ? { executorDetachedAt: exit.executorDetachedAt } : {}),
+              budgetMs,
+              elapsedMs: Date.now() - start,
+            },
+            hint: "Call extension_stop for this project, then extension_dev again; extension_logs (level: error) and the session log may say why the browser left.",
+          });
+        }
         const attached =
           contract.runtime === "attached" ||
           typeof contract.executorAttachedAt === "string";

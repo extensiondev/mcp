@@ -4,6 +4,7 @@ import path from "node:path";
 import * as bridge from "extension-develop/bridge";
 
 import { browserArtifactsDir, readyContractPath } from "../../lib/session-paths";
+import { attachedDevContract, errorContract, readyContract } from "./engine-answers";
 
 /* @invariant A session fixture that wants eval writes the engine's own token
    file, at the path the engine publishes, the way `extension dev --allow-eval`
@@ -35,23 +36,51 @@ function writeContract(
   return file;
 }
 
+/* @invariant A "modern" contract is the one the pinned engine writes: the
+   full `readyContract("dev")` base with the launcher's stamps, `schema: 1`
+   included. The hand-written shape this used to be (status, pid, ports and
+   nothing else) let every dev and start cell skip the machine-contract branch
+   of the boot verdict and never carried the fields wait and assert read
+  . */
 export function writeModernContract(
   projectPath: string,
   browser: string,
   overrides: Record<string, unknown> = {},
 ): string {
-  return writeContract(projectPath, browser, {
-    schemaVersion: 2,
-    status: "ready",
+  return writeContract(
+    projectPath,
     browser,
-    instanceId: "inst-modern",
-    runId: "run-modern",
-    controlPort: 43210,
-    port: 8080,
-    pid: process.pid,
-    cdpPort: 9333,
-    ...overrides,
-  });
+    attachedDevContract(browser, {
+      instanceId: "inst-modern",
+      runId: "run-modern",
+      distPath: path.join(projectPath, "dist", browser),
+      manifestPath: path.join(projectPath, "src", "manifest.json"),
+      logsPath: path.join(browserArtifactsDir(projectPath, browser), "logs.ndjson"),
+      ...overrides,
+    }),
+  );
+}
+
+/* The contract after the compile landed and before any browser stamped it:
+   what a `noBrowser` session keeps for good, and what a launching session
+   shows for a moment. The base only, no launcher or executor fields. */
+export function writeCompiledUnattachedContract(
+  projectPath: string,
+  browser: string,
+  overrides: Record<string, unknown> = {},
+): string {
+  return writeContract(
+    projectPath,
+    browser,
+    readyContract("dev", browser, {
+      instanceId: "inst-unattached",
+      runId: "run-unattached",
+      distPath: path.join(projectPath, "dist", browser),
+      manifestPath: path.join(projectPath, "src", "manifest.json"),
+      logsPath: path.join(browserArtifactsDir(projectPath, browser), "logs.ndjson"),
+      ...overrides,
+    }),
+  );
 }
 
 export function writeLegacyContract(
@@ -75,14 +104,14 @@ export function writeErrorContract(
   projectPath: string,
   browser: string,
 ): string {
-  return writeContract(projectPath, browser, {
-    schemaVersion: 2,
-    status: "error",
+  return writeContract(
+    projectPath,
     browser,
-    instanceId: "inst-err",
-    controlPort: 43210,
-    message: "compile failed",
-  });
+    errorContract(browser, "compile_error", {
+      instanceId: "inst-err",
+      distPath: path.join(projectPath, "dist", browser),
+    }),
+  );
 }
 
 export function writeSchema1ContractError(

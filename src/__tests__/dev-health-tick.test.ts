@@ -44,6 +44,7 @@ const start = await import("../tools/start");
 const wait = await import("../tools/wait");
 const { removeSession } = await import("../lib/process-manager");
 const {
+  writeCompiledUnattachedContract,
   writeModernContract,
   writeSchema1ContractError,
   writePreSchema1ContractError,
@@ -292,7 +293,7 @@ describe("extension_dev build-only sessions", () => {
     expect(result.hint).toContain("browserAttached: false");
     expect(result.hint).not.toContain("fully loaded");
 
-    writeModernContract(project, "chrome", { command: "dev", pid: process.pid });
+    writeCompiledUnattachedContract(project, "chrome", { pid: process.pid });
     const before = Date.now();
     const waited = JSON.parse(
       await wait.handler({ projectPath: project, browser: "chrome" }),

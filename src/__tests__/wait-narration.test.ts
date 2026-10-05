@@ -8,7 +8,10 @@ import {
   removeSession,
   removeSessionMarker,
 } from "../lib/process-manager";
-import { writeModernContract } from "./fixtures/ready-contract";
+import {
+  writeCompiledUnattachedContract,
+  writeModernContract,
+} from "./fixtures/ready-contract";
 
 let dir: string;
 beforeEach(() => {
@@ -198,7 +201,7 @@ describe("extension_wait splits compiled from browserAttached", () => {
   });
 
   it("keeps the half-ready state separate when the budget runs out unattached", async () => {
-    writeModernContract(dir, "chrome", { pid: process.pid });
+    writeCompiledUnattachedContract(dir, "chrome", { pid: process.pid });
 
     const result = JSON.parse(
       await handler({ projectPath: dir, browser: "chrome", timeoutMs: 1500 }),
@@ -214,6 +217,47 @@ describe("extension_wait splits compiled from browserAttached", () => {
   }, 10_000);
 });
 
+describe("extension_wait on a browser that died after ready", () => {
+  it("does not call a detached runtime attached, and names the exit", async () => {
+    writeModernContract(dir, "chrome", {
+      pid: process.pid,
+      browserExitedAt: "2026-10-05T12:00:00.000Z",
+      browserExitCode: 0,
+      browserExitSignal: null,
+      executorDetachedAt: "2026-10-05T12:00:01.000Z",
+      runtime: "detached",
+    });
+
+    const result = JSON.parse(
+      await handler({ projectPath: dir, browser: "chrome", timeoutMs: 1500 }),
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.status).toBe("browser-gone");
+    expect(result.error.code).toBe("E_SESSION_EXITED");
+    expect(result.error.message).toContain("exited at 2026-10-05T12:00:00.000Z");
+    expect(result.value.browserAttached).toBe(false);
+    expect(result.value.compiled).toBe(true);
+    expect(result.hint).toContain("extension_stop");
+  });
+
+  it("reads a detached runtime with no exit stamp the same way", async () => {
+    writeModernContract(dir, "chrome", {
+      pid: process.pid,
+      runtime: "detached",
+      executorDetachedAt: "2026-10-05T12:00:01.000Z",
+    });
+
+    const result = JSON.parse(
+      await handler({ projectPath: dir, browser: "chrome", timeoutMs: 1500 }),
+    );
+
+    expect(result.status).toBe("browser-gone");
+    expect(result.error.message).toContain("detached at 2026-10-05T12:00:01.000Z");
+    expect(result.value.browserAttached).toBe(false);
+  });
+});
+
 describe("extension_wait in build-only sessions", () => {
   it("returns at compile time instead of waiting for a browser that cannot attach", async () => {
     registerSession({
@@ -223,7 +267,7 @@ describe("extension_wait in build-only sessions", () => {
       command: "dev",
       noBrowser: true,
     });
-    writeModernContract(dir, "chrome", { pid: process.pid });
+    writeCompiledUnattachedContract(dir, "chrome", { pid: process.pid });
 
     const before = Date.now();
     const result = JSON.parse(
@@ -247,7 +291,7 @@ describe("extension_wait in build-only sessions", () => {
       noBrowser: true,
     });
     removeSession(dir, "chrome");
-    writeModernContract(dir, "chrome", { pid: process.pid });
+    writeCompiledUnattachedContract(dir, "chrome", { pid: process.pid });
 
     const result = JSON.parse(
       await handler({ projectPath: dir, browser: "chrome" }),
