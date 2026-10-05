@@ -6,7 +6,11 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-import { listCredentials, readCredentials } from "../lib/credentials";
+import {
+  credentialStoreProblem,
+  listCredentials,
+  readCredentials,
+} from "../lib/credentials";
 import { envelope } from "../lib/envelope";
 import { resolveApiBase, safeApiBase, tokenTtlNote } from "../lib/login-flow";
 import {
@@ -73,6 +77,21 @@ export async function readIdentity(deps?: {
   fetchImpl?: typeof fetch;
 }): Promise<string> {
   const creds = readCredentials();
+  const problem = creds ? null : credentialStoreProblem();
+  if (problem) {
+    return envelope({
+      ok: false,
+      command: "extension_auth",
+      status: "store-unreadable",
+      error: {
+        code: "E_CONFIG",
+        name: "CredentialStoreUnreadable",
+        message: `The login store at ${problem.path} exists but ${problem.reason}, so the logins on this machine cannot be listed.`,
+      },
+      value: { path: problem.path },
+      hint: "This is not a logged-out machine: the file is there and may hold logins. Fix or move it and run extension_auth (action: status) again; a new login is refused while it is unreadable, and extension_auth (action: logout) with no project removes it if its logins are not worth recovering.",
+    });
+  }
   if (!creds) {
     return envelope({
       ok: true,

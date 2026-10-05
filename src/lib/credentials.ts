@@ -74,23 +74,88 @@ function readEntry(data: unknown): StoredCredentials | null {
   };
 }
 
-export function readCredentialStore(): CredentialStore | null {
+/* @invariant
+ * "NO LOGINS" IS A FILE THAT IS NOT THERE. EVERYTHING ELSE IS "CANNOT READ".
+ *
+ * Every failure to read the store used to come back as null: a file another
+ * process was halfway through writing, one cut short by a crash, one this
+ * user may not read, one written by a newer client. The writers then built
+ * the next store from nothing and wrote it over the file, so signing in to
+ * one project erased every other login, and the answer said "logged in".
+ * The read now has three outcomes and only one of them may be written over:
+ * absent (or a file holding no usable entry). An unreadable store keeps its
+ * bytes, the write refuses and says why, and status reports it as unreadable
+ * instead of "logged out".
+ */
+export type CredentialStoreRead =
+  | { state: "absent" }
+  | { state: "ok"; store: CredentialStore }
+  | { state: "unreadable"; path: string; reason: string };
+
+export class CredentialStoreUnreadableError extends Error {
+  readonly path: string;
+  readonly reason: string;
+  constructor(file: string, reason: string) {
+    super(
+      `The login store at ${file} exists but ${reason}, so it was left untouched and nothing was stored. Fix or move that file and sign in again; extension_auth (action: logout) with no project removes it if its logins are not worth recovering.`,
+    );
+    this.name = "CredentialStoreUnreadableError";
+    this.path = file;
+    this.reason = reason;
+  }
+}
+
+export function inspectCredentialStore(): CredentialStoreRead {
+  const file = credentialsPath();
+  let text: string;
+  try {
+    text = fs.readFileSync(file, "utf8");
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException)?.code;
+    if (code === "ENOENT") return { state: "absent" };
+    return {
+      state: "unreadable",
+      path: file,
+      reason: `could not be read (${code || (err as Error)?.message || "unknown error"})`,
+    };
+  }
+  if (!text.trim()) return { state: "absent" };
   let data: unknown;
   try {
-    data = JSON.parse(fs.readFileSync(credentialsPath(), "utf8"));
+    data = JSON.parse(text);
   } catch {
-    return null;
+    return {
+      state: "unreadable",
+      path: file,
+      reason: "is not valid JSON (it may have been cut short mid-write)",
+    };
   }
-  if (!data || typeof data !== "object") return null;
+  if (!data || typeof data !== "object" || Array.isArray(data)) {
+    return { state: "unreadable", path: file, reason: "does not hold a login store" };
+  }
   const record = data as Record<string, unknown>;
   if (record.version === 1) {
     const only = readEntry(record);
-    if (!only) return null;
+    if (!only) return { state: "absent" };
     const key = credentialKey(only.workspaceSlug, only.projectSlug);
-    return { version: 2, active: key, entries: { [key]: only } };
+    return {
+      state: "ok",
+      store: { version: 2, active: key, entries: { [key]: only } },
+    };
   }
-  if (record.version !== 2 || !record.entries || typeof record.entries !== "object") {
-    return null;
+  if (record.version !== 2) {
+    return {
+      state: "unreadable",
+      path: file,
+      reason: `is a version ${JSON.stringify(record.version)} store, which this client does not read (a newer client may have written it)`,
+    };
+  }
+  if (
+    !record.entries ||
+    typeof record.entries !== "object" ||
+    Array.isArray(record.entries)
+  ) {
+    return { state: "unreadable", path: file, reason: "has no entries map" };
   }
   const entries: Record<string, StoredCredentials> = {};
   for (const [key, value] of Object.entries(record.entries as Record<string, unknown>)) {
@@ -98,12 +163,24 @@ export function readCredentialStore(): CredentialStore | null {
     if (entry) entries[key.toLowerCase()] = entry;
   }
   const keys = Object.keys(entries);
-  if (keys.length === 0) return null;
+  if (keys.length === 0) return { state: "absent" };
   const active =
     typeof record.active === "string" && entries[record.active.toLowerCase()]
       ? record.active.toLowerCase()
       : (keys[0] ?? null);
-  return { version: 2, active, entries };
+  return { state: "ok", store: { version: 2, active, entries } };
+}
+
+export function readCredentialStore(): CredentialStore | null {
+  const read = inspectCredentialStore();
+  return read.state === "ok" ? read.store : null;
+}
+
+export function credentialStoreProblem(): { path: string; reason: string } | null {
+  const read = inspectCredentialStore();
+  return read.state === "unreadable"
+    ? { path: read.path, reason: read.reason }
+    : null;
 }
 
 export const PROJECT_PIN_ENV = "EXTENSION_DEV_PROJECT";
@@ -162,7 +239,7 @@ export function listCredentials(): Array<StoredCredentials & { key: string; acti
   }));
 }
 
-function writeStore(store: CredentialStore): string {
+function ensureStoreDir(): string {
   const file = credentialsPath();
   const dir = path.dirname(file);
   fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
@@ -171,22 +248,107 @@ function writeStore(store: CredentialStore): string {
   } catch {
     // Best-effort: some filesystems (e.g. Windows) do not support chmod.
   }
-  fs.writeFileSync(file, JSON.stringify(store, null, 2) + "\n", {
-    mode: 0o600,
-  });
+  return file;
+}
+
+/* @invariant THE STORE IS REPLACED WHOLE OR NOT AT ALL. The bytes go to a
+ * sibling file and are renamed over the store, so a reader, in this process
+ * or another server's, sees the old store or the new one and never a file cut
+ * off mid-write. A crash between the two leaves the old store and a stray
+ * temp file, which is the harmless way round. */
+function writeStore(store: CredentialStore): string {
+  const file = ensureStoreDir();
+  const tmpFile = `${file}.${process.pid}.${Date.now()}.tmp`;
   try {
-    fs.chmodSync(file, 0o600);
-  } catch {
-    // Best-effort: some filesystems (e.g. Windows) do not support chmod.
+    fs.writeFileSync(tmpFile, JSON.stringify(store, null, 2) + "\n", {
+      mode: 0o600,
+    });
+    try {
+      fs.chmodSync(tmpFile, 0o600);
+    } catch {
+      // Best-effort: some filesystems (e.g. Windows) do not support chmod.
+    }
+    fs.renameSync(tmpFile, file);
+  } catch (err) {
+    fs.rmSync(tmpFile, { force: true });
+    throw err;
   }
   return file;
 }
 
+const LOCK_STALE_MS = 2_000;
+const LOCK_WAIT_MS = 3_000;
+
+function pause(ms: number): void {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
+/* @invariant ONE WRITER READS AND REPLACES THE STORE AT A TIME. Two servers
+ * signing in at once each read the store, added their login and wrote it
+ * back, and the second write dropped the first one's login. The read, the
+ * change and the replace happen under a lock file taken with an exclusive
+ * create; a lock older than two seconds belongs to a writer that died (the
+ * work under it takes milliseconds) and is taken over. A writer that cannot
+ * take the lock in time refuses instead of writing over a store it could not
+ * read under the lock. */
+function takeLock(lock: string): boolean {
+  try {
+    fs.closeSync(fs.openSync(lock, "wx", 0o600));
+    return true;
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException)?.code !== "EEXIST") throw err;
+    return false;
+  }
+}
+
+function lockAgeMs(lock: string): number | null {
+  try {
+    return Date.now() - fs.statSync(lock).mtimeMs;
+  } catch {
+    return null;
+  }
+}
+
+function withStoreLock<T>(change: () => T): T {
+  const file = ensureStoreDir();
+  const lock = `${file}.lock`;
+  const deadline = Date.now() + LOCK_WAIT_MS;
+  while (!takeLock(lock)) {
+    const age = lockAgeMs(lock);
+    if (age === null) continue;
+    if (age > LOCK_STALE_MS) {
+      fs.rmSync(lock, { force: true });
+      continue;
+    }
+    if (Date.now() >= deadline) {
+      throw new Error(
+        `Another process is writing the login store at ${file} and did not finish in ${LOCK_WAIT_MS} ms; nothing was stored. Try again.`,
+      );
+    }
+    pause(25);
+  }
+  try {
+    return change();
+  } finally {
+    fs.rmSync(lock, { force: true });
+  }
+}
+
+function storeForWrite(): CredentialStore | null {
+  const read = inspectCredentialStore();
+  if (read.state === "unreadable") {
+    throw new CredentialStoreUnreadableError(read.path, read.reason);
+  }
+  return read.state === "ok" ? read.store : null;
+}
+
 export function writeCredentials(creds: StoredCredentials): string {
   const key = credentialKey(creds.workspaceSlug, creds.projectSlug);
-  const existing = readCredentialStore();
-  const entries = { ...(existing?.entries ?? {}), [key]: creds };
-  return writeStore({ version: 2, active: key, entries });
+  return withStoreLock(() => {
+    const existing = storeForWrite();
+    const entries = { ...(existing?.entries ?? {}), [key]: creds };
+    return writeStore({ version: 2, active: key, entries });
+  });
 }
 
 /* @invariant A BATCH ADDS LOGINS AND DOES NOT CHOOSE THE DEFAULT ONE. A
@@ -195,22 +357,24 @@ export function writeCredentials(creds: StoredCredentials): string {
  * list says no such thing, and letting whichever name happened to be written
  * last become the default would silently repoint every unnamed token read. So
  * the active entry is kept when there is one, and only an empty store takes
- * the first name of the batch. Every entry lands in one write, so a reader
- * never sees half a batch.
+ * the first name of the batch. Every entry lands in one replace of the file,
+ * so a reader never sees half a batch.
  */
 export function writeCredentialBatch(batch: StoredCredentials[]): string | null {
   if (batch.length === 0) return null;
-  const existing = readCredentialStore();
-  const entries = { ...(existing?.entries ?? {}) };
-  for (const creds of batch) {
-    entries[credentialKey(creds.workspaceSlug, creds.projectSlug)] = creds;
-  }
-  const first = batch[0] as StoredCredentials;
-  const active =
-    existing?.active && entries[existing.active]
-      ? existing.active
-      : credentialKey(first.workspaceSlug, first.projectSlug);
-  return writeStore({ version: 2, active, entries });
+  return withStoreLock(() => {
+    const existing = storeForWrite();
+    const entries = { ...(existing?.entries ?? {}) };
+    for (const creds of batch) {
+      entries[credentialKey(creds.workspaceSlug, creds.projectSlug)] = creds;
+    }
+    const first = batch[0] as StoredCredentials;
+    const active =
+      existing?.active && entries[existing.active]
+        ? existing.active
+        : credentialKey(first.workspaceSlug, first.projectSlug);
+    return writeStore({ version: 2, active, entries });
+  });
 }
 
 export function clearCredentials(selector?: CredentialSelector): {
