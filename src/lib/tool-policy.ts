@@ -68,11 +68,14 @@ const acts = (
  * reason the hints do. Build, analyze, dev, start and the manifest checks are
  * left out on purpose: they carry the project's own source and compiler
  * output, the same bytes the agent reads unfenced with its own file tools, so
- * a fence there would claim a boundary that does not exist.
+ * a fence there would claim a boundary that does not exist. extension_docs_search
+ * is left out for the same kind of reason: it returns excerpts of our own
+ * published docs, ranked by a route we run, not text any page wrote.
  */
 export const TOOL_POLICY: Record<string, ToolPolicy> = {
   extension_create: { group: "local", annotations: acts({ openWorldHint: true }) },
   extension_templates: { group: "local", annotations: reads(true) },
+  extension_docs_search: { group: "local", annotations: reads(true) },
   extension_add_feature: { group: "local", annotations: reads() },
   extension_build: { group: "local", annotations: acts({ idempotentHint: true }) },
   extension_dev: { group: "local", annotations: acts() },

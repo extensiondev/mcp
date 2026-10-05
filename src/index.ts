@@ -54,6 +54,7 @@ import { fetchLoginConfig, resolveApiBase, safeApiBase } from "./lib/login-flow"
 
 import * as browsers from "./tools/browsers";
 import * as doctor from "./tools/doctor";
+import * as docsSearch from "./tools/docs-search";
 import {
   inputValidationError,
   normalizeArgAliases,
@@ -112,6 +113,7 @@ export const tools: ToolModule[] = [
   workspaceCreate,
   browsers,
   doctor,
+  docsSearch,
 ];
 
 /* @invariant isError agrees with the envelope's own ok.

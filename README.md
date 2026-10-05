@@ -7,7 +7,7 @@
 
 # @extension.dev/mcp [![Version][npm-version-image]][npm-version-url] [![Downloads][npm-downloads-image]][npm-downloads-url] [![Discord][discord-image]][discord-url]
 
-> Give your AI agent hands for browser extension development. 31 MCP tools that scaffold, run, inspect, debug, and publish cross-browser extensions.
+> Give your AI agent hands for browser extension development. 32 MCP tools that scaffold, run, inspect, debug, and publish cross-browser extensions.
 
 <img alt="Logo" align="right" src="https://media.extension.land/brand/extension-dev/logo-dock.png" width="15.5%" />
 
@@ -196,6 +196,7 @@ cp node_modules/@extension.dev/mcp/claude/commands/*.md ~/my-extension/.claude/c
 | ---- | ---- | ----------- |
 | build | `extension_create` | Scaffold from a template |
 | build | `extension_templates` | Browse 50+ templates (`list`) and read one's source (`source`) |
+| build | `extension_docs_search` | Search the Extension.js and extension.dev docs by keyword |
 | build | `extension_add_feature` | Add sidebar/popup/content script |
 | build | `extension_build` | Build for production |
 | run | `extension_dev` | Dev server with HMR |

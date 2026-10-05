@@ -8,6 +8,12 @@
   the returned `approvalId` runs it once. A revoke cannot be undone, so
   it is the one outward call that should never run on an agent's word
   alone. `EXTENSION_DEV_APPROVAL_GATE=0` still turns the gate off.
+- New tool `extension_docs_search`: keyword search over the Extension.js
+  and extension.dev docs, returning up to 8 pages with a title, URL and
+  an excerpt of at most 400 characters. It calls
+  `/api/docs/search` on extension.dev, which ranks with no model call, so
+  it is free, needs no login and is in the `local` group. Its
+  description is kept short on purpose so it costs little context.
 
 ## 10.10.6
 
