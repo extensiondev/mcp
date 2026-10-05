@@ -327,3 +327,289 @@ export async function rdpCollectConsoleMessages(
     return messages;
   });
 }
+
+export type RdpEvalOutcome =
+  | { ok: true; value: unknown; tab: { url: string; title: string } }
+  | { ok: false; name: string; message: string };
+
+const RDP_EVAL_SLOT = "__extensionDevRdpEval";
+const RDP_FRAME_WAIT_MS = 5_000;
+const RDP_FRAME_POLL_MS = 50;
+const RDP_RESULT_POLL_MS = 100;
+
+/* @invariant A console actor evaluates outside the document's content
+   security policy, which is the whole reason to come here: the in-page
+   executors (the surface relay, scripting.executeScript, tabs.executeScript
+   with a string) are all refused by a policy that forbids eval, the
+   extension's own or a site's. It answers an
+   object with an actor grip rather than a value and never awaits a promise,
+   so the expression is settled inside the document, JSON-encoded there,
+   parked under a token and read back as a string. The expression is
+   embedded as source, never passed to eval, or the page policy would refuse
+   the wrapper for the same reason it refused the relay. */
+export function rdpStartExpression(expression: string, token: string): string {
+  const key = JSON.stringify(token);
+  return `(function () {
+  var store = globalThis.${RDP_EVAL_SLOT} = globalThis.${RDP_EVAL_SLOT} || {};
+  store[${key}] = { state: "pending" };
+  function settle(next) { store[${key}] = next; }
+  function encode(value) {
+    if (value === undefined) return { state: "value" };
+    var json;
+    try { json = JSON.stringify(value); } catch (error) { json = undefined; }
+    return { state: "value", json: json === undefined ? JSON.stringify(String(value)) : json };
+  }
+  function thrown(error) {
+    return { state: "throw", name: (error && error.name) || "EvalError", message: (error && error.message) || String(error) };
+  }
+  try {
+    Promise.resolve((${expression}
+)).then(function (value) { settle(encode(value)); }, function (error) { settle(thrown(error)); });
+  } catch (error) {
+    settle(thrown(error));
+  }
+  return "started";
+})()`;
+}
+
+export function rdpPollExpression(token: string): string {
+  const key = JSON.stringify(token);
+  return `(function () {
+  var store = globalThis.${RDP_EVAL_SLOT};
+  var entry = (store && store[${key}]) || null;
+  if (entry && entry.state !== "pending") {
+    delete store[${key}];
+    if (Object.keys(store).length === 0) { try { delete globalThis.${RDP_EVAL_SLOT}; } catch (error) {} }
+  }
+  var encoded = JSON.stringify(entry);
+  return encoded;
+})()`;
+}
+
+type RdpSettled =
+  | { ok: true; value: unknown }
+  | { ok: false; name: string; message: string };
+
+export function readRdpEvalSlot(raw: unknown): RdpSettled | "pending" | "lost" {
+  if (typeof raw !== "string") return "lost";
+  let slot: Record<string, unknown> | null;
+  try {
+    slot = JSON.parse(raw) as Record<string, unknown> | null;
+  } catch {
+    return "lost";
+  }
+  if (!slot || typeof slot !== "object") return "lost";
+  if (slot.state === "pending") return "pending";
+  if (slot.state === "throw") {
+    return {
+      ok: false,
+      name: typeof slot.name === "string" && slot.name ? slot.name : "EvalError",
+      message:
+        typeof slot.message === "string" && slot.message
+          ? slot.message
+          : "the expression threw inside the document",
+    };
+  }
+  if (slot.state !== "value") return "lost";
+  if (typeof slot.json !== "string") return { ok: true, value: null };
+  try {
+    return { ok: true, value: JSON.parse(slot.json) };
+  } catch {
+    return { ok: true, value: slot.json };
+  }
+}
+
+function exceptionText(packet: RdpPacket): string {
+  const message = packet.exceptionMessage;
+  if (typeof message === "string") return message;
+  const initial = (message as { initial?: unknown } | null | undefined)?.initial;
+  if (typeof initial === "string") return initial;
+  return packet.hasException === true ||
+    (packet.exception !== undefined && packet.exception !== null)
+    ? "the expression threw inside the document"
+    : "";
+}
+
+/* @invariant A string past Firefox's long-string threshold (10,000
+   characters) comes back as a grip holding only its first part, so a
+   document's HTML or a large JSON value would read as truncated or as no
+   string at all. The grip's own actor hands the rest back. */
+async function readStringResult(
+  session: RdpSession,
+  result: unknown,
+  timeoutMs: number,
+): Promise<unknown> {
+  if (!result || typeof result !== "object") return result;
+  const grip = result as Record<string, unknown>;
+  if (grip.type !== "longString" || typeof grip.actor !== "string") return result;
+  const length = typeof grip.length === "number" ? grip.length : 0;
+  const reply = await session.request(
+    grip.actor,
+    { type: "substring", start: 0, end: length },
+    timeoutMs,
+  );
+  return typeof reply.substring === "string" ? reply.substring : grip.initial;
+}
+
+async function consoleEvaluate(
+  session: RdpSession,
+  consoleActor: string,
+  text: string,
+  timeoutMs: number,
+): Promise<{ result: unknown; threw: string }> {
+  const results: RdpPacket[] = [];
+  let wake: (() => void) | null = null;
+  const untap = session.tap((packet) => {
+    if (packet.from !== consoleActor || packet.type !== "evaluationResult") return;
+    results.push(packet);
+    wake?.();
+  });
+  try {
+    const reply = await session.request(
+      consoleActor,
+      { type: "evaluateJSAsync", text },
+      timeoutMs,
+    );
+    const resultId = String(reply.resultID ?? "");
+    const deadline = Date.now() + timeoutMs;
+    for (;;) {
+      const hit = results.find((p) => String(p.resultID ?? "") === resultId);
+      if (hit) {
+        return {
+          result: await readStringResult(session, hit.result, timeoutMs),
+          threw: exceptionText(hit),
+        };
+      }
+      const left = deadline - Date.now();
+      if (left <= 0) {
+        throw new Error(
+          `Firefox sent no evaluation result within ${timeoutMs}ms`,
+        );
+      }
+      await new Promise<void>((resolve) => {
+        const timer = setTimeout(resolve, Math.min(left, 250));
+        wake = () => {
+          clearTimeout(timer);
+          resolve();
+        };
+      });
+      wake = null;
+    }
+  } finally {
+    untap();
+  }
+}
+
+function topFrameConsoleActor(
+  frames: Array<Record<string, unknown>>,
+): string | undefined {
+  const usable = frames.filter((frame) => typeof frame.consoleActor === "string");
+  const top = usable.find((frame) => frame.isTopLevelTarget === true) ?? usable[0];
+  return top ? String(top.consoleActor) : undefined;
+}
+
+export async function rdpEvaluateInTab(
+  port: number,
+  options: {
+    select: (tabs: RdpTab[]) => RdpTab | null | undefined;
+    expression: string;
+    timeoutMs?: number;
+  },
+): Promise<RdpEvalOutcome> {
+  const timeoutMs = options.timeoutMs ?? 10_000;
+  return withSession(port, timeoutMs, async (session) => {
+    const listed = await session.request("root", { type: "listTabs" }, timeoutMs);
+    const tab = options.select((listed.tabs as RdpTab[]) ?? []);
+    if (!tab?.actor) {
+      return { ok: false, name: "TargetNotFound", message: "no open tab matches" };
+    }
+    const watcher = await session.request(
+      String(tab.actor),
+      { type: "getWatcher", isServerTargetSwitchingEnabled: true },
+      timeoutMs,
+    );
+    const watcherActor = String(watcher.actor ?? "");
+    if (!watcherActor) {
+      return {
+        ok: false,
+        name: "Unsupported",
+        message: "this Firefox build exposes no watcher actor for a tab, so the tab cannot be evaluated over the debugger protocol",
+      };
+    }
+    const frames: Array<Record<string, unknown>> = [];
+    const untap = session.tap((packet) => {
+      if (packet.type !== "target-available-form") return;
+      const target = packet.target as Record<string, unknown> | undefined;
+      if (target && typeof target === "object") frames.push(target);
+    });
+    try {
+      await session.request(
+        watcherActor,
+        { type: "watchTargets", targetType: "frame" },
+        timeoutMs,
+      );
+      const frameDeadline = Date.now() + Math.min(timeoutMs, RDP_FRAME_WAIT_MS);
+      let consoleActor = topFrameConsoleActor(frames);
+      while (!consoleActor && Date.now() < frameDeadline) {
+        await new Promise((resolve) => setTimeout(resolve, RDP_FRAME_POLL_MS));
+        consoleActor = topFrameConsoleActor(frames);
+      }
+      if (!consoleActor) {
+        return {
+          ok: false,
+          name: "TargetNotFound",
+          message: "the tab announced no document to evaluate in (it may still be loading)",
+        };
+      }
+      const token = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+      const started = await consoleEvaluate(
+        session,
+        consoleActor,
+        rdpStartExpression(options.expression, token),
+        timeoutMs,
+      );
+      if (started.threw) {
+        return { ok: false, name: "EvalError", message: started.threw };
+      }
+      const resultDeadline = Date.now() + timeoutMs;
+      for (;;) {
+        const polled = await consoleEvaluate(
+          session,
+          consoleActor,
+          rdpPollExpression(token),
+          timeoutMs,
+        );
+        const settled = readRdpEvalSlot(polled.result);
+        if (settled === "lost") {
+          return {
+            ok: false,
+            name: "EvalLost",
+            message: "the document reloaded or navigated before the expression settled, so its result is gone",
+          };
+        }
+        if (settled !== "pending") {
+          return settled.ok
+            ? {
+                ok: true,
+                value: settled.value,
+                tab: { url: String(tab.url ?? ""), title: String(tab.title ?? "") },
+              }
+            : settled;
+        }
+        if (Date.now() >= resultDeadline) {
+          return {
+            ok: false,
+            name: "Timeout",
+            message: `the expression did not settle within ${timeoutMs}ms`,
+          };
+        }
+        await new Promise((resolve) => setTimeout(resolve, RDP_RESULT_POLL_MS));
+      }
+    } finally {
+      untap();
+      void session
+        .request(watcherActor, { type: "unwatchTargets", targetType: "frame" }, 1_000)
+        .catch(() => {});
+    }
+  });
+}
