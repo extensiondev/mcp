@@ -49,7 +49,14 @@ function platformAnswers() {
     const href = String(url);
     const json = (body: unknown, status = 200) =>
       new Response(JSON.stringify(body), { status });
-    if (href.endsWith("/api/cli/login/config")) return json({});
+    if (href.endsWith("/api/cli/login/config")) {
+      return json({
+        batchOnboarding: {
+          createProjectsPerApproval: 10,
+          loginProjectsPerApproval: 20,
+        },
+      });
+    }
     if (href.endsWith("/api/cli/device/code")) {
       return json({
         device_code: "dev-code",

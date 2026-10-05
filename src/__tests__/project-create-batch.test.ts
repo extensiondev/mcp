@@ -32,6 +32,7 @@ type CreateRoute = Route | "network-error";
 let clock = 0;
 
 function harness(options: {
+  batchOnboarding?: unknown;
   code?: Route;
   token?: Route[];
   create?: (project: string, slug: string, call: number) => CreateRoute;
@@ -53,6 +54,16 @@ function harness(options: {
         deviceCodeUrl: "/api/cli/device/code",
         deviceTokenUrl: "/api/cli/device/token",
         verificationUri: "https://extension.dev/device",
+        ...("batchOnboarding" in options
+          ? options.batchOnboarding === undefined
+            ? {}
+            : { batchOnboarding: options.batchOnboarding }
+          : {
+              batchOnboarding: {
+                createProjectsPerApproval: 10,
+                loginProjectsPerApproval: 20,
+              },
+            }),
       });
     }
     if (href.endsWith("/api/cli/device/code")) {
@@ -206,27 +217,109 @@ describe("extension_project_create with projects: refusals before a device code 
     expect(fn).not.toHaveBeenCalled();
   });
 
-  it("refuses eleven projects and names the ten per hour limit, without chunking", async () => {
-    const { fn } = harness({});
-    const eleven = Array.from({ length: 11 }, (_, i) => ({
+  const entries = (count: number) =>
+    Array.from({ length: count }, (_, i) => ({
       project: `acme/app-${i + 1}`,
       repo: `octo/app-${i + 1}`,
     }));
-    const out = await run({ projects: eleven });
+
+  it("refuses eleven projects against the platform's cap of ten, without chunking and without a device code", async () => {
+    const h = harness({});
+    const out = await run({ projects: entries(11) });
+
     expect(out.ok).toBe(false);
     expect(out.status).toBe("bad-request");
-    expect(out.error.message).toContain("at most 10");
+    expect(out.error.message).toContain("creates at most 10");
+    expect(out.value).toEqual({ maxProjects: 10, listed: 11 });
+    expect(out.hint).toContain("Send the first 10; the next 10 can start in a new call");
+    expect(out.hint).toContain("once the hourly creation limit allows");
     expect(out.hint).toContain("at most 10 projects per hour");
     expect(out.hint).toContain("no device code was spent");
-    expect(fn).not.toHaveBeenCalled();
+    expect(h.to("/api/cli/device/code")).toHaveLength(0);
+    expect(h.calls.map((call) => call.url)).toEqual([`${API}/api/cli/login/config`]);
   });
 
-  it("accepts exactly ten", () => {
-    const ten = Array.from({ length: 10 }, (_, i) => ({
-      project: `acme/app-${i + 1}`,
-      repo: `octo/app-${i + 1}`,
-    }));
-    expect(parseBatchCreateArgs({ projects: ten }).ok).toBe(true);
+  it("accepts exactly ten", async () => {
+    const h = harness({});
+    const out = await run({ projects: entries(10) });
+
+    expect(parseBatchCreateArgs({ projects: entries(10) }).ok).toBe(true);
+    expect(out.status).toBe("authorization-pending");
+    expect(h.to("/api/cli/device/code")[0]?.body.projects).toHaveLength(10);
+  });
+
+  it("takes the create cap from the platform, lower or higher than ten", async () => {
+    const low = harness({ batchOnboarding: { createProjectsPerApproval: 3, loginProjectsPerApproval: 20 } });
+    const refused = await run({ projects: entries(4) });
+    expect(refused.status).toBe("bad-request");
+    expect(refused.value.maxProjects).toBe(3);
+    expect(refused.hint).toContain("Send the first 3");
+    expect(low.to("/api/cli/device/code")).toHaveLength(0);
+
+    const high = harness({ batchOnboarding: { createProjectsPerApproval: 20, loginProjectsPerApproval: 20 } });
+    const taken = await run({ projects: entries(11) });
+    expect(taken.status).toBe("authorization-pending");
+    expect(high.to("/api/cli/device/code")[0]?.body.projects).toHaveLength(11);
+  });
+
+  it.each([
+    ["a missing number", {}],
+    ["zero", { createProjectsPerApproval: 0 }],
+    ["a negative number", { createProjectsPerApproval: -5 }],
+    ["a string that is not a number", { createProjectsPerApproval: "many" }],
+    ["a fraction", { createProjectsPerApproval: 10.5 }],
+    ["null", { createProjectsPerApproval: null }],
+  ])("falls back to ten when the platform advertises the capability with %s", async (_label, batchOnboarding) => {
+    harness({ batchOnboarding });
+    const refused = await run({ projects: entries(11) });
+    expect(refused.value.maxProjects).toBe(10);
+
+    harness({ batchOnboarding });
+    const taken = await run({ projects: entries(10) });
+    expect(taken.status).toBe("authorization-pending");
+  });
+
+  it("never reads a cap above twenty as more than twenty", async () => {
+    harness({ batchOnboarding: { createProjectsPerApproval: 500 } });
+    const out = await run({ projects: entries(21) });
+
+    expect(out.status).toBe("bad-request");
+    expect(out.error.message).toContain("between 1 and 20");
+  });
+
+  it.each([
+    ["no flag at all", undefined],
+    ["a flag that is false", false],
+    ["a flag that is true but carries nothing", true],
+    ["a flag that is a list", [10, 20]],
+    ["a flag that is null", null],
+  ])("refuses a list before spending a device code when the platform answers with %s", async (_label, batchOnboarding) => {
+    const h = harness({ batchOnboarding });
+    const out = await run({ projects: THREE });
+
+    expect(out.ok).toBe(false);
+    expect(out.status).toBe("batch-unsupported");
+    expect(out.error.code).toBe("E_PLATFORM");
+    expect(out.error.message).toContain("does not advertise batch onboarding");
+    expect(out.value.projects).toEqual(["acme/alpha", "acme/beta", "acme/gamma"]);
+    expect(out.hint).toContain("one extension_project_create call each");
+    expect(h.to("/api/cli/device/code")).toHaveLength(0);
+    expect(h.to("/api/cli/device/token")).toHaveLength(0);
+  });
+
+  it("still creates one project on a platform that advertises no batch", async () => {
+    const h = harness({
+      batchOnboarding: undefined,
+      token: [{ status: 400, body: { error: "authorization_pending" } }],
+    });
+    const out = await run({ project: "acme/alpha", repo: "octo/alpha-src" });
+
+    expect(out.status).toBe("authorization-pending");
+    expect(h.to("/api/cli/device/code")[0]?.body).toEqual({
+      project: "acme/alpha",
+      clientName: "extension-mcp",
+      intent: "create",
+    });
   });
 
   it.each([
@@ -251,8 +344,11 @@ describe("extension_project_create with projects: refusals before a device code 
   });
 
   it("names the limit in the tool description and the projects input", () => {
+    expect(schema.description).toContain("One approval creates at most 10 projects");
     expect(schema.description).toContain("at most 10 per hour");
+    expect(schema.description).toContain("the next 10 can start in a new call once that limit allows");
     expect(schema.description).toContain("never split silently");
+    expect(schema.description).toContain("does not advertise batch onboarding");
     expect(schema.inputSchema.properties.projects.description).toContain("1 to 10 entries");
     expect(schema.inputSchema.properties.projects.description).toContain("at most 48 characters");
   });
@@ -835,6 +931,30 @@ describe("extension_project_create with projects: the grant and the list", () =>
 
     expect(out.status).toBe("create-failed");
     expect(out.hint).toContain("one extension_project_create call each");
+  });
+
+  it("carries the platform's own refusal of a list over its cap, should the two ever disagree", async () => {
+    harness({
+      batchOnboarding: { createProjectsPerApproval: 20, loginProjectsPerApproval: 20 },
+      code: {
+        status: 400,
+        body: {
+          message: "A create list names at most 10 projects per approval.",
+          code: "CREATE_BATCH_TOO_LONG",
+          maxProjects: 10,
+        },
+      },
+    });
+    const out = await run({
+      projects: Array.from({ length: 11 }, (_, i) => ({
+        project: `acme/app-${i + 1}`,
+        repo: `octo/app-${i + 1}`,
+      })),
+    });
+
+    expect(out.ok).toBe(false);
+    expect(out.status).toBe("create-failed");
+    expect(out.error.message).toContain("at most 10 projects per approval");
   });
 
   it("leaves the single-project call exactly as it was", async () => {

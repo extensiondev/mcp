@@ -14,6 +14,52 @@ export const MAX_WORKSPACE_SLUG_LENGTH = 64;
 
 export const PLATFORM_CREATES_PER_HOUR = 10;
 
+export const DEFAULT_CREATE_PROJECTS_PER_APPROVAL = 10;
+
+export interface BatchCapability {
+  createProjectsPerApproval: number;
+  loginProjectsPerApproval: number;
+}
+
+function capFrom(value: unknown, fallback: number): number {
+  const count = Number(value);
+  if (!Number.isInteger(count) || count < 1) return fallback;
+  return Math.min(count, MAX_BATCH_PROJECTS);
+}
+
+/* @invariant THE PLATFORM SAYS WHETHER IT TAKES A LIST, AND HOW LONG A LIST,
+ * AND THIS CLIENT BELIEVES IT BEFORE SPENDING A DEVICE CODE. The login config
+ * a call already reads carries `batchOnboarding` on a platform that accepts
+ * `projects`. A platform without it predates the list: sent one, it answers
+ * with its refusal for a malformed single project, a sentence no client can
+ * tell from any other, at the price of one of ten device codes. So absence is
+ * read as "no", here, before any code is asked for.
+ *
+ * The caps are the platform's to state. The create cap ruled on 2026-10-05 is
+ * ten per approval, and ten is the fallback when the platform advertises the
+ * capability without a usable number, so a garbled field can never read as
+ * "no limit". A number above twenty is held to twenty, the most this client
+ * will ever put in one list, and the platform checks every list again.
+ */
+export function readBatchCapability(config: unknown): BatchCapability | null {
+  const raw = (config as { batchOnboarding?: unknown } | null)?.batchOnboarding;
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const record = raw as Record<string, unknown>;
+  return {
+    createProjectsPerApproval: capFrom(
+      record.createProjectsPerApproval,
+      DEFAULT_CREATE_PROJECTS_PER_APPROVAL,
+    ),
+    loginProjectsPerApproval: capFrom(
+      record.loginProjectsPerApproval,
+      MAX_BATCH_PROJECTS,
+    ),
+  };
+}
+
+export const BATCH_UNSUPPORTED_MESSAGE =
+  "This platform does not advertise batch onboarding, so a list of projects was not sent and no device code was spent.";
+
 const PROJECT_SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 export function isExactProjectSlug(slug: string): boolean {
@@ -106,5 +152,9 @@ export function sameProjectSet(a: string[], b: string[]): boolean {
 }
 
 export function createRateLimitNote(): string {
-  return `The platform creates at most ${PLATFORM_CREATES_PER_HOUR} projects per hour for one approving account, and a provisioning grant lives 15 minutes, so one approval can create at most ${PLATFORM_CREATES_PER_HOUR}. Creations the same account already made in the last hour count against it.`;
+  return `The platform creates at most ${PLATFORM_CREATES_PER_HOUR} projects per hour for one approving account, and a provisioning grant lives 15 minutes. Creations the same account already made in the last hour count against it.`;
+}
+
+export function createCapNote(cap: number): string {
+  return `One approval creates at most ${cap} projects on this platform. Send the first ${cap}; the next ${cap} can start in a new call, with its own approval, once the hourly creation limit allows.`;
 }

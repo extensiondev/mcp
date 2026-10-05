@@ -11,7 +11,11 @@ import {
   writeCredentials,
   type StoredCredentials,
 } from "./credentials";
-import { sameProjectSet } from "./project-batch";
+import {
+  readBatchCapability,
+  sameProjectSet,
+  type BatchCapability,
+} from "./project-batch";
 import { PROD_ORIGINS } from "@extension.dev/urls/origins";
 import { consoleBase, consoleProjectUrl } from "./registry";
 
@@ -93,6 +97,7 @@ export interface LoginConfig {
   deviceCodeUrl: string;
   deviceTokenUrl: string;
   verificationUri: string;
+  batch: BatchCapability | null;
 }
 
 export async function fetchLoginConfig(
@@ -114,6 +119,7 @@ export async function fetchLoginConfig(
     verificationUri: String(
       data.verificationUri || `${apiBase.replace(/\/+$/, "")}/device`,
     ),
+    batch: readBatchCapability(data),
   };
 }
 

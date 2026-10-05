@@ -20,7 +20,10 @@ import {
   tokenTtlNote,
 } from "../lib/login-flow";
 import { envelope, type ErrorCode } from "../lib/envelope";
-import { parseProjectBatch } from "../lib/project-batch";
+import {
+  BATCH_UNSUPPORTED_MESSAGE,
+  parseProjectBatch,
+} from "../lib/project-batch";
 import { consoleBase } from "../lib/registry";
 
 const FIRST_CALL_BUDGET_MS = 8_000;
@@ -395,6 +398,30 @@ export async function loginToProjects(args: {
     );
   }
 
+  if (!config.batch) {
+    return fail(
+      "LoginBatchUnsupported",
+      BATCH_UNSUPPORTED_MESSAGE,
+      "batch-unsupported",
+      "E_PLATFORM",
+      {
+        value: { projects },
+        hint: "Sign in to each project with its own extension_auth (action: login, project) call.",
+      },
+    );
+  }
+  if (projects.length > config.batch.loginProjectsPerApproval) {
+    return fail(
+      "BadRequest",
+      `projects names ${projects.length} projects, and one approval signs in to at most ${config.batch.loginProjectsPerApproval} on this platform.`,
+      "bad-request",
+      "E_BAD_REQUEST",
+      {
+        hint: `Split the list into calls of ${config.batch.loginProjectsPerApproval} or fewer; each call is its own approval. No device code was spent.`,
+      },
+    );
+  }
+
   let deviceCode = String(args.deviceCode || "").trim();
   let interval = 5;
   let budgetMs = RESUME_BUDGET_MS;
@@ -413,7 +440,7 @@ export async function loginToProjects(args: {
         "login-failed",
         "E_AUTH_FAILED",
         {
-          hint: "No device code was issued. If this platform predates batch login it refuses the list form; sign in to each project with its own extension_auth (action: login, project) call.",
+          hint: "No device code was issued. Sign in to each project with its own extension_auth (action: login, project) call, or fix what the platform refused and try the list again.",
         },
       );
     }

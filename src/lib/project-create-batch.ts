@@ -13,7 +13,8 @@ import { envelope, type ErrorCode } from "./envelope";
 import { fetchLoginConfig, resolveApiBase, safeApiBase } from "./login-flow";
 import { platformHoldEnvelope, sawPlatformHold } from "./platform-hold";
 import {
-  PLATFORM_CREATES_PER_HOUR,
+  BATCH_UNSUPPORTED_MESSAGE,
+  createCapNote,
   createRateLimitNote,
   parseProjectBatch,
   sameProjectSet,
@@ -195,12 +196,11 @@ function isRecord(value: unknown): value is Record<string, unknown> {
  * ENTRY THIS TOOL DOES NOT UNDERSTAND IS REFUSED, NOT SKIPPED. A list with
  * one bad entry would otherwise reach the approval page looking complete,
  * get approved, and then fail one project at a time against a grant that is
- * already running out. The list rules are the platform's own. The cap on a
- * create list is lower than the platform's cap on a list because the platform
- * creates at most ten projects an hour for one approving account: a longer
- * list would be approved whole and could never finish, so it is refused here
- * with that reason instead of being split quietly into approvals nobody asked
- * for.
+ * already running out. The list rules are the platform's own. How many
+ * projects one approval may create is the platform's number too, read from
+ * its login config before a code is asked for: a list longer than that is
+ * refused with the reason instead of being split quietly into approvals
+ * nobody asked for.
  */
 export function parseBatchCreateArgs(
   args: BatchCreateArgs,
@@ -244,13 +244,6 @@ export function parseBatchCreateArgs(
   }
   const parsed = parseProjectBatch(refs);
   if (!parsed.ok) return parsed;
-  if (parsed.batch.refs.length > PLATFORM_CREATES_PER_HOUR) {
-    return {
-      ok: false,
-      message: `projects names ${parsed.batch.refs.length} projects to create, and one approval can create at most ${PLATFORM_CREATES_PER_HOUR}.`,
-      hint: `${createRateLimitNote()} Split the list into calls of ${PLATFORM_CREATES_PER_HOUR} or fewer and run them an hour apart; each call is its own approval. Nothing was started and no device code was spent.`,
-    };
-  }
   const entries: BatchEntry[] = [];
   for (const [index, raw] of (args.projects as Record<string, unknown>[]).entries()) {
     const ref = parsed.batch.refs[index] as string;
@@ -792,6 +785,32 @@ export async function createProjectBatch(args: BatchCreateArgs): Promise<string>
     );
   }
 
+  if (!config.batch) {
+    return fail(
+      "CreateBatchUnsupported",
+      BATCH_UNSUPPORTED_MESSAGE,
+      "batch-unsupported",
+      "E_PLATFORM",
+      {
+        value: { projects: refs },
+        hint: "Create the projects one extension_project_create call each (project, repo).",
+      },
+    );
+  }
+  const createCap = config.batch.createProjectsPerApproval;
+  if (refs.length > createCap) {
+    return fail(
+      "BadRequest",
+      `projects names ${refs.length} projects to create, and one approval creates at most ${createCap} on this platform.`,
+      "bad-request",
+      "E_BAD_REQUEST",
+      {
+        value: { maxProjects: createCap, listed: refs.length },
+        hint: `${createCapNote(createCap)} ${createRateLimitNote()} Nothing was started and no device code was spent.`,
+      },
+    );
+  }
+
   let interval = 5;
   let budgetMs = RESUME_BUDGET_MS;
   let start: Awaited<ReturnType<typeof requestDeviceCode>> | null = null;
@@ -822,7 +841,7 @@ export async function createProjectBatch(args: BatchCreateArgs): Promise<string>
         "create-failed",
         "E_PLATFORM",
         {
-          hint: "No device code was issued and nothing was created. If this platform predates batch approval it refuses the list form; create the projects one extension_project_create call each (project, repo).",
+          hint: "No device code was issued and nothing was created. Fix what the platform refused and try the list again, or create the projects one extension_project_create call each (project, repo).",
         },
       );
     }

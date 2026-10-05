@@ -25,7 +25,11 @@ function jsonResponse(body: unknown, status = 200): Response {
 
 type Route = { status: number; body: unknown };
 
-function harness(options: { code?: Route; token?: Route[] }) {
+function harness(options: {
+  batchOnboarding?: unknown;
+  code?: Route;
+  token?: Route[];
+}) {
   const calls: Array<{ url: string; body: any }> = [];
   let tokenCalls = 0;
   const fn = vi.fn(async (url: any, init?: RequestInit) => {
@@ -36,6 +40,16 @@ function harness(options: { code?: Route; token?: Route[] }) {
         deviceCodeUrl: "/api/cli/device/code",
         deviceTokenUrl: "/api/cli/device/token",
         verificationUri: "https://extension.dev/device",
+        ...("batchOnboarding" in options
+          ? options.batchOnboarding === undefined
+            ? {}
+            : { batchOnboarding: options.batchOnboarding }
+          : {
+              batchOnboarding: {
+                createProjectsPerApproval: 10,
+                loginProjectsPerApproval: 20,
+              },
+            }),
       });
     }
     if (href.endsWith("/api/cli/device/code")) {
@@ -158,6 +172,47 @@ describe("extension_auth login with projects: refusals before a device code is s
     const out = await run({ action: "login", projects: twenty });
     expect(out.status).toBe("authorization-pending");
     expect(h.to("/api/cli/device/code")[0]?.body.projects).toHaveLength(20);
+  });
+
+  it.each([
+    ["no flag at all", undefined],
+    ["a flag that is false", false],
+    ["a flag that is null", null],
+  ])("refuses a list before spending a device code when the platform answers with %s", async (_label, batchOnboarding) => {
+    const h = harness({ batchOnboarding });
+    const out = await run({ action: "login", projects: LIST });
+
+    expect(out.ok).toBe(false);
+    expect(out.status).toBe("batch-unsupported");
+    expect(out.error.code).toBe("E_PLATFORM");
+    expect(out.error.message).toContain("does not advertise batch onboarding");
+    expect(out.hint).toContain("its own extension_auth (action: login, project) call");
+    expect(h.to("/api/cli/device/code")).toHaveLength(0);
+    expect(h.to("/api/cli/device/token")).toHaveLength(0);
+  });
+
+  it("takes the login cap from the platform and falls back to twenty", async () => {
+    const low = harness({ batchOnboarding: { createProjectsPerApproval: 10, loginProjectsPerApproval: 2 } });
+    const refused = await run({ action: "login", projects: LIST });
+    expect(refused.status).toBe("bad-request");
+    expect(refused.error.message).toContain("at most 2");
+    expect(refused.hint).toContain("No device code was spent");
+    expect(low.to("/api/cli/device/code")).toHaveLength(0);
+
+    const twenty = Array.from({ length: 20 }, (_, i) => `acme/app-${i + 1}`);
+    harness({ batchOnboarding: { loginProjectsPerApproval: "lots" } });
+    expect((await run({ action: "login", projects: twenty })).status).toBe("authorization-pending");
+  });
+
+  it("still signs in to one project on a platform that advertises no batch", async () => {
+    const h = harness({ batchOnboarding: undefined });
+    const out = await run({ action: "login", project: "acme/alpha" });
+
+    expect(out.status).toBe("authorization-pending");
+    expect(h.to("/api/cli/device/code")[0]?.body).toEqual({
+      project: "acme/alpha",
+      clientName: "extension-mcp",
+    });
   });
 
   it("refuses project and projects together", async () => {

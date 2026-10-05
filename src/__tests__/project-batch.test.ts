@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  DEFAULT_CREATE_PROJECTS_PER_APPROVAL,
   MAX_BATCH_PROJECTS,
   PLATFORM_CREATES_PER_HOUR,
+  createCapNote,
   createRateLimitNote,
+  readBatchCapability,
   isExactProjectSlug,
   parseProjectBatch,
   sameProjectSet,
@@ -121,5 +124,56 @@ describe("the creation limit is named, with its number", () => {
     expect(PLATFORM_CREATES_PER_HOUR).toBe(10);
     expect(createRateLimitNote()).toContain("at most 10 projects per hour");
     expect(createRateLimitNote()).toContain("15 minutes");
+  });
+
+  it("says ten per approval and when the next ten can start", () => {
+    expect(DEFAULT_CREATE_PROJECTS_PER_APPROVAL).toBe(10);
+    expect(createCapNote(10)).toContain("at most 10 projects");
+    expect(createCapNote(10)).toContain("the next 10 can start in a new call");
+    expect(createCapNote(10)).toContain("once the hourly creation limit allows");
+  });
+});
+
+describe("readBatchCapability", () => {
+  it("reads the platform's two caps", () => {
+    expect(
+      readBatchCapability({
+        batchOnboarding: { createProjectsPerApproval: 10, loginProjectsPerApproval: 20 },
+      }),
+    ).toEqual({ createProjectsPerApproval: 10, loginProjectsPerApproval: 20 });
+    expect(
+      readBatchCapability({
+        batchOnboarding: { createProjectsPerApproval: 4, loginProjectsPerApproval: 7 },
+      }),
+    ).toEqual({ createProjectsPerApproval: 4, loginProjectsPerApproval: 7 });
+  });
+
+  it.each([
+    ["no config", null],
+    ["a config without the flag", { deviceFlow: true }],
+    ["false", { batchOnboarding: false }],
+    ["true", { batchOnboarding: true }],
+    ["a number", { batchOnboarding: 10 }],
+    ["a list", { batchOnboarding: [10, 20] }],
+    ["null", { batchOnboarding: null }],
+  ])("reads %s as no capability", (_label, config) => {
+    expect(readBatchCapability(config)).toBeNull();
+  });
+
+  it("falls back to ten creates and twenty logins for a number it cannot use, and never above twenty", () => {
+    expect(readBatchCapability({ batchOnboarding: {} })).toEqual({
+      createProjectsPerApproval: 10,
+      loginProjectsPerApproval: 20,
+    });
+    expect(
+      readBatchCapability({
+        batchOnboarding: { createProjectsPerApproval: "x", loginProjectsPerApproval: -1 },
+      }),
+    ).toEqual({ createProjectsPerApproval: 10, loginProjectsPerApproval: 20 });
+    expect(
+      readBatchCapability({
+        batchOnboarding: { createProjectsPerApproval: 999, loginProjectsPerApproval: 999 },
+      }),
+    ).toEqual({ createProjectsPerApproval: 20, loginProjectsPerApproval: 20 });
   });
 });

@@ -7,9 +7,10 @@
   twenty visits to extension.dev/device, one to create each project and
   one to sign in to it, and the ten tokens then expired together and cost
   ten more. This release is the client half and waits on the platform
-  deploy that accepts a list; against a platform that predates it, both
-  inputs below answer with the refusal the platform sent and the
-  one-project call to use instead.
+  deploy that accepts a list. The platform advertises the capability as
+  `batchOnboarding` in its login config; against a platform that does
+  not, both inputs below refuse the list before a device code is spent
+  and name the one-project call to use instead.
 - `extension_project_create` takes `projects`, a list of
   `{ project, repo }` entries in one workspace, in place of `project` and
   `repo`. The approval page lists every name. Each project is created by
@@ -33,12 +34,16 @@
   returned; if the server restarts mid-list the projects already created
   stay created and the rest need a new approval.
 - One approval creates at most 10 projects, because the platform creates
-  at most 10 per hour for one approving account. A longer create list is
-  refused before any approval is asked for, with that reason; it is never
-  split silently.
+  at most 10 per hour for one approving account; the next 10 can start
+  in a new call once that limit allows. The cap is read from the
+  platform's login config (`createProjectsPerApproval`), with 10 as the
+  fallback when the platform states no usable number. A longer create
+  list is refused before any approval is asked for, with that reason; it
+  is never split silently.
 - `extension_auth` with `action: "login"` takes `projects`, a list of up
   to 20 `<workspace>/<project>` names of existing projects in one
-  workspace, in place of `project`. One approval stores one token per
+  workspace (the platform's `loginProjectsPerApproval`), in place of
+  `project`. One approval stores one token per
   project, which is also how a set of logins that expire together is
   renewed. One missing project refuses the whole list and stores
   nothing. The call that completes a batch login can take up to a
