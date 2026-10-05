@@ -3,6 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { envelope } from "../lib/envelope";
+import { writeEvalToken } from "./fixtures/ready-contract";
 
 const okFrame = () =>
   envelope({ ok: true, command: "extension_eval", status: "ok", value: 42 });
@@ -37,6 +38,7 @@ function project(manifests: Record<string, Record<string, unknown>>): string {
     fs.mkdirSync(path.dirname(file), { recursive: true });
     fs.writeFileSync(file, JSON.stringify(manifest));
   }
+  writeEvalToken(dir, "chrome");
   return dir;
 }
 

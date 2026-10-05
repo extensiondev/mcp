@@ -4,6 +4,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { envelope } from "../lib/envelope";
+import { writeEvalToken } from "./fixtures/ready-contract";
 
 const cliCalls: string[][] = [];
 let relayReply: () => string = () =>
@@ -88,6 +89,7 @@ function project(manifest: Record<string, unknown>): { dir: string; id: string }
   const readyDir = path.join(dir, "dist", "extension-js", "chrome");
   fs.mkdirSync(readyDir, { recursive: true });
   fs.writeFileSync(path.join(readyDir, "ready.json"), JSON.stringify({ status: "ready", distPath }));
+  writeEvalToken(dir, "chrome");
   return { dir, id: expectedId(distPath) };
 }
 
@@ -323,6 +325,7 @@ describe("extension_eval evaluates a web tab named by url over CDP, so Trusted T
 
   it("refuses a tab that shows the browser's error page", async () => {
     const p = project(MV3);
+    writeEvalToken(p.dir, "edge");
     cdpTargets = [
       { id: "err", type: "page", url: "chrome-error://chromewebdata/", title: "This page has been blocked by Microsoft Edge" },
     ];
@@ -386,5 +389,35 @@ describe("extension_eval evaluates a web tab named by url over CDP, so Trusted T
     expect(result.hint).toContain("Trusted Types");
     expect(result.hint).toContain("Pass url");
     expect(evaluations).toEqual([]);
+  });
+});
+
+describe("the debug-port routes honour the session's eval gate", () => {
+  it.each([
+    ["the background", { context: "background" }],
+    ["a web tab named by url", { context: "page", url: "https://example.com" }],
+    ["an MV3 surface", { context: "popup" }],
+  ])("refuses %s on a session started without allowEval and calls no target", async (_label, extra) => {
+    const p = project(MV3);
+    fs.rmSync(path.join(p.dir, ".extension-js"), { recursive: true, force: true });
+    cdpTargets = [
+      { id: "sw", type: "service_worker", url: `chrome-extension://${p.id}/sw.js`, title: "" },
+      { id: "tab", type: "page", url: "https://example.com/", title: "Example" },
+      { id: "pop", type: "page", url: `chrome-extension://${p.id}/action/index.html`, title: "Popup" },
+    ];
+
+    const result = JSON.parse(
+      await evalTool.handler({ projectPath: p.dir, expression: "1", ...extra }),
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.status).toBe("eval-disabled");
+    expect(result.error.code).toBe("E_EVAL_DISABLED");
+    expect(result.hint).toContain("allowEval: true");
+    expect(evaluations).toEqual([]);
+  });
+
+  it("promises the gate on every route in its description", () => {
+    expect(evalTool.schema.description).toContain("the debug port included");
   });
 });

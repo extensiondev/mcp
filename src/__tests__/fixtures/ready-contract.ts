@@ -1,7 +1,22 @@
 import fs from "node:fs";
 import path from "node:path";
 
+import * as bridge from "extension-develop/bridge";
+
 import { browserArtifactsDir, readyContractPath } from "../../lib/session-paths";
+
+/* @invariant A session fixture that wants eval writes the engine's own token
+   file, at the path the engine publishes, the way `extension dev --allow-eval`
+   does. A fixture that only says "ready" models a session started WITHOUT
+   allowEval, and every eval route refuses it; the suites that evaluate over
+   the debug port used to pass on such sessions, which is how the gate went
+   unenforced there. */
+export function writeEvalToken(projectPath: string, browser: string): string {
+  const file = bridge.controlTokenPath(projectPath, browser);
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, "test-session-token", { mode: 0o600 });
+  return file;
+}
 
 /* @invariant These fixtures go through the same owner module the production
    readers use, so a layout change in the engine moves the code and its fixtures

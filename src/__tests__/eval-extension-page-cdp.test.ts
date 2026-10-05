@@ -4,6 +4,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { envelope } from "../lib/envelope";
+import { writeEvalToken } from "./fixtures/ready-contract";
 
 const cliCalls: string[][] = [];
 vi.mock("../lib/act", async (importOriginal) => {
@@ -93,6 +94,7 @@ function project(
     path.join(readyDir, "ready.json"),
     JSON.stringify({ status: "ready", distPath }),
   );
+  writeEvalToken(dir, browser);
   return { dir, id: expectedId(distPath) };
 }
 

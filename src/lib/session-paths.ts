@@ -175,6 +175,19 @@ export {
   type ReadyContractInfo,
 } from "extension-develop/bridge";
 
+/* @invariant THE EVAL GATE IS THE ENGINE'S TOKEN FILE, ON EVERY ROUTE. The
+   engine writes a 0600 session token only when the dev session was started
+   with --allow-eval, and its relay refuses eval without it. The debug-port
+   routes this package added answered without
+   looking, so a session started without allowEval evaluated anyway while the
+   tool description promised the gate. The same file, read at the
+   root the engine writes under, is now the gate for those routes too. */
+export function evalTokenPresent(projectPath: string, browser: string): boolean {
+  return Boolean(
+    bridge.readControlToken(engineProjectRoot(projectPath), browser),
+  );
+}
+
 /* @invariant
  * The sentence a caller appends when a session artifact is missing, so a
  * layout mismatch between this package's pinned engine and the engine actually

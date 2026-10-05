@@ -29,6 +29,7 @@ import {
 } from "../lib/act";
 import { envelope } from "../lib/envelope";
 import { resolveSessionBrowser } from "../lib/session-browser";
+import { evalTokenPresent } from "../lib/session-paths";
 import {
   isChromiumFamily,
   isGeckoFamily,
@@ -70,7 +71,7 @@ import { executeScriptExpression } from "./inspect-gecko";
 export const schema = {
   name: "extension_eval",
   description:
-    "Evaluate an expression in a running extension context. Start the session with allowEval:true (extension_dev), which writes a 0600 session token. Context defaults to 'background', except on a Chromium MV3 session (the default template) where it defaults to 'page', the active tab, because the MV3 service worker CSP blocks eval; pass context:'background' to target the worker anyway and get that explanation back. For content and page, pass `url` to pick the tab, or omit both `url` and `tab` for the active tab; a numeric `tab` only disambiguates. Extension surfaces (popup, options, sidebar, devtools) and override pages (newtab, history, bookmarks) need no tab id but must already be open: open one with extension_open first, because a closed one returns an explicit error. On a Chromium MV3 session those pages, and context:'page' with a chrome-extension:// url, evaluate over CDP, the inspector path the extension page CSP does not govern; elsewhere they evaluate over the in-bundle relay. On Firefox a document whose content security policy forbids eval (the extension's own pages, or a site's) is evaluated over the debugger protocol instead, which takes one expression; a page inside the extension that is no declared surface (pages/*) is reached the same way by context:'page' and its moz-extension:// url once a tab shows it. Call extension_dom_snapshot with listTabs:true to enumerate {tabId, url, title}.",
+    "Evaluate an expression in a running extension context. Start the session with allowEval:true (extension_dev), which writes a 0600 session token; without that token every route of this tool, the debug port included, answers eval-disabled. Context defaults to 'background', except on a Chromium MV3 session (the default template) where it defaults to 'page', the active tab, because the MV3 service worker CSP blocks eval; pass context:'background' to target the worker anyway and get that explanation back. For content and page, pass `url` to pick the tab, or omit both `url` and `tab` for the active tab; a numeric `tab` only disambiguates. Extension surfaces (popup, options, sidebar, devtools) and override pages (newtab, history, bookmarks) need no tab id but must already be open: open one with extension_open first, because a closed one returns an explicit error. On a Chromium MV3 session those pages, and context:'page' with a chrome-extension:// url, evaluate over CDP, the inspector path the extension page CSP does not govern; elsewhere they evaluate over the in-bundle relay. On Firefox a document whose content security policy forbids eval (the extension's own pages, or a site's) is evaluated over the debugger protocol instead, which takes one expression; a page inside the extension that is no declared surface (pages/*) is reached the same way by context:'page' and its moz-extension:// url once a tab shows it. Call extension_dom_snapshot with listTabs:true to enumerate {tabId, url, title}.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -881,6 +882,20 @@ export async function handler(
     resolveDefaultEvalContext(args.projectPath, browser) === "page";
   const context = defaulted ? "page" : args.context;
   if (wantsExtensionPageOverCdp(args.projectPath, browser, context, args.url)) {
+    if (!evalTokenPresent(args.projectPath, browser)) {
+      return envelope({
+        ok: false,
+        command: schema.name,
+        status: "eval-disabled",
+        error: {
+          code: "E_EVAL_DISABLED",
+          name: "EvalDisabled",
+          message:
+            "eval is disabled for this session: it was started without allowEval: true, so no session token exists, and this tool evaluates nothing without one, over the debug port or the relay.",
+        },
+        hint: "Call extension_dev again with allowEval: true and replace: true (it stops this session first), then extension_eval again. Reads that need no eval still work: extension_dom_snapshot, extension_inspect, extension_logs, extension_assert.",
+      });
+    }
     const resolved = await resolveCdpPort(args.projectPath, browser);
     if (resolved) {
       const overCdp = await evaluateOnChromiumExtensionPage(
