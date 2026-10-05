@@ -7,8 +7,8 @@
   the store consoles by hand: it validates, builds, checks for review
   risks, rehearses with `extension_submit` (dry run), and submits only on
   the user's yes through the approval link. It covers Chrome, Firefox,
-  Edge and Safari, and recommends Manifest V3 everywhere (it used to
-  suggest MV2 for Firefox).
+  Edge and Safari, and keeps whatever manifest version the project
+  declares rather than migrating it during a submission.
 
 ## 10.10.4
 

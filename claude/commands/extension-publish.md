@@ -35,5 +35,5 @@ Default to `chrome` and `firefox`. `all` means chrome, firefox, edge and safari.
 ## Rules
 
 - Never submit without the user's confirmation in step 6, and never retry a real submission with a different build or store list under an old `approvalId`; request a new approval.
-- Manifest V3 for every store. Do not suggest MV2.
+- Keep the manifest version the project already declares. Extension.js templates use `chromium:manifest_version: 3` and `firefox:manifest_version: 2`, and AMO accepts both; do not migrate a manifest as part of a submission.
 - Store credentials are never arguments and never asked for in chat; they live in the extension.dev console.
