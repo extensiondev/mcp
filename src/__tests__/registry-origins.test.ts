@@ -51,9 +51,9 @@ describe("console/registry origin resolution", () => {
   });
 
   it("lets a per-tool api hint pick the environment for its own link", () => {
-    expect(consoleProjectUrl(ref, "stores", "http://localhost:3100")).toBe(
-      "http://console.extension.localhost/acme/widget/stores",
-    );
+    expect(
+      consoleProjectUrl(ref, "submissions", "http://localhost:3100"),
+    ).toBe("http://console.extension.localhost/acme/widget/submissions");
   });
 
   it("keeps registry on prod even in dev (no local proxy) unless overridden", () => {
