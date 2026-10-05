@@ -56,6 +56,25 @@
 - `extension_project_create` no longer lists `project` and `repo` as
   required in its schema, since a list replaces them. A call with
   neither form is still refused, by the tool.
+- `extension_publish` with `project` now describes the project it was
+  called for. The token was already picked
+  by `project`, but `registryUrl`, and the build index behind a missing
+  `buildSha`, `version` or `builtAt`, came from the most recent login, so
+  with several logins stored a publish for one project could return
+  another project's registry address and fill its build details from
+  another project's builds. The same slip is fixed in
+  `extension_release_promote` (the builds page, the channel list and the
+  public URLs it returns) and in the `extension_submit` dry run (the
+  console page it names). `extension_shares` and `extension_preview_web`
+  were checked and did not have it.
+- A private project's registry data is read with the login stored for
+  that project. It used to be asked with the most recent login, which
+  gave up on a mismatch and reported the builds as missing.
+- `extension_release_status` reads a `project` given as
+  `<workspace>/<project>`, the form every other tool takes. It used to
+  join the pair to the active login's workspace and ask the registry for
+  an address that names no project, which is also what a server started
+  with `--project` sent on every call.
 
 ## 10.10.8
 

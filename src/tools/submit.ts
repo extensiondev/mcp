@@ -29,7 +29,7 @@ import {
   fetchRegistryJson,
   parseChannels,
   registryFileUrl,
-  resolveProjectRef,
+  loginProjectRef,
 } from "../lib/registry";
 
 export function storeMdWarnings(browsers: string[], cwd: string): string[] {
@@ -291,7 +291,7 @@ export async function handler(args: SubmitToolArgs): Promise<string> {
   let statusNote: string | null = null;
 
   if (dryRun) {
-    const ref = resolveProjectRef();
+    const ref = loginProjectRef(args.project);
     const consoleStoresUrl = consoleProjectUrl(
       ref,
       ConsoleProjectPage.submissions,

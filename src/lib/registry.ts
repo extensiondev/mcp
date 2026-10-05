@@ -42,18 +42,71 @@ export interface ProjectRef {
   project: string;
 }
 
+function splitProjectName(name: string): ProjectRef | null {
+  const parts = name.split("/");
+  const workspace = String(parts[0] ?? "").trim();
+  const project = String(parts[1] ?? "").trim();
+  if (parts.length !== 2 || !workspace || !project) return null;
+  return { workspace, project };
+}
+
+/* @invariant A `project` WRITTEN AS '<workspace>/<project>' IS ONE NAME, NOT A
+ * SLUG WITH A SLASH IN IT. Every token-scoped tool takes `project` in that
+ * form, and a pinned server writes it in that form into any tool that has a
+ * `project` input, so this resolver receives it whether or not the tool that
+ * called it documented a bare slug. Read as a slug, the pair was joined to the
+ * active login's workspace and percent-encoded into a registry address that
+ * names no project. It is split here instead. A workspace given beside it must
+ * agree, and one that does not is a contradiction this refuses to settle.
+ *
+ * A bare slug with no workspace takes its workspace from the stored login that
+ * slug names, when exactly one does, and only otherwise from the active login,
+ * which is what it always did.
+ */
 export function resolveProjectRef(overrides?: {
   workspace?: string;
   project?: string;
 }): ProjectRef | null {
-  const workspace = String(overrides?.workspace || "").trim();
-  const project = String(overrides?.project || "").trim();
+  let workspace = String(overrides?.workspace || "").trim();
+  let project = String(overrides?.project || "").trim();
+  if (project.includes("/")) {
+    const named = splitProjectName(project);
+    if (!named) return null;
+    if (workspace && workspace.toLowerCase() !== named.workspace.toLowerCase()) {
+      return null;
+    }
+    workspace = named.workspace;
+    project = named.project;
+  }
   if (workspace && project) return { workspace, project };
-  const creds = readCredentials();
+  const creds =
+    (project ? readCredentials({ project }) : null) ?? readCredentials();
   const ws = workspace || String(creds?.workspaceSlug || "").trim();
   const proj = project || String(creds?.projectSlug || "").trim();
   if (!ws || !proj) return null;
   return { workspace: ws, project: proj };
+}
+
+/* @invariant THE PROJECT A CALL NAMED IS THE PROJECT ITS ANSWER DESCRIBES.
+ * A token-scoped tool picks its token with `project`, so every address it
+ * builds afterwards, the registry index it reads, the console page and the
+ * public URL it returns, has to come from that same login. Resolving them
+ * with no argument took the ACTIVE login instead: with ten logins stored, a
+ * publish for one project returned another project's registry address and
+ * could fill a missing build sha or version from another project's build
+ * index. This takes the same selector the token took. A
+ * name with no stored login is used as written when it is a full
+ * '<workspace>/<project>', and is no project at all otherwise: an answer that
+ * names nothing is right where one that names the wrong project is not.
+ */
+export function loginProjectRef(selector?: string): ProjectRef | null {
+  const named = String(selector ?? "").trim();
+  if (!named) return resolveProjectRef();
+  const creds = readCredentials({ project: named });
+  const workspace = String(creds?.workspaceSlug || "").trim();
+  const project = String(creds?.projectSlug || "").trim();
+  if (workspace && project) return { workspace, project };
+  return splitProjectName(named);
 }
 
 export function registryFileUrl(ref: ProjectRef, file: string): string {

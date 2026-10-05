@@ -26,7 +26,7 @@ import {
   fetchRegistryJson,
   parseChannels,
   registryFileUrl,
-  resolveProjectRef,
+  loginProjectRef,
   userlandProjectUrl,
 } from "../lib/registry";
 
@@ -215,7 +215,7 @@ export async function handler(args: {
     const code = typeof data?.code === "string" ? data.code : undefined;
     const enrich: Record<string, unknown> = {};
     let hint = "";
-    const ref = resolveProjectRef();
+    const ref = loginProjectRef(args.project);
 
     if (res.status === 404 || code === "UNKNOWN_BUILD") {
       enrich.buildsPageUrl = consoleProjectUrl(ref, "builds", args.api);
@@ -252,7 +252,7 @@ export async function handler(args: {
     });
   }
 
-  const promotedRef = resolveProjectRef();
+  const promotedRef = loginProjectRef(args.project);
   const publicChannelUrl = userlandProjectUrl(
     promotedRef,
     UserlandProjectPage.channel(channel),

@@ -17,7 +17,7 @@ import {
   isSuccessfulBuild,
   parseBuildIndex,
   registryFileUrl,
-  resolveProjectRef,
+  loginProjectRef,
 } from "../lib/registry";
 
 export const schema = {
@@ -159,7 +159,7 @@ export async function handler(args: {
   }
   let buildNote: string | null = null;
 
-  const ref = resolveProjectRef();
+  const ref = loginProjectRef(args.project);
   if (ref) {
     const buildsUrl = registryFileUrl(ref, "builds/index.json");
     const buildsRes = await fetchRegistryJson(buildsUrl, fetch, {
