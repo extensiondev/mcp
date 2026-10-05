@@ -14,6 +14,9 @@ import {
   resolveApiBase,
   safeApiBase,
 } from "../lib/login-flow";
+import { PLATFORM_CREATES_PER_HOUR } from "../lib/project-batch";
+import { createProjectBatch } from "../lib/project-create-batch";
+import { buildCreateBody } from "../lib/project-create-body";
 import { consoleBase, consoleProjectUrl } from "../lib/registry";
 import { platformHoldEnvelope, sawPlatformHold } from "../lib/platform-hold";
 import { identityHeaders } from "../lib/session-identity";
@@ -27,7 +30,7 @@ const RESUME_BUDGET_MS = 22_000;
 export const schema = {
   name: "extension_project_create",
   description:
-    "Create an extension.dev project for an extension that does not have one yet, without opening the console. Use it right after extension_create and extension_build, once the extension's source is pushed to a GitHub repository, and BEFORE extension_auth: extension_auth can only log in to a project that already exists, and this tool is what brings that project into existence. Ask for nothing but the project slug and the repo; the platform finds the GitHub App installation on the approving account itself, and if there is none it returns a connect link to open. Two-phase, like login: the first call returns a code and a URL where the signed-in workspace owner approves creating exactly this project; call again with the returned deviceCode to finish. The approval mints a provisioning grant that lives minutes, can only create the one named project, and is never stored on this machine. On success the platform creates the project, its mirror repository, and dispatches the first build. Then run extension_auth (action: login) against the new project, and extension_publish to share it.",
+    `Create an extension.dev project for an extension that does not have one yet, without opening the console. Use it right after extension_create and extension_build, once the extension's source is pushed to a GitHub repository, and BEFORE extension_auth: extension_auth can only log in to a project that already exists, and this tool is what brings that project into existence. Ask for nothing but the project slug and the repo; the platform finds the GitHub App installation on the approving account itself, and if there is none it returns a connect link to open. Two-phase, like login: the first call returns a code and a URL where the signed-in workspace owner approves creating exactly this project; call again with the returned deviceCode to finish. The approval mints a provisioning grant that lives minutes, can only create the one named project, and is never stored on this machine. On success the platform creates the project, its mirror repository, and dispatches the first build. Then run extension_auth (action: login) against the new project, and extension_publish to share it. To create several projects in one workspace under one approval, pass \`projects\` instead of \`project\` and \`repo\`: the approval page lists every name, each project is created by its own request, and each one's 7-day token is stored as that project's login, so no extension_auth call is needed afterwards. A list takes a few calls to finish: while projects remain the answer is status 'creating' with the same deviceCode to call again, and the grant is held in this server's memory only. One approval creates at most ${PLATFORM_CREATES_PER_HOUR} projects, because the platform creates at most ${PLATFORM_CREATES_PER_HOUR} per hour for one approving account; a longer list is refused before any approval is asked for, never split silently.`,
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -83,14 +86,19 @@ export const schema = {
         description:
           "Per-browser output directory overrides, for example {\"edge\": \"build/manifestv3\"}. A browser named here wins over `outputDirectory`.",
       },
+      projects: {
+        type: "array",
+        items: { type: "object" },
+        description: `Create several projects in one workspace under one approval, instead of \`project\` and \`repo\`. 1 to ${PLATFORM_CREATES_PER_HOUR} entries, each { project: '<workspace>/<project>', repo: '<owner>/<repo>' }, all in the same workspace, each project named by its exact slug (lowercase letters and digits joined by single dashes, at most 48 characters), none twice and none existing yet. An entry may also carry displayName, description, installCommand, buildCommand, outputDirectory, browsers and outputDirectories for that project alone; the same inputs at the top level are the shared default for every entry that leaves them out. The answer carries one row per project: created and logged in, created with no token (run a batch extension_auth login), refused with the platform's code, or not attempted. A refusal on one project never hides the others.`,
+      },
       deviceCode: {
         type: "string",
         description:
-          "Resume token from the prior call's `deviceCode`; omit on the first call.",
+          "Resume token from the prior call's `deviceCode`; omit on the first call. A batch returns the same deviceCode until every listed project has an answer.",
       },
       api: API_BASE,
     },
-    required: ["project", "repo"],
+    required: [] as string[],
   },
 };
 
@@ -146,81 +154,10 @@ function pendingEnvelope(start: {
   });
 }
 
-function buildCreateBody(args: {
-  workspace: string;
-  projectSlug: string;
-  owner: string;
-  repoName: string;
-  installationId?: string;
-  displayName?: string;
-  description?: string;
-  installCommand?: string;
-  buildCommand?: string;
-  outputDirectory?: string;
-  browsers?: string[];
-  outputDirectories?: Record<string, unknown>;
-}): Record<string, unknown> {
-  const installCommand = String(args.installCommand || "npm install").trim();
-  const buildCommand = String(args.buildCommand || "npm run build").trim();
-  const wanted = new Set(
-    (Array.isArray(args.browsers) && args.browsers.length
-      ? args.browsers
-      : ["chrome"]
-    ).map((name) => String(name).trim().toLowerCase()),
-  );
-  const several = wanted.size > 1;
-  const outputFor = (name: string) => {
-    const override = args.outputDirectories?.[name];
-    if (typeof override === "string" && override.trim()) return override.trim();
-    const pattern = String(args.outputDirectory || "").trim();
-    if (pattern.includes("<browser>")) return pattern.replaceAll("<browser>", name);
-    if (pattern && !several) return pattern;
-
-    return `dist/${name}`;
-  };
-  const browser = (name: string) => ({
-    enabled: wanted.has(name),
-    installCommand,
-    buildCommand,
-    outputDirectory: outputFor(name),
-  });
-  return {
-    info: {
-      id: "",
-      name: args.projectSlug,
-      displayName: String(args.displayName || args.projectSlug).trim(),
-      description: String(
-        args.description ||
-          `Browser extension project for ${args.owner}/${args.repoName}.`,
-      ).trim(),
-    },
-    build: {
-      chrome: browser("chrome"),
-      edge: browser("edge"),
-      firefox: browser("firefox"),
-    },
-    deployment: {
-      branch: "",
-      nodeVersion: "",
-      runWhatsNew: false,
-      runExtensionExecutables: false,
-    },
-    github: {
-      owner: args.owner,
-      repo: args.repoName,
-      installationId: args.installationId,
-      createdAt: new Date().toISOString(),
-      pullRequestComments: true,
-      commitComments: false,
-    },
-    workspaceSlug: args.workspace,
-    createdFrom: { kind: "repository", ref: `${args.owner}/${args.repoName}` },
-  };
-}
-
 export async function handler(args: {
-  project: string;
-  repo: string;
+  project?: string;
+  repo?: string;
+  projects?: unknown;
   installationId?: string;
   displayName?: string;
   description?: string;
@@ -232,6 +169,9 @@ export async function handler(args: {
   deviceCode?: string;
   api?: string;
 }): Promise<string> {
+  if (args.projects !== undefined && args.projects !== null) {
+    return createProjectBatch(args);
+  }
   const project = String(args.project || "").trim();
   if (!/^[^/]+\/[^/]+$/.test(project)) {
     return fail(
@@ -354,7 +294,7 @@ async function finishFromPoll(
     apiBase: string;
     project: string;
     args: {
-      repo: string;
+      repo?: string;
       installationId?: string;
       displayName?: string;
       description?: string;
@@ -434,7 +374,7 @@ async function finishFromPoll(
     });
   }
 
-  const [owner = "", repoName = ""] = ctx.args.repo.split("/");
+  const [owner = "", repoName = ""] = String(ctx.args.repo || "").split("/");
   const body = buildCreateBody({
     workspace: wantWorkspace,
     projectSlug: wantProject,

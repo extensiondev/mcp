@@ -108,7 +108,18 @@ describe("extension_project_create", () => {
     expect(schema.name).toBe("extension_project_create");
     expect(schema.description).toContain("BEFORE extension_auth");
     expect(schema.description).toContain("extension_build");
-    expect(schema.inputSchema.required).toEqual(["project", "repo"]);
+    expect(schema.inputSchema.required).toEqual([]);
+  });
+
+  it("still refuses a single call that names no project or no repo", async () => {
+    const { fn } = createFetch({ token: [] });
+    vi.stubGlobal("fetch", fn);
+    for (const args of [{}, { project: "acme/ghost-app" }, { repo: "acme/src" }]) {
+      const out = JSON.parse(await handler(args as never));
+      expect(out.ok).toBe(false);
+      expect(out.error.code).toBe("E_BAD_REQUEST");
+    }
+    expect(fn).not.toHaveBeenCalled();
   });
 
   it("asks for no installation id, because the platform resolves it", () => {
