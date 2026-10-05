@@ -26,6 +26,25 @@ export async function clearLocalCredentials(project?: string): Promise<string> {
     : result.removed.length > 1
       ? `all ${result.removed.length} stored logins`
       : "the stored login";
+  if (result.failure) {
+    return envelope({
+      ok: false,
+      command: "extension_auth",
+      status: "logout-failed",
+      error: {
+        code: "E_CONFIG",
+        name: "LogoutFailed",
+        message: `Nothing was removed: ${result.failure}.`,
+      },
+      value: {
+        cleared: false,
+        removed: [],
+        remaining: result.remaining,
+        path: result.path,
+      },
+      hint: `The token is still stored on this machine and token-scoped tools still use it. Fix what stopped the removal at ${result.path} and log out again${revokeUrl ? `, or revoke the token itself at ${revokeUrl}, which ends it wherever it is stored` : ", or revoke the token from the project's access-tokens page, which ends it wherever it is stored"}.`,
+    });
+  }
   return envelope({
     ok: true,
     command: "extension_auth",

@@ -377,27 +377,57 @@ export function writeCredentialBatch(batch: StoredCredentials[]): string | null 
   });
 }
 
+/* @invariant A LOGOUT THAT DID NOT REMOVE THE TOKEN SAYS SO. Only a file
+ * that is not there means "nothing to remove". Every other failure to delete
+ * or rewrite the store used to be read as that, or swallowed, so a logout
+ * answered "removed from this machine" over a token still on disk and still
+ * in use, and "no stored credentials" over a file it could not delete. A
+ * failure now comes back as `failure` with the reason and the store as it
+ * still stands, and nothing is reported removed. */
 export function clearCredentials(selector?: CredentialSelector): {
   cleared: boolean;
   path: string;
   removed: string[];
   remaining: string[];
+  failure?: string;
 } {
   const file = credentialsPath();
-  const store = readCredentialStore();
+  const read = inspectCredentialStore();
+  const store = read.state === "ok" ? read.store : null;
   const wanted = String(selector?.project ?? "").trim();
+  const describe = (err: unknown): string =>
+    String((err as NodeJS.ErrnoException)?.code || (err as Error)?.message || err);
+  const stillThere = (): string[] => listCredentials().map((entry) => entry.key);
   if (!wanted) {
     try {
       fs.unlinkSync(file);
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException)?.code === "ENOENT") {
+        return { cleared: false, path: file, removed: [], remaining: [] };
+      }
       return {
-        cleared: true,
+        cleared: false,
         path: file,
-        removed: store ? Object.keys(store.entries) : [],
-        remaining: [],
+        removed: [],
+        remaining: stillThere(),
+        failure: `the store at ${file} could not be deleted (${describe(err)})`,
       };
-    } catch {
-      return { cleared: false, path: file, removed: [], remaining: [] };
     }
+    return {
+      cleared: true,
+      path: file,
+      removed: store ? Object.keys(store.entries) : [],
+      remaining: [],
+    };
+  }
+  if (read.state === "unreadable") {
+    return {
+      cleared: false,
+      path: file,
+      removed: [],
+      remaining: [],
+      failure: `the store at ${file} exists but ${read.reason}, so the login for ${wanted} could not be looked up in it`,
+    };
   }
   if (!store) return { cleared: false, path: file, removed: [], remaining: [] };
   const entry = selectEntry(store, { project: wanted });
@@ -405,23 +435,36 @@ export function clearCredentials(selector?: CredentialSelector): {
     return { cleared: false, path: file, removed: [], remaining: Object.keys(store.entries) };
   }
   const key = credentialKey(entry.workspaceSlug, entry.projectSlug);
-  const entries = { ...store.entries };
-  delete entries[key];
-  const remaining = Object.keys(entries);
-  if (remaining.length === 0) {
-    try {
-      fs.unlinkSync(file);
-    } catch {
-      // nothing left to remove
-    }
-    return { cleared: true, path: file, removed: [key], remaining: [] };
+  try {
+    return withStoreLock(() => {
+      const current = storeForWrite() ?? store;
+      const entries = { ...current.entries };
+      delete entries[key];
+      const remaining = Object.keys(entries);
+      if (remaining.length === 0) {
+        try {
+          fs.unlinkSync(file);
+        } catch (err) {
+          if ((err as NodeJS.ErrnoException)?.code !== "ENOENT") throw err;
+        }
+        return { cleared: true, path: file, removed: [key], remaining: [] };
+      }
+      writeStore({
+        version: 2,
+        active: current.active === key ? (remaining[0] ?? null) : current.active,
+        entries,
+      });
+      return { cleared: true, path: file, removed: [key], remaining };
+    });
+  } catch (err) {
+    return {
+      cleared: false,
+      path: file,
+      removed: [],
+      remaining: stillThere(),
+      failure: `the login for ${key} could not be removed from ${file} (${describe(err)})`,
+    };
   }
-  writeStore({
-    version: 2,
-    active: store.active === key ? (remaining[0] ?? null) : store.active,
-    entries,
-  });
-  return { cleared: true, path: file, removed: [key], remaining };
 }
 
 export function readValidCredentials(
