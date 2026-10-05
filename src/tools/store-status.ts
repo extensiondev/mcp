@@ -6,6 +6,7 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
+import { ConsoleProjectPage } from "@extension.dev/urls/paths";
 import {
   consoleProjectUrl,
   fetchRegistryJson,
@@ -174,7 +175,11 @@ export async function readStores(args: {
   const healthUrl = registryFileUrl(ref, "stores/health.json");
   const statusUrl = registryFileUrl(ref, "stores/status.json");
   const submissionsUrl = registryFileUrl(ref, "stores/submissions.json");
-  const consoleStoresUrl = consoleProjectUrl(ref, "stores", args.api);
+  const consoleStoresUrl = consoleProjectUrl(
+    ref,
+    ConsoleProjectPage.submissions,
+    args.api,
+  );
 
   const [healthRes, statusRes, submissionsRes] = await Promise.all([
     fetchRegistryJson(healthUrl, fetch, { ref, api: args.api }),
@@ -200,7 +205,7 @@ export async function readStores(args: {
   if (!healthRes.ok && !statusRes.ok && !submissionsRes.ok) {
     return fail(
       "StoreStatusNotFound",
-      `No store data on the registry for ${ref.workspace}/${ref.project} (${healthRes.message}). The project may have no stores configured yet, be private (private registry data needs a share token), or the workspace/project slugs may be wrong. Configure stores at ${consoleStoresUrl}/new; the console Stores page is the authoritative view: ${consoleStoresUrl}`,
+      `No store data on the registry for ${ref.workspace}/${ref.project} (${healthRes.message}). The project may have no stores configured yet, be private (private registry data needs a share token), or the workspace/project slugs may be wrong. Configure stores at ${consoleStoresUrl}/new; the console Submissions page is the authoritative view: ${consoleStoresUrl}`,
       "unavailable",
       "E_PLATFORM",
       {

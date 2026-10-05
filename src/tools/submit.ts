@@ -6,6 +6,7 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
+import { ConsoleProjectPage } from "@extension.dev/urls/paths";
 import { API_BASE } from "../lib/common-schema";
 import { envelope, type ErrorCode } from "../lib/envelope";
 import fs from "node:fs";
@@ -291,7 +292,11 @@ export async function handler(args: SubmitToolArgs): Promise<string> {
 
   if (dryRun) {
     const ref = resolveProjectRef();
-    const consoleStoresUrl = consoleProjectUrl(ref, "stores", args.api);
+    const consoleStoresUrl = consoleProjectUrl(
+      ref,
+      ConsoleProjectPage.submissions,
+      args.api,
+    );
     const storeModeNote = `Store publish mode (draft / skip-publish / live) is not readable with the CLI token, so it cannot be verified from here; check per-store settings at ${consoleStoresUrl}.`;
 
     let health: Record<string, { ok?: boolean; message?: string }> | null = null;

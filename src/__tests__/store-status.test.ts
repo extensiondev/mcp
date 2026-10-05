@@ -201,12 +201,12 @@ describe("store-status reader", () => {
     expect(byStore.firefox.review.status).toBe("pending");
 
     expect(out.value.lastPollAt).toBe("2026-07-22T18:00:00.000Z");
-    expect(out.value.consoleStoresUrl).toContain("/acme/widget/stores");
+    expect(out.value.consoleStoresUrl).toContain("/acme/widget/submissions");
     expect(out.value.registryUrls.status).toContain(
       "/acme/widget/_extension-dev/stores/status.json",
     );
     expect(out.hint).toContain("FAILED the last health check");
-    expect(out.hint).toContain("/stores/edge");
+    expect(out.hint).toContain("/submissions/edge");
   });
 
   it("reports a known store missing from the registry as not configured", async () => {
@@ -228,7 +228,7 @@ describe("store-status reader", () => {
     );
     expect(byStore.firefox.configured).toBe(false);
     expect(byStore.edge.configured).toBe(false);
-    expect(out.hint).toContain("/stores/new");
+    expect(out.hint).toContain("/submissions/new");
   });
 
   it("backfills a store's submission from status.json when submissions.json is absent", async () => {
@@ -309,8 +309,8 @@ describe("store-status reader", () => {
     expect(out.status).toBe("unavailable");
     expect(out.error.code).toBe("E_PLATFORM");
     expect(out.error.name).toBe("StoreStatusNotFound");
-    expect(out.error.message).toContain("stores/new");
-    expect(out.value.consoleStoresUrl).toContain("/acme/widget/stores");
+    expect(out.error.message).toContain("submissions/new");
+    expect(out.value.consoleStoresUrl).toContain("/acme/widget/submissions");
   });
 
   it("defaults to the stored login's project", async () => {

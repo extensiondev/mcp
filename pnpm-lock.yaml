@@ -27,8 +27,8 @@ importers:
   .:
     dependencies:
       '@extension.dev/urls':
-        specifier: ^0.8.1
-        version: 0.8.1
+        specifier: ^0.8.2
+        version: 0.8.2
       '@modelcontextprotocol/sdk':
         specifier: ^1.12.1
         version: 1.29.0(zod@4.3.6)
@@ -641,8 +641,8 @@ packages:
     resolution: {integrity: sha512-+CNAzxglkrpNf/kKywqQfk74QjtceuOE7Qm+AF8miRvPF/wmmK5+OJOgVh3AVTT3RP2mH3+FOaxlE5v72owk0A==}
     engines: {node: ^20.19.0 || ^22.13.0 || >=24}
 
-  '@extension.dev/urls@0.8.1':
-    resolution: {integrity: sha512-xGULBCpd4XJK9N5e4l6EfbiSdTdGD0Zj2sbogCS5KfWTL7+VdQ9T6aQ9V4tio/Lf/phGgSGwlkAghYpiPvQAAA==}
+  '@extension.dev/urls@0.8.2':
+    resolution: {integrity: sha512-cnS5KijvWZnrFSp8d4IfUsZHj1wflOWmNr0C2ZPnGT2DeqIk7I66yMJPpGQSIeddmEl494xic7lRnKMrWQe0dQ==}
     engines: {node: '>=20.18'}
 
   '@hono/node-server@2.0.12':
@@ -3649,7 +3649,7 @@ snapshots:
       '@eslint/core': 1.2.1
       levn: 0.4.1
 
-  '@extension.dev/urls@0.8.1': {}
+  '@extension.dev/urls@0.8.2': {}
 
   '@hono/node-server@2.0.12(hono@4.13.12)':
     dependencies:

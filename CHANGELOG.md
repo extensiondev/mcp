@@ -33,6 +33,11 @@
   of an extension whose policy forbids eval. Use `context: "page"` or
   `extension_dom_snapshot` there.
 
+- `extension_submit` and `extension_store_status` link to the console's
+  Submissions tab at `/<workspace>/<project>/submissions`, where the page
+  moved; the old `/stores` address still redirects. `@extension.dev/urls`
+  moves to `^0.8.2`, which carries the new paths.
+
 ## 10.10.7
 
 - A share revoke now waits for a person by default, like a real store
