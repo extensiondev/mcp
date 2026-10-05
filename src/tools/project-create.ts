@@ -25,6 +25,12 @@ import { consoleBase, consoleProjectUrl } from "../lib/registry";
 import { platformHoldEnvelope, sawPlatformHold } from "../lib/platform-hold";
 import { identityHeaders } from "../lib/session-identity";
 import { spendNarration } from "../lib/allowance";
+import {
+  firstBuildSentence,
+  firstBuildValue,
+  readFirstBuild,
+  withheldBecause,
+} from "../lib/first-build";
 
 const COMMAND = "extension_project_create";
 
@@ -34,7 +40,7 @@ const RESUME_BUDGET_MS = 22_000;
 export const schema = {
   name: "extension_project_create",
   description:
-    `Create an extension.dev project for an extension that does not have one yet, without opening the console. Use it right after extension_create and extension_build, once the extension's source is pushed to a GitHub repository, and BEFORE extension_auth: extension_auth can only log in to a project that already exists, and this tool is what brings that project into existence. Ask for nothing but the project slug and the repo; the platform finds the GitHub App installation on the approving account itself, and if there is none it returns a connect link to open. Two-phase, like login: the first call returns a code and a URL where the signed-in workspace owner approves creating exactly this project; call again with the returned deviceCode to finish. The approval mints a provisioning grant that lives minutes, can only create the one named project, and is never stored on this machine. On success the platform creates the project, its mirror repository, and dispatches the first build. Then run extension_auth (action: login) against the new project, and extension_publish to share it. To create several projects in one workspace under one approval, pass \`projects\` instead of \`project\` and \`repo\`: the approval page lists every name, each project is created by its own request, and each one's 7-day token is stored as that project's login, so no extension_auth call is needed afterwards. A list takes a few calls to finish: while projects remain the answer is status 'creating' with the same deviceCode to call again, and the grant is held in this server's memory only. One approval creates at most ${DEFAULT_CREATE_PROJECTS_PER_APPROVAL} projects, the cap the platform states in its login config, because it creates at most ${PLATFORM_CREATES_PER_HOUR} per hour for one approving account; the next ${DEFAULT_CREATE_PROJECTS_PER_APPROVAL} can start in a new call once that limit allows. A longer list is refused before any approval is asked for, never split silently, and so is any list on a platform that does not advertise batch onboarding.`,
+    `Create an extension.dev project for an extension that does not have one yet, without opening the console. Use it right after extension_create and extension_build, once the extension's source is pushed to a GitHub repository, and BEFORE extension_auth: extension_auth can only log in to a project that already exists, and this tool is what brings that project into existence. Ask for nothing but the project slug and the repo; the platform finds the GitHub App installation on the approving account itself, and if there is none it returns a connect link to open. Two-phase, like login: the first call returns a code and a URL where the signed-in workspace owner approves creating exactly this project; call again with the returned deviceCode to finish. The approval mints a provisioning grant that lives minutes, can only create the one named project, and is never stored on this machine. On success the platform creates the project and its mirror repository, and dispatches the first build when it can: the answer says in \`firstBuild\` whether one was dispatched and, when none was, why (no commits, no build workflow, a spent build allowance, a paused dispatch). Then run extension_auth (action: login) against the new project, and extension_publish to share it. To create several projects in one workspace under one approval, pass \`projects\` instead of \`project\` and \`repo\`: the approval page lists every name, each project is created by its own request, and each one's 7-day token is stored as that project's login, so no extension_auth call is needed afterwards. A list takes a few calls to finish: while projects remain the answer is status 'creating' with the same deviceCode to call again, and the grant is held in this server's memory only. One approval creates at most ${DEFAULT_CREATE_PROJECTS_PER_APPROVAL} projects, the cap the platform states in its login config, because it creates at most ${PLATFORM_CREATES_PER_HOUR} per hour for one approving account; the next ${DEFAULT_CREATE_PROJECTS_PER_APPROVAL} can start in a new call once that limit allows. A longer list is refused before any approval is asked for, never split silently, and so is any list on a platform that does not advertise batch onboarding.`,
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -501,6 +507,11 @@ async function finishFromPoll(
     { workspace: finalWorkspace, project: finalProject },
     "",
   );
+  const firstBuild = readFirstBuild(data);
+  const buildsPageUrl = consoleProjectUrl(
+    { workspace: finalWorkspace, project: finalProject },
+    "builds",
+  );
   return envelope({
     ok: true,
     command: COMMAND,
@@ -511,16 +522,39 @@ async function finishFromPoll(
       projectId: data.projectId ?? null,
       consoleUrl,
       sourceRepo: ctx.args.repo,
+      firstBuild: firstBuildValue(firstBuild),
       allowance: spendNarration({
-        what: "This project creation, including its first build,",
+        what:
+          firstBuild.state === "dispatched"
+            ? "This project creation, including its first build,"
+            : firstBuild.state === "withheld"
+              ? "This project creation, with no first build dispatched,"
+              : "This project creation, and its first build if the platform dispatched one,",
         body: data,
         api: ctx.apiBase,
       }),
       nextSteps: [
         `extension_auth (action: login, project: '${finalWorkspace}/${finalProject}')`,
-        "extension_publish",
+        ...(firstBuild.state === "dispatched"
+          ? ["extension_publish"]
+          : [
+              `extension_release_status (include: ['releases'], project: '${finalWorkspace}/${finalProject}') until a build is listed, then extension_publish`,
+            ]),
       ],
     },
-    hint: `Project ${finalWorkspace}/${finalProject} exists and its first build was dispatched. The provisioning grant is now spent and nothing was stored on this machine. Next: extension_auth (action: login, project: '${finalWorkspace}/${finalProject}') to mint the project token, then extension_publish to share it.`,
+    hint: `Project ${finalWorkspace}/${finalProject} exists. ${firstBuildSentence(firstBuild, buildsPageUrl)} The provisioning grant is now spent and nothing was stored on this machine. Next: extension_auth (action: login, project: '${finalWorkspace}/${finalProject}') to mint the project token${
+      firstBuild.state === "dispatched"
+        ? ", then extension_publish to share it."
+        : "; extension_publish has nothing to share until a build exists."
+    }`,
+    ...(firstBuild.state === "dispatched"
+      ? {}
+      : {
+          warnings: [
+            firstBuild.state === "withheld"
+              ? `No first build was dispatched for ${finalWorkspace}/${finalProject}: ${withheldBecause(firstBuild.reason)}.`
+              : `The platform did not say whether a first build was dispatched for ${finalWorkspace}/${finalProject}.`,
+          ],
+        }),
   });
 }

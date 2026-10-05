@@ -219,9 +219,12 @@ describe("extension_project_create", () => {
         status: 200,
         body: {
           success: true,
+          message: "Repository created successfully",
           projectId: "prj_new",
           projectSlug: "ghost-app",
           workspaceSlug: "acme",
+          idempotencyKey: "idem-1",
+          initialBuild: { dispatched: true },
         },
       },
     });
@@ -232,6 +235,10 @@ describe("extension_project_create", () => {
     expect(out.ok).toBe(true);
     expect(out.status).toBe("created");
     expect(out.value.projectId).toBe("prj_new");
+    expect(out.value.firstBuild).toEqual({ dispatched: true });
+    expect(out.hint).toContain("Its first build was dispatched.");
+    expect(out.value.allowance.spent).toContain("including its first build");
+    expect(out.warnings ?? []).toEqual([]);
     expect(out.value.nextSteps[0]).toContain("extension_auth");
 
     const createCall = calls.find((c) =>
@@ -477,5 +484,85 @@ describe("extension_project_create", () => {
     expect(out.error.message).toContain(
       "installation is not on the account that approved",
     );
+  });
+
+  async function createdWith(body: Record<string, unknown>) {
+    const { fn } = createFetch({
+      token: [{ status: 200, body: grantBody }],
+      create: {
+        status: 200,
+        body: {
+          success: true,
+          message: "Repository created successfully",
+          projectId: "prj_new",
+          projectSlug: "ghost-app",
+          workspaceSlug: "acme",
+          idempotencyKey: "idem-1",
+          ...body,
+        },
+      },
+    });
+    vi.stubGlobal("fetch", fn);
+
+    return JSON.parse(await handler({ ...baseArgs, deviceCode: "dev-code" }));
+  }
+
+  it.each([
+    ["allowance_exhausted", "used its build allowance"],
+    ["no_commits", "no commits yet"],
+    ["no_build_workflow", "no build workflow"],
+    ["dispatch_paused", "paused on the platform"],
+    ["dispatch_failed", "could not"],
+  ])(
+    "does not claim a first build the platform withheld (%s)",
+    async (reason, words) => {
+      const out = await createdWith({
+        initialBuild: { dispatched: false, reason },
+      });
+
+      expect(out.ok).toBe(true);
+      expect(out.status).toBe("created");
+      expect(out.value.firstBuild).toEqual({ dispatched: false, reason });
+      expect(out.hint).not.toContain("Its first build was dispatched");
+      expect(out.hint).toContain("No first build was dispatched");
+      expect(out.hint).toContain(words);
+      expect(out.hint).toContain("/builds");
+      expect(out.value.allowance.spent).not.toContain("including its first build");
+      expect(out.warnings.join(" ")).toContain(words);
+      expect(out.value.nextSteps.join(" ")).toContain("extension_release_status");
+    },
+  );
+
+  it("relays a reason it has no sentence for instead of dropping it", async () => {
+    const out = await createdWith({
+      initialBuild: { dispatched: false, reason: "some_future_reason" },
+    });
+
+    expect(out.hint).toContain("some_future_reason");
+  });
+
+  it("claims no build when the answer does not say one was dispatched", async () => {
+    const out = await createdWith({});
+
+    expect(out.ok).toBe(true);
+    expect(out.value.firstBuild).toEqual({ dispatched: null });
+    expect(out.hint).not.toContain("Its first build was dispatched");
+    expect(out.hint).toContain("did not say whether a first build was dispatched");
+    expect(out.warnings.join(" ")).toContain("did not say");
+  });
+
+  it.each([[{ dispatched: "true" }], [{ dispatched: 1 }], ["yes"], [[true]]])(
+    "takes only a literal true for dispatched (%j)",
+    async (initialBuild) => {
+      const out = await createdWith({ initialBuild });
+
+      expect(out.value.firstBuild).toEqual({ dispatched: null });
+      expect(out.hint).not.toContain("Its first build was dispatched");
+    },
+  );
+
+  it("promises the firstBuild field in its description", () => {
+    expect(schema.description).toContain("`firstBuild`");
+    expect(schema.description).not.toContain("and dispatches the first build.");
   });
 });

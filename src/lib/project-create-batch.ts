@@ -8,6 +8,7 @@
 
 import { spendNarration } from "./allowance";
 import { writeCredentialBatch } from "./credentials";
+import { firstBuildValue, readFirstBuild, withheldBecause } from "./first-build";
 import { pollDeviceGrant, requestDeviceCode } from "./device-flow";
 import { envelope, type ErrorCode } from "./envelope";
 import { fetchLoginConfig, resolveApiBase, safeApiBase } from "./login-flow";
@@ -93,6 +94,7 @@ type Row =
       loggedIn: boolean;
       projectId: unknown;
       consoleUrl: string;
+      firstBuild: { dispatched: boolean | null; reason?: string };
       expiresAt?: string | null;
       tokenCode?: string;
       hint?: string;
@@ -489,6 +491,7 @@ async function createOne(session: Session, entry: BatchEntry, installationId: st
     { workspace: finalWorkspace, project: finalProject },
     "",
   );
+  const firstBuild = firstBuildValue(readFirstBuild(data));
   const token = String(data.token || "").trim();
   const scoped =
     finalWorkspace.toLowerCase() === entry.workspace &&
@@ -517,6 +520,7 @@ async function createOne(session: Session, entry: BatchEntry, installationId: st
         loggedIn: true,
         projectId: data.projectId ?? null,
         consoleUrl,
+        firstBuild,
         expiresAt: expiresAt ? new Date(expiresAt * 1000).toISOString() : null,
       },
     };
@@ -531,6 +535,7 @@ async function createOne(session: Session, entry: BatchEntry, installationId: st
       loggedIn: false,
       projectId: data.projectId ?? null,
       consoleUrl,
+      firstBuild,
       tokenCode,
       hint: scoped
         ? `${entry.ref} was created but the platform issued no token for it. Sign in with extension_auth (action: login).`
@@ -579,6 +584,29 @@ function finalEnvelope(session: Session): string {
   const unconfirmed = rows
     .filter((row) => row.status === "unconfirmed")
     .map((row) => row.project);
+  /* @invariant "Each first build was dispatched" is a count of rows whose
+   * answer said so, never a property of having been created. A project the
+   * platform made without a build (no commits, a spent allowance, a paused
+   * dispatch) and one whose answer did not say are both named, each with what
+   * is known about it, so the list is never rounded up to "all building". */
+  const built = created.filter(
+    (row) => row.status === "created" && row.firstBuild.dispatched === true,
+  );
+  const unbuilt = created.filter(
+    (row) => row.status === "created" && row.firstBuild.dispatched !== true,
+  );
+  const unbuiltList = unbuilt
+    .map((row) =>
+      row.status === "created" && row.firstBuild.dispatched === false
+        ? `${row.project} (${withheldBecause(row.firstBuild.reason ?? "unstated")})`
+        : `${row.project} (the platform did not say)`,
+    )
+    .join("; ");
+  const buildsSentence =
+    unbuilt.length === 0
+      ? "each first build was dispatched"
+      : `${built.length} of ${created.length} first builds were dispatched`;
+  const unbuiltWarning = `No first build is confirmed for: ${unbuiltList}. Each of those projects exists without a build; extension_publish has nothing to share for it until one is started from its Builds page in the console.`;
 
   if (created.length === 0 && stop?.held) {
     return platformHoldEnvelope({
@@ -623,7 +651,11 @@ function finalEnvelope(session: Session): string {
     ...(created.length
       ? {
           allowance: spendNarration({
-            what: `Creating ${created.length} project${created.length === 1 ? "" : "s"}, including each first build,`,
+            what: `Creating ${created.length} project${created.length === 1 ? "" : "s"}, ${
+              built.length === created.length
+                ? "including each first build,"
+                : `including the ${built.length} first build${built.length === 1 ? "" : "s"} the platform said it dispatched,`
+            }`,
             body: session.lastBody ?? undefined,
             api: session.apiBase,
           }),
@@ -641,12 +673,17 @@ function finalEnvelope(session: Session): string {
       value,
       hint:
         needLogin.length === 0
-          ? `All ${rows.length} projects exist, each first build was dispatched, and this machine is signed in to every one of them for 7 days. ${spent} Token-scoped tools take \`project\` to pick one.`
-          : `All ${rows.length} projects exist and each first build was dispatched, but no token was stored for ${needLogin.join(", ")}. ${spent} Sign in to those with one batch login: ${nextSteps[0]}.`,
-      ...(needLogin.length
+          ? `All ${rows.length} projects exist, ${buildsSentence}, and this machine is signed in to every one of them for 7 days. ${spent} Token-scoped tools take \`project\` to pick one.`
+          : `All ${rows.length} projects exist and ${buildsSentence}, but no token was stored for ${needLogin.join(", ")}. ${spent} Sign in to those with one batch login: ${nextSteps[0]}.`,
+      ...(needLogin.length || unbuilt.length
         ? {
             warnings: [
-              `Created without a stored login: ${needLogin.join(", ")}. Run ${nextSteps[0]}.`,
+              ...(needLogin.length
+                ? [
+                    `Created without a stored login: ${needLogin.join(", ")}. Run ${nextSteps[0]}.`,
+                  ]
+                : []),
+              ...(unbuilt.length ? [unbuiltWarning] : []),
             ],
           }
         : {}),
@@ -667,6 +704,7 @@ function finalEnvelope(session: Session): string {
     hint: `${spent} ${
       stop?.code === "RATE_LIMITED" ? `${createRateLimitNote()} ` : ""
     }Next: ${nextSteps.join("; then ") || "read results"}.`,
+    ...(unbuilt.length ? { warnings: [unbuiltWarning] } : {}),
   });
 }
 

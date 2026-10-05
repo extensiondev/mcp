@@ -122,6 +122,8 @@ function created(slug: string, extra: Record<string, unknown> = {}): Route {
       projectId: `prj_${slug}`,
       projectSlug: slug,
       workspaceSlug: "acme",
+      idempotencyKey: `idem-${slug}`,
+      initialBuild: { dispatched: true },
       tokenIssued: true,
       token: `seven-day-token-for-${slug}`,
       expiresAt: 1_900_000_000,
@@ -421,6 +423,7 @@ describe("extension_project_create with projects: one approval", () => {
         loggedIn: true,
         projectId: `prj_${slug}`,
         consoleUrl: expect.stringContaining(`/acme/${slug}`),
+        firstBuild: { dispatched: true },
         expiresAt: new Date(1_900_000_000 * 1000).toISOString(),
       })),
     );
@@ -991,5 +994,55 @@ describe("extension_project_create with projects: the grant and the list", () =>
     expect("project" in h.to("/api/cli/projects/create")[0]!.body).toBe(false);
     expect(listCredentials()).toHaveLength(0);
     expect(out.value.nextSteps[0]).toContain("extension_auth (action: login");
+  });
+});
+
+describe("extension_project_create with projects: a first build is counted, never assumed", () => {
+  it("says each first build was dispatched when every answer says so", async () => {
+    harness({ token: [grant(SLUGS)] });
+    const out = await run({ projects: THREE, deviceCode: "dev-code" });
+
+    expect(out.status).toBe("created");
+    expect(out.hint).toContain("each first build was dispatched");
+    expect(out.value.allowance.spent).toContain("including each first build");
+    expect(out.warnings ?? []).toEqual([]);
+  });
+
+  it("names the project the platform created without a build, with its reason", async () => {
+    harness({
+      token: [grant(SLUGS)],
+      create: (_ref, slug) =>
+        slug === "beta"
+          ? created(slug, {
+              initialBuild: { dispatched: false, reason: "allowance_exhausted" },
+            })
+          : created(slug),
+    });
+    const out = await run({ projects: THREE, deviceCode: "dev-code" });
+
+    expect(out.ok).toBe(true);
+    expect(out.status).toBe("created");
+    expect(out.value.results[1].firstBuild).toEqual({
+      dispatched: false,
+      reason: "allowance_exhausted",
+    });
+    expect(out.hint).not.toContain("each first build was dispatched");
+    expect(out.hint).toContain("2 of 3 first builds were dispatched");
+    expect(out.value.allowance.spent).toContain("the 2 first builds");
+    expect(out.warnings.join(" ")).toContain("acme/beta");
+    expect(out.warnings.join(" ")).toContain("used its build allowance");
+  });
+
+  it("does not round an answer that says nothing about the build up to dispatched", async () => {
+    harness({
+      token: [grant(SLUGS)],
+      create: (_ref, slug) =>
+        slug === "gamma" ? created(slug, { initialBuild: undefined }) : created(slug),
+    });
+    const out = await run({ projects: THREE, deviceCode: "dev-code" });
+
+    expect(out.value.results[2].firstBuild).toEqual({ dispatched: null });
+    expect(out.hint).toContain("2 of 3 first builds were dispatched");
+    expect(out.warnings.join(" ")).toContain("acme/gamma (the platform did not say)");
   });
 });

@@ -193,9 +193,13 @@ describe("every spending lane counts the allowance out loud in its result", () =
       }
       if (url.endsWith("/api/cli/projects/create")) {
         return jsonResponse({
+          success: true,
+          message: "Repository created successfully",
           workspaceSlug: "acme",
           projectSlug: "ghost-app",
           projectId: "prj_1",
+          idempotencyKey: "idem-1",
+          initialBuild: { dispatched: true },
         });
       }
       throw new Error(`unrouted ${url}`);
