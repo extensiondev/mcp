@@ -155,6 +155,8 @@ A real store submission and a promotion to stable also wait for a person by defa
 
 Every tool also carries MCP annotations (`readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`), so clients can auto-approve reads and ask before the rest.
 
+Answers that can carry text a web page or an extension wrote (logs, DOM, eval results, storage, titles, runtime errors) fence it between `<untrusted-data-ID>` and `</untrusted-data-ID>`, with a fresh random `ID` per call in `untrusted.boundary`. The page cannot predict the ID or close the fence early, and the JSON still parses to the same fields. A fence is a signal to the model, not a gate: pair it with `--no-ship` when the agent reads pages you do not trust.
+
 ```json
 {
   "mcpServers": {

@@ -29,6 +29,7 @@ export interface ToolPolicy {
   group: FeatureGroup;
   annotations: ToolAnnotations;
   ships?: "always" | ((args: Args) => boolean);
+  untrusted?: true;
 }
 
 const reads = (openWorld = false): ToolAnnotations => ({
@@ -59,6 +60,15 @@ const acts = (
  * hides the tools whose every call ships and refuses the shipping calls of the
  * rest, so a dry run and a share listing keep working. tool-policy.test.ts
  * fails a registered tool with no row and a row with no tool.
+ *
+ * `untrusted` marks a tool whose answer can carry text a web page or an
+ * extension wrote at runtime (DOM, console, storage, titles, eval results,
+ * runtime errors, other extensions' names); its envelope is fenced by
+ * fenceUntrusted. It is per tool and takes the worst branch for the same
+ * reason the hints do. Build, analyze, dev, start and the manifest checks are
+ * left out on purpose: they carry the project's own source and compiler
+ * output, the same bytes the agent reads unfenced with its own file tools, so
+ * a fence there would claim a boundary that does not exist.
  */
 export const TOOL_POLICY: Record<string, ToolPolicy> = {
   extension_create: { group: "local", annotations: acts({ openWorldHint: true }) },
@@ -67,24 +77,65 @@ export const TOOL_POLICY: Record<string, ToolPolicy> = {
   extension_build: { group: "local", annotations: acts({ idempotentHint: true }) },
   extension_dev: { group: "local", annotations: acts() },
   extension_start: { group: "local", annotations: acts() },
-  extension_wait: { group: "local", annotations: reads() },
+  extension_wait: {
+    group: "local",
+    annotations: reads(),
+    untrusted: true,
+  },
   extension_stop: { group: "local", annotations: acts({ idempotentHint: true }) },
   extension_manifest_validate: { group: "local", annotations: reads() },
   extension_theme_verify: { group: "local", annotations: reads() },
   extension_analyze: { group: "local", annotations: reads() },
-  extension_assert: { group: "local", annotations: acts({ idempotentHint: true }) },
-  extension_inspect: { group: "local", annotations: acts({ idempotentHint: true }) },
-  extension_dom_snapshot: { group: "local", annotations: reads() },
-  extension_list_extensions: { group: "local", annotations: reads() },
-  extension_logs: { group: "local", annotations: reads() },
-  extension_doctor: { group: "local", annotations: reads() },
+  extension_assert: {
+    group: "local",
+    annotations: acts({ idempotentHint: true }),
+    untrusted: true,
+  },
+  extension_inspect: {
+    group: "local",
+    annotations: acts({ idempotentHint: true }),
+    untrusted: true,
+  },
+  extension_dom_snapshot: {
+    group: "local",
+    annotations: reads(),
+    untrusted: true,
+  },
+  extension_list_extensions: {
+    group: "local",
+    annotations: reads(),
+    untrusted: true,
+  },
+  extension_logs: {
+    group: "local",
+    annotations: reads(),
+    untrusted: true,
+  },
+  extension_doctor: {
+    group: "local",
+    annotations: reads(),
+    untrusted: true,
+  },
   extension_eval: {
     group: "local",
     annotations: acts({ destructiveHint: true, openWorldHint: true }),
+    untrusted: true,
   },
-  extension_storage: { group: "local", annotations: acts({ destructiveHint: true }) },
-  extension_reload: { group: "local", annotations: acts({ idempotentHint: true }) },
-  extension_open: { group: "local", annotations: acts({ openWorldHint: true }) },
+  extension_storage: {
+    group: "local",
+    annotations: acts({ destructiveHint: true }),
+    untrusted: true,
+  },
+  extension_reload: {
+    group: "local",
+    annotations: acts({ idempotentHint: true }),
+    untrusted: true,
+  },
+  extension_open: {
+    group: "local",
+    annotations: acts({ openWorldHint: true }),
+    untrusted: true,
+  },
   extension_browsers: {
     group: "local",
     annotations: acts({ destructiveHint: true, openWorldHint: true }),

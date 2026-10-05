@@ -1,5 +1,22 @@
 # Changelog
 
+## 10.10.6
+
+- Tools that read a page or an extension (`extension_logs`,
+  `extension_dom_snapshot`, `extension_inspect`, `extension_eval`,
+  `extension_storage`, `extension_open`, `extension_assert`,
+  `extension_reload`, `extension_wait`, `extension_doctor`,
+  `extension_list_extensions`) now fence what it wrote between
+  `<untrusted-data-ID>` and `</untrusted-data-ID>`, with a fresh random
+  `ID` per call named in `untrusted.boundary`, so text on an inspected
+  page that says to publish or revoke reads as data, not as an
+  instruction. The fence covers `value`, `error`, `warnings` and `hint`,
+  because page text also reaches error messages and hints. A tag the
+  page writes, even one that guesses the ID, is escaped in the raw text
+  and parses back to the same characters, so every answer is still one
+  JSON envelope with the same fields. Build, analyze and dev output stay
+  unfenced: they carry the project's own source.
+
 ## 10.10.5
 
 - `extension_build` and `extension_analyze` report store review risks
