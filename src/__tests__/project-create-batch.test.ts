@@ -26,7 +26,7 @@ function jsonResponse(body: unknown, status = 200): Response {
   );
 }
 
-type Route = { status: number; body: unknown };
+type Route = { status: number; body: unknown; headers?: Record<string, string> };
 type CreateRoute = Route | "network-error";
 
 let clock = 0;
@@ -88,7 +88,10 @@ function harness(options: {
         ? options.create(ref, slug, createCalls)
         : created(slug);
       if (route === "network-error") throw new Error("socket hang up");
-      return jsonResponse(route.body, route.status);
+      return new Response(JSON.stringify(route.body), {
+        status: route.status,
+        headers: route.headers,
+      });
     }
     throw new Error(`Unexpected fetch: ${href}`);
   });
@@ -532,6 +535,25 @@ describe("extension_project_create with projects: every project keeps its own an
     expect(out.value.results[1].hint).toContain("1800 seconds");
     expect(out.hint).toContain("at most 10 projects per hour");
     expect(out.value.nextSteps.join(" ")).toContain("['acme/beta', 'acme/gamma']");
+  });
+
+  it("reads the wait from the Retry-After header when the body does not carry it", async () => {
+    harness({
+      token: [grant(SLUGS)],
+      create: () => ({
+        status: 429,
+        body: { message: "Too many project creations.", code: "RATE_LIMITED" },
+        headers: { "retry-after": "2400" },
+      }),
+    });
+    const out = await run({ projects: THREE, deviceCode: "dev-code" });
+
+    expect(out.value.results[0]).toMatchObject({
+      status: "refused",
+      code: "RATE_LIMITED",
+      retryAfterSeconds: 2400,
+    });
+    expect(out.value.results[0].hint).toContain("2400 seconds");
   });
 
   it.each([

@@ -466,7 +466,13 @@ async function createOne(session: Session, entry: BatchEntry, installationId: st
       data.message || (data as { error?: unknown }).error || text || "unknown error",
     ).slice(0, 500);
     const connectUrl = String(data.connectUrl || "").trim();
-    const retryAfterSeconds = Number(data.retryAfterSeconds || 0) || undefined;
+    /* @invariant The wait is read from the body or from the Retry-After
+     * header, whichever the platform sent. Its two creation limiters answer
+     * the same code with different bodies, and the one that counts creations
+     * per approving account states the wait only in the header. */
+    const retryAfterSeconds =
+      Number(data.retryAfterSeconds || res.headers.get("retry-after") || 0) ||
+      undefined;
     const hint = refusalHint(code, entry.ref, retryAfterSeconds);
     const row: Row = {
       project: entry.ref,
