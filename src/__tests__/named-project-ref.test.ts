@@ -14,6 +14,7 @@ import { handler as publish } from "../tools/publish";
 import { handler as promote } from "../tools/release-promote";
 import { handler as releaseStatus } from "../tools/release-status";
 import { handler as submit } from "../tools/submit";
+import { promoteAnswer } from "./fixtures/platform-answers";
 
 const KEYS = ["XDG_CONFIG_HOME", "EXTENSION_DEV_PROJECT", "EXTENSION_DEV_TOKEN", "EXTENSION_DEV_API_URL", "EXTENSION_DEV_APPROVAL_GATE"];
 const saved: Record<string, string | undefined> = {};
@@ -89,7 +90,7 @@ function platform(routes: {
         return json(routes.publish ?? { shareUrl: "https://share.test/x", visibility: "private" });
       }
       if (href.endsWith("/api/cli/release/promote")) {
-        const route = routes.promote ?? { status: 200, body: { ok: true } };
+        const route = routes.promote ?? { status: 200, body: promoteAnswer() };
         return json(route.body, route.status);
       }
       if (href.endsWith("/api/cli/stores/submit")) {
@@ -239,7 +240,7 @@ describe("the sibling tools that take project", () => {
   });
 
   it("extension_release_promote returns the named project's public pages on success", async () => {
-    platform({ promote: { status: 200, body: { ok: true } } });
+    platform({ promote: { status: 200, body: promoteAnswer() } });
     const out = JSON.parse(
       await promote({ project: NAMED, buildId: "abc1234", channel: "preview" } as never),
     );

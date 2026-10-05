@@ -10,6 +10,7 @@ import { handler as publish } from "../tools/publish";
 import { handler as promote } from "../tools/release-promote";
 import { handler as submit } from "../tools/submit";
 import { handler as projectCreate } from "../tools/project-create";
+import { promoteAnswer } from "./fixtures/platform-answers";
 
 vi.mock("../lib/cdp-port", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../lib/cdp-port")>()),
@@ -137,11 +138,12 @@ describe("every spending lane counts the allowance out loud in its result", () =
 
   it("narrates the promote spend and relays the platform's numbers", async () => {
     global.fetch = (async () =>
-      jsonResponse({
-        message: "promoted",
-        channel: "stable",
-        allowance: { used: 9, limit: 100 },
-      })) as unknown as typeof fetch;
+      jsonResponse(
+        promoteAnswer({
+          targetChannel: "stable",
+          allowance: { used: 9, limit: 100 },
+        }),
+      )) as unknown as typeof fetch;
     const out = JSON.parse(
       await promote({ buildId: "a1b2c3d", channel: "stable" }),
     );

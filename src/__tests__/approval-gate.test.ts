@@ -4,6 +4,7 @@ import { actionFingerprint, evaluateApproval } from "../lib/approval-gate";
 import { handler as submitHandler } from "../tools/submit";
 import { handler as promoteHandler } from "../tools/release-promote";
 import { handler as sharesHandler } from "../tools/shares";
+import { promoteAnswer } from "./fixtures/platform-answers";
 
 type Call = { key: string; url: string; method: string; body: unknown };
 
@@ -134,7 +135,7 @@ describe("the approval gate guards irreversible outward actions and cannot self-
     it("asks for an approval before a promotion to stable, and not before one to beta", async () => {
       global.fetch = router(calls, {
         "POST /api/cli/approvals": approvalRoute,
-        "POST /api/cli/release/promote": () => jsonResponse({ ok: true }),
+        "POST /api/cli/release/promote": () => jsonResponse(promoteAnswer()),
       });
       const stable = JSON.parse(
         await promoteHandler({ buildId: "abc1234", channel: "stable" }),
@@ -331,7 +332,7 @@ describe("the approval gate guards irreversible outward actions and cannot self-
             approvalId: "apr_promo",
             approvalUrl: "https://www.extension.dev/approve/apr_promo",
           }),
-        "POST /api/cli/release/promote": () => jsonResponse({ ok: true }),
+        "POST /api/cli/release/promote": () => jsonResponse(promoteAnswer()),
       });
       const out = JSON.parse(
         await promoteHandler({ buildId: "abc1234", channel: "stable" }),
@@ -349,7 +350,7 @@ describe("the approval gate guards irreversible outward actions and cannot self-
       global.fetch = router(calls, {
         "GET /api/cli/approvals": () =>
           jsonResponse({ status: "approved", fingerprint: submitFingerprint }),
-        "POST /api/cli/release/promote": () => jsonResponse({ ok: true }),
+        "POST /api/cli/release/promote": () => jsonResponse(promoteAnswer()),
       });
       const out = JSON.parse(
         await promoteHandler({
@@ -371,7 +372,7 @@ describe("the approval gate guards irreversible outward actions and cannot self-
       global.fetch = router(calls, {
         "GET /api/cli/approvals": () =>
           jsonResponse({ status: "approved", fingerprint }),
-        "POST /api/cli/release/promote": () => jsonResponse({ ok: true }),
+        "POST /api/cli/release/promote": () => jsonResponse(promoteAnswer()),
       });
       const out = JSON.parse(
         await promoteHandler({

@@ -20,6 +20,10 @@ import {
   requestApprovalAfterRefusal,
 } from "../lib/approval-gate";
 import { spendNarration } from "../lib/allowance";
+import {
+  partialPromoteWarnings,
+  readPromoteOutcome,
+} from "../lib/promote-outcome";
 
 import {
   consoleProjectUrl,
@@ -33,7 +37,7 @@ import {
 export const schema = {
   name: "extension_release_promote",
   description:
-    "Promote a built extension to a release channel (stable, preview, beta, …) on extension.dev, headless. This WRITES: it is the only verb that changes what a channel points at. It is auth-gated by your stored login (extension_auth) or a release token in EXTENSION_DEV_TOKEN, minted and revoked under project settings, Access tokens. Tokens live at most 7 days, so CI must re-mint before expiry. The project comes from the token; with several logins stored, `project` picks which one. Call extension_release_status to find a valid buildId. Cutting a version-bump PR is not available headlessly, because it writes to your source repo and needs an interactive login.",
+    "Promote a built extension to a release channel (stable, preview, beta, …) on extension.dev, headless. This WRITES: it is the only verb that changes what a channel points at. It is auth-gated by your stored login (extension_auth) or a release token in EXTENSION_DEV_TOKEN, minted and revoked under project settings, Access tokens. Tokens live at most 7 days, so CI must re-mint before expiry. The project comes from the token; with several logins stored, `project` picks which one. Call extension_release_status to find a valid buildId. The status is 'promoted' only when the platform says every asked browser's release was dispatched and the channel pointer moved; 'promoted-partially' lists in its warnings what did not happen (a browser whose dispatch failed, a channel pointer that was not moved) and must not be repeated whole; 'promote-unconfirmed' means the platform's answer did not carry the result, so read extension_release_status before promoting again. Cutting a version-bump PR is not available headlessly, because it writes to your source repo and needs an interactive login.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -268,7 +272,7 @@ export async function handler(args: {
     body: data,
     api: args.api,
   });
-  const enriched =
+  const enriched: Record<string, unknown> =
     data && typeof data === "object" && !Array.isArray(data)
       ? {
           ...data,
@@ -277,10 +281,48 @@ export async function handler(args: {
           allowance,
         }
       : { platform: data, allowance };
+  const outcome = readPromoteOutcome(data);
+  const statusRead = `extension_release_status (include: ['releases']${
+    args.project ? `, project: '${args.project}'` : ""
+  })`;
+  if (outcome.state === "unconfirmed") {
+    return envelope({
+      ok: false,
+      command: "extension_release_promote",
+      status: "promote-unconfirmed",
+      error: {
+        code: "E_PLATFORM",
+        name: "PromoteUnconfirmed",
+        message: `The platform answered ${res.status} but ${outcome.why}, so whether ${channel} now serves build ${buildId} is unknown.`,
+      },
+      value: { channel, buildId, platform: data },
+      hint: `Do not promote again blind: a promote that did go through would be dispatched a second time. Read ${statusRead} and promote again only if ${channel} does not name ${buildId}.`,
+    });
+  }
+  if (outcome.state === "partial") {
+    return envelope({
+      ok: true,
+      command: "extension_release_promote",
+      status: "promoted-partially",
+      value: {
+        ...enriched,
+        incomplete: {
+          failedBrowsers: outcome.failedBrowsers,
+          pendingMirrors: outcome.pendingMirrors,
+          githubReleaseFailed: outcome.githubReleaseFailed,
+          githubReleaseAssetErrors: outcome.githubReleaseAssetErrors,
+          notarizationPending: outcome.notarizationPending,
+        },
+      },
+      hint: `The release workflow was dispatched for ${outcome.queuedBrowsers.join(", ")}, and part of this promote did not happen: read the warnings. Do not repeat the whole promote; confirm what ${channel} serves with ${statusRead}.`,
+      warnings: partialPromoteWarnings(outcome, channel),
+    });
+  }
   return envelope({
     ok: true,
     command: "extension_release_promote",
     status: "promoted",
     value: enriched,
+    hint: `The platform dispatched the release workflow for ${outcome.queuedBrowsers.join(", ")} and moved the ${channel} channel pointer to build ${buildId}. The artifacts land when that workflow finishes; ${statusRead} reads what the channel serves.`,
   });
 }
