@@ -24,6 +24,7 @@ import {
   requestApprovalAfterRefusal,
 } from "../lib/approval-gate";
 import { spendNarration } from "../lib/allowance";
+import { readSubmitOutcome } from "../lib/submit-outcome";
 import {
   consoleProjectUrl,
   fetchRegistryJson,
@@ -82,7 +83,7 @@ export interface SubmitToolArgs {
 export const schema = {
   name: "extension_submit",
   description:
-    "Submit a built extension for store REVIEW through extension.dev, which holds your store credentials and dispatches from your project's mirror CI: the Chrome Web Store, Firefox AMO, Edge Add-ons and the App Store (Safari). This is store review only. It does not push a build to the extension.dev platform, and it does not make a shareable link: that is extension_publish, which is what \"deploy\" or \"ship\" an extension almost always means. Reach for this only when the ask is explicitly a store submission. It defaults to a dry run that dispatches nothing: the platform verifies auth, project, build and store workflow, and this tool adds each store's credential-health verdict. Trust those per-store rows over the platform's bare preflight line, which does not check store health. Pass dryRun:false to actually submit, which is irreversible and enters store review. The project comes from your token (extension_auth or EXTENSION_DEV_TOKEN; tokens live at most 7 days, so CI must re-mint from the console's Access tokens page); with several logins stored, `project` picks which one. Store credentials are never arguments, and no local file is uploaded. Call extension_release_status for valid shas, and, after a real submission, for the recorded outcome and review state.",
+    "Submit a built extension for store REVIEW through extension.dev, which holds your store credentials and dispatches from your project's mirror CI: the Chrome Web Store, Firefox AMO, Edge Add-ons and the App Store (Safari). This is store review only. It does not push a build to the extension.dev platform, and it does not make a shareable link: that is extension_publish, which is what \"deploy\" or \"ship\" an extension almost always means. Reach for this only when the ask is explicitly a store submission. It defaults to a dry run that dispatches nothing: the platform verifies auth, project, build and store workflow, and this tool adds each store's credential-health verdict. Trust those per-store rows over the platform's bare preflight line, which does not check store health. Pass dryRun:false to actually submit, which is irreversible and enters store review. A real submission answers 'submitted' only when the platform recorded a submission for every store asked; 'submitted-partially' names the stores it did not record, which are the only ones to submit again; 'submit-unconfirmed' means no usable answer came back, so read extension_release_status before submitting again, because a second call submits a second time. The project comes from your token (extension_auth or EXTENSION_DEV_TOKEN; tokens live at most 7 days, so CI must re-mint from the console's Access tokens page); with several logins stored, `project` picks which one. Store credentials are never arguments, and no local file is uploaded. Call extension_release_status for valid shas, and, after a real submission, for the recorded outcome and review state.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -219,6 +220,10 @@ export async function handler(args: SubmitToolArgs): Promise<string> {
     if (gate.approvalId) body.approvalId = gate.approvalId;
   }
 
+  const statusRead = `extension_release_status (include: ['stores']${
+    args.project ? `, project: '${args.project}'` : ""
+  })`;
+
   let res: Response;
   try {
     res = await fetch(url, {
@@ -231,6 +236,24 @@ export async function handler(args: SubmitToolArgs): Promise<string> {
       body: JSON.stringify(body),
     });
   } catch (err: any) {
+    if (!dryRun) {
+      /* @invariant A real submission that got no answer is unconfirmed, never
+       * failed. The request left this machine, and the platform dispatches a
+       * store's workflow before it answers, so "could not reach" would invite
+       * the retry that submits a second time. */
+      return envelope({
+        ok: false,
+        command: "extension_submit",
+        status: "submit-unconfirmed",
+        error: {
+          code: "E_NETWORK",
+          name: "SubmitUnconfirmed",
+          message: `The submission request for ${browsers.join(", ")} left this machine and no answer came back (${err?.message || err}), so whether any store was submitted is unknown.`,
+        },
+        value: { browsers, buildSha, channel },
+        hint: `Do not submit again blind: a store that was dispatched would be submitted twice. Read ${statusRead} first and submit only the stores with no new submission.`,
+      });
+    }
     return fail(
       "SubmitNetworkError",
       `Could not reach ${url}: ${err?.message || err}`,
@@ -260,12 +283,30 @@ export async function handler(args: SubmitToolArgs): Promise<string> {
     if (!dryRun && !args.approvalId && platformRequiresApproval(res, data)) {
       return requestApprovalAfterRefusal(gateInput);
     }
-    return fail(
-      "SubmitError",
-      `${dryRun ? "preflight" : "submit"} failed (${res.status}): ${data?.message || text || "unknown error"}`,
-      "submit-failed",
-      "E_PLATFORM",
-    );
+    /* @invariant A server error on a real submission may come after a
+     * dispatch. The platform dispatches each store's workflow and only then
+     * records it and moves to the next store, so a 5xx can follow one or more
+     * stores already submitted. The failure is reported as a failure and says
+     * that, because the natural next move is to submit again. */
+    const maybeDispatched = !dryRun && res.status >= 500;
+    return envelope({
+      ok: false,
+      command: "extension_submit",
+      status: "submit-failed",
+      error: {
+        code: "E_PLATFORM",
+        name: "SubmitError",
+        message: `${dryRun ? "preflight" : "submit"} failed (${res.status}): ${data?.message || text || "unknown error"}`,
+        ...(typeof data?.code === "string" ? { platformCode: data.code } : {}),
+      },
+      ...(maybeDispatched
+        ? {
+            hint: `The platform failed after the request was accepted, and it dispatches each store before it records it, so ${
+              browsers.length === 1 ? browsers[0] : "one or more of " + browsers.join(", ")
+            } may already be submitted. Read ${statusRead} before submitting again.`,
+          }
+        : {}),
+    });
   }
 
   const warnings: (string | null | undefined | false)[] = Array.isArray(
@@ -439,21 +480,74 @@ export async function handler(args: SubmitToolArgs): Promise<string> {
   }
 
   if (!dryRun) {
-    statusNote =
-      "Track this submission with extension_release_status: it reads the recorded outcome, per-store credential health, and review state from the public registry.";
-    if (platformOk) {
-      result.allowance = spendNarration({
-        what: "This submission",
-        body: data,
-        api: args.api,
+    const outcome = readSubmitOutcome(data, browsers);
+    if (outcome.state === "unconfirmed") {
+      return envelope({
+        ok: false,
+        command: "extension_submit",
+        status: "submit-unconfirmed",
+        error: {
+          code: "E_PLATFORM",
+          name: "SubmitUnconfirmed",
+          message: `The platform answered ${res.status} but ${outcome.why}, so whether ${browsers.join(", ")} ${browsers.length === 1 ? "was" : "were"} submitted is unknown.`,
+        },
+        value: { browsers, buildSha, channel, platform: data },
+        hint: `Do not submit again blind: a store that was dispatched would be submitted twice. Read ${statusRead} first and submit only the stores with no new submission.`,
       });
     }
+    if (outcome.state === "refused") {
+      return envelope({
+        ok: false,
+        command: "extension_submit",
+        status: "submit-refused",
+        error: {
+          code: "E_PLATFORM",
+          name: "SubmitRefused",
+          message: message || "The platform refused the submission.",
+        },
+        value: result,
+        warnings,
+      });
+    }
+    statusNote = `Track this submission with ${statusRead}: it reads the recorded outcome, per-store credential health, and review state from the public registry.`;
+    result.submittedStores = outcome.stores;
+    result.allowance = spendNarration({
+      what: "This submission",
+      body: data,
+      api: args.api,
+    });
+    if (outcome.state === "partial") {
+      result.missingStores = outcome.missing;
+      return envelope({
+        ok: true,
+        command: "extension_submit",
+        status: "submitted-partially",
+        value: result,
+        hint: `The platform recorded a submission for ${outcome.stores.join(", ")} and none for ${outcome.missing.join(", ")}. Submit again with browsers limited to ${outcome.missing.join(", ")}; do not repeat ${outcome.stores.join(", ")}.`,
+        warnings: [
+          `NOT submitted: ${outcome.missing.join(", ")}. The platform's answer has no submission row for ${outcome.missing.length === 1 ? "it" : "them"}.`,
+          ...warnings,
+          channelNote,
+          statusNote,
+        ],
+      });
+    }
+    return envelope({
+      ok: true,
+      command: "extension_submit",
+      status: "submitted",
+      value: result,
+      hint:
+        message ||
+        `The platform dispatched the store workflow for ${outcome.stores.join(", ")} and recorded each submission as pending. A store's own review comes after that and is not part of this answer.`,
+      warnings: [...warnings, channelNote, statusNote],
+    });
   }
 
   return envelope({
     ok,
     command: "extension_submit",
-    status: dryRun ? "preflight" : "submitted",
+    status: "preflight",
     value: result,
     hint: message,
     warnings: [...warnings, channelNote, statusNote],

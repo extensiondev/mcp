@@ -4,7 +4,7 @@ import { actionFingerprint, evaluateApproval } from "../lib/approval-gate";
 import { handler as submitHandler } from "../tools/submit";
 import { handler as promoteHandler } from "../tools/release-promote";
 import { handler as sharesHandler } from "../tools/shares";
-import { promoteAnswer } from "./fixtures/platform-answers";
+import { promoteAnswer, submitAnswer } from "./fixtures/platform-answers";
 
 type Call = { key: string; url: string; method: string; body: unknown };
 
@@ -123,7 +123,7 @@ describe("the approval gate guards irreversible outward actions and cannot self-
     it("asks for an approval before a real submission with no setting at all", async () => {
       global.fetch = router(calls, {
         "POST /api/cli/approvals": approvalRoute,
-        "POST /api/cli/stores/submit": () => jsonResponse({ ok: true }),
+        "POST /api/cli/stores/submit": () => jsonResponse(submitAnswer()),
       });
       const out = JSON.parse(
         await submitHandler({ browsers: ["chrome"], buildSha: "abc1234", dryRun: false }),
@@ -161,7 +161,7 @@ describe("the approval gate guards irreversible outward actions and cannot self-
     it("lets a real submission through when the user turns the gate off", async () => {
       process.env.EXTENSION_DEV_APPROVAL_GATE = "0";
       global.fetch = router(calls, {
-        "POST /api/cli/stores/submit": () => jsonResponse({ ok: true }),
+        "POST /api/cli/stores/submit": () => jsonResponse(submitAnswer()),
       });
       const out = JSON.parse(
         await submitHandler({ browsers: ["chrome"], buildSha: "abc1234", dryRun: false }),
@@ -199,7 +199,7 @@ describe("the approval gate guards irreversible outward actions and cannot self-
             approvalUrl: "https://www.extension.dev/approve/apr_new",
             expiresAt: new Date(Date.now() + 600000).toISOString(),
           }),
-        "POST /api/cli/stores/submit": () => jsonResponse({ ok: true }),
+        "POST /api/cli/stores/submit": () => jsonResponse(submitAnswer()),
       });
       const out = JSON.parse(
         await submitHandler({
@@ -218,7 +218,7 @@ describe("the approval gate guards irreversible outward actions and cannot self-
 
     it("leaves a dry-run preflight ungated", async () => {
       global.fetch = router(calls, {
-        "POST /api/cli/stores/submit": () => jsonResponse({ ok: true }),
+        "POST /api/cli/stores/submit": () => jsonResponse(submitAnswer()),
       });
       await submitHandler({
         browsers: ["chrome"],
@@ -242,7 +242,7 @@ describe("the approval gate guards irreversible outward actions and cannot self-
       global.fetch = router(calls, {
         "GET /api/cli/approvals": () =>
           jsonResponse({ status: "approved", fingerprint: "deadbeef" }),
-        "POST /api/cli/stores/submit": () => jsonResponse({ ok: true }),
+        "POST /api/cli/stores/submit": () => jsonResponse(submitAnswer()),
       });
       const out = JSON.parse(
         await submitHandler({
@@ -261,7 +261,7 @@ describe("the approval gate guards irreversible outward actions and cannot self-
     it("refuses a pending approval and does not submit", async () => {
       global.fetch = router(calls, {
         "GET /api/cli/approvals": () => jsonResponse({ status: "pending" }),
-        "POST /api/cli/stores/submit": () => jsonResponse({ ok: true }),
+        "POST /api/cli/stores/submit": () => jsonResponse(submitAnswer()),
       });
       const out = JSON.parse(
         await submitHandler({
@@ -279,7 +279,7 @@ describe("the approval gate guards irreversible outward actions and cannot self-
       global.fetch = router(calls, {
         "GET /api/cli/approvals": () =>
           jsonResponse({ message: "not found" }, 404),
-        "POST /api/cli/stores/submit": () => jsonResponse({ ok: true }),
+        "POST /api/cli/stores/submit": () => jsonResponse(submitAnswer()),
       });
       const out = JSON.parse(
         await submitHandler({
@@ -303,7 +303,7 @@ describe("the approval gate guards irreversible outward actions and cannot self-
       global.fetch = router(calls, {
         "GET /api/cli/approvals": () =>
           jsonResponse({ status: "approved", fingerprint, used: false }),
-        "POST /api/cli/stores/submit": () => jsonResponse({ ok: true }),
+        "POST /api/cli/stores/submit": () => jsonResponse(submitAnswer()),
       });
       const out = JSON.parse(
         await submitHandler({

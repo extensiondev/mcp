@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, it, expect } from "vitest";
 import { schema, handler, storeMdWarnings } from "../tools/submit";
 import { writeCredentials } from "../lib/credentials";
 import { tools as ALL_TOOLS } from "../index";
+import { submitAnswer } from "./fixtures/platform-answers";
 
 function jsonResponse(body: unknown, ok = true, status = 200): Response {
   return {
@@ -259,7 +260,7 @@ describe("extension_submit: platform submit handler", () => {
     let body: any = null;
     global.fetch = (async (_url: string, init: any) => {
       body = JSON.parse(init.body);
-      return jsonResponse({ ok: true, submissions: [] });
+      return jsonResponse(submitAnswer(["edge"]));
     }) as unknown as typeof fetch;
     await handler({ browsers: ["edge"], buildSha: "def5678", dryRun: false });
     expect(body.dryRun).toBe(false);

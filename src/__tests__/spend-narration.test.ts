@@ -10,7 +10,7 @@ import { handler as publish } from "../tools/publish";
 import { handler as promote } from "../tools/release-promote";
 import { handler as submit } from "../tools/submit";
 import { handler as projectCreate } from "../tools/project-create";
-import { promoteAnswer } from "./fixtures/platform-answers";
+import { promoteAnswer, submitAnswer } from "./fixtures/platform-answers";
 
 vi.mock("../lib/cdp-port", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../lib/cdp-port")>()),
@@ -156,7 +156,7 @@ describe("every spending lane counts the allowance out loud in its result", () =
 
   it("narrates a real submission and stays silent on a dry run", async () => {
     global.fetch = (async () =>
-      jsonResponse({ ok: true, message: "dispatched", buildId: "a1b2c3d" })) as unknown as typeof fetch;
+      jsonResponse(submitAnswer(["chrome"]))) as unknown as typeof fetch;
     const real = JSON.parse(
       await submit({ browsers: ["chrome"], buildSha: "a1b2c3d", dryRun: false }),
     );
