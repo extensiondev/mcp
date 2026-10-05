@@ -1,5 +1,38 @@
 # Changelog
 
+## 10.10.8
+
+- On Firefox, `extension_eval` now reads an extension whose content
+  security policy forbids eval, which is every MV3 extension page
+ . Extension.js 4.1.31 evaluates such a
+  document over the debugger protocol, but the wrapper this server put
+  around a popup, options, sidebar or override-page expression called
+  eval itself, so those contexts still answered "blocked by CSP" on an
+  engine that could read them. A refused surface is now asked again with
+  the bare expression, which the engine takes over the protocol and
+  awaits there. A project pinned below 4.1.31 keeps the refusal, and its
+  hint now names that floor.
+- `extension_eval` with `context: "page"` and a `moz-extension://` url
+  reaches a page the manifest declares as no surface (`pages/*`), through
+  the console actor of the tab showing it. It used to answer
+  `E_NO_SURFACE_DOCUMENT`. Open the page with `extension_open` first; a
+  page no tab shows answers `E_NO_MATCHING_TARGET`.
+- `extension_dom_snapshot` on a `moz-extension://` url reads the page the
+  same way when Firefox refuses the injection with "Missing host
+  permission for the tab", and returns the engine's own snapshot fields.
+- `extension_eval` with `context: "page"` on a site whose policy forbids
+  eval now works on an MV3 Firefox build, over the debugger protocol,
+  when `url` names the tab. An MV2 build keeps its `tabs.executeScript`
+  route, which had gone dead on Extension.js 4.1.31 because that engine
+  renamed the refusal to `E_CSP_BLOCKS_EVAL`; both spellings are read now.
+- The protocol takes one expression. A statement list sent to a
+  policy-locked Firefox document answers `E_BAD_REQUEST` with the way to
+  wrap it, where the background used to answer a control-channel error
+  carrying "SyntaxError: expected expression".
+- Still refused, by name: a string evaluated in the content-script world
+  of an extension whose policy forbids eval. Use `context: "page"` or
+  `extension_dom_snapshot` there.
+
 ## 10.10.7
 
 - A share revoke now waits for a person by default, like a real store

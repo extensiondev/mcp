@@ -31,7 +31,7 @@ import {
   matchTargetsByUrl,
   TARGET_ID_NOTE,
 } from "../lib/cdp-targets";
-import { rdpListTabs } from "../lib/rdp";
+import { rdpEvaluateInTab, rdpListTabs } from "../lib/rdp";
 import { listBridgeTabs, matchTabsByUrl } from "../lib/bridge-tabs";
 
 const RDP_ACTOR_NOTE =
@@ -90,6 +90,99 @@ export const schema = {
     required: ["projectPath"],
   },
 };
+
+const GECKO_EXTENSION_URL = /^moz-extension:\/\//;
+
+const sameDocumentUrl = (a: unknown, b: string): boolean =>
+  String(a ?? "").replace(/[?#].*$/, "") === b.replace(/[?#].*$/, "");
+
+export function protocolSnapshotExpression(
+  wantHtml: boolean,
+  maxBytes: number,
+): string {
+  return `(function () {
+  var doc = document;
+  function countShadow(root) {
+    var n = 0, els = root.querySelectorAll("*");
+    for (var i = 0; i < els.length; i++) { if (els[i].shadowRoot) { n++; n += countShadow(els[i].shadowRoot); } }
+    return n;
+  }
+  var html = doc.documentElement.outerHTML;
+  var snap = {
+    context: "page",
+    url: String(location.href),
+    title: doc.title,
+    summary: {
+      htmlLength: html.length,
+      scriptCount: doc.querySelectorAll("script").length,
+      styleCount: doc.querySelectorAll("style,link[rel=stylesheet]").length,
+      extensionRootCount: doc.querySelectorAll("#extension-root,[data-extension-root]").length,
+      openShadowRoots: countShadow(doc),
+      bodyChildCount: doc.body ? doc.body.children.length : 0
+    }
+  };
+  if (${wantHtml ? "true" : "false"}) {
+    var cap = ${Math.max(0, Math.floor(maxBytes))};
+    if (cap > 0 && html.length > cap) { snap.html = html.slice(0, cap); snap.htmlTruncated = true; }
+    else { snap.html = html; }
+  }
+  return snap;
+})()`;
+}
+
+/* @invariant Firefox refuses an injection into a moz-extension:// document
+   whatever host permissions the manifest holds, so the bridge's inspect
+   answers "Missing host permission for the tab" for a page inside the
+   extension that is open in a tab, and a page the manifest declares as no
+   surface (pages/*) has no relay to ask either. The tab's
+   console actor reads it over the debugger protocol. The snapshot is built
+   there in the engine's own shape, so a caller reads the same fields
+   whichever door answered. Null keeps the engine's refusal: no rdpPort, no
+   such tab, or a protocol failure are all reasons to say what the engine
+   said. */
+async function snapshotExtensionPageOverProtocol(
+  args: ActArgs & { include?: string[]; maxBytes?: number },
+  browser: string,
+  url: string | undefined,
+  raw: string,
+  consoleAsked: boolean,
+): Promise<string | null> {
+  if (!url || !isGeckoFamily(browser) || !GECKO_EXTENSION_URL.test(url)) return null;
+  try {
+    const refused = JSON.parse(raw);
+    if (!refused || refused.ok !== false) return null;
+  } catch {
+    return null;
+  }
+  const resolved = await resolveRdpPort(args.projectPath, browser, {
+    waitMs: 3_000,
+    graceMs: 1_000,
+  });
+  if (!resolved) return null;
+  const wantHtml = args.include?.includes("html") === true;
+  try {
+    const outcome = await rdpEvaluateInTab(resolved.port, {
+      select: (tabs) => tabs.find((tab) => sameDocumentUrl(tab.url, url)),
+      expression: protocolSnapshotExpression(wantHtml, args.maxBytes ?? 262144),
+      timeoutMs: args.timeout ?? 10_000,
+    });
+    if (!outcome.ok) return null;
+    return envelope({
+      ok: true,
+      command: schema.name,
+      status: "ok",
+      value: outcome.value,
+      warnings: [
+        `${url} is a page inside the extension, which Firefox lets no script be injected into, so this snapshot was read over the debugger protocol from the tab showing it.` +
+          (consoleAsked
+            ? " Console lines are not collected on this path; read them with extension_logs."
+            : ""),
+      ],
+    });
+  } catch {
+    return null;
+  }
+}
 
 async function cdpPortOrError(
   projectPath: string,
@@ -353,7 +446,16 @@ export async function handler(
   if (withConsole != null) cli.push("--with-console", String(withConsole));
   cli.push("--browser", resolveSessionBrowser(args.projectPath, args.browser).browser);
   if (args.timeout != null) cli.push("--timeout", String(args.timeout));
-  const raw = await runActVerb(cli, args.projectPath, args.timeout, schema.name);
+  const sessionBrowser = resolveSessionBrowser(args.projectPath, args.browser).browser;
+  const asked = await runActVerb(cli, args.projectPath, args.timeout, schema.name);
+  const overProtocol = await snapshotExtensionPageOverProtocol(
+    args,
+    sessionBrowser,
+    targetUrl ?? (typeof resolvedTarget?.url === "string" ? resolvedTarget.url : undefined),
+    asked,
+    withConsole != null,
+  );
+  const raw = overProtocol ?? asked;
   if (!resolvedTarget) return raw;
   try {
     const parsed = JSON.parse(raw);
