@@ -1,5 +1,15 @@
 # Changelog
 
+## 10.10.5
+
+- The bundled `/extension-publish` command now takes an extension through
+  store review with this server's own tools instead of sending people to
+  the store consoles by hand: it validates, builds, checks for review
+  risks, rehearses with `extension_submit` (dry run), and submits only on
+  the user's yes through the approval link. It covers Chrome, Firefox,
+  Edge and Safari, and recommends Manifest V3 everywhere (it used to
+  suggest MV2 for Firefox).
+
 ## 10.10.4
 
 - `--project <workspace>/<project>` (env `EXTENSION_DEV_PROJECT`) pins a

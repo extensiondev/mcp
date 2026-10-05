@@ -1,62 +1,39 @@
 ---
-description: Prepare an extension for store submission (Chrome Web Store, Firefox Add-ons)
-argument-hint: "[chrome|firefox|both]"
+description: Get an extension through store review (Chrome Web Store, Firefox AMO, Edge Add-ons, App Store for Safari)
+argument-hint: "[chrome|firefox|edge|safari|all]"
 ---
 
-Prepare the current extension for store submission. The user said: $ARGUMENTS
+Take the current extension to store review. The user said: $ARGUMENTS
 
 ## Parse arguments
 
-Default to `both` (Chrome + Firefox). If the user specifies `chrome` or `firefox`, target only that store.
+Default to `chrome` and `firefox`. `all` means chrome, firefox, edge and safari. Accept any comma-separated mix.
 
 ## Steps
 
-1. **Validate the manifest**
-   If MCP tool `extension_manifest_validate` is available, use it with the target browsers.
-   Otherwise, read `src/manifest.json` and check:
-   - Has `name`, `version`, `description`
-   - Has appropriate `manifest_version` for each target
-   - Permissions are minimal (no unnecessary permissions)
-   - Has icons (at least 16x16, 48x48, 128x128)
+1. **Check the manifest.** Call `extension_manifest_validate` for each target browser. Fix every `buildBlocking` finding before going on; report warnings.
 
-2. **Build for each target browser**
+2. **Build store bundles.** Call `extension_build` with `zip: true` for each target. If it refuses on a blocking manifest error or returns compiler errors in `value.errors`, fix and rebuild.
 
-   ```bash
-   npx extension build --browser=chrome --zip
-   npx extension build --browser=firefox --zip
-   ```
+3. **Look for review risks.** Call `extension_analyze` on each build and flag anything a reviewer rejects:
+   - `<all_urls>` or broad host permissions without a reason in the listing
+   - remote code (`eval`, `new Function`, scripts loaded from a URL)
+   - permissions the code never uses
+   - Firefox: a missing `browser_specific_settings.gecko.data_collection_permissions` declaration, which AMO now requires for new add-ons and updates
+   - a bundle over 10 MB, source maps in the production build, missing 128px icon
 
-3. **Inspect the builds**
-   If MCP tool `extension_analyze` is available, use it for each browser build.
-   Check:
-   - Total size under 10MB (store limit)
-   - No source maps in production build
-   - Has manifest.json in dist
-   - Has icons
+4. **Pick the build to submit.** Store review runs from a build on extension.dev, not from local files. Call `extension_release_status` with `include: "releases"` to find the sha. If the user has not shipped this version yet, say so and offer `extension_publish` first.
 
-4. **Report store readiness**
+5. **Rehearse.** Call `extension_submit` with the browsers and `buildSha`, leaving `dryRun` at its default (`true`). Show the per-store credential rows. A store whose credentials are not healthy is fixed in the extension.dev console (the response names the page); drop it from `browsers` or stop.
 
-   ### Chrome Web Store
-   - Zip location: `dist/chrome/<name>.zip`
-   - Submit at: https://chrome.google.com/webstore/devconsole
-   - Checklist:
-     - [ ] manifest_version: 3
-     - [ ] Icons: 128x128 PNG
-     - [ ] Description under 132 characters (for listing)
-     - [ ] Screenshots: 1280x800 or 640x400
-     - [ ] Privacy policy URL (if using sensitive permissions)
+6. **Submit only on a clear yes.** Ask the user to confirm the exact stores, build and channel. Then call `extension_submit` with `dryRun: false`.
+   - It answers `approval-required` with an `approvalUrl`: give the user that link. A workspace owner approves exactly this submission on extension.dev.
+   - When they say it is approved, call `extension_submit` again with the same arguments plus the returned `approvalId`. It runs once.
 
-   ### Firefox Add-ons (AMO)
-   - Zip location: `dist/firefox/<name>.zip`
-   - Submit at: https://addons.mozilla.org/developers/
-   - Checklist:
-     - [ ] manifest_version: 2 (recommended for broadest compat) or 3
-     - [ ] No Chrome-only APIs without polyfill
-     - [ ] Source code zip if using a bundler: `npx extension build --browser=firefox --zip --zip-source`
-     - [ ] AMO requires source code review for minified/bundled code
+7. **Report.** Call `extension_release_status` for the recorded outcome and review state per store, and give the user each store's listing or dashboard link from the response.
 
-5. **Flag issues** that would cause store rejection:
-   - `<all_urls>` host permission without justification
-   - `activeTab` + `scripting` without clear use case
-   - Remote code loading (eval, Function constructor, remote scripts)
-   - Excessive permissions for the extension's functionality
+## Rules
+
+- Never submit without the user's confirmation in step 6, and never retry a real submission with a different build or store list under an old `approvalId`; request a new approval.
+- Manifest V3 for every store. Do not suggest MV2.
+- Store credentials are never arguments and never asked for in chat; they live in the extension.dev console.
