@@ -1,5 +1,5 @@
 {
-  "version": "0.0.1",
+  "version": "0.0.2",
   "name": "Extension.dev Live Preview",
   "author": "Extension.dev",
   "description": "Lends real browser powers to the extension you are previewing on Extension.dev. Install while building so your popup, content scripts, and APIs run for real.",

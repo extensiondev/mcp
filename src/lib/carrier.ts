@@ -19,6 +19,26 @@ export const CARRIER_DIR_NAME = "extension-dev-live-preview";
 
 export const CARRIER_EXTENSION_ID = "ibppeifnekhjjjmpjfiobccjlicbmgcb";
 
+/* @invariant THE ORIGIN SENTENCE IS THE BUNDLED WORKER'S RULE, OR IT IS NOT
+ * SAID. The shipped carrier is a copy of a build from apps/extension-core,
+ * and for a while the copy was an older build whose listener never read its
+ * sender while this sentence promised that it did. The
+ * trusted origins, hosts and ports are listed here as data, the sentence is
+ * made from them, and carrier-bundle.test.ts reads the shipped worker and
+ * refuses the package when any of them is missing from it or the refusal
+ * sentence is. A sync that ships a worker without the check reddens the
+ * gate instead of shipping a false promise. */
+export const CARRIER_TRUSTED_ORIGINS = [
+  "https://preview.extension.dev",
+  "https://code.extension.dev",
+  "https://themes.extension.dev",
+] as const;
+export const CARRIER_TRUSTED_LOCAL_HOSTS = ["localhost", "127.0.0.1"] as const;
+export const CARRIER_TRUSTED_LOCAL_PORTS = ["3103", "3104", "3110", "3111"] as const;
+export const CARRIER_REFUSAL_SENTENCE =
+  "This page is not one the Live Preview carrier answers.";
+export const CARRIER_ALLOWED_ORIGINS_SENTENCE = `${CARRIER_TRUSTED_ORIGINS.join(", ")}, and those same apps' dev servers on ${CARRIER_TRUSTED_LOCAL_HOSTS.map((host) => `http://${host}`).join(" and ")} (ports ${CARRIER_TRUSTED_LOCAL_PORTS.join(", ")}). The carrier checks the sender's origin, so a page on any other localhost port is refused.`;
+
 const MARKER_FILE = "managed-by-extension-dev-mcp.json";
 
 function deriveCarrierId(source: string): string | null {
@@ -275,8 +295,7 @@ export function materializeCarrier(
         ? {
             bridgeProtocol: {
               carrierExtensionId: carrierId,
-              allowedOrigins:
-                "https://preview.extension.dev, https://code.extension.dev, https://themes.extension.dev, and those same apps' dev servers on http://localhost and http://127.0.0.1 (ports 3103, 3104, 3110, 3111). The carrier checks the sender's origin, so a page on any other localhost port is refused.",
+              allowedOrigins: CARRIER_ALLOWED_ORIGINS_SENTENCE,
               howTo:
                 "From a page on an allowed origin, register your guest once with a 'session' message (it declares the permissions the carrier enforces), then send 'bridge' messages to run chrome.* for real; each one streams into the Trace tab. Use the EXACT dotted wire names the bridge dispatcher accepts: storage is storage.get/set/remove/clear with the AREA AS AN ARGUMENT, NOT storage.local.get.",
               example: [
