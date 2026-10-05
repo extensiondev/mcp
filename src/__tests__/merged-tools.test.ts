@@ -1,4 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 
 import * as browsers from "../tools/browsers";
 import * as auth from "../tools/auth";
@@ -89,10 +92,27 @@ describe("extension_browsers dispatch", () => {
 
 describe("extension_auth dispatch", () => {
   it("reports logged-out status by default with no credentials", async () => {
-    const out = JSON.parse(await auth.handler({}));
-    expect(["logged-out", "logged-in", "expired", "refused-by-server"]).toContain(
-      out.status,
-    );
+    const prevXdg = process.env.XDG_CONFIG_HOME;
+    const prevToken = process.env.EXTENSION_DEV_TOKEN;
+    const prevFetch = global.fetch;
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "extdev-merged-auth-"));
+    process.env.XDG_CONFIG_HOME = tmp;
+    delete process.env.EXTENSION_DEV_TOKEN;
+    const fetchSpy = vi.fn(async () => {
+      throw new Error("status with no stored login must not reach the network");
+    });
+    global.fetch = fetchSpy as unknown as typeof fetch;
+    try {
+      const out = JSON.parse(await auth.handler({}));
+      expect(out.status).toBe("logged-out");
+      expect(fetchSpy).not.toHaveBeenCalled();
+    } finally {
+      global.fetch = prevFetch;
+      if (prevXdg === undefined) delete process.env.XDG_CONFIG_HOME;
+      else process.env.XDG_CONFIG_HOME = prevXdg;
+      if (prevToken !== undefined) process.env.EXTENSION_DEV_TOKEN = prevToken;
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
   });
 
   it("rejects a login without a workspace/project pair", async () => {
