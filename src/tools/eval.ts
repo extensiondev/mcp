@@ -29,14 +29,24 @@ import {
 } from "../lib/act";
 import { envelope } from "../lib/envelope";
 import { resolveSessionBrowser } from "../lib/session-browser";
-import { isChromiumFamily, WEBKIT_FAMILY } from "../lib/browser-family";
+import {
+  isChromiumFamily,
+  isGeckoFamily,
+  WEBKIT_FAMILY,
+} from "../lib/browser-family";
 import {
   readWebDriverSession,
   WebDriverClient,
   type WebDriverSessionInfo,
 } from "../lib/webdriver";
 import { manifestCandidates } from "../lib/project-manifest";
-import { resolveCdpPort, CDP_PORT_MISSING_HINT } from "../lib/cdp-port";
+import {
+  resolveCdpPort,
+  resolveRdpPort,
+  CDP_PORT_MISSING_HINT,
+} from "../lib/cdp-port";
+import { rdpEvaluateInTab, type RdpTab } from "../lib/rdp";
+import { matchPatternCovers } from "../lib/match-patterns";
 import {
   evaluateOnExtensionPage,
   findExtensionPageTargets,
@@ -60,7 +70,7 @@ import { executeScriptExpression } from "./inspect-gecko";
 export const schema = {
   name: "extension_eval",
   description:
-    "Evaluate an expression in a running extension context. Start the session with allowEval:true (extension_dev), which writes a 0600 session token. Context defaults to 'background', except on a Chromium MV3 session (the default template) where it defaults to 'page', the active tab, because the MV3 service worker CSP blocks eval; pass context:'background' to target the worker anyway and get that explanation back. For content and page, pass `url` to pick the tab, or omit both `url` and `tab` for the active tab; a numeric `tab` only disambiguates. Extension surfaces (popup, options, sidebar, devtools) and override pages (newtab, history, bookmarks) need no tab id but must already be open: open one with extension_open first, because a closed one returns an explicit error. On a Chromium MV3 session those pages, and context:'page' with a chrome-extension:// url, evaluate over CDP, the inspector path the extension page CSP does not govern; elsewhere they evaluate over the in-bundle relay. Call extension_dom_snapshot with listTabs:true to enumerate {tabId, url, title}.",
+    "Evaluate an expression in a running extension context. Start the session with allowEval:true (extension_dev), which writes a 0600 session token. Context defaults to 'background', except on a Chromium MV3 session (the default template) where it defaults to 'page', the active tab, because the MV3 service worker CSP blocks eval; pass context:'background' to target the worker anyway and get that explanation back. For content and page, pass `url` to pick the tab, or omit both `url` and `tab` for the active tab; a numeric `tab` only disambiguates. Extension surfaces (popup, options, sidebar, devtools) and override pages (newtab, history, bookmarks) need no tab id but must already be open: open one with extension_open first, because a closed one returns an explicit error. On a Chromium MV3 session those pages, and context:'page' with a chrome-extension:// url, evaluate over CDP, the inspector path the extension page CSP does not govern; elsewhere they evaluate over the in-bundle relay. On Firefox a document whose content security policy forbids eval (the extension's own pages, or a site's) is evaluated over the debugger protocol instead, which takes one expression; a page inside the extension that is no declared surface (pages/*) is reached the same way by context:'page' and its moz-extension:// url once a tab shows it. Call extension_dom_snapshot with listTabs:true to enumerate {tabId, url, title}.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -487,6 +497,9 @@ async function evaluateThroughRelay(
     );
   let raw = await run(relaySafeExpression(args.expression, token));
   let parsed = tryParseFrame(raw);
+  if (isGeckoFamily(browser) && cspRefusedFrame(parsed)) {
+    return evaluatePastSurfaceCsp(args, context, run);
+  }
   if (!parsed || parsed.ok !== true) return raw;
   let frame = readRelayFrame(parsed.value);
   if (!frame) return raw;
@@ -542,19 +555,44 @@ async function evaluateThroughRelay(
    expression itself", while any expression fails the same way in a page whose
    content_security_policy forbids eval (every MV3 extension page with an
    explicit policy, and MV3 backgrounds). The hint names the policy and the
-   paths that do not go through eval. */
+   paths that do not go through eval. From Extension.js
+   4.1.31 the engine names the refusal itself as E_CSP_BLOCKS_EVAL, in every
+   context, so both spellings are read here: a check for E_EVAL alone goes
+   dead on the engine this server pins. */
 const CSP_EVAL_REFUSAL = /blocked by CSP|call to eval|unsafe-eval|Content Security Policy/i;
+
+function cspRefusedFrame(parsed: Record<string, any> | null): boolean {
+  if (!parsed || parsed.ok !== false) return false;
+  const code = typeof parsed.error?.code === "string" ? parsed.error.code : "";
+  if (code === "E_CSP_BLOCKS_EVAL") return true;
+  return code === "E_EVAL" && CSP_EVAL_REFUSAL.test(String(parsed.error?.message ?? ""));
+}
+
+function cspRefusalHint(context: string | undefined): string {
+  if (context === "page") {
+    return (
+      "This page's own Content-Security-Policy forbids eval, so the in-page executor cannot run any expression in it; this is the site's policy, not a fault in the expression. " +
+      "Pass url so the tab is evaluated through the browser's debugger, which the policy does not govern (CDP on Chromium, the debugger protocol on Firefox), or read the page with extension_dom_snapshot or extension_inspect."
+    );
+  }
+  if (context === "content") {
+    return (
+      "The extension's content_security_policy forbids eval in its content-script world on this engine, so no string runs there; this is the extension's policy, not a fault in the expression. " +
+      'Evaluate the page itself with context: "page" and a url, or read the DOM the content script sees with extension_dom_snapshot or extension_inspect.'
+    );
+  }
+  return (
+    `The extension's content_security_policy (or the MV3 default) forbids eval in its own ${context ?? "background"} context, so the in-page executor cannot run any expression there; this is the extension's policy, not a fault in the expression. ` +
+    "Read the page instead with extension_dom_snapshot or extension_inspect, evaluate a web page with context: \"page\" and a url, or read the extension's console with extension_logs. On a Chromium MV3 session the extension's own pages evaluate over CDP, which the page policy does not govern. " +
+    "On Firefox, Extension.js 4.1.31 and later evaluate them over the debugger protocol instead: if this session runs an older engine, upgrade the project's extension dependency and restart it."
+  );
+}
 
 function explainCspRefusal(raw: string, context: string | undefined): string | null {
   const parsed = tryParseFrame(raw);
-  if (!parsed || parsed.ok !== false) return null;
-  const code = typeof parsed.error?.code === "string" ? parsed.error.code : "";
-  const message = String(parsed.error?.message ?? "");
-  if (code !== "E_EVAL" || !CSP_EVAL_REFUSAL.test(message)) return null;
+  if (!parsed || !cspRefusedFrame(parsed)) return null;
   parsed.error.name = "CspBlocksEval";
-  parsed.hint =
-    `The extension's content_security_policy (or the MV3 default) forbids eval in its own ${context ?? "background"} context, so the in-page executor cannot run any expression there; this is the extension's policy, not a fault in the expression. ` +
-    "Read the page instead with extension_dom_snapshot or extension_inspect, evaluate a web page with context: \"page\" and a url, or read the extension's console with extension_logs. On a Chromium MV3 session the extension's own pages evaluate over CDP, which the page policy does not govern.";
+  parsed.hint = cspRefusalHint(context);
   if (typeof parsed.error.hint === "string") delete parsed.error.hint;
   return actFrameJson(parsed);
 }
@@ -574,8 +612,7 @@ const NO_SCRIPTING_API = /scripting is not available/i;
    injects as the extension and the page policy does not govern it. Only an MV2 build has tabs.executeScript; an MV3 Gecko build
    keeps the policy explanation, since protocol-level eval there is the engine's own concern. */
 function pageEvalRefusedByCsp(parsed: Record<string, any>): boolean {
-  const code = typeof parsed.error?.code === "string" ? parsed.error.code : "";
-  return code === "E_EVAL" && CSP_EVAL_REFUSAL.test(String(parsed.error?.message ?? ""));
+  return cspRefusedFrame(parsed);
 }
 
 function isSingleExpression(source: string): boolean {
@@ -585,6 +622,174 @@ function isSingleExpression(source: string): boolean {
   } catch {
     return false;
   }
+}
+
+/* @invariant The debugger protocol takes the expression as source inside a
+   wrapper, never through eval, because eval is exactly what the document's
+   policy refuses. A statement list has no value without eval's completion
+   semantics, so it is refused here by name rather than sent on to fail as
+   "SyntaxError: expected expression" under a control-channel code (measured
+   on Extension.js 4.1.31, Firefox 159). */
+function notOneExpression(): string {
+  return envelope({
+    ok: false,
+    command: schema.name,
+    status: "bad-request",
+    error: {
+      code: "E_BAD_REQUEST",
+      name: "NotOneExpression",
+      message:
+        "This document's content security policy forbids eval, so Firefox evaluates it over the debugger protocol, which takes one expression, and this input is a statement list.",
+    },
+    hint: "Pass one expression. Wrap statements in a function that returns the value, for example (() => { const a = 20; return a + 1; })().",
+  });
+}
+
+/* @invariant The relay wrapper settles a promise inside the page, and it
+   reaches the expression through (0, eval). Under a policy that forbids
+   eval that inner call is what throws, whoever evaluates the wrapper: the
+   engine's protocol route ran the
+   wrapper past the policy and the wrapper then refused itself, so popup and
+   options still answered "blocked by CSP" on an engine that could read them
+  . The bare expression has no
+   inner eval: the bridge refuses it, the engine takes it over the protocol,
+   awaits a promise there and hands the value back, so the wrapper is not
+   needed on this path at all. */
+async function evaluatePastSurfaceCsp(
+  args: ActArgs & { expression: string },
+  context: string,
+  run: (expression: string) => Promise<string>,
+): Promise<string> {
+  if (!isSingleExpression(args.expression)) return notOneExpression();
+  const direct = await run(args.expression);
+  const frame = tryParseFrame(direct);
+  if (!frame) return direct;
+  if (cspRefusedFrame(frame)) return explainCspRefusal(direct, context) ?? direct;
+  if (frame.ok === true && frame.value === undefined) {
+    frame.value = null;
+    return actFrameJson(frame);
+  }
+  return direct;
+}
+
+const sameDocumentUrl = (a: unknown, b: string): boolean =>
+  String(a ?? "").replace(/[?#].*$/, "") === b.replace(/[?#].*$/, "");
+
+function tabByUrl(tabs: RdpTab[], url: string): RdpTab | undefined {
+  const exact = tabs.filter((tab) => sameDocumentUrl(tab.url, url));
+  const covered = exact.length
+    ? exact
+    : tabs.filter((tab) => matchPatternCovers(url, String(tab.url ?? "")));
+  const candidates = covered.length
+    ? covered
+    : tabs.filter((tab) => String(tab.url ?? "").includes(url));
+  return candidates.find((tab) => tab.selected === true) ?? candidates[0];
+}
+
+/* @invariant On Gecko a tab has one door the document's policy does not
+   govern: its console actor over the debugger protocol, the same server the
+   session already publishes as rdpPort. It reaches what no injection can: a
+   page inside the extension that the manifest declares as no surface
+   (pages/*), which has no relay to ask and refuses executeScript whatever
+   the host permissions, and a web page whose own policy
+   forbids eval on an MV3 build, which has no tabs.executeScript to fall back
+   on. Null means the protocol could not be reached, so the
+   caller keeps the answer it already had. */
+async function evaluateInGeckoTab(
+  args: ActArgs & { expression: string },
+  browser: string,
+  select: (tabs: RdpTab[]) => RdpTab | null | undefined,
+  missing: string,
+): Promise<string | null> {
+  const resolved = await resolveRdpPort(args.projectPath, browser, {
+    waitMs: 3_000,
+    graceMs: 1_000,
+  });
+  if (!resolved) return null;
+  let outcome: Awaited<ReturnType<typeof rdpEvaluateInTab>>;
+  try {
+    outcome = await rdpEvaluateInTab(resolved.port, {
+      select,
+      expression: args.expression,
+      timeoutMs: args.timeout ?? 10_000,
+    });
+  } catch {
+    return null;
+  }
+  if (outcome.ok) {
+    return envelope({
+      ok: true,
+      command: schema.name,
+      status: "ok",
+      value: outcome.value === undefined ? null : outcome.value,
+    });
+  }
+  if (outcome.name === "TargetNotFound") {
+    return envelope({
+      ok: false,
+      command: schema.name,
+      status: "no-matching-target",
+      error: { code: "E_NO_MATCHING_TARGET", name: "NoMatchingTarget", message: missing },
+      hint: "Open the page first with extension_open and its url, then retry; extension_dom_snapshot with listTabs: true lists what is open.",
+    });
+  }
+  if (outcome.name === "Timeout") {
+    return envelope({
+      ok: false,
+      command: schema.name,
+      status: "eval-pending",
+      error: { code: "E_WAIT_TIMEOUT", name: "EvalPending", message: outcome.message },
+      hint: "The expression returned a promise that is still pending; pass a larger timeout to wait for it.",
+    });
+  }
+  return envelope({
+    ok: false,
+    command: schema.name,
+    status: "eval-failed",
+    error: { code: "E_EVAL", name: outcome.name, message: outcome.message },
+    hint: "The expression threw inside the document. It ran over the debugger protocol, which the document's content security policy does not govern, so this is the expression's own error.",
+  });
+}
+
+/* @invariant The engine's protocol route embeds the expression as source,
+   so a statement list sent to a policy-locked Gecko background comes back as
+   "SyntaxError: expected expression" under the name Unavailable, which act
+   then dresses as a control-channel failure. That name with that message is
+   the route's own signature: an eval that is allowed reports a syntax error
+   as the expression's, under E_EVAL. */
+function backgroundRouteRefusedStatements(
+  args: ActArgs & { expression: string },
+  browser: string,
+  context: string | undefined,
+  raw: string,
+): boolean {
+  if (!isGeckoFamily(browser) || (context ?? "background") !== "background") return false;
+  const failed = tryParseFrame(raw);
+  if (!failed || failed.ok !== false) return false;
+  if (failed.error?.name !== "Unavailable") return false;
+  if (!/SyntaxError/.test(String(failed.error?.message ?? ""))) return false;
+  return !isSingleExpression(args.expression);
+}
+
+async function evaluatePagePastSiteCsp(
+  args: ActArgs & { expression: string },
+  browser: string,
+  context: string | undefined,
+  raw: string,
+): Promise<string | null> {
+  if (context !== "page" || !isGeckoFamily(browser)) return null;
+  if (!cspRefusedFrame(tryParseFrame(raw))) return null;
+  if (!args.url && args.tab != null) return null;
+  if (!isSingleExpression(args.expression)) return notOneExpression();
+  const url = args.url;
+  return evaluateInGeckoTab(
+    args,
+    browser,
+    url
+      ? (tabs) => tabByUrl(tabs, url)
+      : (tabs) => tabs.find((tab) => tab.selected === true),
+    url ? `No open tab matches url: ${url}` : "No tab is selected in the dev browser.",
+  );
 }
 
 async function evaluateThroughExecuteScript(
@@ -715,6 +920,17 @@ export async function handler(
       }
       return raw;
     }
+    if (isGeckoFamily(browser)) {
+      if (!isSingleExpression(args.expression)) return notOneExpression();
+      const url = args.url as string;
+      const overProtocol = await evaluateInGeckoTab(
+        args,
+        browser,
+        (tabs) => tabs.find((tab) => sameDocumentUrl(tab.url, url)),
+        `No open tab shows ${url}.`,
+      );
+      if (overProtocol !== null) return overProtocol;
+    }
     const declared = declaredSurfaces(args.projectPath, browser) ?? [];
     return envelope({
       ok: false,
@@ -751,6 +967,11 @@ export async function handler(
 
   const mv2Fallback = await evaluateThroughExecuteScript(args, browser, context, raw);
   if (mv2Fallback !== null) return mv2Fallback;
+  const pastSiteCsp = await evaluatePagePastSiteCsp(args, browser, context, raw);
+  if (pastSiteCsp !== null) return pastSiteCsp;
+  if (backgroundRouteRefusedStatements(args, browser, context, raw)) {
+    return notOneExpression();
+  }
   const cspRefusal = explainCspRefusal(raw, context);
   if (cspRefusal !== null) return cspRefusal;
   const trustedTypes = tryParseFrame(raw);
