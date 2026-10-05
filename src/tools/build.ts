@@ -20,6 +20,7 @@ import {
   sessionPathHint,
 } from "../lib/session-paths";
 import { type Envelope, envelope, isEnvelope } from "../lib/envelope";
+import { reviewDist, reviewRiskWarnings } from "../lib/store-review";
 
 const COMMAND = "extension_build";
 
@@ -792,6 +793,7 @@ export async function handler(args: {
         : undefined;
     const distDir = path.resolve(args.projectPath, "dist", browser);
     const entrypoints = builtEntrypoints(distDir);
+    const risks = reviewDist(distDir, browser);
     const contamination = carrierContamination(
       path.resolve(args.projectPath, "dist"),
     );
@@ -918,6 +920,7 @@ export async function handler(args: {
         ...(status ? { engineBuildStatus: status } : {}),
         ...(engineRefusedJsonOutput ? { engineRejectedJsonOutput: true } : {}),
         ...(entrypoints.length ? { entrypoints } : {}),
+        ...(risks.length ? { reviewRisks: risks } : {}),
         ...(buildWarningsTruncated !== undefined
           ? { buildWarningsTruncated }
           : {}),
@@ -932,6 +935,7 @@ export async function handler(args: {
         ...warnings,
         ...(preflight?.warnings ?? []),
         ...buildWarnings,
+        ...reviewRiskWarnings(risks),
         ...zipNotes,
         uncheckedNote,
         derivedBundleIdNote,

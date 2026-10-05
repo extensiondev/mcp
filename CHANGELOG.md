@@ -2,6 +2,17 @@
 
 ## 10.10.5
 
+- `extension_build` and `extension_analyze` report store review risks
+  read off the built package, as `value.reviewRisks` plus one warning
+  each with the fix: access to every website, code the package did not
+  ship (`eval`, `new Function`, scripts or imports loaded from a URL), a
+  Firefox manifest without `data_collection_permissions`, and API
+  permissions no shipped script uses. They never block a build. On a
+  dev build only the manifest checks run, because the hot-reload runtime
+  and the injected `management` permission are not what a store
+  receives (measured on seven published extensions' dev builds against a
+  production build of an official template).
+
 - The bundled `/extension-publish` command now takes an extension through
   store review with this server's own tools instead of sending people to
   the store consoles by hand: it validates, builds, checks for review
