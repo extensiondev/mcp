@@ -8,6 +8,7 @@
 
 import { spendNarration } from "./allowance";
 import { writeCredentialBatch } from "./credentials";
+import { answerIsUnknownOutcome, readCreatedProject } from "./create-answer";
 import { firstBuildValue, readFirstBuild, withheldBecause } from "./first-build";
 import { pollDeviceGrant, requestDeviceCode } from "./device-flow";
 import { envelope, type ErrorCode } from "./envelope";
@@ -390,7 +391,9 @@ function refusalHint(code: string, ref: string, retryAfterSeconds?: number): str
   return undefined;
 }
 
-async function createOne(session: Session, entry: BatchEntry, installationId: string | undefined): Promise<{ row: Row; stop?: Stop; halt?: boolean }> {
+type CreateOutcome = { row: Row; stop?: Stop; halt?: boolean };
+
+async function createOne(session: Session, entry: BatchEntry, installationId: string | undefined): Promise<CreateOutcome> {
   const url = `${session.apiBase}/api/cli/projects/create`;
   const body = {
     ...buildCreateBody({
@@ -443,14 +446,46 @@ async function createOne(session: Session, entry: BatchEntry, installationId: st
         : {}),
     };
   }
-  session.unanswered = 0;
-  const text = await res.text();
+  /* @invariant An answer that cannot be read is no answer. The same holds
+   * for a server error with no platform code, which comes from in front of
+   * the platform while the create may still be running behind it. Both leave
+   * the project's existence unknown, so both take the unconfirmed row and end
+   * the slice exactly as a dropped connection does. */
+  const unknownOutcome = (message: string): CreateOutcome => {
+    session.unanswered += 1;
+    return {
+      row: {
+        project: entry.ref,
+        status: "unconfirmed",
+        message,
+        hint: `Whether ${entry.ref} now exists is unknown. It is not retried, because a second create racing the first would be two builds claiming one name. Check the console at ${consoleBase()}; if it exists, sign in with extension_auth (action: login).`,
+      },
+      halt: true,
+      ...(session.unanswered >= 2
+        ? { stop: { code: "PLATFORM_UNREACHABLE", message } }
+        : {}),
+    };
+  };
+  let text: string;
+  try {
+    text = await res.text();
+  } catch (err: any) {
+    return unknownOutcome(
+      `The platform answered ${res.status} for ${entry.ref} and the answer could not be read: ${err?.message || err}`,
+    );
+  }
   let data: Record<string, unknown>;
   try {
     data = JSON.parse(text);
   } catch {
     data = { message: text };
   }
+  if (!res.ok && !sawPlatformHold(res, data) && answerIsUnknownOutcome(res.status, data)) {
+    return unknownOutcome(
+      `The create request for ${entry.ref} got a ${res.status} with no platform code, which is an answer from in front of the platform while the create may still be running.`,
+    );
+  }
+  session.unanswered = 0;
 
   if (!res.ok) {
     const held = sawPlatformHold(res, data);
@@ -484,9 +519,15 @@ async function createOne(session: Session, entry: BatchEntry, installationId: st
       : { row };
   }
 
+  const createdAnswer = readCreatedProject(data);
+  if (!createdAnswer.ok) {
+    return unknownOutcome(
+      `The platform answered ${res.status} for ${entry.ref} but ${createdAnswer.why}.`,
+    );
+  }
   session.lastBody = data;
-  const finalWorkspace = String(data.workspaceSlug || entry.workspace).trim();
-  const finalProject = String(data.projectSlug || entry.slug).trim();
+  const finalWorkspace = createdAnswer.workspaceSlug;
+  const finalProject = createdAnswer.projectSlug;
   const consoleUrl = consoleProjectUrl(
     { workspace: finalWorkspace, project: finalProject },
     "",
@@ -502,23 +543,51 @@ async function createOne(session: Session, entry: BatchEntry, installationId: st
    * login on this machine for a project nobody named here. */
   if (data.tokenIssued === true && token && scoped) {
     const expiresAt = Number(data.expiresAt || 0);
-    writeCredentialBatch([
-      {
-        version: 1,
-        token,
-        workspaceSlug: finalWorkspace,
-        projectSlug: finalProject,
-        expiresAt,
-        api: session.apiBase,
-        provider: "extensiondev",
-      },
-    ]);
+    /* @invariant THE PROJECT IS RECORDED AS CREATED BEFORE ANYTHING ELSE CAN
+     * FAIL. The platform has made the project by the time its answer is
+     * here. Filing the token used to sit unguarded between that answer and
+     * the row, so a login store that could not be written threw the row away:
+     * the call ended in an internal error, the resumed call asked to create
+     * the same project and was told it exists, and the summary counted a
+     * project that was made as one that was not. A token that cannot be
+     * filed is a created project without a stored login, said so with the
+     * reason, and the token is not kept anywhere. */
+    let storeFailure = "";
+    try {
+      writeCredentialBatch([
+        {
+          version: 1,
+          token,
+          workspaceSlug: finalWorkspace,
+          projectSlug: finalProject,
+          expiresAt,
+          api: session.apiBase,
+          provider: "extensiondev",
+        },
+      ]);
+    } catch (err: any) {
+      storeFailure = String(err?.message || err);
+    }
+    if (storeFailure) {
+      return {
+        row: {
+          project: entry.ref,
+          status: "created",
+          loggedIn: false,
+          projectId: createdAnswer.projectId,
+          consoleUrl,
+          firstBuild,
+          tokenCode: "TOKEN_NOT_STORED",
+          hint: `${entry.ref} was created, but its token could not be stored on this machine and was discarded: ${storeFailure} Sign in with extension_auth (action: login) once that is fixed.`,
+        },
+      };
+    }
     return {
       row: {
         project: entry.ref,
         status: "created",
         loggedIn: true,
-        projectId: data.projectId ?? null,
+        projectId: createdAnswer.projectId,
         consoleUrl,
         firstBuild,
         expiresAt: expiresAt ? new Date(expiresAt * 1000).toISOString() : null,
@@ -533,7 +602,7 @@ async function createOne(session: Session, entry: BatchEntry, installationId: st
       project: entry.ref,
       status: "created",
       loggedIn: false,
-      projectId: data.projectId ?? null,
+      projectId: createdAnswer.projectId,
       consoleUrl,
       firstBuild,
       tokenCode,

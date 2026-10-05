@@ -246,4 +246,52 @@ describe("extension_workspace_create", () => {
     expect(out.status).toBe("lane-closed");
     expect(out.error.message).toContain("Headless workspace creation");
   });
+
+  async function workspaceAnswers(create: Route | "no-answer") {
+    const { fn } = createFetch({
+      token: [{ status: 200, body: grantBody }],
+      ...(create === "no-answer" ? {} : { create }),
+    });
+    const routed = vi.fn(async (url: any, init?: RequestInit) => {
+      if (create === "no-answer" && String(url).endsWith("/api/cli/workspaces/create")) {
+        throw new Error("socket hang up");
+      }
+      return fn(url, init);
+    });
+    vi.stubGlobal("fetch", routed);
+
+    return JSON.parse(
+      await handler({
+        workspace: "new-org",
+        displayName: "New Org",
+        deviceCode: "dev-code",
+      }),
+    );
+  }
+
+  it.each([
+    ["no answer at all", "no-answer" as const, "no answer came back"],
+    ["a gateway timeout", { status: 504, body: "<html>504</html>" }, "in front of the platform"],
+    ["an empty object", { status: 201, body: {} }, "named no workspace id"],
+    ["an id with no slug", { status: 201, body: { id: "ws_new" } }, "did not name the workspace"],
+    ["a page of html", { status: 200, body: "<html>ok</html>" }, "named no workspace id"],
+  ])("calls %s unconfirmed, never created and never failed", async (_label, create, words) => {
+    const out = await workspaceAnswers(create as Route | "no-answer");
+
+    expect(out.ok).toBe(false);
+    expect(out.status).toBe("create-unconfirmed");
+    expect(out.error.message).toContain(words);
+    expect(out.hint).toContain("Do not create it again blind");
+  });
+
+  it("reports the slug the platform registered", async () => {
+    const out = await workspaceAnswers({
+      status: 201,
+      body: { ...created.body, slug: "new-org-2" },
+    });
+
+    expect(out.status).toBe("created");
+    expect(out.value.workspaceSlug).toBe("new-org-2");
+    expect(out.value.workspaceId).toBe("ws_new");
+  });
 });

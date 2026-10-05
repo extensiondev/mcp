@@ -565,4 +565,66 @@ describe("extension_project_create", () => {
     expect(schema.description).toContain("`firstBuild`");
     expect(schema.description).not.toContain("and dispatches the first build.");
   });
+
+  async function createAnswers(create: Route | "no-answer") {
+    const { fn } = createFetch({
+      token: [{ status: 200, body: grantBody }],
+      ...(create === "no-answer" ? {} : { create }),
+    });
+    const routed = vi.fn(async (url: any, init?: RequestInit) => {
+      if (create === "no-answer" && String(url).endsWith("/api/cli/projects/create")) {
+        throw new Error("socket hang up");
+      }
+      return fn(url, init);
+    });
+    vi.stubGlobal("fetch", routed);
+
+    return JSON.parse(await handler({ ...baseArgs, deviceCode: "dev-code" }));
+  }
+
+  it.each([
+    ["no answer at all", "no-answer" as const, "no answer came back"],
+    ["a gateway timeout", { status: 504, body: "<html>504</html>" }, "in front of the platform"],
+    ["a bare server error", { status: 500, body: { message: "no" } }, "no platform code"],
+    ["an empty 200", { status: 200, body: "" }, "did not carry success: true"],
+    ["an empty object", { status: 200, body: {} }, "did not carry success: true"],
+    ["a page of html", { status: 200, body: "<html>ok</html>" }, "did not carry success: true"],
+    ["success with no id", { status: 200, body: { success: true } }, "named no project id"],
+    [
+      "success with no names",
+      { status: 200, body: { success: true, projectId: "prj_new" } },
+      "did not name the workspace and project",
+    ],
+  ])("calls %s unconfirmed, never created and never failed", async (_label, create, words) => {
+    const out = await createAnswers(create as Route | "no-answer");
+
+    expect(out.ok).toBe(false);
+    expect(out.status).toBe("create-unconfirmed");
+    expect(out.error.message).toContain(words);
+    expect(out.error.message).toContain("is unknown");
+    expect(out.hint).toContain("Do not create it again blind");
+    expect(out.hint).toContain("extension_auth (action: login, project: 'acme/ghost-app')");
+  });
+
+  it("keeps a failure the platform named a failure", async () => {
+    const out = await createAnswers({
+      status: 500,
+      body: { message: "Project creation was rolled back.", code: "PROJECT_CREATE_ROLLED_BACK" },
+    });
+
+    expect(out.status).toBe("create-failed");
+    expect(out.error.message).toContain("rolled back");
+  });
+
+  it("reports the names the platform registered, not the ones asked for", async () => {
+    const out = await createdWith({
+      projectSlug: "ghost-app-2",
+      initialBuild: { dispatched: true },
+    });
+
+    expect(out.status).toBe("created");
+    expect(out.value.projectSlug).toBe("ghost-app-2");
+    expect(out.warnings.join(" ")).toContain("registered this project as acme/ghost-app-2");
+    expect(out.value.nextSteps[0]).toContain("acme/ghost-app-2");
+  });
 });

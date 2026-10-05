@@ -25,6 +25,7 @@ import { consoleBase, consoleProjectUrl } from "../lib/registry";
 import { platformHoldEnvelope, sawPlatformHold } from "../lib/platform-hold";
 import { identityHeaders } from "../lib/session-identity";
 import { spendNarration } from "../lib/allowance";
+import { answerIsUnknownOutcome, readCreatedProject } from "../lib/create-answer";
 import {
   firstBuildSentence,
   firstBuildValue,
@@ -401,6 +402,19 @@ async function finishFromPoll(
   });
 
   const url = `${ctx.apiBase}/api/cli/projects/create`;
+  const unconfirmed = (what: string, code: ErrorCode): string =>
+    envelope({
+      ok: false,
+      command: COMMAND,
+      status: "create-unconfirmed",
+      error: {
+        code,
+        name: "CreateUnconfirmed",
+        message: `${what}, so whether ${ctx.project} now exists is unknown.`,
+      },
+      value: { project: ctx.project, consoleUrl: consoleBase() },
+      hint: `Do not create it again blind: the grant is spent, and a second create racing the first is two builds claiming one name. Look for ${ctx.project} in the console at ${consoleBase()}. If it is there, sign in with extension_auth (action: login, project: '${ctx.project}'); only if it is not, call extension_project_create again.`,
+    });
   let res: Response;
   try {
     res = await fetch(url, {
@@ -413,15 +427,21 @@ async function finishFromPoll(
       body: JSON.stringify(body),
     });
   } catch (err: any) {
-    return fail(
-      "CreateNetworkError",
-      `Could not reach ${url}: ${err?.message || err}`,
-      "create-failed",
+    return unconfirmed(
+      `The create request for ${ctx.project} left this machine and no answer came back (${err?.message || err})`,
       "E_NETWORK",
     );
   }
 
-  const text = await res.text();
+  let text: string;
+  try {
+    text = await res.text();
+  } catch (err: any) {
+    return unconfirmed(
+      `The platform answered ${res.status} for ${ctx.project} and the answer could not be read (${err?.message || err})`,
+      "E_NETWORK",
+    );
+  }
   let data: Record<string, unknown>;
   try {
     data = JSON.parse(text);
@@ -491,6 +511,12 @@ async function finishFromPoll(
         hint: `Run extension_auth (action: login) with project '${ctx.project}'.`,
       });
     }
+    if (answerIsUnknownOutcome(res.status, data)) {
+      return unconfirmed(
+        `The create request for ${ctx.project} got a ${res.status} with no platform code, which is an answer from in front of the platform while the create may still be running`,
+        "E_PLATFORM",
+      );
+    }
     return fail(
       "CreateError",
       `create failed (${res.status}): ${String(
@@ -501,8 +527,18 @@ async function finishFromPoll(
     );
   }
 
-  const finalWorkspace = String(data.workspaceSlug || wantWorkspace);
-  const finalProject = String(data.projectSlug || wantProject);
+  const createdAnswer = readCreatedProject(data);
+  if (!createdAnswer.ok) {
+    return unconfirmed(
+      `The platform answered ${res.status} for ${ctx.project} but ${createdAnswer.why}`,
+      "E_PLATFORM",
+    );
+  }
+  const finalWorkspace = createdAnswer.workspaceSlug;
+  const finalProject = createdAnswer.projectSlug;
+  const renamed =
+    finalWorkspace.toLowerCase() !== wantWorkspace.toLowerCase() ||
+    finalProject.toLowerCase() !== wantProject.toLowerCase();
   const consoleUrl = consoleProjectUrl(
     { workspace: finalWorkspace, project: finalProject },
     "",
@@ -519,7 +555,7 @@ async function finishFromPoll(
     value: {
       workspaceSlug: finalWorkspace,
       projectSlug: finalProject,
-      projectId: data.projectId ?? null,
+      projectId: createdAnswer.projectId,
       consoleUrl,
       sourceRepo: ctx.args.repo,
       firstBuild: firstBuildValue(firstBuild),
@@ -547,14 +583,19 @@ async function finishFromPoll(
         ? ", then extension_publish to share it."
         : "; extension_publish has nothing to share until a build exists."
     }`,
-    ...(firstBuild.state === "dispatched"
-      ? {}
-      : {
-          warnings: [
+    warnings: [
+      ...(renamed
+        ? [
+            `The platform registered this project as ${finalWorkspace}/${finalProject}, not the ${ctx.project} that was asked for. Use the name it has.`,
+          ]
+        : []),
+      ...(firstBuild.state === "dispatched"
+        ? []
+        : [
             firstBuild.state === "withheld"
               ? `No first build was dispatched for ${finalWorkspace}/${finalProject}: ${withheldBecause(firstBuild.reason)}.`
               : `The platform did not say whether a first build was dispatched for ${finalWorkspace}/${finalProject}.`,
-          ],
-        }),
+          ]),
+    ],
   });
 }

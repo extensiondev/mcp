@@ -17,6 +17,7 @@ import {
 import { consoleBase } from "../lib/registry";
 import { platformHoldEnvelope, sawPlatformHold } from "../lib/platform-hold";
 import { identityHeaders } from "../lib/session-identity";
+import { answerIsUnknownOutcome, readCreatedWorkspace } from "../lib/create-answer";
 
 const COMMAND = "extension_workspace_create";
 
@@ -292,6 +293,19 @@ async function finishFromPoll(
   }
 
   const url = `${ctx.apiBase}/api/cli/workspaces/create`;
+  const unconfirmed = (what: string, code: ErrorCode): string =>
+    envelope({
+      ok: false,
+      command: COMMAND,
+      status: "create-unconfirmed",
+      error: {
+        code,
+        name: "CreateUnconfirmed",
+        message: `${what}, so whether workspace ${ctx.workspace} now exists is unknown.`,
+      },
+      value: { workspace: ctx.workspace, consoleUrl: consoleBase() },
+      hint: `Do not create it again blind: the grant is spent, and the first request may have landed. Look for ${ctx.workspace} in the console at ${consoleBase()}. If it is there, go on to extension_project_create with project '${ctx.workspace}/<project>'; only if it is not, call extension_workspace_create again.`,
+    });
   let res: Response;
   try {
     res = await fetch(url, {
@@ -308,15 +322,21 @@ async function finishFromPoll(
       }),
     });
   } catch (err: any) {
-    return fail(
-      "CreateNetworkError",
-      `Could not reach ${url}: ${err?.message || err}`,
-      "create-failed",
+    return unconfirmed(
+      `The create request for workspace ${ctx.workspace} left this machine and no answer came back (${err?.message || err})`,
       "E_NETWORK",
     );
   }
 
-  const text = await res.text();
+  let text: string;
+  try {
+    text = await res.text();
+  } catch (err: any) {
+    return unconfirmed(
+      `The platform answered ${res.status} for workspace ${ctx.workspace} and the answer could not be read (${err?.message || err})`,
+      "E_NETWORK",
+    );
+  }
   let data: Record<string, unknown>;
   try {
     data = JSON.parse(text);
@@ -358,6 +378,12 @@ async function finishFromPoll(
             : "Pick a different slug and run the tool again.",
       });
     }
+    if (answerIsUnknownOutcome(res.status, data)) {
+      return unconfirmed(
+        `The create request for workspace ${ctx.workspace} got a ${res.status} with no platform code, which is an answer from in front of the platform while the create may still be running`,
+        "E_PLATFORM",
+      );
+    }
     return fail(
       "CreateError",
       `create failed (${res.status}): ${String(
@@ -368,7 +394,14 @@ async function finishFromPoll(
     );
   }
 
-  const finalSlug = String(data.slug || ctx.workspace);
+  const createdAnswer = readCreatedWorkspace(data);
+  if (!createdAnswer.ok) {
+    return unconfirmed(
+      `The platform answered ${res.status} for workspace ${ctx.workspace} but ${createdAnswer.why}`,
+      "E_PLATFORM",
+    );
+  }
+  const finalSlug = createdAnswer.slug;
   const owner = String(data.ownerGithubLogin || grant.ownerGithubLogin || "");
   return envelope({
     ok: true,
@@ -376,7 +409,7 @@ async function finishFromPoll(
     status: "created",
     value: {
       workspaceSlug: finalSlug,
-      workspaceId: data.id ?? null,
+      workspaceId: createdAnswer.id,
       displayName: data.displayName ?? finalSlug,
       ownerGithubLogin: owner || null,
       consoleUrl: `${consoleBase()}/${encodeURIComponent(finalSlug)}`,

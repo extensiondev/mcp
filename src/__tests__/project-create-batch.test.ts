@@ -1046,3 +1046,80 @@ describe("extension_project_create with projects: a first build is counted, neve
     expect(out.warnings.join(" ")).toContain("acme/gamma (the platform did not say)");
   });
 });
+
+describe("extension_project_create with projects: an answer that proves nothing creates nothing", () => {
+  it.each([
+    ["an empty object", { status: 200, body: {} }],
+    ["success with no id", { status: 200, body: { success: true, projectSlug: "beta", workspaceSlug: "acme" } }],
+    ["a gateway timeout", { status: 504, body: { message: "upstream timed out" } }],
+  ] as Array<[string, Route]>)("marks %s unconfirmed and does not go on in that call", async (_label, route) => {
+    const h = harness({
+      token: [grant(SLUGS)],
+      create: (_ref, slug) => (slug === "beta" ? route : created(slug)),
+    });
+    const out = await run({ projects: THREE, deviceCode: "dev-code" });
+
+    const beta = out.value.results[1];
+    expect(beta.status).toBe("unconfirmed");
+    expect(beta.hint).toContain("is unknown");
+    expect(out.value.results[0].status).toBe("created");
+    expect(h.to("/api/cli/projects/create")).toHaveLength(2);
+    expect(readCredentials({ project: "acme/beta" })).toBeNull();
+  });
+
+  it("never files a token under a name the answer did not give", async () => {
+    harness({
+      token: [grant(["alpha"])],
+      create: () => ({
+        status: 200,
+        body: { success: true, tokenIssued: true, token: "orphan-token", expiresAt: 1_900_000_000 },
+      }),
+    });
+    const out = await run({
+      projects: [THREE[0]],
+      deviceCode: "dev-code",
+    });
+
+    expect(out.value.results[0].status).toBe("unconfirmed");
+    expect(listCredentials()).toHaveLength(0);
+  });
+});
+
+describe("extension_project_create with projects: a created project keeps its row whatever fails after", () => {
+  it("records every project as created when the login store cannot be written", async () => {
+    const file = path.join(tmp, "extension-dev", "auth.json");
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, "{ not json");
+    const h = harness({ token: [grant(SLUGS)] });
+    const out = await run({ projects: THREE, deviceCode: "dev-code" });
+
+    expect(out.error?.code).not.toBe("E_INTERNAL");
+    expect(out.status).toBe("created");
+    expect(out.value.counts).toMatchObject({ created: 3, loggedIn: 0, refused: 0 });
+    for (const row of out.value.results) {
+      expect(row.status).toBe("created");
+      expect(row.loggedIn).toBe(false);
+      expect(row.tokenCode).toBe("TOKEN_NOT_STORED");
+      expect(row.hint).toContain("could not be stored");
+      expect(row.hint).toContain("is not valid JSON");
+    }
+    expect(h.to("/api/cli/projects/create")).toHaveLength(3);
+    expect(out.hint).toContain("no token was stored for acme/alpha, acme/beta, acme/gamma");
+    expect(fs.readFileSync(file, "utf8")).toBe("{ not json");
+    expect(JSON.stringify(out)).not.toContain("seven-day-token-for-");
+  });
+
+  it("does not ask to create a project again after its token could not be filed", async () => {
+    const file = path.join(tmp, "extension-dev", "auth.json");
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, "{ not json");
+    const h = harness({ token: [grant(SLUGS)], createTakesMs: 21_000 });
+    let out = await run({ projects: THREE, deviceCode: "dev-code" });
+    for (let call = 0; out.status === "creating" && call < 5; call += 1) {
+      out = await run({ projects: THREE, deviceCode: "dev-code" });
+    }
+
+    expect(out.status).toBe("created");
+    expect(h.to("/api/cli/projects/create")).toHaveLength(3);
+  });
+});
