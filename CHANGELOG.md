@@ -1,5 +1,54 @@
 # Changelog
 
+## 10.10.10
+
+Every sentence the server says is now backed by something it read
+.
+
+- Success is read, never assumed. Promote, submit, publish, project and
+  workspace create, logout and uninstall read the platform's or the
+  library's own answer and say `promoted-partially`, `submit-unconfirmed`,
+  `publish-unconfirmed`, `create-unconfirmed`, `not-installed` and the like
+  when it falls short. A failed read is reported as unreadable, never as an
+  empty list, across eval, open, the tab polls, session markers and
+  carriers.
+- One resolver returns the token and the project it belongs to. An
+  unnamed call sends `EXTENSION_DEV_TOKEN` and takes its project from the
+  token's own claims, never from whichever stored login is active; a named
+  project sends its stored login first, the private registry grant
+  included.
+- `extension_manifest_validate` judges each browser through the engine's
+  own prefix filter, checks every requested browser's references, refuses
+  an unknown target, and blocks only where the engine or the browser
+  refuses (a `service_worker` the engine rewrites for Firefox is a
+  warning).
+- `extension_build` reads `zip_artifacts`, refuses a stale dist, reports a
+  timeout as `build-timeout`, uses the engine's own bundle-id rule, and
+  writes `firefox-based` builds where the engine does (`dist/gecko-based`).
+- `extension_inspect` names the document it read after navigating, counts
+  uncaught exceptions as console errors, reports a section that threw as
+  `failedSections` instead of an empty value, and marks every cap.
+- `extension_open` checks popup, options and sidebar against the manifest
+  before asking the engine, says when an open could not be confirmed, and
+  never counts a tab it rendered itself as the window.
+- `extension_storage` reads a set back; `context` is gone, since the engine
+  runs every storage call in the background.
+- `extension_assert` counts only the extension's own log lines, reads the
+  guest's id from the contract, compares storage values structurally, and
+  does not credit a background the dev build injected.
+- `extension_stop` with `all` leaves sessions owned by another running
+  server alone unless `includeOtherServers` is true; stop and auth are
+  marked destructive.
+- `extension_dev` reports the control channel from `ready.json`, and a boot
+  error that is not a compile error answers `boot-failed`.
+- The tool reference `claude/rules/mcp-tools.md` is generated from the
+  schemas, and a test validates every example call in the docs against
+  them.
+- Requires Node 22.12 or later, the floor of the engine this package runs
+  in-process.
+- The release workflow publishes to npm before it pushes the version
+  commit and tag, so a failed publish no longer strands a tag.
+
 ## 10.10.9
 
 - One approval now covers several projects in one workspace
