@@ -74,7 +74,7 @@ describe("the release rails fail closed", () => {
         encoding: "utf8",
       });
       expect(result.status).not.toBe(0);
-      expect(result.stderr).toMatch(/nothing was rewritten/);
+      expect(result.stderr).toMatch(/holds neither/);
       fs.writeFileSync(readme, "<img src=\"logo.png\" width=\"15.5%\">\n");
       const ok = spawnSync(process.execPath, [fileURLToPath(new URL("../../scripts/readme-logo-width.mjs", import.meta.url)), "npm"], {
         env: { ...process.env, README_LOGO_WIDTH_PATH: readme },
@@ -82,6 +82,11 @@ describe("the release rails fail closed", () => {
       });
       expect(ok.status).toBe(0);
       expect(fs.readFileSync(readme, "utf8")).toContain('width="20.7%"');
+      const again = spawnSync(process.execPath, [fileURLToPath(new URL("../../scripts/readme-logo-width.mjs", import.meta.url)), "npm"], {
+        env: { ...process.env, README_LOGO_WIDTH_PATH: readme },
+        encoding: "utf8",
+      });
+      expect(again.status, "already at the npm width is done, not an error").toBe(0);
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }

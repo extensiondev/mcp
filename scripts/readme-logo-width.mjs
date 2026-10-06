@@ -21,8 +21,13 @@ const [from, to] =
 
 const readme = readFileSync(readmePath, "utf8");
 const needle = `width="${from}"`;
+const target = `width="${to}"`;
 if (!readme.includes(needle)) {
-  console.error(`readme-logo-width: ${readmePath} holds no ${needle}, so nothing was rewritten for ${mode || "github"}`);
+  if (readme.includes(target)) {
+    console.log(`readme-logo-width: ${readmePath} already holds ${target} for ${mode || "github"}`);
+    process.exit(0);
+  }
+  console.error(`readme-logo-width: ${readmePath} holds neither ${needle} nor ${target}, so the logo width for ${mode || "github"} is unknown`);
   process.exit(1);
 }
-writeFileSync(readmePath, readme.replace(needle, `width="${to}"`));
+writeFileSync(readmePath, readme.replace(needle, target));
