@@ -34,6 +34,7 @@ vi.mock("../lib/cdp-port", async (importOriginal) => {
 });
 
 const navigations: string[] = [];
+let attachedId = "";
 let cdpTargets: Array<{ id: string; type: string; url: string; title?: string }> =
   [];
 vi.mock("../lib/cdp", () => {
@@ -45,15 +46,16 @@ vi.mock("../lib/cdp", () => {
       return "ws://127.0.0.1:9222/devtools/browser/x";
     }
     async connect() {}
-    async attachToTarget() {
+    async attachToTarget(id: string) {
+      attachedId = id;
       return "session-1";
     }
+    async enableDomains() {}
     async navigate(_session: string, url: string) {
       navigations.push(url);
-      cdpTargets = [
-        ...cdpTargets.filter((t) => t.type !== "page"),
-        { id: "navigated", type: "page", url, title: "Landed" },
-      ];
+      cdpTargets = cdpTargets.map((t) =>
+        t.id === attachedId ? { ...t, url, title: "Landed" } : t,
+      );
     }
     async evaluate() {
       return null;

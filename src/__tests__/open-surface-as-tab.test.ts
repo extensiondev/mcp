@@ -9,6 +9,7 @@ let cdpTargets: Array<{ id: string; type: string; url: string; title?: string }>
   [];
 let cdpPort: { port: number } | null = { port: 9222 };
 let navigationLands = true;
+let attachedId = "";
 let popupMeasure: { w: number; h: number } | null = null;
 let windowResizeHonored = true;
 let windowBounds: { width?: number; height?: number } = {};
@@ -29,16 +30,17 @@ vi.mock("../lib/cdp", () => {
       return "ws://127.0.0.1:9222/devtools/browser/x";
     }
     async connect() {}
-    async attachToTarget() {
+    async attachToTarget(id: string) {
+      attachedId = id;
       return "session-1";
     }
+    async enableDomains() {}
     async navigate(_session: string, url: string) {
       navigations.push(url);
       if (navigationLands) {
-        cdpTargets = [
-          ...cdpTargets.filter((t) => t.type !== "page"),
-          { id: "navigated", type: "page", url, title: "Landed" },
-        ];
+        cdpTargets = cdpTargets.map((t) =>
+          t.id === attachedId ? { ...t, url, title: "Landed" } : t,
+        );
       }
     }
     async getPageMeta() {
@@ -581,4 +583,36 @@ describe("popup-as-tab window sizing", () => {
       clamped: true,
     });
   });
+});
+
+describe("open never calls a tab that stayed put navigated", () => {
+  it("reports a reused new-tab page that never left chrome://newtab as not navigated", async () => {
+    const p = project({ manifest_version: 3, name: "F" });
+    cdpTargets = [{ id: "ntp", type: "page", url: "chrome://newtab/" }];
+    navigationLands = false;
+
+    const result = JSON.parse(
+      await open.handler({ projectPath: p.dir, url: "https://example.com/file.zip" }),
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.status).toBe("navigate-failed");
+    expect(result.value?.redirected).toBeUndefined();
+  }, 15_000);
+
+  it("does not let a tab already at a sibling path answer for the one navigated", async () => {
+    const p = project({ manifest_version: 3, name: "F" });
+    cdpTargets = [
+      { id: "other", type: "page", url: "https://example.com/other" },
+      { id: "blank", type: "page", url: "about:blank" },
+    ];
+    navigationLands = false;
+
+    const result = JSON.parse(
+      await open.handler({ projectPath: p.dir, url: "https://example.com" }),
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.status).toBe("navigate-failed");
+  }, 15_000);
 });

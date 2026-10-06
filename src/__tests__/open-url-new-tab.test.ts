@@ -4,19 +4,30 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { envelope } from "../lib/envelope";
+import { actFrame, tabRows } from "./fixtures/engine-answers";
 
 const actCalls: string[][] = [];
+let lastTabId = 9;
+let lastNavigateUrl = "";
+let attachedId = "";
 vi.mock("../lib/act", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../lib/act")>();
   return {
     ...actual,
     runActVerb: async (cli: string[]) => {
       actCalls.push(cli);
+      if (cli.includes("--list-tabs")) {
+        return JSON.stringify(
+          actFrame("inspect", tabRows([{ id: lastTabId, url: lastNavigateUrl, title: "Landed" }])),
+        );
+      }
+      lastTabId = cli.includes("--tab") ? Number(cli[cli.indexOf("--tab") + 1]) : 9;
+      lastNavigateUrl = String(cli[1] ?? "");
       return envelope({
         ok: true,
         command: "extension_open",
         status: "ok",
-        value: { tabId: cli.includes("--tab") ? Number(cli[cli.indexOf("--tab") + 1]) : 9, created: cli.includes("--new-tab") },
+        value: { tabId: lastTabId, created: cli.includes("--new-tab") },
       });
     },
   };
@@ -39,12 +50,14 @@ vi.mock("../lib/cdp", () => {
       return "ws://127.0.0.1:9222/devtools/browser/x";
     }
     async connect() {}
-    async attachToTarget() {
+    async attachToTarget(id: string) {
+      attachedId = id;
       return "session-1";
     }
+    async enableDomains() {}
     async navigate(_s: string, url: string) {
       navigations.push(url);
-      cdpTargets = [...cdpTargets.filter((t) => t.id !== "reused"), { id: "reused", type: "page", url }];
+      cdpTargets = cdpTargets.map((t) => (t.id === attachedId ? { ...t, url } : t));
     }
     async evaluate() {
       return null;
@@ -152,7 +165,7 @@ describe("extension_open with a url never takes over a page the agent was watchi
     );
 
     expect(result.ok).toBe(true);
-    expect(actCalls).toHaveLength(1);
+    expect(actCalls.filter((c) => c[0] === "navigate")).toHaveLength(1);
     expect(actCalls[0].slice(0, 2)).toEqual(["navigate", "https://example.com/next"]);
     expect(actCalls[0]).toContain("--tab");
     expect(actCalls[0][actCalls[0].indexOf("--tab") + 1]).toBe("7");
@@ -170,11 +183,12 @@ describe("extension_open with a url never takes over a page the agent was watchi
       await open.handler({ projectPath: p.dir, browser: "firefox", url: "pages/options.html" }),
     );
 
+    const navigates = actCalls.filter((c) => c[0] === "navigate");
     expect(web.ok).toBe(true);
-    expect(actCalls[0].slice(0, 2)).toEqual(["navigate", "https://example.com/"]);
-    expect(actCalls[0]).toContain("--new-tab");
+    expect(navigates[0].slice(0, 2)).toEqual(["navigate", "https://example.com/"]);
+    expect(navigates[0]).toContain("--new-tab");
     expect(relative.ok).toBe(true);
-    expect(actCalls[1][1]).toBe("moz-extension://abc/pages/options.html");
+    expect(navigates[1][1]).toBe("moz-extension://abc/pages/options.html");
     expect(web.value.created).toBe(true);
   });
 });

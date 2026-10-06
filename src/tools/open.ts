@@ -50,11 +50,20 @@ type SettledTarget = {
   redirectedFrom?: string;
 };
 
+/* @invariant THE TARGET THAT WAS NAVIGATED IS THE ONE THAT ANSWERS. The poll
+   used to take the FIRST page whose url started with the wanted one, so a tab
+   already at a sibling path answered for a new navigation, and it called any
+   url the navigated tab showed a redirect, including the url it had BEFORE
+   (a reused new-tab page sent to a download or a hanging server stayed on
+   chrome://newtab and was reported navigated there). With a known target
+   only that target is read; its pre-navigation url is never a landing
+  . */
 async function pollForTarget(
   port: number,
   url: string,
   budgetMs: number,
   navigatedTargetId?: string,
+  previousUrl?: string,
 ): Promise<SettledTarget | null> {
   const deadline = Date.now() + budgetMs;
   const wanted = url.replace(/#.*$/, "");
@@ -65,15 +74,16 @@ async function pollForTarget(
       for (const t of targets) {
         const tUrl = String(t.url ?? "");
         if (t.type !== "page") continue;
+        if (navigatedTargetId && String(t.id) !== navigatedTargetId) continue;
         const title = typeof t.title === "string" ? t.title : undefined;
         if (tUrl === wanted || tUrl.startsWith(wanted)) {
           return { id: String(t.id), url: tUrl, title };
         }
         if (
           navigatedTargetId &&
-          String(t.id) === navigatedTargetId &&
           tUrl &&
           tUrl !== "about:blank" &&
+          tUrl !== previousUrl &&
           !tUrl.startsWith("chrome-error://")
         ) {
           redirected = { id: String(t.id), url: tUrl, title, redirectedFrom: url };
@@ -96,17 +106,19 @@ async function pollForTarget(
 async function landedOnErrorPage(
   port: number,
   targetId: string,
-): Promise<{ url: string; title?: string } | null> {
+): Promise<{ url: string; title?: string } | null | "unreadable"> {
   await new Promise((r) => setTimeout(r, 400));
   try {
     const target = (await CDPClient.discoverTargets(port)).find(
       (t) => String(t.id) === targetId,
     );
+    if (!target) return "unreadable";
     const url = String(target?.url ?? "");
     if (/^(chrome|edge)-error:\/\//.test(url)) {
       return { url, title: typeof target?.title === "string" ? target.title : undefined };
     }
   } catch {
+    return "unreadable";
   }
   return null;
 }
@@ -233,10 +245,13 @@ export async function navigateToUrl(
       isDisposableTab(String(t.url ?? ""), url, reuse),
     );
     let navigatedTargetId: string | undefined;
+    let previousUrl: string | undefined;
     let openedNewTab = false;
     if (reusable) {
       navigatedTargetId = String(reusable.id);
+      previousUrl = String(reusable.url ?? "");
       const sessionId = await cdp.attachToTarget(navigatedTargetId);
+      await cdp.enableDomains(sessionId);
       await cdp.navigate(sessionId, url);
     } else {
       const created = (await cdp
@@ -254,14 +269,20 @@ export async function navigateToUrl(
       url,
       6000,
       navigatedTargetId,
+      previousUrl,
     );
     /* @invariant A target can match the requested url for an instant and then
        be swapped to the browser's own error page: Edge answered a blocked
        extension page that way and the tool reported it navigated. The landed target is read once more after it settles, and
        an error page is a refusal with the browser's title as the reason. */
-    const blocked = settled
+    const blockedRead = settled
       ? await landedOnErrorPage(resolved.port, settled.id)
       : null;
+    const blocked = blockedRead === "unreadable" ? null : blockedRead;
+    const unreadableNote =
+      blockedRead === "unreadable"
+        ? "The landed page could not be re-read after it settled, so whether the browser swapped it for its own error page was not checked."
+        : null;
     if (blocked) {
       return envelope({
         ok: false,
@@ -317,6 +338,7 @@ export async function navigateToUrl(
       hint:
         "Inspect it with extension_dom_snapshot or extension_inspect using url (context: 'page'), they resolve the tab themselves. " +
         "`target.targetId` is a CDP target id, NOT a chrome.tabs id: do not pass it as `tab`. If you need a numeric tab id, call extension_dom_snapshot with listTabs: true.",
+      warnings: [unreadableNote],
     });
   } catch (e) {
     return envelope({

@@ -6,6 +6,7 @@ import path from "node:path";
 import { envelope } from "../lib/envelope";
 
 const actCalls: string[][] = [];
+let attachedId = "";
 let engineReply: (cli: string[]) => string = (cli) =>
   envelope({ ok: true, command: "extension_open", status: "ok", value: { opened: cli[1] } });
 vi.mock("../lib/act", async (importOriginal) => {
@@ -58,11 +59,13 @@ vi.mock("../lib/cdp", () => {
       return browserUserAgent;
     }
     async connect() {}
-    async attachToTarget() {
+    async attachToTarget(id: string) {
+      attachedId = id;
       return "session-1";
     }
+    async enableDomains() {}
     async navigate(_s: string, url: string) {
-      cdpTargets = [...cdpTargets.filter((t) => t.id !== "reused"), { id: "reused", type: "page", url }];
+      cdpTargets = cdpTargets.map((t) => (t.id === attachedId ? { ...t, url } : t));
     }
     async evaluate() {
       return null;

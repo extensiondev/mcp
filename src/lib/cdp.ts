@@ -132,7 +132,16 @@ export class CDPClient extends CDPConnection {
   }
 
   async navigate(sessionId: string, url: string): Promise<void> {
-    await this.sendCommand("Page.navigate", { url }, sessionId);
+    /* @invariant Page.navigate answers `errorText` (net::ERR_NAME_NOT_RESOLVED,
+       net::ERR_CONNECTION_REFUSED, net::ERR_BLOCKED_BY_CLIENT) without a
+       protocol error. Dropping it called a refused navigation navigated
+      . */
+    const reply = (await this.sendCommand("Page.navigate", { url }, sessionId)) as
+      | { errorText?: unknown }
+      | undefined;
+    if (typeof reply?.errorText === "string" && reply.errorText) {
+      throw new Error(`The browser refused to navigate to ${url}: ${reply.errorText}`);
+    }
     await new Promise<void>((resolve) => {
       const timeout = setTimeout(resolve, 5000);
 

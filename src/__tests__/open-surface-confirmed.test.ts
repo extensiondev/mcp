@@ -38,6 +38,7 @@ vi.mock("../lib/cdp", () => {
     async attachToTarget() {
       return "session-1";
     }
+    async enableDomains() {}
     async navigate() {}
     async sendCommand() {
       return {};

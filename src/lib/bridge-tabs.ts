@@ -94,6 +94,31 @@ export async function pollForBridgeTab(
   }
 }
 
+async function pollForBridgeTabById(
+  projectPath: string,
+  browser: string,
+  url: string,
+  tabId: number | null,
+  budgetMs: number,
+): Promise<{ tab: BridgeTab | null; seen: BridgeTab | null }> {
+  const deadline = Date.now() + budgetMs;
+  const wanted = url.replace(/#.*$/, "");
+  let seen: BridgeTab | null = null;
+  for (;;) {
+    const listed = await listBridgeTabs(projectPath, browser);
+    if ("tabs" in listed) {
+      const candidates =
+        tabId != null ? listed.tabs.filter((t) => t.tabId === tabId) : listed.tabs;
+      for (const t of candidates) {
+        if (t.url === wanted || t.url.startsWith(wanted)) return { tab: t, seen: t };
+        if (tabId != null) seen = t;
+      }
+    }
+    if (Date.now() >= deadline) return { tab: null, seen };
+    await new Promise((r) => setTimeout(r, 250));
+  }
+}
+
 /* @invariant The engine's own `navigate` verb is asked first. It is a static
  * tabs call inside the extension, so it works where an MV3 background refuses
  * eval, which is every Safari session and any Chromium build with a strict
@@ -155,17 +180,42 @@ export async function navigateToUrlViaBridge(
       verbFrame.value && typeof verbFrame.value === "object"
         ? verbFrame.value
         : {};
+    const tabId = typeof value.tabId === "number" ? value.tabId : null;
+    /* @invariant THE VERB'S ANSWER IS THE REQUEST, NOT THE LANDING. The
+       engine replies from the tabs callback with the url it was ASKED for,
+       so the tab is read back until it reports that url.
+       A tab that never does is not "navigated"; what it shows is reported. */
+    const landed = await pollForBridgeTabById(projectPath, browser, url, tabId, 3000);
+    if (!landed.tab) {
+      return envelope({
+        ok: false,
+        command: tool,
+        status: "navigation-unconfirmed",
+        error: {
+          code: "E_NAVIGATE_FAILED",
+          name: "NavigationUnconfirmed",
+          message: `The engine accepted the navigation to ${url}${
+            tabId != null ? ` in tab ${tabId}` : ""
+          }, but no tab reported that url afterwards${
+            landed.seen ? ` (the tab shows ${landed.seen.url || "no url"}${landed.seen.title ? `, "${landed.seen.title}"` : ""})` : ""
+          }.`,
+        },
+        value: { navigated: url, tabId, created: value.created === true, via: "navigate", ...(landed.seen ? { tab: landed.seen } : {}) },
+        hint: "Read the tab with extension_dom_snapshot (listTabs: true) to see what it shows; a url nothing serves, or a document the extension does not ship, lands on the browser's error page.",
+      });
+    }
     return envelope({
       ok: true,
       command: tool,
       status: "navigated",
       value: {
         navigated: url,
-        tabId: typeof value.tabId === "number" ? value.tabId : null,
+        tabId: landed.tab.tabId ?? tabId,
         created: value.created === true,
         via: "navigate",
+        tab: landed.tab,
       },
-      hint: "The tab now shows this page. Content scripts that match it ran on load; read them with extension_eval (context: 'content', url) or extension_assert content-script-injected.",
+      hint: `The tab reports ${landed.tab.url}${landed.tab.title ? ` ("${landed.tab.title}")` : ""}. Whether the page loaded or shows the browser's error page is in that title; read it with extension_inspect (url) to be sure. Content scripts that match it run on load; read them with extension_eval (context: 'content', url) or extension_assert content-script-injected.`,
     });
   }
   return navigateToUrlViaBackgroundEval(projectPath, browser, url, timeout, tool);

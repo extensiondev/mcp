@@ -66,6 +66,7 @@ vi.mock("../lib/cdp", () => {
     async attachToTarget(targetId: string) {
       return `session-${targetId}`;
     }
+    async enableDomains() {}
     async navigate(_session: string, url: string) {
       cdpTargets = [
         ...cdpTargets,
