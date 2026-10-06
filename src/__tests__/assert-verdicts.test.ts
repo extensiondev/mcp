@@ -215,7 +215,7 @@ describe("background-worker-booted", () => {
     ];
     const { check } = await assertOnce({ assert: "background-worker-booted" });
     expect(check.outcome).toBe("inconclusive");
-    expect(check.detail).toContain("not loaded");
+    expect(check.detail).toContain("no other target of this extension");
   });
 
   /* @invariant The muddy middle. A loaded extension with no worker target is
