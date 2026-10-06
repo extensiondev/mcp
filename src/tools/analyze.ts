@@ -299,6 +299,10 @@ export async function handler(args: {
       noPromoAssets: !files.some((f) => PROMO_RE.test(f.path)),
       under10MB: totalSize - archiveSize < 10 * 1024 * 1024,
     },
+    storeReadinessNotes: {
+      under10MB: "this server's own 10 MB sanity threshold, not a store limit (the stores publish their own, larger caps)",
+      hasIcons: "a file whose name contains 'icon' under the image types this server recognises",
+    },
   };
 
   return envelope({

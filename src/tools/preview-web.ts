@@ -246,6 +246,7 @@ async function buildShare(
       : null;
 
   const sharedAt = new Date().toISOString();
+  const sharedAtFrom = "this machine's clock at the moment the platform answered, not the platform's record";
   const record = recordSharedPreview(projectPath, {
     sharedAt,
     previewUrl: result.data.previewUrl,
@@ -273,6 +274,7 @@ async function buildShare(
     serves: "uploaded-local-build",
     localBuildUploaded: true,
     allowance: spendNarration({ what: "This share upload", body: result.body }),
+    sharedAtFrom,
     ...(browserCheck
       ? browserCheck.held
         ? { browserLoadable: null, heldFromPublic: true, browserCheck }
@@ -649,7 +651,8 @@ export async function handler(args: {
       value: {
         ...result,
         hostReachable: true,
-        previewLoadable: true,
+        previewLoadable: fileCount > 0,
+        ...(fileCount > 0 ? {} : { previewLoadableNote: "the host answered this build's name and version but listed no files, so nothing is known to render; previewLoadable stays false" }),
         /* @invariant
          * previewLoadable says what this probe proved, and no more.
          *

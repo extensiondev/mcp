@@ -118,6 +118,6 @@ export async function handler(args: {
     value: { query, results },
     ...(results.length
       ? {}
-      : { hint: "No page matched. Try fewer or different words, or browse https://extension.js.org/docs." }),
+      : { hint: "No page matched. Try fewer or different words, or browse https://extension.js.org/docs. While the public hold is on, the platform filters its own platform pages out of these results server-side, so an extension.dev topic can be absent for that reason alone." }),
   });
 }

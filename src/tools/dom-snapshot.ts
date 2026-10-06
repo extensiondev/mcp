@@ -16,6 +16,7 @@ import {
   actFrameJson,
   patchValue,
   type ActArgs,
+  addWarning,
 } from "../lib/act";
 import { envelope } from "../lib/envelope";
 import { resolveSessionBrowser } from "../lib/session-browser";
@@ -462,6 +463,21 @@ export async function handler(
     patchValue(parsed, {
       resolvedTarget: { ...resolvedTarget, matchedBy: "tabUrl" },
     });
+    /* The target this server resolved and the document the snapshot reports
+       are compared, not assumed the same. */
+    const reported =
+      typeof parsed?.value?.meta?.url === "string"
+        ? parsed.value.meta.url
+        : typeof parsed?.value?.url === "string"
+          ? parsed.value.url
+          : null;
+    const resolvedUrl = typeof resolvedTarget.url === "string" ? resolvedTarget.url : null;
+    if (reported && resolvedUrl && reported.replace(/#.*$/, "") !== resolvedUrl.replace(/#.*$/, "")) {
+      addWarning(
+        parsed,
+        `The snapshot reports ${reported} while the target this server resolved was ${resolvedUrl}; the tab navigated between the two reads, and the values describe what the snapshot reports.`,
+      );
+    }
     return actFrameJson(parsed);
   } catch {
     return raw;

@@ -157,6 +157,22 @@ function fail(
   });
 }
 
+/* The health reading carries its own date (stores/health.json updatedAt);
+   "healthy" without it read as a fact about now. */
+function healthReadAtNote(doc: unknown): string {
+  const at = String((doc as { updatedAt?: unknown } | null)?.updatedAt ?? "").trim();
+  return at ? ` (as of ${at})` : " (the health reading carries no date)";
+}
+
+export function contradictoryRef(args: { workspace?: string; project?: string }): string | null {
+  const workspace = String(args.workspace ?? "").trim();
+  const project = String(args.project ?? "").trim();
+  if (!workspace || !project.includes("/")) return null;
+  const named = project.split("/")[0] ?? "";
+  if (named.toLowerCase() === workspace.toLowerCase()) return null;
+  return `workspace '${workspace}' and project '${project}' name different workspaces; pass one of them, or project as '<workspace>/<project>' alone.`;
+}
+
 export async function readStores(args: {
   workspace?: string;
   project?: string;
@@ -166,7 +182,8 @@ export async function readStores(args: {
   if (!ref) {
     return fail(
       "StoreStatusInputError",
-      "No project to inspect. Run extension_auth (action: login), which names the project, or pass workspace + project explicitly.",
+      contradictoryRef(args) ??
+        "No project to inspect. Run extension_auth (action: login), which names the project, or pass workspace + project explicitly.",
       "auth-required",
       "E_AUTH_REQUIRED",
     );
@@ -205,7 +222,7 @@ export async function readStores(args: {
   if (!healthRes.ok && !statusRes.ok && !submissionsRes.ok) {
     return fail(
       "StoreStatusNotFound",
-      `No store data on the registry for ${ref.workspace}/${ref.project} (${healthRes.message}). The project may have no stores configured yet, be private (private registry data needs a share token), or the workspace/project slugs may be wrong. Configure stores at ${consoleStoresUrl}/new; the console Submissions page is the authoritative view: ${consoleStoresUrl}`,
+      `No store data on the registry for ${ref.workspace}/${ref.project} (${healthRes.message}). The project may have no stores configured yet, be private (private registry data is read with a stored login for this project, which extension_auth mints), or the workspace/project slugs may be wrong. Configure stores at ${consoleStoresUrl}/new; the console Submissions page is the authoritative view: ${consoleStoresUrl}`,
       "unavailable",
       "E_PLATFORM",
       {
@@ -278,7 +295,7 @@ export async function readStores(args: {
         health.message || "no reason recorded"
       }) - fix them at ${consoleStoresUrl}/${store}`;
     } else {
-      head = `${store}: configured, credentials healthy`;
+      head = `${store}: configured, credentials healthy${healthReadAtNote(healthRes.ok ? healthRes.json : null)}`;
     }
     const tail: string[] = [];
     if (submission) {

@@ -11,6 +11,7 @@ import {
   stripTemplatePathPrefix,
   templateCatalogUrl,
   templateFileUrls,
+  resolvedTemplateCommit,
 } from "../lib/template-artifact-source";
 import { envelope } from "../lib/envelope";
 
@@ -59,12 +60,14 @@ export async function readTemplateSource(args: {
         code: "E_TEMPLATE_NOT_FOUND",
         message: `Template '${args.slug}' not found in the catalog`,
       },
-      hint: 'Use extension_templates with action: "list" to see available templates.',
+      hint: 'Use extension_templates with action: "list" to see available templates. The catalog this server read may be a cached or bundled copy that predates a rename; the list answer names its source.',
     });
   }
 
+  const sourceCommit = await resolvedTemplateCommit();
   const meta = {
     slug: template.slug,
+    sourceCommit,
     description: template.description,
     uiFramework: template.uiFramework || "vanilla",
     surfaces: template.surfaces,

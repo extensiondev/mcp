@@ -24,6 +24,7 @@ vi.mock("../lib/template-artifact-source", () => ({
   templateFileUrls: async (slug: string, file: string) => [
     `https://example.invalid/${slug}/${file}`,
   ],
+  resolvedTemplateCommit: async () => "abc1234",
 }));
 
 import { readTemplateSource } from "../tools/get-template-source";

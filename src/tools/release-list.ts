@@ -17,6 +17,7 @@ import {
   userlandProjectUrl,
 } from "../lib/registry";
 import { UserlandProjectPage } from "@extension.dev/urls/userland";
+import { contradictoryRef } from "./store-status";
 import { envelope, type ErrorCode } from "../lib/envelope";
 import { platformHoldEnvelope } from "../lib/platform-hold";
 
@@ -45,7 +46,8 @@ export async function readReleases(args: {
   if (!ref) {
     return fail(
       "ReleaseListInputError",
-      "No project to list. Run extension_auth (action: login), which names the project, or pass workspace + project explicitly.",
+      contradictoryRef(args) ??
+        "No project to list. Run extension_auth (action: login), which names the project, or pass workspace + project explicitly.",
       "auth-required",
       "E_AUTH_REQUIRED",
     );

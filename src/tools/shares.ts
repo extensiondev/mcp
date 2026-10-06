@@ -430,7 +430,7 @@ async function revokeShare(args: {
         message: supplied
           ? `The reference is malformed and nothing was sent to the platform: no share id could be read out of ${JSON.stringify(
               supplied.length > 200 ? `${supplied.slice(0, 200)}...` : supplied,
-            )}. A share id is gen_ followed by exactly 64 lowercase hex characters (32 on shares minted before 2026-07-30), and a url revokes only when it contains one whole. Check the ref for a copy-paste cut, or run action:"list" and copy the exact artifactId.`
+            )}. A share id is gen_ followed by exactly 64 lowercase hex characters (the platform's retired derived form was 32), and a url revokes only when it contains one whole. Check the ref for a copy-paste cut, or run action:"list" and copy the exact artifactId.`
           : 'Nothing to revoke. Pass artifactId (a gen_... id) or url (the previewUrl, zipUrl, viewUrl, or revokeUrl of the share). Run action:"list" to see both.',
       },
     });

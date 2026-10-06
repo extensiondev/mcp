@@ -192,7 +192,7 @@ export function reviewRisksReport(input: {
     if (!gecko || !("data_collection_permissions" in gecko)) {
       risks.push({
         code: "FIREFOX_DATA_COLLECTION_MISSING",
-        message: "The Firefox manifest has no browser_specific_settings.gecko.data_collection_permissions. AMO requires it for new add-ons and for updates.",
+        message: "The Firefox manifest has no browser_specific_settings.gecko.data_collection_permissions. AMO requires it for new add-ons and for updates of existing ones, and the platform's own Firefox preflight repeats the warning on every submission.",
         fix: 'Add "browser_specific_settings": { "gecko": { "data_collection_permissions": { "required": ["none"] } } }, or list what the extension does collect.',
       });
     }
