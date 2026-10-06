@@ -73,6 +73,7 @@ export interface ListedArtifact {
 
 export interface ArtifactListing {
   artifacts: ListedArtifact[];
+  malformedRows?: number;
   count: number;
   matched: number;
   limit: number;
@@ -238,13 +239,26 @@ export async function listArtifacts(options: {
     };
   }
 
-  const artifacts = Array.isArray(data.artifacts)
-    ? (data.artifacts as ListedArtifact[]).map((artifact) =>
-        artifact && typeof artifact.revokeUrl === "string"
-          ? { ...artifact, revokeUrl: wwwRevokeUrl(artifact.revokeUrl) }
-          : artifact,
-      )
-    : [];
+  /* @invariant A LISTING WITHOUT ITS LIST IS NOT ZERO SHARES, and a row
+     without an id is not a share. */
+  if (!Array.isArray(data.artifacts)) {
+    return {
+      ok: false,
+      error: {
+        name: "SharesListError",
+        status: res.status,
+        message: `Listing shares answered ${res.status} without an artifacts list, so which shares exist is unknown.`,
+      },
+    };
+  }
+  const rows = data.artifacts as ListedArtifact[];
+  const valid = rows.filter((artifact) => artifact && typeof (artifact as { artifactId?: unknown }).artifactId === "string");
+  const malformedRows = rows.length - valid.length;
+  const artifacts = valid.map((artifact) =>
+    typeof artifact.revokeUrl === "string"
+      ? { ...artifact, revokeUrl: wwwRevokeUrl(artifact.revokeUrl) }
+      : artifact,
+  );
   const num = (value: unknown, fallback: number): number =>
     typeof value === "number" && Number.isFinite(value) ? value : fallback;
 
@@ -252,6 +266,7 @@ export async function listArtifacts(options: {
     ok: true,
     data: {
       artifacts,
+      ...(malformedRows ? { malformedRows } : {}),
       count: num(data.count, artifacts.length),
       matched: num(data.matched, artifacts.length),
       limit: num(data.limit, artifacts.length),

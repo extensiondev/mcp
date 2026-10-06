@@ -15,6 +15,9 @@ import {
   registryFileUrl,
   resolveProjectRef,
   userlandProjectUrl,
+  requireShape,
+  channelsShapeProblem,
+  buildIndexShapeProblem,
 } from "../lib/registry";
 import { UserlandProjectPage } from "@extension.dev/urls/userland";
 import { contradictoryRef } from "./store-status";
@@ -57,11 +60,13 @@ export async function readReleases(args: {
   const metaUrl = registryFileUrl(ref, "meta.json");
   const buildsUrl = registryFileUrl(ref, "builds/index.json");
 
-  const [channelsRes, metaRes, buildsRes] = await Promise.all([
+  const [channelsRaw, metaRes, buildsRaw] = await Promise.all([
     fetchRegistryJson(channelsUrl, fetch, { ref, api: args.api }),
     fetchRegistryJson(metaUrl, fetch, { ref, api: args.api }),
     fetchRegistryJson(buildsUrl, fetch, { ref, api: args.api }),
   ]);
+  const channelsRes = requireShape(channelsRaw, channelsShapeProblem);
+  const buildsRes = requireShape(buildsRaw, buildIndexShapeProblem);
 
   const buildsPageUrl = consoleProjectUrl(ref, "builds", args.api);
 

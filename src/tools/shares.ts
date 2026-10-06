@@ -404,6 +404,9 @@ async function listShares(args: {
       "attribution.ownership says who the share belongs to and therefore who may revoke it: project means the owning workspace holds it and any member can pull it back, personal means one person holds it alone. attribution.credit names the publisher and is attribution only, granting and restricting nothing. A credit of \"CLI token ...\" means the platform could not resolve which human minted that token, and a credit of \"not recorded\" means it never knew; neither is a name, and neither should be reported as one.",
       handsOutAZip ? ZIP_URL_REDIRECT_NOTE : null,
       truncatedNote,
+      listing.data.malformedRows
+        ? `${listing.data.malformedRows} row(s) of the platform's listing carried no artifact id and were left out, so the list may be short by that many.`
+        : null,
     ],
   });
 }
@@ -487,7 +490,9 @@ async function revokeShare(args: {
     : undefined;
   const entry = local ? localIndex(local.entries).get(ref) : undefined;
   const recordNote = local
-    ? entry
+    ? local.unreadable
+      ? `${local.path} exists but could not be parsed, so whether this project recorded the share is unknown.`
+      : entry
       ? `${local.path} still lists this share as its own append-only history and was not rewritten, so the entry stays with its original sharedAt. The platform is the truth for whether a link resolves.`
       : `${local.path} has no entry for this share, so it was made from another machine or another checkout.`
     : undefined;

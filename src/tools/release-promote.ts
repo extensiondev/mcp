@@ -32,6 +32,7 @@ import {
   parseChannels,
   registryFileUrl,
   userlandProjectUrl,
+  channelsShapeProblem,
 } from "../lib/registry";
 
 export const schema = {
@@ -237,7 +238,7 @@ export async function handler(args: {
           api: args.api,
         });
         if (channelsRes.ok) {
-          const rows = parseChannels(channelsRes.json).filter((c) => c.sha);
+          const rows = channelsShapeProblem(channelsRes.json) ? [] : parseChannels(channelsRes.json).filter((c) => c.sha);
           enrich.validChannelShas = Object.fromEntries(
             rows.map((c) => [c.channel, c.sha]),
           );

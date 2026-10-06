@@ -101,6 +101,16 @@ export interface LoginConfig {
   batch: BatchCapability | null;
 }
 
+function readJsonObject(text: string): { value: Record<string, unknown> } | { problem: string } {
+  try {
+    const parsed = JSON.parse(text) as unknown;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return { problem: "not a JSON object" };
+    return { value: parsed as Record<string, unknown> };
+  } catch (err) {
+    return { problem: err instanceof Error ? err.message : String(err) };
+  }
+}
+
 export async function fetchLoginConfig(
   apiBase: string,
   fetchImpl: FetchImpl = fetch,
@@ -113,7 +123,16 @@ export async function fetchLoginConfig(
       `Could not fetch login config from ${apiBase} (${res.status}).`,
     );
   }
-  const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+  /* @invariant AN UNREADABLE CONFIG IS NOT A PLATFORM THAT LACKS BATCH. A
+     body that did not parse used to become {} and read as
+     batch-unsupported, stated as a fact about the platform. */
+  const read = readJsonObject(await res.text());
+  if ("problem" in read) {
+    throw new Error(
+      `The login config at ${apiBase}/api/cli/login/config answered ${res.status} but could not be read (${read.problem}), so what this platform supports is unknown.`,
+    );
+  }
+  const data = read.value;
   return {
     deviceCodeUrl: String(data.deviceCodeUrl || "/api/cli/device/code"),
     deviceTokenUrl: String(data.deviceTokenUrl || "/api/cli/device/token"),

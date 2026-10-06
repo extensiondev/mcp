@@ -18,6 +18,7 @@ import {
   isSuccessfulBuild,
   parseBuildIndex,
   registryFileUrl,
+  buildIndexShapeProblem,
 } from "../lib/registry";
 
 export const schema = {
@@ -207,7 +208,9 @@ export async function handler(args: {
       ref,
       api: args.api,
     });
-    if (buildsRes.ok) {
+    if (buildsRes.ok && buildIndexShapeProblem(buildsRes.json)) {
+      buildNote = `The project's build index at ${buildsUrl} answered but ${buildIndexShapeProblem(buildsRes.json)}, so buildSha, version and builtAt were not filled in from it.`;
+    } else if (buildsRes.ok) {
       const items = parseBuildIndex(buildsRes.json);
       if (args.buildSha) {
         const pin = String(args.buildSha).toLowerCase();
@@ -240,17 +243,26 @@ export async function handler(args: {
           .sort((a, b) =>
             String(b.timestamp ?? "").localeCompare(String(a.timestamp ?? "")),
           )[0];
-        if (newestSuccess) {
-          if (data.buildSha == null) data.buildSha = newestSuccess.sha;
-          if (data.builtAt == null && newestSuccess.timestamp)
-            data.builtAt = newestSuccess.timestamp;
-          if (data.version == null && newestSuccess.version)
-            data.version = newestSuccess.version;
-          if (data.channel == null && newestSuccess.channel)
-            data.channel = newestSuccess.channel;
+        /* @invariant THE PLATFORM'S SHA WINS. When the platform names the
+           build it served, the index row is matched to that sha; the newest
+           build fills in only when the platform named none, and then it is
+           said to be a guess. */
+        const platformSha = typeof data.buildSha === "string" && data.buildSha ? String(data.buildSha).toLowerCase() : null;
+        const served = platformSha
+          ? items.find((item) => item.sha.toLowerCase().startsWith(platformSha) || platformSha.startsWith(item.sha.toLowerCase()))
+          : newestSuccess;
+        if (served) {
+          if (data.buildSha == null) data.buildSha = served.sha;
+          if (data.builtAt == null && served.timestamp) data.builtAt = served.timestamp;
+          if (data.version == null && served.version) data.version = served.version;
+          if (data.channel == null && served.channel) data.channel = served.channel;
           data.registryUrl = buildsUrl;
-          buildNote =
-            "buildSha/builtAt/version describe the newest successful build in the project's registry index, which is what the share link serves. Pin buildSha to serve a specific build.";
+          buildNote = platformSha
+            ? `builtAt/version are read from the index row of build ${served.sha}, the build the platform says the link serves.`
+            : "The platform named no build for this link; buildSha/builtAt/version describe the newest successful build in the project's registry index, which is what an unpinned link is expected to serve. Pin buildSha to serve a specific build.";
+        } else if (platformSha) {
+          data.registryUrl = buildsUrl;
+          buildNote = `The platform says the link serves build ${data.buildSha}, which the project's registry index does not list, so builtAt and version were not filled in from another build.`;
         }
       }
     }

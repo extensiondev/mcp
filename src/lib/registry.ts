@@ -149,6 +149,29 @@ export interface RegistryFetchRefusal {
 
 export type RegistryFetchResult<T> = { ok: true; json: T } | RegistryFetchRefusal;
 
+/* @invariant A FILE OF THE WRONG SHAPE IS UNREADABLE, NOT EMPTY. A 200 whose
+   body is not the channels map or the build index used to parse to [] and
+   read as "nothing recorded". */
+export function channelsShapeProblem(json: unknown): string | null {
+  if (!json || typeof json !== "object" || Array.isArray(json)) return "the body is not a channels map";
+  const bad = Object.entries(json as Record<string, unknown>).find(([, row]) => !row || typeof row !== "object");
+  return bad ? `channel ${bad[0]} is not an object` : null;
+}
+
+export function buildIndexShapeProblem(json: unknown): string | null {
+  const items = (json as { items?: unknown } | null)?.items;
+  return Array.isArray(items) ? null : "the body has no items list";
+}
+
+export function requireShape<T>(
+  read: RegistryFetchResult<T>,
+  problem: (json: unknown) => string | null,
+): RegistryFetchResult<T> {
+  if (!read.ok) return read;
+  const why = problem(read.json);
+  return why ? { ok: false, message: `answered 200 but ${why}` } : read;
+}
+
 async function readJson<T>(
   url: string,
   res: Response,

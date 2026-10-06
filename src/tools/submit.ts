@@ -30,6 +30,7 @@ import {
   fetchRegistryJson,
   parseChannels,
   registryFileUrl,
+  channelsShapeProblem,
 } from "../lib/registry";
 
 export function storeMdWarnings(browsers: string[], cwd: string): string[] {
@@ -400,7 +401,7 @@ export async function handler(args: SubmitToolArgs): Promise<string> {
       } else {
         healthUnreadable = healthRes.message;
       }
-      if (channelsRes.ok) channelRows = parseChannels(channelsRes.json);
+      if (channelsRes.ok && !channelsShapeProblem(channelsRes.json)) channelRows = parseChannels(channelsRes.json);
     } else {
       healthUnreadable =
         "no stored workspace/project to look up (run extension_auth)";
