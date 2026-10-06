@@ -67,9 +67,14 @@ export function readSessionMarkers(): { markers: ProcessInfo[]; unreadable: stri
     files = fs.readdirSync(markerDir());
   } catch (err) {
     const code = (err as { code?: string })?.code;
+    /* @invariant A missing directory is the one read error that means "none
+       yet". Windows answers ENOENT, not ENOTDIR, for a directory path that is
+       really a file, so ENOENT counts as empty only when nothing is there at
+       all; otherwise the read failed and says so. */
+    const absent = code === "ENOENT" && !fs.existsSync(markerDir());
     return {
       markers: [],
-      unreadable: code === "ENOENT" ? null : `${markerDir()}: ${err instanceof Error ? err.message : String(err)}`,
+      unreadable: absent ? null : `${markerDir()}: ${err instanceof Error ? err.message : String(err)}`,
     };
   }
   const out: ProcessInfo[] = [];

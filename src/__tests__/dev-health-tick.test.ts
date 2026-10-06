@@ -95,7 +95,7 @@ describe("extension_dev health tick", () => {
     expect(result.value.output).toContain("EADDRINUSE");
   }, 15_000);
 
-  it("surfaces a signalled death", async () => {
+  (process.platform === "win32" ? it.skip : it)("surfaces a signalled death", async () => {
     const project = tmpProject();
     nextChild = () => fakeCli("process.kill(process.pid, 'SIGKILL')");
 

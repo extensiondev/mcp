@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { credentialsPath } from "../lib/credentials";
 
 import {
   identityHeaders,
@@ -51,7 +52,7 @@ describe("session identity", () => {
     const id = resolveInstallId();
     expect(id).toMatch(HEX_128);
     const file = installIdentityPath();
-    expect(file.startsWith(tmp)).toBe(true);
+    expect(path.dirname(file)).toBe(path.dirname(credentialsPath()));
     const stored = JSON.parse(fs.readFileSync(file, "utf8"));
     expect(stored.version).toBe(1);
     expect(stored.installId).toBe(id);
@@ -151,6 +152,10 @@ describe("session identity", () => {
 
   it("returns no headers rather than throwing when the home directory is gone", () => {
     delete process.env.XDG_CONFIG_HOME;
+    const appData = process.env.APPDATA;
+    const localAppData = process.env.LOCALAPPDATA;
+    delete process.env.APPDATA;
+    delete process.env.LOCALAPPDATA;
     const homedir = os.homedir;
     (os as { homedir: () => string }).homedir = () => {
       throw new Error("no home on this host");
@@ -160,6 +165,8 @@ describe("session identity", () => {
       expect(identityHeaders("extension_publish")).toEqual({});
     } finally {
       (os as { homedir: () => string }).homedir = homedir;
+      if (appData !== undefined) process.env.APPDATA = appData;
+      if (localAppData !== undefined) process.env.LOCALAPPDATA = localAppData;
     }
   });
 

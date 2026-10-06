@@ -1087,7 +1087,7 @@ describe("extension_project_create with projects: an answer that proves nothing 
 
 describe("extension_project_create with projects: a created project keeps its row whatever fails after", () => {
   it("records every project as created when the login store cannot be written", async () => {
-    const file = path.join(tmp, "extension-dev", "auth.json");
+    const file = credentialsPath();
     fs.mkdirSync(path.dirname(file), { recursive: true });
     fs.writeFileSync(file, "{ not json");
     const h = harness({ token: [grant(SLUGS)] });

@@ -42,7 +42,7 @@ describe("parseSafariDriverHelp", () => {
 });
 
 describe("safariDriverCandidates", () => {
-  it("prefers the driver bundled beside the Safari binary, then the system one", () => {
+  (process.platform === "win32" ? it.skip : it)("prefers the driver bundled beside the Safari binary, then the system one", () => {
     expect(
       safariDriverCandidates(
         "/Applications/Safari Technology Preview.app/Contents/MacOS/Safari Technology Preview",

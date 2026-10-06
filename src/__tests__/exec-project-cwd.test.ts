@@ -18,6 +18,9 @@ function fakeProject(binScript: string): string {
   const bin = path.join(binDir, "extension");
   fs.writeFileSync(bin, `#!/bin/sh\n${binScript}\n`);
   fs.chmodSync(bin, 0o755);
+  if (process.platform === "win32") {
+    fs.writeFileSync(path.join(binDir, "extension.cmd"), "@echo off\r\n");
+  }
   cleanups.push(() => fs.rmSync(dir, { recursive: true, force: true }));
   return dir;
 }
