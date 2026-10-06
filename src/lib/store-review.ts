@@ -258,9 +258,6 @@ export function hasSourceMaps(files: Array<{ path: string }>): boolean {
   return files.some((f) => f.path.endsWith(".map"));
 }
 
-/* Permissions a manifest key uses on its own, with no script call to find
-  : sidePanel through side_panel, declarativeNetRequest
-   through static rule_resources. */
 const MANIFEST_KEY_USES: Record<string, (manifest: Record<string, unknown>) => boolean> = {
   sidePanel: (m) => m.side_panel != null,
   declarativeNetRequest: (m) => Array.isArray((m.declarative_net_request as { rule_resources?: unknown } | undefined)?.rule_resources),

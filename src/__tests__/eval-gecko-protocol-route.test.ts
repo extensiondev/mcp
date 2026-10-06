@@ -300,7 +300,6 @@ describe("a page inside the extension that the manifest declares as no surface",
     });
   });
 
-  /*. */
   it("says the debugger port did not answer instead of 'matches none of the surface documents'", async () => {
     const dir = project(MV3);
     openTabs = [{ actor: "tab1", url: `${BASE}pages/panel.html`, title: "Panel" } as RdpTab];

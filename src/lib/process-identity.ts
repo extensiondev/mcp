@@ -28,8 +28,6 @@ export const PLAUSIBLE_SESSION_BINARY =
   /chrom|edge|brave|opera|vivaldi|yandex|firefox|waterfox|librewolf|zen|floorp|safari|node|electron|extension/i;
 
 export function processCommand(pid: number): string {
-  /* Linux ps -o comm= reports the thread name (Node stamps "MainThread"),
-     not the binary, so argv[0] from /proc must win where it exists. */
   try {
     const cmdline = fs.readFileSync(`/proc/${pid}/cmdline`, "utf8");
     const argv0 = cmdline.split("\0")[0];

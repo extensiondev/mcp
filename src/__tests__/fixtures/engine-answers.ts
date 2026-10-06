@@ -14,7 +14,7 @@ import path from "node:path";
 
 type Body = Record<string, unknown>;
 
-/* What `extension build` leaves on disk on exit 0: dist/<browser>/ with the
+/* @invariant What `extension build` leaves on disk on exit 0: dist/<browser>/ with the
  * manifest and the files it references (modelled as a copy of src/), newer
  * than the build's start. A test fake that returns exit 0 calls this from
  * INSIDE the fake, the way the engine writes during the run; a dist seeded
@@ -47,7 +47,7 @@ export function browserFromCliArgs(args: string[]): string {
 
 const NOW = "2026-10-05T12:00:00.000Z";
 
-/* extension-develop/dist/832~0.mjs, the `base` object and `writeReady` of the
+/* @invariant extension-develop/dist/832~0.mjs, the `base` object and `writeReady` of the
  * ready-contract writer: the fields every dev session stamps once it is
  * ready and the browser launcher has stamped its ports. `start` and
  * `preview` share the base with `port: null`, `controlPort: null` and no
@@ -91,7 +91,7 @@ export function readyContract(
   return { ...base, ...overrides };
 }
 
-/* The launcher's stamps on a dev contract once the browser is up and the
+/* @invariant The launcher's stamps on a dev contract once the browser is up and the
  * executor has connected (CLI: the ready.json stamps after launch). */
 export function attachedDevContract(browser: string, overrides: Body = {}): Body {
   return readyContract("dev", browser, {
@@ -107,7 +107,7 @@ export function attachedDevContract(browser: string, overrides: Body = {}): Body
   });
 }
 
-/* A dev browser that died AFTER ready: the engine keeps `status: "ready"`,
+/* @invariant A dev browser that died AFTER ready: the engine keeps `status: "ready"`,
  * adds the exit stamps and flips `runtime` to "detached" while keeping
  * `executorAttachedAt` (832~0.mjs `writeReady`, the `sameRun` block). */
 export function browserExitedAfterReadyContract(browser: string, overrides: Body = {}): Body {
@@ -121,7 +121,7 @@ export function browserExitedAfterReadyContract(browser: string, overrides: Body
   });
 }
 
-/* `status: "error"` contracts, with the codes the writer stamps. */
+/* @invariant `status: "error"` contracts, with the codes the writer stamps. */
 export function errorContract(
   browser: string,
   code:
@@ -149,12 +149,12 @@ export function errorContract(
   });
 }
 
-/* extension-develop/dist/dev-server~0.mjs `LogsFileWriter.writeHeader`. */
+/* @invariant extension-develop/dist/dev-server~0.mjs `LogsFileWriter.writeHeader`. */
 export function logHeader(runId: string, rotatedFrom: string | null = null): Body {
   return { v: 1, type: "header", runId, startedAt: NOW, rotatedFrom };
 }
 
-/* The executor's console capture (rspack-config~0.mjs, the `send({type:
+/* @invariant The executor's console capture (rspack-config~0.mjs, the `send({type:
  * "log", event})` site): no `message` key, the parts are an array. */
 export function logEvent(
   context: string,
@@ -175,7 +175,7 @@ export function logEvent(
   };
 }
 
-/* `LogsFileWriter.maybeNoteDrops`. */
+/* @invariant `LogsFileWriter.maybeNoteDrops`. */
 export function logGap(dropped: number): Body {
   return { v: 1, type: "gap", reason: "disk_slow", dropped };
 }
@@ -187,7 +187,7 @@ export function logFile(runId: string, events: Body[], rotatedFrom: string | nul
     .concat("\n");
 }
 
-/* The CLI's act frame once the bridge answered (cli.cjs `runCommand`):
+/* @invariant The CLI's act frame once the bridge answered (cli.cjs `runCommand`):
  * `command` is overwritten by this package with the tool name afterwards. */
 export function actFrame(command: string, value: unknown, overrides: Body = {}): Body {
   return {
@@ -222,7 +222,7 @@ export function actFailure(
   };
 }
 
-/* A refusal the CLI makes before it reaches the bridge (cli.cjs `fail()`):
+/* @invariant A refusal the CLI makes before it reaches the bridge (cli.cjs `fail()`):
  * no `type`, `cmdId` or `engine`. */
 export function cliRefusal(command: string, code: string, message: string, hint?: string): Body {
   return {
@@ -236,7 +236,7 @@ export function cliRefusal(command: string, code: string, message: string, hint?
   };
 }
 
-/* The executor's reply to `tabs.query` behind `--list-tabs`
+/* @invariant The executor's reply to `tabs.query` behind `--list-tabs`
  * (rspack-config~0.mjs): a plain array, never `{tabs: [...]}`. */
 export function tabRows(
   rows: Array<{ id: number; url: string; title?: string; active?: boolean; windowId?: number }>,
@@ -250,7 +250,7 @@ export function tabRows(
   }));
 }
 
-/* extension-develop/dist/840~0.mjs: the summary the build writes under
+/* @invariant extension-develop/dist/840~0.mjs: the summary the build writes under
  * dist/extension-js/<browser>/build-summary.json, `zip_artifacts` included
  * when a zip was asked for (rspack-config~0.mjs names the archives). */
 export function buildSummary(
@@ -285,7 +285,7 @@ export function zipArtifacts(
   return out;
 }
 
-/* cli.cjs `runDoctor`: the frame's `value` is the check array. The legs a
+/* @invariant cli.cjs `runDoctor`: the frame's `value` is the check array. The legs a
  * dev session answers, in the order the CLI emits them. */
 export function doctorFrame(
   legs: Array<{ check: string; status: "pass" | "fail" | "warn" | "skip"; detail: string; remediation?: string }>,

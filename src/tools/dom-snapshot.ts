@@ -463,8 +463,6 @@ export async function handler(
     patchValue(parsed, {
       resolvedTarget: { ...resolvedTarget, matchedBy: "tabUrl" },
     });
-    /* The target this server resolved and the document the snapshot reports
-       are compared, not assumed the same. */
     const reported =
       typeof parsed?.value?.meta?.url === "string"
         ? parsed.value.meta.url

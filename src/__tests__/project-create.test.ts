@@ -334,7 +334,6 @@ describe("extension_project_create", () => {
     expect(JSON.parse(String(codeCall!.init?.body)).intent).toBe("create");
   });
 
-  /*. */
   it("keeps the login the platform minted when the project already exists, so no second approval is asked", async () => {
     const { fn } = createFetch({
       token: [

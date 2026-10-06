@@ -54,9 +54,6 @@ export const OVERRIDE_SURFACES = ["newtab", "history", "bookmarks"];
    remembered per project and surface. */
 export const renderedTabTargets = new Set<string>();
 export const renderedGeckoSurfaces = new Map<string, string>();
-/* The side panel persists across focus changes, so a target at its document
-   that this server did not render is the live panel; a popup window closes on
-   blur and its tab copy is reused as entry 21 pinned. */
 const PERSISTENT_WINDOW_SURFACES = ["sidebar"];
 
 type SettledTarget = {

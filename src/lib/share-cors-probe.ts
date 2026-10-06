@@ -87,9 +87,6 @@ export async function probeShareCors(options: {
 
     const status = res.status;
     const allowOrigin = res.headers.get("access-control-allow-origin");
-    /* A held source.zip answers 403 with the hold code in the BODY and no
-       hold header, so a refusal's body is read before
-       it is judged; a success body is cancelled unread. */
     let body: unknown = undefined;
     if (status >= 400) {
       try {

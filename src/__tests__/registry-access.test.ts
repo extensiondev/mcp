@@ -91,7 +91,6 @@ class Probe extends RegistryAccessTokens {
   }
 }
 
-/*. */
 describe("the grant is asked with the named project's stored login first", () => {
   it("sends the stored login, not EXTENSION_DEV_TOKEN, when both exist", async () => {
     process.env.EXTENSION_DEV_TOKEN = claimsToken("other", "thing");

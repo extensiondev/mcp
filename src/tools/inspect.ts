@@ -141,8 +141,6 @@ export async function handler(args: {
     let landed: { url: string; title?: string } | null = null;
     let landingUnread: string | null = null;
     if (args.url && !target.url.includes(args.url)) {
-      /* The previous document's console is dropped before navigating, so
-         value.console describes the document that was read. */
       cdp.resetConsole();
       try {
         await cdp.navigate(sessionId, args.url);

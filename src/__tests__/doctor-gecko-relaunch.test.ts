@@ -94,7 +94,6 @@ describe("extension_doctor does not call a session dead over a browser exit the 
     expect(browserLeg.status).toBe("fail");
   });
 
-  /*. */
   it("does not count the dev server's own control socket as the browser answering", async () => {
     cli.response = {
       code: 1,

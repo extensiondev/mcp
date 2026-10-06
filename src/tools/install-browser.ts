@@ -38,9 +38,6 @@ export async function installManagedBrowser(
       }),
     );
 
-    /* The installer returns normally on its Edge system-binary branch
-       without placing anything in the cache; "installed" is read off the
-       cache, not the return. */
     const destination = path.join(getManagedBrowsersCacheRoot(), browser);
     const binaryPath = findManagedBinaryIn(destination, browser);
     if (!binaryPath) {

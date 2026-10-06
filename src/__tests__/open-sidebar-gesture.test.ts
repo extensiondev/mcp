@@ -211,7 +211,6 @@ const clicks = () =>
   commands.filter((c) => c.method === "Input.dispatchMouseEvent");
 
 describe("extension_open sidebar on Chromium when Chrome demands a user gesture", () => {
-  /*. */
   it("names the missing surface when the manifest declares no side panel", async () => {
     const p = project();
     fs.writeFileSync(
@@ -278,7 +277,6 @@ describe("extension_open sidebar on Chromium when Chrome demands a user gesture"
     expect(cdpTargets.find((t) => t.id === "host")).toBeUndefined();
   });
 
-  /*. */
   it("never mistakes a tab this server rendered earlier for the panel", async () => {
     const p = project();
     const rendered = JSON.parse(await open.handler({ projectPath: p.dir, surface: "sidebar", asTab: true }));

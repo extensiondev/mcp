@@ -162,7 +162,6 @@ export function resolveCredential(options: { project?: string } = {}): ResolvedC
   return { token: "", source: "none", ref: null, refSource: "none", mismatch: null, note: null };
 }
 
-/* The project an authenticated call acts on: the one the token belongs to. */
 export function credentialProjectRef(selector?: string): CredentialRef | null {
   return resolveCredential({ project: selector }).ref;
 }

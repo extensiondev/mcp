@@ -196,9 +196,6 @@ describe("extension_build zip path reporting", () => {
     return dir;
   }
 
-  /* The engine writes the archives and its summary DURING the build, so the
-     fake CLI writes them when it is called, never before: a file seeded before
-     the call is an older build's, which is the case the locator must refuse. */
   function engineWrites(dir: string, files: string[], summary?: Record<string, unknown>) {
     onCli = () => {
       for (const file of files) {

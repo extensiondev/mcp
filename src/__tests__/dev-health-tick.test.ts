@@ -143,7 +143,6 @@ describe("extension_dev health tick", () => {
     expect(result.hint).toContain("extension_wait");
   }, 20_000);
 
-  /*. */
   it("calls a browser launch failure a boot failure, not a compile story", async () => {
     const project = tmpProject();
     nextChild = () => {
@@ -169,7 +168,6 @@ describe("extension_dev health tick", () => {
     expect(JSON.stringify(result)).not.toMatch(/recompile/);
   }, 20_000);
 
-  /*. */
   it("says when the output it shows was cut, and keeps the head", async () => {
     const project = tmpProject();
     nextChild = () =>

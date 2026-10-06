@@ -500,8 +500,6 @@ const SAFARI_VENDORS = new Set(["safari", "webkit-based"]);
  * rejection back to where it is expensive, never accept more. The parity test
  * in build-safari-packaging pins the pattern to the engine's own literal.
  */
-/* The engine's own check (cli.cjs, the safari bundle-id validator):
-   dot-separated segments of letters, digits and hyphens, one or more. */
 export const BUNDLE_ID_PATTERN = /^[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*$/;
 
 function manifestDivergence(projectPath: string, browser: string): string[] {

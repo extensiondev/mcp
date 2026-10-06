@@ -71,7 +71,6 @@ describe("extension_publish surfaces the platform's preview commands", () => {
     expect(out.hint).toContain(`firefox: ${FIREFOX}`);
   });
 
-  /*. */
   it("does not claim a share token on a public project's commands that carry none", async () => {
     platform.result = {
       ok: true,

@@ -29,7 +29,6 @@ describe("the release version gate reads the bundle's own manifest", () => {
   });
 });
 
-/*. */
 describe("the release rails fail closed", () => {
   const read = (rel: string) => fs.readFileSync(fileURLToPath(new URL(`../../${rel}`, import.meta.url)), "utf8");
 

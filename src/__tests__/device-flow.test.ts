@@ -68,7 +68,6 @@ describe("pollDeviceGrant never calls an answer it cannot read pending", () => {
     expect((result as { reason: string }).reason).toBe("pending");
   });
 
-  /*. */
   it("relays the platform's Retry-After on a rate-limited poll and says the code is still pending", async () => {
     const result = await pollDeviceGrant({
       apiBase: "https://api.test",

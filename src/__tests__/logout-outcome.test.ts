@@ -69,7 +69,6 @@ describe("a logout says what was removed, and says so when nothing was", () => {
     expect(fs.existsSync(credentialsPath())).toBe(false);
   });
 
-  /*. */
   it("carries a revoke link for every login an unnamed logout removed", async () => {
     writeCredentials(login("one"));
     writeCredentials(login("two"));

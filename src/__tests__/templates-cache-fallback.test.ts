@@ -94,7 +94,6 @@ describe("templates cache resilience", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
-  /*. */
   it("keeps a good live catalog when the cache directory cannot be written, and says so", async () => {
     fs.mkdirSync(path.dirname(cacheDir), { recursive: true });
     fs.writeFileSync(cacheDir, "not a directory");

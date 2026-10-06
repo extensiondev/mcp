@@ -53,7 +53,6 @@ describe("extension_auth status asks the server who the token is", () => {
     fs.rmSync(tmp, { recursive: true, force: true });
   });
 
-  /*. */
   it("says live only when the server says live, and warns when the server names another project", async () => {
     if (process.platform === "win32") return;
     writeCredentials(sample());

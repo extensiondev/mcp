@@ -97,7 +97,6 @@ afterEach(() => {
   }
 });
 
-/*. */
 describe("ownExtension is the contract's identity", () => {
   it("marks the id the contract stamps, not the dist path hash, as own", async () => {
     const stamped = "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz".replace(/z/g, "p");

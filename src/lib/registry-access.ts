@@ -97,8 +97,6 @@ export class RegistryAccessTokens {
     const sameAs = (workspace: string, project: string): boolean =>
       workspace.toLowerCase() === ref.workspace.toLowerCase() &&
       project.toLowerCase() === ref.project.toLowerCase();
-    /* The stored login for THIS project first; the env token only when none
-       is stored, and only when its own claims name this project. */
     let token = String(creds?.token || "").trim();
     if (token && creds?.workspaceSlug && creds?.projectSlug && !sameAs(creds.workspaceSlug, creds.projectSlug)) {
       token = "";
@@ -136,7 +134,6 @@ export class RegistryAccessTokens {
       };
     }
 
-    /* "public" is read off the field that says so. */
     if (res.status === 400) {
       let visibility: string;
       try {
@@ -152,8 +149,6 @@ export class RegistryAccessTokens {
       };
     }
     if (!res.ok) {
-      /* The platform names why (token-revoked, expired, issuer-not-a-member,
-         authority-unavailable, wrong-lane); the reason travels. */
       let said: { message?: unknown; reason?: unknown; code?: unknown } = {};
       try {
         said = (await res.clone().json()) as typeof said;

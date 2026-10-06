@@ -61,7 +61,7 @@ export function writeModernContract(
   );
 }
 
-/* The contract after the compile landed and before any browser stamped it:
+/* @invariant The contract after the compile landed and before any browser stamped it:
    what a `noBrowser` session keeps for good, and what a launching session
    shows for a moment. The base only, no launcher or executor fields. */
 export function writeCompiledUnattachedContract(

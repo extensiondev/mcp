@@ -94,8 +94,6 @@ describe("extension_publish envelope compatibility", () => {
     }
   });
 
-  /* The cell used to assert only PublishConfigError,
-     which either token produces. It now reads the bearer that was sent. */
   it("sends EXTENSION_DEV_TOKEN for an unnamed call and the stored login for a named one", async () => {
     writeCredentials({
       version: 1,

@@ -72,7 +72,6 @@ describe("extension_docs_search", () => {
     expect(calls).toHaveLength(0);
   });
 
-  /*. */
   it("does not call an unreadable 200 a no-match", async () => {
     vi.stubGlobal(
       "fetch",

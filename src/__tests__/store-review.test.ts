@@ -88,7 +88,6 @@ describe("reviewDist", () => {
     expect(reviewDistReport(dist, "chrome").manifestUnreadable).toMatch(/ENOENT|no such file/);
   });
 
-  /*. */
   it("never calls a permission unused when a shipped script could not be read", () => {
     const report = reviewRisksReport({
       distPath: dist,

@@ -151,7 +151,6 @@ describe("extension_open surface confirmation", () => {
     });
   });
 
-  /*. */
   it("refuses an options open before asking the engine when the manifest declares none", async () => {
     const p = project();
     fs.writeFileSync(

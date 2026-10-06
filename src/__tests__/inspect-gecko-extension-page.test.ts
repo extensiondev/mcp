@@ -175,7 +175,6 @@ describe("extension_inspect on Gecko reads a page inside the extension through i
     expect(calls[0]).toContain("--url");
   });
 
-/*. */
 describe("deepDom on Gecko says whether closed roots could be seen at all", () => {
   it("notes a context that cannot see closed roots instead of listing none", async () => {
     const dir = project(MANIFEST);

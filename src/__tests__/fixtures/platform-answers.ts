@@ -9,7 +9,7 @@
 
 type Body = Record<string, unknown>;
 
-/* www: src/app/api/projects/[projectId]/releases/releases-route.create.ts,
+/* @invariant www: src/app/api/projects/[projectId]/releases/releases-route.create.ts,
  * the 200 at the end of the create handler, reached through
  * /api/cli/release/promote. All browsers failing is a 500, never this body. */
 export function promoteAnswer(overrides: Body = {}): Body {
@@ -30,7 +30,7 @@ export function promoteAnswer(overrides: Body = {}): Body {
   };
 }
 
-/* www: src/app/api/clone/core/create-project-from-clone/seed-and-build.ts,
+/* @invariant www: src/app/api/clone/core/create-project-from-clone/seed-and-build.ts,
  * the one-body 200 of a freshly created project, reached through
  * /api/cli/projects/create. The MCP lane's success extras add the token keys. */
 export function projectCreatedAnswer(overrides: Body = {}): Body {
@@ -46,7 +46,7 @@ export function projectCreatedAnswer(overrides: Body = {}): Body {
   };
 }
 
-/* www: src/app/api/cli/stores/submit/route.ts, the 200 of a real submission
+/* @invariant www: src/app/api/cli/stores/submit/route.ts, the 200 of a real submission
  * (dryRun false): one row per store dispatched, in the order asked, each
  * recorded as pending. The stores are dispatched one at a time, so a failure
  * mid-list is an error answer after earlier stores were already dispatched. */
@@ -77,7 +77,7 @@ export function submitAnswer(
   };
 }
 
-/* www: src/app/api/cli/publish/route.ts, the 200 of a private project: the
+/* @invariant www: src/app/api/cli/publish/route.ts, the 200 of a private project: the
  * share URL, the served build (null fields when the project has no successful
  * build or the index could not be read), the token-bearing preview commands
  * and the expiry. A public project answers the same keys with no expiry and
@@ -97,7 +97,7 @@ export function publishAnswer(overrides: Body = {}): Body {
   };
 }
 
-/* www: src/app/api/cli/approvals/[approvalId]/route.ts, the record a verify
+/* @invariant www: src/app/api/cli/approvals/[approvalId]/route.ts, the record a verify
  * reads: the status, the fingerprint of the action it was granted for, its
  * expiry and whether it has been spent. */
 export function approvalRecord(fingerprint: string, overrides: Body = {}): Body {

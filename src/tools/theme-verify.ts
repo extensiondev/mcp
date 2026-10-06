@@ -311,9 +311,6 @@ export async function handler(args: {
 
   const hasError = grammarErrors.length > 0;
   const hasWarn = findings.some((f) => f.severity === "warn");
-  /* A resolver caveat (image-derived colours are not modelled) means the
-     headless proxy did not cover this manifest; "clean" is not said over it
-    . */
   const verdict: "invalid" | "diverged" | "headless-clean" | "headless-partial" = hasError
     ? "invalid"
     : hasWarn

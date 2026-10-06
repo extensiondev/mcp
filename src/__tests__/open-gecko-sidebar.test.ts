@@ -151,7 +151,6 @@ describe("extension_open sidebar on Gecko when the engine names a Chromium API i
     expect(JSON.stringify(result)).not.toContain("sidePanel");
   });
 
-  /*. */
   it("does not call the panel closed when the probe itself failed", async () => {
     const dir = project(MANIFEST);
     probeOverride = () =>
@@ -173,7 +172,6 @@ describe("extension_open sidebar on Gecko when the engine names a Chromium API i
     expect(warnings).not.toMatch(/panel is not open now/);
   });
 
-  /*. */
   it("calls the panel unverified when a tab it rendered earlier shows the same document", async () => {
     const dir = project(MANIFEST);
     panelOpen = false;

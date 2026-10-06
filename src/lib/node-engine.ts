@@ -31,8 +31,6 @@ function parts(version: string): number[] | null {
   return m ? [Number(m[1]), Number(m[2] ?? 0), Number(m[3] ?? 0)] : null;
 }
 
-/* `>=a.b.c` only, which is how the engine states its floor; anything else
-   is "not understood" so the caller can say so instead of guessing. */
 export function meetsNodeRange(version: string, range: string): boolean | null {
   const m = range.trim().match(/^>=\s*v?([\d.]+)$/);
   const have = parts(version);

@@ -157,8 +157,6 @@ function fail(
   });
 }
 
-/* The health reading carries its own date (stores/health.json updatedAt);
-   "healthy" without it read as a fact about now. */
 function healthReadAtNote(doc: unknown): string {
   const at = String((doc as { updatedAt?: unknown } | null)?.updatedAt ?? "").trim();
   return at ? ` (as of ${at})` : " (the health reading carries no date)";

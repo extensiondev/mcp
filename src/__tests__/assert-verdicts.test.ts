@@ -251,7 +251,6 @@ describe("background-worker-booted", () => {
     expect(check.detail).toContain("run run-1");
   });
 
-  /*. */
   it("does not pass on background lines the browser relayed rather than the extension wrote", async () => {
     writeManifest({ background: { service_worker: "sw.js" } });
     liveSession();
@@ -266,7 +265,6 @@ describe("background-worker-booted", () => {
     expect(check.evidence?.relayedLines ?? check.relayedLines ?? 1).toBe(1);
   });
 
-  /*. */
   it("is inconclusive on a worker the dev build injected for a project that declares no background", async () => {
     writeManifest({ background: { service_worker: "background/service_worker.js" } });
     fs.mkdirSync(path.join(project, "src"), { recursive: true });
@@ -628,7 +626,6 @@ describe("storage-key-present", () => {
     expect(check.outcome).toBe("fail");
   });
 
-  /*. */
   it("compares equals structurally, whatever the key order", async () => {
     liveSession();
     live.storageFrame = frameWith({ prefs: { b: 2, a: { y: 1, x: [1, 2] } } });
@@ -708,7 +705,6 @@ describe("console-errors-empty", () => {
     expect(check.detail).toContain("do not belong to a live run");
   });
 
-  /*. */
   it("does not count a browser-relayed error from another origin", async () => {
     liveSession();
     writeLogs([
@@ -786,7 +782,6 @@ describe("console-errors-empty", () => {
 });
 
 describe("the verdict document", () => {
-  /*. */
   it("names the failed build, not platform coverage, when ready.json holds compile errors", async () => {
     writeManifest({ background: { service_worker: "sw.js" } });
     writeReady({

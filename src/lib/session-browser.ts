@@ -52,8 +52,6 @@ function contractSightings(projectPath: string): ContractSighting[] {
   return sightings;
 }
 
-/* A recorded pid counts only while it is alive AND still a session process;
-   a number reused by a stranger reads as gone. */
 function pidAlive(pid: number): boolean {
   return pidState(pid) === "alive";
 }
