@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
+import { actFrame, tabRows } from "./fixtures/engine-answers";
 
 
 const calls: string[][] = [];
@@ -72,10 +73,9 @@ describe("extension_open url on Gecko (bridge navigation)", () => {
   it("navigates via a background tabs.update eval and verifies against the tab list", async () => {
     actResponder = (cli) => {
       if (isListTabs(cli)) {
-        return JSON.stringify({
-          ok: true,
-          tabs: [{ tabId: 7, url: "https://example.com/", title: "Example" }],
-        });
+        return JSON.stringify(
+          actFrame("inspect", tabRows([{ id: 7, url: "https://example.com/", title: "Example" }])),
+        );
       }
       if (isEval(cli)) return JSON.stringify({ ok: true, value: { tabId: 7 } });
       return JSON.stringify({ ok: true });
@@ -129,10 +129,9 @@ describe("extension_open url on Gecko (bridge navigation)", () => {
   it("reports NavigateFailed when no tab ever reports the URL", async () => {
     actResponder = (cli) => {
       if (isListTabs(cli)) {
-        return JSON.stringify({
-          ok: true,
-          tabs: [{ tabId: 7, url: "about:blank", title: "" }],
-        });
+        return JSON.stringify(
+          actFrame("inspect", tabRows([{ id: 7, url: "about:blank", title: "" }])),
+        );
       }
       return JSON.stringify({ ok: true, value: { tabId: 7 } });
     };
@@ -161,10 +160,9 @@ describe("extension_inspect on Gecko (bridge inspection)", () => {
   it("returns summary/meta/html over the bridge with the CDP-only gaps named", async () => {
     actResponder = (cli) => {
       if (isListTabs(cli)) {
-        return JSON.stringify({
-          ok: true,
-          tabs: [{ tabId: 7, url: "https://example.com/", title: "Example" }],
-        });
+        return JSON.stringify(
+          actFrame("inspect", tabRows([{ id: 7, url: "https://example.com/", title: "Example" }])),
+        );
       }
       if (isEval(cli)) return JSON.stringify({ ok: true, value: pageValue });
       return JSON.stringify({ ok: true });
@@ -229,10 +227,9 @@ describe("extension_inspect on Gecko (bridge inspection)", () => {
     const roots = { rootCount: 1, markerCount: 0, latestGeneration: 3, roots: [], markers: [] };
     actResponder = (cli) => {
       if (isListTabs(cli)) {
-        return JSON.stringify({
-          ok: true,
-          tabs: [{ tabId: 7, url: "https://example.com/", title: "Example" }],
-        });
+        return JSON.stringify(
+          actFrame("inspect", tabRows([{ id: 7, url: "https://example.com/", title: "Example" }])),
+        );
       }
       if (isEval(cli)) {
         return JSON.stringify({
@@ -271,10 +268,9 @@ describe("extension_inspect on Gecko (bridge inspection)", () => {
     ];
     actResponder = (cli) => {
       if (isListTabs(cli)) {
-        return JSON.stringify({
-          ok: true,
-          tabs: [{ tabId: 7, url: "https://example.com/", title: "Example" }],
-        });
+        return JSON.stringify(
+          actFrame("inspect", tabRows([{ id: 7, url: "https://example.com/", title: "Example" }])),
+        );
       }
       if (isEval(cli)) return JSON.stringify({ ok: true, value: pageValue });
       return JSON.stringify({ ok: true });
@@ -389,10 +385,9 @@ describe("extension_inspect on Gecko (bridge inspection)", () => {
   it("falls back to tabs.executeScript when the engine has no page-context eval (MV2)", async () => {
     actResponder = (cli) => {
       if (isListTabs(cli)) {
-        return JSON.stringify({
-          ok: true,
-          tabs: [{ tabId: 7, url: "https://example.com/", title: "Example" }],
-        });
+        return JSON.stringify(
+          actFrame("inspect", tabRows([{ id: 7, url: "https://example.com/", title: "Example" }])),
+        );
       }
       if (!isEval(cli)) return JSON.stringify({ ok: true });
       const context = cli[cli.indexOf("--context") + 1];

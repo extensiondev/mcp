@@ -4,6 +4,7 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { logsPath, readyContractPath } from "../lib/session-paths";
+import { logHeader } from "./fixtures/engine-answers";
 
 const GUEST_ID = "abcdefghijklmnopabcdefghijklmnop";
 const COMPANION_ID = "kgdaecdpfkikjncaalnmmnjjfpofkcbl";
@@ -189,8 +190,8 @@ describe("background-worker-booted", () => {
     writeManifest({ background: { service_worker: "sw.js" } });
     liveSession();
     writeLogs([
-      { type: "header", runId: "run-1", v: 1 },
-      { context: "background", level: "info", seq: 1, message: "booted" },
+      logHeader("run-1"),
+      { context: "background", level: "info", seq: 1, messageParts: ["booted"] },
     ]);
     live.targets = [
       { id: "popup", type: "page", url: `chrome-extension://${GUEST_ID}/popup.html` },
@@ -210,8 +211,8 @@ describe("background-worker-booted", () => {
       distPath: path.join(project, "dist", BROWSER),
     });
     writeLogs([
-      { type: "header", runId: "run-1", v: 1 },
-      { context: "background", level: "info", seq: 1, message: "booted" },
+      logHeader("run-1"),
+      { context: "background", level: "info", seq: 1, messageParts: ["booted"] },
     ]);
     live.targets = [
       { id: "popup", type: "page", url: `chrome-extension://${GUEST_ID}/popup.html` },
@@ -364,13 +365,13 @@ describe("content-script-injected", () => {
     writeManifest(withMatch);
     liveSession();
     writeLogs([
-      { type: "header", runId: "run-1", v: 1 },
+      logHeader("run-1"),
       {
         context: "content",
         level: "info",
         seq: 1,
         url: "https://shop.example/cart",
-        message: "hello",
+        messageParts: ["hello"],
       },
     ]);
     const { check } = await assertOnce({
@@ -490,8 +491,8 @@ describe("console-errors-empty", () => {
       instanceId: "inst-9",
     });
     writeLogs([
-      { type: "header", runId: "run-1", v: 1 },
-      { context: "popup", level: "info", seq: 1, message: "hi" },
+      logHeader("run-1"),
+      { context: "popup", level: "info", seq: 1, messageParts: ["hi"] },
     ]);
     const { check } = await assertOnce({ assert: "console-errors-empty" });
     expect(check.outcome).toBe("inconclusive");
@@ -501,9 +502,9 @@ describe("console-errors-empty", () => {
   it("fails on error events and quotes them", async () => {
     liveSession();
     writeLogs([
-      { type: "header", runId: "run-1", v: 1 },
-      { context: "background", level: "error", seq: 1, message: "boom" },
-      { context: "popup", level: "info", seq: 2, message: "fine" },
+      logHeader("run-1"),
+      { context: "background", level: "error", seq: 1, messageParts: ["boom"] },
+      { context: "popup", level: "info", seq: 2, messageParts: ["fine"] },
     ]);
     const { check } = await assertOnce({ assert: "console-errors-empty" });
     expect(check.outcome).toBe("fail");
@@ -513,19 +514,19 @@ describe("console-errors-empty", () => {
   it("passes on a live timeline with no error, and honours ignore", async () => {
     liveSession();
     writeLogs([
-      { type: "header", runId: "run-1", v: 1 },
-      { context: "popup", level: "info", seq: 1, message: "fine" },
+      logHeader("run-1"),
+      { context: "popup", level: "info", seq: 1, messageParts: ["fine"] },
     ]);
     const clean = await assertOnce({ assert: "console-errors-empty" });
     expect(clean.check.outcome).toBe("pass");
 
     writeLogs([
-      { type: "header", runId: "run-1", v: 1 },
+      logHeader("run-1"),
       {
         context: "background",
         level: "error",
         seq: 1,
-        message: "ResizeObserver loop limit exceeded",
+        messageParts: ["ResizeObserver loop limit exceeded"],
       },
     ]);
     const ignored = await assertOnce({
@@ -538,9 +539,9 @@ describe("console-errors-empty", () => {
   it("scopes to the contexts it was given", async () => {
     liveSession();
     writeLogs([
-      { type: "header", runId: "run-1", v: 1 },
-      { context: "content", level: "error", seq: 1, message: "page blew up" },
-      { context: "background", level: "info", seq: 2, message: "fine" },
+      logHeader("run-1"),
+      { context: "content", level: "error", seq: 1, messageParts: ["page blew up"] },
+      { context: "background", level: "info", seq: 2, messageParts: ["fine"] },
     ]);
     const scoped = await assertOnce({
       assert: "console-errors-empty",
@@ -557,8 +558,8 @@ describe("the verdict document", () => {
     writeManifest({ background: { service_worker: "sw.js" } });
     liveSession();
     writeLogs([
-      { type: "header", runId: "run-1", v: 1 },
-      { context: "background", level: "info", seq: 1, message: "booted" },
+      logHeader("run-1"),
+      { context: "background", level: "info", seq: 1, messageParts: ["booted"] },
     ]);
     live.targets = [
       { id: "sw", type: "service_worker", url: `chrome-extension://${GUEST_ID}/sw.js` },
@@ -585,8 +586,8 @@ describe("the verdict document", () => {
     writeManifest({ background: { service_worker: "sw.js" } });
     liveSession();
     writeLogs([
-      { type: "header", runId: "run-1", v: 1 },
-      { context: "background", level: "info", seq: 1, message: "booted" },
+      logHeader("run-1"),
+      { context: "background", level: "info", seq: 1, messageParts: ["booted"] },
     ]);
     live.targets = [
       { id: "sw", type: "service_worker", url: `chrome-extension://${GUEST_ID}/sw.js` },

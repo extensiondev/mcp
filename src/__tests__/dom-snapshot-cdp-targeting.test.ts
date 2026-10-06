@@ -1,4 +1,5 @@
 import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
+import { actFrame, tabRows } from "./fixtures/engine-answers";
 
 
 const calls: string[][] = [];
@@ -208,13 +209,12 @@ describe("dom_snapshot tabUrl targeting", () => {
   it("Gecko resolves tabUrl against the bridge tab list and inspects by numeric tab id", async () => {
     actResponder = (cli) =>
       cli.includes("--list-tabs")
-        ? JSON.stringify({
-            ok: true,
-            tabs: [
-              { tabId: 7, url: "https://example.com/", title: "Example Domain" },
-              { tabId: 9, url: "https://other.dev/", title: "Other" },
-            ],
-          })
+        ? JSON.stringify(
+            actFrame("inspect", tabRows([
+              { id: 7, url: "https://example.com/", title: "Example Domain" },
+              { id: 9, url: "https://other.dev/", title: "Other" },
+            ])),
+          )
         : JSON.stringify({ ok: true });
 
     const result = JSON.parse(
@@ -240,10 +240,9 @@ describe("dom_snapshot tabUrl targeting", () => {
   it("Gecko zero matches returns the available tabs instead of inspecting", async () => {
     actResponder = (cli) =>
       cli.includes("--list-tabs")
-        ? JSON.stringify({
-            ok: true,
-            tabs: [{ tabId: 7, url: "https://example.com/", title: "Example" }],
-          })
+        ? JSON.stringify(
+            actFrame("inspect", tabRows([{ id: 7, url: "https://example.com/", title: "Example" }])),
+          )
         : JSON.stringify({ ok: true });
 
     const result = JSON.parse(
@@ -265,13 +264,12 @@ describe("dom_snapshot tabUrl targeting", () => {
   it("Gecko several matches refuses to guess and returns tabIds to pick from", async () => {
     actResponder = (cli) =>
       cli.includes("--list-tabs")
-        ? JSON.stringify({
-            ok: true,
-            tabs: [
-              { tabId: 7, url: "https://example.com/", title: "Example" },
-              { tabId: 9, url: "https://example.com/other", title: "Other" },
-            ],
-          })
+        ? JSON.stringify(
+            actFrame("inspect", tabRows([
+              { id: 7, url: "https://example.com/", title: "Example" },
+              { id: 9, url: "https://example.com/other", title: "Other" },
+            ])),
+          )
         : JSON.stringify({ ok: true });
 
     const result = JSON.parse(
