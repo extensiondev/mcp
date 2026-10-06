@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { browserFromCliArgs, writeEngineDist } from "./fixtures/engine-answers";
 
 interface CliResponse {
   code: number;
@@ -18,9 +19,11 @@ vi.mock("../lib/exec", async (importOriginal) => {
     ...actual,
     runExtensionCli: async (args: string[]) => {
       cliCalls.push(args);
-      return (
-        cliResponder?.(args) ?? { code: 0, stdout: "", stderr: "" }
-      );
+      const answer = cliResponder?.(args) ?? { code: 0, stdout: "", stderr: "" };
+      if (args[0] === "build" && answer.code === 0) {
+        writeEngineDist(args[1]!, browserFromCliArgs(args));
+      }
+      return answer;
     },
   };
 });

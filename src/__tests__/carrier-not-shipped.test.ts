@@ -2,6 +2,7 @@ import { describe, it, expect, afterEach, vi } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { browserFromCliArgs, writeEngineDist } from "./fixtures/engine-answers";
 
 let carrierAtCliTime: boolean | null = null;
 let projectAtCliTime: string | null = null;
@@ -9,7 +10,8 @@ vi.mock("../lib/exec", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../lib/exec")>();
   return {
     ...actual,
-    runExtensionCli: async () => {
+    runExtensionCli: async (args: string[]) => {
+      if (args[0] === "build") writeEngineDist(args[1]!, browserFromCliArgs(args));
       carrierAtCliTime =
         projectAtCliTime === null
           ? null

@@ -2,6 +2,7 @@ import { describe, it, expect, afterEach, vi } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { browserFromCliArgs, writeEngineDist } from "./fixtures/engine-answers";
 
 const tmpDirs: string[] = [];
 function tmpProject(): string {
@@ -40,7 +41,12 @@ vi.mock("../lib/exec", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../lib/exec")>();
   return {
     ...actual,
-    runExtensionCli: async () => cliResult,
+    runExtensionCli: async (args: string[]) => {
+      if (args[0] === "build" && cliResult.code === 0) {
+        writeEngineDist(args[1]!, browserFromCliArgs(args));
+      }
+      return cliResult;
+    },
   };
 });
 

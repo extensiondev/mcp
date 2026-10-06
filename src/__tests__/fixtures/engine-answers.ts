@@ -9,7 +9,41 @@
  * When the pinned engine changes a writer, this file changes with it.
  */
 
+import fs from "node:fs";
+import path from "node:path";
+
 type Body = Record<string, unknown>;
+
+/* What `extension build` leaves on disk on exit 0: dist/<browser>/ with the
+ * manifest and the files it references (modelled as a copy of src/), newer
+ * than the build's start. A test fake that returns exit 0 calls this from
+ * INSIDE the fake, the way the engine writes during the run; a dist seeded
+ * before the call is an older build's, which the tool must refuse. A dist
+ * the test already placed is touched, so its scenario stays. */
+export function writeEngineDist(projectPath: string, browser: string): string {
+  const distDir = path.join(projectPath, "dist", browser);
+  const manifest = path.join(distDir, "manifest.json");
+  if (fs.existsSync(manifest)) {
+    const now = new Date();
+    fs.utimesSync(manifest, now, now);
+    return distDir;
+  }
+  const src = fs.existsSync(path.join(projectPath, "src", "manifest.json"))
+    ? path.join(projectPath, "src")
+    : projectPath;
+  fs.mkdirSync(distDir, { recursive: true });
+  for (const entry of fs.readdirSync(src, { withFileTypes: true })) {
+    if (entry.name === "dist" || entry.name === "node_modules") continue;
+    fs.cpSync(path.join(src, entry.name), path.join(distDir, entry.name), { recursive: true });
+  }
+  return distDir;
+}
+
+export function browserFromCliArgs(args: string[]): string {
+  const at = args.indexOf("--browser");
+  return at >= 0 && args[at + 1] ? String(args[at + 1]) : "chrome";
+}
+
 
 const NOW = "2026-10-05T12:00:00.000Z";
 

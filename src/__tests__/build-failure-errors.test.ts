@@ -3,6 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { envelope } from "../lib/envelope";
+import { browserFromCliArgs, writeEngineDist } from "./fixtures/engine-answers";
 
 let onBuild: () => { code: number; stdout: string; stderr: string } = () => ({
   code: 0,
@@ -13,7 +14,13 @@ vi.mock("../lib/exec", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../lib/exec")>();
   return {
     ...actual,
-    runExtensionCli: async () => onBuild(),
+    runExtensionCli: async (args: string[]) => {
+      const answer = onBuild();
+      if (args[0] === "build" && answer.code === 0) {
+        writeEngineDist(args[1]!, browserFromCliArgs(args));
+      }
+      return answer;
+    },
     pinnedCliVersion: () => "4.1.30",
   };
 });

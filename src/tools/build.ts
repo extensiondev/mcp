@@ -18,6 +18,7 @@ import {
   buildSummaryPath,
   readyContractPath,
   sessionPathHint,
+  engineProjectRoot,
 } from "../lib/session-paths";
 import { type Envelope, envelope, isEnvelope } from "../lib/envelope";
 import { reviewDist, reviewRiskWarnings } from "../lib/store-review";
@@ -854,12 +855,49 @@ export async function handler(args: {
       engineSummary.warnings_count > buildWarnings.length
         ? engineSummary.warnings_count
         : undefined;
-    const distDir = path.resolve(args.projectPath, "dist", browser);
+    /* @invariant "BUILT" IS A DIST THIS RUN WROTE, AT THE PATH THE ENGINE
+     * NAMES. The guards below used to read projectPath/dist/<browser> by hand
+     * and read an empty answer as clean, so an exit 0 with nothing on disk,
+     * or a manifest in a subfolder whose dist lives at the package root, was
+     * "built" with no entrypoints and no review.
+     * The dist is the summary's output_path, else the engine's project root;
+     * its manifest must exist and be newer than this build's start. */
+    const distDir =
+      typeof engineSummary?.output_path === "string" && engineSummary.output_path
+        ? path.resolve(engineSummary.output_path)
+        : path.join(engineProjectRoot(args.projectPath), "dist", browser);
+    const distManifest = path.join(distDir, "manifest.json");
+    let distWrittenAt: number | null = null;
+    try {
+      distWrittenAt = fs.statSync(distManifest).mtimeMs;
+    } catch {
+    }
+    if (distWrittenAt === null || distWrittenAt < start - 1_000) {
+      return envelope({
+        ok: false,
+        command: COMMAND,
+        status: "build-not-found",
+        error: {
+          code: "E_BUILD_NOT_FOUND",
+          message:
+            distWrittenAt === null
+              ? `The bundler exited 0 but no manifest.json exists at ${distDir}, so nothing was built there.`
+              : `The bundler exited 0 but the manifest at ${distDir} predates this build, so this run wrote nothing there.`,
+        },
+        value: {
+          browser,
+          buildExitCode: 0,
+          distDir,
+          duration,
+          output: lastLines(out, 12),
+        },
+        warnings: [...warnings, ...(preflight?.warnings ?? [])],
+        hint: "Check the build output above and the project's output configuration: the dist this tool reads is the one the engine reports (output_path), else dist/<browser> under the package root.",
+      });
+    }
     const entrypoints = builtEntrypoints(distDir);
     const risks = reviewDist(distDir, browser);
-    const contamination = carrierContamination(
-      path.resolve(args.projectPath, "dist"),
-    );
+    const contamination = carrierContamination(path.dirname(distDir));
     const uncheckedNote = contamination.unchecked.length
       ? `Could not read the entry table of ${contamination.unchecked.join(", ")}, so those archives were not checked for the live-preview carrier. Unpack and check them yourself before submitting.`
       : null;

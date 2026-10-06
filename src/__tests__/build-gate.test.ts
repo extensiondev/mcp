@@ -7,6 +7,7 @@ const cliCalls: string[][] = [];
 let cliResultOverride: { code: number; stdout: string; stderr: string } | null =
   null;
 let onCli: ((args: string[]) => void) | null = null;
+let skipDist = false;
 vi.mock("../lib/exec", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../lib/exec")>();
   return {
@@ -14,20 +15,20 @@ vi.mock("../lib/exec", async (importOriginal) => {
     runExtensionCli: async (args: string[]) => {
       cliCalls.push(args);
       onCli?.(args);
-      return (
-        cliResultOverride ?? {
-          code: 0,
-          stdout: "Build Status: success\nSize: 12 kB",
-          stderr: "",
-        }
-      );
+      const answer = cliResultOverride ?? {
+        code: 0,
+        stdout: "Build Status: success\nSize: 12 kB",
+        stderr: "",
+      };
+      if (answer.code === 0 && !skipDist) writeEngineDist(args[1]!, browserFromCliArgs(args));
+      return answer;
     },
   };
 });
 
 const build = await import("../tools/build");
 const { buildSummaryPath } = await import("../lib/session-paths");
-const { buildSummary, zipArtifacts } = await import("./fixtures/engine-answers");
+const { buildSummary, zipArtifacts, browserFromCliArgs, writeEngineDist } = await import("./fixtures/engine-answers");
 
 const tmpDirs: string[] = [];
 function project(manifest: Record<string, unknown>, files: string[] = []): string {
@@ -50,6 +51,7 @@ afterEach(() => {
   cliCalls.length = 0;
   cliResultOverride = null;
   onCli = null;
+  skipDist = false;
   for (const dir of tmpDirs.splice(0)) {
     fs.rmSync(dir, { recursive: true, force: true });
   }
@@ -213,7 +215,7 @@ describe("extension_build zip path reporting", () => {
   it("returns the path the engine's summary names", async () => {
     const dir = builtProject("zip-probe-ext");
     const zip = path.join(dir, "dist", "zipprobeext-1.0.0-chrome.zip");
-    engineWrites(dir, [zip], buildSummary("chrome", { zip_artifacts: zipArtifacts("zipprobeext", "1.0.0", "chrome").map((a) => ({ ...a, path: zip })) }));
+    engineWrites(dir, [zip], buildSummary("chrome", { output_path: path.join(dir, "dist", "chrome"), zip_artifacts: zipArtifacts("zipprobeext", "1.0.0", "chrome").map((a) => ({ ...a, path: zip })) }));
 
     const result = JSON.parse(await build.handler({ projectPath: dir, zip: true }));
 
@@ -364,5 +366,60 @@ describe("extension_build warns over a live dev session", () => {
 
     expect(result.ok).toBe(false);
     expect(result.warnings.join(" ")).toContain("dev session");
+  });
+});
+
+describe("extension_build believes the disk, not the exit code", () => {
+  it("refuses to call a build successful when the bundler exited 0 and wrote nothing", async () => {
+    skipDist = true;
+    const dir = project({ manifest_version: 3, name: "Fixture", version: "1.0.0" });
+
+    const result = JSON.parse(await build.handler({ projectPath: dir }));
+
+    expect(result.ok).toBe(false);
+    expect(result.status).toBe("build-not-found");
+    expect(result.error.code).toBe("E_BUILD_NOT_FOUND");
+    expect(result.error.message).toContain("no manifest.json exists");
+  });
+
+  it("refuses a dist left by an earlier build", async () => {
+    skipDist = true;
+    const dir = project({ manifest_version: 3, name: "Fixture", version: "1.0.0" });
+    const distDir = path.join(dir, "dist", "chrome");
+    fs.mkdirSync(distDir, { recursive: true });
+    fs.writeFileSync(path.join(distDir, "manifest.json"), "{}");
+    const past = new Date(Date.now() - 60_000);
+    fs.utimesSync(path.join(distDir, "manifest.json"), past, past);
+
+    const result = JSON.parse(await build.handler({ projectPath: dir }));
+
+    expect(result.status).toBe("build-not-found");
+    expect(result.error.message).toContain("predates this build");
+  });
+
+  it("reads the dist at the package root when the manifest sits in a subfolder", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-build-root-"));
+    tmpDirs.push(root);
+    fs.writeFileSync(
+      path.join(root, "package.json"),
+      JSON.stringify({ name: "mono", devDependencies: { extension: "4.1.31" } }),
+    );
+    const sub = path.join(root, "Extensions", "combined");
+    fs.mkdirSync(path.join(sub, "src"), { recursive: true });
+    fs.writeFileSync(
+      path.join(sub, "src", "manifest.json"),
+      JSON.stringify({ manifest_version: 3, name: "Sub", version: "1.0.0" }),
+    );
+    onCli = () => {
+      const dist = path.join(root, "dist", "chrome");
+      fs.mkdirSync(dist, { recursive: true });
+      fs.writeFileSync(path.join(dist, "manifest.json"), JSON.stringify({ manifest_version: 3, name: "Sub", version: "1.0.0" }));
+    };
+    skipDist = true;
+
+    const result = JSON.parse(await build.handler({ projectPath: sub }));
+
+    expect(result.ok).toBe(true);
+    expect(result.status).toBe("built");
   });
 });
