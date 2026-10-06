@@ -8,7 +8,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { filterKeysForThisBrowser } from "browser-extension-manifest-fields";
+import { engineManifestView } from "./engine-manifest-view";
 
 import { engineProjectRoot } from "./session-paths";
 
@@ -56,7 +56,7 @@ export function readBuiltManifest(
            `chromium:service_worker` read raw declared no background and the
            assertion failed the worker that was running. */
         const folded = isSourceManifest(file, projectPath)
-          ? (filterKeysForThisBrowser(manifest, browser) as Record<string, unknown>)
+          ? (engineManifestView(manifest, browser) as Record<string, unknown>)
           : (manifest as Record<string, unknown>);
         return { file, manifest: folded };
       }

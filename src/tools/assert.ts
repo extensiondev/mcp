@@ -27,6 +27,8 @@ import { CDPClient } from "../lib/cdp";
 import { CDP_PORT_MISSING_HINT, resolveCdpPort } from "../lib/cdp-port";
 import { envelope, isEnvelope } from "../lib/envelope";
 import { verifyGuestLoaded } from "../lib/guest-load-oracle";
+import { sessionGuestIdentity } from "../lib/extension-identity";
+import { engineManifestView } from "../lib/engine-manifest-view";
 import { contentScriptsForbidden, coveringMatches } from "../lib/match-patterns";
 import {
   declaredBackground,
@@ -34,6 +36,7 @@ import {
   manifestCandidates,
   readBuiltManifest,
   type ReadManifest,
+  isSourceManifest,
 } from "../lib/project-manifest";
 import { logsPath, readyContractPath } from "../lib/session-paths";
 import { resolveSessionBrowser } from "../lib/session-browser";
@@ -48,7 +51,10 @@ import {
   type CheckResult,
 } from "../lib/verdict";
 import { version } from "../../package.json";
-import { readLogEvents } from "./logs-filter";
+import { readLogEvents,
+  browserEventBelongsTo,
+  isBrowserChannelEvent,
+} from "./logs-filter";
 import { emptyReason, readLogRunId, staleFileNote } from "./logs";
 import {
   declaredSurfaces,
@@ -472,6 +478,31 @@ async function assertBackgroundWorker(
       { manifestFile: read.file },
     );
   }
+  /* @invariant THE DEV BUILD INJECTS A BACKGROUND OF ITS OWN (the bridge
+     producer) when the project declares none, so the built manifest always
+     declares one and a booted worker there is the engine's. The source manifest says what the extension declares. */
+  const injected = (() => {
+    if (isSourceManifest(read.file, stage.projectPath)) return false;
+    for (const file of manifestCandidates(stage.projectPath, stage.browser)) {
+      if (!isSourceManifest(file, stage.projectPath)) continue;
+      try {
+        const source = JSON.parse(fs.readFileSync(file, "utf8"));
+        if (!source || typeof source !== "object") continue;
+        return declaredBackground(engineManifestView(source as Record<string, unknown>, stage.browser)).kind === "none";
+      } catch {
+        continue;
+      }
+    }
+    return false;
+  })();
+  const injectedVerdict = (): CheckResult =>
+    inconclusiveCheck(
+      id,
+      null,
+      `The built manifest declares a ${background.kind}, but the project's source manifest declares no background: the dev build injects one of its own (the reload bridge producer), so the worker that booted is the engine's, not the extension's. Nothing about the extension's own code is proven either way.`,
+      "Declare a background in src/manifest.json (background.service_worker, or firefox:background.scripts), rebuild, then assert again.",
+      { manifestFile: read.file, injectedBackground: true },
+    );
   if (!stage.chromium) {
     /* @invariant On Gecko the proof is the control channel itself: the
        bridge executor that answers it runs inside the extension's background,
@@ -532,6 +563,7 @@ async function assertBackgroundWorker(
       ),
   );
   if (workers.length > 0) {
+    if (injected) return injectedVerdict();
     return passCheck(
       id,
       null,
@@ -549,15 +581,18 @@ async function assertBackgroundWorker(
 
   const runId = readLogRunId(stage.projectPath, stage.browser);
   const stale = staleFileNote(stage.projectPath, stage.browser, runId);
-  const backgroundLines = readLogEvents(stage.projectPath, stage.browser, {
+  const backgroundContextLines = readLogEvents(stage.projectPath, stage.browser, {
     context: ["background"],
   });
+  const backgroundLines = backgroundContextLines.filter((event) => !isBrowserChannelEvent(event));
+  const relayedLines = backgroundContextLines.length - backgroundLines.length;
   if (backgroundLines.length > 0 && !stale) {
+    if (injected) return injectedVerdict();
     return passCheck(
       id,
       null,
-      `No live ${background.kind} target is listed, but the background context wrote ${backgroundLines.length} log line(s) in run ${runId || "(unnamed)"}, which only a booted background can do. Chrome delists a dormant service worker, so this is the same verdict read from evidence that outlives the target.`,
-      { backgroundLogLines: backgroundLines.length, runId },
+      `No live ${background.kind} target is listed, but the extension's own background producer wrote ${backgroundLines.length} log line(s) in run ${runId || "(unnamed)"}${relayedLines ? ` (${relayedLines} browser-relayed line(s) in that context were not counted)` : ""}, which only a booted background can do. Chrome delists a dormant service worker, so this is the same verdict read from evidence that outlives the target.`,
+      { backgroundLogLines: backgroundLines.length, relayedLines, runId },
     );
   }
 
@@ -572,10 +607,12 @@ async function assertBackgroundWorker(
     }. That is not proof it never booted: Chrome delists an idle service worker, so absence here means no evidence either way.${
       stale
         ? ` The log file could not settle it either: ${stale}`
-        : " Nothing in this run's logs came from the background context either."
+        : relayedLines
+          ? ` The ${relayedLines} background-context line(s) in this run were relayed by the browser (any extension url, or the load refusal), not written by the extension's producer, so they do not count.`
+          : " Nothing in this run's logs came from the background context either."
     }`,
     "Wake it and assert again: extension_open (surface: 'action') or any message to the worker starts it, and one console line from the background makes this answerable from the log stream even after it idles out.",
-    { runId, backgroundLogLines: backgroundLines.length },
+    { runId, backgroundLogLines: backgroundLines.length, relayedLines },
   );
 }
 
@@ -830,6 +867,16 @@ async function assertSurfaceRendered(
         `The ${clause.surface} page is open at ${document} but nothing rendered into it: ${evidence.bodyElementCount ?? 0} element(s) and ${evidence.textLength ?? 0} character(s) of text in the body. A mount point with nothing mounted looks exactly like this.`,
         { evidence: evidence as Record<string, unknown> },
       );
+}
+
+function contractCompileErrors(projectPath: string, browser: string): string[] {
+  try {
+    const contract = JSON.parse(fs.readFileSync(readyContractPath(projectPath, browser), "utf8"));
+    if (contract?.status !== "error") return [];
+    return Array.isArray(contract.errors) ? contract.errors.map(String) : [];
+  } catch {
+    return [];
+  }
 }
 
 function contractLoadRefusal(projectPath: string, browser: string): string | null {
@@ -1097,10 +1144,25 @@ export function readStorageValue(value: unknown, key: string): StorageRead {
   return { shape: "absent" };
 }
 
+/* @invariant EQUAL OBJECTS ARE EQUAL WHATEVER THEIR KEY ORDER: the comparison is structural, with keys sorted at every level. */
+function canonical(value: unknown): string {
+  const walk = (node: unknown): unknown => {
+    if (Array.isArray(node)) return node.map(walk);
+    if (node && typeof node === "object") {
+      return Object.fromEntries(
+        Object.keys(node as Record<string, unknown>)
+          .sort()
+          .map((key) => [key, walk((node as Record<string, unknown>)[key])]),
+      );
+    }
+    return node === undefined ? null : node;
+  };
+  const encoded = JSON.stringify(walk(value));
+  return encoded ?? "null";
+}
+
 function sameValue(left: unknown, right: unknown): boolean {
-  const encode = (value: unknown): string =>
-    JSON.stringify(value ?? null) ?? "null";
-  return encode(left) === encode(right);
+  return canonical(left) === canonical(right);
 }
 
 async function assertStorageKeyPresent(
@@ -1264,10 +1326,17 @@ function assertConsoleErrorsEmpty(
       { logFile: file, runId, events: all.length },
     );
   }
-  const errorEvents = readLogEvents(stage.projectPath, stage.browser, {
+  /* @invariant A WEBSITE'S OWN ERROR IS NOT THE EXTENSION'S. Browser-relayed
+     lines come from any extension url or service worker, a visited site's
+     included; one is counted only when its url is this extension's
+    . */
+  const guestIds = sessionGuestIdentity(stage.projectPath, stage.browser).expectedIds;
+  const allErrorEvents = readLogEvents(stage.projectPath, stage.browser, {
     ...scopeQuery,
     level: "error",
   });
+  const errorEvents = allErrorEvents.filter((event) => browserEventBelongsTo(event, guestIds));
+  const foreignErrors = allErrorEvents.length - errorEvents.length;
   const errors = errorEvents.map((event) => {
     const ev = event as { messageParts?: unknown[]; message?: unknown; errorName?: unknown; stack?: unknown };
     const parts = Array.isArray(ev.messageParts) ? ev.messageParts : null;
@@ -1307,8 +1376,8 @@ function assertConsoleErrorsEmpty(
       ignored.length && errors.length
         ? `, and ${errors.length} matched an ignore entry and were not counted`
         : ""
-    }.`,
-    { events: all.length, ignored: errors.length - kept.length, runId },
+    }${foreignErrors ? `; ${foreignErrors} browser-relayed error(s) from other origins were not counted` : ""}.`,
+    { events: all.length, ignored: errors.length - kept.length, foreignErrors, runId },
   );
 }
 
@@ -1381,17 +1450,30 @@ export async function handler(args: {
     subject: { projectPath: args.projectPath, browser },
   });
 
+  /* @invariant A BUILD THAT FAILED EXPLAINS ITS OWN INCONCLUSIVES: the stage
+     sentence "this platform cannot cover the question today" is not the
+     reason when ready.json records compile errors. */
+  const compileErrors = contractCompileErrors(args.projectPath, browser);
   return envelope({
     ok: verdict.passed,
     command: COMMAND,
     status: verdict.outcome,
     value: verdict,
-    hint: verdictSentence(verdict),
-    warnings: verdict.inconclusive.length
-      ? [
-          `Inconclusive: ${verdict.inconclusive.join(" | ")}. Read each check's settledBy for the evidence that would answer it; none of these is a pass.`,
-        ]
-      : [],
+    hint: compileErrors.length
+      ? `The session's build failed (${compileErrors.length} compile error(s), the first: ${compileErrors[0]}): fix it, let the dev server recompile, then assert again. ${verdictSentence(verdict)}`
+      : verdictSentence(verdict),
+    warnings: [
+      ...(compileErrors.length
+        ? [
+            `ready.json records ${compileErrors.length} compile error(s) for this session, so the extension never loaded as written; inconclusive checks below are explained by that build, not by what this platform can cover.`,
+          ]
+        : []),
+      ...(verdict.inconclusive.length
+        ? [
+            `Inconclusive: ${verdict.inconclusive.join(" | ")}. Read each check's settledBy for the evidence that would answer it; none of these is a pass.`,
+          ]
+        : []),
+    ],
   });
 }
 

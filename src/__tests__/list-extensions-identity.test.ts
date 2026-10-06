@@ -97,6 +97,31 @@ afterEach(() => {
   }
 });
 
+/*. */
+describe("ownExtension is the contract's identity", () => {
+  it("marks the id the contract stamps, not the dist path hash, as own", async () => {
+    const stamped = "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz".replace(/z/g, "p");
+    const p = project({ extensionId: stamped });
+    cdpTargets = [swTarget(stamped), swTarget(p.id)];
+    domainInfo = {};
+    const out = JSON.parse(await listExtensions.handler({ projectPath: p.dir }));
+    const rows = out.value.extensions as Array<{ id: string; ownExtension?: boolean }>;
+    expect(rows.find((r) => r.id === stamped)?.ownExtension).toBe(true);
+    expect(rows.find((r) => r.id === p.id)?.ownExtension).not.toBe(true);
+    expect(out.value.ownExtensionId).toBe(stamped);
+  });
+
+  it("never marks a companion the contract lists under managedExtensions as own", async () => {
+    const companion = "abcdabcdabcdabcdabcdabcdabcdabcd";
+    const p = project({ managedExtensions: [{ id: companion, name: "Extension.js DevTools" }] });
+    cdpTargets = [swTarget(companion)];
+    domainInfo = {};
+    const out = JSON.parse(await listExtensions.handler({ projectPath: p.dir }));
+    const rows = out.value.extensions as Array<{ id: string; ownExtension?: boolean }>;
+    expect(rows.find((r) => r.id === companion)?.ownExtension).not.toBe(true);
+  });
+});
+
 describe("list-extensions own-extension identity", () => {
   it("flags the session's extension and names it from the ready contract", async () => {
     const p = project({ extensionName: "My Ext", extensionVersion: "2.1.0" });

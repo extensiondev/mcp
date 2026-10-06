@@ -8,7 +8,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { filterKeysForThisBrowser } from "browser-extension-manifest-fields";
+import { engineManifestView } from "../lib/engine-manifest-view";
 import { CHROMIUM_FAMILY, GECKO_FAMILY, WEBKIT_FAMILY, isChromiumFamily, isGeckoFamily } from "../lib/browser-family";
 import { listTemplates } from "../lib/templates-cache";
 import { envelope } from "../lib/envelope";
@@ -356,12 +356,12 @@ export async function handler(args: {
     result.errors.push("Missing required field: name");
   }
   if (!manifest.version) {
-    result.warnings.push(
-      "Missing field: version (required for store submission)",
+    result.errors.push(
+      'Missing field: version. Chrome refuses to load a manifest without it ("Required value \'version\' is missing"), and every store upload needs it.',
     );
   }
 
-  const chromiumManifest = filterKeysForThisBrowser(manifest, "chrome");
+  const chromiumManifest = engineManifestView(manifest, "chrome");
 
   /* @invariant The engine serves public/ at the dist root, so an icon the
      manifest names as images/icon.png may live at public/images/icon.png and
@@ -382,7 +382,7 @@ export async function handler(args: {
      a Firefox-only validation. */
   const effectiveByBrowser = new Map<string, Record<string, unknown>>();
   for (const b of browsers) {
-    effectiveByBrowser.set(b, filterKeysForThisBrowser(manifest, b));
+    effectiveByBrowser.set(b, engineManifestView(manifest, b));
   }
   const missingRefs = new Map<string, string[]>();
   const missingWar = new Map<string, string[]>();
@@ -456,9 +456,14 @@ export async function handler(args: {
     const perm = API_PERMISSION[api];
     if (declaredPermSet.has(perm)) continue;
     const base = `Code calls chrome.${api} but "${perm}" is not in permissions`;
+    /* @invariant THIS RULE IS A TEXT SEARCH, NOT A REFUSAL. The call is found
+       by a regex over up to ${SCAN_FILE_CAP} source files, comments and
+       strings included, and neither the engine nor the browser refuses the
+       build; a crash at runtime is the risk. So it warns and names its
+       method. */
     if (HARD_APIS.has(api)) {
-      result.errors.push(
-        `${base}, chrome.${api} is undefined without it and will crash the context at runtime.`,
+      result.warnings.push(
+        `${base}; chrome.${api} is undefined without it and the call crashes its context at runtime. Found by a text search over the project's source files (comments and strings count), so confirm the call is live before adding "${perm}".`,
       );
     } else {
       result.warnings.push(
@@ -499,7 +504,7 @@ export async function handler(args: {
     const isChromium = isChromiumFamily(browser);
     const isFirefox = isGeckoFamily(browser);
     const effective =
-      effectiveByBrowser.get(browser) ?? filterKeysForThisBrowser(manifest, browser);
+      effectiveByBrowser.get(browser) ?? engineManifestView(manifest, browser);
     const issues: string[] = [];
 
     if (isFirefox && (effective.manifest_version as number) === 2) {
@@ -543,8 +548,8 @@ export async function handler(args: {
         }
       }
       if (manifest["firefox:browser_action"] && !effective.action) {
-        issues.push(
-          'Firefox browser_action found but no chromium:action. Chromium MV3 uses "action" instead of "browser_action".',
+        result.warnings.push(
+          `${browser}: firefox:browser_action is declared and no action for Chromium, so the ${browser} build ships no toolbar action; Chromium MV3 reads "action" (chromium:action). The build itself is not refused.`,
         );
       }
 
@@ -552,7 +557,7 @@ export async function handler(args: {
         for (const key of CHROME_DESKTOP_ONLY_KEYS) {
           if (effective[key] !== undefined) {
             result.warnings.push(
-              `Manifest key "${key}" works on Chrome but is inert on Edge (it is a Chrome-only surface). The edge build ships it as a no-op; move it under "chromium:${key}" only if you also target Chrome, or remove it.`,
+              `Manifest key "${key}" works on Chrome but is inert on Edge (it is a Chrome-only surface). The edge build ships it as a no-op; move it under "chrome:${key}" (the engine applies a chrome: key to Chrome only, while chromium: covers Edge too), or remove it.`,
             );
           }
         }
@@ -571,10 +576,22 @@ export async function handler(args: {
           result.warnings.push(note);
         }
       }
+      /* @invariant THE ENGINE FOLDS AN UNPREFIXED side_panel INTO
+         sidebar_action FOR GECKO (`sidebarFoldTarget`), so the Firefox build
+         does ship the sidebar; only a chromium:-prefixed side_panel leaves
+         Firefox without one. */
+      const sidePanelPath = (chromiumManifest.side_panel as Record<string, unknown> | undefined)?.default_path;
+      const unprefixedSidePanel = typeof (manifest.side_panel as Record<string, unknown> | undefined)?.default_path === "string";
       if (chromiumManifest.side_panel && !effective.sidebar_action) {
-        result.warnings.push(
-          "Chromium side_panel declared but no firefox:sidebar_action: the Firefox build ships without a sidebar. If you want one there, Firefox uses sidebar_action.",
-        );
+        if (unprefixedSidePanel && typeof sidePanelPath === "string") {
+          result.warnings.push(
+            `${browser}: side_panel is folded into sidebar_action by the engine for Gecko builds, so the ${browser} build ships the sidebar at ${sidePanelPath}. Declare firefox:sidebar_action to shape it yourself, or prefix the key chromium:side_panel to leave Firefox without one.`,
+          );
+        } else {
+          result.warnings.push(
+            `${browser}: chromium:side_panel is declared and no firefox:sidebar_action, so the ${browser} build ships without a sidebar. Firefox uses sidebar_action.`,
+          );
+        }
       }
       const bss = effective.browser_specific_settings as
         | Record<string, unknown>
@@ -594,6 +611,7 @@ export async function handler(args: {
       }
       for (const key of CHROMIUM_ONLY_KEYS) {
         if (effective[key] !== undefined) {
+          if (key === "side_panel" && unprefixedSidePanel) continue;
           result.warnings.push(
             `Firefox: manifest key "${key}" is Chromium-only and is ignored or refused by Firefox. Move it under "chromium:${key}".`,
           );
@@ -615,10 +633,13 @@ export async function handler(args: {
       }
       const bg = effective.background as Record<string, unknown> | undefined;
 
+      /* @invariant THE ENGINE REWRITES service_worker INTO scripts FOR GECKO
+         (`patchGeckoBackground`), so this is not a refusal and does not
+         block the build. */
       if (bg) {
         if (bg.service_worker && !bg.scripts) {
-          issues.push(
-            'Background service_worker declared but no firefox:scripts. Firefox uses "scripts" (array) instead of "service_worker".',
+          result.warnings.push(
+            `${browser}: background.service_worker is declared and no firefox:background.scripts; the engine rewrites it to scripts: ["${String(bg.service_worker)}"] for Gecko builds, so the build is sound. Declare firefox:background.scripts to shape the Firefox background yourself.`,
           );
         }
       }

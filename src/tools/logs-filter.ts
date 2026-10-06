@@ -76,3 +76,19 @@ export function makeFilter(args: LogsArgs): (event: unknown) => boolean {
   };
   return (event: unknown): boolean => matchesLogQuery(event as never, query);
 }
+
+/* @invariant THE DEV SERVER WRITES context: "background" LINES OF ITS OWN:
+   every Log.entryAdded the launcher relays from any extension url or any
+   service_worker target, and its extension_load_refused line, carry
+   data.channel "browser" (dev-server ingestLog). Only a line without that
+   channel was written by the extension's own producer. */
+export function isBrowserChannelEvent(event: unknown): boolean {
+  const data = (event as { data?: { channel?: unknown } })?.data;
+  return data?.channel === "browser";
+}
+
+export function browserEventBelongsTo(event: unknown, guestIds: string[]): boolean {
+  if (!isBrowserChannelEvent(event)) return true;
+  const url = String((event as { url?: unknown })?.url ?? "");
+  return guestIds.some((id) => url.startsWith(`chrome-extension://${id}/`));
+}

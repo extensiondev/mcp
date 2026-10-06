@@ -91,7 +91,7 @@ describe("the Firefox report names what Firefox itself would say", () => {
     expect(warnings.find((w) => w.includes("gecko.id"))).toContain("new internal id on every launch");
     expect(warnings.find((w) => w.includes('"version_name"'))).toContain("Chromium-only");
     expect(warnings.find((w) => w.includes("extension_ids"))).toBeDefined();
-    expect(warnings.find((w) => w.includes("side_panel declared but no firefox:sidebar_action"))).toBeDefined();
+    expect(warnings.find((w) => w.includes("chromium:side_panel is declared and no firefox:sidebar_action"))).toBeDefined();
   });
 
   it("is quiet about the gecko id when the manifest sets it, and asks for data_collection_permissions until it is there", async () => {

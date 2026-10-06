@@ -170,6 +170,7 @@ describe("extension_build validation gate", () => {
       {
         manifest_version: 3,
         name: "Fixture",
+        version: "1.0.0",
         action: { default_popup: "popup.html" },
       },
       ["popup.html"],
@@ -179,7 +180,7 @@ describe("extension_build validation gate", () => {
 
     expect(result.ok).toBe(true);
     expect(Array.isArray(result.warnings)).toBe(true);
-    expect(result.warnings.join(" ").toLowerCase()).toContain("version");
+    expect(result.warnings.join(" ").toLowerCase()).toContain("128x128 icon");
   });
 });
 

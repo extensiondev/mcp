@@ -251,6 +251,33 @@ describe("background-worker-booted", () => {
     expect(check.detail).toContain("run run-1");
   });
 
+  /*. */
+  it("does not pass on background lines the browser relayed rather than the extension wrote", async () => {
+    writeManifest({ background: { service_worker: "sw.js" } });
+    liveSession();
+    live.targets = [{ id: "popup", type: "page", url: `chrome-extension://${GUEST_ID}/popup.html` }];
+    writeLogs([
+      logHeader("run-1"),
+      { v: 1, id: "e1", timestamp: 1, level: "error", context: "background", messageParts: ["Failed to load resource: 404"], url: `chrome-extension://${GUEST_ID}/x.png`, data: { channel: "browser" }, runId: "run-1", seq: 1 },
+    ]);
+    const { check } = await assertOnce({ assert: "background-worker-booted" });
+    expect(check.outcome).toBe("inconclusive");
+    expect(check.detail).toMatch(/relayed by the browser/);
+    expect(check.evidence?.relayedLines ?? check.relayedLines ?? 1).toBe(1);
+  });
+
+  /*. */
+  it("is inconclusive on a worker the dev build injected for a project that declares no background", async () => {
+    writeManifest({ background: { service_worker: "background/service_worker.js" } });
+    fs.mkdirSync(path.join(project, "src"), { recursive: true });
+    fs.writeFileSync(path.join(project, "src", "manifest.json"), JSON.stringify({ name: "x", action: { default_popup: "popup.html" } }));
+    liveSession();
+    live.targets = [{ id: "sw", type: "service_worker", url: `chrome-extension://${GUEST_ID}/background/service_worker.js` }];
+    const { check } = await assertOnce({ assert: "background-worker-booted" });
+    expect(check.outcome).toBe("inconclusive");
+    expect(check.detail).toMatch(/injects one of its own/);
+  });
+
   it("does not read a past run's background lines as this run's boot", async () => {
     writeManifest({ background: { service_worker: "sw.js" } });
     writeReady({
@@ -601,6 +628,18 @@ describe("storage-key-present", () => {
     expect(check.outcome).toBe("fail");
   });
 
+  /*. */
+  it("compares equals structurally, whatever the key order", async () => {
+    liveSession();
+    live.storageFrame = frameWith({ prefs: { b: 2, a: { y: 1, x: [1, 2] } } });
+    const { check } = await assertOnce({
+      assert: "storage-key-present",
+      key: "prefs",
+      equals: { a: { x: [1, 2], y: 1 }, b: 2 },
+    });
+    expect(check.outcome).toBe("pass");
+  });
+
   it("passes when the key is there, and compares equals when given", async () => {
     liveSession();
     live.storageFrame = frameWith({ token: "abc" });
@@ -669,6 +708,29 @@ describe("console-errors-empty", () => {
     expect(check.detail).toContain("do not belong to a live run");
   });
 
+  /*. */
+  it("does not count a browser-relayed error from another origin", async () => {
+    liveSession();
+    writeLogs([
+      logHeader("run-1"),
+      { v: 1, id: "e1", timestamp: 1, level: "log", context: "background", messageParts: ["hello"], runId: "run-1", seq: 1 },
+      { v: 1, id: "e2", timestamp: 2, level: "error", context: "background", messageParts: ["Uncaught TypeError in sw"], url: "https://www.youtube.com/sw.js", data: { channel: "browser" }, runId: "run-1", seq: 2 },
+    ]);
+    const { check } = await assertOnce({ assert: "console-errors-empty" });
+    expect(check.outcome).toBe("pass");
+    expect(check.detail).toMatch(/1 browser-relayed error/);
+  });
+
+  it("still counts a browser-relayed error from the extension's own origin", async () => {
+    liveSession();
+    writeLogs([
+      logHeader("run-1"),
+      { v: 1, id: "e2", timestamp: 2, level: "error", context: "background", messageParts: ["Uncaught TypeError in sw"], url: `chrome-extension://${GUEST_ID}/sw.js`, data: { channel: "browser" }, runId: "run-1", seq: 2 },
+    ]);
+    const { check } = await assertOnce({ assert: "console-errors-empty" });
+    expect(check.outcome).toBe("fail");
+  });
+
   it("fails on error events and quotes them", async () => {
     liveSession();
     writeLogs([
@@ -724,6 +786,26 @@ describe("console-errors-empty", () => {
 });
 
 describe("the verdict document", () => {
+  /*. */
+  it("names the failed build, not platform coverage, when ready.json holds compile errors", async () => {
+    writeManifest({ background: { service_worker: "sw.js" } });
+    writeReady({
+      status: "error",
+      code: "compile_error",
+      errors: ["Module not found: ./missing"],
+      pid: process.pid,
+      runId: "run-1",
+      instanceId: "inst-1",
+      distPath: path.join(project, "dist", BROWSER),
+      extensionId: GUEST_ID,
+      cdpPort: 9222,
+    });
+    live.targets = [];
+    const { frame } = await assertOnce({ assert: "background-worker-booted" });
+    expect(frame.warnings.join("\n")).toMatch(/records 1 compile error/);
+    expect(frame.hint).toMatch(/build failed .*Module not found/);
+  });
+
   it("is a pass only when every check passed", async () => {
     writeManifest({ background: { service_worker: "sw.js" } });
     liveSession();

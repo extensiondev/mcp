@@ -113,7 +113,7 @@ describe("75d: the permission scan reaches src/ first and says when it stopped",
     fs.mkdirSync(path.join(dir, "src"), { recursive: true });
     fs.writeFileSync(path.join(dir, "src", "x.js"), "chrome.history.search({});");
     const out = await validate(dir, ["chrome"]);
-    expect(out.value.errors.join("\n")).toMatch(/chrome\.history/);
+    expect(out.warnings.join("\n")).toMatch(/chrome\.history/);
     expect(out.warnings.join("\n")).toMatch(/stopped at its cap/);
   });
 

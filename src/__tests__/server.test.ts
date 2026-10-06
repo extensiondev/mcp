@@ -162,9 +162,9 @@ describe("manifest-validate handler", () => {
         browsers: ["firefox"],
       }),
     );
-    expect(parsed.value.browserSupport.firefox.issues.join(" ")).toContain(
-      "firefox:scripts",
-    );
+    expect(parsed.value.browserSupport.firefox.supported).toBe(true);
+    expect(parsed.value.browserSupport.firefox.issues).toEqual([]);
+    expect(parsed.warnings.join(" ")).toContain("rewrites it to scripts");
   });
 });
 

@@ -10,7 +10,6 @@ import {
   SESSION_BROWSER,
   SESSION_PROJECT_PATH,
 } from "../lib/common-schema";
-import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { CDPClient } from "../lib/cdp";
@@ -24,6 +23,7 @@ import {
 } from "../lib/cdp-port";
 import { rdpListAddons } from "../lib/rdp";
 import { resolveSessionBrowser } from "../lib/session-browser";
+import { sessionGuestIdentity } from "../lib/extension-identity";
 import { readyContractPath } from "../lib/session-paths";
 
 export const schema = {
@@ -51,16 +51,6 @@ interface ExtensionEntry {
   note?: string;
 }
 
-function unpackedExtensionId(distPath: string): string {
-  const digest = crypto.createHash("sha256").update(distPath).digest();
-  let id = "";
-  for (let i = 0; i < 16; i++) {
-    id += String.fromCharCode(97 + (digest[i] >> 4));
-    id += String.fromCharCode(97 + (digest[i] & 0x0f));
-  }
-  return id;
-}
-
 interface OwnIdentity {
   ids: string[];
   name?: string;
@@ -82,15 +72,11 @@ function readOwnIdentity(
 
   const distPath =
     typeof contract?.distPath === "string" ? contract.distPath : null;
-  const ids: string[] = [];
-  if (distPath) {
-    ids.push(unpackedExtensionId(distPath));
-    try {
-      const real = fs.realpathSync(distPath);
-      if (real !== distPath) ids.push(unpackedExtensionId(real));
-    } catch {
-    }
-  }
+  /* @invariant THE GUEST'S ID IS THE CONTRACT'S. The engine stamps
+     `extensionId` (a manifest `key` changes it from the path hash) and lists
+     its companions under `managedExtensions`; a path hash alone marked the
+     wrong row, or none, as ownExtension. */
+  const ids: string[] = [...sessionGuestIdentity(projectPath, browser).expectedIds];
 
   let name =
     typeof contract?.extensionName === "string"
