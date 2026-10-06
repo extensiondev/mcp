@@ -321,7 +321,35 @@ export async function revokeArtifact(options: {
   if (sawPlatformHold(res, data)) {
     return heldOutcome("SharesHeld", res, data, options.api);
   }
-  if (res.status === 401) return authError("SharesAuthError");
+  if (res.status === 401) {
+    return {
+      ok: false,
+      error: {
+        name: "SharesAuthError",
+        status: 401,
+        ...(typeof data?.code === "string" ? { code: data.code } : {}),
+        message: `The platform refused the token this revoke was sent with (${
+          typeof data?.code === "string" ? data.code : "401"
+        }): it is expired, revoked, or not a project token. Sign in again with extension_auth (action: login).`,
+      },
+    };
+  }
+  /* @invariant The platform's code is read before its status: a 404 with
+     APPROVAL_NOT_FOUND is a spent or unknown approval over a share that is
+     still live, not a share that is gone. */
+  if (res.status === 404 && typeof data?.code === "string" && data.code !== "ARTIFACT_NOT_FOUND") {
+    return {
+      ok: false,
+      error: {
+        name: "SharesRevokeError",
+        status: 404,
+        code: data.code,
+        message: `Revoking ${options.artifactId} was refused (${data.code}): ${
+          (data?.message as string) || "no message"
+        }. The share was not touched.`,
+      },
+    };
+  }
   if (res.status === 404) {
     return {
       ok: false,

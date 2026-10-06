@@ -23,7 +23,7 @@ import {
 } from "../lib/share-record";
 import { envelope } from "../lib/envelope";
 import { resolveToken } from "../lib/publish";
-import { PROJECT_TOKEN_INPUT } from "../lib/credentials";
+import { PROJECT_TOKEN_INPUT, noStoredLoginHint } from "../lib/credentials";
 import {
   approvalGateEnabled,
   evaluateApproval,
@@ -452,8 +452,30 @@ async function revokeShare(args: {
     if (gate.blocked) return gate.envelope;
   }
 
+  /* @invariant THE DELETE GOES OUT WITH THE TOKEN THE APPROVAL WAS ASKED
+     WITH. The gate above resolved the named project's login; the request
+     used to fall back to the active login or the env token, so a share of a
+     non-active project was approved as one project and revoked as another
+    . A named project with no stored login is refused
+     before anything is sent. */
+  if (!token) {
+    return envelope({
+      ok: false,
+      command: "extension_shares",
+      status: "auth-required",
+      value: { action: "revoke", artifactId: ref },
+      error: {
+        code: "E_AUTH_REQUIRED",
+        name: "SharesAuthError",
+        message: args.project
+          ? noStoredLoginHint(args.project)
+          : "No token. Run extension_auth (action: login), or set EXTENSION_DEV_TOKEN.",
+      },
+    });
+  }
   const result = await revokeArtifact({
     artifactId: ref,
+    token,
     ...(args.approvalId ? { approvalId: args.approvalId } : {}),
     ...(args.api ? { api: args.api } : {}),
   });
