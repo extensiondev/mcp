@@ -178,7 +178,14 @@ export function removeCarrier(projectPath: string): CarrierRemoval {
   };
 }
 
-export function ensureCarrierIgnored(projectPath: string): string | null {
+/* @invariant A FAILED IGNORE IS SAID. `failed` and `not-a-repo` used to
+   collapse into the same null as `already-ignored`, so a carrier the tool
+   described as gitignored could sit unignored in a repo whose .gitignore it
+   could not write. */
+export function ensureCarrierIgnored(projectPath: string): {
+  entry: string | null;
+  state: "added" | "already-ignored" | "not-a-repo" | "failed";
+} {
   const outcome = ensureProjectIgnored(projectPath, {
     entry: `extensions/${CARRIER_DIR_NAME}/`,
     aliases: [
@@ -189,7 +196,7 @@ export function ensureCarrierIgnored(projectPath: string): string | null {
     comment:
       "# Extension.dev live-preview carrier: a local debug companion, not part of your extension.",
   });
-  return outcome.state === "added" ? outcome.entry : null;
+  return { entry: outcome.state === "added" ? outcome.entry : null, state: outcome.state };
 }
 
 export type CarrierMaterialization = {
@@ -197,6 +204,7 @@ export type CarrierMaterialization = {
   path?: string;
   note: string;
   gitignored?: string;
+  gitignoreNote?: string;
   limitations?: string[];
   graduation?: string;
   bridgeProtocol?: {
@@ -273,11 +281,17 @@ export function materializeCarrier(
       )}\n`,
     );
     rememberCarrier(projectPath);
-    const ignored = ensureCarrierIgnored(projectPath);
+    const ignoreOutcome = ensureCarrierIgnored(projectPath);
+    const ignored = ignoreOutcome.entry;
+    const ignoreNote =
+      ignoreOutcome.state === "failed"
+        ? `The carrier could NOT be added to this project's .gitignore (the file could not be written); it is in ./extensions unignored, so do not commit it.`
+        : null;
     return {
       loaded: true,
       path: target,
       ...(ignored ? { gitignored: ignored } : {}),
+      ...(ignoreNote ? { gitignoreNote: ignoreNote } : {}),
       note:
         "Live-preview carrier placed in ./extensions; Extension.js loads it as a companion beside your extension. " +
         "Open https://preview.extension.dev/ in the dev browser, load a build from this machine, and switch the lane toggle to Real " +

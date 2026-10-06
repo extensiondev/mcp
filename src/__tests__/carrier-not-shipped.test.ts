@@ -309,6 +309,22 @@ describe("removeCarrier", () => {
 });
 
 describe("extension_stop", () => {
+  it("reports a carrier it could not remove instead of saying nothing", async () => {
+    if (process.platform === "win32" || process.getuid?.() === 0) return;
+    const dir = project();
+    placeCarrier(dir);
+    const parent = path.join(dir, "extensions");
+    fs.chmodSync(parent, 0o555);
+    try {
+      const outcome = await stop.stopOne(dir, "chrome");
+      expect(outcome.carrierRemoved).toBeUndefined();
+      expect(outcome.carrierNote).toContain("Could not remove the carrier");
+      expect(fs.existsSync(carrierDir(dir))).toBe(true);
+    } finally {
+      fs.chmodSync(parent, 0o755);
+    }
+  });
+
   it("takes the carrier back out of the project", async () => {
     const dir = project();
     placeCarrier(dir);
@@ -345,6 +361,22 @@ describe("materializeCarrier", () => {
     expect(fs.readFileSync(path.join(dir, ".gitignore"), "utf-8")).toBe(
       "node_modules\nextensions/\n",
     );
+  });
+
+  it("says so when the .gitignore could not be written", () => {
+    if (process.platform === "win32" || process.getuid?.() === 0) return;
+    const dir = project();
+    fs.mkdirSync(path.join(dir, ".git"));
+    fs.writeFileSync(path.join(dir, ".gitignore"), "node_modules\n");
+    fs.chmodSync(path.join(dir, ".gitignore"), 0o444);
+    try {
+      const result = materializeCarrier(dir, "chrome");
+      expect(result.loaded).toBe(true);
+      expect(result.gitignored).toBeUndefined();
+      expect(result.gitignoreNote).toContain("could NOT be added");
+    } finally {
+      fs.chmodSync(path.join(dir, ".gitignore"), 0o644);
+    }
   });
 
   it("writes no .gitignore into a project that is not a git repo", () => {

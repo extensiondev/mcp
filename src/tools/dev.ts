@@ -185,6 +185,7 @@ export async function handler(
   const spawned = spawnExtensionCli(cliArgs, { projectDir: args.projectPath });
   const { child, logPath } = spawned;
   if (child.pid === undefined) {
+    if (carrier?.loaded) removeCarrier(args.projectPath);
     return spawnFailedEnvelope(schema.name, spawned);
   }
   const pid = child.pid;

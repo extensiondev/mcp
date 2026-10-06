@@ -246,6 +246,10 @@ export async function handler(
       ...boot.warnings,
       stale.removed &&
         "Removed a Live Preview carrier left behind by an earlier dev session, so it was not loaded beside your extension here.",
+      !stale.removed &&
+        stale.note &&
+        /Could not remove/i.test(stale.note) &&
+        `${stale.note} A Live Preview carrier is still in ./extensions and the engine loads that folder, so this run has the debug companion beside your extension.`,
     ],
   });
 }

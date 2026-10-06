@@ -63,13 +63,19 @@ interface StopOutcome {
   reaped: number[];
   detail: string;
   carrierRemoved?: string;
+  carrierNote?: string;
   staleRecord?: boolean;
   survivorsUnverified?: boolean;
 }
 
-function cleanCarrier(projectPath: string): { carrierRemoved?: string } {
+/* @invariant A carrier that could not be removed is reported, not folded
+   into "there was no carrier". */
+function cleanCarrier(projectPath: string): { carrierRemoved?: string; carrierNote?: string } {
   const removal = removeCarrier(projectPath);
-  return removal.removed ? { carrierRemoved: removal.path } : {};
+  if (removal.removed) return { carrierRemoved: removal.path };
+  return removal.note && /Could not remove/i.test(removal.note)
+    ? { carrierNote: `${removal.note} The carrier is still at ${removal.path}; the engine loads ./extensions, so remove it by hand before the next run.` }
+    : {};
 }
 
 /* @invariant "NO SURVIVORS" IS A SEARCH THAT RAN AND FOUND NONE. pgrep exits
