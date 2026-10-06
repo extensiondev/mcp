@@ -19,7 +19,7 @@
   },
   "homepage": "https://extension.dev",
   "engines": {
-    "node": ">=20.18"
+    "node": ">=22.12"
   },
   "packageManager": "pnpm@10.19.0",
   "exports": {
@@ -49,6 +49,7 @@
     "LICENSE"
   ],
   "scripts": {
+    "docs:tools": "node scripts/generate-mcp-tools.mjs",
     "clean": "rm -rf dist",
     "readme:clients": "UPDATE_README=1 vitest run src/__tests__/readme-clients.test.ts",
     "watch": "rslib build --watch",

@@ -12,13 +12,13 @@ claude/
   ARCHITECTURE.md         How the template, CLAUDE.md, and MCP layers connect
   commands/
     extension.md          /extension: create, dev, build, add features, debug
-    extension-add.md      /extension-add: add sidebar, popup, content script, etc.
+    extension-add.md      /extension-add: plan a sidebar, popup, content script, etc. (the tool writes no files)
     extension-debug.md    /extension-debug: live DOM/console inspection
     extension-publish.md  /extension-publish: store submission prep
   rules/
     extension-dev.md      Core rules: project structure, manifest, commands
     cross-browser.md      Cross-browser manifest field mapping
-    mcp-tools.md          Full MCP tool specification and design doc
+    mcp-tools.md          MCP tool reference, generated from the server's schemas (pnpm docs:tools)
   examples/
     create-extension.md   Example prompt: scaffold and customize an extension
     add-sidebar.md        Example prompt: add a sidebar panel to an existing extension
@@ -59,7 +59,7 @@ Claude Code will automatically pick up the instructions and know how to:
 
 ## How it connects to the examples repo
 
-The [examples repo](https://github.com/extension-js/examples) publishes `templates-meta.json` as a nightly release asset. This file is the single source of truth for:
+The template catalog (`templates-meta.json`) is read from `media.extension.land/templates/latest.json` first and from a pinned commit of the [examples repo](https://github.com/extension-js/examples) as the fallback, with a bundled snapshot when neither answers. It is the single source of truth for:
 
 - **CLAUDE.md**, references it so Claude knows all available templates
 - **MCP tools**, `extension_templates` fetches and queries it at runtime
@@ -69,4 +69,4 @@ When a new template is added to the examples repo, all three layers pick it up a
 
 ## License
 
-MIT
+Apache-2.0

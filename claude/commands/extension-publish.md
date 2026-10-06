@@ -22,7 +22,7 @@ Default to `chrome` and `firefox`. `all` means chrome, firefox, edge and safari.
    - Firefox: a missing `browser_specific_settings.gecko.data_collection_permissions` declaration, which AMO now requires for new add-ons and updates
    - a bundle over 10 MB, source maps in the production build, missing 128px icon
 
-4. **Pick the build to submit.** Store review runs from a build on extension.dev, not from local files. Call `extension_release_status` with `include: "releases"` to find the sha. If the user has not shipped this version yet, say so and offer `extension_publish` first.
+4. **Pick the build to submit.** Store review runs from a build on extension.dev, not from local files. Call `extension_release_status` with `include: ["releases"]` to find the sha. If no build of this version is listed, say so: a build comes from a push to the project's repository (the platform builds it), not from `extension_publish`, which only shares a build that already exists.
 
 5. **Rehearse.** Call `extension_submit` with the browsers and `buildSha`, leaving `dryRun` at its default (`true`). Show the per-store credential rows. A store whose credentials are not healthy is fixed in the extension.dev console (the response names the page); drop it from `browsers` or stop.
 

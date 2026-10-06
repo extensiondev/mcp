@@ -11,6 +11,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { version } from "../package.json";
 
 export { version };
+export { renderToolsDoc } from "./lib/docs-tools";
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,

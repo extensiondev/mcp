@@ -70,8 +70,8 @@ Older Firefox ignores the `chromium:world` field and runs in the default isolate
 ## API differences
 
 - Chromium: use `chrome.*` namespace for Chrome-specific APIs (sidePanel, etc.)
-- Firefox: use `browser.*` namespace (auto-polyfilled by the framework)
-- For cross-browser code: use `browser.*` when possible, the polyfill maps it to `chrome.*` on Chromium
+- Firefox: `browser.*` is native; `chrome.*` also works there for most APIs
+- For cross-browser code: the polyfill that maps `browser.*` to `chrome.*` on Chromium is on for `extension_dev` and `extension_start` by default and OFF for `extension_build` (pass `polyfill: true` to the build, or write `chrome.*` and check `typeof browser` yourself)
 
 ## Testing across browsers
 
@@ -82,5 +82,6 @@ npm run dev -- --browser=firefox
 npm run dev -- --browser=edge
 
 # Build for multiple browsers
-npm run build -- --browser=chrome,firefox
+npm run build -- --browser=chrome
+npm run build -- --browser=firefox
 ```

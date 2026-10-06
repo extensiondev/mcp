@@ -41,7 +41,7 @@ The extension.dev platform ships 50+ templates in the [examples](https://github.
 
 ```bash
 # The full catalog with metadata (framework, surfaces, permissions, etc.)
-curl -sL https://github.com/extension-js/examples/releases/download/nightly/templates-meta.json | jq '.templates[] | {slug, description, uiFramework, surfaces}'
+curl -sL https://media.extension.land/templates/latest.json | jq '.templates[] | {slug, description, uiFramework, surfaces}'
 ```
 
 **Pre-built distributions** are available for every template:
@@ -121,7 +121,8 @@ npm run preview
 
 # Target a specific browser
 npm run dev -- --browser=firefox
-npm run build -- --browser=chrome,firefox
+npm run build -- --browser=chrome
+npm run build -- --browser=firefox
 
 # Zip for distribution
 npm run build -- --zip
@@ -200,13 +201,13 @@ The `extension_dom_snapshot` MCP tool wraps this verb one-to-one.
 
 **Debugging protocol (Chromium CDP): `extension_inspect` MCP tool.** Connects directly to the running session's debug port. Use it when the bridge is not enough: closed shadow roots (`deepDom`), selector probes, DOM snapshots, console summaries, or navigating the tab to a URL before inspecting. Returns structured events:
 
-- `page_html` - full injected HTML (after content scripts run)
-- `page_html_summary` - root/script/style/link counts
-- `page_meta` - readyState, viewport, frame count
-- `dom_snapshot` - structured tree (tag, id, classes, role, max 500 nodes)
-- `console_summary` - error/warn counts + top 5 unique messages
-- `selector_probe` - per-selector element counts and samples
-- `extension_root_tree` - extension root elements with reinject generations
+- `html` - full injected HTML (after content scripts run), with `htmlTruncated` when cut
+- `summary` - root/script/style/link counts
+- `meta` - readyState, viewport, frame count
+- `domSnapshot` - structured tree (tag, id, classes, role; `domSnapshotTruncated` names the cap)
+- `console` - error/warn counts + top unique messages
+- `probes` - per-selector element counts and samples
+- `extensionRoots` - extension root elements with reinject generations
 
 ### Unified logging (`--logs`)
 
@@ -229,7 +230,7 @@ npm run dev -- --logs info --log-url "example.com"
 ### Other debugging tools
 
 - Use `--browser=firefox` to test cross-browser compatibility
-- **Safari (macOS).** On Extension.js 4.1.28 or newer, `--browser=safari` builds the app, opens it, and after you enable the extension in Safari > Settings > Extensions it reloads on every save through the extension's bridge and streams background and content lines into the session log. Start it with `allowEval: true` and the bridge tools work: `extension_storage`, `extension_reload`, `extension_open` for surfaces, `extension_dom_snapshot` by tab id, `extension_logs`, and the assertions except `surface-rendered`. `extension_eval` in `content` or `page` needs a tab already open at the url, which you open in Safari by hand: `extension_open` with `url` and `extension_eval` in `background` are blocked by Safari's MV3 background CSP, and the engine says so. Safari has no CDP or RDP, so `extension_inspect` has no Safari path. Apple's Safari MCP server (`claude mcp add safari-mcp -- "/usr/bin/safaridriver" --mcp`, Safari 27+, after enabling Safari > Settings > Developer > "Allow remote automation and external agents") reads a page in its own isolated window with no extension-aware tool, and runs beside a dev session, since this server opens no automation session of its own.
+- **Safari (macOS).** On Extension.js 4.1.28 or newer, `--browser=safari` builds the app, opens it, and after you enable the extension in Safari > Settings > Extensions it reloads on every save through the extension's bridge and streams background and content lines into the session log. Start it with `allowEval: true` and the bridge tools work: `extension_storage`, `extension_reload`, `extension_open` for surfaces, `extension_dom_snapshot` by tab id, `extension_logs`, and the assertions (`surface-rendered` reads the surface through the relay there). `extension_eval` in `content` or `page` needs a tab already open at the url, which you open in Safari by hand: `extension_open` with `url` and `extension_eval` in `background` are blocked by Safari's MV3 background CSP, and the engine says so. Safari has no CDP or RDP, so `extension_inspect` has no Safari path. Apple's Safari MCP server (`claude mcp add safari-mcp -- "/usr/bin/safaridriver" --mcp`, Safari 27+, after enabling Safari > Settings > Developer > "Allow remote automation and external agents") reads a page in its own isolated window with no extension-aware tool, and runs beside a dev session, since this server opens no automation session of its own.
 - Check `dist/<browser>/` for build output
 - Use `--wait` flag to check if dev session is ready (outputs ready.json contract)
 - Use `npm run start` to test production builds (builds first, then launches)

@@ -9,7 +9,7 @@
 
 > Give your AI agent hands for browser extension development. 32 MCP tools that scaffold, run, inspect, debug, and publish cross-browser extensions.
 
-<img alt="Logo" align="right" src="https://media.extension.land/brand/extension-dev/logo-dock.png" width="15.5%" />
+<img alt="Logo" align="right" src="https://media.extension.land/brand/extension-dev/logo-dock.png" width="20.7%" />
 
 ```bash
 claude mcp add extension-dev npx @extension.dev/mcp
@@ -29,7 +29,7 @@ These tools give agents eyes on the live browser, so they debug from evidence in
 - **Run** the dev server with HMR in Chrome, Edge, Firefox, Brave, Opera, Vivaldi, Yandex, Waterfox, LibreWolf, Zen, Floorp, or any Chromium- or Gecko-based binary, plus Safari on macOS (no HMR yet), no build config
 - **See** the live DOM, unified logs from every extension context, `chrome.storage` contents, and the loaded-extension list
 - **Act**: evaluate code in any context, trigger the action button and commands, reload the extension, replay events
-- **Ship**: validate the manifest cross-browser, build for production, publish a shareable preview, and promote builds to release channels headlessly
+- **Ship**: validate the manifest cross-browser, build for production, publish a shareable preview, and promote builds to release channels (a stable promotion asks for a human approval first)
 
 Built on [Extension.js](https://extension.js.org), the open-source cross-browser extension framework.
 
@@ -146,8 +146,8 @@ npx @extension.dev/mcp login --project <workspace>/<project>
 
 Two flags (or environment variables) narrow the server before an agent sees it:
 
-- `--features=local` exposes only the tools that work on this machine (create, run, inspect, build), which also cuts the tool list by about 40%. `--features=platform` exposes only the extension.dev account, share, release and store tools. Both are on by default. Env: `EXTENSION_DEV_FEATURES`.
-- `--no-ship` keeps everything that stays on this machine and refuses every call that reaches other people: `extension_publish`, `extension_release_promote`, `extension_submit` with `dryRun: false`, `extension_preview_web` with `share: true`, and a share revoke. Dry runs and share listing still work. Env: `EXTENSION_DEV_NO_SHIP=1`.
+- `--features=local` exposes the tools that work on this machine (create, run, inspect, build, plus docs search), which leaves 23 of the 32 tools (the 9 platform tools are off). `--features=platform` exposes only the extension.dev account, share, release and store tools. Both are on by default. Env: `EXTENSION_DEV_FEATURES`.
+- `--no-ship` refuses the calls that put something in front of other people: `extension_publish`, `extension_release_promote`, `extension_submit` with `dryRun: false`, `extension_preview_web` with `share: true`, and a share revoke. Dry runs, share listing, login and project or workspace creation still work. Env: `EXTENSION_DEV_NO_SHIP=1`.
 
 A refused call answers `E_TOOL_DISABLED` with the flag to change.
 
@@ -222,12 +222,12 @@ cp node_modules/@extension.dev/mcp/claude/commands/*.md ~/my-extension/.claude/c
 | platform | `extension_project_create` | Create the extension.dev project for a built extension, or several under one approval, headless, via device approval |
 | platform | `extension_preview_web` | Render a build in the web emulator, and share it as a link |
 | platform | `extension_shares` | List every link you have shared, and revoke one permanently |
-| platform | `extension_publish` | Publish a shareable preview to extension.dev |
+| platform | `extension_publish` | Mint a shareable link for a build extension.dev already holds (nothing is uploaded) |
 | platform | `extension_release_promote` | Promote a build to a release channel, headless |
-| platform | `extension_submit` | Submit for store review: Chrome, Firefox and Edge, through extension.dev |
+| platform | `extension_submit` | Submit for store review: Chrome, Firefox, Edge and Safari, through extension.dev |
 | platform | `extension_release_status` | Read release channels, recent builds, and store submission and review state |
 
-Browser-launching tools (`dev`, `start`) shell out to the `extension` CLI, the project's own `node_modules/.bin/extension` when present, otherwise `npx extension@<pinned>` at the version this package is verified against; everything else runs in-process.
+Browser-launching tools (`dev`, `start`) shell out to the `extension` CLI, the project's own `node_modules/.bin/extension` when present, otherwise `npx extension@<pinned>` at the version this package is verified against; build, doctor, eval, storage, reload, open, dom_snapshot and assert spawn that CLI too, and the rest runs in-process.
 
 ## Asserting instead of guessing
 
@@ -286,8 +286,8 @@ and `extension_open` with `url` cannot open one on Safari: the bridge
 navigates through a background eval, and Safari's MV3 background CSP blocks
 eval, which also blocks `extension_eval` in `background`. Open the page in
 Safari by hand, then read it. Safari has no CDP or RDP, so
-`extension_inspect` has no Safari path and `surface-rendered` answers
-inconclusive, pointing at `extension_dom_snapshot` with a `context`.
+`extension_inspect` has no Safari path; `surface-rendered` reads the
+surface through the relay there and can pass or fail.
 
 Safari 27 and Safari Technology Preview 247 also ship Apple's own MCP server
 inside `safaridriver` (enable Safari > Settings > Developer > "Allow remote
