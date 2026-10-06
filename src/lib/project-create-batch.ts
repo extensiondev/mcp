@@ -8,6 +8,7 @@
 
 import { spendNarration } from "./allowance";
 import { writeCredentialBatch } from "./credentials";
+import { tokenExpiry } from "./credentials";
 import { answerIsUnknownOutcome, readCreatedProject } from "./create-answer";
 import { firstBuildValue, readFirstBuild, withheldBecause } from "./first-build";
 import { pollDeviceGrant, requestDeviceCode } from "./device-flow";
@@ -542,7 +543,7 @@ async function createOne(session: Session, entry: BatchEntry, installationId: st
    * answer; if the answer is not the listed project, filing it would put a
    * login on this machine for a project nobody named here. */
   if (data.tokenIssued === true && token && scoped) {
-    const expiresAt = Number(data.expiresAt || 0);
+    const expiresAt = tokenExpiry(data.expiresAt);
     /* @invariant THE PROJECT IS RECORDED AS CREATED BEFORE ANYTHING ELSE CAN
      * FAIL. The platform has made the project by the time its answer is
      * here. Filing the token used to sit unguarded between that answer and

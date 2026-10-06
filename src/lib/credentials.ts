@@ -183,6 +183,18 @@ export function credentialStoreProblem(): { path: string; reason: string } | nul
     : null;
 }
 
+/* @invariant A TOKEN WITHOUT AN EXPIRY IS NOT ETERNAL. A missing or
+   non-numeric `expiresAt` used to be stored as 0, which the reader treats as
+   "never expires" while the sentence said seven days. The
+   platform mints seven-day tokens; a token that arrives without its expiry
+   is stored with that documented life, counted from now. */
+export const TOKEN_TTL_SECONDS = 7 * 24 * 3600;
+
+export function tokenExpiry(value: unknown): number {
+  const n = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(n) && n > 0 ? n : Math.floor(Date.now() / 1000) + TOKEN_TTL_SECONDS;
+}
+
 export const PROJECT_PIN_ENV = "EXTENSION_DEV_PROJECT";
 
 export function pinnedProject(): string {

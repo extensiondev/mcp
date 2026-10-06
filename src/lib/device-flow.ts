@@ -86,13 +86,16 @@ export async function requestDeviceCode(args: {
     deviceCode,
     userCode,
     verificationUri: String(
-      data.verification_uri || "https://extension.dev/device",
+      data.verification_uri || `${String(args.apiBase ?? "https://www.extension.dev").replace(/\/+$/, "")}/device`,
     ),
     verificationUriComplete: String(
       data.verification_uri_complete || data.verification_uri || "",
     ),
-    interval: Number(data.interval || 5),
-    expiresIn: Number(data.expires_in || 900),
+    /* @invariant A non-numeric interval or expiry is the default, never NaN:
+       NaN defeated both the sleep and the deadline, so the poll ran hot with
+       no end. */
+    interval: positiveNumber(data.interval, 5),
+    expiresIn: positiveNumber(data.expires_in, 900),
   };
 }
 
@@ -163,6 +166,19 @@ export async function pollDeviceGrant(args: {
     }
 
     const error = String(data.error || "");
+    /* @invariant A 2xx that carries neither a token nor an OAuth error is an
+       answer this client does not understand, not "still pending": a batch
+       code is spent when minting starts, so calling it pending lost the
+       tokens and the next call said expired. */
+    if (res.ok && !error) {
+      return {
+        ok: false,
+        reason: "error",
+        message: `The device token endpoint answered ${res.status} without a token and without an OAuth error${
+          text ? ` (${text.slice(0, 200)})` : ""
+        }; the approval may have been consumed by an answer this client cannot read.`,
+      };
+    }
     const code = String(data.code || "").trim();
     const refusal = code ? { code, body: data } : {};
     if (error === "access_denied") {
@@ -228,4 +244,9 @@ export async function pollDeviceToken(args: {
       message: err?.message ? String(err.message) : String(err),
     };
   }
+}
+
+function positiveNumber(value: unknown, fallback: number): number {
+  const n = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(n) && n > 0 ? n : fallback;
 }

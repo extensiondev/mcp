@@ -8,6 +8,7 @@ import {
   listCredentials,
   readCredentials,
   readValidCredentials,
+  tokenExpiry,
   writeCredentials,
   type StoredCredentials,
 } from "../lib/credentials";
@@ -194,5 +195,18 @@ describe("several logins live side by side, one per workspace/project", () => {
 
     expect(readValidCredentials(undefined, { project: "acme/widget" })?.token).toBe("fresh");
     expect(readValidCredentials(undefined, { project: "acme/gadget" })).toBeNull();
+  });
+});
+
+describe("a token that arrives without an expiry is not stored as eternal", () => {
+  it("keeps a real expiry and gives a missing or garbled one the documented seven days", () => {
+    const now = Math.floor(Date.now() / 1000);
+    expect(tokenExpiry(1_900_000_000)).toBe(1_900_000_000);
+    expect(tokenExpiry("1900000000")).toBe(1_900_000_000);
+    for (const bad of [undefined, null, 0, -5, "soon", NaN]) {
+      const got = tokenExpiry(bad);
+      expect(got).toBeGreaterThanOrEqual(now + 7 * 24 * 3600 - 2);
+      expect(got).toBeLessThanOrEqual(now + 7 * 24 * 3600 + 2);
+    }
   });
 });

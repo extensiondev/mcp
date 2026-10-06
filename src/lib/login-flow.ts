@@ -11,6 +11,7 @@ import {
   writeCredentials,
   type StoredCredentials,
 } from "./credentials";
+import { tokenExpiry } from "./credentials";
 import {
   readBatchCapability,
   sameProjectSet,
@@ -151,7 +152,7 @@ export function persistTokenResponse(args: {
     token,
     workspaceSlug,
     projectSlug,
-    expiresAt: Number(args.data.expiresAt || 0),
+    expiresAt: tokenExpiry(args.data.expiresAt),
     api: args.apiBase,
     provider: "extensiondev",
   };
@@ -195,7 +196,7 @@ export function persistBatchTokenResponse(args: {
       token,
       workspaceSlug,
       projectSlug,
-      expiresAt: Number(record.expiresAt || 0),
+      expiresAt: tokenExpiry(record.expiresAt),
       api: args.apiBase,
       provider: "extensiondev",
     };
