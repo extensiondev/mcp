@@ -507,6 +507,13 @@ export async function handler(args: {
       args.project,
     );
     result.share = share;
+    if (share.ok !== true) {
+      previewWarnings.push(
+        `share: true was asked for and the upload did NOT produce a share: ${
+          (share as { error?: { message?: string } }).error?.message ?? "the platform refused"
+        }. There is no public link; the result below is the local preview only.`,
+      );
+    }
     if (share.ok === true && share.browserLoadable === false) {
       const check = share.browserCheck as { reason?: string } | undefined;
       previewWarnings.push(
@@ -686,12 +693,31 @@ export async function handler(args: {
      * share as a failure. When the share succeeded, the local lane's absence
      * is a warning on a success, not a verdict.
      */
-    const shared = result.share as { ok?: unknown } | undefined;
+    const shared = result.share as
+      | { ok?: unknown; browserLoadable?: unknown; heldFromPublic?: unknown; zipUrl?: unknown }
+      | undefined;
     if (args.share && shared?.ok === true) {
+      /* @invariant "THE SHARE LINK WORKS" IS THE PROBE'S VERDICT, NOT THE
+         UPLOAD'S. This branch used to say the link works on `share.ok`
+         alone, which only means the bytes went up, while the same envelope
+         could carry the CORS probe's "it will not render for anyone" or a
+         hold from the public. */
+      const linkWorks =
+        shared.browserLoadable === true &&
+        shared.heldFromPublic !== true &&
+        typeof shared.zipUrl === "string";
+      const linkNote =
+        shared.browserLoadable === true && shared.heldFromPublic === true
+          ? "The share uploaded and its zip answers, but the platform is holding share pages from the public, so the link does not open for strangers yet."
+          : shared.browserLoadable === false
+            ? "The share uploaded, but the probe could not read its zip the way a browser would, so the link will not render for anyone until that is fixed; see share.loadCheck."
+            : shared.browserLoadable === true
+              ? `The share link works; only the local ${SURFACE.label} dev lane at ${hostBase} is unreachable, which is expected outside the extension.dev monorepo.`
+              : "The share uploaded, but whether its link renders was not checked (no probe verdict).";
       return envelope({
         ok: true,
         command: COMMAND,
-        status: "shared",
+        status: linkWorks ? "shared" : "shared-unverified",
         value: {
           ...result,
           hostReachable: false,
@@ -700,11 +726,10 @@ export async function handler(args: {
             error: err instanceof Error ? err.message : String(err),
           },
         },
-        hint: "share.previewUrl is live and needs no local server. The deepLink lane is separate: it only resolves against a preview.extension.dev dev server on this machine, and none answered.",
-        warnings: [
-          ...previewWarnings,
-          `The share link works; only the local ${SURFACE.label} dev lane at ${hostBase} is unreachable, which is expected outside the extension.dev monorepo.`,
-        ],
+        hint: linkWorks
+          ? "share.previewUrl is live and needs no local server. The deepLink lane is separate: it only resolves against a preview.extension.dev dev server on this machine, and none answered."
+          : "share.previewUrl exists but is not confirmed to render; read share.loadCheck before handing the link to anyone. The deepLink lane is separate and needs a local preview.extension.dev dev server, which did not answer.",
+        warnings: [...previewWarnings, linkNote],
       });
     }
     return envelope({

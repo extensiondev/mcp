@@ -668,6 +668,59 @@ describe("extension_preview_web", () => {
       }
     });
 
+    it("does not say the share link works when its own probe said it will not render", async () => {
+      const dir = tmpDist(MANIFEST);
+      process.env.EXTENSION_DEV_TOKEN = "tok_test";
+      const signed = "https://acct.r2.cloudflarestorage.com/b/gen_cors.zip?s=1";
+      shareFleet({
+        ["https://www.extension.dev/api/artifacts/gen_cors/source.zip"]: () =>
+          new Response(null, {
+            status: 302,
+            headers: { location: signed, "access-control-allow-origin": "*" },
+          }),
+        [signed]: () =>
+          new Response(null, { status: 200, headers: { "content-type": "application/zip" } }),
+      });
+      const fleet = global.fetch;
+      global.fetch = (async (input: any, init: any) => {
+        if (String(input).includes("/__preview/fetch")) throw new Error("ECONNREFUSED");
+        return fleet(input, init);
+      }) as unknown as typeof fetch;
+      try {
+        const out = JSON.parse(
+          await handler({ projectPath: dir, build: false, distPath: dir, share: true }),
+        );
+        expect(out.value.share.ok).toBe(true);
+        expect(out.value.share.browserLoadable).toBe(false);
+        expect(out.status).toBe("shared-unverified");
+        expect(out.warnings.join(" ")).not.toContain("The share link works");
+        expect(out.warnings.join(" ")).toMatch(/will not render for anyone/);
+        expect(out.hint).not.toContain("is live");
+      } finally {
+        fs.rmSync(dir, { recursive: true, force: true });
+      }
+    });
+
+    it("warns loudly when share:true was asked for and the upload produced no share", async () => {
+      const dir = tmpDist(MANIFEST);
+      process.env.EXTENSION_DEV_TOKEN = "tok_test";
+      global.fetch = (async (_input: any, init: any) => {
+        if (init?.method === "POST") {
+          return new Response(JSON.stringify({ message: "Payload too large" }), { status: 413 });
+        }
+        throw new Error("unrouted");
+      }) as unknown as typeof fetch;
+      try {
+        const out = JSON.parse(
+          await handler({ projectPath: dir, build: false, distPath: dir, share: true, probe: false }),
+        );
+        expect(out.value.share.ok).toBe(false);
+        expect(out.warnings.join(" ")).toContain("did NOT produce a share");
+      } finally {
+        fs.rmSync(dir, { recursive: true, force: true });
+      }
+    });
+
     it("certifies a share when the final hop allows the preview origin", async () => {
       const dir = tmpDist(MANIFEST);
       process.env.EXTENSION_DEV_TOKEN = "tok_test";
