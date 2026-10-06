@@ -86,7 +86,7 @@ function readBuildSummary(
   const file = buildSummaryPath(projectPath, browser);
   try {
     const stat = fs.statSync(file);
-    if (stat.mtimeMs >= since) {
+    if (stat.mtimeMs >= since - MTIME_SLACK_MS) {
       const summary = JSON.parse(fs.readFileSync(file, "utf8"));
       if (summary && typeof summary === "object") return { file, summary };
     }
@@ -280,7 +280,7 @@ function newestZip(
         const full = path.join(dir, name);
         return { full, mtimeMs: fs.statSync(full).mtimeMs };
       })
-      .filter((entry) => entry.mtimeMs >= since)
+      .filter((entry) => entry.mtimeMs >= since - MTIME_SLACK_MS)
       .sort((a, b) => b.mtimeMs - a.mtimeMs);
     return fresh[0]?.full ?? null;
   } catch {
@@ -332,9 +332,16 @@ function zipFromSummary(
   return null;
 }
 
+/* @invariant FILESYSTEM MTIMES COME FROM A COARSE KERNEL CLOCK that can
+   trail Date.now() by a few milliseconds, so a file the engine wrote just
+   after the build started can carry an mtime before it (seen on CI's Linux
+   runners). A second of slack still tells this run's output from an older
+   build's. */
+const MTIME_SLACK_MS = 1000;
+
 function freshFile(file: string, since: number): boolean {
   try {
-    return fs.statSync(file).mtimeMs >= since;
+    return fs.statSync(file).mtimeMs >= since - MTIME_SLACK_MS;
   } catch {
     return false;
   }
@@ -1143,7 +1150,7 @@ function buildCompileErrors(
 ): string[] {
   try {
     const file = readyContractPath(projectPath, browser);
-    if (fs.statSync(file).mtimeMs < since) return [];
+    if (fs.statSync(file).mtimeMs < since - MTIME_SLACK_MS) return [];
     const contract = JSON.parse(fs.readFileSync(file, "utf8"));
     const errors = Array.isArray(contract?.errors) ? contract.errors : [];
     return errors
