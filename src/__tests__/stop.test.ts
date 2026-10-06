@@ -223,7 +223,7 @@ function enginesProfileDir(
 }
 
 describe("extension_stop orphan reaping", () => {
-  posixOnly(
+  it(
     "reaps a profile-dir holder even when the project path carries regex metachars",
     async () => {
       const projectPath = path.join(tmpProject(), "weird (c++) [v1]");
@@ -280,7 +280,7 @@ describe("extension_stop orphan reaping", () => {
     15_000,
   );
 
-  posixOnly(
+  it(
     "matches a dev server spawned with the caller's relative path spelling",
     async () => {
       const absolute = tmpProject();

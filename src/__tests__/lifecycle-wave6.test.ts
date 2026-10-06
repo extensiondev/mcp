@@ -4,10 +4,24 @@ import os from "node:os";
 import path from "node:path";
 
 const taskkillCalls: string[][] = [];
+const windowsHost: { table: string | null } = { table: null };
 
 vi.mock("node:child_process", async (importOriginal) => {
   const actual = await importOriginal<typeof import("node:child_process")>();
   const execFileSync = ((file: string, args?: readonly string[], options?: unknown) => {
+    if (process.platform === "win32" && (file === "pgrep" || file === "ps")) {
+      throw Object.assign(new Error(`spawnSync ${file} ENOENT`), { code: "ENOENT" });
+    }
+    if (file === "powershell") {
+      if (windowsHost.table === null) {
+        throw Object.assign(new Error("spawnSync powershell ENOENT"), { code: "ENOENT" });
+      }
+      return windowsHost.table;
+    }
+    if (file === "tasklist") {
+      const pid = String(args?.[1] ?? "").replace("PID eq ", "");
+      return `"node.exe","${pid}","Console","1","10,000 K"\r\n`;
+    }
     if (file === "taskkill") {
       taskkillCalls.push([...(args ?? [])]);
       const pid = Number(args?.[1]);
@@ -59,6 +73,7 @@ const posixOnly = process.platform === "win32" ? it.skip : it;
 
 afterEach(() => {
   vi.restoreAllMocks();
+  windowsHost.table = null;
   process.env.EXTENSION_MCP_SESSION_DIR = sessionDir;
   for (const dir of tmpDirs.splice(0)) fs.rmSync(dir, { recursive: true, force: true });
 });
@@ -114,6 +129,77 @@ describe("Reaped means confirmed gone", () => {
         if (isAlive(pid)) realKill(pid, "SIGKILL");
       }
       expect(taskkillCalls).toContainEqual(["/PID", String(pid), "/T", "/F"]);
+    },
+    15_000,
+  );
+});
+
+/* @invariant Windows stop reads its own process table.
+   pgrep and ps fail here as they do on Windows, so a pass cannot come from
+   the host's own pgrep; powershell and tasklist answer from the table each
+   cell sets, and taskkill really kills the holder. */
+describe("A Windows stop can verify what it ended", () => {
+  function onWindows<T>(run: () => Promise<T>): Promise<T> {
+    const platform = Object.getOwnPropertyDescriptor(process, "platform")!;
+    Object.defineProperty(process, "platform", { value: "win32" });
+    return run().finally(() => Object.defineProperty(process, "platform", platform));
+  }
+
+  posixOnly(
+    "reaps a profile holder found in the process table and confirms it gone",
+    async () => {
+      const projectPath = tmpProject();
+      const profileArg = path.join(projectPath, "dist", "extension-js", "profiles", "chrome-profile", "calm-red-fox");
+      const pid = spawnHolder([profileArg]);
+      await new Promise((r) => setTimeout(r, 200));
+      windowsHost.table = `4\tSystem\t\r\n${pid}\tnode.exe\t"node" -e "x" ${profileArg}\r\n`;
+      try {
+        const result = JSON.parse(await onWindows(() => stop.handler({ projectPath, browser: "chrome" })));
+        expect(result.value.reaped).toContain(pid);
+        expect(result.value.stopped).toBe(true);
+        expect(result.value.survivorsUnverified).toBeUndefined();
+      } finally {
+        if (isAlive(pid)) realKill(pid, "SIGKILL");
+      }
+    },
+    15_000,
+  );
+
+  posixOnly(
+    "answers stopped when the table shows nothing of the session left",
+    async () => {
+      const projectPath = tmpProject();
+      const pid = spawnHolder([]);
+      registerSession({ pid, browser: "chrome", projectPath, command: "dev" });
+      windowsHost.table = "4\tSystem\t\r\n";
+      try {
+        const result = JSON.parse(await onWindows(() => stop.handler({ projectPath, browser: "chrome" })));
+        expect(result.value.stopped).toBe(true);
+        expect(result.value.survivorsUnverified).toBeUndefined();
+        expect(isAlive(pid)).toBe(false);
+      } finally {
+        removeSession(projectPath, "chrome");
+        if (isAlive(pid)) realKill(pid, "SIGKILL");
+      }
+    },
+    15_000,
+  );
+
+  posixOnly(
+    "still says unverified when the process table cannot be read",
+    async () => {
+      const projectPath = tmpProject();
+      const pid = spawnHolder([]);
+      registerSession({ pid, browser: "chrome", projectPath, command: "dev" });
+      windowsHost.table = null;
+      try {
+        const result = JSON.parse(await onWindows(() => stop.handler({ projectPath, browser: "chrome" })));
+        expect(result.value.stopped).toBe(false);
+        expect(result.value.survivorsUnverified).toBe(true);
+      } finally {
+        removeSession(projectPath, "chrome");
+        if (isAlive(pid)) realKill(pid, "SIGKILL");
+      }
     },
     15_000,
   );

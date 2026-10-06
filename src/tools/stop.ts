@@ -14,6 +14,8 @@ import {
   PLAUSIBLE_SESSION_BINARY,
   describeForeignPid,
   pidState,
+  readWindowsProcessTable,
+  type WindowsProcessRow,
   processCommand,
 } from "../lib/process-identity";
 import type { ReadyContract } from "../lib/types";
@@ -87,11 +89,25 @@ function cleanCarrier(projectPath: string): { carrierRemoved?: string; carrierNo
 }
 
 /* @invariant "NO SURVIVORS" IS A SEARCH THAT RAN AND FOUND NONE. pgrep exits
-   1 for no match and fails outright when it is absent (Windows, a slim
-   image) or cannot run; both used to read as an empty list, so a stop
-   answered "stopped, reaped: []" with the browser still up. A search that could not run answers null, and the outcome says the
-   survivors were not verified. */
-function pgrepPids(pattern: string): number[] | null {
+   1 for no match and fails outright when it is absent (a slim image) or
+   cannot run; both used to read as an empty list, so a stop answered
+   "stopped, reaped: []" with the browser still up. A
+   search that could not run answers null, and the outcome says the
+   survivors were not verified. Windows has no pgrep and matches the same
+   patterns against its own process table instead, case-insensitively as
+   its paths are. */
+function pgrepPids(
+  pattern: string,
+  windowsTable?: () => WindowsProcessRow[] | null,
+): number[] | null {
+  if (process.platform === "win32") {
+    const table = windowsTable ? windowsTable() : readWindowsProcessTable();
+    if (!table) return null;
+    const matcher = new RegExp(pattern, "i");
+    return table
+      .filter((row) => row.pid !== process.pid && matcher.test(row.commandLine))
+      .map((row) => row.pid);
+  }
   try {
     const out = execFileSync("pgrep", ["-f", pattern], { encoding: "utf8" });
     return out
@@ -159,8 +175,13 @@ function sessionProcessPids(
 ): { pids: number[]; verified: boolean } {
   const pids = new Set<number>();
   let verified = true;
+  let table: WindowsProcessRow[] | null | undefined;
+  const windowsTable = (): WindowsProcessRow[] | null => {
+    if (table === undefined) table = readWindowsProcessTable();
+    return table;
+  };
   const found = (pattern: string): number[] => {
-    const hits = pgrepPids(pattern);
+    const hits = pgrepPids(pattern, windowsTable);
     if (hits === null) {
       verified = false;
       return [];

@@ -41,10 +41,12 @@ async function waitFor(check: () => boolean, budgetMs: number): Promise<boolean>
    win32 cell in lifecycle-wave6 only fakes the platform, so before this cell
    no run had shown taskkill /T /F ending a real tree. The
    parent stands in for the dev server and its child for the browser it
-   launched; the child is what a shim-only kill used to leave running. */
+   launched; the child is what a shim-only kill used to leave running. Since
+   the survivor search reads the Windows process table, so a
+   stop that ended the tree says stopped instead of unverified. */
 describe("extension_stop on a real Windows host", () => {
   windowsOnly(
-    "ends the session's whole process tree and says survivors were not verified",
+    "ends the session's whole process tree and confirms nothing of it is left",
     async () => {
       const projectPath = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-stop-win-"));
       const childPidFile = path.join(projectPath, "child.pid");
@@ -72,9 +74,8 @@ describe("extension_stop on a real Windows host", () => {
 
         expect(await waitFor(() => !isAlive(parentPid), 5_000)).toBe(true);
         expect(await waitFor(() => !isAlive(childPid), 5_000)).toBe(true);
-        expect(result.value.stopped).toBe(false);
-        expect(result.value.survivorsUnverified).toBe(true);
-        expect(result.value.detail).toContain("NOT verified");
+        expect(result.value.stopped).toBe(true);
+        expect(result.value.survivorsUnverified).toBeUndefined();
       } finally {
         removeSession(projectPath, "chrome");
         for (const pid of [childPid, parentPid]) {

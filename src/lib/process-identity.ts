@@ -27,7 +27,59 @@ export type PidState = "alive" | "dead" | "foreign";
 export const PLAUSIBLE_SESSION_BINARY =
   /chrom|edge|brave|opera|vivaldi|yandex|firefox|waterfox|librewolf|zen|floorp|safari|node|electron|extension/i;
 
+export interface WindowsProcessRow {
+  pid: number;
+  name: string;
+  commandLine: string;
+}
+
+/* @invariant WINDOWS ANSWERS FROM ITS OWN PROCESS TABLE. There is no /proc,
+   ps or pgrep there, so processCommand answered "" and the session filter
+   dropped every match, and the survivor search could never run, so every
+   stop answered stopped: false and a dev replace always refused. One CIM query reads id, image name and command line for every
+   process; null means the query itself could not run, never "no processes". */
+export function readWindowsProcessTable(): WindowsProcessRow[] | null {
+  try {
+    const out = execFileSync(
+      "powershell",
+      [
+        "-NoProfile",
+        "-NonInteractive",
+        "-Command",
+        "[Console]::OutputEncoding = [Text.Encoding]::UTF8; Get-CimInstance Win32_Process | ForEach-Object { \"$($_.ProcessId)`t$($_.Name)`t$($_.CommandLine)\" }",
+      ],
+      { encoding: "utf8", windowsHide: true, maxBuffer: 64 * 1024 * 1024 },
+    );
+    const rows: WindowsProcessRow[] = [];
+    for (const line of out.split(/\r?\n/)) {
+      const [pidText, name = "", ...rest] = line.split("\t");
+      const pid = Number.parseInt(pidText ?? "", 10);
+      if (Number.isInteger(pid) && pid > 0) {
+        rows.push({ pid, name, commandLine: rest.join("\t") });
+      }
+    }
+    return rows.length ? rows : null;
+  } catch {
+    return null;
+  }
+}
+
+function windowsImageName(pid: number): string {
+  try {
+    const out = execFileSync(
+      "tasklist",
+      ["/FI", `PID eq ${pid}`, "/FO", "CSV", "/NH"],
+      { encoding: "utf8", windowsHide: true },
+    );
+    const match = /^"([^"]+)","(\d+)"/m.exec(out);
+    return match && Number(match[2]) === pid ? match[1] : "";
+  } catch {
+    return "";
+  }
+}
+
 export function processCommand(pid: number): string {
+  if (process.platform === "win32") return windowsImageName(pid);
   try {
     const cmdline = fs.readFileSync(`/proc/${pid}/cmdline`, "utf8");
     const argv0 = cmdline.split("\0")[0];
