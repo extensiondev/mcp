@@ -34,10 +34,17 @@ describe("extension_publish surfaces the platform's preview commands", () => {
     prevXdg = process.env.XDG_CONFIG_HOME;
     prevToken = process.env.EXTENSION_DEV_TOKEN;
     process.env.XDG_CONFIG_HOME = tmp;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        throw new Error("publish-preview cells never reach the network");
+      }),
+    );
     process.env.EXTENSION_DEV_TOKEN = `${Buffer.from(JSON.stringify({ u: "open-source-demo", p: "web-scrobbler", exp: Math.floor(Date.now() / 1000) + 600 })).toString("base64url")}.sig`;
   });
 
   afterEach(() => {
+    vi.unstubAllGlobals();
     if (prevXdg === undefined) delete process.env.XDG_CONFIG_HOME;
     else process.env.XDG_CONFIG_HOME = prevXdg;
     if (prevToken === undefined) delete process.env.EXTENSION_DEV_TOKEN;
