@@ -48,7 +48,6 @@ import {
   type CheckResult,
 } from "../lib/verdict";
 import { version } from "../../package.json";
-import { recentErrorLogs } from "./doctor";
 import { readLogEvents } from "./logs-filter";
 import { emptyReason, readLogRunId, staleFileNote } from "./logs";
 import {
