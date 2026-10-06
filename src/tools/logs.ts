@@ -7,6 +7,7 @@
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
 import fs from "node:fs";
+import path from "node:path";
 import WebSocket from "ws";
 
 import {
@@ -88,6 +89,7 @@ function summarize(
   projectPath?: string,
   staleNote?: string,
   streamNote?: string,
+  extra: Record<string, unknown> = {},
 ): string {
   const matched = events.length;
   const { events: out, windowTruncated } = capRecent(events, limit);
@@ -98,7 +100,12 @@ function summarize(
       )
     : -1;
   const reason =
-    matched === 0 && projectPath ? emptyReason(projectPath, browser) : undefined;
+    matched === 0 && projectPath
+      ? (emptyReason(projectPath, browser) ??
+        (typeof extra.total === "number" && extra.total === 0 && source === "file"
+          ? "The log file holds no events yet: the session is live and nothing in the extension has logged. Drive it (open a surface, load a page) and read again."
+          : undefined))
+      : undefined;
   const stale = Boolean(staleNote) && matched > 0;
   return envelope({
     ok: true,
@@ -112,6 +119,7 @@ function summarize(
       count: out.length,
       windowTruncated,
       dropped: dropped || undefined,
+      ...extra,
       nextSince: lastSeq >= 0 ? lastSeq : undefined,
       events: out,
     },
@@ -199,9 +207,21 @@ async function readFromFile(
     });
   }
 
+  /* @invariant A CUT FILE IS SAID TO BE CUT. The engine rotates the file at
+     50,000 lines or 8 MB (the new header carries `rotatedFrom`) and appends a
+     `{type: "gap", reason: "disk_slow", dropped}` sentinel when it could not
+     keep up; both were invisible here, so an agent read a rotated or gapped
+     file as the whole run and a filter that matched nothing as a session
+     that logged nothing. The answer now carries the run's
+     total, what was dropped and whether it was rotated, and an empty match
+     over a live file says the filter is what matched nothing. */
   const matches = makeFilter(args);
   const lines = fs.readFileSync(file, "utf8").split("\n").filter(Boolean);
   let runId = "";
+  let rotatedFrom: string | null = null;
+  let dropped = 0;
+  let total = 0;
+  let maxSeq = -1;
   const events: any[] = [];
   for (const line of lines) {
     let event: any;
@@ -210,11 +230,36 @@ async function readFromFile(
     } catch {
       continue;
     }
-    if (event && event.type === "header" && event.runId) {
-      runId = String(event.runId);
+    if (event && event.type === "header") {
+      if (event.runId) runId = String(event.runId);
+      if (typeof event.rotatedFrom === "string" && event.rotatedFrom) rotatedFrom = event.rotatedFrom;
       continue;
     }
+    if (event && event.type === "gap") {
+      dropped += Number(event.dropped) || 0;
+      continue;
+    }
+    total += 1;
+    if (typeof event?.seq === "number" && event.seq > maxSeq) maxSeq = event.seq;
     if (matches(event)) events.push(event);
+  }
+  const notes: string[] = [];
+  if (rotatedFrom) {
+    notes.push(
+      `This file was rotated (it continues run ${rotatedFrom}); earlier events of the run sit in ${path.basename(file).replace(/\.ndjson$/, ".1.ndjson")} and are not in this answer.`,
+    );
+  }
+  if (dropped > 0) {
+    notes.push(
+      `The engine dropped ${dropped} event(s) it could not write in time (disk_slow); this answer is missing them.`,
+    );
+  }
+  if (events.length === 0 && total > 0) {
+    notes.push(
+      args.since !== undefined && Number(args.since) > maxSeq
+        ? `No event matched: the since cursor ${args.since} is past this run's newest seq (${maxSeq}), so it belongs to another run or process.`
+        : `No event matched this filter, but the run holds ${total} event(s); the session is not silent, the filter is.`,
+    );
   }
   return summarize(
     events,
@@ -222,9 +267,11 @@ async function readFromFile(
     browser,
     runId,
     limit,
-    0,
+    dropped,
     args.projectPath,
     staleFileNote(args.projectPath, browser, runId),
+    notes.join(" ") || undefined,
+    { total, ...(rotatedFrom ? { rotatedFrom } : {}) },
   );
 }
 
