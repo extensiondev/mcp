@@ -99,6 +99,7 @@ function liveSession(): void {
     runId: "run-1",
     instanceId: "inst-1",
     distPath: path.join(project, "dist", BROWSER),
+    extensionId: GUEST_ID,
     cdpPort: 9222,
   });
 }
@@ -157,6 +158,17 @@ describe("background-worker-booted", () => {
     expect(check.detail).toContain("declares no background");
   });
 
+  it("does not pass background-worker-booted on another extension's worker", async () => {
+    writeManifest({ background: { service_worker: "sw.js" } });
+    liveSession();
+    live.targets = [
+      { id: "sw", type: "service_worker", url: "chrome-extension://ponmlkjihgfedcbaponmlkjihgfedcba/sw.js" },
+    ];
+    const { check } = await assertOnce({ assert: "background-worker-booted" });
+    expect(check.outcome).not.toBe("pass");
+    expect(JSON.stringify(check)).toContain("ponmlkjihgfedcbaponmlkjihgfedcba");
+  });
+
   it("fails when the browser lists no target for the guest", async () => {
     writeManifest({ background: { service_worker: "sw.js" } });
     liveSession();
@@ -209,6 +221,7 @@ describe("background-worker-booted", () => {
       runId: "run-2",
       instanceId: "inst-2",
       distPath: path.join(project, "dist", BROWSER),
+      extensionId: GUEST_ID,
     });
     writeLogs([
       logHeader("run-1"),

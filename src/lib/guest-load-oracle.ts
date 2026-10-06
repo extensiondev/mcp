@@ -8,18 +8,18 @@
 
 import { CDPClient } from "./cdp";
 import { resolveCdpPort } from "./cdp-port";
-import { CARRIER_EXTENSION_ID } from "./carrier";
-
-const ENGINE_COMPANION_IDS = new Set<string>([
-  "kgdaecdpfkikjncaalnmmnjjfpofkcbl",
-  CARRIER_EXTENSION_ID,
-]);
+import { sessionGuestIdentity } from "./extension-identity";
 
 const EXTENSION_URL = /^chrome-extension:\/\/([a-p]{32})\//i;
 
-export function isEngineCompanionUrl(url: string): boolean {
+export function isEngineCompanionUrl(url: string, projectPath?: string, browser?: string): boolean {
   const match = EXTENSION_URL.exec(String(url ?? ""));
-  return match ? ENGINE_COMPANION_IDS.has(match[1].toLowerCase()) : false;
+  if (!match) return false;
+  const id = match[1]!.toLowerCase();
+  const companions = projectPath && browser
+    ? sessionGuestIdentity(projectPath, browser).companionIds
+    : sessionGuestIdentity("", "chrome").companionIds;
+  return companions.has(id);
 }
 
 export type GuestTarget = { id: string; type: string; url: string };
@@ -29,6 +29,7 @@ export type GuestLoadCheck = {
   loaded: boolean;
   guestTargets: GuestTarget[];
   guestIds: string[];
+  otherExtensionIds?: string[];
   cdpPort?: number;
   reason: string;
 };
@@ -65,25 +66,52 @@ export async function verifyGuestLoaded(
       ),
     ]);
 
+    const identity = sessionGuestIdentity(projectPath, browser);
+    if (identity.expectedIds.length === 0) {
+      return {
+        checked: false,
+        loaded: false,
+        guestTargets: [],
+        guestIds: [],
+        cdpPort,
+        reason:
+          "The session's ready contract names no extensionId and no distPath, so the browser's target list cannot be matched to this project's extension.",
+      };
+    }
     const guestTargets: GuestTarget[] = [];
+    const otherIds = new Set<string>();
     for (const t of targets) {
       const match = EXTENSION_URL.exec(String(t.url ?? ""));
       if (!match) continue;
-      const id = match[1].toLowerCase();
-      if (ENGINE_COMPANION_IDS.has(id)) continue;
-      guestTargets.push({ id, type: String(t.type), url: String(t.url) });
+      const id = match[1]!.toLowerCase();
+      if (identity.companionIds.has(id)) continue;
+      if (identity.expectedIds.includes(id)) {
+        guestTargets.push({ id, type: String(t.type), url: String(t.url) });
+      } else {
+        otherIds.add(id);
+      }
     }
     const guestIds = [...new Set(guestTargets.map((t) => t.id))];
+    const others = [...otherIds];
     return {
       checked: true,
       loaded: guestTargets.length > 0,
       guestTargets,
       guestIds,
+      otherExtensionIds: others,
       cdpPort,
       reason:
         guestTargets.length > 0
-          ? `The browser lists ${guestIds.length} extension target${guestIds.length === 1 ? "" : "s"} that are not the engine companion (${guestIds.join(", ")}), so the guest is loaded.`
-          : "The browser's target list has no chrome-extension:// target other than the engine's devtools companion. On Chrome this is the signature of a silently rejected --load-extension: the CLI and ready.json cannot see it.",
+          ? `The browser lists ${guestTargets.length} target${guestTargets.length === 1 ? "" : "s"} under this project's extension id ${guestIds.join(", ")} (from the session contract), so the guest is loaded.${
+              others.length ? ` Other extensions are loaded too: ${others.join(", ")}.` : ""
+            }`
+          : `The browser's target list has no chrome-extension:// target under this project's extension id (${identity.expectedIds.join(" or ")}, from the session contract${
+              identity.source === "dist-path" ? ", derived from its dist path" : ""
+            }).${
+              others.length
+                ? ` It does list other extensions (${others.join(", ")}), which are not this project.`
+                : ""
+            } On Chrome this is the signature of a silently rejected --load-extension; ready.json carries extension_load_refused when the engine saw the refusal.`,
     };
   } catch (err) {
     return {

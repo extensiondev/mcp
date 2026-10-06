@@ -11,7 +11,6 @@ import {
   SESSION_BROWSER,
   SESSION_PROJECT_PATH,
 } from "../lib/common-schema";
-import crypto from "node:crypto";
 import fs from "node:fs";
 import {
   runActVerb,
@@ -40,6 +39,7 @@ import {
 import { openSidePanelWithSyntheticGesture } from "../lib/cdp-extension-page";
 import { openDevToolsPanel } from "../lib/cdp-devtools";
 import { listPageTargets, matchTargetsByUrl } from "../lib/cdp-targets";
+import { sessionGuestIdentity, unpackedExtensionId } from "../lib/extension-identity";
 
 export const OVERRIDE_SURFACES = ["newtab", "history", "bookmarks"];
 
@@ -337,15 +337,6 @@ export async function navigateToUrl(
   }
 }
 
-function unpackedExtensionId(distPath: string): string {
-  const digest = crypto.createHash("sha256").update(distPath).digest();
-  let id = "";
-  for (let i = 0; i < 16; i++) {
-    id += String.fromCharCode(97 + (digest[i] >> 4));
-    id += String.fromCharCode(97 + (digest[i] & 0x0f));
-  }
-  return id;
-}
 
 export async function resolveExtensionId(
   projectPath: string,
@@ -381,7 +372,18 @@ export async function resolveExtensionId(
   }
   if (ids.size > 0) {
     const guest = await verifyGuestLoaded(projectPath, browser);
-    if (guest.checked && guest.guestIds.length === 1) return guest.guestIds[0];
+    if (guest.checked && guest.guestIds.length === 1) return guest.guestIds[0]!;
+    /* @invariant A lone live extension stands in for the computed hash only
+       when the contract stamped no id of its own (an older engine, or no
+       contract yet). A stamped id is the engine's word and a stranger's
+       worker never overrides it. */
+    if (
+      guest.checked &&
+      sessionGuestIdentity(projectPath, browser).source !== "contract" &&
+      guest.otherExtensionIds?.length === 1
+    ) {
+      return guest.otherExtensionIds[0]!;
+    }
   }
   if (computedIds.length > 0) return computedIds[0];
   return ids.size === 1 ? [...ids][0] : null;

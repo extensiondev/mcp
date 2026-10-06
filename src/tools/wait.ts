@@ -240,7 +240,7 @@ export async function handler(args: {
         }
         if (guestCheck.checked && !guestCheck.loaded) {
           warnings.push(
-            "The engine reports the runtime attached, but the browser's own target list shows no chrome-extension:// target for your extension, only the engine companion. This is the signature of a silently rejected --load-extension: the CLI and ready.json cannot see it, and the control verbs will fail against a guest that is not there. Check the manifest and extension_logs.",
+            `The engine reports the runtime attached, but the browser's own target list shows no chrome-extension:// target under your extension's id. ${guestCheck.reason} The control verbs will fail against a guest that is not there. Check the manifest and extension_logs.`,
           );
         }
         return envelope({
