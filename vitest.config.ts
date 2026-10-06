@@ -44,6 +44,12 @@ export default defineConfig({
     environment: "node",
     include: ["src/**/*.test.ts"],
     setupFiles: ["src/__tests__/setup-session-dir.ts"],
+    /* @invariant Windows reads its process table through a PowerShell CIM
+       query, and a cold PowerShell on a busy runner can
+       take several seconds by itself, so a cell that stops a session ran past
+       the 5 s default there (carrier-not-shipped, 2026-10-06). The longer
+       budget is Windows only; every other host keeps the default. */
+    testTimeout: process.platform === "win32" ? 30_000 : 5_000,
   },
   resolve: {
     alias: [
