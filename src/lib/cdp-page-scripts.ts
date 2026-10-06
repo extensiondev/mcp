@@ -100,12 +100,28 @@ export const RENDER_EVIDENCE_SCRIPT = `(() => {
             '#extension-root,[data-extension-root]:not([data-extension-root="extension-js-devtools"])'
           );
           const text = body ? (body.innerText || body.textContent || '') : '';
+          const INERT = new Set(['SCRIPT', 'STYLE', 'NOSCRIPT', 'TEMPLATE', 'LINK', 'META']);
+          const VISUAL = new Set(['CANVAS', 'IMG', 'SVG', 'VIDEO', 'IFRAME', 'INPUT', 'TEXTAREA', 'SELECT', 'BUTTON']);
+          let rendered = 0;
+          let visual = 0;
+          if (body) {
+            for (const el of body.querySelectorAll('*')) {
+              const tag = el.tagName.toUpperCase();
+              if (INERT.has(tag) || el.closest('noscript, template')) continue;
+              rendered += 1;
+              if (VISUAL.has(tag)) visual += 1;
+            }
+          }
+          const renderedText = body && typeof body.innerText === 'string' ? body.innerText : '';
           return {
             readyState: document.readyState,
             title: document.title,
             bodyChildCount: body ? body.children.length : 0,
             bodyElementCount: body ? body.querySelectorAll('*').length : 0,
             textLength: text.trim().length,
+            renderedElementCount: rendered,
+            visualElementCount: visual,
+            renderedTextLength: renderedText.trim().length,
             extensionRootCount: roots.length
           };
         } catch { return null; }

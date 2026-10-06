@@ -11,6 +11,7 @@ import {
   SESSION_BROWSER,
   SESSION_PROJECT_PATH,
 } from "../lib/common-schema";
+import fs from "node:fs";
 import { runActVerb } from "../lib/act";
 import { listBridgeTabs } from "../lib/bridge-tabs";
 import { isChromiumFamily, WEBKIT_FAMILY } from "../lib/browser-family";
@@ -34,7 +35,7 @@ import {
   readBuiltManifest,
   type ReadManifest,
 } from "../lib/project-manifest";
-import { logsPath } from "../lib/session-paths";
+import { logsPath, readyContractPath } from "../lib/session-paths";
 import { resolveSessionBrowser } from "../lib/session-browser";
 import {
   ASSERT_CHECKS,
@@ -199,12 +200,6 @@ export function parseClauses(raw: unknown): ParseResult {
         clause.minNodes === undefined ? undefined : Number(clause.minNodes);
       if (minNodes !== undefined && !Number.isFinite(minNodes)) {
         issues.push(`${at}.minNodes must be a number`);
-        return;
-      }
-      if (minNodes !== undefined && clause.selector === undefined) {
-        issues.push(
-          `${at}.minNodes counts selector matches, so it needs a selector`,
-        );
         return;
       }
       const selector =
@@ -574,10 +569,27 @@ async function assertBackgroundWorker(
   );
 }
 
+/* @invariant RENDERED MEANS SOMETHING A PERSON WOULD SEE. The templates ship
+   `<noscript>You need to enable JavaScript</noscript><div id="root"></div>`,
+   which an unmounted bundle leaves as two or three elements and, through the
+   textContent fallback, fifty characters of noscript prose: that passed the
+   old count. A rendered reading excludes script, style, noscript, template,
+   link and meta, measures innerText only, and counts a lone canvas, image or
+   control as rendered. The old fields stay for an
+   engine that does not report the new ones. */
 export function renderedFromEvidence(evidence: {
   bodyElementCount?: number;
   textLength?: number;
+  renderedElementCount?: number;
+  visualElementCount?: number;
+  renderedTextLength?: number;
 }): boolean {
+  if (typeof evidence.renderedElementCount === "number") {
+    const rendered = evidence.renderedElementCount;
+    const text = evidence.renderedTextLength ?? 0;
+    const visual = evidence.visualElementCount ?? 0;
+    return rendered > 0 && (text > 0 || visual > 0 || rendered > 1);
+  }
   const elements = evidence.bodyElementCount ?? 0;
   const text = evidence.textLength ?? 0;
   return elements > 0 && (text > 0 || elements > 1);
@@ -643,6 +655,14 @@ async function assertSurfaceRendered(
           subject,
           `The ${clause.surface} document is open (${parsed.value?.url ?? document}), but a selector cannot be probed through the surface relay on ${stage.browser}.`,
           `Read it with extension_inspect (url: the document's moz-extension:// address, probe: ['${clause.selector}']) or extension_eval context: '${clause.surface}'.`,
+          { url: parsed.value?.url, summary },
+        );
+      }
+      if (children === 0) {
+        return failCheck(
+          id,
+          subject,
+          `The ${clause.surface} document is open (${parsed.value?.url ?? document}) but its body has no child elements: nothing rendered into it.`,
           { url: parsed.value?.url, summary },
         );
       }
@@ -761,6 +781,22 @@ async function assertSurfaceRendered(
         );
   }
 
+  if (clause.minNodes != null) {
+    const rendered = evidence.renderedElementCount ?? evidence.bodyElementCount ?? 0;
+    return rendered >= clause.minNodes
+      ? passCheck(
+          id,
+          subject,
+          `The ${clause.surface} is rendering ${rendered} element(s), and at least ${clause.minNodes} were expected.`,
+          { evidence: evidence as Record<string, unknown> },
+        )
+      : failCheck(
+          id,
+          subject,
+          `The ${clause.surface} is open but renders ${rendered} element(s), fewer than the ${clause.minNodes} expected.`,
+          { evidence: evidence as Record<string, unknown> },
+        );
+  }
   return renderedFromEvidence(evidence)
     ? passCheck(
         id,
@@ -774,6 +810,31 @@ async function assertSurfaceRendered(
         `The ${clause.surface} page is open at ${document} but nothing rendered into it: ${evidence.bodyElementCount ?? 0} element(s) and ${evidence.textLength ?? 0} character(s) of text in the body. A mount point with nothing mounted looks exactly like this.`,
         { evidence: evidence as Record<string, unknown> },
       );
+}
+
+function samePage(eventUrl: string, wanted: string): boolean {
+  if (!eventUrl || !wanted) return false;
+  if (eventUrl === wanted) return true;
+  try {
+    const a = new URL(eventUrl);
+    const b = new URL(wanted);
+    const strip = (pathname: string) => pathname.replace(/\/+$/, "") || "/";
+    return a.origin === b.origin && strip(a.pathname) === strip(b.pathname);
+  } catch {
+    return false;
+  }
+}
+
+function contractCompiledAtMs(projectPath: string, browser: string): number | null {
+  try {
+    const contract = JSON.parse(
+      fs.readFileSync(readyContractPath(projectPath, browser), "utf8"),
+    ) as { compiledAt?: unknown };
+    const ms = typeof contract.compiledAt === "string" ? Date.parse(contract.compiledAt) : NaN;
+    return Number.isFinite(ms) ? ms : null;
+  } catch {
+    return null;
+  }
 }
 
 async function assertContentScriptInjected(
@@ -801,9 +862,22 @@ async function assertContentScriptInjected(
 
   const runId = readLogRunId(stage.projectPath, stage.browser);
   const stale = staleFileNote(stage.projectPath, stage.browser, runId);
+  /* @invariant A LINE COUNTS WHEN IT CAME FROM THAT PAGE, IN THIS BUILD. The
+     engine's url filter is a substring test, so a line from /cart/checkout
+     or from a page whose query carried the wanted url passed for /cart; and
+     a line written early in the run kept passing after an edit broke the
+     script. The event's origin and path must equal the clause's, and the
+     event must be newer than the contract's compiledAt. */
+  const compiledAt = contractCompiledAtMs(stage.projectPath, stage.browser);
   const lines = readLogEvents(stage.projectPath, stage.browser, {
     context: ["content"],
-    url: clause.url,
+  }).filter((event) => {
+    const ev = event as { url?: unknown; timestamp?: unknown };
+    if (!samePage(String(ev.url ?? ""), clause.url)) return false;
+    if (compiledAt !== null && typeof ev.timestamp === "number" && ev.timestamp < compiledAt) {
+      return false;
+    }
+    return true;
   });
 
   if (lines.length > 0 && !stale) {
@@ -1090,6 +1164,13 @@ function assertConsoleErrorsEmpty(
   const subject = clause.subject;
   const file = logsPath(stage.projectPath, stage.browser);
   const all = readLogEvents(stage.projectPath, stage.browser, {});
+  const maxSeq = all.reduce(
+    (max, event) => {
+      const seq = (event as { seq?: unknown }).seq;
+      return typeof seq === "number" && seq > max ? seq : max;
+    },
+    -1,
+  );
 
   /* @invariant An empty timeline is inconclusive, never a pass. "No errors"
      read off a session that never built, exited, or wrote a single line is the
@@ -1120,9 +1201,52 @@ function assertConsoleErrorsEmpty(
     );
   }
 
-  const errors = recentErrorLogs(stage.projectPath, stage.browser, 1000, {
+  /* @invariant THE GUARD AND THE VERDICT READ THE SAME SCOPE. The empty-
+     timeline guard used to run unscoped while the verdict ran with the
+     clause's context and since, so "no errors in popup" passed on a popup
+     that never opened, and a since cursor from an earlier process (seq
+     restarts at 1) passed over everything. Errors are
+     counted as EVENTS, so one with empty text still counts. */
+  const scopeQuery = {
     ...(clause.context ? { context: clause.context } : {}),
     ...(clause.since === undefined ? {} : { since: clause.since }),
+  };
+  if (clause.since !== undefined && clause.since > maxSeq) {
+    return inconclusiveCheck(
+      id,
+      subject,
+      `The since cursor ${clause.since} is past the newest event in this run (seq ${maxSeq}), so it belongs to another run or process and selects nothing.`,
+      "Read extension_logs to find the current run's seq, then assert with a cursor from it.",
+      { logFile: file, runId, maxSeq },
+    );
+  }
+  const inScope = readLogEvents(stage.projectPath, stage.browser, scopeQuery);
+  if (inScope.length === 0) {
+    return inconclusiveCheck(
+      id,
+      subject,
+      `No log event matches this clause's scope (${
+        clause.context?.length ? `context ${clause.context.join(", ")}` : "all contexts"
+      }${clause.since === undefined ? "" : `, after seq ${clause.since}`}) in run ${runId || "(unnamed)"}, so "no errors" there would only mean "nothing happened there".`,
+      "Drive that part of the extension first (open the surface, load the page), then assert again.",
+      { logFile: file, runId, events: all.length },
+    );
+  }
+  const errorEvents = readLogEvents(stage.projectPath, stage.browser, {
+    ...scopeQuery,
+    level: "error",
+  });
+  const errors = errorEvents.map((event) => {
+    const ev = event as { messageParts?: unknown[]; message?: unknown; errorName?: unknown; stack?: unknown };
+    const parts = Array.isArray(ev.messageParts) ? ev.messageParts : null;
+    let text = parts
+      ? parts.map((part) => (typeof part === "string" ? part : JSON.stringify(part))).join(" ")
+      : typeof ev.message === "string"
+        ? ev.message
+        : "";
+    if (!text && typeof ev.errorName === "string") text = ev.errorName;
+    text = text.replace(/\s+/g, " ").trim();
+    return text || "(error event with no message text)";
   });
   const ignored = clause.ignore ?? [];
   const kept = errors.filter(

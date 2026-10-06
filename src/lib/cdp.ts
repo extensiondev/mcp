@@ -22,6 +22,9 @@ export interface RenderEvidence {
   bodyChildCount?: number;
   bodyElementCount?: number;
   textLength?: number;
+  renderedElementCount?: number;
+  visualElementCount?: number;
+  renderedTextLength?: number;
   extensionRootCount?: number;
 }
 

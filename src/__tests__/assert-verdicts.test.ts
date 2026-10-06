@@ -342,6 +342,125 @@ describe("surface-rendered", () => {
   });
 });
 
+describe("surface-rendered reads what a person would see", () => {
+  const withPopup = { action: { default_popup: "popup.html" } };
+
+  it("fails an unmounted template whose only text is the noscript sentence", async () => {
+    writeManifest(withPopup);
+    liveSession();
+    live.targets = [
+      { id: "popup", type: "page", url: `chrome-extension://${GUEST_ID}/popup.html` },
+    ];
+    live.render = {
+      readyState: "complete",
+      bodyElementCount: 3,
+      textLength: 52,
+      renderedElementCount: 1,
+      visualElementCount: 0,
+      renderedTextLength: 0,
+    };
+    const { check } = await assertOnce({ assert: "surface-rendered", surface: "popup" });
+    expect(check.outcome).toBe("fail");
+  });
+
+  it("passes a popup that is a single canvas", async () => {
+    writeManifest(withPopup);
+    liveSession();
+    live.targets = [
+      { id: "popup", type: "page", url: `chrome-extension://${GUEST_ID}/popup.html` },
+    ];
+    live.render = {
+      readyState: "complete",
+      bodyElementCount: 1,
+      textLength: 0,
+      renderedElementCount: 1,
+      visualElementCount: 1,
+      renderedTextLength: 0,
+    };
+    const { check } = await assertOnce({ assert: "surface-rendered", surface: "popup" });
+    expect(check.outcome).toBe("pass");
+  });
+
+  it("takes minNodes without a selector as a floor on rendered elements", async () => {
+    writeManifest(withPopup);
+    liveSession();
+    live.targets = [
+      { id: "popup", type: "page", url: `chrome-extension://${GUEST_ID}/popup.html` },
+    ];
+    live.render = { readyState: "complete", renderedElementCount: 2, renderedTextLength: 9 };
+    const low = await assertOnce({ assert: "surface-rendered", surface: "popup", minNodes: 5 });
+    expect(low.check.outcome).toBe("fail");
+    const ok = await assertOnce({ assert: "surface-rendered", surface: "popup", minNodes: 2 });
+    expect(ok.check.outcome).toBe("pass");
+  });
+});
+
+describe("console-errors-empty judges the scope it was given", () => {
+  it("is inconclusive for a context with no events, even when others logged", async () => {
+    liveSession();
+    writeLogs([logHeader("run-1"), { context: "background", level: "info", seq: 1, messageParts: ["booted"] }]);
+    const { check } = await assertOnce({ assert: "console-errors-empty", context: ["popup"] });
+    expect(check.outcome).toBe("inconclusive");
+  });
+
+  it("is inconclusive for a since cursor past this run's newest seq", async () => {
+    liveSession();
+    writeLogs([logHeader("run-1"), { context: "background", level: "info", seq: 5, messageParts: ["booted"] }]);
+    const { check } = await assertOnce({ assert: "console-errors-empty", since: 800 });
+    expect(check.outcome).toBe("inconclusive");
+    expect(check.detail).toContain("another run");
+  });
+
+  it("counts an error event with no message text", async () => {
+    liveSession();
+    writeLogs([logHeader("run-1"), { context: "background", level: "error", seq: 1, messageParts: [""] }]);
+    const { check } = await assertOnce({ assert: "console-errors-empty" });
+    expect(check.outcome).toBe("fail");
+    expect(check.detail).toContain("no message text");
+  });
+});
+
+describe("content-script-injected matches the page, in this build", () => {
+  const withContent = {
+    manifest_version: 3,
+    name: "F",
+    version: "1.0.0",
+    content_scripts: [{ matches: ["https://shop.example/*"], js: ["content.js"] }],
+  };
+
+  it("does not take a line from a longer path or a foreign page for the one asked", async () => {
+    writeManifest(withContent);
+    liveSession();
+    writeLogs([
+      logHeader("run-1"),
+      { context: "content", level: "info", seq: 1, url: "https://shop.example/cart/checkout?step=2", messageParts: ["hi"] },
+      { context: "content", level: "info", seq: 2, url: "https://evil.test/?next=https://shop.example/cart", messageParts: ["hi"] },
+    ]);
+    const { check } = await assertOnce({ assert: "content-script-injected", url: "https://shop.example/cart" });
+    expect(check.outcome).toBe("inconclusive");
+  });
+
+  it("ignores a line written before the current compile", async () => {
+    writeManifest(withContent);
+    writeReady({
+      status: "ready",
+      pid: process.pid,
+      runId: "run-1",
+      instanceId: "inst-1",
+      distPath: path.join(project, "dist", BROWSER),
+      extensionId: GUEST_ID,
+      cdpPort: 9222,
+      compiledAt: "2026-10-05T12:00:00.000Z",
+    });
+    writeLogs([
+      logHeader("run-1"),
+      { context: "content", level: "info", seq: 1, url: "https://shop.example/cart", timestamp: Date.parse("2026-10-05T11:59:00.000Z"), messageParts: ["old"] },
+    ]);
+    const { check } = await assertOnce({ assert: "content-script-injected", url: "https://shop.example/cart" });
+    expect(check.outcome).toBe("inconclusive");
+  });
+});
+
 describe("content-script-injected", () => {
   const withMatch = {
     content_scripts: [{ matches: ["https://shop.example/*"], js: ["cs.js"] }],
