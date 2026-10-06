@@ -1,5 +1,38 @@
 # Changelog
 
+## 10.10.11
+
+The rest of the 2026-10-05 audit findings, apart from the Safari WebDriver
+fields that wait on the engine.
+
+- `extension_eval` says where it ran and what came back: the tab's url and
+  title on Firefox, a note when the value was not serializable, only real
+  background targets as the background, and `eval-lost` or
+  `eval-unsupported` when the answer never arrived. A woken worker is no
+  longer said to have idled when it may never have started.
+- `extension_logs` and `extension_assert` report a cut stream: a follow
+  that closed early is a partial read, dropped-line markers are not
+  counted as events, and console-errors-empty is inconclusive when lines
+  were dropped. An unknown console `context` is refused as a bad request
+  instead of failing the whole call.
+- `extension_wait` and `extension_start` report only what they observed:
+  a start session is `build-ready`, a build contract or a stopped session
+  is `no-session`, and start refuses Safari and preview-path hosts it
+  cannot serve.
+- `extension_open` names the DevTools panel frame that appeared, and says
+  when the panel registry could not be read or the target was inferred.
+- Platform answers of the wrong shape (channels, build index, shares,
+  login config) are unreadable, never empty, and an unpinned publish
+  matches the build the platform named.
+- `extension_stop` counts a process as reaped only once it is gone, and
+  ends a Windows session through `taskkill /T /F`. A session marker that
+  could not be written is a warning on the started answer, and the
+  `release promote` command exits non-zero on an answer it cannot read.
+- `extension_list_extensions` on Firefox marks a lone temporary add-on as
+  an inferred match.
+- The scheduled test tier builds through the real pinned engine with
+  `--output json` and checks the fixtures against what it writes.
+
 ## 10.10.10
 
 Every sentence the server says is now backed by something it read
