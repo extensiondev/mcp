@@ -1,4 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import path from "node:path";
+import os from "node:os";
+import fs from "node:fs";
 
 import { actionFingerprint, evaluateApproval } from "../lib/approval-gate";
 import { handler as submitHandler } from "../tools/submit";
@@ -514,7 +517,12 @@ describe("the approval gate believes only a complete record", () => {
 describe("an approval the caller presents travels even with the local gate off", () => {
   it("forwards approvalId on a non-stable promote whose local gate is off", async () => {
     const previous = process.env.EXTENSION_DEV_APPROVAL_GATE;
+    const previousToken = process.env.EXTENSION_DEV_TOKEN;
+    const previousXdg = process.env.XDG_CONFIG_HOME;
+    const isolated = fs.mkdtempSync(path.join(os.tmpdir(), "extdev-gate-off-"));
     process.env.EXTENSION_DEV_APPROVAL_GATE = "0";
+    process.env.EXTENSION_DEV_TOKEN = "tok_test";
+    process.env.XDG_CONFIG_HOME = isolated;
     const calls: Call[] = [];
     global.fetch = router(calls, {
       "POST /api/cli/release/promote": () => jsonResponse(promoteAnswer({ targetChannel: "beta" })),
@@ -529,6 +537,11 @@ describe("an approval the caller presents travels even with the local gate off",
     } finally {
       if (previous === undefined) delete process.env.EXTENSION_DEV_APPROVAL_GATE;
       else process.env.EXTENSION_DEV_APPROVAL_GATE = previous;
+      if (previousToken === undefined) delete process.env.EXTENSION_DEV_TOKEN;
+      else process.env.EXTENSION_DEV_TOKEN = previousToken;
+      if (previousXdg === undefined) delete process.env.XDG_CONFIG_HOME;
+      else process.env.XDG_CONFIG_HOME = previousXdg;
+      fs.rmSync(isolated, { recursive: true, force: true });
     }
   });
 });
