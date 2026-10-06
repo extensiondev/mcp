@@ -45,7 +45,7 @@ export type PublishResult =
   | { ok: true; data: Record<string, unknown> }
   | {
       ok: false;
-      error: { name: string; message: string };
+      error: { name: string; message: string; code?: string; status?: number };
       held?: boolean;
       body?: unknown;
     };
@@ -124,6 +124,8 @@ export async function publish(
       ok: false,
       error: {
         name: "PublishError",
+        ...(typeof data?.code === "string" ? { code: data.code } : {}),
+        status: res.status,
         message: `publish failed (${res.status}): ${
           data?.message || text || "unknown error"
         }`,

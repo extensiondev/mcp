@@ -76,3 +76,23 @@ export function submitAnswer(
     ...overrides,
   };
 }
+
+/* www: src/app/api/cli/publish/route.ts, the 200 of a private project: the
+ * share URL, the served build (null fields when the project has no successful
+ * build or the index could not be read), the token-bearing preview commands
+ * and the expiry. A public project answers the same keys with no expiry and
+ * token-less commands. */
+export function publishAnswer(overrides: Body = {}): Body {
+  return {
+    shareUrl: "https://preview.extension.dev/?preview=gen_0123456789abcdef0123456789abcdef",
+    visibility: "private",
+    buildSha: "abc1234",
+    version: "1.2.0",
+    builtAt: "2026-10-05T11:00:00.000Z",
+    previewCommands: {
+      chrome: "npx extension preview https://registry.extension.land/acme/widget/_extension-dev/builds/abc1234/chrome.zip?token=t",
+    },
+    expiresAt: "2026-10-06T12:00:00.000Z",
+    ...overrides,
+  };
+}

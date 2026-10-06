@@ -5,7 +5,10 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const platform = vi.hoisted(() => ({
-  result: { ok: true, data: {} as Record<string, unknown> },
+  result: {
+    ok: true,
+    data: { shareUrl: "https://preview.extension.dev/?preview=gen_x", visibility: "private" } as Record<string, unknown>,
+  },
 }));
 
 vi.mock("../lib/publish", () => ({
@@ -61,7 +64,7 @@ describe("extension_publish build pin enrichment", () => {
     prevXdg = process.env.XDG_CONFIG_HOME;
     prevFetch = global.fetch;
     process.env.XDG_CONFIG_HOME = tmp;
-    platform.result = { ok: true, data: {} };
+    platform.result = { ok: true, data: { shareUrl: "https://preview.extension.dev/?preview=gen_x", visibility: "private" } };
     writeCredentials({
       version: 1,
       token: "tok_stored",
@@ -155,6 +158,7 @@ describe("extension_publish build pin enrichment", () => {
     platform.result = {
       ok: true,
       data: {
+        shareUrl: "https://preview.extension.dev/?preview=gen_x",
         buildSha: "a8a86d7c0ffee000000000000000000000000001",
         version: "9.0.0.0",
         builtAt: "2026-10-01T10:00:00.000Z",

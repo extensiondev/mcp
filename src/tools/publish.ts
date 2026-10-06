@@ -132,7 +132,25 @@ export async function handler(args: {
         api: args.api,
       });
     }
-    const projectMissing = /\(404\)/.test(result.error.message);
+    const code = (result.error as { code?: string }).code;
+    if (code === "UNKNOWN_BUILD") {
+      return envelope({
+        ok: false,
+        command: "extension_publish",
+        status: "build-unknown",
+        error: {
+          code: "E_PLATFORM",
+          name: "PublishError",
+          message: result.error.message,
+          platformCode: code,
+        },
+        hint: `The platform has no completed build for buildSha ${String(args.buildSha ?? "")}, so no share was minted. extension_release_status (include: ['releases']${
+          args.project ? `, project: '${args.project}'` : ""
+        }) lists the shas it does have; omit buildSha to share the newest successful build.`,
+      });
+    }
+    const projectMissing =
+      code === "PROJECT_NOT_FOUND" || (code === undefined && /\(404\)/.test(result.error.message));
     return envelope({
       ok: false,
       command: "extension_publish",
@@ -152,6 +170,28 @@ export async function handler(args: {
   }
 
   const data = result.data as Record<string, unknown>;
+  /* @invariant A SHARE IS A URL THE PLATFORM NAMED, OVER A BUILD IT NAMED.
+     "published" used to be any 2xx: an empty body, an HTML page, and a
+     share minted over a project with no successful build (the platform
+     mints it and answers `buildSha: null`) all read as published with a
+     link that renders nothing. No share URL is
+     unconfirmed; a share with no build is said to be exactly that. */
+  if (typeof data.shareUrl !== "string" || !data.shareUrl.trim()) {
+    return envelope({
+      ok: false,
+      command: "extension_publish",
+      status: "publish-unconfirmed",
+      error: {
+        code: "E_PLATFORM",
+        name: "PublishUnconfirmed",
+        message: "The platform answered the publish but named no share URL, so whether a share was minted is unknown.",
+      },
+      value: { platform: data },
+      hint: `Do not publish again blind: a share that was minted counts against the project's live shares. Run extension_shares (action: list${
+        args.project ? `, project: '${args.project}'` : ""
+      }) to see whether one appeared, then publish again only if it did not.`,
+    });
+  }
   let note: string | null = null;
   if (args.ttlHours != null && data.visibility === "public") {
     note =
@@ -191,7 +231,7 @@ export async function handler(args: {
         } else {
           if (data.buildSha == null) data.buildSha = args.buildSha;
           data.registryUrl = buildsUrl;
-          buildNote = `buildSha ${args.buildSha} is pinned but was not found in the project's registry build index, so builtAt/version/channel are not filled in from another build. The URL still serves the pinned build the platform accepted.`;
+          buildNote = `buildSha ${args.buildSha} is pinned but was not found in the project's registry build index, so builtAt/version/channel are not filled in from another build. The platform accepted the pin without reading its own index (it echoes the sha when the index is unreadable), so whether a build with that sha exists was not verified here.`;
         }
       } else {
         const newestSuccess = items
@@ -232,12 +272,16 @@ export async function handler(args: {
           .map(([browser, command]) => `${browser}: ${command}`)
           .join(" | ")}. Each command carries the same share token as the URL and expires with it.`
       : null;
+  const noBuild = data.buildSha == null;
+  const noBuildNote = noBuild
+    ? "This share serves NO build: the platform minted the link but named no build sha, which means the project has no successful build yet (or its build index could not be read). Anyone opening the link gets nothing to run. Build first (push a commit, or extension_build then a platform build), then publish again."
+    : null;
   return envelope({
     ok: true,
     command: "extension_publish",
-    status: "published",
+    status: noBuild ? "published-without-build" : "published",
     value: data,
-    warnings: [note, buildNote],
+    warnings: [noBuildNote, note, buildNote],
     ...(previewHint ? { hint: previewHint } : {}),
   });
 }
