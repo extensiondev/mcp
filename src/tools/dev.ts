@@ -134,9 +134,32 @@ export async function handler(
         hint: "Call extension_stop with this projectPath first, or pass replace: true to have extension_dev stop the old session before starting the new one.",
       });
     }
+    /* @invariant REPLACED MEANS STOPPED. The outcome of each stop used to be
+       dropped, so a session that survived its stop was still reported as
+       replaced and the new session was started over it, which is the
+       profile-lock fork the guard exists to prevent. A
+       stale record (a pid that is no longer the session) counts as gone; a
+       live survivor refuses the start. */
     for (const s of existing) {
-      await stopOne(args.projectPath, s.browser);
-      replaced.push({ pid: s.pid, browser: s.browser });
+      const outcome = await stopOne(args.projectPath, s.browser);
+      if (!outcome.stopped && !outcome.staleRecord) {
+        return envelope({
+          ok: false,
+          command: schema.name,
+          status: "replace-failed",
+          error: {
+            code: "E_SESSION_EXISTS",
+            message: `replace: true could not stop the ${s.browser} session (pid ${s.pid}): ${outcome.detail} No new session was started.`,
+          },
+          value: {
+            projectPath: args.projectPath,
+            session: { pid: s.pid, browser: s.browser },
+            reaped: outcome.reaped,
+          },
+          hint: "Call extension_stop for this projectPath and read its detail; if a browser process survives, end it by pid, then call extension_dev again.",
+        });
+      }
+      if (!outcome.staleRecord) replaced.push({ pid: s.pid, browser: s.browser });
     }
   }
 

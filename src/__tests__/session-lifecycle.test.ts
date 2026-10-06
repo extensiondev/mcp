@@ -178,6 +178,37 @@ describe("extension_dev fork guard", () => {
   }, 20_000);
 });
 
+describe("extension_dev replace:true believes the stop, not its own request", () => {
+  it("refuses to start when the old session survived its stop", async () => {
+    const project = tmpProject();
+    const pid = spawnVictim();
+    registerSession({ pid, browser: "chrome", projectPath: project, command: "dev" });
+    const stopSpy = vi.spyOn(stop, "stopOne").mockResolvedValue({
+      projectPath: project,
+      browser: "chrome",
+      pid,
+      stopped: false,
+      reaped: [],
+      detail: "Sent SIGTERM and SIGKILL but the process still reports alive; it may be exiting. Warning: 1 browser process(es) still alive after reap (pids 4242).",
+    });
+    try {
+      const result = JSON.parse(await dev.handler({ projectPath: project, replace: true }));
+
+      expect(result.ok).toBe(false);
+      expect(result.status).toBe("replace-failed");
+      expect(result.error.message).toContain("still reports alive");
+      expect(result.value.replacedSession).toBeUndefined();
+    } finally {
+      stopSpy.mockRestore();
+      try {
+        process.kill(pid, "SIGKILL");
+      } catch {
+        // gone
+      }
+    }
+  });
+});
+
 describe("extension_dev exit cleanup", () => {
   it("removes the on-disk session marker when the dev server exits", async () => {
     const project = tmpProject();
