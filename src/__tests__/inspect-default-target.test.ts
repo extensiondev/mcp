@@ -32,6 +32,7 @@ vi.mock("../lib/cdp", () => ({
     getConsoleSummary() {
       return {};
     }
+    resetConsole() {}
     async getPageHTML() {
       return "";
     }

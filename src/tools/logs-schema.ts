@@ -17,7 +17,7 @@ import {
 export const schema = {
   name: "extension_logs",
   description:
-    "Read or stream logs from every context of a running dev session (service worker, content scripts, popup, options, sidebar, devtools, pages) in one ordered timeline. This reads the same agent-bridge plane as the `extension logs` CLI: a one-shot returns the most recent matching lines from logs.ndjson, and follow:true collects from the live control channel for a bounded window. This requires an active extension_dev session.",
+    "Read or stream logs from every context of a running dev session (service worker, content scripts, popup, options, sidebar, devtools, pages) in one ordered timeline. This reads the same agent-bridge plane as the `extension logs` CLI: a one-shot returns the most recent matching lines from logs.ndjson, and follow:true connects to the live control channel, receives the broker's replay of its recent ring (up to 5,000 events, counted in value.replayed) and then the frames that arrive during followMs (value.live). This requires an active extension_dev session.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -25,7 +25,7 @@ export const schema = {
       browser: {
         type: "string",
         description:
-          "Which dist/extension-js/<browser>/ to read. Defaults to this project's live session, else chromium.",
+          "Which dist/extension-js/<browser>/ to read. Defaults to this project's live session, else chrome.",
       },
       level: {
         type: "string",
@@ -41,7 +41,6 @@ export const schema = {
           enum: [
             "background",
             "content",
-            "page",
             "sidebar",
             "popup",
             "options",

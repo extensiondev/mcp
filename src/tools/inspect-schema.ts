@@ -14,7 +14,7 @@ import {
 export const schema = {
   name: "extension_inspect",
   description:
-    "Inspect a running extension deeply over the browser's debugger protocol: full HTML including shadow DOM, DOM structure, content-script injection, console messages, and CSS selector queries through `probe`. This is the ONLY tool that pierces closed shadow roots (deepDom), runs selector probes, and navigates a tab to `url` before reading it. It reads a web or override page and picks the first inspectable target, or the first whose url contains `url`; it cannot address an extension surface by name and takes no chrome.tabs id. Use extension_dom_snapshot to choose which tab or which open surface (popup, options, sidebar, devtools) to read, or to enumerate what is open. Use extension_analyze for a built extension's files and sizes on disk. Chromium rides the Chrome DevTools Protocol and needs the session's debug port, not allowControl. Firefox is fully paired: summary, meta, html, dom_snapshot, extension_roots and probes ride the agent bridge and need allowEval:true, console rides the RDP watcher replay on engine 4.0.15 and later, and deepDom needs an MV2 session with host permissions for the target url, because the Firefox MV3 background CSP blocks bridge evals. This requires an active dev or start session.",
+    "Inspect a running extension deeply over the browser's debugger protocol: full HTML (open shadow roots of #extension-root and [data-extension-root] hosts inlined; other shadow roots are not crossed by html, dom_snapshot or probe), DOM structure, content-script injection, console messages, and CSS selector queries through `probe`. This is the ONLY tool that pierces closed shadow roots (deepDom), runs selector probes, and navigates a tab to `url` before reading it. It reads a web or override page and picks the first inspectable target, or the first whose url contains `url`; it cannot address an extension surface by name and takes no chrome.tabs id. Use extension_dom_snapshot to choose which tab or which open surface (popup, options, sidebar, devtools) to read, or to enumerate what is open. Use extension_analyze for a built extension's files and sizes on disk. Chromium rides the Chrome DevTools Protocol and needs the session's debug port, not allowControl. Firefox is fully paired: summary, meta, html, dom_snapshot, extension_roots and probes ride the agent bridge and need allowEval:true, console rides the RDP watcher replay on engine 4.0.15 and later, and deepDom needs an MV2 session with host permissions for the target url, because the Firefox MV3 background CSP blocks bridge evals. This requires an active dev or start session.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -56,7 +56,7 @@ export const schema = {
         type: "boolean",
         default: false,
         description:
-          "Pierce CLOSED shadow roots; open ones are read anyway. Chromium: CDP DOM pierce. Firefox: a content-script walk via tabs.executeScript (MV2 only, needs host permissions for the target url).",
+          "Pierce CLOSED shadow roots (open roots of the extension-root hosts are already inlined in html; other open roots are not read). Chromium: CDP DOM pierce. Firefox: a content-script walk via tabs.executeScript (MV2 only, needs host permissions for the target url); the answer says whether that context could see closed roots at all.",
       },
     },
     required: ["projectPath"],

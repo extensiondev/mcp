@@ -384,7 +384,7 @@ export async function navigateToUrl(
         },
         hint: isExtensionPage
           ? "Confirm the path exists in the built dist (extension_build / extension_analyze list entrypoints). For an extension page, the path must match the BUILT manifest, which may differ from your source layout."
-          : "Confirm the URL loads in a normal browser and that the dev session's browser has network access. Nothing about your extension bundle is implicated in a failed http(s) navigation.",
+          : "Confirm the URL loads in a normal browser and that the dev session's browser has network access. The extension under test is implicated only if it blocks the request itself (declarativeNetRequest rules or a webRequest listener); otherwise nothing about the bundle is.",
       });
     }
     return envelope({
@@ -772,17 +772,20 @@ async function openSurfaceAsTab(
         );
         if (popupBounds) renderedAsTab.popupBounds = popupBounds;
       }
+      /* @invariant EVERY HINT NAMES A CONTEXT THAT EXISTS: `action` is a
+         surface name, the readers take `popup`. */
+      const readerContext = surface === "action" ? "popup" : surface;
       const reachIt =
-        `Inspect it with extension_dom_snapshot context: '${surface}' (include: ['html']), or extension_inspect with this url. ` +
-        `To run code in it, call extension_eval with context: '${surface}' (on Chromium this goes over CDP, which the extension page CSP does not govern); ` +
+        `Inspect it with extension_dom_snapshot context: '${readerContext}' (include: ['html']), or extension_inspect with this url. ` +
+        `To run code in it, call extension_eval with context: '${readerContext}' (on Chromium this goes over CDP, which the extension page CSP does not govern); ` +
         "do NOT pass this extension-page url as a tab target for script injection, which cannot reach extension pages.";
       parsed.hint = OVERRIDE_SURFACES.includes(surface)
-        ? `Opened the ${surface} override page in a tab, which is the only place the browser ever renders a chrome_url_overrides page, so this is the real surface and not a stand-in. ` +
+        ? `Opened the ${surface} override document by url in a tab. Whether the browser serves it as its ${surface} page was not read: open a new ${surface === "newtab" ? "tab" : surface + " view"} in the dev browser to see that. ` +
           reachIt
         : `Rendered the ${surface} document in a real tab, which is how you inspect a surface headlessly. ` +
           (popupBounds
-            ? `The window was resized to the popup's content size (${popupBounds.width}x${popupBounds.height}${popupBounds.clamped ? ", clamped to Chrome's 25x25-800x600 popup bounds" : ""}), approximating real popup rendering. This resizes the WHOLE browser window for the session. It is the same page with the same extension APIs, but window.close() closes the tab. `
-            : "It is the same page with the same extension APIs, but it is NOT hosted in a popup window: no popup sizing, and window.close() closes the tab. ") +
+            ? `The window was resized to the popup's content size (${popupBounds.width}x${popupBounds.height}${popupBounds.clamped ? ", clamped to Chrome's 25x25-800x600 popup bounds" : ""}), approximating real popup rendering. This resizes the WHOLE browser window for the session. It is the same document with the same extension APIs, opened without a user gesture (no activeTab grant, and an active-tab query can return this tab itself), and window.close() closes the tab. `
+            : "It is the same document with the same extension APIs, but it is NOT hosted in a popup window: no popup sizing, no user gesture (no activeTab grant, and an active-tab query can return this tab itself), and window.close() closes the tab. ") +
           reachIt;
       return actFrameJson(parsed);
     }
@@ -867,7 +870,7 @@ async function confirmSurfaceTarget(
 export const schema = {
   name: "extension_open",
   description:
-    "Open an extension surface, or replay an event, in a running session. Pass surface:'popup', 'options' or 'sidebar' to open a UI surface, or 'newtab', 'history' or 'bookmarks' to open the matching chrome_url_overrides page in a tab (always a tab, resolved by the server, never sent to the engine). On Chromium, when Chrome refuses the sidebar for lack of a user gesture, the server opens the real panel through a synthetic click on the extension's own page and says so in warnings; if that fails too it renders the sidebar document as a tab. Pass surface:'devtools' to open the browser's DevTools on a tab (the one `url` matches, else the first web page) and show the extension's panel there, picked by `panel` title when there are several: Chromium only, over CDP Target.openDevTools, headed or headless; the result names the panel document's url, which extension_eval reads with context 'page' and that url (the panel is no tab, so the tab-based readers do not reach it). Pass surface:'action' to trigger the toolbar action, which opens its popup or replays chrome.action.onClicked when there is none. Pass surface:'command' with `name` to replay a chrome.commands.onCommand shortcut. Note that action and command replay invoke your listener without a user gesture, so the gesture-derived activeTab grant does not apply; the result reports gesture:false and warns when activeTab is declared. Start the session with allowControl:true (extension_dev).",
+    "Open an extension surface, or replay an event, in a running session. Pass surface:'popup', 'options' or 'sidebar' to open a UI surface, or 'newtab', 'history' or 'bookmarks' to open the matching chrome_url_overrides page in a tab (always a tab, resolved by the server, never sent to the engine). On Chromium, when Chrome refuses the sidebar for lack of a user gesture, the server opens the real panel through a synthetic click on the extension's own page and says so in warnings; if that fails too it renders the sidebar document as a tab. Pass surface:'devtools' to open the browser's DevTools on a tab (the one `url` matches, else the first web page) and show the extension's panel there, picked by `panel` title when there are several: Chromium only, over CDP Target.openDevTools, headed or headless; the result names the panel document's url, which extension_eval reads with context 'page' and that url (the panel is no tab, so the tab-based readers do not reach it). Pass surface:'action' to trigger the toolbar action, which opens its popup or replays chrome.action.onClicked when there is none. Pass surface:'command' with `name` to replay a chrome.commands.onCommand shortcut. Note that action and command replay invoke your listener without a user gesture, so the gesture-derived activeTab grant does not apply; the engine's own frame is returned as is. Start the session with allowControl:true (extension_dev).",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -928,7 +931,7 @@ export function sessionIsHeadless(): boolean {
 }
 
 const HEADED_RELAUNCH =
-  "start a headed session: extension_dev with replace: true, and in the environment set EXTENSION_HEADLESS=0 AND clear EXTENSION_BROWSER_FLAGS (it may carry --headless=new, which keeps the window hidden even with EXTENSION_HEADLESS=0)";
+  "a person starts a headed session from a shell where EXTENSION_HEADLESS=0 is set and EXTENSION_BROWSER_FLAGS carries no --headless (extension_stop, then extension_dev from that shell; no tool input sets those variables)";
 
 /* @invariant A path with no scheme names a document inside the extension,
    whatever the manifest declares about it: pages/options.html is reachable
@@ -970,7 +973,7 @@ async function resolveExtensionDocumentUrl(
         name: "NoExtensionId",
         message: `"${relative}" has no scheme, so it was read as a document inside the extension, but the extension's moz-extension:// base could not be resolved from the live session.`,
       },
-      hint: `Pass the full moz-extension://<uuid>/${doc} url (extension_list_extensions reports the uuid), or start the session with allowEval: true so the base can be read from the background.`,
+      hint: `Pass the full moz-extension://<uuid>/${doc} url (extension_dom_snapshot with listTabs: true shows the moz-extension:// urls of open tabs; extension_list_extensions reports the add-on id, not the uuid), or start the session with allowEval: true so the base can be read from the background.`,
     }),
   };
 }
@@ -1179,6 +1182,18 @@ function readWindowRefusal(
   if (!parsed || parsed.ok !== false) return null;
   const code = typeof parsed.error?.code === "string" ? parsed.error.code : "";
   const message = String(parsed.error?.message ?? "");
+  /* @invariant A MISSING SESSION IS NOT A MISSING WINDOW. The engine says
+     "No active control channel found for <browser>" with E_SESSION_NOT_FOUND,
+     and "no active" used to match the no-window arm, so a session that was
+     never started took the tab route. */
+  if (
+    code === "E_SESSION_NOT_FOUND" ||
+    code === "E_NO_SESSION" ||
+    code === "E_NO_CONTROL_CHANNEL" ||
+    /no active control channel/i.test(message)
+  ) {
+    return null;
+  }
   if (code === "E_TARGET_NOT_FOUND" || /active browser window|no active|headless/i.test(message)) {
     return { kind: "no-window", frame: parsed };
   }
@@ -1198,14 +1213,19 @@ function windowRefusalWarning(
 ): string {
   const noun = surface === "sidebar" ? "sidebar" : surface === "options" ? "options page" : "popup";
   const said = String(refusal.frame.error?.message ?? "").replace(/\s+/g, " ").trim();
+  /* @invariant THE WARNING SAYS WHAT WAS OBSERVED: the engine's refusal,
+     quoted, and what this server did about it. The browser was never asked
+     (the engine's open verb refuses a gesture-gated surface in its own
+     preflight), so no sentence here describes browser behaviour this call
+     did not measure. */
   if (isGeckoFamily(browser)) {
     return refusal.kind === "gesture"
-      ? `${browser} opens the ${noun} only from its toolbar; the engine refused with Chromium's gesture wording because it counts every non-Firefox name as Chromium. The ${noun} document was rendered in a tab instead: the same document and APIs, without the toolbar anchoring.`
-      : `${browser} cannot open the ${noun} programmatically (${said}), so the ${noun} document was rendered in a tab instead: the same document and APIs, without the toolbar anchoring.`;
+      ? `The engine refused to open the ${noun} on ${browser} before asking the browser (its open verb carries no user gesture: ${said}), so the ${noun} document was rendered in a tab instead: the same document and APIs, without the toolbar anchoring and without a user gesture or an activeTab grant.`
+      : `The engine refused to open the ${noun} on ${browser} (${said}), so the ${noun} document was rendered in a tab instead: the same document and APIs, without the toolbar anchoring and without a user gesture or an activeTab grant.`;
   }
   return refusal.kind === "gesture"
-    ? `Chromium opens the ${noun} only from a real user gesture, which automation cannot produce, so the ${noun} document was rendered in a tab instead (the same document and APIs). For the real window, ${HEADED_RELAUNCH} and click the toolbar icon.`
-    : `The dev browser has no window to show the ${noun} in (${said}); a headless browser never shows one, so the ${noun} document was rendered in a tab instead (the same document and APIs). For the real window, ${HEADED_RELAUNCH}.`;
+    ? `Chromium opens the ${noun} only from a real user gesture, and the engine refused before asking the browser because its open verb carries none (${said}), so the ${noun} document was rendered in a tab instead (the same document and APIs, without a user gesture or an activeTab grant). For the real window, ${HEADED_RELAUNCH} and click the toolbar icon.`
+    : `The engine reported no window to show the ${noun} in (${said}), so the ${noun} document was rendered in a tab instead (the same document and APIs, without a user gesture or an activeTab grant). For the real window, ${HEADED_RELAUNCH}.`;
 }
 
 const DEVTOOLS_PANEL_BUDGET_MS = 15_000;
@@ -1552,7 +1572,7 @@ async function openGeckoSidebar(
 }
 
 const SIDEBAR_GESTURE_WARNING =
-  "Chrome opens the side panel only from a user gesture and the engine's open verb carries none, so the server opened the extension's own sidebar page in a tab, dispatched a synthetic click on it over CDP and called chrome.sidePanel.open from inside that click, then closed the tab. The panel that opened is the real one; the toolbar wiring (action.onClicked or sidePanel.setPanelBehavior) was not exercised.";
+  "Chrome opens the side panel only from a user gesture and the engine's open verb carries none, so the server opened the extension's own sidebar page in a tab, dispatched a synthetic click on it over CDP and called chrome.sidePanel.open from inside that click, then asked the browser to close that tab (the close is not re-read). The panel that opened is the real one; the toolbar wiring (action.onClicked or sidePanel.setPanelBehavior) was not exercised.";
 
 async function openSidebarThroughGesture(
   projectPath: string,

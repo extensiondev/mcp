@@ -215,13 +215,14 @@ describe("extension_open sidebar on Gecko when the engine names a Chromium API i
       envelope({
         ok: false,
         command: "extension_open",
-        status: "no-session",
-        error: { code: "E_NO_SESSION", name: "NoSession", message: "no session" },
+        status: "failed",
+        error: { code: "E_SESSION_NOT_FOUND", name: "CliError", message: "No active control channel found for firefox. Looked at /p/dist/extension-js/firefox/ready.json. Run `extension dev --browser=firefox --allow-control` first." },
       });
     const failed = JSON.parse(
       await open.handler({ projectPath: dir, browser: "firefox", surface: "sidebar" }),
     );
-    expect(failed.error.code).toBe("E_NO_SESSION");
+    expect(failed.error.code).toBe("E_SESSION_NOT_FOUND");
+    expect(failed.value?.renderedAsTab).toBeUndefined();
     expect(calls.filter((c) => c[0] === "inspect")).toEqual([]);
   });
 });

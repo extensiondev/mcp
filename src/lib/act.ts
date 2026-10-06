@@ -48,6 +48,9 @@ export function toMcpSpeak(text: string): string {
         /\bextension open (popup|options|sidebar|newtab|history|bookmarks)\b/g,
         'extension_open with surface: "$1"',
       )
+      .replace(/`?extension inspect --list-tabs`?/g, "extension_dom_snapshot with listTabs: true")
+      .replace(/`?extension inspect\b`?/g, "extension_inspect")
+      .replace(/`?extension logs\b`?/g, "extension_logs")
       .replace(/`extension dev`/g, "extension_dev")
       .replace(/\bextension dev\b/g, "extension_dev")
       .replace(/--tab\b/g, "`tab`")

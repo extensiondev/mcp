@@ -192,6 +192,10 @@ export class CDPConnection {
     return summarizeConsoleMessages(this.consoleMessages);
   }
 
+  resetConsole(): void {
+    this.consoleMessages = [];
+  }
+
   protected onEvent(
     handler: (msg: Record<string, unknown>) => void,
   ): () => void {

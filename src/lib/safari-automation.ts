@@ -26,6 +26,10 @@ export const SAFARI_MCP_SETTING =
 export const SAFARI_MCP_ADD_COMMAND =
   'claude mcp add safari-mcp -- "/usr/bin/safaridriver" --mcp';
 
+export function safariMcpAddCommand(driverPath: string | null): string {
+  return `claude mcp add safari-mcp -- "${driverPath || "/usr/bin/safaridriver"}" --mcp`;
+}
+
 /* @invariant The reading comes from safaridriver's own usage text, never
  * from a Safari version number. Apple added `--mcp` in Safari 27 and Safari
  * Technology Preview 247, and the Preview ships its own safaridriver inside
@@ -124,14 +128,14 @@ export function safariAutomationHint(automation: SafariAutomation): string {
   if (automation.mcp) {
     return (
       `Safari ships Apple's Safari MCP server (${automation.safaridriver} --mcp). ` +
-      `Enable ${SAFARI_MCP_SETTING}, then add it beside this server: ${SAFARI_MCP_ADD_COMMAND}. ` +
+      `Enable ${SAFARI_MCP_SETTING}, then add it beside this server: ${safariMcpAddCommand(automation.safaridriver)}. ` +
       "It drives an isolated automation window with page-level tools (tabs, console, network, screenshots, evaluate); it has no extension-aware tool, so use it to read a page your content script touches, not the popup or background."
     );
   }
   if (automation.safaridriver) {
     return (
       `This safaridriver (${automation.safaridriver}) has no --mcp flag: Apple's Safari MCP server needs Safari 27 or Safari Technology Preview 247+. ` +
-      "Until then a Safari session is build, open and enable only, with no console or DOM reading from this server."
+      "Until then a Safari session is build, open and enable only: this server's inspect and DOM readers do not reach it, while extension_logs still reads what the extension itself logs through the bridge."
     );
   }
   return "No safaridriver found beside Safari, so no automation reading is possible for it from this machine.";

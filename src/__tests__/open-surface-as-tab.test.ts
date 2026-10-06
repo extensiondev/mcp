@@ -500,7 +500,8 @@ describe("open never destroys the page you were watching", () => {
 
     expect(result.ok).toBe(false);
     expect(result.hint).not.toMatch(/built dist|BUILT manifest|entrypoints/);
-    expect(result.hint).toMatch(/Nothing about your extension bundle/);
+    expect(result.hint).toMatch(/implicated only if it blocks the request itself/);
+    expect(result.hint).not.toMatch(/Nothing about your extension bundle is implicated in a failed/);
   }, 15_000);
 });
 

@@ -236,6 +236,11 @@ describe("extension_open falls back to the tab route on any window refusal, howe
     expect(createdTabs).toEqual([`chrome-extension://${p.id}/action/index.html`]);
     expect(actCalls).toHaveLength(1);
     expect(result.warnings.join(" ")).toContain("only from a real user gesture");
+    expect(result.warnings.join(" ")).toMatch(/refused before asking the browser/);
+    expect(result.warnings.join(" ")).toMatch(/can't open it from the command line/);
+    expect(result.warnings.join(" ")).not.toMatch(/which automation cannot produce/);
+    expect(result.hint).toMatch(/no user gesture \(no activeTab grant/);
+    expect(result.hint).not.toMatch(/context: 'action'/);
   });
 
   it("renders the options page as a tab when the engine says opened but no document ever appears", async () => {
@@ -267,11 +272,12 @@ describe("extension_open falls back to the tab route on any window refusal, howe
 
     expect(result.ok).toBe(true);
     expect(bridgeNavigations).toEqual(["moz-extension://abc/action/index.html"]);
-    expect(result.warnings.join(" ")).toContain("firefox cannot open the popup programmatically");
+    expect(result.warnings.join(" ")).toContain("The engine refused to open the popup on firefox");
+    expect(result.warnings.join(" ")).not.toMatch(/cannot open the popup programmatically/);
     expect(result.warnings.join(" ")).not.toContain("Chromium");
   });
 
-  it("names the engine's misclassification when a Gecko browser gets the Chromium gesture text", async () => {
+  it("quotes the engine's refusal when a Gecko browser gets the Chromium gesture text, with no stale engine story", async () => {
     const p = project("firefox");
     engineReply = () =>
       envelope({
@@ -291,8 +297,7 @@ describe("extension_open falls back to the tab route on any window refusal, howe
 
     expect(result.ok).toBe(true);
     expect(bridgeNavigations).toEqual(["moz-extension://abc/action/index.html"]);
-    expect(result.warnings.join(" ")).toContain("zen opens the popup only from its toolbar");
-    expect(result.warnings.join(" ")).toContain("counts every non-Firefox name as Chromium");
+    expect(result.warnings.join(" ")).toContain("The engine refused to open the popup on zen before asking the browser");
   });
 });
 

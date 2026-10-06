@@ -220,14 +220,15 @@ describe("extension_open surface confirmation", () => {
     actResult = envelope({
       ok: false,
       command: "extension_open",
-      status: "no-session",
-      error: { code: "E_NO_SESSION", name: "NoSession", message: "no session" },
+      status: "failed",
+      error: { code: "E_SESSION_NOT_FOUND", name: "CliError", message: "No active control channel found for chrome. Looked at /p/dist/extension-js/chrome/ready.json. Run `extension dev --browser=chrome --allow-control` first." },
     });
 
     const result = JSON.parse(
       await open.handler({ projectPath: p.dir, surface: "options" }),
     );
 
-    expect(result.error.name).toBe("NoSession");
+    expect(result.error.code).toBe("E_SESSION_NOT_FOUND");
+    expect(result.value?.renderedAsTab).toBeUndefined();
   });
 });

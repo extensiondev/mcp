@@ -22,7 +22,7 @@ import { WEBKIT_FAMILY } from "../lib/browser-family";
 import { readWebDriverSession, WebDriverClient } from "../lib/webdriver";
 import {
   detectSafariAutomation,
-  SAFARI_MCP_ADD_COMMAND,
+  safariMcpAddCommand,
   SAFARI_MCP_SETTING,
 } from "../lib/safari-automation";
 import { readLogEvents, type LogQuery } from "./logs-filter";
@@ -171,7 +171,7 @@ async function environmentPreflight(): Promise<string> {
             ? `${automation.safaridriver} has no --mcp flag, so Safari has no agent-readable window from this machine`
             : "No safaridriver found, so Safari has no agent-readable window from this machine",
       remediation: automation.mcp
-        ? `Enable ${SAFARI_MCP_SETTING}, then add it beside this server: ${SAFARI_MCP_ADD_COMMAND}. It reads pages in an isolated automation window and has no extension-aware tool.`
+        ? `Enable ${SAFARI_MCP_SETTING}, then add it beside this server: ${safariMcpAddCommand(automation.safaridriver)}. It reads pages in an isolated automation window and has no extension-aware tool.`
         : "Install Safari 27 (Software Update) or Safari Technology Preview 247+ for Apple's Safari MCP server. A Safari dev session still builds, opens and guides the enable step without it.",
     });
   }

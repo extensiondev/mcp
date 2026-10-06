@@ -67,7 +67,14 @@ export function emptyReason(
   }
   if (contract.status === "error") {
     const errs = contract.errors;
-    return `The dev session recorded status:"error"${errs?.length ? ` (${errs.join("; ")})` : ""}, so the extension never ran. There are no logs because there was no working build, not because your code is silent.`;
+    const code = (contract as { code?: unknown }).code;
+    if (code === "browser_exited") {
+      return `The dev session recorded status:"error" with code browser_exited: the browser exited after the build, so logging stopped when it did. Whatever was written before is in the file; nothing new will arrive until the session is relaunched.`;
+    }
+    if (errs?.length || code === "compile_error" || code === "first_compile") {
+      return `The dev session recorded status:"error"${errs?.length ? ` (${errs.join("; ")})` : ""}, so the extension never ran. There are no logs because there was no working build, not because your code is silent.`;
+    }
+    return `The dev session recorded status:"error"${typeof code === "string" ? ` (${code})` : ""}, so the extension is not running. Nothing is logging until the session is relaunched.`;
   }
   if (typeof contract.pid === "number") {
     try {
@@ -99,12 +106,18 @@ function summarize(
         -1,
       )
     : -1;
+  /* @invariant THE EMPTY REASON IS ABOUT THE SESSION ONLY WHEN THE FILE IS
+     EMPTY. A filter that matched none of N events used to carry "no dev
+     session has produced a build here". */
+  const fileHasEvents = typeof extra.total === "number" && extra.total > 0;
   const reason =
     matched === 0 && projectPath
-      ? (emptyReason(projectPath, browser) ??
-        (typeof extra.total === "number" && extra.total === 0 && source === "file"
-          ? "The log file holds no events yet: the session is live and nothing in the extension has logged. Drive it (open a surface, load a page) and read again."
-          : undefined))
+      ? fileHasEvents
+        ? `${extra.total} event(s) are in this run's file and none matched the filter; the session itself is not the reason.`
+        : (emptyReason(projectPath, browser) ??
+          (typeof extra.total === "number" && extra.total === 0 && source === "file"
+            ? "The log file holds no events yet: the session is live and nothing in the extension has logged. Drive it (open a surface, load a page) and read again."
+            : undefined))
       : undefined;
   const stale = Boolean(staleNote) && matched > 0;
   return envelope({
@@ -338,8 +351,8 @@ export function controlRefusal(
     return {
       code: "E_NO_CONTROL_CHANNEL",
       status: "control-channel-unavailable",
-      message: `${preamble} That code means the broker has no control channel to hand out: the session was started without allowControl, so it turns controlling clients away. Following logs is a read, not a control operation, so a session that refuses this connection cannot be streamed at all until it is relaunched.`,
-      hint: "Relaunch the session with extension_dev and allowControl: true, or read the file instead by calling extension_logs without follow.",
+      message: `${preamble} That code is what the pinned broker sends a CONTROLLER when the session runs without allowControl; this reader dialed as a consumer, which that broker never refuses this way, so the engine in this project closes consumers on a rule the pin does not have. Nothing is known about the session's logs from this read.`,
+      hint: "Read the file instead by calling extension_logs without follow, and compare the engine versions with extension_doctor; if the project's engine is the pin, relaunch the session with extension_dev and allowControl: true.",
     };
   }
 
@@ -393,6 +406,14 @@ async function readFromStream(
   const events: any[] = [];
   let dropped = 0;
   let runId = ready.runId;
+  /* @invariant A FOLLOW RETURNS HISTORY PLUS THE WINDOW. The broker replays
+     its whole ring (5,000 events) to a new consumer before any live frame,
+     so `matched` counts both; the two are told apart by the event's own
+     timestamp against the moment this reader connected and reported
+     separately. */
+  let connectedAt = Date.now();
+  let replayed = 0;
+  let liveCount = 0;
 
   return await new Promise<string>((resolve) => {
     let settled = false;
@@ -438,6 +459,7 @@ async function readFromStream(
           args.projectPath,
           undefined,
           streamNote,
+          { replayed, live: liveCount, followMs },
         ),
       );
     };
@@ -445,6 +467,7 @@ async function readFromStream(
     const timer = setTimeout(finish, followMs);
 
     socket.on("open", () => {
+      connectedAt = Date.now();
       try {
         socket.send(
           JSON.stringify({
@@ -468,7 +491,12 @@ async function readFromStream(
       if (frame.type === "ready" && frame.runId) {
         runId = String(frame.runId);
       } else if (frame.type === "log" && frame.event) {
-        if (matches(frame.event)) events.push(frame.event);
+        if (matches(frame.event)) {
+          events.push(frame.event);
+          const at = Number(frame.event.timestamp);
+          if (Number.isFinite(at) && at < connectedAt) replayed += 1;
+          else liveCount += 1;
+        }
       } else if (frame.type === "gap" && typeof frame.dropped === "number") {
         dropped += frame.dropped;
       }

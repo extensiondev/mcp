@@ -164,13 +164,20 @@ async function collectGeckoDeepDom(
   const frame = Array.isArray(value?.frames) ? value.frames[0] : null;
   if (frame && Array.isArray(frame.closed)) {
     result.closedShadowRoots = frame.closed.map(
-      (c: { host?: string; html?: string }) => ({
+      (c: { host?: string; html?: string; truncated?: boolean }) => ({
         host: String(c.host ?? ""),
         type: "closed",
         html: String(c.html ?? ""),
+        ...(c.truncated ? { truncated: true } : {}),
       }),
     );
     result.deepDom = true;
+    result.closedShadowRootsVisible = frame.api === true;
+    if (frame.api !== true) {
+      notes.push(
+        `deepDom on ${browser}: this content-script context has no openOrClosedShadowRoot, so closed shadow roots could not be seen; an empty list here does not mean there are none.`,
+      );
+    }
     return;
   }
   const reason =

@@ -5,12 +5,21 @@ import path from "node:path";
 import { envelope } from "../lib/envelope";
 
 const calls: string[][] = [];
+let deepDomApi: boolean | null = null;
 vi.mock("../lib/act", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../lib/act")>();
   return {
     ...actual,
     runActVerb: async (cli: string[]) => {
       calls.push(cli);
+      if (cli[0] === "eval" && deepDomApi !== null) {
+        return envelope({
+          ok: true,
+          command: "extension_inspect",
+          status: "ok",
+          value: { frames: [{ api: deepDomApi, closed: [] }] },
+        });
+      }
       return envelope({
         ok: true,
         command: "extension_inspect",
@@ -62,6 +71,7 @@ const MANIFEST = {
 
 afterEach(() => {
   calls.length = 0;
+  deepDomApi = null;
   listed.length = 0;
   navigations.length = 0;
   for (const d of dirs.splice(0)) fs.rmSync(d, { recursive: true, force: true });
@@ -164,4 +174,27 @@ describe("extension_inspect on Gecko reads a page inside the extension through i
     expect(calls[0][idx + 1]).toBe("page");
     expect(calls[0]).toContain("--url");
   });
+
+/*. */
+describe("deepDom on Gecko says whether closed roots could be seen at all", () => {
+  it("notes a context that cannot see closed roots instead of listing none", async () => {
+    const dir = project(MANIFEST);
+    deepDomApi = false;
+    const out = JSON.parse(
+      await inspect.handler({ projectPath: dir, browser: "firefox", url: "https://a.test/", deepDom: true, include: [] }),
+    );
+    expect(out.value.closedShadowRootsVisible).toBe(false);
+    expect(out.warnings.join("\n")).toMatch(/could not be seen/);
+  });
+
+  it("reports visible closed roots plainly when the api is there", async () => {
+    const dir = project(MANIFEST);
+    deepDomApi = true;
+    const out = JSON.parse(
+      await inspect.handler({ projectPath: dir, browser: "firefox", url: "https://a.test/", deepDom: true, include: [] }),
+    );
+    expect(out.value.closedShadowRootsVisible).toBe(true);
+    expect(out.warnings.join("\n")).not.toMatch(/could not be seen/);
+  });
+});
 });

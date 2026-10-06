@@ -138,7 +138,9 @@ describe("extension_open resolves override pages itself: the engine's open verb 
       document: "chrome_url_overrides/newtab.html",
       extensionId: p.id,
     });
-    expect(result.hint).toContain("real surface");
+    expect(result.hint).toMatch(/override document by url in a tab/);
+    expect(result.hint).toMatch(/was not read/);
+    expect(result.hint).not.toMatch(/the only place the browser ever renders/);
     expect(result.hint).not.toContain("NOT hosted in a popup window");
     expect(result.hint).toContain("extension_eval with context: 'newtab'");
   });

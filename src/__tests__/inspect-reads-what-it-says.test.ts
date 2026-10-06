@@ -6,6 +6,7 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 
 const cdp = vi.hoisted(() => ({
+  order: [] as string[],
   targets: [] as Array<{ id: string; type: string; url: string; title: string }>,
   navigateThrows: null as string | null,
   landOn: null as string | null,
@@ -29,7 +30,11 @@ vi.mock("../lib/cdp", async (importOriginal) => {
         return `session-${id}`;
       }
       async enableDomains() {}
+      resetConsole() {
+        cdp.order.push("resetConsole");
+      }
       async navigate(_sessionId: string, url: string) {
+        cdp.order.push("navigate");
         if (cdp.navigateThrows) throw new Error(cdp.navigateThrows);
         const landed = cdp.landOn ?? url;
         cdp.targets = cdp.targets.map((t) => (t.id === "web" ? { ...t, url: landed, title: "Landed" } : t));
@@ -75,6 +80,7 @@ const { CDPConnection } = await import("../lib/cdp-connection");
 const scripts = await import("../lib/cdp-page-scripts");
 
 beforeEach(() => {
+  cdp.order = [];
   cdp.targets = [{ id: "web", type: "page", url: "https://site.test/", title: "site" }];
   cdp.navigateThrows = null;
   cdp.landOn = null;
@@ -105,6 +111,18 @@ describe("71a: the envelope names the document that was read", () => {
     expect(out.status).toBe("navigate-failed");
     expect(out.error.message).toMatch(/ERR_NAME_NOT_RESOLVED.*Nothing was inspected/);
     expect(out.value.html).toBeUndefined();
+  });
+});
+
+describe("102g: a navigating inspect reads the new document's console only", () => {
+  it("drops the previous document's console before navigating", async () => {
+    await handler({ projectPath: "/p", browser: "chrome", url: "https://other.test/", include: ["console"] });
+    expect(cdp.order).toEqual(["resetConsole", "navigate"]);
+  }, 10_000);
+
+  it("keeps the console when no navigation happens", async () => {
+    await handler({ projectPath: "/p", browser: "chrome", include: ["console"] });
+    expect(cdp.order).toEqual([]);
   });
 });
 
