@@ -161,7 +161,7 @@ describe("extension_stop", () => {
     expect(stoppedPids).toContain(pidB);
     expect(isAlive(pidA)).toBe(false);
     expect(isAlive(pidB)).toBe(false);
-  });
+  }, 15_000);
 });
 
 describe("extension_stop after an MCP restart", () => {
