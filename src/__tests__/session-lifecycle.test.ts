@@ -118,6 +118,20 @@ afterEach(() => {
 });
 
 describe("extension_dev fork guard", () => {
+  it("does not take a stranger holding a recorded pid for a live session", async () => {
+    if (process.platform === "win32") return;
+    const project = tmpProject();
+    const stranger = spawn("sleep", ["300"], { detached: true, stdio: "ignore" });
+    stranger.unref();
+    spawned.push(stranger);
+    await new Promise((r) => setTimeout(r, 200));
+    registerSession({ pid: stranger.pid!, browser: "chrome", projectPath: project, command: "dev" });
+
+    const result = JSON.parse(await dev.handler({ projectPath: project }));
+
+    expect(result.status).not.toBe("session-exists");
+  });
+
   it("refuses a second dev call while a live session holds the project", async () => {
     const project = tmpProject();
     const pid = spawnVictim();

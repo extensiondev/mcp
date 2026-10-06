@@ -326,3 +326,29 @@ describe("resolveExtensionInvocation", () => {
     expect(prefixArgs).toEqual([]);
   });
 });
+
+describe("extension_stop never signals a pid that is no longer the session", () => {
+  posixOnly(
+    "cleans the records and kills nothing when the recorded pid is now a stranger",
+    async () => {
+      const projectPath = tmpProject();
+      const stranger = spawnHolder("sleep", ["300"]);
+      await new Promise((r) => setTimeout(r, 200));
+      registerSession({ pid: stranger, browser: "chrome", projectPath, command: "dev" });
+
+      const result = JSON.parse(await stop.handler({ projectPath, browser: "chrome" }));
+
+      expect(isAlive(stranger)).toBe(true);
+      expect(result.value.reaped).toEqual([]);
+      expect(result.value.detail).toContain("Nothing was signalled");
+      expect(result.value.detail).toContain('"sleep"');
+      expect(result.value.staleRecord).toBe(true);
+      try {
+        process.kill(stranger, "SIGKILL");
+      } catch {
+        // already gone
+      }
+    },
+    15_000,
+  );
+});

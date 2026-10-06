@@ -7,9 +7,9 @@
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
 import fs from "node:fs";
-import http from "node:http";
 import type { ReadyContract } from "./types";
 import { readyContractPath } from "./session-paths";
+import { pidState } from "./process-identity";
 
 async function resolveContractPort(
   projectPath: string,
@@ -28,9 +28,16 @@ async function resolveContractPort(
     try {
       const contract = JSON.parse(
         fs.readFileSync(readyPath, "utf8"),
-      ) as ReadyContract & { cdpPort?: number; rdpPort?: number };
+      ) as ReadyContract & { cdpPort?: number; rdpPort?: number; pid?: number };
       contractSeen = true;
       if (contractSeenAt == null) contractSeenAt = Date.now();
+      /* @invariant A DEAD SESSION'S PORT IS NOBODY'S. The contract keeps the
+         port of the dev server that wrote it; once that pid is gone the port
+         may belong to another project's browser, and every reader that
+         dialled it answered for the wrong session. */
+      if (typeof contract.pid === "number" && pidState(contract.pid) !== "alive") {
+        return { port: null, contractSeen };
+      }
       if (typeof contract[field] === "number") {
         return { port: contract[field] as number, contractSeen };
       }
@@ -52,18 +59,20 @@ export async function resolveCdpPort(
   projectPath: string,
   browser: string,
   options?: { waitMs?: number; graceMs?: number },
-): Promise<{ port: number; source: "contract" | "default-probe" } | null> {
-  const { port, contractSeen } = await resolveContractPort(
+): Promise<{ port: number; source: "contract" } | null> {
+  /* @invariant NO CONTRACT MEANS NO SESSION. This used to fall back to
+     whatever answered on 127.0.0.1:9222, and every caller read only the port,
+     so a project that was never started was asserted, inspected, navigated
+     and evaluated against another session's browser. The
+     only port this package dials is the one the project's own contract
+     names, while the process that wrote it is alive. */
+  const { port } = await resolveContractPort(
     projectPath,
     browser,
     "cdpPort",
     options,
   );
-  if (port != null) return { port, source: "contract" };
-  if (!contractSeen && (await isCdpEndpoint(9222))) {
-    return { port: 9222, source: "default-probe" };
-  }
-  return null;
+  return port != null ? { port, source: "contract" } : null;
 }
 
 export async function resolveRdpPort(
@@ -85,20 +94,3 @@ export const CDP_PORT_MISSING_HINT =
 
 export const RDP_PORT_MISSING_HINT =
   "The session's ready contract has no rdpPort. Firefox sessions publish one from extension.js 4.0.15 on; upgrade the project's extension dependency (or remove the local install so the MCP's pinned CLI drives the session) and restart the dev session.";
-
-function isCdpEndpoint(port: number): Promise<boolean> {
-  return new Promise((resolve) => {
-    const req = http.get(
-      { host: "127.0.0.1", port, path: "/json/version", timeout: 1_000 },
-      (res) => {
-        res.resume();
-        resolve(res.statusCode === 200);
-      },
-    );
-    req.on("error", () => resolve(false));
-    req.on("timeout", () => {
-      req.destroy();
-      resolve(false);
-    });
-  });
-}

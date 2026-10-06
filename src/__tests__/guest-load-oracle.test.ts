@@ -8,7 +8,7 @@ type RawTarget = {
   webSocketDebuggerUrl: string;
 };
 let targets: RawTarget[] = [];
-let resolved: { port: number; source: "contract" | "default-probe" } | null = {
+let resolved: { port: number; source: "contract" } | null = {
   port: 9333,
   source: "contract",
 };

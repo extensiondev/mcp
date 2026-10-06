@@ -10,6 +10,12 @@ import { PROJECT_PATH } from "../lib/common-schema";
 import fs from "node:fs";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
+import {
+  PLAUSIBLE_SESSION_BINARY,
+  describeForeignPid,
+  pidState,
+  processCommand,
+} from "../lib/process-identity";
 import type { ReadyContract } from "../lib/types";
 import {
   findSessionInfo,
@@ -57,6 +63,7 @@ interface StopOutcome {
   reaped: number[];
   detail: string;
   carrierRemoved?: string;
+  staleRecord?: boolean;
 }
 
 function cleanCarrier(projectPath: string): { carrierRemoved?: string } {
@@ -87,28 +94,6 @@ function projectPathForms(projectPath: string): string[] {
   } catch {
   }
   return [...forms];
-}
-
-const PLAUSIBLE_SESSION_BINARY =
-  /chrom|edge|brave|opera|vivaldi|yandex|firefox|waterfox|librewolf|zen|floorp|safari|node|electron|extension/i;
-
-function processCommand(pid: number): string {
-  /* @invariant Linux ps -o comm= reports the thread name (Node stamps
-     "MainThread"), not the binary, so argv[0] from /proc must win where it
-     exists or the plausibility filter rejects every real session process. */
-  try {
-    const cmdline = fs.readFileSync(`/proc/${pid}/cmdline`, "utf8");
-    const argv0 = cmdline.split("\0")[0];
-    if (argv0) return path.basename(argv0);
-  } catch {
-  }
-  try {
-    return execFileSync("ps", ["-o", "comm=", "-p", String(pid)], {
-      encoding: "utf8",
-    }).trim();
-  } catch {
-    return "";
-  }
 }
 
 export interface ContractProcessHints {
@@ -260,7 +245,29 @@ export async function stopOne(
   }
 
   let detail: string;
-  if (!isAlive(pid)) {
+  const state = pidState(pid);
+  if (state === "foreign") {
+    /* @invariant A record whose pid is now someone else's is cleaned, never
+       signalled: the session it described is gone, and the number belongs to
+       a process this server did not start. */
+    removeSession(projectPath, browser);
+    removeSessionMarker(projectPath, browser);
+    try {
+      fs.rmSync(readyContractPath(projectPath, browser), { force: true });
+    } catch {
+    }
+    return {
+      projectPath,
+      browser,
+      pid,
+      stopped: false,
+      reaped: [],
+      staleRecord: true,
+      ...cleanCarrier(projectPath),
+      detail: `Nothing was signalled: ${describeForeignPid(pid)}. The session that recorded it is already gone; its stale records were removed.`,
+    };
+  }
+  if (state === "dead") {
     detail = "Process was already gone; cleaned up session records.";
   } else {
     signal(pid, "SIGTERM");

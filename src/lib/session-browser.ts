@@ -9,6 +9,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { listSessionMarkers, listSessions } from "./process-manager";
+import { pidState } from "./process-identity";
 import {
   readyContractPath,
   sessionArtifactsRootDir,
@@ -51,13 +52,10 @@ function contractSightings(projectPath: string): ContractSighting[] {
   return sightings;
 }
 
+/* A recorded pid counts only while it is alive AND still a session process;
+   a number reused by a stranger reads as gone. */
 function pidAlive(pid: number): boolean {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch {
-    return false;
-  }
+  return pidState(pid) === "alive";
 }
 
 export function knownSessionBrowsers(projectPath: string): string[] {
