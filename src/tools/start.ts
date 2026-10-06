@@ -9,7 +9,9 @@
 import fs from "node:fs";
 import path from "node:path";
 import { LAUNCH_BROWSER, PROJECT_PATH } from "../lib/common-schema";
-import { pollBootVerdict } from "../lib/boot-verdict";
+import { pollBootVerdict,
+  bootFailureHint,
+} from "../lib/boot-verdict";
 import { profileCarriesTabsOver } from "../lib/profile-carryover";
 import { removeCarrier } from "../lib/carrier";
 import { envelope } from "../lib/envelope";
@@ -178,6 +180,26 @@ export async function handler(
       hint: building
         ? "Read `value.output` above for the cause: a failed production build, a port already in use, or a missing browser binary are the common ones. extension_build will surface a build error on its own."
         : "Read `value.output` above for the cause: a missing or broken dist/ (run extension_build first, or drop build:false), or a missing browser binary are the common ones.",
+      warnings: boot.warnings,
+    });
+  }
+
+  if (boot.verdict.kind === "boot-failed") {
+    const { code, message } = boot.verdict;
+    return envelope({
+      ok: false,
+      command: schema.name,
+      status: "boot-failed",
+      error: {
+        code: "E_CONTRACT_ERROR",
+        message: `The session recorded status: error${code ? ` (${code})` : ""}${message ? `: ${message}` : ""}. The process is running; the extension is not.`,
+      },
+      value: {
+        ...session,
+        ...(code ? { engineCode: code } : {}),
+        output: cleanOutput.slice(0, 2000),
+      },
+      hint: bootFailureHint(code),
       warnings: boot.warnings,
     });
   }

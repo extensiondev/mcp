@@ -303,10 +303,11 @@ function reconcileRelaunchedBrowser(
       /\bexited\b/i.test(String(leg.detail ?? "")),
   );
   if (!exitedLeg) return false;
+  /* @invariant ONLY THE EXECUTOR LEG PROVES THE BROWSER ANSWERED. The
+     control channel is the dev server's own socket, which lives on after
+     the browser dies; counting it relaunched a crashed browser. */
   const executorAnswered = checks.some(
-    (leg) =>
-      (leg.check === "executor" || leg.check === "control-channel") &&
-      leg.status === "pass",
+    (leg) => leg.check === "executor" && leg.status === "pass",
   );
   const browserAlive =
     typeof contract?.browserPid === "number" && pidIsAlive(contract.browserPid);

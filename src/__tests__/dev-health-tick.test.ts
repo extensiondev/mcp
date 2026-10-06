@@ -143,6 +143,32 @@ describe("extension_dev health tick", () => {
     expect(result.hint).toContain("extension_wait");
   }, 20_000);
 
+  /*. */
+  it("calls a browser launch failure a boot failure, not a compile story", async () => {
+    const project = tmpProject();
+    nextChild = () => {
+      const cli = fakeCli('console.log("building"); setTimeout(()=>{}, 60000);');
+      setTimeout(() => {
+        writeSchema1ContractError(project, "chrome", {
+          code: "browser_launch_failed",
+          message: "the browser process could not start: spawn ENOENT",
+        });
+      }, 300);
+      return cli;
+    };
+
+    const result = JSON.parse(await dev.handler({ projectPath: project }));
+
+    expect(result.ok).toBe(false);
+    expect(result.status).toBe("boot-failed");
+    expect(result.error.code).toBe("E_CONTRACT_ERROR");
+    expect(result.error.message).toContain("browser_launch_failed");
+    expect(result.error.message).toContain("spawn ENOENT");
+    expect(result.value.engineCode).toBe("browser_launch_failed");
+    expect(result.hint).toMatch(/could not start/);
+    expect(JSON.stringify(result)).not.toMatch(/recompile/);
+  }, 20_000);
+
   it("trusts the profile-lock stamp even from a CLI that declares no schema", async () => {
     const project = tmpProject();
     nextChild = () => {

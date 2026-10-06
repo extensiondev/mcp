@@ -15,7 +15,9 @@ import {
   browserProfileRootDir,
   profileRemediation,
 } from "../lib/session-paths";
-import { pollBootVerdict } from "../lib/boot-verdict";
+import { pollBootVerdict,
+  bootFailureHint,
+} from "../lib/boot-verdict";
 import { profileCarriesTabsOver } from "../lib/profile-carryover";
 import { envelope } from "../lib/envelope";
 import {
@@ -254,6 +256,26 @@ export async function handler(
       hint:
         "Read `value.output` above for the cause: a port already in use, a manifest the build rejects, or a missing browser binary are the common ones. " +
         "Fix it and call extension_dev again; extension_doctor with this projectPath will also report what the last session recorded.",
+      warnings: boot.warnings,
+    });
+  }
+
+  if (boot.verdict.kind === "boot-failed") {
+    const { code, message } = boot.verdict;
+    return envelope({
+      ok: false,
+      command: schema.name,
+      status: "boot-failed",
+      error: {
+        code: "E_CONTRACT_ERROR",
+        message: `The session recorded status: error${code ? ` (${code})` : ""}${message ? `: ${message}` : ""}. The process is running; the extension is not.`,
+      },
+      value: {
+        ...session,
+        ...(code ? { engineCode: code } : {}),
+        output: cleanOutput.slice(0, 2000),
+      },
+      hint: bootFailureHint(code),
       warnings: boot.warnings,
     });
   }

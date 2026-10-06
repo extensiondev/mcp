@@ -94,6 +94,30 @@ describe("extension_doctor does not call a session dead over a browser exit the 
     expect(browserLeg.status).toBe("fail");
   });
 
+  /*. */
+  it("does not count the dev server's own control socket as the browser answering", async () => {
+    cli.response = {
+      code: 1,
+      stdout: report([
+        { check: "ready-contract", status: "pass", detail: "status ready" },
+        { check: "control-channel", status: "pass", detail: "control channel answered" },
+        { check: "executor", status: "fail", detail: "no executor connected" },
+        { check: "browser", status: "fail", detail: EXITED },
+      ]),
+      stderr: "",
+    };
+
+    const result = JSON.parse(
+      await handler({ projectPath: tmpProject(), browser: "firefox" }),
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.status).toBe("unhealthy");
+    const browserLeg = result.value.checks.find((c: { check: string }) => c.check === "browser");
+    expect(browserLeg.status).toBe("fail");
+    expect(JSON.stringify(result)).not.toMatch(/session is live/);
+  });
+
   it("does not let one live leg hide a different failure", async () => {
     cli.response = {
       code: 1,

@@ -27,6 +27,7 @@ interface DetectedBrowser {
   source: "managed" | "system" | "not_found";
   engine: "chromium" | "gecko" | "webkit";
   version: string | null;
+  versionProbe?: "ok" | "failed";
   cdpSupport: boolean;
   rdpSupport: boolean;
   automation?: SafariAutomation;
@@ -327,7 +328,8 @@ async function getVersion(
       env: { ...process.env },
     });
     const match = stdout.match(/[\d]+\.[\d]+[\d.]*/);
-    return match ? match[0] : stdout.trim().slice(0, 50);
+    const text = match ? match[0] : stdout.trim().slice(0, 50);
+    return text.length > 0 ? text : null;
   } catch {
     return null;
   }
@@ -377,12 +379,16 @@ export async function detectBrowsers(
       source === "managed" && systemBinaryPath && systemBinaryPath !== binaryPath
         ? systemBinaryPath
         : null;
+    /* @invariant A BINARY THAT DID NOT ANSWER --version IS UNVERIFIED, NOT
+       AVAILABLE: a quarantined or half-downloaded bundle used to keep its
+       source and join "All requested browsers are available". */
     detected.push({
       browser,
       binaryPath,
       source,
       engine: isWebkit ? "webkit" : isGecko ? "gecko" : "chromium",
       version,
+      ...(binaryPath ? { versionProbe: version ? "ok" : "failed" } : {}),
       cdpSupport: !isGecko && !isWebkit,
       rdpSupport: isGecko,
       ...(automation ? { automation } : {}),
@@ -396,7 +402,8 @@ export async function detectBrowsers(
     });
   }
 
-  const available = detected.filter((d) => d.source !== "not_found");
+  const available = detected.filter((d) => d.source !== "not_found" && d.versionProbe === "ok");
+  const unverified = detected.filter((d) => d.source !== "not_found" && d.versionProbe === "failed");
   const missing = detected.filter((d) => d.source === "not_found");
   const safari = detected.find((d) => d.automation);
   const safariHint = safari?.automation
@@ -412,9 +419,17 @@ export async function detectBrowsers(
       managed,
       summary: {
         available: available.map((d) => d.browser),
+        unverified: unverified.map((d) => d.browser),
         missing: missing.map((d) => d.browser),
       },
     },
+    ...(unverified.length
+      ? {
+          warnings: unverified.map(
+            (d) => `${d.browser}: ${d.binaryPath} did not answer --version within 5s, so it is unverified; a quarantined or half-downloaded bundle looks like this. Run it once by hand, or reinstall it with extension_browsers action: "install".`,
+          ),
+        }
+      : {}),
     hint: missing.length
       ? `Missing browser(s): ${missing.map((d) => d.browser).join(", ")}.${
           missing.some((d) => MANAGED_INSTALLABLE.has(d.browser))
@@ -424,6 +439,8 @@ export async function detectBrowsers(
                 .join(", ")}.`
             : ""
         }${safariHint}`
-      : `All requested browsers are available.${safariHint}`,
+      : unverified.length
+        ? `${available.map((d) => d.browser).join(", ") || "No browser"} answered a version probe; ${unverified.map((d) => d.browser).join(", ")} did not and ${unverified.length === 1 ? "is" : "are"} unverified.${safariHint}`
+        : `All requested browsers are available.${safariHint}`,
   });
 }

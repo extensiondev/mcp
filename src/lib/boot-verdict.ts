@@ -29,6 +29,7 @@ export type BootVerdict =
   | { kind: "silent-within-budget" }
   | { kind: "exited"; exitCode: number | null; signal: string | null }
   | { kind: "compile-failed"; message?: string; compileErrors: string[] }
+  | { kind: "boot-failed"; code?: string; message?: string }
   | {
       kind: "browser-exited";
       stamp: {
@@ -139,11 +140,40 @@ function contractVerdict(
     };
   }
 
+  /* @invariant A CONTRACT ERROR THAT IS NOT A COMPILE ERROR IS NOT CALLED
+     ONE. The engine stamps browser_launch_failed, extension_load_refused and
+     dev_server_start_failed too, and every one used to read "the first
+     compile failed, the server will recompile". */
+  const compileErrors = Array.isArray(contract.errors) ? contract.errors : [];
+  const compileCode =
+    typeof contract.code !== "string" ||
+    contract.code === "first_compile" ||
+    contract.code === "compile_error";
+  if (compileCode || (compileErrors.length > 0 && typeof contract.code !== "string")) {
+    return {
+      kind: "compile-failed",
+      message: contract.message,
+      compileErrors,
+    };
+  }
   return {
-    kind: "compile-failed",
-    message: contract.message,
-    compileErrors: Array.isArray(contract.errors) ? contract.errors : [],
+    kind: "boot-failed",
+    code: contract.code,
+    message: typeof contract.message === "string" ? contract.message : undefined,
   };
+}
+
+export function bootFailureHint(code: string | undefined): string {
+  switch (code) {
+    case "browser_launch_failed":
+      return "The browser process could not start. extension_browsers (action: detect) says which binaries are usable; pass chromiumBinary or geckoBinary to extension_dev to pick one, then retry.";
+    case "extension_load_refused":
+      return "The browser refused to load the built extension. Run extension_manifest_validate and read extension_logs for the browser's reason, fix it, then call extension_dev again.";
+    case "dev_server_start_failed":
+      return "The dev server could not start, usually a port already in use. Pass another port to extension_dev, or stop what holds it, then retry.";
+    default:
+      return "Read the engine's message above, fix the cause, then call extension_dev again. extension_doctor with this projectPath reports what the last session recorded.";
+  }
 }
 
 export async function pollBootVerdict(
