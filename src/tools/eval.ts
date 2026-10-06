@@ -221,12 +221,13 @@ async function evaluateOnChromiumExtensionPage(
       resolved.port,
       target.targetId,
       args.expression,
+      args.timeout,
     );
     if (!outcome.ok) {
       return envelope({
         ok: false,
         command: schema.name,
-        status: outcome.thrown ? "eval-failed" : "cdp-failed",
+        status: outcome.thrown ? "eval-failed" : outcome.timedOut ? "eval-timeout" : "cdp-failed",
         error: {
           code: outcome.thrown ? "E_EVAL" : "E_CDP",
           name: outcome.thrown ? "EvalError" : "CdpError",
@@ -257,7 +258,7 @@ async function evaluateOnChromiumExtensionPage(
     const url = args.url as string;
     const matches = matchTargetsByUrl(await listPageTargets(resolved.port), url);
     if (matches.length === 0) return RELAY_INSTEAD;
-    return evaluateOnWebTarget(args, matches, url);
+    return evaluateOnWebTarget(args, matches, url, browser);
   }
   if (context === "page") {
     wanted = args.url as string;
@@ -318,6 +319,7 @@ async function evaluateOnChromiumExtensionPage(
     resolved.port,
     target.targetId,
     args.expression,
+    args.timeout,
   );
   const others = targets.slice(1);
   const warnings = others.length
@@ -329,7 +331,7 @@ async function evaluateOnChromiumExtensionPage(
     return envelope({
       ok: false,
       command: schema.name,
-      status: outcome.thrown ? "eval-failed" : "cdp-failed",
+      status: outcome.thrown ? "eval-failed" : outcome.timedOut ? "eval-timeout" : "cdp-failed",
       error: {
         code: outcome.thrown ? "E_EVAL" : "E_CDP",
         name: outcome.thrown ? "EvalError" : "CdpError",
@@ -412,8 +414,9 @@ async function evaluateOnWebTarget(
   args: ActArgs & { expression: string },
   matches: Array<{ targetId: string; url: string; title: string }>,
   url: string,
+  browser: string,
 ): Promise<string> {
-  const resolved = await resolveCdpPort(args.projectPath, args.browser ?? "chrome");
+  const resolved = await resolveCdpPort(args.projectPath, browser);
   if (!resolved) return RELAY_INSTEAD;
   const live = matches.filter((t) => !isBrowserErrorPage(t.url));
   if (live.length === 0) {
@@ -430,12 +433,12 @@ async function evaluateOnWebTarget(
     });
   }
   const target = live[0];
-  const outcome = await evaluateOnExtensionPage(resolved.port, target.targetId, args.expression);
+  const outcome = await evaluateOnExtensionPage(resolved.port, target.targetId, args.expression, args.timeout);
   if (!outcome.ok) {
     return envelope({
       ok: false,
       command: schema.name,
-      status: outcome.thrown ? "eval-failed" : "cdp-failed",
+      status: outcome.thrown ? "eval-failed" : outcome.timedOut ? "eval-timeout" : "cdp-failed",
       error: {
         code: outcome.thrown ? "E_EVAL" : "E_CDP",
         name: outcome.thrown ? "EvalError" : "CdpError",
@@ -820,7 +823,7 @@ async function evaluateThroughExecuteScript(
       "eval",
       ...commonFlags({ ...args, context: "background", url: undefined, tab: undefined, browser }),
       "--",
-      executeScriptExpression(args.url, code),
+      executeScriptExpression(args.url, code, typeof args.tab === "number" ? args.tab : undefined),
       args.projectPath,
     ],
     args.projectPath,
@@ -863,7 +866,9 @@ async function evaluateThroughExecuteScript(
     status: "evaluated",
     value: result.value === undefined ? null : result.value,
     warnings: [
-      `Because ${why}, this ran through tabs.executeScript from the background: the content script world of the tab, not the page's MAIN world, so globals the page defines are not visible${context === "page" ? ' even though context: "page" was asked' : ""}. An empty string or null here is the content world's reading at call time; if the element renders late, wait and retry.`,
+      `Because ${why}, this ran through tabs.executeScript from the background${
+        typeof args.tab === "number" ? ` in tab ${args.tab}` : args.url ? ` in the first tab whose url contains ${JSON.stringify(args.url)}` : " in the active tab"
+      }: the content script world of the tab, not the page's MAIN world, so globals the page defines are not visible${context === "page" ? ' even though context: "page" was asked' : ""}. An empty string or null here is the content world's reading at call time; if the element renders late, wait and retry.`,
     ],
     hint: "Pass url to pick the tab; the extension needs host permissions for it.",
   });

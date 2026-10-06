@@ -48,7 +48,7 @@ type EvaluateResponse = {
 
 export type ExtensionPageEval =
   | { ok: true; value: unknown }
-  | { ok: false; message: string; thrown: boolean };
+  | { ok: false; message: string; thrown: boolean; timedOut?: boolean };
 
 function stripHash(url: string): string {
   return url.replace(/#.*$/, "");
@@ -193,12 +193,19 @@ const TOP_LEVEL_AWAIT_REFUSAL = /await is only valid in async functions/i;
    handed back by reference and settled through Runtime.awaitPromise, the one
    call that awaits a replMode result honestly. Measured on Chrome 151 on a
    page, a DevTools iframe and a service worker. */
+/* @invariant THE CALLER'S TIMEOUT IS THE EVALUATE'S TIMEOUT. The connection's
+   fixed 15 s used to cut an expression the caller gave 60 s, and the answer
+   blamed the debug port while the expression ran on, so a retry did its
+   side effect twice. A timed-out evaluate is answered as
+   such. */
 export async function evaluateOnExtensionPage(
   port: number,
   targetId: string,
   expression: string,
+  timeoutMs?: number,
 ): Promise<ExtensionPageEval> {
   const cdp = new CDPClient();
+  const budget = typeof timeoutMs === "number" && timeoutMs > 0 ? timeoutMs : undefined;
   try {
     await cdp.connect(await CDPClient.discoverBrowserWsUrl(port));
     const sessionId = await cdp.attachToTarget(targetId);
@@ -206,6 +213,7 @@ export async function evaluateOnExtensionPage(
       "Runtime.evaluate",
       { expression, ...RUNTIME_EVALUATE_DEFAULTS },
       sessionId,
+      budget,
     )) as EvaluateResponse | undefined;
     if (
       response?.exceptionDetails &&
@@ -221,6 +229,7 @@ export async function evaluateOnExtensionPage(
           replMode: true,
         },
         sessionId,
+        budget,
       )) as EvaluateResponse | undefined;
       const promiseObjectId = asPromise?.result?.objectId;
       response =
@@ -229,6 +238,7 @@ export async function evaluateOnExtensionPage(
               "Runtime.awaitPromise",
               { promiseObjectId, returnByValue: true },
               sessionId,
+              budget,
             )) as EvaluateResponse | undefined)
           : asPromise;
     }
@@ -241,11 +251,16 @@ export async function evaluateOnExtensionPage(
     }
     return { ok: true, value: readRemoteValue(response?.result) };
   } catch (error) {
-    return {
-      ok: false,
-      thrown: false,
-      message: error instanceof Error ? error.message : String(error),
-    };
+    const message = error instanceof Error ? error.message : String(error);
+    if (/timed out/i.test(message)) {
+      return {
+        ok: false,
+        thrown: false,
+        timedOut: true,
+        message: `The expression did not answer within ${budget ?? 15_000} ms over the debug port. It may still be running in the target, so a retry repeats whatever it does; read the target's state first, or pass a larger timeout.`,
+      };
+    }
+    return { ok: false, thrown: false, message };
   } finally {
     try {
       cdp.disconnect();

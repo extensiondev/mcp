@@ -112,10 +112,14 @@ function closedShadowWalkerCode(cap: number): string {
 export function executeScriptExpression(
   urlFilter: string | undefined,
   code: string,
+  tabId?: number,
 ): string {
-  const pick = urlFilter
-    ? `tabs.find(function (t) { return String(t.url || "").toLowerCase().indexOf(${JSON.stringify(urlFilter.toLowerCase())}) !== -1; })`
-    : `(tabs.find(function (t) { return t.active; }) || tabs[0])`;
+  const pick =
+    typeof tabId === "number"
+      ? `tabs.find(function (t) { return t.id === ${tabId}; })`
+      : urlFilter
+        ? `tabs.find(function (t) { return String(t.url || "").toLowerCase().indexOf(${JSON.stringify(urlFilter.toLowerCase())}) !== -1; })`
+        : `(tabs.find(function (t) { return t.active; }) || tabs[0])`;
   return `browser.tabs.query({}).then(function (tabs) {
     var tab = ${pick};
     if (!tab) return { error: "no matching tab" };

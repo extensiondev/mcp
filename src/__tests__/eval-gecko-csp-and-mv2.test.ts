@@ -121,6 +121,32 @@ describe("extension_eval names the extension's CSP instead of blaming the expres
 });
 
 describe("extension_eval on MV2 Gecko reaches a tab through tabs.executeScript", () => {
+  it("addresses the tab the caller named, not the active one", async () => {
+    const dir = project(MV2);
+    const seen: string[] = [];
+    respond = (call, index) => {
+      seen.push(call.expression);
+      return index === 0
+        ? noScripting()
+        : envelope({
+            ok: true,
+            command: "extension_eval",
+            status: "ok",
+            value: { frames: [{ __extensionDevExec: 1, ok: true, value: 1 }] },
+          });
+    };
+
+    const result = JSON.parse(
+      await evalTool.handler({ projectPath: dir, browser: "firefox", context: "content", tab: 12, expression: "1" }),
+    );
+
+    expect(result.ok).toBe(true);
+    const fallback = seen[1]!;
+    expect(fallback).toContain("t.id === 12");
+    expect(fallback).not.toContain("t.active");
+    expect(String(result.warnings)).toContain("in tab 12");
+  });
+
   it("retries a page eval from the background with the executeScript wrapper and unwraps the result", async () => {
     const dir = project(MV2);
     respond = (call, index) =>

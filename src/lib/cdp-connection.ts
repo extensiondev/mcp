@@ -135,6 +135,7 @@ export class CDPConnection {
     method: string,
     params: Record<string, unknown> = {},
     sessionId?: string,
+    timeoutMs: number = COMMAND_TIMEOUT_MS,
   ): Promise<unknown> {
     return new Promise((resolve, reject) => {
       if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
@@ -150,10 +151,10 @@ export class CDPConnection {
         this.pendingRequests.delete(id);
         reject(
           new Error(
-            `CDP command timed out (${COMMAND_TIMEOUT_MS}ms): ${method}`,
+            `CDP command timed out (${timeoutMs}ms): ${method}`,
           ),
         );
-      }, COMMAND_TIMEOUT_MS);
+      }, timeoutMs);
 
       this.pendingRequests.set(id, { resolve, reject, timeout });
       this.ws.send(JSON.stringify(message));

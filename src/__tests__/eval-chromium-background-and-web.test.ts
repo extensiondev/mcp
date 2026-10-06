@@ -29,6 +29,8 @@ vi.mock("../lib/cdp-port", async (importOriginal) => {
 type Target = { id: string; type: string; url: string; title: string };
 let cdpTargets: Target[] = [];
 const evaluations: Array<{ params: Record<string, unknown>; sessionId?: string }> = [];
+let lastEvaluateTimeout: number | null = null;
+let evaluateRejects: string | null = null;
 const awaited: Array<Record<string, unknown>> = [];
 const otherCommands: Array<{ method: string; params: Record<string, unknown>; sessionId?: string }> = [];
 let evaluateResponse: (params: Record<string, unknown>) => Record<string, unknown> = () => ({
@@ -46,7 +48,9 @@ vi.mock("../lib/cdp", () => {
     async attachToTarget(targetId: string) {
       return `session-${targetId}`;
     }
-    async sendCommand(method: string, params: Record<string, unknown> = {}, sessionId?: string) {
+    async sendCommand(method: string, params: Record<string, unknown> = {}, sessionId?: string, timeoutMs?: number) {
+      if (method === "Runtime.evaluate") lastEvaluateTimeout = timeoutMs ?? null;
+      if (method === "Runtime.evaluate" && evaluateRejects) throw new Error(evaluateRejects);
       if (method === "Runtime.evaluate") {
         evaluations.push({ params, sessionId });
         return evaluateResponse(params);
@@ -419,5 +423,33 @@ describe("the debug-port routes honour the session's eval gate", () => {
 
   it("promises the gate on every route in its description", () => {
     expect(evalTool.schema.description).toContain("the debug port included");
+  });
+});
+
+describe("the debug-port eval honours the caller's timeout and says when it ran out", () => {
+  it("hands the caller's timeout to the evaluate instead of a fixed 15 s", async () => {
+    const p = project(MV3);
+    cdpTargets = [{ id: "sw", type: "service_worker", url: `chrome-extension://${p.id}/sw.js`, title: "" }];
+    lastEvaluateTimeout = null;
+
+    await evalTool.handler({ projectPath: p.dir, context: "background", expression: "1", timeout: 60000 });
+
+    expect(lastEvaluateTimeout).toBe(60000);
+  });
+
+  it("answers eval-timeout, and says the expression may still be running, when the evaluate times out", async () => {
+    const p = project(MV3);
+    cdpTargets = [{ id: "sw", type: "service_worker", url: `chrome-extension://${p.id}/sw.js`, title: "" }];
+    evaluateRejects = "CDP command timed out (15000ms): Runtime.evaluate";
+    try {
+      const result = JSON.parse(
+        await evalTool.handler({ projectPath: p.dir, context: "background", expression: "1" }),
+      );
+      expect(result.ok).toBe(false);
+      expect(result.status).toBe("eval-timeout");
+      expect(result.error.message).toContain("may still be running");
+    } finally {
+      evaluateRejects = null;
+    }
   });
 });
