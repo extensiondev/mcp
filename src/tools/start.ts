@@ -49,12 +49,12 @@ export const schema = {
       },
       port: {
         type: "number",
-        description: "Server port (0 for auto-assign)",
+        description: "Passed to the engine as --port (0 for auto-assign). A production start serves nothing over it today; it matters only to a toolchain that reads it.",
       },
       noBrowser: {
         type: "boolean",
         default: false,
-        description: "Serve without launching a browser",
+        description: "Build (or, with build:false, check the dist) without launching a browser. A production start serves nothing, so with no browser the engine process ends once the build does; read the result with extension_build rather than a session.",
       },
       outputPath: {
         type: "string",
@@ -106,6 +106,34 @@ export async function handler(
   }
   const building = args.build !== false && !outputPath;
   const command = building ? "start" : "preview";
+  /* @invariant WHAT THE ENGINE REFUSES IS REFUSED HERE, BEFORE A SPAWN:
+     its preview verb has no --host or --public-host and both verbs refuse
+     Safari, and a refused spawn used to read as "exited" with a dist hint
+    . */
+  if (browser === "safari" || browser === "webkit-based") {
+    return envelope({
+      ok: false,
+      command: schema.name,
+      status: "unsupported-browser",
+      error: {
+        code: "E_UNSUPPORTED_BROWSER",
+        message: `The engine's ${command} verb does not run Safari; extension_dev builds, packages and opens the Safari app.`,
+      },
+      hint: "Use extension_dev with browser: \"safari\", or extension_build with browser: \"safari\" for the packaged app.",
+    });
+  }
+  if (!building && (args.host || args.publicHost)) {
+    return envelope({
+      ok: false,
+      command: schema.name,
+      status: "bad-request",
+      error: {
+        code: "E_BAD_REQUEST",
+        message: `host and publicHost are not options of the engine's preview verb, which build: false and outputPath run; they apply only when start builds.`,
+      },
+      hint: "Drop host and publicHost, or let extension_start build (build: true, no outputPath).",
+    });
+  }
   const cliArgs = [command, args.projectPath, "--browser", browser];
   if (outputPath) cliArgs.push("--output-path", outputPath);
   if (building && args.polyfill === false) cliArgs.push("--polyfill", "false");
@@ -256,16 +284,18 @@ export async function handler(
   return envelope({
     ok: true,
     command: schema.name,
-    status: building ? "started" : "launched",
+    status: "started",
     value: {
       pid,
       browser,
       projectPath: args.projectPath,
       logPath,
+      verb: command,
+      observed: "the engine process was alive 5 s after it was spawned",
     },
     hint: building
-      ? "Use extension_wait to check when the build and browser launch are complete. When you are done, call extension_stop to shut down the session."
-      : "Call extension_stop when you are done to close the preview browser.",
+      ? "The engine process was alive 5 s after spawn, which is all this answer knows; extension_wait reads whether the build landed. When you are done, call extension_stop to shut the session down."
+      : "The engine's preview process was alive 5 s after spawn, which is all this answer knows: whether a browser shows the extension is not read here. Call extension_stop when you are done.",
     warnings: [
       ...boot.warnings,
       stale.removed &&

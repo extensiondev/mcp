@@ -113,6 +113,35 @@ export async function handler(args: {
         continue;
       }
       lastContractStatus = contract.status;
+      /* @invariant A BUILD'S CONTRACT IS NOT A SESSION. extension_build
+         leaves status "ready" with command "build" and the finished build's
+         pid, which read as a dev session whose server had died. */
+      if ((contract as { command?: unknown }).command === "build") {
+        return envelope({
+          ok: false,
+          command: schema.name,
+          status: "no-session",
+          error: {
+            code: "E_NO_SESSION",
+            message: `${readyPath} is the contract a finished extension_build left (command: build), not a running session, so there is nothing to wait for.`,
+          },
+          value: { readyPath, budgetMs, elapsedMs: Date.now() - start },
+          hint: "Start a session with extension_dev (or extension_start), then call extension_wait.",
+        });
+      }
+      if (contract.status === "stopped") {
+        return envelope({
+          ok: false,
+          command: schema.name,
+          status: "stopped",
+          error: {
+            code: "E_SESSION_EXITED",
+            message: `${readyPath} records status: stopped; that session was stopped and nothing will become ready.`,
+          },
+          value: { readyPath, budgetMs, elapsedMs: Date.now() - start },
+          hint: "Start a session with extension_dev, then call extension_wait.",
+        });
+      }
 
       if (contract.status === "ready") {
         if (typeof contract.pid === "number" && !isAlive(contract.pid)) {
@@ -211,7 +240,7 @@ export async function handler(args: {
           return envelope({
             ok: true,
             command: schema.name,
-            status: "launched",
+            status: "build-ready",
             value: {
               compiled: true,
               browserAttached: false,
@@ -332,6 +361,23 @@ export async function handler(args: {
     });
   }
 
+  /* @invariant "STILL BUILDING" NEEDS A BUILD. With no contract and no
+     session this server knows of, the honest answer is that there is no
+     session at this path, not a timeout to retry. */
+  if (lastContractStatus === null && !contractUnreadable && !staleContractNote && !findSessionInfo(args.projectPath, browser)) {
+    return envelope({
+      ok: false,
+      command: schema.name,
+      status: "no-session",
+      error: {
+        code: "E_NO_SESSION",
+        message: `No ${browser} session is known for ${args.projectPath}: this server registered none and no contract appeared at ${readyPath} in ${budgetMs} ms.`,
+      },
+      value: { compiled: false, browserAttached: false, readyPath, budgetMs, elapsedMs: Date.now() - start },
+      warnings: [clampNote],
+      hint: "Check projectPath and browser, or start a session with extension_dev, then call extension_wait.",
+    });
+  }
   return envelope({
     ok: false,
     command: schema.name,

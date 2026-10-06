@@ -347,8 +347,8 @@ Run the PRODUCTION build in a browser: build the project, serve it, and launch. 
 | `browser` | "chrome" \| "chromium" \| "edge" \| "brave" \| "opera" \| "vivaldi" \| "yandex" \| "firefox" \| "waterfox" \| "librewolf" \| "zen" \| "floorp" \| "safari" \| "chromium-based" \| "gecko-based" \| "firefox-based" \| "webkit-based" | no | `"chrome"` |  |
 | `build` | boolean | no | `true` | Build before serving. false serves the existing dist/<browser> as-is and fails when there is none. |
 | `polyfill` | boolean | no | `true` | Apply cross-browser polyfill (build only) |
-| `port` | number | no |  | Server port (0 for auto-assign) |
-| `noBrowser` | boolean | no | `false` | Serve without launching a browser |
+| `port` | number | no |  | Passed to the engine as --port (0 for auto-assign). A production start serves nothing over it today; it matters only to a toolchain that reads it. |
+| `noBrowser` | boolean | no | `false` | Build (or, with build:false, check the dist) without launching a browser. A production start serves nothing, so with no browser the engine process ends once the build does; read the result with extension_build rather than a session. |
 | `outputPath` | string | no |  | An existing unpacked extension directory to launch as it is (a manifest.json at its root), for an artifact built by another toolchain or an exact release candidate. Implies build:false; projectPath still names the project the session belongs to. Relative paths resolve against projectPath. |
 | `profile` | string | no |  | Profile path, or "false" to reuse the real user profile. Omit for a throwaway one. |
 | `startingUrl` | string | no |  | URL the browser opens on launch |

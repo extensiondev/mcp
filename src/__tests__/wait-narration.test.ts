@@ -35,9 +35,15 @@ describe("extension_wait budget disclosure", () => {
   });
 
   it("narrates a timeout: budget, elapsed, and what was observed", async () => {
-    const result = JSON.parse(
-      await handler({ projectPath: dir, browser: "chrome", timeoutMs: 1200 }),
-    );
+    registerSession({ pid: process.pid, browser: "chrome", projectPath: dir, command: "dev" });
+    let result;
+    try {
+      result = JSON.parse(
+        await handler({ projectPath: dir, browser: "chrome", timeoutMs: 1200 }),
+      );
+    } finally {
+      removeSession(dir, "chrome");
+    }
 
     expect(result.schema).toBe(1);
     expect(result.command).toBe("extension_wait");

@@ -43,7 +43,7 @@ describe("extension_wait on a start session says at once that nothing will attac
 
     expect(Date.now() - started).toBeLessThan(10_000);
     expect(result.ok).toBe(true);
-    expect(result.status).toBe("launched");
+    expect(result.status).toBe("build-ready");
     expect(result.value).toMatchObject({ compiled: true, browserAttached: false, sessionCommand: "start" });
     expect(result.hint).toContain("extension_start session");
     expect(result.hint).toContain("Do not call extension_wait again");
@@ -66,7 +66,7 @@ describe("extension_wait on a start session says at once that nothing will attac
     );
 
     expect(Date.now() - started).toBeLessThan(1400);
-    expect(result.status).toBe("launched");
+    expect(result.status).toBe("build-ready");
     expect(result.value.sessionCommand).toBe("preview");
     expect(result.hint).toContain("prebuilt dist");
   }, 10_000);

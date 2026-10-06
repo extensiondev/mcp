@@ -136,7 +136,7 @@ describe("extension_start build:false health tick", () => {
     const result = JSON.parse(await start.handler({ projectPath: project, build: false }));
 
     expect(result.ok).toBe(true);
-    expect(result.status).toBe("launched");
+    expect(result.status).toBe("started");
   }, 15_000);
 
   it("still reports launched for a process that survives the tick", async () => {
@@ -147,7 +147,7 @@ describe("extension_start build:false health tick", () => {
     const result = JSON.parse(await start.handler({ projectPath: project, build: false }));
 
     expect(result.ok).toBe(true);
-    expect(result.status).toBe("launched");
+    expect(result.status).toBe("started");
     expect(result.value.logPath).toBeTruthy();
     expect(result.earlyOutput).toBeUndefined();
   }, 15_000);
