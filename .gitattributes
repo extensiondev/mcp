@@ -1,0 +1,3 @@
+* text=auto eol=lf
+*.png binary
+src/__tests__/fixtures/store-md/crlf-line-endings.md -text
