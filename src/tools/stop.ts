@@ -64,6 +64,7 @@ interface StopOutcome {
   detail: string;
   carrierRemoved?: string;
   staleRecord?: boolean;
+  survivorsUnverified?: boolean;
 }
 
 function cleanCarrier(projectPath: string): { carrierRemoved?: string } {
@@ -71,15 +72,21 @@ function cleanCarrier(projectPath: string): { carrierRemoved?: string } {
   return removal.removed ? { carrierRemoved: removal.path } : {};
 }
 
-function pgrepPids(pattern: string): number[] {
+/* @invariant "NO SURVIVORS" IS A SEARCH THAT RAN AND FOUND NONE. pgrep exits
+   1 for no match and fails outright when it is absent (Windows, a slim
+   image) or cannot run; both used to read as an empty list, so a stop
+   answered "stopped, reaped: []" with the browser still up. A search that could not run answers null, and the outcome says the
+   survivors were not verified. */
+function pgrepPids(pattern: string): number[] | null {
   try {
     const out = execFileSync("pgrep", ["-f", pattern], { encoding: "utf8" });
     return out
       .split("\n")
       .map((s) => parseInt(s.trim(), 10))
       .filter((n) => Number.isInteger(n) && n > 0 && n !== process.pid);
-  } catch {
-    return [];
+  } catch (err) {
+    const status = (err as { status?: unknown })?.status;
+    return status === 1 ? [] : null;
   }
 }
 
@@ -135,10 +142,19 @@ export function contractProcessHints(
 function sessionProcessPids(
   projectPath: string,
   hints: ContractProcessHints = { pids: [] },
-): number[] {
+): { pids: number[]; verified: boolean } {
   const pids = new Set<number>();
+  let verified = true;
+  const found = (pattern: string): number[] => {
+    const hits = pgrepPids(pattern);
+    if (hits === null) {
+      verified = false;
+      return [];
+    }
+    return hits;
+  };
   if (hints.profilePath) {
-    for (const pid of pgrepPids(escapeRegex(hints.profilePath))) pids.add(pid);
+    for (const pid of found(escapeRegex(hints.profilePath))) pids.add(pid);
   }
   for (const pid of hints.pids) {
     if (pid !== process.pid && isAlive(pid)) pids.add(pid);
@@ -161,19 +177,22 @@ function sessionProcessPids(
       `${escapeRegex(profilesRootDir(form))}${escapeRegex(path.sep)}`,
     ];
     for (const pattern of patterns) {
-      for (const pid of pgrepPids(pattern)) pids.add(pid);
+      for (const pid of found(pattern)) pids.add(pid);
     }
   }
-  return [...pids].filter((pid) =>
-    PLAUSIBLE_SESSION_BINARY.test(processCommand(pid)),
-  );
+  return {
+    pids: [...pids].filter((pid) =>
+      PLAUSIBLE_SESSION_BINARY.test(processCommand(pid)),
+    ),
+    verified,
+  };
 }
 
 function reapSessionProcesses(
   projectPath: string,
   hints: ContractProcessHints = { pids: [] },
 ): number[] {
-  const pids = sessionProcessPids(projectPath, hints);
+  const { pids } = sessionProcessPids(projectPath, hints);
   for (const pid of pids) {
     try {
       process.kill(pid, "SIGKILL");
@@ -283,19 +302,27 @@ export async function stopOne(
 
   const reaped = reapSessionProcesses(projectPath, hints);
 
-  removeSession(projectPath, browser);
-  removeSessionMarker(projectPath, browser);
-  try {
-    fs.rmSync(readyContractPath(projectPath, browser), { force: true });
-  } catch {
-  }
-
-  const survivors = sessionProcessPids(projectPath, hints);
-  const stopped = !isAlive(pid) && survivors.length === 0;
-  if (survivors.length) {
+  /* @invariant THE RECORDS GO ONLY WHEN THE SESSION IS KNOWN TO BE GONE. They
+     used to be erased before the survivors were counted, so a stop that left
+     a browser running also left nothing for the fork guard or a second stop
+     to find. */
+  const { pids: survivors, verified } = sessionProcessPids(projectPath, hints);
+  const dead = pidState(pid) === "dead";
+  const stopped = dead && verified && survivors.length === 0;
+  if (!verified) {
+    detail += " Warning: the search for surviving browser processes could not run (pgrep is missing or failed), so survivors were NOT verified; the browser may still be up.";
+  } else if (survivors.length) {
     detail += ` Warning: ${survivors.length} browser process(es) still alive after reap (pids ${survivors.join(", ")}).`;
   } else if (reaped.length) {
     detail += ` Reaped ${reaped.length} browser process(es).`;
+  }
+  if (dead) {
+    removeSession(projectPath, browser);
+    removeSessionMarker(projectPath, browser);
+    try {
+      fs.rmSync(readyContractPath(projectPath, browser), { force: true });
+    } catch {
+    }
   }
 
   return {
@@ -305,6 +332,7 @@ export async function stopOne(
     stopped,
     reaped,
     detail,
+    ...(verified ? {} : { survivorsUnverified: true }),
     ...cleanCarrier(projectPath),
   };
 }

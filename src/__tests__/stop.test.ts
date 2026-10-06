@@ -352,3 +352,29 @@ describe("extension_stop never signals a pid that is no longer the session", () 
     15_000,
   );
 });
+
+describe("extension_stop says when it could not look for survivors", () => {
+  posixOnly(
+    "reports survivors as unverified, not absent, when pgrep cannot run",
+    async () => {
+      const projectPath = tmpProject();
+      const pid = spawnVictim();
+      registerSession({ pid, browser: "chrome", projectPath, command: "dev" });
+      const emptyBin = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-no-pgrep-"));
+      const previousPath = process.env.PATH;
+      process.env.PATH = emptyBin;
+      let result: any;
+      try {
+        result = JSON.parse(await stop.handler({ projectPath, browser: "chrome" }));
+      } finally {
+        process.env.PATH = previousPath;
+        fs.rmSync(emptyBin, { recursive: true, force: true });
+      }
+
+      expect(result.ok).toBe(false);
+      expect(result.value.survivorsUnverified).toBe(true);
+      expect(result.value.detail).toContain("NOT verified");
+    },
+    15_000,
+  );
+});
