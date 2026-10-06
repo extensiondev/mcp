@@ -1257,13 +1257,20 @@ async function openDevToolsSurface(
       },
       panels: outcome.panels,
       devtoolsPage: devtoolsPageUrl,
-      reloadedInspected: args.reload === true,
+      reloadedInspected: outcome.reloadedInspected,
     },
-    warnings: outcome.panelTarget
-      ? []
-      : [
-          "The panel is shown but its document target had not appeared within 3s; call extension_open surface: \"devtools\" again once it loads to get its url.",
-        ],
+    warnings: [
+      ...(args.reload === true && !outcome.reloadedInspected
+        ? [
+            "reload: true was asked for, but the inspected tab could not be reloaded (the attach or Page.reload failed), so the panel was read without a reload.",
+          ]
+        : []),
+      ...(outcome.panelTarget
+        ? []
+        : [
+            "The panel is shown but its document target had not appeared within 3s; call extension_open surface: \"devtools\" again once it loads to get its url.",
+          ]),
+    ],
     hint: panelUrl
       ? `DevTools is open on ${inspected.url} with the "${outcome.panelTitle}" panel shown. Read the panel with extension_eval context: "page", url: "${panelUrl}" (over CDP, with chrome.devtools available); context: "devtools" reads the devtools page itself (${doc}), the hidden document that registered the panel. The panel is an iframe inside DevTools, not a tab, so extension_dom_snapshot and extension_inspect do not reach it.`
       : `DevTools is open on ${inspected.url} with the "${outcome.panelTitle}" panel shown. context: "devtools" on extension_eval reads the devtools page itself (${doc}).`,

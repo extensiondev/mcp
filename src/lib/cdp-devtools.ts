@@ -16,6 +16,7 @@ export type DevToolsPanelOutcome =
       panelTitle: string;
       panelTarget: { targetId: string; url: string } | null;
       panels: string[];
+      reloadedInspected: boolean;
     }
   | {
       opened: false;
@@ -75,6 +76,7 @@ export async function openDevToolsPanel(
     reloadInspected?: boolean;
   },
 ): Promise<DevToolsPanelOutcome> {
+  let reloadedInspected = false;
   const budgetMs = options.budgetMs ?? 15_000;
   const cdp = new CDPClient();
   const listTargets = async (): Promise<RawTarget[]> =>
@@ -141,7 +143,9 @@ export async function openDevToolsPanel(
       try {
         const inspectedSession = await cdp.attachToTarget(options.inspectedTargetId);
         await cdp.sendCommand("Page.reload", {}, inspectedSession);
+        reloadedInspected = true;
       } catch {
+        reloadedInspected = false;
       }
     }
     const evaluate = async (expression: string): Promise<EvaluateResponse | null> =>
@@ -243,6 +247,7 @@ export async function openDevToolsPanel(
       panelTitle: panelTitleFromId(panelId, options.extensionId),
       panelTarget,
       panels,
+      reloadedInspected,
     };
   } catch (error) {
     return {

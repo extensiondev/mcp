@@ -25,6 +25,7 @@ vi.mock("../lib/cdp-port", async (importOriginal) => {
 type Target = { id: string; type: string; url: string; title: string };
 let cdpTargets: Target[] = [];
 let openDevToolsSupported = true;
+let reloadRejects = false;
 let panelRegisters: boolean | "after-reload" = true;
 let reloaded = false;
 const otherCommands: Array<{ method: string; sessionId?: string }> = [];
@@ -47,6 +48,7 @@ vi.mock("../lib/cdp", () => {
     }
     async sendCommand(method: string, params?: Record<string, unknown>, sessionId?: string) {
       commands.push(method);
+      if (method === "Page.reload" && reloadRejects) throw new Error("Target closed");
       if (method === "Target.openDevTools") {
         if (!openDevToolsSupported) throw new Error("'Target.openDevTools' wasn't found");
         cdpTargets = [
@@ -131,6 +133,7 @@ afterEach(() => {
   commands.length = 0;
   cdpTargets = [];
   openDevToolsSupported = true;
+  reloadRejects = false;
   panelRegisters = true;
   reloaded = false;
   otherCommands.length = 0;
@@ -205,6 +208,21 @@ describe("extension_open surface devtools opens the real DevTools and shows the 
     expect(result.error.message).toContain("devtools/index.html loaded in it");
     expect(result.hint).toContain("extension_logs");
   }, 15_000);
+
+  it("does not say the tab was reloaded when the reload failed", async () => {
+    const p = project();
+    panelRegisters = true;
+    reloadRejects = true;
+    cdpTargets = [{ id: "web", type: "page", url: "https://example.com/", title: "Example" }];
+
+    const result = JSON.parse(
+      await open.handler({ projectPath: p.dir, surface: "devtools", reload: true, waitMs: 3000 }),
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.value.reloadedInspected).toBe(false);
+    expect(result.warnings.join(" ")).toContain("could not be reloaded");
+  }, 20_000);
 
   it("reloads the inspected tab on request so a panel created on a page event registers", async () => {
     const p = project();
