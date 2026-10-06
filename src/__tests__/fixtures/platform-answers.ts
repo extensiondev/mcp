@@ -96,3 +96,17 @@ export function publishAnswer(overrides: Body = {}): Body {
     ...overrides,
   };
 }
+
+/* www: src/app/api/cli/approvals/[approvalId]/route.ts, the record a verify
+ * reads: the status, the fingerprint of the action it was granted for, its
+ * expiry and whether it has been spent. */
+export function approvalRecord(fingerprint: string, overrides: Body = {}): Body {
+  return {
+    approvalId: "apr_1",
+    status: "approved",
+    fingerprint,
+    expiresAt: new Date(Date.now() + 10 * 60_000).toISOString(),
+    used: false,
+    ...overrides,
+  };
+}

@@ -4,7 +4,7 @@ import { actionFingerprint, evaluateApproval } from "../lib/approval-gate";
 import { handler as submitHandler } from "../tools/submit";
 import { handler as promoteHandler } from "../tools/release-promote";
 import { handler as sharesHandler } from "../tools/shares";
-import { promoteAnswer, submitAnswer } from "./fixtures/platform-answers";
+import { approvalRecord, promoteAnswer, submitAnswer } from "./fixtures/platform-answers";
 
 type Call = { key: string; url: string; method: string; body: unknown };
 
@@ -241,7 +241,7 @@ describe("the approval gate guards irreversible outward actions and cannot self-
     it("rejects a wrong-scope approval and does not submit", async () => {
       global.fetch = router(calls, {
         "GET /api/cli/approvals": () =>
-          jsonResponse({ status: "approved", fingerprint: "deadbeef" }),
+          jsonResponse(approvalRecord("deadbeef")),
         "POST /api/cli/stores/submit": () => jsonResponse(submitAnswer()),
       });
       const out = JSON.parse(
@@ -302,7 +302,7 @@ describe("the approval gate guards irreversible outward actions and cannot self-
       });
       global.fetch = router(calls, {
         "GET /api/cli/approvals": () =>
-          jsonResponse({ status: "approved", fingerprint, used: false }),
+          jsonResponse(approvalRecord(fingerprint)),
         "POST /api/cli/stores/submit": () => jsonResponse(submitAnswer()),
       });
       const out = JSON.parse(
@@ -349,7 +349,7 @@ describe("the approval gate guards irreversible outward actions and cannot self-
       });
       global.fetch = router(calls, {
         "GET /api/cli/approvals": () =>
-          jsonResponse({ status: "approved", fingerprint: submitFingerprint }),
+          jsonResponse(approvalRecord(submitFingerprint)),
         "POST /api/cli/release/promote": () => jsonResponse(promoteAnswer()),
       });
       const out = JSON.parse(
@@ -371,7 +371,7 @@ describe("the approval gate guards irreversible outward actions and cannot self-
       });
       global.fetch = router(calls, {
         "GET /api/cli/approvals": () =>
-          jsonResponse({ status: "approved", fingerprint }),
+          jsonResponse(approvalRecord(fingerprint)),
         "POST /api/cli/release/promote": () => jsonResponse(promoteAnswer()),
       });
       const out = JSON.parse(
@@ -407,7 +407,7 @@ describe("the approval gate guards irreversible outward actions and cannot self-
       });
       global.fetch = router(calls, {
         "GET /api/cli/approvals": () =>
-          jsonResponse({ status: "approved", fingerprint }),
+          jsonResponse(approvalRecord(fingerprint)),
         "DELETE /api/artifacts": () => jsonResponse({ revoked: true }),
       });
       const out = JSON.parse(
@@ -451,5 +451,84 @@ describe("the approval gate guards irreversible outward actions and cannot self-
       expect(result.blocked).toBe(true);
       expect(hit("POST /api/cli/approvals")).toBe(true);
     });
+  });
+});
+
+describe("the approval gate believes only a complete record", () => {
+  const scope = { buildId: "abc1234", channel: "stable" };
+  const action = "extension_release_promote";
+  const future = new Date(Date.now() + 60_000).toISOString();
+
+  async function verify(record: Record<string, unknown>) {
+    return evaluateApproval({
+      command: "extension_release_promote",
+      action,
+      scope,
+      description: "Promote.",
+      approvalId: "apr_1",
+      token: "tok",
+      enabled: true,
+      fetchImpl: (async () => jsonResponse(record)) as unknown as typeof fetch,
+    });
+  }
+
+  it("refuses an approved record with no fingerprint", async () => {
+    const gate = await verify({ status: "approved", expiresAt: future, used: false });
+    expect(gate.blocked).toBe(true);
+    expect(JSON.parse((gate as { envelope: string }).envelope).error.name).toBe("ApprovalUnverifiable");
+  });
+
+  it("refuses an approved record with no readable expiry or no used flag", async () => {
+    const fingerprint = actionFingerprint(action, scope);
+    const noExpiry = await verify({ status: "approved", fingerprint, used: false });
+    expect(noExpiry.blocked).toBe(true);
+    const noUsed = await verify({ status: "approved", fingerprint, expiresAt: future });
+    expect(noUsed.blocked).toBe(true);
+  });
+
+  it("accepts a complete record, with a numeric expiry too", async () => {
+    const fingerprint = actionFingerprint(action, scope);
+    const iso = await verify({ status: "approved", fingerprint, expiresAt: future, used: false });
+    expect(iso.blocked).toBe(false);
+    const ms = await verify({ status: "approved", fingerprint, expiresAt: Date.now() + 60_000, used: false });
+    expect(ms.blocked).toBe(false);
+  });
+
+  it("does not tell the agent to wait for an approval the platform never created", async () => {
+    const gate = await evaluateApproval({
+      command: "extension_release_promote",
+      action,
+      scope,
+      description: "Promote.",
+      token: "tok",
+      enabled: true,
+      fetchImpl: (async () => jsonResponse({})) as unknown as typeof fetch,
+    });
+    expect(gate.blocked).toBe(true);
+    const envelope = JSON.parse((gate as { envelope: string }).envelope);
+    expect(envelope.error.name).toBe("ApprovalRequestUnconfirmed");
+    expect(envelope.error.message).not.toContain("<from the response>");
+  });
+});
+
+describe("an approval the caller presents travels even with the local gate off", () => {
+  it("forwards approvalId on a non-stable promote whose local gate is off", async () => {
+    const previous = process.env.EXTENSION_DEV_APPROVAL_GATE;
+    process.env.EXTENSION_DEV_APPROVAL_GATE = "0";
+    const calls: Call[] = [];
+    global.fetch = router(calls, {
+      "POST /api/cli/release/promote": () => jsonResponse(promoteAnswer({ targetChannel: "beta" })),
+    });
+    try {
+      const out = JSON.parse(
+        await promoteHandler({ buildId: "abc1234", channel: "beta", approvalId: "apr_given" }),
+      );
+      expect(out.ok).toBe(true);
+      const promote = calls.find((c) => c.key === "POST /api/cli/release/promote");
+      expect((promote?.body as { approvalId?: string })?.approvalId).toBe("apr_given");
+    } finally {
+      if (previous === undefined) delete process.env.EXTENSION_DEV_APPROVAL_GATE;
+      else process.env.EXTENSION_DEV_APPROVAL_GATE = previous;
+    }
   });
 });

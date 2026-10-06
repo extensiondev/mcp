@@ -167,7 +167,11 @@ export async function handler(args: {
   if (gate.blocked) return gate.envelope;
 
   const body: Record<string, unknown> = { buildId, channel };
-  if (gate.approvalId) body.approvalId = gate.approvalId;
+  /* @invariant An approval the caller presents travels whether or not this
+     client's own gate is on: with the gate off the platform can still require
+     one, and dropping the id made the second call fail forever. */
+  const approvalId = gate.approvalId ?? (args.approvalId ? String(args.approvalId).trim() : "");
+  if (approvalId) body.approvalId = approvalId;
   if (args.sourceChannel) body.sourceChannel = String(args.sourceChannel).trim();
   if (Array.isArray(args.browsers) && args.browsers.length) {
     body.browsers = args.browsers.map((b) => String(b).trim()).filter(Boolean);

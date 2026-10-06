@@ -275,6 +275,19 @@ async function requestApproval(params: {
 
   const approvalId = String(data.approvalId || "").trim();
   const approvalUrl = String(data.approvalUrl || "").trim();
+  /* @invariant An approval request the platform answered without an id is
+     not an approval to wait for: telling the agent to "call again with the
+     approvalId from the response" described one that may not exist. */
+  if (!approvalId) {
+    return block(
+      input.command,
+      APPROVAL_REQUIRED_STATUS,
+      "E_APPROVAL_REQUIRED",
+      "ApprovalRequestUnconfirmed",
+      `A human must approve this irreversible action before it runs, and the platform answered the approval request (${res.status}) without an approval id, so no approval is known to exist. Nothing was executed; call this tool again to request one.`,
+      { action: input.action, fingerprint, description: input.description },
+    );
+  }
   return block(
     input.command,
     APPROVAL_REQUIRED_STATUS,
@@ -366,7 +379,13 @@ async function verifyApproval(params: {
   const used = data.used === true;
   const now = input.now ?? Date.now();
   const expiresAt =
-    typeof data.expiresAt === "string" ? Date.parse(data.expiresAt) : NaN;
+    typeof data.expiresAt === "string"
+      ? Date.parse(data.expiresAt)
+      : typeof data.expiresAt === "number" && Number.isFinite(data.expiresAt)
+        ? data.expiresAt > 1e12
+          ? data.expiresAt
+          : data.expiresAt * 1000
+        : NaN;
   const expired =
     status === "expired" || (Number.isFinite(expiresAt) && expiresAt <= now);
 
@@ -383,6 +402,27 @@ async function verifyApproval(params: {
         expectedFingerprint: fingerprint,
         approvedFingerprint: storedFingerprint,
       },
+    );
+  }
+
+  /* @invariant APPROVED MEANS EVERY PROVING FIELD IS PRESENT AND RIGHT. The
+     check used to block only when a fingerprint was PRESENT and differed, so
+     a record with no fingerprint, no readable expiry or no used flag passed
+     as approved. */
+  if (status === "approved" && (!storedFingerprint || !Number.isFinite(expiresAt) || typeof data.used !== "boolean")) {
+    return block(
+      input.command,
+      APPROVAL_REJECTED_STATUS,
+      "E_APPROVAL_REJECTED",
+      "ApprovalUnverifiable",
+      `The platform's record of approval ${approvalId} reads approved but lacks ${[
+        !storedFingerprint ? "its fingerprint" : null,
+        !Number.isFinite(expiresAt) ? "a readable expiry" : null,
+        typeof data.used !== "boolean" ? "its single-use flag" : null,
+      ]
+        .filter(Boolean)
+        .join(", ")}, so it cannot be matched to this action. This irreversible action was refused. Request a fresh approval by calling this tool with no approvalId.`,
+      { action: input.action, approvalId, fingerprint },
     );
   }
 

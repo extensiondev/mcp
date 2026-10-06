@@ -217,7 +217,8 @@ export async function handler(args: SubmitToolArgs): Promise<string> {
       enabled: approvalGateEnabled(true),
     });
     if (gate.blocked) return gate.envelope;
-    if (gate.approvalId) body.approvalId = gate.approvalId;
+    const approvalId = gate.approvalId ?? (args.approvalId ? String(args.approvalId).trim() : "");
+    if (approvalId) body.approvalId = approvalId;
   }
 
   const statusRead = `extension_release_status (include: ['stores']${
