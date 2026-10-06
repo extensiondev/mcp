@@ -7,6 +7,7 @@
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
 import type { ChildProcess } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -14,8 +15,33 @@ import spawn from "cross-spawn";
 import { dependencies } from "../../package.json";
 import { envelope } from "./envelope";
 
+function descendantPids(pid: number): number[] {
+  try {
+    const out = execFileSync("pgrep", ["-P", String(pid)], { encoding: "utf8" });
+    const direct = out
+      .split("\n")
+      .map((line: string) => parseInt(line.trim(), 10))
+      .filter((n: number) => Number.isInteger(n) && n > 0);
+    return direct.flatMap((childPid: number) => [childPid, ...descendantPids(childPid)]);
+  } catch {
+    return [];
+  }
+}
+
+function killTree(pid: number | undefined, signal: NodeJS.Signals): void {
+  if (!pid) return;
+  for (const target of [...descendantPids(pid).reverse(), pid]) {
+    try {
+      process.kill(target, signal);
+    } catch {
+    }
+  }
+}
+
 export interface CliResult {
   code: number | null;
+  signal?: NodeJS.Signals | null;
+  timedOut?: boolean;
   stdout: string;
   stderr: string;
 }
@@ -104,17 +130,31 @@ export function runExtensionCli(
       } catch {
       }
     };
+    const budgetMs = (options?.timeoutMs ?? 30_000) + SPAWN_KILL_HEADROOM_MS;
     const child = spawn(command, [...prefixArgs, ...args], {
       cwd: options?.cwd,
       stdio: ["ignore", outFd, errFd],
       env: { ...process.env, FORCE_COLOR: "0", NO_COLOR: "1" },
-      timeout: (options?.timeoutMs ?? 30_000) + SPAWN_KILL_HEADROOM_MS,
     });
-    child.on("close", (code) => {
+    /* @invariant A RUN THIS SERVER KILLED SAYS SO, AND THE KILL REACHES THE
+       WHOLE TREE. The close event's signal was dropped, so a build that ran
+       past the timer answered "exited with code null" with a hint about
+       compile errors; and the spawn's own timer signalled only the wrapper
+       (an npx or sh shim), whose grandchild kept running and whose exit then
+       read as a clean 0. The timer here signals every
+       descendant, SIGTERM then SIGKILL, and marks the result `timedOut`. */
+    let timedOut = false;
+    const timer = setTimeout(() => {
+      timedOut = true;
+      killTree(child.pid, "SIGTERM");
+      setTimeout(() => killTree(child.pid, "SIGKILL"), SPAWN_KILL_HEADROOM_MS);
+    }, budgetMs);
+    child.on("close", (code, signal) => {
+      clearTimeout(timer);
       const stdout = readAll("stdout");
       const stderr = readAll("stderr");
       cleanup();
-      resolve({ code, stdout, stderr });
+      resolve({ code: timedOut ? null : code, signal, timedOut, stdout, stderr });
     });
     child.on("error", (err) => {
       const stdout = readAll("stdout");

@@ -33,6 +33,7 @@ export type ErrorCode =
   | "E_BROWSER_UNINSTALL"
   | "E_BUILD_FAILED"
   | "E_BUILD_NOT_FOUND"
+  | "E_BUILD_TIMEOUT"
   | "E_CARRIER_IN_DIST"
   | "E_CDP"
   | "E_CLI"
@@ -102,6 +103,7 @@ export const ERROR_CODES: ErrorCode[] = [
   "E_BROWSER_UNINSTALL",
   "E_BUILD_FAILED",
   "E_BUILD_NOT_FOUND",
+  "E_BUILD_TIMEOUT",
   "E_CARRIER_IN_DIST",
   "E_CDP",
   "E_CLI",

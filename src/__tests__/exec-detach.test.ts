@@ -89,6 +89,25 @@ describe("spawnExtensionCli detach contract", () => {
 
 describe("runExtensionCli outer kill timer", () => {
   posixOnly(
+    "says when it was the one that killed the run",
+    async () => {
+      const project = fakeProject("sleep 30");
+      const started = Date.now();
+
+      const result = await runExtensionCli(["build", project], {
+        cwd: project,
+        timeoutMs: 200,
+      });
+
+      expect(Date.now() - started).toBeLessThan(12_000);
+      expect(result.code).toBeNull();
+      expect(result.timedOut).toBe(true);
+      expect(result.signal).toBe("SIGTERM");
+    },
+    20_000,
+  );
+
+  posixOnly(
     "gives the engine's own --timeout envelope headroom to land before the SIGTERM",
     async () => {
       const project = fakeProject('sleep 1.5; echo "engine timeout frame"');

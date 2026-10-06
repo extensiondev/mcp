@@ -448,3 +448,18 @@ describe("extension_build says when its manifest gate could not run", () => {
     expect(result.warnings.join(" ")).toContain("Manifest validation did not run");
   });
 });
+
+describe("extension_build names a run this server stopped", () => {
+  it("answers build-timeout, not a compile failure, when the kill timer fired", async () => {
+    const dir = project({ manifest_version: 3, name: "Fixture", version: "1.0.0" });
+    cliResultOverride = { code: null, signal: "SIGTERM", timedOut: true, stdout: "", stderr: "" } as never;
+
+    const result = JSON.parse(await build.handler({ projectPath: dir }));
+
+    expect(result.ok).toBe(false);
+    expect(result.status).toBe("build-timeout");
+    expect(result.error.code).toBe("E_BUILD_TIMEOUT");
+    expect(result.error.message).toContain("stopped the build after 180000 ms");
+    expect(result.error.message).not.toContain("exited with code null");
+  });
+});

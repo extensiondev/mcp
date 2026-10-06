@@ -1078,6 +1078,21 @@ export async function handler(args: {
     });
   }
 
+  if (attempt.timedOut) {
+    const budget = spawn.timeoutMs;
+    return envelope({
+      ok: false,
+      command: COMMAND,
+      status: "build-timeout",
+      error: {
+        code: "E_BUILD_TIMEOUT",
+        name: "BuildTimeout",
+        message: `This server stopped the build after ${budget} ms (${attempt.signal ?? "a signal"}); the engine did not fail, it ran out of the time it was given. A first build that installs dependencies can take longer than that, and the engine process may still be running.`,
+      },
+      value: { browser, buildExitCode: null, duration, output: lastLines(out, 12) },
+      hint: "This tool's budget is fixed at 180 s. Check for a still-running extension build process (it may finish on its own) before retrying; a retry that races it writes the same dist twice.",
+    });
+  }
   const engineFailure =
     typeof engine.frame?.error?.message === "string"
       ? engine.frame.error.message.trim()
