@@ -152,7 +152,7 @@ export function sameProjectSet(a: string[], b: string[]): boolean {
 }
 
 export function createRateLimitNote(): string {
-  return `The platform creates at most ${PLATFORM_CREATES_PER_HOUR} projects per hour for one approving account, and a provisioning grant lives 15 minutes. Creations the same account already made in the last hour count against it.`;
+  return `The platform limits create requests to ${PLATFORM_CREATES_PER_HOUR} per hour for one approving account, counted before the existence check (so a request for a project that already exists counts), and a second limiter answers the same RATE_LIMITED code at a higher rate. Requests the same account already made in the last hour count against it; the platform's own retry-after is relayed when it sends one.`;
 }
 
 export function createCapNote(cap: number): string {

@@ -12,6 +12,7 @@ import { laneClosedByServer } from "../lib/credential-source";
 import { envelope, type ErrorCode } from "../lib/envelope";
 import {
   fetchLoginConfig,
+  persistTokenResponse,
   resolveApiBase,
   safeApiBase,
 } from "../lib/login-flow";
@@ -42,7 +43,7 @@ const RESUME_BUDGET_MS = 22_000;
 export const schema = {
   name: "extension_project_create",
   description:
-    `Create an extension.dev project for an extension that does not have one yet, without opening the console. Use it right after extension_create and extension_build, once the extension's source is pushed to a GitHub repository, and BEFORE extension_auth: extension_auth can only log in to a project that already exists, and this tool is what brings that project into existence. Ask for nothing but the project slug and the repo; the platform finds the GitHub App installation on the approving account itself, and if there is none it returns a connect link to open. Two-phase, like login: the first call returns a code and a URL where the signed-in workspace owner approves creating exactly this project; call again with the returned deviceCode to finish. The approval mints a provisioning grant that lives minutes, can only create the one named project, and is never stored on this machine. On success the platform creates the project and its mirror repository, and dispatches the first build when it can: the answer says in \`firstBuild\` whether one was dispatched and, when none was, why (no commits, no build workflow, a spent build allowance, a paused dispatch). Then run extension_auth (action: login) against the new project, and extension_publish to share it. To create several projects in one workspace under one approval, pass \`projects\` instead of \`project\` and \`repo\`: the approval page lists every name, each project is created by its own request, and each one's 7-day token is stored as that project's login, so no extension_auth call is needed afterwards. A list takes a few calls to finish: while projects remain the answer is status 'creating' with the same deviceCode to call again, and the grant is held in this server's memory only. One approval creates at most ${DEFAULT_CREATE_PROJECTS_PER_APPROVAL} projects, the cap the platform states in its login config, because it creates at most ${PLATFORM_CREATES_PER_HOUR} per hour for one approving account; the next ${DEFAULT_CREATE_PROJECTS_PER_APPROVAL} can start in a new call once that limit allows. A longer list is refused before any approval is asked for, never split silently, and so is any list on a platform that does not advertise batch onboarding.`,
+    `Create an extension.dev project for an extension that does not have one yet, without opening the console. Use it right after extension_create and extension_build, once the extension's source is pushed to a GitHub repository, and BEFORE extension_auth: extension_auth can only log in to a project that already exists, and this tool is what brings that project into existence. Ask for nothing but the project slug and the repo; the platform finds the GitHub App installation on the approving account itself, and if there is none it returns a connect link to open. Two-phase, like login: the first call returns a code and a URL where a signed-in member of the workspace approves creating exactly this project; call again with the returned deviceCode to finish. The approval mints a provisioning grant that lives minutes, can only create the one named project, and is never stored on this machine. On success the platform creates the project and its mirror repository, and dispatches the first build when it can: the answer says in \`firstBuild\` whether one was dispatched and, when none was, why (no commits, no build workflow, a spent build allowance, a paused dispatch). Then run extension_auth (action: login) against the new project, and extension_publish to share it. To create several projects in one workspace under one approval, pass \`projects\` instead of \`project\` and \`repo\`: the approval page lists every name, each project is created by its own request, and each one's 7-day token is stored as that project's login, so no extension_auth call is needed afterwards. A list takes a few calls to finish: while projects remain the answer is status 'creating' with the same deviceCode to call again, and the grant is held in this server's memory only. One approval creates at most ${DEFAULT_CREATE_PROJECTS_PER_APPROVAL} projects, the cap the platform states in its login config, because it creates at most ${PLATFORM_CREATES_PER_HOUR} per hour for one approving account; the next ${DEFAULT_CREATE_PROJECTS_PER_APPROVAL} can start in a new call once that limit allows. A longer list is refused before any approval is asked for, never split silently, and so is any list on a platform that does not advertise batch onboarding.`,
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -136,8 +137,8 @@ function fail(
    allowlist before the hold flag, so a workspace on
    WWW_MCP_ACTION_ALLOWED_WORKSPACES creates headlessly through the hold and
    this refusal reaches only workspaces that are not on it. */
-function laneClosedHint(): string {
-  return `Create the project in the console at ${consoleBase()} (workspace page, New project), then run extension_auth (action: login) against it. While the public hold is on, headless creation is open only to workspaces on the platform's allowlist (WWW_MCP_ACTION_ALLOWED_WORKSPACES), the same list that already lets publish, submit and promote run headlessly; this workspace is not on it, so the console is the route.`;
+export function laneClosedHint(): string {
+  return `The platform closed headless creation for this call; its own message above says which case this is (the public hold, an allowlist this workspace is not on, or a host that is not ready). Create the project in the console at ${consoleBase()} (workspace page, New project), then run extension_auth (action: login) against it; while the public hold is on, the console answers its gate page until the platform opens.`;
 }
 
 function pendingEnvelope(start: {
@@ -332,9 +333,12 @@ async function finishFromPoll(
       });
     }
     if (poll.reason === "denied") {
+      if (poll.code === "CLI_PROJECT_CREATE_DISABLED") {
+        return fail("CreateClosed", poll.message || "Headless project creation is not open on this host.", "lane-closed", "E_PLATFORM", laneClosedHint());
+      }
       return fail(
         "CreateDenied",
-        "Creating the project was denied at extension.dev/device.",
+        `Creating the project was denied at extension.dev/device${poll.code ? ` (${poll.code})` : ""}${poll.message ? `: ${poll.message}` : "."}`,
         "create-denied",
         "E_AUTH_DENIED",
       );
@@ -342,7 +346,7 @@ async function finishFromPoll(
     if (poll.reason === "expired") {
       return fail(
         "CreateExpired",
-        "The device code expired. Run extension_project_create again to restart.",
+        `${poll.message || "The device code has expired or is unknown."} Run extension_project_create again to restart.`,
         "create-expired",
         "E_AUTH_EXPIRED",
       );
@@ -371,16 +375,42 @@ async function finishFromPoll(
       "E_AUTH_FAILED",
     );
   }
+  /* @invariant THE LOGIN THE PLATFORM MINTED IS KEPT. For a create-intent
+     code on a project that already exists the platform approves a plain
+     login and mints its 7-day token; dropping it and asking for a second
+     approval cost a human a click for nothing. */
   if (String(grant.tokenKind || "") !== "provisioning") {
+    let stored: { workspaceSlug: string; projectSlug: string; expiresAt?: number } | null = null;
+    let storeFailure: string | null = null;
+    if (token) {
+      try {
+        const creds = persistTokenResponse({ apiBase: ctx.apiBase, project: ctx.project, data: grant as Record<string, unknown> });
+        stored = { workspaceSlug: creds.workspaceSlug, projectSlug: creds.projectSlug, ...(creds.expiresAt ? { expiresAt: creds.expiresAt } : {}) };
+      } catch (err) {
+        storeFailure = err instanceof Error ? err.message : String(err);
+      }
+    }
     return envelope({
-      ok: false,
+      ok: stored !== null,
       command: COMMAND,
-      status: "project-exists",
-      error: {
-        code: "E_PLATFORM",
-        message: `Project ${ctx.project} already exists on this host, so there is nothing to create.`,
-      },
-      hint: `Run extension_auth (action: login) with project '${ctx.project}' instead; the login lane mints the project token this tool deliberately does not.`,
+      status: stored ? "project-exists-logged-in" : "project-exists",
+      ...(stored
+        ? {
+            value: {
+              ...stored,
+              ...(stored.expiresAt ? { expiresAtIso: new Date(stored.expiresAt * 1000).toISOString() } : {}),
+              stored: true,
+            },
+          }
+        : {
+            error: {
+              code: "E_PLATFORM",
+              message: `Project ${ctx.project} already exists on this host, so there is nothing to create${storeFailure ? `, and the login the platform minted for it could not be stored (${storeFailure})` : ", and the platform minted no login for it"}.`,
+            },
+          }),
+      hint: stored
+        ? `Project ${ctx.project} already exists, so nothing was created; the approval minted a login for it instead, which is now stored on this machine (no second approval is needed). Token-scoped tools can use it; extension_auth (action: status) shows it.`
+        : `Run extension_auth (action: login) with project '${ctx.project}' to mint its token.`,
     });
   }
 
@@ -493,9 +523,12 @@ async function finishFromPoll(
           ),
         },
         ...(connectUrl ? { value: { connectUrl } } : {}),
-        hint: connectUrl
-          ? `Open ${connectUrl} to connect the extension.dev GitHub App, then call extension_project_create again with the same arguments. Nothing was created.`
-          : "Connect the extension.dev GitHub App to the approving account, then call extension_project_create again. Nothing was created.",
+        hint:
+          code === "INSTALLATION_AMBIGUOUS"
+            ? "The approving account holds more than one installation of the extension.dev GitHub App, so this lane cannot pick one; create the project in the console this once. Nothing was created."
+            : connectUrl
+              ? `Open ${connectUrl} to connect the extension.dev GitHub App, then start a new extension_project_create call (this device code is spent). Nothing was created.`
+              : "Connect the extension.dev GitHub App to the approving account, then start a new extension_project_create call (this device code is spent). Nothing was created.",
       });
     }
     if (code === "PROJECT_EXISTS") {
@@ -577,7 +610,7 @@ async function finishFromPoll(
             ]),
       ],
     },
-    hint: `Project ${finalWorkspace}/${finalProject} exists. ${firstBuildSentence(firstBuild, buildsPageUrl)} The provisioning grant is now spent and nothing was stored on this machine. Next: extension_auth (action: login, project: '${finalWorkspace}/${finalProject}') to mint the project token${
+    hint: `Project ${finalWorkspace}/${finalProject} exists. ${firstBuildSentence(firstBuild, buildsPageUrl)} The provisioning grant stays valid until it expires and is not stored by this tool; the only file written on this machine is its install id (install.json). Next: extension_auth (action: login, project: '${finalWorkspace}/${finalProject}') to mint the project token${
       firstBuild.state === "dispatched"
         ? ", then extension_publish to share it."
         : "; extension_publish has nothing to share until a build exists."

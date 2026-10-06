@@ -187,8 +187,8 @@ describe("extension_project_create", () => {
     expect(out.error.message.toLowerCase()).not.toContain("console");
     expect(out.hint).toContain("Create the project in the console");
     expect(out.hint).toContain("extension_auth");
-    expect(out.hint).toContain("WWW_MCP_ACTION_ALLOWED_WORKSPACES");
-    expect(out.hint).toContain("this workspace is not on it");
+    expect(out.hint).toContain("its own message above says which case this is");
+    expect(out.hint).toContain("console answers its gate page");
     expect(out.hint).not.toContain("every workspace");
   });
 
@@ -334,12 +334,13 @@ describe("extension_project_create", () => {
     expect(JSON.parse(String(codeCall!.init?.body)).intent).toBe("create");
   });
 
-  it("redirects to extension_auth when the project already exists", async () => {
+  /*. */
+  it("keeps the login the platform minted when the project already exists, so no second approval is asked", async () => {
     const { fn } = createFetch({
       token: [
         {
           status: 200,
-          body: { ...grantBody, tokenKind: undefined },
+          body: { ...grantBody, token: "login-token", tokenKind: undefined },
         },
       ],
     });
@@ -347,9 +348,43 @@ describe("extension_project_create", () => {
     const out = JSON.parse(
       await handler({ ...baseArgs, deviceCode: "dev-code" }),
     );
-    expect(out.ok).toBe(false);
-    expect(out.status).toBe("project-exists");
-    expect(out.hint).toContain("extension_auth");
+    expect(out.ok).toBe(true);
+    expect(out.status).toBe("project-exists-logged-in");
+    expect(out.value).toMatchObject({ workspaceSlug: "acme", projectSlug: "ghost-app", stored: true });
+    expect(out.hint).toMatch(/no second approval is needed/);
+    const { readCredentials } = await import("../lib/credentials");
+    expect(readCredentials({ project: "acme/ghost-app" })?.token).toBe("login-token");
+  });
+
+  it("answers lane-closed with the platform's code when the lane shut between approval and poll", async () => {
+    const { fn } = createFetch({
+      token: [
+        {
+          status: 403,
+          body: { error: "access_denied", code: "CLI_PROJECT_CREATE_DISABLED", message: "Headless project creation is closed on this host." },
+        },
+      ],
+    });
+    vi.stubGlobal("fetch", fn);
+    const out = JSON.parse(await handler({ ...baseArgs, deviceCode: "dev-code" }));
+    expect(out.status).toBe("lane-closed");
+    expect(out.error.message).toMatch(/closed on this host/);
+    expect(out.hint).not.toMatch(/this workspace is not on it/);
+  });
+
+  it("relays the platform's own sentence for an unknown or redeemed device code", async () => {
+    const { fn } = createFetch({
+      token: [
+        {
+          status: 400,
+          body: { error: "expired_token", error_description: "This device code was already redeemed. Start the flow again." },
+        },
+      ],
+    });
+    vi.stubGlobal("fetch", fn);
+    const out = JSON.parse(await handler({ ...baseArgs, deviceCode: "dev-code" }));
+    expect(out.status).toBe("create-expired");
+    expect(out.error.message).toMatch(/already redeemed/);
   });
 
   it("refuses a grant scoped to a different project and creates nothing", async () => {

@@ -190,7 +190,8 @@ export async function pollDeviceGrant(args: {
       };
     }
     if (error === "expired_token") {
-      return { ok: false, reason: "expired" };
+      const said = String(data.error_description || data.message || "").trim();
+      return { ok: false, reason: "expired", ...(said ? { message: said } : {}) };
     }
     if (error === "slow_down") {
       interval += 5;

@@ -128,7 +128,7 @@ describe("the published client had no hold awareness at all, so this file is the
     );
     expect(out.error.message).toContain("extension_create");
     expect(out.error.message).toContain("extension_build");
-    expect(out.error.message).toContain("free forever");
+    expect(out.error.message).toContain("need no account and nothing from the platform");
     expect(out.error.message).toContain("https://templates.extension.dev");
 
     expect(out.value.stillWorks).toContain("extension_dev");

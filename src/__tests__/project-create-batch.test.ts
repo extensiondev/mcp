@@ -235,7 +235,7 @@ describe("extension_project_create with projects: refusals before a device code 
     expect(out.value).toEqual({ maxProjects: 10, listed: 11 });
     expect(out.hint).toContain("Send the first 10; the next 10 can start in a new call");
     expect(out.hint).toContain("once the hourly creation limit allows");
-    expect(out.hint).toContain("at most 10 projects per hour");
+    expect(out.hint).toContain("limits create requests to 10 per hour");
     expect(out.hint).toContain("no device code was spent");
     expect(h.to("/api/cli/device/code")).toHaveLength(0);
     expect(h.calls.map((call) => call.url)).toEqual([`${API}/api/cli/login/config`]);
@@ -630,9 +630,9 @@ describe("extension_project_create with projects: every project keeps its own an
       },
       { project: "acme/gamma", status: "not-attempted", code: "RATE_LIMITED" },
     ]);
-    expect(out.value.results[1].hint).toContain("at most 10 projects per hour");
+    expect(out.value.results[1].hint).toContain("limits create requests to 10 per hour");
     expect(out.value.results[1].hint).toContain("1800 seconds");
-    expect(out.hint).toContain("at most 10 projects per hour");
+    expect(out.hint).toContain("limits create requests to 10 per hour");
     expect(out.value.nextSteps.join(" ")).toContain("['acme/beta', 'acme/gamma']");
   });
 

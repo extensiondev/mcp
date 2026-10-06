@@ -238,9 +238,18 @@ async function finishFromPoll(
       });
     }
     if (poll.reason === "denied") {
+      if (poll.code === "WORKSPACE_EXISTS") {
+        return envelope({
+          ok: false,
+          command: COMMAND,
+          status: "workspace-exists",
+          error: { code: "E_PLATFORM", message: poll.message || `Workspace '${ctx.workspace}' already exists on this host (the platform answered WORKSPACE_EXISTS).` },
+          hint: `Run extension_project_create with project '${ctx.workspace}/<project>' instead.`,
+        });
+      }
       return fail(
         "CreateDenied",
-        "Creating the workspace was denied at extension.dev/device.",
+        `Creating the workspace was denied at extension.dev/device${poll.code ? ` (${poll.code})` : ""}${poll.message ? `: ${poll.message}` : "."}`,
         "create-denied",
         "E_AUTH_DENIED",
       );
@@ -248,7 +257,7 @@ async function finishFromPoll(
     if (poll.reason === "expired") {
       return fail(
         "CreateExpired",
-        `The device code expired. Run ${COMMAND} again to restart.`,
+        `${poll.message || "The device code has expired or is unknown."} Run ${COMMAND} again to restart.`,
         "create-expired",
         "E_AUTH_EXPIRED",
       );
@@ -285,7 +294,7 @@ async function finishFromPoll(
       status: "workspace-exists",
       error: {
         code: "E_PLATFORM",
-        message: `Workspace '${ctx.workspace}' already exists on this host, so there is nothing to create.`,
+        message: `Workspace '${ctx.workspace}' appears to exist already: the approval minted a plain login rather than a workspace-provisioning grant (inferred from the grant's kind, not from a platform code), so there is nothing to create.`,
       },
       hint: `Run extension_project_create with project '${ctx.workspace}/<project>' instead.`,
     });
@@ -416,6 +425,6 @@ async function finishFromPoll(
         `extension_project_create (project: '${finalSlug}/<project>', repo: '<owner>/<repo>')`,
       ],
     },
-    hint: `Workspace ${finalSlug} exists${owner ? `, owned by ${owner}` : ""}. The grant is now spent and nothing was stored on this machine. If ${owner || "the approver"} is not who you meant to own it, stop here: ownership follows the GitHub account that approved the code. Next: extension_project_create with project '${finalSlug}/<project>'.`,
+    hint: `Workspace ${finalSlug} exists${owner ? `, owned by ${owner}` : ""}. The provisioning grant stays valid until it expires and is not stored by this tool; the only file written on this machine is its install id (install.json). If ${owner || "the approver"} is not who you meant to own it, stop here: ownership follows the GitHub account that approved the code. Next: extension_project_create with project '${finalSlug}/<project>'.`,
   });
 }

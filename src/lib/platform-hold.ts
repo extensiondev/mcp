@@ -61,7 +61,9 @@ export const PLATFORM_HOLD_RELAYS_THE_PLATFORM_DATE: boolean = false;
 const HOLD_CONDITION_FALLBACK = "extension.dev is not open to the public yet.";
 
 const HOLD_STILL_WORKS =
-  "This does not stop you building. Creating, developing and packaging an extension run on your own machine, they are free forever, and they work right now with no account and no platform: extension_create scaffolds a project, extension_dev runs it in a real browser with live reload, extension_build produces the store-ready package for every browser you target, and extension_manifest_validate with extension_doctor check it before you ship. What is closed is only the part that runs on extension.dev's machines: publishing, promoting a release, submitting to a store, hosting a preview share, and creating a platform project.";
+  "This does not stop you building. Creating, developing and packaging an extension run on your own machine, need no account and nothing from the platform, and work right now: extension_create scaffolds a project, extension_dev runs it in a real browser with live reload, extension_build produces the store-ready package for every browser you target, and extension_manifest_validate with extension_doctor check it before you ship. What is closed is the part that runs on extension.dev's machines: publishing, promoting a release, submitting to a store, hosting a preview share, requesting an approval, and creating a platform project or workspace.";
+
+export const HOLD_STILL_WORKS_SENTENCE = HOLD_STILL_WORKS;
 
 export const PLATFORM_HOLD_STILL_WORKS = [
   "extension_create",

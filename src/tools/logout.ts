@@ -20,6 +20,12 @@ export async function clearLocalCredentials(project?: string): Promise<string> {
           "settings/access-tokens",
         )
       : null;
+  /* @invariant ONE REVOKE LINK PER LOGIN REMOVED. An unnamed logout that
+     removes several logins used to carry one project's link. */
+  const revokeUrlFor = (key: string): string | null => {
+    const [workspace, project] = key.split("/");
+    return workspace && project ? consoleProjectUrl({ workspace, project }, "settings/access-tokens") : null;
+  };
   const result = clearCredentials(wanted ? { project: wanted } : undefined);
   const scope = wanted
     ? `the login for ${creds ? `${creds.workspaceSlug}/${creds.projectSlug}` : wanted}`
@@ -54,6 +60,9 @@ export async function clearLocalCredentials(project?: string): Promise<string> {
       removed: result.removed,
       remaining: result.remaining,
       revokeUrl: result.cleared && revokeUrl ? revokeUrl : null,
+      ...(result.cleared && result.removed.length > 1
+        ? { revokeUrls: Object.fromEntries(result.removed.map((key) => [key, revokeUrlFor(key)])) }
+        : {}),
     },
     hint: result.cleared
       ? `Removed ${scope} from this machine${result.remaining.length ? `; ${result.remaining.length} other login${result.remaining.length === 1 ? "" : "s"} stay (${result.remaining.join(", ")})` : ""}. The token stays valid server-side until it expires; ${revokeUrl ? `revoke it now at ${revokeUrl} (takes about a minute to propagate)` : "revoke it from the project's access-tokens page if needed"}.`

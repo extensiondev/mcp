@@ -69,6 +69,19 @@ describe("a logout says what was removed, and says so when nothing was", () => {
     expect(fs.existsSync(credentialsPath())).toBe(false);
   });
 
+  /*. */
+  it("carries a revoke link for every login an unnamed logout removed", async () => {
+    writeCredentials(login("one"));
+    writeCredentials(login("two"));
+    const out = await logout();
+
+    expect(out.status).toBe("logged-out");
+    expect(out.value.removed.sort()).toEqual(["acme/one", "acme/two"]);
+    expect(Object.keys(out.value.revokeUrls).sort()).toEqual(["acme/one", "acme/two"]);
+    expect(out.value.revokeUrls["acme/one"]).toMatch(/acme\/one.*settings\/access-tokens/);
+    expect(out.value.revokeUrls["acme/two"]).toMatch(/acme\/two/);
+  });
+
   it("does not say removed when the last login's file could not be deleted", async () => {
     writeCredentials(login("solo"));
     vi.spyOn(fs, "unlinkSync").mockImplementation(denied("EPERM"));

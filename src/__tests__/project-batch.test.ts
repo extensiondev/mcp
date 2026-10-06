@@ -122,8 +122,8 @@ describe("sameProjectSet", () => {
 describe("the creation limit is named, with its number", () => {
   it("states ten per hour and the fifteen minute grant", () => {
     expect(PLATFORM_CREATES_PER_HOUR).toBe(10);
-    expect(createRateLimitNote()).toContain("at most 10 projects per hour");
-    expect(createRateLimitNote()).toContain("15 minutes");
+    expect(createRateLimitNote()).toContain("limits create requests to 10 per hour");
+    expect(createRateLimitNote()).toContain("counted before the existence check");
   });
 
   it("says ten per approval and when the next ten can start", () => {

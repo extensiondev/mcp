@@ -120,6 +120,7 @@ interface Stop {
   message: string;
   body?: Record<string, unknown>;
   held?: boolean;
+  source?: "platform" | "client";
 }
 
 interface Session {
@@ -371,17 +372,23 @@ const STOP_CODES = new Set([
   "INSTALLATION_AMBIGUOUS",
 ]);
 
-function refusalHint(code: string, ref: string, retryAfterSeconds?: number): string | undefined {
+function refusalHint(code: string, ref: string, retryAfterSeconds?: number, grantSecondsLeft?: number): string | undefined {
   if (code === "PROJECT_EXISTS") {
     return `${ref} already exists, so there was nothing to create and no token came back. Sign in to it with extension_auth (action: login).`;
   }
   if (code === "RATE_LIMITED") {
     return `${createRateLimitNote()}${
       retryAfterSeconds ? ` The platform says to wait ${retryAfterSeconds} seconds.` : ""
-    } The grant will have expired by then, so the projects not created need a new extension_project_create call, and its approval, after the wait.`;
+    } ${
+      retryAfterSeconds && typeof grantSecondsLeft === "number"
+        ? retryAfterSeconds >= grantSecondsLeft
+          ? `The grant has about ${Math.max(0, Math.round(grantSecondsLeft))} s left, so it will have expired by then: the projects not created need a new extension_project_create call, and its approval, after the wait.`
+          : `The grant has about ${Math.round(grantSecondsLeft)} s left, so a call with this deviceCode after the wait can still finish the list.`
+        : "If the grant has expired by then, the projects not created need a new extension_project_create call and its approval."
+    }`;
   }
   if (code === "TOKEN_EXPIRED") {
-    return "The provisioning grant lives 15 minutes and ran out. Start a new extension_project_create call for the projects not created.";
+    return "The provisioning grant ran out (the platform answered TOKEN_EXPIRED). Start a new extension_project_create call for the projects not created.";
   }
   if (code === "PROJECT_LIMIT_EXCEEDED") {
     return "The workspace is at its plan's project limit. Nothing more can be created in it until a project is removed or the plan changes.";
@@ -443,7 +450,7 @@ async function createOne(session: Session, entry: BatchEntry, installationId: st
       },
       halt: true,
       ...(session.unanswered >= 2
-        ? { stop: { code: "PLATFORM_UNREACHABLE", message } }
+        ? { stop: { code: "PLATFORM_UNREACHABLE", message, source: "client" as const } }
         : {}),
     };
   }
@@ -463,7 +470,7 @@ async function createOne(session: Session, entry: BatchEntry, installationId: st
       },
       halt: true,
       ...(session.unanswered >= 2
-        ? { stop: { code: "PLATFORM_UNREACHABLE", message } }
+        ? { stop: { code: "PLATFORM_UNREACHABLE", message, source: "client" as const } }
         : {}),
     };
   };
@@ -504,7 +511,7 @@ async function createOne(session: Session, entry: BatchEntry, installationId: st
     const retryAfterSeconds =
       Number(data.retryAfterSeconds || res.headers.get("retry-after") || 0) ||
       undefined;
-    const hint = refusalHint(code, entry.ref, retryAfterSeconds);
+    const hint = refusalHint(code, entry.ref, retryAfterSeconds, session.grantExpiresAt - Math.floor(Date.now() / 1000));
     const row: Row = {
       project: entry.ref,
       status: "refused",
@@ -633,7 +640,7 @@ function finalEnvelope(session: Session): string {
       status: "not-attempted",
       code: stop?.code ?? "NOT_ATTEMPTED",
       message: stop
-        ? `Not attempted: an earlier project in this list was refused with ${stop.code}, which applies to the whole approval.`
+        ? `Not attempted: an earlier project in this list was ${stop.source === "client" ? `stopped by this client with ${stop.code}` : `refused by the platform with ${stop.code}`}, which applies to the whole approval.`
         : "Not attempted.",
     });
   }
@@ -766,7 +773,7 @@ function finalEnvelope(session: Session): string {
     error: {
       code: "E_PLATFORM",
       name: "BatchIncomplete",
-      message: `${created.length} of ${rows.length} projects were created. Each project has its own row in results with the platform's code; nothing is retried automatically.${
+      message: `${created.length} of ${rows.length} projects were created. Each project has its own row in results with the code that stopped it (the platform's, or this client's for TOKEN_EXPIRED and PLATFORM_UNREACHABLE); nothing is retried automatically.${
         stop ? ` The list stopped at ${stop.code}: ${stop.message}` : ""
       }`,
     },
@@ -803,7 +810,8 @@ async function runSlice(session: Session, deviceCode: string, installationId: st
       if (Math.floor(Date.now() / 1000) >= session.grantExpiresAt - GRANT_EXPIRY_MARGIN_SECONDS) {
         session.stop = {
           code: "TOKEN_EXPIRED",
-          message: "The provisioning grant expired; it lives fifteen minutes.",
+          message: `The provisioning grant expired at ${new Date(session.grantExpiresAt * 1000).toISOString()} by this client's clock; the platform did not answer that.`,
+          source: "client",
         };
         break;
       }
