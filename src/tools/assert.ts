@@ -54,6 +54,7 @@ import { version } from "../../package.json";
 import { readLogEvents,
   browserEventBelongsTo,
   isBrowserChannelEvent,
+  readLogDropped,
 } from "./logs-filter";
 import { emptyReason, readLogRunId, staleFileNote } from "./logs";
 import {
@@ -1369,6 +1370,19 @@ function assertConsoleErrorsEmpty(
     );
   }
 
+  /* @invariant DROPPED LINES MAY HAVE BEEN ERRORS. When the writer fell
+     behind and recorded gap sentinels, "no errors" covers only the lines that
+     reached the file, so the clean answer is inconclusive. */
+  const droppedLines = readLogDropped(stage.projectPath, stage.browser);
+  if (droppedLines > 0) {
+    return inconclusiveCheck(
+      id,
+      subject,
+      `No error-level log event${scope} among the ${all.length} event(s) that reached the file in run ${runId || "(unnamed)"}, but the writer dropped ${droppedLines} line(s) when it fell behind, and any of them may have been an error.`,
+      "Read extension_logs with follow: true while driving the extension, which streams lines the file writer dropped, then assert again.",
+      { events: all.length, dropped: droppedLines, runId },
+    );
+  }
   return passCheck(
     id,
     subject,

@@ -21,12 +21,25 @@ export { type LogQuery };
    here that re-exported it unrooted answered "no log events" for a project
    whose manifest sits in a subfolder, and doctor, wait and assert then said
    there were no runtime errors. */
+/* @invariant A SENTINEL IS NOT A LOG LINE. The engine's reader hands back
+   its `type: "gap"` drop markers beside the events, so assert counted a
+   header-plus-sentinel file as "1 event" and a passing timeline. Typed records are kept out of the events and the gaps are
+   read on their own. */
 export function readLogEvents(
   projectPath: string,
   browser: string,
   query: LogQuery,
 ): ReturnType<typeof engineReadLogEvents> {
-  return engineReadLogEvents(engineProjectRoot(projectPath), browser, query);
+  return engineReadLogEvents(engineProjectRoot(projectPath), browser, query).filter(
+    (event) => typeof (event as { type?: unknown }).type !== "string",
+  ) as ReturnType<typeof engineReadLogEvents>;
+}
+
+export function readLogDropped(projectPath: string, browser: string): number {
+  return engineReadLogEvents(engineProjectRoot(projectPath), browser, {}).reduce((sum, event) => {
+    const record = event as { type?: unknown; dropped?: unknown };
+    return record.type === "gap" && typeof record.dropped === "number" ? sum + record.dropped : sum;
+  }, 0);
 }
 
 export interface LogsArgs {

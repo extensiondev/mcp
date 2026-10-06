@@ -739,6 +739,27 @@ describe("console-errors-empty", () => {
     expect(check.detail).toContain("boom");
   });
 
+  /* @invariant a gap sentinel is not an event, and lines the writer dropped may have been errors. */
+  it("does not count a gap sentinel as an event", async () => {
+    liveSession();
+    writeLogs([logHeader("run-1"), { v: 1, type: "gap", reason: "disk_slow", dropped: 4 }]);
+    const { check } = await assertOnce({ assert: "console-errors-empty" });
+    expect(check.outcome).toBe("inconclusive");
+    expect(check.detail).not.toMatch(/among 1 event/);
+  });
+
+  it("is inconclusive, not a pass, when the writer dropped lines from the run", async () => {
+    liveSession();
+    writeLogs([
+      logHeader("run-1"),
+      { context: "popup", level: "info", seq: 1, messageParts: ["fine"] },
+      { v: 1, type: "gap", reason: "disk_slow", dropped: 7 },
+    ]);
+    const { check } = await assertOnce({ assert: "console-errors-empty" });
+    expect(check.outcome).toBe("inconclusive");
+    expect(check.detail).toMatch(/dropped 7 line/);
+  });
+
   it("passes on a live timeline with no error, and honours ignore", async () => {
     liveSession();
     writeLogs([

@@ -414,6 +414,11 @@ async function readFromStream(
   let connectedAt = Date.now();
   let replayed = 0;
   let liveCount = 0;
+  const startedAt = Date.now();
+  let opened = false;
+  let readySeen = false;
+  let bufferedFrom: number | undefined;
+  let evicted: number | undefined;
 
   return await new Promise<string>((resolve) => {
     let settled = false;
@@ -458,8 +463,26 @@ async function readFromStream(
           dropped,
           args.projectPath,
           undefined,
-          streamNote,
-          { replayed, live: liveCount, followMs },
+          [
+            streamNote,
+            opened && !readySeen
+              ? "The control channel opened but the broker never sent its ready frame, so whether the replay covered the run is unknown."
+              : null,
+            typeof evicted === "number" && evicted > 0
+              ? `The broker's ring had already evicted ${evicted} older event(s) before this read${typeof bufferedFrom === "number" ? ` (it holds from seq ${bufferedFrom})` : ""}; read the file (call without follow) for those.`
+              : null,
+          ]
+            .filter((note): note is string => Boolean(note))
+            .join(" ") || undefined,
+          {
+            replayed,
+            live: liveCount,
+            followMs,
+            opened,
+            readySeen,
+            ...(typeof bufferedFrom === "number" ? { bufferedFrom } : {}),
+            ...(typeof evicted === "number" ? { evicted } : {}),
+          },
         ),
       );
     };
@@ -467,6 +490,7 @@ async function readFromStream(
     const timer = setTimeout(finish, followMs);
 
     socket.on("open", () => {
+      opened = true;
       connectedAt = Date.now();
       try {
         socket.send(
@@ -488,8 +512,11 @@ async function readFromStream(
       } catch {
         return;
       }
-      if (frame.type === "ready" && frame.runId) {
-        runId = String(frame.runId);
+      if (frame.type === "ready") {
+        readySeen = true;
+        if (frame.runId) runId = String(frame.runId);
+        if (typeof frame.bufferedFrom === "number") bufferedFrom = frame.bufferedFrom;
+        if (typeof frame.evicted === "number") evicted = frame.evicted;
       } else if (frame.type === "log" && frame.event) {
         if (matches(frame.event)) {
           events.push(frame.event);
@@ -538,6 +565,13 @@ async function readFromStream(
         CONTROL_ENVELOPE_VERSION,
       );
       if (!refusal) {
+        /* @invariant A CLOSE BEFORE THE WINDOW ENDS IS A PARTIAL READ: the
+           server exited or restarted mid-window, and finishing silently read
+           as the whole window. */
+        const elapsed = Date.now() - startedAt;
+        if (elapsed < followMs - 250) {
+          streamNote = `The control channel closed after ${Math.round(elapsed / 1000)} s of the ${Math.round(followMs / 1000)} s window (close code ${code}${reason?.length ? `, "${reason.toString()}"` : ""}), so this is a partial read; the dev session may have stopped or restarted. Re-check with extension_wait.`;
+        }
         finish();
         return;
       }

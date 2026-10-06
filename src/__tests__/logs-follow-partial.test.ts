@@ -96,4 +96,37 @@ describe("extension_logs follow: control channel error mid-stream", () => {
     expect(out.ok).toBe(false);
     expect(out.error.code).toBe("E_CONTROL_CHANNEL");
   }, 10000);
+
+  /* @invariant a channel that closes mid-window is a partial read, and the broker's ring state is reported. */
+  it("says a channel that closed before the window ended is a partial read", async () => {
+    const port = (wss.address() as { port: number }).port;
+    writeReady(tmp, "chromium", port);
+    wss.on("connection", (conn) => {
+      conn.send(JSON.stringify({ type: "ready", runId: "run-1", bufferedFrom: 120, evicted: 119 }));
+      conn.send(JSON.stringify({ type: "log", event: { context: "background", level: "info", messageParts: ["hi"], seq: 120, timestamp: Date.now() } }));
+      setTimeout(() => conn.close(1000, "server restart"), 150);
+    });
+    const out = JSON.parse(
+      await handler({ projectPath: tmp, browser: "chromium", follow: true, followMs: 4000 }),
+    );
+    expect(out.ok).toBe(true);
+    expect(out.value.opened).toBe(true);
+    expect(out.value.readySeen).toBe(true);
+    expect(out.value.bufferedFrom).toBe(120);
+    expect(out.value.evicted).toBe(119);
+    const text = out.warnings.join("\n");
+    expect(text).toMatch(/closed after \d+ s of the 4 s window/);
+    expect(text).toMatch(/evicted 119 older event/);
+  }, 10000);
+
+  it("says when the broker never sent its ready frame", async () => {
+    const port = (wss.address() as { port: number }).port;
+    writeReady(tmp, "chromium", port);
+    wss.on("connection", () => {});
+    const out = JSON.parse(
+      await handler({ projectPath: tmp, browser: "chromium", follow: true, followMs: 1500 }),
+    );
+    expect(out.value.readySeen).toBe(false);
+    expect(out.warnings.join("\n")).toMatch(/never sent its ready frame/);
+  }, 10000);
 });
