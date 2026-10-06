@@ -58,7 +58,7 @@ export const schema = {
         type: "array",
         items: { type: "string" },
         description:
-          "Browsers to release (optional; auto-detected from the build)",
+          "Browsers to release. Optional: when omitted the platform reads the build's browsers from its index, and falls back to chrome alone when that index cannot be read, so pass them to be sure.",
       },
       version: {
         type: "string",

@@ -64,6 +64,22 @@ describe("extension_publish surfaces the platform's preview commands", () => {
     expect(out.hint).toContain(`firefox: ${FIREFOX}`);
   });
 
+  /*. */
+  it("does not claim a share token on a public project's commands that carry none", async () => {
+    platform.result = {
+      ok: true,
+      data: {
+        shareUrl: "https://acme.extension.dev/widget",
+        visibility: "public",
+        buildSha: "7258a6f",
+        previewCommands: { chrome: "npx -y extension@latest preview https://registry.extension.land/acme/widget/builds/7258a6f/chrome.zip --browser=chrome" },
+      },
+    };
+    const out = JSON.parse(await handler({}));
+    expect(out.hint).toMatch(/carry no share token/);
+    expect(out.hint).not.toMatch(/same share token as the URL/);
+  });
+
   it("drops a command the platform did not shape as a preview, and says nothing when there are none", async () => {
     platform.result = {
       ok: true,

@@ -79,7 +79,7 @@ export const schema = {
         enum: ["all", "live"],
         default: "all",
         description:
-          "all (default) includes expired and revoked shares, which is what makes a dead link explainable; live returns only links that still resolve.",
+          "all (default) includes expired and revoked shares, which is what makes a dead link explainable; live returns only the links the platform reported resolving at list time (a 429 or 503 from the platform answers listed-local-only, which says nothing about any link).",
       },
       limit: {
         type: "number",
@@ -297,7 +297,7 @@ async function listShares(args: {
       warnings: [
         isAuth
           ? `The platform was not asked, so live and dead cannot be told apart here. ${LOGIN_HINT} localOnly is this project's own record of every link it ever shared, revoke handles included.`
-          : "The platform could not be reached, so localOnly below is this project's own record and not a statement about what is still live.",
+          : `The platform did not list shares (${listing.error.message}), so localOnly below is this project's own record and not a statement about what is still live.`,
       ],
     });
   }
@@ -391,9 +391,11 @@ async function listShares(args: {
         ? `; ${localOnly.length} recorded ${
             localOnly.length === 1 ? "share is" : "shares are"
           } ${
-            liveFiltered
-              ? 'not in this live-only listing (possibly dead rather than not owned; rerun with status:"all" to tell)'
-              : "without an artifact behind them"
+            completeness !== "whole"
+              ? "not in this listing, which is not known to be whole (see the warning), so they may simply be past the returned window"
+              : liveFiltered
+                ? 'not in this live-only listing (possibly dead rather than not owned; rerun with status:"all" to tell)'
+                : "without an artifact behind them"
           }`
         : ""
     }. Revoke one with action:"revoke" and its artifactId or any of its URLs.`,
@@ -553,7 +555,7 @@ async function revokeShare(args: {
       ...(result.data.revokedAt ? { revokedAt: result.data.revokedAt } : {}),
     },
     warnings: [
-      "The link is dead for everyone, permanently: the zip is deleted and the id is burned, so it can never resolve again. Sharing the same build later returns a different link, and anyone holding the old one gets nothing.",
+      "The platform reports the share revoked: the id no longer resolves and anyone holding the link gets nothing. Whether the stored zip was deleted is not reported by that answer. Sharing the same build later returns a different link.",
       recordNote,
     ],
   });

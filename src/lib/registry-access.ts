@@ -19,7 +19,7 @@ export type AccessGrant =
   | { status: "ok"; token: string; expiresAt: number }
   | { status: "public" }
   | { status: "no-credential" }
-  | { status: "denied"; httpStatus?: number; message: string };
+  | { status: "denied"; httpStatus?: number; message: string; reason?: string };
 
 type CacheEntry =
   | { kind: "fresh"; token: string; expiresAt: number }
@@ -152,10 +152,20 @@ export class RegistryAccessTokens {
       };
     }
     if (!res.ok) {
+      /* The platform names why (token-revoked, expired, issuer-not-a-member,
+         authority-unavailable, wrong-lane); the reason travels. */
+      let said: { message?: unknown; reason?: unknown; code?: unknown } = {};
+      try {
+        said = (await res.clone().json()) as typeof said;
+      } catch {
+        said = {};
+      }
+      const detail = [said.reason, said.code, said.message].filter((v) => typeof v === "string" && v).join(": ");
       return {
         status: "denied",
         httpStatus: res.status,
-        message: `access-grant returned ${res.status}`,
+        message: `access-grant returned ${res.status}${detail ? ` (${detail})` : ""}`,
+        ...(typeof said.reason === "string" ? { reason: said.reason } : {}),
       };
     }
     let data: { token?: unknown; expiresAt?: unknown };

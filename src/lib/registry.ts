@@ -320,6 +320,7 @@ export interface BuildIndexItem {
   channel?: string;
   buildEnv?: string;
   status?: string;
+  summaryStatus?: string;
   version?: string;
   message?: string;
   timestamp?: string;
@@ -332,11 +333,18 @@ export interface BuildIndexItem {
  * extension_publish answered buildSha/version/builtAt as null for a project
  * with three READY builds. The vocabulary lives here
  * once and every "successful build" read goes through it. */
-export function isSuccessfulBuild(item: Pick<BuildIndexItem, "status">): boolean {
+export function isSuccessfulBuild(item: Pick<BuildIndexItem, "status" | "summaryStatus">): boolean {
   const status = String(item?.status ?? "")
     .trim()
     .toLowerCase();
-  return status === "success" || status === "ready";
+  return (status === "success" || status === "ready") && !isPartialBuild(item);
+}
+
+/* @invariant THE WRITER SETS status: "success" BESIDE summaryStatus:
+   "partial" WHEN AT LEAST ONE BROWSER BUILT, so a build with a failed
+   browser read as the newest successful, promotable build. */
+export function isPartialBuild(item: Pick<BuildIndexItem, "summaryStatus">): boolean {
+  return String(item?.summaryStatus ?? "").trim().toLowerCase() === "partial";
 }
 
 export function parseBuildIndex(json: unknown): BuildIndexItem[] {
@@ -353,6 +361,7 @@ export function parseBuildIndex(json: unknown): BuildIndexItem[] {
     if (row.channel) entry.channel = String(row.channel);
     if (row.buildEnv) entry.buildEnv = String(row.buildEnv);
     if (row.status) entry.status = String(row.status);
+    if (row.summaryStatus) entry.summaryStatus = String(row.summaryStatus);
     if (row.version) entry.version = String(row.version);
     if (typeof row.message === "string") {
       entry.message = row.message.split("\n", 1)[0];

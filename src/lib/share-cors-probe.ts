@@ -85,14 +85,25 @@ export async function probeShareCors(options: {
       });
     }
 
-    try {
-      await res.body?.cancel();
-    } catch {
-      controller.abort();
-    }
-
     const status = res.status;
     const allowOrigin = res.headers.get("access-control-allow-origin");
+    /* A held source.zip answers 403 with the hold code in the BODY and no
+       hold header, so a refusal's body is read before
+       it is judged; a success body is cancelled unread. */
+    let body: unknown = undefined;
+    if (status >= 400) {
+      try {
+        body = JSON.parse((await res.text()).slice(0, 4096));
+      } catch {
+        body = undefined;
+      }
+    } else {
+      try {
+        await res.body?.cancel();
+      } catch {
+        controller.abort();
+      }
+    }
 
     /* @invariant
      * A HOLD IS NOT A BROKEN LINK, AND THIS PROBE MUST NOT REPORT IT AS ONE.
@@ -109,7 +120,7 @@ export async function probeShareCors(options: {
      * still not ok, because the public genuinely cannot read it yet, but the
      * reason says why and stops short of calling the link broken.
      */
-    if (sawPlatformHold(res)) {
+    if (sawPlatformHold(res, body)) {
       return verdict({
         ok: false,
         held: true,

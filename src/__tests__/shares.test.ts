@@ -588,8 +588,12 @@ describe("extension_shares", () => {
     expect(out.value.artifactId).toBe(LOCAL_ID);
     expect(out.value.revoked).toBe(true);
     expect(
-      out.warnings.some((w: string) => w.includes("permanently")),
+      out.warnings.some((w: string) => w.includes("reports the share revoked")),
     ).toBe(true);
+    expect(
+      out.warnings.some((w: string) => w.includes("Whether the stored zip was deleted is not reported")),
+    ).toBe(true);
+    expect(out.warnings.join("\n")).not.toMatch(/permanently: the zip is deleted/);
     expect(
       out.warnings.some((w: string) => w.includes("not rewritten")),
     ).toBe(true);

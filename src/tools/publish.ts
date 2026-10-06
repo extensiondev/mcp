@@ -36,7 +36,7 @@ export const schema = {
       buildSha: {
         type: "string",
         description:
-          "Pin the URL to a build sha (7-40 hex chars). An unknown sha is rejected, so the returned URL always points at a real build.",
+          "Pin the URL to a build sha (7-40 hex chars). The platform rejects a sha missing from a readable build index; when its index cannot be read it echoes the sha back and a pin on a failed build is accepted, so value.buildSha is the platform's claim, not a verified build. extension_release_status lists the builds it knows.",
       },
       api: API_BASE,
     },
@@ -267,11 +267,16 @@ export async function handler(args: {
    * page dark the command is the only way the link is usable, so the hint
    * names that outright instead of sending the reader to a 503. */
   const previewCommands = previewCommandsOf(data.previewCommands);
+  const tokenCarried = previewCommands.every(([, command]) => /[?&]t=/.test(command));
   const previewHint =
     previewCommands.length > 0
       ? `Run the extension without opening the share page: ${previewCommands
           .map(([browser, command]) => `${browser}: ${command}`)
-          .join(" | ")}. Each command carries the same share token as the URL and expires with it.`
+          .join(" | ")}. ${
+          tokenCarried
+            ? "Each command carries the same share token as the URL and expires with it."
+            : "These commands carry no share token: the project is public, so the zips are served without one."
+        }`
       : null;
   const noBuild = data.buildSha == null;
   const noBuildNote = noBuild

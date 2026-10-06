@@ -82,7 +82,7 @@ export interface SubmitToolArgs {
 export const schema = {
   name: "extension_submit",
   description:
-    "Submit a built extension for store REVIEW through extension.dev, which holds your store credentials and dispatches from your project's mirror CI: the Chrome Web Store, Firefox AMO, Edge Add-ons and the App Store (Safari). This is store review only. It does not push a build to the extension.dev platform, and it does not make a shareable link: that is extension_publish, which is what \"deploy\" or \"ship\" an extension almost always means. Reach for this only when the ask is explicitly a store submission. It defaults to a dry run that dispatches nothing: the platform verifies auth, project, build and store workflow, and this tool adds each store's credential-health verdict. Trust those per-store rows over the platform's bare preflight line, which does not check store health. Pass dryRun:false to actually submit, which is irreversible and enters store review. A real submission answers 'submitted' only when the platform recorded a submission for every store asked; 'submitted-partially' names the stores it did not record, which are the only ones to submit again; 'submit-unconfirmed' means no usable answer came back, so read extension_release_status before submitting again, because a second call submits a second time. The project comes from your token (extension_auth or EXTENSION_DEV_TOKEN; tokens live at most 7 days, so CI must re-mint from the console's Access tokens page); with several logins stored, `project` picks which one. Store credentials are never arguments, and no local file is uploaded. Call extension_release_status for valid shas, and, after a real submission, for the recorded outcome and review state.",
+    "Submit a built extension for store REVIEW through extension.dev, which holds your store credentials and dispatches from your project's mirror CI: the Chrome Web Store, Firefox AMO, Edge Add-ons and the App Store (Safari). This is store review only. It does not push a build to the extension.dev platform, and it does not make a shareable link: that is extension_publish, which is what \"deploy\" or \"ship\" an extension almost always means. Reach for this only when the ask is explicitly a store submission. It defaults to a dry run that dispatches nothing: the platform verifies the token and project, finds the store workflow, reads the build from its index when that index is readable, reads store health itself and adds a Safari plan verdict; this tool re-reads the per-store health rows beside it. The dry run does not run the owner gate, the approval, the build quota, the dispatch pause or the submission-mode check, which the real run does first. Pass dryRun:false to actually submit, which is irreversible: only the workspace owner who issued the token may, and it dispatches the store workflow; a Chrome or Edge store with no saved submission mode is uploaded as a draft (absent_mode: safe) and does not enter review. A real submission answers 'submitted' only when the platform recorded a submission for every store asked; 'submitted-partially' names the stores it did not record, which are the only ones to submit again; 'submit-unconfirmed' means no usable answer came back, so read extension_release_status before submitting again, because a second call submits a second time. The project comes from your token (extension_auth or EXTENSION_DEV_TOKEN; tokens live at most 7 days, so CI must re-mint from the console's Access tokens page); with several logins stored, `project` picks which one. Store credentials are never arguments, and no local file is uploaded. Call extension_release_status for valid shas, and, after a real submission, for the recorded outcome and review state.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -295,6 +295,13 @@ export async function handler(args: SubmitToolArgs): Promise<string> {
     const saidNothingDispatched = data?.retryable === true;
     const maybeDispatched =
       !dryRun && res.status >= 500 && !saidNothingDispatched;
+    /* @invariant AN APPROVAL IS SPENT BEFORE THE QUOTA AND CHANNEL CHECKS.
+       The platform consumes a presented approvalId once the owner, runner
+       and dispatch-pause checks pass, so a refusal after those has already
+       used it. */
+    const BEFORE_APPROVAL = new Set(["BUILD_DISPATCH_DISABLED", "OWNER_REQUIRED", "TOKEN_ISSUER_UNKNOWN", "APPROVAL_REQUIRED", "APPROVAL_NOT_FOUND", "APPROVAL_SCOPE_MISMATCH", "APPROVAL_USED", "APPROVAL_EXPIRED"]);
+    const platformCode = typeof data?.code === "string" ? data.code : "";
+    const approvalSpent = !dryRun && Boolean(body.approvalId) && res.status < 500 && !BEFORE_APPROVAL.has(platformCode);
     return envelope({
       ok: false,
       command: "extension_submit",
@@ -319,14 +326,29 @@ export async function handler(args: SubmitToolArgs): Promise<string> {
                   : ""
               }.`,
             }
-          : {}),
+          : approvalSpent
+            ? {
+                hint: `The approval presented with this call was spent by the platform before this refusal (it consumes the grant once the owner, runner-class and dispatch-pause checks pass, and ${platformCode || "this refusal"} came after). Fix the cause, then call again with no approvalId to request a fresh approval.`,
+              }
+            : {}),
     });
   }
 
+  /* @invariant THE PLATFORM'S WARNING OBJECTS ARE RENDERED. The dry run
+     answers `{code, store, message, docsUrl}` objects (every Firefox
+     preflight carries FIREFOX_DATA_COLLECTION_PERMISSIONS), and the envelope
+     keeps strings only, so they were dropped on the floor. */
   const warnings: (string | null | undefined | false)[] = Array.isArray(
     data?.warnings,
   )
-    ? [...data.warnings]
+    ? (data.warnings as unknown[]).map((w) => {
+        if (typeof w === "string") return w;
+        if (!w || typeof w !== "object") return null;
+        const row = w as { code?: unknown; store?: unknown; message?: unknown; docsUrl?: unknown };
+        const text = String(row.message ?? row.code ?? "").trim();
+        if (!text) return null;
+        return `${row.store ? `${String(row.store)}: ` : ""}${text}${row.docsUrl ? ` (${String(row.docsUrl)})` : ""}`;
+      })
     : [];
   warnings.push(
     ...storeMdWarnings(
@@ -408,17 +430,19 @@ export async function handler(args: SubmitToolArgs): Promise<string> {
         return {
           browser,
           ok: false,
-          configured: false,
+          configured: true as const,
+          healthy: false,
           publishMode: "unknown",
           reason:
             String(row.message || "").trim() ||
-            `The ${browser} store failed its last credential health check.`,
+            `The ${browser} store is configured but failed its last credential health check.`,
         };
       }
       return {
         browser,
         ok: true,
         configured: true as const,
+        healthy: true,
         publishMode: "unknown",
       };
     });
@@ -461,9 +485,9 @@ export async function handler(args: SubmitToolArgs): Promise<string> {
     if (actionable.length > 0) {
       summaryParts.push(
         platformOk
-          ? `Preflight passed for ${actionable.join(", ")}: the platform verified auth, the project, build ${
+          ? `Preflight passed for ${actionable.join(", ")}: the platform verified the token and project, found the store workflow, read build ${
               data?.buildId ?? buildSha
-            }, and the store workflow, and the store credentials passed their last health check.`
+            } from its index where that index was readable, and the store credentials passed their last health check. Not checked by a dry run: the owner gate, the approval, the build quota, the dispatch pause and the submission mode, which the real run checks first.`
           : `${actionable.join(", ")}: the store credentials passed their last health check, but the platform failure above still blocks submission.`,
       );
     }
@@ -523,7 +547,7 @@ export async function handler(args: SubmitToolArgs): Promise<string> {
         warnings,
       });
     }
-    statusNote = `Track this submission with ${statusRead}: it reads the recorded outcome, per-store credential health, and review state from the public registry.`;
+    statusNote = `Track this submission with ${statusRead}: the record appears in the registry's stores/submissions.json when the store workflow reports, so a read right after this answer may still show none; that is not a reason to submit again.`;
     result.submittedStores = outcome.stores;
     result.allowance = spendNarration({
       what: "This submission",
@@ -553,7 +577,7 @@ export async function handler(args: SubmitToolArgs): Promise<string> {
       value: result,
       hint:
         message ||
-        `The platform dispatched the store workflow for ${outcome.stores.join(", ")} and recorded each submission as pending. A store's own review comes after that and is not part of this answer.`,
+        `The platform dispatched the store workflow for ${outcome.stores.join(", ")} and recorded each submission as pending. A Chrome or Edge store with no saved submission mode is uploaded as a draft (absent_mode: safe) and does not enter review; a store's own review, where it happens, comes after this answer.`,
       warnings: [...warnings, channelNote, statusNote, credential.note],
     });
   }
