@@ -6,12 +6,14 @@ import path from "node:path";
 const cliCalls: string[][] = [];
 let cliResultOverride: { code: number; stdout: string; stderr: string } | null =
   null;
+let onCli: ((args: string[]) => void) | null = null;
 vi.mock("../lib/exec", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../lib/exec")>();
   return {
     ...actual,
     runExtensionCli: async (args: string[]) => {
       cliCalls.push(args);
+      onCli?.(args);
       return (
         cliResultOverride ?? {
           code: 0,
@@ -24,6 +26,8 @@ vi.mock("../lib/exec", async (importOriginal) => {
 });
 
 const build = await import("../tools/build");
+const { buildSummaryPath } = await import("../lib/session-paths");
+const { buildSummary, zipArtifacts } = await import("./fixtures/engine-answers");
 
 const tmpDirs: string[] = [];
 function project(manifest: Record<string, unknown>, files: string[] = []): string {
@@ -45,6 +49,7 @@ function project(manifest: Record<string, unknown>, files: string[] = []): strin
 afterEach(() => {
   cliCalls.length = 0;
   cliResultOverride = null;
+  onCli = null;
   for (const dir of tmpDirs.splice(0)) {
     fs.rmSync(dir, { recursive: true, force: true });
   }
@@ -188,72 +193,107 @@ describe("extension_build zip path reporting", () => {
     return dir;
   }
 
-  it("returns the absolute path of the zip the engine actually wrote", async () => {
-    const dir = builtProject("zip-probe-ext");
-    const zip = path.join(dir, "dist", "chrome", "zipprobeext-1.0.0.zip");
-    fs.writeFileSync(zip, "PK");
+  /* The engine writes the archives and its summary DURING the build, so the
+     fake CLI writes them when it is called, never before: a file seeded before
+     the call is an older build's, which is the case the locator must refuse. */
+  function engineWrites(dir: string, files: string[], summary?: Record<string, unknown>) {
+    onCli = () => {
+      for (const file of files) {
+        fs.mkdirSync(path.dirname(file), { recursive: true });
+        fs.writeFileSync(file, "PK");
+      }
+      if (summary) {
+        const file = buildSummaryPath(dir, "chrome");
+        fs.mkdirSync(path.dirname(file), { recursive: true });
+        fs.writeFileSync(file, JSON.stringify(summary));
+      }
+    };
+  }
 
-    const result = JSON.parse(
-      await build.handler({ projectPath: dir, zip: true }),
-    );
+  it("returns the path the engine's summary names", async () => {
+    const dir = builtProject("zip-probe-ext");
+    const zip = path.join(dir, "dist", "zipprobeext-1.0.0-chrome.zip");
+    engineWrites(dir, [zip], buildSummary("chrome", { zip_artifacts: zipArtifacts("zipprobeext", "1.0.0", "chrome").map((a) => ({ ...a, path: zip })) }));
+
+    const result = JSON.parse(await build.handler({ projectPath: dir, zip: true }));
 
     expect(result.ok).toBe(true);
     expect(result.value.zipPath).toBe(zip);
-    expect(result.warnings.join(" ")).not.toContain("no .zip file");
+    expect(result.warnings.join(" ")).not.toContain("names no zip");
   });
 
-  it("mirrors the engine's sanitization of a custom zipFilename", async () => {
+  it("finds the engine's name at the dist root when the summary carries no list", async () => {
     const dir = builtProject("zip-probe-ext");
-    const zip = path.join(dir, "dist", "chrome", "my-customname-v2.zip");
-    fs.writeFileSync(zip, "PK");
+    const zip = path.join(dir, "dist", "zipprobeext-1.0.0-chrome.zip");
+    engineWrites(dir, [zip]);
+
+    const result = JSON.parse(await build.handler({ projectPath: dir, zip: true }));
+
+    expect(result.value.zipPath).toBe(zip);
+  });
+
+  it("keeps a custom zipFilename's stem and case and adds the browser suffix, as the engine does", async () => {
+    const dir = builtProject("zip-probe-ext");
+    const zip = path.join(dir, "dist", "My Custom-Name v2-chrome.zip");
+    engineWrites(dir, [zip]);
 
     const result = JSON.parse(
-      await build.handler({
-        projectPath: dir,
-        zip: true,
-        zipFilename: "My Custom-Name v2",
-      }),
+      await build.handler({ projectPath: dir, zip: true, zipFilename: "My Custom-Name v2" }),
     );
 
     expect(result.value.zipPath).toBe(zip);
   });
 
-  it("falls back to the freshest zip when the name cannot be predicted", async () => {
+  it("falls back to the freshest archive for this browser when the name cannot be predicted", async () => {
     const dir = builtProject("__MSG_appName__");
-    const zip = path.join(dir, "dist", "chrome", "meine-erweiterung-1.0.0.zip");
-    fs.writeFileSync(zip, "PK");
-    const future = new Date(Date.now() + 2000);
-    fs.utimesSync(zip, future, future);
+    const zip = path.join(dir, "dist", "meine-erweiterung-1.0.0-chrome.zip");
+    engineWrites(dir, [zip]);
 
-    const result = JSON.parse(
-      await build.handler({ projectPath: dir, zip: true }),
-    );
+    const result = JSON.parse(await build.handler({ projectPath: dir, zip: true }));
 
     expect(result.value.zipPath).toBe(zip);
   });
 
-  it("says so explicitly when the zip cannot be located", async () => {
+  it("never reports an archive from an earlier build", async () => {
     const dir = builtProject("zip-probe-ext");
+    const old = path.join(dir, "dist", "zipprobeext-1.0.0-chrome.zip");
+    fs.mkdirSync(path.dirname(old), { recursive: true });
+    fs.writeFileSync(old, "PK");
+    const past = new Date(Date.now() - 60_000);
+    fs.utimesSync(old, past, past);
+
+    const result = JSON.parse(await build.handler({ projectPath: dir, zip: true }));
+
+    expect(result.value.zipPath).toBeUndefined();
+    expect(result.warnings.join(" ")).toContain("no .zip newer than this build");
+  });
+
+  it("reports the source zip the engine wrote under its explicit name, not an older default-named one", async () => {
+    const dir = builtProject("zip-probe-ext");
+    const stale = path.join(dir, "dist", "zipprobeext-1.0.0-source.zip");
+    fs.mkdirSync(path.dirname(stale), { recursive: true });
+    fs.writeFileSync(stale, "PK");
+    const past = new Date(Date.now() - 60_000);
+    fs.utimesSync(stale, past, past);
+    const fresh = path.join(dir, "dist", "release-source.zip");
+    engineWrites(dir, [fresh]);
 
     const result = JSON.parse(
-      await build.handler({ projectPath: dir, zip: true }),
+      await build.handler({ projectPath: dir, zipSource: true, zipFilename: "release" }),
     );
+
+    expect(result.value.zipSourcePath).toBe(fresh);
+  });
+
+  it("says so explicitly when no zip can be located", async () => {
+    const dir = builtProject("zip-probe-ext");
+
+    const result = JSON.parse(await build.handler({ projectPath: dir, zip: true }));
 
     expect(result.ok).toBe(true);
     expect(result.value.zipPath).toBeUndefined();
-    expect(result.warnings.join(" ")).toContain("dist/chrome");
-  });
-
-  it("reports the source zip from the dist ROOT, where the engine writes it", async () => {
-    const dir = builtProject("zip-probe-ext");
-    const sourceZip = path.join(dir, "dist", "zipprobeext-1.0.0-source.zip");
-    fs.writeFileSync(sourceZip, "PK");
-
-    const result = JSON.parse(
-      await build.handler({ projectPath: dir, zipSource: true }),
-    );
-
-    expect(result.value.zipSourcePath).toBe(sourceZip);
+    expect(result.warnings.join(" ")).toContain("names no zip");
+    expect(result.warnings.join(" ")).not.toContain("may not have packaged");
   });
 
   it("adds neither field on a build without zip", async () => {

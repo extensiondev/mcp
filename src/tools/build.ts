@@ -43,6 +43,7 @@ interface EngineBuildSummary {
   errors_count?: number;
   warnings?: string[];
   safari?: EngineSafariSummary;
+  zip_artifacts?: Array<{ kind?: string; path?: string; size?: number }>;
 }
 
 /* @invariant
@@ -303,35 +304,97 @@ function engineZipBase(distDir: string, projectPath: string): string {
   return `${engineSanitize(rawName)}-${version}`;
 }
 
+/* @invariant
+ * THE ZIP IS THE ONE THE ENGINE SAYS IT WROTE, AND IT IS NEWER THAN THE BUILD.
+ *
+ * The summary carries `zip_artifacts` with the real paths, and the engine
+ * names its archives `dist/<sanitized name>-<version>-<browser>.zip` and
+ * `dist/<...>-source.zip` (an explicit zipFilename keeps its stem and case
+ * and gets the browser suffix). This used to look inside dist/<browser> for
+ * `<name>-<version>.zip`, a layout the engine left, so `zip: true` reported
+ * no zip and blamed the engine; and the source locator returned an archive
+ * from an earlier build when one sat at the default name.
+ * Order now: the summary's path, then the engine's name at the dist root,
+ * then the newest matching archive, then the old layout for older engines,
+ * and nothing older than this build's start is ever returned.
+ */
+function zipFromSummary(
+  summary: EngineBuildSummary | null,
+  kind: "dist" | "source",
+  since: number,
+): string | null {
+  for (const artifact of summary?.zip_artifacts ?? []) {
+    if (artifact?.kind !== kind || typeof artifact.path !== "string") continue;
+    if (freshFile(artifact.path, since)) return artifact.path;
+  }
+  return null;
+}
+
+function freshFile(file: string, since: number): boolean {
+  try {
+    return fs.statSync(file).mtimeMs >= since;
+  } catch {
+    return false;
+  }
+}
+
+function explicitZipStem(zipFilename: string): string {
+  const flat = path.basename(zipFilename.trim());
+  const safe = [...flat]
+    .filter((ch) => !'<>:"/\\|?*'.includes(ch) && ch.charCodeAt(0) > 0x1f)
+    .join("")
+    .replace(/\.+$/, "")
+    .trim();
+  return (safe || "extension").replace(/\.zip$/i, "");
+}
+
 function locateDistZip(
   projectPath: string,
   browser: string,
   zipFilename: string | undefined,
   since: number,
+  summary: EngineBuildSummary | null,
 ): string | null {
+  const fromSummary = zipFromSummary(summary, "dist", since);
+  if (fromSummary) return fromSummary;
   const distDir = path.resolve(projectPath, "dist", browser);
-  const base = zipFilename
-    ? engineSanitize(zipFilename)
+  const distRoot = path.resolve(projectPath, "dist");
+  const stem = zipFilename
+    ? explicitZipStem(zipFilename)
     : engineZipBase(distDir, projectPath);
-  const expected = path.join(distDir, `${base}.zip`);
-  if (fs.existsSync(expected)) return expected;
-  return newestZip(distDir, since);
+  const suffix = `-${browser}`;
+  const named = stem.toLowerCase().endsWith(suffix) ? stem : `${stem}${suffix}`;
+  const expected = path.join(distRoot, `${named}.zip`);
+  if (freshFile(expected, since)) return expected;
+  return (
+    newestZip(
+      distRoot,
+      since,
+      (name) => name.toLowerCase().endsWith(`${suffix}.zip`),
+    ) ??
+    newestZip(distDir, since)
+  );
 }
 
 function locateSourceZip(
   projectPath: string,
   browser: string,
+  zipFilename: string | undefined,
   since: number,
+  summary: EngineBuildSummary | null,
 ): string | null {
+  const fromSummary = zipFromSummary(summary, "source", since);
+  if (fromSummary) return fromSummary;
   const distDir = path.resolve(projectPath, "dist", browser);
   const distRoot = path.resolve(projectPath, "dist");
-  const expected = path.join(
-    distRoot,
-    `${engineZipBase(distDir, projectPath)}-source.zip`,
-  );
-  if (fs.existsSync(expected)) return expected;
+  const stem = zipFilename
+    ? explicitZipStem(zipFilename)
+    : engineZipBase(distDir, projectPath);
+  const expected = path.join(distRoot, `${stem}-source.zip`);
+  if (freshFile(expected, since)) return expected;
   return newestZip(distRoot, since, (name) => name.endsWith("-source.zip"));
 }
+
 
 export const schema = {
   name: "extension_build",
@@ -850,19 +913,19 @@ export async function handler(args: {
     }
     const zipNotes: string[] = [];
     const zipPath = args.zip
-      ? locateDistZip(args.projectPath, browser, args.zipFilename, start)
+      ? locateDistZip(args.projectPath, browser, args.zipFilename, start, engineSummary)
       : null;
     if (args.zip && !zipPath) {
       zipNotes.push(
-        `zip: true was requested and the build succeeded, but no .zip file could be located in dist/${browser}. The engine may not have packaged it; check the build output below.`,
+        `zip: true was requested and the build succeeded, but the engine's summary names no zip and no .zip newer than this build was found under dist/ (the engine writes dist/<name>-<version>-${browser}.zip). Check the build output below.`,
       );
     }
     const zipSourcePath = args.zipSource
-      ? locateSourceZip(args.projectPath, browser, start)
+      ? locateSourceZip(args.projectPath, browser, args.zipFilename, start, engineSummary)
       : null;
     if (args.zipSource && !zipSourcePath) {
       zipNotes.push(
-        `zipSource: true was requested and the build succeeded, but no *-source.zip file could be located in dist/. The engine may not have packaged it; check the build output below.`,
+        `zipSource: true was requested and the build succeeded, but the engine's summary names no source zip and no *-source.zip newer than this build was found under dist/. Check the build output below.`,
       );
     }
     const divergence = manifestDivergence(args.projectPath, browser);
