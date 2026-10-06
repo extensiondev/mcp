@@ -49,7 +49,7 @@
     "LICENSE"
   ],
   "scripts": {
-    "docs:tools": "node scripts/generate-mcp-tools.mjs",
+    "docs:tools": "WRITE_TOOLS_DOC=1 vitest run src/__tests__/docs-match-the-code.test.ts",
     "clean": "rm -rf dist",
     "readme:clients": "UPDATE_README=1 vitest run src/__tests__/readme-clients.test.ts",
     "watch": "rslib build --watch",

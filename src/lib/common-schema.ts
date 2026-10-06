@@ -61,7 +61,7 @@ export const SESSION_BROWSER = {
 
 export const CALL_TIMEOUT = {
   type: "number",
-  description: "Command timeout in ms (default 5000)",
+  description: "Command timeout in ms. When omitted, the default depends on the route: 30000 through the dev session's control channel, 10000 over the Firefox debugger protocol, and 15000 per command over the Chromium debug port.",
 } as const;
 
 export const API_BASE = {

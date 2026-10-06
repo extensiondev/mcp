@@ -221,11 +221,28 @@ export async function runActVerb(
           "json",
           ...args.slice(separatorAt),
         ];
-  const { code, stdout, stderr } = await runExtensionCli(cliArgs, {
+  const { code, stdout, stderr, timedOut, signal } = await runExtensionCli(cliArgs, {
     cwd: projectPath,
     timeoutMs,
   });
   const out = stdout.trim();
+  /* @invariant AN ANSWER THAT DID NOT COME BACK IS NOT A FAILURE OF THE
+     VERB. A run this server stopped, or one that exited 0 with stdout it
+     cannot read, may already have acted (a storage set, an open), so it is
+     reported as unconfirmed with that warning, never as "exited with code
+     0/null". */
+  if (timedOut) {
+    return envelope({
+      ok: false,
+      command,
+      status: "cli-timeout",
+      error: {
+        code: "E_CLI",
+        name: "CliTimeout",
+        message: `This server stopped the extension CLI after ${timeoutMs ?? 30_000} ms (${signal ?? "a signal"}) before it answered. The ${args[0]} verb may already have acted; read the state it changes before repeating it.`,
+      },
+    });
+  }
   if (out) {
     try {
       const frame = translateFrame(JSON.parse(out), projectPath, browserFlag(args));
@@ -262,6 +279,18 @@ export async function runActVerb(
         message: await outputFlagRefusalMessage("act", args[0], projectPath),
       },
       hint: "extension_doctor reports the project's engine version next to the one this server pins.",
+    });
+  }
+  if (code === 0 && out) {
+    return envelope({
+      ok: false,
+      command,
+      status: "cli-unreadable",
+      error: {
+        code: "E_CLI",
+        name: "CliUnreadable",
+        message: `The extension CLI exited 0 but its answer could not be read as JSON (${out.slice(0, 200)}). The ${args[0]} verb may have acted; read the state it changes before repeating it.`,
+      },
     });
   }
   const message = stderr.trim() || `extension exited with code ${code}`;

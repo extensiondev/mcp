@@ -24,7 +24,6 @@ import {
   commonFlags,
   actFrameJson,
   addWarning,
-  patchValue,
   type ActArgs,
 } from "../lib/act";
 import { envelope } from "../lib/envelope";
@@ -53,6 +52,7 @@ import {
   readExtensionPageTargets,
   readExtensionWorkerTargets,
   wakeExtensionWorker,
+  BACKGROUND_TARGET_TYPES,
 } from "../lib/cdp-extension-page";
 import { listPageTargets, matchTargetsByUrl } from "../lib/cdp-targets";
 import {
@@ -71,7 +71,7 @@ import { executeScriptExpression } from "./inspect-gecko";
 export const schema = {
   name: "extension_eval",
   description:
-    "Evaluate an expression in a running extension context. Start the session with allowEval:true (extension_dev), which writes a 0600 session token; without that token every route of this tool, the debug port included, answers eval-disabled. Context defaults to 'background', except on a Chromium MV3 session (the default template) where it defaults to 'page', the active tab, because the MV3 service worker CSP blocks eval; pass context:'background' to target the worker anyway and get that explanation back. For content and page, pass `url` to pick the tab, or omit both `url` and `tab` for the active tab; a numeric `tab` only disambiguates. Extension surfaces (popup, options, sidebar, devtools) and override pages (newtab, history, bookmarks) need no tab id but must already be open: open one with extension_open first, because a closed one returns an explicit error. On a Chromium MV3 session those pages, and context:'page' with a chrome-extension:// url, evaluate over CDP, the inspector path the extension page CSP does not govern; elsewhere they evaluate over the in-bundle relay. On Firefox a document whose content security policy forbids eval (the extension's own pages, or a site's) is evaluated over the debugger protocol instead, which takes one expression; a page inside the extension that is no declared surface (pages/*) is reached the same way by context:'page' and its moz-extension:// url once a tab shows it. Call extension_dom_snapshot with listTabs:true to enumerate {tabId, url, title}.",
+    "Evaluate an expression in a running extension context. Start the session with allowEval:true (extension_dev), which writes a 0600 session token; without that token every route of this tool, the debug port included, answers eval-disabled. Context defaults to 'background', except on a Chromium MV3 session (the default template) where it defaults to 'page', the active tab; pass context:'background' to evaluate in the service worker, which on Chromium goes over the debug port. Debug-port evaluates run with a user gesture, so gesture-gated APIs (permissions.request, sidePanel.open) can succeed here and still fail when the extension's own code calls them. For content and page, pass `url` to pick the tab, or omit both `url` and `tab` for the active tab; a numeric `tab` only disambiguates. Extension surfaces (popup, options, sidebar, devtools) and override pages (newtab, history, bookmarks) need no tab id but must already be open: open one with extension_open first, because a closed one returns an explicit error. On a Chromium MV3 session those pages, and context:'page' with a chrome-extension:// url, evaluate over CDP, the inspector path the extension page CSP does not govern; elsewhere they evaluate over the in-bundle relay. On Firefox a document whose content security policy forbids eval (the extension's own pages, or a site's) is evaluated over the debugger protocol instead, which takes one expression; a page inside the extension that is no declared surface (pages/*) is reached the same way by context:'page' and its moz-extension:// url once a tab shows it. Call extension_dom_snapshot with listTabs:true to enumerate {tabId, url, title}.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -209,12 +209,13 @@ async function evaluateOnChromiumExtensionPage(
     }
     const workersRead = await readExtensionWorkerTargets(resolved.port, extensionId);
     if ("unreadable" in workersRead) return targetsUnreadable(workersRead.unreadable);
-    let workers = workersRead.targets;
+    let workers = workersRead.targets.filter((t) => BACKGROUND_TARGET_TYPES.has(t.type));
     const wakeWarnings: string[] = [];
     if (workers.length === 0) {
       const wake = await wakeExtensionWorker(resolved.port, extensionId);
-      if (wake.woken) {
-        workers = wake.targets;
+      const woken = wake.woken ? wake.targets.filter((t) => BACKGROUND_TARGET_TYPES.has(t.type)) : [];
+      if (wake.woken && woken.length > 0) {
+        workers = woken;
         wakeWarnings.push(
           "The background worker was idle (Chrome stops an MV3 service worker after about 30 s without events) and was started through ServiceWorker.startWorker before evaluating; state it held before idling is gone unless it was persisted.",
         );
@@ -226,7 +227,7 @@ async function evaluateOnChromiumExtensionPage(
           error: {
             code: "E_NO_TARGET",
             name: "NoTarget",
-            message: `No running background for chrome-extension://${extensionId}/: Chrome stops an idle MV3 service worker and lists no target for it, and starting it through ServiceWorker.startWorker did not bring one back: ${wake.reason}.`,
+            message: `No running background for chrome-extension://${extensionId}/: Chrome stops an idle MV3 service worker and lists no target for it, and starting it through ServiceWorker.startWorker did not bring one back: ${wake.woken ? "only dedicated workers were listed, which are not the background" : wake.reason}.`,
           },
           hint: "Check the extension declares a background (extension_manifest_validate), then wake it with an event it listens to (extension_reload, open a surface with extension_open, navigate a matching tab) and retry. extension_logs (context: ['background']) holds what it wrote before it idled.",
         });
@@ -260,6 +261,7 @@ async function evaluateOnChromiumExtensionPage(
       status: "evaluated",
       value: outcome.value,
       warnings: [
+        outcome.note ?? null,
         ...wakeWarnings,
         ...(workers.length > 1
           ? [
@@ -364,7 +366,7 @@ async function evaluateOnChromiumExtensionPage(
     command: schema.name,
     status: "evaluated",
     value: outcome.value,
-    warnings,
+    warnings: [...warnings, outcome.note ?? null],
     hint: `Evaluated over CDP in ${target.url} (target ${target.targetId}), the inspector path the extension page CSP does not govern. The result is serialized by value, so return plain data rather than DOM nodes; a promise is awaited before returning.`,
   });
 }
@@ -470,12 +472,14 @@ async function evaluateOnWebTarget(
     command: schema.name,
     status: "evaluated",
     value: outcome.value,
-    warnings:
-      live.length > 1
+    warnings: [
+      ...(live.length > 1
         ? [
             `${live.length} tabs match ${url}; evaluated in ${target.url} (target ${target.targetId}). Narrow the url to pick another.`,
           ]
-        : [],
+        : []),
+      outcome.note ?? null,
+    ],
     hint: `Evaluated over CDP in ${target.url} (target ${target.targetId}), the page's main world through the inspector, which the site's CSP and Trusted Types do not govern. Pass context: "content" for the extension's isolated world instead.`,
   });
 }
@@ -695,7 +699,7 @@ async function evaluatePastSurfaceCsp(
 const sameDocumentUrl = (a: unknown, b: string): boolean =>
   String(a ?? "").replace(/[?#].*$/, "") === b.replace(/[?#].*$/, "");
 
-function tabByUrl(tabs: RdpTab[], url: string): RdpTab | undefined {
+function tabByUrl(tabs: RdpTab[], url: string, seen?: { matched: number }): RdpTab | undefined {
   const exact = tabs.filter((tab) => sameDocumentUrl(tab.url, url));
   const covered = exact.length
     ? exact
@@ -703,6 +707,7 @@ function tabByUrl(tabs: RdpTab[], url: string): RdpTab | undefined {
   const candidates = covered.length
     ? covered
     : tabs.filter((tab) => String(tab.url ?? "").includes(url));
+  if (seen) seen.matched = candidates.length;
   return candidates.find((tab) => tab.selected === true) ?? candidates[0];
 }
 
@@ -720,6 +725,7 @@ async function evaluateInGeckoTab(
   browser: string,
   select: (tabs: RdpTab[]) => RdpTab | null | undefined,
   missing: string,
+  seen?: { matched: number },
 ): Promise<string | null> {
   const resolved = await resolveRdpPort(args.projectPath, browser, {
     waitMs: 3_000,
@@ -751,11 +757,19 @@ async function evaluateInGeckoTab(
     });
   }
   if (outcome.ok) {
+    /* @invariant THE ANSWER NAMES THE TAB IT RAN IN, and says when several
+       tabs matched the url and one was picked. */
     return envelope({
       ok: true,
       command: schema.name,
       status: "ok",
       value: outcome.value === undefined ? null : outcome.value,
+      warnings: [
+        `Evaluated in the tab showing ${outcome.tab.url || "an unknown url"}${outcome.tab.title ? ` ("${outcome.tab.title}")` : ""}.`,
+        seen && seen.matched > 1
+          ? `${seen.matched} open tabs matched the url; the selected one (or the first) was used. Narrow the url to pick another.`
+          : null,
+      ],
     });
   }
   if (outcome.name === "TargetNotFound") {
@@ -776,12 +790,21 @@ async function evaluateInGeckoTab(
       hint: "The expression returned a promise that is still pending; pass a larger timeout to wait for it.",
     });
   }
+  /* @invariant THE HINT FOLLOWS WHAT FAILED. Unsupported means nothing ran
+     and EvalLost means the document went away mid-call; only EvalError is
+     the expression's own throw. */
+  const lost = outcome.name === "EvalLost";
+  const unsupported = outcome.name === "Unsupported";
   return envelope({
     ok: false,
     command: schema.name,
-    status: "eval-failed",
+    status: lost ? "eval-lost" : unsupported ? "eval-unsupported" : "eval-failed",
     error: { code: "E_EVAL", name: outcome.name, message: outcome.message },
-    hint: "The expression threw inside the document. It ran over the debugger protocol, which the document's content security policy does not govern, so this is the expression's own error.",
+    hint: lost
+      ? "The document navigated or closed before the expression answered, so it may have run in part; read the page's state before repeating it."
+      : unsupported
+        ? "The debugger protocol could not evaluate in that tab, so the expression never ran. extension_dom_snapshot reads the page without eval."
+        : "The expression threw inside the document. It ran over the debugger protocol, which the document's content security policy does not govern, so this is the expression's own error.",
   });
 }
 
@@ -816,13 +839,15 @@ async function evaluatePagePastSiteCsp(
   if (!args.url && args.tab != null) return null;
   if (!isSingleExpression(args.expression)) return notOneExpression();
   const url = args.url;
+  const seen = { matched: 0 };
   return evaluateInGeckoTab(
     args,
     browser,
     url
-      ? (tabs) => tabByUrl(tabs, url)
+      ? (tabs) => tabByUrl(tabs, url, seen)
       : (tabs) => tabs.find((tab) => tab.selected === true),
     url ? `No open tab matches url: ${url}` : "No tab is selected in the dev browser.",
+    seen,
   );
 }
 
@@ -1051,10 +1076,11 @@ export async function handler(
     try {
       const parsed = JSON.parse(raw);
       if (parsed && typeof parsed === "object") {
-        patchValue(parsed, { defaultedContext: "page" });
+        /* @invariant THE PAGE'S VALUE IS NEVER EDITED: the default is said in
+           a warning, not written into what the expression returned. */
         addWarning(
           parsed,
-          'No context given: defaulted to "page" (the active tab) because this Chromium session\'s MV3 background is a service worker whose CSP blocks eval. Pass context: "background" explicitly to target the worker (works on Firefox/MV2 builds).',
+          'No context given: defaulted to "page" (the active tab). Pass context: "background" to evaluate in the service worker, which this tool reaches over the debug port.',
         );
         const code =
           typeof parsed.error?.code === "string" ? parsed.error.code : "";
@@ -1071,12 +1097,12 @@ export async function handler(
            CLI copy. */
         const unreachable =
           code === "E_TARGET_NOT_FOUND" ||
-          /cannot access|chrome-extension:\/\/|chrome:\/\//i.test(
+          /cannot access|chrome-extension:\/\/|chrome:\/\/|no active tab|missing host permission/i.test(
             JSON.stringify(parsed.error ?? ""),
           );
         if (parsed.ok === false && unreachable) {
           parsed.hint =
-            "The active tab is a browser or extension page that eval cannot reach. Navigate the dev browser to a regular web page, or pass url (match pattern) or tab to pick one; extension_dom_snapshot with listTabs: true lists open tabs.";
+            "The active tab could not be reached: it is a browser or extension page, a site outside the extension's host permissions, or there is no active tab. Navigate the dev browser to a page the extension may script, or pass url (match pattern) or tab to pick one; extension_dom_snapshot with listTabs: true lists open tabs.";
         }
         return actFrameJson(parsed);
       }

@@ -248,6 +248,22 @@ describe("extension_eval reaches the Chromium background over CDP, where the ext
     expect(cliCalls).toEqual([]);
   });
 
+  it("never takes a dedicated worker for the background; it wakes the service worker instead", async () => {
+    const p = project(MV3);
+    cdpTargets = [
+      { id: "nt", type: "page", url: `chrome-extension://${p.id}/newtab.html`, title: "NT" },
+      { id: "dw", type: "worker", url: `chrome-extension://${p.id}/worker.js`, title: "" },
+    ];
+
+    const result = JSON.parse(
+      await evalTool.handler({ projectPath: p.dir, context: "background", expression: "1" }),
+    );
+
+    expect(result.ok).toBe(true);
+    expect(otherCommands.map((c) => c.method)).toContain("ServiceWorker.startWorker");
+    expect(evaluations[0].sessionId).toBe("session-sw-woken");
+  });
+
   it("wakes an idle worker through ServiceWorker.startWorker from a page session and evaluates in it", async () => {
     const p = project(MV3);
     cdpTargets = [

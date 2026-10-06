@@ -110,6 +110,20 @@ function closedShadowWalkerCode(cap: number): string {
   `;
 }
 
+/* @invariant A MATCH PATTERN PICKS BY PATTERN. The picker was a substring
+   test, so https://www.youtube.com/* matched no tab. */
+export function matchPatternRegexSource(pattern: string): string {
+  if (pattern === "<all_urls>") return "^(https?|file|ftp):";
+  const m = /^(\*|https?|file|ftp|wss?):\/\/([^/]*)(\/.*)?$/.exec(pattern);
+  if (!m) return "^" + pattern.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*") + "$";
+  const scheme = m[1] === "*" ? "https?" : m[1];
+  const host = m[2] === "*" ? "[^/]*" : m[2].startsWith("*.")
+    ? "([^/]*\\.)?" + m[2].slice(2).replace(/[.]/g, "\\.")
+    : m[2].replace(/[.]/g, "\\.");
+  const pathPart = (m[3] ?? "/").replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*");
+  return "^" + scheme + "://" + host + pathPart + "$";
+}
+
 export function executeScriptExpression(
   urlFilter: string | undefined,
   code: string,
@@ -119,7 +133,9 @@ export function executeScriptExpression(
     typeof tabId === "number"
       ? `tabs.find(function (t) { return t.id === ${tabId}; })`
       : urlFilter
-        ? `tabs.find(function (t) { return String(t.url || "").toLowerCase().indexOf(${JSON.stringify(urlFilter.toLowerCase())}) !== -1; })`
+        ? /\*|<all_urls>/.test(urlFilter)
+          ? `tabs.find(function (t) { return new RegExp(${JSON.stringify(matchPatternRegexSource(urlFilter))}).test(String(t.url || "")); })`
+          : `tabs.find(function (t) { return String(t.url || "").toLowerCase().indexOf(${JSON.stringify(urlFilter.toLowerCase())}) !== -1; })`
         : `(tabs.find(function (t) { return t.active; }) || tabs[0])`;
   return `browser.tabs.query({}).then(function (tabs) {
     var tab = ${pick};

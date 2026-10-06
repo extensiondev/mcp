@@ -47,7 +47,7 @@ type EvaluateResponse = {
 };
 
 export type ExtensionPageEval =
-  | { ok: true; value: unknown }
+  | { ok: true; value: unknown; note?: string }
   | { ok: false; message: string; thrown: boolean; timedOut?: boolean };
 
 function stripHash(url: string): string {
@@ -70,6 +70,11 @@ export const WORKER_TARGET_TYPES = new Set([
   "background_page",
   "worker",
 ]);
+
+/* @invariant A DEDICATED WORKER IS NOT THE BACKGROUND: it has no chrome.*
+   and lives beside an idle service worker, so taking the first listed
+   worker ran the expression there with no wake attempted. */
+export const BACKGROUND_TARGET_TYPES = new Set(["service_worker", "background_page"]);
 
 /* @invariant The background has no page target: an MV3 service worker and an
    MV2 background page are targets of their own types, and Runtime.evaluate on
@@ -186,6 +191,19 @@ export async function findExtensionPageTargets(
   return "targets" in read ? read.targets : [];
 }
 
+/* @invariant A VALUE JSON CANNOT CARRY IS SAID, NOT PASSED OFF. NaN,
+   Infinity, -0 and BigInt come back from the protocol as strings in
+   unserializableValue, and undefined comes back as null; the caller sees the
+   converted value with a note naming the conversion. */
+export function remoteValueNote(result: RemoteObject | undefined): string | undefined {
+  if (!result) return undefined;
+  if (result.type === "undefined") return "the expression returned undefined, which is answered as null";
+  if (typeof result.unserializableValue === "string") {
+    return `the expression returned ${result.unserializableValue}${result.type === "bigint" ? " (a BigInt)" : ""}, which JSON cannot carry, so value holds it as the string "${result.unserializableValue}"`;
+  }
+  return undefined;
+}
+
 function readRemoteValue(result: RemoteObject | undefined): unknown {
   if (!result) return null;
   if ("value" in result) return result.value;
@@ -272,7 +290,8 @@ export async function evaluateOnExtensionPage(
         message: describeException(response.exceptionDetails),
       };
     }
-    return { ok: true, value: readRemoteValue(response?.result) };
+    const note = remoteValueNote(response?.result);
+    return { ok: true, value: readRemoteValue(response?.result), ...(note ? { note } : {}) };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     if (/timed out/i.test(message)) {

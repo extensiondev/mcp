@@ -62,10 +62,10 @@ describe("eval default context", () => {
     expect(idx).toBeGreaterThan(-1);
     expect(calls[0][idx + 1]).toBe("page");
     expect(result.ok).toBe(true);
-    expect(result.value.defaultedContext).toBe("page");
-    expect(result.value.result).toBe(42);
-    expect(result.warnings[0]).toContain("CSP");
+    expect(result.value).toBe(42);
+    expect(result.warnings[0]).toContain('defaulted to "page"');
     expect(result.warnings[0]).toContain('context: "background"');
+    expect(result.warnings[0]).not.toMatch(/works on Firefox\/MV2/);
   });
 
   it("leaves an explicit background context untouched on Chromium MV3", async () => {
@@ -151,8 +151,9 @@ describe("eval default context", () => {
     );
 
     expect(result.ok).toBe(false);
-    expect(result.value.defaultedContext).toBe("page");
+    expect(result.warnings.join(" ")).toContain('defaulted to "page"');
     expect(result.hint).toContain("Navigate the dev browser");
+    expect(result.hint).toMatch(/outside the extension's host permissions/);
     expect(result.hint).toContain("listTabs: true");
   });
 

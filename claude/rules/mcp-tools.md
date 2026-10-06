@@ -33,7 +33,7 @@ Run a test stage against a live dev session: state expectations and read one ver
 | `projectPath` | string | yes |  | Extension project root (needs a live dev session) |
 | `expect` | array of object | yes |  | One object per expectation, each { assert: <check id>, ...args }. background-worker-booted: no args. surface-rendered: surface (popup, options, sidebar, newtab, history, bookmarks), optional selector and minNodes. content-script-injected: url. storage-key-present: key, optional area (default local), equals, context. console-errors-empty: optional context (array), since (seq cursor), ignore (substrings). |
 | `browser` | string | no |  | Session browser; defaults to this project's live session |
-| `timeout` | number | no |  | Command timeout in ms (default 5000) |
+| `timeout` | number | no |  | Command timeout in ms. When omitted, the default depends on the route: 30000 through the dev session's control channel, 10000 over the Firefox debugger protocol, and 15000 per command over the Chromium debug port. |
 
 ## extension_auth
 
@@ -148,11 +148,11 @@ Take a shallow structured DOM snapshot of one chosen surface through the agent b
 | `maxBytes` | number | no | `262144` |  |
 | `withConsole` | number \| boolean | no |  | Also include recent console lines. A number is how many; true means 50. |
 | `browser` | string | no |  | Session browser; defaults to this project's live session |
-| `timeout` | number | no |  | Command timeout in ms (default 5000) |
+| `timeout` | number | no |  | Command timeout in ms. When omitted, the default depends on the route: 30000 through the dev session's control channel, 10000 over the Firefox debugger protocol, and 15000 per command over the Chromium debug port. |
 
 ## extension_eval
 
-Evaluate an expression in a running extension context. Start the session with allowEval:true (extension_dev), which writes a 0600 session token; without that token every route of this tool, the debug port included, answers eval-disabled. Context defaults to 'background', except on a Chromium MV3 session (the default template) where it defaults to 'page', the active tab, because the MV3 service worker CSP blocks eval; pass context:'background' to target the worker anyway and get that explanation back. For content and page, pass `url` to pick the tab, or omit both `url` and `tab` for the active tab; a numeric `tab` only disambiguates. Extension surfaces (popup, options, sidebar, devtools) and override pages (newtab, history, bookmarks) need no tab id but must already be open: open one with extension_open first, because a closed one returns an explicit error. On a Chromium MV3 session those pages, and context:'page' with a chrome-extension:// url, evaluate over CDP, the inspector path the extension page CSP does not govern; elsewhere they evaluate over the in-bundle relay. On Firefox a document whose content security policy forbids eval (the extension's own pages, or a site's) is evaluated over the debugger protocol instead, which takes one expression; a page inside the extension that is no declared surface (pages/*) is reached the same way by context:'page' and its moz-extension:// url once a tab shows it. Call extension_dom_snapshot with listTabs:true to enumerate {tabId, url, title}.
+Evaluate an expression in a running extension context. Start the session with allowEval:true (extension_dev), which writes a 0600 session token; without that token every route of this tool, the debug port included, answers eval-disabled. Context defaults to 'background', except on a Chromium MV3 session (the default template) where it defaults to 'page', the active tab; pass context:'background' to evaluate in the service worker, which on Chromium goes over the debug port. Debug-port evaluates run with a user gesture, so gesture-gated APIs (permissions.request, sidePanel.open) can succeed here and still fail when the extension's own code calls them. For content and page, pass `url` to pick the tab, or omit both `url` and `tab` for the active tab; a numeric `tab` only disambiguates. Extension surfaces (popup, options, sidebar, devtools) and override pages (newtab, history, bookmarks) need no tab id but must already be open: open one with extension_open first, because a closed one returns an explicit error. On a Chromium MV3 session those pages, and context:'page' with a chrome-extension:// url, evaluate over CDP, the inspector path the extension page CSP does not govern; elsewhere they evaluate over the in-bundle relay. On Firefox a document whose content security policy forbids eval (the extension's own pages, or a site's) is evaluated over the debugger protocol instead, which takes one expression; a page inside the extension that is no declared surface (pages/*) is reached the same way by context:'page' and its moz-extension:// url once a tab shows it. Call extension_dom_snapshot with listTabs:true to enumerate {tabId, url, title}.
 
 | input | type | required | default | description |
 | --- | --- | --- | --- | --- |
@@ -162,7 +162,7 @@ Evaluate an expression in a running extension context. Start the session with al
 | `url` | string | no |  | content/page: pick the tab by url (match pattern, then substring). Preferred over `tab`. |
 | `tab` | number | no |  | Numeric chrome.tabs id, only to disambiguate when several tabs match. |
 | `browser` | string | no |  | Session browser; defaults to this project's live session |
-| `timeout` | number | no |  | Command timeout in ms (default 5000) |
+| `timeout` | number | no |  | Command timeout in ms. When omitted, the default depends on the route: 30000 through the dev session's control channel, 10000 over the Firefox debugger protocol, and 15000 per command over the Chromium debug port. |
 
 ## extension_inspect
 
@@ -232,7 +232,7 @@ Open an extension surface, or replay an event, in a running session. Pass surfac
 | `tab` | number | no |  | With `url`: navigate this chrome.tabs id in place instead of opening a new tab (rides the engine's navigate verb, so the session needs allowControl: true). Without it an existing page is never taken over. |
 | `asTab` | boolean | no | `false` | popup/options/sidebar: render the surface's document in a real tab instead of a popup window. This is how you inspect a surface HEADLESSLY, and it is applied automatically when a headless session refuses to open one. Same page and APIs, but no popup sizing and window.close() closes the tab. |
 | `browser` | string | no |  | Session browser; defaults to this project's live session |
-| `timeout` | number | no |  | Command timeout in ms (default 5000) |
+| `timeout` | number | no |  | Command timeout in ms. When omitted, the default depends on the route: 30000 through the dev session's control channel, 10000 over the Firefox debugger protocol, and 15000 per command over the Chromium debug port. |
 
 ## extension_preview_web
 
@@ -319,7 +319,7 @@ Reload a running extension's background context, or a tab. Start the session wit
 | `context` | "background" \| "content" \| "page" | no | `"background"` |  |
 | `tab` | number | no |  | For content/page: a specific tab id |
 | `browser` | string | no |  | Session browser; defaults to this project's live session |
-| `timeout` | number | no |  | Command timeout in ms (default 5000) |
+| `timeout` | number | no |  | Command timeout in ms. When omitted, the default depends on the route: 30000 through the dev session's control channel, 10000 over the Firefox debugger protocol, and 15000 per command over the Chromium debug port. |
 
 ## extension_shares
 
@@ -381,7 +381,7 @@ Read or write chrome.storage in a running extension. Every call runs in the exte
 | `key` | string | no |  | Key to get or set |
 | `value` | any | no |  | Value to set (any JSON value); required for action=set |
 | `browser` | string | no |  | Session browser; defaults to this project's live session |
-| `timeout` | number | no |  | Command timeout in ms (default 5000) |
+| `timeout` | number | no |  | Command timeout in ms. When omitted, the default depends on the route: 30000 through the dev session's control channel, 10000 over the Firefox debugger protocol, and 15000 per command over the Chromium debug port. |
 
 ## extension_submit
 

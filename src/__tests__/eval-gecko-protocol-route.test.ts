@@ -365,6 +365,38 @@ describe("a web page whose own policy forbids eval, on a Gecko build with no tab
     expect(result.ok).toBe(true);
     expect(result.value).toBe("over-protocol");
     expect(rdpCalls[0].picked?.actor).toBe("tab2");
+    expect(result.warnings.join("\n")).toMatch(/Evaluated in the tab showing http:\/\/127\.0\.0\.1:8765\/csp\.html \("csp host"\)/);
+  });
+
+  it("says when several tabs matched the url and one was picked", async () => {
+    const dir = project(MV3);
+    respond = () => refusedByCsp();
+    openTabs = [
+      { actor: "tab1", url: "http://127.0.0.1:8765/csp.html", title: "one" },
+      { actor: "tab2", url: "http://127.0.0.1:8765/csp.html", title: "two" },
+    ];
+    const result = JSON.parse(
+      await evalTool.handler({ projectPath: dir, browser: "firefox", context: "page", url: "http://127.0.0.1:8765/csp.html", expression: "1" }),
+    );
+    expect(result.warnings.join("\n")).toMatch(/2 open tabs matched the url/);
+  });
+
+  it("names a document that went away mid-call and one the protocol could not reach", async () => {
+    const dir = project(MV3);
+    respond = () => refusedByCsp();
+    openTabs = [{ actor: "tab2", url: "http://127.0.0.1:8765/csp.html", title: "csp host" }];
+    rdpAnswer = () => ({ ok: false, name: "EvalLost", message: "the document went away" });
+    const lost = JSON.parse(
+      await evalTool.handler({ projectPath: dir, browser: "firefox", context: "page", url: "http://127.0.0.1:8765/csp.html", expression: "1" }),
+    );
+    expect(lost.status).toBe("eval-lost");
+    expect(lost.hint).toMatch(/may have run in part/);
+    rdpAnswer = () => ({ ok: false, name: "Unsupported", message: "no console actor" });
+    const unsupported = JSON.parse(
+      await evalTool.handler({ projectPath: dir, browser: "firefox", context: "page", url: "http://127.0.0.1:8765/csp.html", expression: "1" }),
+    );
+    expect(unsupported.status).toBe("eval-unsupported");
+    expect(unsupported.hint).toMatch(/never ran/);
   });
 
   it("explains the page's policy, not the extension's, when only a tab id names the page", async () => {

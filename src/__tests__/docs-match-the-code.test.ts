@@ -44,7 +44,11 @@ function looseJson(objectText: string): Record<string, unknown> | null {
 
 describe("109: the docs say what the code does", () => {
   it("renders the tool reference from the schemas, and the file on disk is that rendering", () => {
-    expect(read("claude/rules/mcp-tools.md")).toBe(renderToolsDoc(tools.map((t) => t.schema)) + "\n");
+    const rendered = renderToolsDoc(tools.map((t) => t.schema)) + "\n";
+    if (process.env.WRITE_TOOLS_DOC === "1") {
+      fs.writeFileSync(fileURLToPath(new URL("../../claude/rules/mcp-tools.md", import.meta.url)), rendered);
+    }
+    expect(read("claude/rules/mcp-tools.md")).toBe(rendered);
     for (const tool of tools) expect(read("claude/rules/mcp-tools.md")).toContain(`## ${tool.schema.name}`);
   });
 
