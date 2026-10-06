@@ -62,8 +62,9 @@ vi.mock("../lib/act", async (importOriginal) => {
 });
 
 const navigations: string[] = [];
+let bridgeTabs: Array<{ tabId: number; url: string; title: string }> = [];
 vi.mock("../lib/bridge-tabs", () => ({
-  listBridgeTabs: async () => ({ tabs: [] }),
+  listBridgeTabs: async () => ({ tabs: bridgeTabs }),
   resolveBridgeBaseUrl: async () => "moz-extension://abc/",
   navigateToUrlViaBridge: async (_p: string, _b: string, url: string) => {
     navigations.push(url);
@@ -99,6 +100,8 @@ afterEach(() => {
   openResult = refusal;
   panelOpen = true;
   probeOverride = null;
+  bridgeTabs = [];
+  open.renderedGeckoSurfaces.clear();
   for (const d of dirs.splice(0)) fs.rmSync(d, { recursive: true, force: true });
 });
 
@@ -168,6 +171,23 @@ describe("extension_open sidebar on Gecko when the engine names a Chromium API i
     expect(warnings).toMatch(/whether the panel is open could not be read/);
     expect(warnings).toMatch(/E_NO_SESSION/);
     expect(warnings).not.toMatch(/panel is not open now/);
+  });
+
+  /*. */
+  it("calls the panel unverified when a tab it rendered earlier shows the same document", async () => {
+    const dir = project(MANIFEST);
+    panelOpen = false;
+    const first = JSON.parse(await open.handler({ projectPath: dir, browser: "firefox", surface: "sidebar" }));
+    expect(first.value.renderedAsTab).toBeDefined();
+    bridgeTabs = [{ tabId: 3, url: "moz-extension://abc/sidebar/index.html", title: "Sidebar" }];
+    panelOpen = true;
+
+    const second = JSON.parse(await open.handler({ projectPath: dir, browser: "firefox", surface: "sidebar" }));
+
+    expect(second.ok).toBe(true);
+    expect(second.status).toBe("already-open-unverified");
+    expect(second.value.alreadyOpen).toBe("unverified");
+    expect(second.warnings.join("\n")).toMatch(/rendered earlier shows the same sidebar document/);
   });
 
   it("says the manifest declares no sidebar rather than probing", async () => {

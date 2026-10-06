@@ -358,6 +358,7 @@ async function pollUntil<T>(
 export async function openSidePanelWithSyntheticGesture(
   port: number,
   hostUrl: string,
+  excludeTargetIds: ReadonlySet<string> = new Set(),
 ): Promise<SidePanelGestureOutcome> {
   const cdp = new CDPClient();
   let hostId: string | null = null;
@@ -465,7 +466,7 @@ export async function openSidePanelWithSyntheticGesture(
     const panel = await pollUntil(
       async () => {
         const matches = (await findExtensionPageTargets(port, hostUrl)).filter(
-          (t) => t.targetId !== excluded,
+          (t) => t.targetId !== excluded && !excludeTargetIds.has(t.targetId),
         );
         return matches.length ? matches[0] : null;
       },

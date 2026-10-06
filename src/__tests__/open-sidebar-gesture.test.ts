@@ -44,6 +44,7 @@ type Target = { id: string; type: string; url: string; title?: string };
 let cdpTargets: Target[] = [];
 let panelRejects: string | null = null;
 let hostStaysListedAfterClose = false;
+let panelAppears = true;
 const commands: Array<{
   method: string;
   params: Record<string, unknown>;
@@ -116,10 +117,12 @@ vi.mock("../lib/cdp", () => {
             phaseMessage = panelRejects;
           } else {
             phase = "opened";
-            cdpTargets = [
-              ...cdpTargets,
-              { id: "panel", type: "page", url: hostUrl, title: "Panel" },
-            ];
+            if (panelAppears) {
+              cdpTargets = [
+                ...cdpTargets,
+                { id: "panel", type: "page", url: hostUrl, title: "Panel" },
+              ];
+            }
           }
         }
         return {};
@@ -193,6 +196,8 @@ afterEach(() => {
   cdpTargets = [];
   panelRejects = null;
   hostStaysListedAfterClose = false;
+  panelAppears = true;
+  open.renderedTabTargets.clear();
   armed = false;
   phase = null;
   phaseMessage = undefined;
@@ -272,6 +277,22 @@ describe("extension_open sidebar on Chromium when Chrome demands a user gesture"
     expect(closed?.params.targetId).toBe("host");
     expect(cdpTargets.find((t) => t.id === "host")).toBeUndefined();
   });
+
+  /*. */
+  it("never mistakes a tab this server rendered earlier for the panel", async () => {
+    const p = project();
+    const rendered = JSON.parse(await open.handler({ projectPath: p.dir, surface: "sidebar", asTab: true }));
+    expect(rendered.ok).toBe(true);
+    const renderedId = rendered.value.target.targetId;
+    expect(open.renderedTabTargets.has(renderedId)).toBe(true);
+    panelAppears = false;
+
+    const result = JSON.parse(await open.handler({ projectPath: p.dir, surface: "sidebar" }));
+
+    expect(result.value?.gesture).toBeUndefined();
+    expect(result.value?.surfaceTarget?.targetId).not.toBe(renderedId);
+    expect(JSON.stringify(result)).toMatch(/no page target for .* appeared|rendered/);
+  }, 20_000);
 
   it("never mistakes the host tab for the panel when the browser still lists it after close", async () => {
     const p = project();

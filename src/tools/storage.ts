@@ -11,14 +11,14 @@ import {
   SESSION_BROWSER,
   SESSION_PROJECT_PATH,
 } from "../lib/common-schema";
-import { runActVerb, type ActArgs } from "../lib/act";
+import { actFrameJson, addWarning, patchValue, runActVerb, type ActArgs } from "../lib/act";
 import { envelope } from "../lib/envelope";
 import { resolveSessionBrowser } from "../lib/session-browser";
 
 export const schema = {
   name: "extension_storage",
   description:
-    "Read or write chrome.storage in a running extension. Start the session with allowControl:true (extension_dev). Set one key per call: there is no bulk-object set.",
+    "Read or write chrome.storage in a running extension. Every call runs in the extension's background (the engine honours no context), so it proves nothing about what a content script or page can read. A set is read back and the answer says whether the stored value matches. Start the session with allowControl:true (extension_dev). Set one key per call: there is no bulk-object set.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -36,11 +36,6 @@ export const schema = {
       key: { type: "string", description: "Key to get or set" },
       value: {
         description: "Value to set (any JSON value); required for action=set",
-      },
-      context: {
-        type: "string",
-        enum: ["background", "popup", "options", "sidebar", "content"],
-        default: "background",
       },
       browser: SESSION_BROWSER,
       timeout: CALL_TIMEOUT,
@@ -89,8 +84,65 @@ export async function handler(
     }
     cli.push("--value", JSON.stringify(args.value));
   }
-  if (args.context) cli.push("--context", args.context);
   cli.push("--browser", browser);
   if (args.timeout != null) cli.push("--timeout", String(args.timeout));
-  return runActVerb(cli, args.projectPath, args.timeout, schema.name);
+  const raw = await runActVerb(cli, args.projectPath, args.timeout, schema.name);
+  /* @invariant THE ENGINE READS NO CONTEXT FOR STORAGE and `{set: [key]}` is
+     the request echoed, not a read. A caller's context is
+     named as not honoured, and a set is read back before it is called set. */
+  let parsed: any;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return raw;
+  }
+  if (!parsed || typeof parsed !== "object") return raw;
+  if (args.context && args.context !== "background") {
+    addWarning(
+      parsed,
+      `context: "${args.context}" is not honoured: the engine runs every storage call in the background, so this says nothing about what the ${args.context} can read.`,
+    );
+  }
+  if (args.action === "set" && parsed.ok === true && args.key !== undefined) {
+    const readBackRaw = await runActVerb(
+      ["storage", "get", args.projectPath, ...(args.area ? ["--area", args.area] : []), "--key", args.key, "--browser", browser, ...(args.timeout != null ? ["--timeout", String(args.timeout)] : [])],
+      args.projectPath,
+      args.timeout,
+      schema.name,
+    );
+    let readBack: any;
+    try {
+      readBack = JSON.parse(readBackRaw);
+    } catch {
+      readBack = null;
+    }
+    const stored =
+      readBack?.ok === true && readBack.value && typeof readBack.value === "object" && args.key in readBack.value
+        ? (readBack.value as Record<string, unknown>)[args.key]
+        : undefined;
+    const matches = readBack?.ok === true && JSON.stringify(stored) === JSON.stringify(args.value);
+    patchValue(parsed, {
+      readBack: {
+        key: args.key,
+        ...(readBack?.ok === true ? { value: stored === undefined ? null : stored, present: stored !== undefined } : { unreadable: String(readBack?.error?.message ?? readBackRaw.slice(0, 200)) }),
+        matches,
+      },
+    });
+    if (!matches) {
+      parsed.ok = false;
+      parsed.status = "set-unconfirmed";
+      parsed.error = {
+        code: "E_CONTROL_ENVELOPE",
+        name: "SetUnconfirmed",
+        message:
+          readBack?.ok === true
+            ? `The engine accepted the set, but reading "${args.key}" back from storage.${args.area ?? "local"} answered ${stored === undefined ? "no such key" : JSON.stringify(stored)}, not the value sent.`
+            : `The engine accepted the set, but "${args.key}" could not be read back from storage.${args.area ?? "local"}: ${String(readBack?.error?.message ?? readBackRaw.slice(0, 200))}.`,
+      };
+      parsed.hint = "A storage.onChanged listener or a later write in the extension may have changed it; read it again with action: 'get', or check the listener.";
+    } else {
+      parsed.status = "set";
+    }
+  }
+  return actFrameJson(parsed);
 }

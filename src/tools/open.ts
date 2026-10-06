@@ -12,6 +12,7 @@ import {
   SESSION_PROJECT_PATH,
 } from "../lib/common-schema";
 import fs from "node:fs";
+import path from "node:path";
 import {
   runActVerb,
   actFrameJson,
@@ -35,6 +36,7 @@ import { manifestCandidates } from "../lib/project-manifest";
 import {
   navigateToUrlViaBridge,
   resolveBridgeBaseUrl,
+  listBridgeTabs,
 } from "../lib/bridge-tabs";
 import { openSidePanelWithSyntheticGesture } from "../lib/cdp-extension-page";
 import { openDevToolsPanel } from "../lib/cdp-devtools";
@@ -42,6 +44,20 @@ import { listPageTargets, matchTargetsByUrl } from "../lib/cdp-targets";
 import { sessionGuestIdentity, unpackedExtensionId } from "../lib/extension-identity";
 
 export const OVERRIDE_SURFACES = ["newtab", "history", "bookmarks"];
+
+/* @invariant A TAB THIS SERVER RENDERED IS NEVER COUNTED AS THE SURFACE. A
+   popup or sidebar document rendered as a tab by an earlier call matched the
+   url the confirmation polls for, so the next call reported the window open
+  . The target ids of rendered tabs are remembered here
+   for the life of the server and excluded from every confirmation; on
+   Gecko, where tabs are not target ids, the rendered document url is
+   remembered per project and surface. */
+export const renderedTabTargets = new Set<string>();
+export const renderedGeckoSurfaces = new Map<string, string>();
+/* The side panel persists across focus changes, so a target at its document
+   that this server did not render is the live panel; a popup window closes on
+   blur and its tab copy is reused as entry 21 pinned. */
+const PERSISTENT_WINDOW_SURFACES = ["sidebar"];
 
 type SettledTarget = {
   id: string;
@@ -70,6 +86,7 @@ async function pollForTarget(
   budgetMs: number,
   navigatedTargetId?: string,
   previousUrl?: string,
+  excludeIds?: ReadonlySet<string>,
 ): Promise<PolledTarget> {
   const deadline = Date.now() + budgetMs;
   const wanted = url.replace(/#.*$/, "");
@@ -83,6 +100,7 @@ async function pollForTarget(
       for (const t of targets) {
         const tUrl = String(t.url ?? "");
         if (t.type !== "page") continue;
+        if (excludeIds?.has(String(t.id))) continue;
         if (navigatedTargetId && String(t.id) !== navigatedTargetId) continue;
         const title = typeof t.title === "string" ? t.title : undefined;
         if (tUrl === wanted || tUrl.startsWith(wanted)) {
@@ -178,6 +196,7 @@ function isDisposableTab(
 export interface NavigateOptions {
   reuse?: "blank" | "surface";
   tab?: number;
+  avoidUrls?: string[];
 }
 
 async function navigateToUrlViaWebDriver(
@@ -270,8 +289,15 @@ export async function navigateToUrl(
     const browserWsUrl = await CDPClient.discoverBrowserWsUrl(resolved.port);
     await cdp.connect(browserWsUrl);
 
-    const reusable = pageTargets.find((t) =>
-      isDisposableTab(String(t.url ?? ""), url, reuse),
+    /* @invariant A LIVE POPUP OR SIDE PANEL IS NEVER NAVIGATED IN PLACE: its
+       target is a page of the extension's origin like any other, and a
+       surface re-render used to take it over and call it a tab. A target at a window-hosted document is reused only when
+       this server rendered it as a tab itself. */
+    const avoid = new Set(options.avoidUrls ?? []);
+    const reusable = pageTargets.find(
+      (t) =>
+        isDisposableTab(String(t.url ?? ""), url, reuse) &&
+        (!avoid.has(String(t.url ?? "").replace(/#.*$/, "")) || renderedTabTargets.has(String(t.id))),
     );
     let navigatedTargetId: string | undefined;
     let previousUrl: string | undefined;
@@ -712,8 +738,14 @@ async function openSurfaceAsTab(
     url = `${base}${doc}`;
     extensionId = base.replace(/^.*:\/\//, "").replace(/\/$/, "");
   }
+  const avoidUrls = isChromiumFamily(browser)
+    ? PERSISTENT_WINDOW_SURFACES.map((s) => surfaceDocument(projectPath, browser, s))
+        .filter((d): d is string => typeof d === "string")
+        .map((d) => `chrome-extension://${extensionId}/${d}`)
+    : [];
   const raw = await navigateToUrl(projectPath, browser, url, undefined, {
     reuse: "surface",
+    avoidUrls,
   });
   try {
     const parsed = JSON.parse(raw);
@@ -725,6 +757,8 @@ async function openSurfaceAsTab(
       };
       patchValue(parsed, { renderedAsTab });
       const target = parsed.value?.target ?? parsed.target;
+      if (typeof target?.targetId === "string") renderedTabTargets.add(target.targetId);
+      if (!isChromiumFamily(browser)) renderedGeckoSurfaces.set(`${path.resolve(projectPath)}::${browser}::${surface}`, url);
       let popupBounds: { width: number; height: number; clamped: boolean } | null =
         null;
       if (
@@ -764,9 +798,6 @@ async function confirmSurfaceTarget(
   surface: string,
   raw: string,
 ): Promise<string> {
-  if (!isChromiumFamily(browser)) return raw;
-  const doc = surfaceDocument(projectPath, browser, surface);
-  if (!doc) return raw;
   let parsed: any;
   try {
     parsed = JSON.parse(raw);
@@ -774,13 +805,30 @@ async function confirmSurfaceTarget(
     return raw;
   }
   if (parsed?.ok === false) return raw;
+  /* @invariant AN UNCONFIRMED OPEN SAYS SO. Confirmation runs over CDP for a
+     document the manifest declares; every path that could not run it used
+     to return the engine's "opened" bare. */
+  const unconfirmed = (why: string): string => {
+    patchValue(parsed, { confirmed: false, confirmation: why });
+    addWarning(
+      parsed,
+      `The engine reported the ${surface} as opened, and this server could not confirm a document for it: ${why}. Read it with extension_dom_snapshot context: '${surface}' to be sure.`,
+    );
+    return actFrameJson(parsed);
+  };
+  if (!isChromiumFamily(browser)) {
+    return unconfirmed(`confirmation reads the CDP target list, which ${browser} has none of`);
+  }
+  const doc = surfaceDocument(projectPath, browser, surface);
+  if (!doc) return unconfirmed("the manifest declares no document for this surface");
   const resolved = await resolveCdpPort(projectPath, browser);
   const extensionId = resolved
     ? await resolveExtensionId(projectPath, browser)
     : null;
-  if (!resolved || !extensionId) return raw;
+  if (!resolved) return unconfirmed("no CDP port is recorded for this session");
+  if (!extensionId) return unconfirmed("the extension id could not be resolved from the session");
   const wanted = `chrome-extension://${extensionId}/${doc}`;
-  const settled = await pollForTarget(resolved.port, wanted, 3000);
+  const settled = await pollForTarget(resolved.port, wanted, 3000, undefined, undefined, renderedTabTargets);
   if (targetsUnreadable(settled)) {
     return envelope({
       ok: false,
@@ -797,6 +845,7 @@ async function confirmSurfaceTarget(
   }
   if (settled) {
     patchValue(parsed, {
+      confirmed: true,
       surfaceTarget: { targetId: settled.id, url: settled.url },
     });
     return actFrameJson(parsed);
@@ -999,14 +1048,22 @@ export async function handler(
     }
   }
 
-  if (args.surface === "popup") {
+  /* @invariant EVERY WINDOW SURFACE IS CHECKED AGAINST THE MANIFEST BEFORE
+     THE ENGINE IS ASKED. The engine answers `opened: "options"` from
+     chrome.runtime.openOptionsPage without reading lastError, so an
+     extension with no options page read as opened. */
+  if (["popup", "options", "sidebar"].includes(args.surface)) {
     const declared = declaredSurfaces(args.projectPath, browser);
-    if (declared && !declared.includes("popup")) {
+    if (declared && !declared.includes(args.surface)) {
       return missingSurfaceError(
         args.projectPath,
         browser,
-        "popup",
-        "so there is no popup to open",
+        args.surface,
+        args.surface === "popup"
+          ? "so there is no popup to open"
+          : args.surface === "options"
+            ? "so there is no options page to open"
+            : "so there is no sidebar panel to open",
       );
     }
   }
@@ -1019,6 +1076,7 @@ export async function handler(
     const asTab = await openSurfaceAsTab(args.projectPath, browser, args.surface);
     try {
       const parsedTab = JSON.parse(asTab);
+      if (parsedTab?.status === "no-surface" || parsedTab?.status === "no-manifest") return asTab;
       if (parsedTab?.ok) {
         addWarning(
           parsedTab,
@@ -1437,17 +1495,37 @@ async function openGeckoSidebar(
         : typeof open.value?.meta?.url === "string"
           ? open.value.meta.url
           : undefined;
+    /* @invariant THE RELAY MATCHES ON CONTEXT ALONE, so a tab this server
+       rendered with the sidebar document answers a sidebar probe as readily
+       as the panel does. When such a tab is still listed,
+       "open" is unverified. */
+    const renderedUrl = renderedGeckoSurfaces.get(`${path.resolve(projectPath)}::${browser}::sidebar`);
+    let renderedTabListed = false;
+    if (renderedUrl) {
+      const listed = await listBridgeTabs(projectPath, browser);
+      renderedTabListed =
+        "tabs" in listed && listed.tabs.some((t) => t.url.replace(/#.*$/, "") === renderedUrl.replace(/#.*$/, ""));
+    }
     return envelope({
       ok: true,
       command: schema.name,
-      status: "already-open",
+      status: renderedTabListed ? "already-open-unverified" : "already-open",
       value: {
         surface: "sidebar",
         document: doc,
-        alreadyOpen: true,
+        alreadyOpen: renderedTabListed ? "unverified" : true,
         ...(url ? { url } : {}),
       },
-      hint: `The sidebar panel is open in the ${browser} window already: read it with extension_dom_snapshot context: 'sidebar' or run code in it with extension_eval context: 'sidebar'. ${GECKO_SIDEBAR_GESTURE}, and it did not need to.`,
+      ...(renderedTabListed
+        ? {
+            warnings: [
+              `A tab this server rendered earlier shows the same sidebar document (${renderedUrl}), and the relay answers a sidebar probe from either, so whether the real panel is open is unverified. Close that tab and retry to be sure.`,
+            ],
+          }
+        : {}),
+      hint: renderedTabListed
+        ? `The sidebar document answered the probe, from the panel or from the tab rendered earlier. Read it with extension_dom_snapshot context: 'sidebar'; ${GECKO_SIDEBAR_GESTURE}.`
+        : `The sidebar panel is open in the ${browser} window already: read it with extension_dom_snapshot context: 'sidebar' or run code in it with extension_eval context: 'sidebar'. ${GECKO_SIDEBAR_GESTURE}, and it did not need to.`,
     });
   }
   const fallback = await openSurfaceAsTab(projectPath, browser, "sidebar");
@@ -1501,6 +1579,7 @@ async function openSidebarThroughGesture(
     const outcome = await openSidePanelWithSyntheticGesture(
       resolved.port,
       hostUrl,
+      renderedTabTargets,
     );
     if (outcome.opened) {
       return envelope({
