@@ -616,24 +616,49 @@ interface ValidationPreflight {
   warnings: string[];
 }
 
+/* @invariant THREE STATES, NOT TWO. The gate used to collapse "the validator
+   threw" and "the validator could not read the manifest" into the same null
+   that `skipValidation` yields, so a build went on with no word that nothing
+   had been checked. A preflight that could not run is a
+   warning on whatever follows; a validator envelope that refused (an
+   unparseable manifest) carries its errors forward. */
+type PreflightOutcome =
+  | { state: "ran"; preflight: ValidationPreflight }
+  | { state: "could-not-run"; reason: string };
+
 async function validationPreflight(
   projectPath: string,
   browser: string,
-): Promise<ValidationPreflight | null> {
+): Promise<PreflightOutcome> {
   try {
     const manifestValidate = await import("./manifest-validate");
     const parsed = JSON.parse(
       await manifestValidate.handler({ projectPath, browsers: [browser] }),
     );
+    if (
+      parsed?.ok === false &&
+      /^manifest-(unreadable|not-found)$/.test(String(parsed?.status ?? ""))
+    ) {
+      return {
+        state: "could-not-run",
+        reason: String(parsed?.error?.message || parsed?.status || "the validator refused"),
+      };
+    }
     const value = parsed?.value ?? {};
     return {
-      valid: Boolean(value.valid),
-      buildBlocking: Boolean(value.buildBlocking),
-      errors: Array.isArray(value.errors) ? value.errors : [],
-      warnings: Array.isArray(value.warnings) ? value.warnings : [],
+      state: "ran",
+      preflight: {
+        valid: Boolean(value.valid),
+        buildBlocking: Boolean(value.buildBlocking),
+        errors: Array.isArray(value.errors) ? value.errors : [],
+        warnings: Array.isArray(value.warnings) ? value.warnings : [],
+      },
     };
-  } catch {
-    return null;
+  } catch (err) {
+    return {
+      state: "could-not-run",
+      reason: `the validator threw: ${(err as Error)?.message ?? String(err)}`,
+    };
   }
 }
 
@@ -723,9 +748,16 @@ export async function handler(args: {
     carrierNotes.push(carrierCleanup.note);
   }
 
-  const preflight = args.skipValidation
+  const preflightOutcome = args.skipValidation
     ? null
     : await validationPreflight(args.projectPath, browser);
+  const preflight =
+    preflightOutcome?.state === "ran" ? preflightOutcome.preflight : null;
+  if (preflightOutcome?.state === "could-not-run") {
+    carrierNotes.push(
+      `Manifest validation did not run before this build (${preflightOutcome.reason}), so nothing below was checked against the manifest rules. Run extension_manifest_validate on its own to see why.`,
+    );
+  }
   if (preflight?.buildBlocking) {
     return envelope({
       ok: false,

@@ -423,3 +423,28 @@ describe("extension_build believes the disk, not the exit code", () => {
     expect(result.status).toBe("built");
   });
 });
+
+describe("extension_build says when its manifest gate could not run", () => {
+  it("warns instead of going quiet when the validator throws on a manifest shape", async () => {
+    const dir = project({
+      manifest_version: 3,
+      name: "Fixture",
+      version: "1.0.0",
+      permissions: { storage: true },
+    });
+
+    const result = JSON.parse(await build.handler({ projectPath: dir }));
+
+    expect(result.ok).toBe(true);
+    expect(result.warnings.join(" ")).toContain("Manifest validation did not run");
+  });
+
+  it("warns when the manifest cannot be parsed and the engine builds anyway", async () => {
+    const dir = project({ manifest_version: 3, name: "Fixture", version: "1.0.0" });
+    fs.writeFileSync(path.join(dir, "src", "manifest.json"), "\ufeff{ \"manifest_version\": 3, \"name\": \"Fixture\", \"version\": \"1.0.0\" }");
+
+    const result = JSON.parse(await build.handler({ projectPath: dir }));
+
+    expect(result.warnings.join(" ")).toContain("Manifest validation did not run");
+  });
+});
