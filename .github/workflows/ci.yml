@@ -94,6 +94,42 @@ jobs:
           EXTENSION_MCP_CLI_VERSION: ${{ matrix.version }}
         run: pnpm test
 
+  # Windows ran no cell of this suite until 2026-10-06, and the first run of
+  # the stop cells on a Windows host found every stop answering stopped: false
+  # and every dev replace refusing. One job on the pinned
+  # engine keeps that platform under every push; the engine matrix stays on
+  # Ubuntu, where the engine-version questions live.
+  verify-windows:
+    runs-on: windows-latest
+    name: verify (windows)
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v5
+        with:
+          version: 10.19.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --no-frozen-lockfile
+
+      - name: Build
+        run: pnpm compile
+
+      - name: Typecheck (src and tests)
+        run: pnpm typecheck
+
+      - name: Test
+        run: pnpm test
+
   # The engine pin is the second surface that goes stale without any commit
   # going wrong. This package spawns whatever `extension-develop` its own
   # dependencies name, so an engine release that nobody mirrors here leaves
@@ -230,7 +266,7 @@ jobs:
   # main to watch it close.
   nightly-alert:
     if: always() && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
-    needs: [engines, verify, registry-listing, engine-pin]
+    needs: [engines, verify, verify-windows, registry-listing, engine-pin]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
