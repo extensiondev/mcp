@@ -10,7 +10,7 @@ let domainInfo: Record<string, { name: string; version: string }> = {};
 
 vi.mock("../lib/cdp-port", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../lib/cdp-port")>();
-  return { ...actual, resolveCdpPort: async () => ({ port: 9222 }) };
+  return { ...actual, resolveCdpPort: async () => ({ port: 9222, source: "contract" as const }) };
 });
 
 vi.mock("../lib/cdp", () => {

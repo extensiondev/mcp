@@ -203,12 +203,13 @@ export async function pollDeviceGrant(args: {
         ...refusal,
       };
     } else if (!error && !res.ok) {
+      const retryAfter = String(res.headers?.get?.("retry-after") ?? "").trim();
       return {
         ok: false,
         reason: "error",
         message: `Device token poll failed (${res.status}): ${String(
           data.message || text || "no response body",
-        ).slice(0, 200)}`,
+        ).slice(0, 200)}${res.status === 429 ? ` The platform rate-limited this poll${retryAfter ? ` and asks for ${retryAfter} seconds before the next one` : ""}; the device code is still pending.` : ""}`,
         ...refusal,
       };
     }

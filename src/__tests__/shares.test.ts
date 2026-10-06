@@ -600,7 +600,7 @@ describe("extension_shares", () => {
     expect(fs.readFileSync(sharedPreviewsPath(dir), "utf8")).toBe(before);
   });
 
-  it("does not claim a permanent revocation the platform did not confirm", async () => {
+  it("does not claim a revocation over a body with revoked false, a shape the platform does not send today but this client must not trust either way", async () => {
     global.fetch = listingFetch({ artifactId: LOCAL_ID, revoked: false });
     const out = JSON.parse(
       await handler({ action: "revoke", artifactId: LOCAL_ID }),

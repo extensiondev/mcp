@@ -37,7 +37,7 @@ vi.mock("../lib/act", async (importOriginal) => {
 
 vi.mock("../lib/cdp-port", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../lib/cdp-port")>();
-  return { ...actual, resolveCdpPort: async () => ({ port: 9222 }) };
+  return { ...actual, resolveCdpPort: async () => ({ port: 9222, source: "contract" as const }) };
 });
 
 type Target = { id: string; type: string; url: string; title?: string };

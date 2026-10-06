@@ -23,7 +23,7 @@ vi.mock("../lib/act", async (importOriginal) => {
   };
 });
 
-let cdpPort: { port: number } | null = { port: 9222 };
+let cdpPort: { port: number; source: "contract" } | null = { port: 9222, source: "contract" };
 vi.mock("../lib/cdp-port", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../lib/cdp-port")>();
   return { ...actual, resolveCdpPort: async () => cdpPort };

@@ -124,7 +124,8 @@ describe("extension_doctor does not call a session dead over a browser exit the 
       stdout: report([
         { check: "browser", status: "fail", detail: EXITED },
         { check: "executor", status: "pass", detail: "executor responded" },
-        { check: "control-channel", status: "fail", detail: "control channel refused" },
+        { check: "control-channel", status: "pass", detail: "control channel answered" },
+        { check: "port-agreement", status: "fail", detail: "ready.json names port 8080, the server listens on 8081" },
       ]),
       stderr: "",
     };

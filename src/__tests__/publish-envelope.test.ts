@@ -78,7 +78,7 @@ describe("extension_publish envelope compatibility", () => {
     process.env.EXTENSION_DEV_TOKEN = "tok_test";
     const origFetch = global.fetch;
     global.fetch = (async () =>
-      new Response(JSON.stringify({ message: "Project not found" }), {
+      new Response(JSON.stringify({ message: "Project not found", code: "PROJECT_NOT_FOUND", createProjectUrl: "https://www.extension.dev/new" }), {
         status: 404,
         headers: { "content-type": "application/json" },
       })) as unknown as typeof fetch;
@@ -94,7 +94,9 @@ describe("extension_publish envelope compatibility", () => {
     }
   });
 
-  it("prefers EXTENSION_DEV_TOKEN over stored credentials (resolution order)", async () => {
+  /* The cell used to assert only PublishConfigError,
+     which either token produces. It now reads the bearer that was sent. */
+  it("sends EXTENSION_DEV_TOKEN for an unnamed call and the stored login for a named one", async () => {
     writeCredentials({
       version: 1,
       token: "tok_stored",
@@ -103,10 +105,21 @@ describe("extension_publish envelope compatibility", () => {
       expiresAt: Math.floor(Date.now() / 1000) + 3600,
       api: "https://www.extension.dev",
     });
-    process.env.EXTENSION_DEV_TOKEN = "tok_env";
-    const out = await handler({
-      api: "http://not-localhost.example",
-    });
-    expect(JSON.parse(out).error.name).toBe("PublishConfigError");
+    const envToken = `${Buffer.from(JSON.stringify({ u: "acme", p: "widget", exp: Math.floor(Date.now() / 1000) + 600 })).toString("base64url")}.sig`;
+    process.env.EXTENSION_DEV_TOKEN = envToken;
+    const bearers: string[] = [];
+    const prevFetch = global.fetch;
+    global.fetch = (async (_url: string, init?: RequestInit) => {
+      bearers.push(String((init?.headers as Record<string, string>)?.authorization ?? ""));
+      return new Response(JSON.stringify({ message: "stop here", code: "PROJECT_NOT_FOUND" }), { status: 404, headers: { "content-type": "application/json" } });
+    }) as unknown as typeof fetch;
+    try {
+      await handler({ api: "https://www.extension.dev" });
+      await handler({ api: "https://www.extension.dev", project: "acme/widget" });
+    } finally {
+      global.fetch = prevFetch;
+    }
+    expect(bearers[0]).toBe(`Bearer ${envToken}`);
+    expect(bearers[1]).toBe("Bearer tok_stored");
   });
 });

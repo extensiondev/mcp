@@ -67,4 +67,35 @@ describe("pollDeviceGrant never calls an answer it cannot read pending", () => {
     expect(result.ok).toBe(false);
     expect((result as { reason: string }).reason).toBe("pending");
   });
+
+  /*. */
+  it("relays the platform's Retry-After on a rate-limited poll and says the code is still pending", async () => {
+    const result = await pollDeviceGrant({
+      apiBase: "https://api.test",
+      path: "/api/cli/device/token",
+      project: "acme/widget",
+      deviceCode: "d",
+      interval: 1,
+      budgetMs: 500,
+      fetchImpl: (async () => new Response(JSON.stringify({ message: "Too many polls." }), { status: 429, headers: { "retry-after": "42", "content-type": "application/json" } })) as unknown as typeof fetch,
+    });
+    expect(result.ok).toBe(false);
+    expect((result as { reason: string }).reason).toBe("error");
+    expect((result as { message?: string }).message).toMatch(/42 seconds/);
+    expect((result as { message?: string }).message).toMatch(/still pending/);
+  });
+
+  it("treats slow_down as a wider interval, not an end", async () => {
+    const result = await pollDeviceGrant({
+      apiBase: "https://api.test",
+      path: "/api/cli/device/token",
+      project: "acme/widget",
+      deviceCode: "d",
+      interval: 1,
+      budgetMs: 500,
+      fetchImpl: (async () => new Response(JSON.stringify({ error: "slow_down" }), { status: 400, headers: { "content-type": "application/json" } })) as unknown as typeof fetch,
+    });
+    expect(result.ok).toBe(false);
+    expect((result as { reason: string }).reason).toBe("pending");
+  });
 });

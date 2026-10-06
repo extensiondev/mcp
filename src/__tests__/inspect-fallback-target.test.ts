@@ -59,7 +59,7 @@ vi.mock("../lib/cdp", () => ({
 }));
 
 vi.mock("../lib/cdp-port", () => ({
-  resolveCdpPort: async () => ({ port: 9222 }),
+  resolveCdpPort: async () => ({ port: 9222, source: "contract" as const }),
   CDP_PORT_MISSING_HINT: "",
 }));
 

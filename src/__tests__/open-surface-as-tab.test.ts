@@ -7,7 +7,7 @@ import path from "node:path";
 const navigations: string[] = [];
 let cdpTargets: Array<{ id: string; type: string; url: string; title?: string }> =
   [];
-let cdpPort: { port: number } | null = { port: 9222 };
+let cdpPort: { port: number; source: "contract" } | null = { port: 9222, source: "contract" };
 let navigationLands = true;
 let attachedId = "";
 let popupMeasure: { w: number; h: number } | null = null;
