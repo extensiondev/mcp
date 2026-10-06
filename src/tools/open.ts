@@ -58,19 +58,28 @@ type SettledTarget = {
    chrome://newtab and was reported navigated there). With a known target
    only that target is read; its pre-navigation url is never a landing
   . */
+type PolledTarget = SettledTarget | null | { unreadable: string };
+
+function targetsUnreadable(polled: PolledTarget): polled is { unreadable: string } {
+  return polled !== null && "unreadable" in polled;
+}
+
 async function pollForTarget(
   port: number,
   url: string,
   budgetMs: number,
   navigatedTargetId?: string,
   previousUrl?: string,
-): Promise<SettledTarget | null> {
+): Promise<PolledTarget> {
   const deadline = Date.now() + budgetMs;
   const wanted = url.replace(/#.*$/, "");
   let redirected: SettledTarget | null = null;
+  let listed = false;
+  let lastError: string | null = null;
   for (;;) {
     try {
       const targets = await CDPClient.discoverTargets(port);
+      listed = true;
       for (const t of targets) {
         const tUrl = String(t.url ?? "");
         if (t.type !== "page") continue;
@@ -89,10 +98,15 @@ async function pollForTarget(
           redirected = { id: String(t.id), url: tUrl, title, redirectedFrom: url };
         }
       }
-    } catch {
-      // transient during the process swap; keep polling
+    } catch (err) {
+      lastError = err instanceof Error ? err.message : String(err);
     }
-    if (Date.now() >= deadline) return redirected;
+    /* @invariant A POLL THAT NEVER READ THE LIST IS NOT "NO TARGET". Every
+       throw used to be swallowed as transient, and the caller said the
+       navigation "did not produce a live page target". */
+    if (Date.now() >= deadline) {
+      return !listed && lastError !== null ? { unreadable: lastError } : redirected;
+    }
     await new Promise((r) => setTimeout(r, 250));
   }
 }
@@ -234,7 +248,22 @@ export async function navigateToUrl(
   }
   const cdp = new CDPClient();
   try {
-    const targets = await CDPClient.discoverTargets(resolved.port);
+    let targets: Awaited<ReturnType<typeof CDPClient.discoverTargets>>;
+    try {
+      targets = await CDPClient.discoverTargets(resolved.port);
+    } catch (err) {
+      return envelope({
+        ok: false,
+        command: schema.name,
+        status: "targets-unreadable",
+        error: {
+          code: "E_CDP",
+          name: "TargetsUnreadable",
+          message: `The session's target list could not be read before navigating to ${url}: ${err instanceof Error ? err.message : String(err)}. Nothing was navigated.`,
+        },
+        hint: "The session's debug port did not answer. extension_doctor says whether the browser is still up; if it is, retry.",
+      });
+    }
     const pageTargets = targets.filter(
       (t) => t.type === "page" && !String(t.url || "").startsWith("devtools://"),
     );
@@ -264,13 +293,28 @@ export async function navigateToUrl(
       openedNewTab = true;
     }
 
-    const settled = await pollForTarget(
+    const polled = await pollForTarget(
       resolved.port,
       url,
       6000,
       navigatedTargetId,
       previousUrl,
     );
+    if (targetsUnreadable(polled)) {
+      return envelope({
+        ok: false,
+        command: schema.name,
+        status: "targets-unreadable",
+        error: {
+          code: "E_CDP",
+          name: "TargetsUnreadable",
+          message: `The session's target list could not be read while waiting for ${url}: ${polled.unreadable}. Whether the navigation landed is unknown.`,
+        },
+        value: { navigated: url },
+        hint: "The session's debug port did not answer. extension_doctor says whether the browser is still up; if it is, read the tabs with extension_dom_snapshot listTargets: true.",
+      });
+    }
+    const settled = polled;
     /* @invariant A target can match the requested url for an instant and then
        be swapped to the browser's own error page: Edge answered a blocked
        extension page that way and the tool reported it navigated. The landed target is read once more after it settles, and
@@ -737,6 +781,20 @@ async function confirmSurfaceTarget(
   if (!resolved || !extensionId) return raw;
   const wanted = `chrome-extension://${extensionId}/${doc}`;
   const settled = await pollForTarget(resolved.port, wanted, 3000);
+  if (targetsUnreadable(settled)) {
+    return envelope({
+      ok: false,
+      command: schema.name,
+      status: "surface-unconfirmed",
+      error: {
+        code: "E_CDP",
+        name: "SurfaceUnconfirmed",
+        message: `The engine reported the ${surface} as opened, but the session's target list could not be read (${settled.unreadable}), so whether a page target for ${wanted} appeared is unknown.`,
+      },
+      value: { engineResult: parsed },
+      hint: "extension_doctor says whether the browser is still up; if it is, retry or read the targets with extension_dom_snapshot listTargets: true.",
+    });
+  }
   if (settled) {
     patchValue(parsed, {
       surfaceTarget: { targetId: settled.id, url: settled.url },
@@ -1322,6 +1380,11 @@ const GECKO_SIDEBAR_GESTURE =
    rendered, an open one is reported as open, and a closed one gets its
    document as a tab through the same path the override pages use, with the
    gesture rule stated instead of a foreign API name. */
+/* @invariant THE RELAY'S "NOT OPEN" ANSWER IS THE ONLY CLOSED PANEL. A probe
+   refused for any other reason (no session, a CLI error, an unparsable
+   answer) used to read "the panel is not open now". */
+const GECKO_PANEL_CLOSED = /E_TARGET_NOT_FOUND|is not open|not open|no sidebar|no .*sidebar context/i;
+
 async function openGeckoSidebar(
   projectPath: string,
   browser: string,
@@ -1354,10 +1417,18 @@ async function openGeckoSidebar(
     schema.name,
   );
   let open: Record<string, any> | null = null;
+  let probeFailure: string | null = null;
   try {
     const parsed = JSON.parse(probe);
     if (parsed?.ok === true) open = parsed;
+    else {
+      const signature = `${parsed?.error?.code ?? ""} ${parsed?.error?.message ?? ""}`;
+      if (!GECKO_PANEL_CLOSED.test(signature)) {
+        probeFailure = `${parsed?.error?.code ?? "no code"}: ${parsed?.error?.message ?? probe.slice(0, 200)}`;
+      }
+    }
   } catch {
+    probeFailure = `unreadable answer: ${probe.slice(0, 200)}`;
   }
   if (open) {
     const url =
@@ -1385,7 +1456,9 @@ async function openGeckoSidebar(
     if (parsedFallback?.ok) {
       addWarning(
         parsedFallback,
-        `${GECKO_SIDEBAR_GESTURE}, and the panel is not open now, so the sidebar document was rendered as a tab instead. The DOM is the same document the panel would show; the panel hosting stays unverified. A person opens the real panel from the toolbar button or View > Sidebar.`,
+        probeFailure
+          ? `${GECKO_SIDEBAR_GESTURE}, and whether the panel is open could not be read (${probeFailure}), so the sidebar document was rendered as a tab instead. The DOM is the same document the panel would show; the panel hosting stays unverified. A person opens the real panel from the toolbar button or View > Sidebar.`
+          : `${GECKO_SIDEBAR_GESTURE}, and the panel is not open now, so the sidebar document was rendered as a tab instead. The DOM is the same document the panel would show; the panel hosting stays unverified. A person opens the real panel from the toolbar button or View > Sidebar.`,
       );
       return actFrameJson(parsedFallback);
     }
@@ -1409,6 +1482,14 @@ async function openSidebarThroughGesture(
   refusal: Record<string, any>,
 ): Promise<string> {
   const doc = surfaceDocument(projectPath, browser, "sidebar");
+  if (!doc) {
+    return missingSurfaceError(
+      projectPath,
+      browser,
+      "sidebar",
+      "so there is no sidebar panel to open",
+    );
+  }
   const resolved = doc ? await resolveCdpPort(projectPath, browser) : null;
   const extensionId = resolved
     ? await resolveExtensionId(projectPath, browser)

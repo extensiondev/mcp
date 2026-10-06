@@ -206,6 +206,25 @@ const clicks = () =>
   commands.filter((c) => c.method === "Input.dispatchMouseEvent");
 
 describe("extension_open sidebar on Chromium when Chrome demands a user gesture", () => {
+  /*. */
+  it("names the missing surface when the manifest declares no side panel", async () => {
+    const p = project();
+    fs.writeFileSync(
+      path.join(p.dir, "src", "manifest.json"),
+      JSON.stringify({ manifest_version: 3, name: "F", action: { default_popup: "action/index.html" } }),
+    );
+
+    const result = JSON.parse(
+      await open.handler({ projectPath: p.dir, surface: "sidebar" }),
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.status).toBe("no-surface");
+    expect(result.error.code).toBe("E_NO_SURFACE_DOCUMENT");
+    expect(clicks()).toHaveLength(0);
+    expect(JSON.stringify(result)).not.toMatch(/CDP port could not be resolved/);
+  });
+
   it("opens the real panel through a synthetic click on the extension's own page and says what it did", async () => {
     const p = project();
 

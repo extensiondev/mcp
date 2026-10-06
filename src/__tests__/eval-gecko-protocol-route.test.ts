@@ -300,6 +300,31 @@ describe("a page inside the extension that the manifest declares as no surface",
     });
   });
 
+  /*. */
+  it("says the debugger port did not answer instead of 'matches none of the surface documents'", async () => {
+    const dir = project(MV3);
+    openTabs = [{ actor: "tab1", url: `${BASE}pages/panel.html`, title: "Panel" } as RdpTab];
+    rdpAnswer = () => {
+      throw new Error("connect ECONNREFUSED 127.0.0.1:9222");
+    };
+
+    const result = JSON.parse(
+      await evalTool.handler({
+        projectPath: dir,
+        browser: "firefox",
+        context: "page",
+        url: `${BASE}pages/panel.html`,
+        expression: "document.title",
+      }),
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.status).toBe("rdp-failed");
+    expect(result.error.code).toBe("E_RDP");
+    expect(result.error.message).toContain("ECONNREFUSED");
+    expect(result.error.message).not.toContain("matches none");
+  });
+
   it("keeps the no-surface answer when the session publishes no debugger port", async () => {
     const dir = project(MV3);
     rdpPort = null;

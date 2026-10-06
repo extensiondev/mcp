@@ -81,6 +81,7 @@ export async function openDevToolsPanel(
   const cdp = new CDPClient();
   const listTargets = async (): Promise<RawTarget[]> =>
     (await CDPClient.discoverTargets(port)) as RawTarget[];
+  let reached: "open" | "frontend" | "panel" | "show" = "open";
   try {
     await cdp.connect(await CDPClient.discoverBrowserWsUrl(port));
     const before = new Set(
@@ -117,6 +118,7 @@ export async function openDevToolsPanel(
       };
     }
 
+    reached = "frontend";
     const sessionId = await cdp.attachToTarget(devtoolsTargetId);
     /* @invariant Some extensions register their panel only when the page
        reports to them (Preact Devtools creates it once the page's debug hook
@@ -211,6 +213,7 @@ export async function openDevToolsPanel(
       };
     }
 
+    reached = "panel";
     const framesBefore = new Set(
       (await listTargets().catch(() => []))
         .filter((t) => t.type === "iframe" && String(t.url ?? "").startsWith(`${prefix}/`))
@@ -227,6 +230,7 @@ export async function openDevToolsPanel(
       };
     }
 
+    reached = "show";
     let panelTarget: { targetId: string; url: string } | null = null;
     const showDeadline = Date.now() + 3000;
     while (!panelTarget && Date.now() < showDeadline) {
@@ -250,10 +254,13 @@ export async function openDevToolsPanel(
       reloadedInspected,
     };
   } catch (error) {
+    /* @invariant THE STAGE IS THE ONE REACHED. Any throw after the frontend
+       opened used to be stage "open", and the tool said the protocol "lacks
+       or refused Target.openDevTools". */
     return {
       opened: false,
-      stage: "open",
-      reason: error instanceof Error ? error.message : String(error),
+      stage: reached,
+      reason: `${error instanceof Error ? error.message : String(error)} (after the ${reached} step)`,
     };
   } finally {
     try {

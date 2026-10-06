@@ -75,22 +75,37 @@ export const WORKER_TARGET_TYPES = new Set([
    MV2 background page are targets of their own types, and Runtime.evaluate on
    them is the inspector path the extension CSP does not govern, the same way
    it is for the extension's pages. */
+/* @invariant A LIST THAT COULD NOT BE READ IS NOT AN EMPTY LIST. These used
+   to answer `[]` when the target fetch threw, and the callers told the agent
+   "no open page" or the idle-worker story. */
+export type TargetsRead<T> = { targets: T[] } | { unreadable: string };
+
+export async function readExtensionWorkerTargets(
+  port: number,
+  extensionId: string,
+): Promise<TargetsRead<{ targetId: string; type: string; url: string }>> {
+  try {
+    const origin = `chrome-extension://${extensionId}/`;
+    return {
+      targets: (await CDPClient.discoverTargets(port))
+        .filter(
+          (t) =>
+            WORKER_TARGET_TYPES.has(String(t.type)) &&
+            String(t.url ?? "").startsWith(origin),
+        )
+        .map((t) => ({ targetId: String(t.id), type: String(t.type), url: String(t.url ?? "") })),
+    };
+  } catch (err) {
+    return { unreadable: err instanceof Error ? err.message : String(err) };
+  }
+}
+
 export async function findExtensionWorkerTargets(
   port: number,
   extensionId: string,
 ): Promise<Array<{ targetId: string; type: string; url: string }>> {
-  try {
-    const origin = `chrome-extension://${extensionId}/`;
-    return (await CDPClient.discoverTargets(port))
-      .filter(
-        (t) =>
-          WORKER_TARGET_TYPES.has(String(t.type)) &&
-          String(t.url ?? "").startsWith(origin),
-      )
-      .map((t) => ({ targetId: String(t.id), type: String(t.type), url: String(t.url ?? "") }));
-  } catch {
-    return [];
-  }
+  const read = await readExtensionWorkerTargets(port, extensionId);
+  return "targets" in read ? read.targets : [];
 }
 
 export type WorkerWake =
@@ -152,15 +167,23 @@ export async function wakeExtensionWorker(
   }
 }
 
+export async function readExtensionPageTargets(
+  port: number,
+  wantedUrl: string,
+): Promise<TargetsRead<PageTarget>> {
+  try {
+    return { targets: matchExtensionPageTargets(await listDocumentTargets(port), wantedUrl) };
+  } catch (err) {
+    return { unreadable: err instanceof Error ? err.message : String(err) };
+  }
+}
+
 export async function findExtensionPageTargets(
   port: number,
   wantedUrl: string,
 ): Promise<PageTarget[]> {
-  try {
-    return matchExtensionPageTargets(await listDocumentTargets(port), wantedUrl);
-  } catch {
-    return [];
-  }
+  const read = await readExtensionPageTargets(port, wantedUrl);
+  return "targets" in read ? read.targets : [];
 }
 
 function readRemoteValue(result: RemoteObject | undefined): unknown {

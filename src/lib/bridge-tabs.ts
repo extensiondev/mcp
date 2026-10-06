@@ -79,19 +79,32 @@ export async function pollForBridgeTab(
   browser: string,
   url: string,
   budgetMs: number,
-): Promise<BridgeTab | null> {
+): Promise<BridgeTab | null | { unreadable: string }> {
   const deadline = Date.now() + budgetMs;
   const wanted = url.replace(/#.*$/, "");
+  let listedOnce = false;
+  let lastError: string | null = null;
   for (;;) {
     const listed = await listBridgeTabs(projectPath, browser);
     if ("tabs" in listed) {
+      listedOnce = true;
       for (const t of listed.tabs) {
         if (t.url === wanted || t.url.startsWith(wanted)) return t;
       }
+    } else {
+      lastError = listed.error;
     }
-    if (Date.now() >= deadline) return null;
+    if (Date.now() >= deadline) {
+      return !listedOnce && lastError !== null ? { unreadable: lastError } : null;
+    }
     await new Promise((r) => setTimeout(r, 250));
   }
+}
+
+function tabListUnreadable(
+  polled: BridgeTab | null | { unreadable: string },
+): polled is { unreadable: string } {
+  return polled !== null && "unreadable" in polled;
 }
 
 async function pollForBridgeTabById(
@@ -100,21 +113,32 @@ async function pollForBridgeTabById(
   url: string,
   tabId: number | null,
   budgetMs: number,
-): Promise<{ tab: BridgeTab | null; seen: BridgeTab | null }> {
+): Promise<{ tab: BridgeTab | null; seen: BridgeTab | null; unreadable?: string }> {
   const deadline = Date.now() + budgetMs;
   const wanted = url.replace(/#.*$/, "");
   let seen: BridgeTab | null = null;
+  let listedOnce = false;
+  let lastError: string | null = null;
   for (;;) {
     const listed = await listBridgeTabs(projectPath, browser);
     if ("tabs" in listed) {
+      listedOnce = true;
       const candidates =
         tabId != null ? listed.tabs.filter((t) => t.tabId === tabId) : listed.tabs;
       for (const t of candidates) {
         if (t.url === wanted || t.url.startsWith(wanted)) return { tab: t, seen: t };
         if (tabId != null) seen = t;
       }
+    } else {
+      lastError = listed.error;
     }
-    if (Date.now() >= deadline) return { tab: null, seen };
+    if (Date.now() >= deadline) {
+      return {
+        tab: null,
+        seen,
+        ...(!listedOnce && lastError !== null ? { unreadable: lastError } : {}),
+      };
+    }
     await new Promise((r) => setTimeout(r, 250));
   }
 }
@@ -194,11 +218,15 @@ export async function navigateToUrlViaBridge(
         error: {
           code: "E_NAVIGATE_FAILED",
           name: "NavigationUnconfirmed",
-          message: `The engine accepted the navigation to ${url}${
-            tabId != null ? ` in tab ${tabId}` : ""
-          }, but no tab reported that url afterwards${
-            landed.seen ? ` (the tab shows ${landed.seen.url || "no url"}${landed.seen.title ? `, "${landed.seen.title}"` : ""})` : ""
-          }.`,
+          message: landed.unreadable
+            ? `The engine accepted the navigation to ${url}${
+                tabId != null ? ` in tab ${tabId}` : ""
+              }, but the tab list could not be read afterwards (${landed.unreadable.slice(0, 300)}), so where it landed is unknown.`
+            : `The engine accepted the navigation to ${url}${
+                tabId != null ? ` in tab ${tabId}` : ""
+              }, but no tab reported that url afterwards${
+                landed.seen ? ` (the tab shows ${landed.seen.url || "no url"}${landed.seen.title ? `, "${landed.seen.title}"` : ""})` : ""
+              }.`,
         },
         value: { navigated: url, tabId, created: value.created === true, via: "navigate", ...(landed.seen ? { tab: landed.seen } : {}) },
         hint: "Read the tab with extension_dom_snapshot (listTabs: true) to see what it shows; a url nothing serves, or a document the extension does not ship, lands on the browser's error page.",
@@ -275,6 +303,19 @@ async function navigateToUrlViaBackgroundEval(
     url,
     timeout != null ? Math.min(timeout, 6000) : 6000,
   );
+  if (tabListUnreadable(settled)) {
+    return envelope({
+      ok: false,
+      command: tool,
+      status: "navigation-unconfirmed",
+      error: {
+        code: "E_NAVIGATE_FAILED",
+        name: "NavigationUnconfirmed",
+        message: `The navigation to ${url} was sent, but the tab list could not be read afterwards (${settled.unreadable.slice(0, 300)}), so where it landed is unknown.`,
+      },
+      hint: "extension_doctor says whether the session is still up; if it is, read the tabs with extension_dom_snapshot listTabs: true.",
+    });
+  }
   if (!settled) {
     return envelope({
       ok: false,

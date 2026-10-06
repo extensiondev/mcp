@@ -17,6 +17,7 @@ export interface SafariAutomation {
   safaridriver: string | null;
   mcp: boolean;
   bidi: boolean;
+  helpUnreadable?: string;
 }
 
 export const SAFARI_MCP_SETTING =
@@ -76,13 +77,28 @@ export async function detectSafariAutomation(
     return { safaridriver: null, mcp: false, bidi: false };
   }
 
+  /* @invariant A DRIVER THAT EXISTS BUT COULD NOT BE READ IS REPORTED AS
+     SUCH. A candidate whose --help could not be read used to fall through
+     to the absent-driver answer. */
+  let unreadable: string | null = null;
   for (const candidate of safariDriverCandidates(safariBinary)) {
     if (!fs.existsSync(candidate)) continue;
     const help = await readSafariDriverHelp(candidate);
-    if (help === null) continue;
+    if (help === null) {
+      unreadable = unreadable ?? candidate;
+      continue;
+    }
     return { safaridriver: candidate, ...parseSafariDriverHelp(help) };
   }
 
+  if (unreadable) {
+    return {
+      safaridriver: unreadable,
+      mcp: false,
+      bidi: false,
+      helpUnreadable: `${unreadable} --help printed nothing or could not be run, so whether it has --mcp is unknown`,
+    };
+  }
   return { safaridriver: null, mcp: false, bidi: false };
 }
 

@@ -68,14 +68,19 @@ export function carriersPlacedHere(): string[] {
   return [...placedHere];
 }
 
-export function rememberedCarriers(): string[] {
+export function readRememberedCarriers(): { carriers: string[]; unreadable: string | null } {
   let files: string[];
   try {
     files = fs.readdirSync(recordDir());
-  } catch {
-    return [];
+  } catch (err) {
+    const code = (err as { code?: string })?.code;
+    return {
+      carriers: [],
+      unreadable: code === "ENOENT" ? null : `${recordDir()}: ${err instanceof Error ? err.message : String(err)}`,
+    };
   }
   const out: string[] = [];
+  const torn: string[] = [];
   for (const file of files) {
     if (!file.endsWith(".json")) continue;
     try {
@@ -86,7 +91,15 @@ export function rememberedCarriers(): string[] {
         out.push(parsed.projectPath);
       }
     } catch {
+      torn.push(file);
     }
   }
-  return out;
+  return {
+    carriers: out,
+    unreadable: torn.length ? `${torn.length} carrier record${torn.length === 1 ? "" : "s"} under ${recordDir()} could not be parsed (${torn.slice(0, 3).join(", ")})` : null,
+  };
+}
+
+export function rememberedCarriers(): string[] {
+  return readRememberedCarriers().carriers;
 }

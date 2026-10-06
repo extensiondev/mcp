@@ -50,8 +50,8 @@ import { rdpEvaluateInTab, type RdpTab } from "../lib/rdp";
 import { matchPatternCovers } from "../lib/match-patterns";
 import {
   evaluateOnExtensionPage,
-  findExtensionPageTargets,
-  findExtensionWorkerTargets,
+  readExtensionPageTargets,
+  readExtensionWorkerTargets,
   wakeExtensionWorker,
 } from "../lib/cdp-extension-page";
 import { listPageTargets, matchTargetsByUrl } from "../lib/cdp-targets";
@@ -170,6 +170,20 @@ export function wantsExtensionPageOverCdp(
   );
 }
 
+function targetsUnreadable(why: string): string {
+  return envelope({
+    ok: false,
+    command: schema.name,
+    status: "targets-unreadable",
+    error: {
+      code: "E_CDP",
+      name: "TargetsUnreadable",
+      message: `Could not list the session's CDP targets: ${why}. Whether the page or worker is open is unknown.`,
+    },
+    hint: "The session's debug port did not answer. extension_doctor says whether the browser is still up; if it is, retry.",
+  });
+}
+
 async function evaluateOnChromiumExtensionPage(
   args: ActArgs & { expression: string },
   browser: string,
@@ -193,7 +207,9 @@ async function evaluateOnChromiumExtensionPage(
         hint: `Confirm the session is ready (extension_wait). ${CDP_PORT_MISSING_HINT}`,
       });
     }
-    let workers = await findExtensionWorkerTargets(resolved.port, extensionId);
+    const workersRead = await readExtensionWorkerTargets(resolved.port, extensionId);
+    if ("unreadable" in workersRead) return targetsUnreadable(workersRead.unreadable);
+    let workers = workersRead.targets;
     const wakeWarnings: string[] = [];
     if (workers.length === 0) {
       const wake = await wakeExtensionWorker(resolved.port, extensionId);
@@ -295,9 +311,9 @@ async function evaluateOnChromiumExtensionPage(
     }
     wanted = `chrome-extension://${extensionId}/${doc}`;
   }
-  const targets = (await findExtensionPageTargets(resolved.port, wanted)).filter(
-    (t) => !isBrowserErrorPage(t.url),
-  );
+  const pagesRead = await readExtensionPageTargets(resolved.port, wanted);
+  if ("unreadable" in pagesRead) return targetsUnreadable(pagesRead.unreadable);
+  const targets = pagesRead.targets.filter((t) => !isBrowserErrorPage(t.url));
   if (targets.length === 0) {
     return envelope({
       ok: false,
@@ -709,6 +725,10 @@ async function evaluateInGeckoTab(
     waitMs: 3_000,
     graceMs: 1_000,
   });
+  /* @invariant A DEBUGGER PORT THAT DID NOT ANSWER IS SAID AS SUCH. A port
+     the session never published falls through to the relay's own answer; a
+     published port whose call threw used to return null too, and the caller
+     then said the url "matches none of the surface documents". */
   if (!resolved) return null;
   let outcome: Awaited<ReturnType<typeof rdpEvaluateInTab>>;
   try {
@@ -717,8 +737,18 @@ async function evaluateInGeckoTab(
       expression: args.expression,
       timeoutMs: args.timeout ?? 10_000,
     });
-  } catch {
-    return null;
+  } catch (err) {
+    return envelope({
+      ok: false,
+      command: schema.name,
+      status: "rdp-failed",
+      error: {
+        code: "E_RDP",
+        name: "RdpFailed",
+        message: `The ${browser} remote-debugging port ${resolved.port} did not answer: ${err instanceof Error ? err.message : String(err)}. The tab's documents were not read.`,
+      },
+      hint: "extension_doctor says whether the browser is still up; if it is, retry.",
+    });
   }
   if (outcome.ok) {
     return envelope({

@@ -165,9 +165,11 @@ async function environmentPreflight(): Promise<string> {
       status: automation.mcp ? "pass" : "warn",
       detail: automation.mcp
         ? `Apple's Safari MCP server is available (${automation.safaridriver} --mcp)`
-        : automation.safaridriver
-          ? `${automation.safaridriver} has no --mcp flag, so Safari has no agent-readable window from this machine`
-          : "No safaridriver found, so Safari has no agent-readable window from this machine",
+        : automation.helpUnreadable
+          ? `${automation.helpUnreadable}; Safari's agent-readable window is unverified from this machine`
+          : automation.safaridriver
+            ? `${automation.safaridriver} has no --mcp flag, so Safari has no agent-readable window from this machine`
+            : "No safaridriver found, so Safari has no agent-readable window from this machine",
       remediation: automation.mcp
         ? `Enable ${SAFARI_MCP_SETTING}, then add it beside this server: ${SAFARI_MCP_ADD_COMMAND}. It reads pages in an isolated automation window and has no extension-aware tool.`
         : "Install Safari 27 (Software Update) or Safari Technology Preview 247+ for Apple's Safari MCP server. A Safari dev session still builds, opens and guides the enable step without it.",

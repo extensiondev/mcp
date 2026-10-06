@@ -23,6 +23,7 @@ const refusal = () =>
 const calls: string[][] = [];
 let openResult: () => string = refusal;
 let panelOpen = true;
+let probeOverride: (() => string) | null = null;
 vi.mock("../lib/act", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../lib/act")>();
   return {
@@ -31,6 +32,7 @@ vi.mock("../lib/act", async (importOriginal) => {
       calls.push(cli);
       if (cli[0] === "open") return openResult();
       if (cli[0] === "inspect") {
+        if (probeOverride) return probeOverride();
         return panelOpen
           ? envelope({
               ok: true,
@@ -96,6 +98,7 @@ afterEach(() => {
   navigations.length = 0;
   openResult = refusal;
   panelOpen = true;
+  probeOverride = null;
   for (const d of dirs.splice(0)) fs.rmSync(d, { recursive: true, force: true });
 });
 
@@ -143,6 +146,28 @@ describe("extension_open sidebar on Gecko when the engine names a Chromium API i
     expect(warning).toContain("1392624");
     expect(warning).toContain("rendered as a tab");
     expect(JSON.stringify(result)).not.toContain("sidePanel");
+  });
+
+  /*. */
+  it("does not call the panel closed when the probe itself failed", async () => {
+    const dir = project(MANIFEST);
+    probeOverride = () =>
+      envelope({
+        ok: false,
+        command: "extension_open",
+        status: "failed",
+        error: { code: "E_NO_SESSION", name: "NoSession", message: "No active control channel found for firefox." },
+      });
+
+    const result = JSON.parse(
+      await open.handler({ projectPath: dir, browser: "firefox", surface: "sidebar" }),
+    );
+
+    expect(result.ok).toBe(true);
+    const warnings = result.warnings.join("\n");
+    expect(warnings).toMatch(/whether the panel is open could not be read/);
+    expect(warnings).toMatch(/E_NO_SESSION/);
+    expect(warnings).not.toMatch(/panel is not open now/);
   });
 
   it("says the manifest declares no sidebar rather than probing", async () => {

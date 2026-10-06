@@ -19,7 +19,7 @@ import {
 import type { ReadyContract } from "../lib/types";
 import {
   findSessionInfo,
-  listSessionMarkers,
+  readSessionMarkers,
   listSessions,
   removeSession,
   removeSessionMarker,
@@ -28,7 +28,7 @@ import { resolveSessionBrowser } from "../lib/session-browser";
 import { profilesRootDir, readyContractPath } from "../lib/session-paths";
 import { removeCarrier } from "../lib/carrier";
 import { sweepCarriers, type CarrierSweepEntry } from "../lib/carrier-exit";
-import { rememberedCarriers } from "../lib/carrier-registry";
+import { readRememberedCarriers } from "../lib/carrier-registry";
 import { envelope } from "../lib/envelope";
 
 export const schema = {
@@ -353,7 +353,8 @@ export async function handler(args: {
     for (const s of listSessions()) {
       candidates.set(`${path.resolve(s.projectPath)}::${s.browser}`, s);
     }
-    for (const m of listSessionMarkers()) {
+    const markersRead = readSessionMarkers();
+    for (const m of markersRead.markers) {
       const key = `${path.resolve(m.projectPath)}::${m.browser}`;
       if (!candidates.has(key)) candidates.set(key, m);
     }
@@ -374,17 +375,25 @@ export async function handler(args: {
     const visited = new Set(
       outcomes.map((outcome) => path.resolve(outcome.projectPath)),
     );
+    const carriersRead = readRememberedCarriers();
     const carriers: CarrierSweepEntry[] = sweepCarriers(
-      rememberedCarriers().filter((p) => !visited.has(path.resolve(p))),
+      carriersRead.carriers.filter((p) => !visited.has(path.resolve(p))),
     );
+    const unreadNotes = [
+      markersRead.unreadable ? `Session markers could not be fully read: ${markersRead.unreadable}; a session recorded there may still be running.` : null,
+      carriersRead.unreadable ? `Carrier records could not be fully read: ${carriersRead.unreadable}; a carrier recorded there may still be in place.` : null,
+    ].filter((note): note is string => note !== null);
 
     if (candidates.size === 0 && carriers.length === 0) {
       return envelope({
-        ok: true,
+        ok: unreadNotes.length === 0,
         command: schema.name,
-        status: "nothing-to-stop",
+        status: unreadNotes.length ? "nothing-found-unreadable" : "nothing-to-stop",
         value: { stopped: [] },
-        hint: "No sessions registered in this server, no session markers on disk, and no carrier left in any project this machine recorded. Nothing to stop.",
+        warnings: unreadNotes,
+        hint: unreadNotes.length
+          ? "No sessions registered in this server and nothing readable on disk, but part of the record could not be read, so nothing is known to be stopped."
+          : "No sessions registered in this server, no session markers on disk, and no carrier left in any project this machine recorded. Nothing to stop.",
       });
     }
     return envelope({

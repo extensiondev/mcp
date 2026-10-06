@@ -58,14 +58,22 @@ export function removeSessionMarker(
   }
 }
 
-export function listSessionMarkers(): ProcessInfo[] {
+/* @invariant A DIRECTORY THAT COULD NOT BE READ IS NOT AN EMPTY ONE. The
+   stop hint used to say "no session markers on disk" over an EACCES or a
+   torn record. */
+export function readSessionMarkers(): { markers: ProcessInfo[]; unreadable: string | null } {
   let files: string[];
   try {
     files = fs.readdirSync(markerDir());
-  } catch {
-    return [];
+  } catch (err) {
+    const code = (err as { code?: string })?.code;
+    return {
+      markers: [],
+      unreadable: code === "ENOENT" ? null : `${markerDir()}: ${err instanceof Error ? err.message : String(err)}`,
+    };
   }
   const out: ProcessInfo[] = [];
+  const torn: string[] = [];
   for (const file of files) {
     if (!file.endsWith(".json")) continue;
     try {
@@ -79,9 +87,17 @@ export function listSessionMarkers(): ProcessInfo[] {
         out.push(parsed as ProcessInfo);
       }
     } catch {
+      torn.push(file);
     }
   }
-  return out;
+  return {
+    markers: out,
+    unreadable: torn.length ? `${torn.length} marker file${torn.length === 1 ? "" : "s"} under ${markerDir()} could not be parsed (${torn.slice(0, 3).join(", ")})` : null,
+  };
+}
+
+export function listSessionMarkers(): ProcessInfo[] {
+  return readSessionMarkers().markers;
 }
 
 function writeMarkerBestEffort(info: ProcessInfo, registeredAtMs: number): void {
