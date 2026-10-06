@@ -291,7 +291,11 @@ export async function readStores(args: {
       );
       if (submission.storeUrl) tail.push(`listing ${submission.storeUrl}`);
     } else if (row.configured === true) {
-      tail.push("no submissions recorded");
+      tail.push(
+        submissionsRes.ok
+          ? "no submissions recorded"
+          : "submissions unknown: stores/submissions.json could not be read",
+      );
     }
     if (review?.status) {
       tail.push(

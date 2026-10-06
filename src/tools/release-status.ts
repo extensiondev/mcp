@@ -72,17 +72,34 @@ export async function handler(args: {
     include.includes("stores") ? readStores(scope).then(parse) : null,
   ]);
 
-  const sections = [releases, stores].filter(Boolean) as Record<
-    string,
-    unknown
-  >[];
+  const named = (
+    [
+      ["releases", releases],
+      ["stores", stores],
+    ] as Array<[string, Record<string, unknown> | null]>
+  ).filter((entry): entry is [string, Record<string, unknown>] => Boolean(entry[1]));
+  const sections = named.map(([, section]) => section);
 
   const ok = sections.some((section) => section.ok === true);
+  const failed = named.filter(([, section]) => section.ok !== true);
+  const partial = ok && failed.length > 0;
 
   return envelope({
     ok,
     command: "extension_release_status",
-    status: ok ? "read" : "unavailable",
+    status: ok ? (partial ? "partial" : "read") : "unavailable",
+    ...(partial
+      ? {
+          warnings: [
+            `Only part of the status could be read: ${failed
+              .map(
+                ([name, section]) =>
+                  `${name} failed (${(section.error as { message?: string } | undefined)?.message ?? "no message"})`,
+              )
+              .join("; ")}. The sections that are present are complete; the failed ones are unknown, not empty.`,
+          ],
+        }
+      : {}),
     value: {
       ...(releases ? { releases } : {}),
       ...(stores ? { stores } : {}),

@@ -8,7 +8,7 @@ import {
   normalizeStoresStatus,
   readStores as handler,
 } from "../tools/store-status";
-import { schema } from "../tools/release-status";
+import { schema, handler as releaseStatus } from "../tools/release-status";
 import { tools as ALL_TOOLS } from "../index";
 import { writeCredentials } from "../lib/credentials";
 
@@ -16,6 +16,7 @@ function jsonResponse(body: unknown, ok = true, status = 200): Response {
   return {
     ok,
     status,
+    headers: { get: () => null },
     text: async () => JSON.stringify(body),
   } as unknown as Response;
 }
@@ -356,5 +357,78 @@ describe("store-status normalizers", () => {
     expect(doc.reviews.firefox.status).toBe("pending");
     expect(doc.lastSubmission?.store).toBe("firefox");
     expect(doc.lastPollAt).toBe("2026-07-22T18:00:00.000Z");
+  });
+});
+
+describe("extension_release_status never calls an unreadable file empty", () => {
+  it("says submissions are unknown, not absent, when submissions.json cannot be read", async () => {
+    global.fetch = (async (url: string) => {
+      const href = String(url);
+      if (href.endsWith("stores/health.json")) return jsonResponse(HEALTH);
+      if (href.endsWith("stores/status.json")) return jsonResponse(STATUS_V3);
+      if (href.endsWith("stores/submissions.json")) return jsonResponse({ message: "boom" }, false, 500);
+      return jsonResponse({ message: "not found" }, false, 404);
+    }) as unknown as typeof fetch;
+
+    const out = JSON.parse(
+      await releaseStatus({ workspace: "acme", project: "widget", include: ["stores"] }),
+    );
+
+    expect(JSON.stringify(out)).toContain("submissions unknown");
+    expect(JSON.stringify(out)).not.toContain("no submissions recorded");
+  });
+
+  it("says the registry could not be read instead of telling the agent to push a commit", async () => {
+    global.fetch = (async (url: string) => {
+      const href = String(url);
+      if (href.endsWith("meta.json")) return jsonResponse({ name: "Widget", visibility: "public" });
+      return jsonResponse({ message: "upstream timed out" }, false, 500);
+    }) as unknown as typeof fetch;
+
+    const out = JSON.parse(
+      await releaseStatus({ workspace: "acme", project: "widget", include: ["releases"] }),
+    );
+
+    const text = JSON.stringify(out);
+    expect(text).not.toContain("Push a commit");
+    expect(text).toContain("could not be read");
+  });
+
+  it("calls a project with no declared visibility private, and an unreadable meta.json unknown", async () => {
+    global.fetch = fetchByFile({
+      "channels.json": { channels: [] },
+      "builds/index.json": { items: [] },
+      "meta.json": { name: "Widget" },
+    });
+    const undeclared = JSON.parse(
+      await releaseStatus({ workspace: "acme", project: "widget", include: ["releases"] }),
+    );
+    expect(JSON.stringify(undeclared)).not.toContain("open without login");
+
+    global.fetch = fetchByFile({
+      "channels.json": { channels: [] },
+      "builds/index.json": { items: [] },
+    });
+    const unreadable = JSON.parse(
+      await releaseStatus({ workspace: "acme", project: "widget", include: ["releases"] }),
+    );
+    expect(JSON.stringify(unreadable)).toContain("visibility is unknown");
+  });
+
+  it("marks a status read partial when one section failed", async () => {
+    global.fetch = (async (url: string) => {
+      const href = String(url);
+      if (href.includes("stores/")) return jsonResponse({ message: "boom" }, false, 500);
+      if (href.endsWith("channels.json")) return jsonResponse({ channels: [] });
+      if (href.endsWith("builds/index.json")) return jsonResponse({ items: [] });
+      if (href.endsWith("meta.json")) return jsonResponse({ name: "Widget" });
+      return jsonResponse({ message: "not found" }, false, 404);
+    }) as unknown as typeof fetch;
+
+    const out = JSON.parse(await releaseStatus({ workspace: "acme", project: "widget" }));
+
+    expect(out.ok).toBe(true);
+    expect(out.status).toBe("partial");
+    expect(out.warnings.join(" ")).toContain("stores failed");
   });
 });

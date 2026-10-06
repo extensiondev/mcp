@@ -104,7 +104,10 @@ export async function readReleases(args: {
     new Set(channels.map((c) => c.sha).filter(Boolean)),
   );
 
-  const isPrivate = String(meta?.visibility || "").toLowerCase() === "private";
+  /* @invariant Undeclared visibility is PRIVATE, as the platform reads it;
+     an unreadable meta.json is unknown, never public. */
+  const visibility = metaRes.ok ? String(meta?.visibility || "private").toLowerCase() : "unknown";
+  const isPrivate = visibility !== "public";
   const publicProjectUrl = userlandProjectUrl(ref, "", args.api);
   const channelsWithUrls = channels.map((c) => ({
     ...c,
@@ -160,7 +163,19 @@ export async function readReleases(args: {
               .map((b) => b.sha)
               .join(", ") || "none"
           }. Use one of these as buildId/buildSha for promote/deploy/publish.`
-        : `No channels or builds are recorded on the registry yet for ${ref.workspace}/${ref.project}. Push a commit to produce a build, then check ${buildsPageUrl}.`,
-    warnings: [publicUrlNote, channelsUnavailable, buildsUnavailable],
+        : !channelsRes.ok || !buildsRes.ok
+          ? `The registry could not be read for ${ref.workspace}/${ref.project} (${[
+              !channelsRes.ok ? `channels.json: ${channelsRes.message}` : null,
+              !buildsRes.ok ? `builds index: ${buildsRes.message}` : null,
+            ]
+              .filter(Boolean)
+              .join("; ")}), so whether channels or builds exist is unknown. The console Builds page is the record: ${buildsPageUrl}.`
+          : `No channels or builds are recorded on the registry yet for ${ref.workspace}/${ref.project}. Push a commit to produce a build, then check ${buildsPageUrl}.`,
+    warnings: [
+      publicUrlNote,
+      channelsUnavailable,
+      buildsUnavailable,
+      metaRes.ok ? null : `meta.json could not be read (${metaRes.message}), so the project's visibility is unknown and no public page links are offered.`,
+    ],
   });
 }
