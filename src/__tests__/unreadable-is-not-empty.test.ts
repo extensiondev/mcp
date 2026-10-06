@@ -145,9 +145,11 @@ describe("session markers and carrier records", () => {
     process.env.EXTENSION_MCP_SESSION_DIR = file;
     const read = processManager.readSessionMarkers();
     expect(read.markers).toEqual([]);
-    expect(read.unreadable).toMatch(/ENOTDIR|not a directory/i);
+    expect(read.unreadable).toContain(file);
+    expect(read.unreadable).toMatch(/ENOTDIR|ENOENT|not a directory/i);
     const carriers = carrierRegistry.readRememberedCarriers();
-    expect(carriers.unreadable).toMatch(/ENOTDIR|not a directory/i);
+    expect(carriers.unreadable).toContain(file);
+    expect(carriers.unreadable).toMatch(/ENOTDIR|ENOENT|not a directory/i);
   });
 
   it("reads Windows' ENOENT on a path that exists as unreadable, not as no markers", () => {

@@ -35,12 +35,7 @@ export function directoryNotCreatedYet(dir: string): boolean {
   const target = path.resolve(dir);
   let probe = target;
   for (;;) {
-    let stat: fs.Stats | null = null;
-    try {
-      stat = fs.statSync(probe);
-    } catch {
-      stat = null;
-    }
+    const stat = fs.statSync(probe, { throwIfNoEntry: false });
     if (stat) return probe !== target && stat.isDirectory();
     const parent = path.dirname(probe);
     if (parent === probe) return false;
