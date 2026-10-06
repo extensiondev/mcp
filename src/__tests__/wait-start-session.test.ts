@@ -51,6 +51,26 @@ describe("extension_wait on a start session says at once that nothing will attac
     expect(result.warnings.join(" ")).toContain("clamped to 50000ms");
   }, 20_000);
 
+  it("answers launched for a preview session too, which the engine stamps as command preview", async () => {
+    const project = tmpProject();
+    writeContract(project, "chrome", {
+      command: "preview",
+      pid: process.pid,
+      port: null,
+      compiledAt: new Date().toISOString(),
+    });
+    const started = Date.now();
+
+    const result = JSON.parse(
+      await wait.handler({ projectPath: project, browser: "chrome", timeoutMs: 1500 }),
+    );
+
+    expect(Date.now() - started).toBeLessThan(1400);
+    expect(result.status).toBe("launched");
+    expect(result.value.sessionCommand).toBe("preview");
+    expect(result.hint).toContain("prebuilt dist");
+  }, 10_000);
+
   it("keeps waiting on a dev session that has compiled but not attached, and says when the budget was clamped", async () => {
     const project = tmpProject();
     writeContract(project, "chrome", {

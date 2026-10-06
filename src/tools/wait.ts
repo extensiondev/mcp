@@ -85,6 +85,7 @@ export async function handler(args: {
   let sawCompiledButUnattached = false;
   let lastContractStatus: string | null = null;
   let staleContractNote: string | null = null;
+  let contractUnreadable: string | null = null;
   const clampNote = clamped
     ? `requested ${requested}ms was clamped to ${SAFE_CEILING_MS}ms to stay under the MCP client request timeout`
     : null;
@@ -202,7 +203,7 @@ export async function handler(args: {
             hint: "Build-only session (noBrowser): the extension compiled and the dev server is live, but no browser was launched, so browserAttached will never become true. Do not call extension_wait again to wait for a browser. The control verbs (storage/reload/open/dom_snapshot/eval) need a live browser and will not work against this session.",
           });
         }
-        if (!attached && contract.command === "start") {
+        if (!attached && (contract.command === "start" || contract.command === "preview")) {
           /* @invariant A start session runs the production build with no dev
              bridge in it, so no executor ever attaches and waiting for one is
              not transient. The build landing is the answer,
@@ -214,7 +215,7 @@ export async function handler(args: {
             value: {
               compiled: true,
               browserAttached: false,
-              sessionCommand: "start",
+              sessionCommand: contract.command,
               browser: contract.browser,
               pid: contract.pid,
               readyPath,
@@ -222,7 +223,7 @@ export async function handler(args: {
               elapsedMs: Date.now() - start,
             },
             warnings: [clampNote, staleContractNote],
-            hint: "This is an extension_start session: the production build is loaded in the browser, and a production build carries no dev bridge, so browserAttached stays false for good and extension_eval, extension_storage, extension_reload, extension_open and extension_dom_snapshot cannot drive it. Do not call extension_wait again. To drive or read the extension, run it with extension_dev; to check the production artifact, extension_build reports its summary and extension_preview_web renders the built dist.",
+            hint: `This is an extension_start session (${contract.command === "preview" ? "a prebuilt dist served by the engine's preview verb" : "the production build"}): the contract says the build landed, not that a browser shows it, and a production build carries no dev bridge, so browserAttached stays false for good and extension_eval, extension_storage, extension_reload, extension_open and extension_dom_snapshot cannot drive it. Do not call extension_wait again. To drive or read the extension, run it with extension_dev; to check the production artifact, extension_build reports its summary and extension_preview_web renders the built dist.`,
           });
         }
         if (!attached) {
@@ -298,7 +299,13 @@ export async function handler(args: {
           },
         });
       }
-    } catch {
+    } catch (err) {
+      /* @invariant ENOENT is "no contract yet"; anything else is a contract
+         that exists and could not be read, which the timeout must say
+         instead of "no ready contract was observed". */
+      const code = (err as NodeJS.ErrnoException)?.code;
+      contractUnreadable =
+        code === "ENOENT" ? null : `${readyPath} exists but could not be read: ${(err as Error)?.message ?? String(err)}`;
     }
 
     await new Promise((resolve) => setTimeout(resolve, pollInterval));
@@ -334,7 +341,9 @@ export async function handler(args: {
       message:
         lastContractStatus === "starting"
           ? `Not ready after ${budgetMs}ms this call: the dev server stamped its contract (status: starting) but the first compile has not landed yet.`
-          : `Not ready after ${budgetMs}ms this call: no ready contract was observed at ${readyPath}, so neither the compile nor a browser attach has been seen.`,
+          : contractUnreadable
+            ? `Not ready after ${budgetMs}ms this call: ${contractUnreadable}. A contract that exists and cannot be read is not "no session"; the engine may be mid-write, or the file is corrupt.`
+            : `Not ready after ${budgetMs}ms this call: no ready contract was observed at ${readyPath}, so neither the compile nor a browser attach has been seen.`,
     },
     value: {
       compiled: false,

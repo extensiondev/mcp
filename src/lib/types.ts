@@ -59,7 +59,7 @@ export interface ReadyContract {
   code?: string;
   browserExitCode?: number | null;
   browserExitedAt?: string;
-  command: "dev" | "start";
+  command: "dev" | "start" | "preview" | "build";
   browser: string;
   runId?: string;
   startedAt?: string;
