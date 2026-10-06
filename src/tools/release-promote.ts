@@ -7,8 +7,8 @@
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
 import { API_BASE } from "../lib/common-schema";
+import { resolveCredential } from "../lib/credential-source";
 import { envelope, type ErrorCode } from "../lib/envelope";
-import { resolveToken } from "../lib/publish";
 import { PROJECT_TOKEN_INPUT, noStoredLoginHint } from "../lib/credentials";
 import { resolveApiBase, safeApiBase } from "../lib/login-flow";
 import { UserlandProjectPage } from "@extension.dev/urls/userland";
@@ -31,7 +31,6 @@ import {
   fetchRegistryJson,
   parseChannels,
   registryFileUrl,
-  loginProjectRef,
   userlandProjectUrl,
 } from "../lib/registry";
 
@@ -105,7 +104,8 @@ export async function handler(args: {
   api?: string;
   project?: string;
 }): Promise<string> {
-  const token = resolveToken({ project: args.project });
+  const credential = resolveCredential({ project: args.project });
+  const token = credential.token;
   if (!token && args.project) {
     return fail("PromoteAuthError", noStoredLoginHint(args.project), "auth-required", "E_AUTH_REQUIRED");
   }
@@ -224,7 +224,7 @@ export async function handler(args: {
     const code = typeof data?.code === "string" ? data.code : undefined;
     const enrich: Record<string, unknown> = {};
     let hint = "";
-    const ref = loginProjectRef(args.project);
+    const ref = credential.ref;
 
     if (res.status === 404 || code === "UNKNOWN_BUILD") {
       enrich.buildsPageUrl = consoleProjectUrl(ref, "builds", args.api);
@@ -261,7 +261,7 @@ export async function handler(args: {
     });
   }
 
-  const promotedRef = loginProjectRef(args.project);
+  const promotedRef = credential.ref;
   const publicChannelUrl = userlandProjectUrl(
     promotedRef,
     UserlandProjectPage.channel(channel),
@@ -319,7 +319,7 @@ export async function handler(args: {
         },
       },
       hint: `The release workflow was dispatched for ${outcome.queuedBrowsers.join(", ")}, and part of this promote did not happen: read the warnings. Do not repeat the whole promote; confirm what ${channel} serves with ${statusRead}.`,
-      warnings: partialPromoteWarnings(outcome, channel),
+      warnings: [...partialPromoteWarnings(outcome, channel), credential.note],
     });
   }
   return envelope({
@@ -328,6 +328,6 @@ export async function handler(args: {
     status: "promoted",
     value: enriched,
     hint: `The platform dispatched the release workflow for ${outcome.queuedBrowsers.join(", ")} and moved the ${channel} channel pointer to build ${buildId}. The artifacts land when that workflow finishes; ${statusRead} reads what the channel serves.`,
-    warnings: notarizationNotes(outcome.notarization),
+    warnings: [...notarizationNotes(outcome.notarization), credential.note],
   });
 }

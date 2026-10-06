@@ -27,15 +27,21 @@ describe("extension_publish surfaces the platform's preview commands", () => {
   let tmp: string;
   let prevXdg: string | undefined;
 
+  let prevToken: string | undefined;
+
   beforeEach(() => {
     tmp = fs.mkdtempSync(path.join(os.tmpdir(), "extdev-publish-preview-"));
     prevXdg = process.env.XDG_CONFIG_HOME;
+    prevToken = process.env.EXTENSION_DEV_TOKEN;
     process.env.XDG_CONFIG_HOME = tmp;
+    process.env.EXTENSION_DEV_TOKEN = `${Buffer.from(JSON.stringify({ u: "open-source-demo", p: "web-scrobbler", exp: Math.floor(Date.now() / 1000) + 600 })).toString("base64url")}.sig`;
   });
 
   afterEach(() => {
     if (prevXdg === undefined) delete process.env.XDG_CONFIG_HOME;
     else process.env.XDG_CONFIG_HOME = prevXdg;
+    if (prevToken === undefined) delete process.env.EXTENSION_DEV_TOKEN;
+    else process.env.EXTENSION_DEV_TOKEN = prevToken;
     fs.rmSync(tmp, { recursive: true, force: true });
   });
 

@@ -66,7 +66,11 @@ function success(creds: {
       projectSlug: creds.projectSlug,
       expiresAt,
     },
-    hint: `Logged in to ${creds.workspaceSlug}/${creds.projectSlug}. extension_publish can now use the stored token. The token expires ${
+    hint: `Logged in to ${creds.workspaceSlug}/${creds.projectSlug}. ${
+      String(process.env.EXTENSION_DEV_TOKEN || "").trim()
+        ? `EXTENSION_DEV_TOKEN is set, so an unnamed extension_publish still sends it; pass project: "${creds.workspaceSlug}/${creds.projectSlug}" to use this stored login.`
+        : "extension_publish can now use the stored token."
+    } The token expires ${
       expiresAt ?? "within 7 days"
     }: extension.dev CLI tokens live at most 7 days, so CI must re-mint before then (console: project settings -> Access tokens).`,
     warnings: [tokenTtlNote(creds.workspaceSlug, creds.projectSlug)],

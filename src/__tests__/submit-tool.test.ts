@@ -8,6 +8,10 @@ import { writeCredentials } from "../lib/credentials";
 import { tools as ALL_TOOLS } from "../index";
 import { submitAnswer } from "./fixtures/platform-answers";
 
+function claimsToken(u: string, p: string): string {
+  return `${Buffer.from(JSON.stringify({ u, p, exp: Math.floor(Date.now() / 1000) + 600 })).toString("base64url")}.sig`;
+}
+
 function jsonResponse(body: unknown, ok = true, status = 200): Response {
   return {
     ok,
@@ -83,7 +87,7 @@ describe("extension_submit: platform submit handler", () => {
   });
 
   it("fails with SubmitInputError before any fetch when browsers/buildSha missing", async () => {
-    process.env.EXTENSION_DEV_TOKEN = "tok";
+    process.env.EXTENSION_DEV_TOKEN = claimsToken("acme", "widget");
     let called = false;
     global.fetch = (async () => {
       called = true;
@@ -139,7 +143,7 @@ describe("extension_submit: platform submit handler", () => {
   });
 
   it("keeps a platform-reported failure primary when no local ref exists", async () => {
-    process.env.EXTENSION_DEV_TOKEN = "tok";
+    process.env.EXTENSION_DEV_TOKEN = claimsToken("acme", "widget");
     global.fetch = (async () =>
       jsonResponse({
         ok: false,
@@ -156,7 +160,7 @@ describe("extension_submit: platform submit handler", () => {
   });
 
   it("keeps a platform failure primary even when store credentials are healthy", async () => {
-    process.env.EXTENSION_DEV_TOKEN = "tok";
+    process.env.EXTENSION_DEV_TOKEN = claimsToken("acme", "widget");
     writeCredentials({
       version: 1,
       token: "tok",
@@ -188,7 +192,7 @@ describe("extension_submit: platform submit handler", () => {
   });
 
   it("still fails the dry run when every requested store is definitively blocked", async () => {
-    process.env.EXTENSION_DEV_TOKEN = "tok";
+    process.env.EXTENSION_DEV_TOKEN = claimsToken("acme", "widget");
     writeCredentials({
       version: 1,
       token: "tok",
@@ -219,7 +223,7 @@ describe("extension_submit: platform submit handler", () => {
   });
 
   it("reads STORE.md from projectPath instead of the server's cwd", async () => {
-    process.env.EXTENSION_DEV_TOKEN = "tok";
+    process.env.EXTENSION_DEV_TOKEN = claimsToken("acme", "widget");
     global.fetch = (async () =>
       jsonResponse({ ok: true, dryRun: true })) as unknown as typeof fetch;
     const project = path.join(tmp, "project");
@@ -256,7 +260,7 @@ describe("extension_submit: platform submit handler", () => {
   });
 
   it("passes dryRun:false through only when explicitly set", async () => {
-    process.env.EXTENSION_DEV_TOKEN = "tok";
+    process.env.EXTENSION_DEV_TOKEN = claimsToken("acme", "widget");
     let body: any = null;
     global.fetch = (async (_url: string, init: any) => {
       body = JSON.parse(init.body);
@@ -267,7 +271,7 @@ describe("extension_submit: platform submit handler", () => {
   });
 
   it("attaches STORE.md warnings to the result without blocking it", async () => {
-    process.env.EXTENSION_DEV_TOKEN = "tok";
+    process.env.EXTENSION_DEV_TOKEN = claimsToken("acme", "widget");
     global.fetch = (async () =>
       jsonResponse({ ok: true, dryRun: true })) as unknown as typeof fetch;
     const prevCwd = process.cwd();
@@ -276,9 +280,8 @@ describe("extension_submit: platform submit handler", () => {
       const out = JSON.parse(
         await handler({ browsers: ["firefox"], buildSha: "abc1234" }),
       );
-      expect(out.warnings).toHaveLength(2);
       expect(out.warnings[0]).toContain("No STORE.md");
-      expect(out.warnings[1]).toBe("channel: stable (default)");
+      expect(out.warnings[out.warnings.length - 1]).toBe("channel: stable (default)");
       expect(out.value.preflight[0].reason).not.toContain("STORE.md");
     } finally {
       process.chdir(prevCwd);
@@ -286,7 +289,7 @@ describe("extension_submit: platform submit handler", () => {
   });
 
   it("surfaces a non-OK response as SubmitError", async () => {
-    process.env.EXTENSION_DEV_TOKEN = "tok";
+    process.env.EXTENSION_DEV_TOKEN = claimsToken("acme", "widget");
     global.fetch = (async () =>
       jsonResponse(
         { message: "Build not found", code: "UNKNOWN_BUILD" },

@@ -53,6 +53,39 @@ describe("extension_auth status asks the server who the token is", () => {
     fs.rmSync(tmp, { recursive: true, force: true });
   });
 
+  /*. */
+  it("says live only when the server says live, and warns when the server names another project", async () => {
+    if (process.platform === "win32") return;
+    writeCredentials(sample());
+
+    const result = JSON.parse(
+      await readIdentity({
+        fetchImpl: fetchAnswering(200, { login: "acme/other-widget", live: false }),
+      }),
+    );
+
+    expect(result.value.server.live).toBe(false);
+    expect(JSON.stringify(result)).not.toMatch(/is live there/);
+    expect(JSON.stringify(result)).toMatch(/does not report it live/);
+    expect(result.warnings.join("\n")).toMatch(/resolves this token to acme\/other-widget, not to the acme\/widget/);
+  });
+
+  it("names the env token and its project when nothing is stored", async () => {
+    if (process.platform === "win32") return;
+    const prev = process.env.EXTENSION_DEV_TOKEN;
+    process.env.EXTENSION_DEV_TOKEN = `${Buffer.from(JSON.stringify({ u: "acme", p: "ci-only", exp: 1 })).toString("base64url")}.sig`;
+    try {
+      const result = JSON.parse(await readIdentity({ fetchImpl: fetchFailing }));
+      expect(result.status).toBe("logged-out");
+      expect(result.value.envToken).toBe("acme/ci-only");
+      expect(result.hint).toMatch(/EXTENSION_DEV_TOKEN is set and is what authenticated tools send/);
+      expect(result.hint).toMatch(/acme\/ci-only/);
+    } finally {
+      if (prev === undefined) delete process.env.EXTENSION_DEV_TOKEN;
+      else process.env.EXTENSION_DEV_TOKEN = prev;
+    }
+  });
+
   it("reports the server's confirmation beside the local claim", async () => {
     if (process.platform === "win32") return;
     writeCredentials(sample());

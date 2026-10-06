@@ -8,10 +8,10 @@
 
 import { ConsoleProjectPage } from "@extension.dev/urls/paths";
 import { API_BASE } from "../lib/common-schema";
+import { resolveCredential } from "../lib/credential-source";
 import { envelope, type ErrorCode } from "../lib/envelope";
 import fs from "node:fs";
 import path from "node:path";
-import { resolveToken } from "../lib/publish";
 import { PROJECT_TOKEN_INPUT, noStoredLoginHint } from "../lib/credentials";
 import { resolveApiBase, safeApiBase } from "../lib/login-flow";
 import { identityHeaders } from "../lib/session-identity";
@@ -30,7 +30,6 @@ import {
   fetchRegistryJson,
   parseChannels,
   registryFileUrl,
-  loginProjectRef,
 } from "../lib/registry";
 
 export function storeMdWarnings(browsers: string[], cwd: string): string[] {
@@ -146,7 +145,8 @@ function fail(
 }
 
 export async function handler(args: SubmitToolArgs): Promise<string> {
-  const token = resolveToken({ project: args.project });
+  const credential = resolveCredential({ project: args.project });
+  const token = credential.token;
   if (!token && args.project) {
     return fail("SubmitAuthError", noStoredLoginHint(args.project), "auth-required", "E_AUTH_REQUIRED");
   }
@@ -346,7 +346,7 @@ export async function handler(args: SubmitToolArgs): Promise<string> {
   let statusNote: string | null = null;
 
   if (dryRun) {
-    const ref = loginProjectRef(args.project);
+    const ref = credential.ref;
     const consoleStoresUrl = consoleProjectUrl(
       ref,
       ConsoleProjectPage.submissions,
@@ -554,7 +554,7 @@ export async function handler(args: SubmitToolArgs): Promise<string> {
       hint:
         message ||
         `The platform dispatched the store workflow for ${outcome.stores.join(", ")} and recorded each submission as pending. A store's own review comes after that and is not part of this answer.`,
-      warnings: [...warnings, channelNote, statusNote],
+      warnings: [...warnings, channelNote, statusNote, credential.note],
     });
   }
 
@@ -564,6 +564,6 @@ export async function handler(args: SubmitToolArgs): Promise<string> {
     status: "preflight",
     value: result,
     hint: message,
-    warnings: [...warnings, channelNote, statusNote],
+    warnings: [...warnings, channelNote, statusNote, credential.note],
   });
 }

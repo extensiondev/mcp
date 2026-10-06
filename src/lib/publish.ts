@@ -6,7 +6,7 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-import { pinnedProject, readValidCredentials } from "./credentials";
+import { resolveCredential } from "./credential-source";
 import { resolveApiBase, safeApiBase } from "./login-flow";
 import { identityHeaders } from "./session-identity";
 import { platformHoldMessage, sawPlatformHold } from "./platform-hold";
@@ -19,18 +19,7 @@ type FetchImpl = typeof fetch;
    call is for. With no project, the order stays
    environment first, then the active stored login. */
 export function resolveToken(options: { project?: string } = {}): string {
-  const named = String(options.project ?? "").trim();
-  const project = named || pinnedProject();
-  if (project) {
-    const creds = readValidCredentials(undefined, { project });
-    if (creds?.token) return String(creds.token).trim();
-    if (named) return "";
-    return String(process.env.EXTENSION_DEV_TOKEN || "").trim();
-  }
-  const fromEnv = String(process.env.EXTENSION_DEV_TOKEN || "").trim();
-  if (fromEnv) return fromEnv;
-  const creds = readValidCredentials();
-  return creds?.token ? String(creds.token).trim() : "";
+  return resolveCredential(options).token;
 }
 
 export interface PublishOptions {

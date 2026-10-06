@@ -12,6 +12,7 @@ import {
   readCredentials,
 } from "../lib/credentials";
 import { envelope } from "../lib/envelope";
+import { readTokenClaims, resolveCredential } from "../lib/credential-source";
 import { resolveApiBase, safeApiBase, tokenTtlNote } from "../lib/login-flow";
 import {
   askServerIdentity,
@@ -39,7 +40,7 @@ function describeServer(check: ServerCheck, api: string) {
   if (check.kind === "confirmed") {
     return {
       status: "logged-in",
-      note: `The server at ${api} confirms this token: it resolves to ${check.login} and is live there.`,
+      note: `The server at ${api} confirms this token: it resolves to ${check.login}${check.live ? " and is live there" : ", though the server does not report it live"}.`,
       warning: null,
       value: {
         verdict: "confirmed",
@@ -97,8 +98,22 @@ export async function readIdentity(deps?: {
       ok: true,
       command: "extension_auth",
       status: "logged-out",
-      value: {},
-      hint: "No stored credentials. Run extension_auth (action: login) to authenticate.",
+      ...(String(process.env.EXTENSION_DEV_TOKEN || "").trim()
+        ? {
+            value: {
+              envToken: (() => {
+                const claims = readTokenClaims(String(process.env.EXTENSION_DEV_TOKEN));
+                return claims ? `${claims.workspace}/${claims.project}` : "unreadable claims";
+              })(),
+            },
+          }
+        : { value: {} }),
+      hint: String(process.env.EXTENSION_DEV_TOKEN || "").trim()
+        ? `No stored login, but EXTENSION_DEV_TOKEN is set and is what authenticated tools send${(() => {
+            const claims = readTokenClaims(String(process.env.EXTENSION_DEV_TOKEN));
+            return claims ? ` (per its claims it belongs to ${claims.workspace}/${claims.project})` : " (its claims could not be read)";
+          })()}. Run extension_auth (action: login) to store a login as well.`
+        : "No stored credentials. Run extension_auth (action: login) to authenticate.",
     });
   }
 
@@ -138,9 +153,14 @@ export async function readIdentity(deps?: {
   const apiDivergesNote = apiDiverges
     ? `This login was minted via ${recordedApi}: access grants for private registry reads use that recorded base when no api argument is given, while other authenticated tools target ${effectiveDefaultApi} unless given one.`
     : null;
+  const resolved = resolveCredential();
   const envTokenNote = envTokenSet
-    ? "EXTENSION_DEV_TOKEN is set and takes precedence over this stored login for authenticated tools; this report describes only the stored login."
+    ? `EXTENSION_DEV_TOKEN is set: an unnamed call sends it${resolved.ref ? ` (per its claims it belongs to ${resolved.ref.workspace}/${resolved.ref.project})` : " (its claims could not be read)"}, while a call naming a project, or a server pinned to one, sends that project's stored login first; this report describes only the stored login.`
     : null;
+  const serverIdentityMismatch =
+    check.kind === "confirmed" && check.login.toLowerCase() !== `${creds.workspaceSlug}/${creds.projectSlug}`.toLowerCase()
+      ? `The server resolves this token to ${check.login}, not to the ${creds.workspaceSlug}/${creds.projectSlug} the stored file claims; the file's slugs are stale or were edited. Log in again to refresh them.`
+      : null;
   const logins = listCredentials().map((entry) => ({
     project: `${entry.workspaceSlug}/${entry.projectSlug}`,
     active: entry.active,
@@ -186,6 +206,7 @@ export async function readIdentity(deps?: {
       tokenTtlNote(creds.workspaceSlug, creds.projectSlug),
       server.warning,
       apiDivergesNote,
+      serverIdentityMismatch,
       envTokenNote,
     ],
   });

@@ -6,6 +6,7 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
+import { readTokenClaims } from "./credential-source";
 import { readValidCredentials } from "./credentials";
 import { resolveApiBase, safeApiBase } from "./login-flow";
 import { identityHeaders } from "./session-identity";
@@ -93,17 +94,23 @@ export class RegistryAccessTokens {
     const creds = readValidCredentials(undefined, {
       project: `${ref.workspace}/${ref.project}`,
     });
-    const token = String(
-      process.env.EXTENSION_DEV_TOKEN || creds?.token || "",
-    ).trim();
-    if (!token) return { status: "no-credential" };
-
-    if (creds?.workspaceSlug && creds?.projectSlug && !process.env.EXTENSION_DEV_TOKEN) {
-      const same =
-        creds.workspaceSlug.toLowerCase() === ref.workspace.toLowerCase() &&
-        creds.projectSlug.toLowerCase() === ref.project.toLowerCase();
-      if (!same) return { status: "no-credential" };
+    const sameAs = (workspace: string, project: string): boolean =>
+      workspace.toLowerCase() === ref.workspace.toLowerCase() &&
+      project.toLowerCase() === ref.project.toLowerCase();
+    /* The stored login for THIS project first; the env token only when none
+       is stored, and only when its own claims name this project. */
+    let token = String(creds?.token || "").trim();
+    if (token && creds?.workspaceSlug && creds?.projectSlug && !sameAs(creds.workspaceSlug, creds.projectSlug)) {
+      token = "";
     }
+    if (!token) {
+      const env = String(process.env.EXTENSION_DEV_TOKEN || "").trim();
+      if (env) {
+        const claims = readTokenClaims(env);
+        if (!claims || sameAs(claims.workspace, claims.project)) token = env;
+      }
+    }
+    if (!token) return { status: "no-credential" };
 
     const check = safeApiBase(resolveApiBase(apiHint || creds?.api), apiHint);
     if (!check.ok) return { status: "denied", message: check.message };
@@ -129,7 +136,21 @@ export class RegistryAccessTokens {
       };
     }
 
-    if (res.status === 400) return { status: "public" };
+    /* "public" is read off the field that says so. */
+    if (res.status === 400) {
+      let visibility: string;
+      try {
+        visibility = String(((await res.clone().json()) as { visibility?: unknown })?.visibility ?? "");
+      } catch {
+        visibility = "";
+      }
+      if (visibility && visibility !== "private") return { status: "public" };
+      return {
+        status: "denied",
+        httpStatus: 400,
+        message: "access-grant answered 400 without saying the project is public",
+      };
+    }
     if (!res.ok) {
       return {
         status: "denied",

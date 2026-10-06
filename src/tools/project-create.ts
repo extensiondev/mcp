@@ -8,6 +8,7 @@
 
 import { API_BASE } from "../lib/common-schema";
 import { pollDeviceGrant, requestDeviceCode } from "../lib/device-flow";
+import { laneClosedByServer } from "../lib/credential-source";
 import { envelope, type ErrorCode } from "../lib/envelope";
 import {
   fetchLoginConfig,
@@ -243,9 +244,7 @@ export async function handler(args: {
       });
     } catch (err: any) {
       const message = err?.message || "Could not start the device flow.";
-      const laneClosed = /CLI_PROJECT_CREATE_DISABLED|403/.test(
-        String(message),
-      );
+      const laneClosed = laneClosedByServer(err, "CLI_PROJECT_CREATE_DISABLED");
       const serverMessage =
         typeof err?.serverMessage === "string" ? err.serverMessage.trim() : "";
       return fail(

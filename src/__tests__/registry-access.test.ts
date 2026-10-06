@@ -81,6 +81,72 @@ describe("public projects", () => {
   });
 });
 
+function claimsToken(u: string, p: string): string {
+  return `${Buffer.from(JSON.stringify({ u, p, exp: Math.floor(Date.now() / 1000) + 600 })).toString("base64url")}.sig`;
+}
+
+class Probe extends RegistryAccessTokens {
+  mintFor(ref: { workspace: string; project: string }) {
+    return (this as unknown as { mint: (r: typeof ref) => Promise<unknown> }).mint(ref);
+  }
+}
+
+/*. */
+describe("the grant is asked with the named project's stored login first", () => {
+  it("sends the stored login, not EXTENSION_DEV_TOKEN, when both exist", async () => {
+    process.env.EXTENSION_DEV_TOKEN = claimsToken("other", "thing");
+    try {
+      const bearers: string[] = [];
+      const fetchImpl = vi.fn(async (_url: any, init?: any) => {
+        bearers.push(String(init?.headers?.authorization ?? ""));
+        return jsonResponse({ token: "short", expiresAt: Math.floor(Date.now() / 1000) + 600 });
+      });
+      const grant = await new Probe({ fetchImpl: fetchImpl as any }).mintFor(REF);
+      expect(grant).toMatchObject({ status: "ok", token: "short" });
+      expect(bearers).toEqual(["Bearer stored-long-lived-token"]);
+    } finally {
+      delete process.env.EXTENSION_DEV_TOKEN;
+    }
+  });
+
+  it("does not send an env token whose claims name another project", async () => {
+    process.env.EXTENSION_DEV_TOKEN = claimsToken("other", "thing");
+    stored.current = null as unknown as typeof stored.current;
+    try {
+      const fetchImpl = vi.fn(async () => jsonResponse({ token: "short", expiresAt: 1 }));
+      const grant = await new Probe({ fetchImpl: fetchImpl as any }).mintFor(REF);
+      expect(grant).toEqual({ status: "no-credential" });
+      expect(fetchImpl).not.toHaveBeenCalled();
+    } finally {
+      delete process.env.EXTENSION_DEV_TOKEN;
+    }
+  });
+
+  it("sends an env token whose claims name this project when nothing is stored", async () => {
+    process.env.EXTENSION_DEV_TOKEN = claimsToken("acme", "widget");
+    stored.current = null as unknown as typeof stored.current;
+    try {
+      const bearers: string[] = [];
+      const fetchImpl = vi.fn(async (_url: any, init?: any) => {
+        bearers.push(String(init?.headers?.authorization ?? ""));
+        return jsonResponse({ token: "short", expiresAt: Math.floor(Date.now() / 1000) + 600 });
+      });
+      const grant = await new Probe({ fetchImpl: fetchImpl as any }).mintFor(REF);
+      expect(grant).toMatchObject({ status: "ok" });
+      expect(bearers[0]).toBe(`Bearer ${process.env.EXTENSION_DEV_TOKEN}`);
+    } finally {
+      delete process.env.EXTENSION_DEV_TOKEN;
+    }
+  });
+
+  it("reads public off the 400 body's visibility and nothing else", async () => {
+    const publicFetch = vi.fn(async () => jsonResponse({ message: "Project is public; no access token is required.", visibility: "public" }, 400));
+    expect(await new Probe({ fetchImpl: publicFetch as any }).mintFor(REF)).toEqual({ status: "public" });
+    const bareFetch = vi.fn(async () => jsonResponse({ message: "workspaceSlug and projectSlug are required." }, 400));
+    expect(await new Probe({ fetchImpl: bareFetch as any }).mintFor(REF)).toMatchObject({ status: "denied", httpStatus: 400 });
+  });
+});
+
 describe("private projects", () => {
   it("mints a short-lived token on 401 and retries once with ?t=", async () => {
     const calls: string[] = [];

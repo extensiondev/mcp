@@ -7,9 +7,10 @@
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
 import { API_BASE } from "../lib/common-schema";
+import { resolveCredential } from "../lib/credential-source";
 import { envelope, type ErrorCode } from "../lib/envelope";
 import { spendNarration } from "../lib/allowance";
-import { publish, resolveToken } from "../lib/publish";
+import { publish } from "../lib/publish";
 import { PROJECT_TOKEN_INPUT, noStoredLoginHint } from "../lib/credentials";
 import { platformHoldEnvelope } from "../lib/platform-hold";
 import {
@@ -17,7 +18,6 @@ import {
   isSuccessfulBuild,
   parseBuildIndex,
   registryFileUrl,
-  loginProjectRef,
 } from "../lib/registry";
 
 export const schema = {
@@ -77,7 +77,8 @@ export async function handler(args: {
   buildSha?: string;
   api?: string;
 }): Promise<string> {
-  const token = resolveToken({ project: args.project });
+  const credential = resolveCredential({ project: args.project });
+  const token = credential.token;
   if (!token && args.project) {
     return fail("PublishAuthError", noStoredLoginHint(args.project), "auth-required", "E_AUTH_REQUIRED");
   }
@@ -199,7 +200,7 @@ export async function handler(args: {
   }
   let buildNote: string | null = null;
 
-  const ref = loginProjectRef(args.project);
+  const ref = credential.ref;
   if (ref) {
     const buildsUrl = registryFileUrl(ref, "builds/index.json");
     const buildsRes = await fetchRegistryJson(buildsUrl, fetch, {
@@ -281,7 +282,7 @@ export async function handler(args: {
     command: "extension_publish",
     status: noBuild ? "published-without-build" : "published",
     value: data,
-    warnings: [noBuildNote, note, buildNote],
+    warnings: [noBuildNote, note, buildNote, credential.note],
     ...(previewHint ? { hint: previewHint } : {}),
   });
 }
