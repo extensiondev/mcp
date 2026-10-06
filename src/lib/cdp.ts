@@ -254,6 +254,7 @@ export class CDPClient extends CDPConnection {
       selector: string;
       count: number;
       samples: Array<Record<string, unknown>>;
+      error?: string;
     }>
   > {
     const result = await this.evaluate(
@@ -265,6 +266,7 @@ export class CDPClient extends CDPConnection {
         selector: string;
         count: number;
         samples: Array<Record<string, unknown>>;
+        error?: string;
       }>) ?? []
     );
   }

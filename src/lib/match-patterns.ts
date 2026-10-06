@@ -76,7 +76,7 @@ export function coveringMatches(patterns: string[], url: string): string[] {
    about:blank is deliberately absent: match_about_blank injects there, so
    calling it forbidden would be a wrong red. file:// is absent for the same
    reason, since a profile launched with file access enabled does inject. */
-const FORBIDDEN: Array<{ test: RegExp; reason: string }> = [
+const FORBIDDEN: Array<{ test: RegExp; reason: string; chromiumOnly?: boolean }> = [
   {
     test: /^chrome:\/\//i,
     reason:
@@ -107,15 +107,23 @@ const FORBIDDEN: Array<{ test: RegExp; reason: string }> = [
       "an extension page is not a host page: content scripts do not inject into extension origins, and a surface's own scripts run there instead",
   },
   {
+    chromiumOnly: true,
     test: /^https?:\/\/(chrome\.google\.com\/webstore|chromewebstore\.google\.com)/i,
     reason:
       "Chrome blocks every extension from the Web Store's own pages by policy, whatever the manifest declares",
   },
 ];
 
-export function contentScriptsForbidden(url: string): string | null {
+/* @invariant A rule about one browser's policy is applied to that browser.
+   The Web Store block is Chrome's; asserting a content script there on
+   Firefox or Safari used to be a hard FAIL "no manifest change makes this
+   true" for a page those browsers inject into like any other. The protocol rules (view-source:, extension origins) hold everywhere. */
+export function contentScriptsForbidden(url: string, browser?: string): string | null {
   const trimmed = String(url ?? "").trim();
+  const chromium =
+    browser === undefined || !/firefox|gecko|waterfox|librewolf|zen|floorp|safari|webkit/i.test(browser);
   for (const rule of FORBIDDEN) {
+    if (!chromium && rule.chromiumOnly) continue;
     if (rule.test.test(trimmed)) return rule.reason;
   }
   return null;

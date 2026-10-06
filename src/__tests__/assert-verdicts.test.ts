@@ -16,6 +16,7 @@ const live = vi.hoisted(() => ({
   render: null as Record<string, unknown> | null,
   probeCount: 0,
   storageFrame: "",
+  probeError: null as string | null,
   port: 9222 as number | null,
 }));
 
@@ -39,8 +40,9 @@ vi.mock("../lib/cdp", async (importOriginal) => {
     async probeSelectors(_sessionId: string, selectors: string[]) {
       return selectors.map((selector) => ({
         selector,
-        count: live.probeCount,
+        count: live.probeError ? 0 : live.probeCount,
         samples: [],
+        ...(live.probeError ? { error: live.probeError } : {}),
       }));
     }
     async evaluate() {
@@ -169,14 +171,50 @@ describe("background-worker-booted", () => {
     expect(JSON.stringify(check)).toContain("ponmlkjihgfedcbaponmlkjihgfedcba");
   });
 
-  it("fails when the browser lists no target for the guest", async () => {
+  it("fails only when the contract says the browser refused the load", async () => {
+    writeManifest({ background: { service_worker: "sw.js" } });
+    writeReady({
+      status: "error",
+      code: "extension_load_refused",
+      extensionLoadRefusedReason: "Manifest file is missing or unreadable",
+      pid: process.pid,
+      runId: "run-1",
+      instanceId: "inst-1",
+      distPath: path.join(project, "dist", BROWSER),
+      extensionId: GUEST_ID,
+      cdpPort: 9222,
+    });
+    live.targets = [];
+    const { check } = await assertOnce({ assert: "background-worker-booted" });
+    expect(check.outcome).toBe("fail");
+    expect(check.detail).toContain("Manifest file is missing");
+  });
+
+  it("is inconclusive when a selector the page rejects is probed", async () => {
+    writeManifest({ action: { default_popup: "popup.html" } });
+    liveSession();
+    live.targets = [
+      { id: "popup", type: "page", url: `chrome-extension://${GUEST_ID}/popup.html` },
+    ];
+    live.render = { readyState: "complete", renderedElementCount: 3, renderedTextLength: 9 };
+    live.probeError = "SyntaxError: 'div[' is not a valid selector";
+    try {
+      const { check } = await assertOnce({ assert: "surface-rendered", surface: "popup", selector: "div[" });
+      expect(check.outcome).toBe("inconclusive");
+      expect(check.detail).toContain("not a valid selector");
+    } finally {
+      live.probeError = null;
+    }
+  });
+
+  it("is inconclusive, not a fail, when no target is listed and the contract records no refusal", async () => {
     writeManifest({ background: { service_worker: "sw.js" } });
     liveSession();
     live.targets = [
       { id: "companion", type: "page", url: `chrome-extension://${COMPANION_ID}/x.html` },
     ];
     const { check } = await assertOnce({ assert: "background-worker-booted" });
-    expect(check.outcome).toBe("fail");
+    expect(check.outcome).toBe("inconclusive");
     expect(check.detail).toContain("not loaded");
   });
 
@@ -829,5 +867,16 @@ describe("match patterns decide wording, never a pass", () => {
     expect(contentScriptsForbidden("about:blank")).toBeNull();
     expect(contentScriptsForbidden("file:///tmp/x.html")).toBeNull();
     expect(contentScriptsForbidden("https://shop.example/")).toBeNull();
+  });
+});
+
+describe("the Web Store rule is Chrome's alone", () => {
+  it("forbids the store page on Chromium and not on Gecko or WebKit", () => {
+    const url = "https://chromewebstore.google.com/detail/x";
+    expect(contentScriptsForbidden(url, "chrome")).toBeTruthy();
+    expect(contentScriptsForbidden(url, "edge")).toBeTruthy();
+    expect(contentScriptsForbidden(url, "firefox")).toBeNull();
+    expect(contentScriptsForbidden(url, "safari")).toBeNull();
+    expect(contentScriptsForbidden("chrome-extension://abc/x.html", "firefox")).toBeTruthy();
   });
 });

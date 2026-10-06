@@ -197,8 +197,8 @@ export function parseClauses(raw: unknown): ParseResult {
       }
       const minNodes =
         clause.minNodes === undefined ? undefined : Number(clause.minNodes);
-      if (minNodes !== undefined && !Number.isFinite(minNodes)) {
-        issues.push(`${at}.minNodes must be a number`);
+      if (minNodes !== undefined && (!Number.isFinite(minNodes) || minNodes < 1)) {
+        issues.push(`${at}.minNodes must be a number of at least 1`);
         return;
       }
       const selector =
@@ -506,13 +506,22 @@ async function assertBackgroundWorker(
   if (!guest.checked) {
     return inconclusiveCheck(id, null, guest.reason, NO_SESSION_SETTLED_BY);
   }
+  /* @invariant NO TARGET IS NOT "NOT LOADED". An idle MV3 worker with no
+     page of its extension open lists nothing, exactly like a rejected load,
+     so the target list alone cannot tell them apart. The one thing that can
+     is the contract: the CLI stamps `extension_load_refused` when the browser
+     refused the load. That is the FAIL; anything else falls through to the
+     log evidence and, failing that, to inconclusive. */
   if (!guest.loaded) {
-    return failCheck(
-      id,
-      null,
-      `The extension is not loaded in the running browser, so its ${background.kind} never started. ${guest.reason}`,
-      { guestIds: guest.guestIds },
-    );
+    const refusal = contractLoadRefusal(stage.projectPath, stage.browser);
+    if (refusal) {
+      return failCheck(
+        id,
+        null,
+        `The browser refused to load the extension (${refusal}), so its ${background.kind} never started. ${guest.reason}`,
+        { guestIds: guest.guestIds },
+      );
+    }
   }
 
   const workers = targets.filter(
@@ -558,7 +567,9 @@ async function assertBackgroundWorker(
   return inconclusiveCheck(
     id,
     null,
-    `${read.file} declares a ${background.kind}${background.ref ? ` (${background.ref})` : ""}, the extension is loaded, and the browser lists no live worker target for it. That is not proof it never booted: Chrome delists an idle service worker, so absence here means no evidence either way.${
+    `${read.file} declares a ${background.kind}${background.ref ? ` (${background.ref})` : ""}, and the browser lists no live worker target for it${
+      guest.loaded ? " although the extension is loaded" : ` and no other target of this extension (${guest.reason})`
+    }. That is not proof it never booted: Chrome delists an idle service worker, so absence here means no evidence either way.${
       stale
         ? ` The log file could not settle it either: ${stale}`
         : " Nothing in this run's logs came from the background context either."
@@ -681,7 +692,7 @@ async function assertSurfaceRendered(
       );
     }
     const message = String(parsed?.error?.message ?? raw);
-    if (/not open|E_TARGET_NOT_FOUND|not found/i.test(message) || parsed?.error?.code === "E_TARGET_NOT_FOUND") {
+    if (parsed?.error?.code === "E_TARGET_NOT_FOUND" || /\bis not open\b/i.test(message)) {
       return failCheck(
         id,
         subject,
@@ -763,7 +774,17 @@ async function assertSurfaceRendered(
     const probes = await attached.cdp.probeSelectors(attached.sessionId, [
       clause.selector,
     ]);
-    const count = probes?.[0]?.count ?? 0;
+    const probe = probes?.[0];
+    if (probe?.error) {
+      return inconclusiveCheck(
+        id,
+        subject,
+        `The selector ${clause.selector} could not be probed in the ${clause.surface}: the page refused it (${probe.error}).`,
+        "Fix the selector (it must be a CSS selector the page's querySelectorAll accepts) and assert again.",
+        { evidence: evidence as Record<string, unknown> },
+      );
+    }
+    const count = probe?.count ?? 0;
     const wantedCount = clause.minNodes ?? 1;
     return count >= wantedCount
       ? passCheck(
@@ -811,6 +832,18 @@ async function assertSurfaceRendered(
       );
 }
 
+function contractLoadRefusal(projectPath: string, browser: string): string | null {
+  try {
+    const contract = JSON.parse(
+      fs.readFileSync(readyContractPath(projectPath, browser), "utf8"),
+    ) as { code?: unknown; message?: unknown; extensionLoadRefusedReason?: unknown };
+    if (contract.code !== "extension_load_refused") return null;
+    return String(contract.extensionLoadRefusedReason || contract.message || "extension_load_refused");
+  } catch {
+    return null;
+  }
+}
+
 function samePage(eventUrl: string, wanted: string): boolean {
   if (!eventUrl || !wanted) return false;
   if (eventUrl === wanted) return true;
@@ -843,7 +876,7 @@ async function assertContentScriptInjected(
   const id = CONTENT_SCRIPT;
   const subject = clause.subject;
 
-  const forbidden = contentScriptsForbidden(clause.url);
+  const forbidden = contentScriptsForbidden(clause.url, stage.browser);
   if (forbidden) {
     return failCheck(
       id,
