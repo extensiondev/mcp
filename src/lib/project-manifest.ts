@@ -8,6 +8,9 @@
 
 import fs from "node:fs";
 import path from "node:path";
+import { filterKeysForThisBrowser } from "browser-extension-manifest-fields";
+
+import { engineProjectRoot } from "./session-paths";
 
 /* @invariant One candidate list for the whole package. The built manifest is
    the one a running browser loaded, so dist wins over src, and the ordering
@@ -18,12 +21,20 @@ export function manifestCandidates(
   projectPath: string,
   browser: string,
 ): string[] {
-  return [
-    path.join(projectPath, "dist", browser, "manifest.json"),
-    path.join(projectPath, "dist", "manifest.json"),
+  const root = engineProjectRoot(projectPath);
+  const built = [
+    path.join(root, "dist", browser, "manifest.json"),
+    path.join(root, "dist", "manifest.json"),
+  ];
+  const source = [
     path.join(projectPath, "src", "manifest.json"),
     path.join(projectPath, "manifest.json"),
   ];
+  return [...new Set([...built, ...source])];
+}
+
+export function isSourceManifest(file: string, projectPath: string): boolean {
+  return !file.startsWith(path.join(engineProjectRoot(projectPath), "dist") + path.sep);
 }
 
 export interface ReadManifest {
@@ -39,7 +50,15 @@ export function readBuiltManifest(
     try {
       const manifest = JSON.parse(fs.readFileSync(file, "utf8"));
       if (manifest && typeof manifest === "object") {
-        return { file, manifest: manifest as Record<string, unknown> };
+        /* @invariant A SOURCE manifest is read through the engine's prefix
+           rule before it is judged. The built manifest has its browser
+           prefixes folded in; the source one still carries them, so a
+           `chromium:service_worker` read raw declared no background and the
+           assertion failed the worker that was running. */
+        const folded = isSourceManifest(file, projectPath)
+          ? (filterKeysForThisBrowser(manifest, browser) as Record<string, unknown>)
+          : (manifest as Record<string, unknown>);
+        return { file, manifest: folded };
       }
     } catch {
       continue;

@@ -11,6 +11,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { envelope } from "../lib/envelope";
 import { reviewRiskWarnings, reviewRisks } from "../lib/store-review";
+import { engineProjectRoot } from "../lib/session-paths";
 
 const COMMAND = "extension_analyze";
 
@@ -89,7 +90,7 @@ export async function handler(args: {
   format?: string;
 }): Promise<string> {
   const browser = args.browser ?? "chrome";
-  const distPath = path.resolve(args.projectPath, "dist", browser);
+  const distPath = path.join(engineProjectRoot(args.projectPath), "dist", browser);
 
   if (!fs.existsSync(distPath)) {
     return envelope({

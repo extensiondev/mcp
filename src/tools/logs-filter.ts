@@ -8,11 +8,26 @@
 
 import {
   matchesLogQuery,
-  readLogEvents,
+  readLogEvents as engineReadLogEvents,
   type LogQuery,
 } from "extension-develop/bridge";
+import { engineProjectRoot } from "../lib/session-paths";
 
-export { readLogEvents, type LogQuery };
+export { type LogQuery };
+
+/* @invariant THE LOG IS READ WHERE THE ENGINE WROTE IT. The engine's own
+   reader takes the path as given, while the engine writes the file under
+   its project root (the package.json that owns the manifest). Every reader
+   here that re-exported it unrooted answered "no log events" for a project
+   whose manifest sits in a subfolder, and doctor, wait and assert then said
+   there were no runtime errors. */
+export function readLogEvents(
+  projectPath: string,
+  browser: string,
+  query: LogQuery,
+): ReturnType<typeof engineReadLogEvents> {
+  return engineReadLogEvents(engineProjectRoot(projectPath), browser, query);
+}
 
 export interface LogsArgs {
   projectPath: string;

@@ -20,6 +20,7 @@ import { recordSharedPreview } from "../lib/share-record";
 import { probeShareCors } from "../lib/share-cors-probe";
 import { envelope } from "../lib/envelope";
 import { ALLOWANCE_PHRASE } from "../lib/allowance";
+import { engineProjectRoot } from "../lib/session-paths";
 import {
   PLATFORM_HOLD_CODE,
   PLATFORM_HOLD_STILL_WORKS,
@@ -422,7 +423,7 @@ export async function handler(args: {
 
   const distDir = args.distPath
     ? path.resolve(args.distPath)
-    : path.resolve(args.projectPath, "dist", browser);
+    : path.join(engineProjectRoot(args.projectPath), "dist", browser);
   const manifestPath = path.join(distDir, "manifest.json");
   if (!fs.existsSync(manifestPath)) {
     return envelope({
