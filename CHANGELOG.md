@@ -1,5 +1,16 @@
 # Changelog
 
+## 10.10.12
+
+- `extension_stop` on Windows reads the Windows process table to find what
+  is left of a session, so a stop that ended the whole tree says
+  `stopped` instead of "survivors were not verified". Before this, every
+  Windows stop answered `stopped: false`, and `extension_dev` with
+  `replace: true` refused every time. A stop still says unverified when
+  the table cannot be read. Measured on a Windows runner.
+- The lockfile raises `proxy-addr`, `source-map-js` and Vue past their
+  open advisories.
+
 ## 10.10.11
 
 The rest of the 2026-10-05 audit findings, apart from the Safari WebDriver
