@@ -9,7 +9,7 @@
 import { PROJECT_PATH } from "../lib/common-schema";
 import fs from "node:fs";
 import path from "node:path";
-import { getTemplateBySlug } from "../lib/templates-cache";
+import { getTemplateBySlug, listTemplates } from "../lib/templates-cache";
 import {
   PINNED_COMMIT,
   templateCatalogUrl,
@@ -155,17 +155,37 @@ export async function handler(args: {
     });
   }
 
-  const templateSlug = FEATURE_TEMPLATE_MAP[args.feature]?.[framework];
-  const template = templateSlug
-    ? await getTemplateBySlug(templateSlug)
-    : undefined;
-  const referenceFiles = template?.keyFiles ?? template?.files ?? [];
-
   const FEATURE_DIR: Record<string, string> = {
     "content-script": "content",
     popup: "action",
   };
   const featureDir = FEATURE_DIR[args.feature] ?? args.feature;
+
+  /* @invariant THE CATALOG IS READ BEFORE SAYING NO TEMPLATE SHIPS A SURFACE.
+     devtools and options had no row in the map and were answered "No
+     catalog template ships this surface yet" while the catalog carried
+     several. */
+  let templateSlug: string | undefined = FEATURE_TEMPLATE_MAP[args.feature]?.[framework];
+  let referenceNote: string | undefined;
+  if (!templateSlug) {
+    try {
+      const carriers = await listTemplates({ surface: featureDir });
+      const exact = carriers.find((t) => (t.uiFramework ?? "vanilla") === framework);
+      const pick = exact ?? carriers[0];
+      if (pick) {
+        templateSlug = pick.slug;
+        if (!exact) {
+          referenceNote = `No ${framework} template in the catalog ships a ${featureDir} surface; ${pick.slug} (${pick.uiFramework ?? "vanilla"}) is referenced for the surface wiring only.`;
+        }
+      }
+    } catch {
+      referenceNote = `The template catalog could not be read, so whether a template ships a ${featureDir} surface is unknown.`;
+    }
+  }
+  const template = templateSlug
+    ? await getTemplateBySlug(templateSlug)
+    : undefined;
+  const referenceFiles = template?.keyFiles ?? template?.files ?? [];
 
   const scriptExt =
     framework === "react" || framework === "preact" ? "tsx" : "ts";
@@ -185,7 +205,7 @@ export async function handler(args: {
     featureDir.charAt(0).toUpperCase() + featureDir.slice(1);
 
   const filesToCreate: Array<{ path: string; hint: string }> = [];
-  const manifestUpdates = MANIFEST_ADDITIONS[args.feature] ?? {};
+  const manifestUpdates: Record<string, unknown> = { ...(MANIFEST_ADDITIONS[args.feature] ?? {}) };
 
   if (
     ["sidebar", "popup", "newtab", "options", "devtools"].includes(args.feature)
@@ -260,16 +280,33 @@ export async function handler(args: {
     key.replace(/^(chromium|chrome|firefox|gecko|safari|edge|opera|brave):/, "");
   let manifestKeys: string[] | null = null;
   let manifestUnreadable: string | undefined;
+  let current: Record<string, unknown> = {};
   try {
     const parsed = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("not a JSON object");
-    manifestKeys = Object.keys(parsed as Record<string, unknown>);
+    current = parsed as Record<string, unknown>;
+    manifestKeys = Object.keys(current);
   } catch (err) {
     manifestUnreadable = err instanceof Error ? err.message : String(err);
   }
+  /* @invariant A PREFIXED KEY REPLACES THE UNPREFIXED ONE IN THE ENGINE, so
+     an addition like `chromium:permissions: ["sidePanel"]` dropped the
+     project's existing permissions on Chromium. A list
+     addition is merged with what the manifest already declares for that
+     key, and the merge is listed, not counted as a conflict. */
+  const merged: string[] = [];
+  for (const [key, value] of Object.entries(manifestUpdates)) {
+    if (!Array.isArray(value)) continue;
+    const prefixed = current[key];
+    const bare = current[bareKey(key)];
+    const existing = Array.isArray(prefixed) ? prefixed : Array.isArray(bare) ? bare : null;
+    if (!existing) continue;
+    manifestUpdates[key] = [...existing, ...value.filter((v) => !existing.includes(v))];
+    merged.push(key);
+  }
   const manifestConflicts = manifestKeys
-    ? Object.keys(manifestUpdates).filter((key) =>
-        manifestKeys.some((present) => bareKey(present) === bareKey(key)),
+    ? Object.keys(manifestUpdates).filter(
+        (key) => !merged.includes(key) && manifestKeys.some((present) => bareKey(present) === bareKey(key)),
       )
     : [];
   const safe = conflicts.length === 0 && manifestConflicts.length === 0 && !manifestUnreadable;
@@ -305,6 +342,7 @@ export async function handler(args: {
       })),
       conflicts: conflicts.map((c) => c.path),
       manifestConflicts,
+      manifestMerged: merged,
       manifestReadable: manifestKeys !== null,
       instructions: [
         `1. Add these fields to your src/manifest.json:\n${JSON.stringify(manifestUpdates, null, 2)}`,
@@ -320,6 +358,8 @@ export async function handler(args: {
       ].filter(Boolean),
     },
     warnings: [
+      ...(referenceNote ? [referenceNote] : []),
+      ...(merged.length ? [`${merged.join(", ")} already declared values; the additions above merge them with the new entries, so paste the merged list.`] : []),
       ...(conflicts.length ? [conflictHint] : []),
       ...(manifestConflicts.length ? [manifestConflictHint] : []),
       ...(manifestUnreadable ? [manifestUnreadableHint] : []),

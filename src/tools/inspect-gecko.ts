@@ -16,6 +16,7 @@ import {
   EXTENSION_ROOT_META_SCRIPT,
   domSnapshotScript,
 } from "../lib/cdp-page-scripts";
+import { normalizeDomSnapshot } from "../lib/cdp";
 import {
   restoredTabWarning,
   sessionProfileReused,
@@ -70,11 +71,11 @@ function buildBridgeInspectExpression(opts: {
         const cap = ${JSON.stringify(opts.maxBytes)};
         out.htmlTruncated = cap > 0 && html.length > cap;
         out.html = out.htmlTruncated ? html.slice(0, cap) : html;
-      } catch (e) {}`,
+      } catch (e) { (out.failedSections = out.failedSections || []).push({ section: "html", reason: String(e) }); }`,
     );
   }
   if (opts.domSnapshot) {
-    parts.push(`try { out.domSnapshot = ${domSnapshotScript(500)}; } catch (e) {}`);
+    parts.push(`try { out.domSnapshot = ${domSnapshotScript(500)}; } catch (e) { (out.failedSections = out.failedSections || []).push({ section: "dom_snapshot", reason: String(e) }); }`);
   }
   if (opts.extensionRoots) {
     parts.push(
@@ -98,7 +99,7 @@ function closedShadowWalkerCode(cap: number): string {
         if (!node || node.nodeType !== 1) return;
         var sr = null;
         try { sr = node.openOrClosedShadowRoot || null; } catch (e) {}
-        if (sr && sr.mode !== "open") out.closed.push({ host: node.tagName.toLowerCase(), html: String(sr.innerHTML).slice(0, ${cap}) });
+        if (sr && sr.mode !== "open") { var full = String(sr.innerHTML); out.closed.push({ host: node.tagName.toLowerCase(), html: full.slice(0, ${cap}), truncated: full.length > ${cap} }); }
         var kids = node.children;
         for (var i = 0; i < kids.length; i++) walk(kids[i]);
         if (sr) { var sk = sr.children; for (var j = 0; j < sk.length; j++) walk(sk[j]); }
@@ -368,7 +369,25 @@ export async function inspectViaBridge(
     if (value.htmlTruncated) result.htmlTruncated = true;
   }
   if (include.has("dom_snapshot") && value.domSnapshot) {
-    result.domSnapshot = value.domSnapshot;
+    const snap = normalizeDomSnapshot(value.domSnapshot, 500);
+    result.domSnapshot = Array.isArray(value.domSnapshot) ? value.domSnapshot : snap.nodes;
+    if (snap.truncated) {
+      result.domSnapshotTruncated = {
+        listed: snap.nodes.length,
+        totalElements: snap.totalElements,
+        maxNodes: snap.maxNodes,
+        maxDepth: snap.maxDepth,
+      };
+    }
+  }
+  const failedSections: Array<{ section: string; reason: string }> = Array.isArray(value.failedSections)
+    ? value.failedSections.filter((f: unknown) => f && typeof f === "object")
+    : [];
+  if (failedSections.length) {
+    result.failedSections = failedSections;
+    for (const f of failedSections) {
+      notes.push(`${f.section} could not be read: ${f.reason}. Its value is absent, not empty.`);
+    }
   }
   if (include.has("extension_roots") && value.extensionRoots !== undefined) {
     result.extensionRoots = value.extensionRoots;
@@ -406,7 +425,7 @@ export async function inspectViaBridge(
   return envelope({
     ok: true,
     command: TOOL,
-    status: "inspected",
+    status: failedSections.length ? "inspected-partially" : "inspected",
     value: result,
     warnings: [...notes, probeWarning],
   });

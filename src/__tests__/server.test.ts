@@ -278,7 +278,7 @@ describe("add-feature handler", () => {
     }
   });
 
-  it("plans options and devtools without a reference template", async () => {
+  it("plans options and devtools from the catalog's own templates", async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "extjs-addfeat-"));
     try {
       fs.mkdirSync(path.join(root, "src"), { recursive: true });
@@ -289,10 +289,9 @@ describe("add-feature handler", () => {
         );
         expect(parsed.ok).toBe(true);
         expect(parsed.status).toBe("planned");
-        expect(parsed.value.referenceTemplate).toBeUndefined();
+        expect(parsed.value.referenceTemplate).toBeDefined();
         const instructions = parsed.value.instructions.join("\n");
-        expect(instructions).not.toContain("Reference template source");
-        expect(instructions).toContain("manifest additions");
+        expect(instructions).toContain("Reference template source");
         expect(parsed.value.filesToCreate.length).toBeGreaterThan(0);
         expect(Object.keys(parsed.value.manifestUpdates).length).toBeGreaterThan(0);
       }

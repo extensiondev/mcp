@@ -6,7 +6,7 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-import { CDPClient } from "../lib/cdp";
+import { CDPClient, normalizeDomSnapshot } from "../lib/cdp";
 import { envelope } from "../lib/envelope";
 import { isEngineCompanionUrl } from "../lib/guest-load-oracle";
 import { isChromiumFamily } from "../lib/browser-family";
@@ -134,12 +134,59 @@ export async function handler(args: {
     const sessionId = await cdp.attachToTarget(target.id);
     await cdp.enableDomains(sessionId);
 
+    /* @invariant THE ENVELOPE NAMES THE DOCUMENT THAT WAS READ. After a
+       navigation the target used to keep its pre-navigation url and title,
+       and a refused navigation (errorText) was not distinguished from a
+       landed one. */
+    let landed: { url: string; title?: string } | null = null;
+    let landingUnread: string | null = null;
     if (args.url && !target.url.includes(args.url)) {
-      await cdp.navigate(sessionId, args.url);
+      try {
+        await cdp.navigate(sessionId, args.url);
+      } catch (err) {
+        return envelope({
+          ok: false,
+          command: schema.name,
+          status: "navigate-failed",
+          error: {
+            code: "E_NAVIGATE_FAILED",
+            name: "NavigateFailed",
+            message: `${err instanceof Error ? err.message : String(err)}. Nothing was inspected.`,
+          },
+          value: { cdpPort, browser, requestedUrl: args.url, target: { id: target.id, url: target.url, title: target.title } },
+          hint: "The browser refused the url before any document rendered. Check the address, or read the tab with extension_dom_snapshot listTargets: true.",
+        });
+      }
       await new Promise((r) => setTimeout(r, 1500));
+      try {
+        const after = await CDPClient.discoverTargets(cdpPort);
+        const same = after.find((t) => String(t.id) === target.id);
+        if (same) landed = { url: String(same.url ?? ""), title: same.title };
+        else landingUnread = "the navigated target is no longer listed";
+      } catch (err) {
+        landingUnread = err instanceof Error ? err.message : String(err);
+      }
     } else {
       await new Promise((r) => setTimeout(r, 500));
     }
+    const landingWarning =
+      landingUnread
+        ? `The target could not be re-read after navigating to ${args.url} (${landingUnread}); target.url is the pre-navigation value.`
+        : landed && landed.url.startsWith("chrome-error://")
+          ? `The browser landed on its own error page (${landed.url}${landed.title ? `, "${landed.title}"` : ""}) instead of ${args.url}; the values below describe that error page.`
+          : landed && args.url && !landed.url.includes(args.url)
+            ? `The tab shows ${landed.url} after navigating, not the requested ${args.url}; the values below describe what it shows.`
+            : null;
+
+    const failedSections: Array<{ section: string; reason: string }> = [];
+    const section = async <T>(name: string, read: () => Promise<T>): Promise<T | null> => {
+      try {
+        return await read();
+      } catch (err) {
+        failedSections.push({ section: name, reason: err instanceof Error ? err.message : String(err) });
+        return null;
+      }
+    };
 
     let documentUrl = "";
     let toolchainWarning: string | null = null;
@@ -176,8 +223,9 @@ export async function handler(args: {
       ...(profileReused ? { profileReused: true } : {}),
       target: {
         id: target.id,
-        url: target.url,
-        title: target.title,
+        url: landed?.url ?? target.url,
+        title: landed ? landed.title : target.title,
+        ...(landed && args.url ? { requestedUrl: args.url } : {}),
         ...(documentUrl && documentUrl !== target.url ? { documentUrl } : {}),
       },
       targets: pageTargets.map((t) => ({
@@ -188,8 +236,8 @@ export async function handler(args: {
     };
 
     if (include.has("html")) {
-      let html = await cdp.getPageHTML(sessionId);
-      if (maxBytes > 0 && html.length > maxBytes) {
+      let html = await section("html", () => cdp.getPageHTML(sessionId));
+      if (html !== null && maxBytes > 0 && html.length > maxBytes) {
         html = html.slice(0, maxBytes);
         result.htmlTruncated = true;
       }
@@ -197,7 +245,7 @@ export async function handler(args: {
     }
 
     if (include.has("summary")) {
-      const summary = await cdp.evaluate(
+      const summary = await section("summary", () => cdp.evaluate(
         sessionId,
         `(() => {
           try {
@@ -212,16 +260,30 @@ export async function handler(args: {
             };
           } catch { return {}; }
         })()`,
-      );
+      ));
       result.summary = summary;
     }
 
     if (include.has("meta")) {
-      result.meta = await cdp.getPageMeta(sessionId);
+      result.meta = await section("meta", () => cdp.getPageMeta(sessionId));
     }
 
     if (include.has("dom_snapshot")) {
-      result.domSnapshot = await cdp.getDomSnapshot(sessionId);
+      const snap = await section("dom_snapshot", () => cdp.getDomSnapshot(sessionId));
+      if (snap === null) {
+        result.domSnapshot = null;
+      } else {
+        const normalized = normalizeDomSnapshot(snap, 500);
+        result.domSnapshot = Array.isArray(snap) ? snap : normalized.nodes;
+        if (normalized.truncated) {
+          result.domSnapshotTruncated = {
+            listed: normalized.nodes.length,
+            totalElements: normalized.totalElements,
+            maxNodes: normalized.maxNodes,
+            maxDepth: normalized.maxDepth,
+          };
+        }
+      }
     }
 
     if (include.has("console")) {
@@ -229,11 +291,11 @@ export async function handler(args: {
     }
 
     if (include.has("extension_roots")) {
-      result.extensionRoots = await cdp.getExtensionRootMeta(sessionId);
+      result.extensionRoots = await section("extension_roots", () => cdp.getExtensionRootMeta(sessionId));
     }
 
     if (args.probe?.length) {
-      result.probes = await cdp.probeSelectors(sessionId, args.probe);
+      result.probes = await section("probes", () => cdp.probeSelectors(sessionId, args.probe as string[]));
       const jsLooking = args.probe.filter((p) =>
         /^typeof\s|^(chrome|browser|window|document)\.|\(\)|=>|===/.test(p),
       );
@@ -245,23 +307,28 @@ export async function handler(args: {
     }
 
     if (args.deepDom) {
-      const closed = await cdp.getClosedShadowRoots(
+      const closed = await section("closed_shadow_roots", () => cdp.getClosedShadowRoots(
         sessionId,
         maxBytes > 0 ? maxBytes : 65536,
-      );
+      ));
       result.closedShadowRoots = closed;
       result.deepDom = true;
     }
 
     const probeWarning = result.probeWarning;
     delete result.probeWarning;
+    if (failedSections.length) result.failedSections = failedSections;
     return envelope({
       ok: true,
       command: schema.name,
-      status: "inspected",
+      status: failedSections.length ? "inspected-partially" : "inspected",
       value: result,
       warnings: [
         typeof probeWarning === "string" ? probeWarning : null,
+        landingWarning,
+        ...failedSections.map(
+          (f) => `${f.section} could not be read: ${f.reason}. Its value is null, not empty.`,
+        ),
         toolchainWarning,
         profileReused ? restoredTabWarning(documentUrl || target.url) : null,
       ],

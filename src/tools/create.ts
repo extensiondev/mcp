@@ -48,7 +48,7 @@ function detectPackageManager(projectPath: string): string {
 export const schema = {
   name: "extension_create",
   description:
-    "Create a browser extension project from a template in the extension.dev catalog. Call extension_templates first to see what is available. The scaffolder may initialize a git repository in the new project. Read the result's defaultsApplied block for that, and for every other decision made without being asked.",
+    "Create a browser extension project from a template in the extension.dev catalog. Call extension_templates first to see what is available. The scaffolder may initialize a git repository in the new project (with a first commit), and it also writes store metadata and a .gitignore of its own. Read the result's defaultsApplied block for the decisions this tool can read back: parent directory, template, package manager, target browser and whether a git repository was initialized by this call.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -77,6 +77,33 @@ export const schema = {
     required: ["projectName"],
   },
 };
+
+const MANIFEST_SEARCH_DEPTH = 3;
+const MANIFEST_SEARCH_SKIP = new Set(["node_modules", ".git"]);
+
+export function findScaffoldManifest(projectPath: string): string | null {
+  for (const rel of ["manifest.json", "src/manifest.json", "extension/manifest.json", "extension/src/manifest.json"]) {
+    const candidate = path.join(projectPath, rel);
+    if (fs.existsSync(candidate)) return candidate;
+  }
+  const queue: Array<{ dir: string; depth: number }> = [{ dir: projectPath, depth: 0 }];
+  while (queue.length) {
+    const current = queue.shift() as { dir: string; depth: number };
+    let entries: fs.Dirent[];
+    try {
+      entries = fs.readdirSync(current.dir, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+    for (const entry of entries) {
+      if (entry.isFile() && entry.name === "manifest.json") return path.join(current.dir, entry.name);
+      if (entry.isDirectory() && current.depth < MANIFEST_SEARCH_DEPTH && !MANIFEST_SEARCH_SKIP.has(entry.name)) {
+        queue.push({ dir: path.join(current.dir, entry.name), depth: current.depth + 1 });
+      }
+    }
+  }
+  return null;
+}
 
 export async function handler(args: {
   projectName: string;
@@ -189,17 +216,20 @@ export async function handler(args: {
     }
   }
 
-  const hasManifest =
-    fs.existsSync(path.join(result.projectPath, "manifest.json")) ||
-    fs.existsSync(path.join(result.projectPath, "src", "manifest.json"));
-  if (!hasManifest) {
+  /* @invariant THE MANIFEST IS FOUND THE WAY THE SCAFFOLDER FINDS IT: the
+     four common locations, then a breadth-first walk to depth 3 skipping
+     node_modules and .git (extension-create `findManifestJsonPath`). A
+     monorepo template keeps it at packages/extension/src/manifest.json and
+     used to be called incomplete. */
+  const manifestPath = findScaffoldManifest(result.projectPath);
+  if (!manifestPath) {
     return envelope({
       ok: false,
       command: COMMAND,
       status: "scaffold-incomplete",
       error: {
         code: "E_SCAFFOLD_INCOMPLETE",
-        message: `The scaffold is incomplete: no manifest.json exists under ${result.projectPath} (checked the root and src/). Do not run extension_dev against it.`,
+        message: `The scaffold is incomplete: no manifest.json exists under ${result.projectPath} (checked the root, src/, extension/, extension/src/ and every directory to depth 3). Do not run extension_dev against it.`,
       },
       value: {
         projectPath: result.projectPath,
@@ -254,6 +284,7 @@ export async function handler(args: {
     value: {
       resolvedPath: result.projectPath,
       projectPath: result.projectPath,
+      manifestPath,
       projectName: result.projectName,
       template: result.template,
       templateCatalogUrl: catalogUrl,

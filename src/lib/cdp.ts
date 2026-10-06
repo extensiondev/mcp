@@ -28,6 +28,32 @@ export interface RenderEvidence {
   extensionRootCount?: number;
 }
 
+export interface DomSnapshot {
+  nodes: Array<Record<string, unknown>>;
+  totalElements: number;
+  truncated: boolean;
+  maxNodes: number;
+  maxDepth: number;
+}
+
+/* @invariant A CAP IS SAID. The snapshot used to stop at 500 nodes or depth
+   20 with no marker; an older or foreign answer that is
+   a bare array is kept as untruncated-unknown. */
+export function normalizeDomSnapshot(result: unknown, maxNodes: number): DomSnapshot {
+  if (Array.isArray(result)) {
+    return { nodes: result, totalElements: result.length, truncated: false, maxNodes, maxDepth: 20 };
+  }
+  const obj = (result ?? {}) as Partial<DomSnapshot>;
+  const nodes = Array.isArray(obj.nodes) ? obj.nodes : [];
+  return {
+    nodes,
+    totalElements: typeof obj.totalElements === "number" ? obj.totalElements : nodes.length,
+    truncated: obj.truncated === true,
+    maxNodes,
+    maxDepth: 20,
+  };
+}
+
 export class CDPClient extends CDPConnection {
   static async discoverBrowserWsUrl(
     port: number,
@@ -155,14 +181,27 @@ export class CDPClient extends CDPConnection {
     });
   }
 
+  /* @invariant A THROW IS NOT AN EMPTY VALUE. `exceptionDetails` sits beside
+     `result`, not inside it, so an expression that threw used to read as
+     `undefined` and the wrappers turned that into "", {} or [] under
+     status "inspected". */
   async evaluate(sessionId: string, expression: string): Promise<unknown> {
     const response = (await this.sendCommand(
       "Runtime.evaluate",
       { expression, returnByValue: true, awaitPromise: false },
       sessionId,
-    )) as { result?: { value?: unknown; exceptionDetails?: unknown } };
+    )) as {
+      result?: { value?: unknown };
+      exceptionDetails?: { text?: string; exception?: { description?: string } };
+    };
+    if (response?.exceptionDetails) {
+      const details = response.exceptionDetails;
+      throw new Error(
+        `the page threw while evaluating: ${details.exception?.description ?? details.text ?? "unknown error"}`,
+      );
+    }
 
-    return response.result?.value;
+    return response?.result?.value;
   }
 
   async getPageHTML(sessionId: string): Promise<string> {
@@ -274,9 +313,9 @@ export class CDPClient extends CDPConnection {
   async getDomSnapshot(
     sessionId: string,
     maxNodes = 500,
-  ): Promise<Array<Record<string, unknown>>> {
+  ): Promise<DomSnapshot> {
     const result = await this.evaluate(sessionId, domSnapshotScript(maxNodes));
-    return (result as Array<Record<string, unknown>>) ?? [];
+    return normalizeDomSnapshot(result, maxNodes);
   }
 
   async getRenderEvidence(sessionId: string): Promise<RenderEvidence | null> {

@@ -73,19 +73,23 @@ export const EXTENSION_ROOT_META_SCRIPT = `(() => {
             generation: readGeneration(node),
             status: node.getAttribute ? node.getAttribute('data-extjs-reinject-status') || undefined : undefined
           });
-          const roots = Array.from(
+          const allRoots = Array.from(
             document.querySelectorAll('#extension-root,[data-extension-root]:not([data-extension-root="extension-js-devtools"])')
-          ).slice(0, 10).map(normalize);
-          const markers = Array.from(
+          );
+          const allMarkers = Array.from(
             document.querySelectorAll('[data-extjs-reinject-marker="true"]')
-          ).slice(0, 10).map(normalize);
+          );
+          const roots = allRoots.slice(0, 10).map(normalize);
+          const markers = allMarkers.slice(0, 10).map(normalize);
           if (!roots.length && !markers.length) return null;
           const generations = [...roots, ...markers]
             .map(e => e.generation)
             .filter(g => typeof g === 'number');
           return {
-            rootCount: roots.length,
-            markerCount: markers.length,
+            rootCount: allRoots.length,
+            markerCount: allMarkers.length,
+            listed: { roots: roots.length, markers: markers.length },
+            truncated: allRoots.length > roots.length || allMarkers.length > markers.length,
             latestGeneration: generations.length ? Math.max(...generations) : 0,
             roots,
             markers
@@ -156,10 +160,12 @@ export function probeSelectorsScript(selectors: string[]) {
 export function domSnapshotScript(maxNodes: number) {
   return `(() => {
         const maxNodes = ${maxNodes};
+        const maxDepth = 20;
         const nodes = [];
+        let truncated = false;
         const walk = (node, depth) => {
-          if (nodes.length >= maxNodes || depth > 20) return;
           if (node.nodeType !== 1) return;
+          if (nodes.length >= maxNodes || depth > maxDepth) { truncated = true; return; }
           const el = node;
           nodes.push({
             tag: el.tagName.toLowerCase(),
@@ -175,6 +181,6 @@ export function domSnapshotScript(maxNodes: number) {
           }
         };
         walk(document.documentElement, 0);
-        return nodes;
+        return { nodes, truncated, totalElements: document.getElementsByTagName('*').length };
       })()`;
 }
