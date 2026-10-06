@@ -118,7 +118,7 @@ afterEach(() => {
   cliCalls.length = 0;
   evaluations.length = 0;
   cdpTargets = [];
-  cdpPort = { port: 9222 };
+  cdpPort = { port: 9222, source: "contract" };
   evaluateResponse = () => ({ result: { type: "number", value: 5 } });
   for (const dir of tmpDirs.splice(0)) {
     fs.rmSync(dir, { recursive: true, force: true });

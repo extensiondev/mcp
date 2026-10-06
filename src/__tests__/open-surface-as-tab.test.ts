@@ -117,7 +117,7 @@ function project(
 
 afterEach(() => {
   navigations.length = 0;
-  cdpPort = { port: 9222 };
+  cdpPort = { port: 9222, source: "contract" };
   cdpTargets = [];
   navigationLands = true;
   popupMeasure = null;

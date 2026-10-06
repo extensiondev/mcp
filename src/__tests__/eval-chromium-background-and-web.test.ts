@@ -110,7 +110,7 @@ afterEach(() => {
   awaited.length = 0;
   otherCommands.length = 0;
   cdpTargets = [];
-  cdpPort = { port: 9222 };
+  cdpPort = { port: 9222, source: "contract" };
   relayReply = () => envelope({ ok: true, command: "extension_eval", status: "ok", value: "relay" });
   evaluateResponse = () => ({ result: { type: "number", value: 7 } });
   for (const d of dirs.splice(0)) fs.rmSync(d, { recursive: true, force: true });
