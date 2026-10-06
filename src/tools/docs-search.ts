@@ -70,10 +70,13 @@ export async function handler(args: {
   }
 
   let body: { results?: Result[]; message?: string; retryAfterSeconds?: number } = {};
+  let bodyUnreadable: string | null = null;
   try {
-    body = (await res.json()) as typeof body;
-  } catch {
-    body = {};
+    const parsed = (await res.json()) as unknown;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("not a JSON object");
+    body = parsed as typeof body;
+  } catch (err) {
+    bodyUnreadable = err instanceof Error ? err.message : String(err);
   }
 
   if (!res.ok) {
@@ -91,7 +94,22 @@ export async function handler(args: {
     });
   }
 
-  const results = Array.isArray(body.results) ? body.results : [];
+  /* @invariant A 2xx THE TOOL CANNOT READ IS NOT "NO MATCH". An HTML, empty
+     or reshaped body used to become `{}` and answer "No page matched" from
+     the tool agents consult before answering from memory. */
+  if (bodyUnreadable !== null || !Array.isArray(body.results)) {
+    return envelope({
+      ok: false,
+      command: COMMAND,
+      status: "search-unreadable",
+      error: {
+        code: "E_PLATFORM",
+        message: `Docs search answered ${res.status} but the body could not be read as {results: [...]}${bodyUnreadable !== null ? ` (${bodyUnreadable})` : ` (keys: ${Object.keys(body).join(", ") || "none"})`}. Nothing is known about whether a page matches.`,
+      },
+      hint: "Retry once; if it persists, read the docs at https://extension.js.org/docs.",
+    });
+  }
+  const results = body.results;
 
   return envelope({
     ok: true,

@@ -71,4 +71,31 @@ describe("extension_docs_search", () => {
     expect(out.error.code).toBe("E_BAD_REQUEST");
     expect(calls).toHaveLength(0);
   });
+
+  /*. */
+  it("does not call an unreadable 200 a no-match", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response("<html>maintenance</html>", { status: 200, headers: { "content-type": "text/html" } })),
+    );
+    const out = JSON.parse(await handler({ query: "side panel" }));
+    expect(out.ok).toBe(false);
+    expect(out.status).toBe("search-unreadable");
+    expect(out.error.code).toBe("E_PLATFORM");
+  });
+
+  it("does not call a reshaped 200 a no-match", async () => {
+    respond(200, { data: [] });
+    const out = JSON.parse(await handler({ query: "side panel" }));
+    expect(out.ok).toBe(false);
+    expect(out.status).toBe("search-unreadable");
+    expect(out.error.message).toMatch(/keys: data/);
+  });
+
+  it("still answers no-match for a readable empty result list", async () => {
+    respond(200, { query: "zzz", results: [] });
+    const out = JSON.parse(await handler({ query: "zzz" }));
+    expect(out.ok).toBe(true);
+    expect(out.status).toBe("no-match");
+  });
 });

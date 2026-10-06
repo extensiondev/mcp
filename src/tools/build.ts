@@ -21,7 +21,7 @@ import {
   engineProjectRoot,
 } from "../lib/session-paths";
 import { type Envelope, envelope, isEnvelope } from "../lib/envelope";
-import { reviewDist, reviewRiskWarnings } from "../lib/store-review";
+import { reviewCoverageNotes, reviewDistReport, reviewRiskWarnings } from "../lib/store-review";
 
 const COMMAND = "extension_build";
 
@@ -928,7 +928,8 @@ export async function handler(args: {
       });
     }
     const entrypoints = builtEntrypoints(distDir);
-    const risks = reviewDist(distDir, browser);
+    const review = reviewDistReport(distDir, browser);
+    const risks = review.risks;
     const contamination = carrierContamination(path.dirname(distDir));
     const uncheckedNote = contamination.unchecked.length
       ? `Could not read the entry table of ${contamination.unchecked.join(", ")}, so those archives were not checked for the live-preview carrier. Unpack and check them yourself before submitting.`
@@ -1069,6 +1070,7 @@ export async function handler(args: {
         ...(preflight?.warnings ?? []),
         ...buildWarnings,
         ...reviewRiskWarnings(risks),
+        ...reviewCoverageNotes(review),
         ...zipNotes,
         uncheckedNote,
         derivedBundleIdNote,

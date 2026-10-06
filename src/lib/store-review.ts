@@ -85,12 +85,23 @@ function hostPatterns(manifest: Record<string, unknown>): string[] {
   return [...found];
 }
 
-function readText(distPath: string, rel: string): string {
+function readText(distPath: string, rel: string): string | null {
   try {
     return fs.readFileSync(path.join(distPath, rel), "utf8");
   } catch {
-    return "";
+    return null;
   }
+}
+
+/* @invariant THE SCAN SAYS WHAT IT DID NOT READ. An unreadable script used
+   to read as "" and a permission used only there was reported unused with
+   the fix "Remove ..."; scripts past the byte cap were silently skipped
+  . */
+export interface ReviewReport {
+  risks: ReviewRisk[];
+  unreadable: string[];
+  notScanned: string[];
+  manifestUnreadable?: string;
 }
 
 /* @invariant
@@ -104,14 +115,20 @@ function readText(distPath: string, rel: string): string {
  * follow. The scan reads only the built files, never the network, and stops at
  * MAX_SCAN_BYTES of script so a huge bundle cannot stall the build result.
  */
-export function reviewRisks(input: {
+export function reviewRisks(input: Parameters<typeof reviewRisksReport>[0]): ReviewRisk[] {
+  return reviewRisksReport(input).risks;
+}
+
+export function reviewRisksReport(input: {
   distPath: string;
   browser: string;
   manifest: Record<string, unknown>;
   files: Array<{ path: string; type?: string }>;
   development?: boolean;
-}): ReviewRisk[] {
+}): ReviewReport {
   const risks: ReviewRisk[] = [];
+  const unreadable: string[] = [];
+  const notScanned: string[] = [];
   const development = input.development ?? isDevelopmentBuild(input.files);
 
   const broad = hostPatterns(input.manifest).filter((p) => BROAD_PATTERNS.has(p));
@@ -134,8 +151,15 @@ export function reviewRisks(input: {
   let scanned = 0;
   let source = "";
   for (const file of scripts) {
-    if (scanned >= MAX_SCAN_BYTES) break;
+    if (scanned >= MAX_SCAN_BYTES) {
+      notScanned.push(file.path);
+      continue;
+    }
     const text = readText(input.distPath, file.path);
+    if (text === null) {
+      unreadable.push(file.path);
+      continue;
+    }
     scanned += text.length;
     source += `\n${text}`;
     for (const [label, pattern] of REMOTE_CODE_PATTERNS) {
@@ -143,7 +167,12 @@ export function reviewRisks(input: {
     }
   }
   for (const file of pages) {
-    if (REMOTE_SCRIPT_TAG.test(readText(input.distPath, file.path))) {
+    const html = readText(input.distPath, file.path);
+    if (html === null) {
+      unreadable.push(file.path);
+      continue;
+    }
+    if (REMOTE_SCRIPT_TAG.test(html)) {
       note("a <script> loaded from a URL", file.path);
     }
   }
@@ -169,7 +198,8 @@ export function reviewRisks(input: {
     }
   }
 
-  if (source && scanned < MAX_SCAN_BYTES && !development) {
+  const complete = unreadable.length === 0 && notScanned.length === 0;
+  if (source && complete && !development) {
     const unused = strings(input.manifest.permissions).filter((perm) => {
       const apis = API_PERMISSIONS[perm];
       if (!apis) return false;
@@ -185,7 +215,25 @@ export function reviewRisks(input: {
     }
   }
 
-  return risks;
+  return { risks, unreadable, notScanned };
+}
+
+export function reviewCoverageNotes(report: ReviewReport): string[] {
+  const notes: string[] = [];
+  if (report.manifestUnreadable) {
+    notes.push(`Store review scan skipped: the built manifest could not be parsed (${report.manifestUnreadable}).`);
+  }
+  if (report.unreadable.length) {
+    notes.push(
+      `Store review scan could not read ${report.unreadable.length} shipped file${report.unreadable.length === 1 ? "" : "s"} (${report.unreadable.slice(0, 5).join(", ")}${report.unreadable.length > 5 ? ", ..." : ""}), so remote-code and unused-permission findings are incomplete and no permission is reported unused.`,
+    );
+  }
+  if (report.notScanned.length) {
+    notes.push(
+      `Store review scan stopped at ${MAX_SCAN_BYTES / (1024 * 1024)} MB of script; ${report.notScanned.length} script${report.notScanned.length === 1 ? " was" : "s were"} not scanned for remote code (${report.notScanned.slice(0, 5).join(", ")}${report.notScanned.length > 5 ? ", ..." : ""}) and no permission is reported unused.`,
+    );
+  }
+  return notes;
 }
 
 /* @invariant
@@ -223,11 +271,20 @@ function listFiles(dir: string, base = ""): Array<{ path: string }> {
 }
 
 export function reviewDist(distPath: string, browser: string): ReviewRisk[] {
+  return reviewDistReport(distPath, browser).risks;
+}
+
+export function reviewDistReport(distPath: string, browser: string): ReviewReport {
   let manifest: Record<string, unknown>;
   try {
     manifest = JSON.parse(fs.readFileSync(path.join(distPath, "manifest.json"), "utf8"));
-  } catch {
-    return [];
+  } catch (err) {
+    return {
+      risks: [],
+      unreadable: [],
+      notScanned: [],
+      manifestUnreadable: err instanceof Error ? err.message : String(err),
+    };
   }
-  return reviewRisks({ distPath, browser, manifest, files: listFiles(distPath) });
+  return reviewRisksReport({ distPath, browser, manifest, files: listFiles(distPath) });
 }

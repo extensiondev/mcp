@@ -6,7 +6,7 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-import { listTemplates } from "../lib/templates-cache";
+import { listTemplatesWithSource } from "../lib/templates-cache";
 import { templateCatalogUrl } from "../lib/template-artifact-source";
 import { envelope } from "../lib/envelope";
 
@@ -17,7 +17,7 @@ export async function searchTemplates(args: {
   featured?: boolean;
   query?: string;
 }): Promise<string> {
-  const templates = await listTemplates(args);
+  const { templates, source, note } = await listTemplatesWithSource(args);
 
   const results = templates.map((t) => ({
     slug: t.slug,
@@ -37,7 +37,8 @@ export async function searchTemplates(args: {
   return envelope({
     ok: true,
     command: "extension_templates",
-    status: "listed",
-    value: { count: results.length, templates: results },
+    status: source === "live" || source === "cache" ? "listed" : "listed-from-fallback",
+    value: { count: results.length, source, templates: results },
+    warnings: note ? [note] : [],
   });
 }

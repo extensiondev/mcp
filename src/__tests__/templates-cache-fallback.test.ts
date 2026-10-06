@@ -17,7 +17,7 @@ vi.mock("../lib/template-artifact-source", () => ({
 }));
 
 import os from "node:os";
-import { fetchTemplatesMeta, listTemplates } from "../lib/templates-cache";
+import { fetchTemplatesMeta, fetchTemplatesMetaWithSource, listTemplates, listTemplatesWithSource } from "../lib/templates-cache";
 
 const fakeHome = os.homedir();
 const cacheDir = path.join(fakeHome, ".cache", "extension-js");
@@ -92,5 +92,43 @@ describe("templates cache resilience", () => {
     const again = await fetchTemplatesMeta();
     expect(again.templates[0].slug).toBe("one");
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  /*. */
+  it("keeps a good live catalog when the cache directory cannot be written, and says so", async () => {
+    fs.mkdirSync(path.dirname(cacheDir), { recursive: true });
+    fs.writeFileSync(cacheDir, "not a directory");
+    try {
+      const payload = { version: "2", templates: [{ slug: "one", surfaces: [], description: "" }] };
+      vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, status: 200, json: async () => payload })));
+      const read = await fetchTemplatesMetaWithSource();
+      expect(read.source).toBe("live");
+      expect(read.meta.templates[0].slug).toBe("one");
+      expect(read.note).toMatch(/could not be cached/);
+    } finally {
+      fs.rmSync(cacheDir, { force: true });
+    }
+  });
+
+  it("labels a bundled-snapshot answer and names why the live read failed", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => { throw new Error("offline"); }));
+    const read = await fetchTemplatesMetaWithSource();
+    expect(read.source).toBe("bundled-snapshot");
+    expect(read.note).toMatch(/offline/);
+    const listed = await listTemplatesWithSource();
+    expect(listed.source).toBe("bundled-snapshot");
+    expect(listed.note).toMatch(/bundled/);
+  });
+
+  it("labels a stale cache answer with its age", async () => {
+    fs.mkdirSync(cacheDir, { recursive: true });
+    fs.writeFileSync(cacheFile, JSON.stringify({ version: "2", templates: [{ slug: "old", surfaces: [], description: "" }] }));
+    const old = new Date(Date.now() - 3 * 60 * 60 * 1000);
+    fs.utimesSync(cacheFile, old, old);
+    vi.stubGlobal("fetch", vi.fn(async () => ({ ok: false, status: 503, json: async () => ({}) })));
+    const read = await fetchTemplatesMetaWithSource();
+    expect(read.source).toBe("stale-cache");
+    expect(read.meta.templates[0].slug).toBe("old");
+    expect(read.note).toMatch(/503/);
   });
 });

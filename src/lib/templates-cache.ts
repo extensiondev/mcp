@@ -44,44 +44,88 @@ function readCachedMeta(): TemplatesMetaV2 | null {
   }
 }
 
-export async function fetchTemplatesMeta(): Promise<TemplatesMetaV2> {
+export type TemplatesSource = "live" | "cache" | "stale-cache" | "bundled-snapshot";
+
+export interface TemplatesMetaRead {
+  meta: TemplatesMetaV2;
+  source: TemplatesSource;
+  cacheAgeMs?: number;
+  note?: string;
+}
+
+function cacheAgeMs(): number | undefined {
+  try {
+    return Date.now() - fs.statSync(CACHE_FILE).mtimeMs;
+  } catch {
+    return undefined;
+  }
+}
+
+/* @invariant THE ANSWER NAMES ITS SOURCE, AND A GOOD LIVE READ IS NEVER
+   THROWN AWAY OVER A CACHE WRITE. The cache write used to sit in the fetch's
+   try, so an unwritable ~/.cache turned a live catalog into the bundled
+   snapshot, and nothing said which source answered. */
+export async function fetchTemplatesMetaWithSource(): Promise<TemplatesMetaRead> {
   if (isCacheValid()) {
     const cached = readCachedMeta();
-    if (cached) return cached;
+    if (cached) return { meta: cached, source: "cache", cacheAgeMs: cacheAgeMs() };
   }
 
-  let lastStatus = 0;
+  const failures: string[] = [];
   for (const url of await templateMetaUrls()) {
+    let data: unknown;
     try {
       const response = await fetch(url);
       if (!response.ok) {
-        lastStatus = response.status;
+        failures.push(`${url} answered ${response.status}`);
         continue;
       }
-      const data = await response.json();
-      if (!isUsableMeta(data)) {
-        continue;
-      }
+      data = await response.json();
+    } catch (err) {
+      failures.push(`${url}: ${err instanceof Error ? err.message : String(err)}`);
+      continue;
+    }
+    if (!isUsableMeta(data)) {
+      failures.push(`${url} answered a body with no templates`);
+      continue;
+    }
+    let note: string | undefined;
+    try {
       fs.mkdirSync(CACHE_DIR, { recursive: true });
       const tmpFile = `${CACHE_FILE}.${process.pid}.tmp`;
       fs.writeFileSync(tmpFile, JSON.stringify(data, null, 2));
       fs.renameSync(tmpFile, CACHE_FILE);
-      return data;
-    } catch {
-      // Try the next source.
+    } catch (err) {
+      note = `The live catalog was read but could not be cached under ${CACHE_DIR} (${err instanceof Error ? err.message : String(err)}); the next call fetches it again.`;
     }
+    return { meta: data, source: "live", ...(note ? { note } : {}) };
   }
 
+  const why = failures.length ? failures.join("; ") : "no catalog source is configured";
   const stale = readCachedMeta();
-  if (stale) return stale;
+  if (stale) {
+    const age = cacheAgeMs();
+    return {
+      meta: stale,
+      source: "stale-cache",
+      ...(age !== undefined ? { cacheAgeMs: age } : {}),
+      note: `The catalog came from a cache older than its ${Math.round(CACHE_TTL_MS / 60000)} minute TTL${age !== undefined ? ` (${Math.round(age / 60000)} minutes)` : ""} because the live read failed (${why}); templates added or renamed since may be missing or stale.`,
+    };
+  }
 
   if (isUsableMeta(bundledSnapshot)) {
-    return bundledSnapshot;
+    return {
+      meta: bundledSnapshot,
+      source: "bundled-snapshot",
+      note: `The catalog came from the snapshot bundled with this package because the live read failed (${why}); templates added or renamed since this package was published are missing or stale.`,
+    };
   }
 
-  throw new Error(
-    `Failed to fetch templates-meta.json (${lastStatus || "network error"}).`,
-  );
+  throw new Error(`Failed to fetch templates-meta.json (${why}).`);
+}
+
+export async function fetchTemplatesMeta(): Promise<TemplatesMetaV2> {
+  return (await fetchTemplatesMetaWithSource()).meta;
 }
 
 export interface TemplateFilters {
@@ -92,11 +136,29 @@ export interface TemplateFilters {
   query?: string;
 }
 
+export async function listTemplatesWithSource(
+  filters?: TemplateFilters,
+): Promise<{ templates: TemplateMeta[]; source: TemplatesSource; note?: string }> {
+  const read = await fetchTemplatesMetaWithSource();
+  return {
+    templates: applyTemplateFilters(read.meta.templates, filters),
+    source: read.source,
+    ...(read.note ? { note: read.note } : {}),
+  };
+}
+
 export async function listTemplates(
   filters?: TemplateFilters,
 ): Promise<TemplateMeta[]> {
   const meta = await fetchTemplatesMeta();
-  let templates = meta.templates;
+  return applyTemplateFilters(meta.templates, filters);
+}
+
+function applyTemplateFilters(
+  all: TemplateMeta[],
+  filters?: TemplateFilters,
+): TemplateMeta[] {
+  let templates = all;
 
   if (filters?.surface) {
     templates = templates.filter((t) => t.surfaces.includes(filters.surface!));

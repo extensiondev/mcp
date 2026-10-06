@@ -9,7 +9,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { filterKeysForThisBrowser } from "browser-extension-manifest-fields";
-import { isChromiumFamily, isGeckoFamily } from "../lib/browser-family";
+import { CHROMIUM_FAMILY, GECKO_FAMILY, WEBKIT_FAMILY, isChromiumFamily, isGeckoFamily } from "../lib/browser-family";
 import { listTemplates } from "../lib/templates-cache";
 import { envelope } from "../lib/envelope";
 
@@ -206,12 +206,24 @@ const HARD_APIS = new Set([
   "debugger", "pageCapture", "desktopCapture",
 ]);
 
-function scanApiUsage(roots: string[], excluded: string[] = []): Set<string> {
+const SCAN_FILE_CAP = 300;
+
+/* @invariant THE SCAN SAYS WHAT IT DID NOT READ. It used to stop silently at
+   300 files or depth 6, in directory order, so a repo whose e2e/ sorted
+   before src/ never had src/ scanned for crash-level APIs. Files are read before subdirectories, src/ before its siblings, and
+   the cap and every unreadable file are reported. */
+function scanApiUsage(
+  roots: string[],
+  excluded: string[] = [],
+): { used: Set<string>; filesRead: number; capped: boolean; unreadable: string[] } {
   const used = new Set<string>();
+  const unreadable: string[] = [];
   const skip = new Set(excluded.map((d) => path.resolve(d)));
+  const seen = new Set<string>();
   let filesRead = 0;
+  let capped = false;
   const walk = (dir: string, depth: number): void => {
-    if (depth > 6 || filesRead > 300) return;
+    if (depth > 6 || capped) return;
     if (skip.has(path.resolve(dir))) return;
     let entries: fs.Dirent[];
     try {
@@ -219,20 +231,24 @@ function scanApiUsage(roots: string[], excluded: string[] = []): Set<string> {
     } catch {
       return;
     }
-    for (const e of entries) {
-      if (e.name === "node_modules" || e.name === "dist" || e.name.startsWith("."))
-        continue;
+    const files = entries.filter((e) => !e.isDirectory() && /\.(js|mjs|cjs|ts|tsx|jsx|svelte|vue)$/.test(e.name));
+    const dirs = entries
+      .filter((e) => e.isDirectory() && e.name !== "node_modules" && e.name !== "dist" && !e.name.startsWith("."))
+      .sort((a, b) => (a.name === "src" ? -1 : b.name === "src" ? 1 : a.name.localeCompare(b.name)));
+    for (const e of files) {
       const full = path.join(dir, e.name);
-      if (e.isDirectory()) {
-        walk(full, depth + 1);
-        continue;
+      if (seen.has(full)) continue;
+      seen.add(full);
+      if (filesRead >= SCAN_FILE_CAP) {
+        capped = true;
+        return;
       }
-      if (!/\.(js|mjs|cjs|ts|tsx|jsx|svelte|vue)$/.test(e.name)) continue;
-      if (filesRead++ > 300) return;
+      filesRead++;
       let src: string;
       try {
         src = fs.readFileSync(full, "utf8");
       } catch {
+        unreadable.push(full);
         continue;
       }
       const re = /\b(?:chrome|browser)\.(\w+)/g;
@@ -241,10 +257,15 @@ function scanApiUsage(roots: string[], excluded: string[] = []): Set<string> {
         if (API_PERMISSION[m[1]]) used.add(m[1]);
       }
     }
+    for (const e of dirs) walk(path.join(dir, e.name), depth + 1);
   };
   for (const root of new Set(roots)) walk(root, 0);
-  return used;
+  return { used, filesRead, capped, unreadable };
 }
+
+const DEFAULT_BROWSERS = ["chrome", "firefox", "edge"];
+const DEFAULT_TARGET = "chrome";
+const KNOWN_TARGETS = [...CHROMIUM_FAMILY, ...GECKO_FAMILY, ...WEBKIT_FAMILY];
 
 export async function handler(args: {
   manifestPath?: string;
@@ -255,8 +276,26 @@ export async function handler(args: {
   if (!args.browsers && typeof (args as { browser?: string }).browser === "string") {
     args = { ...args, browsers: [(args as { browser: string }).browser] };
   }
+  /* @invariant EVERY REQUESTED TARGET IS ONE THIS TOOL KNOWS HOW TO CHECK.
+     A typo or a capitalised name used to get `supported: true` with zero
+     checks run, and `browsers: []` skipped the loop. */
   const explicitBrowsers = Array.isArray(args.browsers) && args.browsers.length > 0;
-  const browsers = args.browsers ?? ["chrome", "firefox", "edge"];
+  const browsers = explicitBrowsers ? (args.browsers as string[]) : DEFAULT_BROWSERS;
+  const unknownTargets = browsers.filter((b) => !KNOWN_TARGETS.includes(b));
+  if (unknownTargets.length) {
+    const errors = unknownTargets.map((b) => {
+      const guess = KNOWN_TARGETS.find((k) => k === String(b).toLowerCase());
+      return `"${b}" is not a known browser target${guess ? ` (did you mean "${guess}"?)` : ""}. Known targets: ${KNOWN_TARGETS.join(", ")}.`;
+    });
+    return envelope({
+      ok: false,
+      command: COMMAND,
+      status: "unknown-browser",
+      error: { code: "E_BAD_REQUEST", message: errors[0] },
+      value: { valid: false, errors, browserSupport: {}, similarTemplates: [] },
+      warnings: [],
+    });
+  }
   const result: ValidationResult = {
     valid: true,
     errors: [],
@@ -337,19 +376,35 @@ export async function handler(args: {
     path.join(manifestDir, "public"),
     path.join(projectRoot, "public"),
   ];
-  for (const ref of new Set(collectPathRefs(chromiumManifest))) {
-    if (!fileResolvesSomewhere(ref, roots)) {
-      result.errors.push(
-        `Referenced file "${ref}" was not found near the manifest. extension_build fails on this dangling reference.`,
-      );
+  /* @invariant REFERENCES ARE CHECKED IN EACH REQUESTED BROWSER'S VIEW. The
+     Chromium view drops `firefox:` keys, so a missing Firefox panel or
+     background script read as valid, and a missing `chromium:` file blocked
+     a Firefox-only validation. */
+  const effectiveByBrowser = new Map<string, Record<string, unknown>>();
+  for (const b of browsers) {
+    effectiveByBrowser.set(b, filterKeysForThisBrowser(manifest, b));
+  }
+  const missingRefs = new Map<string, string[]>();
+  const missingWar = new Map<string, string[]>();
+  for (const [b, view] of effectiveByBrowser) {
+    for (const ref of new Set(collectPathRefs(view))) {
+      if (fileResolvesSomewhere(ref, roots)) continue;
+      missingRefs.set(ref, [...(missingRefs.get(ref) ?? []), b]);
+    }
+    for (const ref of new Set(collectWebAccessibleRefs(view))) {
+      if (fileResolvesSomewhere(ref, roots)) continue;
+      missingWar.set(ref, [...(missingWar.get(ref) ?? []), b]);
     }
   }
-  for (const ref of new Set(collectWebAccessibleRefs(chromiumManifest))) {
-    if (!fileResolvesSomewhere(ref, roots)) {
-      result.warnings.push(
-        `web_accessible_resources names "${ref}", which was not found near the manifest. The build ships without it and the browser answers 404 when the extension or a page asks for it.`,
-      );
-    }
+  for (const [ref, where] of missingRefs) {
+    result.errors.push(
+      `Referenced file "${ref}" was not found near the manifest (${where.join(", ")} view). extension_build fails on this dangling reference.`,
+    );
+  }
+  for (const [ref, where] of missingWar) {
+    result.warnings.push(
+      `web_accessible_resources names "${ref}", which was not found near the manifest (${where.join(", ")} view). The build ships without it and the browser answers 404 when the extension or a page asks for it.`,
+    );
   }
 
   const defaultLocale = manifest.default_locale;
@@ -373,10 +428,6 @@ export async function handler(args: {
     );
   }
 
-  const effectiveByBrowser = new Map<string, Record<string, unknown>>();
-  for (const b of browsers) {
-    effectiveByBrowser.set(b, filterKeysForThisBrowser(manifest, b));
-  }
   const declaredPermSet = new Set<string>();
   for (const view of [chromiumManifest, ...effectiveByBrowser.values()]) {
     for (const p of [
@@ -386,10 +437,21 @@ export async function handler(args: {
       if (typeof p === "string") declaredPermSet.add(p);
     }
   }
-  const usedApis = scanApiUsage(
+  const scan = scanApiUsage(
     roots,
     roots.map((r) => path.join(r, "extensions")),
   );
+  const usedApis = scan.used;
+  if (scan.capped) {
+    result.warnings.push(
+      `The permission scan read ${scan.filesRead} source files and stopped at its cap, so files it did not reach were not checked for undeclared chrome.* APIs. Validate a narrower projectPath, or move unrelated code out of the manifest's tree.`,
+    );
+  }
+  if (scan.unreadable.length) {
+    result.warnings.push(
+      `${scan.unreadable.length} source file${scan.unreadable.length === 1 ? "" : "s"} could not be read and ${scan.unreadable.length === 1 ? "was" : "were"} not scanned for undeclared APIs: ${scan.unreadable.slice(0, 5).map((f) => path.relative(projectRoot, f)).join(", ")}${scan.unreadable.length > 5 ? ", ..." : ""}.`,
+    );
+  }
   for (const api of usedApis) {
     const perm = API_PERMISSION[api];
     if (declaredPermSet.has(perm)) continue;
@@ -579,6 +641,11 @@ export async function handler(args: {
       );
     }
 
+    if (WEBKIT_FAMILY.has(browser)) {
+      result.warnings.push(
+        `${browser}: checked as its Chromium source manifest only; Safari-specific rules (the Xcode conversion) are not checked here.`,
+      );
+    }
     result.browserSupport[browser] = {
       supported: issues.length === 0,
       issues,
@@ -634,8 +701,14 @@ export async function handler(args: {
     const issues = support.issues?.length
       ? support.issues.join("; ")
       : `${browser} is not supported by this manifest.`;
+    /* @invariant THE DEFAULT BUILD TARGET'S ISSUES STAY BLOCKING. With no
+       `browsers`, extension_build builds chrome, and its preflight passes
+       `browsers: ["chrome"]`; demoting chrome's own issue to an advisory
+       here said `valid` for a manifest that build then refused. */
     if (explicitBrowsers) {
       result.errors.push(`${browser}: ${issues}`);
+    } else if (browser === DEFAULT_TARGET) {
+      result.errors.push(`${browser} (the default build target): ${issues}`);
     } else {
       result.warnings.push(
         `${browser} (not requested, checked by default): ${issues}`,

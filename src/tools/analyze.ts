@@ -10,7 +10,7 @@ import { PROJECT_PATH } from "../lib/common-schema";
 import fs from "node:fs";
 import path from "node:path";
 import { envelope } from "../lib/envelope";
-import { reviewRiskWarnings, reviewRisks } from "../lib/store-review";
+import { reviewCoverageNotes, reviewRiskWarnings, reviewRisksReport } from "../lib/store-review";
 import { engineProjectRoot } from "../lib/session-paths";
 
 const COMMAND = "extension_analyze";
@@ -229,18 +229,20 @@ export async function handler(args: {
       ? `This dist contains ${formatBytes(archiveSize)} of .zip archive(s) (store packaging output, written into dist by zip builds). shippableSize excludes them so the packaged copy does not double-count the files it contains.`
       : undefined;
 
-  const risks = reviewRisks({
+  const review = reviewRisksReport({
     distPath,
     browser,
     manifest,
     files,
     development: buildType === "development",
   });
+  const risks = review.risks;
 
   const result = {
     browser,
     distPath,
     reviewRisks: risks,
+    reviewCoverage: { unreadable: review.unreadable, notScanned: review.notScanned },
     entrypoints,
     buildType,
     totalSize,
@@ -303,6 +305,7 @@ export async function handler(args: {
     value: result,
     warnings: [
       ...reviewRiskWarnings(risks),
+      ...reviewCoverageNotes(review),
       ...sizeWarnings,
       note,
       archiveNote,

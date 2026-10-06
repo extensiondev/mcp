@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { reviewDist } from "../lib/store-review";
+import { reviewDist, reviewDistReport, reviewRisksReport } from "../lib/store-review";
 
 let dist: string;
 
@@ -82,8 +82,30 @@ describe("reviewDist", () => {
     expect(codes()).toEqual(["BROAD_HOST_ACCESS"]);
   });
 
-  it("returns nothing for a folder without a manifest", () => {
+  it("returns nothing for a folder without a manifest, and says the manifest was the reason", () => {
     write("a.js", "eval(x)");
     expect(codes()).toEqual([]);
+    expect(reviewDistReport(dist, "chrome").manifestUnreadable).toMatch(/ENOENT|no such file/);
+  });
+
+  /*. */
+  it("never calls a permission unused when a shipped script could not be read", () => {
+    const report = reviewRisksReport({
+      distPath: dist,
+      browser: "chrome",
+      manifest: { manifest_version: 3, name: "x", version: "1.0.0", permissions: ["storage"] },
+      files: [{ path: "missing.js" }, { path: "page.html" }],
+    });
+    expect(report.unreadable).toEqual(["missing.js", "page.html"]);
+    expect(report.risks.map((r) => r.code)).not.toContain("UNUSED_PERMISSION");
+  });
+
+  it("reports a permission unused only on a complete read", () => {
+    manifest({ permissions: ["storage"] });
+    write("bg.js", "console.log(1)");
+    const report = reviewDistReport(dist, "chrome");
+    expect(report.unreadable).toEqual([]);
+    expect(report.notScanned).toEqual([]);
+    expect(report.risks.map((r) => r.code)).toContain("UNUSED_PERMISSION");
   });
 });

@@ -1,7 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-vi.mock("../lib/templates-cache", () => ({
-  listTemplates: async () => [
+const ROWS = [
     {
       slug: "content-react",
       description: "A content script starter",
@@ -15,7 +14,11 @@ vi.mock("../lib/templates-cache", () => ({
         "https://github.com/extension-js/examples/tree/abc/examples/content-react",
       downloads: { chrome: "https://example.com/content-react-chrome.zip" },
     },
-  ],
+];
+
+vi.mock("../lib/templates-cache", () => ({
+  listTemplates: async () => ROWS,
+  listTemplatesWithSource: async () => ({ templates: ROWS, source: "live" }),
 }));
 
 import { templateCatalogUrl } from "../lib/template-artifact-source";
