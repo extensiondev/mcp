@@ -98,13 +98,28 @@ jobs:
           echo "name=$(node -p 'require("./package.json").name')" >> "$GITHUB_OUTPUT"
           echo "publish_access=$(node -p 'require("./package.json").publishConfig?.access || "public"')" >> "$GITHUB_OUTPUT"
 
+      # npm view answers E404 for a version that is not on the registry and
+      # anything else (network, auth, a 5xx) for a read that did not happen;
+      # only the first means "not published yet". A version that IS published
+      # while its tag is absent is the stranded shape a failed push leaves
+      # behind, and the rerun finishes the tag instead of refusing.
       - name: Check published version
+        id: published
         shell: bash
         run: |
           PKG="${{ steps.meta.outputs.name }}"
           VER="${{ steps.validate.outputs.version }}"
-          if npm view "$PKG@$VER" version --registry https://registry.npmjs.org/ >/dev/null 2>&1; then
-            echo "$PKG@$VER is already published" >&2
+          set +e
+          OUT="$(npm view "$PKG@$VER" version --registry https://registry.npmjs.org/ 2>&1)"
+          STATUS=$?
+          set -e
+          if [ "$STATUS" -eq 0 ]; then
+            echo "$PKG@$VER is already on npm and its tag is absent: the publish went through on an earlier run and the push did not; this run tags and releases it without publishing again"
+            echo "already=true" >> "$GITHUB_OUTPUT"
+          elif echo "$OUT" | grep -q "E404"; then
+            echo "already=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "Could not read the registry for $PKG@$VER (exit $STATUS): $OUT" >&2
             exit 1
           fi
 
@@ -182,19 +197,6 @@ jobs:
           git remote set-url --push origin "git@github.com:${{ github.repository }}.git"
           git config core.sshCommand "ssh -i ~/.ssh/release_push_key -o IdentitiesOnly=yes"
 
-      - name: Commit and tag release
-        env:
-          VERSION: ${{ steps.validate.outputs.version }}
-          TAG: ${{ steps.validate.outputs.tag }}
-        run: |
-          git add package.json pnpm-lock.yaml server.json .claude-plugin
-          if ! git diff --cached --quiet; then
-            git commit -m "Release v$VERSION"
-          fi
-          git tag -a "$TAG" --cleanup=whitespace -F "${{ steps.notes.outputs.file }}"
-          git push
-          git push origin "$TAG"
-
       - name: Prepare npm README
         run: node scripts/readme-logo-width.mjs npm
 
@@ -207,7 +209,24 @@ jobs:
       # (id-token: write above) against the trusted publisher configured on
       # npmjs.com for this repo/workflow. Provenance is generated automatically.
       - name: Publish to npm with provenance
+        if: steps.published.outputs.already != 'true'
         run: npm publish --provenance --access ${{ steps.meta.outputs.publish_access }} --tag latest --ignore-scripts
+
+      # The tag and the bump are pushed only once npm serves the tarball: a
+      # publish that fails after the push left vX.Y.Z tagged and main bumped
+      # while npm served nothing, and the rerun was refused by the tag check.
+      - name: Commit and tag release
+        env:
+          VERSION: ${{ steps.validate.outputs.version }}
+          TAG: ${{ steps.validate.outputs.tag }}
+        run: |
+          git add package.json pnpm-lock.yaml server.json .claude-plugin
+          if ! git diff --cached --quiet; then
+            git commit -m "Release v$VERSION"
+          fi
+          git tag -a "$TAG" --cleanup=whitespace -F "${{ steps.notes.outputs.file }}"
+          git push
+          git push origin "$TAG"
 
       - name: Create GitHub release
         env:

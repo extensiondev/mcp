@@ -230,7 +230,7 @@ jobs:
   # main to watch it close.
   nightly-alert:
     if: always() && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
-    needs: [engines, verify, registry-listing]
+    needs: [engines, verify, registry-listing, engine-pin]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:

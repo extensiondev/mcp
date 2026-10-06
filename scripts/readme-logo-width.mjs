@@ -9,7 +9,9 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
-const readmePath = fileURLToPath(new URL("../README.md", import.meta.url));
+const readmePath =
+  process.env.README_LOGO_WIDTH_PATH ||
+  fileURLToPath(new URL("../README.md", import.meta.url));
 const githubWidth = "15.5%";
 const npmWidth = "20.7%";
 
@@ -18,4 +20,9 @@ const [from, to] =
   mode === "npm" ? [githubWidth, npmWidth] : [npmWidth, githubWidth];
 
 const readme = readFileSync(readmePath, "utf8");
-writeFileSync(readmePath, readme.replace(`width="${from}"`, `width="${to}"`));
+const needle = `width="${from}"`;
+if (!readme.includes(needle)) {
+  console.error(`readme-logo-width: ${readmePath} holds no ${needle}, so nothing was rewritten for ${mode || "github"}`);
+  process.exit(1);
+}
+writeFileSync(readmePath, readme.replace(needle, `width="${to}"`));
