@@ -56,6 +56,7 @@ export type ErrorCode =
   | "E_NETWORK"
   | "E_NO_CONTROL_CHANNEL"
   | "E_NO_DIST"
+  | "E_NO_THEME"
   | "E_NO_EXTENSION_ID"
   | "E_NO_MATCHING_TARGET"
   | "E_NO_REFERENCE_TEMPLATE"
@@ -126,6 +127,7 @@ export const ERROR_CODES: ErrorCode[] = [
   "E_NETWORK",
   "E_NO_CONTROL_CHANNEL",
   "E_NO_DIST",
+  "E_NO_THEME",
   "E_NO_EXTENSION_ID",
   "E_NO_MATCHING_TARGET",
   "E_NO_REFERENCE_TEMPLATE",

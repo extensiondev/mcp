@@ -93,7 +93,7 @@ function isFabricationBlack(value: unknown): boolean {
 
 function coerceInput(raw: unknown): {
   manifest: Record<string, unknown>;
-  theme: ChromeThemeManifestTheme;
+  theme: ChromeThemeManifestTheme | null;
 } {
   if (!raw || typeof raw !== "object") {
     throw new Error(
@@ -111,7 +111,7 @@ function coerceInput(raw: unknown): {
       :
         manifest.colors || manifest.tints || manifest.images
         ? (manifest as unknown as ChromeThemeManifestTheme)
-        : ({} as ChromeThemeManifestTheme);
+        : null;
   return { manifest, theme: themeBlock };
 }
 
@@ -168,10 +168,9 @@ export async function handler(args: {
     });
   }
 
-  let manifest: Record<string, unknown>;
-  let theme: ChromeThemeManifestTheme;
+  let coerced: ReturnType<typeof coerceInput>;
   try {
-    ({ manifest, theme } = coerceInput(raw));
+    coerced = coerceInput(raw);
   } catch (err) {
     return envelope({
       ok: false,
@@ -184,6 +183,25 @@ export async function handler(args: {
       },
     });
   }
+
+  /* @invariant NO THEME BLOCK IS NOT A CLEAN THEME. An ordinary extension
+     manifest, or one with a misspelled `theme` key, used to resolve to `{}`
+     and read `headless-clean`. */
+  const manifest = coerced.manifest;
+  if (coerced.theme === null) {
+    return envelope({
+      ok: false,
+      command: COMMAND,
+      status: "no-theme",
+      error: {
+        code: "E_NO_THEME",
+        name: "InputError",
+        message: `The manifest declares no \`theme\` block and no top-level colors, tints or images (keys present: ${Object.keys(manifest).join(", ") || "none"}), so there is nothing to verify.`,
+      },
+      hint: "A Chrome theme is a manifest with a `theme` object holding colors, tints, images or properties. Check the key's spelling.",
+    });
+  }
+  const theme = coerced.theme;
 
   const findings: Finding[] = [];
 
@@ -207,13 +225,14 @@ export async function handler(args: {
 
   const resolved = resolveChromeTheme(theme);
 
-  for (const { key, reason } of resolved.ignoredKeys) {
+  for (const { key, reason, section } of resolved.ignoredKeys) {
+    const slot = `${section ?? "colors"}.${key}`;
     findings.push({
       class: "D4",
       severity: "warn",
       leg: "chrome-accepts",
-      key: `colors.${key}`,
-      detail: `Chrome discards colors.${key}: ${reason}`,
+      key: slot,
+      detail: `Chrome discards ${slot}: ${reason}`,
     });
   }
   const imageKeys = new Set<string>(CHROME_THEME_IMAGE_KEYS);
@@ -317,7 +336,7 @@ export async function handler(args: {
   ];
 
   return envelope({
-    ok: true,
+    ok: verdict !== "invalid",
     command: COMMAND,
     status: verdict,
     value: {

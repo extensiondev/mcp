@@ -28,17 +28,55 @@ export async function uninstallManagedBrowser(args: {
   }
 
   try {
-    await extensionUninstall({ browser: args.browser, all: args.all });
+    const answer = await extensionUninstall({ browser: args.browser, all: args.all });
+    /* @invariant "UNINSTALLED" IS READ FROM THE PER-BROWSER RESULT. The
+       library answers `{browser, removed, path}` per target and `removed:
+       false` for a browser that was never installed; the array used to be
+       discarded. */
+    const rows: Array<{ browser: string; removed: boolean; path: string }> = Array.isArray(answer)
+      ? (answer as unknown[]).flatMap((row) => {
+          const r = row as { browser?: unknown; removed?: unknown; path?: unknown } | null;
+          return r && typeof r === "object" && typeof r.removed === "boolean"
+            ? [{ browser: String(r.browser ?? ""), removed: r.removed, path: String(r.path ?? "") }]
+            : [];
+        })
+      : [];
+    const removed = rows.filter((row) => row.removed).map((row) => row.browser);
+    const absent = rows.filter((row) => !row.removed).map((row) => row.browser);
+    const status =
+      rows.length === 0
+        ? "uninstall-unconfirmed"
+        : removed.length === 0
+          ? "not-installed"
+          : absent.length > 0
+            ? "uninstalled-partially"
+            : "uninstalled";
 
     return envelope({
-      ok: true,
+      ok: rows.length > 0,
       command: "extension_browsers",
-      status: "uninstalled",
+      status,
       value: {
         target: args.all ? "all" : args.browser,
+        removed,
+        notInstalled: absent,
+        results: rows,
         duration: Date.now() - start,
       },
-      hint: 'Use extension_browsers with action: "list" to confirm what remains in the managed cache.',
+      ...(rows.length === 0
+        ? {
+            error: {
+              code: "E_BROWSER_UNINSTALL",
+              message: "The uninstaller returned no per-browser result, so nothing is known to have been removed.",
+            },
+          }
+        : {}),
+      hint:
+        status === "not-installed"
+          ? `${absent.join(", ")} ${absent.length === 1 ? "was" : "were"} not installed in the managed cache, so nothing was removed.`
+          : status === "uninstalled-partially"
+            ? `Removed ${removed.join(", ")}; ${absent.join(", ")} ${absent.length === 1 ? "was" : "were"} not installed.`
+            : 'Use extension_browsers with action: "list" to confirm what remains in the managed cache.',
     });
   } catch (err) {
     return envelope({

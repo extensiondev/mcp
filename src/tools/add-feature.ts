@@ -252,12 +252,36 @@ export async function handler(args: {
     fs.existsSync(path.join(projectPath, f.path)),
   );
 
+  /* @invariant "SAFE TO CREATE" READS THE MANIFEST. The plan's additions
+     replace keys the manifest may already declare (background, action,
+     side_panel); conflicts used to be file paths only, and an unparseable
+     manifest read as no conflict. */
+  const bareKey = (key: string): string =>
+    key.replace(/^(chromium|chrome|firefox|gecko|safari|edge|opera|brave):/, "");
+  let manifestKeys: string[] | null = null;
+  let manifestUnreadable: string | undefined;
+  try {
+    const parsed = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("not a JSON object");
+    manifestKeys = Object.keys(parsed as Record<string, unknown>);
+  } catch (err) {
+    manifestUnreadable = err instanceof Error ? err.message : String(err);
+  }
+  const manifestConflicts = manifestKeys
+    ? Object.keys(manifestUpdates).filter((key) =>
+        manifestKeys.some((present) => bareKey(present) === bareKey(key)),
+      )
+    : [];
+  const safe = conflicts.length === 0 && manifestConflicts.length === 0 && !manifestUnreadable;
+
   const conflictHint = `Warning: ${conflicts.length} file(s) already exist and would be overwritten.`;
+  const manifestConflictHint = `Warning: src/manifest.json already declares ${manifestConflicts.join(", ")}; the manifest additions above would replace ${manifestConflicts.length === 1 ? "it" : "them"}, so merge by hand instead of pasting.`;
+  const manifestUnreadableHint = `src/manifest.json could not be parsed (${manifestUnreadable}), so which keys the additions would replace is unknown.`;
 
   return envelope({
     ok: true,
     command: COMMAND,
-    status: conflicts.length ? "planned-with-conflicts" : "planned",
+    status: safe ? "planned" : "planned-with-conflicts",
     value: {
       feature: args.feature,
       framework,
@@ -280,6 +304,8 @@ export async function handler(args: {
         exists: fs.existsSync(path.join(projectPath, f.path)),
       })),
       conflicts: conflicts.map((c) => c.path),
+      manifestConflicts,
+      manifestReadable: manifestKeys !== null,
       instructions: [
         `1. Add these fields to your src/manifest.json:\n${JSON.stringify(manifestUpdates, null, 2)}`,
         `2. Create the following files in your project:`,
@@ -293,9 +319,11 @@ export async function handler(args: {
         "5. Run npm run dev to test",
       ].filter(Boolean),
     },
-    warnings: conflicts.length ? [conflictHint] : [],
-    ...(conflicts.length
-      ? {}
-      : { hint: "No conflicts detected. Safe to create all files." }),
+    warnings: [
+      ...(conflicts.length ? [conflictHint] : []),
+      ...(manifestConflicts.length ? [manifestConflictHint] : []),
+      ...(manifestUnreadable ? [manifestUnreadableHint] : []),
+    ],
+    ...(safe ? { hint: "No conflicts detected. Safe to create all files." } : {}),
   });
 }

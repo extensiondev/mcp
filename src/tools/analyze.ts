@@ -53,7 +53,13 @@ function walkDir(dir: string, base: string = ""): FileEntry[] {
       if (entry.isDirectory()) {
         entries.push(...walkDir(path.join(dir, entry.name), rel));
       } else {
-        const stat = fs.statSync(path.join(dir, entry.name));
+        let stat: fs.Stats;
+        try {
+          stat = fs.statSync(path.join(dir, entry.name));
+        } catch {
+          entries.push({ path: rel, size: 0, type: "unreadable" });
+          continue;
+        }
         const ext = path.extname(entry.name).toLowerCase();
         let type = "other";
         if ([".js", ".mjs"].includes(ext)) type = "javascript";
@@ -106,14 +112,37 @@ export async function handler(args: {
   }
 
   const files = walkDir(distPath);
+  if (files.length === 0) {
+    return envelope({
+      ok: false,
+      command: COMMAND,
+      status: "dist-empty",
+      error: { code: "E_NO_DIST", message: `${distPath} holds no files, so there is nothing to analyze. Run extension_build first.` },
+    });
+  }
+  const unreadable = files.filter((f) => f.type === "unreadable").map((f) => f.path);
   const totalSize = files.reduce((sum, f) => sum + f.size, 0);
 
   let manifest: Record<string, unknown> = {};
   const manifestPath = path.join(distPath, "manifest.json");
 
+  /* @invariant AN UNREADABLE DIST IS NOT AN ANALYZED ONE. A manifest that
+     could not be parsed used to become `{}` and the readiness flags all
+     passed on nothing. */
   try {
-    manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
-  } catch {
+    const parsed = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("not an object");
+    manifest = parsed as Record<string, unknown>;
+  } catch (err) {
+    return envelope({
+      ok: false,
+      command: COMMAND,
+      status: "dist-unreadable",
+      error: {
+        code: "E_NO_DIST",
+        message: `${manifestPath} ${fs.existsSync(manifestPath) ? `could not be parsed (${(err as Error)?.message ?? String(err)})` : "does not exist"}, so this dist cannot be analyzed. Run extension_build first.`,
+      },
+    });
   }
 
   const byType: Record<string, { count: number; size: number }> = {};
@@ -257,10 +286,10 @@ export async function handler(args: {
       hasIcons: files.some(
         (f) => f.type === "image" && f.path.includes("icon"),
       ),
-      has128Icon:
-        typeof (manifest.icons as Record<string, unknown> | undefined)?.[
-          "128"
-        ] === "string",
+      has128Icon: (() => {
+        const icon = (manifest.icons as Record<string, unknown> | undefined)?.["128"];
+        return typeof icon === "string" && fs.existsSync(path.join(distPath, icon.replace(/^\.?\//, "")));
+      })(),
       noSourceMaps: !files.some((f) => f.type === "sourcemap"),
       noPromoAssets: !files.some((f) => PROMO_RE.test(f.path)),
       under10MB: totalSize - archiveSize < 10 * 1024 * 1024,
@@ -272,6 +301,14 @@ export async function handler(args: {
     command: COMMAND,
     status: "analyzed",
     value: result,
-    warnings: [...reviewRiskWarnings(risks), ...sizeWarnings, note, archiveNote],
+    warnings: [
+      ...reviewRiskWarnings(risks),
+      ...sizeWarnings,
+      note,
+      archiveNote,
+      unreadable.length
+        ? `${unreadable.length} entr${unreadable.length === 1 ? "y" : "ies"} could not be read and count as 0 bytes: ${unreadable.join(", ")}.`
+        : undefined,
+    ],
   });
 }

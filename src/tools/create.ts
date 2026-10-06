@@ -105,12 +105,25 @@ export async function handler(args: {
     };
   const logTail = (max = 20): string[] => logLines.slice(-max);
 
-  const looksTransient = (): boolean => {
-    const blob = logLines.join("\n").toLowerCase();
+  /* @invariant THE PROJECT'S OWN NAME IS NOT A NETWORK ERROR. The scaffolder
+     logs a card with the name, template and path through this logger, so a
+     project called network-monitor used to read as a transient fetch failure
+    . The name and both paths are scrubbed before the
+     markers are matched, and the thrown error's message is matched too. */
+  const scrubbed = (text: string): string => {
+    const noise = [args.projectName, projectInput, path.resolve(projectInput), args.parentDir ? path.resolve(args.parentDir) : ""]
+      .filter((part) => part.length > 0)
+      .sort((a, b) => b.length - a.length);
+    return noise.reduce((acc, part) => acc.split(part).join(" "), text);
+  };
+  const looksTransient = (err?: unknown): boolean => {
+    const message = err instanceof Error ? err.message : err === undefined ? "" : String(err);
+    const blob = scrubbed([message, ...logLines].join("\n")).toLowerCase();
     return /timed out|timeout|etimedout|econnreset|rate limit|\b429\b|network|could not resolve host|terminal prompts disabled|authentication failed|early eof|rpc failed|remote end hung up/.test(
       blob,
     );
   };
+  const gitBefore = fs.existsSync(path.join(path.resolve(projectInput), ".git"));
   /* @invariant Only a directory this call created fresh may ever be wiped:
      the scaffolder accepts pre-existing directories (dotfiles, LICENSE,
      node_modules, .git), and rmSync on one deletes files the tool never
@@ -166,13 +179,13 @@ export async function handler(args: {
   try {
     result = await attempt();
   } catch (err1) {
-    if (!looksTransient()) return failure(err1, false);
+    if (!looksTransient(err1)) return failure(err1, false);
     logLines.push("[retry] transient template-download failure; retrying once");
     cleanPartial();
     try {
       result = await attempt();
     } catch (err2) {
-      return failure(err2, looksTransient());
+      return failure(err2, looksTransient(err2));
     }
   }
 
@@ -228,7 +241,7 @@ export async function handler(args: {
   const resolvedParent = args.parentDir
     ? path.resolve(args.parentDir)
     : process.cwd();
-  const gitInit = fs.existsSync(path.join(result.projectPath, ".git"));
+  const gitInit = !gitBefore && fs.existsSync(path.join(result.projectPath, ".git"));
 
   const wwwOrigin = mcpOrigins().www;
   const deployUrl = `${wwwOrigin}${wwwNewPath({ template: result.template })}`;

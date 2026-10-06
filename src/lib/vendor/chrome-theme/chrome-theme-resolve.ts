@@ -99,7 +99,7 @@ export interface ResolvedChromeTheme {
     ntpBackgroundRepeat: "no-repeat" | "repeat" | "repeat-x" | "repeat-y";
   };
   /** Honored manifest keys that were dropped/ignored, with reasons. */
-  ignoredKeys: { key: string; reason: string }[];
+  ignoredKeys: { key: string; reason: string; section?: "colors" | "tints" | "properties" }[];
   /** Fidelity caveats (e.g. image-derived colors not modeled). */
   caveats: string[];
 }
@@ -179,13 +179,20 @@ function parseManifestColors(
 /** browser_theme_pack.cc:1340 SetTintsFromJSON + MakeHSLShiftValid. */
 function parseManifestTints(
   tints: Record<string, number[]> | undefined,
+  ignoredKeys: ResolvedChromeTheme["ignoredKeys"],
 ): Map<string, HslTint> {
   const out = new Map<string, HslTint>();
   if (!tints) return out;
   for (const [key, value] of Object.entries(tints)) {
-    if (!Array.isArray(value) || value.length !== 3) continue;
+    if (!Array.isArray(value) || value.length !== 3) {
+      ignoredKeys.push({ key, section: "tints", reason: "malformed tint value, Chrome expects [h, s, l] with three numbers" });
+      continue;
+    }
     const [h, s, l] = value;
-    if ([h, s, l].some((channel) => typeof channel !== "number")) continue;
+    if ([h, s, l].some((channel) => typeof channel !== "number")) {
+      ignoredKeys.push({ key, section: "tints", reason: "non-numeric tint channel, Chrome skips the tint" });
+      continue;
+    }
     out.set(
       key,
       makeHslShiftValid({ h: h as number, s: s as number, l: l as number }),
@@ -258,8 +265,16 @@ export function resolveChromeTheme(
   const ignoredKeys: ResolvedChromeTheme["ignoredKeys"] = [];
   const caveats: string[] = [];
   const colors = parseManifestColors(theme.colors, ignoredKeys);
-  const tints = parseManifestTints(theme.tints);
+  const tints = parseManifestTints(theme.tints, ignoredKeys);
   const images = theme.images ?? {};
+  for (const [key, value] of Object.entries(theme.properties ?? {})) {
+    if (key === "ntp_logo_alternate" && typeof value !== "number") {
+      ignoredKeys.push({ key, section: "properties", reason: "not a number (Chrome reads 0 or 1), the logo falls back to the derived default" });
+    }
+    if ((key === "ntp_background_alignment" || key === "ntp_background_repeat") && typeof value !== "string") {
+      ignoredKeys.push({ key, section: "properties", reason: "not a string, Chrome falls back to the default" });
+    }
+  }
 
   const tintOrDefault = (key: keyof typeof CHROME_THEME_DEFAULT_TINTS) =>
     tints.get(key) ?? CHROME_THEME_DEFAULT_TINTS[key];

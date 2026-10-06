@@ -10,6 +10,7 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import { exactVersion, pinnedCliVersion, runExtensionCli } from "../lib/exec";
+import { nodeCheck } from "../lib/node-engine";
 import {
   outputFlagRefusalMessage,
   refusedTheOutputFlag,
@@ -120,13 +121,7 @@ async function environmentPreflight(): Promise<string> {
     remediation?: string;
   }> = [];
 
-  const nodeMajor = Number(process.versions.node.split(".")[0]);
-  checks.push({
-    check: "node",
-    status: nodeMajor >= 20 ? "pass" : "fail",
-    detail: `Node ${process.versions.node} on ${process.platform}/${process.arch}`,
-    remediation: nodeMajor >= 20 ? undefined : "Extension.js needs Node >= 20.18.",
-  });
+  checks.push(nodeCheck(process.versions.node));
 
   const { code, stdout, stderr } = await runExtensionCli(["--version"], {
     timeoutMs: 60_000,
