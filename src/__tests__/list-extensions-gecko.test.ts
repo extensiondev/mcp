@@ -156,6 +156,9 @@ describe("extension_list_extensions on Gecko (RDP root listAddons)", () => {
     expect(own.name).toBe("My Project");
     expect(own.version).toBe("0.1.0");
     expect(own.source).toBe("session-contract");
+    expect(own.ownExtensionInferred).toBe(true);
+    expect(result.value.ownExtensionInferred).toBe(true);
+    expect(result.warnings.join(" ")).toContain("That is an inference");
   });
 
   it("explains the engine upgrade when the contract has no rdpPort", async () => {

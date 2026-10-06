@@ -28,8 +28,25 @@ function descendantPids(pid: number): number[] {
   }
 }
 
+/* @invariant Windows has no process groups, pgrep or POSIX signals, so a
+   kill there ends only the cmd.exe shim and leaves the engine and browser
+   running. taskkill /T walks the tree Windows itself records and /F ends it
+  . */
+export function killWindowsTree(pid: number): boolean {
+  try {
+    execFileSync("taskkill", ["/PID", String(pid), "/T", "/F"], { stdio: "ignore" });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function killTree(pid: number | undefined, signal: NodeJS.Signals): void {
   if (!pid) return;
+  if (process.platform === "win32") {
+    killWindowsTree(pid);
+    return;
+  }
   for (const target of [...descendantPids(pid).reverse(), pid]) {
     try {
       process.kill(target, signal);

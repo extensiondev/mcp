@@ -100,7 +100,7 @@ export function listSessionMarkers(): ProcessInfo[] {
   return readSessionMarkers().markers;
 }
 
-function writeMarkerBestEffort(info: ProcessInfo, registeredAtMs: number): void {
+function writeMarkerBestEffort(info: ProcessInfo, registeredAtMs: number): string | null {
   try {
     fs.mkdirSync(markerDir(), { recursive: true });
     fs.writeFileSync(
@@ -112,17 +112,23 @@ function writeMarkerBestEffort(info: ProcessInfo, registeredAtMs: number): void 
         registeredAt: new Date(registeredAtMs).toISOString(),
       }),
     );
-  } catch {
+    return null;
+  } catch (error) {
+    /* @invariant A marker that did not land is said, never swallowed. The
+       marker is how stop all: true and the fork guard find a detached session
+       after this server restarts, so a silent failure left a live browser that
+       a later stop answered nothing-to-stop over. */
+    return `The session marker could not be written to ${markerDir()} (${error instanceof Error ? error.message : String(error)}), so if this server restarts, extension_stop (all: true) and the fork guard will not see this session; stop it by projectPath and browser, or by its pid ${info.pid}.`;
   }
 }
 
-export function registerSession(info: ProcessInfo): void {
+export function registerSession(info: ProcessInfo): string | null {
   const key = sessionKey(info.projectPath, info.browser);
   const prior = registrationStamps.get(key);
   const at = prior && prior.pid === info.pid ? prior.at : Date.now();
   registrationStamps.set(key, { pid: info.pid, at });
   sessions.set(key, info);
-  writeMarkerBestEffort(info, at);
+  return writeMarkerBestEffort(info, at);
 }
 
 export function sessionSinceMs(

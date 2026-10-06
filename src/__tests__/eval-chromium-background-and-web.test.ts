@@ -284,8 +284,8 @@ describe("extension_eval reaches the Chromium background over CDP, where the ext
     expect(start?.params.scopeURL).toBe(`chrome-extension://${p.id}/`);
     expect(start?.sessionId).toBe("session-nt");
     expect(evaluations[0].sessionId).toBe("session-sw-woken");
-    expect(result.warnings.join(" ")).toContain("was idle");
     expect(result.warnings.join(" ")).toContain("ServiceWorker.startWorker");
+    expect(result.warnings.join(" ")).toContain("does not say it idled");
   });
 
   it("says the worker is idle and how to wake it when no background target is listed", async () => {

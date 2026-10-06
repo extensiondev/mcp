@@ -30,6 +30,7 @@ import { removeCarrier } from "../lib/carrier";
 import { sweepCarriers, type CarrierSweepEntry } from "../lib/carrier-exit";
 import { readRememberedCarriers } from "../lib/carrier-registry";
 import { envelope } from "../lib/envelope";
+import { killWindowsTree } from "../lib/exec";
 
 export const schema = {
   name: "extension_stop",
@@ -67,6 +68,7 @@ interface StopOutcome {
   pid: number | null;
   stopped: boolean;
   reaped: number[];
+  reapUnconfirmed?: number[];
   detail: string;
   carrierRemoved?: string;
   carrierNote?: string;
@@ -200,18 +202,33 @@ function sessionProcessPids(
   };
 }
 
-function reapSessionProcesses(
+/* @invariant Reaped means confirmed gone. A kill that was sent is not a
+   death: the count used to be the candidates signalled, so "reaped 2" could
+   stand over two browsers still running. Each pid is read again after the
+   kill, and one still alive is reported apart. */
+async function reapSessionProcesses(
   projectPath: string,
   hints: ContractProcessHints = { pids: [] },
-): number[] {
+): Promise<{ reaped: number[]; unconfirmed: number[] }> {
   const { pids } = sessionProcessPids(projectPath, hints);
+  if (pids.length === 0) return { reaped: [], unconfirmed: [] };
   for (const pid of pids) {
+    if (process.platform === "win32") {
+      killWindowsTree(pid);
+      continue;
+    }
     try {
       process.kill(pid, "SIGKILL");
     } catch {
     }
   }
-  return pids;
+  await new Promise((resolve) => setTimeout(resolve, 250));
+  const reaped: number[] = [];
+  const unconfirmed: number[] = [];
+  for (const pid of pids) {
+    (pidState(pid) === "dead" ? reaped : unconfirmed).push(pid);
+  }
+  return { reaped, unconfirmed };
 }
 
 function isAlive(pid: number): boolean {
@@ -224,6 +241,7 @@ function isAlive(pid: number): boolean {
 }
 
 function signal(pid: number, sig: NodeJS.Signals): boolean {
+  if (process.platform === "win32") return killWindowsTree(pid);
   try {
     process.kill(-pid, sig);
     return true;
@@ -259,19 +277,25 @@ export async function stopOne(
   const hints = contractProcessHints(projectPath, browser);
 
   if (pid == null) {
-    const reaped = reapSessionProcesses(projectPath, hints);
+    const { reaped, unconfirmed } = await reapSessionProcesses(projectPath, hints);
     removeSessionMarker(projectPath, browser);
+    let detail: string;
+    if (unconfirmed.length) {
+      detail = `No dev pid on record. Killed orphaned browser process(es) from the profile dir, but ${unconfirmed.length} still report alive 250 ms later (pids ${unconfirmed.join(", ")})${reaped.length ? `; ${reaped.length} confirmed gone` : ""}.`;
+    } else if (reaped.length) {
+      detail = `No dev pid on record, but reaped ${reaped.length} orphaned browser process(es) from the profile dir, each confirmed gone.`;
+    } else {
+      detail = "No known session for this project/browser (nothing registered in this server and no ready.json contract found).";
+    }
     return {
       projectPath,
       browser,
       pid: null,
-      stopped: reaped.length === 0 ? false : true,
+      stopped: reaped.length > 0 && unconfirmed.length === 0,
       reaped,
+      ...(unconfirmed.length ? { reapUnconfirmed: unconfirmed } : {}),
       ...cleanCarrier(projectPath),
-      detail:
-        reaped.length === 0
-          ? "No known session for this project/browser (nothing registered in this server and no ready.json contract found)."
-          : `No dev pid on record, but reaped ${reaped.length} orphaned browser process(es) from the profile dir.`,
+      detail,
     };
   }
 
@@ -312,7 +336,7 @@ export async function stopOne(
       : "Terminated.";
   }
 
-  const reaped = reapSessionProcesses(projectPath, hints);
+  const { reaped } = await reapSessionProcesses(projectPath, hints);
 
   /* @invariant THE RECORDS GO ONLY WHEN THE SESSION IS KNOWN TO BE GONE. They
      used to be erased before the survivors were counted, so a stop that left

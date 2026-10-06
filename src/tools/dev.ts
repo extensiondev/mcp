@@ -193,7 +193,7 @@ export async function handler(
   }
   const pid = child.pid;
 
-  registerSession({
+  let markerWarning = registerSession({
     pid,
     browser,
     port: args.port,
@@ -395,7 +395,7 @@ export async function handler(
 
   const boundPort = contractBoundPort(args.projectPath, browser, spawnedAt);
   if (boundPort !== null && boundPort !== args.port) {
-    registerSession({
+    markerWarning = registerSession({
       pid,
       browser,
       port: boundPort,
@@ -454,6 +454,7 @@ export async function handler(
       portNote,
       profileReused && !args.noBrowser ? REUSED_PROFILE_NOTE : null,
       ...boot.warnings,
+      markerWarning,
     ],
     hint: args.noBrowser
       ? "Build-only session (noBrowser: true): no browser will launch, so no runtime will ever attach. extension_wait returns as soon as the first compile lands (compiled: true, browserAttached: false) instead of waiting out its budget; do not wait for a browser. The control verbs (storage/reload/open/dom_snapshot/eval) need a live browser and will not work against this session. When you are done, call extension_stop to shut down the dev server."

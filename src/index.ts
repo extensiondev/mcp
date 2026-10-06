@@ -347,7 +347,14 @@ export async function runCli(cmd: string, args: string[]): Promise<number> {
       } catch {
         parsed = null;
       }
-      return parsed?.ok === false ? 1 : 0;
+      /* @invariant Only an envelope that says ok: true exits 0. An answer that
+         does not parse is an unknown outcome, and a release script reading
+         the exit code must not take it as a promotion. */
+      if (parsed?.ok === true) return 0;
+      if (parsed === null || typeof parsed !== "object") {
+        log("The promote answer above could not be read as an envelope, so whether the channel moved is unknown; check extension_release_list before retrying.");
+      }
+      return 1;
     }
     log(
       "Usage: extension-mcp release promote --build <sha> --channel <channel>",

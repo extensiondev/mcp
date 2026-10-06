@@ -217,7 +217,7 @@ async function evaluateOnChromiumExtensionPage(
       if (wake.woken && woken.length > 0) {
         workers = woken;
         wakeWarnings.push(
-          "The background worker was idle (Chrome stops an MV3 service worker after about 30 s without events) and was started through ServiceWorker.startWorker before evaluating; state it held before idling is gone unless it was persisted.",
+          "No running background worker was listed, so it was started through ServiceWorker.startWorker before evaluating. Chrome stops an idle MV3 service worker after about 30 s without events, but a worker that never started looks the same here, so this does not say it idled; any in-memory state from an earlier run of it is gone unless it was persisted.",
         );
       } else {
         return envelope({

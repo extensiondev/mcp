@@ -165,7 +165,7 @@ export async function handler(
   }
   const pid = child.pid;
 
-  registerSession({
+  const markerWarning = registerSession({
     pid,
     browser,
     projectPath: args.projectPath,
@@ -298,6 +298,7 @@ export async function handler(
       : "The engine's preview process was alive 5 s after spawn, which is all this answer knows: whether a browser shows the extension is not read here. Call extension_stop when you are done.",
     warnings: [
       ...boot.warnings,
+      markerWarning,
       stale.removed &&
         "Removed a Live Preview carrier left behind by an earlier dev session, so it was not loaded beside your extension here.",
       !stale.removed &&

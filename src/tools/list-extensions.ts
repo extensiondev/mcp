@@ -45,6 +45,7 @@ interface ExtensionEntry {
   name?: string;
   version?: string;
   ownExtension?: boolean;
+  ownExtensionInferred?: boolean;
   temporarilyInstalled?: boolean;
   contexts: Array<{ type: string; url: string }>;
   source: "extensions-domain" | "session-contract" | "target-only" | "rdp-root";
@@ -332,7 +333,12 @@ async function listGeckoExtensions(
     if (!extensions.some((e) => e.ownExtension)) {
       const temporary = extensions.filter((e) => e.temporarilyInstalled);
       if (temporary.length === 1) {
+        /* @invariant A lone temporary add-on is this project's only by
+           inference: when the project's own add-on failed to install, the
+           one temporary install left can be the engine's companion, so the
+           match is labelled inferred and never stated as read. */
         temporary[0].ownExtension = true;
+        temporary[0].ownExtensionInferred = true;
         if (temporary[0].name === undefined && own?.name !== undefined) {
           temporary[0].name = own.name;
           if (own.version !== undefined) temporary[0].version = own.version;
@@ -358,9 +364,13 @@ async function listGeckoExtensions(
         browser,
         count: extensions.length,
         ownExtensionId: ownEntry?.id ?? null,
+        ...(ownEntry?.ownExtensionInferred ? { ownExtensionInferred: true } : {}),
         extensions,
       },
       warnings: [
+        ownEntry?.ownExtensionInferred
+          ? `No installed add-on carries this session's name${own?.name ? ` ("${own.name}")` : ""}, so ${ownEntry.id} is marked ownExtension only because it is the one temporary install. That is an inference: if this project's add-on failed to install, it may be another temporary add-on such as the engine's companion. extension_logs shows whether the install succeeded.`
+          : null,
         "Lists INSTALLED add-ons via the RDP root actor (listAddons), regardless of whether a context is currently live, so entries carry no contexts. temporarilyInstalled marks temporary loads; ownExtension marks the extension this dev session serves, matched from the session's ready contract. Add-ons are never attached to or evaluated in.",
       ],
     });
