@@ -15,6 +15,8 @@ export type DevToolsPanelOutcome =
       panelId: string;
       panelTitle: string;
       panelTarget: { targetId: string; url: string } | null;
+      panelTargetInferred?: boolean;
+      panelFrameCandidates?: number;
       panels: string[];
       reloadedInspected: boolean;
     }
@@ -24,6 +26,8 @@ export type DevToolsPanelOutcome =
       reason: string;
       devtoolsTargetId?: string;
       panels?: string[];
+      registryUnreadable?: string;
+      devtoolsPageLoaded?: boolean;
     };
 
 type RawTarget = { id: string; type: string; url: string; title?: string };
@@ -150,6 +154,7 @@ export async function openDevToolsPanel(
         reloadedInspected = false;
       }
     }
+    let lastEvaluateError: string | null = null;
     const evaluate = async (expression: string): Promise<EvaluateResponse | null> =>
       ((await cdp
         .sendCommand(
@@ -157,7 +162,18 @@ export async function openDevToolsPanel(
           { expression, returnByValue: true, awaitPromise: true },
           sessionId,
         )
-        .catch(() => null)) as EvaluateResponse | null);
+        .catch((err: unknown) => {
+          lastEvaluateError = err instanceof Error ? err.message : String(err);
+          return null;
+        })) as EvaluateResponse | null);
+    /* @invariant A REGISTRY THAT COULD NOT BE READ IS NOT AN EMPTY ONE. The
+       panel list is read through a module import that another Chromium or
+       Edge build may not have; a rejected read used to end as "no panel
+       registered" and send the agent to panels.create.
+       The devtools_page frame is checked on the way too. */
+    let registryAnswered = false;
+    let registryError: string | null = null;
+    let devtoolsPageLoaded = false;
 
     const wantedId =
       typeof options.panelTitle === "string" && options.panelTitle
@@ -171,7 +187,18 @@ export async function openDevToolsPanel(
     while (!panelId && Date.now() < deadline) {
       const response = await evaluate(PANEL_IDS_EXPRESSION);
       const ids = response?.result?.value;
+      if (response?.exceptionDetails) {
+        registryError = response.exceptionDetails.exception?.description ?? response.exceptionDetails.text ?? "the registry read threw";
+      } else if (!response) {
+        registryError = lastEvaluateError ?? "the registry read did not answer";
+      }
+      if (!devtoolsPageLoaded) {
+        devtoolsPageLoaded = (await listTargets().catch(() => [])).some(
+          (t) => t.type === "iframe" && String(t.url ?? "").startsWith(options.devtoolsPageUrl),
+        );
+      }
       if (Array.isArray(ids)) {
+        registryAnswered = true;
         panels = ids.map(String);
         panelId =
           panels.find((id) => (wantedId ? id === wantedId : id.startsWith(prefix))) ?? null;
@@ -207,9 +234,15 @@ export async function openDevToolsPanel(
         stage: "panel",
         devtoolsTargetId,
         panels,
-        reason: wantedId
-          ? `no panel with id ${wantedId} registered within ${budgetMs}ms`
-          : `no panel from ${prefix} registered within ${budgetMs}ms`,
+        devtoolsPageLoaded,
+        ...(!registryAnswered && registryError ? { registryUnreadable: registryError } : {}),
+        reason: !registryAnswered
+          ? `the DevTools panel registry could not be read (${registryError ?? "no answer"}), so whether a panel registered is unknown`
+          : !devtoolsPageLoaded
+            ? `the devtools page ${options.devtoolsPageUrl} never appeared as a frame within ${budgetMs}ms, so nothing could register a panel`
+            : wantedId
+              ? `no panel with id ${wantedId} registered within ${budgetMs}ms`
+              : `no panel from ${prefix} registered within ${budgetMs}ms`,
       };
     }
 
@@ -231,18 +264,36 @@ export async function openDevToolsPanel(
     }
 
     reached = "show";
+    /* @invariant THE PANEL FRAME IS THE ONE THAT APPEARED. Taking frames[0]
+       on the first read returned another panel's, or an own-origin iframe
+       the extension injects, before the 3 s poll ran. A
+       frame already listed is used only when it is the sole candidate once
+       the poll ends, and then it is marked inferred. */
     let panelTarget: { targetId: string; url: string } | null = null;
+    let panelTargetInferred = false;
+    let panelFrameCandidates = 0;
     const showDeadline = Date.now() + 3000;
-    while (!panelTarget && Date.now() < showDeadline) {
+    for (;;) {
       const frames = (await listTargets().catch(() => [])).filter(
         (t) =>
           t.type === "iframe" &&
           String(t.url ?? "").startsWith(`${prefix}/`) &&
           !String(t.url ?? "").startsWith(options.devtoolsPageUrl),
       );
-      const fresh = frames.find((t) => !framesBefore.has(t.id)) ?? frames[0];
-      if (fresh) panelTarget = { targetId: fresh.id, url: String(fresh.url) };
-      else await sleep(200);
+      panelFrameCandidates = frames.length;
+      const fresh = frames.find((t) => !framesBefore.has(t.id));
+      if (fresh) {
+        panelTarget = { targetId: fresh.id, url: String(fresh.url) };
+        break;
+      }
+      if (Date.now() >= showDeadline) {
+        if (frames.length === 1) {
+          panelTarget = { targetId: frames[0].id, url: String(frames[0].url) };
+          panelTargetInferred = true;
+        }
+        break;
+      }
+      await sleep(200);
     }
     return {
       opened: true,
@@ -250,6 +301,8 @@ export async function openDevToolsPanel(
       panelId,
       panelTitle: panelTitleFromId(panelId, options.extensionId),
       panelTarget,
+      ...(panelTargetInferred ? { panelTargetInferred } : {}),
+      panelFrameCandidates,
       panels,
       reloadedInspected,
     };

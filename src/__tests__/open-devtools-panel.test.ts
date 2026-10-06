@@ -27,6 +27,8 @@ let cdpTargets: Target[] = [];
 let openDevToolsSupported = true;
 let reloadRejects = false;
 let panelRegisters: boolean | "after-reload" = true;
+let registryThrows = false;
+let showAddsFrame = true;
 let reloaded = false;
 const otherCommands: Array<{ method: string; sessionId?: string }> = [];
 let extensionId = "";
@@ -62,6 +64,9 @@ vi.mock("../lib/cdp", () => {
         const expression = String(params?.expression ?? "");
         if (expression.includes("tabIds()")) {
           expect(sessionId).toBe("session-dt");
+          if (registryThrows) {
+            return { exceptionDetails: { text: "Uncaught", exception: { description: "TypeError: Failed to fetch dynamically imported module" } } };
+          }
           const registered = panelRegisters === true || (panelRegisters === "after-reload" && reloaded);
           return {
             result: {
@@ -74,10 +79,12 @@ vi.mock("../lib/cdp", () => {
         if (expression.includes("showPanel(")) {
           const shownId = /showPanel\("([^"]+)"\)/.exec(expression)?.[1] ?? "";
           const doc = shownId.endsWith("Second") ? "devtools/second.html" : "devtools/panel.html";
-          cdpTargets = [
-            ...cdpTargets,
-            { id: "panel", type: "iframe", url: `chrome-extension://${extensionId}/${doc}`, title: "" },
-          ];
+          if (showAddsFrame) {
+            cdpTargets = [
+              ...cdpTargets,
+              { id: "panel", type: "iframe", url: `chrome-extension://${extensionId}/${doc}`, title: "" },
+            ];
+          }
           return { result: { value: "shown" } };
         }
         return { result: { value: 1 } };
@@ -135,6 +142,8 @@ afterEach(() => {
   openDevToolsSupported = true;
   reloadRejects = false;
   panelRegisters = true;
+  registryThrows = false;
+  showAddsFrame = true;
   reloaded = false;
   otherCommands.length = 0;
   for (const d of dirs.splice(0)) fs.rmSync(d, { recursive: true, force: true });
@@ -207,6 +216,37 @@ describe("extension_open surface devtools opens the real DevTools and shows the 
     expect(result.status).toBe("surface-did-not-open");
     expect(result.error.message).toContain("devtools/index.html loaded in it");
     expect(result.hint).toContain("extension_logs");
+  }, 15_000);
+
+  /* @invariant */
+  it("never hands back a frame that was already there when two of the extension's frames sit in DevTools", async () => {
+    const p = project();
+    showAddsFrame = false;
+    cdpTargets = [
+      { id: "web", type: "page", url: "https://example.com/", title: "Example" },
+      { id: "old-a", type: "iframe", url: `chrome-extension://${p.id}/devtools/second.html`, title: "" },
+      { id: "old-b", type: "iframe", url: `chrome-extension://${p.id}/injected.html`, title: "" },
+    ];
+
+    const result = JSON.parse(await open.handler({ projectPath: p.dir, surface: "devtools" }));
+
+    expect(result.ok).toBe(true);
+    expect(result.value.panel.targetId).toBeNull();
+    expect(result.value.panel.url).toBeNull();
+    expect(result.warnings.join("\n")).toMatch(/2 frames of this extension sit inside DevTools/);
+  }, 15_000);
+
+  it("says the panel registry could not be read instead of 'no panel registered'", async () => {
+    const p = project();
+    registryThrows = true;
+    cdpTargets = [{ id: "web", type: "page", url: "https://example.com/", title: "Example" }];
+
+    const result = JSON.parse(await open.handler({ projectPath: p.dir, surface: "devtools", waitMs: 1200 }));
+
+    expect(result.ok).toBe(false);
+    expect(result.error.message).toMatch(/registry could not be read .*dynamically imported module/);
+    expect(result.hint).toMatch(/did not answer the panel-registry read/);
+    expect(result.hint).not.toMatch(/panels\.create/);
   }, 15_000);
 
   it("does not say the tab was reloaded when the reload failed", async () => {

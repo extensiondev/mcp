@@ -1359,7 +1359,7 @@ async function openDevToolsSurface(
         name: "PanelDidNotRegister",
         message:
           outcome.stage === "panel"
-            ? `DevTools opened on ${inspected.url} and ${doc} loaded in it, but ${outcome.reason}.${registered.length ? ` Panels this extension did register: ${registered.map((id) => id.slice(`chrome-extension://${extensionId}`.length)).join(", ")}.` : ""}`
+            ? `DevTools opened on ${inspected.url}${outcome.devtoolsPageLoaded === false ? "" : ` and ${doc} loaded in it`}, but ${outcome.reason}.${registered.length ? ` Panels this extension did register: ${registered.map((id) => id.slice(`chrome-extension://${extensionId}`.length)).join(", ")}.` : ""}`
             : `DevTools opened on ${inspected.url} and the panel registered, but ${outcome.reason}.`,
       },
       value: {
@@ -1368,7 +1368,9 @@ async function openDevToolsSurface(
         panels: outcome.panels ?? [],
       },
       hint:
-        args.panel && registered.length
+        outcome.stage === "panel" && outcome.registryUnreadable
+          ? "This browser build's DevTools frontend did not answer the panel-registry read this server uses, so the panel may well exist; open DevTools by hand in a headed session to see it, and extension_logs (context: ['devtools']) reads the devtools page either way."
+          : args.panel && registered.length
           ? `No panel is titled "${args.panel}"; pass one of the registered titles as \`panel\`, or omit it for the first.`
           : `The devtools page registers panels with chrome.devtools.panels.create; extension_logs (context: ['devtools']) shows what ${doc} wrote or threw. An extension that creates its panel only when the page reports to it (Preact Devtools does, through its content script) needs the page loaded with DevTools already open: retry with reload: true, and waitMs for a longer wait. DevTools stays open on the tab.`,
     });
@@ -1399,9 +1401,15 @@ async function openDevToolsSurface(
           ]
         : []),
       ...(outcome.panelTarget
-        ? []
+        ? outcome.panelTargetInferred
+          ? [
+              "No new panel frame appeared after showPanel; the one frame of this extension already inside DevTools was taken as the panel, which is an inference, not a match.",
+            ]
+          : []
         : [
-            "The panel is shown but its document target had not appeared within 3s; call extension_open surface: \"devtools\" again once it loads to get its url.",
+            (outcome.panelFrameCandidates ?? 0) > 1
+              ? `The panel is shown but ${outcome.panelFrameCandidates} frames of this extension sit inside DevTools and none appeared after showPanel, so which one is the panel is unknown; its url is not given.`
+              : "The panel is shown but its document target had not appeared within 3s; call extension_open surface: \"devtools\" again once it loads to get its url.",
           ]),
     ],
     hint: panelUrl
