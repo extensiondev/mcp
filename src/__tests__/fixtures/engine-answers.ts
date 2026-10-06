@@ -69,7 +69,7 @@ export function readyContract(
     distPath,
     manifestPath: "/tmp/project/src/manifest.json",
     port: command === "dev" ? 8080 : null,
-    host: "localhost",
+    ...(command === "build" ? {} : { host: "localhost" }),
     controlPort: command === "dev" ? 43210 : null,
     toolchainVersion: "4.1.31",
     extensionName: "Fixture",

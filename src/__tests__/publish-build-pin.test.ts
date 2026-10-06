@@ -11,13 +11,16 @@ const platform = vi.hoisted(() => ({
   },
 }));
 
-vi.mock("../lib/publish", () => ({
-  resolveToken: () => "tok_test",
-  publish: async () => ({
-    ok: platform.result.ok,
-    data: { ...platform.result.data },
-  }),
-}));
+/* @invariant The real publish client runs: only the network is faked, and
+   only /api/cli/publish answers with the platform body each cell sets, so
+   the token resolution and response reading are the shipped ones. */
+function publishAnswer(url: string): Response | null {
+  if (!url.endsWith("/api/cli/publish")) return null;
+  return new Response(JSON.stringify(platform.result.data), {
+    status: platform.result.ok ? 200 : 500,
+    headers: { "content-type": "application/json" },
+  });
+}
 
 import { handler } from "../tools/publish";
 import { writeCredentials } from "../lib/credentials";
@@ -47,21 +50,28 @@ function buildsIndex(): unknown {
 }
 
 function registryFetch(body: unknown): typeof fetch {
-  return (async () => ({
-    ok: true,
-    status: 200,
-    text: async () => JSON.stringify(body),
-  })) as unknown as typeof fetch;
+  return (async (input: string | URL | Request) => {
+    const answer = publishAnswer(String(input instanceof Request ? input.url : input));
+    if (answer) return answer;
+    return {
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify(body),
+    };
+  }) as unknown as typeof fetch;
 }
 
 describe("extension_publish build pin enrichment", () => {
   let tmp: string;
   let prevXdg: string | undefined;
   let prevFetch: typeof fetch;
+  let prevToken: string | undefined;
 
   beforeEach(() => {
     tmp = fs.mkdtempSync(path.join(os.tmpdir(), "extdev-publish-pin-"));
     prevXdg = process.env.XDG_CONFIG_HOME;
+    prevToken = process.env.EXTENSION_DEV_TOKEN;
+    delete process.env.EXTENSION_DEV_TOKEN;
     prevFetch = global.fetch;
     process.env.XDG_CONFIG_HOME = tmp;
     platform.result = { ok: true, data: { shareUrl: "https://preview.extension.dev/?preview=gen_x", visibility: "private" } };
@@ -80,6 +90,8 @@ describe("extension_publish build pin enrichment", () => {
     if (prevXdg === undefined) delete process.env.XDG_CONFIG_HOME;
     else process.env.XDG_CONFIG_HOME = prevXdg;
     global.fetch = prevFetch;
+    if (prevToken === undefined) delete process.env.EXTENSION_DEV_TOKEN;
+    else process.env.EXTENSION_DEV_TOKEN = prevToken;
     fs.rmSync(tmp, { recursive: true, force: true });
   });
 

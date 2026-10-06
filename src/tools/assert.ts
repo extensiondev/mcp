@@ -54,6 +54,7 @@ import { version } from "../../package.json";
 import { readLogEvents,
   browserEventBelongsTo,
   isBrowserChannelEvent,
+  makeFilter,
   readLogDropped,
 } from "./logs-filter";
 import { emptyReason, readLogRunId, staleFileNote } from "./logs";
@@ -271,6 +272,19 @@ export function parseClauses(raw: unknown): ParseResult {
         : Array.isArray(clause.context)
           ? clause.context.map(String)
           : [String(clause.context)];
+    /* @invariant The console context set is the engine's, so the engine's
+       filter is run once on a probe event at parse time. It throws a
+       RangeError on a context it does not know, lazily on the first event, and
+       that used to surface mid-stage as E_INTERNAL for
+       the whole call instead of a refused clause. */
+    if (context !== undefined) {
+      try {
+        makeFilter({ context } as never)({ context: "background", level: "info", seq: 0, ts: 0 });
+      } catch (error) {
+        issues.push(`${at}.context: ${error instanceof Error ? error.message : String(error)}`);
+        return;
+      }
+    }
     const since = clause.since === undefined ? undefined : Number(clause.since);
     if (since !== undefined && !Number.isFinite(since)) {
       issues.push(`${at}.since must be a number, the seq cursor to read from`);

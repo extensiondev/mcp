@@ -1,5 +1,9 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { writeCredentials, type StoredCredentials } from "../lib/credentials";
 import { fetchRegistryJson } from "../lib/registry";
 import {
   RegistryAccessTokens,
@@ -7,28 +11,34 @@ import {
 } from "../lib/registry-access";
 
 
-const stored = vi.hoisted(() => ({
-  current: {
-    version: 1 as const,
-    token: "stored-long-lived-token",
-    workspaceSlug: "acme",
-    projectSlug: "widget",
-    expiresAt: 0,
-    api: "https://www.extension.dev",
-  },
-}));
+/* @invariant The real credential store answers: each cell writes its login
+   to a temporary config directory and the shipped readers resolve it, so
+   expiry and selection are the code's own. */
+const STORED: StoredCredentials = {
+  version: 1,
+  token: "stored-long-lived-token",
+  workspaceSlug: "acme",
+  projectSlug: "widget",
+  expiresAt: 0,
+  api: "https://www.extension.dev",
+};
 
-vi.mock("../lib/credentials", () => ({
-  readCredentials: vi.fn(() => stored.current),
-  readValidCredentials: vi.fn(() => {
-    const creds = stored.current;
-    if (!creds) return null;
-    if (creds.expiresAt && creds.expiresAt <= Math.floor(Date.now() / 1000)) {
-      return null;
-    }
-    return creds;
-  }),
-}));
+function setStored(creds: StoredCredentials | null): void {
+  fs.rmSync(path.join(configDir, "extension-dev"), { recursive: true, force: true });
+  if (creds) writeCredentials(creds);
+}
+
+let configDir = "";
+const prevXdg = process.env.XDG_CONFIG_HOME;
+const prevAppData = process.env.APPDATA;
+
+afterEach(() => {
+  fs.rmSync(configDir, { recursive: true, force: true });
+  if (prevXdg === undefined) delete process.env.XDG_CONFIG_HOME;
+  else process.env.XDG_CONFIG_HOME = prevXdg;
+  if (prevAppData === undefined) delete process.env.APPDATA;
+  else process.env.APPDATA = prevAppData;
+});
 
 const REF = { workspace: "acme", project: "widget" };
 const URL_UNDER_TEST =
@@ -40,14 +50,10 @@ function jsonResponse(body: unknown, status = 200): Response {
 
 beforeEach(() => {
   delete process.env.EXTENSION_DEV_TOKEN;
-  stored.current = {
-    version: 1 as const,
-    token: "stored-long-lived-token",
-    workspaceSlug: "acme",
-    projectSlug: "widget",
-    expiresAt: 0,
-    api: "https://www.extension.dev",
-  };
+  configDir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-registry-access-"));
+  process.env.XDG_CONFIG_HOME = configDir;
+  process.env.APPDATA = configDir;
+  setStored(STORED);
 });
 
 describe("public projects", () => {
@@ -110,7 +116,7 @@ describe("the grant is asked with the named project's stored login first", () =>
 
   it("does not send an env token whose claims name another project", async () => {
     process.env.EXTENSION_DEV_TOKEN = claimsToken("other", "thing");
-    stored.current = null as unknown as typeof stored.current;
+    setStored(null);
     try {
       const fetchImpl = vi.fn(async () => jsonResponse({ token: "short", expiresAt: 1 }));
       const grant = await new Probe({ fetchImpl: fetchImpl as any }).mintFor(REF);
@@ -123,7 +129,7 @@ describe("the grant is asked with the named project's stored login first", () =>
 
   it("sends an env token whose claims name this project when nothing is stored", async () => {
     process.env.EXTENSION_DEV_TOKEN = claimsToken("acme", "widget");
-    stored.current = null as unknown as typeof stored.current;
+    setStored(null);
     try {
       const bearers: string[] = [];
       const fetchImpl = vi.fn(async (_url: any, init?: any) => {
@@ -229,10 +235,10 @@ describe("private projects", () => {
   });
 
   it("never posts an expired stored token; it asks for a fresh login instead", async () => {
-    stored.current = {
-      ...stored.current,
+    setStored({
+      ...STORED,
       expiresAt: Math.floor(Date.now() / 1000) - 60,
-    };
+    });
     const fetchImpl = vi.fn(async () => jsonResponse({}, 401));
     const res = await fetchRegistryJson(URL_UNDER_TEST, fetchImpl as any, {
       ref: REF,

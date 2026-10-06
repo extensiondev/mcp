@@ -839,7 +839,7 @@ export async function handler(args: {
   const { code, stdout, stderr } = attempt;
   if (engineRefusedJsonOutput) {
     warnings.push(
-      "The Extension.js installed in this project is older than the one this server expects: it rejected --output json on build, so the build was run a second time without that flag and the result was read from the build summary the engine writes into dist/extension-js/. The extension that came out is exactly the same one. Upgrade the project's Extension.js to get the richer report back, including the Safari app identity and the byte totals from the run that just happened, and to stop paying for the second build.",
+      "The Extension.js installed in this project is older than the one this server expects: it rejected --output json on build, so the build was run a second time without that flag and the result comes from the build summary the engine writes into dist/extension-js/ when this run left one there (a separate warning names the path when it did not). The extension that came out is exactly the same one. Upgrade the project's Extension.js to get the richer report back, including the Safari app identity and the byte totals from the run that just happened, and to stop paying for the second build.",
     );
   } else if (engineKnownTooOld) {
     /* @invariant
@@ -852,7 +852,7 @@ export async function handler(args: {
      * wording here would teach the user to expect a cost this code just removed.
      */
     warnings.push(
-      `The Extension.js installed in this project is older than the one this server expects: it reports ${verdict.version}, and --output json only reached extension build in ${verdict.floor}, so the build was run without that flag and the result was read from the build summary the engine writes into dist/extension-js/. The extension that came out is exactly the same one, and nothing was built twice. Upgrade the project's Extension.js to get the richer report back, including the Safari app identity and the byte totals from the run that just happened.`,
+      `The Extension.js installed in this project is older than the one this server expects: it reports ${verdict.version}, and --output json only reached extension build in ${verdict.floor}, so the build was run without that flag and the result comes from the build summary the engine writes into dist/extension-js/ when this run left one there (a separate warning names the path when it did not). The extension that came out is exactly the same one, and nothing was built twice. Upgrade the project's Extension.js to get the richer report back, including the Safari app identity and the byte totals from the run that just happened.`,
     );
   }
   const duration = Date.now() - start;

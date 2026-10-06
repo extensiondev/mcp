@@ -4,10 +4,6 @@ import path from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("../lib/credentials", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../lib/credentials")>()),
-  readValidCredentials: () => null,
-}));
 
 import { ZIP_URL_REDIRECT_NOTE } from "../lib/artifacts-api";
 import { probeShareCors } from "../lib/share-cors-probe";
@@ -20,6 +16,9 @@ const FULL_ID = `gen_${"0123456789abcdef".repeat(4)}`;
 
 const origFetch = global.fetch;
 const origToken = process.env.EXTENSION_DEV_TOKEN;
+const origXdg = process.env.XDG_CONFIG_HOME;
+const origAppData = process.env.APPDATA;
+let emptyConfig = "";
 const tmpDirs: string[] = [];
 
 function tmpProject(): string {
@@ -51,6 +50,9 @@ function liveRow(zipUrl: string | null) {
 
 beforeEach(() => {
   process.env.EXTENSION_DEV_TOKEN = "test-token";
+  emptyConfig = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-zip-config-"));
+  process.env.XDG_CONFIG_HOME = emptyConfig;
+  process.env.APPDATA = emptyConfig;
   global.fetch = (async () => {
     throw new Error("no test may reach the real platform");
   }) as unknown as typeof fetch;
@@ -60,6 +62,11 @@ afterEach(() => {
   global.fetch = origFetch;
   if (origToken === undefined) delete process.env.EXTENSION_DEV_TOKEN;
   else process.env.EXTENSION_DEV_TOKEN = origToken;
+  fs.rmSync(emptyConfig, { recursive: true, force: true });
+  if (origXdg === undefined) delete process.env.XDG_CONFIG_HOME;
+  else process.env.XDG_CONFIG_HOME = origXdg;
+  if (origAppData === undefined) delete process.env.APPDATA;
+  else process.env.APPDATA = origAppData;
   for (const dir of tmpDirs.splice(0)) {
     fs.rmSync(dir, { recursive: true, force: true });
   }

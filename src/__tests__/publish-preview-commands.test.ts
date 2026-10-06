@@ -8,13 +8,16 @@ const platform = vi.hoisted(() => ({
   result: { ok: true, data: {} as Record<string, unknown> },
 }));
 
-vi.mock("../lib/publish", () => ({
-  resolveToken: () => "tok_test",
-  publish: async () => ({
-    ok: platform.result.ok,
-    data: { ...platform.result.data },
-  }),
-}));
+/* @invariant The real publish client runs: only the network is faked, and
+   only /api/cli/publish answers with the platform body each cell sets, so
+   the token resolution and response reading are the shipped ones. */
+function publishAnswer(url: string): Response | null {
+  if (!url.endsWith("/api/cli/publish")) return null;
+  return new Response(JSON.stringify(platform.result.data), {
+    status: platform.result.ok ? 200 : 500,
+    headers: { "content-type": "application/json" },
+  });
+}
 
 import { handler } from "../tools/publish";
 
@@ -36,7 +39,9 @@ describe("extension_publish surfaces the platform's preview commands", () => {
     process.env.XDG_CONFIG_HOME = tmp;
     vi.stubGlobal(
       "fetch",
-      vi.fn(async () => {
+      vi.fn(async (input: string | URL | Request) => {
+        const answer = publishAnswer(String(input instanceof Request ? input.url : input));
+        if (answer) return answer;
         throw new Error("publish-preview cells never reach the network");
       }),
     );

@@ -330,6 +330,21 @@ describe("the build probes the engine before it spends a compile", () => {
     expect(warned).not.toContain("stop paying for the second build");
   });
 
+  it("never says the summary was read when no summary from this run is on disk", async () => {
+    const dir = projectWithLocalEngine();
+    cliResponder = engineBelowTheFloor("4.0.16", {
+      code: 0,
+      stdout: "",
+      stderr: "",
+    });
+
+    const result = await run({ projectPath: dir, browser: "chrome" });
+    const warned = (result.warnings ?? []).join(" ");
+
+    expect(warned).toContain("no summary from this run was found on disk");
+    expect(warned).not.toContain("the result was read from the build summary");
+  });
+
   it("sends the flag when the probe says the engine is new enough", async () => {
     const dir = projectWithLocalEngine();
     cliResponder = engine("4.0.19-canary.1785200797.ce99a79e", {

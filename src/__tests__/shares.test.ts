@@ -4,10 +4,6 @@ import path from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("../lib/credentials", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../lib/credentials")>()),
-  readValidCredentials: () => null,
-}));
 
 import { handler, schema } from "../tools/shares";
 import { parseArtifactRef } from "../lib/artifacts-api";
@@ -46,9 +42,15 @@ describe("extension_shares", () => {
   const origFetch = global.fetch;
   const origToken = process.env.EXTENSION_DEV_TOKEN;
   const origGate = process.env.EXTENSION_DEV_APPROVAL_GATE;
+  const origXdg = process.env.XDG_CONFIG_HOME;
+  const origAppData = process.env.APPDATA;
+  let emptyConfig = "";
 
   beforeEach(() => {
     process.env.EXTENSION_DEV_TOKEN = "test-token";
+    emptyConfig = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-shares-config-"));
+    process.env.XDG_CONFIG_HOME = emptyConfig;
+    process.env.APPDATA = emptyConfig;
     process.env.EXTENSION_DEV_APPROVAL_GATE = "0";
     global.fetch = (async () => {
       throw new Error("no test may reach the real platform");
@@ -61,6 +63,11 @@ describe("extension_shares", () => {
     else process.env.EXTENSION_DEV_TOKEN = origToken;
     if (origGate === undefined) delete process.env.EXTENSION_DEV_APPROVAL_GATE;
     else process.env.EXTENSION_DEV_APPROVAL_GATE = origGate;
+    fs.rmSync(emptyConfig, { recursive: true, force: true });
+    if (origXdg === undefined) delete process.env.XDG_CONFIG_HOME;
+    else process.env.XDG_CONFIG_HOME = origXdg;
+    if (origAppData === undefined) delete process.env.APPDATA;
+    else process.env.APPDATA = origAppData;
   });
 
   it("names the tool and defaults to listing", () => {
