@@ -18,11 +18,11 @@ export const LAUNCH_FLAG_SCHEMA = {
   },
   chromiumBinary: {
     type: "string",
-    description: "Custom Chromium-based binary (overrides browser)",
+    description: "Custom Chromium-based binary to launch; `browser` still names the target family the engine builds for (chromium-based when none is given).",
   },
   geckoBinary: {
     type: "string",
-    description: "Custom Gecko/Firefox binary (overrides browser)",
+    description: "Custom Gecko/Firefox binary to launch; `browser` still names the target family the engine builds for (gecko-based when none is given).",
   },
   host: {
     type: "string",

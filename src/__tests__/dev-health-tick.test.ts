@@ -169,6 +169,49 @@ describe("extension_dev health tick", () => {
     expect(JSON.stringify(result)).not.toMatch(/recompile/);
   }, 20_000);
 
+  /*. */
+  it("says when the output it shows was cut, and keeps the head", async () => {
+    const project = tmpProject();
+    nextChild = () =>
+      fakeCli('console.error("HEADLINE " + "x".repeat(3000)); process.exit(1);');
+    const result = JSON.parse(await dev.handler({ projectPath: project }));
+    expect(result.status).toBe("exited");
+    expect(result.value.output.length).toBe(2000);
+    expect(result.value.outputTruncated).toMatchObject({ shown: 2000, kept: "head" });
+    expect(result.value.outputTruncated.total).toBeGreaterThan(2000);
+  }, 15_000);
+
+  it("reports the control channel from the contract, not from the request", async () => {
+    const project = tmpProject();
+    nextChild = () => {
+      const cli = fakeCli('console.log("building"); setTimeout(()=>{}, 60000);');
+      setTimeout(() => {
+        writeModernContract(project, "chrome", { controlPort: null, controlPortUnavailableReason: "EADDRINUSE 43210" });
+      }, 300);
+      return cli;
+    };
+    const result = JSON.parse(await dev.handler({ projectPath: project, allowControl: true }));
+    expect(result.status).toBe("started");
+    expect(result.value.capabilities.controlChannel).toMatchObject({ requested: true, port: null, unavailableReason: "EADDRINUSE 43210" });
+    expect(result.hint).toMatch(/reports no control port \(EADDRINUSE 43210\)/);
+    expect(result.hint).not.toMatch(/Control channel is ON/);
+  }, 20_000);
+
+  it("names the shared output, not a profile lock, when a session already runs", async () => {
+    const project = tmpProject();
+    nextChild = () => {
+      const cli = fakeCli('console.log("building"); setTimeout(()=>{}, 60000);');
+      setTimeout(() => writeModernContract(project, "chrome", { controlPort: 43210 }), 300);
+      return cli;
+    };
+    const first = JSON.parse(await dev.handler({ projectPath: project }));
+    expect(first.status).toBe("started");
+    const second = JSON.parse(await dev.handler({ projectPath: project }));
+    expect(second.status).toBe("session-exists");
+    expect(second.error.message).toMatch(/last compile wins/);
+    expect(second.error.message).not.toMatch(/dies on the profile lock/);
+  }, 25_000);
+
   it("trusts the profile-lock stamp even from a CLI that declares no schema", async () => {
     const project = tmpProject();
     nextChild = () => {

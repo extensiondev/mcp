@@ -426,9 +426,9 @@ export async function handler(args: {
         checks.push({
           check: "runtime-errors",
           status: "fail",
-          detail: `Recent error-level logs: ${errs.join(" | ")}`,
+          detail: `${errs.length} distinct error-level log message(s) in this run, any context, any time since it started (up to 5 shown): ${errs.join(" | ")}`,
           remediation:
-            "The extension is throwing at runtime. Inspect with extension_logs. A chrome.* API called without its permission is a common cause: extension_manifest_validate catches a permission MISSING FROM permissions[], but it does not model host-permission scope (e.g. webRequest with no matching host_permissions) or gesture requirements (e.g. activeTab without a user gesture), so a valid:true there does not rule those out.",
+            "Error-level events were logged this run; read them with extension_logs (level: 'error') to see which context and when. A chrome.* API called without its permission is a common cause: extension_manifest_validate catches a permission MISSING FROM permissions[], but it does not model host-permission scope (e.g. webRequest with no matching host_permissions) or gesture requirements (e.g. activeTab without a user gesture), so a valid:true there does not rule those out.",
         });
       }
     }

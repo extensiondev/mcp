@@ -10,7 +10,8 @@ import { PROJECT_PATH } from "../lib/common-schema";
 import fs from "node:fs";
 import path from "node:path";
 import { envelope } from "../lib/envelope";
-import { reviewCoverageNotes, reviewRiskWarnings, reviewRisksReport } from "../lib/store-review";
+import { engineBrowserName } from "../lib/browser-family";
+import { isDevelopmentBuild, reviewCoverageNotes, reviewRiskWarnings, reviewRisksReport } from "../lib/store-review";
 import { engineProjectRoot } from "../lib/session-paths";
 
 const COMMAND = "extension_analyze";
@@ -96,7 +97,7 @@ export async function handler(args: {
   format?: string;
 }): Promise<string> {
   const browser = args.browser ?? "chrome";
-  const distPath = path.join(engineProjectRoot(args.projectPath), "dist", browser);
+  const distPath = path.join(engineProjectRoot(args.projectPath), "dist", engineBrowserName(browser));
 
   if (!fs.existsSync(distPath)) {
     return envelope({
@@ -154,7 +155,7 @@ export async function handler(args: {
   }
 
   const sourcemapSize = byType.sourcemap?.size ?? 0;
-  const buildType = sourcemapSize > 0 ? "development" : "production";
+  const buildType = isDevelopmentBuild(files) ? "development" : "production";
   const archiveSize = byType.archive?.size ?? 0;
   const shippableSize = totalSize - sourcemapSize - archiveSize;
 
@@ -222,8 +223,10 @@ export async function handler(args: {
 
   const note =
     buildType === "development"
-      ? `This dist contains ${formatBytes(sourcemapSize)} of sourcemaps and looks like a dev build; run extension_build for production sizes. shippableSize excludes sourcemaps.`
-      : undefined;
+      ? `This dist holds the dev runtime (hot-update or the engine's companion files) and is a dev build; run extension_build for production sizes. shippableSize excludes sourcemaps.`
+      : sourcemapSize > 0
+        ? `This dist contains ${formatBytes(sourcemapSize)} of sourcemaps; they ship unless the build strips them. shippableSize excludes them.`
+        : undefined;
   const archiveNote =
     archiveSize > 0
       ? `This dist contains ${formatBytes(archiveSize)} of .zip archive(s) (store packaging output, written into dist by zip builds). shippableSize excludes them so the packaged copy does not double-count the files it contains.`

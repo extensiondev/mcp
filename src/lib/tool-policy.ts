@@ -85,7 +85,7 @@ export const TOOL_POLICY: Record<string, ToolPolicy> = {
     annotations: reads(),
     untrusted: true,
   },
-  extension_stop: { group: "local", annotations: acts({ idempotentHint: true }) },
+  extension_stop: { group: "local", annotations: acts({ idempotentHint: true, destructiveHint: true }) },
   extension_manifest_validate: { group: "local", annotations: reads() },
   extension_theme_verify: { group: "local", annotations: reads() },
   extension_analyze: { group: "local", annotations: reads() },
@@ -143,7 +143,7 @@ export const TOOL_POLICY: Record<string, ToolPolicy> = {
     group: "local",
     annotations: acts({ destructiveHint: true, openWorldHint: true }),
   },
-  extension_auth: { group: "platform", annotations: acts({ openWorldHint: true }) },
+  extension_auth: { group: "platform", annotations: acts({ openWorldHint: true, destructiveHint: true }) },
   extension_workspace_create: {
     group: "platform",
     annotations: acts({ openWorldHint: true }),

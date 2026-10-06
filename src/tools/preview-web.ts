@@ -19,6 +19,7 @@ import { spendNarration } from "../lib/allowance";
 import { recordSharedPreview } from "../lib/share-record";
 import { probeShareCors } from "../lib/share-cors-probe";
 import { envelope } from "../lib/envelope";
+import { engineBrowserName } from "../lib/browser-family";
 import { ALLOWANCE_PHRASE } from "../lib/allowance";
 import { engineProjectRoot } from "../lib/session-paths";
 import {
@@ -423,7 +424,7 @@ export async function handler(args: {
 
   const distDir = args.distPath
     ? path.resolve(args.distPath)
-    : path.join(engineProjectRoot(args.projectPath), "dist", browser);
+    : path.join(engineProjectRoot(args.projectPath), "dist", engineBrowserName(browser));
   const manifestPath = path.join(distDir, "manifest.json");
   if (!fs.existsSync(manifestPath)) {
     return envelope({

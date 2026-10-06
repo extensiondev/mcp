@@ -800,10 +800,13 @@ describe("extension_build refuses a Safari packaging option it cannot honour", (
     const dir = project();
     distFor(dir, "safari");
 
+    for (const accepted of ["notreversedns", "1com.acme"]) {
+      cliCalls.length = 0;
+      const result = await run({ projectPath: dir, browser: "safari", bundleId: accepted });
+      expect(result.status, `${accepted} is one the engine accepts`).not.toBe("invalid-bundle-id");
+    }
     for (const bad of [
-      "notreversedns",
       "com.acme.",
-      "1com.acme",
       "com..acme",
     ]) {
       cliCalls.length = 0;
@@ -839,7 +842,7 @@ describe("extension_build refuses a Safari packaging option it cannot honour", (
 });
 
 const ENGINE_IS_VALID_BUNDLE_ID_SOURCE =
-  "^[A-Za-z][A-Za-z0-9-]*(\\.[A-Za-z][A-Za-z0-9-]*)+$";
+  "^[A-Za-z0-9-]+(\\.[A-Za-z0-9-]+)*$";
 
 describe("the local bundle-id validator stays the engine's validator", () => {
   it("is character for character the regex isValidBundleId applies", () => {

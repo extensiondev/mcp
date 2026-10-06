@@ -48,7 +48,13 @@ export const schema = {
         type: "boolean",
         default: false,
         description:
-          "Stop every known session across projects and browsers, found from this server's registry AND the on-disk markers earlier runs left, so it still works after an MCP restart. It also takes back every live-preview carrier still recorded on this machine, including one in a project whose session was never stopped. projectPath/browser are then ignored.",
+          "Stop every known session across projects and browsers, found from this server's registry AND the on-disk markers written by this server or by servers that are no longer running, so it still works after an MCP restart. A marker owned by another MCP server that is still running is left alone and listed under skippedForeign unless includeOtherServers is true. It also takes back every live-preview carrier still recorded on this machine, including one in a project whose session was never stopped. projectPath/browser are then ignored.",
+      },
+      includeOtherServers: {
+        type: "boolean",
+        default: false,
+        description:
+          "With all: true, also stop sessions whose markers belong to another MCP server that is still running (the markers sit in a per-user directory every server shares). Off by default, since those sessions are someone else's.",
       },
     },
     required: [],
@@ -347,15 +353,27 @@ export async function handler(args: {
   projectPath?: string;
   browser?: string;
   all?: boolean;
+  includeOtherServers?: boolean;
 }): Promise<string> {
   if (args.all) {
     const candidates = new Map<string, { projectPath: string; browser: string }>();
     for (const s of listSessions()) {
       candidates.set(`${path.resolve(s.projectPath)}::${s.browser}`, s);
     }
+    /* @invariant THE MARKER DIRECTORY IS SHARED BY EVERY MCP SERVER OF THIS
+       USER, so "all" used to kill sessions a RUNNING sibling server owns
+      . A marker whose serverPid is alive and is not this
+       process is skipped and reported unless the caller asked for it. */
     const markersRead = readSessionMarkers();
+    const skippedForeign: Array<{ projectPath: string; browser: string; serverPid: number }> = [];
     for (const m of markersRead.markers) {
       const key = `${path.resolve(m.projectPath)}::${m.browser}`;
+      const foreign =
+        typeof m.serverPid === "number" && m.serverPid !== process.pid && pidState(m.serverPid) === "alive";
+      if (foreign && !args.includeOtherServers) {
+        skippedForeign.push({ projectPath: m.projectPath, browser: m.browser, serverPid: m.serverPid as number });
+        continue;
+      }
       if (!candidates.has(key)) candidates.set(key, m);
     }
     const outcomes: StopOutcome[] = [];
@@ -380,6 +398,9 @@ export async function handler(args: {
       carriersRead.carriers.filter((p) => !visited.has(path.resolve(p))),
     );
     const unreadNotes = [
+      skippedForeign.length
+        ? `${skippedForeign.length} session(s) belong to other MCP servers that are still running (${skippedForeign.map((s) => `${s.browser} on ${s.projectPath}, server pid ${s.serverPid}`).join("; ")}) and were left alone; pass includeOtherServers: true to stop them too.`
+        : null,
       markersRead.unreadable ? `Session markers could not be fully read: ${markersRead.unreadable}; a session recorded there may still be running.` : null,
       carriersRead.unreadable ? `Carrier records could not be fully read: ${carriersRead.unreadable}; a carrier recorded there may still be in place.` : null,
     ].filter((note): note is string => note !== null);
@@ -389,7 +410,7 @@ export async function handler(args: {
         ok: unreadNotes.length === 0,
         command: schema.name,
         status: unreadNotes.length ? "nothing-found-unreadable" : "nothing-to-stop",
-        value: { stopped: [] },
+        value: { stopped: [], ...(skippedForeign.length ? { skippedForeign } : {}) },
         warnings: unreadNotes,
         hint: unreadNotes.length
           ? "No sessions registered in this server and nothing readable on disk, but part of the record could not be read, so nothing is known to be stopped."
@@ -401,6 +422,7 @@ export async function handler(args: {
       command: schema.name,
       status: "stopped-all",
       value: {
+        ...(skippedForeign.length ? { skippedForeign } : {}),
         stopped: outcomes,
         ...(carriers.length ? { carriersSwept: carriers } : {}),
       },

@@ -16,7 +16,7 @@ import { uninstallManagedBrowser } from "./uninstall-browser";
 export const schema = {
   name: "extension_browsers",
   description:
-    "Find, install and remove the browsers Extension.js tooling can launch. Pass action:'detect' (the default) to scan both system-installed and managed browsers, and report each one's binary path, version, engine and debugger support. Pass action:'list' for the managed cache this tool downloads into, with sizes on disk. Pass action:'install' to download a managed binary: 580 to 625 MB in one blocking call, so allow a generous client timeout. Pass action:'uninstall' to remove managed binaries; it never touches a system install.",
+    "Find, install and remove the browsers Extension.js tooling can launch. Pass action:'detect' (the default) to scan both system-installed and managed browsers, and report each one's binary path, version, engine and debugger support. Pass action:'list' for the managed cache this tool downloads into, with sizes on disk. Pass action:'install' to download a managed binary: several hundred MB in one blocking call, so allow a generous client timeout. Pass action:'uninstall' to remove managed binaries; it never touches a system install.",
   inputSchema: {
     type: "object" as const,
     properties: {

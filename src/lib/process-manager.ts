@@ -108,6 +108,7 @@ function writeMarkerBestEffort(info: ProcessInfo, registeredAtMs: number): void 
       JSON.stringify({
         ...info,
         projectPath: path.resolve(info.projectPath),
+        serverPid: process.pid,
         registeredAt: new Date(registeredAtMs).toISOString(),
       }),
     );

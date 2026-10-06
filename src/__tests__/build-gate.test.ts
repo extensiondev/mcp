@@ -358,7 +358,7 @@ describe("extension_build warns over a live dev session", () => {
     expect(result.warnings.join(" ")).not.toContain("dev session");
   });
 
-  it("carries the warning on a failed build too, the dist may be half rewritten", async () => {
+  it("does not say a failed build wrote over the dev dist: the engine promotes its staging dir only on success", async () => {
     const dir = project({ manifest_version: 3, name: "F", version: "1.0.0" });
     writeReadyContract(dir, "chrome", process.pid);
     cliResultOverride = { code: 1, stdout: "", stderr: "boom" };
@@ -366,7 +366,7 @@ describe("extension_build warns over a live dev session", () => {
     const result = JSON.parse(await build.handler({ projectPath: dir }));
 
     expect(result.ok).toBe(false);
-    expect(result.warnings.join(" ")).toContain("dev session");
+    expect(result.warnings.join(" ")).not.toMatch(/wrote over its dist/);
   });
 });
 

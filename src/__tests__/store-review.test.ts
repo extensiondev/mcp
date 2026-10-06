@@ -78,7 +78,7 @@ describe("reviewDist", () => {
   it("judges only the manifest on a dev build", () => {
     manifest({ permissions: ["management"], host_permissions: ["<all_urls>"] });
     write("bg.js", "eval(x)");
-    write("bg.js.map", "{}");
+    write("bg.a1b2.hot-update.js", "{}");
     expect(codes()).toEqual(["BROAD_HOST_ACCESS"]);
   });
 

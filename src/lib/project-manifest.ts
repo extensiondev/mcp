@@ -9,6 +9,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { engineManifestView } from "./engine-manifest-view";
+import { engineBrowserName } from "./browser-family";
 
 import { engineProjectRoot } from "./session-paths";
 
@@ -22,6 +23,7 @@ export function manifestCandidates(
   browser: string,
 ): string[] {
   const root = engineProjectRoot(projectPath);
+  browser = engineBrowserName(browser);
   const built = [
     path.join(root, "dist", browser, "manifest.json"),
     path.join(root, "dist", "manifest.json"),

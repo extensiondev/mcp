@@ -176,6 +176,7 @@ export async function handler(
         exitCode: code,
         signal,
         output: cleanOutput.slice(0, 2000),
+        ...(cleanOutput.length > 2000 ? { outputTruncated: { shown: 2000, total: cleanOutput.length, kept: "head" } } : {}),
       },
       hint: building
         ? "Read `value.output` above for the cause: a failed production build, a port already in use, or a missing browser binary are the common ones. extension_build will surface a build error on its own."
@@ -198,6 +199,7 @@ export async function handler(
         ...session,
         ...(code ? { engineCode: code } : {}),
         output: cleanOutput.slice(0, 2000),
+        ...(cleanOutput.length > 2000 ? { outputTruncated: { shown: 2000, total: cleanOutput.length, kept: "head" } } : {}),
       },
       hint: bootFailureHint(code),
       warnings: boot.warnings,
@@ -219,7 +221,7 @@ export async function handler(
       value: {
         ...session,
         buildErrors: compileErrors,
-        ...(compileErrors.length ? {} : { output: cleanOutput.slice(0, 2000) }),
+        ...(compileErrors.length ? {} : { output: cleanOutput.slice(0, 2000), ...(cleanOutput.length > 2000 ? { outputTruncated: { shown: 2000, total: cleanOutput.length, kept: "head" } } : {}) }),
       },
       hint: "Fix the build error listed in `value.buildErrors`, then call extension_start again. extension_build reports the same failure on its own.",
       warnings: boot.warnings,

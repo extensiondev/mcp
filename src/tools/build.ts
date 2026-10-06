@@ -21,6 +21,7 @@ import {
   engineProjectRoot,
 } from "../lib/session-paths";
 import { type Envelope, envelope, isEnvelope } from "../lib/envelope";
+import { engineBrowserName } from "../lib/browser-family";
 import { reviewCoverageNotes, reviewDistReport, reviewRiskWarnings } from "../lib/store-review";
 
 const COMMAND = "extension_build";
@@ -358,7 +359,7 @@ function locateDistZip(
 ): string | null {
   const fromSummary = zipFromSummary(summary, "dist", since);
   if (fromSummary) return fromSummary;
-  const distDir = path.resolve(projectPath, "dist", browser);
+  const distDir = path.resolve(projectPath, "dist", engineBrowserName(browser));
   const distRoot = path.resolve(projectPath, "dist");
   const stem = zipFilename
     ? explicitZipStem(zipFilename)
@@ -386,7 +387,7 @@ function locateSourceZip(
 ): string | null {
   const fromSummary = zipFromSummary(summary, "source", since);
   if (fromSummary) return fromSummary;
-  const distDir = path.resolve(projectPath, "dist", browser);
+  const distDir = path.resolve(projectPath, "dist", engineBrowserName(browser));
   const distRoot = path.resolve(projectPath, "dist");
   const stem = zipFilename
     ? explicitZipStem(zipFilename)
@@ -440,7 +441,7 @@ export const schema = {
         type: "boolean",
         default: false,
         description:
-          "Build even when extension_manifest_validate reports build-blocking errors. The build normally refuses: a manifest error yields a broken bundle the bundler itself never flags.",
+          "Build even when extension_manifest_validate reports build-blocking errors. The build normally refuses: the engine itself stops only on missing scripts, icons, DNR rule files, default_locale and manifest_version, and ships a bundle over the rest.",
       },
       appName: {
         type: "string",
@@ -450,7 +451,7 @@ export const schema = {
       bundleId: {
         type: "string",
         description:
-          "Safari targets only: a reverse-DNS bundle identifier you own, such as com.acme.readinglist. Without one the app is packaged under a generated dev.extensionjs.* identifier derived from the app name, which every project built from the same template shares, and the first team to register it takes it.",
+          "Safari targets only: a reverse-DNS bundle identifier you own, such as com.acme.readinglist. Without one the app is packaged under a generated dev.extensionjs.* identifier derived from the app name, which two projects with the same name share, and the first team to register it takes it.",
       },
       macOsOnly: {
         type: "boolean",
@@ -492,8 +493,9 @@ const SAFARI_VENDORS = new Set(["safari", "webkit-based"]);
  * rejection back to where it is expensive, never accept more. The parity test
  * in build-safari-packaging pins the pattern to the engine's own literal.
  */
-export const BUNDLE_ID_PATTERN =
-  /^[A-Za-z][A-Za-z0-9-]*(\.[A-Za-z][A-Za-z0-9-]*)+$/;
+/* The engine's own check (cli.cjs, the safari bundle-id validator):
+   dot-separated segments of letters, digits and hyphens, one or more. */
+export const BUNDLE_ID_PATTERN = /^[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*$/;
 
 function manifestDivergence(projectPath: string, browser: string): string[] {
   const read = (p: string): Record<string, any> | null => {
@@ -504,7 +506,7 @@ function manifestDivergence(projectPath: string, browser: string): string[] {
     }
   };
   const built = read(
-    path.resolve(projectPath, "dist", browser, "manifest.json"),
+    path.resolve(projectPath, "dist", engineBrowserName(browser), "manifest.json"),
   );
   const source =
     read(path.resolve(projectPath, "src", "manifest.json")) ??
@@ -730,8 +732,8 @@ export async function handler(args: {
       error: {
         code: "E_INVALID_BUNDLE_ID",
         message:
-          `bundleId ${JSON.stringify(args.bundleId)} is not a reverse-DNS identifier, so Xcode would reject it. ` +
-          "Expected two or more dot-separated segments of letters, digits and hyphens, each starting with a letter.",
+          `bundleId ${JSON.stringify(args.bundleId)} is not an identifier the engine accepts. ` +
+          "Expected dot-separated segments of letters, digits and hyphens (the engine's own rule); a reverse-DNS name under a domain you own is what Apple expects at submission.",
       },
       value: { browser, bundleId: args.bundleId, duration: Date.now() - start },
       hint: 'Use an identifier under a domain you own, for example "com.acme.readinglist".',
@@ -783,11 +785,13 @@ export async function handler(args: {
   const clobberedSessions = liveProjectSessions(args.projectPath).filter(
     (session) => session.browser === browser,
   );
-  const warnings: string[] = carrierNotes.concat(
-    clobberedSessions.map(
+  const warnings: string[] = carrierNotes;
+  /* @invariant THE CLOBBER WARNING IS SAID ONLY ON A BUILD THAT WROTE: the
+     engine never promotes its staging dir on a failed build, and this note
+     used to ride every failure envelope. */
+  const clobberNotes: string[] = clobberedSessions.map(
       (session) =>
         `A live dev session (pid ${session.pid}) is running on this project for ${browser}, and this build wrote over its dist/${browser} output. The dev browser may now serve the production artifact instead of the dev build until the next recompile. Run extension_stop, or let dev recompile on the next source change, to resolve it.`,
-    ),
   );
 
   const cliArgs = ["build", args.projectPath, "--browser", browser];
@@ -897,7 +901,7 @@ export async function handler(args: {
     const distDir =
       typeof engineSummary?.output_path === "string" && engineSummary.output_path
         ? path.resolve(engineSummary.output_path)
-        : path.join(engineProjectRoot(args.projectPath), "dist", browser);
+        : path.join(engineProjectRoot(args.projectPath), "dist", engineBrowserName(browser));
     const distManifest = path.join(distDir, "manifest.json");
     let distWrittenAt: number | null = null;
     try {
@@ -1026,11 +1030,11 @@ export async function handler(args: {
     const safariIdentity = safari ? (engineSummary?.safari ?? null) : null;
     const derivedBundleIdNote =
       safariIdentity?.bundleIdDerived === true
-        ? `The Safari app was packaged under the generated bundle identifier ${safariIdentity.bundleId ?? "the engine derived for you"}, which the engine derived from your app name rather than one you chose. It is fine for running the app locally. Every project built from the same template derives the same identifier, and Apple binds one permanently to the first team that registers it, so whoever submits first takes it and everyone after is locked out. Rebuild with bundleId set to a reverse-DNS identifier under a domain you own, which regenerates the Xcode project, and do it before your first submission: afterwards a new identifier is a new extension carrying none of your users.`
+        ? `The Safari app was packaged under the generated bundle identifier ${safariIdentity.bundleId ?? "the engine derived for you"}, which the engine derived from your app name rather than one you chose. It is fine for running the app locally. Two projects with the same app name derive the same identifier, and Apple binds one permanently to the first team that registers it, so whoever submits first takes it and everyone after is locked out. Rebuild with bundleId set to a reverse-DNS identifier under a domain you own, which regenerates the Xcode project, and do it before your first submission: afterwards a new identifier is a new extension carrying none of your users.`
         : null;
     const safariIdentityMissingNote =
       safari && !safariIdentity
-        ? `The build succeeded but reported no Safari app identity, so this run cannot tell you which bundle identifier the app carries. Either the packager did not run (a non-macOS host, or Xcode missing, skips packaging and leaves a plain bundle in dist/${browser}), or the engine installed in this project predates the reporting contract. Check the build output below, and run extension_doctor if you expected an app.`
+        ? `The build succeeded but reported no Safari app identity, so this run cannot tell you which bundle identifier the app carries. Either the packager did not run (a non-macOS host skips packaging and leaves a plain bundle in dist/${browser}), or the engine installed in this project predates the reporting contract. Check the build output below, and run extension_doctor if you expected an app.`
         : null;
     return envelope({
       ok: true,
@@ -1067,6 +1071,7 @@ export async function handler(args: {
       },
       warnings: [
         ...warnings,
+        ...clobberNotes,
         ...(preflight?.warnings ?? []),
         ...buildWarnings,
         ...reviewRiskWarnings(risks),
@@ -1124,7 +1129,7 @@ export async function handler(args: {
     },
     warnings,
     hint: compileErrors.length
-      ? `Fix the ${compileErrors.length} compile error${compileErrors.length === 1 ? "" : "s"} in value.errors (file, loader and message as the bundler printed them) and build again. extension_manifest_validate covers the manifest; a missing dependency is installed by the build itself.`
+      ? `Fix the ${compileErrors.length} compile error${compileErrors.length === 1 ? "" : "s"} in value.errors (file, loader and message as the bundler printed them) and build again. extension_manifest_validate covers the manifest; the engine installs dependencies only when none of the declared ones is present, so a missing one beside installed ones is yours to install`
       : "Read value.output for the bundler's own report. The manifest may live at the project root or under src; a failure here is usually a compile error, a manifest the engine refuses, or a Safari toolchain the host does not have.",
   });
 }

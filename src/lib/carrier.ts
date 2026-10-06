@@ -293,7 +293,7 @@ export function materializeCarrier(
       ...(ignored ? { gitignored: ignored } : {}),
       ...(ignoreNote ? { gitignoreNote: ignoreNote } : {}),
       note:
-        "Live-preview carrier placed in ./extensions; Extension.js loads it as a companion beside your extension. " +
+        "Live-preview carrier placed in ./extensions; Extension.js loads it as a companion beside your extension when it loads that folder (not with noBrowser, and not when the project configures its own extensions list, which this server does not read). " +
         "Open https://preview.extension.dev/ in the dev browser, load a build from this machine, and switch the lane toggle to Real " +
         "to watch the session's real-lane chrome.* trace on the Trace tab. " +
         "It is a debug companion, never part of a release: extension_stop and extension_build remove it again" +

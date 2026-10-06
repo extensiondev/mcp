@@ -396,7 +396,7 @@ export async function detectBrowsers(
         ? {
             systemBinaryPath: shadowedSystem,
             devLaunches:
-              `extension_dev launches the managed binary above, not the system install at ${shadowedSystem}; pass ${isGecko ? "geckoBinary" : "chromiumBinary"} to extension_dev to use the system one.`,
+              `extension_dev normally launches the managed binary above rather than the system install at ${shadowedSystem}${browser === "chromium" ? " (for chromium the engine can prefer a system stable binary)" : ""}; pass ${isGecko ? "geckoBinary" : "chromiumBinary"} to extension_dev to choose one explicitly.`,
           }
         : {}),
     });
@@ -431,7 +431,7 @@ export async function detectBrowsers(
         }
       : {}),
     hint: missing.length
-      ? `Missing browser(s): ${missing.map((d) => d.browser).join(", ")}.${
+      ? `Not found at the paths this server checks (the managed cache and the usual install locations): ${missing.map((d) => d.browser).join(", ")}.${
           missing.some((d) => MANAGED_INSTALLABLE.has(d.browser))
             ? ` Use extension_browsers with action: "install" to install ${missing
                 .filter((d) => MANAGED_INSTALLABLE.has(d.browser))

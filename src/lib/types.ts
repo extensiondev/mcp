@@ -88,6 +88,7 @@ export interface ProcessInfo {
   command: "dev" | "start" | "preview";
   noBrowser?: boolean;
   profileReused?: boolean;
+  serverPid?: number;
 }
 
 export type BrowserType =

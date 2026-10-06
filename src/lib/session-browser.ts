@@ -176,6 +176,34 @@ export function contractBoundPort(
   }
 }
 
+/* @invariant THE CONTROL CHANNEL IS REPORTED FROM THE CONTRACT. A control
+   server that cannot bind leaves controlPort null and
+   controlPortUnavailableReason in ready.json. */
+export function contractControlState(
+  projectPath: string,
+  browser: string,
+  since: number,
+): { read: boolean; port: number | null; unavailableReason: string | null } {
+  try {
+    const file = readyContractPath(projectPath, browser);
+    if (fs.statSync(file).mtimeMs < since) return { read: false, port: null, unavailableReason: null };
+    const contract = JSON.parse(fs.readFileSync(file, "utf8")) as {
+      controlPort?: unknown;
+      controlPortUnavailableReason?: unknown;
+    };
+    return {
+      read: true,
+      port: typeof contract.controlPort === "number" ? contract.controlPort : null,
+      unavailableReason:
+        typeof contract.controlPortUnavailableReason === "string" && contract.controlPortUnavailableReason
+          ? contract.controlPortUnavailableReason
+          : null,
+    };
+  } catch {
+    return { read: false, port: null, unavailableReason: null };
+  }
+}
+
 export function resolveSessionBrowser(
   projectPath: string,
   explicit: string | undefined,

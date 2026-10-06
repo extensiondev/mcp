@@ -32,6 +32,7 @@ import {
 } from "../lib/process-manager";
 import {
   contractBoundPort,
+  contractControlState,
   liveProjectSessions,
 } from "../lib/session-browser";
 import { stopOne } from "./stop";
@@ -127,7 +128,7 @@ export async function handler(
           code: "E_SESSION_EXISTS",
           message:
             `A dev session is already running for this project (${listed}). ` +
-            "Starting another would fork the session: both browsers contend for the same profile and the new one dies on the profile lock.",
+            "Starting another would run two dev servers on the same project, and the engine's own warning for that is that the last compile wins on dist/<browser>; each run gets a fresh managed profile, so the lock is not the hazard, the shared output is.",
         },
         value: {
           projectPath: args.projectPath,
@@ -252,6 +253,7 @@ export async function handler(
         exitCode: code,
         signal,
         output: cleanOutput.slice(0, 2000),
+        ...(cleanOutput.length > 2000 ? { outputTruncated: { shown: 2000, total: cleanOutput.length, kept: "head" } } : {}),
       },
       hint:
         "Read `value.output` above for the cause: a port already in use, a manifest the build rejects, or a missing browser binary are the common ones. " +
@@ -274,6 +276,7 @@ export async function handler(
         ...session,
         ...(code ? { engineCode: code } : {}),
         output: cleanOutput.slice(0, 2000),
+        ...(cleanOutput.length > 2000 ? { outputTruncated: { shown: 2000, total: cleanOutput.length, kept: "head" } } : {}),
       },
       hint: bootFailureHint(code),
       warnings: boot.warnings,
@@ -295,9 +298,9 @@ export async function handler(
       value: {
         ...session,
         compileErrors,
-        ...(compileErrors.length ? {} : { output: cleanOutput.slice(0, 2000) }),
+        ...(compileErrors.length ? {} : { output: cleanOutput.slice(0, 2000), ...(cleanOutput.length > 2000 ? { outputTruncated: { shown: 2000, total: cleanOutput.length, kept: "head" } } : {}) }),
       },
-      hint: "Fix the compile error listed in `value.compileErrors` and save: the dev server is still running and will recompile. Do not call extension_wait yet, it will report ready for a build that failed.",
+      hint: "Fix the compile error listed in `value.compileErrors` and save: the dev server is still running and will recompile. extension_wait answers contract-error while the build is failed and ready once a compile lands.",
       warnings: boot.warnings,
     });
   }
@@ -336,6 +339,7 @@ export async function handler(
         owner,
         ...(lockedAt ? { lockedAt } : {}),
         output: cleanOutput.slice(0, 2000),
+        ...(cleanOutput.length > 2000 ? { outputTruncated: { shown: 2000, total: cleanOutput.length, kept: "head" } } : {}),
       },
       hint:
         "A locked profile means another session's browser still holds it: call extension_stop with this projectPath to kill that session, then start extension_dev again. " +
@@ -357,18 +361,31 @@ export async function handler(
         ...session,
         ...boot.verdict.stamp,
         output: cleanOutput.slice(0, 2000),
+        ...(cleanOutput.length > 2000 ? { outputTruncated: { shown: 2000, total: cleanOutput.length, kept: "head" } } : {}),
       },
       hint:
-        "A locked profile means another session's browser still holds it: call extension_stop with this projectPath to kill that session, then start extension_dev again. " +
-        `If the lock survives a crash, clear it by hand before retrying. ${profileAdvice}`,
+        "The browser process ended before the session attached; a locked profile is answered as profile-locked, not here. Read value.output and extension_logs for the browser's own last words; a binary that refuses the launch flags, a crash at startup or a browser killed from outside are the common causes. " +
+        `Call extension_dev again; ${profileAdvice}`,
       warnings: boot.warnings,
     });
   }
 
   const controlVerbs = "storage, reload, open, dom_snapshot";
+  /* @invariant THE CONTROL CHANNEL IS REPORTED FROM THE CONTRACT. A control
+     server that cannot bind leaves controlPort null and
+     controlPortUnavailableReason in ready.json; echoing the request said
+     "ON" over it. */
+  const control = contractControlState(args.projectPath, browser, spawnedAt);
+  const controlBound = allowControl && control.port !== null;
   const capabilities = {
     allowControl,
     allowEval: Boolean(args.allowEval),
+    controlChannel: {
+      requested: allowControl,
+      port: control.port,
+      ...(control.unavailableReason ? { unavailableReason: control.unavailableReason } : {}),
+      ...(control.read ? {} : { note: "ready.json has not stamped the control port yet; extension_wait reports it once it lands." }),
+    },
     unlocked: allowControl
       ? args.allowEval
         ? `${controlVerbs}, eval`
@@ -442,7 +459,11 @@ export async function handler(
       ? "Build-only session (noBrowser: true): no browser will launch, so no runtime will ever attach. extension_wait returns as soon as the first compile lands (compiled: true, browserAttached: false) instead of waiting out its budget; do not wait for a browser. The control verbs (storage/reload/open/dom_snapshot/eval) need a live browser and will not work against this session. When you are done, call extension_stop to shut down the dev server."
       : "Use extension_wait to check when the extension is fully loaded, then extension_inspect to inspect the live state. " +
         (allowControl
-          ? `Control channel is ON: extension_${controlVerbs.split(", ").join("/extension_")}${args.allowEval ? "/extension_eval" : ""} will work against this session.`
+          ? controlBound
+            ? `Control channel is ON (port ${control.port} per ready.json): extension_${controlVerbs.split(", ").join("/extension_")}${args.allowEval ? "/extension_eval" : ""} will work against this session.`
+            : control.unavailableReason
+              ? `Control was requested, but the engine reports no control port (${control.unavailableReason}), so extension_${controlVerbs.split(", ").join("/extension_")} will be refused until the session is relaunched.`
+              : `Control was requested; ready.json has not stamped the control port yet, so extension_wait is what confirms extension_${controlVerbs.split(", ").join("/extension_")} will work.`
           : "Control channel is OFF: extension_storage/reload/open/dom_snapshot need allowControl: true, and extension_eval needs allowEval: true (which also implies allowControl). To unlock them, call extension_dev again with the flag you need plus replace: true (it stops this session first); a plain second call is refused so the session does not fork.") +
         " When you are done, call extension_stop to shut down the dev server and browser.",
   });

@@ -235,6 +235,6 @@ export async function spawnFailedEnvelope(
       name: "CliError",
       message: `The extension CLI process could not be spawned${cause ? ` (${cause.message})` : ""}. No session was started and nothing was registered.`,
     },
-    hint: "Neither a project-local node_modules/.bin/extension nor npx could be launched. Install the engine in the project (npm i -D extension) or put npx on the PATH the MCP server runs with, then call the tool again.",
+    hint: "The one command this server chose could not be launched: the project-local node_modules/.bin/extension when the project has one, else npx. Install the engine in the project (npm i -D extension) or put npx on the PATH the MCP server runs with, then call the tool again.",
   });
 }

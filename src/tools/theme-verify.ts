@@ -311,11 +311,16 @@ export async function handler(args: {
 
   const hasError = grammarErrors.length > 0;
   const hasWarn = findings.some((f) => f.severity === "warn");
-  const verdict: "invalid" | "diverged" | "headless-clean" = hasError
+  /* A resolver caveat (image-derived colours are not modelled) means the
+     headless proxy did not cover this manifest; "clean" is not said over it
+    . */
+  const verdict: "invalid" | "diverged" | "headless-clean" | "headless-partial" = hasError
     ? "invalid"
     : hasWarn
       ? "diverged"
-      : "headless-clean";
+      : resolved.caveats.length
+        ? "headless-partial"
+        : "headless-clean";
 
   const attended = [
     {
@@ -374,7 +379,7 @@ export async function handler(args: {
           resolver: {
             status: "reported",
             detail:
-              "Headless proxy: every color current stable Chrome derives from this manifest.",
+              `Headless proxy: the colours this resolver derives from the manifest, transcribed from Chromium main as fetched on 2026-07-04 (not a live Chrome read)${resolved.caveats.length ? "; the caveats name what it does not model" : ""}.`,
             resolved,
           },
           realPaint: { status: "needs-attended", how: attended[1].how },
