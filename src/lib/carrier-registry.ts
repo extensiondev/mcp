@@ -9,7 +9,7 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { sessionStateDir } from "./process-manager";
+import { directoryNotCreatedYet, sessionStateDir } from "./process-manager";
 
 const placedHere = new Set<string>();
 
@@ -74,10 +74,7 @@ export function readRememberedCarriers(): { carriers: string[]; unreadable: stri
     files = fs.readdirSync(recordDir());
   } catch (err) {
     const code = (err as { code?: string })?.code;
-    /* @invariant ENOENT is "none yet" only when nothing is at the path;
-       Windows answers ENOENT for a directory path that is really a file
-      . */
-    const absent = code === "ENOENT" && !fs.existsSync(recordDir());
+    const absent = code === "ENOENT" && directoryNotCreatedYet(recordDir());
     return {
       carriers: [],
       unreadable: absent ? null : `${recordDir()}: ${err instanceof Error ? err.message : String(err)}`,

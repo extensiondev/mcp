@@ -26,6 +26,28 @@ export function sessionStateDir(): string {
   );
 }
 
+/* @invariant A missing directory is the one read error that means "none
+   yet", and only when the path simply does not exist yet: the nearest thing
+   that does exist above it is a directory. Windows answers ENOENT, not
+   ENOTDIR, for a path that is a file or runs through one, so ENOENT alone
+   used to read a broken state directory as "no markers" there. */
+export function directoryNotCreatedYet(dir: string): boolean {
+  const target = path.resolve(dir);
+  let probe = target;
+  for (;;) {
+    let stat: fs.Stats | null = null;
+    try {
+      stat = fs.statSync(probe);
+    } catch {
+      stat = null;
+    }
+    if (stat) return probe !== target && stat.isDirectory();
+    const parent = path.dirname(probe);
+    if (parent === probe) return false;
+    probe = parent;
+  }
+}
+
 function markerDir(): string {
   return sessionStateDir();
 }
@@ -67,11 +89,7 @@ export function readSessionMarkers(): { markers: ProcessInfo[]; unreadable: stri
     files = fs.readdirSync(markerDir());
   } catch (err) {
     const code = (err as { code?: string })?.code;
-    /* @invariant A missing directory is the one read error that means "none
-       yet". Windows answers ENOENT, not ENOTDIR, for a directory path that is
-       really a file, so ENOENT counts as empty only when nothing is there at
-       all; otherwise the read failed and says so. */
-    const absent = code === "ENOENT" && !fs.existsSync(markerDir());
+    const absent = code === "ENOENT" && directoryNotCreatedYet(markerDir());
     return {
       markers: [],
       unreadable: absent ? null : `${markerDir()}: ${err instanceof Error ? err.message : String(err)}`,

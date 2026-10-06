@@ -156,7 +156,7 @@ describe("session markers and carrier records", () => {
     process.env.EXTENSION_MCP_SESSION_DIR = file;
     const realReaddir = fs.readdirSync;
     vi.spyOn(fs, "readdirSync").mockImplementation(((target: fs.PathLike, ...rest: unknown[]) => {
-      if (String(target) === file) {
+      if (String(target) === file || String(target).startsWith(file + path.sep)) {
         throw Object.assign(new Error(`ENOENT: no such file or directory, scandir '${file}'`), { code: "ENOENT" });
       }
       return (realReaddir as (...a: unknown[]) => unknown)(target, ...rest);
@@ -164,6 +164,7 @@ describe("session markers and carrier records", () => {
     const read = processManager.readSessionMarkers();
     expect(read.markers).toEqual([]);
     expect(read.unreadable).toContain(file);
+    expect(carrierRegistry.readRememberedCarriers().unreadable).toContain(file);
     vi.restoreAllMocks();
     fs.rmSync(file);
     expect(processManager.readSessionMarkers().unreadable).toBeNull();
