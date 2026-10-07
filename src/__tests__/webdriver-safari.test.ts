@@ -18,6 +18,7 @@ vi.mock("../lib/act", async (importOriginal) => {
 });
 
 import { logsPath, readyContractPath } from "../lib/session-paths";
+import { readyContract, safariDevContract } from "./fixtures/engine-answers";
 import {
   readWebDriverSession,
   sameDocument,
@@ -125,25 +126,30 @@ describe("Safari sessions over the dev window's WebDriver connection", () => {
     fs.rmSync(project, { recursive: true, force: true });
   });
 
-  function writeReady(extra: Record<string, unknown>): void {
+  function sessionFields(): Record<string, unknown> {
+    return {
+      runId: "run-safari",
+      extensionId: "dev.extensionjs.Demo.Extension",
+      distPath: path.join(project, "dist", BROWSER),
+      manifestPath: path.join(project, "dist", BROWSER, "manifest.json"),
+      logsPath: logsPath(project, BROWSER),
+    };
+  }
+
+  function writeContract(contract: Record<string, unknown>): void {
     const file = readyContractPath(project, BROWSER);
     fs.mkdirSync(path.dirname(file), { recursive: true });
-    fs.writeFileSync(
-      file,
-      JSON.stringify({
-        status: "ready",
-        command: "dev",
-        browser: BROWSER,
-        runId: "run-safari",
-        pid: process.pid,
-        extensionId: "dev.extensionjs.Demo.Extension",
-        ...extra,
-      }),
-    );
+    fs.writeFileSync(file, JSON.stringify(contract));
+  }
+
+  function writeReady(extra: Record<string, unknown>): void {
+    writeContract(readyContract("dev", BROWSER, { ...sessionFields(), ...extra }));
   }
 
   function withWindow(): void {
-    writeReady({ webdriverPort: safari.port, webdriverSessionId: "S-9" });
+    writeContract(
+      safariDevContract({ port: safari.port, sessionId: "S-9" }, sessionFields()),
+    );
   }
 
   function writeLogs(events: Array<Record<string, unknown>>): void {
@@ -155,7 +161,7 @@ describe("Safari sessions over the dev window's WebDriver connection", () => {
     );
   }
 
-  it("reads the session only when ready.json carries both fields", () => {
+  it("reads the session only when ready.json carries both fields (a port alone is a hand-cut contract no engine writes)", () => {
     writeReady({});
     expect(readWebDriverSession(project, BROWSER)).toBeNull();
     writeReady({ webdriverPort: safari.port });

@@ -11,6 +11,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
+import { engineProjectRoot } from "../../lib/session-paths";
 
 type Body = Record<string, unknown>;
 
@@ -94,8 +95,9 @@ export function readyContract(
 /* @invariant A Safari dev contract as Extension.js 4.1.32 writes it: the
  * launcher holds one safaridriver session and stamps its port (a number) and
  * session id (a string), or webdriverUnavailableReason when it could not open
- * one, and the ready writer keeps all three across recompiles
- *. */
+ * one (extension/dist/browsers.cjs `stampReadyWebDriver`, which deletes the
+ * other two keys whichever way it goes), and the ready writer keeps all three
+ * across recompiles. */
 export function safariDevContract(
   session: { port: number; sessionId: string } | { unavailableReason: string },
   overrides: Body = {},
@@ -268,7 +270,9 @@ export function tabRows(
 
 /* @invariant extension-develop/dist/840~0.mjs: the summary the build writes under
  * dist/extension-js/<browser>/build-summary.json, `zip_artifacts` included
- * when a zip was asked for (rspack-config~0.mjs names the archives). */
+ * when a zip was asked for (rspack-config~0.mjs names the archives).
+ * `addon_lint` is on every summary; measured on a chrome build of 4.1.32 it
+ * reads `{status: "skipped", reason: "browser"}`. */
 export function buildSummary(
   browser: string,
   overrides: Body = {},
@@ -281,7 +285,96 @@ export function buildSummary(
     largest_asset_bytes: 8_192,
     warnings_count: 0,
     errors_count: 0,
+    addon_lint: { status: "skipped", reason: "browser" },
     ...overrides,
+  };
+}
+
+/* @invariant What `extension build <dir> --browser <b> --output json` prints on
+ * STDOUT with Extension.js 4.1.32, measured 2026-10-07 on a fixture project
+ * (cli.cjs, the build command's json reporter): one envelope line, nothing
+ * else. The summaries sit inline under value.summaries, one per browser, and
+ * each output_path is the real dist the build wrote: dist/<browser> under the
+ * package.json that owns the manifest (840~0.mjs `getDistPath`), which is why
+ * it is resolved through the same root reader the tool uses. The human report
+ * never touches stdout; it goes to stderr (`buildNarration`). */
+export function buildFrame(
+  projectPath: string,
+  browsers: string[],
+  overrides: Body = {},
+): Body {
+  return {
+    schema: 1,
+    ok: true,
+    command: "build",
+    status: "built",
+    value: {
+      projectPath,
+      browsers,
+      mode: "production",
+      summaries: browsers.map((browser) =>
+        buildSummary(browser, {
+          output_path: path.join(engineProjectRoot(projectPath), "dist", browser),
+        }),
+      ),
+    },
+    error: null,
+    warnings: [],
+    ...overrides,
+  };
+}
+
+/* @invariant The DEGRADED frame of an engine that already answered
+ * `--output json` but predates the summaries contract: the same envelope
+ * with `summaries` left out of value, which is the one key this changes. A
+ * cell that feeds it is proving the fallback to the persisted
+ * build-summary.json, and its title says so. */
+export function preSummariesBuildFrame(projectPath: string, browsers: string[]): Body {
+  const frame = buildFrame(projectPath, browsers);
+  const { summaries: _dropped, ...value } = frame.value as Body;
+  return { ...frame, value };
+}
+
+/* @invariant The build's human report as 4.1.32 writes it to STDERR, measured
+ * on the same run: the compile line, the header block, the asset tree and
+ * the closing line. The tree is one manifest entry, which is enough for a
+ * narration reader; no tool parses these lines. */
+export function buildNarration(
+  browser: string,
+  name = "Fixture",
+  version = "1.0.0",
+  bytes = 165,
+): string {
+  const label = browser.charAt(0).toUpperCase() + browser.slice(1);
+  return [
+    `⏵⏵⏵ [12:00:00] ${name} compiled in 212 ms.`,
+    " ",
+    " 🧩 Extension.js 4.1.32",
+    `    Browser        ${label}`,
+    `    Extension      ${name} ${version}`,
+    `    Output         /tmp/project/dist/${browser}`,
+    " ",
+    ".",
+    "└─ manifest.json (0.14KB)",
+    "",
+    `⏵⏵⏵ Extension built for production in dist/${browser} (${bytes} B).`,
+    "",
+  ].join("\n");
+}
+
+/* @invariant What `runExtensionCli` hands back for a build that exited 0 on
+ * 4.1.32: the frame on stdout, the narration on stderr. A fake that returns
+ * this calls `writeEngineDist` first, the way the engine writes before it
+ * prints. */
+export function buildCliAnswer(
+  projectPath: string,
+  browser: string,
+  frameOverrides: Body = {},
+): { code: number; stdout: string; stderr: string } {
+  return {
+    code: 0,
+    stdout: `${JSON.stringify(buildFrame(projectPath, [browser], frameOverrides))}\n`,
+    stderr: buildNarration(browser),
   };
 }
 

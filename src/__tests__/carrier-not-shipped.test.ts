@@ -2,7 +2,7 @@ import { describe, it, expect, afterEach, vi } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { browserFromCliArgs, writeEngineDist } from "./fixtures/engine-answers";
+import { browserFromCliArgs, buildCliAnswer, writeEngineDist } from "./fixtures/engine-answers";
 
 let carrierAtCliTime: boolean | null = null;
 let projectAtCliTime: string | null = null;
@@ -22,7 +22,7 @@ vi.mock("../lib/exec", async (importOriginal) => {
                 "extension-dev-live-preview",
               ),
             );
-      return { code: 0, stdout: "Build Status: success", stderr: "" };
+      return buildCliAnswer(args[1]!, browserFromCliArgs(args));
     },
   };
 });

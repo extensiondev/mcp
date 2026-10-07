@@ -2,7 +2,7 @@ import { describe, it, expect, afterEach, vi } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { browserFromCliArgs, writeEngineDist } from "./fixtures/engine-answers";
+import { browserFromCliArgs, buildCliAnswer, writeEngineDist } from "./fixtures/engine-answers";
 
 const tmpDirs: string[] = [];
 function tmpProject(): string {
@@ -192,7 +192,7 @@ describe("build reports failure when the artifact is unusable", () => {
       { manifest: { action: { default_popup: "popup.html" } }, files: [] },
     );
     fs.writeFileSync(path.join(dir, "src", "popup.html"), "<html></html>");
-    cliResult = { code: 0, stdout: "Build Status: success", stderr: "" };
+    cliResult = buildCliAnswer(dir, "chrome");
 
     const result = JSON.parse(await build.handler({ projectPath: dir }));
 
@@ -322,7 +322,7 @@ describe("swarm-found lies stay fixed", () => {
         chrome_url_overrides: { newtab: "newtab/index.html" },
       }),
     );
-    cliResult = { code: 0, stdout: "Build Status: success", stderr: "" };
+    cliResult = buildCliAnswer(dir, "chrome");
 
     const result = JSON.parse(await build.handler({ projectPath: dir }));
 
@@ -479,7 +479,7 @@ describe("build reports what the production artifact lost", () => {
       path.join(distDir, "manifest.json"),
       JSON.stringify({ permissions: ["storage"] }),
     );
-    cliResult = { code: 0, stdout: "Build Status: success", stderr: "" };
+    cliResult = buildCliAnswer(dir, "chrome");
 
     const result = JSON.parse(await build.handler({ projectPath: dir }));
 

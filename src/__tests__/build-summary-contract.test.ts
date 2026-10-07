@@ -2,19 +2,25 @@ import { describe, it, expect, vi, afterEach } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { browserFromCliArgs, writeEngineDist } from "./fixtures/engine-answers";
+import {
+  browserFromCliArgs,
+  buildNarration,
+  preSummariesBuildFrame,
+  writeEngineDist,
+} from "./fixtures/engine-answers";
 
-
-let cliResult = { code: 0, stdout: "Build Status: success", stderr: "" };
 vi.mock("../lib/exec", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../lib/exec")>();
   return {
     ...actual,
     runExtensionCli: async (args: string[]) => {
-      if (args[0] === "build" && cliResult.code === 0) {
-        writeEngineDist(args[1]!, browserFromCliArgs(args));
-      }
-      return cliResult;
+      const browser = browserFromCliArgs(args);
+      if (args[0] === "build") writeEngineDist(args[1]!, browser);
+      return {
+        code: 0,
+        stdout: `${JSON.stringify(preSummariesBuildFrame(args[1]!, [browser]))}\n`,
+        stderr: buildNarration(browser),
+      };
     },
   };
 });
@@ -52,13 +58,12 @@ function writeSummary(
 }
 
 afterEach(() => {
-  cliResult = { code: 0, stdout: "Build Status: success", stderr: "" };
   for (const dir of tmpDirs.splice(0)) {
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
 
-describe("build consumes the engine's persisted BuildSummary", () => {
+describe("build consumes the engine's persisted BuildSummary when the frame on stdout predates the summaries contract (value.summaries absent)", () => {
   it("surfaces fresh structured warnings as buildWarnings", async () => {
     const project = completeProject();
     writeSummary(

@@ -15,12 +15,9 @@ vi.mock("../lib/exec", async (importOriginal) => {
     runExtensionCli: async (args: string[]) => {
       cliCalls.push(args);
       onCli?.(args);
-      const answer = cliResultOverride ?? {
-        code: 0,
-        stdout: "Build Status: success\nSize: 12 kB",
-        stderr: "",
-      };
-      if (answer.code === 0 && !skipDist) writeEngineDist(args[1]!, browserFromCliArgs(args));
+      const browser = browserFromCliArgs(args);
+      const answer = cliResultOverride ?? buildCliAnswer(args[1]!, browser);
+      if (answer.code === 0 && !skipDist) writeEngineDist(args[1]!, browser);
       return answer;
     },
   };
@@ -28,7 +25,7 @@ vi.mock("../lib/exec", async (importOriginal) => {
 
 const build = await import("../tools/build");
 const { buildSummaryPath } = await import("../lib/session-paths");
-const { buildSummary, zipArtifacts, browserFromCliArgs, writeEngineDist } = await import("./fixtures/engine-answers");
+const { buildCliAnswer, buildSummary, zipArtifacts, browserFromCliArgs, writeEngineDist } = await import("./fixtures/engine-answers");
 
 const tmpDirs: string[] = [];
 function project(manifest: Record<string, unknown>, files: string[] = []): string {

@@ -3,8 +3,20 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { envelope } from "../lib/envelope";
+import { actFrame, cliRefusal, tabRows } from "./fixtures/engine-answers";
 
 const actCalls: string[][] = [];
+let controlChannel: "answers" | "silent" = "answers";
+const listTabsReply = (): string =>
+  JSON.stringify(
+    controlChannel === "answers"
+      ? actFrame("inspect", tabRows([{ id: 1, url: "about:blank", title: "New Tab" }]))
+      : cliRefusal(
+          "inspect",
+          "E_SESSION_NOT_FOUND",
+          "No active control channel found for firefox. Looked at /tmp/project/dist/extension-js/firefox/ready.json. Run `extension dev --browser=firefox --allow-control` first.",
+        ),
+  );
 let inspectReply: () => string = () =>
   envelope({
     ok: true,
@@ -18,17 +30,10 @@ vi.mock("../lib/act", async (importOriginal) => {
     ...actual,
     runActVerb: async (cli: string[]) => {
       actCalls.push(cli);
+      if (cli.includes("--list-tabs")) return listTabsReply();
       return inspectReply();
     },
   };
-});
-
-let bridgeTabs: { tabs: Array<{ tabId: number; url: string; title: string }> } | { error: string } = {
-  tabs: [{ tabId: 1, url: "about:blank", title: "New Tab" }],
-};
-vi.mock("../lib/bridge-tabs", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../lib/bridge-tabs")>();
-  return { ...actual, listBridgeTabs: async () => bridgeTabs };
 });
 
 vi.mock("../lib/cdp-port", async (importOriginal) => {
@@ -64,7 +69,7 @@ function check(result: any, id: string) {
 
 afterEach(() => {
   actCalls.length = 0;
-  bridgeTabs = { tabs: [{ tabId: 1, url: "about:blank", title: "New Tab" }] };
+  controlChannel = "answers";
   inspectReply = () =>
     envelope({
       ok: true,
@@ -76,7 +81,7 @@ afterEach(() => {
 });
 
 describe("extension_assert reads Gecko through the control channel instead of answering inconclusive", () => {
-  it("passes background-worker-booted when the bridge answers a tabs query", async () => {
+  it("passes background-worker-booted when the bridge answers a tabs query with the engine's tab rows", async () => {
     const result = JSON.parse(
       await assertTool.handler({
         projectPath: project(),
@@ -89,10 +94,12 @@ describe("extension_assert reads Gecko through the control channel instead of an
     expect(leg.outcome ?? leg.status ?? leg.verdict).toMatch(/pass/i);
     expect(JSON.stringify(leg)).toContain("control channel");
     expect(JSON.stringify(leg)).not.toContain("exposes no such list");
+    expect(leg.evidence?.tabsSeen ?? leg.details?.tabsSeen ?? leg.tabsSeen).toBe(1);
+    expect(actCalls[0]).toEqual(expect.arrayContaining(["inspect", "--list-tabs", "--browser", "firefox"]));
   });
 
-  it("stays inconclusive on the background when the control channel is silent", async () => {
-    bridgeTabs = { error: "no control channel" };
+  it("stays inconclusive on the background when the CLI refuses with its no-control-channel frame", async () => {
+    controlChannel = "silent";
 
     const result = JSON.parse(
       await assertTool.handler({

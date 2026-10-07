@@ -2,7 +2,7 @@ import { describe, it, expect, afterEach, vi } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { browserFromCliArgs, writeEngineDist } from "./fixtures/engine-answers";
+import { browserFromCliArgs, buildNarration, writeEngineDist } from "./fixtures/engine-answers";
 
 interface CliResponse {
   code: number;
@@ -390,13 +390,13 @@ describe("extension_build reads the build numbers off the engine, not off its pr
     distFor(dir, "chrome");
     cliResponse = {
       ...summariesOf({ browser: "chrome", total_bytes: 5 }),
-      stderr: "Build Status: success\nSize: 12 kB",
+      stderr: buildNarration("chrome", "Reading List"),
     };
 
     const result = await run({ projectPath: dir, browser: "chrome" });
 
     expect(result.value.totalBytes).toBe(5);
-    expect(result.value.output).toContain("Size: 12 kB");
+    expect(result.value.output).toContain("Extension built for production in dist/chrome");
     expect(result.value.output).not.toContain('"schema"');
   });
 
@@ -452,13 +452,13 @@ describe("extension_build against an engine older than the summaries contract", 
     expect(result.warnings).toContain("Deprecation: legacy API");
   });
 
-  it("still finds the summary when the engine printed no envelope at all", async () => {
+  it("still finds the summary when the engine printed no envelope at all (nothing on stdout, the human report on stderr where 4.1.32 puts it)", async () => {
     const dir = project();
     distFor(dir, "chrome");
     cliResponse = {
       code: 0,
-      stdout: "Build Status: success\nSize: 12 kB",
-      stderr: "",
+      stdout: "",
+      stderr: buildNarration("chrome", "Reading List"),
     };
     persistSummary(dir, "chrome", {
       browser: "chrome",
@@ -471,7 +471,7 @@ describe("extension_build against an engine older than the summaries contract", 
     expect(result.ok).toBe(true);
     expect(result.value.totalBytes).toBe(999);
     expect(result.value.engineBuildStatus).toBeUndefined();
-    expect(result.value.output).toContain("Build Status: success");
+    expect(result.value.output).toContain("Extension built for production in dist/chrome");
   });
 
   it("recovers the Safari identity from the persisted summary when the envelope has none", async () => {
@@ -560,8 +560,8 @@ describe("extension_build survives an engine that has no --output flag at all", 
     distFor(dir, "chrome");
     cliResponder = engineTooOldFor({
       code: 0,
-      stdout: "Build Status: success\nSize: 12 kB",
-      stderr: "",
+      stdout: "",
+      stderr: buildNarration("chrome", "Reading List"),
     });
     persistSummary(dir, "chrome", {
       browser: "chrome",
