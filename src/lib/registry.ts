@@ -18,6 +18,7 @@ import {
   type RegistryAccessTokens,
 } from "./registry-access";
 import { readCredentials } from "./credentials";
+import { consoleBase, consoleProjectUrl } from "./console-urls";
 import { mcpOrigins } from "./origins";
 import {
   platformHoldMessage,
@@ -26,13 +27,9 @@ import {
   sawPlatformHold,
 } from "./platform-hold";
 
-export const REGISTRY_BASE_DEFAULT = PROD_ORIGINS.registry;
-
 export { mcpOrigins };
 
-export function consoleBase(apiHint?: string): string {
-  return mcpOrigins(apiHint).console;
-}
+export { consoleBase, consoleProjectUrl } from "./console-urls";
 
 export function registryBase(): string {
   return mcpOrigins().registry;
@@ -123,17 +120,6 @@ export function registryFileUrl(ref: ProjectRef, file: string): string {
   return `${registryBase()}/${encodeURIComponent(ref.workspace)}/${encodeURIComponent(
     ref.project,
   )}/_extension-dev/${file}`;
-}
-
-export function consoleProjectUrl(
-  ref: ProjectRef | null,
-  page: string,
-  apiHint?: string,
-): string {
-  const base = consoleBase(apiHint);
-  if (!ref) return base;
-
-  return `${base}${consoleProjectPath(ref, page)}`;
 }
 
 export function userlandProjectUrl(
@@ -447,10 +433,3 @@ export function parseBuildIndex(json: unknown): BuildIndexItem[] {
   return out;
 }
 
-export function mirrorActionsUrlFromRunUrl(runUrl: unknown): string | null {
-  const match = String(runUrl ?? "").match(
-    /^(https:\/\/github\.com\/extensiondev\/[^/]+)\/actions\b/,
-  );
-
-  return match ? `${match[1]}/actions` : null;
-}

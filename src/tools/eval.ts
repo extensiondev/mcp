@@ -8,6 +8,7 @@
 
 import crypto from "node:crypto";
 import fs from "node:fs";
+import { setTimeout as sleep } from "node:timers/promises";
 
 import {
   CALL_TIMEOUT,
@@ -28,6 +29,7 @@ import {
   type ActArgs,
 } from "../lib/act";
 import { envelope } from "../lib/envelope";
+import { parseFrameObject } from "../lib/frame-json";
 import { resolveSessionBrowser } from "../lib/session-browser";
 import { evalTokenPresent } from "../lib/session-paths";
 import {
@@ -530,16 +532,6 @@ const TRUSTED_TYPES_REFUSAL = /Trusted Type/i;
 const RELAY_POLL_MS = 300;
 const RELAY_DEFAULT_BUDGET_MS = 30_000;
 
-function tryParseFrame(raw: string): Record<string, any> | null {
-  try {
-    const parsed = JSON.parse(raw);
-
-    return parsed && typeof parsed === "object" ? parsed : null;
-  } catch {
-    return null;
-  }
-}
-
 async function evaluateThroughRelay(
   args: ActArgs & { expression: string },
   browser: string,
@@ -562,7 +554,7 @@ async function evaluateThroughRelay(
       schema.name,
     );
   let raw = await run(relaySafeExpression(args.expression, token));
-  let parsed = tryParseFrame(raw);
+  let parsed = parseFrameObject(raw);
 
   if (isGeckoFamily(browser) && cspRefusedFrame(parsed)) {
     return evaluatePastSurfaceCsp(args, context, run);
@@ -591,10 +583,10 @@ async function evaluateThroughRelay(
       });
     }
 
-    await new Promise((r) => setTimeout(r, RELAY_POLL_MS));
+    await sleep(RELAY_POLL_MS);
     polls += 1;
     raw = await run(relayPollExpression(token));
-    parsed = tryParseFrame(raw);
+    parsed = parseFrameObject(raw);
     if (!parsed || parsed.ok !== true) return raw;
 
     const next = readRelayFrame(parsed.value);
@@ -674,7 +666,7 @@ function cspRefusalHint(context: string | undefined): string {
 }
 
 function explainCspRefusal(raw: string, context: string | undefined): string | null {
-  const parsed = tryParseFrame(raw);
+  const parsed = parseFrameObject(raw);
   if (!parsed || !cspRefusedFrame(parsed)) return null;
 
   parsed.error.name = "CspBlocksEval";
@@ -751,7 +743,7 @@ async function evaluatePastSurfaceCsp(
   if (!isSingleExpression(args.expression)) return notOneExpression();
 
   const direct = await run(args.expression);
-  const frame = tryParseFrame(direct);
+  const frame = parseFrameObject(direct);
   if (!frame) return direct;
   if (cspRefusedFrame(frame)) return explainCspRefusal(direct, context) ?? direct;
 
@@ -898,7 +890,7 @@ function backgroundRouteRefusedStatements(
 ): boolean {
   if (!isGeckoFamily(browser) || (context ?? "background") !== "background") return false;
 
-  const failed = tryParseFrame(raw);
+  const failed = parseFrameObject(raw);
   if (!failed || failed.ok !== false) return false;
   if (failed.error?.name !== "Unavailable") return false;
   if (!/SyntaxError/.test(String(failed.error?.message ?? ""))) return false;
@@ -913,7 +905,7 @@ async function evaluatePagePastSiteCsp(
   raw: string,
 ): Promise<string | null> {
   if (context !== "page" || !isGeckoFamily(browser)) return null;
-  if (!cspRefusedFrame(tryParseFrame(raw))) return null;
+  if (!cspRefusedFrame(parseFrameObject(raw))) return null;
   if (!args.url && args.tab != null) return null;
   if (!isSingleExpression(args.expression)) return notOneExpression();
 
@@ -940,7 +932,7 @@ async function evaluateThroughExecuteScript(
   if (context !== "page" && context !== "content") return null;
   if (isChromiumFamily(browser)) return null;
 
-  const parsed = tryParseFrame(raw);
+  const parsed = parseFrameObject(raw);
   if (!parsed || parsed.ok !== false) return null;
 
   const noScriptingApi = NO_SCRIPTING_API.test(String(parsed.error?.message ?? ""));
@@ -968,7 +960,7 @@ async function evaluateThroughExecuteScript(
     args.timeout,
     schema.name,
   );
-  const frame = tryParseFrame(wrapped);
+  const frame = parseFrameObject(wrapped);
   if (!frame || frame.ok !== true) return wrapped ?? raw;
 
   const value = frame.value;
@@ -1080,7 +1072,7 @@ export async function handler(
         browser,
         surface.context,
       );
-      const parsed = tryParseFrame(raw);
+      const parsed = parseFrameObject(raw);
 
       if (parsed) {
         addWarning(
@@ -1157,7 +1149,7 @@ export async function handler(
   const cspRefusal = explainCspRefusal(raw, context);
   if (cspRefusal !== null) return cspRefusal;
 
-  const trustedTypes = tryParseFrame(raw);
+  const trustedTypes = parseFrameObject(raw);
 
   if (
     trustedTypes?.ok === false &&

@@ -68,6 +68,7 @@ vi.mock("../lib/cdp-port", () => ({
 describe("extension_inspect navigation fallback", () => {
   it("navigates a web page, not an open extension surface, when url matches nothing", async () => {
     cdp.navigated.length = 0;
+    const startedAt = Date.now();
     const out = JSON.parse(
       await handler({
         projectPath: "/p",
@@ -81,6 +82,8 @@ describe("extension_inspect navigation fallback", () => {
     expect(cdp.navigated).toEqual([
       { sessionId: "session-web", url: "https://nomatch.example/" },
     ]);
+
+    expect(Date.now() - startedAt).toBeLessThan(100);
   }, 10000);
 
   it("falls back to the extension surface only when nothing else is open", async () => {

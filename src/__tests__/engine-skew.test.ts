@@ -19,6 +19,7 @@ import {
   LOG_EVENT_VERSION,
 } from "../tools/logs-constants";
 import { readyContractPath, logsPath } from "../lib/session-paths";
+import { readyContract } from "./fixtures/engine-answers";
 
 describe("control-channel constants come from the engine, not from literals", () => {
   it("re-exports the engine's own wire constants by identity", () => {
@@ -301,12 +302,15 @@ describe("older engine, different control envelope", () => {
       fs.mkdirSync(path.dirname(file), { recursive: true });
       fs.writeFileSync(
         file,
-        JSON.stringify({
-          status: "ready",
-          controlPort: port,
-          instanceId: "inst-1",
-          runId: "run-1",
-        }),
+        JSON.stringify(
+          readyContract("dev", browser, {
+            controlPort: port,
+            instanceId: "inst-1",
+            runId: "run-1",
+            distPath: path.join(tmp, "dist", browser),
+            logsPath: path.join(tmp, "dist", "extension-js", browser, "logs.ndjson"),
+          }),
+        ),
       );
     }
 

@@ -5,6 +5,7 @@ import path from "node:path";
 import { describe, it, expect, afterEach, vi } from "vitest";
 
 import { envelope } from "../lib/envelope";
+import { readyContract } from "./fixtures/engine-answers";
 
 import type * as ActModule from "../lib/act";
 
@@ -48,7 +49,10 @@ function project(options: { addonId?: string | null; uuid?: string; prefsFor?: s
 
   const readyDir = path.join(dir, "dist", "extension-js", "firefox");
   fs.mkdirSync(readyDir, { recursive: true });
-  fs.writeFileSync(path.join(readyDir, "ready.json"), JSON.stringify({ status: "ready", profilePath: profile }));
+  fs.writeFileSync(
+    path.join(readyDir, "ready.json"),
+    JSON.stringify(readyContract("dev", "firefox", { profilePath: profile, distPath: path.join(dir, "dist", "firefox") })),
+  );
 
   return dir;
 }

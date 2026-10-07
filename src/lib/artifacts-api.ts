@@ -131,10 +131,10 @@ export function parseArtifactRef(input: string): string | null {
     const segments = parsed.pathname.split("/").filter(Boolean);
 
     for (let i = segments.length - 1; i >= 0; i -= 1) {
-      const raw = segments[i];
-      if (!raw) continue;
+      const rawSegment = segments[i];
+      if (!rawSegment) continue;
 
-      const segment = decodeURIComponent(raw);
+      const segment = decodeURIComponent(rawSegment);
       if (ARTIFACT_ID.test(segment)) return segment;
     }
   }

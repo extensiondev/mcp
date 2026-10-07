@@ -6,6 +6,8 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
+import { setTimeout as sleep } from "node:timers/promises";
+
 import { CDPClient } from "./cdp";
 
 export type DevToolsPanelOutcome =
@@ -63,10 +65,6 @@ export function panelTitleFromId(panelId: string, extensionId: string): string {
 
 function isDevToolsFrontend(target: RawTarget): boolean {
   return String(target.url ?? "").startsWith("devtools://");
-}
-
-async function sleep(ms: number): Promise<void> {
-  await new Promise((r) => setTimeout(r, ms));
 }
 
 export async function openDevToolsPanel(

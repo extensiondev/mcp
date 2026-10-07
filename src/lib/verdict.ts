@@ -77,10 +77,6 @@ export interface AssertCheckDeclaration {
   readonly counterpartNote?: string;
 }
 
-/* @invariant Retired ids are never reused, for the reason the upstream registry
-   gives: a consumer pinning a version bought the meaning of every id in it. */
-export const ASSERT_RETIRED_IDS: readonly string[] = Object.freeze([]);
-
 export const ASSERT_CHECKS: readonly AssertCheckDeclaration[] = Object.freeze([
   {
     id: "background-worker-booted",

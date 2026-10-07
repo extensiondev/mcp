@@ -14,12 +14,13 @@ import {
   type StoredCredentials,
 } from "./credentials";
 import { tokenExpiry } from "./credentials";
+import { parseJsonObject } from "./json-object";
 import {
   readBatchCapability,
   sameProjectSet,
   type BatchCapability,
 } from "./project-batch";
-import { consoleBase, consoleProjectUrl } from "./registry";
+import { consoleBase, consoleProjectUrl } from "./console-urls";
 
 const DEFAULT_API = PROD_ORIGINS.www;
 
@@ -110,17 +111,6 @@ export interface LoginConfig {
   batch: BatchCapability | null;
 }
 
-function readJsonObject(text: string): { value: Record<string, unknown> } | { problem: string } {
-  try {
-    const parsed = JSON.parse(text) as unknown;
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return { problem: "not a JSON object" };
-
-    return { value: parsed as Record<string, unknown> };
-  } catch (err) {
-    return { problem: err instanceof Error ? err.message : String(err) };
-  }
-}
-
 export async function fetchLoginConfig(
   apiBase: string,
   fetchImpl: FetchImpl = fetch,
@@ -138,7 +128,7 @@ export async function fetchLoginConfig(
   /* @invariant AN UNREADABLE CONFIG IS NOT A PLATFORM THAT LACKS BATCH. A
      body that did not parse used to become {} and read as
      batch-unsupported, stated as a fact about the platform. */
-  const read = readJsonObject(await res.text());
+  const read = parseJsonObject(await res.text());
 
   if ("problem" in read) {
     throw new Error(

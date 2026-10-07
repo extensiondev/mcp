@@ -144,42 +144,6 @@ export function deadReadySession(
   return null;
 }
 
-export interface BrowserExitStamp {
-  code?: string;
-  browserExitCode?: number | null;
-  browserExitedAt?: string;
-}
-
-export function browserExitStamp(
-  projectPath: string,
-  browser: string,
-  since: number,
-): BrowserExitStamp | null {
-  const readyPath = readyContractPath(projectPath, browser);
-
-  try {
-    const stat = fs.statSync(readyPath);
-    if (stat.mtimeMs < since) return null;
-
-    const contract = JSON.parse(fs.readFileSync(readyPath, "utf8"));
-    const exited =
-      contract?.code === "browser_exited" ||
-      contract?.browserExitCode !== undefined ||
-      contract?.browserExitedAt !== undefined;
-
-    if (contract?.status === "error" && exited) {
-      return {
-        code: contract.code,
-        browserExitCode: contract.browserExitCode ?? null,
-        browserExitedAt: contract.browserExitedAt,
-      };
-    }
-  } catch {
-  }
-
-  return null;
-}
-
 export function contractBoundPort(
   projectPath: string,
   browser: string,

@@ -7,6 +7,7 @@
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
 import fs from "node:fs";
+import { setTimeout as sleep } from "node:timers/promises";
 
 import { readyContractPath } from "./session-paths";
 import { pidState } from "./process-identity";
@@ -56,7 +57,7 @@ async function resolveContractPort(
         : deadline;
     if (Date.now() >= effectiveDeadline) break;
 
-    await new Promise((resolve) => setTimeout(resolve, 500));
+    await sleep(500);
   }
 
   return { port: null, contractSeen };

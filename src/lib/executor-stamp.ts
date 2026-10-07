@@ -7,6 +7,7 @@
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
 import fs from "node:fs";
+import { setTimeout as sleep } from "node:timers/promises";
 
 import { readyContractPath } from "./session-paths";
 
@@ -91,6 +92,6 @@ export async function watchExecutorReattach(
       };
     }
 
-    await new Promise((resolve) => setTimeout(resolve, POLL_MS));
+    await sleep(POLL_MS);
   }
 }

@@ -10,6 +10,7 @@ import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { setTimeout as sleep } from "node:timers/promises";
 
 import spawn from "cross-spawn";
 
@@ -263,7 +264,7 @@ export async function spawnFailedEnvelope(
   let cause = spawned.spawnError?.() ?? null;
 
   while (!cause && Date.now() < deadline) {
-    await new Promise((resolve) => setTimeout(resolve, 25));
+    await sleep(25);
     cause = spawned.spawnError?.() ?? null;
   }
 

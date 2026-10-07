@@ -7,6 +7,7 @@
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
 import net from "node:net";
+import { setTimeout as sleep } from "node:timers/promises";
 
 import type { ConsoleMessage } from "./console-summary";
 
@@ -360,7 +361,7 @@ export async function rdpCollectConsoleMessages(
         timeoutMs,
       );
 
-      await new Promise((resolve) => setTimeout(resolve, settleMs));
+      await sleep(settleMs);
     } finally {
       untap();
     }
@@ -625,7 +626,7 @@ export async function rdpEvaluateInTab(
       let consoleActor = topFrameConsoleActor(frames);
 
       while (!consoleActor && Date.now() < frameDeadline) {
-        await new Promise((resolve) => setTimeout(resolve, RDP_FRAME_POLL_MS));
+        await sleep(RDP_FRAME_POLL_MS);
         consoleActor = topFrameConsoleActor(frames);
       }
 
@@ -686,7 +687,7 @@ export async function rdpEvaluateInTab(
           };
         }
 
-        await new Promise((resolve) => setTimeout(resolve, RDP_RESULT_POLL_MS));
+        await sleep(RDP_RESULT_POLL_MS);
       }
     } finally {
       untap();

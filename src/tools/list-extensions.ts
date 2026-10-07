@@ -167,26 +167,9 @@ export async function handler(args: {
   const cdp = new CDPClient();
 
   try {
-    let targets: Awaited<ReturnType<CDPClient["getTargets"]>> | null = null;
-    let lastError: unknown = null;
-
-    for (let attempt = 0; attempt < 3; attempt++) {
-      try {
-        const browserWsUrl = await CDPClient.discoverBrowserWsUrl(cdpPort);
-        await cdp.connect(browserWsUrl);
-        targets = await cdp.getTargets();
-        break;
-      } catch (error) {
-        lastError = error;
-        cdp.disconnect();
-
-        if (attempt < 2) {
-          await new Promise((resolve) => setTimeout(resolve, 800));
-        }
-      }
-    }
-
-    if (!targets) throw lastError;
+    const browserWsUrl = await CDPClient.discoverBrowserWsUrl(cdpPort);
+    await cdp.connect(browserWsUrl);
+    const targets = await cdp.getTargets();
 
     const byId = new Map<string, Array<{ type: string; url: string }>>();
 
@@ -312,23 +295,7 @@ async function listGeckoExtensions(
   const rdpPort = resolved.port;
 
   try {
-    let addons: Awaited<ReturnType<typeof rdpListAddons>> | null = null;
-    let lastError: unknown = null;
-
-    for (let attempt = 0; attempt < 3; attempt++) {
-      try {
-        addons = await rdpListAddons(rdpPort);
-        break;
-      } catch (error) {
-        lastError = error;
-
-        if (attempt < 2) {
-          await new Promise((resolve) => setTimeout(resolve, 800));
-        }
-      }
-    }
-
-    if (!addons) throw lastError;
+    const addons = await rdpListAddons(rdpPort);
 
     const own = readOwnIdentity(projectPath, browser);
 

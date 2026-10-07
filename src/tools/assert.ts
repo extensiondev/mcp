@@ -7,6 +7,7 @@
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
 import fs from "node:fs";
+import { setTimeout as sleep } from "node:timers/promises";
 
 import {
   CALL_TIMEOUT,
@@ -1197,7 +1198,7 @@ async function assertContentScriptInjectedOnWebKit(
 
     if (!sameDocument(current, clause.url)) {
       await client.navigate(clause.url);
-      await new Promise((resolve) => setTimeout(resolve, 1200));
+      await sleep(1200);
     }
 
     reading = await readExtensionRoots(client);

@@ -28,6 +28,7 @@ import { platformHoldEnvelope, sawPlatformHold } from "../lib/platform-hold";
 import { identityHeaders } from "../lib/session-identity";
 import { spendNarration } from "../lib/allowance";
 import { answerIsUnknownOutcome, readCreatedProject } from "../lib/create-answer";
+import { isProjectRef } from "../lib/credentials";
 import {
   firstBuildSentence,
   firstBuildValue,
@@ -189,7 +190,7 @@ export async function handler(args: {
 
   const project = String(args.project || "").trim();
 
-  if (!/^[^/]+\/[^/]+$/.test(project)) {
+  if (!isProjectRef(project)) {
     return fail(
       "BadRequest",
       "project must be in the form '<workspace>/<project>'.",
@@ -200,7 +201,7 @@ export async function handler(args: {
 
   const repo = String(args.repo || "").trim();
 
-  if (!/^[^/]+\/[^/]+$/.test(repo)) {
+  if (!isProjectRef(repo)) {
     return fail(
       "BadRequest",
       "repo must be in the form '<owner>/<repo>', a GitHub repository the extension's source is pushed to.",

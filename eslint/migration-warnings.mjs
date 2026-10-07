@@ -21,7 +21,6 @@ const CORE_RULES = [
   "no-new",
   "no-eval",
   "no-script-url",
-  "no-unused-vars",
   "no-empty",
   "no-template-curly-in-string",
   "no-throw-literal",

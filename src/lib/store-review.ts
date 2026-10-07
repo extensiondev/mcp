@@ -277,13 +277,6 @@ export function isDevelopmentBuild(files: Array<{ path: string }>): boolean {
   return files.some((f) => /hot-update\./.test(f.path) || /(^|\/)extension-js(-devtools)?\//.test(f.path));
 }
 
-/* @invariant A SOURCE MAP IS NOT A DEV BUILD. A production build with
-   sourcemaps used to switch the code checks off and read clean; the dev signal is the hot-update runtime or the engine's own
-   companion files, which only a dev session writes into dist. */
-export function hasSourceMaps(files: Array<{ path: string }>): boolean {
-  return files.some((f) => f.path.endsWith(".map"));
-}
-
 const MANIFEST_KEY_USES: Record<string, (manifest: Record<string, unknown>) => boolean> = {
   sidePanel: (m) => m.side_panel != null,
   declarativeNetRequest: (m) => Array.isArray((m.declarative_net_request as { rule_resources?: unknown } | undefined)?.rule_resources),

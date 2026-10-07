@@ -188,7 +188,7 @@ describe("extension_list_extensions on Gecko (RDP root listAddons)", () => {
     expect(listAddonsCalls).toEqual([]);
   });
 
-  it("surfaces an RDP failure after retries as the tool error", async () => {
+  it("surfaces an RDP failure as the tool error after one attempt, since the port came from a live contract", async () => {
     rdpError = new Error("ECONNREFUSED 127.0.0.1:9223");
     const dir = project({});
 
@@ -199,6 +199,6 @@ describe("extension_list_extensions on Gecko (RDP root listAddons)", () => {
     expect(result.status).toBe("rdp-failed");
     expect(result.error.message).toContain("Failed to list extensions over RDP");
     expect(result.error.message).toContain("ECONNREFUSED");
-    expect(listAddonsCalls.length).toBe(3);
+    expect(listAddonsCalls.length).toBe(1);
   });
 });

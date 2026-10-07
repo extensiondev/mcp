@@ -64,82 +64,95 @@ export class CDPConnection {
   }
 
   private handleMessage(data: string): void {
+    let message: Record<string, unknown>;
+
     try {
-      const message = JSON.parse(data) as Record<string, unknown>;
-
-      if (typeof message.id === "number") {
-        const pending = this.pendingRequests.get(message.id);
-
-        if (pending) {
-          clearTimeout(pending.timeout);
-          this.pendingRequests.delete(message.id);
-
-          if (message.error) {
-            pending.reject(new Error(JSON.stringify(message.error)));
-          } else {
-            pending.resolve(message.result);
-          }
-        }
-
-        return;
-      }
-
-      if (message.method === "Log.entryAdded") {
-        const entry = (message.params as Record<string, unknown>)?.entry as
-          | Record<string, unknown>
-          | undefined;
-
-        if (entry) {
-          this.consoleMessages.push({
-            level: String(entry.level ?? "info"),
-            text: String(entry.text ?? ""),
-            source: String(entry.source ?? "other"),
-            timestamp: Number(entry.timestamp ?? Date.now()),
-          });
-        }
-      }
-
-      if (message.method === "Runtime.consoleAPICalled") {
-        const params = message.params as Record<string, unknown> | undefined;
-
-        if (params) {
-          const args = (params.args as Array<Record<string, unknown>>) ?? [];
-          const text = args
-            .map((a) => String(a.value ?? a.description ?? ""))
-            .join(" ");
-
-          this.consoleMessages.push({
-            level: String(params.type ?? "log"),
-            text,
-            source: "console-api",
-            timestamp: Number(params.timestamp ?? Date.now()),
-          });
-        }
-      }
-
-      /* @invariant AN UNCAUGHT EXCEPTION IS A CONSOLE ERROR. Chrome reports a
-         script that threw at load only as Runtime.exceptionThrown, which no
-         collector read, so `console.total` was 0 on a broken page. */
-      if (message.method === "Runtime.exceptionThrown") {
-        const details = (message.params as Record<string, unknown>)?.exceptionDetails as
-          | { text?: unknown; exception?: { description?: unknown }; timestamp?: unknown }
-          | undefined;
-
-        if (details) {
-          const text = String(details.exception?.description ?? details.text ?? "Uncaught exception");
-          this.consoleMessages.push({
-            level: "error",
-            text,
-            source: "exception",
-            timestamp: Number((message.params as Record<string, unknown>)?.timestamp ?? Date.now()),
-          });
-        }
-      }
-
-      for (const listener of this.eventListeners) {
-        listener(message);
-      }
+      message = JSON.parse(data) as Record<string, unknown>;
     } catch {
+      return;
+    }
+
+    if (message === null || typeof message !== "object") return;
+
+    if (typeof message.id === "number") {
+      const pending = this.pendingRequests.get(message.id);
+
+      if (pending) {
+        clearTimeout(pending.timeout);
+        this.pendingRequests.delete(message.id);
+
+        if (message.error) {
+          pending.reject(new Error(JSON.stringify(message.error)));
+        } else {
+          pending.resolve(message.result);
+        }
+      }
+
+      return;
+    }
+
+    if (message.method === "Log.entryAdded") {
+      const entry = (message.params as Record<string, unknown>)?.entry as
+        | Record<string, unknown>
+        | undefined;
+
+      if (entry) {
+        this.consoleMessages.push({
+          level: String(entry.level ?? "info"),
+          text: String(entry.text ?? ""),
+          source: String(entry.source ?? "other"),
+          timestamp: Number(entry.timestamp ?? Date.now()),
+        });
+      }
+    }
+
+    if (message.method === "Runtime.consoleAPICalled") {
+      const params = message.params as Record<string, unknown> | undefined;
+
+      if (params) {
+        const args = (params.args as Array<Record<string, unknown>>) ?? [];
+        const text = args
+          .map((a) => String(a.value ?? a.description ?? ""))
+          .join(" ");
+
+        this.consoleMessages.push({
+          level: String(params.type ?? "log"),
+          text,
+          source: "console-api",
+          timestamp: Number(params.timestamp ?? Date.now()),
+        });
+      }
+    }
+
+    /* @invariant AN UNCAUGHT EXCEPTION IS A CONSOLE ERROR. Chrome reports a
+       script that threw at load only as Runtime.exceptionThrown, which no
+       collector read, so `console.total` was 0 on a broken page. */
+    if (message.method === "Runtime.exceptionThrown") {
+      const details = (message.params as Record<string, unknown>)?.exceptionDetails as
+        | { text?: unknown; exception?: { description?: unknown }; timestamp?: unknown }
+        | undefined;
+
+      if (details) {
+        const text = String(details.exception?.description ?? details.text ?? "Uncaught exception");
+        this.consoleMessages.push({
+          level: "error",
+          text,
+          source: "exception",
+          timestamp: Number((message.params as Record<string, unknown>)?.timestamp ?? Date.now()),
+        });
+      }
+    }
+
+    for (const listener of this.eventListeners) {
+      try {
+        listener(message);
+      } catch (err) {
+        process.stderr.write(
+          `[extension-dev] a CDP event listener threw on ${String(message.method ?? "a reply")}: ${
+            err instanceof Error ? err.message : String(err)
+          }\n`,
+        );
+      }
     }
   }
 

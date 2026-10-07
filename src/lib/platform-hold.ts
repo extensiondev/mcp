@@ -123,14 +123,9 @@ export function sawPlatformHold(
 ): boolean {
   if (readPlatformCode(body) === PLATFORM_HOLD_CODE) return true;
 
-  try {
-    const marker = res?.headers?.get?.(PLATFORM_HOLD_HEADER);
-    if (typeof marker === "string" && marker.trim() === "held") return true;
-  } catch {
-    return false;
-  }
+  const marker = res?.headers?.get?.(PLATFORM_HOLD_HEADER);
 
-  return false;
+  return typeof marker === "string" && marker.trim() === "held";
 }
 
 function relayedDate(body: unknown): string {

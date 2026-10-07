@@ -368,10 +368,10 @@ export async function handler(args: SubmitToolArgs): Promise<string> {
         if (!w || typeof w !== "object") return null;
 
         const row = w as { code?: unknown; store?: unknown; message?: unknown; docsUrl?: unknown };
-        const text = String(row.message ?? row.code ?? "").trim();
-        if (!text) return null;
+        const rowText = String(row.message ?? row.code ?? "").trim();
+        if (!rowText) return null;
 
-        return `${row.store ? `${String(row.store)}: ` : ""}${text}${row.docsUrl ? ` (${String(row.docsUrl)})` : ""}`;
+        return `${row.store ? `${String(row.store)}: ` : ""}${rowText}${row.docsUrl ? ` (${String(row.docsUrl)})` : ""}`;
       })
     : [];
   warnings.push(

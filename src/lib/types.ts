@@ -92,9 +92,3 @@ export interface ProcessInfo {
   serverPid?: number;
 }
 
-export type BrowserType =
-  | "chrome"
-  | "edge"
-  | "firefox"
-  | "chromium-based"
-  | "gecko-based";

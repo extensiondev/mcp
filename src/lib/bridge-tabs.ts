@@ -8,6 +8,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
+import { setTimeout as sleep } from "node:timers/promises";
 
 import { actFrameJson, runActVerb } from "./act";
 import { envelope } from "./envelope";
@@ -108,7 +109,7 @@ export async function pollForBridgeTab(
       return !listedOnce && lastError !== null ? { unreadable: lastError } : null;
     }
 
-    await new Promise((r) => setTimeout(r, 250));
+    await sleep(250);
   }
 }
 
@@ -155,7 +156,7 @@ async function pollForBridgeTabById(
       };
     }
 
-    await new Promise((r) => setTimeout(r, 250));
+    await sleep(250);
   }
 }
 

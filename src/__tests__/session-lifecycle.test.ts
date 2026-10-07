@@ -5,6 +5,8 @@ import { spawn } from "node:child_process";
 
 import { describe, it, expect, vi, afterEach } from "vitest";
 
+import { readyContract } from "./fixtures/engine-answers";
+
 import type { ChildProcess } from "node:child_process";
 import type * as ExecModule from "../lib/exec";
 import type { SpawnedCli } from "../lib/exec";
@@ -82,7 +84,7 @@ function writeReadyContract(
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(
     path.join(dir, "ready.json"),
-    JSON.stringify({ status: "ready", command: "dev", browser, pid }),
+    JSON.stringify(readyContract("dev", browser, { pid, distPath: path.join(project, "dist", browser) })),
   );
 }
 

@@ -65,6 +65,7 @@ import {
   pinProjectArgs,
   type ServerOptions,
 } from "./lib/tool-policy";
+import { isProjectRef } from "./lib/credentials";
 
 import { version } from "../package.json";
 
@@ -390,7 +391,7 @@ export async function runCli(cmd: string, args: string[]): Promise<number> {
   if (cmd === "login") {
     const project = String(flag("project") || "").trim();
 
-    if (!/^[^/]+\/[^/]+$/.test(project)) {
+    if (!isProjectRef(project)) {
       log("Usage: extension-mcp login --project <workspace>/<project> [--api <url>]");
 
       return 1;
@@ -409,19 +410,19 @@ export async function runCli(cmd: string, args: string[]): Promise<number> {
     try {
       const config = await fetchLoginConfig(apiBase);
 
-      const start = await requestDeviceCode({
+      const started = await requestDeviceCode({
         apiBase,
         path: config.deviceCodeUrl,
         project,
       });
-      const completeLink = String(start.verificationUriComplete || "").trim();
+      const completeLink = String(started.verificationUriComplete || "").trim();
       log("");
 
-      if (completeLink && completeLink !== start.verificationUri) {
-        log(`  Open ${completeLink} to approve (code ${start.userCode} is pre-filled).`);
-        log(`  If the page asks for a code, enter ${start.userCode} at ${start.verificationUri}.`);
+      if (completeLink && completeLink !== started.verificationUri) {
+        log(`  Open ${completeLink} to approve (code ${started.userCode} is pre-filled).`);
+        log(`  If the page asks for a code, enter ${started.userCode} at ${started.verificationUri}.`);
       } else {
-        log(`  Open ${start.verificationUri} and enter code: ${start.userCode}`);
+        log(`  Open ${started.verificationUri} and enter code: ${started.userCode}`);
       }
 
       log("");
@@ -430,9 +431,9 @@ export async function runCli(cmd: string, args: string[]): Promise<number> {
         apiBase,
         path: config.deviceTokenUrl,
         project,
-        deviceCode: start.deviceCode,
-        interval: start.interval,
-        budgetMs: start.expiresIn * 1000,
+        deviceCode: started.deviceCode,
+        interval: started.interval,
+        budgetMs: started.expiresIn * 1000,
       });
 
       if (!poll.ok) {

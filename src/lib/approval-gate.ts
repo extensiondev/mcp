@@ -9,6 +9,7 @@
 import crypto from "node:crypto";
 
 import { envelope } from "./envelope";
+import { parseJsonObject } from "./json-object";
 import { resolveApiBase, safeApiBase } from "./login-flow";
 import { platformHoldEnvelope, sawPlatformHold } from "./platform-hold";
 
@@ -202,16 +203,9 @@ function block(
 
 async function readJson(res: Response): Promise<Record<string, unknown>> {
   const text = await res.text();
+  const read = parseJsonObject(text);
 
-  try {
-    const parsed = JSON.parse(text);
-
-    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
-      ? (parsed as Record<string, unknown>)
-      : { message: text };
-  } catch {
-    return { message: text };
-  }
+  return "value" in read ? read.value : { message: text };
 }
 
 async function requestApproval(params: {

@@ -42,6 +42,52 @@ export const CARRIER_ALLOWED_ORIGINS_SENTENCE = `${CARRIER_TRUSTED_ORIGINS.join(
 
 const MARKER_FILE = "managed-by-extension-dev-mcp.json";
 
+export const CARRIER_LOOPBACK_ENV = "EXTENSION_DEV_CARRIER_LOOPBACK";
+
+/* @invariant THE PLACED COPY ADMITS NO LOOPBACK PAGE UNLESS THE SERVER SAYS
+ * SO. The bundled worker trusts localhost on four ports that are this
+ * company's own dev servers; on any other machine those ports belong to
+ * whatever runs there, and a page on one of them would pair with an
+ * extension holding cookies, history, scripting and <all_urls>. So the copy
+ * written into the user's project drops the two loopback matches from
+ * externally_connectable, which Chrome enforces before the worker's own
+ * check runs, and only CARRIER_LOOPBACK_ENV=1 on the server keeps them. */
+export function carrierLoopbackAllowed(
+  env: Record<string, string | undefined> = process.env,
+): boolean {
+  const raw = String(env[CARRIER_LOOPBACK_ENV] ?? "").trim().toLowerCase();
+
+  return raw !== "" && raw !== "0" && raw !== "false" && raw !== "off";
+}
+
+const LOOPBACK_MATCHES = new Set(
+  CARRIER_TRUSTED_LOCAL_HOSTS.map((host) => `http://${host}/*`),
+);
+
+export function carrierAllowedOriginsSentence(loopback: boolean): string {
+  if (loopback) return CARRIER_ALLOWED_ORIGINS_SENTENCE;
+
+  return `${CARRIER_TRUSTED_ORIGINS.join(", ")} only: the placed copy's externally_connectable lists no localhost or 127.0.0.1 match, so no page served on this machine can pair with the carrier. Set ${CARRIER_LOOPBACK_ENV}=1 on the server to admit those same apps' dev servers on ports ${CARRIER_TRUSTED_LOCAL_PORTS.join(", ")}.`;
+}
+
+function narrowPlacedManifest(target: string, loopback: boolean): void {
+  if (loopback) return;
+
+  const file = path.join(target, "manifest.json");
+  const placed = JSON.parse(fs.readFileSync(file, "utf-8")) as {
+    externally_connectable?: { matches?: string[] };
+  };
+  const matches = placed.externally_connectable?.matches;
+  if (!matches) return;
+
+  placed.externally_connectable = {
+    ...placed.externally_connectable,
+    matches: matches.filter((match) => !LOOPBACK_MATCHES.has(match)),
+  };
+
+  fs.writeFileSync(file, `${JSON.stringify(placed, null, 2)}\n`);
+}
+
 function deriveCarrierId(source: string): string | null {
   try {
     const manifest = JSON.parse(
@@ -67,10 +113,6 @@ function deriveCarrierId(source: string): string | null {
 
 export function carrierPath(projectPath: string): string {
   return path.join(projectPath, "extensions", CARRIER_DIR_NAME);
-}
-
-export function isManagedCarrier(projectPath: string): boolean {
-  return claimCarrier(carrierPath(projectPath)).ours;
 }
 
 function relativeFiles(dir: string, base = dir, depth = 0): string[] | null {
@@ -300,6 +342,8 @@ export function materializeCarrier(
   try {
     fs.rmSync(target, { recursive: true, force: true });
     fs.cpSync(source, target, { recursive: true });
+    const loopback = carrierLoopbackAllowed();
+    narrowPlacedManifest(target, loopback);
     const manifest = JSON.parse(
       fs.readFileSync(path.join(source, "manifest.json"), "utf-8"),
     ) as { version?: string };
@@ -346,7 +390,7 @@ export function materializeCarrier(
         ? {
             bridgeProtocol: {
               carrierExtensionId: carrierId,
-              allowedOrigins: CARRIER_ALLOWED_ORIGINS_SENTENCE,
+              allowedOrigins: carrierAllowedOriginsSentence(loopback),
               howTo:
                 "From a page on an allowed origin, register your guest once with a 'session' message (it declares the permissions the carrier enforces), then send 'bridge' messages to run chrome.* for real; each one streams into the Trace tab. Use the EXACT dotted wire names the bridge dispatcher accepts: storage is storage.get/set/remove/clear with the AREA AS AN ARGUMENT, NOT storage.local.get.",
               example: [

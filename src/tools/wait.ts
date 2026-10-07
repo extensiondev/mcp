@@ -7,6 +7,7 @@
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
 import fs from "node:fs";
+import { setTimeout as sleep } from "node:timers/promises";
 
 import { PROJECT_PATH, SESSION_BROWSER } from "../lib/common-schema";
 import { findSessionInfo, sessionSinceMs } from "../lib/process-manager";
@@ -114,7 +115,7 @@ export async function handler(args: {
           ? `A ready.json contract stamped before this session started (status: ${contract.status}) was ignored; it describes the previous run, not this one.`
           : `A ready.json contract whose dev-server pid ${contract.pid} is dead (status: ${contract.status}) was ignored; it describes a session that already exited.`;
 
-        await new Promise((resolve) => setTimeout(resolve, pollInterval));
+        await sleep(pollInterval);
         continue;
       }
 
@@ -271,7 +272,7 @@ export async function handler(args: {
         }
 
         if (!attached) {
-          await new Promise((r) => setTimeout(r, pollInterval));
+          await sleep(pollInterval);
           sawCompiledButUnattached = true;
           continue;
         }
@@ -356,7 +357,7 @@ export async function handler(args: {
         code === "ENOENT" ? null : `${readyPath} exists but could not be read: ${(err as Error)?.message ?? String(err)}`;
     }
 
-    await new Promise((resolve) => setTimeout(resolve, pollInterval));
+    await sleep(pollInterval);
   }
 
   if (sawCompiledButUnattached) {

@@ -2,6 +2,29 @@
 
 ## Unreleased
 
+- The README and the `extension_create` description now say that a
+  successful scaffold sends one `draft_seeded` event to PostHog, what it
+  carries, and that `EXTENSION_DEV_NO_TELEMETRY=1` or `DO_NOT_TRACK=1` turns
+  it off. Nothing about what is sent changed; a test fails if either text
+  stops naming the event or the two variables.
+- The Live Preview carrier copy that `extension_dev {carrier: true}` places
+  no longer admits `http://localhost/*` or `http://127.0.0.1/*` in its
+  `externally_connectable`: on a stranger's machine those ports belong to
+  whatever runs there. `EXTENSION_DEV_CARRIER_LOOPBACK=1` on the server
+  keeps them for the extension.dev apps' own dev servers; the `carrier`
+  description names the permissions the carrier holds and the switch.
+- `extension_inspect` no longer sleeps 1.5 s after navigating or 0.5 s when
+  it did not navigate: the CDP navigate already waits for the page's load
+  event, so both waits read nothing.
+- A CDP event listener that throws is reported on stderr with the event
+  name instead of being discarded with unparseable frames, and the
+  recorded console is kept.
+- `extension_list_extensions` connects once to the port the ready contract
+  stamped instead of retrying three times 800 ms apart: the port is read
+  from a live session's contract, so a refused connection is the answer.
+- One JSON frame reader (`src/lib/frame-json.ts`) replaces the two private
+  copies in `extension_open` and `extension_eval`.
+
 - The server starts with the local group alone: the 23 of its 32 tools that
   work on this machine. The 9 platform tools (account, share, release and
   store) come on with `--features=local,platform` or
@@ -55,6 +78,26 @@
   `extension_eval` in `background` like an MV2 page does. The CSP refusal
   rewrite applies to a declared content_security_policy, never to MV3 as
   such.
+- The six inline `<workspace>/<project>` checks on login, project create
+  and the create list now go through `isProjectRef`, so a ref with a space
+  is refused where it enters instead of by the platform one call later. The
+  login list keeps its own check because its exact-slug rule two lines down
+  owns the message.
+- Dead code out: `isManagedCarrier`, `credentialProjectRef`, `mirrorActionsUrlFromRunUrl`,
+  `browserExitStamp`, `hasSourceMaps`, `REGISTRY_BASE_DEFAULT`,
+  `SAFARI_MCP_ADD_COMMAND`, `BrowserType`, `ASSERT_RETIRED_IDS`, two unused
+  `vi` imports and the live lane's unused `GECKO` set.
+- The lint migration warnings no longer re-enable core `no-unused-vars`
+  after typescript-eslint turned it off; `@typescript-eslint/no-unused-vars`
+  stays. The same line left the monorepo's shared config.
+- Nine test files write `ready.json` through the engine contract builder
+  instead of by hand; the stop-hints cells name the dead server pid they
+  cut in.
+- Sleeps go through `node:timers/promises`; one JSON object reader serves
+  login config and the approval gate; `consoleBase` and `consoleProjectUrl`
+  moved to `src/lib/console-urls.ts`, which ends the login-flow, registry,
+  registry-access import cycle; four shadowed names renamed; the
+  platform-hold header read lost a catch nothing could reach.
 
 ## 10.10.13
 

@@ -7,7 +7,7 @@
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
 import { spendNarration } from "./allowance";
-import { writeCredentialBatch, tokenExpiry  } from "./credentials";
+import { writeCredentialBatch, tokenExpiry, isProjectRef } from "./credentials";
 import { answerIsUnknownOutcome, readCreatedProject } from "./create-answer";
 import { firstBuildValue, readFirstBuild, withheldBecause } from "./first-build";
 import { pollDeviceGrant, requestDeviceCode } from "./device-flow";
@@ -265,7 +265,7 @@ export function parseBatchCreateArgs(
     const slug = parsed.batch.slugs[index] as string;
     const repo = typeof raw.repo === "string" ? raw.repo.trim() : "";
 
-    if (!/^[^/]+\/[^/]+$/.test(repo)) {
+    if (!isProjectRef(repo)) {
       return {
         ok: false,
         message: `The entry for '${ref}' needs repo as '<owner>/<repo>', the GitHub repository that project's source is pushed to.`,

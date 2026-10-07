@@ -91,7 +91,7 @@ export const schema = {
         type: "boolean",
         default: false,
         description:
-          "Load the bundled Live Preview carrier beside your extension (Chromium only) so allowlisted pages (preview.extension.dev, localhost) can pair with the session and stream its real-lane chrome.* trace. Written into the auto-loaded ./extensions folder, gitignored, and removed on extension_stop or extension_build: never part of a release.",
+          "Load the bundled Live Preview carrier beside your extension (Chromium only) so pages on preview.extension.dev, code.extension.dev and themes.extension.dev can pair with the session and stream its real-lane chrome.* trace. The carrier holds cookies, history, bookmarks, scripting and <all_urls>; the placed copy admits no localhost page unless the server sets the loopback switch named in the Live Preview carrier section of this package's readme, which exists for those apps' own dev servers. Written into the auto-loaded ./extensions folder, gitignored, and removed on extension_stop or extension_build: never part of a release.",
       },
     },
     required: ["projectPath"],

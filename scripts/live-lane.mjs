@@ -34,7 +34,6 @@ const README_BROWSER_ORDER = [
   "safari",
 ];
 
-const GECKO = new Set(["firefox", "waterfox", "librewolf", "zen", "floorp"]);
 
 /* @invariant EVERY BROWSER THIS LANE LAUNCHES IS HEADLESS. A headed browser on
  * macOS activates itself and takes the operator's keyboard, so the engine is

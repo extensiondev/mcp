@@ -181,3 +181,23 @@ describe("extension_create seeds the creation funnel", () => {
     );
   });
 });
+
+describe("the telemetry is disclosed where a user reads", () => {
+  const readme = fs.readFileSync(
+    path.resolve(__dirname, "..", "..", "README.md"),
+    "utf8",
+  );
+
+  it("names the event and both opt-out variables in the README", () => {
+    expect(readme).toContain("draft_seeded");
+    expect(readme).toContain("EXTENSION_DEV_NO_TELEMETRY");
+    expect(readme).toContain("DO_NOT_TRACK");
+    expect(readme).toContain("us.i.posthog.com");
+  });
+
+  it("names the event in the tool description and points at the README section with the switches", () => {
+    expect(create.schema.description).toContain("draft_seeded");
+    expect(create.schema.description).toContain("Telemetry section");
+    expect(readme).toContain("### Telemetry");
+  });
+});

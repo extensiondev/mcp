@@ -6,6 +6,7 @@ import { describe, it, expect, afterEach } from "vitest";
 
 import * as wait from "../tools/wait";
 import { deadReadySession } from "../lib/session-browser";
+import { readyContract } from "./fixtures/engine-answers";
 
 const dirs: string[] = [];
 
@@ -21,7 +22,7 @@ function writeContract(projectPath: string, browser: string, contract: Record<st
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(
     path.join(dir, "ready.json"),
-    JSON.stringify({ schema: 1, status: "ready", browser, ts: new Date().toISOString(), ...contract }),
+    JSON.stringify(readyContract("start", browser, { distPath: path.join(projectPath, "dist", browser), ts: new Date().toISOString(), ...contract })),
   );
 }
 

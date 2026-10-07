@@ -63,7 +63,7 @@ export async function verifyGuestLoaded(
     const timeoutMs = options?.timeoutMs ?? 3000;
     const targets = await Promise.race([
       CDPClient.discoverTargets(cdpPort),
-      new Promise<never>((_, reject) =>
+      new Promise<never>((_resolve, reject) =>
         setTimeout(
           () => reject(new Error(`CDP /json timed out after ${timeoutMs}ms`)),
           timeoutMs,

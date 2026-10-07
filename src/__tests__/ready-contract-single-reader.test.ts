@@ -9,6 +9,7 @@ import * as bridge from "extension-develop/bridge";
 import { readReadyContract, readyContractPath } from "../lib/session-paths";
 import { handler as doctorHandler } from "../tools/doctor";
 import { handler as logsHandler } from "../tools/logs";
+import { readyContract } from "./fixtures/engine-answers";
 
 const SRC = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -181,12 +182,11 @@ describe("the engine's reader on every edge the deleted copy covered", () => {
 
   it("reads a full contract through the browser-keyed path", () => {
     const project = tmpProject();
-    writeContract(project, "firefox", {
-      status: "ready",
+    writeContract(project, "firefox", readyContract("dev", "firefox", {
       controlPort: 51515,
       instanceId: "inst-1",
       runId: "run-1",
-    });
+    }));
 
     expect(readReadyContract(project, "firefox")).toMatchObject({
       controlPort: 51515,

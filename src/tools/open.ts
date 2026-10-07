@@ -6,6 +6,7 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
+import { setTimeout as sleep } from "node:timers/promises";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -22,6 +23,7 @@ import {
   type ActArgs,
 } from "../lib/act";
 import { envelope } from "../lib/envelope";
+import { parseFrameObject } from "../lib/frame-json";
 import { resolveSessionBrowser } from "../lib/session-browser";
 import { readyContractPath } from "../lib/session-paths";
 import { CDPClient } from "../lib/cdp";
@@ -130,7 +132,7 @@ async function pollForTarget(
       return !listed && lastError !== null ? { unreadable: lastError } : redirected;
     }
 
-    await new Promise((r) => setTimeout(r, 250));
+    await sleep(250);
   }
 }
 
@@ -144,7 +146,7 @@ async function landedOnErrorPage(
   port: number,
   targetId: string,
 ): Promise<{ url: string; title?: string } | null | "unreadable"> {
-  await new Promise((r) => setTimeout(r, 400));
+  await sleep(400);
 
   try {
     const target = (await CDPClient.discoverTargets(port)).find(
@@ -1223,7 +1225,7 @@ export async function handler(
     }
 
     const fallback = await openSurfaceAsTab(args.projectPath, browser, args.surface);
-    const parsedFallback = tryParseEnvelope(fallback);
+    const parsedFallback = parseFrameObject(fallback);
 
     if (parsedFallback?.ok) {
       addWarning(parsedFallback, windowRefusalWarning(refusal, args.surface, browser));
@@ -1249,7 +1251,7 @@ export async function handler(
   if (!AS_TAB_SURFACES.includes(args.surface)) return raw;
 
   const confirmed = await confirmSurfaceTarget(args.projectPath, browser, args.surface, raw);
-  const parsedConfirmed = tryParseEnvelope(confirmed);
+  const parsedConfirmed = parseFrameObject(confirmed);
   if (parsedConfirmed?.status !== "surface-did-not-open") return confirmed;
 
   /* @invariant An engine "opened" with no document behind it within 3s is a
@@ -1257,7 +1259,7 @@ export async function handler(
      with an options or popup window whatever the launch flags said. The document is rendered in a tab instead and the
      warning says so; the engine's answer rides along for the record. */
   const fallback = await openSurfaceAsTab(args.projectPath, browser, args.surface);
-  const parsedFallback = tryParseEnvelope(fallback);
+  const parsedFallback = parseFrameObject(fallback);
 
   if (parsedFallback?.ok) {
     addWarning(
@@ -1278,14 +1280,6 @@ type WindowRefusal = {
   frame: Record<string, any>;
 };
 
-function tryParseEnvelope(raw: string): Record<string, any> | null {
-  try {
-    return JSON.parse(raw);
-  } catch {
-    return null;
-  }
-}
-
 /* @invariant Three refusals mean the same thing to the caller, "the window
    did not open", and the tab route answers all three. The gesture code is the
    engine's own; the no-window arm reads the BROWSER's words the engine quotes
@@ -1303,7 +1297,7 @@ function readWindowRefusal(
   const gesture = readGestureRefusal(raw);
   if (gesture) return { kind: "gesture", frame: gesture };
 
-  const parsed = tryParseEnvelope(raw);
+  const parsed = parseFrameObject(raw);
   if (!parsed || parsed.ok !== false) return null;
 
   const code = typeof parsed.error?.code === "string" ? parsed.error.code : "";

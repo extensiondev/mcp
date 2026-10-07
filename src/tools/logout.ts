@@ -24,9 +24,11 @@ export async function clearLocalCredentials(project?: string): Promise<string> {
   /* @invariant ONE REVOKE LINK PER LOGIN REMOVED. An unnamed logout that
      removes several logins used to carry one project's link. */
   const revokeUrlFor = (key: string): string | null => {
-    const [workspace, project] = key.split("/");
+    const [workspaceSlug, projectSlug] = key.split("/");
 
-    return workspace && project ? consoleProjectUrl({ workspace, project }, "settings/access-tokens") : null;
+    return workspaceSlug && projectSlug
+      ? consoleProjectUrl({ workspace: workspaceSlug, project: projectSlug }, "settings/access-tokens")
+      : null;
   };
 
   const result = clearCredentials(wanted ? { project: wanted } : undefined);

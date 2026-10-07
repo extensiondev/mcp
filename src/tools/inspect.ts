@@ -168,8 +168,6 @@ export async function handler(args: {
         });
       }
 
-      await new Promise((r) => setTimeout(r, 1500));
-
       try {
         const after = await CDPClient.discoverTargets(cdpPort);
         const same = after.find((t) => String(t.id) === target.id);
@@ -178,8 +176,6 @@ export async function handler(args: {
       } catch (err) {
         landingUnread = err instanceof Error ? err.message : String(err);
       }
-    } else {
-      await new Promise((r) => setTimeout(r, 500));
     }
 
     const landingWarning =

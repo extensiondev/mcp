@@ -97,6 +97,7 @@ describe("extension_inspect with no target, on a profile that survives runs", ()
 
   it("stays quiet when the caller named the target itself", async () => {
     profile.reused = true;
+    const startedAt = Date.now();
 
     const out = JSON.parse(
       await handler({
@@ -108,6 +109,7 @@ describe("extension_inspect with no target, on a profile that survives runs", ()
     );
 
     expect(out.warnings.join(" ")).not.toMatch(/previous session/i);
+    expect(Date.now() - startedAt).toBeLessThan(100);
   }, 10000);
 
   it("reports the carry-over on the session value so an agent can branch", async () => {

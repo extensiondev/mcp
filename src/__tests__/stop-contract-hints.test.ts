@@ -6,6 +6,7 @@ import path from "node:path";
 import { describe, it, expect, afterEach } from "vitest";
 
 import * as stop from "../tools/stop";
+import { readyContract } from "./fixtures/engine-answers";
 
 const posixOnly = process.platform === "win32" ? it.skip : it;
 
@@ -51,7 +52,9 @@ async function waitGone(pid: number): Promise<boolean> {
   return !isAlive(pid);
 }
 
-function writeContract(
+const DEAD_SERVER_PID = 2 ** 30;
+
+function writeContractOfDeadServer(
   projectPath: string,
   browser: string,
   contract: Record<string, unknown>,
@@ -60,7 +63,13 @@ function writeContract(
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(
     path.join(dir, "ready.json"),
-    JSON.stringify({ status: "ready", command: "dev", browser, ...contract }),
+    JSON.stringify(
+      readyContract("dev", browser, {
+        pid: DEAD_SERVER_PID,
+        distPath: path.join(projectPath, "dist", browser),
+        ...contract,
+      }),
+    ),
   );
 }
 
@@ -84,7 +93,7 @@ describe("extension_stop reaps the browser the launcher recorded, not only the o
       const projectPath = tmpProject();
       const profilePath = path.join(os.tmpdir(), `custom-fx-profile-${process.pid}`);
       const pid = spawnHolder(["profile", profilePath, "no-remote"]);
-      writeContract(projectPath, "firefox", { profilePath });
+      writeContractOfDeadServer(projectPath, "firefox", { profilePath });
       await new Promise((r) => setTimeout(r, 200));
 
       const result = JSON.parse(
@@ -103,7 +112,7 @@ describe("extension_stop reaps the browser the launcher recorded, not only the o
       const projectPath = tmpProject();
       const browserPid = spawnHolder(["quiet-browser"]);
       const launcherPid = spawnHolder(["quiet-launcher"]);
-      writeContract(projectPath, "firefox", { browserPid, launcherPid });
+      writeContractOfDeadServer(projectPath, "firefox", { browserPid, launcherPid });
       await new Promise((r) => setTimeout(r, 200));
 
       const result = JSON.parse(
@@ -122,7 +131,7 @@ describe("extension_stop reaps the browser the launcher recorded, not only the o
 
   it("reads the hints out of the contract and ignores what is not a pid", () => {
     const projectPath = tmpProject();
-    writeContract(projectPath, "firefox", {
+    writeContractOfDeadServer(projectPath, "firefox", {
       profilePath: "/tmp/p",
       browserPid: 4242,
       launcherPid: "nope",

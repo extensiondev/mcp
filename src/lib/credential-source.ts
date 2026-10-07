@@ -174,10 +174,6 @@ export function resolveCredential(options: { project?: string } = {}): ResolvedC
   return { token: "", source: "none", ref: null, refSource: "none", mismatch: null, note: null };
 }
 
-export function credentialProjectRef(selector?: string): CredentialRef | null {
-  return resolveCredential({ project: selector }).ref;
-}
-
 /* @invariant A LANE IS CLOSED ON THE SERVER'S CODE ONLY. Matching the
    digits 403 in a sentence read a proxy or firewall refusal as "not on the
    allowlist". */

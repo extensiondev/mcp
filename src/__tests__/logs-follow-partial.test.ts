@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { handler } from "../tools/logs";
 import { CONTROL_WS_PATH } from "../tools/logs-constants";
+import { readyContract } from "./fixtures/engine-answers";
 
 import type net from "node:net";
 
@@ -15,12 +16,15 @@ function writeReady(projectPath: string, browser: string, port: number): void {
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(
     path.join(dir, "ready.json"),
-    JSON.stringify({
-      status: "ready",
-      controlPort: port,
-      instanceId: "inst-1",
-      runId: "run-1",
-    }),
+    JSON.stringify(
+      readyContract("dev", browser, {
+        controlPort: port,
+        instanceId: "inst-1",
+        runId: "run-1",
+        distPath: path.join(projectPath, "dist", browser),
+        logsPath: path.join(dir, "logs.ndjson"),
+      }),
+    ),
   );
 }
 

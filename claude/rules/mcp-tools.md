@@ -80,7 +80,7 @@ Build a browser extension for production. The output lands in dist/<browser>/. P
 
 ## extension_create
 
-Create a browser extension project from a template in the extension.dev catalog. Call extension_templates first to see what is available. The scaffolder may initialize a git repository in the new project (with a first commit), and it also writes store metadata and a .gitignore of its own. Read the result's defaultsApplied block for the decisions this tool can read back: parent directory, template, package manager, target browser and whether a git repository was initialized by this call.
+Create a browser extension project from a template in the extension.dev catalog. Call extension_templates first to see what is available. The scaffolder may initialize a git repository in the new project (with a first commit), and it also writes store metadata and a .gitignore of its own. Read the result's defaultsApplied block for the decisions this tool can read back: parent directory, template, package manager, target browser and whether a git repository was initialized by this call. After a successful scaffold this tool sends one telemetry event, draft_seeded (template slug, source and commit, a random install id, never a path or a name), to PostHog; the Telemetry section of this package's readme names the two environment variables that turn it off.
 
 | input | type | required | default | description |
 | --- | --- | --- | --- | --- |
@@ -110,7 +110,7 @@ Run the extension while you edit it: dev build, hot module replacement, and a br
 | `replace` | boolean | no | `false` | Stop the live session for this projectPath first, reported as replacedSession. Without it a second call is refused rather than forking: two sessions fight over one profile and the newer browser dies on the lock. |
 | `allowControl` | boolean | no | `false` | Enable the agent-bridge control channel that extension_storage/reload/open/dom_snapshot need |
 | `allowEval` | boolean | no | `false` | Enable extension_eval (runs code in a context; writes a 0600 session token). Implies allowControl, so you never need to pass both. |
-| `carrier` | boolean | no | `false` | Load the bundled Live Preview carrier beside your extension (Chromium only) so allowlisted pages (preview.extension.dev, localhost) can pair with the session and stream its real-lane chrome.* trace. Written into the auto-loaded ./extensions folder, gitignored, and removed on extension_stop or extension_build: never part of a release. |
+| `carrier` | boolean | no | `false` | Load the bundled Live Preview carrier beside your extension (Chromium only) so pages on preview.extension.dev, code.extension.dev and themes.extension.dev can pair with the session and stream its real-lane chrome.* trace. The carrier holds cookies, history, bookmarks, scripting and <all_urls>; the placed copy admits no localhost page unless the server sets the loopback switch named in the Live Preview carrier section of this package's readme, which exists for those apps' own dev servers. Written into the auto-loaded ./extensions folder, gitignored, and removed on extension_stop or extension_build: never part of a release. |
 
 ## extension_docs_search
 

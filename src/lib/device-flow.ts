@@ -238,7 +238,7 @@ export async function pollDeviceGrant(args: {
 
     const waitMs = interval * 1000;
 
-    await new Promise((r) => setTimeout(r, waitMs));
+    await new Promise((resolve) => setTimeout(resolve, waitMs));
   }
 }
 

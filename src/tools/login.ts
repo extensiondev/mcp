@@ -25,6 +25,7 @@ import {
   parseProjectBatch,
 } from "../lib/project-batch";
 import { consoleBase } from "../lib/registry";
+import { isProjectRef } from "../lib/credentials";
 
 const FIRST_CALL_BUDGET_MS = 8_000;
 const RESUME_BUDGET_MS = 22_000;
@@ -131,7 +132,7 @@ export async function loginToProject(args: {
 }): Promise<string> {
   const project = String(args.project || "").trim();
 
-  if (!/^[^/]+\/[^/]+$/.test(project)) {
+  if (!isProjectRef(project)) {
     return fail(
       "BadRequest",
       "project must be in the form '<workspace>/<project>'. The slug pair is the console address bar: an existing project's page is console.extension.dev/<workspace>/<project>. If the project does not exist yet, create it at extension.dev/new, then log in with the slugs the console shows.",

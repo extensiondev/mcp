@@ -120,3 +120,61 @@ describe("materializeCarrier", () => {
     );
   });
 });
+
+describe("the placed carrier admits loopback pages only when the server says so", () => {
+  const placedMatches = (): string[] =>
+    (
+      JSON.parse(
+        fs.readFileSync(
+          path.join(projectDir, "extensions", CARRIER_DIR_NAME, "manifest.json"),
+          "utf-8",
+        ),
+      ) as { externally_connectable?: { matches?: string[] } }
+    ).externally_connectable?.matches ?? [];
+
+  afterEach(() => {
+    delete process.env.EXTENSION_DEV_CARRIER_LOOPBACK;
+  });
+
+  it("drops the localhost and 127.0.0.1 matches by default and says so", () => {
+    delete process.env.EXTENSION_DEV_CARRIER_LOOPBACK;
+    const result = materializeCarrier(projectDir, "chrome");
+    expect(result.loaded).toBe(true);
+    const matches = placedMatches();
+    expect(matches).toContain("https://preview.extension.dev/*");
+    expect(matches).not.toContain("http://localhost/*");
+    expect(matches).not.toContain("http://127.0.0.1/*");
+    expect(result.bridgeProtocol?.allowedOrigins).toContain("no localhost or 127.0.0.1 match");
+    expect(result.bridgeProtocol?.allowedOrigins).toContain("EXTENSION_DEV_CARRIER_LOOPBACK=1");
+  });
+
+  it("keeps them when EXTENSION_DEV_CARRIER_LOOPBACK=1 and names the ports", () => {
+    process.env.EXTENSION_DEV_CARRIER_LOOPBACK = "1";
+    const result = materializeCarrier(projectDir, "chrome");
+    expect(result.loaded).toBe(true);
+    expect(placedMatches()).toContain("http://localhost/*");
+    expect(placedMatches()).toContain("http://127.0.0.1/*");
+    expect(result.bridgeProtocol?.allowedOrigins).toContain("3104");
+  });
+
+  it("leaves the shipped bundle itself untouched", () => {
+    delete process.env.EXTENSION_DEV_CARRIER_LOOPBACK;
+    materializeCarrier(projectDir, "chrome");
+    const shipped = JSON.parse(
+      fs.readFileSync(
+        path.resolve(__dirname, "..", "..", "extensions", "live-preview", "chromium", "manifest.json"),
+        "utf-8",
+      ),
+    ) as { externally_connectable?: { matches?: string[] } };
+    expect(shipped.externally_connectable?.matches).toContain("http://localhost/*");
+  });
+});
+
+describe("the carrier's reach is disclosed where a user reads", () => {
+  it("names the permissions and the loopback switch in the README", () => {
+    const readme = fs.readFileSync(path.resolve(__dirname, "..", "..", "README.md"), "utf8");
+    expect(readme).toContain("### The Live Preview carrier");
+    expect(readme).toContain("EXTENSION_DEV_CARRIER_LOOPBACK=1");
+    expect(readme).toContain("<all_urls>");
+  });
+});

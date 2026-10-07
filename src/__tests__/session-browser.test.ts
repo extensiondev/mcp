@@ -10,6 +10,7 @@ import {
   liveProjectSessions,
 } from "../lib/session-browser";
 import { toMcpSpeak } from "../lib/act";
+import { readyContract } from "./fixtures/engine-answers";
 import {
   registerSession,
   removeSession,
@@ -28,11 +29,14 @@ function tmpProject(): string {
 function writeContract(
   projectPath: string,
   browser: string,
-  contract: Record<string, unknown> = { status: "ready" },
+  contract: Record<string, unknown> = {},
 ): void {
   const dir = path.join(projectPath, "dist", "extension-js", browser);
   fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(path.join(dir, "ready.json"), JSON.stringify(contract));
+  fs.writeFileSync(
+    path.join(dir, "ready.json"),
+    JSON.stringify(readyContract("dev", browser, { distPath: path.join(projectPath, "dist", browser), ...contract })),
+  );
 }
 
 const registered: Array<{ projectPath: string; browser: string }> = [];

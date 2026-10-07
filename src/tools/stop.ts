@@ -9,6 +9,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
+import { setTimeout as sleep } from "node:timers/promises";
 
 import { PROJECT_PATH } from "../lib/common-schema";
 import {
@@ -268,7 +269,7 @@ async function reapSessionProcesses(
     }
   }
 
-  await new Promise((resolve) => setTimeout(resolve, 250));
+  await sleep(250);
   const reaped: number[] = [];
   const unconfirmed: number[] = [];
 
@@ -385,11 +386,11 @@ export async function stopOne(
     detail = "Process was already gone; cleaned up session records.";
   } else {
     signal(pid, "SIGTERM");
-    await new Promise((resolve) => setTimeout(resolve, 1500));
+    await sleep(1500);
 
     if (isAlive(pid)) {
       signal(pid, "SIGKILL");
-      await new Promise((resolve) => setTimeout(resolve, 250));
+      await sleep(250);
     }
 
     detail = isAlive(pid)

@@ -6,6 +6,8 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
+import { setTimeout as sleep } from "node:timers/promises";
+
 import { CDPClient } from "./cdp";
 import { listDocumentTargets, type PageTarget } from "./cdp-targets";
 
@@ -161,7 +163,7 @@ export async function wakeExtensionWorker(
       if (targets.length > 0) return { woken: true, targets };
       if (Date.now() >= deadline) break;
 
-      await new Promise((r) => setTimeout(r, 150));
+      await sleep(150);
     }
 
     return {
@@ -397,7 +399,7 @@ async function pollUntil<T>(
     if (value !== null) return value;
     if (Date.now() >= deadline) return null;
 
-    await new Promise((r) => setTimeout(r, everyMs));
+    await sleep(everyMs);
   }
 }
 

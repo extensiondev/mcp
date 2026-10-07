@@ -13,6 +13,7 @@ import {
   listSessionMarkers,
 } from "../lib/process-manager";
 import { resolveExtensionInvocation } from "../lib/exec";
+import { readyContract } from "./fixtures/engine-answers";
 
 const previousSessionDir = process.env.EXTENSION_MCP_SESSION_DIR;
 const sessionDir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-stop-markers-"));
@@ -134,7 +135,7 @@ describe("extension_stop", () => {
     const readyPath = path.join(readyDir, "ready.json");
     fs.writeFileSync(
       readyPath,
-      JSON.stringify({ status: "ready", command: "dev", browser: "chrome", pid }),
+      JSON.stringify(readyContract("dev", "chrome", { pid, distPath: path.join(projectPath, "dist", "chrome") })),
     );
 
     const result = JSON.parse(

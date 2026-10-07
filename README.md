@@ -163,6 +163,14 @@ Answers that can carry text a web page or an extension wrote (logs, DOM, eval re
 }
 ```
 
+### Telemetry
+
+`extension_create` sends one event after a successful scaffold, `draft_seeded`, to PostHog at `https://us.i.posthog.com/capture/` with a public write-only project key. It carries the template slug, the template source (`template`, `fork` or `blank-init`), the template commit it resolved, a random per-install session id, the environment, and the fixed names `source`, `entry` and `emitted_from`; never a path, a project name, a user name, an address or anything read from your files. No other tool sends anything. Set `EXTENSION_DEV_NO_TELEMETRY=1` or `DO_NOT_TRACK=1` in the server's environment to turn it off.
+
+### The Live Preview carrier
+
+`extension_dev` with `carrier: true` copies a companion extension into the project's `extensions/` folder so pages on preview.extension.dev, code.extension.dev and themes.extension.dev can pair with the session and stream its real-lane `chrome.*` trace. That companion holds `cookies`, `history`, `bookmarks`, `scripting` and `<all_urls>`, so the placed copy admits no `localhost` or `127.0.0.1` page: on your machine those ports belong to whatever you run there. `EXTENSION_DEV_CARRIER_LOOPBACK=1` on the server keeps the loopback matches, which exists for those apps' own dev servers. The carrier is removed by `extension_stop` and `extension_build` and is never part of a release.
+
 ### Pair with the skill
 
 This server gives agents hands; [`@extension.dev/skill`](https://www.npmjs.com/package/@extension.dev/skill) gives them judgment: the cross-browser rules, silent-failure gotchas, debugging playbooks, and store checklist, packaged in the open [Agent Skills](https://agentskills.io) format. With both installed, agents know to verify against the live browser instead of guessing, and these tools make that a one-call operation.
