@@ -1,21 +1,24 @@
-import { describe, it, expect, vi } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
+import { describe, it, expect, vi } from "vitest";
+
 import { tools as ALL_TOOLS } from "../index";
 import * as browsers from "../tools/browsers";
-
 import * as manifestValidate from "../tools/manifest-validate";
 import * as analyze from "../tools/analyze";
 import * as inspectTool from "../tools/inspect";
 import * as logs from "../tools/logs";
 import * as storage from "../tools/storage";
 import * as addFeature from "../tools/add-feature";
+
 import templatesSnapshot from "../lib/templates-meta.snapshot.json";
 
+import type * as CdpPortModule from "../lib/cdp-port";
+
 vi.mock("../lib/cdp-port", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../lib/cdp-port")>()),
+  ...(await importOriginal<typeof CdpPortModule>()),
   resolveCdpPort: async () => null,
   resolveRdpPort: async () => null,
 }));
@@ -60,6 +63,7 @@ describe("Tool schema validation", () => {
       const properties = Object.keys(
         (tool.schema.inputSchema.properties ?? {}) as Record<string, unknown>,
       );
+
       for (const field of required) {
         expect(properties).toContain(field);
       }
@@ -83,6 +87,7 @@ describe("manifest-validate handler", () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "extjs-manifest-"));
     const file = path.join(dir, "manifest.json");
     fs.writeFileSync(file, JSON.stringify(manifest));
+
     return file;
   };
 
@@ -123,6 +128,7 @@ describe("manifest-validate handler", () => {
     expect(parsed.value.errors).not.toContain(
       expect.stringContaining("Missing manifest_version"),
     );
+
     expect(parsed.value.browserSupport.chrome.issues.join(" ")).toContain(
       "Manifest V2 is deprecated",
     );
@@ -180,6 +186,7 @@ describe("analyze handler", () => {
 
   it("excludes .zip artifacts from the shippable size", async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-inspect-zip-"));
+
     try {
       const distDir = path.join(dir, "dist", "chrome");
       fs.mkdirSync(distDir, { recursive: true });
@@ -187,6 +194,7 @@ describe("analyze handler", () => {
         path.join(distDir, "manifest.json"),
         JSON.stringify({ manifest_version: 3, name: "F", version: "1.0.0" }),
       );
+
       fs.writeFileSync(path.join(distDir, "background.js"), "x".repeat(1000));
       const zipSize = 11 * 1024 * 1024;
       fs.writeFileSync(
@@ -201,6 +209,7 @@ describe("analyze handler", () => {
       expect(parsed.value.shippableSize).toBe(
         parsed.value.totalSize - parsed.value.byType.archive.size,
       );
+
       expect(parsed.warnings.join(" ")).toContain("shippableSize excludes them");
       expect(parsed.value.buildType).toBe("production");
       expect(parsed.value.totalSize).toBeGreaterThan(10 * 1024 * 1024);
@@ -212,6 +221,7 @@ describe("analyze handler", () => {
 
   it("keeps shippableSize intact when no archive is present", async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-inspect-nozip-"));
+
     try {
       const distDir = path.join(dir, "dist", "chrome");
       fs.mkdirSync(distDir, { recursive: true });
@@ -219,6 +229,7 @@ describe("analyze handler", () => {
         path.join(distDir, "manifest.json"),
         JSON.stringify({ manifest_version: 3, name: "F", version: "1.0.0" }),
       );
+
       fs.writeFileSync(path.join(distDir, "background.js"), "x".repeat(1000));
 
       const parsed = JSON.parse(await analyze.handler({ projectPath: dir }));
@@ -253,21 +264,25 @@ describe("add-feature handler", () => {
     const bySlug = new Map(
       templatesSnapshot.templates.map((t) => [t.slug, t]),
     );
+
     for (const [feature, frameworks] of Object.entries(
       addFeature.FEATURE_TEMPLATE_MAP,
     )) {
       const surface = FEATURE_SURFACE[feature];
       expect(surface, `feature "${feature}" has no carrier surface`).toBeDefined();
+
       for (const [framework, slug] of Object.entries(frameworks)) {
         const template = bySlug.get(slug);
         expect(
           template,
           `${feature}/${framework} -> ${slug} not in corpus`,
         ).toBeDefined();
+
         expect(
           template!.surfaces,
           `${feature}/${framework} -> ${slug} does not carry ${surface}`,
         ).toContain(surface);
+
         if (template!.uiFramework) {
           expect(
             template!.uiFramework,
@@ -280,9 +295,11 @@ describe("add-feature handler", () => {
 
   it("plans options and devtools from the catalog's own templates", async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "extjs-addfeat-"));
+
     try {
       fs.mkdirSync(path.join(root, "src"), { recursive: true });
       fs.writeFileSync(path.join(root, "src", "manifest.json"), "{}");
+
       for (const feature of ["options", "devtools"]) {
         const parsed = JSON.parse(
           await addFeature.handler({ projectPath: root, feature }),
@@ -342,7 +359,7 @@ describe("logs handler", () => {
     ];
     fs.writeFileSync(
       path.join(dir, "logs.ndjson"),
-      lines.map((l) => JSON.stringify(l)).join("\n") + "\n",
+      `${lines.map((l) => JSON.stringify(l)).join("\n")  }\n`,
     );
 
     const all = JSON.parse(await logs.handler({ projectPath: root }));

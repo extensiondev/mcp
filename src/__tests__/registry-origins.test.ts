@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+
 import { consoleBase, consoleProjectUrl, registryBase } from "../lib/registry";
 
 const ENV_KEYS = [
@@ -14,11 +15,13 @@ describe("console/registry origin resolution", () => {
 
   beforeEach(() => {
     saved = {};
+
     for (const k of ENV_KEYS) {
       saved[k] = process.env[k];
       delete process.env[k];
     }
   });
+
   afterEach(() => {
     for (const k of ENV_KEYS) {
       if (saved[k] === undefined) delete process.env[k];
@@ -33,6 +36,7 @@ describe("console/registry origin resolution", () => {
     expect(consoleProjectUrl(ref, "builds")).toBe(
       "https://console.extension.dev/acme/widget/builds",
     );
+
     expect(registryBase()).toBe("https://registry.extension.land");
   });
 

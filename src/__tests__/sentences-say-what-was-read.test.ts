@@ -2,10 +2,11 @@
  * call observed, every hint names inputs that exist, and a count says which
  * reads it covers. Each cell failed before its fix. */
 
-import { describe, it, expect, afterEach, beforeEach } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+
+import { describe, it, expect, afterEach, beforeEach } from "vitest";
 import { WebSocketServer } from "ws";
 
 import { toMcpSpeak } from "../lib/act";
@@ -66,6 +67,7 @@ describe("102b: the empty reason is about the session only when the file is empt
     dir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-logs-empty-"));
     writeModernContract(dir, "chrome", { pid: process.pid, runId: "run-1" });
   });
+
   afterEach(() => fs.rmSync(dir, { recursive: true, force: true }));
 
   it("says a browser exit is a browser exit, not a build that never ran", () => {
@@ -95,6 +97,7 @@ describe("102a: a follow reports the broker's replay and the live window apart",
     wss = new WebSocketServer({ port: 0, path: CONTROL_WS_PATH });
     await new Promise<void>((resolve) => wss.on("listening", resolve));
   });
+
   afterEach(async () => {
     await new Promise<void>((resolve) => wss.close(() => resolve()));
     fs.rmSync(tmp, { recursive: true, force: true });
@@ -114,6 +117,7 @@ describe("102a: a follow reports the broker's replay and the live window apart",
         conn.send(JSON.stringify({ type: "log", event: { ...logEvent("background", "info", ["fresh"], { seq: 3 }), timestamp: Date.now() } }));
       }, 200);
     });
+
     const out = JSON.parse(await logs({ projectPath: tmp, browser: "chrome", follow: true, followMs: 1500 } as never));
     expect(out.value.matched).toBe(3);
     expect(out.value.replayed).toBe(2);

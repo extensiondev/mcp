@@ -1,9 +1,14 @@
-import { describe, it, expect, afterEach, vi } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+
+import { describe, it, expect, afterEach, vi } from "vitest";
+
 import { envelope } from "../lib/envelope";
 import { actFrame, cliRefusal, tabRows } from "./fixtures/engine-answers";
+
+import type * as ActModule from "../lib/act";
+import type * as CdpPortModule from "../lib/cdp-port";
 
 const actCalls: string[][] = [];
 let controlChannel: "answers" | "silent" = "answers";
@@ -25,25 +30,29 @@ let inspectReply: () => string = () =>
     value: { context: "newtab", url: "moz-extension://abc/newtab/index.html", title: "NT", summary: { bodyChildCount: 4 } },
   });
 vi.mock("../lib/act", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../lib/act")>();
+  const actual = await importOriginal<typeof ActModule>();
+
   return {
     ...actual,
     runActVerb: async (cli: string[]) => {
       actCalls.push(cli);
       if (cli.includes("--list-tabs")) return listTabsReply();
+
       return inspectReply();
     },
   };
 });
 
 vi.mock("../lib/cdp-port", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../lib/cdp-port")>();
+  const actual = await importOriginal<typeof CdpPortModule>();
+
   return { ...actual, resolveCdpPort: async () => null, resolveRdpPort: async () => null };
 });
 
 const assertTool = await import("../tools/assert");
 
 const dirs: string[] = [];
+
 function project(): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-assert-gecko-"));
   dirs.push(dir);
@@ -58,6 +67,7 @@ function project(): string {
       chrome_url_overrides: { newtab: "newtab/index.html" },
     }),
   );
+
   return dir;
 }
 
@@ -77,6 +87,7 @@ afterEach(() => {
       status: "ok",
       value: { context: "newtab", url: "moz-extension://abc/newtab/index.html", title: "NT", summary: { bodyChildCount: 4 } },
     });
+
   for (const d of dirs.splice(0)) fs.rmSync(d, { recursive: true, force: true });
 });
 

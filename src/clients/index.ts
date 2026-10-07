@@ -64,6 +64,7 @@ export function serverArgs(input: Omit<RecipeInput, "client">): string[] {
   if (input.reach !== "local" && input.project) args.push("--project", input.project);
   if (input.reach === "no-ship") args.push("--no-ship");
   if (input.reach === "local") args.push("--features=local");
+
   return args;
 }
 
@@ -127,8 +128,10 @@ export function buildRecipe(input: RecipeInput): Recipe {
         },
         login,
       };
+
     case "vscode": {
       const named = { name: SERVER_NAME, ...stdio };
+
       return {
         client: "vscode",
         command: `code --add-mcp ${shellQuote(JSON.stringify(named))}`,
@@ -145,16 +148,19 @@ export function buildRecipe(input: RecipeInput): Recipe {
         login,
       };
     }
+
     case "codex": {
       const lines = [
         `[mcp_servers.${SERVER_NAME}]`,
         `command = "npx"`,
         `args = [${args.map(tomlString).join(", ")}]`,
       ];
+
       if (envEntries.length) {
         lines.push("", `[mcp_servers.${SERVER_NAME}.env]`);
         for (const [k, v] of envEntries) lines.push(`${k} = ${tomlString(v)}`);
       }
+
       return {
         client: "codex",
         command: [
@@ -168,6 +174,7 @@ export function buildRecipe(input: RecipeInput): Recipe {
         login,
       };
     }
+
     case "json":
       return {
         client: "json",

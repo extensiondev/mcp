@@ -2,7 +2,10 @@
  * and a context the engine never reads is named as not honoured. */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
+
 import { envelope } from "../lib/envelope";
+
+import type * as ActModule from "../lib/act";
 
 const act = vi.hoisted(() => ({
   calls: [] as string[][],
@@ -10,22 +13,27 @@ const act = vi.hoisted(() => ({
   getFails: false,
 }));
 vi.mock("../lib/act", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../lib/act")>();
+  const actual = await importOriginal<typeof ActModule>();
+
   return {
     ...actual,
     runActVerb: async (cli: string[]) => {
       act.calls.push(cli);
       const key = cli[cli.indexOf("--key") + 1];
+
       if (cli[1] === "set") {
         return envelope({ ok: true, command: "extension_storage", status: "ok", value: { set: [key] } });
       }
+
       if (act.getFails) {
         return envelope({ ok: false, command: "extension_storage", status: "failed", error: { code: "E_CONTROL_CHANNEL", name: "StorageError", message: "storage.local unavailable" } });
       }
+
       return envelope({ ok: true, command: "extension_storage", status: "ok", value: key in act.stored ? { [key]: act.stored[key] } : {} });
     },
   };
 });
+
 vi.mock("../lib/session-browser", () => ({ resolveSessionBrowser: () => ({ browser: "chrome" }) }));
 
 const storage = await import("../tools/storage");

@@ -1,10 +1,13 @@
-import { describe, it, expect, vi, afterEach } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import type { ChildProcess } from "node:child_process";
 
-type SpawnedCli = import("../lib/exec").SpawnedCli;
+import { describe, it, expect, vi, afterEach } from "vitest";
+
+import type { ChildProcess } from "node:child_process";
+import type * as ExecModule from "../lib/exec";
+import type { SpawnedCli } from "../lib/exec";
+
 
 function failedSpawn(): SpawnedCli {
   const child = {
@@ -14,6 +17,7 @@ function failedSpawn(): SpawnedCli {
     on: () => child,
     unref: () => child,
   };
+
   return {
     child: child as unknown as ChildProcess,
     logPath: path.join(os.tmpdir(), "mcp-spawn-failure.log"),
@@ -23,7 +27,8 @@ function failedSpawn(): SpawnedCli {
 }
 
 vi.mock("../lib/exec", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../lib/exec")>();
+  const actual = await importOriginal<typeof ExecModule>();
+
   return {
     ...actual,
     spawnExtensionCli: () => failedSpawn(),
@@ -37,9 +42,11 @@ const { getSession, listSessionMarkers } = await import(
 );
 
 const tmpDirs: string[] = [];
+
 function tmpProject(): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-spawn-failure-"));
   tmpDirs.push(dir);
+
   return dir;
 }
 

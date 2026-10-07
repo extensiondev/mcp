@@ -1,18 +1,25 @@
-import { describe, it, expect, afterEach, vi } from "vitest";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+
+import { describe, it, expect, afterEach, vi } from "vitest";
+
 import { envelope } from "../lib/envelope";
 import { writeEvalToken } from "./fixtures/ready-contract";
 
+import type * as ActModule from "../lib/act";
+import type * as CdpPortModule from "../lib/cdp-port";
+
 const cliCalls: string[][] = [];
 vi.mock("../lib/act", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../lib/act")>();
+  const actual = await importOriginal<typeof ActModule>();
+
   return {
     ...actual,
     runActVerb: async (cli: string[]) => {
       cliCalls.push(cli);
+
       return envelope({
         ok: true,
         command: "extension_eval",
@@ -25,7 +32,8 @@ vi.mock("../lib/act", async (importOriginal) => {
 
 let cdpPort: { port: number; source: "contract" } | null = { port: 9222, source: "contract" };
 vi.mock("../lib/cdp-port", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../lib/cdp-port")>();
+  const actual = await importOriginal<typeof CdpPortModule>();
+
   return { ...actual, resolveCdpPort: async () => cdpPort };
 });
 
@@ -57,12 +65,15 @@ vi.mock("../lib/cdp", () => {
     ) {
       if (method === "Runtime.evaluate") {
         evaluations.push({ params, sessionId });
+
         return evaluateResponse();
       }
+
       return {};
     }
     disconnect() {}
   }
+
   return { CDPClient };
 });
 
@@ -71,14 +82,17 @@ const evalTool = await import("../tools/eval");
 function expectedId(distPath: string): string {
   const d = crypto.createHash("sha256").update(distPath).digest();
   let id = "";
+
   for (let i = 0; i < 16; i++) {
     id += String.fromCharCode(97 + (d[i] >> 4));
     id += String.fromCharCode(97 + (d[i] & 0x0f));
   }
+
   return id;
 }
 
 const tmpDirs: string[] = [];
+
 function project(
   manifest: Record<string, unknown>,
   browser = "chrome",
@@ -94,7 +108,9 @@ function project(
     path.join(readyDir, "ready.json"),
     JSON.stringify({ status: "ready", distPath }),
   );
+
   writeEvalToken(dir, browser);
+
   return { dir, id: expectedId(distPath) };
 }
 
@@ -120,6 +136,7 @@ afterEach(() => {
   cdpTargets = [];
   cdpPort = { port: 9222, source: "contract" };
   evaluateResponse = () => ({ result: { type: "number", value: 5 } });
+
   for (const dir of tmpDirs.splice(0)) {
     fs.rmSync(dir, { recursive: true, force: true });
   }
@@ -152,6 +169,7 @@ describe("extension_eval reaches an MV3 extension page over CDP, which the page 
       awaitPromise: true,
       userGesture: true,
     });
+
     expect(evaluations[0].params.replMode).toBeUndefined();
   });
 
@@ -213,6 +231,7 @@ describe("extension_eval reaches an MV3 extension page over CDP, which the page 
     expect(result.error.message).toContain(
       `chrome-extension://${p.id}/chrome_url_overrides/newtab.html`,
     );
+
     expect(result.hint).toContain('extension_open surface: "newtab"');
     expect(evaluations).toEqual([]);
   });
@@ -264,6 +283,7 @@ describe("extension_eval reaches an MV3 extension page over CDP, which the page 
     evaluateResponse = () => ({
       result: { type: "object", subtype: "node", description: "div#root" },
     });
+
     const node = JSON.parse(
       await evalTool.handler({
         projectPath: p.dir,

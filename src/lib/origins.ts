@@ -11,6 +11,7 @@ import { resolveOrigins, type Origins } from "@extension.dev/urls/origins";
 export function mcpOrigins(apiHint?: string): Origins {
   const www =
     String(apiHint || process.env.EXTENSION_DEV_API_URL || "").trim() || undefined;
+
   return resolveOrigins(
     {
       www,

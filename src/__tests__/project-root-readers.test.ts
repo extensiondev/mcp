@@ -1,7 +1,8 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { readLogEvents } from "../tools/logs-filter";
 import { declaredBackground, readBuiltManifest } from "../lib/project-manifest";
@@ -18,6 +19,7 @@ beforeEach(() => {
     path.join(root, "package.json"),
     JSON.stringify({ name: "mono", devDependencies: { extension: "4.1.31" } }),
   );
+
   sub = path.join(root, "Extensions", "combined");
   fs.mkdirSync(path.join(sub, "src"), { recursive: true });
   fs.writeFileSync(

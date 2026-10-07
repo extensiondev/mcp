@@ -1,8 +1,9 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   PLATFORM_HOLD_CODE,
@@ -64,6 +65,7 @@ describe("the published client had no hold awareness at all, so this file is the
     else process.env.EXTENSION_DEV_TOKEN = prevToken;
     if (prevApi === undefined) delete process.env.EXTENSION_DEV_API_URL;
     else process.env.EXTENSION_DEV_API_URL = prevApi;
+
     fs.rmSync(tmp, { recursive: true, force: true });
   });
 
@@ -82,6 +84,7 @@ describe("the published client had no hold awareness at all, so this file is the
 
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error("unreachable");
+
     expect(result.message).toContain("the sentence we wrote");
     expect(result.status).toBe(403);
   });
@@ -102,6 +105,7 @@ describe("the published client had no hold awareness at all, so this file is the
 
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error("unreachable");
+
     expect(result.held).toBe(true);
     expect(result.code).toBe(PLATFORM_HOLD_CODE);
     expect(tokens.get).not.toHaveBeenCalled();
@@ -117,6 +121,7 @@ describe("the published client had no hold awareness at all, so this file is the
       "fetch",
       vi.fn(async () => heldResponse()),
     );
+
     const out = JSON.parse(await publishHandler({}));
 
     expect(out.ok).toBe(false);
@@ -126,6 +131,7 @@ describe("the published client had no hold awareness at all, so this file is the
     expect(out.error.message).toContain(
       "extension.dev is not open to the public yet",
     );
+
     expect(out.error.message).toContain("extension_create");
     expect(out.error.message).toContain("extension_build");
     expect(out.error.message).toContain("need no account and nothing from the platform");
@@ -155,9 +161,11 @@ describe("the published client had no hold awareness at all, so this file is the
     for (const frame of frames) {
       const text = JSON.stringify(frame);
       expect(frame.status).toBe("platform-held");
+
       for (const host of HELD_HOSTS) {
         expect(text, `${frame.command} points at ${host}`).not.toContain(host);
       }
+
       expect(text).toContain("templates.extension.dev");
     }
   });
@@ -172,12 +180,14 @@ describe("the published client had no hold awareness at all, so this file is the
 
     const walk = (dir: string): string[] => {
       const out: string[] = [];
+
       for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
         const full = path.join(dir, entry.name);
         if (entry.name === "__tests__") continue;
         if (entry.isDirectory()) out.push(...walk(full));
         else if (entry.name.endsWith(".ts")) out.push(full);
       }
+
       return out;
     };
 
@@ -213,6 +223,7 @@ describe("the published client had no hold awareness at all, so this file is the
           ),
       ),
     );
+
     const out = JSON.parse(await publishHandler({}));
     expect(out.status).toBe("platform-held");
     expect(out.error.message).toContain("some other wording entirely");
@@ -228,6 +239,7 @@ describe("the published client had no hold awareness at all, so this file is the
       "fetch",
       vi.fn(async () => enroll),
     );
+
     const out = JSON.parse(await publishHandler({}));
     expect(out.status).toBe("publish-failed");
   });
@@ -242,6 +254,7 @@ describe("the published client had no hold awareness at all, so this file is the
           }),
       ),
     );
+
     const out = JSON.parse(await publishHandler({}));
     expect(out.status).toBe("publish-failed");
     expect(out.error.message).toContain("project not found");

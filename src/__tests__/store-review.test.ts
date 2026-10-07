@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { reviewDist, reviewDistReport, reviewRisksReport } from "../lib/store-review";
@@ -34,6 +35,7 @@ describe("reviewDist", () => {
       host_permissions: ["https://example.com/*"],
       background: { service_worker: "background.js" },
     });
+
     write("background.js", "chrome.storage.local.set({ a: 1 });");
     expect(codes()).toEqual([]);
   });
@@ -65,6 +67,7 @@ describe("reviewDist", () => {
     manifest({
       browser_specific_settings: { gecko: { data_collection_permissions: { required: ["none"] } } },
     });
+
     expect(codes("firefox")).not.toContain("FIREFOX_DATA_COLLECTION_MISSING");
   });
 

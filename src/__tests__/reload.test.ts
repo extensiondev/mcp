@@ -7,18 +7,23 @@
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
+
 import { actFrame } from "./fixtures/engine-answers";
+
+import type * as ActModule from "../lib/act";
 
 const act = vi.hoisted(() => ({
   calls: [] as Array<{ cli: string[]; projectPath: string; timeout: number | undefined; tool: string | undefined }>,
   reply: "" as string,
 }));
 vi.mock("../lib/act", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../lib/act")>();
+  const actual = await importOriginal<typeof ActModule>();
+
   return {
     ...actual,
     runActVerb: async (cli: string[], projectPath: string, timeout?: number, tool?: string) => {
       act.calls.push({ cli, projectPath, timeout, tool });
+
       return act.reply;
     },
   };
@@ -28,6 +33,7 @@ const session = vi.hoisted(() => ({ browser: "chrome", asked: [] as Array<string
 vi.mock("../lib/session-browser", () => ({
   resolveSessionBrowser: (_projectPath: string, explicit: string | undefined) => {
     session.asked.push(explicit);
+
     return { browser: explicit ?? session.browser, source: explicit ? "explicit" : "session" };
   },
 }));
@@ -85,6 +91,7 @@ describe("extension_reload hands the reload verb to the engine as it was asked",
       "--timeout",
       "1500",
     ]);
+
     expect(act.calls[0].timeout).toBe(1500);
     expect(session.asked).toEqual(["edge"]);
   });

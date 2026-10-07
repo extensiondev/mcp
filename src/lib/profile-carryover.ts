@@ -8,6 +8,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
+
 import { findSessionInfo } from "./process-manager";
 import {
   PERSISTED_PROFILE_DIR_NAME,
@@ -44,6 +45,7 @@ export function profileCarriesTabsOver(
   const raw = typeof profileArg === "string" ? profileArg.trim() : "";
   if (raw === SYSTEM_PROFILE_ARG) return true;
   if (raw) return holdsState(path.resolve(projectPath, raw));
+
   return holdsState(
     path.join(
       browserProfileRootDir(projectPath, browser),

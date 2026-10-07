@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+
 import {
   validateToolInput,
   inputValidationError,
@@ -188,6 +189,7 @@ describe("inputValidationError", () => {
     expect(out.value.args.optional).toEqual(
       expect.arrayContaining(["parentDir", "template", "install"]),
     );
+
     expect(out.value.args.aliases.projectName).toEqual(["name"]);
     expect(out.value.args.aliases.parentDir).toEqual(["parent", "into"]);
   });

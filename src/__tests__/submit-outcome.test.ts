@@ -1,7 +1,8 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { handler, schema } from "../tools/submit";
 import { readSubmitOutcome } from "../lib/submit-outcome";
@@ -17,17 +18,21 @@ function stubSubmit(answer: unknown | (() => never), status = 200) {
     "fetch",
     vi.fn(async (url: any) => {
       const href = String(url);
+
       if (href.endsWith("/api/cli/stores/submit")) {
         calls.push(href);
         if (typeof answer === "function") return (answer as () => never)();
+
         return new Response(
           typeof answer === "string" ? answer : JSON.stringify(answer),
           { status },
         );
       }
+
       throw new Error(`Unexpected fetch: ${href}`);
     }),
   );
+
   return calls;
 }
 
@@ -52,6 +57,7 @@ beforeEach(() => {
   ]) {
     saved[key] = process.env[key];
   }
+
   tmp = fs.mkdtempSync(path.join(os.tmpdir(), "extdev-submit-outcome-"));
   process.env.XDG_CONFIG_HOME = tmp;
   process.env.EXTENSION_DEV_API_URL = API;
@@ -61,10 +67,12 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+
   for (const [key, value] of Object.entries(saved)) {
     if (value === undefined) delete process.env[key];
     else process.env[key] = value;
   }
+
   fs.rmSync(tmp, { recursive: true, force: true });
 });
 
@@ -128,6 +136,7 @@ describe("extension_submit says submitted only for stores the platform recorded"
     stubSubmit(() => {
       throw new Error("socket hang up");
     });
+
     const out = await submit(["chrome", "firefox"]);
 
     expect(out.ok).toBe(false);
@@ -140,6 +149,7 @@ describe("extension_submit says submitted only for stores the platform recorded"
     stubSubmit(() => {
       throw new Error("socket hang up");
     });
+
     const out = await submit(["chrome"], { dryRun: true });
 
     expect(out.status).toBe("network-failed");
@@ -173,6 +183,7 @@ describe("extension_submit says submitted only for stores the platform recorded"
           ),
       ),
     );
+
     const out = await submit(["chrome", "firefox"]);
 
     expect(out.status).toBe("submit-failed");

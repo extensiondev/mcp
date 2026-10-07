@@ -1,13 +1,16 @@
-import { describe, it, expect, afterEach } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+
+import { describe, it, expect, afterEach } from "vitest";
+
 import { handler } from "../tools/doctor";
 import { pinnedCliVersion } from "../lib/exec";
 
 const previousEnvPin = process.env.EXTENSION_MCP_CLI_VERSION;
 
 const tmpDirs: string[] = [];
+
 function fakeProject(engineVersion: string): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-doctor-drift-"));
   tmpDirs.push(dir);
@@ -22,6 +25,7 @@ function fakeProject(engineVersion: string): string {
     path.join(pkgDir, "package.json"),
     JSON.stringify({ name: "extension", version: engineVersion }),
   );
+
   return dir;
 }
 
@@ -31,6 +35,7 @@ afterEach(() => {
   } else {
     process.env.EXTENSION_MCP_CLI_VERSION = previousEnvPin;
   }
+
   for (const dir of tmpDirs.splice(0)) {
     fs.rmSync(dir, { recursive: true, force: true });
   }

@@ -1,9 +1,14 @@
-import { describe, it, expect, afterEach, vi } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+
+import { describe, it, expect, afterEach, vi } from "vitest";
+
 import { envelope } from "../lib/envelope";
 import { browserFromCliArgs, writeEngineDist } from "./fixtures/engine-answers";
+
+import type * as ExecModule from "../lib/exec";
+import type * as EngineVersionModule from "../lib/engine-version";
 
 let onBuild: () => { code: number; stdout: string; stderr: string } = () => ({
   code: 0,
@@ -11,21 +16,26 @@ let onBuild: () => { code: number; stdout: string; stderr: string } = () => ({
   stderr: "",
 });
 vi.mock("../lib/exec", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../lib/exec")>();
+  const actual = await importOriginal<typeof ExecModule>();
+
   return {
     ...actual,
     runExtensionCli: async (args: string[]) => {
       const answer = onBuild();
+
       if (args[0] === "build" && answer.code === 0) {
         writeEngineDist(args[1]!, browserFromCliArgs(args));
       }
+
       return answer;
     },
     pinnedCliVersion: () => "4.1.30",
   };
 });
+
 vi.mock("../lib/engine-version", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../lib/engine-version")>();
+  const actual = await importOriginal<typeof EngineVersionModule>();
+
   return {
     ...actual,
     refusedTheOutputFlag: () => false,
@@ -36,6 +46,7 @@ vi.mock("../lib/engine-version", async (importOriginal) => {
 const build = await import("../tools/build");
 
 const dirs: string[] = [];
+
 function project(): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-build-errors-"));
   dirs.push(dir);
@@ -44,6 +55,7 @@ function project(): string {
     path.join(dir, "src", "manifest.json"),
     JSON.stringify({ manifest_version: 3, name: "F", version: "1.0.0" }),
   );
+
   return dir;
 }
 
@@ -73,11 +85,13 @@ afterEach(() => {
 describe("extension_build on a failed build carries the compiler errors", () => {
   it("reads the errors the engine stamped on the contract and points at them", async () => {
     const dir = project();
+
     onBuild = () => {
       stampContract(dir, [
         "\u001b[31mERROR\u001b[0m in ./src/App.vue: Module not found: Can't resolve '../shared/x'",
         "./src/main.ts(3,10): error TS2307: Cannot find module 'vue'",
       ]);
+
       return { code: 1, stdout: failedFrame(), stderr: "" };
     };
 

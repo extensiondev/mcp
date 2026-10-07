@@ -53,11 +53,13 @@ export function fenceUntrusted(
   mint: () => string = randomUUID,
 ): string {
   let parsed: unknown;
+
   try {
     parsed = JSON.parse(text);
   } catch {
     parsed = undefined;
   }
+
   const frame: Record<string, unknown> = isEnvelope(parsed)
     ? (parsed as unknown as Record<string, unknown>)
     : {
@@ -76,9 +78,11 @@ export function fenceUntrusted(
   const head: Record<string, unknown> = {};
   const body: Record<string, unknown> = {};
   for (const key of TRUSTED_HEAD) if (key in frame) head[key] = frame[key];
+
   for (const [key, field] of Object.entries(frame)) {
     if ((TRUSTED_HEAD as readonly string[]).includes(key)) continue;
     if (FENCE_KEYS.includes(key)) continue;
+
     body[key] = field;
   }
 
@@ -100,5 +104,6 @@ export function fenceUntrusted(
     bodyJson,
     `"untrustedEnd":${JSON.stringify(close)}`,
   ].filter(Boolean);
+
   return `{${members.join(",")}}`;
 }

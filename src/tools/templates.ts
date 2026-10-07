@@ -86,6 +86,7 @@ export async function handler(args: {
         hint: 'Call extension_templates with action: "list" to find one.',
       });
     }
+
     return readTemplateSource({ slug: args.slug, files: args.files });
   }
 

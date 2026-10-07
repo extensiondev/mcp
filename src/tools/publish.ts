@@ -47,6 +47,7 @@ export const schema = {
 
 function previewCommandsOf(value: unknown): Array<[string, string]> {
   if (!value || typeof value !== "object") return [];
+
   return Object.entries(value as Record<string, unknown>)
     .filter(
       ([browser, command]) =>
@@ -80,9 +81,11 @@ export async function handler(args: {
 }): Promise<string> {
   const credential = resolveCredential({ project: args.project });
   const token = credential.token;
+
   if (!token && args.project) {
     return fail("PublishAuthError", noStoredLoginHint(args.project), "auth-required", "E_AUTH_REQUIRED");
   }
+
   if (!token) {
     return fail(
       "PublishAuthError",
@@ -94,6 +97,7 @@ export async function handler(args: {
 
   if (args.ttlHours != null) {
     const t = Number(args.ttlHours);
+
     if (!Number.isInteger(t) || t < 1 || t > 168) {
       return fail(
         "PublishBadRequest",
@@ -134,7 +138,9 @@ export async function handler(args: {
         api: args.api,
       });
     }
+
     const code = (result.error as { code?: string }).code;
+
     if (code === "UNKNOWN_BUILD") {
       return envelope({
         ok: false,
@@ -151,8 +157,10 @@ export async function handler(args: {
         }) lists the shas it does have; omit buildSha to share the newest successful build.`,
       });
     }
+
     const projectMissing =
       code === "PROJECT_NOT_FOUND" || (code === undefined && /\(404\)/.test(result.error.message));
+
     return envelope({
       ok: false,
       command: "extension_publish",
@@ -172,6 +180,7 @@ export async function handler(args: {
   }
 
   const data = result.data as Record<string, unknown>;
+
   /* @invariant A SHARE IS A URL THE PLATFORM NAMED, OVER A BUILD IT NAMED.
      "published" used to be any 2xx: an empty body, an HTML page, and a
      share minted over a project with no successful build (the platform
@@ -194,46 +203,59 @@ export async function handler(args: {
       }) to see whether one appeared, then publish again only if it did not.`,
     });
   }
+
   let note: string | null = null;
+
   if (args.ttlHours != null && data.visibility === "public") {
     note =
       "ttlHours was ignored: this is a public project, whose share URL is its canonical public page.";
   }
+
   let buildNote: string | null = null;
 
   const ref = credential.ref;
+
   if (ref) {
     const buildsUrl = registryFileUrl(ref, "builds/index.json");
     const buildsRes = await fetchRegistryJson(buildsUrl, fetch, {
       ref,
       api: args.api,
     });
+
     if (buildsRes.ok && buildIndexShapeProblem(buildsRes.json)) {
       buildNote = `The project's build index at ${buildsUrl} answered but ${buildIndexShapeProblem(buildsRes.json)}, so buildSha, version and builtAt were not filled in from it.`;
     } else if (buildsRes.ok) {
       const items = parseBuildIndex(buildsRes.json);
+
       if (args.buildSha) {
         const pin = String(args.buildSha).toLowerCase();
         const pinned = items.find((item) => {
           const sha = item.sha.toLowerCase();
           const commit = String(item.commit ?? "").toLowerCase();
+
           return (
             sha.startsWith(pin) ||
             pin.startsWith(sha) ||
             (commit !== "" && (commit.startsWith(pin) || pin.startsWith(commit)))
           );
         });
+
         if (pinned) {
           if (data.buildSha == null) data.buildSha = pinned.sha;
+
           if (data.builtAt == null && pinned.timestamp)
-            data.builtAt = pinned.timestamp;
+            {data.builtAt = pinned.timestamp;}
+
           if (data.version == null && pinned.version)
-            data.version = pinned.version;
+            {data.version = pinned.version;}
+
           if (data.channel == null && pinned.channel)
-            data.channel = pinned.channel;
+            {data.channel = pinned.channel;}
+
           data.registryUrl = buildsUrl;
         } else {
           if (data.buildSha == null) data.buildSha = args.buildSha;
+
           data.registryUrl = buildsUrl;
           buildNote = `buildSha ${args.buildSha} is pinned but was not found in the project's registry build index, so builtAt/version/channel are not filled in from another build. The platform accepted the pin without reading its own index (it echoes the sha when the index is unreadable), so whether a build with that sha exists was not verified here.`;
         }
@@ -251,11 +273,13 @@ export async function handler(args: {
         const served = platformSha
           ? items.find((item) => item.sha.toLowerCase().startsWith(platformSha) || platformSha.startsWith(item.sha.toLowerCase()))
           : newestSuccess;
+
         if (served) {
           if (data.buildSha == null) data.buildSha = served.sha;
           if (data.builtAt == null && served.timestamp) data.builtAt = served.timestamp;
           if (data.version == null && served.version) data.version = served.version;
           if (data.channel == null && served.channel) data.channel = served.channel;
+
           data.registryUrl = buildsUrl;
           buildNote = platformSha
             ? `builtAt/version are read from the index row of build ${served.sha}, the build the platform says the link serves.`
@@ -267,11 +291,13 @@ export async function handler(args: {
       }
     }
   }
+
   data.allowance = spendNarration({
     what: "This publish",
     body: data,
     api: args.api,
   });
+
   /* @invariant The preview commands come from the PLATFORM and are relayed,
    * never rebuilt here: they carry the share token inside a registry URL, and
    * a tool that assembled its own would be a tool that could be talked into
@@ -294,6 +320,7 @@ export async function handler(args: {
   const noBuildNote = noBuild
     ? "This share serves NO build: the platform minted the link but named no build sha, which means the project has no successful build yet (or its build index could not be read). Anyone opening the link gets nothing to run. Build first (push a commit, or extension_build then a platform build), then publish again."
     : null;
+
   return envelope({
     ok: true,
     command: "extension_publish",

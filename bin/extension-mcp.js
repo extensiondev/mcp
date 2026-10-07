@@ -8,6 +8,7 @@
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
 import {createRequire} from 'node:module'
+
 import {startServer, runCli, isServerFlag, resolveServerOptions} from '../dist/module.js'
 
 const require = createRequire(import.meta.url)
@@ -34,10 +35,12 @@ const [, , cmd, ...rest] = process.argv
 
 if (cmd === undefined || isServerFlag(cmd)) {
   const resolved = resolveServerOptions(process.argv.slice(2), process.env)
+
   if (!resolved.ok) {
     process.stderr.write(`${resolved.message}\n\n${usage}`)
     process.exit(1)
   }
+
   startServer(resolved.options)
 } else if (['login', 'logout', 'whoami', 'release'].includes(cmd)) {
   runCli(cmd, rest)

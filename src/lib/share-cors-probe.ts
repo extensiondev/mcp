@@ -26,7 +26,9 @@ export interface ShareCorsVerdict {
 
 function allows(allowOrigin: string | null, origin: string): boolean {
   if (!allowOrigin) return false;
+
   const value = allowOrigin.trim();
+
   return value === "*" || value.toLowerCase() === origin.toLowerCase();
 }
 
@@ -69,6 +71,7 @@ export async function probeShareCors(options: {
   for (let hop = 0; hop < MAX_HOPS; hop++) {
     const controller = new AbortController();
     let res: Response;
+
     try {
       res = await doFetch(url, {
         method: "GET",
@@ -87,7 +90,8 @@ export async function probeShareCors(options: {
 
     const status = res.status;
     const allowOrigin = res.headers.get("access-control-allow-origin");
-    let body: unknown = undefined;
+    let body: unknown;
+
     if (status >= 400) {
       try {
         body = JSON.parse((await res.text()).slice(0, 4096));
@@ -133,6 +137,7 @@ export async function probeShareCors(options: {
 
     if (status >= 300 && status < 400) {
       const location = res.headers.get("location");
+
       if (!location) {
         return verdict({
           ok: false,
@@ -141,6 +146,7 @@ export async function probeShareCors(options: {
           reason: `${url} answered ${status} with no Location, so the download goes nowhere.`,
         });
       }
+
       url = new URL(location, url).toString();
       redirects += 1;
       continue;
@@ -161,14 +167,14 @@ export async function probeShareCors(options: {
         finalStatus: status,
         allowOrigin,
         reason:
-          `${url} answered ${status} but with ` +
-          (allowOrigin
+          `${url} answered ${status} but with ${ 
+          allowOrigin
             ? `access-control-allow-origin: ${allowOrigin}, which does not cover ${origin}`
-            : "no access-control-allow-origin header") +
-          `. A browser at ${origin} will refuse to read it, so the link opens to an error even though this fetch succeeded.` +
-          (redirects > 0
+            : "no access-control-allow-origin header" 
+          }. A browser at ${origin} will refuse to read it, so the link opens to an error even though this fetch succeeded.${ 
+          redirects > 0
             ? " The header has to be on this response, not on the redirect that led here."
-            : ""),
+            : ""}`,
       });
     }
 

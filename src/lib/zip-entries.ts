@@ -35,9 +35,11 @@ const UNREADABLE: ZipListing = { names: [], readable: false };
  */
 export function readZipEntryNames(zipPath: string): ZipListing {
   let handle: number | null = null;
+
   try {
     const size = fs.statSync(zipPath).size;
     if (size < EOCD_MIN_LENGTH) return UNREADABLE;
+
     handle = fs.openSync(zipPath, "r");
 
     const tailLength = Math.min(size, MAX_COMMENT_LENGTH + EOCD_MIN_LENGTH);
@@ -45,17 +47,20 @@ export function readZipEntryNames(zipPath: string): ZipListing {
     fs.readSync(handle, tail, 0, tailLength, size - tailLength);
 
     let eocd = -1;
+
     for (let at = tail.length - EOCD_MIN_LENGTH; at >= 0; at -= 1) {
       if (tail.readUInt32LE(at) === EOCD_SIGNATURE) {
         eocd = at;
         break;
       }
     }
+
     if (eocd < 0) return UNREADABLE;
 
     const expected = tail.readUInt16LE(eocd + 10);
     const directoryBytes = tail.readUInt32LE(eocd + 12);
     const directoryOffset = tail.readUInt32LE(eocd + 16);
+
     if (
       expected === 0xffff ||
       directoryBytes === 0xffffffff ||
@@ -65,6 +70,7 @@ export function readZipEntryNames(zipPath: string): ZipListing {
     ) {
       return UNREADABLE;
     }
+
     if (directoryBytes === 0) {
       return { names: [], readable: expected === 0 };
     }
@@ -74,18 +80,23 @@ export function readZipEntryNames(zipPath: string): ZipListing {
 
     const names: string[] = [];
     let at = 0;
+
     while (at + 46 <= directory.length) {
       if (directory.readUInt32LE(at) !== CENTRAL_SIGNATURE) return UNREADABLE;
+
       const nameLength = directory.readUInt16LE(at + 28);
       const extraLength = directory.readUInt16LE(at + 30);
       const commentLength = directory.readUInt16LE(at + 32);
       const nameStart = at + 46;
       if (nameStart + nameLength > directory.length) return UNREADABLE;
+
       names.push(
         directory.subarray(nameStart, nameStart + nameLength).toString("utf8"),
       );
+
       at = nameStart + nameLength + extraLength + commentLength;
     }
+
     return { names, readable: names.length === expected };
   } catch {
     return UNREADABLE;

@@ -48,6 +48,7 @@ export class RegistryAccessTokens {
   peek(ref: ProjectRef): string {
     const entry = this.cache.get(cacheKey(ref));
     if (!entry || entry.kind !== "fresh") return "";
+
     return entry.expiresAt - REFRESH_LEAD_SECONDS > this.nowSeconds()
       ? entry.token
       : "";
@@ -57,7 +58,9 @@ export class RegistryAccessTokens {
     const key = cacheKey(ref);
     const entry = this.cache.get(key);
     if (entry?.kind === "pending") return entry.promise;
+
     const cached = this.peek(ref);
+
     if (cached) {
       return {
         status: "ok",
@@ -69,6 +72,7 @@ export class RegistryAccessTokens {
     const promise = this.mint(ref, apiHint);
     this.cache.set(key, { kind: "pending", promise });
     const result = await promise;
+
     if (result.status === "ok") {
       this.cache.set(key, {
         kind: "fresh",
@@ -78,6 +82,7 @@ export class RegistryAccessTokens {
     } else {
       this.cache.delete(key);
     }
+
     return result;
   }
 
@@ -98,22 +103,27 @@ export class RegistryAccessTokens {
       workspace.toLowerCase() === ref.workspace.toLowerCase() &&
       project.toLowerCase() === ref.project.toLowerCase();
     let token = String(creds?.token || "").trim();
+
     if (token && creds?.workspaceSlug && creds?.projectSlug && !sameAs(creds.workspaceSlug, creds.projectSlug)) {
       token = "";
     }
+
     if (!token) {
       const env = String(process.env.EXTENSION_DEV_TOKEN || "").trim();
+
       if (env) {
         const claims = readTokenClaims(env);
         if (!claims || sameAs(claims.workspace, claims.project)) token = env;
       }
     }
+
     if (!token) return { status: "no-credential" };
 
     const check = safeApiBase(resolveApiBase(apiHint || creds?.api), apiHint);
     if (!check.ok) return { status: "denied", message: check.message };
 
     let res: Response;
+
     try {
       res = await this.fetchImpl(`${check.base}/api/access-grant`, {
         method: "POST",
@@ -136,26 +146,33 @@ export class RegistryAccessTokens {
 
     if (res.status === 400) {
       let visibility: string;
+
       try {
         visibility = String(((await res.clone().json()) as { visibility?: unknown })?.visibility ?? "");
       } catch {
         visibility = "";
       }
+
       if (visibility && visibility !== "private") return { status: "public" };
+
       return {
         status: "denied",
         httpStatus: 400,
         message: "access-grant answered 400 without saying the project is public",
       };
     }
+
     if (!res.ok) {
       let said: { message?: unknown; reason?: unknown; code?: unknown } = {};
+
       try {
         said = (await res.clone().json()) as typeof said;
       } catch {
         said = {};
       }
+
       const detail = [said.reason, said.code, said.message].filter((v) => typeof v === "string" && v).join(": ");
+
       return {
         status: "denied",
         httpStatus: res.status,
@@ -163,16 +180,21 @@ export class RegistryAccessTokens {
         ...(typeof said.reason === "string" ? { reason: said.reason } : {}),
       };
     }
+
     let data: { token?: unknown; expiresAt?: unknown };
+
     try {
       data = JSON.parse(await res.text());
     } catch {
       return { status: "denied", message: "access-grant did not return JSON" };
     }
+
     const minted = String(data?.token || "").trim();
+
     if (!minted) {
       return { status: "denied", message: "access-grant returned no token" };
     }
+
     return {
       status: "ok",
       token: minted,
@@ -185,9 +207,11 @@ export const defaultRegistryAccessTokens = new RegistryAccessTokens();
 
 export function withAccessToken(url: string, token: string): string {
   if (!token) return url;
+
   try {
     const u = new URL(url);
     u.searchParams.set("t", token);
+
     return u.toString();
   } catch {
     return url;

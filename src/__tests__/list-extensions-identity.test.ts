@@ -1,15 +1,19 @@
-import { describe, it, expect, afterEach, vi } from "vitest";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+
+import { describe, it, expect, afterEach, vi } from "vitest";
+
+import type * as CdpPortModule from "../lib/cdp-port";
 
 
 let cdpTargets: Array<{ type: string; url: string }> = [];
 let domainInfo: Record<string, { name: string; version: string }> = {};
 
 vi.mock("../lib/cdp-port", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../lib/cdp-port")>();
+  const actual = await importOriginal<typeof CdpPortModule>();
+
   return { ...actual, resolveCdpPort: async () => ({ port: 9222, source: "contract" as const }) };
 });
 
@@ -26,12 +30,15 @@ vi.mock("../lib/cdp", () => {
       if (method === "Extensions.getExtensionInfo") {
         const info = domainInfo[String(params?.extensionId)];
         if (!info) throw new Error("Extension not found");
+
         return { extensionInfo: info };
       }
+
       return {};
     }
     disconnect() {}
   }
+
   return { CDPClient };
 });
 
@@ -40,10 +47,12 @@ const listExtensions = await import("../tools/list-extensions");
 function expectedId(distPath: string): string {
   const d = crypto.createHash("sha256").update(distPath).digest();
   let id = "";
+
   for (let i = 0; i < 16; i++) {
     id += String.fromCharCode(97 + (d[i] >> 4));
     id += String.fromCharCode(97 + (d[i] & 0x0f));
   }
+
   return id;
 }
 
@@ -57,6 +66,7 @@ function swTarget(id: string): { type: string; url: string } {
 }
 
 const tmpDirs: string[] = [];
+
 function project(
   contract: Record<string, unknown> = {},
   opts: { distManifest?: Record<string, unknown> | null } = {},
@@ -79,6 +89,7 @@ function project(
       ...contract,
     }),
   );
+
   if (opts.distManifest !== undefined && opts.distManifest !== null) {
     fs.mkdirSync(distPath, { recursive: true });
     fs.writeFileSync(
@@ -86,12 +97,14 @@ function project(
       JSON.stringify(opts.distManifest),
     );
   }
+
   return { dir, distPath, id: expectedId(distPath) };
 }
 
 afterEach(() => {
   cdpTargets = [];
   domainInfo = {};
+
   for (const dir of tmpDirs.splice(0)) {
     fs.rmSync(dir, { recursive: true, force: true });
   }
@@ -140,6 +153,7 @@ describe("list-extensions own-extension identity", () => {
       version: "2.1.0",
       source: "session-contract",
     });
+
     expect(own.note).toBeUndefined();
   });
 

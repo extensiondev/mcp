@@ -1,15 +1,18 @@
-import { describe, it, expect, afterEach } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+
+import { describe, it, expect, afterEach } from "vitest";
 
 import * as wait from "../tools/wait";
 import { deadReadySession } from "../lib/session-browser";
 
 const dirs: string[] = [];
+
 function tmpProject(): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-wait-start-"));
   dirs.push(dir);
+
   return dir;
 }
 
@@ -35,6 +38,7 @@ describe("extension_wait on a start session says at once that nothing will attac
       port: 8080,
       compiledAt: new Date().toISOString(),
     });
+
     const started = Date.now();
 
     const result = JSON.parse(
@@ -59,6 +63,7 @@ describe("extension_wait on a start session says at once that nothing will attac
       port: null,
       compiledAt: new Date().toISOString(),
     });
+
     const started = Date.now();
 
     const result = JSON.parse(

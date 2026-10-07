@@ -117,24 +117,30 @@ export function parseArtifactRef(input: string): string | null {
   if (ARTIFACT_ID.test(raw)) return raw;
 
   let parsed: URL | null;
+
   try {
     parsed = new URL(raw);
   } catch {
     parsed = null;
   }
+
   if (parsed) {
     const fromQuery = parsed.searchParams.get("preview");
     if (fromQuery && ARTIFACT_ID.test(fromQuery.trim())) return fromQuery.trim();
+
     const segments = parsed.pathname.split("/").filter(Boolean);
+
     for (let i = segments.length - 1; i >= 0; i -= 1) {
       const raw = segments[i];
       if (!raw) continue;
+
       const segment = decodeURIComponent(raw);
       if (ARTIFACT_ID.test(segment)) return segment;
     }
   }
 
   const loose = ARTIFACT_ID_CANDIDATE.exec(raw);
+
   return loose && ARTIFACT_ID.test(loose[0]) ? loose[0] : null;
 }
 
@@ -149,13 +155,17 @@ export function parseArtifactRef(input: string): string | null {
  */
 export function wwwRevokeUrl(value: string): string {
   let parsed: URL;
+
   try {
     parsed = new URL(value);
   } catch {
     return value;
   }
+
   if (parsed.hostname.toLowerCase() !== "extension.dev") return value;
+
   parsed.hostname = "www.extension.dev";
+
   return parsed.toString();
 }
 
@@ -172,6 +182,7 @@ function authError(name: string): ArtifactsOutcome<never> {
 
 async function readBody(res: Response): Promise<Record<string, unknown>> {
   const text = await res.text();
+
   try {
     return JSON.parse(text) as Record<string, unknown>;
   } catch {
@@ -190,6 +201,7 @@ export async function listArtifacts(options: {
   if (!token) return authError("SharesAuthError");
 
   const apiCheck = safeApiBase(resolveApiBase(options.api), options.api);
+
   if (!apiCheck.ok) {
     return {
       ok: false,
@@ -203,6 +215,7 @@ export async function listArtifacts(options: {
 
   const doFetch = options.fetchImpl ?? fetch;
   let res: Response;
+
   try {
     res = await doFetch(url.toString(), {
       headers: {
@@ -222,10 +235,13 @@ export async function listArtifacts(options: {
   }
 
   const data = await readBody(res);
+
   if (sawPlatformHold(res, data)) {
     return heldOutcome("SharesHeld", res, data, options.api);
   }
+
   if (res.status === 401) return authError("SharesAuthError");
+
   if (!res.ok) {
     return {
       ok: false,
@@ -251,6 +267,7 @@ export async function listArtifacts(options: {
       },
     };
   }
+
   const rows = data.artifacts as ListedArtifact[];
   const valid = rows.filter((artifact) => artifact && typeof (artifact as { artifactId?: unknown }).artifactId === "string");
   const malformedRows = rows.length - valid.length;
@@ -299,6 +316,7 @@ export async function revokeArtifact(options: {
   if (!token) return authError("SharesAuthError");
 
   const apiCheck = safeApiBase(resolveApiBase(options.api), options.api);
+
   if (!apiCheck.ok) {
     return {
       ok: false,
@@ -312,6 +330,7 @@ export async function revokeArtifact(options: {
   const approvalId = String(options.approvalId || "").trim();
   const doFetch = options.fetchImpl ?? fetch;
   let res: Response;
+
   try {
     res = await doFetch(url, {
       method: "DELETE",
@@ -333,9 +352,11 @@ export async function revokeArtifact(options: {
   }
 
   const data = await readBody(res);
+
   if (sawPlatformHold(res, data)) {
     return heldOutcome("SharesHeld", res, data, options.api);
   }
+
   if (res.status === 401) {
     return {
       ok: false,
@@ -349,6 +370,7 @@ export async function revokeArtifact(options: {
       },
     };
   }
+
   /* @invariant The platform's code is read before its status: a 404 with
      APPROVAL_NOT_FOUND is a spent or unknown approval over a share that is
      still live, not a share that is gone. */
@@ -365,6 +387,7 @@ export async function revokeArtifact(options: {
       },
     };
   }
+
   if (res.status === 404) {
     return {
       ok: false,
@@ -375,6 +398,7 @@ export async function revokeArtifact(options: {
       },
     };
   }
+
   if (!res.ok) {
     return {
       ok: false,

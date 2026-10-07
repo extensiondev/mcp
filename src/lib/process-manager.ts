@@ -10,6 +10,7 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+
 import type { ProcessInfo } from "./types";
 
 const sessions = new Map<string, ProcessInfo>();
@@ -34,11 +35,14 @@ export function sessionStateDir(): string {
 export function directoryNotCreatedYet(dir: string): boolean {
   const target = path.resolve(dir);
   let probe = target;
+
   for (;;) {
     const stat = fs.statSync(probe, { throwIfNoEntry: false });
     if (stat) return probe !== target && stat.isDirectory();
+
     const parent = path.dirname(probe);
     if (parent === probe) return false;
+
     probe = parent;
   }
 }
@@ -53,6 +57,7 @@ function markerPath(projectPath: string, browser: string): string {
     .update(sessionKey(projectPath, browser))
     .digest("hex")
     .slice(0, 16);
+
   return path.join(markerDir(), `${digest}.json`);
 }
 
@@ -62,6 +67,7 @@ export function removeSessionMarker(
   pid?: number,
 ): void {
   const file = markerPath(projectPath, browser);
+
   if (pid !== undefined) {
     try {
       const parsed = JSON.parse(fs.readFileSync(file, "utf8"));
@@ -69,6 +75,7 @@ export function removeSessionMarker(
     } catch {
     }
   }
+
   try {
     fs.rmSync(file, { force: true });
   } catch {
@@ -80,24 +87,30 @@ export function removeSessionMarker(
    torn record. */
 export function readSessionMarkers(): { markers: ProcessInfo[]; unreadable: string | null } {
   let files: string[];
+
   try {
     files = fs.readdirSync(markerDir());
   } catch (err) {
     const code = (err as { code?: string })?.code;
     const absent = code === "ENOENT" && directoryNotCreatedYet(markerDir());
+
     return {
       markers: [],
       unreadable: absent ? null : `${markerDir()}: ${err instanceof Error ? err.message : String(err)}`,
     };
   }
+
   const out: ProcessInfo[] = [];
   const torn: string[] = [];
+
   for (const file of files) {
     if (!file.endsWith(".json")) continue;
+
     try {
       const parsed = JSON.parse(
         fs.readFileSync(path.join(markerDir(), file), "utf8"),
       );
+
       if (
         typeof parsed?.projectPath === "string" &&
         typeof parsed?.browser === "string"
@@ -108,6 +121,7 @@ export function readSessionMarkers(): { markers: ProcessInfo[]; unreadable: stri
       torn.push(file);
     }
   }
+
   return {
     markers: out,
     unreadable: torn.length ? `${torn.length} marker file${torn.length === 1 ? "" : "s"} under ${markerDir()} could not be parsed (${torn.slice(0, 3).join(", ")})` : null,
@@ -130,6 +144,7 @@ function writeMarkerBestEffort(info: ProcessInfo, registeredAtMs: number): strin
         registeredAt: new Date(registeredAtMs).toISOString(),
       }),
     );
+
     return null;
   } catch (error) {
     /* @invariant A marker that did not land is said, never swallowed. The
@@ -146,6 +161,7 @@ export function registerSession(info: ProcessInfo): string | null {
   const at = prior && prior.pid === info.pid ? prior.at : Date.now();
   registrationStamps.set(key, { pid: info.pid, at });
   sessions.set(key, info);
+
   return writeMarkerBestEffort(info, at);
 }
 
@@ -155,7 +171,9 @@ export function sessionSinceMs(
 ): number | null {
   const stamp = registrationStamps.get(sessionKey(projectPath, browser));
   if (stamp) return stamp.at;
+
   const resolved = path.resolve(projectPath);
+
   for (const marker of listSessionMarkers()) {
     if (
       path.resolve(marker.projectPath) !== resolved ||
@@ -163,13 +181,16 @@ export function sessionSinceMs(
     ) {
       continue;
     }
+
     const registeredAt = (marker as ProcessInfo & { registeredAt?: string })
       .registeredAt;
+
     if (typeof registeredAt === "string") {
       const parsed = Date.parse(registeredAt);
       if (Number.isFinite(parsed)) return parsed;
     }
   }
+
   return null;
 }
 
@@ -186,7 +207,9 @@ export function findSessionInfo(
 ): ProcessInfo | undefined {
   const inMemory = sessions.get(sessionKey(projectPath, browser));
   if (inMemory) return inMemory;
+
   const resolved = path.resolve(projectPath);
+
   for (const marker of listSessionMarkers()) {
     if (
       path.resolve(marker.projectPath) === resolved &&
@@ -195,6 +218,7 @@ export function findSessionInfo(
       return marker;
     }
   }
+
   return undefined;
 }
 
@@ -205,6 +229,7 @@ export function removeSession(
 ): void {
   const key = sessionKey(projectPath, browser);
   if (pid !== undefined && sessions.get(key)?.pid !== pid) return;
+
   sessions.delete(key);
   registrationStamps.delete(key);
 }

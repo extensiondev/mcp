@@ -199,6 +199,7 @@ export const DEFAULT_SERVER_OPTIONS: ServerOptions = {
 
 const truthy = (raw: string | undefined): boolean => {
   const value = String(raw ?? "").trim().toLowerCase();
+
   return value !== "" && value !== "0" && value !== "false" && value !== "off";
 };
 
@@ -219,6 +220,7 @@ export function resolveServerOptions(
   let rawFeatures = env[FEATURES_ENV];
   let noShip = truthy(env[NO_SHIP_ENV]);
   let project = String(env[PROJECT_PIN_ENV] || "").trim().toLowerCase();
+
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     if (arg === "--no-ship") noShip = true;
@@ -228,19 +230,23 @@ export function resolveServerOptions(
     else if (arg.startsWith("--project=")) project = arg.slice("--project=".length).trim().toLowerCase();
     else return { ok: false, message: `Unknown flag "${arg}".` };
   }
+
   if (project && !isProjectRef(project)) {
     return {
       ok: false,
       message: `--project takes "<workspace>/<project>", got "${project}".`,
     };
   }
+
   const pin = project ? { project } : {};
+
   if (rawFeatures === undefined || rawFeatures.trim() === "") {
     return {
       ok: true,
       options: { features: [...DEFAULT_SERVER_OPTIONS.features], noShip, ...pin },
     };
   }
+
   const names = rawFeatures
     .split(",")
     .map((name) => name.trim().toLowerCase())
@@ -248,13 +254,16 @@ export function resolveServerOptions(
   const unknown = names.filter(
     (name) => !FEATURE_GROUPS.includes(name as FeatureGroup),
   );
+
   if (unknown.length) {
     return {
       ok: false,
       message: `Unknown feature group ${unknown.map((n) => `"${n}"`).join(", ")}. Use ${FEATURE_GROUPS.join(" or ")}, comma-separated.`,
     };
   }
+
   const features = FEATURE_GROUPS.filter((group) => names.includes(group));
+
   return { ok: true, options: { features, noShip, ...pin } };
 }
 
@@ -262,6 +271,7 @@ export function isToolListed(name: string, options: ServerOptions): boolean {
   const policy = TOOL_POLICY[name];
   if (!policy) return false;
   if (!options.features.includes(policy.group)) return false;
+
   return !(options.noShip && policy.ships === "always");
 }
 
@@ -272,6 +282,7 @@ export function disabledToolEnvelope(
 ): string | null {
   const policy = TOOL_POLICY[name];
   if (!policy) return null;
+
   if (!options.features.includes(policy.group)) {
     return envelope({
       ok: false,
@@ -285,9 +296,11 @@ export function disabledToolEnvelope(
       hint: `Add ${policy.group} to --features (or ${FEATURES_ENV}) in this server's MCP config, or ask the user to.`,
     });
   }
+
   const ships =
     policy.ships === "always" ||
     (typeof policy.ships === "function" && policy.ships(args));
+
   if (options.noShip && ships) {
     return envelope({
       ok: false,
@@ -301,6 +314,7 @@ export function disabledToolEnvelope(
       hint: `Dry runs, previews without share, and listing still work. To ship, the user removes --no-ship (or ${NO_SHIP_ENV}) from this server's MCP config.`,
     });
   }
+
   return null;
 }
 
@@ -312,6 +326,7 @@ export function pinProjectArgs(
 ): { args: Args } | { refused: string } {
   const pinned = options.project;
   if (!pinned) return { args };
+
   /* @invariant A LIST IS HELD TO THE PIN NAME BY NAME, AND THE PIN IS NEVER
    * INJECTED BESIDE ONE. A pinned server acts on one project, so a batch that
    * names any other project is refused here exactly as a single call naming
@@ -334,8 +349,10 @@ export function pinProjectArgs(
     const others = names.filter(
       (entry) => !entry.includes("/") || !sameProject(entry, pinned),
     );
+
     if (others.length > 0 || entries.length === 0) {
       const shown = others.map((entry) => entry || "(an unnamed entry)");
+
       return {
         refused: envelope({
           ok: false,
@@ -352,9 +369,12 @@ export function pinProjectArgs(
         }),
       };
     }
+
     return { args };
   }
+
   const named = typeof args.project === "string" ? args.project : "";
+
   if (named && !sameProject(named, pinned)) {
     return {
       refused: envelope({
@@ -370,8 +390,10 @@ export function pinProjectArgs(
       }),
     };
   }
+
   const properties = (inputSchema.properties ?? {}) as Record<string, unknown>;
   const statusOnly = name === "extension_auth" && args.action === "status";
   if (named || statusOnly || !("project" in properties)) return { args };
+
   return { args: { ...args, project: pinned } };
 }

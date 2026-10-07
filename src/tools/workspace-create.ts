@@ -94,6 +94,7 @@ function pendingEnvelope(start: {
   const message = hasCompleteLink
     ? `Open ${complete} and approve creating the workspace (code ${start.userCode} is pre-filled), then call ${COMMAND} again with this deviceCode and the same arguments. If the page asks for a code, enter ${start.userCode} at ${start.verificationUri}. The GitHub account that approves becomes the workspace owner.`
     : `Open ${start.verificationUri}, enter code ${start.userCode}, approve creating the workspace, then call ${COMMAND} again with this deviceCode and the same arguments. The GitHub account that approves becomes the workspace owner.`;
+
   return envelope({
     ok: true,
     command: COMMAND,
@@ -119,6 +120,7 @@ export async function handler(args: {
   const workspace = String(args.workspace || "")
     .trim()
     .toLowerCase();
+
   if (!SLUG_PATTERN.test(workspace)) {
     return fail(
       "BadRequest",
@@ -129,12 +131,15 @@ export async function handler(args: {
   }
 
   const apiCheck = safeApiBase(resolveApiBase(args.api), args.api);
+
   if (!apiCheck.ok) {
     return fail("ConfigError", apiCheck.message, "bad-request", "E_BAD_REQUEST");
   }
+
   const apiBase = apiCheck.base;
 
   let config;
+
   try {
     config = await fetchLoginConfig(apiBase);
   } catch (err: any) {
@@ -149,8 +154,10 @@ export async function handler(args: {
   let deviceCode = String(args.deviceCode || "").trim();
   let interval = 5;
   let budgetMs = RESUME_BUDGET_MS;
+
   if (!deviceCode) {
     let start;
+
     try {
       start = await requestDeviceCode({
         apiBase,
@@ -163,6 +170,7 @@ export async function handler(args: {
       const laneClosed = laneClosedByServer(err, "CLI_WORKSPACE_CREATE_DISABLED");
       const serverMessage =
         typeof err?.serverMessage === "string" ? err.serverMessage.trim() : "";
+
       return fail(
         "CreateStartError",
         laneClosed
@@ -174,6 +182,7 @@ export async function handler(args: {
         laneClosed ? laneClosedHint() : undefined,
       );
     }
+
     deviceCode = start.deviceCode;
     interval = start.interval;
     budgetMs = FIRST_CALL_BUDGET_MS;
@@ -185,9 +194,11 @@ export async function handler(args: {
       interval,
       budgetMs,
     });
+
     if (!early.ok && early.reason === "pending") {
       return pendingEnvelope(start);
     }
+
     return finishFromPoll(early, {
       apiBase,
       workspace,
@@ -205,6 +216,7 @@ export async function handler(args: {
     interval,
     budgetMs,
   });
+
   return finishFromPoll(poll, {
     apiBase,
     workspace,
@@ -237,6 +249,7 @@ async function finishFromPoll(
         hint: `Still waiting for approval at ${ctx.verificationUri}. Approve there, then call ${COMMAND} again with this same deviceCode.`,
       });
     }
+
     if (poll.reason === "denied") {
       if (poll.code === "WORKSPACE_EXISTS") {
         return envelope({
@@ -247,6 +260,7 @@ async function finishFromPoll(
           hint: `Run extension_project_create with project '${ctx.workspace}/<project>' instead.`,
         });
       }
+
       return fail(
         "CreateDenied",
         `Creating the workspace was denied at extension.dev/device${poll.code ? ` (${poll.code})` : ""}${poll.message ? `: ${poll.message}` : "."}`,
@@ -254,6 +268,7 @@ async function finishFromPoll(
         "E_AUTH_DENIED",
       );
     }
+
     if (poll.reason === "expired") {
       return fail(
         "CreateExpired",
@@ -262,6 +277,7 @@ async function finishFromPoll(
         "E_AUTH_EXPIRED",
       );
     }
+
     return fail(
       "CreateAuthError",
       poll.message || "Device authorization failed.",
@@ -275,6 +291,7 @@ async function finishFromPoll(
   const workspaceSlug = String(grant.workspaceSlug || "")
     .trim()
     .toLowerCase();
+
   /* @invariant The grant must be the WORKSPACE kind for the WORKSPACE asked.
    * A project token or a project provisioning grant answering this poll
    * means the record was not ours, and sending either to the create endpoint
@@ -287,6 +304,7 @@ async function finishFromPoll(
       "E_AUTH_FAILED",
     );
   }
+
   if (String(grant.tokenKind || "") !== "workspace-provisioning") {
     return envelope({
       ok: false,
@@ -315,6 +333,7 @@ async function finishFromPoll(
       hint: `Do not create it again blind: the grant is spent, and the first request may have landed. Look for ${ctx.workspace} in the console at ${consoleBase()}. If it is there, go on to extension_project_create with project '${ctx.workspace}/<project>'; only if it is not, call extension_workspace_create again.`,
     });
   let res: Response;
+
   try {
     res = await fetch(url, {
       method: "POST",
@@ -337,6 +356,7 @@ async function finishFromPoll(
   }
 
   let text: string;
+
   try {
     text = await res.text();
   } catch (err: any) {
@@ -345,7 +365,9 @@ async function finishFromPoll(
       "E_NETWORK",
     );
   }
+
   let data: Record<string, unknown>;
+
   try {
     data = JSON.parse(text);
   } catch {
@@ -354,6 +376,7 @@ async function finishFromPoll(
 
   if (!res.ok) {
     const code = String(data.code || "");
+
     if (sawPlatformHold(res, data)) {
       return platformHoldEnvelope({
         command: COMMAND,
@@ -362,6 +385,7 @@ async function finishFromPoll(
         value: { workspace: ctx.workspace },
       });
     }
+
     if (code === "CLI_WORKSPACE_CREATE_DISABLED") {
       return fail(
         "CreateClosed",
@@ -371,6 +395,7 @@ async function finishFromPoll(
         laneClosedHint(),
       );
     }
+
     if (code === "WORKSPACE_EXISTS" || code === "WORKSPACE_SLUG_RESERVED") {
       return envelope({
         ok: false,
@@ -386,12 +411,14 @@ async function finishFromPoll(
             : "Pick a different slug and run the tool again.",
       });
     }
+
     if (answerIsUnknownOutcome(res.status, data)) {
       return unconfirmed(
         `The create request for workspace ${ctx.workspace} got a ${res.status} with no platform code, which is an answer from in front of the platform while the create may still be running`,
         "E_PLATFORM",
       );
     }
+
     return fail(
       "CreateError",
       `create failed (${res.status}): ${String(
@@ -403,14 +430,17 @@ async function finishFromPoll(
   }
 
   const createdAnswer = readCreatedWorkspace(data);
+
   if (!createdAnswer.ok) {
     return unconfirmed(
       `The platform answered ${res.status} for workspace ${ctx.workspace} but ${createdAnswer.why}`,
       "E_PLATFORM",
     );
   }
+
   const finalSlug = createdAnswer.slug;
   const owner = String(data.ownerGithubLogin || grant.ownerGithubLogin || "");
+
   return envelope({
     ok: true,
     command: COMMAND,

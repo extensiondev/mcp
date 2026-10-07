@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+
 import { describe, expect, it } from "vitest";
 
 import { tools as ALL_TOOLS } from "../index";
@@ -72,6 +73,7 @@ describe("the tool count is derived, never typed", () => {
   it("never names a tool the server no longer registers", () => {
     for (const surface of COUNT_BEARING_FILES) {
       const text = read(surface);
+
       for (const retired of RETIRED_TOOL_NAMES) {
         expect(
           new RegExp(`${retired}\\b`).test(text),

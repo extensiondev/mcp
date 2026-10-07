@@ -8,12 +8,14 @@
 
 import fs from "node:fs";
 import path from "node:path";
+
 import { extensionCreate } from "extension-create";
+import { wwwNewPath } from "@extension.dev/urls/paths";
+
 import { exactVersion } from "../lib/exec";
 import { mcpOrigins } from "../lib/registry";
 import { captureTemplateSeed } from "../lib/funnel-telemetry";
 import { templateCatalogUrl } from "../lib/template-artifact-source";
-import { wwwNewPath } from "@extension.dev/urls/paths";
 import { envelope } from "../lib/envelope";
 
 const COMMAND = "extension_create";
@@ -25,6 +27,7 @@ function scaffoldEnginePin(projectPath: string): string | null {
     );
     const spec =
       pkg?.devDependencies?.extension ?? pkg?.dependencies?.extension ?? null;
+
     return typeof spec === "string" ? spec : null;
   } catch {
     return null;
@@ -39,9 +42,11 @@ function detectPackageManager(projectPath: string): string {
     ["yarn.lock", "yarn"],
     ["package-lock.json", "npm"],
   ];
+
   for (const [lockfile, pm] of byLockfile) {
     if (fs.existsSync(path.join(projectPath, lockfile))) return pm;
   }
+
   return "npm";
 }
 
@@ -86,22 +91,28 @@ export function findScaffoldManifest(projectPath: string): string | null {
     const candidate = path.join(projectPath, rel);
     if (fs.existsSync(candidate)) return candidate;
   }
+
   const queue: Array<{ dir: string; depth: number }> = [{ dir: projectPath, depth: 0 }];
+
   while (queue.length) {
     const current = queue.shift() as { dir: string; depth: number };
     let entries: fs.Dirent[];
+
     try {
       entries = fs.readdirSync(current.dir, { withFileTypes: true });
     } catch {
       continue;
     }
+
     for (const entry of entries) {
       if (entry.isFile() && entry.name === "manifest.json") return path.join(current.dir, entry.name);
+
       if (entry.isDirectory() && current.depth < MANIFEST_SEARCH_DEPTH && !MANIFEST_SEARCH_SKIP.has(entry.name)) {
         queue.push({ dir: path.join(current.dir, entry.name), depth: current.depth + 1 });
       }
     }
   }
+
   return null;
 }
 
@@ -121,6 +132,7 @@ export async function handler(args: {
   if (process.env.GIT_ASKPASS === undefined) process.env.GIT_ASKPASS = "";
 
   const logLines: string[] = [];
+
   const capture =
     (stream: "log" | "error") =>
     (...parts: any[]) => {
@@ -130,6 +142,7 @@ export async function handler(args: {
         .trim();
       if (line) logLines.push(stream === "error" ? `[error] ${line}` : line);
     };
+
   const logTail = (max = 20): string[] => logLines.slice(-max);
 
   /* @invariant THE PROJECT'S OWN NAME IS NOT A NETWORK ERROR. The scaffolder
@@ -141,23 +154,29 @@ export async function handler(args: {
     const noise = [args.projectName, projectInput, path.resolve(projectInput), args.parentDir ? path.resolve(args.parentDir) : ""]
       .filter((part) => part.length > 0)
       .sort((a, b) => b.length - a.length);
+
     return noise.reduce((acc, part) => acc.split(part).join(" "), text);
   };
+
   const looksTransient = (err?: unknown): boolean => {
     const message = err instanceof Error ? err.message : err === undefined ? "" : String(err);
     const blob = scrubbed([message, ...logLines].join("\n")).toLowerCase();
+
     return /timed out|timeout|etimedout|econnreset|rate limit|\b429\b|network|could not resolve host|terminal prompts disabled|authentication failed|early eof|rpc failed|remote end hung up/.test(
       blob,
     );
   };
+
   const gitBefore = fs.existsSync(path.join(path.resolve(projectInput), ".git"));
   /* @invariant Only a directory this call created fresh may ever be wiped:
      the scaffolder accepts pre-existing directories (dotfiles, LICENSE,
      node_modules, .git), and rmSync on one deletes files the tool never
      created. */
   const preExisting = fs.existsSync(projectInput);
+
   const cleanPartial = (): void => {
     if (preExisting) return;
+
     try {
       if (args.parentDir && fs.existsSync(projectInput)) {
         fs.rmSync(projectInput, { recursive: true, force: true });
@@ -165,6 +184,7 @@ export async function handler(args: {
     } catch {
     }
   };
+
   const attempt = () =>
     extensionCreate(projectInput, {
       template: args.template ?? "typescript",
@@ -203,12 +223,15 @@ export async function handler(args: {
         });
 
   let result: Awaited<ReturnType<typeof extensionCreate>>;
+
   try {
     result = await attempt();
   } catch (err1) {
     if (!looksTransient(err1)) return failure(err1, false);
+
     logLines.push("[retry] transient template-download failure; retrying once");
     cleanPartial();
+
     try {
       result = await attempt();
     } catch (err2) {
@@ -222,6 +245,7 @@ export async function handler(args: {
      monorepo template keeps it at packages/extension/src/manifest.json and
      used to be called incomplete. */
   const manifestPath = findScaffoldManifest(result.projectPath);
+
   if (!manifestPath) {
     return envelope({
       ok: false,

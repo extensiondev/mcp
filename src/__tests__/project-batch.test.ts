@@ -65,6 +65,7 @@ describe("parseProjectBatch mirrors the platform's list rules", () => {
   it("refuses a second workspace and names both", () => {
     const out = parseProjectBatch(["acme/app", "globex/tool"]);
     expect(out.ok).toBe(false);
+
     if (!out.ok) {
       expect(out.message).toContain("globex");
       expect(out.message).toContain("acme");
@@ -141,6 +142,7 @@ describe("readBatchCapability", () => {
         batchOnboarding: { createProjectsPerApproval: 10, loginProjectsPerApproval: 20 },
       }),
     ).toEqual({ createProjectsPerApproval: 10, loginProjectsPerApproval: 20 });
+
     expect(
       readBatchCapability({
         batchOnboarding: { createProjectsPerApproval: 4, loginProjectsPerApproval: 7 },
@@ -165,11 +167,13 @@ describe("readBatchCapability", () => {
       createProjectsPerApproval: 10,
       loginProjectsPerApproval: 20,
     });
+
     expect(
       readBatchCapability({
         batchOnboarding: { createProjectsPerApproval: "x", loginProjectsPerApproval: -1 },
       }),
     ).toEqual({ createProjectsPerApproval: 10, loginProjectsPerApproval: 20 });
+
     expect(
       readBatchCapability({
         batchOnboarding: { createProjectsPerApproval: 999, loginProjectsPerApproval: 999 },

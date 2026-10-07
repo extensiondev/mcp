@@ -1,12 +1,16 @@
-import { describe, it, expect, afterEach, vi } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
+import { describe, it, expect, afterEach, vi } from "vitest";
+
 import snapshot from "../lib/templates-meta.snapshot.json";
 
+import type * as TemplatesCacheModule from "../lib/templates-cache";
+
 vi.mock("../lib/templates-cache", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../lib/templates-cache")>();
+  const actual = await importOriginal<typeof TemplatesCacheModule>();
+
   return {
     ...actual,
     listTemplates: async () =>
@@ -20,16 +24,19 @@ vi.mock("../lib/templates-cache", async (importOriginal) => {
 const manifestValidate = await import("../tools/manifest-validate");
 
 const dirs: string[] = [];
+
 function project(manifest: Record<string, unknown>, files: string[] = []): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-validate-gecko-"));
   dirs.push(dir);
   fs.mkdirSync(path.join(dir, "src"), { recursive: true });
   fs.writeFileSync(path.join(dir, "src", "manifest.json"), JSON.stringify(manifest));
+
   for (const rel of files) {
     const full = path.join(dir, rel);
     fs.mkdirSync(path.dirname(full), { recursive: true });
     fs.writeFileSync(full, "");
   }
+
   return dir;
 }
 

@@ -77,6 +77,7 @@ const FABRICATION_SENTINEL = [0, 0, 0];
 function isValidChromeVersion(version: string): boolean {
   const parts = version.split(".");
   if (parts.length < 1 || parts.length > 4) return false;
+
   return parts.every(
     (part) => /^(0|[1-9]\d{0,4})$/.test(part) && Number(part) <= 65535,
   );
@@ -100,6 +101,7 @@ function coerceInput(raw: unknown): {
       "Theme manifest must be a JSON object with a `theme` block.",
     );
   }
+
   const obj = raw as Record<string, unknown>;
   const manifest =
     obj.manifest && typeof obj.manifest === "object"
@@ -112,6 +114,7 @@ function coerceInput(raw: unknown): {
         manifest.colors || manifest.tints || manifest.images
         ? (manifest as unknown as ChromeThemeManifestTheme)
         : null;
+
   return { manifest, theme: themeBlock };
 }
 
@@ -120,9 +123,11 @@ export async function handler(args: {
   manifestPath?: string;
 }): Promise<string> {
   let raw: unknown;
+
   if (args.manifestPath) {
     const abs = path.resolve(args.manifestPath);
     let text: string;
+
     try {
       text = await fs.readFile(abs, "utf8");
     } catch {
@@ -137,6 +142,7 @@ export async function handler(args: {
         },
       });
     }
+
     try {
       raw = JSON.parse(text);
     } catch (err) {
@@ -169,6 +175,7 @@ export async function handler(args: {
   }
 
   let coerced: ReturnType<typeof coerceInput>;
+
   try {
     coerced = coerceInput(raw);
   } catch (err) {
@@ -188,6 +195,7 @@ export async function handler(args: {
      manifest, or one with a misspelled `theme` key, used to resolve to `{}`
      and read `headless-clean`. */
   const manifest = coerced.manifest;
+
   if (coerced.theme === null) {
     return envelope({
       ok: false,
@@ -201,6 +209,7 @@ export async function handler(args: {
       hint: "A Chrome theme is a manifest with a `theme` object holding colors, tints, images or properties. Check the key's spelling.",
     });
   }
+
   const theme = coerced.theme;
 
   const findings: Finding[] = [];
@@ -212,6 +221,7 @@ export async function handler(args: {
   const versionValid = version.length > 0 && isValidChromeVersion(version);
   const grammarErrors: string[] = [];
   if (!nameValid) grammarErrors.push("name must be a non-empty string");
+
   if (!versionValid) {
     grammarErrors.push(
       `version "${version}" is not a Chrome version (1-4 integers 0-65535, e.g. "1.0")`,
@@ -235,7 +245,9 @@ export async function handler(args: {
       detail: `Chrome discards ${slot}: ${reason}`,
     });
   }
+
   const imageKeys = new Set<string>(CHROME_THEME_IMAGE_KEYS);
+
   for (const key of Object.keys(declaredImages)) {
     if (!imageKeys.has(key)) {
       findings.push({
@@ -255,7 +267,9 @@ export async function handler(args: {
       });
     }
   }
+
   const tintKeys = new Set<string>(CHROME_THEME_TINT_KEYS);
+
   for (const key of Object.keys(declaredTints)) {
     if (!tintKeys.has(key)) {
       findings.push({
@@ -275,7 +289,9 @@ export async function handler(args: {
       });
     }
   }
+
   const propKeys = new Set<string>(CHROME_THEME_PROPERTY_KEYS);
+
   for (const key of Object.keys(declaredProps)) {
     if (!propKeys.has(key)) {
       findings.push({

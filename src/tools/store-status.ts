@@ -7,6 +7,7 @@
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
 import { ConsoleProjectPage } from "@extension.dev/urls/paths";
+
 import {
   consoleProjectUrl,
   fetchRegistryJson,
@@ -48,6 +49,7 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 
 function str(value: unknown): string | undefined {
   const text = String(value ?? "").trim();
+
   return text || undefined;
 }
 
@@ -69,6 +71,7 @@ function submissionView(row: Record<string, unknown>): SubmissionView {
   if (buildSha) view.buildSha = buildSha;
   if (storeSubmissionId) view.storeSubmissionId = storeSubmissionId;
   if (failureReason) view.failureReason = failureReason;
+
   return view;
 }
 
@@ -77,18 +80,24 @@ export function latestSubmissionsByStore(
 ): Record<string, SubmissionView> {
   const list = (json as { submissions?: unknown[] } | null)?.submissions;
   const out: Record<string, { at: number; view: SubmissionView }> = {};
+
   for (const raw of Array.isArray(list) ? list : []) {
     if (!isPlainObject(raw)) continue;
+
     const store = str(raw.store);
     if (!store) continue;
+
     const at = Date.parse(String(raw.submittedAt || raw.updatedAt || ""));
     const stamp = Number.isFinite(at) ? at : 0;
+
     if (!out[store] || stamp >= out[store].at) {
       out[store] = { at: stamp, view: submissionView(raw) };
     }
   }
+
   const flat: Record<string, SubmissionView> = {};
   for (const [store, entry] of Object.entries(out)) flat[store] = entry.view;
+
   return flat;
 }
 
@@ -109,6 +118,7 @@ export function normalizeStoresStatus(json: unknown): NormalizedStoresStatus {
   if (isPlainObject(base.reviews)) {
     for (const [store, raw] of Object.entries(base.reviews)) {
       if (!isPlainObject(raw)) continue;
+
       out.reviews[store] = {
         status: str(raw.status),
         version: str(raw.version),
@@ -121,14 +131,18 @@ export function normalizeStoresStatus(json: unknown): NormalizedStoresStatus {
   const lastPoll = isPlainObject(base.lastPoll) ? base.lastPoll : null;
   const looksLikeLegacyPoll =
     !lastPoll && (base.kind === "store_status" || Array.isArray(base.updates));
+
   if (lastPoll) {
     out.lastPollAt = str(lastPoll.timestamp);
   } else if (looksLikeLegacyPoll) {
     out.lastPollAt = str(base.updatedAt);
+
     for (const raw of Array.isArray(base.updates) ? base.updates : []) {
       if (!isPlainObject(raw)) continue;
+
       const store = str(raw.store);
       if (!store || out.reviews[store]) continue;
+
       out.reviews[store] = {
         status: str(raw.status),
         version: str(raw.version),
@@ -159,6 +173,7 @@ function fail(
 
 function healthReadAtNote(doc: unknown): string {
   const at = String((doc as { updatedAt?: unknown } | null)?.updatedAt ?? "").trim();
+
   return at ? ` (as of ${at})` : " (the health reading carries no date)";
 }
 
@@ -166,8 +181,10 @@ export function contradictoryRef(args: { workspace?: string; project?: string })
   const workspace = String(args.workspace ?? "").trim();
   const project = String(args.project ?? "").trim();
   if (!workspace || !project.includes("/")) return null;
+
   const named = project.split("/")[0] ?? "";
   if (named.toLowerCase() === workspace.toLowerCase()) return null;
+
   return `workspace '${workspace}' and project '${project}' name different workspaces; pass one of them, or project as '<workspace>/<project>' alone.`;
 }
 
@@ -177,6 +194,7 @@ export async function readStores(args: {
   api?: string;
 }): Promise<string> {
   const ref = resolveProjectRef(args);
+
   if (!ref) {
     return fail(
       "StoreStatusInputError",
@@ -207,6 +225,7 @@ export async function readStores(args: {
   const heldRead = [healthRes, statusRes, submissionsRes].find(
     (res) => !res.ok && res.held === true,
   );
+
   if (heldRead && !heldRead.ok) {
     return platformHoldEnvelope({
       command: "extension_release_status",
@@ -243,6 +262,7 @@ export async function readStores(args: {
     : {};
 
   const statusLastStore = str(status.lastSubmission?.store);
+
   if (statusLastStore && !submissionsByStore[statusLastStore] && status.lastSubmission) {
     submissionsByStore[statusLastStore] = submissionView(status.lastSubmission);
   }
@@ -260,6 +280,7 @@ export async function readStores(args: {
       ? Boolean(healthRow)
       : "unknown";
     const row: Record<string, unknown> = { store, configured };
+
     if (healthRow) {
       row.health = {
         ok: healthRow.ok === true,
@@ -267,14 +288,19 @@ export async function readStores(args: {
         message: str(healthRow.message),
       };
     }
+
     const submission = submissionsByStore[store];
+
     if (submission && Object.keys(submission).length > 0) {
       row.lastSubmission = submission;
     }
+
     const review = status.reviews[store];
+
     if (review && Object.values(review).some(Boolean)) {
       row.review = review;
     }
+
     return row;
   });
 
@@ -284,6 +310,7 @@ export async function readStores(args: {
     const submission = row.lastSubmission as SubmissionView | undefined;
     const review = row.review as ReviewView | undefined;
     let head: string;
+
     if (row.configured === "unknown") {
       head = `${store}: configuration unknown (stores/health.json is unreadable)`;
     } else if (row.configured === false) {
@@ -295,7 +322,9 @@ export async function readStores(args: {
     } else {
       head = `${store}: configured, credentials healthy${healthReadAtNote(healthRes.ok ? healthRes.json : null)}`;
     }
+
     const tail: string[] = [];
+
     if (submission) {
       tail.push(
         `last submission${submission.version ? ` v${submission.version}` : ""} ${
@@ -304,6 +333,7 @@ export async function readStores(args: {
           submission.failureReason ? ` (${submission.failureReason})` : ""
         }`,
       );
+
       if (submission.storeUrl) tail.push(`listing ${submission.storeUrl}`);
     } else if (row.configured === true) {
       tail.push(
@@ -312,11 +342,13 @@ export async function readStores(args: {
           : "submissions unknown: stores/submissions.json could not be read",
       );
     }
+
     if (review?.status) {
       tail.push(
         `review ${review.status}${review.checkedAt ? ` (checked ${review.checkedAt})` : ""}`,
       );
     }
+
     return tail.length > 0 ? `${head}; ${tail.join("; ")}` : head;
   });
 

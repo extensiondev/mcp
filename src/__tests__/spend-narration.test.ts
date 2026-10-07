@@ -12,8 +12,10 @@ import { handler as submit } from "../tools/submit";
 import { handler as projectCreate } from "../tools/project-create";
 import { promoteAnswer, submitAnswer } from "./fixtures/platform-answers";
 
+import type * as CdpPortModule from "../lib/cdp-port";
+
 vi.mock("../lib/cdp-port", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../lib/cdp-port")>()),
+  ...(await importOriginal<typeof CdpPortModule>()),
   resolveCdpPort: async () => null,
   resolveRdpPort: async () => null,
 }));
@@ -32,6 +34,7 @@ function expectNarrated(allowance: any, what: string) {
   expect(allowance.spent).toBe(
     `${what} ${ALLOWANCE_PHRASE}.`,
   );
+
   expect(allowance.remains).toBeTruthy();
   expect(allowance.wall).toContain("/pricing");
 }
@@ -61,10 +64,12 @@ describe("every spending lane counts the allowance out loud in its result", () =
   afterEach(() => {
     global.fetch = origFetch;
     vi.restoreAllMocks();
+
     for (const key of KEYS) {
       if (saved[key] === undefined) delete process.env[key];
       else process.env[key] = saved[key];
     }
+
     fs.rmSync(tmp, { recursive: true, force: true });
   });
 
@@ -74,9 +79,11 @@ describe("every spending lane counts the allowance out loud in its result", () =
       path.join(dir, "manifest.json"),
       JSON.stringify({ manifest_version: 3, name: "Spend Ext", version: "1.0.0" }),
     );
+
     process.env.EXTENSION_DEV_API_URL = "https://www.extension.dev";
     global.fetch = (async (input: any, init: any) => {
       const url = String(input);
+
       if (init?.method === "POST") {
         return jsonResponse(
           {
@@ -91,9 +98,11 @@ describe("every spending lane counts the allowance out loud in its result", () =
           201,
         );
       }
+
       if (url.includes("/__preview/fetch")) {
         return new Response("not here", { status: 404 });
       }
+
       if (url.endsWith("/source.zip")) {
         return new Response(null, {
           status: 200,
@@ -103,8 +112,10 @@ describe("every spending lane counts the allowance out loud in its result", () =
           },
         });
       }
+
       throw new Error(`unrouted ${url}`);
     }) as unknown as typeof fetch;
+
     try {
       const out = JSON.parse(
         await previewWeb({
@@ -130,6 +141,7 @@ describe("every spending lane counts the allowance out loud in its result", () =
         shareUrl: "https://userland.extension.dev/acme/app",
         visibility: "public",
       })) as unknown as typeof fetch;
+
     const out = JSON.parse(await publish({}));
     expect(out.ok).toBe(true);
     expectNarrated(out.value.allowance, "This publish");
@@ -144,6 +156,7 @@ describe("every spending lane counts the allowance out loud in its result", () =
           allowance: { used: 9, limit: 100 },
         }),
       )) as unknown as typeof fetch;
+
     const out = JSON.parse(
       await promote({ buildId: "a1b2c3d", channel: "stable" }),
     );
@@ -157,6 +170,7 @@ describe("every spending lane counts the allowance out loud in its result", () =
   it("narrates a real submission and stays silent on a dry run", async () => {
     global.fetch = (async () =>
       jsonResponse(submitAnswer(["chrome"]))) as unknown as typeof fetch;
+
     const real = JSON.parse(
       await submit({ browsers: ["chrome"], buildSha: "a1b2c3d", dryRun: false }),
     );
@@ -165,6 +179,7 @@ describe("every spending lane counts the allowance out loud in its result", () =
 
     global.fetch = (async () =>
       jsonResponse({ ok: true, message: "preflight ok", buildId: "a1b2c3d" })) as unknown as typeof fetch;
+
     const dry = JSON.parse(
       await submit({ browsers: ["chrome"], buildSha: "a1b2c3d" }),
     );
@@ -176,6 +191,7 @@ describe("every spending lane counts the allowance out loud in its result", () =
     const FUTURE = Math.floor(Date.now() / 1000) + 900;
     global.fetch = (async (input: any) => {
       const url = String(input);
+
       if (url.endsWith("/api/cli/login/config")) {
         return jsonResponse({
           deviceCodeUrl: "/api/cli/device/code",
@@ -183,6 +199,7 @@ describe("every spending lane counts the allowance out loud in its result", () =
           verificationUri: "https://extension.dev/device",
         });
       }
+
       if (url.endsWith("/api/cli/device/token")) {
         return jsonResponse({
           token: "provision-token",
@@ -193,6 +210,7 @@ describe("every spending lane counts the allowance out loud in its result", () =
           tokenKind: "provisioning",
         });
       }
+
       if (url.endsWith("/api/cli/projects/create")) {
         return jsonResponse({
           success: true,
@@ -204,8 +222,10 @@ describe("every spending lane counts the allowance out loud in its result", () =
           initialBuild: { dispatched: true },
         });
       }
+
       throw new Error(`unrouted ${url}`);
     }) as unknown as typeof fetch;
+
     const out = JSON.parse(
       await projectCreate({
         project: "acme/ghost-app",

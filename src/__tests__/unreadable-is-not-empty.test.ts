@@ -2,31 +2,39 @@
  * why, never reported as an empty list that sends the agent after the wrong
  * fix. Each cell here failed before its fix. */
 
-import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+
+import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
+
 import { envelope } from "../lib/envelope";
 import { writeEvalToken } from "./fixtures/ready-contract";
+
+import type * as CdpPortModule from "../lib/cdp-port";
+import type * as ActModule from "../lib/act";
 
 const act = vi.hoisted(() => ({
   calls: [] as string[][],
   reply: ((_cli: string[]) => JSON.stringify({ ok: true, value: {} })) as (cli: string[]) => string,
 }));
 vi.mock("../lib/act", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../lib/act")>();
+  const actual = await importOriginal<typeof ActModule>();
+
   return {
     ...actual,
     runActVerb: async (cli: string[]) => {
       act.calls.push(cli);
+
       return act.reply(cli);
     },
   };
 });
 
 vi.mock("../lib/cdp-port", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../lib/cdp-port")>();
+  const actual = await importOriginal<typeof CdpPortModule>();
+
   return { ...actual, resolveCdpPort: async () => ({ port: 9222, source: "contract" as const }) };
 });
 
@@ -42,9 +50,11 @@ vi.mock("../lib/cdp", () => {
     static async discoverTargets() {
       cdp.discoverCalls += 1;
       if (cdp.discoverThrows) throw new Error(cdp.discoverThrows);
+
       if (cdp.discoverThrowsFromCall !== null && cdp.discoverCalls >= cdp.discoverThrowsFromCall) {
         throw new Error("socket hang up during the poll");
       }
+
       return cdp.targets;
     }
     static async discoverBrowserWsUrl() {
@@ -59,6 +69,7 @@ vi.mock("../lib/cdp", () => {
     async connect() {}
     async attachToTarget(id: string) {
       if (cdp.attachThrows) throw new Error(cdp.attachThrows);
+
       return `session-${id}`;
     }
     async enableDomains() {}
@@ -72,16 +83,21 @@ vi.mock("../lib/cdp", () => {
           ...cdp.targets,
           { id: "dt", type: "page", url: "devtools://devtools/bundled/devtools_app.html?targetType=tab", title: "DevTools" },
         ];
+
         return { targetId: "dt" };
       }
+
       if (method === "Target.createTarget") {
         cdp.targets = [...cdp.targets, { id: "created", type: "page", url: "about:blank" }];
+
         return { targetId: "created" };
       }
+
       return {};
     }
     disconnect() {}
   }
+
   return { CDPClient };
 });
 
@@ -94,11 +110,14 @@ const evalTool = await import("../tools/eval");
 const open = await import("../tools/open");
 
 const tmpDirs: string[] = [];
+
 function tmpDir(prefix: string): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
   tmpDirs.push(dir);
+
   return dir;
 }
+
 const savedSessionDir = process.env.EXTENSION_MCP_SESSION_DIR;
 beforeEach(() => {
   act.calls.length = 0;
@@ -109,21 +128,26 @@ beforeEach(() => {
   cdp.attachThrows = null;
   cdp.targets = [];
 });
+
 afterEach(() => {
   if (savedSessionDir === undefined) delete process.env.EXTENSION_MCP_SESSION_DIR;
   else process.env.EXTENSION_MCP_SESSION_DIR = savedSessionDir;
+
   for (const dir of tmpDirs.splice(0)) fs.rmSync(dir, { recursive: true, force: true });
 });
 
 function expectedId(distPath: string): string {
   const d = crypto.createHash("sha256").update(distPath).digest();
   let id = "";
+
   for (let i = 0; i < 16; i++) {
     id += String.fromCharCode(97 + (d[i] >> 4));
     id += String.fromCharCode(97 + (d[i] & 0x0f));
   }
+
   return id;
 }
+
 function chromeProject(manifest: Record<string, unknown>): { dir: string; id: string } {
   const dir = tmpDir("mcp-unreadable-");
   fs.mkdirSync(path.join(dir, "src"), { recursive: true });
@@ -135,6 +159,7 @@ function chromeProject(manifest: Record<string, unknown>): { dir: string; id: st
   fs.mkdirSync(readyDir, { recursive: true });
   fs.writeFileSync(path.join(readyDir, "ready.json"), JSON.stringify({ status: "ready", distPath }));
   writeEvalToken(dir, "chrome");
+
   return { dir, id: expectedId(distPath) };
 }
 
@@ -161,8 +186,10 @@ describe("session markers and carrier records", () => {
       if (String(target) === file || String(target).startsWith(file + path.sep)) {
         throw Object.assign(new Error(`ENOENT: no such file or directory, scandir '${file}'`), { code: "ENOENT" });
       }
+
       return (realReaddir as (...a: unknown[]) => unknown)(target, ...rest);
     }) as typeof fs.readdirSync);
+
     const read = processManager.readSessionMarkers();
     expect(read.markers).toEqual([]);
     expect(read.unreadable).toContain(file);
@@ -205,6 +232,7 @@ describe("bridge tab polls", () => {
         : cli[0] === "eval"
           ? JSON.stringify({ ok: true, value: { tabId: 3 } })
           : envelope({ ok: false, command: "extension_open", status: "failed", error: { code: "E_NO_SESSION", message: "No active control channel found for firefox." } });
+
     const out = JSON.parse(await bridgeTabs.navigateToUrlViaBridge("/p", "firefox", "https://b.test/", 600));
     expect(out.ok).toBe(false);
     expect(out.status).toBe("navigation-unconfirmed");
@@ -217,6 +245,7 @@ describe("bridge tab polls", () => {
       cli[0] === "navigate"
         ? JSON.stringify({ ok: true, command: "navigate", status: "ok", value: { tabId: 7, url: "https://a.test/", created: false } })
         : envelope({ ok: false, command: "extension_open", status: "failed", error: { code: "E_NO_SESSION", message: "No active control channel found for firefox." } });
+
     const out = JSON.parse(await bridgeTabs.navigateToUrlViaBridge("/p", "firefox", "https://a.test/", 600));
     expect(out.status).toBe("navigation-unconfirmed");
     expect(out.error.message).toMatch(/in tab 7, but the tab list could not be read/);
@@ -235,6 +264,7 @@ describe("devtools opener", () => {
     });
     expect(outcome.opened).toBe(false);
     if (outcome.opened) return;
+
     expect(outcome.stage).toBe("frontend");
     expect(outcome.reason).toMatch(/Target closed.*after the frontend step/);
   });

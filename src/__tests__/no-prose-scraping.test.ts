@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+
 import { describe, expect, it } from "vitest";
 
 const srcDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -38,14 +39,17 @@ const EXEMPT = new Map<string, string>([
 
 const walk = (dir: string): string[] => {
   const out: string[] = [];
+
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     const full = path.join(dir, entry.name);
+
     if (entry.isDirectory()) {
       out.push(...walk(full));
     } else if (entry.name.endsWith(".ts")) {
       out.push(full);
     }
   }
+
   return out;
 };
 

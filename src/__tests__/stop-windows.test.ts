@@ -1,8 +1,10 @@
-import { describe, it, expect, afterAll } from "vitest";
 import { spawn } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+
+import { describe, it, expect, afterAll } from "vitest";
+
 import * as stop from "../tools/stop";
 import { registerSession, removeSession } from "../lib/process-manager";
 
@@ -15,12 +17,14 @@ process.env.EXTENSION_MCP_SESSION_DIR = sessionDir;
 afterAll(() => {
   if (previousSessionDir === undefined) delete process.env.EXTENSION_MCP_SESSION_DIR;
   else process.env.EXTENSION_MCP_SESSION_DIR = previousSessionDir;
+
   fs.rmSync(sessionDir, { recursive: true, force: true });
 });
 
 function isAlive(pid: number): boolean {
   try {
     process.kill(pid, 0);
+
     return true;
   } catch {
     return false;
@@ -29,10 +33,13 @@ function isAlive(pid: number): boolean {
 
 async function waitFor(check: () => boolean, budgetMs: number): Promise<boolean> {
   const deadline = Date.now() + budgetMs;
+
   while (Date.now() < deadline) {
     if (check()) return true;
+
     await new Promise((r) => setTimeout(r, 100));
   }
+
   return check();
 }
 
@@ -63,6 +70,7 @@ describe("extension_stop on a real Windows host", () => {
       });
       const parentPid = parent.pid!;
       let childPid = 0;
+
       try {
         expect(await waitFor(() => fs.existsSync(childPidFile), 10_000)).toBe(true);
         childPid = Number(fs.readFileSync(childPidFile, "utf8"));
@@ -78,6 +86,7 @@ describe("extension_stop on a real Windows host", () => {
         expect(result.value.survivorsUnverified).toBeUndefined();
       } finally {
         removeSession(projectPath, "chrome");
+
         for (const pid of [childPid, parentPid]) {
           if (pid && isAlive(pid)) {
             try {
@@ -86,6 +95,7 @@ describe("extension_stop on a real Windows host", () => {
             }
           }
         }
+
         fs.rmSync(projectPath, { recursive: true, force: true });
       }
     },

@@ -1,17 +1,25 @@
-import { describe, it, expect, afterEach, vi } from "vitest";
 import vm from "node:vm";
+
+import { describe, it, expect, afterEach, vi } from "vitest";
+
 import { envelope } from "../lib/envelope";
+
 import type { RdpTab } from "../lib/rdp";
+import type * as ActModule from "../lib/act";
+import type * as CdpPortModule from "../lib/cdp-port";
+import type * as RdpModule from "../lib/rdp";
 
 const calls: string[][] = [];
 let respond: () => string = () => JSON.stringify({ ok: true });
 
 vi.mock("../lib/act", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../lib/act")>();
+  const actual = await importOriginal<typeof ActModule>();
+
   return {
     ...actual,
     runActVerb: async (cli: string[]) => {
       calls.push(cli);
+
       return respond();
     },
   };
@@ -19,7 +27,8 @@ vi.mock("../lib/act", async (importOriginal) => {
 
 let rdpPort: number | null = 9222;
 vi.mock("../lib/cdp-port", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../lib/cdp-port")>();
+  const actual = await importOriginal<typeof CdpPortModule>();
+
   return {
     ...actual,
     resolveRdpPort: async () =>
@@ -32,7 +41,8 @@ let openTabs: RdpTab[] = [];
 let rdpFails = false;
 
 vi.mock("../lib/rdp", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../lib/rdp")>();
+  const actual = await importOriginal<typeof RdpModule>();
+
   return {
     ...actual,
     rdpEvaluateInTab: async (
@@ -43,6 +53,7 @@ vi.mock("../lib/rdp", async (importOriginal) => {
       rdpCalls.push({ expression: options.expression, picked });
       if (rdpFails) throw new Error("RDP connect timed out after 10000ms");
       if (!picked) return { ok: false, name: "TargetNotFound", message: "no open tab matches" };
+
       return {
         ok: true,
         value: { context: "page", url: picked.url, title: "panel", summary: { htmlLength: 199 } },
@@ -147,6 +158,7 @@ describe("dom_snapshot of a page inside the extension on Gecko", () => {
       browser: "firefox",
       url: "https://example.com/",
     });
+
     respond = () => JSON.stringify({ ok: true, value: { url: PANEL } });
     await domSnapshot.handler({ projectPath: "/p", browser: "firefox", url: PANEL });
 
@@ -190,6 +202,7 @@ describe("the snapshot built over the protocol", () => {
       "openShadowRoots",
       "bodyChildCount",
     ]);
+
     expect(snap.summary.htmlLength).toBe(html.length);
     expect(snap.summary.extensionRootCount).toBe(1);
   });

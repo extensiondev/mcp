@@ -15,18 +15,21 @@ function respond(
 
 function router(
   routes: Record<string, () => Response>,
-): { impl: typeof fetch; seen: { url: string; origin: string | null }[] } {
-  const seen: { url: string; origin: string | null }[] = [];
+): { impl: typeof fetch; seen: Array<{ url: string; origin: string | null }> } {
+  const seen: Array<{ url: string; origin: string | null }> = [];
   const impl = (async (input: any, init: any) => {
     const url = String(input);
     seen.push({
       url,
       origin: new Headers(init?.headers ?? {}).get("origin"),
     });
+
     const route = routes[url];
     if (!route) throw new Error(`unrouted ${url}`);
+
     return route();
   }) as unknown as typeof fetch;
+
   return { impl, seen };
 }
 

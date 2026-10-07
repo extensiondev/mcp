@@ -36,6 +36,7 @@ export async function askServerIdentity(args: {
     () => controller.abort(),
     args.timeoutMs ?? DEFAULT_TIMEOUT_MS,
   );
+
   try {
     const res = await fetchImpl(
       `${args.apiBase.replace(/\/+$/, "")}/api/cli/whoami`,
@@ -47,21 +48,26 @@ export async function askServerIdentity(args: {
         signal: controller.signal,
       },
     );
+
     if (res.status === 200) {
       const data = (await res.json().catch(() => null)) as {
         login?: unknown;
         live?: unknown;
       } | null;
       const login = String(data?.login || "").trim();
+
       if (!login) {
         return {
           kind: "unavailable",
           detail: "the server answered 200 without a login",
         };
       }
+
       return { kind: "confirmed", login, live: data?.live === true };
     }
+
     if (res.status === 401) return { kind: "refused" };
+
     return {
       kind: "unavailable",
       detail: `the server answered ${res.status}, which is not a verdict on this credential`,

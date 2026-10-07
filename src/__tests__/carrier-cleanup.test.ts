@@ -1,7 +1,8 @@
-import { afterEach, describe, expect, it } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+
+import { afterEach, describe, expect, it } from "vitest";
 
 import {
   CARRIER_DIR_NAME,
@@ -30,17 +31,20 @@ const tmpDirs: string[] = [];
 function project(): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-carrier-clean-"));
   tmpDirs.push(dir);
+
   return dir;
 }
 
 function withCarrier(): string {
   const dir = project();
   expect(materializeCarrier(dir, "chrome").loaded).toBe(true);
+
   return dir;
 }
 
 afterEach(() => {
   uninstallCarrierExitCleanup();
+
   for (const dir of tmpDirs.splice(0)) {
     forgetCarrier(dir);
     fs.rmSync(dir, { recursive: true, force: true });
@@ -56,6 +60,7 @@ describe("a carrier this tool placed stays recognisable without its marker", () 
       ours: true,
       how: "payload",
     });
+
     const removal = removeCarrier(dir);
     expect(removal.removed).toBe(true);
     expect(removal.note).toContain(CARRIER_EXTENSION_ID);
@@ -119,12 +124,14 @@ describe("the carrier is written down so something can still find it later", () 
     expect(rememberedCarriers().map((p) => path.resolve(p))).toContain(
       path.resolve(dir),
     );
+
     expect(carriersPlacedHere()).toContain(path.resolve(dir));
 
     removeCarrier(dir);
     expect(rememberedCarriers().map((p) => path.resolve(p))).not.toContain(
       path.resolve(dir),
     );
+
     expect(carriersPlacedHere()).not.toContain(path.resolve(dir));
   });
 
@@ -134,6 +141,7 @@ describe("the carrier is written down so something can still find it later", () 
     expect(rememberedCarriers().map((p) => path.resolve(p))).toContain(
       path.resolve(dir),
     );
+
     removeCarrier(dir);
     expect(rememberedCarriers().map((p) => path.resolve(p))).not.toContain(
       path.resolve(dir),
@@ -173,8 +181,11 @@ describe("the server dying takes the carriers with it", () => {
 
   it("removes what this process placed when the server is signalled", () => {
     const dir = withCarrier();
+
     const keepAlive = () => {};
+
     process.on("SIGTERM", keepAlive);
+
     try {
       installCarrierExitCleanup();
       const ours = ourListeners("SIGTERM").filter((l) => l !== keepAlive);
@@ -191,7 +202,9 @@ describe("the server dying takes the carriers with it", () => {
 
   it("hands the signal back once nothing else is listening", () => {
     const keepAlive = () => {};
+
     process.on("SIGTERM", keepAlive);
+
     try {
       installCarrierExitCleanup();
       const before = process.listenerCount("SIGTERM");
@@ -225,8 +238,11 @@ describe("the server dying takes the carriers with it", () => {
   it("never throws when the project is already gone", () => {
     const dir = withCarrier();
     fs.rmSync(dir, { recursive: true, force: true });
+
     const keepAlive = () => {};
+
     process.on("SIGTERM", keepAlive);
+
     try {
       installCarrierExitCleanup();
       const ours = ourListeners("SIGTERM").filter((l) => l !== keepAlive);

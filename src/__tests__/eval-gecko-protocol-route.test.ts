@@ -1,9 +1,15 @@
-import { describe, it, expect, afterEach, vi } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+
+import { describe, it, expect, afterEach, vi } from "vitest";
+
 import { envelope } from "../lib/envelope";
+
 import type { RdpTab } from "../lib/rdp";
+import type * as ActModule from "../lib/act";
+import type * as CdpPortModule from "../lib/cdp-port";
+import type * as RdpModule from "../lib/rdp";
 
 type Call = { cli: string[]; expression: string };
 const calls: Call[] = [];
@@ -11,13 +17,15 @@ let respond: (call: Call, index: number) => string = () =>
   envelope({ ok: true, command: "extension_eval", status: "ok", value: 1 });
 
 vi.mock("../lib/act", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../lib/act")>();
+  const actual = await importOriginal<typeof ActModule>();
+
   return {
     ...actual,
     runActVerb: async (cli: string[]) => {
       const at = cli.indexOf("--");
       const call = { cli, expression: at === -1 ? "" : cli[at + 1] };
       calls.push(call);
+
       return respond(call, calls.length - 1);
     },
   };
@@ -25,7 +33,8 @@ vi.mock("../lib/act", async (importOriginal) => {
 
 let rdpPort: number | null = 9222;
 vi.mock("../lib/cdp-port", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../lib/cdp-port")>();
+  const actual = await importOriginal<typeof CdpPortModule>();
+
   return {
     ...actual,
     resolveCdpPort: async () => null,
@@ -40,7 +49,8 @@ let openTabs: RdpTab[] = [];
 let rdpAnswer: (picked: RdpTab) => unknown = () => ({ ok: true, value: "over-protocol" });
 
 vi.mock("../lib/rdp", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../lib/rdp")>();
+  const actual = await importOriginal<typeof RdpModule>();
+
   return {
     ...actual,
     rdpEvaluateInTab: async (
@@ -50,7 +60,9 @@ vi.mock("../lib/rdp", async (importOriginal) => {
       const picked = options.select(openTabs);
       rdpCalls.push({ port, expression: options.expression, picked });
       if (!picked) return { ok: false, name: "TargetNotFound", message: "no open tab matches" };
+
       const answer = rdpAnswer(picked) as Record<string, unknown>;
+
       return answer.ok === true
         ? { ...answer, tab: { url: String(picked.url), title: String(picked.title ?? "") } }
         : answer;
@@ -61,12 +73,14 @@ vi.mock("../lib/rdp", async (importOriginal) => {
 const evalTool = await import("../tools/eval");
 
 const dirs: string[] = [];
+
 function project(manifest: Record<string, unknown>): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-eval-gecko-route-"));
   dirs.push(dir);
   const dist = path.join(dir, "dist", "firefox");
   fs.mkdirSync(dist, { recursive: true });
   fs.writeFileSync(path.join(dist, "manifest.json"), JSON.stringify(manifest));
+
   return dir;
 }
 
@@ -303,6 +317,7 @@ describe("a page inside the extension that the manifest declares as no surface",
   it("says the debugger port did not answer instead of 'matches none of the surface documents'", async () => {
     const dir = project(MV3);
     openTabs = [{ actor: "tab1", url: `${BASE}pages/panel.html`, title: "Panel" } as RdpTab];
+
     rdpAnswer = () => {
       throw new Error("connect ECONNREFUSED 127.0.0.1:9222");
     };
@@ -375,6 +390,7 @@ describe("a web page whose own policy forbids eval, on a Gecko build with no tab
       { actor: "tab1", url: "http://127.0.0.1:8765/csp.html", title: "one" },
       { actor: "tab2", url: "http://127.0.0.1:8765/csp.html", title: "two" },
     ];
+
     const result = JSON.parse(
       await evalTool.handler({ projectPath: dir, browser: "firefox", context: "page", url: "http://127.0.0.1:8765/csp.html", expression: "1" }),
     );

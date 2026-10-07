@@ -1,7 +1,9 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
+
 import { resolveCdpPort } from "../lib/cdp-port";
 import { resolveExtensionInvocation } from "../lib/exec";
 import {
@@ -20,6 +22,7 @@ let dir: string;
 beforeEach(() => {
   dir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-legacy-"));
 });
+
 afterEach(() => fs.rmSync(dir, { recursive: true, force: true }));
 
 describe("legacy ready-contract compatibility", () => {
@@ -34,6 +37,7 @@ describe("legacy ready-contract compatibility", () => {
     setTimeout(() => {
       writeModernContract(dir, "chrome", { cdpPort: 9444 });
     }, 300);
+
     const resolved = await resolveCdpPort(dir, "chrome", { waitMs: 5_000 });
     expect(resolved).toEqual({ port: 9444, source: "contract" });
   });
@@ -70,6 +74,7 @@ describe("legacy ready-contract compatibility", () => {
   it("EXTENSION_MCP_CLI_VERSION overrides the npx pin", () => {
     const prev = process.env.EXTENSION_MCP_CLI_VERSION;
     process.env.EXTENSION_MCP_CLI_VERSION = "9.9.9-skewtest.1";
+
     try {
       const { command, prefixArgs } = resolveExtensionInvocation();
       expect(command).toBe("npx");

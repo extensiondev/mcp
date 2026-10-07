@@ -1,9 +1,11 @@
-import { describe, it, expect, vi, afterEach } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
+import { describe, it, expect, vi, afterEach } from "vitest";
+
 let attempts: Array<{ targetExisted: boolean; gitSurvived: boolean }> = [];
+
 let behavior: (input: string) => Promise<{
   projectPath: string;
   projectName: string;
@@ -23,7 +25,9 @@ vi.mock("extension-create", () => ({
         targetExisted: fs.existsSync(input),
         gitSurvived: fs.existsSync(path.join(input, ".git", "config")),
       });
+
       opts.logger.error("fetch failed: network timeout while downloading template");
+
       return behavior(input);
     },
   ),
@@ -32,9 +36,11 @@ vi.mock("extension-create", () => ({
 const create = await import("../tools/create");
 
 const tmpDirs: string[] = [];
+
 function tmpDir(): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-create-cleanup-"));
   tmpDirs.push(dir);
+
   return dir;
 }
 
@@ -42,11 +48,13 @@ const previousEnvPin = process.env.EXTENSION_MCP_CLI_VERSION;
 
 afterEach(() => {
   attempts = [];
+
   if (previousEnvPin === undefined) {
     delete process.env.EXTENSION_MCP_CLI_VERSION;
   } else {
     process.env.EXTENSION_MCP_CLI_VERSION = previousEnvPin;
   }
+
   for (const dir of tmpDirs.splice(0)) {
     fs.rmSync(dir, { recursive: true, force: true });
   }
@@ -59,8 +67,10 @@ describe("extension_create never wipes a pre-existing directory", () => {
     fs.mkdirSync(path.join(target, ".git"), { recursive: true });
     fs.writeFileSync(path.join(target, ".git", "config"), "[core]\n");
     fs.writeFileSync(path.join(target, "LICENSE"), "Apache-2.0\n");
+
     behavior = async (input) => {
       fs.writeFileSync(path.join(input, "partial.tmp"), "half a template");
+
       throw new Error("network timeout");
     };
 
@@ -79,9 +89,11 @@ describe("extension_create never wipes a pre-existing directory", () => {
   it("still clears a directory the tool itself created before retrying", async () => {
     const parent = tmpDir();
     const target = path.join(parent, "probe");
+
     behavior = async (input) => {
       fs.mkdirSync(input, { recursive: true });
       fs.writeFileSync(path.join(input, "partial.tmp"), "half a template");
+
       throw new Error("network timeout");
     };
 
@@ -106,6 +118,7 @@ describe("extension_create engine-pin drift warning", () => {
         path.join(input, "package.json"),
         JSON.stringify({ devDependencies: { extension: enginePin } }),
       );
+
       return {
         projectPath: input,
         projectName: path.basename(input),

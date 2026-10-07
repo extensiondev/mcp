@@ -1,13 +1,18 @@
 import { describe, it, expect, afterEach, vi } from "vitest";
+
 import { normalizeArgAliases, validateToolInput } from "../lib/validate-input";
+
+import type * as ActModule from "../lib/act";
 
 const calls: string[][] = [];
 vi.mock("../lib/act", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../lib/act")>();
+  const actual = await importOriginal<typeof ActModule>();
+
   return {
     ...actual,
     runActVerb: async (cli: string[]) => {
       calls.push(cli);
+
       return JSON.stringify({ ok: true });
     },
   };

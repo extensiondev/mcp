@@ -1,12 +1,14 @@
 import fs from "node:fs";
-import net from "node:net";
 import os from "node:os";
 import path from "node:path";
-import { WebSocketServer } from "ws";
 
+import { WebSocketServer } from "ws";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+
 import { handler } from "../tools/logs";
 import { CONTROL_WS_PATH } from "../tools/logs-constants";
+
+import type net from "node:net";
 
 function writeReady(projectPath: string, browser: string, port: number): void {
   const dir = path.join(projectPath, "dist", "extension-js", browser);
@@ -47,6 +49,7 @@ describe("extension_logs follow: control channel error mid-stream", () => {
           event: { context: "background", level: "info", message: "hi", seq: 3 },
         }),
       );
+
       conn.send(JSON.stringify({ type: "gap", dropped: 2 }));
       setTimeout(() => {
         const raw = (conn as unknown as { _socket: net.Socket })._socket;
@@ -72,6 +75,7 @@ describe("extension_logs follow: control channel error mid-stream", () => {
     expect(
       out.warnings.some((w: string) => w.includes("partial read")),
     ).toBe(true);
+
     expect(Date.now() - started).toBeLessThan(5000);
   }, 10000);
 
@@ -106,6 +110,7 @@ describe("extension_logs follow: control channel error mid-stream", () => {
       conn.send(JSON.stringify({ type: "log", event: { context: "background", level: "info", messageParts: ["hi"], seq: 120, timestamp: Date.now() } }));
       setTimeout(() => conn.close(1000, "server restart"), 150);
     });
+
     const out = JSON.parse(
       await handler({ projectPath: tmp, browser: "chromium", follow: true, followMs: 4000 }),
     );

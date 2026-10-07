@@ -26,6 +26,7 @@ export interface TokenClaims extends CredentialRef {
 export function readTokenClaims(token: string): TokenClaims | null {
   const first = String(token ?? "").trim().split(".")[0];
   if (!first) return null;
+
   try {
     const padded = first.replace(/-/g, "+").replace(/_/g, "/") + "=".repeat((4 - (first.length % 4)) % 4);
     const parsed = JSON.parse(Buffer.from(padded, "base64").toString("utf8")) as {
@@ -36,6 +37,7 @@ export function readTokenClaims(token: string): TokenClaims | null {
     const workspace = String(parsed?.u ?? "").trim().toLowerCase();
     const project = String(parsed?.p ?? "").trim().toLowerCase();
     if (!workspace || !project) return null;
+
     return {
       workspace,
       project,
@@ -49,6 +51,7 @@ export function readTokenClaims(token: string): TokenClaims | null {
 export function splitRef(name: string): CredentialRef | null {
   const [workspace, project, ...rest] = String(name ?? "").trim().split("/");
   if (!workspace || !project || rest.length) return null;
+
   return { workspace: workspace.toLowerCase(), project: project.toLowerCase() };
 }
 
@@ -88,6 +91,7 @@ export function resolveCredential(options: { project?: string } = {}): ResolvedC
 
   if (wanted) {
     const creds = readValidCredentials(undefined, { project: wanted });
+
     if (creds?.token) {
       return {
         token: String(creds.token).trim(),
@@ -98,7 +102,9 @@ export function resolveCredential(options: { project?: string } = {}): ResolvedC
         note: null,
       };
     }
+
     const wantedRef = splitRef(wanted);
+
     if (named) {
       return {
         token: "",
@@ -109,8 +115,10 @@ export function resolveCredential(options: { project?: string } = {}): ResolvedC
         note: `No stored login for ${named}. Run extension_auth (action: login) for it.`,
       };
     }
+
     if (env) {
       const mismatch = wantedRef && envRef && !sameRef(wantedRef, envRef) ? { env: envRef, stored: wantedRef } : null;
+
       return {
         token: env,
         source: "env",
@@ -122,6 +130,7 @@ export function resolveCredential(options: { project?: string } = {}): ResolvedC
           : null,
       };
     }
+
     return { token: "", source: "none", ref: wantedRef, refSource: "named", mismatch: null, note: null };
   }
 
@@ -132,6 +141,7 @@ export function resolveCredential(options: { project?: string } = {}): ResolvedC
         ? { workspace: active.workspaceSlug, project: active.projectSlug }
         : null;
     const mismatch = envRef && storedRef && !sameRef(envRef, storedRef) ? { env: envRef, stored: storedRef } : null;
+
     return {
       token: env,
       source: "env",
@@ -149,6 +159,7 @@ export function resolveCredential(options: { project?: string } = {}): ResolvedC
   }
 
   const creds = readValidCredentials();
+
   if (creds?.token) {
     return {
       token: String(creds.token).trim(),
@@ -159,6 +170,7 @@ export function resolveCredential(options: { project?: string } = {}): ResolvedC
       note: null,
     };
   }
+
   return { token: "", source: "none", ref: null, refSource: "none", mismatch: null, note: null };
 }
 

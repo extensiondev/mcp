@@ -1,7 +1,9 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+
 import { writeCredentials } from "../lib/credentials";
 import { resolveToken } from "../lib/publish";
 
@@ -25,6 +27,7 @@ describe("publish resolveToken precedence", () => {
 
   beforeEach(() => {
     if (process.platform === "win32") return;
+
     tmp = fs.mkdtempSync(path.join(os.tmpdir(), "extdev-tok-"));
     prevXdg = process.env.XDG_CONFIG_HOME;
     prevToken = process.env.EXTENSION_DEV_TOKEN;
@@ -38,11 +41,13 @@ describe("publish resolveToken precedence", () => {
     else process.env.XDG_CONFIG_HOME = prevXdg;
     if (prevToken === undefined) delete process.env.EXTENSION_DEV_TOKEN;
     else process.env.EXTENSION_DEV_TOKEN = prevToken;
+
     fs.rmSync(tmp, { recursive: true, force: true });
   });
 
   it("prefers EXTENSION_DEV_TOKEN over the creds file", () => {
     if (process.platform === "win32") return;
+
     process.env.EXTENSION_DEV_TOKEN = "from-env";
     writeCreds("from-file");
     expect(resolveToken()).toBe("from-env");
@@ -50,24 +55,29 @@ describe("publish resolveToken precedence", () => {
 
   it("falls back to the creds file when env is unset", () => {
     if (process.platform === "win32") return;
+
     writeCreds("from-file");
     expect(resolveToken()).toBe("from-file");
   });
 
   it("ignores an expired creds file", () => {
     if (process.platform === "win32") return;
+
     writeCreds("from-file", 1000);
     expect(resolveToken()).toBe("");
   });
 
   it("returns empty when neither env nor file is present", () => {
     if (process.platform === "win32") return;
+
     expect(resolveToken()).toBe("");
   });
 
   it("lets an explicit project outrank EXTENSION_DEV_TOKEN and pick among stored logins", () => {
     if (process.platform === "win32") return;
+
     const future = Math.floor(Date.now() / 1000) + 3600;
+
     for (const [token, projectSlug] of [["t-widget", "widget"], ["t-gadget", "gadget"]] as const) {
       writeCredentials({
         version: 1,
@@ -78,6 +88,7 @@ describe("publish resolveToken precedence", () => {
         api: "https://www.extension.dev",
       });
     }
+
     process.env.EXTENSION_DEV_TOKEN = "from-env";
 
     expect(resolveToken()).toBe("from-env");

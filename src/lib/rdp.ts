@@ -7,6 +7,7 @@
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
 import net from "node:net";
+
 import type { ConsoleMessage } from "./console-summary";
 
 
@@ -34,6 +35,7 @@ export interface RdpTab {
 
 export function encodeRdpPacket(packet: Record<string, unknown>): Buffer {
   const json = Buffer.from(JSON.stringify(packet), "utf8");
+
   return Buffer.concat([Buffer.from(`${json.length}:`, "ascii"), json]);
 }
 
@@ -43,24 +45,32 @@ export class RdpPacketDecoder {
   push(chunk: Buffer): Array<Record<string, unknown>> {
     this.buffer = Buffer.concat([this.buffer, chunk]);
     const packets: Array<Record<string, unknown>> = [];
+
     for (;;) {
       const colon = this.buffer.indexOf(0x3a);
+
       if (colon === -1) {
         if (this.buffer.length > 16) {
           throw new Error("RDP stream corrupt: no length prefix");
         }
+
         break;
       }
+
       const prefix = this.buffer.subarray(0, colon).toString("ascii");
+
       if (!/^\d+$/.test(prefix)) {
         throw new Error(`RDP stream corrupt: bad length prefix "${prefix}"`);
       }
+
       const length = Number(prefix);
       if (this.buffer.length < colon + 1 + length) break;
+
       const json = this.buffer.subarray(colon + 1, colon + 1 + length);
       this.buffer = this.buffer.subarray(colon + 1 + length);
       packets.push(JSON.parse(json.toString("utf8")));
     }
+
     return packets;
   }
 }
@@ -95,14 +105,17 @@ export class RdpSession {
 
       socket.on("data", (chunk) => {
         let packets: RdpPacket[];
+
         try {
           packets = decoder.push(
             Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk),
           );
         } catch {
           session.close();
+
           return;
         }
+
         for (const packet of packets) {
           if (!settledConnect && packet.from === "root") {
             settledConnect = true;
@@ -110,7 +123,9 @@ export class RdpSession {
             resolve(session);
             continue;
           }
+
           for (const tap of session.taps) tap(packet);
+
           for (let i = 0; i < session.waiters.length; i++) {
             if (session.waiters[i].match(packet)) {
               session.waiters.splice(i, 1)[0].resolve(packet);
@@ -119,6 +134,7 @@ export class RdpSession {
           }
         }
       });
+
       socket.on("error", (error) => {
         if (!settledConnect) {
           settledConnect = true;
@@ -126,8 +142,10 @@ export class RdpSession {
           reject(error);
         }
       });
+
       socket.on("close", () => {
         session.closed = true;
+
         for (const waiter of session.waiters.splice(0)) {
           waiter.reject(
             new Error("RDP connection closed before a reply arrived"),
@@ -145,12 +163,15 @@ export class RdpSession {
     return new Promise((resolve, reject) => {
       if (this.closed) {
         reject(new Error("RDP connection is closed"));
+
         return;
       }
+
       const waiter = {
         match: (p: RdpPacket) => p.from === actor && p.type === undefined,
         resolve: (p: RdpPacket) => {
           clearTimeout(timer);
+
           if (typeof p.error === "string") {
             reject(
               new Error(
@@ -171,6 +192,7 @@ export class RdpSession {
       const timer = setTimeout(() => {
         const at = this.waiters.indexOf(waiter);
         if (at !== -1) this.waiters.splice(at, 1);
+
         reject(
           new Error(
             `RDP request ${String(packet.type)} to ${actor} timed out after ${timeoutMs}ms`,
@@ -184,6 +206,7 @@ export class RdpSession {
 
   tap(handler: (p: RdpPacket) => void): () => void {
     this.taps.add(handler);
+
     return () => this.taps.delete(handler);
   }
 
@@ -199,6 +222,7 @@ async function withSession<T>(
   work: (session: RdpSession) => Promise<T>,
 ): Promise<T> {
   const session = await RdpSession.connect(port, timeoutMs);
+
   try {
     return await work(session);
   } finally {
@@ -211,8 +235,10 @@ export async function rdpListAddons(
   options?: { timeoutMs?: number },
 ): Promise<RdpAddon[]> {
   const timeoutMs = options?.timeoutMs ?? 10_000;
+
   return withSession(port, timeoutMs, async (session) => {
     const reply = await session.request("root", { type: "listAddons" }, timeoutMs);
+
     return (reply.addons as RdpAddon[]) ?? [];
   });
 }
@@ -222,18 +248,23 @@ export async function rdpListTabs(
   options?: { timeoutMs?: number },
 ): Promise<RdpTab[]> {
   const timeoutMs = options?.timeoutMs ?? 10_000;
+
   return withSession(port, timeoutMs, async (session) => {
     const reply = await session.request("root", { type: "listTabs" }, timeoutMs);
+
     return (reply.tabs as RdpTab[]) ?? [];
   });
 }
 
 function formatConsoleArg(arg: unknown): string {
   if (arg === null || arg === undefined) return String(arg);
+
   if (typeof arg === "object") {
     const cls = (arg as Record<string, unknown>).class;
+
     return typeof cls === "string" ? `[${cls}]` : "[object]";
   }
+
   return String(arg);
 }
 
@@ -247,6 +278,7 @@ export async function rdpCollectConsoleMessages(
 ): Promise<ConsoleMessage[]> {
   const timeoutMs = options?.timeoutMs ?? 10_000;
   const settleMs = options?.settleMs ?? 1_000;
+
   return withSession(port, timeoutMs, async (session) => {
     const tabsReply = await session.request(
       "root",
@@ -258,6 +290,7 @@ export async function rdpCollectConsoleMessages(
     const tab = wanted
       ? tabs.find((t) => String(t.url ?? "").toLowerCase().includes(wanted))
       : (tabs.find((t) => t.selected === true) ?? tabs[0]);
+
     if (!tab?.actor) {
       throw new Error(
         wanted
@@ -277,13 +310,18 @@ export async function rdpCollectConsoleMessages(
     const messages: ConsoleMessage[] = [];
     const untap = session.tap((packet) => {
       if (packet.type !== "resources-available-array") return;
+
       const array = Array.isArray(packet.array) ? packet.array : [];
+
       for (const entry of array) {
         if (!Array.isArray(entry) || entry.length < 2) continue;
+
         const [resourceType, resources] = entry as [string, unknown[]];
         if (!Array.isArray(resources)) continue;
+
         for (const raw of resources) {
           const resource = raw as Record<string, unknown>;
+
           if (resourceType === "console-message") {
             const args = Array.isArray(resource.arguments)
               ? resource.arguments
@@ -312,6 +350,7 @@ export async function rdpCollectConsoleMessages(
         { type: "watchTargets", targetType: "frame" },
         timeoutMs,
       );
+
       await session.request(
         watcherActor,
         {
@@ -320,10 +359,12 @@ export async function rdpCollectConsoleMessages(
         },
         timeoutMs,
       );
+
       await new Promise((resolve) => setTimeout(resolve, settleMs));
     } finally {
       untap();
     }
+
     return messages;
   });
 }
@@ -349,6 +390,7 @@ const RDP_RESULT_POLL_MS = 100;
    the wrapper for the same reason it refused the relay. */
 export function rdpStartExpression(expression: string, token: string): string {
   const key = JSON.stringify(token);
+
   return `(function () {
   var store = globalThis.${RDP_EVAL_SLOT} = globalThis.${RDP_EVAL_SLOT} || {};
   store[${key}] = { state: "pending" };
@@ -374,6 +416,7 @@ export function rdpStartExpression(expression: string, token: string): string {
 
 export function rdpPollExpression(token: string): string {
   const key = JSON.stringify(token);
+
   return `(function () {
   var store = globalThis.${RDP_EVAL_SLOT};
   var entry = (store && store[${key}]) || null;
@@ -392,14 +435,18 @@ type RdpSettled =
 
 export function readRdpEvalSlot(raw: unknown): RdpSettled | "pending" | "lost" {
   if (typeof raw !== "string") return "lost";
+
   let slot: Record<string, unknown> | null;
+
   try {
     slot = JSON.parse(raw) as Record<string, unknown> | null;
   } catch {
     return "lost";
   }
+
   if (!slot || typeof slot !== "object") return "lost";
   if (slot.state === "pending") return "pending";
+
   if (slot.state === "throw") {
     return {
       ok: false,
@@ -410,8 +457,10 @@ export function readRdpEvalSlot(raw: unknown): RdpSettled | "pending" | "lost" {
           : "the expression threw inside the document",
     };
   }
+
   if (slot.state !== "value") return "lost";
   if (typeof slot.json !== "string") return { ok: true, value: null };
+
   try {
     return { ok: true, value: JSON.parse(slot.json) };
   } catch {
@@ -422,8 +471,10 @@ export function readRdpEvalSlot(raw: unknown): RdpSettled | "pending" | "lost" {
 function exceptionText(packet: RdpPacket): string {
   const message = packet.exceptionMessage;
   if (typeof message === "string") return message;
+
   const initial = (message as { initial?: unknown } | null | undefined)?.initial;
   if (typeof initial === "string") return initial;
+
   return packet.hasException === true ||
     (packet.exception !== undefined && packet.exception !== null)
     ? "the expression threw inside the document"
@@ -440,14 +491,17 @@ async function readStringResult(
   timeoutMs: number,
 ): Promise<unknown> {
   if (!result || typeof result !== "object") return result;
+
   const grip = result as Record<string, unknown>;
   if (grip.type !== "longString" || typeof grip.actor !== "string") return result;
+
   const length = typeof grip.length === "number" ? grip.length : 0;
   const reply = await session.request(
     grip.actor,
     { type: "substring", start: 0, end: length },
     timeoutMs,
   );
+
   return typeof reply.substring === "string" ? reply.substring : grip.initial;
 }
 
@@ -461,9 +515,11 @@ async function consoleEvaluate(
   let wake: (() => void) | null = null;
   const untap = session.tap((packet) => {
     if (packet.from !== consoleActor || packet.type !== "evaluationResult") return;
+
     results.push(packet);
     wake?.();
   });
+
   try {
     const reply = await session.request(
       consoleActor,
@@ -472,27 +528,35 @@ async function consoleEvaluate(
     );
     const resultId = String(reply.resultID ?? "");
     const deadline = Date.now() + timeoutMs;
+    const sleepUntilWoken = (ms: number) =>
+      new Promise<void>((resolve) => {
+        const timer = setTimeout(resolve, ms);
+
+        wake = () => {
+          clearTimeout(timer);
+          resolve();
+        };
+      });
+
     for (;;) {
       const hit = results.find((p) => String(p.resultID ?? "") === resultId);
+
       if (hit) {
         return {
           result: await readStringResult(session, hit.result, timeoutMs),
           threw: exceptionText(hit),
         };
       }
+
       const left = deadline - Date.now();
+
       if (left <= 0) {
         throw new Error(
           `Firefox sent no evaluation result within ${timeoutMs}ms`,
         );
       }
-      await new Promise<void>((resolve) => {
-        const timer = setTimeout(resolve, Math.min(left, 250));
-        wake = () => {
-          clearTimeout(timer);
-          resolve();
-        };
-      });
+
+      await sleepUntilWoken(Math.min(left, 250));
       wake = null;
     }
   } finally {
@@ -505,6 +569,7 @@ function topFrameConsoleActor(
 ): string | undefined {
   const usable = frames.filter((frame) => typeof frame.consoleActor === "string");
   const top = usable.find((frame) => frame.isTopLevelTarget === true) ?? usable[0];
+
   return top ? String(top.consoleActor) : undefined;
 }
 
@@ -517,18 +582,22 @@ export async function rdpEvaluateInTab(
   },
 ): Promise<RdpEvalOutcome> {
   const timeoutMs = options.timeoutMs ?? 10_000;
+
   return withSession(port, timeoutMs, async (session) => {
     const listed = await session.request("root", { type: "listTabs" }, timeoutMs);
     const tab = options.select((listed.tabs as RdpTab[]) ?? []);
+
     if (!tab?.actor) {
       return { ok: false, name: "TargetNotFound", message: "no open tab matches" };
     }
+
     const watcher = await session.request(
       String(tab.actor),
       { type: "getWatcher", isServerTargetSwitchingEnabled: true },
       timeoutMs,
     );
     const watcherActor = String(watcher.actor ?? "");
+
     if (!watcherActor) {
       return {
         ok: false,
@@ -536,24 +605,30 @@ export async function rdpEvaluateInTab(
         message: "this Firefox build exposes no watcher actor for a tab, so the tab cannot be evaluated over the debugger protocol",
       };
     }
+
     const frames: Array<Record<string, unknown>> = [];
     const untap = session.tap((packet) => {
       if (packet.type !== "target-available-form") return;
+
       const target = packet.target as Record<string, unknown> | undefined;
       if (target && typeof target === "object") frames.push(target);
     });
+
     try {
       await session.request(
         watcherActor,
         { type: "watchTargets", targetType: "frame" },
         timeoutMs,
       );
+
       const frameDeadline = Date.now() + Math.min(timeoutMs, RDP_FRAME_WAIT_MS);
       let consoleActor = topFrameConsoleActor(frames);
+
       while (!consoleActor && Date.now() < frameDeadline) {
         await new Promise((resolve) => setTimeout(resolve, RDP_FRAME_POLL_MS));
         consoleActor = topFrameConsoleActor(frames);
       }
+
       if (!consoleActor) {
         return {
           ok: false,
@@ -561,6 +636,7 @@ export async function rdpEvaluateInTab(
           message: "the tab announced no document to evaluate in (it may still be loading)",
         };
       }
+
       const token = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
       const started = await consoleEvaluate(
         session,
@@ -568,10 +644,13 @@ export async function rdpEvaluateInTab(
         rdpStartExpression(options.expression, token),
         timeoutMs,
       );
+
       if (started.threw) {
         return { ok: false, name: "EvalError", message: started.threw };
       }
+
       const resultDeadline = Date.now() + timeoutMs;
+
       for (;;) {
         const polled = await consoleEvaluate(
           session,
@@ -580,6 +659,7 @@ export async function rdpEvaluateInTab(
           timeoutMs,
         );
         const settled = readRdpEvalSlot(polled.result);
+
         if (settled === "lost") {
           return {
             ok: false,
@@ -587,6 +667,7 @@ export async function rdpEvaluateInTab(
             message: "the document reloaded or navigated before the expression settled, so its result is gone",
           };
         }
+
         if (settled !== "pending") {
           return settled.ok
             ? {
@@ -596,6 +677,7 @@ export async function rdpEvaluateInTab(
               }
             : settled;
         }
+
         if (Date.now() >= resultDeadline) {
           return {
             ok: false,
@@ -603,6 +685,7 @@ export async function rdpEvaluateInTab(
             message: `the expression did not settle within ${timeoutMs}ms`,
           };
         }
+
         await new Promise((resolve) => setTimeout(resolve, RDP_RESULT_POLL_MS));
       }
     } finally {

@@ -1,9 +1,10 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { credentialsPath } from "../lib/credentials";
 
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+
+import { credentialsPath } from "../lib/credentials";
 import {
   identityHeaders,
   installIdentityPath,
@@ -44,6 +45,7 @@ describe("session identity", () => {
     } else process.env.EXTENSION_DEV_NO_TELEMETRY = prevNoTelemetry;
     if (prevDoNotTrack === undefined) delete process.env.DO_NOT_TRACK;
     else process.env.DO_NOT_TRACK = prevDoNotTrack;
+
     fs.rmSync(tmp, { recursive: true, force: true });
     resetSessionIdentityForTests();
   });
@@ -82,9 +84,11 @@ describe("session identity", () => {
       os.homedir(),
       process.platform,
     ];
+
     for (const leak of leaks) {
       expect(id).not.toContain(String(leak).toLowerCase());
     }
+
     resetSessionIdentityForTests();
     fs.rmSync(installIdentityPath(), { force: true });
     expect(resolveInstallId()).not.toBe(id);
@@ -110,6 +114,7 @@ describe("session identity", () => {
     expect(Object.keys(headers).sort()).toEqual(
       [INSTALL_HEADER, SESSION_HEADER, TOOL_HEADER].sort(),
     );
+
     expect(headers[INSTALL_HEADER]).toMatch(HEX_128);
     expect(headers[SESSION_HEADER]).toMatch(HEX_128);
     expect(headers[TOOL_HEADER]).toBe("extension_publish");
@@ -157,9 +162,11 @@ describe("session identity", () => {
     delete process.env.APPDATA;
     delete process.env.LOCALAPPDATA;
     const homedir = os.homedir;
+
     (os as { homedir: () => string }).homedir = () => {
       throw new Error("no home on this host");
     };
+
     try {
       expect(() => identityHeaders("extension_publish")).not.toThrow();
       expect(identityHeaders("extension_publish")).toEqual({});
@@ -180,6 +187,7 @@ describe("session identity", () => {
       file,
       JSON.stringify({ version: 1, installId: "nope", rotatedAt: Date.now() }),
     );
+
     expect(resolveInstallId()).toMatch(HEX_128);
   });
 });

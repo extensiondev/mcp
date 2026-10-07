@@ -43,8 +43,10 @@ export function normalizeDomSnapshot(result: unknown, maxNodes: number): DomSnap
   if (Array.isArray(result)) {
     return { nodes: result, totalElements: result.length, truncated: false, maxNodes, maxDepth: 20 };
   }
+
   const obj = (result ?? {}) as Partial<DomSnapshot>;
   const nodes = Array.isArray(obj.nodes) ? obj.nodes : [];
+
   return {
     nodes,
     totalElements: typeof obj.totalElements === "number" ? obj.totalElements : nodes.length,
@@ -83,7 +85,9 @@ export class CDPClient extends CDPConnection {
     try {
       const res = await fetch(`http://${host}:${port}/json/version`);
       if (!res.ok) return null;
+
       const data = (await res.json()) as Record<string, unknown>;
+
       return typeof data.Browser === "string" ? data.Browser : null;
     } catch {
       return null;
@@ -101,7 +105,9 @@ export class CDPClient extends CDPConnection {
     try {
       const res = await fetch(`http://${host}:${port}/json/version`);
       if (!res.ok) return null;
+
       const data = (await res.json()) as Record<string, unknown>;
+
       return typeof data["User-Agent"] === "string" ? data["User-Agent"] : null;
     } catch {
       return null;
@@ -165,9 +171,11 @@ export class CDPClient extends CDPConnection {
     const reply = (await this.sendCommand("Page.navigate", { url }, sessionId)) as
       | { errorText?: unknown }
       | undefined;
+
     if (typeof reply?.errorText === "string" && reply.errorText) {
       throw new Error(`The browser refused to navigate to ${url}: ${reply.errorText}`);
     }
+
     await new Promise<void>((resolve) => {
       const timeout = setTimeout(resolve, 5000);
 
@@ -194,8 +202,10 @@ export class CDPClient extends CDPConnection {
       result?: { value?: unknown };
       exceptionDetails?: { text?: string; exception?: { description?: string } };
     };
+
     if (response?.exceptionDetails) {
       const details = response.exceptionDetails;
+
       throw new Error(
         `the page threw while evaluating: ${details.exception?.description ?? details.text ?? "unknown error"}`,
       );
@@ -206,6 +216,7 @@ export class CDPClient extends CDPConnection {
 
   async getPageHTML(sessionId: string): Promise<string> {
     const result = await this.evaluate(sessionId, PAGE_HTML_SCRIPT);
+
     return typeof result === "string" ? result : "";
   }
 
@@ -223,9 +234,12 @@ export class CDPClient extends CDPConnection {
     )) as { root?: unknown };
 
     const found: Array<{ nodeId: number; host: string; type: string }> = [];
+
     const walk = (node: any, hostName: string): void => {
       if (!node || typeof node !== "object") return;
+
       const name = node.localName || node.nodeName || hostName;
+
       if (Array.isArray(node.shadowRoots)) {
         for (const sr of node.shadowRoots) {
           if (
@@ -239,13 +253,17 @@ export class CDPClient extends CDPConnection {
               type: "closed",
             });
           }
+
           walk(sr, name);
         }
       }
+
       if (Array.isArray(node.children))
-        for (const c of node.children) walk(c, name);
+        {for (const c of node.children) walk(c, name);}
+
       if (node.contentDocument) walk(node.contentDocument, name);
     };
+
     walk((doc as any).root, "html");
 
     const out: Array<{
@@ -254,6 +272,7 @@ export class CDPClient extends CDPConnection {
       html: string;
       truncated?: boolean;
     }> = [];
+
     for (const f of found) {
       try {
         const oh = (await this.sendCommand(
@@ -263,10 +282,12 @@ export class CDPClient extends CDPConnection {
         )) as { outerHTML?: string };
         let html = String(oh?.outerHTML ?? "");
         let truncated = false;
+
         if (maxBytes > 0 && html.length > maxBytes) {
           html = html.slice(0, maxBytes);
           truncated = true;
         }
+
         out.push({
           host: f.host,
           type: f.type,
@@ -277,11 +298,13 @@ export class CDPClient extends CDPConnection {
         out.push({ host: f.host, type: f.type, html: "" });
       }
     }
+
     return out;
   }
 
   async getPageMeta(sessionId: string): Promise<Record<string, unknown>> {
     const result = await this.evaluate(sessionId, PAGE_META_SCRIPT);
+
     return (result as Record<string, unknown>) ?? {};
   }
 
@@ -300,6 +323,7 @@ export class CDPClient extends CDPConnection {
       sessionId,
       probeSelectorsScript(selectors),
     );
+
     return (
       (result as Array<{
         selector: string;
@@ -315,11 +339,13 @@ export class CDPClient extends CDPConnection {
     maxNodes = 500,
   ): Promise<DomSnapshot> {
     const result = await this.evaluate(sessionId, domSnapshotScript(maxNodes));
+
     return normalizeDomSnapshot(result, maxNodes);
   }
 
   async getRenderEvidence(sessionId: string): Promise<RenderEvidence | null> {
     const result = await this.evaluate(sessionId, RENDER_EVIDENCE_SCRIPT);
+
     return (result as RenderEvidence) ?? null;
   }
 
@@ -327,6 +353,7 @@ export class CDPClient extends CDPConnection {
     sessionId: string,
   ): Promise<Record<string, unknown> | null> {
     const result = await this.evaluate(sessionId, EXTENSION_ROOT_META_SCRIPT);
+
     return (result as Record<string, unknown>) ?? null;
   }
 }

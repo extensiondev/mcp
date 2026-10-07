@@ -1,8 +1,12 @@
-import { describe, it, expect, afterEach, vi } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+
+import { describe, it, expect, afterEach, vi } from "vitest";
+
 import { envelope } from "../lib/envelope";
+
+import type * as ActModule from "../lib/act";
 
 const refusal = () =>
   JSON.stringify({
@@ -25,14 +29,17 @@ let openResult: () => string = refusal;
 let panelOpen = true;
 let probeOverride: (() => string) | null = null;
 vi.mock("../lib/act", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../lib/act")>();
+  const actual = await importOriginal<typeof ActModule>();
+
   return {
     ...actual,
     runActVerb: async (cli: string[]) => {
       calls.push(cli);
       if (cli[0] === "open") return openResult();
+
       if (cli[0] === "inspect") {
         if (probeOverride) return probeOverride();
+
         return panelOpen
           ? envelope({
               ok: true,
@@ -56,6 +63,7 @@ vi.mock("../lib/act", async (importOriginal) => {
               },
             });
       }
+
       return envelope({ ok: true, command: "extension_open", status: "ok", value: null });
     },
   };
@@ -68,6 +76,7 @@ vi.mock("../lib/bridge-tabs", () => ({
   resolveBridgeBaseUrl: async () => "moz-extension://abc/",
   navigateToUrlViaBridge: async (_p: string, _b: string, url: string) => {
     navigations.push(url);
+
     return envelope({
       ok: true,
       command: "extension_open",
@@ -80,11 +89,13 @@ vi.mock("../lib/bridge-tabs", () => ({
 const open = await import("../tools/open");
 
 const dirs: string[] = [];
+
 function project(manifest: Record<string, unknown>): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-open-gecko-sidebar-"));
   dirs.push(dir);
   fs.mkdirSync(path.join(dir, "src"), { recursive: true });
   fs.writeFileSync(path.join(dir, "src", "manifest.json"), JSON.stringify(manifest));
+
   return dir;
 }
 
@@ -121,6 +132,7 @@ describe("extension_open sidebar on Gecko when the engine names a Chromium API i
       alreadyOpen: true,
       url: "moz-extension://abc/sidebar/index.html",
     });
+
     expect(result.hint).toContain("context: 'sidebar'");
     expect(result.hint).toContain("user gesture");
     expect(JSON.stringify(result)).not.toContain("sidePanel");
@@ -145,6 +157,7 @@ describe("extension_open sidebar on Gecko when the engine names a Chromium API i
       surface: "sidebar",
       document: "sidebar/index.html",
     });
+
     const warning = result.warnings.find((w: string) => w.includes("user gesture"));
     expect(warning).toContain("1392624");
     expect(warning).toContain("rendered as a tab");
@@ -204,6 +217,7 @@ describe("extension_open sidebar on Gecko when the engine names a Chromium API i
     const dir = project(MANIFEST);
     openResult = () =>
       envelope({ ok: true, command: "extension_open", status: "ok", value: { opened: "sidebar" } });
+
     const opened = JSON.parse(
       await open.handler({ projectPath: dir, browser: "firefox", surface: "sidebar" }),
     );
@@ -216,6 +230,7 @@ describe("extension_open sidebar on Gecko when the engine names a Chromium API i
         status: "failed",
         error: { code: "E_SESSION_NOT_FOUND", name: "CliError", message: "No active control channel found for firefox. Looked at /p/dist/extension-js/firefox/ready.json. Run `extension dev --browser=firefox --allow-control` first." },
       });
+
     const failed = JSON.parse(
       await open.handler({ projectPath: dir, browser: "firefox", surface: "sidebar" }),
     );

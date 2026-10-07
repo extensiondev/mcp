@@ -1,28 +1,38 @@
-import { describe, it, expect, afterEach, vi } from "vitest";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+
+import { describe, it, expect, afterEach, vi } from "vitest";
+
 import { envelope } from "../lib/envelope";
 import { actFrame, tabRows } from "./fixtures/engine-answers";
+
+import type * as ActModule from "../lib/act";
+import type * as CdpPortModule from "../lib/cdp-port";
+import type * as BridgeTabsModule from "../lib/bridge-tabs";
 
 const actCalls: string[][] = [];
 let lastTabId = 9;
 let lastNavigateUrl = "";
 let attachedId = "";
 vi.mock("../lib/act", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../lib/act")>();
+  const actual = await importOriginal<typeof ActModule>();
+
   return {
     ...actual,
     runActVerb: async (cli: string[]) => {
       actCalls.push(cli);
+
       if (cli.includes("--list-tabs")) {
         return JSON.stringify(
           actFrame("inspect", tabRows([{ id: lastTabId, url: lastNavigateUrl, title: "Landed" }])),
         );
       }
+
       lastTabId = cli.includes("--tab") ? Number(cli[cli.indexOf("--tab") + 1]) : 9;
       lastNavigateUrl = String(cli[1] ?? "");
+
       return envelope({
         ok: true,
         command: "extension_open",
@@ -34,7 +44,8 @@ vi.mock("../lib/act", async (importOriginal) => {
 });
 
 vi.mock("../lib/cdp-port", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../lib/cdp-port")>();
+  const actual = await importOriginal<typeof CdpPortModule>();
+
   return { ...actual, resolveCdpPort: async () => ({ port: 9222, source: "contract" as const }) };
 });
 
@@ -52,6 +63,7 @@ vi.mock("../lib/cdp", () => {
     async connect() {}
     async attachToTarget(id: string) {
       attachedId = id;
+
       return "session-1";
     }
     async enableDomains() {}
@@ -67,17 +79,21 @@ vi.mock("../lib/cdp", () => {
         const url = String(params?.url ?? "");
         createdTabs.push({ url, background: params?.background === true });
         cdpTargets = [...cdpTargets, { id: "created", type: "page", url }];
+
         return { targetId: "created" };
       }
+
       return {};
     }
     disconnect() {}
   }
+
   return { CDPClient };
 });
 
 vi.mock("../lib/bridge-tabs", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../lib/bridge-tabs")>();
+  const actual = await importOriginal<typeof BridgeTabsModule>();
+
   return { ...actual, resolveBridgeBaseUrl: async () => "moz-extension://abc/" };
 });
 
@@ -86,14 +102,17 @@ const open = await import("../tools/open");
 function expectedId(distPath: string): string {
   const d = crypto.createHash("sha256").update(distPath).digest();
   let id = "";
+
   for (let i = 0; i < 16; i++) {
     id += String.fromCharCode(97 + (d[i] >> 4));
     id += String.fromCharCode(97 + (d[i] & 0x0f));
   }
+
   return id;
 }
 
 const dirs: string[] = [];
+
 function project(browser = "chrome"): { dir: string; id: string } {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-open-url-"));
   dirs.push(dir);
@@ -102,10 +121,12 @@ function project(browser = "chrome"): { dir: string; id: string } {
     path.join(dir, "src", "manifest.json"),
     JSON.stringify({ manifest_version: 3, name: "F", action: { default_popup: "popup.html" } }),
   );
+
   const distPath = path.join(dir, "dist", browser);
   const readyDir = path.join(dir, "dist", "extension-js", browser);
   fs.mkdirSync(readyDir, { recursive: true });
   fs.writeFileSync(path.join(readyDir, "ready.json"), JSON.stringify({ status: "ready", distPath }));
+
   return { dir, id: expectedId(distPath) };
 }
 

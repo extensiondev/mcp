@@ -58,6 +58,7 @@ describe("the emitter applies it", () => {
       saved[key] = process.env[key];
       delete process.env[key];
     }
+
     resetSessionIdentityForTests();
   });
 
@@ -66,6 +67,7 @@ describe("the emitter applies it", () => {
       if (saved[key] === undefined) delete process.env[key];
       else process.env[key] = saved[key];
     }
+
     resetSessionIdentityForTests();
   });
 

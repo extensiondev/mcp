@@ -1,12 +1,20 @@
+import fs from "node:fs";
+import os from "node:os";
+import nodePath from "node:path";
+
 import { describe, it, expect, afterEach, vi } from "vitest";
+
+import type * as ActModule from "../lib/act";
 
 const calls: string[][] = [];
 vi.mock("../lib/act", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../lib/act")>();
+  const actual = await importOriginal<typeof ActModule>();
+
   return {
     ...actual,
     runActVerb: async (cli: string[]) => {
       calls.push(cli);
+
       return JSON.stringify({ ok: true });
     },
   };
@@ -89,11 +97,8 @@ describe("eval targeting", () => {
 });
 
 describe("open command validates against the manifest", () => {
-  const fs = require("node:fs") as typeof import("node:fs");
-  const os = require("node:os") as typeof import("node:os");
-  const nodePath = require("node:path") as typeof import("node:path");
-
   const dirs: string[] = [];
+
   function projectWithCommands(commands: Record<string, unknown> | undefined) {
     const dir = fs.mkdtempSync(nodePath.join(os.tmpdir(), "mcp-open-cmd-"));
     dirs.push(dir);
@@ -102,6 +107,7 @@ describe("open command validates against the manifest", () => {
       nodePath.join(dir, "src", "manifest.json"),
       JSON.stringify({ manifest_version: 3, name: "F", ...(commands ? { commands } : {}) }),
     );
+
     return dir;
   }
 
@@ -146,11 +152,8 @@ describe("open command validates against the manifest", () => {
 });
 
 describe("open popup validates against the manifest", () => {
-  const fs = require("node:fs") as typeof import("node:fs");
-  const os = require("node:os") as typeof import("node:os");
-  const nodePath = require("node:path") as typeof import("node:path");
-
   const dirs: string[] = [];
+
   function projectWithManifest(manifest: Record<string, unknown>) {
     const dir = fs.mkdtempSync(nodePath.join(os.tmpdir(), "mcp-open-popup-"));
     dirs.push(dir);
@@ -159,6 +162,7 @@ describe("open popup validates against the manifest", () => {
       nodePath.join(dir, "src", "manifest.json"),
       JSON.stringify({ manifest_version: 3, name: "F", ...manifest }),
     );
+
     return dir;
   }
 

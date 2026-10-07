@@ -47,10 +47,13 @@ export function installIdentityDir(): string {
       process.env.APPDATA ||
       process.env.LOCALAPPDATA ||
       path.join(os.homedir(), "AppData", "Roaming");
+
     return path.join(base, "extension-dev");
   }
+
   const xdg = String(process.env.XDG_CONFIG_HOME || "").trim();
   const base = xdg || path.join(os.homedir(), ".config");
+
   return path.join(base, "extension-dev");
 }
 
@@ -63,8 +66,10 @@ export function telemetryDisabled(): boolean {
     const raw = String(value || "")
       .trim()
       .toLowerCase();
+
     return raw !== "" && raw !== "0" && raw !== "false";
   };
+
   return (
     off(process.env.EXTENSION_DEV_NO_TELEMETRY) || off(process.env.DO_NOT_TRACK)
   );
@@ -80,10 +85,13 @@ function readStoredInstallIdentity(): StoredInstallIdentity | null {
     const data = JSON.parse(raw) as Partial<StoredInstallIdentity> | null;
     if (!data || typeof data !== "object") return null;
     if (data.version !== 1) return null;
+
     const installId = String(data.installId || "").trim();
     if (!/^[0-9a-f]{32}$/.test(installId)) return null;
+
     const rotatedAt = Number(data.rotatedAt || 0);
     if (!Number.isFinite(rotatedAt) || rotatedAt <= 0) return null;
+
     return { version: 1, installId, rotatedAt };
   } catch {
     return null;
@@ -92,11 +100,13 @@ function readStoredInstallIdentity(): StoredInstallIdentity | null {
 
 function writeStoredInstallIdentity(identity: StoredInstallIdentity): boolean {
   const file = installIdentityPath();
+
   try {
     fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
-    fs.writeFileSync(file, JSON.stringify(identity, null, 2) + "\n", {
+    fs.writeFileSync(file, `${JSON.stringify(identity, null, 2)  }\n`, {
       mode: 0o600,
     });
+
     return true;
   } catch {
     return false;
@@ -107,30 +117,38 @@ let ephemeralInstallId = "";
 
 export function resolveInstallId(now: number = Date.now()): string {
   if (telemetryDisabled()) return "";
+
   try {
     installIdentityPath();
   } catch {
     return "";
   }
+
   const stored = readStoredInstallIdentity();
+
   if (stored && now - stored.rotatedAt < ROTATE_AFTER_MS) {
     return stored.installId;
   }
+
   const rotated: StoredInstallIdentity = {
     version: 1,
     installId: randomId(),
     rotatedAt: now,
   };
+
   if (writeStoredInstallIdentity(rotated)) {
     ephemeralInstallId = "";
+
     return rotated.installId;
   }
+
   /* @invariant A read-only or unwritable config directory must still produce a
    * usable session, so the id falls back to memory for this process. Every run
    * on such a host then looks like a brand new install, which OVERCOUNTS
    * distinct machines. CI containers are the common case.
    */
   if (!ephemeralInstallId) ephemeralInstallId = rotated.installId;
+
   return ephemeralInstallId;
 }
 
@@ -139,6 +157,7 @@ let processSessionId = "";
 export function sessionId(): string {
   if (telemetryDisabled()) return "";
   if (!processSessionId) processSessionId = randomId();
+
   return processSessionId;
 }
 
@@ -158,13 +177,16 @@ export function resetSessionIdentityForTests(): void {
 export function identityHeaders(tool: string): Record<string, string> {
   try {
     if (telemetryDisabled()) return {};
+
     const name = String(tool || "")
       .trim()
       .toLowerCase();
     if (!/^[a-z0-9_]{1,64}$/.test(name)) return {};
+
     const install = resolveInstallId();
     const session = sessionId();
     if (!install || !session) return {};
+
     return {
       [INSTALL_HEADER]: install,
       [SESSION_HEADER]: session,

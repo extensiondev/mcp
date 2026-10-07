@@ -1,6 +1,8 @@
-import { describe, it, expect, afterEach } from "vitest";
 import net from "node:net";
 import vm from "node:vm";
+
+import { describe, it, expect, afterEach } from "vitest";
+
 import {
   encodeRdpPacket,
   RdpPacketDecoder,
@@ -16,6 +18,7 @@ async function roundTrip(expression: string, globals: Record<string, unknown> = 
   const context = vm.createContext({ ...globals });
   expect(vm.runInContext(rdpStartExpression(expression, "t1"), context)).toBe("started");
   await settle();
+
   return readRdpEvalSlot(vm.runInContext(rdpPollExpression("t1"), context));
 }
 
@@ -56,6 +59,7 @@ describe("the expression a console actor is handed", () => {
       name: "ReferenceError",
       message: "nope is not defined",
     });
+
     expect(await roundTrip("Promise.reject(new TypeError('late'))")).toEqual({
       ok: false,
       name: "TypeError",
@@ -116,6 +120,7 @@ function firefox(options: {
     socket.on("data", (chunk) => {
       for (const packet of decoder.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk))) {
         requests.push(packet);
+
         if (packet.type === "listTabs") send({ from: "root", tabs: options.tabs });
         else if (packet.type === "getWatcher") send({ from: packet.to, actor: "watcher1" });
         else if (packet.type === "watchTargets") {
@@ -124,10 +129,12 @@ function firefox(options: {
             type: "target-available-form",
             target: { actor: "frame1", consoleActor: "console1", isTopLevelTarget: true },
           });
+
           send({ from: "watcher1" });
         } else if (packet.type === "evaluateJSAsync") {
           const resultID = `r${nextResult++}`;
           send({ from: "console1", resultID });
+
           if (options.syntaxError) {
             send({
               from: "console1",
@@ -136,11 +143,14 @@ function firefox(options: {
               hasException: true,
               exceptionMessage: "SyntaxError: expected expression, got keyword 'var'",
             });
+
             continue;
           }
+
           const value = vm.runInContext(String(packet.text), context) as unknown;
           setTimeout(() => {
             let result: unknown = value;
+
             if (
               typeof value === "string" &&
               options.longStringOver !== undefined &&
@@ -155,6 +165,7 @@ function firefox(options: {
                 initial: value.slice(0, options.longStringOver),
               };
             }
+
             send({ from: "console1", type: "evaluationResult", resultID, result });
           }, 0);
         } else if (packet.type === "substring") {
@@ -168,6 +179,7 @@ function firefox(options: {
     });
   });
   servers.push(server);
+
   return new Promise((resolve) => {
     server.listen(0, "127.0.0.1", () => {
       resolve({ port: (server.address() as net.AddressInfo).port, requests });
@@ -196,6 +208,7 @@ describe("rdpEvaluateInTab", () => {
       value: "from-panel",
       tab: { url: PANEL, title: "panel" },
     });
+
     expect(requests.find((r) => r.type === "getWatcher")?.to).toBe("tab2");
     expect(requests.find((r) => r.type === "evaluateJSAsync")?.to).toBe("console1");
   });
@@ -247,6 +260,7 @@ describe("rdpEvaluateInTab", () => {
       name: "EvalError",
       message: "SyntaxError: expected expression, got keyword 'var'",
     });
+
     expect(requests.filter((r) => r.type === "evaluateJSAsync")).toHaveLength(1);
   });
 

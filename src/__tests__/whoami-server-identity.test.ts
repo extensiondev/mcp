@@ -1,7 +1,9 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
 import {
   writeCredentials,
   type StoredCredentials,
@@ -41,6 +43,7 @@ describe("extension_auth status asks the server who the token is", () => {
 
   beforeEach(() => {
     if (process.platform === "win32") return;
+
     tmp = fs.mkdtempSync(path.join(os.tmpdir(), "extdev-whoami-server-"));
     prevXdg = process.env.XDG_CONFIG_HOME;
     process.env.XDG_CONFIG_HOME = tmp;
@@ -50,11 +53,13 @@ describe("extension_auth status asks the server who the token is", () => {
     if (process.platform === "win32") return;
     if (prevXdg === undefined) delete process.env.XDG_CONFIG_HOME;
     else process.env.XDG_CONFIG_HOME = prevXdg;
+
     fs.rmSync(tmp, { recursive: true, force: true });
   });
 
   it("says live only when the server says live, and warns when the server names another project", async () => {
     if (process.platform === "win32") return;
+
     writeCredentials(sample());
 
     const result = JSON.parse(
@@ -71,8 +76,10 @@ describe("extension_auth status asks the server who the token is", () => {
 
   it("names the env token and its project when nothing is stored", async () => {
     if (process.platform === "win32") return;
+
     const prev = process.env.EXTENSION_DEV_TOKEN;
     process.env.EXTENSION_DEV_TOKEN = `${Buffer.from(JSON.stringify({ u: "acme", p: "ci-only", exp: 1 })).toString("base64url")}.sig`;
+
     try {
       const result = JSON.parse(await readIdentity({ fetchImpl: fetchFailing }));
       expect(result.status).toBe("logged-out");
@@ -87,6 +94,7 @@ describe("extension_auth status asks the server who the token is", () => {
 
   it("reports the server's confirmation beside the local claim", async () => {
     if (process.platform === "win32") return;
+
     writeCredentials(sample());
 
     const result = JSON.parse(
@@ -102,12 +110,14 @@ describe("extension_auth status asks the server who the token is", () => {
       login: "acme/widget",
       live: true,
     });
+
     expect(result.hint).toContain("confirms this token");
     expect(result.hint).toContain("acme/widget");
   });
 
   it("flips the status when the server refuses the credential the local file believes in", async () => {
     if (process.platform === "win32") return;
+
     writeCredentials(sample());
 
     const result = JSON.parse(
@@ -123,6 +133,7 @@ describe("extension_auth status asks the server who the token is", () => {
 
   it("says the check did not happen when the server is unreachable, never dressing the local claim as confirmed", async () => {
     if (process.platform === "win32") return;
+
     writeCredentials(sample());
 
     const result = JSON.parse(await readIdentity({ fetchImpl: fetchFailing }));
@@ -138,6 +149,7 @@ describe("extension_auth status asks the server who the token is", () => {
 
   it("treats a server without the endpoint as unverified, not as a verdict", async () => {
     if (process.platform === "win32") return;
+
     writeCredentials(sample());
 
     const result = JSON.parse(
@@ -152,10 +164,12 @@ describe("extension_auth status asks the server who the token is", () => {
 
   it("asks the base recorded at login, not the default, when they diverge", async () => {
     if (process.platform === "win32") return;
+
     writeCredentials(sample({ api: "http://localhost:3100" }));
     const seen: string[] = [];
     const fetchSpy = (async (url: string | URL) => {
       seen.push(String(url));
+
       return new Response(JSON.stringify({ login: "acme/widget", live: true }), {
         status: 200,
         headers: { "content-type": "application/json" },
@@ -170,9 +184,11 @@ describe("extension_auth status asks the server who the token is", () => {
 
   it("does not ask the server for a token the local file already knows is expired", async () => {
     if (process.platform === "win32") return;
+
     writeCredentials(
       sample({ expiresAt: Math.floor(Date.now() / 1000) - 60 }),
     );
+
     const fetchSpy = vi.fn(fetchAnswering(200, { login: "acme/widget" }));
 
     const result = JSON.parse(
@@ -195,6 +211,7 @@ describe("askServerIdentity sends the bearer and reads only real verdicts", () =
         (init?.headers as Record<string, string> | undefined)?.authorization ||
           "",
       );
+
       return new Response(JSON.stringify({ login: "a/b", live: true }), {
         status: 200,
       });

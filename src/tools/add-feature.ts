@@ -6,9 +6,10 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-import { PROJECT_PATH } from "../lib/common-schema";
 import fs from "node:fs";
 import path from "node:path";
+
+import { PROJECT_PATH } from "../lib/common-schema";
 import { getTemplateBySlug, listTemplates } from "../lib/templates-cache";
 import {
   PINNED_COMMIT,
@@ -167,13 +168,16 @@ export async function handler(args: {
      several. */
   let templateSlug: string | undefined = FEATURE_TEMPLATE_MAP[args.feature]?.[framework];
   let referenceNote: string | undefined;
+
   if (!templateSlug) {
     try {
       const carriers = await listTemplates({ surface: featureDir });
       const exact = carriers.find((t) => (t.uiFramework ?? "vanilla") === framework);
       const pick = exact ?? carriers[0];
+
       if (pick) {
         templateSlug = pick.slug;
+
         if (!exact) {
           referenceNote = `No ${framework} template in the catalog ships a ${featureDir} surface; ${pick.slug} (${pick.uiFramework ?? "vanilla"}) is referenced for the surface wiring only.`;
         }
@@ -182,6 +186,7 @@ export async function handler(args: {
       referenceNote = `The template catalog could not be read, so whether a template ships a ${featureDir} surface is unknown.`;
     }
   }
+
   const template = templateSlug
     ? await getTemplateBySlug(templateSlug)
     : undefined;
@@ -227,6 +232,7 @@ export async function handler(args: {
         path: `src/${featureDir}/${componentBase}App.${componentExt}`,
         hint: `Main ${framework} component`,
       });
+
       if (framework === "vue") {
         filesToCreate.push({
           path: `src/${featureDir}/shims-vue.d.ts`,
@@ -247,11 +253,13 @@ export async function handler(args: {
       },
       { path: "src/content/styles.css", hint: "Content script styles" },
     );
+
     if (framework !== "vanilla") {
       filesToCreate.push({
         path: `src/content/ContentApp.${componentExt}`,
         hint: `Main ${framework} component mounted by the content script`,
       });
+
       if (framework === "vue") {
         filesToCreate.push({
           path: "src/content/shims-vue.d.ts",
@@ -281,29 +289,36 @@ export async function handler(args: {
   let manifestKeys: string[] | null = null;
   let manifestUnreadable: string | undefined;
   let current: Record<string, unknown> = {};
+
   try {
     const parsed = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("not a JSON object");
+
     current = parsed as Record<string, unknown>;
     manifestKeys = Object.keys(current);
   } catch (err) {
     manifestUnreadable = err instanceof Error ? err.message : String(err);
   }
+
   /* @invariant A PREFIXED KEY REPLACES THE UNPREFIXED ONE IN THE ENGINE, so
      an addition like `chromium:permissions: ["sidePanel"]` dropped the
      project's existing permissions on Chromium. A list
      addition is merged with what the manifest already declares for that
      key, and the merge is listed, not counted as a conflict. */
   const merged: string[] = [];
+
   for (const [key, value] of Object.entries(manifestUpdates)) {
     if (!Array.isArray(value)) continue;
+
     const prefixed = current[key];
     const bare = current[bareKey(key)];
     const existing = Array.isArray(prefixed) ? prefixed : Array.isArray(bare) ? bare : null;
     if (!existing) continue;
+
     manifestUpdates[key] = [...existing, ...value.filter((v) => !existing.includes(v))];
     merged.push(key);
   }
+
   const manifestConflicts = manifestKeys
     ? Object.keys(manifestUpdates).filter(
         (key) => !merged.includes(key) && manifestKeys.some((present) => bareKey(present) === bareKey(key)),

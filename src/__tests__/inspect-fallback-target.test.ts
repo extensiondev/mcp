@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
+import { handler } from "../tools/inspect";
+
 const cdp = vi.hoisted(() => ({
   navigated: [] as Array<{ sessionId: string; url: string }>,
   targets: [
@@ -63,8 +65,6 @@ vi.mock("../lib/cdp-port", () => ({
   CDP_PORT_MISSING_HINT: "",
 }));
 
-import { handler } from "../tools/inspect";
-
 describe("extension_inspect navigation fallback", () => {
   it("navigates a web page, not an open extension surface, when url matches nothing", async () => {
     cdp.navigated.length = 0;
@@ -87,6 +87,7 @@ describe("extension_inspect navigation fallback", () => {
     cdp.navigated.length = 0;
     const prev = cdp.targets;
     cdp.targets = [prev[0]];
+
     try {
       const out = JSON.parse(
         await handler({

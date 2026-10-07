@@ -61,9 +61,11 @@ describe("the allowance narration", () => {
     expect(
       readPlatformAllowance({ allowance: { used: "7", limit: "100" } }),
     ).toBeNull();
+
     expect(
       readPlatformAllowance({ allowance: { used: -1, limit: 100 } }),
     ).toBeNull();
+
     expect(readPlatformAllowance({ allowance: [7, 100] })).toBeNull();
     expect(readPlatformAllowance(null)).toBeNull();
     expect(readPlatformAllowance("allowance")).toBeNull();
@@ -83,6 +85,7 @@ describe("the allowance narration", () => {
     expect(allowanceWallUrl("http://localhost:3000")).toBe(
       "http://localhost:3000/pricing",
     );
+
     const n = spendNarration({ what: "This publish" });
     expect(n.wall).toBe(
       "What the allowance covers and when the paid plan starts are published at https://www.extension.dev/pricing.",

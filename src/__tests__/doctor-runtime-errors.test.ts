@@ -1,13 +1,17 @@
-import { describe, it, expect, afterEach } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+
+import { describe, it, expect, afterEach } from "vitest";
+
 import { recentErrorLogs } from "../tools/doctor";
 
 const tmpDirs: string[] = [];
+
 function tmpProject(): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-doctor-logs-"));
   tmpDirs.push(dir);
+
   return dir;
 }
 
@@ -20,7 +24,7 @@ function writeLogs(
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(
     path.join(dir, "logs.ndjson"),
-    events.map((e) => JSON.stringify(e)).join("\n") + "\n",
+    `${events.map((e) => JSON.stringify(e)).join("\n")  }\n`,
   );
 }
 
@@ -121,11 +125,11 @@ describe("recentErrorLogs", () => {
     fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(
       path.join(dir, "logs.ndjson"),
-      [
+      `${[
         JSON.stringify({ v: 1, runId: null, header: true }),
         "not json at all",
         JSON.stringify(engineEvent("error", ["real failure"])),
-      ].join("\n") + "\n",
+      ].join("\n")  }\n`,
     );
 
     expect(recentErrorLogs(project, "chrome")).toEqual(["real failure"]);

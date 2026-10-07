@@ -1,15 +1,18 @@
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, parse } from "node:path";
 import { fileURLToPath } from "node:url";
+
 import { defineConfig } from "vitest/config";
 
 const here = dirname(fileURLToPath(import.meta.url));
 
 const findPackageDir = (pkg: string) => {
   const { root } = parse(here);
+
   for (let dir = here; ; dir = dirname(dir)) {
     const candidate = join(dir, "node_modules", pkg);
     if (existsSync(join(candidate, "package.json"))) return candidate;
+
     if (dir === root) {
       throw new Error(`Cannot find ${pkg} in any node_modules above ${here}`);
     }
@@ -25,9 +28,11 @@ const aliasToDist = (pkg: string, subpath = ".") => {
   const entry =
     (typeof target === "string" ? target : target?.import) ??
     (subpath === "." ? pkgJson.main : undefined);
+
   if (!entry) {
     throw new Error(`${pkg} does not export "${subpath}"`);
   }
+
   return join(pkgDir, entry);
 };
 

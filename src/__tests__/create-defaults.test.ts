@@ -1,7 +1,8 @@
-import { describe, it, expect, vi, afterEach } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+
+import { describe, it, expect, vi, afterEach } from "vitest";
 
 
 let scaffoldTarget = "";
@@ -12,6 +13,7 @@ vi.mock("extension-create", () => ({
     fs.mkdirSync(scaffoldTarget, { recursive: true });
     fs.writeFileSync(path.join(scaffoldTarget, "manifest.json"), "{}");
     if (withGit) fs.mkdirSync(path.join(scaffoldTarget, ".git"));
+
     return {
       projectPath: scaffoldTarget,
       projectName: path.basename(scaffoldTarget),
@@ -25,14 +27,17 @@ vi.mock("extension-create", () => ({
 const create = await import("../tools/create");
 
 const tmpDirs: string[] = [];
+
 function tmpDir(): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-create-defaults-"));
   tmpDirs.push(dir);
+
   return dir;
 }
 
 afterEach(() => {
   withGit = false;
+
   for (const dir of tmpDirs.splice(0)) {
     fs.rmSync(dir, { recursive: true, force: true });
   }

@@ -1,9 +1,11 @@
+import { describe, expect, it, vi, beforeEach } from "vitest";
+
+import type * as CdpModule from "../lib/cdp";
 /* @invariant the inspect envelope names the document it
  * read, a throw is a failed section and never an empty value, an uncaught
  * exception counts as a console error, and every cap is said. Each cell
  * failed before its fix. */
 
-import { describe, expect, it, vi, beforeEach } from "vitest";
 
 const cdp = vi.hoisted(() => ({
   order: [] as string[],
@@ -15,7 +17,8 @@ const cdp = vi.hoisted(() => ({
 }));
 
 vi.mock("../lib/cdp", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../lib/cdp")>();
+  const actual = await importOriginal<typeof CdpModule>();
+
   return {
     ...actual,
     CDPClient: class {
@@ -36,6 +39,7 @@ vi.mock("../lib/cdp", async (importOriginal) => {
       async navigate(_sessionId: string, url: string) {
         cdp.order.push("navigate");
         if (cdp.navigateThrows) throw new Error(cdp.navigateThrows);
+
         const landed = cdp.landOn ?? url;
         cdp.targets = cdp.targets.map((t) => (t.id === "web" ? { ...t, url: landed, title: "Landed" } : t));
       }
@@ -44,6 +48,7 @@ vi.mock("../lib/cdp", async (importOriginal) => {
       }
       async getPageMeta() {
         if (cdp.metaThrows) throw new Error(cdp.metaThrows);
+
         return { url: "x" };
       }
       getConsoleSummary() {
@@ -139,12 +144,13 @@ describe("71c: a section that threw is named, never emptied", () => {
   });
 
   it("the CDP client throws on exceptionDetails instead of answering undefined", async () => {
-    const { CDPClient } = await vi.importActual<typeof import("../lib/cdp")>("../lib/cdp");
+    const { CDPClient } = await vi.importActual<typeof CdpModule>("../lib/cdp");
     const client = new CDPClient();
     (client as unknown as { sendCommand: unknown }).sendCommand = async () => ({
       result: { type: "object", subtype: "error" },
       exceptionDetails: { text: "Uncaught", exception: { description: "ReferenceError: nope is not defined" } },
     });
+
     await expect(client.evaluate("s", "nope")).rejects.toThrow(/ReferenceError: nope is not defined/);
   });
 });
@@ -161,6 +167,7 @@ describe("71b: an uncaught exception is a console error", () => {
         },
       }),
     );
+
     const summary = conn.getConsoleSummary() as { total: number; counts: Record<string, number>; topMessages: Array<{ text: string }> };
     expect(summary.total).toBe(1);
     expect(summary.counts.error).toBe(1);

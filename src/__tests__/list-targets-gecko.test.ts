@@ -1,5 +1,9 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
+
 import type { RdpTab } from "../lib/rdp";
+import type * as RdpModule from "../lib/rdp";
+import type * as CdpPortModule from "../lib/cdp-port";
+import type * as SessionBrowserModule from "../lib/session-browser";
 
 
 let rdpTabs: RdpTab[] = [];
@@ -7,18 +11,21 @@ let rdpError: Error | null = null;
 let rdpPort: number | null = 9223;
 
 vi.mock("../lib/rdp", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../lib/rdp")>();
+  const actual = await importOriginal<typeof RdpModule>();
+
   return {
     ...actual,
     rdpListTabs: async () => {
       if (rdpError) throw rdpError;
+
       return rdpTabs;
     },
   };
 });
 
 vi.mock("../lib/cdp-port", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../lib/cdp-port")>();
+  const actual = await importOriginal<typeof CdpPortModule>();
+
   return {
     ...actual,
     resolveRdpPort: async () =>
@@ -27,7 +34,8 @@ vi.mock("../lib/cdp-port", async (importOriginal) => {
 });
 
 vi.mock("../lib/session-browser", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../lib/session-browser")>();
+  const actual = await importOriginal<typeof SessionBrowserModule>();
+
   return {
     ...actual,
     resolveSessionBrowser: (_p: string, browser?: string) => ({
@@ -88,6 +96,7 @@ describe("extension_dom_snapshot listTargets on Gecko (RDP root listTabs)", () =
         title: "",
       },
     ]);
+
     expect(result.warnings[0]).toContain("NOT a chrome.tabs id");
   });
 

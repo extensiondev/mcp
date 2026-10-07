@@ -1,8 +1,10 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { createHash } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
+
 import {
   CARRIER_DIR_NAME,
   CARRIER_EXTENSION_ID,
@@ -35,6 +37,7 @@ describe("materializeCarrier", () => {
     expect(
       fs.existsSync(path.join(target, "managed-by-extension-dev-mcp.json")),
     ).toBe(true);
+
     const manifest = JSON.parse(
       fs.readFileSync(path.join(target, "manifest.json"), "utf-8"),
     ) as { name?: string };
@@ -92,6 +95,7 @@ describe("materializeCarrier", () => {
     expect(g).toMatch(
       /extension_storage|extension_eval|extension_dom_snapshot/,
     );
+
     expect(g).toMatch(/allowControl|allowEval/);
   });
 

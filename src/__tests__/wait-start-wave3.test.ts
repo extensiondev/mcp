@@ -1,23 +1,28 @@
-import { describe, it, expect, afterEach } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+
+import { describe, it, expect, afterEach } from "vitest";
 
 import { handler as wait } from "../tools/wait";
 import { handler as start, schema as startSchema } from "../tools/start";
 import { readyContractPath } from "../lib/session-paths";
 
 const dirs: string[] = [];
+
 function project(): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-wave3-"));
   dirs.push(dir);
+
   return dir;
 }
+
 function contract(dir: string, body: Record<string, unknown>): void {
   const file = readyContractPath(dir, "chrome");
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, JSON.stringify(body));
 }
+
 afterEach(() => {
   for (const d of dirs.splice(0)) fs.rmSync(d, { recursive: true, force: true });
 });

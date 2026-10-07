@@ -2,10 +2,11 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+
 import { WebSocketServer } from "ws";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-
 import * as bridge from "extension-develop/bridge";
+
 import { handler, controlRefusal } from "../tools/logs";
 import {
   CLOSE_BAD_HELLO,
@@ -50,6 +51,7 @@ describe("control-channel constants come from the engine, not from literals", ()
       .split("\n")
       .filter((line) => !line.trimStart().startsWith("//"))
       .join("\n");
+
     for (const name of [
       "CONTROL_WS_PATH",
       "CONTROL_ENVELOPE_VERSION",
@@ -61,9 +63,11 @@ describe("control-channel constants come from the engine, not from literals", ()
     ]) {
       expect(code).not.toMatch(new RegExp(`(const|let|var)\\s+${name}\\s*=`));
     }
+
     expect(code).toMatch(
       /export\s*\{[^}]*CONTROL_WS_PATH[^}]*\}\s*from\s*["']extension-develop\/bridge["']/s,
     );
+
     expect(code).toMatch(
       /export\s*\{[^}]*CLOSE_SLOW_CONSUMER[^}]*\}\s*from\s*["']extension-develop\/bridge["']/s,
     );
@@ -86,11 +90,13 @@ describe("control-channel constants come from the engine, not from literals", ()
       CLOSE_CONTROL_UNAVAILABLE,
       CLOSE_SLOW_CONSUMER,
     };
+
     for (const [name, value] of Object.entries(adopted)) {
       expect(
         published[name],
         `extension-develop/bridge no longer exports ${name}: every refusal would read as an unrecognised close`,
       ).toBeTypeOf("number");
+
       expect(value, `${name} is not the engine's own value`).toBe(
         published[name],
       );
@@ -119,6 +125,7 @@ describe("control-channel constants come from the engine, not from literals", ()
     expect(
       (bridge as unknown as Record<string, unknown>).CLOSE_REFUSAL_FLOOR,
     ).toBeUndefined();
+
     for (const code of [
       CLOSE_BAD_INSTANCE,
       CLOSE_BAD_HELLO,
@@ -128,6 +135,7 @@ describe("control-channel constants come from the engine, not from literals", ()
       expect(code).toBeGreaterThanOrEqual(CLOSE_REFUSAL_FLOOR);
       expect(controlRefusal(code, "", "ws://x", 1)).toBeDefined();
     }
+
     expect(controlRefusal(CLOSE_REFUSAL_FLOOR - 1, "", "ws://x", 1)).toBeUndefined();
   });
 });
@@ -411,6 +419,7 @@ describe("older engine, different control envelope", () => {
               event: { context: "background", level: "info", seq: 4 },
             }),
           );
+
           setTimeout(() => conn.close(4002, "unsupported envelope version"), 50);
         });
       });

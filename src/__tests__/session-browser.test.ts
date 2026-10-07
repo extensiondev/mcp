@@ -1,7 +1,9 @@
-import { describe, it, expect, afterEach } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+
+import { describe, it, expect, afterEach } from "vitest";
+
 import {
   resolveSessionBrowser,
   knownSessionBrowsers,
@@ -15,9 +17,11 @@ import {
 } from "../lib/process-manager";
 
 const tmpDirs: string[] = [];
+
 function tmpProject(): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-session-browser-"));
   tmpDirs.push(dir);
+
   return dir;
 }
 
@@ -32,6 +36,7 @@ function writeContract(
 }
 
 const registered: Array<{ projectPath: string; browser: string }> = [];
+
 function register(projectPath: string, browser: string): void {
   registerSession({ pid: process.pid, browser, projectPath, command: "dev" });
   registered.push({ projectPath, browser });
@@ -42,6 +47,7 @@ afterEach(() => {
     removeSession(projectPath, browser);
     removeSessionMarker(projectPath, browser);
   }
+
   for (const dir of tmpDirs.splice(0)) {
     fs.rmSync(dir, { recursive: true, force: true });
   }
@@ -63,6 +69,7 @@ describe("resolveSessionBrowser", () => {
       browser: "chrome",
       source: "fallback",
     });
+
     expect(resolveSessionBrowser(project, undefined, "firefox")).toEqual({
       browser: "firefox",
       source: "fallback",
@@ -158,6 +165,7 @@ describe("liveProjectSessions", () => {
       projectPath: project,
       command: "dev",
     });
+
     registered.push({ projectPath: project, browser: "chrome" });
     removeSession(project, "chrome");
 
@@ -195,6 +203,7 @@ describe("toMcpSpeak", () => {
     expect(toMcpSpeak("Is the session started with --allow-control?")).toBe(
       "Is the session started with allowControl: true (extension_dev)?",
     );
+
     expect(toMcpSpeak("eval requires --allow-eval")).toBe(
       "eval requires allowEval: true (extension_dev)",
     );
@@ -204,6 +213,7 @@ describe("toMcpSpeak", () => {
     expect(toMcpSpeak("retry with --browser=firefox")).toBe(
       'retry with browser: "firefox"',
     );
+
     expect(toMcpSpeak("start extension dev first")).toBe(
       "start extension_dev first",
     );

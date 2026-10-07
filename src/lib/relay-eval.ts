@@ -41,6 +41,7 @@ function cloneHelper(): string {
 export function relaySafeExpression(expression: string, token: string): string {
   const src = JSON.stringify(expression);
   const key = JSON.stringify(token);
+
   return `(function () {
   ${cloneHelper()}
   var value = (0, eval)(${src});
@@ -60,6 +61,7 @@ export function relaySafeExpression(expression: string, token: string): string {
 
 export function relayPollExpression(token: string): string {
   const key = JSON.stringify(token);
+
   return `(function () {
   var store = globalThis.${RELAY_MARK};
   var entry = store && store[${key}];
@@ -72,8 +74,10 @@ export function relayPollExpression(token: string): string {
 
 export function readRelayFrame(value: unknown): RelayFrame | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+
   const frame = value as Record<string, unknown>;
   if (frame[RELAY_MARK] !== 1 || typeof frame.done !== "boolean") return null;
+
   return {
     done: frame.done,
     ...(typeof frame.ok === "boolean" ? { ok: frame.ok } : {}),

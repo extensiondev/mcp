@@ -1,8 +1,12 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+
 import { browserFromCliArgs, writeEngineDist } from "./fixtures/engine-answers";
+
+import type * as ExecModule from "../lib/exec";
 
 interface CliResponse {
   code: number;
@@ -14,15 +18,18 @@ const cliCalls: string[][] = [];
 let cliResponder: ((args: string[]) => CliResponse) | null = null;
 
 vi.mock("../lib/exec", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../lib/exec")>();
+  const actual = await importOriginal<typeof ExecModule>();
+
   return {
     ...actual,
     runExtensionCli: async (args: string[]) => {
       cliCalls.push(args);
       const answer = cliResponder?.(args) ?? { code: 0, stdout: "", stderr: "" };
+
       if (args[0] === "build" && answer.code === 0) {
         writeEngineDist(args[1]!, browserFromCliArgs(args));
       }
+
       return answer;
     },
   };
@@ -58,6 +65,7 @@ function projectWithLocalEngine(): string {
     path.join(dir, "src", "manifest.json"),
     JSON.stringify(MANIFEST),
   );
+
   const bin = path.join(dir, "node_modules", ".bin");
   fs.mkdirSync(bin, { recursive: true });
   const exe = path.join(
@@ -69,6 +77,7 @@ function projectWithLocalEngine(): string {
   const dist = path.join(dir, "dist", "chrome");
   fs.mkdirSync(dist, { recursive: true });
   fs.writeFileSync(path.join(dist, "manifest.json"), JSON.stringify(MANIFEST));
+
   return dir;
 }
 
@@ -134,9 +143,11 @@ function capabilitiesFrame(
 function engine(version: string, onBuild: CliResponse) {
   return (args: string[]): CliResponse => {
     if (args[0] === "capabilities") return CAPABILITIES_UNKNOWN;
+
     if (args[0] === "--version") {
       return { code: 0, stdout: `${version}\n`, stderr: "" };
     }
+
     return onBuild;
   };
 }
@@ -144,12 +155,15 @@ function engine(version: string, onBuild: CliResponse) {
 function engineBelowTheFloor(version: string, onBuild: CliResponse) {
   return (args: string[]): CliResponse => {
     if (args[0] === "capabilities") return CAPABILITIES_UNKNOWN;
+
     if (args[0] === "--version") {
       return { code: 0, stdout: `${version}\n`, stderr: "" };
     }
+
     if (args.includes("--output")) {
       return { code: 1, stdout: "", stderr: UNKNOWN_OUTPUT };
     }
+
     return onBuild;
   };
 }
@@ -163,9 +177,11 @@ function engineWithCapabilities(
     if (args[0] === "capabilities") {
       return { code: 0, stdout: `${capabilitiesFrame(version, roster)}\n`, stderr: "" };
     }
+
     if (args[0] === "--version") {
       return { code: 0, stdout: `${version}\n`, stderr: "" };
     }
+
     return onBuild;
   };
 }
@@ -187,6 +203,7 @@ afterEach(() => {
   cliCalls.length = 0;
   cliResponder = null;
   engineVersion.resetEngineVersionCache();
+
   for (const dir of tmpDirs.splice(0)) {
     fs.rmSync(dir, { recursive: true, force: true });
   }
@@ -226,6 +243,7 @@ describe("compareVersions follows semver precedence on real engine shapes", () =
     expect(
       cmp("4.0.19-canary.9007199254740993", "4.0.19-canary.9007199254740992"),
     ).toBeGreaterThan(0);
+
     expect(
       cmp("4.0.19-canary.9007199254740992", "4.0.19-canary.9007199254740993"),
     ).toBeLessThan(0);
@@ -371,10 +389,12 @@ describe("the build probes the engine before it spends a compile", () => {
   it("falls through to the retry when the probe cannot be read", async () => {
     const dir = projectWithLocalEngine();
     persistSummary(dir, { browser: "chrome", size: 1234, warnings: [] });
+
     cliResponder = (args) => {
       if (args[0] === "--version") {
         return { code: 1, stdout: "", stderr: "spawn ENOENT" };
       }
+
       return args.includes("--output")
         ? { code: 1, stdout: "", stderr: UNKNOWN_OUTPUT }
         : { code: 0, stdout: "", stderr: "" };
@@ -394,10 +414,12 @@ describe("the build probes the engine before it spends a compile", () => {
   it("falls through to the retry when the version is unparseable", async () => {
     const dir = projectWithLocalEngine();
     persistSummary(dir, { browser: "chrome", size: 1234, warnings: [] });
+
     cliResponder = (args) => {
       if (args[0] === "--version") {
         return { code: 0, stdout: "unknown\n", stderr: "" };
       }
+
       return args.includes("--output")
         ? { code: 1, stdout: "", stderr: UNKNOWN_OUTPUT }
         : { code: 0, stdout: "", stderr: "" };
@@ -412,11 +434,14 @@ describe("the build probes the engine before it spends a compile", () => {
   it("retries a refusal worded the redesigned way just like the old one", async () => {
     const dir = projectWithLocalEngine();
     persistSummary(dir, { browser: "chrome", size: 1234, warnings: [] });
+
     cliResponder = (args) => {
       if (args[0] === "capabilities") return CAPABILITIES_UNKNOWN;
+
       if (args[0] === "--version") {
         return { code: 0, stdout: "unknown\n", stderr: "" };
       }
+
       return args.includes("--output")
         ? { code: 1, stdout: "", stderr: UNKNOWN_OUTPUT_REDESIGNED }
         : { code: 0, stdout: "", stderr: "" };
@@ -545,6 +570,7 @@ describe("an engine that answers capabilities is judged from its own roster", ()
       stdout: "",
       stderr: "",
     });
+
     persistSummary(dir, { browser: "chrome", size: 1234, warnings: [] });
 
     const result = await run({ projectPath: dir, browser: "chrome" });
@@ -557,6 +583,7 @@ describe("an engine that answers capabilities is judged from its own roster", ()
 
   it("does not believe an exit-zero frame that is not the capabilities answer", async () => {
     const dir = projectWithLocalEngine();
+
     cliResponder = (args) => {
       if (args[0] === "capabilities") {
         return {
@@ -573,9 +600,11 @@ describe("an engine that answers capabilities is judged from its own roster", ()
           stderr: "",
         };
       }
+
       if (args[0] === "--version") {
         return { code: 0, stdout: "4.0.18\n", stderr: "" };
       }
+
       return { code: 0, stdout: "", stderr: "" };
     };
 
@@ -609,17 +638,20 @@ describe("the verdict is cached so a build does not pay for a probe", () => {
     const older = projectWithLocalEngine();
     const newer = projectWithLocalEngine();
     persistSummary(older, { browser: "chrome", size: 1, warnings: [] });
+
     cliResponder = (args) => {
       if (args[0] === "--version") {
         const forOlder = cliCalls
           .filter((c) => c[0] === "--version")
           .length === 1;
+
         return {
           code: 0,
           stdout: forOlder ? "4.0.16\n" : "4.0.18\n",
           stderr: "",
         };
       }
+
       return { code: 0, stdout: "", stderr: "" };
     };
 
@@ -641,6 +673,7 @@ describe("the verdict is cached so a build does not pay for a probe", () => {
 
     const realNow = Date.now;
     Date.now = () => realNow() + 61_000;
+
     try {
       await engineVersion.resolvedEngineVersion(dir);
     } finally {

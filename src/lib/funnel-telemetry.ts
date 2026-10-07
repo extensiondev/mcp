@@ -83,6 +83,7 @@ export function posthogKeyForEnvironment(environment: unknown): string {
       PLATFORM_PROJECT_KEY
     );
   }
+
   return String(
     process.env.EXTENSION_DEV_POSTHOG_KEY_NONPRODUCTION || "",
   ).trim();
@@ -92,6 +93,7 @@ export function shouldSendCreationFunnelEvent(): boolean {
   if (telemetryDisabled()) return false;
   if (!posthogKeyForEnvironment(funnelEnvironment())) return false;
   if (!sessionId()) return false;
+
   return typeof fetch === "function";
 }
 
@@ -125,8 +127,10 @@ export function creationFunnelPayload(
   now: Date = new Date(),
 ): CreationFunnelPayload | null {
   if (!shouldSendCreationFunnelEvent()) return null;
+
   const environment = funnelEnvironment();
   const session = sessionId();
+
   return {
     api_key: posthogKeyForEnvironment(environment),
     event,
@@ -169,11 +173,13 @@ export async function captureCreationFunnelEvent(
   try {
     const payload = creationFunnelPayload(event, properties);
     if (!payload) return null;
+
     await fetchImpl(`${posthogHost()}/capture/`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     }).catch(() => undefined);
+
     return payload;
   } catch {
     return null;
@@ -188,7 +194,9 @@ export async function captureTemplateSeed(
     const slug = String(input?.slug || "").trim();
     if (!slug) return null;
     if (!shouldSendCreationFunnelEvent()) return null;
+
     const commit = await resolvedTemplateCommit();
+
     return await captureCreationFunnelEvent(
       DRAFT_SEEDED_EVENT,
       {

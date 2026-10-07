@@ -1,9 +1,14 @@
-import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+
+import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
+
 import { envelope } from "../lib/envelope";
+
+import type * as ActModule from "../lib/act";
+import type * as CdpPortModule from "../lib/cdp-port";
 
 const gestureRefusal = () =>
   JSON.stringify({
@@ -25,18 +30,21 @@ const gestureRefusal = () =>
 let actResult = gestureRefusal();
 const cliCalls: string[][] = [];
 vi.mock("../lib/act", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../lib/act")>();
+  const actual = await importOriginal<typeof ActModule>();
+
   return {
     ...actual,
     runActVerb: async (cli: string[]) => {
       cliCalls.push(cli);
+
       return actResult;
     },
   };
 });
 
 vi.mock("../lib/cdp-port", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../lib/cdp-port")>();
+  const actual = await importOriginal<typeof CdpPortModule>();
+
   return { ...actual, resolveCdpPort: async () => ({ port: 9222, source: "contract" as const }) };
 });
 
@@ -83,23 +91,31 @@ vi.mock("../lib/cdp", () => {
       sessionId?: string,
     ) {
       commands.push({ method, params, sessionId });
+
       if (method === "Target.createTarget") {
         const url = String(params.url ?? "");
         const id = params.background === true ? "fallback-tab" : "host";
         if (id === "host") hostUrl = url;
+
         cdpTargets = [...cdpTargets, { id, type: "page", url }];
+
         return { targetId: id };
       }
+
       if (method === "Runtime.evaluate") {
         const expression = String(params.expression ?? "");
+
         if (expression.includes("chrome.sidePanel.open")) {
           armed = true;
           phase = "armed";
+
           return { result: { type: "number", value: 7 } };
         }
+
         if (expression.includes("typeof chrome.sidePanel")) {
           return { result: { type: "boolean", value: true } };
         }
+
         if (expression.includes("__extensionDevSidePanel")) {
           return {
             result: {
@@ -108,8 +124,10 @@ vi.mock("../lib/cdp", () => {
             },
           };
         }
+
         return { result: { type: "undefined" } };
       }
+
       if (method === "Input.dispatchMouseEvent") {
         if (params.type === "mouseReleased" && armed) {
           if (panelRejects) {
@@ -117,6 +135,7 @@ vi.mock("../lib/cdp", () => {
             phaseMessage = panelRejects;
           } else {
             phase = "opened";
+
             if (panelAppears) {
               cdpTargets = [
                 ...cdpTargets,
@@ -125,18 +144,23 @@ vi.mock("../lib/cdp", () => {
             }
           }
         }
+
         return {};
       }
+
       if (method === "Target.closeTarget") {
         if (!hostStaysListedAfterClose) {
           cdpTargets = cdpTargets.filter((t) => t.id !== params.targetId);
         }
+
         return {};
       }
+
       return {};
     }
     disconnect() {}
   }
+
   return { CDPClient };
 });
 
@@ -145,14 +169,17 @@ const open = await import("../tools/open");
 function expectedId(distPath: string): string {
   const d = crypto.createHash("sha256").update(distPath).digest();
   let id = "";
+
   for (let i = 0; i < 16; i++) {
     id += String.fromCharCode(97 + (d[i] >> 4));
     id += String.fromCharCode(97 + (d[i] & 0x0f));
   }
+
   return id;
 }
 
 const tmpDirs: string[] = [];
+
 function project(): { dir: string; id: string; url: string } {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-open-gesture-"));
   tmpDirs.push(dir);
@@ -166,6 +193,7 @@ function project(): { dir: string; id: string; url: string } {
       side_panel: { default_path: "sidebar/index.html" },
     }),
   );
+
   const distPath = path.join(dir, "dist", "chrome");
   const readyDir = path.join(dir, "dist", "extension-js", "chrome");
   fs.mkdirSync(readyDir, { recursive: true });
@@ -173,7 +201,9 @@ function project(): { dir: string; id: string; url: string } {
     path.join(readyDir, "ready.json"),
     JSON.stringify({ status: "ready", distPath }),
   );
+
   const id = expectedId(distPath);
+
   return { dir, id, url: `chrome-extension://${id}/sidebar/index.html` };
 }
 
@@ -190,6 +220,7 @@ afterEach(() => {
     if (savedEnv[key] === undefined) delete process.env[key];
     else process.env[key] = savedEnv[key];
   }
+
   actResult = gestureRefusal();
   cliCalls.length = 0;
   commands.length = 0;
@@ -202,6 +233,7 @@ afterEach(() => {
   phase = null;
   phaseMessage = undefined;
   hostUrl = "";
+
   for (const dir of tmpDirs.splice(0)) {
     fs.rmSync(dir, { recursive: true, force: true });
   }
@@ -245,6 +277,7 @@ describe("extension_open sidebar on Chromium when Chrome demands a user gesture"
       gesture: "synthetic-click",
       surfaceTarget: { targetId: "panel", url: p.url },
     });
+
     expect(result.warnings[0]).toContain("synthetic");
     expect(result.warnings[0]).toContain("toolbar wiring");
     expect(result.warnings[0]).toContain("not exercised");
@@ -318,6 +351,7 @@ describe("extension_open sidebar on Chromium when Chrome demands a user gesture"
       surface: "sidebar",
       extensionId: p.id,
     });
+
     const warning = result.warnings.find((w: string) =>
       w.includes("synthetic click did not open it"),
     );

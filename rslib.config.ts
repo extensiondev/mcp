@@ -8,17 +8,20 @@
 
 import * as path from "path";
 import { createRequire } from "module";
+
 import { defineConfig } from "@rslib/core";
 
 const require = createRequire(import.meta.url);
 const shouldGenerateDts = (() => {
   try {
     require("@ast-grep/napi");
+
     return true;
   } catch {
     console.warn(
       "[Extension.js] Skipping d.ts generation: @ast-grep/napi failed to load.",
     );
+
     return false;
   }
 })();

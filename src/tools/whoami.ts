@@ -50,6 +50,7 @@ function describeServer(check: ServerCheck, api: string) {
       },
     };
   }
+
   if (check.kind === "refused") {
     return {
       status: "refused-by-server",
@@ -58,6 +59,7 @@ function describeServer(check: ServerCheck, api: string) {
       value: { verdict: "refused", api },
     };
   }
+
   if (check.kind === "unavailable") {
     return {
       status: "logged-in",
@@ -66,6 +68,7 @@ function describeServer(check: ServerCheck, api: string) {
       value: { verdict: "unavailable", api, detail: check.detail },
     };
   }
+
   return {
     status: "expired",
     note: null,
@@ -79,6 +82,7 @@ export async function readIdentity(deps?: {
 }): Promise<string> {
   const creds = readCredentials();
   const problem = creds ? null : credentialStoreProblem();
+
   if (problem) {
     return envelope({
       ok: false,
@@ -93,6 +97,7 @@ export async function readIdentity(deps?: {
       hint: "This is not a logged-out machine: the file is there and may hold logins. Fix or move it and run extension_auth (action: status) again; a new login is refused while it is unreadable, and extension_auth (action: logout) with no project removes it if its logins are not worth recovering.",
     });
   }
+
   if (!creds) {
     return envelope({
       ok: true,
@@ -103,6 +108,7 @@ export async function readIdentity(deps?: {
             value: {
               envToken: (() => {
                 const claims = readTokenClaims(String(process.env.EXTENSION_DEV_TOKEN));
+
                 return claims ? `${claims.workspace}/${claims.project}` : "unreadable claims";
               })(),
             },
@@ -111,6 +117,7 @@ export async function readIdentity(deps?: {
       hint: String(process.env.EXTENSION_DEV_TOKEN || "").trim()
         ? `No stored login, but EXTENSION_DEV_TOKEN is set and is what authenticated tools send${(() => {
             const claims = readTokenClaims(String(process.env.EXTENSION_DEV_TOKEN));
+
             return claims ? ` (per its claims it belongs to ${claims.workspace}/${claims.project})` : " (its claims could not be read)";
           })()}. Run extension_auth (action: login) to store a login as well.`
         : "No stored credentials. Run extension_auth (action: login) to authenticate.",
@@ -130,6 +137,7 @@ export async function readIdentity(deps?: {
   );
 
   let check: ServerCheck;
+
   if (expired) {
     check = {
       kind: "not-asked",
@@ -145,6 +153,7 @@ export async function readIdentity(deps?: {
         })
       : { kind: "unavailable", detail: safe.message };
   }
+
   const server = describeServer(check, askApi);
 
   const identityNote = expired

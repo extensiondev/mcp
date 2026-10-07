@@ -153,6 +153,7 @@ function pendingEnvelope(start: {
   const message = hasCompleteLink
     ? `Open ${complete} and approve creating the project (code ${start.userCode} is pre-filled), then call extension_project_create again with this deviceCode and the same arguments. If the page asks for a code, enter ${start.userCode} at ${start.verificationUri}.`
     : `Open ${start.verificationUri}, enter code ${start.userCode}, approve creating the project, then call extension_project_create again with this deviceCode and the same arguments.`;
+
   return envelope({
     ok: true,
     command: COMMAND,
@@ -185,7 +186,9 @@ export async function handler(args: {
   if (args.projects !== undefined && args.projects !== null) {
     return createProjectBatch(args);
   }
+
   const project = String(args.project || "").trim();
+
   if (!/^[^/]+\/[^/]+$/.test(project)) {
     return fail(
       "BadRequest",
@@ -194,7 +197,9 @@ export async function handler(args: {
       "E_BAD_REQUEST",
     );
   }
+
   const repo = String(args.repo || "").trim();
+
   if (!/^[^/]+\/[^/]+$/.test(repo)) {
     return fail(
       "BadRequest",
@@ -203,7 +208,9 @@ export async function handler(args: {
       "E_BAD_REQUEST",
     );
   }
+
   const installationId = String(args.installationId || "").trim();
+
   if (installationId && !/^\d+$/.test(installationId)) {
     return fail(
       "BadRequest",
@@ -214,12 +221,15 @@ export async function handler(args: {
   }
 
   const apiCheck = safeApiBase(resolveApiBase(args.api), args.api);
+
   if (!apiCheck.ok) {
     return fail("ConfigError", apiCheck.message, "bad-request", "E_BAD_REQUEST");
   }
+
   const apiBase = apiCheck.base;
 
   let config;
+
   try {
     config = await fetchLoginConfig(apiBase);
   } catch (err: any) {
@@ -234,8 +244,10 @@ export async function handler(args: {
   let deviceCode = String(args.deviceCode || "").trim();
   let interval = 5;
   let budgetMs = RESUME_BUDGET_MS;
+
   if (!deviceCode) {
     let start;
+
     try {
       start = await requestDeviceCode({
         apiBase,
@@ -248,6 +260,7 @@ export async function handler(args: {
       const laneClosed = laneClosedByServer(err, "CLI_PROJECT_CREATE_DISABLED");
       const serverMessage =
         typeof err?.serverMessage === "string" ? err.serverMessage.trim() : "";
+
       return fail(
         "CreateStartError",
         laneClosed
@@ -259,6 +272,7 @@ export async function handler(args: {
         laneClosed ? laneClosedHint() : undefined,
       );
     }
+
     deviceCode = start.deviceCode;
     interval = start.interval;
     budgetMs = FIRST_CALL_BUDGET_MS;
@@ -270,9 +284,11 @@ export async function handler(args: {
       interval,
       budgetMs,
     });
+
     if (!early.ok && early.reason === "pending") {
       return pendingEnvelope(start);
     }
+
     return finishFromPoll(early, {
       apiBase,
       project,
@@ -290,6 +306,7 @@ export async function handler(args: {
     interval,
     budgetMs,
   });
+
   return finishFromPoll(poll, {
     apiBase,
     project,
@@ -332,10 +349,12 @@ async function finishFromPoll(
         hint: `Still waiting for approval at ${ctx.verificationUri}. Approve there, then call extension_project_create again with this same deviceCode.`,
       });
     }
+
     if (poll.reason === "denied") {
       if (poll.code === "CLI_PROJECT_CREATE_DISABLED") {
         return fail("CreateClosed", poll.message || "Headless project creation is not open on this host.", "lane-closed", "E_PLATFORM", laneClosedHint());
       }
+
       return fail(
         "CreateDenied",
         `Creating the project was denied at extension.dev/device${poll.code ? ` (${poll.code})` : ""}${poll.message ? `: ${poll.message}` : "."}`,
@@ -343,6 +362,7 @@ async function finishFromPoll(
         "E_AUTH_DENIED",
       );
     }
+
     if (poll.reason === "expired") {
       return fail(
         "CreateExpired",
@@ -351,6 +371,7 @@ async function finishFromPoll(
         "E_AUTH_EXPIRED",
       );
     }
+
     return fail(
       "CreateAuthError",
       poll.message || "Device authorization failed.",
@@ -364,6 +385,7 @@ async function finishFromPoll(
   const workspaceSlug = String(grant.workspaceSlug || "").trim();
   const projectSlug = String(grant.projectSlug || "").trim();
   const [wantWorkspace = "", wantProject = ""] = ctx.project.split("/");
+
   if (
     workspaceSlug.toLowerCase() !== wantWorkspace.toLowerCase() ||
     projectSlug.toLowerCase() !== wantProject.toLowerCase()
@@ -375,6 +397,7 @@ async function finishFromPoll(
       "E_AUTH_FAILED",
     );
   }
+
   /* @invariant THE LOGIN THE PLATFORM MINTED IS KEPT. For a create-intent
      code on a project that already exists the platform approves a plain
      login and mints its 7-day token; dropping it and asking for a second
@@ -382,6 +405,7 @@ async function finishFromPoll(
   if (String(grant.tokenKind || "") !== "provisioning") {
     let stored: { workspaceSlug: string; projectSlug: string; expiresAt?: number } | null = null;
     let storeFailure: string | null = null;
+
     if (token) {
       try {
         const creds = persistTokenResponse({ apiBase: ctx.apiBase, project: ctx.project, data: grant as Record<string, unknown> });
@@ -390,6 +414,7 @@ async function finishFromPoll(
         storeFailure = err instanceof Error ? err.message : String(err);
       }
     }
+
     return envelope({
       ok: stored !== null,
       command: COMMAND,
@@ -445,6 +470,7 @@ async function finishFromPoll(
       hint: `Do not create it again blind: the grant is spent, and a second create racing the first is two builds claiming one name. Look for ${ctx.project} in the console at ${consoleBase()}. If it is there, sign in with extension_auth (action: login, project: '${ctx.project}'); only if it is not, call extension_project_create again.`,
     });
   let res: Response;
+
   try {
     res = await fetch(url, {
       method: "POST",
@@ -463,6 +489,7 @@ async function finishFromPoll(
   }
 
   let text: string;
+
   try {
     text = await res.text();
   } catch (err: any) {
@@ -471,7 +498,9 @@ async function finishFromPoll(
       "E_NETWORK",
     );
   }
+
   let data: Record<string, unknown>;
+
   try {
     data = JSON.parse(text);
   } catch {
@@ -480,6 +509,7 @@ async function finishFromPoll(
 
   if (!res.ok) {
     const code = String(data.code || "");
+
     /* @invariant Held first. Every branch under it points somewhere on the
      * platform, and the platform is what has been shut. */
     if (sawPlatformHold(res, data)) {
@@ -490,6 +520,7 @@ async function finishFromPoll(
         value: { workspace: wantWorkspace, project: wantProject },
       });
     }
+
     if (code === "CLI_PROJECT_CREATE_DISABLED") {
       return fail(
         "CreateClosed",
@@ -499,12 +530,14 @@ async function finishFromPoll(
         laneClosedHint(),
       );
     }
+
     /* @invariant The connect URL is echoed only when the PLATFORM sent one, and
      * it is never constructed here. A tool that builds its own install link is
      * a tool that can be talked into building a link to somebody else's page,
      * and this envelope is read by a model that will hand the link to a human.
      */
     const connectUrl = String(data.connectUrl || "").trim();
+
     if (
       code === "INSTALLATION_ABSENT" ||
       code === "INSTALLATION_ORG_UNSUPPORTED" ||
@@ -531,6 +564,7 @@ async function finishFromPoll(
               : "Connect the extension.dev GitHub App to the approving account, then start a new extension_project_create call (this device code is spent). Nothing was created.",
       });
     }
+
     if (code === "PROJECT_EXISTS") {
       return envelope({
         ok: false,
@@ -543,12 +577,14 @@ async function finishFromPoll(
         hint: `Run extension_auth (action: login) with project '${ctx.project}'.`,
       });
     }
+
     if (answerIsUnknownOutcome(res.status, data)) {
       return unconfirmed(
         `The create request for ${ctx.project} got a ${res.status} with no platform code, which is an answer from in front of the platform while the create may still be running`,
         "E_PLATFORM",
       );
     }
+
     return fail(
       "CreateError",
       `create failed (${res.status}): ${String(
@@ -560,12 +596,14 @@ async function finishFromPoll(
   }
 
   const createdAnswer = readCreatedProject(data);
+
   if (!createdAnswer.ok) {
     return unconfirmed(
       `The platform answered ${res.status} for ${ctx.project} but ${createdAnswer.why}`,
       "E_PLATFORM",
     );
   }
+
   const finalWorkspace = createdAnswer.workspaceSlug;
   const finalProject = createdAnswer.projectSlug;
   const renamed =
@@ -580,6 +618,7 @@ async function finishFromPoll(
     { workspace: finalWorkspace, project: finalProject },
     "builds",
   );
+
   return envelope({
     ok: true,
     command: COMMAND,

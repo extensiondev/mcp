@@ -1,23 +1,27 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
+import os from "node:os";
+
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+
+import { fetchTemplatesMeta, fetchTemplatesMetaWithSource, listTemplates, listTemplatesWithSource } from "../lib/templates-cache";
+
+import type * as OsModule from "node:os";
 
 vi.mock("node:os", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("node:os")>();
+  const actual = await importOriginal<typeof OsModule>();
   const fsx = await import("node:fs");
   const fakeHome = fsx.mkdtempSync(
     `${actual.tmpdir()}/mcp-templates-home-`,
   );
   const homedir = () => fakeHome;
+
   return { ...actual, homedir, default: { ...actual, homedir } };
 });
 
 vi.mock("../lib/template-artifact-source", () => ({
   templateMetaUrls: async () => ["https://example.invalid/templates-meta.json"],
 }));
-
-import os from "node:os";
-import { fetchTemplatesMeta, fetchTemplatesMetaWithSource, listTemplates, listTemplatesWithSource } from "../lib/templates-cache";
 
 const fakeHome = os.homedir();
 const cacheDir = path.join(fakeHome, ".cache", "extension-js");
@@ -40,6 +44,7 @@ describe("templates cache resilience", () => {
         throw new Error("offline");
       }),
     );
+
     const meta = await fetchTemplatesMeta();
     expect(meta.templates.length).toBeGreaterThan(0);
     const templates = await listTemplates();
@@ -55,6 +60,7 @@ describe("templates cache resilience", () => {
         throw new Error("offline");
       }),
     );
+
     const meta = await fetchTemplatesMeta();
     expect(meta.templates.length).toBeGreaterThan(0);
   });
@@ -68,6 +74,7 @@ describe("templates cache resilience", () => {
         json: async () => ({}),
       })),
     );
+
     const meta = await fetchTemplatesMeta();
     expect(meta.templates.length).toBeGreaterThan(0);
     expect(fs.existsSync(cacheFile)).toBe(false);
@@ -89,6 +96,7 @@ describe("templates cache resilience", () => {
     expect(JSON.parse(fs.readFileSync(cacheFile, "utf8")).templates[0].slug).toBe(
       "one",
     );
+
     const again = await fetchTemplatesMeta();
     expect(again.templates[0].slug).toBe("one");
     expect(fetchMock).toHaveBeenCalledTimes(1);
@@ -97,6 +105,7 @@ describe("templates cache resilience", () => {
   it("keeps a good live catalog when the cache directory cannot be written, and says so", async () => {
     fs.mkdirSync(path.dirname(cacheDir), { recursive: true });
     fs.writeFileSync(cacheDir, "not a directory");
+
     try {
       const payload = { version: "2", templates: [{ slug: "one", surfaces: [], description: "" }] };
       vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, status: 200, json: async () => payload })));

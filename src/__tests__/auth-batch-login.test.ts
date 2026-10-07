@@ -1,7 +1,8 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { handler, schema } from "../tools/auth";
 import {
@@ -35,6 +36,7 @@ function harness(options: {
   const fn = vi.fn(async (url: any, init?: RequestInit) => {
     const href = String(url);
     calls.push({ url: href, body: init?.body ? JSON.parse(String(init.body)) : null });
+
     if (href.endsWith("/api/cli/login/config")) {
       return jsonResponse({
         deviceCodeUrl: "/api/cli/device/code",
@@ -52,6 +54,7 @@ function harness(options: {
             }),
       });
     }
+
     if (href.endsWith("/api/cli/device/code")) {
       const route = options.code ?? {
         status: 200,
@@ -64,8 +67,10 @@ function harness(options: {
           expires_in: 900,
         },
       };
+
       return jsonResponse(route.body, route.status);
     }
+
     if (href.endsWith("/api/cli/device/token")) {
       const list = options.token ?? [];
       const next = list[Math.min(tokenCalls, list.length - 1)] ?? {
@@ -73,11 +78,14 @@ function harness(options: {
         body: { error: "authorization_pending" },
       };
       tokenCalls += 1;
+
       return jsonResponse(next.body, next.status);
     }
+
     throw new Error(`Unexpected fetch: ${href}`);
   });
   vi.stubGlobal("fetch", fn);
+
   return {
     fn,
     calls,
@@ -98,6 +106,7 @@ function entry(slug: string, extra: Record<string, unknown> = {}) {
 
 function tokens(slugs: string[]): Route {
   const all = slugs.map((slug) => entry(slug));
+
   return { status: 200, body: { ...all[0], tokens: all } };
 }
 
@@ -126,9 +135,11 @@ beforeEach(() => {
       throw new Error("batch login tests never reach the network");
     }),
   );
+
   for (const key of ["XDG_CONFIG_HOME", "EXTENSION_DEV_API_URL", "EXTENSION_DEV_TOKEN", "EXTENSION_DEV_PROJECT"]) {
     saved[key] = process.env[key];
   }
+
   tmp = fs.mkdtempSync(path.join(os.tmpdir(), "extdev-batchlogin-"));
   process.env.XDG_CONFIG_HOME = tmp;
   process.env.EXTENSION_DEV_API_URL = API;
@@ -139,10 +150,12 @@ beforeEach(() => {
 afterEach(() => {
   vi.useRealTimers();
   vi.unstubAllGlobals();
+
   for (const [key, value] of Object.entries(saved)) {
     if (value === undefined) delete process.env[key];
     else process.env[key] = value;
   }
+
   fs.rmSync(tmp, { recursive: true, force: true });
 });
 
@@ -272,6 +285,7 @@ describe("extension_auth login with projects: one approval, one token per projec
       projects: LIST,
       legacyStatus: "authorization_pending",
     });
+
     expect(out.hint).toContain("lists all 3 projects");
     expect(out.warnings.join(" ")).toContain("up to a minute");
     expect(h.to("/api/cli/device/code")).toHaveLength(1);
@@ -279,10 +293,12 @@ describe("extension_auth login with projects: one approval, one token per projec
       projects: LIST,
       clientName: "extension-mcp",
     });
+
     expect(h.to("/api/cli/device/token")[0]?.body).toEqual({
       device_code: "dev-code",
       projects: LIST,
     });
+
     expect(listCredentials()).toHaveLength(0);
   });
 
@@ -302,7 +318,9 @@ describe("extension_auth login with projects: one approval, one token per projec
         expiresAt: new Date(1_900_000_000 * 1000).toISOString(),
       })),
     });
+
     expect(text).not.toContain("login-token-for-");
+
     for (const slug of ["alpha", "beta", "gamma"]) {
       expect(readCredentials({ project: `acme/${slug}` })).toMatchObject({
         token: `login-token-for-${slug}`,
@@ -310,6 +328,7 @@ describe("extension_auth login with projects: one approval, one token per projec
         provider: "extensiondev",
       });
     }
+
     expect(listCredentials()).toHaveLength(3);
   });
 
@@ -385,6 +404,7 @@ describe("extension_auth login with projects: one approval, one token per projec
         },
       ],
     });
+
     const out = await run({ action: "login", projects: LIST, deviceCode: "dev-code" });
 
     expect(out.ok).toBe(false);
@@ -394,6 +414,7 @@ describe("extension_auth login with projects: one approval, one token per projec
       missingProjects: ["acme/beta"],
       projects: LIST,
     });
+
     expect(out.hint).toContain("all or nothing");
     expect(out.hint).toContain("acme/beta");
     expect(listCredentials()).toHaveLength(0);
@@ -405,6 +426,7 @@ describe("extension_auth login with projects: one approval, one token per projec
         { status: 403, body: { error: "access_denied", message: "gone", code: "MEMBERSHIP_REVOKED" } },
       ],
     });
+
     const revoked = await run({ action: "login", projects: LIST, deviceCode: "dev-code" });
     expect(revoked.error.name).toBe("LoginMembershipRevoked");
     expect(revoked.value.code).toBe("MEMBERSHIP_REVOKED");
@@ -440,6 +462,7 @@ describe("extension_auth login with projects: one approval, one token per projec
     harness({
       code: { status: 400, body: { message: "Field 'project' must be in the form '<workspace>/<project>'." } },
     });
+
     const out = await run({ action: "login", projects: LIST });
 
     expect(out.status).toBe("login-failed");
@@ -456,10 +479,12 @@ describe("extension_auth login with projects: one approval, one token per projec
       projectSlug: "alpha",
       expiresAt: new Date(1_900_000_000 * 1000).toISOString(),
     });
+
     expect(h.to("/api/cli/device/token")[0]?.body).toEqual({
       device_code: "dev-code",
       project: "acme/alpha",
     });
+
     expect(readCredentials()?.projectSlug).toBe("alpha");
   });
 });
@@ -469,6 +494,7 @@ describe("the device flow carries a list as a list", () => {
     const bodies: any[] = [];
     const fetchImpl = vi.fn(async (_url: any, init?: RequestInit) => {
       bodies.push(JSON.parse(String(init?.body)));
+
       return jsonResponse(
         bodies.length === 1
           ? { device_code: "d", user_code: "u" }
@@ -483,6 +509,7 @@ describe("the device flow carries a list as a list", () => {
       projects: LIST,
       fetchImpl,
     });
+
     await pollDeviceGrant({
       apiBase: API,
       path: "/token",
@@ -504,6 +531,7 @@ describe("the device flow carries a list as a list", () => {
     const bodies: string[] = [];
     const fetchImpl = vi.fn(async (_url: any, init?: RequestInit) => {
       bodies.push(String(init?.body));
+
       return jsonResponse(
         bodies.length === 1 ? { device_code: "d", user_code: "u" } : { token: "t" },
       );

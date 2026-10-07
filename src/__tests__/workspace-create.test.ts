@@ -1,7 +1,8 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { handler, schema } from "../tools/workspace-create";
 import { readCredentials } from "../lib/credentials";
@@ -24,6 +25,7 @@ function createFetch(routes: { code?: Route; token: Route[]; create?: Route }) {
   const fn = vi.fn(async (url: any, init?: RequestInit) => {
     const href = String(url);
     calls.push({ url: href, init });
+
     if (href.endsWith("/api/cli/login/config")) {
       return jsonResponse({
         deviceCodeUrl: "/api/cli/device/code",
@@ -31,6 +33,7 @@ function createFetch(routes: { code?: Route; token: Route[]; create?: Route }) {
         verificationUri: "https://extension.dev/device",
       });
     }
+
     if (href.endsWith("/api/cli/device/code")) {
       const route = routes.code ?? {
         status: 200,
@@ -44,8 +47,10 @@ function createFetch(routes: { code?: Route; token: Route[]; create?: Route }) {
           expires_in: 900,
         },
       };
+
       return jsonResponse(route.body, route.status);
     }
+
     if (href.endsWith("/api/cli/device/token")) {
       const next =
         routes.token[Math.min(tokenCalls, routes.token.length - 1)] ?? {
@@ -53,14 +58,19 @@ function createFetch(routes: { code?: Route; token: Route[]; create?: Route }) {
           body: { error: "authorization_pending" },
         };
       tokenCalls += 1;
+
       return jsonResponse(next.body, next.status);
     }
+
     if (href.endsWith("/api/cli/workspaces/create")) {
       const route = routes.create ?? { status: 500, body: { message: "no" } };
+
       return jsonResponse(route.body, route.status);
     }
+
     throw new Error(`Unexpected fetch: ${href}`);
   });
+
   return { fn, calls };
 }
 
@@ -102,6 +112,7 @@ afterEach(() => {
   else process.env.XDG_CONFIG_HOME = prevXdg;
   if (prevApi === undefined) delete process.env.EXTENSION_DEV_API_URL;
   else process.env.EXTENSION_DEV_API_URL = prevApi;
+
   fs.rmSync(tmp, { recursive: true, force: true });
 });
 
@@ -116,11 +127,13 @@ describe("extension_workspace_create", () => {
   it("refuses a project-shaped or malformed slug before any network call", async () => {
     const { fn } = createFetch({ token: [] });
     vi.stubGlobal("fetch", fn);
+
     for (const workspace of ["acme/widget", "", "-lead", "has space"]) {
       const out = JSON.parse(await handler({ workspace }));
       expect(out.ok).toBe(false);
       expect(out.error.code).toBe("E_BAD_REQUEST");
     }
+
     expect(fn).not.toHaveBeenCalled();
   });
 
@@ -141,6 +154,7 @@ describe("extension_workspace_create", () => {
       clientName: "extension-mcp",
       intent: "create-workspace",
     });
+
     expect(body.project).toBeUndefined();
 
     const poll = calls.find((c) => c.url.endsWith("/api/cli/device/token"));
@@ -174,6 +188,7 @@ describe("extension_workspace_create", () => {
     expect((create?.init?.headers as Record<string, string>).authorization).toBe(
       "Bearer workspace-grant",
     );
+
     const body = JSON.parse(String(create?.init?.body));
     expect(body.displayName).toBe("New Org");
     expect(body.slug).toBeUndefined();
@@ -256,6 +271,7 @@ describe("extension_workspace_create", () => {
       if (create === "no-answer" && String(url).endsWith("/api/cli/workspaces/create")) {
         throw new Error("socket hang up");
       }
+
       return fn(url, init);
     });
     vi.stubGlobal("fetch", routed);

@@ -1,4 +1,5 @@
 import { describe, it, expect, afterEach } from "vitest";
+
 import { sessionIsHeadless } from "../tools/open";
 
 describe("sessionIsHeadless", () => {

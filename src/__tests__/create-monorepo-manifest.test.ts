@@ -1,10 +1,11 @@
 /* @invariant the manifest is found the way the scaffolder
  * finds it, so a complete monorepo scaffold is not called incomplete. */
 
-import { describe, it, expect, vi, afterEach } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+
+import { describe, it, expect, vi, afterEach } from "vitest";
 
 let manifestRel = "packages/extension/src/manifest.json";
 vi.mock("extension-create", () => ({
@@ -13,6 +14,7 @@ vi.mock("extension-create", () => ({
     const manifest = path.join(target, manifestRel);
     fs.mkdirSync(path.dirname(manifest), { recursive: true });
     fs.writeFileSync(manifest, "{}");
+
     return { projectPath: target, projectName: path.basename(target), template: opts.template, depsInstalled: true, packageManager: "npm" };
   }),
 }));
@@ -20,11 +22,14 @@ vi.mock("extension-create", () => ({
 const create = await import("../tools/create");
 
 const tmpDirs: string[] = [];
+
 function tmpDir(): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-create-monorepo-"));
   tmpDirs.push(dir);
+
   return dir;
 }
+
 afterEach(() => {
   manifestRel = "packages/extension/src/manifest.json";
   for (const dir of tmpDirs.splice(0)) fs.rmSync(dir, { recursive: true, force: true });

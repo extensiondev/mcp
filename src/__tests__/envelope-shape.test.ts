@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+
 import { describe, expect, it } from "vitest";
 
 import { tools as ALL_TOOLS } from "../index";
@@ -17,11 +18,13 @@ const registered = new Set(ALL_TOOLS.map((t) => t.schema.name));
 
 const walk = (dir: string): string[] => {
   const out: string[] = [];
+
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     const full = path.join(dir, entry.name);
     if (entry.isDirectory()) out.push(...walk(full));
     else if (entry.name.endsWith(".ts")) out.push(full);
   }
+
   return out;
 };
 
@@ -49,6 +52,7 @@ describe("envelope() and envelopeObject() are the only serializers allowed to pr
 
   for (const { relative, text } of sources) {
     if (RAW_SERIALIZER_ALLOWED.has(relative)) continue;
+
     it(`${relative} returns no hand-built frame`, () => {
       const hits = [...text.matchAll(/return JSON\.stringify\(/g)];
       expect(
@@ -75,6 +79,7 @@ describe("envelope() and envelopeObject() are the only serializers allowed to pr
       /LEGACY_NAME_TO_CODE\[/.test(actText),
       "lib/act.ts no longer maps error.name to a code; retire `name` from EnvelopeError",
     ).toBe(true);
+
     expect(
       /error\.name ===/.test(sharesText),
       "tools/shares.ts no longer branches on error.name; retire `name` from EnvelopeError",
@@ -84,12 +89,15 @@ describe("envelope() and envelopeObject() are the only serializers allowed to pr
   it("names only registered tools in `command`, per decision D6", () => {
     expect(DECISION_D6).toContain("`command`");
     const named = new Set<string>();
+
     for (const { text } of sources) {
       for (const match of text.matchAll(/command:\s*"(extension_[a-z_]+)"/g)) {
         named.add(match[1]);
       }
     }
+
     expect(named.size).toBeGreaterThan(0);
+
     for (const name of named) {
       expect(registered, `${name} is not a registered tool`).toContain(name);
     }
@@ -97,8 +105,10 @@ describe("envelope() and envelopeObject() are the only serializers allowed to pr
 
   it("uses only declared error codes", () => {
     const declared = new Set<string>(ERROR_CODES);
+
     for (const { relative, text } of sources) {
       if (relative === "lib/envelope.ts") continue;
+
       for (const match of text.matchAll(/code:\s*"(E_[A-Z0-9_]+)"/g)) {
         expect(
           declared,

@@ -6,10 +6,11 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-import { PROJECT_PATH } from "../lib/common-schema";
 import fs from "node:fs";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
+
+import { PROJECT_PATH } from "../lib/common-schema";
 import {
   PLAUSIBLE_SESSION_BINARY,
   describeForeignPid,
@@ -18,7 +19,6 @@ import {
   type WindowsProcessRow,
   processCommand,
 } from "../lib/process-identity";
-import type { ReadyContract } from "../lib/types";
 import {
   findSessionInfo,
   readSessionMarkers,
@@ -33,6 +33,8 @@ import { sweepCarriers, type CarrierSweepEntry } from "../lib/carrier-exit";
 import { readRememberedCarriers } from "../lib/carrier-registry";
 import { envelope } from "../lib/envelope";
 import { killWindowsTree } from "../lib/exec";
+
+import type { ReadyContract } from "../lib/types";
 
 export const schema = {
   name: "extension_stop",
@@ -83,6 +85,7 @@ interface StopOutcome {
 function cleanCarrier(projectPath: string): { carrierRemoved?: string; carrierNote?: string } {
   const removal = removeCarrier(projectPath);
   if (removal.removed) return { carrierRemoved: removal.path };
+
   return removal.note && /Could not remove/i.test(removal.note)
     ? { carrierNote: `${removal.note} The carrier is still at ${removal.path}; the engine loads ./extensions, so remove it by hand before the next run.` }
     : {};
@@ -103,19 +106,24 @@ function pgrepPids(
   if (process.platform === "win32") {
     const table = windowsTable ? windowsTable() : readWindowsProcessTable();
     if (!table) return null;
+
     const matcher = new RegExp(pattern, "i");
+
     return table
       .filter((row) => row.pid !== process.pid && matcher.test(row.commandLine))
       .map((row) => row.pid);
   }
+
   try {
     const out = execFileSync("pgrep", ["-f", pattern], { encoding: "utf8" });
+
     return out
       .split("\n")
       .map((s) => parseInt(s.trim(), 10))
       .filter((n) => Number.isInteger(n) && n > 0 && n !== process.pid);
   } catch (err) {
     const status = (err as { status?: unknown })?.status;
+
     return status === 1 ? [] : null;
   }
 }
@@ -126,10 +134,12 @@ function escapeRegex(text: string): string {
 
 function projectPathForms(projectPath: string): string[] {
   const forms = new Set([projectPath, path.resolve(projectPath)]);
+
   try {
     forms.add(fs.realpathSync(projectPath));
   } catch {
   }
+
   return [...forms];
 }
 
@@ -158,6 +168,7 @@ export function contractProcessHints(
       (pid): pid is number =>
         typeof pid === "number" && Number.isInteger(pid) && pid > 0,
     );
+
     return {
       ...(typeof contract.profilePath === "string" && contract.profilePath.trim()
         ? { profilePath: contract.profilePath }
@@ -176,24 +187,33 @@ function sessionProcessPids(
   const pids = new Set<number>();
   let verified = true;
   let table: WindowsProcessRow[] | null | undefined;
+
   const windowsTable = (): WindowsProcessRow[] | null => {
     if (table === undefined) table = readWindowsProcessTable();
+
     return table;
   };
+
   const found = (pattern: string): number[] => {
     const hits = pgrepPids(pattern, windowsTable);
+
     if (hits === null) {
       verified = false;
+
       return [];
     }
+
     return hits;
   };
+
   if (hints.profilePath) {
     for (const pid of found(escapeRegex(hints.profilePath))) pids.add(pid);
   }
+
   for (const pid of hints.pids) {
     if (pid !== process.pid && isAlive(pid)) pids.add(pid);
   }
+
   for (const form of projectPathForms(projectPath)) {
     const escaped = escapeRegex(form);
     /* @invariant The second pattern is the only thing that reaps the session's
@@ -211,10 +231,12 @@ function sessionProcessPids(
       `extension[^ ]* (dev|start|preview) ${escaped}`,
       `${escapeRegex(profilesRootDir(form))}${escapeRegex(path.sep)}`,
     ];
+
     for (const pattern of patterns) {
       for (const pid of found(pattern)) pids.add(pid);
     }
   }
+
   return {
     pids: [...pids].filter((pid) =>
       PLAUSIBLE_SESSION_BINARY.test(processCommand(pid)),
@@ -233,28 +255,34 @@ async function reapSessionProcesses(
 ): Promise<{ reaped: number[]; unconfirmed: number[] }> {
   const { pids } = sessionProcessPids(projectPath, hints);
   if (pids.length === 0) return { reaped: [], unconfirmed: [] };
+
   for (const pid of pids) {
     if (process.platform === "win32") {
       killWindowsTree(pid);
       continue;
     }
+
     try {
       process.kill(pid, "SIGKILL");
     } catch {
     }
   }
+
   await new Promise((resolve) => setTimeout(resolve, 250));
   const reaped: number[] = [];
   const unconfirmed: number[] = [];
+
   for (const pid of pids) {
     (pidState(pid) === "dead" ? reaped : unconfirmed).push(pid);
   }
+
   return { reaped, unconfirmed };
 }
 
 function isAlive(pid: number): boolean {
   try {
     process.kill(pid, 0);
+
     return true;
   } catch {
     return false;
@@ -263,12 +291,15 @@ function isAlive(pid: number): boolean {
 
 function signal(pid: number, sig: NodeJS.Signals): boolean {
   if (process.platform === "win32") return killWindowsTree(pid);
+
   try {
     process.kill(-pid, sig);
+
     return true;
   } catch {
     try {
       process.kill(pid, sig);
+
       return true;
     } catch {
       return false;
@@ -283,6 +314,7 @@ function pidFromReadyContract(
   try {
     const raw = fs.readFileSync(readyContractPath(projectPath, browser), "utf8");
     const contract: ReadyContract = JSON.parse(raw);
+
     return typeof contract.pid === "number" ? contract.pid : null;
   } catch {
     return null;
@@ -301,6 +333,7 @@ export async function stopOne(
     const { reaped, unconfirmed } = await reapSessionProcesses(projectPath, hints);
     removeSessionMarker(projectPath, browser);
     let detail: string;
+
     if (unconfirmed.length) {
       detail = `No dev pid on record. Killed orphaned browser process(es) from the profile dir, but ${unconfirmed.length} still report alive 250 ms later (pids ${unconfirmed.join(", ")})${reaped.length ? `; ${reaped.length} confirmed gone` : ""}.`;
     } else if (reaped.length) {
@@ -308,6 +341,7 @@ export async function stopOne(
     } else {
       detail = "No known session for this project/browser (nothing registered in this server and no ready.json contract found).";
     }
+
     return {
       projectPath,
       browser,
@@ -322,16 +356,19 @@ export async function stopOne(
 
   let detail: string;
   const state = pidState(pid);
+
   if (state === "foreign") {
     /* @invariant A record whose pid is now someone else's is cleaned, never
        signalled: the session it described is gone, and the number belongs to
        a process this server did not start. */
     removeSession(projectPath, browser);
     removeSessionMarker(projectPath, browser);
+
     try {
       fs.rmSync(readyContractPath(projectPath, browser), { force: true });
     } catch {
     }
+
     return {
       projectPath,
       browser,
@@ -343,15 +380,18 @@ export async function stopOne(
       detail: `Nothing was signalled: ${describeForeignPid(pid)}. The session that recorded it is already gone; its stale records were removed.`,
     };
   }
+
   if (state === "dead") {
     detail = "Process was already gone; cleaned up session records.";
   } else {
     signal(pid, "SIGTERM");
     await new Promise((resolve) => setTimeout(resolve, 1500));
+
     if (isAlive(pid)) {
       signal(pid, "SIGKILL");
       await new Promise((resolve) => setTimeout(resolve, 250));
     }
+
     detail = isAlive(pid)
       ? "Sent SIGTERM and SIGKILL but the process still reports alive; it may be exiting."
       : "Terminated.";
@@ -366,6 +406,7 @@ export async function stopOne(
   const { pids: survivors, verified } = sessionProcessPids(projectPath, hints);
   const dead = pidState(pid) === "dead";
   const stopped = dead && verified && survivors.length === 0;
+
   if (!verified) {
     detail += " Warning: the search for surviving browser processes could not run (pgrep is missing or failed), so survivors were NOT verified; the browser may still be up.";
   } else if (survivors.length) {
@@ -373,9 +414,11 @@ export async function stopOne(
   } else if (reaped.length) {
     detail += ` Reaped ${reaped.length} browser process(es).`;
   }
+
   if (dead) {
     removeSession(projectPath, browser);
     removeSessionMarker(projectPath, browser);
+
     try {
       fs.rmSync(readyContractPath(projectPath, browser), { force: true });
     } catch {
@@ -402,29 +445,37 @@ export async function handler(args: {
 }): Promise<string> {
   if (args.all) {
     const candidates = new Map<string, { projectPath: string; browser: string }>();
+
     for (const s of listSessions()) {
       candidates.set(`${path.resolve(s.projectPath)}::${s.browser}`, s);
     }
+
     /* @invariant THE MARKER DIRECTORY IS SHARED BY EVERY MCP SERVER OF THIS
        USER, so "all" used to kill sessions a RUNNING sibling server owns
       . A marker whose serverPid is alive and is not this
        process is skipped and reported unless the caller asked for it. */
     const markersRead = readSessionMarkers();
     const skippedForeign: Array<{ projectPath: string; browser: string; serverPid: number }> = [];
+
     for (const m of markersRead.markers) {
       const key = `${path.resolve(m.projectPath)}::${m.browser}`;
       const foreign =
         typeof m.serverPid === "number" && m.serverPid !== process.pid && pidState(m.serverPid) === "alive";
+
       if (foreign && !args.includeOtherServers) {
         skippedForeign.push({ projectPath: m.projectPath, browser: m.browser, serverPid: m.serverPid as number });
         continue;
       }
+
       if (!candidates.has(key)) candidates.set(key, m);
     }
+
     const outcomes: StopOutcome[] = [];
+
     for (const c of candidates.values()) {
       outcomes.push(await stopOne(c.projectPath, c.browser));
     }
+
     /* @invariant
      * A carrier is swept even where no session was ever registered for it.
      *
@@ -462,6 +513,7 @@ export async function handler(args: {
           : "No sessions registered in this server, no session markers on disk, and no carrier left in any project this machine recorded. Nothing to stop.",
       });
     }
+
     return envelope({
       ok: outcomes.every((o) => o.stopped),
       command: schema.name,
@@ -497,6 +549,7 @@ export async function handler(args: {
 
   const { browser } = resolveSessionBrowser(args.projectPath, args.browser);
   const outcome = await stopOne(args.projectPath, browser);
+
   return envelope({
     ok: outcome.stopped,
     command: schema.name,

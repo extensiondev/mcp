@@ -59,8 +59,10 @@ export function matchExtensionPageTargets(
   wantedUrl: string,
 ): PageTarget[] {
   const wanted = stripHash(wantedUrl);
+
   return targets.filter((t) => {
     const url = stripHash(t.url);
+
     return url === wanted || url.startsWith(wanted);
   });
 }
@@ -91,6 +93,7 @@ export async function readExtensionWorkerTargets(
 ): Promise<TargetsRead<{ targetId: string; type: string; url: string }>> {
   try {
     const origin = `chrome-extension://${extensionId}/`;
+
     return {
       targets: (await CDPClient.discoverTargets(port))
         .filter(
@@ -110,6 +113,7 @@ export async function findExtensionWorkerTargets(
   extensionId: string,
 ): Promise<Array<{ targetId: string; type: string; url: string }>> {
   const read = await readExtensionWorkerTargets(port, extensionId);
+
   return "targets" in read ? read.targets : [];
 }
 
@@ -131,6 +135,7 @@ export async function wakeExtensionWorker(
 ): Promise<WorkerWake> {
   const cdp = new CDPClient();
   const scopeURL = `chrome-extension://${extensionId}/`;
+
   try {
     await cdp.connect(await CDPClient.discoverBrowserWsUrl(port));
     const pages = (await CDPClient.discoverTargets(port)).filter(
@@ -138,22 +143,27 @@ export async function wakeExtensionWorker(
     );
     const host =
       pages.find((t) => String(t.url ?? "").startsWith(scopeURL)) ?? pages[0];
+
     if (!host) {
       return {
         woken: false,
         reason: "the session has no page target to issue ServiceWorker.startWorker from",
       };
     }
+
     const sessionId = await cdp.attachToTarget(String(host.id));
     await cdp.sendCommand("ServiceWorker.enable", {}, sessionId);
     await cdp.sendCommand("ServiceWorker.startWorker", { scopeURL }, sessionId);
     const deadline = Date.now() + 3000;
+
     for (;;) {
       const targets = await findExtensionWorkerTargets(port, extensionId);
       if (targets.length > 0) return { woken: true, targets };
       if (Date.now() >= deadline) break;
+
       await new Promise((r) => setTimeout(r, 150));
     }
+
     return {
       woken: false,
       reason:
@@ -188,6 +198,7 @@ export async function findExtensionPageTargets(
   wantedUrl: string,
 ): Promise<PageTarget[]> {
   const read = await readExtensionPageTargets(port, wantedUrl);
+
   return "targets" in read ? read.targets : [];
 }
 
@@ -198,9 +209,11 @@ export async function findExtensionPageTargets(
 export function remoteValueNote(result: RemoteObject | undefined): string | undefined {
   if (!result) return undefined;
   if (result.type === "undefined") return "the expression returned undefined, which is answered as null";
+
   if (typeof result.unserializableValue === "string") {
     return `the expression returned ${result.unserializableValue}${result.type === "bigint" ? " (a BigInt)" : ""}, which JSON cannot carry, so value holds it as the string "${result.unserializableValue}"`;
   }
+
   return undefined;
 }
 
@@ -208,9 +221,11 @@ function readRemoteValue(result: RemoteObject | undefined): unknown {
   if (!result) return null;
   if ("value" in result) return result.value;
   if (result.type === "undefined") return null;
+
   if (typeof result.unserializableValue === "string") {
     return result.unserializableValue;
   }
+
   return result.description ?? null;
 }
 
@@ -218,10 +233,13 @@ function describeException(
   details: EvaluateResponse["exceptionDetails"],
 ): string {
   const exception = details?.exception;
+
   if (typeof exception?.description === "string" && exception.description) {
     return exception.description.split("\n")[0];
   }
+
   if (exception && "value" in exception) return String(exception.value);
+
   return details?.text || "the expression threw";
 }
 
@@ -247,6 +265,7 @@ export async function evaluateOnExtensionPage(
 ): Promise<ExtensionPageEval> {
   const cdp = new CDPClient();
   const budget = typeof timeoutMs === "number" && timeoutMs > 0 ? timeoutMs : undefined;
+
   try {
     await cdp.connect(await CDPClient.discoverBrowserWsUrl(port));
     const sessionId = await cdp.attachToTarget(targetId);
@@ -256,6 +275,7 @@ export async function evaluateOnExtensionPage(
       sessionId,
       budget,
     )) as EvaluateResponse | undefined;
+
     if (
       response?.exceptionDetails &&
       TOP_LEVEL_AWAIT_REFUSAL.test(describeException(response.exceptionDetails))
@@ -283,6 +303,7 @@ export async function evaluateOnExtensionPage(
             )) as EvaluateResponse | undefined)
           : asPromise;
     }
+
     if (response?.exceptionDetails) {
       return {
         ok: false,
@@ -290,10 +311,13 @@ export async function evaluateOnExtensionPage(
         message: describeException(response.exceptionDetails),
       };
     }
+
     const note = remoteValueNote(response?.result);
+
     return { ok: true, value: readRemoteValue(response?.result), ...(note ? { note } : {}) };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
+
     if (/timed out/i.test(message)) {
       return {
         ok: false,
@@ -302,6 +326,7 @@ export async function evaluateOnExtensionPage(
         message: `The expression did not answer within ${budget ?? 15_000} ms over the debug port. It may still be running in the target, so a retry repeats whatever it does; read the target's state first, or pass a larger timeout.`,
       };
     }
+
     return { ok: false, thrown: false, message };
   } finally {
     try {
@@ -366,10 +391,12 @@ async function pollUntil<T>(
   everyMs: number,
 ): Promise<T | null> {
   const deadline = Date.now() + budgetMs;
+
   for (;;) {
     const value = await read();
     if (value !== null) return value;
     if (Date.now() >= deadline) return null;
+
     await new Promise((r) => setTimeout(r, everyMs));
   }
 }
@@ -381,24 +408,29 @@ export async function openSidePanelWithSyntheticGesture(
 ): Promise<SidePanelGestureOutcome> {
   const cdp = new CDPClient();
   let hostId: string | null = null;
+
   const closeHost = async (): Promise<void> => {
     if (!hostId) return;
+
     try {
       await cdp.sendCommand("Target.closeTarget", { targetId: hostId });
     } catch {
     }
   };
+
   try {
     await cdp.connect(await CDPClient.discoverBrowserWsUrl(port));
     const created = (await cdp.sendCommand("Target.createTarget", {
       url: hostUrl,
     })) as { targetId?: string } | undefined;
+
     if (typeof created?.targetId !== "string") {
       return {
         opened: false,
         reason: `the browser did not open a host tab for ${hostUrl}`,
       };
     }
+
     hostId = created.targetId;
     const sessionId = await cdp.attachToTarget(hostId);
     await cdp.sendCommand("Runtime.enable", {}, sessionId);
@@ -413,13 +445,16 @@ export async function openSidePanelWithSyntheticGesture(
     const apiReady = await pollUntil(
       async () => {
         const response = await evaluate(SIDE_PANEL_API_READY).catch(() => null);
+
         return response?.result?.value === true ? true : null;
       },
       5000,
       200,
     );
+
     if (!apiReady) {
       await closeHost();
+
       return {
         opened: false,
         reason:
@@ -428,8 +463,10 @@ export async function openSidePanelWithSyntheticGesture(
     }
 
     const armed = await evaluate(ARM_SIDE_PANEL_SCRIPT);
+
     if (armed.exceptionDetails) {
       await closeHost();
+
       return {
         opened: false,
         reason: `arming the gesture listener threw: ${describeException(armed.exceptionDetails)}`,
@@ -442,11 +479,13 @@ export async function openSidePanelWithSyntheticGesture(
       { type: "mouseMoved", ...point },
       sessionId,
     );
+
     await cdp.sendCommand(
       "Input.dispatchMouseEvent",
       { type: "mousePressed", button: "left", clickCount: 1, ...point },
       sessionId,
     );
+
     await cdp.sendCommand(
       "Input.dispatchMouseEvent",
       { type: "mouseReleased", button: "left", clickCount: 1, ...point },
@@ -461,12 +500,14 @@ export async function openSidePanelWithSyntheticGesture(
           | null
           | undefined;
         if (state?.phase === "opened" || state?.phase === "failed") return state;
+
         return null;
       },
       3000,
       100,
     );
     await closeHost();
+
     if (!settled) {
       return {
         opened: false,
@@ -474,6 +515,7 @@ export async function openSidePanelWithSyntheticGesture(
           "the synthetic click never reached chrome.sidePanel.open (the page did not report a result within 3s)",
       };
     }
+
     if (settled.phase === "failed") {
       return {
         opened: false,
@@ -487,20 +529,24 @@ export async function openSidePanelWithSyntheticGesture(
         const matches = (await findExtensionPageTargets(port, hostUrl)).filter(
           (t) => t.targetId !== excluded && !excludeTargetIds.has(t.targetId),
         );
+
         return matches.length ? matches[0] : null;
       },
       3000,
       250,
     );
+
     if (!panel) {
       return {
         opened: false,
         reason: `chrome.sidePanel.open resolved but no page target for ${hostUrl} appeared within 3s`,
       };
     }
+
     return { opened: true, targetId: panel.targetId, url: panel.url };
   } catch (error) {
     await closeHost();
+
     return {
       opened: false,
       reason: error instanceof Error ? error.message : String(error),

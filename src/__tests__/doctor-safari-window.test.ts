@@ -4,14 +4,20 @@ import os from "node:os";
 import path from "node:path";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
+
 import { safariDevContract } from "./fixtures/engine-answers";
+import { handler } from "../tools/doctor";
+import { readyContractPath } from "../lib/session-paths";
+
+import type * as ExecModule from "../lib/exec";
+import type * as ProcessManagerModule from "../lib/process-manager";
 
 const cli = vi.hoisted(() => ({
   response: { code: 0, stdout: "[]", stderr: "" },
 }));
 
 vi.mock("../lib/exec", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../lib/exec")>()),
+  ...(await importOriginal<typeof ExecModule>()),
   runExtensionCli: async () => cli.response,
   pinnedCliVersion: () => "",
 }));
@@ -22,13 +28,10 @@ vi.mock("../lib/engine-version", () => ({
 }));
 
 vi.mock("../lib/process-manager", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../lib/process-manager")>()),
+  ...(await importOriginal<typeof ProcessManagerModule>()),
   listSessions: () => [],
   listSessionMarkers: () => [],
 }));
-
-import { handler } from "../tools/doctor";
-import { readyContractPath } from "../lib/session-paths";
 
 const tmpDirs: string[] = [];
 let server: http.Server | null = null;
@@ -36,6 +39,7 @@ let server: http.Server | null = null;
 function tmpProject(): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-doctor-safari-"));
   tmpDirs.push(dir);
+
   return dir;
 }
 
@@ -50,10 +54,13 @@ async function answeringDriver(): Promise<number> {
     res.writeHead(200, { "content-type": "application/json" });
     res.end(JSON.stringify({ value: "https://example.test/" }));
   });
+
   await new Promise<void>((resolve) =>
     server?.listen(0, "127.0.0.1", () => resolve()),
   );
+
   const address = server.address();
+
   return typeof address === "object" && address ? address.port : 0;
 }
 
@@ -61,7 +68,9 @@ afterEach(async () => {
   await new Promise<void>((resolve) =>
     server ? server.close(() => resolve()) : resolve(),
   );
+
   server = null;
+
   for (const dir of tmpDirs.splice(0)) {
     fs.rmSync(dir, { recursive: true, force: true });
   }
@@ -115,6 +124,7 @@ describe("extension_doctor's safari-window leg", () => {
       dir,
       safariDevContract({ unavailableReason: "Allow Remote Automation is off" }),
     );
+
     const parsed = JSON.parse(await handler({ projectPath: dir, browser: "safari" }));
     const leg = legOf(parsed);
     expect(leg?.status).toBe("skip");
@@ -130,6 +140,7 @@ describe("extension_doctor's safari-window leg", () => {
       ready,
       JSON.stringify({ status: "ready", browser: "chrome", pid: process.pid }),
     );
+
     const parsed = JSON.parse(await handler({ projectPath: dir, browser: "chrome" }));
     expect(legOf(parsed)).toBeUndefined();
   });

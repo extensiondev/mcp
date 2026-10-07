@@ -1,19 +1,23 @@
-import { describe, it, expect, vi, afterEach } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
+
+import { describe, it, expect, vi, afterEach } from "vitest";
 
 import { remoteValueNote, BACKGROUND_TARGET_TYPES } from "../lib/cdp-extension-page";
 import { matchPatternRegexSource, executeScriptExpression } from "../tools/inspect-gecko";
 import { CALL_TIMEOUT } from "../lib/common-schema";
 import { schema as evalSchema } from "../tools/eval";
 
+import type * as ExecModule from "../lib/exec";
+
 const exec = vi.hoisted(() => ({ result: { code: 0, stdout: "", stderr: "", timedOut: false, signal: null as string | null } }));
 vi.mock("../lib/exec", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../lib/exec")>()),
+  ...(await importOriginal<typeof ExecModule>()),
   runExtensionCli: async () => exec.result,
 }));
+
 const { runActVerb } = await import("../lib/act");
 
 afterEach(() => {
@@ -67,6 +71,7 @@ describe("wave 1: extension_eval says where and what it ran", () => {
       const browser={tabs:{query:async()=>tabs,executeScript:async(id)=>[id]}};
       (${code}).then(r=>process.stdout.write(JSON.stringify(r)));`;
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-picker-"));
+
     try {
       const file = path.join(dir, "p.mjs");
       fs.writeFileSync(file, script);

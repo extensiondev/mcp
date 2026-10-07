@@ -5,18 +5,6 @@ import path from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const act = vi.hoisted(() => ({ calls: [] as string[][] }));
-vi.mock("../lib/act", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../lib/act")>();
-  return {
-    ...actual,
-    runActVerb: async (cli: string[]) => {
-      act.calls.push(cli);
-      return JSON.stringify({ ok: true, command: cli[0], status: "ok", value: { via: "bridge", cli } });
-    },
-  };
-});
-
 import { logsPath, readyContractPath } from "../lib/session-paths";
 import { readyContract, safariDevContract } from "./fixtures/engine-answers";
 import {
@@ -28,6 +16,22 @@ import * as assertTool from "../tools/assert";
 import * as evalTool from "../tools/eval";
 import * as logsTool from "../tools/logs";
 import * as openTool from "../tools/open";
+
+import type * as ActModule from "../lib/act";
+
+const act = vi.hoisted(() => ({ calls: [] as string[][] }));
+vi.mock("../lib/act", async (importOriginal) => {
+  const actual = await importOriginal<typeof ActModule>();
+
+  return {
+    ...actual,
+    runActVerb: async (cli: string[]) => {
+      act.calls.push(cli);
+
+      return JSON.stringify({ ok: true, command: cli[0], status: "ok", value: { via: "bridge", cli } });
+    },
+  };
+});
 
 const BROWSER = "safari";
 
@@ -52,24 +56,31 @@ async function startFakeSafari(): Promise<FakeSafari> {
     req.on("data", (chunk) => {
       raw += String(chunk);
     });
+
     req.on("end", () => {
       const route = String(req.url || "");
       const method = String(req.method || "");
       const body = raw ? JSON.parse(raw) : null;
       state.calls.push({ method, route, body });
+
       const reply = (status: number, value: unknown) => {
         res.writeHead(status, { "content-type": "application/json" });
         res.end(JSON.stringify({ value }));
       };
+
       if (route === "/session/S-9/url" && method === "GET") {
         return reply(200, state.url);
       }
+
       if (route === "/session/S-9/url" && method === "POST") {
         state.url = String((body as { url: string }).url);
+
         return reply(200, null);
       }
+
       if (route === "/session/S-9/execute/sync") {
         const script = String((body as { script: string }).script);
+
         if (script.includes("data-extension-root")) {
           return reply(200, {
             roots: state.roots.length,
@@ -78,24 +89,29 @@ async function startFakeSafari(): Promise<FakeSafari> {
             title: "Fake",
           });
         }
+
         if (script.includes("throw")) {
           return reply(500, {
             error: "javascript error",
             message: "boom from the page",
           });
         }
+
         return reply(200, { echoed: script });
       }
+
       reply(404, { error: "unknown command", message: route });
     });
   });
   await new Promise<void>((resolve) =>
     server.listen(0, "127.0.0.1", () => resolve()),
   );
+
   const address = server.address();
   state.port = typeof address === "object" && address ? address.port : 0;
   state.close = () =>
     new Promise<void>((resolve) => server.close(() => resolve()));
+
   return state;
 }
 
@@ -177,6 +193,7 @@ describe("Safari sessions over the dev window's WebDriver connection", () => {
     expect(sameDocument("https://a.test/x/?q=1#h", "https://a.test/x")).toBe(
       true,
     );
+
     expect(sameDocument("https://a.test/x", "https://a.test/y")).toBe(false);
     expect(sameDocument(null, "https://a.test/")).toBe(false);
   });
@@ -206,6 +223,7 @@ describe("Safari sessions over the dev window's WebDriver connection", () => {
       expression: "document.title",
       url: "https://example.test/page",
     });
+
     expect(
       safari.calls.some(
         (c) =>
@@ -219,6 +237,7 @@ describe("Safari sessions over the dev window's WebDriver connection", () => {
   it("sends content and background eval down the bridge, not the window", async () => {
     withWindow();
     act.calls.length = 0;
+
     for (const context of ["content", "background", undefined]) {
       const parsed = JSON.parse(
         await evalTool.handler({
@@ -230,6 +249,7 @@ describe("Safari sessions over the dev window's WebDriver connection", () => {
       );
       expect(parsed.value.via).toBe("bridge");
     }
+
     expect(act.calls).toHaveLength(3);
     expect(safari.calls).toHaveLength(0);
   });
@@ -269,6 +289,7 @@ describe("Safari sessions over the dev window's WebDriver connection", () => {
     safari.roots = [
       { owner: "content_scripts/content-0::script-0@dev.extensionjs.Demo.Extension (TEAM)" },
     ];
+
     const parsed = JSON.parse(
       await assertTool.handler({
         projectPath: project,
@@ -321,6 +342,7 @@ describe("Safari sessions over the dev window's WebDriver connection", () => {
         { assert: "content-script-injected", url: "https://example.test/page" },
       ],
     });
+
     expect(
       safari.calls.filter(
         (c) => c.method === "POST" && c.route === "/session/S-9/url",
@@ -341,6 +363,7 @@ describe("Safari sessions over the dev window's WebDriver connection", () => {
         runId: "run-safari",
       },
     ]);
+
     const parsed = JSON.parse(
       await assertTool.handler({
         projectPath: project,
@@ -367,6 +390,7 @@ describe("Safari sessions over the dev window's WebDriver connection", () => {
         runId: "run-safari",
       },
     ]);
+
     const parsed = JSON.parse(
       await assertTool.handler({
         projectPath: project,
@@ -408,6 +432,7 @@ describe("Safari sessions over the dev window's WebDriver connection", () => {
       browser: BROWSER,
       expect: [{ assert: "storage-key-present", key: "settings" }],
     });
+
     expect(act.calls.some((cli) => cli[0] === "storage")).toBe(true);
     expect(safari.calls).toHaveLength(0);
   });
@@ -437,6 +462,7 @@ describe("Safari sessions over the dev window's WebDriver connection", () => {
         runId: "run-safari",
       },
     ]);
+
     const parsed = JSON.parse(
       await logsTool.handler({ projectPath: project, browser: BROWSER }),
     );

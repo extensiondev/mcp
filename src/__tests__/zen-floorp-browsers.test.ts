@@ -24,6 +24,7 @@ describe("zen and floorp are browsers the server can name, the way waterfox is",
     expect(floorp.engine).toBe("gecko");
     expect(zen.rdpSupport).toBe(true);
     expect(zen.cdpSupport).toBe(false);
+
     for (const row of [zen, floorp]) {
       if (row.binaryPath) {
         expect(row.binaryPath).toMatch(new RegExp(row.browser, "i"));

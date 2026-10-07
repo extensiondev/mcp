@@ -10,6 +10,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+
 import { isGeckoFamily, WEBKIT_FAMILY } from "../lib/browser-family";
 import { envelope } from "../lib/envelope";
 import {
@@ -194,29 +195,36 @@ function resolveCacheRoot(): string {
   if (isWin) {
     const local = String(process.env.LOCALAPPDATA || "").trim();
     if (local) return path.join(local, "extension.js", "browsers");
+
     const userProfile = String(process.env.USERPROFILE || "").trim();
+
     if (userProfile)
-      return path.join(
+      {return path.join(
         userProfile,
         "AppData",
         "Local",
         "extension.js",
         "browsers",
-      );
+      );}
+
     return path.resolve(process.cwd(), ".cache", "extension.js", "browsers");
   }
 
   if (isMac) {
     const home = String(process.env.HOME || "").trim();
+
     if (home)
-      return path.join(home, "Library", "Caches", "extension.js", "browsers");
+      {return path.join(home, "Library", "Caches", "extension.js", "browsers");}
+
     return path.resolve(process.cwd(), ".cache", "extension.js", "browsers");
   }
 
   const xdg = String(process.env.XDG_CACHE_HOME || "").trim();
   if (xdg) return path.join(xdg, "extension.js", "browsers");
+
   const home = String(process.env.HOME || "").trim();
   if (home) return path.join(home, ".cache", "extension.js", "browsers");
+
   return path.resolve(process.cwd(), ".cache", "extension.js", "browsers");
 }
 
@@ -237,6 +245,7 @@ const MANAGED_EXEC_NAMES: Record<string, string[]> = {
 
 function executableInsideBundle(bundle: string, names: string[]): string | null {
   const macos = path.join(bundle, "Contents", "MacOS");
+
   try {
     for (const entry of fs.readdirSync(macos, { withFileTypes: true })) {
       if (entry.isFile() && names.includes(entry.name)) {
@@ -245,6 +254,7 @@ function executableInsideBundle(bundle: string, names: string[]): string | null 
     }
   } catch {
   }
+
   return null;
 }
 
@@ -253,10 +263,12 @@ export function compareVersionNames(a: string, b: string): number {
     (name.match(/\d+/g) ?? []).map((n) => Number(n));
   const left = nums(a);
   const right = nums(b);
+
   for (let i = 0; i < Math.max(left.length, right.length); i += 1) {
     const diff = (left[i] ?? -1) - (right[i] ?? -1);
     if (diff !== 0) return diff;
   }
+
   return a.localeCompare(b);
 }
 
@@ -272,6 +284,7 @@ export function findManagedBinaryIn(
   browser: string,
 ): string | null {
   if (!fs.existsSync(browserDir)) return null;
+
   const names = MANAGED_EXEC_NAMES[browser] ?? [];
 
   /* @invariant Two managed versions sit side by side after an upgrade, and
@@ -280,19 +293,24 @@ export function findManagedBinaryIn(
      names are visited newest first, so the first hit is the engine's pick. */
   function search(dir: string, depth: number): string | null {
     if (depth > MANAGED_SEARCH_DEPTH) return null;
+
     try {
       const entries = fs
         .readdirSync(dir, { withFileTypes: true })
         .sort((a, b) => compareVersionNames(b.name, a.name));
+
       for (const entry of entries) {
         const full = path.join(dir, entry.name);
+
         if (entry.isFile() && names.includes(entry.name)) {
           return full;
         }
+
         if (entry.isDirectory() && entry.name.endsWith(".app")) {
           const inside = executableInsideBundle(full, names);
           if (inside) return inside;
         }
+
         if (entry.isDirectory() && depth < MANAGED_SEARCH_DEPTH) {
           const found = search(full, depth + 1);
           if (found) return found;
@@ -300,6 +318,7 @@ export function findManagedBinaryIn(
       }
     } catch {
     }
+
     return null;
   }
 
@@ -329,6 +348,7 @@ async function getVersion(
     });
     const match = stdout.match(/[\d]+\.[\d]+[\d.]*/);
     const text = match ? match[0] : stdout.trim().slice(0, 50);
+
     return text.length > 0 ? text : null;
   } catch {
     return null;
@@ -347,6 +367,7 @@ export async function detectBrowsers(
 
   for (const browser of ALL_BROWSERS) {
     const browserDir = path.join(managed.cacheRoot, browser);
+
     if (fs.existsSync(browserDir)) {
       managed.installed.push(browser);
     }
@@ -366,6 +387,7 @@ export async function detectBrowsers(
     }
 
     let version: string | null = null;
+
     if (binaryPath && !isWebkit) {
       version = await getVersion(binaryPath, browser);
     } else if (binaryPath && isWebkit) {

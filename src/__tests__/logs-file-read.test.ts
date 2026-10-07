@@ -1,7 +1,8 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { handler } from "../tools/logs";
 import { logsPath } from "../lib/session-paths";

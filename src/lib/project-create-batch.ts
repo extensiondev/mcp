@@ -7,8 +7,7 @@
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
 import { spendNarration } from "./allowance";
-import { writeCredentialBatch } from "./credentials";
-import { tokenExpiry } from "./credentials";
+import { writeCredentialBatch, tokenExpiry  } from "./credentials";
 import { answerIsUnknownOutcome, readCreatedProject } from "./create-answer";
 import { firstBuildValue, readFirstBuild, withheldBecause } from "./first-build";
 import { pollDeviceGrant, requestDeviceCode } from "./device-flow";
@@ -166,6 +165,7 @@ function sweepSessions(nowSeconds: number): void {
   for (const [key, session] of sessions) {
     if (session.busy) continue;
     if (session.grantExpiresAt <= nowSeconds) session.grant = "";
+
     if (session.grantExpiresAt + SESSION_KEEP_SECONDS <= nowSeconds) {
       sessions.delete(key);
     }
@@ -214,6 +214,7 @@ export function parseBatchCreateArgs(
   | { ok: false; message: string; hint?: string } {
   for (const key of SINGLE_ONLY_KEYS) {
     const value = (args as Record<string, unknown>)[key];
+
     if (value !== undefined && value !== null && String(value).trim() !== "") {
       return {
         ok: false,
@@ -221,6 +222,7 @@ export function parseBatchCreateArgs(
       };
     }
   }
+
   if (!Array.isArray(args.projects)) {
     return {
       ok: false,
@@ -228,7 +230,9 @@ export function parseBatchCreateArgs(
         "projects must be an array of entries shaped { project: '<workspace>/<project>', repo: '<owner>/<repo>' }.",
     };
   }
+
   const refs: unknown[] = [];
+
   for (const entry of args.projects) {
     if (!isRecord(entry)) {
       return {
@@ -236,30 +240,38 @@ export function parseBatchCreateArgs(
         message: `Every entry in projects must be an object shaped { project, repo }; got ${JSON.stringify(entry)}. Each new project needs its own source repository, so a bare name is not enough.`,
       };
     }
+
     const unknown = Object.keys(entry).filter(
       (key) => !(ENTRY_KEYS as readonly string[]).includes(key),
     );
+
     if (unknown.length) {
       return {
         ok: false,
         message: `Unknown key ${unknown.map((key) => `'${key}'`).join(", ")} in a projects entry. An entry takes: ${ENTRY_KEYS.join(", ")}.`,
       };
     }
+
     refs.push(entry.project);
   }
+
   const parsed = parseProjectBatch(refs);
   if (!parsed.ok) return parsed;
+
   const entries: BatchEntry[] = [];
-  for (const [index, raw] of (args.projects as Record<string, unknown>[]).entries()) {
+
+  for (const [index, raw] of (args.projects as Array<Record<string, unknown>>).entries()) {
     const ref = parsed.batch.refs[index] as string;
     const slug = parsed.batch.slugs[index] as string;
     const repo = typeof raw.repo === "string" ? raw.repo.trim() : "";
+
     if (!/^[^/]+\/[^/]+$/.test(repo)) {
       return {
         ok: false,
         message: `The entry for '${ref}' needs repo as '<owner>/<repo>', the GitHub repository that project's source is pushed to.`,
       };
     }
+
     for (const key of ENTRY_STRING_KEYS) {
       if (raw[key] !== undefined && typeof raw[key] !== "string") {
         return {
@@ -268,8 +280,10 @@ export function parseBatchCreateArgs(
         };
       }
     }
+
     if (raw.browsers !== undefined) {
       const list = raw.browsers;
+
       if (
         !Array.isArray(list) ||
         list.length === 0 ||
@@ -281,12 +295,14 @@ export function parseBatchCreateArgs(
         };
       }
     }
+
     if (raw.outputDirectories !== undefined && !isRecord(raw.outputDirectories)) {
       return {
         ok: false,
         message: `In the entry for '${ref}', outputDirectories must be an object such as {"edge": "build/edge"}.`,
       };
     }
+
     const [owner = "", repoName = ""] = repo.split("/");
     entries.push({
       ref,
@@ -307,6 +323,7 @@ export function parseBatchCreateArgs(
         args.outputDirectories,
     });
   }
+
   return { ok: true, workspace: parsed.batch.workspace, entries };
 }
 
@@ -328,6 +345,7 @@ function pendingEnvelope(args: {
     : hasCompleteLink
       ? `Open ${complete} and approve creating the projects (code ${args.userCode} is pre-filled). ${page}; ${again}. If the page asks for a code, enter ${args.userCode} at ${args.verificationUri}.`
       : `Open ${args.verificationUri}, enter code ${args.userCode} and approve creating the projects. ${page}; ${again}.`;
+
   return envelope({
     ok: true,
     command: COMMAND,
@@ -376,6 +394,7 @@ function refusalHint(code: string, ref: string, retryAfterSeconds?: number, gran
   if (code === "PROJECT_EXISTS") {
     return `${ref} already exists, so there was nothing to create and no token came back. Sign in to it with extension_auth (action: login).`;
   }
+
   if (code === "RATE_LIMITED") {
     return `${createRateLimitNote()}${
       retryAfterSeconds ? ` The platform says to wait ${retryAfterSeconds} seconds.` : ""
@@ -387,15 +406,19 @@ function refusalHint(code: string, ref: string, retryAfterSeconds?: number, gran
         : "If the grant has expired by then, the projects not created need a new extension_project_create call and its approval."
     }`;
   }
+
   if (code === "TOKEN_EXPIRED") {
     return "The provisioning grant ran out (the platform answered TOKEN_EXPIRED). Start a new extension_project_create call for the projects not created.";
   }
+
   if (code === "PROJECT_LIMIT_EXCEEDED") {
     return "The workspace is at its plan's project limit. Nothing more can be created in it until a project is removed or the plan changes.";
   }
+
   if (code === "RESERVED_PROJECT_SLUG") {
     return "That slug is reserved on extension.dev. Pick another name for this project.";
   }
+
   return undefined;
 }
 
@@ -421,6 +444,7 @@ async function createOne(session: Session, entry: BatchEntry, installationId: st
     project: entry.ref,
   };
   let res: Response;
+
   try {
     res = await fetch(url, {
       method: "POST",
@@ -441,6 +465,7 @@ async function createOne(session: Session, entry: BatchEntry, installationId: st
      * them unconfirmed one call at a time. */
     session.unanswered += 1;
     const message = `Could not reach ${url}: ${err?.message || err}`;
+
     return {
       row: {
         project: entry.ref,
@@ -454,6 +479,7 @@ async function createOne(session: Session, entry: BatchEntry, installationId: st
         : {}),
     };
   }
+
   /* @invariant An answer that cannot be read is no answer. The same holds
    * for a server error with no platform code, which comes from in front of
    * the platform while the create may still be running behind it. Both leave
@@ -461,6 +487,7 @@ async function createOne(session: Session, entry: BatchEntry, installationId: st
    * the slice exactly as a dropped connection does. */
   const unknownOutcome = (message: string): CreateOutcome => {
     session.unanswered += 1;
+
     return {
       row: {
         project: entry.ref,
@@ -474,7 +501,9 @@ async function createOne(session: Session, entry: BatchEntry, installationId: st
         : {}),
     };
   };
+
   let text: string;
+
   try {
     text = await res.text();
   } catch (err: any) {
@@ -482,17 +511,21 @@ async function createOne(session: Session, entry: BatchEntry, installationId: st
       `The platform answered ${res.status} for ${entry.ref} and the answer could not be read: ${err?.message || err}`,
     );
   }
+
   let data: Record<string, unknown>;
+
   try {
     data = JSON.parse(text);
   } catch {
     data = { message: text };
   }
+
   if (!res.ok && !sawPlatformHold(res, data) && answerIsUnknownOutcome(res.status, data)) {
     return unknownOutcome(
       `The create request for ${entry.ref} got a ${res.status} with no platform code, which is an answer from in front of the platform while the create may still be running.`,
     );
   }
+
   session.unanswered = 0;
 
   if (!res.ok) {
@@ -522,17 +555,20 @@ async function createOne(session: Session, entry: BatchEntry, installationId: st
       ...(retryAfterSeconds ? { retryAfterSeconds } : {}),
       ...(hint ? { hint } : {}),
     };
+
     return STOP_CODES.has(code)
       ? { row, stop: { code, message, body: data, held } }
       : { row };
   }
 
   const createdAnswer = readCreatedProject(data);
+
   if (!createdAnswer.ok) {
     return unknownOutcome(
       `The platform answered ${res.status} for ${entry.ref} but ${createdAnswer.why}.`,
     );
   }
+
   session.lastBody = data;
   const finalWorkspace = createdAnswer.workspaceSlug;
   const finalProject = createdAnswer.projectSlug;
@@ -545,6 +581,7 @@ async function createOne(session: Session, entry: BatchEntry, installationId: st
   const scoped =
     finalWorkspace.toLowerCase() === entry.workspace &&
     finalProject.toLowerCase() === entry.slug;
+
   /* @invariant A token is stored only under the name this call asked for. The
    * platform says which project it made, and a token is filed under that
    * answer; if the answer is not the listed project, filing it would put a
@@ -561,6 +598,7 @@ async function createOne(session: Session, entry: BatchEntry, installationId: st
      * filed is a created project without a stored login, said so with the
      * reason, and the token is not kept anywhere. */
     let storeFailure = "";
+
     try {
       writeCredentialBatch([
         {
@@ -576,6 +614,7 @@ async function createOne(session: Session, entry: BatchEntry, installationId: st
     } catch (err: any) {
       storeFailure = String(err?.message || err);
     }
+
     if (storeFailure) {
       return {
         row: {
@@ -590,6 +629,7 @@ async function createOne(session: Session, entry: BatchEntry, installationId: st
         },
       };
     }
+
     return {
       row: {
         project: entry.ref,
@@ -602,9 +642,11 @@ async function createOne(session: Session, entry: BatchEntry, installationId: st
       },
     };
   }
+
   const tokenCode = !scoped
     ? "PROJECT_NAME_MISMATCH"
     : String(data.tokenCode || "").trim() || "NO_TOKEN_IN_RESPONSE";
+
   return {
     row: {
       project: entry.ref,
@@ -633,8 +675,10 @@ function quoteList(refs: string[]): string {
 
 function finalEnvelope(session: Session): string {
   const stop = session.stop;
+
   for (const entry of session.entries) {
     if (session.rows.has(entry.ref)) continue;
+
     session.rows.set(entry.ref, {
       project: entry.ref,
       status: "not-attempted",
@@ -644,6 +688,7 @@ function finalEnvelope(session: Session): string {
         : "Not attempted.",
     });
   }
+
   const rows = rowsInOrder(session);
   const created = rows.filter((row) => row.status === "created");
   const loggedIn = created.filter((row) => row.status === "created" && row.loggedIn);
@@ -693,6 +738,7 @@ function finalEnvelope(session: Session): string {
       value: { workspace: session.workspace, projects: session.refs, results: rows },
     });
   }
+
   if (created.length === 0 && stop?.code === "CLI_PROJECT_CREATE_DISABLED") {
     return fail("CreateClosed", stop.message, "lane-closed", "E_PLATFORM", {
       hint: laneClosedHint(),
@@ -742,6 +788,7 @@ function finalEnvelope(session: Session): string {
   };
   const spent =
     "The provisioning grant is spent or discarded and was never written to this machine.";
+
   if (created.length === rows.length) {
     return envelope({
       ok: true,
@@ -766,6 +813,7 @@ function finalEnvelope(session: Session): string {
         : {}),
     });
   }
+
   return envelope({
     ok: false,
     command: COMMAND,
@@ -799,27 +847,35 @@ async function runSlice(session: Session, deviceCode: string, installationId: st
       hint: "Another call with this deviceCode is creating projects right now. Wait for it to answer, then call again with the same deviceCode and arguments if projects are still pending.",
     });
   }
+
   session.busy = true;
   let halted = false;
+
   try {
     const started = Date.now();
     let attempted = 0;
+
     for (const entry of session.entries) {
       if (session.rows.has(entry.ref)) continue;
       if (session.stop) break;
+
       if (Math.floor(Date.now() / 1000) >= session.grantExpiresAt - GRANT_EXPIRY_MARGIN_SECONDS) {
         session.stop = {
           code: "TOKEN_EXPIRED",
           message: `The provisioning grant expired at ${new Date(session.grantExpiresAt * 1000).toISOString()} by this client's clock; the platform did not answer that.`,
           source: "client",
         };
+
         break;
       }
+
       if (attempted > 0 && Date.now() - started >= SLICE_BUDGET_MS) break;
+
       attempted += 1;
       const outcome = await createOne(session, entry, installationId);
       session.rows.set(entry.ref, outcome.row);
       if (outcome.stop) session.stop = outcome.stop;
+
       if (outcome.halt) {
         halted = true;
         break;
@@ -828,9 +884,12 @@ async function runSlice(session: Session, deviceCode: string, installationId: st
   } finally {
     session.busy = false;
   }
+
   const remaining = session.entries.filter((entry) => !session.rows.has(entry.ref));
+
   if (remaining.length > 0 && !session.stop) {
     const done = session.entries.length - remaining.length;
+
     return envelope({
       ok: true,
       command: COMMAND,
@@ -846,18 +905,23 @@ async function runSlice(session: Session, deviceCode: string, installationId: st
       }`,
     });
   }
+
   sessions.delete(deviceCode);
+
   return finalEnvelope(session);
 }
 
 export async function createProjectBatch(args: BatchCreateArgs): Promise<string> {
   const parsed = parseBatchCreateArgs(args);
+
   if (!parsed.ok) {
     return fail("BadRequest", parsed.message, "bad-request", "E_BAD_REQUEST", {
       hint: parsed.hint,
     });
   }
+
   const installationId = String(args.installationId || "").trim();
+
   if (installationId && !/^\d+$/.test(installationId)) {
     return fail(
       "BadRequest",
@@ -866,17 +930,21 @@ export async function createProjectBatch(args: BatchCreateArgs): Promise<string>
       "E_BAD_REQUEST",
     );
   }
+
   const refs = parsed.entries.map((entry) => entry.ref);
 
   const apiCheck = safeApiBase(resolveApiBase(args.api), args.api);
+
   if (!apiCheck.ok) {
     return fail("ConfigError", apiCheck.message, "bad-request", "E_BAD_REQUEST");
   }
+
   const apiBase = apiCheck.base;
 
   sweepSessions(Math.floor(Date.now() / 1000));
   let deviceCode = String(args.deviceCode || "").trim();
   const held = deviceCode ? sessions.get(deviceCode) : undefined;
+
   if (held) {
     if (held.apiBase !== apiBase || !sameProjectSet(held.refs, refs)) {
       return fail(
@@ -886,10 +954,12 @@ export async function createProjectBatch(args: BatchCreateArgs): Promise<string>
         "E_BAD_REQUEST",
       );
     }
+
     return runSlice(held, deviceCode, installationId || undefined);
   }
 
   let config;
+
   try {
     config = await fetchLoginConfig(apiBase);
   } catch (err: any) {
@@ -913,7 +983,9 @@ export async function createProjectBatch(args: BatchCreateArgs): Promise<string>
       },
     );
   }
+
   const createCap = config.batch.createProjectsPerApproval;
+
   if (refs.length > createCap) {
     return fail(
       "BadRequest",
@@ -930,6 +1002,7 @@ export async function createProjectBatch(args: BatchCreateArgs): Promise<string>
   let interval = 5;
   let budgetMs = RESUME_BUDGET_MS;
   let start: Awaited<ReturnType<typeof requestDeviceCode>> | null = null;
+
   if (!deviceCode) {
     try {
       start = await requestDeviceCode({
@@ -942,6 +1015,7 @@ export async function createProjectBatch(args: BatchCreateArgs): Promise<string>
       const serverCode = String(err?.serverCode || "");
       const serverMessage =
         typeof err?.serverMessage === "string" ? err.serverMessage.trim() : "";
+
       if (serverCode === "CLI_PROJECT_CREATE_DISABLED") {
         return fail(
           "CreateStartError",
@@ -951,6 +1025,7 @@ export async function createProjectBatch(args: BatchCreateArgs): Promise<string>
           { hint: laneClosedHint() },
         );
       }
+
       return fail(
         "CreateStartError",
         String(err?.message || "Could not start the device flow."),
@@ -961,6 +1036,7 @@ export async function createProjectBatch(args: BatchCreateArgs): Promise<string>
         },
       );
     }
+
     deviceCode = start.deviceCode;
     interval = start.interval;
     budgetMs = FIRST_CALL_BUDGET_MS;
@@ -974,6 +1050,7 @@ export async function createProjectBatch(args: BatchCreateArgs): Promise<string>
     interval,
     budgetMs,
   });
+
   if (!poll.ok) {
     if (poll.reason === "pending") {
       return pendingEnvelope({
@@ -984,7 +1061,9 @@ export async function createProjectBatch(args: BatchCreateArgs): Promise<string>
         verificationUriComplete: start?.verificationUriComplete,
       });
     }
+
     const code = String(poll.code || "");
+
     if (code === "CLI_PROJECT_CREATE_DISABLED") {
       return fail(
         "CreateClosed",
@@ -994,6 +1073,7 @@ export async function createProjectBatch(args: BatchCreateArgs): Promise<string>
         { hint: laneClosedHint() },
       );
     }
+
     if (poll.reason === "denied") {
       return fail(
         "CreateDenied",
@@ -1002,6 +1082,7 @@ export async function createProjectBatch(args: BatchCreateArgs): Promise<string>
         "E_AUTH_DENIED",
       );
     }
+
     if (poll.reason === "expired") {
       return fail(
         "CreateExpired",
@@ -1013,6 +1094,7 @@ export async function createProjectBatch(args: BatchCreateArgs): Promise<string>
         },
       );
     }
+
     return fail(
       "CreateAuthError",
       poll.message || "Device authorization failed.",
@@ -1028,6 +1110,7 @@ export async function createProjectBatch(args: BatchCreateArgs): Promise<string>
   const grantSlugs = Array.isArray(grant.projectSlugs)
     ? (grant.projectSlugs as unknown[]).map((slug) => String(slug).toLowerCase())
     : null;
+
   /* @invariant The grant is used only when it is the one that was asked for:
    * a provisioning grant, for this workspace, for exactly this list. A grant
    * for a different or longer list is discarded unused, because creating
@@ -1068,5 +1151,6 @@ export async function createProjectBatch(args: BatchCreateArgs): Promise<string>
     unanswered: 0,
   };
   sessions.set(deviceCode, session);
+
   return runSlice(session, deviceCode, installationId || undefined);
 }

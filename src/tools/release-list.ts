@@ -6,6 +6,8 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
+import { UserlandProjectPage } from "@extension.dev/urls/userland";
+
 import {
   consoleProjectUrl,
   fetchRegistryJson,
@@ -19,7 +21,6 @@ import {
   channelsShapeProblem,
   buildIndexShapeProblem,
 } from "../lib/registry";
-import { UserlandProjectPage } from "@extension.dev/urls/userland";
 import { contradictoryRef } from "./store-status";
 import { envelope, type ErrorCode } from "../lib/envelope";
 import { platformHoldEnvelope } from "../lib/platform-hold";
@@ -46,6 +47,7 @@ export async function readReleases(args: {
   api?: string;
 }): Promise<string> {
   const ref = resolveProjectRef(args);
+
   if (!ref) {
     return fail(
       "ReleaseListInputError",
@@ -77,6 +79,7 @@ export async function readReleases(args: {
   const heldRead = [channelsRes, metaRes, buildsRes].find(
     (res) => !res.ok && res.held === true,
   );
+
   if (heldRead && !heldRead.ok) {
     return platformHoldEnvelope({
       command: "extension_release_status",

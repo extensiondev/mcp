@@ -1,7 +1,9 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+
 import { writeCredentials } from "../lib/credentials";
 import { handler } from "../tools/publish";
 
@@ -28,6 +30,7 @@ describe("extension_publish envelope compatibility", () => {
     else process.env.EXTENSION_DEV_TOKEN = prevToken;
     if (prevApi === undefined) delete process.env.EXTENSION_DEV_API_URL;
     else process.env.EXTENSION_DEV_API_URL = prevApi;
+
     fs.rmSync(tmp, { recursive: true, force: true });
   });
 
@@ -82,6 +85,7 @@ describe("extension_publish envelope compatibility", () => {
         status: 404,
         headers: { "content-type": "application/json" },
       })) as unknown as typeof fetch;
+
     try {
       const out = JSON.parse(await handler({}));
       expect(out.ok).toBe(false);
@@ -103,20 +107,24 @@ describe("extension_publish envelope compatibility", () => {
       expiresAt: Math.floor(Date.now() / 1000) + 3600,
       api: "https://www.extension.dev",
     });
+
     const envToken = `${Buffer.from(JSON.stringify({ u: "acme", p: "widget", exp: Math.floor(Date.now() / 1000) + 600 })).toString("base64url")}.sig`;
     process.env.EXTENSION_DEV_TOKEN = envToken;
     const bearers: string[] = [];
     const prevFetch = global.fetch;
     global.fetch = (async (_url: string, init?: RequestInit) => {
       bearers.push(String((init?.headers as Record<string, string>)?.authorization ?? ""));
+
       return new Response(JSON.stringify({ message: "stop here", code: "PROJECT_NOT_FOUND" }), { status: 404, headers: { "content-type": "application/json" } });
     }) as unknown as typeof fetch;
+
     try {
       await handler({ api: "https://www.extension.dev" });
       await handler({ api: "https://www.extension.dev", project: "acme/widget" });
     } finally {
       global.fetch = prevFetch;
     }
+
     expect(bearers[0]).toBe(`Bearer ${envToken}`);
     expect(bearers[1]).toBe("Bearer tok_stored");
   });

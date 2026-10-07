@@ -1,6 +1,7 @@
-import { describe, expect, it } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
+
+import { describe, expect, it } from "vitest";
 
 import {
   CARRIER_ALLOWED_ORIGINS_SENTENCE,
@@ -47,9 +48,11 @@ describe("the shipped carrier enforces what its sentence promises", () => {
     for (const origin of CARRIER_TRUSTED_ORIGINS) {
       expect(worker).toContain(`"${origin}"`);
     }
+
     for (const host of CARRIER_TRUSTED_LOCAL_HOSTS) {
       expect(worker).toContain(`"${host}"`);
     }
+
     for (const port of CARRIER_TRUSTED_LOCAL_PORTS) {
       expect(worker).toContain(`"${port}"`);
     }
@@ -57,15 +60,19 @@ describe("the shipped carrier enforces what its sentence promises", () => {
 
   it("says in its sentence only what the bundle lists", () => {
     const matches = manifest.externally_connectable?.matches ?? [];
+
     for (const origin of CARRIER_TRUSTED_ORIGINS) {
       expect(matches).toContain(`${origin}/*`);
     }
+
     for (const host of CARRIER_TRUSTED_LOCAL_HOSTS) {
       expect(matches).toContain(`http://${host}/*`);
     }
+
     for (const port of CARRIER_TRUSTED_LOCAL_PORTS) {
       expect(CARRIER_ALLOWED_ORIGINS_SENTENCE).toContain(port);
     }
+
     expect(CARRIER_ALLOWED_ORIGINS_SENTENCE).toContain(
       "checks the sender's origin",
     );

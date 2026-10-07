@@ -1,7 +1,8 @@
-import { describe, expect, it, vi } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+
+import { describe, expect, it, vi } from "vitest";
 
 import * as browsers from "../tools/browsers";
 import * as auth from "../tools/auth";
@@ -27,6 +28,7 @@ const MERGED_AWAY = [
 describe("v9 tool surface", () => {
   it("registers the merged tools and no longer registers what they replaced", () => {
     const names = ALL_TOOLS.map((t) => t.schema.name);
+
     for (const name of [
       "extension_browsers",
       "extension_auth",
@@ -36,6 +38,7 @@ describe("v9 tool surface", () => {
     ]) {
       expect(names).toContain(name);
     }
+
     for (const gone of MERGED_AWAY) {
       expect(names).not.toContain(gone);
     }
@@ -48,14 +51,17 @@ describe("v9 tool surface", () => {
         string,
         { enum?: string[] }
       >;
+
       return props.action?.enum ?? [];
     };
+
     expect(actions("extension_browsers")).toEqual([
       "detect",
       "list",
       "install",
       "uninstall",
     ]);
+
     expect(actions("extension_auth")).toEqual(["status", "login", "logout"]);
     expect(actions("extension_templates")).toEqual(["list", "source"]);
   });
@@ -102,6 +108,7 @@ describe("extension_auth dispatch", () => {
       throw new Error("status with no stored login must not reach the network");
     });
     global.fetch = fetchSpy as unknown as typeof fetch;
+
     try {
       const out = JSON.parse(await auth.handler({}));
       expect(out.status).toBe("logged-out");
@@ -111,6 +118,7 @@ describe("extension_auth dispatch", () => {
       if (prevXdg === undefined) delete process.env.XDG_CONFIG_HOME;
       else process.env.XDG_CONFIG_HOME = prevXdg;
       if (prevToken !== undefined) process.env.EXTENSION_DEV_TOKEN = prevToken;
+
       fs.rmSync(tmp, { recursive: true, force: true });
     }
   });
@@ -140,6 +148,7 @@ describe("extension_release_status sections", () => {
       status: 404,
       text: async () => "{}",
     })) as unknown as typeof fetch;
+
     try {
       const out = JSON.parse(
         await releaseStatus.handler({

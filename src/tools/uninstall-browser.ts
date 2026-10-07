@@ -7,6 +7,7 @@
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
 import { extensionUninstall } from "extension-install";
+
 import { envelope } from "../lib/envelope";
 
 export async function uninstallManagedBrowser(args: {
@@ -36,6 +37,7 @@ export async function uninstallManagedBrowser(args: {
     const rows: Array<{ browser: string; removed: boolean; path: string }> = Array.isArray(answer)
       ? (answer as unknown[]).flatMap((row) => {
           const r = row as { browser?: unknown; removed?: unknown; path?: unknown } | null;
+
           return r && typeof r === "object" && typeof r.removed === "boolean"
             ? [{ browser: String(r.browser ?? ""), removed: r.removed, path: String(r.path ?? "") }]
             : [];

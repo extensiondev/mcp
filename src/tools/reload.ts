@@ -37,6 +37,7 @@ export const schema = {
 
 export async function handler(args: ActArgs): Promise<string> {
   const { browser } = resolveSessionBrowser(args.projectPath, args.browser);
+
   return runActVerb(
     ["reload", args.projectPath, ...commonFlags({ ...args, browser })],
     args.projectPath,

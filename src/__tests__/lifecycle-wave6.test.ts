@@ -1,58 +1,72 @@
-import { describe, it, expect, vi, afterEach, afterAll } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { spawn } from "node:child_process";
+
+import { describe, it, expect, vi, afterEach, afterAll } from "vitest";
+
+import * as stop from "../tools/stop";
+import * as releasePromote from "../tools/release-promote";
+import { registerSession, removeSession } from "../lib/process-manager";
+import { runCli } from "../index";
+
+import type * as ChildProcessModule from "node:child_process";
 
 const taskkillCalls: string[][] = [];
 const windowsHost: { table: string | null } = { table: null };
 
 vi.mock("node:child_process", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("node:child_process")>();
+  const actual = await importOriginal<typeof ChildProcessModule>();
   const execFileSync = ((file: string, args?: readonly string[], options?: unknown) => {
     if (process.platform === "win32" && (file === "pgrep" || file === "ps")) {
       throw Object.assign(new Error(`spawnSync ${file} ENOENT`), { code: "ENOENT" });
     }
+
     if (file === "powershell") {
       if (windowsHost.table === null) {
         throw Object.assign(new Error("spawnSync powershell ENOENT"), { code: "ENOENT" });
       }
+
       return windowsHost.table;
     }
+
     if (file === "tasklist") {
       const pid = String(args?.[1] ?? "").replace("PID eq ", "");
+
       return `"node.exe","${pid}","Console","1","10,000 K"\r\n`;
     }
+
     if (file === "taskkill") {
       taskkillCalls.push([...(args ?? [])]);
       const pid = Number(args?.[1]);
       process.kill(pid, "SIGKILL");
+
       return Buffer.from("");
     }
+
     return (actual.execFileSync as (...a: unknown[]) => unknown)(file, args, options);
   }) as typeof actual.execFileSync;
+
   return { ...actual, execFileSync, default: { ...actual, execFileSync } };
 });
-
-import { spawn } from "node:child_process";
-import * as stop from "../tools/stop";
-import * as releasePromote from "../tools/release-promote";
-import { registerSession, removeSession } from "../lib/process-manager";
-import { runCli } from "../index";
 
 const previousSessionDir = process.env.EXTENSION_MCP_SESSION_DIR;
 const sessionDir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-wave6-markers-"));
 process.env.EXTENSION_MCP_SESSION_DIR = sessionDir;
 
 const tmpDirs: string[] = [];
+
 function tmpProject(): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-wave6-"));
   tmpDirs.push(dir);
+
   return dir;
 }
 
 function isAlive(pid: number): boolean {
   try {
     process.kill(pid, 0);
+
     return true;
   } catch {
     return false;
@@ -65,6 +79,7 @@ function spawnHolder(args: string[]): number {
     stdio: "ignore",
   });
   child.unref();
+
   return child.pid!;
 }
 
@@ -81,6 +96,7 @@ afterEach(() => {
 afterAll(() => {
   if (previousSessionDir === undefined) delete process.env.EXTENSION_MCP_SESSION_DIR;
   else process.env.EXTENSION_MCP_SESSION_DIR = previousSessionDir;
+
   fs.rmSync(sessionDir, { recursive: true, force: true });
 });
 
@@ -95,6 +111,7 @@ describe("Reaped means confirmed gone", () => {
       await new Promise((r) => setTimeout(r, 200));
       vi.spyOn(process, "kill").mockImplementation(((target: number, sig?: string | number) => {
         if (sig === "SIGKILL") return true;
+
         return realKill(target, sig as NodeJS.Signals);
       }) as typeof process.kill);
 
@@ -121,6 +138,7 @@ describe("Reaped means confirmed gone", () => {
       const platform = Object.getOwnPropertyDescriptor(process, "platform")!;
       Object.defineProperty(process, "platform", { value: "win32" });
       taskkillCalls.length = 0;
+
       try {
         await stop.handler({ projectPath, browser: "chrome" });
       } finally {
@@ -128,6 +146,7 @@ describe("Reaped means confirmed gone", () => {
         removeSession(projectPath, "chrome");
         if (isAlive(pid)) realKill(pid, "SIGKILL");
       }
+
       expect(taskkillCalls).toContainEqual(["/PID", String(pid), "/T", "/F"]);
     },
     15_000,
@@ -142,6 +161,7 @@ describe("A Windows stop can verify what it ended", () => {
   function onWindows<T>(run: () => Promise<T>): Promise<T> {
     const platform = Object.getOwnPropertyDescriptor(process, "platform")!;
     Object.defineProperty(process, "platform", { value: "win32" });
+
     return run().finally(() => Object.defineProperty(process, "platform", platform));
   }
 
@@ -153,6 +173,7 @@ describe("A Windows stop can verify what it ended", () => {
       const pid = spawnHolder([profileArg]);
       await new Promise((r) => setTimeout(r, 200));
       windowsHost.table = `4\tSystem\t\r\n${pid}\tnode.exe\t"node" -e "x" ${profileArg}\r\n`;
+
       try {
         const result = JSON.parse(await onWindows(() => stop.handler({ projectPath, browser: "chrome" })));
         expect(result.value.reaped).toContain(pid);
@@ -172,6 +193,7 @@ describe("A Windows stop can verify what it ended", () => {
       const pid = spawnHolder([]);
       registerSession({ pid, browser: "chrome", projectPath, command: "dev" });
       windowsHost.table = "4\tSystem\t\r\n";
+
       try {
         const result = JSON.parse(await onWindows(() => stop.handler({ projectPath, browser: "chrome" })));
         expect(result.value.stopped).toBe(true);
@@ -192,6 +214,7 @@ describe("A Windows stop can verify what it ended", () => {
       const pid = spawnHolder([]);
       registerSession({ pid, browser: "chrome", projectPath, command: "dev" });
       windowsHost.table = null;
+
       try {
         const result = JSON.parse(await onWindows(() => stop.handler({ projectPath, browser: "chrome" })));
         expect(result.value.stopped).toBe(false);
@@ -211,6 +234,7 @@ describe("A marker that did not land is said", () => {
     fs.writeFileSync(blocker, "");
     process.env.EXTENSION_MCP_SESSION_DIR = path.join(blocker, "sessions");
     const projectPath = tmpProject();
+
     try {
       const warning = registerSession({ pid: 424242, browser: "chrome", projectPath, command: "dev" });
       expect(warning).toContain("could not be written");
@@ -222,6 +246,7 @@ describe("A marker that did not land is said", () => {
 
   it("returns nothing when the marker landed", () => {
     const projectPath = tmpProject();
+
     try {
       expect(registerSession({ pid: 434343, browser: "chrome", projectPath, command: "dev" })).toBeNull();
     } finally {

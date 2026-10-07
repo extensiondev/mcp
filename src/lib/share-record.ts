@@ -64,14 +64,18 @@ function loadExisting(file: string): {
   unreadable: boolean;
 } {
   if (!fs.existsSync(file)) return { entries: [], unreadable: false };
+
   let raw: string;
+
   try {
     raw = fs.readFileSync(file, "utf8");
   } catch {
     return { entries: [], unreadable: true };
   }
+
   try {
     const parsed = JSON.parse(raw) as { shares?: unknown };
+
     if (Array.isArray(parsed?.shares)) {
       return {
         entries: parsed.shares as SharedPreviewEntry[],
@@ -80,6 +84,7 @@ function loadExisting(file: string): {
     }
   } catch {
   }
+
   return { entries: [], unreadable: true };
 }
 
@@ -92,10 +97,13 @@ export interface SharedPreviewsFile {
 
 export function readSharedPreviews(projectPath: string): SharedPreviewsFile {
   const file = sharedPreviewsPath(projectPath);
+
   if (!fs.existsSync(file)) {
     return { path: file, exists: false, unreadable: false, entries: [] };
   }
+
   const existing = loadExisting(file);
+
   return {
     path: file,
     exists: true,
@@ -113,16 +121,20 @@ export function recordSharedPreview(
   const file = sharedPreviewsPath(projectPath);
   let preserved: string | undefined;
   let entries: SharedPreviewEntry[];
+
   try {
     fs.mkdirSync(path.dirname(file), { recursive: true });
     const existing = loadExisting(file);
+
     if (existing.unreadable) {
       preserved = path.join(
         path.dirname(file),
         `shared-previews.${Date.now()}.unreadable.json`,
       );
+
       fs.renameSync(file, preserved);
     }
+
     entries = [...existing.entries, entry];
     fs.writeFileSync(
       file,
@@ -151,10 +163,10 @@ export function recordSharedPreview(
     gitignored: ignore.state,
     ...(preserved ? { preserved } : {}),
     note:
-      `The revoke handle was also written to ${file}, which keeps every share this project has made.` +
-      (preserved
+      `The revoke handle was also written to ${file}, which keeps every share this project has made.${ 
+      preserved
         ? ` The previous file could not be read, so it was kept as ${preserved} rather than overwritten.`
-        : ""),
+        : ""}`,
     ...(ignore.state === "failed"
       ? {
           warning: `${SHARE_STATE_DIR}/ is not in this project's .gitignore and could not be added, so add it yourself before committing.`,

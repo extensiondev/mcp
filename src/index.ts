@@ -8,10 +8,6 @@
 
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { version } from "../package.json";
-
-export { version };
-export { renderToolsDoc } from "./lib/docs-tools";
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
@@ -27,7 +23,6 @@ import * as start from "./tools/start";
 import * as previewWeb from "./tools/preview-web";
 import * as shares from "./tools/shares";
 import * as stop from "./tools/stop";
-
 import * as assertTool from "./tools/assert";
 import * as manifestValidate from "./tools/manifest-validate";
 import * as themeVerify from "./tools/theme-verify";
@@ -46,13 +41,11 @@ import * as releaseStatus from "./tools/release-status";
 import * as submitTool from "./tools/submit";
 import * as wait from "./tools/wait";
 import * as addFeature from "./tools/add-feature";
-
 import * as auth from "./tools/auth";
 import { readIdentity } from "./tools/whoami";
 import { clearLocalCredentials } from "./tools/logout";
 import { requestDeviceCode, pollDeviceToken } from "./lib/device-flow";
 import { fetchLoginConfig, resolveApiBase, safeApiBase } from "./lib/login-flow";
-
 import * as browsers from "./tools/browsers";
 import * as doctor from "./tools/doctor";
 import * as docsSearch from "./tools/docs-search";
@@ -72,6 +65,11 @@ import {
   pinProjectArgs,
   type ServerOptions,
 } from "./lib/tool-policy";
+
+import { version } from "../package.json";
+
+export { version };
+export { renderToolsDoc } from "./lib/docs-tools";
 
 export interface ToolModule {
   schema: {
@@ -132,12 +130,14 @@ export function toolResultFrame(
   isError?: boolean;
 } {
   let refused: boolean;
+
   try {
     const parsed: unknown = JSON.parse(result);
     refused = isEnvelope(parsed) && parsed.ok === false;
   } catch {
     refused = false;
   }
+
   return {
     content: [
       {
@@ -241,6 +241,7 @@ export function createServer(
       (args ?? {}) as Record<string, unknown>,
     );
     const disabled = disabledToolEnvelope(name, aliasedArgs, options);
+
     if (disabled) {
       return {
         content: [{ type: "text" as const, text: disabled }],
@@ -254,15 +255,18 @@ export function createServer(
       tool.schema.inputSchema,
       options,
     );
+
     if ("refused" in pinned) {
       return {
         content: [{ type: "text" as const, text: pinned.refused }],
         isError: true,
       };
     }
+
     const normalizedArgs = pinned.args;
 
     const issues = validateToolInput(tool.schema.inputSchema, normalizedArgs);
+
     if (issues.length) {
       return {
         content: [
@@ -276,8 +280,10 @@ export function createServer(
     }
 
     const untrusted = TOOL_POLICY[name]?.untrusted === true;
+
     try {
       const result = await tool.handler(normalizedArgs);
+
       return toolResultFrame(result, untrusted);
     } catch (err) {
       return toolResultFrame(
@@ -304,6 +310,7 @@ export async function startServer(
 ): Promise<void> {
   installCarrierExitCleanup();
   if (options.project) process.env.EXTENSION_DEV_PROJECT = options.project;
+
   const server = createServer(options);
   const transport = new StdioServerTransport();
   await server.connect(transport);
@@ -314,25 +321,31 @@ export async function runCli(cmd: string, args: string[]): Promise<number> {
 
   const flag = (name: string): string | undefined => {
     const i = args.indexOf(`--${name}`);
+
     return i >= 0 ? args[i + 1] : undefined;
   };
 
   if (cmd === "whoami") {
     log(await readIdentity());
+
     return 0;
   }
 
   if (cmd === "release") {
     const sub = String(args[0] || "").trim();
+
     if (sub === "promote") {
       const buildId = String(flag("build") || flag("build-id") || "").trim();
       const channel = String(flag("channel") || "").trim();
+
       if (!buildId || !channel) {
         log(
           "Usage: extension-mcp release promote --build <sha> --channel <channel> [--source-channel <c>] [--version <v>] [--api <url>]",
         );
+
         return 1;
       }
+
       const out = await releasePromote.handler({
         buildId,
         channel,
@@ -342,43 +355,57 @@ export async function runCli(cmd: string, args: string[]): Promise<number> {
       });
       log(out);
       let parsed: any;
+
       try {
         parsed = JSON.parse(out);
       } catch {
         parsed = null;
       }
+
       /* @invariant Only an envelope that says ok: true exits 0. An answer that
          does not parse is an unknown outcome, and a release script reading
          the exit code must not take it as a promotion. */
       if (parsed?.ok === true) return 0;
+
       if (parsed === null || typeof parsed !== "object") {
         log("The promote answer above could not be read as an envelope, so whether the channel moved is unknown; check extension_release_list before retrying.");
       }
+
       return 1;
     }
+
     log(
       "Usage: extension-mcp release promote --build <sha> --channel <channel>",
     );
+
     return 1;
   }
 
   if (cmd === "logout") {
     log(await clearLocalCredentials());
+
     return 0;
   }
 
   if (cmd === "login") {
     const project = String(flag("project") || "").trim();
+
     if (!/^[^/]+\/[^/]+$/.test(project)) {
       log("Usage: extension-mcp login --project <workspace>/<project> [--api <url>]");
+
       return 1;
     }
+
     const apiCheck = safeApiBase(resolveApiBase(flag("api")));
+
     if (!apiCheck.ok) {
       log(apiCheck.message);
+
       return 1;
     }
+
     const apiBase = apiCheck.base;
+
     try {
       const config = await fetchLoginConfig(apiBase);
 
@@ -389,12 +416,14 @@ export async function runCli(cmd: string, args: string[]): Promise<number> {
       });
       const completeLink = String(start.verificationUriComplete || "").trim();
       log("");
+
       if (completeLink && completeLink !== start.verificationUri) {
         log(`  Open ${completeLink} to approve (code ${start.userCode} is pre-filled).`);
         log(`  If the page asks for a code, enter ${start.userCode} at ${start.verificationUri}.`);
       } else {
         log(`  Open ${start.verificationUri} and enter code: ${start.userCode}`);
       }
+
       log("");
       log("  Waiting for authorization...");
       const poll = await pollDeviceToken({
@@ -405,6 +434,7 @@ export async function runCli(cmd: string, args: string[]): Promise<number> {
         interval: start.interval,
         budgetMs: start.expiresIn * 1000,
       });
+
       if (!poll.ok) {
         log(
           poll.reason === "denied"
@@ -415,12 +445,16 @@ export async function runCli(cmd: string, args: string[]): Promise<number> {
                 ? poll.message || "Device login failed. Run login again."
                 : "Timed out waiting for authorization. Run login again.",
         );
+
         return 1;
       }
+
       log(`Logged in to ${poll.creds.workspaceSlug}/${poll.creds.projectSlug}.`);
+
       return 0;
     } catch (err: unknown) {
       log(err instanceof Error ? err.message : String(err));
+
       return 1;
     }
   }
@@ -428,5 +462,6 @@ export async function runCli(cmd: string, args: string[]): Promise<number> {
   log(
     `Unknown command: ${cmd}. Expected one of: login, logout, whoami, release.`,
   );
+
   return 1;
 }

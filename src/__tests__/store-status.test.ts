@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+
 import {
   latestSubmissionsByStore,
   normalizeStoresStatus,
@@ -26,6 +27,7 @@ function fetchByFile(files: Record<string, unknown>): typeof fetch {
     for (const [suffix, body] of Object.entries(files)) {
       if (String(url).endsWith(suffix)) return jsonResponse(body);
     }
+
     return jsonResponse({ message: "not found" }, false, 404);
   }) as unknown as typeof fetch;
 }
@@ -114,6 +116,7 @@ describe("extension_release_status: registration + schema", () => {
     expect(ALL_TOOLS.map((t) => t.schema.name)).toContain(
       "extension_release_status",
     );
+
     const props = Object.keys(
       (schema.inputSchema as { properties: Record<string, unknown> })
         .properties,
@@ -145,12 +148,14 @@ describe("store-status reader", () => {
   afterEach(() => {
     if (prevXdg === undefined) delete process.env.XDG_CONFIG_HOME;
     else process.env.XDG_CONFIG_HOME = prevXdg;
+
     global.fetch = prevFetch;
     fs.rmSync(tmp, { recursive: true, force: true });
   });
 
   it("fails without a project, naming extension_auth and the overrides", async () => {
     if (process.platform === "win32") return;
+
     const out = JSON.parse(await handler({}));
     expect(out.ok).toBe(false);
     expect(out.status).toBe("auth-required");
@@ -196,9 +201,11 @@ describe("store-status reader", () => {
     expect(byStore.firefox.lastSubmission.storeUrl).toBe(
       "https://addons.mozilla.org/firefox/addon/probe",
     );
+
     expect(byStore.firefox.lastSubmission.submittedAt).toBe(
       "2026-07-22T17:25:05.000Z",
     );
+
     expect(byStore.firefox.review.status).toBe("pending");
 
     expect(out.value.lastPollAt).toBe("2026-07-22T18:00:00.000Z");
@@ -206,6 +213,7 @@ describe("store-status reader", () => {
     expect(out.value.registryUrls.status).toContain(
       "/acme/widget/_extension-dev/stores/status.json",
     );
+
     expect(out.hint).toContain("FAILED the last health check");
     expect(out.hint).toContain("/submissions/edge");
   });
@@ -316,6 +324,7 @@ describe("store-status reader", () => {
 
   it("defaults to the stored login's project", async () => {
     if (process.platform === "win32") return;
+
     writeCredentials({
       version: 1,
       token: "claims.sig",
@@ -324,14 +333,17 @@ describe("store-status reader", () => {
       expiresAt: Math.floor(Date.now() / 1000) + 3600,
       api: "https://www.extension.dev",
     });
+
     const seen: string[] = [];
     global.fetch = (async (url: string) => {
       seen.push(String(url));
+
       return jsonResponse({ message: "not found" }, false, 404);
     }) as unknown as typeof fetch;
 
     await handler({});
     expect(seen.length).toBeGreaterThan(0);
+
     for (const url of seen) {
       expect(url).toContain("/stored-ws/stored-proj/_extension-dev/stores/");
     }
@@ -367,6 +379,7 @@ describe("extension_release_status never calls an unreadable file empty", () => 
       if (href.endsWith("stores/health.json")) return jsonResponse(HEALTH);
       if (href.endsWith("stores/status.json")) return jsonResponse(STATUS_V3);
       if (href.endsWith("stores/submissions.json")) return jsonResponse({ message: "boom" }, false, 500);
+
       return jsonResponse({ message: "not found" }, false, 404);
     }) as unknown as typeof fetch;
 
@@ -382,6 +395,7 @@ describe("extension_release_status never calls an unreadable file empty", () => 
     global.fetch = (async (url: string) => {
       const href = String(url);
       if (href.endsWith("meta.json")) return jsonResponse({ name: "Widget", visibility: "public" });
+
       return jsonResponse({ message: "upstream timed out" }, false, 500);
     }) as unknown as typeof fetch;
 
@@ -400,6 +414,7 @@ describe("extension_release_status never calls an unreadable file empty", () => 
       "builds/index.json": { items: [] },
       "meta.json": { name: "Widget" },
     });
+
     const undeclared = JSON.parse(
       await releaseStatus({ workspace: "acme", project: "widget", include: ["releases"] }),
     );
@@ -409,6 +424,7 @@ describe("extension_release_status never calls an unreadable file empty", () => 
       "channels.json": { channels: [] },
       "builds/index.json": { items: [] },
     });
+
     const unreadable = JSON.parse(
       await releaseStatus({ workspace: "acme", project: "widget", include: ["releases"] }),
     );
@@ -422,6 +438,7 @@ describe("extension_release_status never calls an unreadable file empty", () => 
       if (href.endsWith("channels.json")) return jsonResponse({ channels: [] });
       if (href.endsWith("builds/index.json")) return jsonResponse({ items: [] });
       if (href.endsWith("meta.json")) return jsonResponse({ name: "Widget" });
+
       return jsonResponse({ message: "not found" }, false, 404);
     }) as unknown as typeof fetch;
 

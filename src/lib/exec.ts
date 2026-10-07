@@ -6,14 +6,18 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-import type { ChildProcess } from "node:child_process";
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+
 import spawn from "cross-spawn";
-import { dependencies } from "../../package.json";
+
 import { envelope } from "./envelope";
+
+import { dependencies } from "../../package.json";
+
+import type { ChildProcess } from "node:child_process";
 
 function descendantPids(pid: number): number[] {
   try {
@@ -22,6 +26,7 @@ function descendantPids(pid: number): number[] {
       .split("\n")
       .map((line: string) => parseInt(line.trim(), 10))
       .filter((n: number) => Number.isInteger(n) && n > 0);
+
     return direct.flatMap((childPid: number) => [childPid, ...descendantPids(childPid)]);
   } catch {
     return [];
@@ -35,6 +40,7 @@ function descendantPids(pid: number): number[] {
 export function killWindowsTree(pid: number): boolean {
   try {
     execFileSync("taskkill", ["/PID", String(pid), "/T", "/F"], { stdio: "ignore" });
+
     return true;
   } catch {
     return false;
@@ -43,10 +49,13 @@ export function killWindowsTree(pid: number): boolean {
 
 function killTree(pid: number | undefined, signal: NodeJS.Signals): void {
   if (!pid) return;
+
   if (process.platform === "win32") {
     killWindowsTree(pid);
+
     return;
   }
+
   for (const target of [...descendantPids(pid).reverse(), pid]) {
     try {
       process.kill(target, signal);
@@ -77,6 +86,7 @@ export function pinnedCliVersion(): string {
   const override = String(
     process.env.EXTENSION_MCP_CLI_VERSION || "",
   ).trim();
+
   return override || PINNED_CLI_VERSION;
 }
 
@@ -86,6 +96,7 @@ export function exactVersion(spec: string): string {
 
 export function describeExtensionInvocation(projectDir?: string): string {
   const { command, prefixArgs } = resolveExtensionInvocation(projectDir);
+
   return prefixArgs.length
     ? `${command} ${prefixArgs.join(" ")} (this server's pinned engine; the project has no node_modules/.bin/extension)`
     : `${command} (the project's own Extension.js)`;
@@ -102,12 +113,15 @@ export function resolveExtensionInvocation(projectDir?: string): {
       ".bin",
       process.platform === "win32" ? "extension.cmd" : "extension",
     );
+
     try {
       fs.accessSync(bin, fs.constants.X_OK);
+
       return { command: bin, prefixArgs: [] };
     } catch {
     }
   }
+
   return { command: "npx", prefixArgs: [`extension@${pinnedCliVersion()}`] };
 }
 
@@ -116,18 +130,22 @@ export function runExtensionCli(
   options?: { cwd?: string; timeoutMs?: number },
 ): Promise<CliResult> {
   const { command, prefixArgs } = resolveExtensionInvocation(options?.cwd);
+
   return new Promise((resolve) => {
     let ioDir: string;
     let outFd: number;
     let errFd: number;
+
     try {
       ioDir = fs.mkdtempSync(path.join(os.tmpdir(), "extension-mcp-io-"));
       outFd = fs.openSync(path.join(ioDir, "stdout"), "a");
       errFd = fs.openSync(path.join(ioDir, "stderr"), "a");
     } catch (err) {
       resolve({ code: 1, stdout: "", stderr: String(err) });
+
       return;
     }
+
     const readAll = (name: string): string => {
       try {
         return fs.readFileSync(path.join(ioDir, name), "utf8");
@@ -135,6 +153,7 @@ export function runExtensionCli(
         return "";
       }
     };
+
     const cleanup = () => {
       for (const fd of [outFd, errFd]) {
         try {
@@ -142,11 +161,13 @@ export function runExtensionCli(
         } catch {
         }
       }
+
       try {
         fs.rmSync(ioDir, { recursive: true, force: true });
       } catch {
       }
     };
+
     const budgetMs = (options?.timeoutMs ?? 30_000) + SPAWN_KILL_HEADROOM_MS;
     const child = spawn(command, [...prefixArgs, ...args], {
       cwd: options?.cwd,
@@ -173,6 +194,7 @@ export function runExtensionCli(
       cleanup();
       resolve({ code: timedOut ? null : code, signal, timedOut, stdout, stderr });
     });
+
     child.on("error", (err) => {
       const stdout = readAll("stdout");
       const stderr = readAll("stderr");
@@ -239,10 +261,12 @@ export async function spawnFailedEnvelope(
 ): Promise<string> {
   const deadline = Date.now() + 500;
   let cause = spawned.spawnError?.() ?? null;
+
   while (!cause && Date.now() < deadline) {
     await new Promise((resolve) => setTimeout(resolve, 25));
     cause = spawned.spawnError?.() ?? null;
   }
+
   return envelope({
     ok: false,
     command,

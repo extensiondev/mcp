@@ -86,6 +86,7 @@ export async function openDevToolsPanel(
   const listTargets = async (): Promise<RawTarget[]> =>
     (await CDPClient.discoverTargets(port)) as RawTarget[];
   let reached: "open" | "frontend" | "panel" | "show" = "open";
+
   try {
     await cdp.connect(await CDPClient.discoverBrowserWsUrl(port));
     const before = new Set(
@@ -93,6 +94,7 @@ export async function openDevToolsPanel(
     );
 
     let devtoolsTargetId: string | null = null;
+
     try {
       const opened = (await cdp.sendCommand("Target.openDevTools", {
         targetId: options.inspectedTargetId,
@@ -107,6 +109,7 @@ export async function openDevToolsPanel(
     }
 
     const deadline = Date.now() + budgetMs;
+
     while (!devtoolsTargetId && Date.now() < deadline) {
       await sleep(200);
       const fresh = (await listTargets().catch(() => [])).find(
@@ -114,6 +117,7 @@ export async function openDevToolsPanel(
       );
       if (fresh) devtoolsTargetId = fresh.id;
     }
+
     if (!devtoolsTargetId) {
       return {
         opened: false,
@@ -124,6 +128,7 @@ export async function openDevToolsPanel(
 
     reached = "frontend";
     const sessionId = await cdp.attachToTarget(devtoolsTargetId);
+
     /* @invariant Some extensions register their panel only when the page
        reports to them (Preact Devtools creates it once the page's debug hook
        speaks through the content script), which happens on a load that
@@ -138,14 +143,18 @@ export async function openDevToolsPanel(
          comes. So the devtools_page frame is awaited first, then a settle,
          measured at about 3 s after open by the hand driver that works. */
       const frameDeadline = Date.now() + Math.min(5000, budgetMs / 2);
+
       while (Date.now() < frameDeadline) {
         const frame = (await listTargets().catch(() => [])).find(
           (t) => t.type === "iframe" && String(t.url ?? "").startsWith(options.devtoolsPageUrl),
         );
         if (frame) break;
+
         await sleep(200);
       }
+
       await sleep(Math.min(2500, budgetMs / 4));
+
       try {
         const inspectedSession = await cdp.attachToTarget(options.inspectedTargetId);
         await cdp.sendCommand("Page.reload", {}, inspectedSession);
@@ -154,6 +163,7 @@ export async function openDevToolsPanel(
         reloadedInspected = false;
       }
     }
+
     let lastEvaluateError: string | null = null;
     const evaluate = async (expression: string): Promise<EvaluateResponse | null> =>
       ((await cdp
@@ -164,6 +174,7 @@ export async function openDevToolsPanel(
         )
         .catch((err: unknown) => {
           lastEvaluateError = err instanceof Error ? err.message : String(err);
+
           return null;
         })) as EvaluateResponse | null);
     /* @invariant A REGISTRY THAT COULD NOT BE READ IS NOT AN EMPTY ONE. The
@@ -184,26 +195,32 @@ export async function openDevToolsPanel(
     let panelId: string | null = null;
     let nudged = false;
     const nudgeAt = Date.now() + Math.min(4000, budgetMs / 2);
+
     while (!panelId && Date.now() < deadline) {
       const response = await evaluate(PANEL_IDS_EXPRESSION);
       const ids = response?.result?.value;
+
       if (response?.exceptionDetails) {
         registryError = response.exceptionDetails.exception?.description ?? response.exceptionDetails.text ?? "the registry read threw";
       } else if (!response) {
         registryError = lastEvaluateError ?? "the registry read did not answer";
       }
+
       if (!devtoolsPageLoaded) {
         devtoolsPageLoaded = (await listTargets().catch(() => [])).some(
           (t) => t.type === "iframe" && String(t.url ?? "").startsWith(options.devtoolsPageUrl),
         );
       }
+
       if (Array.isArray(ids)) {
         registryAnswered = true;
         panels = ids.map(String);
         panelId =
           panels.find((id) => (wantedId ? id === wantedId : id.startsWith(prefix))) ?? null;
       }
+
       if (panelId) break;
+
       /* @invariant The devtools_page is an iframe inside the frontend, and a
          headless frontend has been seen to leave it idle for seconds before
          its panels.create call lands. Attaching to that frame and evaluating a
@@ -214,6 +231,7 @@ export async function openDevToolsPanel(
         const frame = (await listTargets().catch(() => [])).find(
           (t) => t.type === "iframe" && String(t.url ?? "").startsWith(options.devtoolsPageUrl),
         );
+
         if (frame) {
           try {
             const frameSession = await cdp.attachToTarget(frame.id);
@@ -226,8 +244,10 @@ export async function openDevToolsPanel(
           }
         }
       }
+
       await sleep(250);
     }
+
     if (!panelId) {
       return {
         opened: false,
@@ -253,6 +273,7 @@ export async function openDevToolsPanel(
         .map((t) => t.id),
     );
     const shown = await evaluate(showPanelExpression(panelId));
+
     if (!shown || shown.exceptionDetails) {
       return {
         opened: false,
@@ -273,6 +294,7 @@ export async function openDevToolsPanel(
     let panelTargetInferred = false;
     let panelFrameCandidates = 0;
     const showDeadline = Date.now() + 3000;
+
     for (;;) {
       const frames = (await listTargets().catch(() => [])).filter(
         (t) =>
@@ -282,19 +304,24 @@ export async function openDevToolsPanel(
       );
       panelFrameCandidates = frames.length;
       const fresh = frames.find((t) => !framesBefore.has(t.id));
+
       if (fresh) {
         panelTarget = { targetId: fresh.id, url: String(fresh.url) };
         break;
       }
+
       if (Date.now() >= showDeadline) {
         if (frames.length === 1) {
           panelTarget = { targetId: frames[0].id, url: String(frames[0].url) };
           panelTargetInferred = true;
         }
+
         break;
       }
+
       await sleep(200);
     }
+
     return {
       opened: true,
       devtoolsTargetId,

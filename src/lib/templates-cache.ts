@@ -9,9 +9,12 @@
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
-import type { TemplatesMetaV2, TemplateMeta } from "./types";
+
 import { templateMetaUrls } from "./template-artifact-source";
+
 import bundledSnapshot from "./templates-meta.snapshot.json";
+
+import type { TemplatesMetaV2, TemplateMeta } from "./types";
 
 const CACHE_DIR = path.join(os.homedir(), ".cache", "extension-js");
 const CACHE_FILE = path.join(CACHE_DIR, "templates-meta.json");
@@ -29,6 +32,7 @@ function isUsableMeta(data: unknown): data is TemplatesMetaV2 {
 function isCacheValid(): boolean {
   try {
     const stat = fs.statSync(CACHE_FILE);
+
     return Date.now() - stat.mtimeMs < CACHE_TTL_MS;
   } catch {
     return false;
@@ -38,6 +42,7 @@ function isCacheValid(): boolean {
 function readCachedMeta(): TemplatesMetaV2 | null {
   try {
     const cached = JSON.parse(fs.readFileSync(CACHE_FILE, "utf8"));
+
     return isUsableMeta(cached) ? cached : null;
   } catch {
     return null;
@@ -72,24 +77,31 @@ export async function fetchTemplatesMetaWithSource(): Promise<TemplatesMetaRead>
   }
 
   const failures: string[] = [];
+
   for (const url of await templateMetaUrls()) {
     let data: unknown;
+
     try {
       const response = await fetch(url);
+
       if (!response.ok) {
         failures.push(`${url} answered ${response.status}`);
         continue;
       }
+
       data = await response.json();
     } catch (err) {
       failures.push(`${url}: ${err instanceof Error ? err.message : String(err)}`);
       continue;
     }
+
     if (!isUsableMeta(data)) {
       failures.push(`${url} answered a body with no templates`);
       continue;
     }
+
     let note: string | undefined;
+
     try {
       fs.mkdirSync(CACHE_DIR, { recursive: true });
       const tmpFile = `${CACHE_FILE}.${process.pid}.tmp`;
@@ -98,13 +110,16 @@ export async function fetchTemplatesMetaWithSource(): Promise<TemplatesMetaRead>
     } catch (err) {
       note = `The live catalog was read but could not be cached under ${CACHE_DIR} (${err instanceof Error ? err.message : String(err)}); the next call fetches it again.`;
     }
+
     return { meta: data, source: "live", ...(note ? { note } : {}) };
   }
 
   const why = failures.length ? failures.join("; ") : "no catalog source is configured";
   const stale = readCachedMeta();
+
   if (stale) {
     const age = cacheAgeMs();
+
     return {
       meta: stale,
       source: "stale-cache",
@@ -140,6 +155,7 @@ export async function listTemplatesWithSource(
   filters?: TemplateFilters,
 ): Promise<{ templates: TemplateMeta[]; source: TemplatesSource; note?: string }> {
   const read = await fetchTemplatesMetaWithSource();
+
   return {
     templates: applyTemplateFilters(read.meta.templates, filters),
     source: read.source,
@@ -151,6 +167,7 @@ export async function listTemplates(
   filters?: TemplateFilters,
 ): Promise<TemplateMeta[]> {
   const meta = await fetchTemplatesMeta();
+
   return applyTemplateFilters(meta.templates, filters);
 }
 
@@ -207,10 +224,12 @@ function applyTemplateFilters(
         const hay = `${slug} ${body}`;
         let score = 0;
         if (phrase && hay.includes(phrase)) score += 100;
+
         for (const tok of tokens) {
           if (slug.includes(tok)) score += 3;
           else if (body.includes(tok)) score += 1;
         }
+
         return { t, score };
       })
       .filter((entry) => entry.score > 0)
@@ -226,5 +245,6 @@ export async function getTemplateBySlug(
   slug: string,
 ): Promise<TemplateMeta | undefined> {
   const meta = await fetchTemplatesMeta();
+
   return meta.templates.find((t) => t.slug === slug);
 }

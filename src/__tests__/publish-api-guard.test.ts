@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+
 import { safeApiBase } from "../lib/login-flow";
 
 describe("safeApiBase (publish token egress guard)", () => {

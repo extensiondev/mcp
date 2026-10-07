@@ -58,22 +58,28 @@ const emphasisRuns = (description: string): string[] => {
   const words = [...description.matchAll(/\b[A-Z][A-Z0-9_]+\b/g)];
   const runs: string[] = [];
   let previousEnd = -1;
+
   for (const match of words) {
     const word = match[0];
+
     if (ACRONYMS_ARE_NAMES_NOT_EMPHASIS.has(word)) {
       previousEnd = -1;
       continue;
     }
+
     const start = match.index as number;
     const contiguous =
       previousEnd >= 0 && description.slice(previousEnd, start).trim() === "";
+
     if (contiguous) {
       runs[runs.length - 1] = `${runs[runs.length - 1]} ${word}`;
     } else {
       runs.push(word);
     }
+
     previousEnd = start + word.length;
   }
+
   return runs;
 };
 

@@ -29,6 +29,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
+
 import * as bridge from "extension-develop/bridge";
 
 /* @invariant The engine's project is the directory of the nearest
@@ -69,12 +70,15 @@ function isFile(file: string): boolean {
 
 function nearestAbove(startDir: string, names: string[]): string | null {
   let current = startDir;
+
   for (;;) {
     for (const name of names) {
       if (isFile(path.join(current, name))) return path.join(current, name);
     }
+
     const parent = path.dirname(current);
     if (parent === current) return null;
+
     current = parent;
   }
 }
@@ -82,31 +86,40 @@ function nearestAbove(startDir: string, names: string[]): string | null {
 function extensionManifestPath(projectPath: string): string | null {
   const src = path.join(projectPath, "src", "manifest.json");
   if (isFile(src)) return src;
+
   const root = path.join(projectPath, "manifest.json");
+
   return isFile(root) ? root : null;
 }
 
 function declaresExtension(projectManifestPath: string): boolean {
   let parsed: unknown;
+
   try {
     parsed = JSON.parse(fs.readFileSync(projectManifestPath, "utf8"));
   } catch {
     return false;
   }
+
   if (!parsed || typeof parsed !== "object") return false;
+
   const record = parsed as Record<string, unknown>;
   const named: string[] = [];
+
   for (const field of ["dependencies", "devDependencies"]) {
     const deps = record[field];
     if (deps && typeof deps === "object") named.push(...Object.keys(deps));
   }
+
   const imports = record.imports;
+
   if (imports && typeof imports === "object") {
     for (const [key, value] of Object.entries(imports)) {
       named.push(key);
       if (typeof value === "string") named.push(value);
     }
   }
+
   return named.some((entry) =>
     EXTENSION_DEPENDENCY_NAMES.some(
       (name) => entry === name || entry.includes(`${name}@`) || entry === `npm:${name}`,
@@ -118,25 +131,33 @@ export function ownsManifest(projectManifestPath: string, manifestPath: string):
   const projectDir = path.resolve(path.dirname(projectManifestPath));
   const manifestDir = path.resolve(path.dirname(manifestPath));
   if (projectDir === manifestDir) return true;
+
   if (path.basename(manifestDir) === "src" && path.dirname(manifestDir) === projectDir) {
     return true;
   }
+
   if (declaresExtension(projectManifestPath)) return true;
+
   return EXTENSION_CONFIG_FILENAMES.some((name) => isFile(path.join(projectDir, name)));
 }
 
 export function engineProjectRoot(projectPath: string): string {
   const start = path.resolve(projectPath);
   const manifest = extensionManifestPath(start);
+
   if (!manifest) {
     const nearest = nearestAbove(start, PROJECT_MANIFEST_FILENAMES);
+
     return nearest ? path.dirname(nearest) : start;
   }
+
   const manifestDir = path.dirname(manifest);
   const packageJson = nearestAbove(manifestDir, [PACKAGE_MANIFEST]);
   if (packageJson && ownsManifest(packageJson, manifest)) return path.dirname(packageJson);
+
   const deno = nearestAbove(manifestDir, DENO_MANIFESTS);
   if (deno && ownsManifest(deno, manifest)) return path.dirname(deno);
+
   return start;
 }
 
@@ -266,9 +287,11 @@ export function profileRemediation(input: ProfileRemediationInput): string {
 
   if (raw.length > 0) {
     const explicit = path.isAbsolute(raw) ? raw : path.resolve(projectPath, raw);
+
     return `This session was launched against the profile you passed, ${explicit}. Close whatever still holds it, or remove that directory, before retrying.`;
   }
 
   const root = browserProfileRootDir(projectPath, browser);
+
   return `The engine keeps this session's profile in a directory inside ${root}, one per run: "${PERSISTED_PROFILE_DIR_NAME}" when the profile is persisted, otherwise three random words drawn fresh on every start, which no caller can predict. List ${root} to see which run directories exist and remove the one the stuck browser holds, or remove ${root} entirely once no session is running.`;
 }

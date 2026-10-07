@@ -7,6 +7,7 @@
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
 import { persistTokenResponse } from "./login-flow";
+
 import type { StoredCredentials } from "./credentials";
 
 type FetchImpl = typeof fetch;
@@ -55,11 +56,13 @@ export async function requestDeviceCode(args: {
   });
   const text = await res.text();
   let data: Record<string, unknown>;
+
   try {
     data = JSON.parse(text);
   } catch {
     data = { message: text };
   }
+
   if (!res.ok) {
     const error = new Error(
       `Device code request failed (${res.status}): ${data.message || "unknown error"}`,
@@ -68,20 +71,27 @@ export async function requestDeviceCode(args: {
       serverCode?: string;
       httpStatus?: number;
     };
+
     if (typeof data.message === "string" && data.message.trim()) {
       error.serverMessage = data.message.trim();
     }
+
     if (typeof data.code === "string" && data.code.trim()) {
       error.serverCode = data.code.trim();
     }
+
     error.httpStatus = res.status;
+
     throw error;
   }
+
   const deviceCode = String(data.device_code || "").trim();
   const userCode = String(data.user_code || "").trim();
+
   if (!deviceCode || !userCode) {
     throw new Error("Device code response missing device_code/user_code.");
   }
+
   return {
     deviceCode,
     userCode,
@@ -155,6 +165,7 @@ export async function pollDeviceGrant(args: {
     });
     const text = await res.text();
     let data: Record<string, unknown>;
+
     try {
       data = JSON.parse(text);
     } catch {
@@ -166,6 +177,7 @@ export async function pollDeviceGrant(args: {
     }
 
     const error = String(data.error || "");
+
     /* @invariant A 2xx that carries neither a token nor an OAuth error is an
        answer this client does not understand, not "still pending": a batch
        code is spent when minting starts, so calling it pending lost the
@@ -179,8 +191,10 @@ export async function pollDeviceGrant(args: {
         }; the approval may have been consumed by an answer this client cannot read.`,
       };
     }
+
     const code = String(data.code || "").trim();
     const refusal = code ? { code, body: data } : {};
+
     if (error === "access_denied") {
       return {
         ok: false,
@@ -189,10 +203,13 @@ export async function pollDeviceGrant(args: {
         ...refusal,
       };
     }
+
     if (error === "expired_token") {
       const said = String(data.error_description || data.message || "").trim();
+
       return { ok: false, reason: "expired", ...(said ? { message: said } : {}) };
     }
+
     if (error === "slow_down") {
       interval += 5;
     } else if (error && error !== "authorization_pending") {
@@ -204,6 +221,7 @@ export async function pollDeviceGrant(args: {
       };
     } else if (!error && !res.ok) {
       const retryAfter = String(res.headers?.get?.("retry-after") ?? "").trim();
+
       return {
         ok: false,
         reason: "error",
@@ -217,7 +235,10 @@ export async function pollDeviceGrant(args: {
     if (Date.now() + interval * 1000 >= deadline) {
       return { ok: false, reason: "pending" };
     }
-    await new Promise((r) => setTimeout(r, interval * 1000));
+
+    const waitMs = interval * 1000;
+
+    await new Promise((r) => setTimeout(r, waitMs));
   }
 }
 
@@ -232,12 +253,14 @@ export async function pollDeviceToken(args: {
 }): Promise<DevicePollResult> {
   const polled = await pollDeviceGrant(args);
   if (!polled.ok) return polled;
+
   try {
     const creds = persistTokenResponse({
       apiBase: args.apiBase,
       project: args.project,
       data: polled.data,
     });
+
     return { ok: true, creds };
   } catch (err: any) {
     return {
@@ -250,5 +273,6 @@ export async function pollDeviceToken(args: {
 
 function positiveNumber(value: unknown, fallback: number): number {
   const n = typeof value === "number" ? value : Number(value);
+
   return Number.isFinite(n) && n > 0 ? n : fallback;
 }

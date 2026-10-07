@@ -4,15 +4,22 @@ import path from "node:path";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { handler } from "../tools/doctor";
+import { readyContractPath } from "../lib/session-paths";
+
+import type * as ExecModule from "../lib/exec";
+import type * as ProcessManagerModule from "../lib/process-manager";
+
 const cli = vi.hoisted(() => ({
   calls: [] as string[][],
   response: { code: 0, stdout: "[]", stderr: "" },
 }));
 
 vi.mock("../lib/exec", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../lib/exec")>()),
+  ...(await importOriginal<typeof ExecModule>()),
   runExtensionCli: async (args: string[]) => {
     cli.calls.push(args);
+
     return cli.response;
   },
   pinnedCliVersion: () => "",
@@ -24,19 +31,17 @@ vi.mock("../lib/engine-version", () => ({
 }));
 
 vi.mock("../lib/process-manager", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../lib/process-manager")>()),
+  ...(await importOriginal<typeof ProcessManagerModule>()),
   listSessions: () => [],
   listSessionMarkers: () => [],
 }));
-
-import { handler } from "../tools/doctor";
-import { readyContractPath } from "../lib/session-paths";
 
 const tmpDirs: string[] = [];
 
 function tmpProject(): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-doctor-label-"));
   tmpDirs.push(dir);
+
   return dir;
 }
 
@@ -49,13 +54,16 @@ function writeContract(dir: string, browser: string, contract: unknown): void {
 function lastBrowserFlagValue(): string | undefined {
   const argv = cli.calls[cli.calls.length - 1];
   if (!argv) return undefined;
+
   const at = argv.indexOf("--browser");
+
   return at === -1 ? undefined : argv[at + 1];
 }
 
 afterEach(() => {
   cli.calls.length = 0;
   cli.response = { code: 0, stdout: "[]", stderr: "" };
+
   for (const dir of tmpDirs.splice(0)) {
     fs.rmSync(dir, { recursive: true, force: true });
   }

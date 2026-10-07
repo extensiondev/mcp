@@ -1,7 +1,9 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
+
 import { isChromiumFamily, isGeckoFamily } from "../lib/browser-family";
 import { handler as validateManifest } from "../tools/manifest-validate";
 
@@ -20,6 +22,7 @@ describe("browser-family", () => {
       expect(isChromiumFamily(name)).toBe(true);
       expect(isGeckoFamily(name)).toBe(false);
     }
+
     for (const name of [
       "firefox",
       "waterfox",
@@ -32,6 +35,7 @@ describe("browser-family", () => {
       expect(isGeckoFamily(name)).toBe(true);
       expect(isChromiumFamily(name)).toBe(false);
     }
+
     for (const name of ["safari", "webkit-based"]) {
       expect(isChromiumFamily(name)).toBe(false);
       expect(isGeckoFamily(name)).toBe(false);
@@ -44,6 +48,7 @@ describe("manifest-validate chromium-family gate", () => {
   beforeEach(() => {
     dir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-manifest-"));
   });
+
   afterEach(() => fs.rmSync(dir, { recursive: true, force: true }));
 
   it('runs the Chromium checks for browsers: ["chromium"]', async () => {

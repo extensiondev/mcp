@@ -6,12 +6,14 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
+import fs from "node:fs";
+import path from "node:path";
+
 import { ConsoleProjectPage } from "@extension.dev/urls/paths";
+
 import { API_BASE } from "../lib/common-schema";
 import { resolveCredential } from "../lib/credential-source";
 import { envelope, type ErrorCode } from "../lib/envelope";
-import fs from "node:fs";
-import path from "node:path";
 import { PROJECT_TOKEN_INPUT, noStoredLoginHint } from "../lib/credentials";
 import { resolveApiBase, safeApiBase } from "../lib/login-flow";
 import { identityHeaders } from "../lib/session-identity";
@@ -40,6 +42,7 @@ export function storeMdWarnings(browsers: string[], cwd: string): string[] {
 
   const filePath = path.join(cwd, STORE_MD_FILENAME);
   let content: string;
+
   try {
     content = fs.readFileSync(filePath, "utf8");
   } catch {
@@ -50,21 +53,25 @@ export function storeMdWarnings(browsers: string[], cwd: string): string[] {
 
   const data = parseStoreMd(content);
   const warnings: string[] = [];
+
   if (wantsFirefox && !data.firefox?.approvalNotes) {
     warnings.push(
       `${STORE_MD_FILENAME} has no Firefox reviewer notes; AMO reviews go faster with test credentials and steps.`,
     );
   }
+
   if (wantsEdge && !data.edge?.certificationNotes) {
     warnings.push(
       `${STORE_MD_FILENAME} has no Edge certification notes; the certification team gets no testing guidance.`,
     );
   }
+
   if (warnings.length === 0) {
     warnings.push(
       `The notes above were read from ${filePath}. The submission reads ${STORE_MD_FILENAME} from the project's source repository at the built commit, so an uncommitted or unpushed edit here does not travel with it.`,
     );
   }
+
   return warnings;
 }
 
@@ -148,9 +155,11 @@ function fail(
 export async function handler(args: SubmitToolArgs): Promise<string> {
   const credential = resolveCredential({ project: args.project });
   const token = credential.token;
+
   if (!token && args.project) {
     return fail("SubmitAuthError", noStoredLoginHint(args.project), "auth-required", "E_AUTH_REQUIRED");
   }
+
   if (!token) {
     return fail(
       "SubmitAuthError",
@@ -163,6 +172,7 @@ export async function handler(args: SubmitToolArgs): Promise<string> {
   const browsers = (Array.isArray(args.browsers) ? args.browsers : [])
     .map((b) => String(b).trim().toLowerCase())
     .filter(Boolean);
+
   if (browsers.length === 0) {
     return fail(
       "SubmitInputError",
@@ -171,7 +181,9 @@ export async function handler(args: SubmitToolArgs): Promise<string> {
       "E_BAD_REQUEST",
     );
   }
+
   const buildSha = String(args.buildSha || "").trim();
+
   if (!buildSha) {
     return fail(
       "SubmitInputError",
@@ -182,6 +194,7 @@ export async function handler(args: SubmitToolArgs): Promise<string> {
   }
 
   const apiCheck = safeApiBase(resolveApiBase(args.api), args.api);
+
   if (!apiCheck.ok) {
     return fail(
       "SubmitConfigError",
@@ -190,6 +203,7 @@ export async function handler(args: SubmitToolArgs): Promise<string> {
       "E_CONFIG",
     );
   }
+
   const url = `${apiCheck.base}/api/cli/stores/submit`;
 
   const dryRun = args.dryRun !== false;
@@ -218,6 +232,7 @@ export async function handler(args: SubmitToolArgs): Promise<string> {
       enabled: approvalGateEnabled(true),
     });
     if (gate.blocked) return gate.envelope;
+
     const approvalId = gate.approvalId ?? (args.approvalId ? String(args.approvalId).trim() : "");
     if (approvalId) body.approvalId = approvalId;
   }
@@ -227,6 +242,7 @@ export async function handler(args: SubmitToolArgs): Promise<string> {
   })`;
 
   let res: Response;
+
   try {
     res = await fetch(url, {
       method: "POST",
@@ -256,6 +272,7 @@ export async function handler(args: SubmitToolArgs): Promise<string> {
         hint: `Do not submit again blind: a store that was dispatched would be submitted twice. Read ${statusRead} first and submit only the stores with no new submission.`,
       });
     }
+
     return fail(
       "SubmitNetworkError",
       `Could not reach ${url}: ${err?.message || err}`,
@@ -266,6 +283,7 @@ export async function handler(args: SubmitToolArgs): Promise<string> {
 
   const text = await res.text();
   let data: any;
+
   try {
     data = JSON.parse(text);
   } catch {
@@ -282,9 +300,11 @@ export async function handler(args: SubmitToolArgs): Promise<string> {
         value: { browsers, buildSha, dryRun },
       });
     }
+
     if (!dryRun && !args.approvalId && platformRequiresApproval(res, data)) {
       return requestApprovalAfterRefusal(gateInput);
     }
+
     /* @invariant A server error on a real submission may come after a
      * dispatch. The platform dispatches each store's workflow and only then
      * records it and moves to the next store, so a 5xx can follow one or more
@@ -303,6 +323,7 @@ export async function handler(args: SubmitToolArgs): Promise<string> {
     const BEFORE_APPROVAL = new Set(["BUILD_DISPATCH_DISABLED", "OWNER_REQUIRED", "TOKEN_ISSUER_UNKNOWN", "APPROVAL_REQUIRED", "APPROVAL_NOT_FOUND", "APPROVAL_SCOPE_MISMATCH", "APPROVAL_USED", "APPROVAL_EXPIRED"]);
     const platformCode = typeof data?.code === "string" ? data.code : "";
     const approvalSpent = !dryRun && Boolean(body.approvalId) && res.status < 500 && !BEFORE_APPROVAL.has(platformCode);
+
     return envelope({
       ok: false,
       command: "extension_submit",
@@ -316,7 +337,7 @@ export async function handler(args: SubmitToolArgs): Promise<string> {
       ...(maybeDispatched
         ? {
             hint: `The platform failed after the request was accepted, and it dispatches each store before it records it, so ${
-              browsers.length === 1 ? browsers[0] : "one or more of " + browsers.join(", ")
+              browsers.length === 1 ? browsers[0] : `one or more of ${  browsers.join(", ")}`
             } may already be submitted. Read ${statusRead} before submitting again.`,
           }
         : saidNothingDispatched
@@ -339,15 +360,17 @@ export async function handler(args: SubmitToolArgs): Promise<string> {
      answers `{code, store, message, docsUrl}` objects (every Firefox
      preflight carries FIREFOX_DATA_COLLECTION_PERMISSIONS), and the envelope
      keeps strings only, so they were dropped on the floor. */
-  const warnings: (string | null | undefined | false)[] = Array.isArray(
+  const warnings: Array<string | null | undefined | false> = Array.isArray(
     data?.warnings,
   )
     ? (data.warnings as unknown[]).map((w) => {
         if (typeof w === "string") return w;
         if (!w || typeof w !== "object") return null;
+
         const row = w as { code?: unknown; store?: unknown; message?: unknown; docsUrl?: unknown };
         const text = String(row.message ?? row.code ?? "").trim();
         if (!text) return null;
+
         return `${row.store ? `${String(row.store)}: ` : ""}${text}${row.docsUrl ? ` (${String(row.docsUrl)})` : ""}`;
       })
     : [];
@@ -380,6 +403,7 @@ export async function handler(args: SubmitToolArgs): Promise<string> {
     let health: Record<string, { ok?: boolean; message?: string }> | null = null;
     let healthUnreadable: string | null = null;
     let channelRows: ReturnType<typeof parseChannels> | null = null;
+
     if (ref) {
       const [healthRes, channelsRes] = await Promise.all([
         fetchRegistryJson(registryFileUrl(ref, "stores/health.json"), fetch, {
@@ -391,16 +415,19 @@ export async function handler(args: SubmitToolArgs): Promise<string> {
           api: args.api,
         }),
       ]);
+
       if (healthRes.ok) {
         const stores = (healthRes.json as { stores?: unknown })?.stores;
         health =
           stores && typeof stores === "object"
             ? (stores as Record<string, { ok?: boolean; message?: string }>)
             : null;
+
         if (!health) healthUnreadable = "stores/health.json had no stores map";
       } else {
         healthUnreadable = healthRes.message;
       }
+
       if (channelsRes.ok && !channelsShapeProblem(channelsRes.json)) channelRows = parseChannels(channelsRes.json);
     } else {
       healthUnreadable =
@@ -417,7 +444,9 @@ export async function handler(args: SubmitToolArgs): Promise<string> {
           reason: `Store configuration could not be read (${healthUnreadable}); verify the ${browser} store in the console before submitting.`,
         };
       }
+
       const row = health[browser];
+
       if (!row) {
         return {
           browser,
@@ -427,6 +456,7 @@ export async function handler(args: SubmitToolArgs): Promise<string> {
           reason: `No ${browser} store is configured on this project; a real submission for ${browser} would fail. Configure it at ${consoleStoresUrl}.`,
         };
       }
+
       if (row.ok !== true) {
         return {
           browser,
@@ -439,6 +469,7 @@ export async function handler(args: SubmitToolArgs): Promise<string> {
             `The ${browser} store is configured but failed its last credential health check.`,
         };
       }
+
       return {
         browser,
         ok: true,
@@ -458,12 +489,14 @@ export async function handler(args: SubmitToolArgs): Promise<string> {
     const resolvedChannel =
       String(data?.channel || "").trim() ||
       (channelDefaulted ? "stable" : String(args.channel).trim());
+
     if (channelRows) {
       const exists = channelRows.some(
         (r) =>
           r.channel === resolvedChannel ||
           r.channel.endsWith(`-${resolvedChannel}`),
       );
+
       if (!exists) {
         warnings.push(
           `Channel "${resolvedChannel}"${channelDefaulted ? " (the default)" : ""} does not exist in this project's channels.json (existing: ${
@@ -474,6 +507,7 @@ export async function handler(args: SubmitToolArgs): Promise<string> {
     }
 
     const summaryParts: string[] = [];
+
     if (!platformOk) {
       summaryParts.push(
         `Preflight FAILED on the platform${
@@ -483,6 +517,7 @@ export async function handler(args: SubmitToolArgs): Promise<string> {
         }. The per-store rows below are advisory and do not override that verdict.`,
       );
     }
+
     if (actionable.length > 0) {
       summaryParts.push(
         platformOk
@@ -492,9 +527,11 @@ export async function handler(args: SubmitToolArgs): Promise<string> {
           : `${actionable.join(", ")}: the store credentials passed their last health check, but the platform failure above still blocks submission.`,
       );
     }
+
     for (const p of blocked) {
       summaryParts.push(`${p.browser}: NOT actionable - ${p.reason}`);
     }
+
     for (const p of unverified) {
       summaryParts.push(
         `${p.browser}: cannot be verified - ${p.reason}${
@@ -504,22 +541,27 @@ export async function handler(args: SubmitToolArgs): Promise<string> {
         }`,
       );
     }
+
     summaryParts.push(storeModeNote);
 
     ok = platformOk && (blocked.length === 0 || actionable.length > 0);
     result.preflight = preflight;
     result.channel = resolvedChannel;
     result.channelDefaulted = channelDefaulted;
+
     if (channelDefaulted) {
       channelNote = `channel: ${resolvedChannel} (default)`;
     }
+
     result.consoleStoresUrl = consoleStoresUrl;
     if (typeof data?.message === "string") result.platformMessage = data.message;
+
     message = summaryParts.join(" ");
   }
 
   if (!dryRun) {
     const outcome = readSubmitOutcome(data, browsers);
+
     if (outcome.state === "unconfirmed") {
       return envelope({
         ok: false,
@@ -534,6 +576,7 @@ export async function handler(args: SubmitToolArgs): Promise<string> {
         hint: `Do not submit again blind: a store that was dispatched would be submitted twice. Read ${statusRead} first and submit only the stores with no new submission.`,
       });
     }
+
     if (outcome.state === "refused") {
       return envelope({
         ok: false,
@@ -548,6 +591,7 @@ export async function handler(args: SubmitToolArgs): Promise<string> {
         warnings,
       });
     }
+
     statusNote = `Track this submission with ${statusRead}: the record appears in the registry's stores/submissions.json when the store workflow reports, so a read right after this answer may still show none; that is not a reason to submit again.`;
     result.submittedStores = outcome.stores;
     result.allowance = spendNarration({
@@ -555,8 +599,10 @@ export async function handler(args: SubmitToolArgs): Promise<string> {
       body: data,
       api: args.api,
     });
+
     if (outcome.state === "partial") {
       result.missingStores = outcome.missing;
+
       return envelope({
         ok: true,
         command: "extension_submit",
@@ -571,6 +617,7 @@ export async function handler(args: SubmitToolArgs): Promise<string> {
         ],
       });
     }
+
     return envelope({
       ok: true,
       command: "extension_submit",

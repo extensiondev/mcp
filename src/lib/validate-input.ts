@@ -28,6 +28,7 @@ interface ObjectSchema {
 function typeOf(value: unknown): string {
   if (Array.isArray(value)) return "array";
   if (value === null) return "null";
+
   return typeof value;
 }
 
@@ -45,28 +46,36 @@ function checkPrimitive(
   const primitives = allowed.filter((t) =>
     ["string", "number", "boolean"].includes(t),
   );
+
   if (primitives.length > 0 && primitives.length === allowed.length) {
     if (!primitives.includes(typeOf(value))) {
       issues.push({
         path,
         message: `expected ${primitives.join(" or ")}, got ${typeOf(value)}`,
       });
+
       return;
     }
   }
+
   if (allowed.includes("array")) {
     if (!Array.isArray(value)) {
       issues.push({ path, message: `expected array, got ${typeOf(value)}` });
+
       return;
     }
+
     const itemSchema = schema.items;
+
     if (itemSchema) {
       value.forEach((item, i) =>
         checkPrimitive(`${path}[${i}]`, item, itemSchema, issues),
       );
     }
+
     return;
   }
+
   if (Array.isArray(schema.enum) && schema.enum.length) {
     if (!schema.enum.includes(value)) {
       issues.push({
@@ -101,11 +110,14 @@ export function normalizeArgAliases(
   const schema = inputSchema as ObjectSchema;
   const props = schema.properties ?? {};
   const out: Record<string, unknown> = { ...args };
+
   for (const [canonical, aliases] of Object.entries(ARG_ALIASES)) {
     if (!(canonical in props)) continue;
     if (out[canonical] !== undefined) continue;
+
     for (const alias of aliases) {
       if (alias in props) continue;
+
       if (out[alias] !== undefined) {
         out[canonical] = out[alias];
         delete out[alias];
@@ -113,6 +125,7 @@ export function normalizeArgAliases(
       }
     }
   }
+
   return out;
 }
 
@@ -132,15 +145,19 @@ export function validateToolInput(
 
   for (const [key, value] of Object.entries(args)) {
     const propSchema = properties[key];
+
     if (!propSchema) {
       const known = Object.keys(properties);
       issues.push({
         path: key,
         message: `unknown argument${known.length ? ` (known: ${known.join(", ")})` : ""}`,
       });
+
       continue;
     }
+
     if (value === undefined) continue;
+
     checkPrimitive(key, value, propSchema, issues);
   }
 
@@ -157,11 +174,14 @@ export function describeToolArgs(inputSchema: Record<string, unknown>): {
   const required = schema.required ?? [];
   const optional = Object.keys(props).filter((k) => !required.includes(k));
   const aliases: Record<string, string[]> = {};
+
   for (const [canonical, list] of Object.entries(ARG_ALIASES)) {
     if (!(canonical in props)) continue;
+
     const usable = list.filter((alias) => !(alias in props));
     if (usable.length) aliases[canonical] = usable;
   }
+
   return { required, optional, aliases };
 }
 

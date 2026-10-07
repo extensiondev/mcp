@@ -72,5 +72,6 @@ export function matchTargetsByUrl(
   const wanted = needle.toLowerCase();
   const byUrl = targets.filter((t) => t.url.toLowerCase().includes(wanted));
   if (byUrl.length > 0) return byUrl;
+
   return targets.filter((t) => t.title.toLowerCase().includes(wanted));
 }

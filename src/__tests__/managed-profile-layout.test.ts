@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { createRequire } from "node:module";
+
 import { describe, expect, it } from "vitest";
 
 import {
@@ -24,17 +25,22 @@ function engineDistFiles(): string[] {
     "dist",
   );
   const out: string[] = [];
+
   const walk = (dir: string) => {
     for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
       const full = path.join(dir, entry.name);
+
       if (entry.isDirectory()) {
         walk(full);
         continue;
       }
+
       if (/\.(mjs|cjs|js)$/.test(entry.name)) out.push(full);
     }
   };
+
   walk(dist);
+
   return out;
 }
 
@@ -47,6 +53,7 @@ describe("the managed profile root matches the engine that is installed", () => 
     expect(profilesRootDir(PROJECT)).toBe(
       path.join(sessionArtifactsRootDir(PROJECT), "profiles"),
     );
+
     expect(profilesRootDir(PROJECT)).toBe(
       path.resolve(PROJECT, "dist", "extension-js", "profiles"),
     );
@@ -66,6 +73,7 @@ describe("the managed profile root matches the engine that is installed", () => 
         path.join(profilesRootDir(PROJECT), `${browser}-profile`),
       );
     }
+
     expect(browserProfileRootDir(PROJECT, "chrome")).not.toBe(
       browserProfileRootDir(PROJECT, "firefox"),
     );
@@ -76,6 +84,7 @@ describe("the managed profile root matches the engine that is installed", () => 
       expect(browserProfileRootDir(PROJECT, browser)).not.toContain(
         `extension-profile-${browser}`,
       );
+
       expect(browserProfileRootDir(PROJECT, browser)).not.toBe(
         path.join(PROJECT, "dist", `extension-profile-${browser}`),
       );
@@ -89,6 +98,7 @@ describe("the managed profile root matches the engine that is installed", () => 
      name. */
   it("stops one level above the run directory the engine names at random", () => {
     const root = browserProfileRootDir(PROJECT, "chrome");
+
     for (const run of [PERSISTED_PROFILE_DIR_NAME, RUN_DIR]) {
       expect(path.dirname(path.join(root, run))).toBe(root);
     }
@@ -96,6 +106,7 @@ describe("the managed profile root matches the engine that is installed", () => 
 
   it("covers every browser and every run directory with one process-match prefix", () => {
     const prefix = profilesRootDir(PROJECT) + path.sep;
+
     for (const browser of BROWSERS) {
       for (const run of [PERSISTED_PROFILE_DIR_NAME, RUN_DIR]) {
         const launched = path.join(

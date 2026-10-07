@@ -20,6 +20,7 @@ export function summarizeConsoleMessages(
   for (const msg of messages) {
     counts[msg.level] = (counts[msg.level] ?? 0) + 1;
     if (!uniqueByLevel[msg.level]) uniqueByLevel[msg.level] = new Map();
+
     const key = msg.text.slice(0, 200);
     uniqueByLevel[msg.level].set(
       key,
@@ -28,8 +29,10 @@ export function summarizeConsoleMessages(
   }
 
   const topMessages: Array<{ level: string; text: string; count: number }> = [];
+
   for (const [level, msgs] of Object.entries(uniqueByLevel)) {
     const sorted = [...msgs.entries()].sort((a, b) => b[1] - a[1]);
+
     for (const [text, count] of sorted.slice(0, 5)) {
       topMessages.push({ level, text, count });
     }

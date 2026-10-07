@@ -1,7 +1,8 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { runCli } from "../index";
 import { loginToProject } from "../tools/login";
@@ -24,6 +25,7 @@ function loginFetch(
   let tokenCalls = 0;
   const fn = vi.fn(async (url: any) => {
     const href = String(url);
+
     if (href.endsWith("/api/cli/login/config")) {
       return jsonResponse({
         deviceCodeUrl: "/api/cli/device/code",
@@ -31,6 +33,7 @@ function loginFetch(
         verificationUri: "https://extension.dev/device",
       });
     }
+
     if (href.endsWith("/api/cli/device/code")) {
       return jsonResponse({
         device_code: "dev-code",
@@ -42,14 +45,18 @@ function loginFetch(
         expires_in: 900,
       });
     }
+
     if (href.endsWith("/api/cli/device/token")) {
       const next =
         tokenResponses[Math.min(tokenCalls, tokenResponses.length - 1)];
       tokenCalls += 1;
+
       return jsonResponse(next.body, next.status);
     }
+
     throw new Error(`Unexpected fetch: ${href}`);
   });
+
   return { fn, tokenCalls: () => tokenCalls };
 }
 
@@ -70,6 +77,7 @@ beforeEach(() => {
     .spyOn(process.stderr, "write")
     .mockImplementation(((chunk: any) => {
       lines.push(String(chunk));
+
       return true;
     }) as any);
 });
@@ -81,12 +89,14 @@ afterEach(() => {
   else process.env.XDG_CONFIG_HOME = prevXdg;
   if (prevApi === undefined) delete process.env.EXTENSION_DEV_API_URL;
   else process.env.EXTENSION_DEV_API_URL = prevApi;
+
   fs.rmSync(tmp, { recursive: true, force: true });
 });
 
 describe("extension-mcp login CLI", () => {
   it("prints the one-click link and logs in on approval", async () => {
     if (process.platform === "win32") return;
+
     const { fn } = loginFetch([
       {
         status: 200,
@@ -237,6 +247,7 @@ describe("pollDeviceToken hard failures", () => {
 
   it("rejects and does not persist a token scoped to another project", async () => {
     if (process.platform === "win32") return;
+
     const fetchImpl = vi.fn(async () =>
       jsonResponse({
         token: "tok",
@@ -264,6 +275,7 @@ describe("pollDeviceToken hard failures", () => {
 
   it("rejects and does not persist a token with no project scope", async () => {
     if (process.platform === "win32") return;
+
     const fetchImpl = vi.fn(async () =>
       jsonResponse({ token: "tok", expiresAt: FUTURE }),
     );
@@ -282,6 +294,7 @@ describe("pollDeviceToken hard failures", () => {
     expect((result as { message: string }).message).toContain(
       "workspace/project scope",
     );
+
     expect(readCredentials()).toBeNull();
   });
 });

@@ -115,11 +115,13 @@ export async function handler(
 
   const existing = liveProjectSessions(args.projectPath);
   const replaced: Array<{ pid: number; browser: string }> = [];
+
   if (existing.length > 0) {
     if (!args.replace) {
       const listed = existing
         .map((s) => `pid ${s.pid} (${s.browser})`)
         .join(", ");
+
       return envelope({
         ok: false,
         command: schema.name,
@@ -137,6 +139,7 @@ export async function handler(
         hint: "Call extension_stop with this projectPath first, or pass replace: true to have extension_dev stop the old session before starting the new one.",
       });
     }
+
     /* @invariant REPLACED MEANS STOPPED. The outcome of each stop used to be
        dropped, so a session that survived its stop was still reported as
        replaced and the new session was started over it, which is the
@@ -145,6 +148,7 @@ export async function handler(
        live survivor refuses the start. */
     for (const s of existing) {
       const outcome = await stopOne(args.projectPath, s.browser);
+
       if (!outcome.stopped && !outcome.staleRecord) {
         return envelope({
           ok: false,
@@ -162,6 +166,7 @@ export async function handler(
           hint: "Call extension_stop for this projectPath and read its detail; if a browser process survives, end it by pid, then call extension_dev again.",
         });
       }
+
       if (!outcome.staleRecord) replaced.push({ pid: s.pid, browser: s.browser });
     }
   }
@@ -180,6 +185,7 @@ export async function handler(
   if (args.port !== undefined) cliArgs.push("--port", String(args.port));
   if (args.noBrowser) cliArgs.push("--no-browser");
   if (args.polyfill === false) cliArgs.push("--polyfill", "false");
+
   cliArgs.push(...launchFlagArgs(args));
   if (allowControl) cliArgs.push("--allow-control");
   if (args.allowEval) cliArgs.push("--allow-eval");
@@ -187,10 +193,13 @@ export async function handler(
   const spawnedAt = Date.now();
   const spawned = spawnExtensionCli(cliArgs, { projectDir: args.projectPath });
   const { child, logPath } = spawned;
+
   if (child.pid === undefined) {
     if (carrier?.loaded) removeCarrier(args.projectPath);
+
     return spawnFailedEnvelope(schema.name, spawned);
   }
+
   const pid = child.pid;
 
   let markerWarning = registerSession({
@@ -217,6 +226,7 @@ export async function handler(
   child.on("exit", () => {
     removeSession(args.projectPath, browser, pid);
     removeSessionMarker(args.projectPath, browser, pid);
+
     if (carrier) {
       try {
         removeCarrier(args.projectPath);
@@ -238,6 +248,7 @@ export async function handler(
 
   if (boot.verdict.kind === "exited") {
     const { exitCode: code, signal } = boot.verdict;
+
     return envelope({
       ok: false,
       command: schema.name,
@@ -264,6 +275,7 @@ export async function handler(
 
   if (boot.verdict.kind === "boot-failed") {
     const { code, message } = boot.verdict;
+
     return envelope({
       ok: false,
       command: schema.name,
@@ -285,6 +297,7 @@ export async function handler(
 
   if (boot.verdict.kind === "compile-failed") {
     const { compileErrors } = boot.verdict;
+
     return envelope({
       ok: false,
       command: schema.name,
@@ -318,6 +331,7 @@ export async function handler(
 
   if (boot.verdict.kind === "profile-locked") {
     const { owner, lockedAt } = boot.verdict;
+
     return envelope({
       ok: false,
       command: schema.name,
@@ -327,11 +341,11 @@ export async function handler(
         message:
           boot.verdict.message ??
           `The dev server is running but the ${browser} browser it launched died during startup ` +
-            "because its profile is locked by another browser instance" +
-            (owner?.pid
+            `because its profile is locked by another browser instance${ 
+            owner?.pid
               ? ` (pid ${owner.pid}${owner.host ? ` on ${owner.host}` : ""})`
-              : "") +
-            ".",
+              : "" 
+            }.`,
       },
       value: {
         ...session,
@@ -394,6 +408,7 @@ export async function handler(
   };
 
   const boundPort = contractBoundPort(args.projectPath, browser, spawnedAt);
+
   if (boundPort !== null && boundPort !== args.port) {
     markerWarning = registerSession({
       pid,
@@ -405,6 +420,7 @@ export async function handler(
       profileReused,
     });
   }
+
   const portReport =
     boundPort !== null
       ? {
@@ -458,14 +474,14 @@ export async function handler(
     ],
     hint: args.noBrowser
       ? "Build-only session (noBrowser: true): no browser will launch, so no runtime will ever attach. extension_wait returns as soon as the first compile lands (compiled: true, browserAttached: false) instead of waiting out its budget; do not wait for a browser. The control verbs (storage/reload/open/dom_snapshot/eval) need a live browser and will not work against this session. When you are done, call extension_stop to shut down the dev server."
-      : "Use extension_wait to check when the extension is fully loaded, then extension_inspect to inspect the live state. " +
-        (allowControl
+      : `Use extension_wait to check when the extension is fully loaded, then extension_inspect to inspect the live state. ${ 
+        allowControl
           ? controlBound
             ? `Control channel is ON (port ${control.port} per ready.json): extension_${controlVerbs.split(", ").join("/extension_")}${args.allowEval ? "/extension_eval" : ""} will work against this session.`
             : control.unavailableReason
               ? `Control was requested, but the engine reports no control port (${control.unavailableReason}), so extension_${controlVerbs.split(", ").join("/extension_")} will be refused until the session is relaunched.`
               : `Control was requested; ready.json has not stamped the control port yet, so extension_wait is what confirms extension_${controlVerbs.split(", ").join("/extension_")} will work.`
-          : "Control channel is OFF: extension_storage/reload/open/dom_snapshot need allowControl: true, and extension_eval needs allowEval: true (which also implies allowControl). To unlock them, call extension_dev again with the flag you need plus replace: true (it stops this session first); a plain second call is refused so the session does not fork.") +
-        " When you are done, call extension_stop to shut down the dev server and browser.",
+          : "Control channel is OFF: extension_storage/reload/open/dom_snapshot need allowControl: true, and extension_eval needs allowEval: true (which also implies allowControl). To unlock them, call extension_dev again with the flag you need plus replace: true (it stops this session first); a plain second call is refused so the session does not fork." 
+        } When you are done, call extension_stop to shut down the dev server and browser.`,
   });
 }

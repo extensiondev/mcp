@@ -6,9 +6,10 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-import { LAUNCH_BROWSER, PROJECT_PATH } from "../lib/common-schema";
 import fs from "node:fs";
 import path from "node:path";
+
+import { LAUNCH_BROWSER, PROJECT_PATH } from "../lib/common-schema";
 import { runExtensionCli } from "../lib/exec";
 import { outputJsonVerdict, refusedTheOutputFlag } from "../lib/engine-version";
 import { liveProjectSessions } from "../lib/session-browser";
@@ -84,13 +85,16 @@ function readBuildSummary(
   since: number,
 ): PersistedSummary {
   const file = buildSummaryPath(projectPath, browser);
+
   try {
     const stat = fs.statSync(file);
+
     if (stat.mtimeMs >= since - MTIME_SLACK_MS) {
       const summary = JSON.parse(fs.readFileSync(file, "utf8"));
       if (summary && typeof summary === "object") return { file, summary };
     }
   } catch {}
+
   return { file, summary: null };
 }
 
@@ -102,23 +106,30 @@ interface EngineOutput {
 function readEngineOutput(stdout: string, stderr: string): EngineOutput {
   let frame: Envelope | null = null;
   const rest: string[] = [];
+
   for (const line of stdout.split("\n")) {
     const text = line.trim();
+
     if (!frame && text.startsWith("{")) {
       let parsed: unknown = null;
+
       try {
         parsed = JSON.parse(text);
       } catch {}
+
       if (isEnvelope(parsed)) {
         frame = parsed;
         continue;
       }
     }
+
     rest.push(line);
   }
+
   const narration = [rest.join("\n").trim(), stderr.trim()]
     .filter(Boolean)
     .join("\n");
+
   return { frame, narration };
 }
 
@@ -163,6 +174,7 @@ function readEngineOutput(stdout: string, stderr: string): EngineOutput {
 function engineSummaries(frame: Envelope | null): EngineBuildSummary[] {
   const value = frame?.value as { summaries?: unknown } | null | undefined;
   if (!value || !Array.isArray(value.summaries)) return [];
+
   return value.summaries.filter(
     (entry): entry is EngineBuildSummary =>
       Boolean(entry) && typeof entry === "object",
@@ -182,6 +194,7 @@ function builtEntrypoints(
   distDir: string,
 ): Array<{ role: string; path: string; present: boolean }> {
   let manifest: Record<string, unknown>;
+
   try {
     manifest = JSON.parse(
       fs.readFileSync(path.join(distDir, "manifest.json"), "utf8"),
@@ -189,63 +202,83 @@ function builtEntrypoints(
   } catch {
     return [];
   }
+
   const out: Array<{ role: string; path: string; present: boolean }> = [];
+
   const add = (role: string, ref: unknown) => {
     if (typeof ref !== "string") return;
+
     out.push({
       role,
       path: ref,
       present: fs.existsSync(path.join(distDir, ref.replace(/^\.?\//, ""))),
     });
   };
+
   const bg = manifest.background as Record<string, unknown> | undefined;
   if (bg?.service_worker) add("background.service_worker", bg.service_worker);
   if (bg?.page) add("background.page", bg.page);
+
   if (Array.isArray(bg?.scripts))
-    bg.scripts.forEach((s) => add("background.scripts", s));
+    {bg.scripts.forEach((s) => add("background.scripts", s));}
+
   const action = (manifest.action || manifest.browser_action) as
     | Record<string, unknown>
     | undefined;
   if (action?.default_popup) add("action.default_popup", action.default_popup);
+
   const pageAction = manifest.page_action as
     | Record<string, unknown>
     | undefined;
+
   if (pageAction?.default_popup)
-    add("page_action.default_popup", pageAction.default_popup);
+    {add("page_action.default_popup", pageAction.default_popup);}
+
   const cs = manifest.content_scripts as
     | Array<Record<string, unknown>>
     | undefined;
+
   if (Array.isArray(cs)) {
     cs.forEach((c, i) => {
       if (Array.isArray(c.js))
-        c.js.forEach((j) => add(`content_scripts[${i}].js`, j));
+        {c.js.forEach((j) => add(`content_scripts[${i}].js`, j));}
+
       if (Array.isArray(c.css))
-        c.css.forEach((s) => add(`content_scripts[${i}].css`, s));
+        {c.css.forEach((s) => add(`content_scripts[${i}].css`, s));}
     });
   }
+
   add("devtools_page", manifest.devtools_page);
   add("options_page", manifest.options_page);
   const optionsUi = manifest.options_ui as Record<string, unknown> | undefined;
   if (optionsUi?.page) add("options_ui.page", optionsUi.page);
+
   const sidePanel = manifest.side_panel as Record<string, unknown> | undefined;
+
   if (sidePanel?.default_path)
-    add("side_panel.default_path", sidePanel.default_path);
+    {add("side_panel.default_path", sidePanel.default_path);}
+
   const sidebarAction = manifest.sidebar_action as
     | Record<string, unknown>
     | undefined;
+
   if (sidebarAction?.default_panel)
-    add("sidebar_action.default_panel", sidebarAction.default_panel);
+    {add("sidebar_action.default_panel", sidebarAction.default_panel);}
+
   const overrides = manifest.chrome_url_overrides as
     | Record<string, unknown>
     | undefined;
+
   if (overrides) {
     for (const [key, ref] of Object.entries(overrides)) {
       add(`chrome_url_overrides.${key}`, ref);
     }
   }
+
   const dnr = manifest.declarative_net_request as
     | Record<string, unknown>
     | undefined;
+
   if (dnr && Array.isArray(dnr.rule_resources)) {
     dnr.rule_resources.forEach((r, i) => {
       if (r && typeof r === "object") {
@@ -256,6 +289,7 @@ function builtEntrypoints(
       }
     });
   }
+
   return out;
 }
 
@@ -278,10 +312,12 @@ function newestZip(
       .filter((name) => name.endsWith(".zip") && (!match || match(name)))
       .map((name) => {
         const full = path.join(dir, name);
+
         return { full, mtimeMs: fs.statSync(full).mtimeMs };
       })
       .filter((entry) => entry.mtimeMs >= since - MTIME_SLACK_MS)
       .sort((a, b) => b.mtimeMs - a.mtimeMs);
+
     return fresh[0]?.full ?? null;
   } catch {
     return null;
@@ -290,11 +326,13 @@ function newestZip(
 
 function engineZipBase(distDir: string, projectPath: string): string {
   let manifest: Record<string, unknown> = {};
+
   try {
     manifest = JSON.parse(
       fs.readFileSync(path.join(distDir, "manifest.json"), "utf8"),
     );
   } catch {}
+
   const rawName =
     typeof manifest.name === "string" && !/^__MSG_.+__$/.test(manifest.name)
       ? manifest.name
@@ -303,6 +341,7 @@ function engineZipBase(distDir: string, projectPath: string): string {
     typeof manifest.version === "string" && manifest.version
       ? manifest.version
       : "0.0.0";
+
   return `${engineSanitize(rawName)}-${version}`;
 }
 
@@ -329,6 +368,7 @@ function zipFromSummary(
     if (artifact?.kind !== kind || typeof artifact.path !== "string") continue;
     if (freshFile(artifact.path, since)) return artifact.path;
   }
+
   return null;
 }
 
@@ -354,6 +394,7 @@ function explicitZipStem(zipFilename: string): string {
     .join("")
     .replace(/\.+$/, "")
     .trim();
+
   return (safe || "extension").replace(/\.zip$/i, "");
 }
 
@@ -366,6 +407,7 @@ function locateDistZip(
 ): string | null {
   const fromSummary = zipFromSummary(summary, "dist", since);
   if (fromSummary) return fromSummary;
+
   const distDir = path.resolve(projectPath, "dist", engineBrowserName(browser));
   const distRoot = path.resolve(projectPath, "dist");
   const stem = zipFilename
@@ -375,6 +417,7 @@ function locateDistZip(
   const named = stem.toLowerCase().endsWith(suffix) ? stem : `${stem}${suffix}`;
   const expected = path.join(distRoot, `${named}.zip`);
   if (freshFile(expected, since)) return expected;
+
   return (
     newestZip(
       distRoot,
@@ -394,6 +437,7 @@ function locateSourceZip(
 ): string | null {
   const fromSummary = zipFromSummary(summary, "source", since);
   if (fromSummary) return fromSummary;
+
   const distDir = path.resolve(projectPath, "dist", engineBrowserName(browser));
   const distRoot = path.resolve(projectPath, "dist");
   const stem = zipFilename
@@ -401,6 +445,7 @@ function locateSourceZip(
     : engineZipBase(distDir, projectPath);
   const expected = path.join(distRoot, `${stem}-source.zip`);
   if (freshFile(expected, since)) return expected;
+
   return newestZip(distRoot, since, (name) => name.endsWith("-source.zip"));
 }
 
@@ -510,6 +555,7 @@ function manifestDivergence(projectPath: string, browser: string): string[] {
       return null;
     }
   };
+
   const built = read(
     path.resolve(projectPath, "dist", engineBrowserName(browser), "manifest.json"),
   );
@@ -532,6 +578,7 @@ function manifestDivergence(projectPath: string, browser: string): string[] {
     const lost = listOf(source, key).filter(
       (p) => !listOf(built, key).includes(p),
     );
+
     if (lost.length) {
       notes.push(
         `The built manifest drops ${key}: ${lost.join(", ")}. The production build has narrower access than the source you tested in dev.`,
@@ -541,6 +588,7 @@ function manifestDivergence(projectPath: string, browser: string): string[] {
 
   const sourceWar = source.web_accessible_resources;
   const builtWar = built.web_accessible_resources;
+
   if (
     Array.isArray(sourceWar) &&
     sourceWar.length &&
@@ -550,6 +598,7 @@ function manifestDivergence(projectPath: string, browser: string): string[] {
       "The built manifest has no web_accessible_resources although the source declares them. Anything injected into a page (scripting.insertCSS targets, injected scripts, images) will be blocked at runtime.",
     );
   }
+
   return notes;
 }
 
@@ -567,9 +616,11 @@ function namesCarrier(entryName: string): boolean {
 function carrierEntriesInZip(zipPath: string): Contamination {
   const listing = readZipEntryNames(zipPath);
   if (!listing.readable) return { paths: [], unchecked: [zipPath] };
+
   const hits = listing.names
     .filter((name) => name.split("/").some(namesCarrier))
     .map((name) => `${zipPath} -> ${name}`);
+
   return { paths: hits, unchecked: [] };
 }
 
@@ -588,31 +639,40 @@ function carrierEntriesInZip(zipPath: string): Contamination {
  */
 function carrierContamination(dir: string, depth = 0): Contamination {
   if (depth > 4) return { paths: [], unchecked: [] };
+
   let entries: fs.Dirent[];
+
   try {
     entries = fs.readdirSync(dir, { withFileTypes: true });
   } catch {
     return { paths: [], unchecked: [] };
   }
+
   const found: Contamination = { paths: [], unchecked: [] };
+
   const absorb = (other: Contamination) => {
     found.paths.push(...other.paths);
     found.unchecked.push(...other.unchecked);
   };
+
   for (const entry of entries) {
     const full = path.join(dir, entry.name);
+
     if (namesCarrier(entry.name)) {
       found.paths.push(full);
       continue;
     }
+
     if (entry.isDirectory()) {
       absorb(carrierContamination(full, depth + 1));
       continue;
     }
+
     if (entry.isFile() && entry.name.endsWith(".zip")) {
       absorb(carrierEntriesInZip(full));
     }
   }
+
   return found;
 }
 
@@ -642,6 +702,7 @@ async function validationPreflight(
     const parsed = JSON.parse(
       await manifestValidate.handler({ projectPath, browsers: [browser] }),
     );
+
     if (
       parsed?.ok === false &&
       /^manifest-(unreadable|not-found)$/.test(String(parsed?.status ?? ""))
@@ -651,7 +712,9 @@ async function validationPreflight(
         reason: String(parsed?.error?.message || parsed?.status || "the validator refused"),
       };
     }
+
     const value = parsed?.value ?? {};
+
     return {
       state: "ran",
       preflight: {
@@ -747,6 +810,7 @@ export async function handler(args: {
 
   const carrierCleanup = removeCarrier(args.projectPath);
   const carrierNotes: string[] = [];
+
   if (carrierCleanup.removed) {
     carrierNotes.push(
       "Removed the Extension.dev live-preview carrier from ./extensions before building. It is a debug companion, not part of your extension; run extension_dev with carrier: true to get it back.",
@@ -760,11 +824,13 @@ export async function handler(args: {
     : await validationPreflight(args.projectPath, browser);
   const preflight =
     preflightOutcome?.state === "ran" ? preflightOutcome.preflight : null;
+
   if (preflightOutcome?.state === "could-not-run") {
     carrierNotes.push(
       `Manifest validation did not run before this build (${preflightOutcome.reason}), so nothing below was checked against the manifest rules. Run extension_manifest_validate on its own to see why.`,
     );
   }
+
   if (preflight?.buildBlocking) {
     return envelope({
       ok: false,
@@ -808,8 +874,10 @@ export async function handler(args: {
   if (args.mode) cliArgs.push("--mode", args.mode);
   if (args.appName) cliArgs.push("--app-name", args.appName);
   if (args.bundleId) cliArgs.push("--bundle-id", args.bundleId);
+
   if (args.macOsOnly !== undefined)
-    cliArgs.push("--macos-only", String(args.macOsOnly));
+    {cliArgs.push("--macos-only", String(args.macOsOnly));}
+
   if (args.forceRegenerate) cliArgs.push("--force-regenerate");
 
   const spawn = { cwd: args.projectPath, timeoutMs: 180_000 };
@@ -833,10 +901,13 @@ export async function handler(args: {
     !engineKnownTooOld &&
     attempt.code !== 0 &&
     refusedTheOutputFlag(attempt.stderr ?? "");
+
   if (engineRefusedJsonOutput) {
     attempt = await runExtensionCli(cliArgs, spawn);
   }
+
   const { code, stdout, stderr } = attempt;
+
   if (engineRefusedJsonOutput) {
     warnings.push(
       "The Extension.js installed in this project is older than the one this server expects: it rejected --output json on build, so the build was run a second time without that flag and the result comes from the build summary the engine writes into dist/extension-js/ when this run left one there (a separate warning names the path when it did not). The extension that came out is exactly the same one. Upgrade the project's Extension.js to get the richer report back, including the Safari app identity and the byte totals from the run that just happened, and to stop paying for the second build.",
@@ -855,6 +926,7 @@ export async function handler(args: {
       `The Extension.js installed in this project is older than the one this server expects: it reports ${verdict.version}, and --output json only reached extension build in ${verdict.floor}, so the build was run without that flag and the result comes from the build summary the engine writes into dist/extension-js/ when this run left one there (a separate warning names the path when it did not). The extension that came out is exactly the same one, and nothing was built twice. Upgrade the project's Extension.js to get the richer report back, including the Safari app identity and the byte totals from the run that just happened.`,
     );
   }
+
   const duration = Date.now() - start;
   const engine = readEngineOutput(stdout ?? "", stderr ?? "");
   const out = engine.narration;
@@ -909,10 +981,12 @@ export async function handler(args: {
         : path.join(engineProjectRoot(args.projectPath), "dist", engineBrowserName(browser));
     const distManifest = path.join(distDir, "manifest.json");
     let distWrittenAt: number | null = null;
+
     try {
       distWrittenAt = fs.statSync(distManifest).mtimeMs;
     } catch {
     }
+
     if (distWrittenAt === null || distWrittenAt < start - 1_000) {
       return envelope({
         ok: false,
@@ -936,6 +1010,7 @@ export async function handler(args: {
         hint: "Check the build output above and the project's output configuration: the dist this tool reads is the one the engine reports (output_path), else dist/<browser> under the package root.",
       });
     }
+
     const entrypoints = builtEntrypoints(distDir);
     const review = reviewDistReport(distDir, browser);
     const risks = review.risks;
@@ -943,6 +1018,7 @@ export async function handler(args: {
     const uncheckedNote = contamination.unchecked.length
       ? `Could not read the entry table of ${contamination.unchecked.join(", ")}, so those archives were not checked for the live-preview carrier. Unpack and check them yourself before submitting.`
       : null;
+
     if (contamination.paths.length) {
       return envelope({
         ok: false,
@@ -963,7 +1039,9 @@ export async function handler(args: {
         hint: "Delete the listed paths from dist and build again. The carrier lives in ./extensions and is taken back before every build run through this tool, so an entry inside a zip means that archive was packed by something else, usually 'extension build --zip-source' driven straight at the engine while a dev session had the carrier in place.",
       });
     }
+
     const missing = entrypoints.filter((e) => !e.present);
+
     if (missing.length) {
       return envelope({
         ok: false,
@@ -972,9 +1050,9 @@ export async function handler(args: {
         error: {
           code: "E_ENTRYPOINT_MISSING",
           message:
-            `The build reported success but ${missing.length} declared entrypoint(s) are missing from dist/${browser}: ` +
-            missing.map((m) => `${m.role} -> ${m.path}`).join(", ") +
-            ". The browser will refuse to load this build.",
+            `The build reported success but ${missing.length} declared entrypoint(s) are missing from dist/${browser}: ${ 
+            missing.map((m) => `${m.role} -> ${m.path}`).join(", ") 
+            }. The browser will refuse to load this build.`,
         },
         value: {
           browser,
@@ -991,23 +1069,28 @@ export async function handler(args: {
         hint: "The bundler exited 0 but did not emit these files. Check that the manifest paths match what the build produces, and that nothing references a file outside the source tree.",
       });
     }
+
     const zipNotes: string[] = [];
     const zipPath = args.zip
       ? locateDistZip(args.projectPath, browser, args.zipFilename, start, engineSummary)
       : null;
+
     if (args.zip && !zipPath) {
       zipNotes.push(
         `zip: true was requested and the build succeeded, but the engine's summary names no zip and no .zip newer than this build was found under dist/ (the engine writes dist/<name>-<version>-${browser}.zip). Check the build output below.`,
       );
     }
+
     const zipSourcePath = args.zipSource
       ? locateSourceZip(args.projectPath, browser, args.zipFilename, start, engineSummary)
       : null;
+
     if (args.zipSource && !zipSourcePath) {
       zipNotes.push(
         `zipSource: true was requested and the build succeeded, but the engine's summary names no source zip and no *-source.zip newer than this build was found under dist/. Check the build output below.`,
       );
     }
+
     const divergence = manifestDivergence(args.projectPath, browser);
     /* @invariant
      * A Safari build reports the identity the packager says it produced, and
@@ -1041,6 +1124,7 @@ export async function handler(args: {
       safari && !safariIdentity
         ? `The build succeeded but reported no Safari app identity, so this run cannot tell you which bundle identifier the app carries. Either the packager did not run (a non-macOS host skips packaging and leaves a plain bundle in dist/${browser}), or the engine installed in this project predates the reporting contract. Check the build output below, and run extension_doctor if you expected an app.`
         : null;
+
     return envelope({
       ok: true,
       command: COMMAND,
@@ -1092,6 +1176,7 @@ export async function handler(args: {
 
   if (attempt.timedOut) {
     const budget = spawn.timeoutMs;
+
     return envelope({
       ok: false,
       command: COMMAND,
@@ -1105,6 +1190,7 @@ export async function handler(args: {
       hint: "This tool's budget is fixed at 180 s. Check for a still-running extension build process (it may finish on its own) before retrying; a retry that races it writes the same dist twice.",
     });
   }
+
   const engineFailure =
     typeof engine.frame?.error?.message === "string"
       ? engine.frame.error.message.trim()
@@ -1121,6 +1207,7 @@ export async function handler(args: {
      the contract carries none, the engine's own output tail travels instead. */
   const compileErrors = buildCompileErrors(args.projectPath, browser, start);
   const tail = [out, stderr.trim()].filter(Boolean).join("\n").trim();
+
   return envelope({
     ok: false,
     command: COMMAND,
@@ -1149,8 +1236,10 @@ function buildCompileErrors(
   try {
     const file = readyContractPath(projectPath, browser);
     if (fs.statSync(file).mtimeMs < since - MTIME_SLACK_MS) return [];
+
     const contract = JSON.parse(fs.readFileSync(file, "utf8"));
     const errors = Array.isArray(contract?.errors) ? contract.errors : [];
+
     return errors
       .filter((e: unknown) => typeof e === "string" && e.trim())
       .map((e: string) => e.replace(ANSI_SEQUENCE, "").trim())

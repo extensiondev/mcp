@@ -1,7 +1,9 @@
-import { describe, it, expect, afterEach } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+
+import { describe, it, expect, afterEach } from "vitest";
+
 import {
   describeExtensionInvocation,
   spawnExtensionCli,
@@ -18,10 +20,13 @@ function fakeProject(binScript: string): string {
   const bin = path.join(binDir, "extension");
   fs.writeFileSync(bin, `#!/bin/sh\n${binScript}\n`);
   fs.chmodSync(bin, 0o755);
+
   if (process.platform === "win32") {
     fs.writeFileSync(path.join(binDir, "extension.cmd"), "@echo off\r\n");
   }
+
   cleanups.push(() => fs.rmSync(dir, { recursive: true, force: true }));
+
   return dir;
 }
 
@@ -36,6 +41,7 @@ afterEach(() => {
       }
     }
   }
+
   live = undefined;
   for (const fn of cleanups.splice(0)) fn();
 });

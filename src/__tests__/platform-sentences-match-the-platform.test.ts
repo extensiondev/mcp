@@ -2,10 +2,11 @@
  * the registry readers say about the platform is what the platform does.
  * Each cell failed before its fix. */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 
 import { schema as submitSchema, handler as submit } from "../tools/submit";
 import { schema as publishSchema } from "../tools/publish";
@@ -17,6 +18,7 @@ import { RegistryAccessTokens } from "../lib/registry-access";
 function claimsToken(u: string, p: string): string {
   return `${Buffer.from(JSON.stringify({ u, p, exp: Math.floor(Date.now() / 1000) + 600 })).toString("base64url")}.sig`;
 }
+
 function jsonResponse(body: unknown, ok = true, status = 200): Response {
   return { ok, status, headers: { get: () => null }, text: async () => JSON.stringify(body) } as unknown as Response;
 }
@@ -33,11 +35,13 @@ describe("103: submit says what the platform checks and answers", () => {
     process.env.EXTENSION_DEV_TOKEN = claimsToken("acme", "widget");
     prevFetch = global.fetch;
   });
+
   afterEach(() => {
     for (const [key, value] of Object.entries(saved)) {
       if (value === undefined) delete process.env[key];
       else process.env[key] = value;
     }
+
     global.fetch = prevFetch;
     fs.rmSync(tmp, { recursive: true, force: true });
   });
@@ -52,6 +56,7 @@ describe("103: submit says what the platform checks and answers", () => {
   it("renders the platform's warning objects and keeps a failing store configured but unhealthy", async () => {
     global.fetch = (async (url: string) => {
       const u = String(url);
+
       if (u.includes("/api/cli/stores/submit")) {
         return jsonResponse({
           ok: true,
@@ -60,10 +65,13 @@ describe("103: submit says what the platform checks and answers", () => {
           warnings: [{ code: "FIREFOX_DATA_COLLECTION_PERMISSIONS", store: "firefox", message: "AMO requires data_collection_permissions.", docsUrl: "https://example.test/docs" }],
         });
       }
+
       if (u.includes("stores/health.json")) {
         return jsonResponse({ stores: { firefox: { ok: false, message: "AMO credentials expired" } } });
       }
+
       if (u.includes("channels.json")) return jsonResponse({ stable: { sha: "abc1234" } });
+
       return jsonResponse({});
     }) as unknown as typeof fetch;
 
@@ -79,8 +87,10 @@ describe("103: submit says what the platform checks and answers", () => {
       if (u.includes("/api/cli/stores/submit")) return jsonResponse({ ok: true, dryRun: true, buildId: "abc1234" });
       if (u.includes("stores/health.json")) return jsonResponse({ stores: { chrome: { ok: true } } });
       if (u.includes("channels.json")) return jsonResponse({ stable: { sha: "abc1234" } });
+
       return jsonResponse({});
     }) as unknown as typeof fetch;
+
     const out = JSON.parse(await submit({ browsers: ["chrome"], buildSha: "abc1234" }));
     expect(out.hint).toMatch(/Not checked by a dry run: the owner gate, the approval, the build quota, the dispatch pause and the submission mode/);
     expect(out.hint).not.toMatch(/verified auth, the project, build/);
@@ -89,11 +99,14 @@ describe("103: submit says what the platform checks and answers", () => {
   it("says when the submission record appears and that a draft upload is not review", async () => {
     global.fetch = (async (url: string) => {
       const u = String(url);
+
       if (u.includes("/api/cli/stores/submit")) {
         return jsonResponse({ ok: true, projectId: "p", buildId: "abc1234", channel: "stable", submissions: [{ store: "chrome", status: "pending" }], origin: "cli" });
       }
+
       return jsonResponse({});
     }) as unknown as typeof fetch;
+
     const out = JSON.parse(await submit({ browsers: ["chrome"], buildSha: "abc1234", dryRun: false }));
     expect(out.status).toBe("submitted");
     expect(out.hint).toMatch(/uploaded as a draft \(absent_mode: safe\) and does not enter review/);
@@ -104,11 +117,14 @@ describe("103: submit says what the platform checks and answers", () => {
   it("says a presented approval was spent when the platform refused after consuming it", async () => {
     global.fetch = (async (url: string) => {
       const u = String(url);
+
       if (u.includes("/api/cli/stores/submit")) {
         return jsonResponse({ ok: false, message: "Build quota exhausted for this month.", code: "BUILD_QUOTA_EXHAUSTED" }, false, 429);
       }
+
       return jsonResponse({});
     }) as unknown as typeof fetch;
+
     const out = JSON.parse(await submit({ browsers: ["chrome"], buildSha: "abc1234", dryRun: false, approvalId: "appr-1" }));
     expect(out.status).toBe("submit-failed");
     expect(out.hint).toMatch(/approval presented with this call was spent/);
@@ -118,11 +134,14 @@ describe("103: submit says what the platform checks and answers", () => {
   it("does not call an approval spent when the refusal came before the platform consumed it", async () => {
     global.fetch = (async (url: string) => {
       const u = String(url);
+
       if (u.includes("/api/cli/stores/submit")) {
         return jsonResponse({ ok: false, message: "Only the workspace owner may submit.", code: "OWNER_REQUIRED" }, false, 403);
       }
+
       return jsonResponse({});
     }) as unknown as typeof fetch;
+
     const out = JSON.parse(await submit({ browsers: ["chrome"], buildSha: "abc1234", dryRun: false, approvalId: "appr-1" }));
     expect(out.hint ?? "").not.toMatch(/was spent/);
   });
@@ -170,6 +189,7 @@ describe("104: publish, promote, builds, the share probe and the grant refusal",
     }
     const prev = process.env.EXTENSION_DEV_TOKEN;
     process.env.EXTENSION_DEV_TOKEN = claimsToken("acme", "widget");
+
     try {
       const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ message: "Token revoked.", reason: "token-revoked" }), { status: 401 }));
       const grant = (await new Probe({ fetchImpl: fetchImpl as unknown as typeof fetch }).mintFor({ workspace: "acme", project: "widget" })) as { status: string; message?: string; reason?: string };

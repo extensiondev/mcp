@@ -1,7 +1,9 @@
-import { describe, it, expect, vi, afterEach } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+
+import { describe, it, expect, vi, afterEach } from "vitest";
+
 import {
   browserFromCliArgs,
   buildNarration,
@@ -9,13 +11,17 @@ import {
   writeEngineDist,
 } from "./fixtures/engine-answers";
 
+import type * as ExecModule from "../lib/exec";
+
 vi.mock("../lib/exec", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../lib/exec")>();
+  const actual = await importOriginal<typeof ExecModule>();
+
   return {
     ...actual,
     runExtensionCli: async (args: string[]) => {
       const browser = browserFromCliArgs(args);
       if (args[0] === "build") writeEngineDist(args[1]!, browser);
+
       return {
         code: 0,
         stdout: `${JSON.stringify(preSummariesBuildFrame(args[1]!, [browser]))}\n`,
@@ -28,6 +34,7 @@ vi.mock("../lib/exec", async (importOriginal) => {
 const build = await import("../tools/build");
 
 const tmpDirs: string[] = [];
+
 function completeProject(): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-build-summary-"));
   tmpDirs.push(dir);
@@ -36,12 +43,14 @@ function completeProject(): string {
     path.join(dir, "src", "manifest.json"),
     JSON.stringify({ manifest_version: 3, name: "F", version: "1.0.0" }),
   );
+
   const distDir = path.join(dir, "dist", "chrome");
   fs.mkdirSync(distDir, { recursive: true });
   fs.writeFileSync(
     path.join(distDir, "manifest.json"),
     JSON.stringify({ manifest_version: 3, name: "F", version: "1.0.0" }),
   );
+
   return dir;
 }
 
@@ -85,6 +94,7 @@ describe("build consumes the engine's persisted BuildSummary when the frame on s
         "asset size limit exceeded",
       ]),
     );
+
     expect(result.value.buildWarningsTruncated).toBeUndefined();
   });
 

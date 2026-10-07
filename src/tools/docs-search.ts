@@ -41,6 +41,7 @@ export async function handler(args: {
   api?: string;
 }): Promise<string> {
   const query = String(args.query || "").trim();
+
   if (!query) {
     return envelope({
       ok: false,
@@ -55,6 +56,7 @@ export async function handler(args: {
   const url = `${base}/api/docs/search?q=${encodeURIComponent(query)}&limit=${limit}`;
 
   let res: Response;
+
   try {
     res = await fetch(url, { headers: { accept: "application/json" } });
   } catch (err) {
@@ -71,9 +73,11 @@ export async function handler(args: {
 
   let body: { results?: Result[]; message?: string; retryAfterSeconds?: number } = {};
   let bodyUnreadable: string | null = null;
+
   try {
     const parsed = (await res.json()) as unknown;
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("not a JSON object");
+
     body = parsed as typeof body;
   } catch (err) {
     bodyUnreadable = err instanceof Error ? err.message : String(err);
@@ -109,6 +113,7 @@ export async function handler(args: {
       hint: "Retry once; if it persists, read the docs at https://extension.js.org/docs.",
     });
   }
+
   const results = body.results;
 
   return envelope({

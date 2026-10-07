@@ -1,7 +1,8 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { handler, schema } from "../tools/project-create";
 import { readCredentials } from "../lib/credentials";
@@ -28,6 +29,7 @@ function createFetch(routes: {
   const fn = vi.fn(async (url: any, init?: RequestInit) => {
     const href = String(url);
     calls.push({ url: href, init });
+
     if (href.endsWith("/api/cli/login/config")) {
       return jsonResponse({
         deviceCodeUrl: "/api/cli/device/code",
@@ -35,6 +37,7 @@ function createFetch(routes: {
         verificationUri: "https://extension.dev/device",
       });
     }
+
     if (href.endsWith("/api/cli/device/code")) {
       const route = routes.code ?? {
         status: 200,
@@ -48,8 +51,10 @@ function createFetch(routes: {
           expires_in: 900,
         },
       };
+
       return jsonResponse(route.body, route.status);
     }
+
     if (href.endsWith("/api/cli/device/token")) {
       const next =
         routes.token[Math.min(tokenCalls, routes.token.length - 1)] ?? {
@@ -57,14 +62,19 @@ function createFetch(routes: {
           body: { error: "authorization_pending" },
         };
       tokenCalls += 1;
+
       return jsonResponse(next.body, next.status);
     }
+
     if (href.endsWith("/api/cli/projects/create")) {
       const route = routes.create ?? { status: 500, body: { message: "no" } };
+
       return jsonResponse(route.body, route.status);
     }
+
     throw new Error(`Unexpected fetch: ${href}`);
   });
+
   return { fn, calls };
 }
 
@@ -100,6 +110,7 @@ afterEach(() => {
   else process.env.XDG_CONFIG_HOME = prevXdg;
   if (prevApi === undefined) delete process.env.EXTENSION_DEV_API_URL;
   else process.env.EXTENSION_DEV_API_URL = prevApi;
+
   fs.rmSync(tmp, { recursive: true, force: true });
 });
 
@@ -114,11 +125,13 @@ describe("extension_project_create", () => {
   it("still refuses a single call that names no project or no repo", async () => {
     const { fn } = createFetch({ token: [] });
     vi.stubGlobal("fetch", fn);
+
     for (const args of [{}, { project: "acme/ghost-app" }, { repo: "acme/src" }]) {
       const out = JSON.parse(await handler(args as never));
       expect(out.ok).toBe(false);
       expect(out.error.code).toBe("E_BAD_REQUEST");
     }
+
     expect(fn).not.toHaveBeenCalled();
   });
 
@@ -127,6 +140,7 @@ describe("extension_project_create", () => {
     expect(schema.inputSchema.properties.installationId.description).toContain(
       "Optional override",
     );
+
     expect(schema.description).toContain("connect link");
   });
 
@@ -252,6 +266,7 @@ describe("extension_project_create", () => {
       owner: "acme",
       repo: "ghost-app-src",
     });
+
     expect(body.github.installationId).toBeUndefined();
     expect(body.origin).toBeUndefined();
     expect(body.createdFrom).toEqual({
@@ -290,6 +305,7 @@ describe("extension_project_create", () => {
       enabled: true,
       outputDirectory: "dist/chrome",
     });
+
     expect(body.build.edge.enabled).toBe(false);
     expect(body.build.firefox.enabled).toBe(false);
   });
@@ -300,6 +316,7 @@ describe("extension_project_create", () => {
       installCommand: "pnpm install",
       buildCommand: "pnpm build",
     });
+
     for (const name of ["chrome", "edge", "firefox"]) {
       expect(body.build[name]).toEqual({
         enabled: true,
@@ -433,6 +450,7 @@ describe("extension_project_create", () => {
       deviceCode: "dev-code",
       installationId: "99999999",
     });
+
     const createCall = calls.find((c) =>
       c.url.endsWith("/api/cli/projects/create"),
     );
@@ -473,6 +491,7 @@ describe("extension_project_create", () => {
     expect(out.value.connectUrl).toBe(
       "https://www.extension.dev/connect/github?next=project-create",
     );
+
     expect(out.hint).toContain("Nothing was created");
   });
 
@@ -609,6 +628,7 @@ describe("extension_project_create", () => {
       if (create === "no-answer" && String(url).endsWith("/api/cli/projects/create")) {
         throw new Error("socket hang up");
       }
+
       return fn(url, init);
     });
     vi.stubGlobal("fetch", routed);

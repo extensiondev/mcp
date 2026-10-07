@@ -1,7 +1,10 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+import type * as ExecModule from "../lib/exec";
 
 interface CliResponse {
   code: number;
@@ -13,11 +16,13 @@ const cliCalls: string[][] = [];
 let cliResponder: ((args: string[]) => CliResponse) | null = null;
 
 vi.mock("../lib/exec", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../lib/exec")>();
+  const actual = await importOriginal<typeof ExecModule>();
+
   return {
     ...actual,
     runExtensionCli: async (args: string[]) => {
       cliCalls.push(args);
+
       return cliResponder?.(args) ?? { code: 0, stdout: "", stderr: "" };
     },
   };
@@ -52,6 +57,7 @@ function projectWithLocalEngine(): string {
   );
   fs.writeFileSync(exe, "#!/bin/sh\nexit 0\n");
   fs.chmodSync(exe, 0o755);
+
   return dir;
 }
 
@@ -67,11 +73,13 @@ function engineThatRefusesTheFlag(
         stderr: "error: unknown command 'capabilities'",
       };
     }
+
     if (args[0] === "--version") {
       return version === null
         ? { code: 1, stdout: "", stderr: "not a version" }
         : { code: 0, stdout: `${version}\n`, stderr: "" };
     }
+
     return { code: 1, stdout: "", stderr: refusal };
   };
 }
@@ -86,6 +94,7 @@ afterEach(() => {
   cliCalls.length = 0;
   cliResponder = null;
   engineVersion.resetEngineVersionCache();
+
   for (const dir of tmpDirs.splice(0)) {
     fs.rmSync(dir, { recursive: true, force: true });
   }

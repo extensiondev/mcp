@@ -26,17 +26,21 @@ function listTools() {
     child.stdout.on("data", (chunk) => {
       buffer += chunk.toString();
       let index = buffer.indexOf("\n");
+
       while (index >= 0) {
         const line = buffer.slice(0, index).trim();
         buffer = buffer.slice(index + 1);
         index = buffer.indexOf("\n");
         if (!line) continue;
+
         let message;
+
         try {
           message = JSON.parse(line);
         } catch {
           continue;
         }
+
         if (message.id === 1) {
           child.stdin.write(
             `${JSON.stringify({
@@ -44,10 +48,12 @@ function listTools() {
               method: "notifications/initialized",
             })}\n`,
           );
+
           child.stdin.write(
             `${JSON.stringify({ jsonrpc: "2.0", id: 2, method: "tools/list" })}\n`,
           );
         }
+
         if (message.id === 2) {
           clearTimeout(timer);
           child.kill();
@@ -107,11 +113,13 @@ if (process.argv.includes("--json")) {
   console.log(
     `${"tool".padEnd(34)}${pad("desc", 8)}${pad("schema", 8)}${pad("total", 8)}`,
   );
+
   for (const row of rows) {
     console.log(
       `${row.name.padEnd(34)}${pad(row.desc_b, 8)}${pad(row.schema_b, 8)}${pad(row.total_b, 8)}`,
     );
   }
+
   console.log("");
   console.log(`description bytes: ${totals.desc_b}  (~${tokens(totals.desc_b)} tokens)`);
   console.log(`schema bytes:      ${totals.schema_b}  (~${tokens(totals.schema_b)} tokens)`);

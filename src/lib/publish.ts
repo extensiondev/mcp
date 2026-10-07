@@ -43,6 +43,7 @@ export async function publish(
   options: PublishOptions = {},
 ): Promise<PublishResult> {
   const token = options.token ?? resolveToken();
+
   if (!token) {
     return {
       ok: false,
@@ -56,12 +57,14 @@ export async function publish(
 
   const doFetch = options.fetchImpl ?? fetch;
   const apiCheck = safeApiBase(resolveApiBase(options.api), options.api);
+
   if (!apiCheck.ok) {
     return {
       ok: false,
       error: { name: "PublishConfigError", message: apiCheck.message },
     };
   }
+
   const url = `${apiCheck.base}/api/cli/publish`;
 
   const body: Record<string, unknown> = {};
@@ -69,6 +72,7 @@ export async function publish(
   if (options.buildSha) body.buildSha = options.buildSha;
 
   let res: Response;
+
   try {
     res = await doFetch(url, {
       method: "POST",
@@ -91,6 +95,7 @@ export async function publish(
 
   const text = await res.text();
   let data: Record<string, unknown>;
+
   try {
     data = JSON.parse(text);
   } catch {
@@ -109,6 +114,7 @@ export async function publish(
         },
       };
     }
+
     return {
       ok: false,
       error: {

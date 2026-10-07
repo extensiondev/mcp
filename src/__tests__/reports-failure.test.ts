@@ -1,13 +1,19 @@
-import { describe, it, expect, afterEach, vi } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+
+import { describe, it, expect, afterEach, vi } from "vitest";
+
 import { browserFromCliArgs, buildCliAnswer, writeEngineDist } from "./fixtures/engine-answers";
 
+import type * as ExecModule from "../lib/exec";
+
 const tmpDirs: string[] = [];
+
 function tmpProject(): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-reports-failure-"));
   tmpDirs.push(dir);
+
   return dir;
 }
 
@@ -30,7 +36,7 @@ function writeLogs(
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(
     path.join(dir, "logs.ndjson"),
-    events.map((e) => JSON.stringify(e)).join("\n") + "\n",
+    `${events.map((e) => JSON.stringify(e)).join("\n")  }\n`,
   );
 }
 
@@ -38,13 +44,15 @@ const DEAD_PID = 2 ** 30;
 
 let cliResult = { code: 0, stdout: "", stderr: "" };
 vi.mock("../lib/exec", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../lib/exec")>();
+  const actual = await importOriginal<typeof ExecModule>();
+
   return {
     ...actual,
     runExtensionCli: async (args: string[]) => {
       if (args[0] === "build" && cliResult.code === 0) {
         writeEngineDist(args[1]!, browserFromCliArgs(args));
       }
+
       return cliResult;
     },
   };
@@ -58,6 +66,7 @@ const { recentErrorLogs } = doctor;
 
 afterEach(() => {
   cliResult = { code: 0, stdout: "", stderr: "" };
+
   for (const dir of tmpDirs.splice(0)) {
     fs.rmSync(dir, { recursive: true, force: true });
   }
@@ -100,6 +109,7 @@ describe("doctor reports failure when the extension is broken", () => {
       pid: process.pid,
       errors: ["Module not found: ./missing.js"],
     });
+
     cliResult = { code: 0, stdout: "[]", stderr: "" };
 
     const result = JSON.parse(
@@ -158,6 +168,7 @@ describe("build reports failure when the artifact is unusable", () => {
       path.join(dir, "src", "manifest.json"),
       JSON.stringify(manifest),
     );
+
     if (dist) {
       const distDir = path.join(dir, "dist", "chrome");
       fs.mkdirSync(distDir, { recursive: true });
@@ -165,10 +176,12 @@ describe("build reports failure when the artifact is unusable", () => {
         path.join(distDir, "manifest.json"),
         JSON.stringify(dist.manifest),
       );
+
       for (const f of dist.files) {
         fs.writeFileSync(path.join(distDir, f), "x");
       }
     }
+
     return dir;
   }
 
@@ -227,11 +240,13 @@ describe("swarm-found lies stay fixed", () => {
       path.join(dir, "src", "manifest.json"),
       JSON.stringify(manifest),
     );
+
     for (const f of presentFiles) {
       const full = path.join(dir, "src", f);
       fs.mkdirSync(path.dirname(full), { recursive: true });
       fs.writeFileSync(full, "x");
     }
+
     return dir;
   }
 
@@ -311,6 +326,7 @@ describe("swarm-found lies stay fixed", () => {
       path.join(dir, "src", "manifest.json"),
       JSON.stringify({ manifest_version: 3, name: "F", version: "1.0.0" }),
     );
+
     const distDir = path.join(dir, "dist", "chrome");
     fs.mkdirSync(distDir, { recursive: true });
     fs.writeFileSync(
@@ -322,6 +338,7 @@ describe("swarm-found lies stay fixed", () => {
         chrome_url_overrides: { newtab: "newtab/index.html" },
       }),
     );
+
     cliResult = buildCliAnswer(dir, "chrome");
 
     const result = JSON.parse(await build.handler({ projectPath: dir }));
@@ -350,6 +367,7 @@ describe("manifest_validate verdicts are always explainable", () => {
         background: { service_worker: "sw.js" },
       }),
     );
+
     fs.writeFileSync(path.join(dir, "src", "sw.js"), "");
 
     const result = JSON.parse(
@@ -374,6 +392,7 @@ describe("manifest_validate verdicts are always explainable", () => {
         background: { service_worker: "sw.js" },
       }),
     );
+
     fs.writeFileSync(path.join(dir, "src", "sw.js"), "");
 
     const result = JSON.parse(
@@ -383,6 +402,7 @@ describe("manifest_validate verdicts are always explainable", () => {
     const unsupported = Object.entries(result.value.browserSupport || {}).filter(
       ([, v]: [string, any]) => !v.supported,
     );
+
     for (const [browser] of unsupported) {
       expect(JSON.stringify(result.warnings)).toContain(browser);
     }
@@ -401,6 +421,7 @@ describe("manifest_validate verdicts are always explainable", () => {
         background: { service_worker: "sw.js" },
       }),
     );
+
     fs.writeFileSync(path.join(dir, "src", "sw.js"), "");
 
     const result = JSON.parse(
@@ -473,12 +494,14 @@ describe("build reports what the production artifact lost", () => {
         web_accessible_resources: [{ resources: ["inject.css"], matches: ["<all_urls>"] }],
       }),
     );
+
     const distDir = path.join(dir, "dist", "chrome");
     fs.mkdirSync(distDir, { recursive: true });
     fs.writeFileSync(
       path.join(distDir, "manifest.json"),
       JSON.stringify({ permissions: ["storage"] }),
     );
+
     cliResult = buildCliAnswer(dir, "chrome");
 
     const result = JSON.parse(await build.handler({ projectPath: dir }));
@@ -531,6 +554,7 @@ describe("wave-2 swarm lies stay fixed", () => {
         "chromium:permissions": ["proxy"],
       }),
     );
+
     fs.writeFileSync(
       path.join(dir, "src", "background.js"),
       "chrome.proxy.settings.set({value: {mode: 'direct'}});\n",
@@ -597,6 +621,7 @@ describe("wave-2 swarm lies stay fixed", () => {
       path.join(dir, "_locales", "en", "messages.json"),
       JSON.stringify({ appName: { message: "ok" } }),
     );
+
     fs.writeFileSync(
       path.join(dir, "manifest.json"),
       JSON.stringify({
@@ -626,6 +651,7 @@ describe("wave-2 swarm lies stay fixed", () => {
         icons: { "16": "icon16.png", "48": "icon48.png" },
       }),
     );
+
     fs.writeFileSync(path.join(dir, "icon16.png"), "");
     fs.writeFileSync(path.join(dir, "icon48.png"), "");
 
@@ -658,10 +684,11 @@ describe("wave-2 swarm lies stay fixed", () => {
       pid: DEAD_PID,
       runId: "old-run",
     });
+
     const dir = path.join(project, "dist", "extension-js", "chrome");
     fs.writeFileSync(
       path.join(dir, "logs.ndjson"),
-      [
+      `${[
         JSON.stringify({ type: "header", runId: "old-run" }),
         JSON.stringify({
           v: 1,
@@ -671,7 +698,7 @@ describe("wave-2 swarm lies stay fixed", () => {
           runId: "old-run",
           seq: 1,
         }),
-      ].join("\n") + "\n",
+      ].join("\n")  }\n`,
     );
 
     const result = JSON.parse(
@@ -690,10 +717,11 @@ describe("wave-2 swarm lies stay fixed", () => {
       pid: process.pid,
       runId: "run-1",
     });
+
     const dir = path.join(project, "dist", "extension-js", "chrome");
     fs.writeFileSync(
       path.join(dir, "logs.ndjson"),
-      [
+      `${[
         JSON.stringify({ type: "header", runId: "run-1" }),
         JSON.stringify({
           v: 1,
@@ -703,7 +731,7 @@ describe("wave-2 swarm lies stay fixed", () => {
           runId: "run-1",
           seq: 1,
         }),
-      ].join("\n") + "\n",
+      ].join("\n")  }\n`,
     );
 
     const result = JSON.parse(
@@ -721,10 +749,11 @@ describe("wave-2 swarm lies stay fixed", () => {
       runId: "mrun-abc",
       instanceId: "7ba4c78fbbe50dc1",
     });
+
     const dir = path.join(project, "dist", "extension-js", "chrome");
     fs.writeFileSync(
       path.join(dir, "logs.ndjson"),
-      [
+      `${[
         JSON.stringify({ type: "header", runId: "7ba4c78fbbe50dc1" }),
         JSON.stringify({
           v: 1,
@@ -734,7 +763,7 @@ describe("wave-2 swarm lies stay fixed", () => {
           runId: "7ba4c78fbbe50dc1",
           seq: 1,
         }),
-      ].join("\n") + "\n",
+      ].join("\n")  }\n`,
     );
 
     const result = JSON.parse(
@@ -752,6 +781,7 @@ describe("wave-2 swarm lies stay fixed", () => {
       runtime: "attached",
       browser: "chrome",
     });
+
     writeLogs(project, "chrome", [
       {
         v: 1,
@@ -875,6 +905,7 @@ describe("doctor names a dead browser instead of a generic build failure", () =>
       browserExitedAt: "2026-07-20T12:00:00.000Z",
       pid: process.pid,
     });
+
     cliResult = { code: 0, stdout: "[]", stderr: "" };
 
     const result = JSON.parse(
@@ -902,6 +933,7 @@ describe("create verifies the scaffold instead of trusting the library", () => {
       path.join(scaffoldDir, "package.json"),
       JSON.stringify({ name: "partial" }),
     );
+
     vi.doMock("extension-create", () => ({
       extensionCreate: async () => ({
         projectPath: scaffoldDir,
@@ -910,6 +942,7 @@ describe("create verifies the scaffold instead of trusting the library", () => {
         depsInstalled: false,
       }),
     }));
+
     const createTool = await import("../tools/create");
 
     const result = JSON.parse(

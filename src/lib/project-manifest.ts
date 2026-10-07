@@ -8,9 +8,9 @@
 
 import fs from "node:fs";
 import path from "node:path";
+
 import { engineManifestView } from "./engine-manifest-view";
 import { engineBrowserName } from "./browser-family";
-
 import { engineProjectRoot } from "./session-paths";
 
 /* @invariant One candidate list for the whole package. The built manifest is
@@ -32,6 +32,7 @@ export function manifestCandidates(
     path.join(projectPath, "src", "manifest.json"),
     path.join(projectPath, "manifest.json"),
   ];
+
   return [...new Set([...built, ...source])];
 }
 
@@ -51,6 +52,7 @@ export function readBuiltManifest(
   for (const file of manifestCandidates(projectPath, browser)) {
     try {
       const manifest = JSON.parse(fs.readFileSync(file, "utf8"));
+
       if (manifest && typeof manifest === "object") {
         /* @invariant A SOURCE manifest is read through the engine's prefix
            rule before it is judged. The built manifest has its browser
@@ -60,12 +62,14 @@ export function readBuiltManifest(
         const folded = isSourceManifest(file, projectPath)
           ? (engineManifestView(manifest, browser) as Record<string, unknown>)
           : (manifest as Record<string, unknown>);
+
         return { file, manifest: folded };
       }
     } catch {
       continue;
     }
   }
+
   return null;
 }
 
@@ -81,16 +85,21 @@ export function declaredBackground(
 ): DeclaredBackground {
   const background = manifest.background;
   if (!background || typeof background !== "object") return { kind: "none" };
+
   const block = background as Record<string, unknown>;
+
   if (typeof block.service_worker === "string" && block.service_worker) {
     return { kind: "service_worker", ref: block.service_worker };
   }
+
   if (Array.isArray(block.scripts) && block.scripts.length > 0) {
     return { kind: "scripts", ref: block.scripts.map(String).join(", ") };
   }
+
   if (typeof block.page === "string" && block.page) {
     return { kind: "page", ref: block.page };
   }
+
   return { kind: "none" };
 }
 
@@ -105,9 +114,11 @@ export function declaredContentScripts(
 ): DeclaredContentScript[] {
   const raw = manifest.content_scripts;
   if (!Array.isArray(raw)) return [];
+
   const out: DeclaredContentScript[] = [];
   raw.forEach((entry, index) => {
     if (!entry || typeof entry !== "object") return;
+
     const block = entry as Record<string, unknown>;
     out.push({
       index,
@@ -115,5 +126,6 @@ export function declaredContentScripts(
       js: Array.isArray(block.js) ? block.js.map(String) : [],
     });
   });
+
   return out;
 }

@@ -1,7 +1,8 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const TEST_COMMIT = "f7f4e6efb56a7e5ae08d58dbff3972d94af7d021";
 
@@ -11,9 +12,11 @@ let writeManifest = true;
 vi.mock("extension-create", () => ({
   extensionCreate: vi.fn(async (_input: string, opts: { template: string }) => {
     fs.mkdirSync(scaffoldTarget, { recursive: true });
+
     if (writeManifest) {
       fs.writeFileSync(path.join(scaffoldTarget, "manifest.json"), "{}");
     }
+
     return {
       projectPath: scaffoldTarget,
       projectName: path.basename(scaffoldTarget),
@@ -30,9 +33,11 @@ const { resetSessionIdentityForTests } = await import(
 );
 
 const tmpDirs: string[] = [];
+
 function tmpDir(): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-create-seed-"));
   tmpDirs.push(dir);
+
   return dir;
 }
 
@@ -54,6 +59,7 @@ beforeEach(() => {
     saved[key] = process.env[key];
     delete process.env[key];
   }
+
   process.env.EXTENSION_TEMPLATES_COMMIT = TEST_COMMIT;
   captures = [];
   writeManifest = true;
@@ -65,6 +71,7 @@ beforeEach(() => {
         url: String(url),
         body: JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>,
       });
+
       return new Response("{}", { status: 200 });
     }),
   );
@@ -72,13 +79,16 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+
   for (const key of ENV_KEYS) {
     if (saved[key] === undefined) delete process.env[key];
     else process.env[key] = saved[key];
   }
+
   for (const dir of tmpDirs.splice(0)) {
     fs.rmSync(dir, { recursive: true, force: true });
   }
+
   resetSessionIdentityForTests();
 });
 
@@ -87,10 +97,12 @@ async function seedCaptures(): Promise<Capture[]> {
     () => {
       const seeds = captures.filter((c) => c.body.event === "draft_seeded");
       expect(seeds.length).toBeGreaterThan(0);
+
       return seeds;
     },
     { timeout: 2000, interval: 10 },
   );
+
   return captures.filter((c) => c.body.event === "draft_seeded");
 }
 

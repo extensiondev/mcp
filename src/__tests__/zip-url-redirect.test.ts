@@ -24,6 +24,7 @@ const tmpDirs: string[] = [];
 function tmpProject(): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "zip-redirect-"));
   tmpDirs.push(dir);
+
   return dir;
 }
 
@@ -62,11 +63,13 @@ afterEach(() => {
   global.fetch = origFetch;
   if (origToken === undefined) delete process.env.EXTENSION_DEV_TOKEN;
   else process.env.EXTENSION_DEV_TOKEN = origToken;
+
   fs.rmSync(emptyConfig, { recursive: true, force: true });
   if (origXdg === undefined) delete process.env.XDG_CONFIG_HOME;
   else process.env.XDG_CONFIG_HOME = origXdg;
   if (origAppData === undefined) delete process.env.APPDATA;
   else process.env.APPDATA = origAppData;
+
   for (const dir of tmpDirs.splice(0)) {
     fs.rmSync(dir, { recursive: true, force: true });
   }
@@ -117,9 +120,11 @@ describe("this package's own zip read follows the redirect", () => {
     const impl = (async (input: unknown) => {
       const url = String(input);
       seen.push(url);
+
       if (url === ZIP) {
         return new Response(null, { status: 302, headers: { location: SIGNED } });
       }
+
       return new Response(null, {
         status: 200,
         headers: { "access-control-allow-origin": "*" },
@@ -172,6 +177,7 @@ describe("extension_preview_web names the redirect beside the zip it hands out",
       path.join(dir, "manifest.json"),
       JSON.stringify({ manifest_version: 3, name: "Zip Ext", version: "1.0.0" }),
     );
+
     global.fetch = uploadFetch({
       artifactId: "gen_zipnote",
       previewUrl: "https://preview.extension.dev/?preview=gen_zipnote",
@@ -199,6 +205,7 @@ describe("extension_preview_web names the redirect beside the zip it hands out",
       path.join(dir, "manifest.json"),
       JSON.stringify({ manifest_version: 3, name: "Zip Ext", version: "1.0.0" }),
     );
+
     global.fetch = uploadFetch({
       artifactId: "gen_nozip",
       previewUrl: "https://preview.extension.dev/?preview=gen_nozip",

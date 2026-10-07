@@ -1,7 +1,8 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   CredentialStoreUnreadableError,
@@ -37,6 +38,7 @@ beforeEach(() => {
   for (const key of ["XDG_CONFIG_HOME", "EXTENSION_DEV_TOKEN", "EXTENSION_DEV_PROJECT"]) {
     saved[key] = process.env[key];
   }
+
   tmp = fs.mkdtempSync(path.join(os.tmpdir(), "extdev-creds-unreadable-"));
   process.env.XDG_CONFIG_HOME = tmp;
   delete process.env.EXTENSION_DEV_TOKEN;
@@ -48,27 +50,32 @@ afterEach(() => {
     if (value === undefined) delete process.env[key];
     else process.env[key] = value;
   }
+
   try {
     fs.chmodSync(path.join(tmp, "extension-dev"), 0o700);
     fs.chmodSync(credentialsPath(), 0o600);
   } catch {
     // The cell may not have created them.
   }
+
   fs.rmSync(tmp, { recursive: true, force: true });
 });
 
 function seedTwo(): string {
   writeCredentials(login("alpha"));
   writeCredentials(login("beta"));
+
   return credentialsPath();
 }
 
 function corrupt(file: string, how: "truncated" | "newer" | "array" | "no-entries") {
   const text = fs.readFileSync(file, "utf8");
   if (how === "truncated") fs.writeFileSync(file, text.slice(0, text.length - 20));
+
   if (how === "newer") {
     fs.writeFileSync(file, JSON.stringify({ ...JSON.parse(text), version: 3 }));
   }
+
   if (how === "array") fs.writeFileSync(file, "[]");
   if (how === "no-entries") fs.writeFileSync(file, JSON.stringify({ version: 2, active: null }));
 }
@@ -84,6 +91,7 @@ describe("a login store that cannot be read is never written over", () => {
       expect(() => writeCredentials(login("gamma"))).toThrow(
         CredentialStoreUnreadableError,
       );
+
       expect(fs.readFileSync(file, "utf8")).toBe(before);
     },
   );
@@ -96,11 +104,13 @@ describe("a login store that cannot be read is never written over", () => {
     expect(() => writeCredentialBatch([login("delta"), login("epsilon")])).toThrow(
       /version 3 store/,
     );
+
     expect(fs.readFileSync(file, "utf8")).toBe(before);
   });
 
   it("refuses when the file exists and this user may not read it", () => {
     if (process.platform === "win32" || process.getuid?.() === 0) return;
+
     const file = seedTwo();
     fs.chmodSync(file, 0o000);
 
@@ -117,6 +127,7 @@ describe("a login store that cannot be read is never written over", () => {
     corrupt(file, "truncated");
 
     let message = "";
+
     try {
       persistTokenResponse({
         apiBase: "https://www.extension.dev",
@@ -126,6 +137,7 @@ describe("a login store that cannot be read is never written over", () => {
     } catch (err) {
       message = String((err as Error).message);
     }
+
     expect(message).toContain(file);
     expect(message).toContain("nothing was stored");
     expect(message).toContain("extension_auth (action: logout)");
@@ -164,6 +176,7 @@ describe("the store is replaced whole", () => {
     } finally {
       rename.mockRestore();
     }
+
     expect(fs.readFileSync(file, "utf8")).toBe(before);
     expect(fs.readdirSync(path.dirname(file)).sort()).toEqual(["auth.json"]);
   });
@@ -181,6 +194,7 @@ describe("the store is replaced whole", () => {
       "acme/beta",
       "acme/gamma",
     ]);
+
     expect(fs.existsSync(lock)).toBe(false);
   });
 
@@ -194,6 +208,7 @@ describe("the store is replaced whole", () => {
     let clock = realNow();
     const now = vi.spyOn(Date, "now").mockImplementation(() => {
       clock += 400;
+
       return clock;
     });
     const stat = vi.spyOn(fs, "statSync").mockImplementation(((target: fs.PathLike) =>
@@ -208,6 +223,7 @@ describe("the store is replaced whole", () => {
       stat.mockRestore();
       fs.rmSync(lock, { force: true });
     }
+
     expect(fs.readFileSync(file, "utf8")).toBe(before);
     expect(fs.existsSync(`${file}.lock`)).toBe(false);
   });

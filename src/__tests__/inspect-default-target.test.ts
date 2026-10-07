@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
+import { handler } from "../tools/inspect";
+
 const COMPANION = "kgdaecdpfkikjncaalnmmnjjfpofkcbl";
 
 const cdp = vi.hoisted(() => ({
@@ -24,6 +26,7 @@ vi.mock("../lib/cdp", () => ({
     async navigate() {}
     async evaluate(_sessionId: string, expr: string) {
       cdp.evaluations.push(expr);
+
       return expr === "location.href" ? cdp.evalResult : {};
     }
     async getPageMeta() {
@@ -57,8 +60,6 @@ vi.mock("../lib/cdp-port", () => ({
   CDP_PORT_MISSING_HINT: "",
 }));
 
-import { handler } from "../tools/inspect";
-
 describe("extension_inspect default target selection", () => {
   it("prefers the guest's surface over the toolchain's newtab welcome page", async () => {
     cdp.targets = [
@@ -70,6 +71,7 @@ describe("extension_inspect default target selection", () => {
         title: "popup",
       },
     ];
+
     const out = JSON.parse(
       await handler({ projectPath: "/p", browser: "chrome", include: [] }),
     );
@@ -88,6 +90,7 @@ describe("extension_inspect default target selection", () => {
       },
       { id: "web", type: "page", url: "https://site.test/", title: "site" },
     ];
+
     const out = JSON.parse(
       await handler({ projectPath: "/p", browser: "chrome", include: [] }),
     );
@@ -98,6 +101,7 @@ describe("extension_inspect default target selection", () => {
     cdp.targets = [
       { id: "welcome", type: "page", url: "chrome://newtab/", title: "Welcome" },
     ];
+
     cdp.evaluations.length = 0;
     cdp.evalResult = `chrome-extension://${COMPANION}/pages/welcome.html`;
     const out = JSON.parse(
@@ -114,8 +118,10 @@ describe("extension_inspect default target selection", () => {
     cdp.targets = [
       { id: "welcome", type: "page", url: "chrome://newtab/", title: "tab" },
     ];
+
     cdp.evalResult =
       "chrome-extension://aaaabbbbccccddddeeeeffffgggghhhh/newtab.html";
+
     const out = JSON.parse(
       await handler({ projectPath: "/p", browser: "chrome", include: [] }),
     );
@@ -129,6 +135,7 @@ describe("extension_inspect default target selection", () => {
       { id: "welcome", type: "page", url: "chrome://newtab/", title: "Welcome" },
       { id: "web", type: "page", url: "https://site.test/", title: "site" },
     ];
+
     const out = JSON.parse(
       await handler({
         projectPath: "/p",

@@ -6,12 +6,13 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
+import fs from "node:fs";
+import path from "node:path";
+
 import {
   SESSION_BROWSER,
   SESSION_PROJECT_PATH,
 } from "../lib/common-schema";
-import fs from "node:fs";
-import path from "node:path";
 import { CDPClient } from "../lib/cdp";
 import { envelope } from "../lib/envelope";
 import { isChromiumFamily, isGeckoFamily } from "../lib/browser-family";
@@ -63,6 +64,7 @@ function readOwnIdentity(
   browser: string,
 ): OwnIdentity | null {
   let contract: Record<string, unknown>;
+
   try {
     contract = JSON.parse(
       fs.readFileSync(readyContractPath(projectPath, browser), "utf8"),
@@ -93,6 +95,7 @@ function readOwnIdentity(
       const manifest = JSON.parse(
         fs.readFileSync(path.join(distPath, "manifest.json"), "utf8"),
       );
+
       if (
         !name &&
         typeof manifest?.name === "string" &&
@@ -100,6 +103,7 @@ function readOwnIdentity(
       ) {
         name = manifest.name;
       }
+
       if (!version && typeof manifest?.version === "string") {
         version = manifest.version;
       }
@@ -108,6 +112,7 @@ function readOwnIdentity(
   }
 
   if (ids.length === 0 && !name) return null;
+
   return { ids, name, version };
 }
 
@@ -123,9 +128,11 @@ export async function handler(args: {
     args.browser,
     "chrome",
   );
+
   if (isGeckoFamily(browser)) {
     return listGeckoExtensions(args.projectPath, browser);
   }
+
   if (!isChromiumFamily(browser)) {
     return envelope({
       ok: false,
@@ -140,6 +147,7 @@ export async function handler(args: {
   }
 
   const resolved = await resolveCdpPort(args.projectPath, browser);
+
   if (!resolved) {
     return envelope({
       ok: false,
@@ -153,12 +161,15 @@ export async function handler(args: {
       hint: `Start a dev session first with extension_dev, then use extension_wait to confirm it is ready. ${CDP_PORT_MISSING_HINT}`,
     });
   }
+
   const cdpPort = resolved.port;
 
   const cdp = new CDPClient();
+
   try {
     let targets: Awaited<ReturnType<CDPClient["getTargets"]>> | null = null;
     let lastError: unknown = null;
+
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
         const browserWsUrl = await CDPClient.discoverBrowserWsUrl(cdpPort);
@@ -168,19 +179,24 @@ export async function handler(args: {
       } catch (error) {
         lastError = error;
         cdp.disconnect();
+
         if (attempt < 2) {
           await new Promise((resolve) => setTimeout(resolve, 800));
         }
       }
     }
+
     if (!targets) throw lastError;
 
     const byId = new Map<string, Array<{ type: string; url: string }>>();
+
     for (const t of targets) {
       const url = String(t.url ?? "");
       if (!url.startsWith("chrome-extension://")) continue;
+
       const id = url.slice("chrome-extension://".length).split("/")[0];
       if (!id) continue;
+
       const list = byId.get(id) ?? [];
       list.push({ type: String(t.type ?? ""), url });
       byId.set(id, list);
@@ -189,6 +205,7 @@ export async function handler(args: {
     const own = readOwnIdentity(args.projectPath, browser);
 
     const extensions: ExtensionEntry[] = [];
+
     for (const [id, ctxTargets] of byId) {
       const entry: ExtensionEntry = {
         id,
@@ -200,6 +217,7 @@ export async function handler(args: {
         const info = (await cdp.sendCommand("Extensions.getExtensionInfo", {
           extensionId: id,
         })) as { extensionInfo?: { name?: string; version?: string } };
+
         if (info?.extensionInfo) {
           entry.name = info.extensionInfo.name;
           entry.version = info.extensionInfo.version;
@@ -210,9 +228,11 @@ export async function handler(args: {
 
       if (own?.ids.includes(id)) {
         entry.ownExtension = true;
+
         if (entry.name === undefined && own.name !== undefined) {
           entry.name = own.name;
           if (own.version !== undefined) entry.version = own.version;
+
           entry.source = "session-contract";
         }
       }
@@ -233,10 +253,12 @@ export async function handler(args: {
       if ((a.ownExtension ?? false) !== (b.ownExtension ?? false)) {
         return a.ownExtension ? -1 : 1;
       }
+
       return (a.name ?? a.id).localeCompare(b.name ?? b.id);
     });
 
     const ownEntry = extensions.find((e) => e.ownExtension);
+
     return envelope({
       ok: true,
       command: schema.name,
@@ -272,6 +294,7 @@ async function listGeckoExtensions(
   browser: string,
 ): Promise<string> {
   const resolved = await resolveRdpPort(projectPath, browser);
+
   if (!resolved) {
     return envelope({
       ok: false,
@@ -285,22 +308,26 @@ async function listGeckoExtensions(
       hint: `Start a dev session first with extension_dev, then use extension_wait to confirm it is ready. ${RDP_PORT_MISSING_HINT}`,
     });
   }
+
   const rdpPort = resolved.port;
 
   try {
     let addons: Awaited<ReturnType<typeof rdpListAddons>> | null = null;
     let lastError: unknown = null;
+
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
         addons = await rdpListAddons(rdpPort);
         break;
       } catch (error) {
         lastError = error;
+
         if (attempt < 2) {
           await new Promise((resolve) => setTimeout(resolve, 800));
         }
       }
     }
+
     if (!addons) throw lastError;
 
     const own = readOwnIdentity(projectPath, browser);
@@ -320,9 +347,11 @@ async function listGeckoExtensions(
         };
         if (typeof addon.name === "string") entry.name = addon.name;
         if (typeof addon.version === "string") entry.version = addon.version;
+
         if (addon.temporarilyInstalled === true) {
           entry.temporarilyInstalled = true;
         }
+
         return entry;
       });
 
@@ -330,8 +359,10 @@ async function listGeckoExtensions(
       const byName = extensions.filter((e) => e.name === own.name);
       if (byName.length === 1) byName[0].ownExtension = true;
     }
+
     if (!extensions.some((e) => e.ownExtension)) {
       const temporary = extensions.filter((e) => e.temporarilyInstalled);
+
       if (temporary.length === 1) {
         /* @invariant A lone temporary add-on is this project's only by
            inference: when the project's own add-on failed to install, the
@@ -339,9 +370,11 @@ async function listGeckoExtensions(
            match is labelled inferred and never stated as read. */
         temporary[0].ownExtension = true;
         temporary[0].ownExtensionInferred = true;
+
         if (temporary[0].name === undefined && own?.name !== undefined) {
           temporary[0].name = own.name;
           if (own.version !== undefined) temporary[0].version = own.version;
+
           temporary[0].source = "session-contract";
         }
       }
@@ -351,10 +384,12 @@ async function listGeckoExtensions(
       if ((a.ownExtension ?? false) !== (b.ownExtension ?? false)) {
         return a.ownExtension ? -1 : 1;
       }
+
       return (a.name ?? a.id).localeCompare(b.name ?? b.id);
     });
 
     const ownEntry = extensions.find((e) => e.ownExtension);
+
     return envelope({
       ok: true,
       command: schema.name,

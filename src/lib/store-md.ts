@@ -37,6 +37,7 @@ function classifyStoreHeading(heading: string): StoreKeyInMd | undefined {
   if (/\bfirefox\b|\bamo\b|firefox-amo/.test(text)) return "firefox";
   if (/\bedge\b|edge-add-ons/.test(text)) return "edge";
   if (/\bchrome\b|chrome-web-store/.test(text)) return "chrome";
+
   return undefined;
 }
 
@@ -54,6 +55,7 @@ function splitSections(content: string, level: number): Section[] {
   const pattern = new RegExp(`^${marker} +(.+)$`, "gm");
   const sections: Section[] = [];
   let match = pattern.exec(content);
+
   while (match) {
     const start = pattern.lastIndex;
     const next = pattern.exec(content);
@@ -61,8 +63,10 @@ function splitSections(content: string, level: number): Section[] {
       heading: match[1]!.trim(),
       body: content.slice(start, next ? next.index : content.length),
     });
+
     match = next;
   }
+
   return sections;
 }
 
@@ -70,9 +74,11 @@ function fieldText(storeBody: string, fieldName: string): string | undefined {
   for (const sub of splitSections(storeBody, 3)) {
     if (sub.heading.toLowerCase().startsWith(fieldName)) {
       const text = stripComments(sub.body).trim();
+
       return text.length > 0 ? text : undefined;
     }
   }
+
   return undefined;
 }
 
@@ -81,14 +87,17 @@ export function parseStoreMd(content: string): StoreMdData {
 
   for (const section of splitSections(content, 2)) {
     const store = classifyStoreHeading(section.heading);
+
     if (store === "firefox" && !data.firefox) {
       const approvalNotes = fieldText(section.body, "reviewer notes");
       const releaseNotes = fieldText(section.body, "release notes");
+
       if (approvalNotes || releaseNotes) {
         data.firefox = { approvalNotes, releaseNotes };
       }
     } else if (store === "edge" && !data.edge) {
       const certificationNotes = fieldText(section.body, "certification notes");
+
       if (certificationNotes) {
         data.edge = { certificationNotes };
       }

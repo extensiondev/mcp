@@ -126,6 +126,7 @@ function ownershipOf(owner: ArtifactOwner | null | undefined): Ownership {
   const kind = text(owner?.kind);
   if (kind === "project") return "project";
   if (kind === "user") return "personal";
+
   return "unknown";
 }
 
@@ -145,6 +146,7 @@ function creditOf(sharedBy: ArtifactPublisher | null | undefined): {
   if (login) return { credit: login, creditSource: "login" };
 
   const tokenId = text(sharedBy?.tokenId);
+
   if (tokenId) {
     return { credit: `CLI token ${tokenId}`, creditSource: "tokenId" };
   }
@@ -188,12 +190,15 @@ function attributionOf(artifact: ListedArtifact): ShareAttribution {
  */
 function localIndex(entries: SharedPreviewEntry[]): Map<string, SharedPreviewEntry> {
   const index = new Map<string, SharedPreviewEntry>();
+
   for (const entry of entries) {
     const existing = index.get(entry.artifactId);
+
     if (!existing || String(entry.sharedAt) > String(existing.sharedAt)) {
       index.set(entry.artifactId, entry);
     }
   }
+
   return index;
 }
 
@@ -212,16 +217,21 @@ function localOnlyStatus(
   if (completeness === "cut") {
     return "unknown: the platform list was cut short, so this share may simply be past the returned window.";
   }
+
   if (completeness === "unsaid") {
     return "unknown: the platform did not say whether that list was whole, so this share may simply be past the returned window.";
   }
+
   const expiresAt = entry.expiresAt ? Date.parse(entry.expiresAt) : NaN;
+
   if (Number.isFinite(expiresAt) && expiresAt <= now) {
     return "expired: its own expiresAt has passed, and the platform no longer lists it.";
   }
+
   if (liveFiltered) {
     return 'not in this live-only listing: the platform was asked for live shares only, so this one may be expired or revoked rather than not owned. Rerun with status:"all" to tell.';
   }
+
   return "not owned by this token: expired and pruned, revoked long ago, or shared while logged in to a different project.";
 }
 
@@ -265,6 +275,7 @@ async function listShares(args: {
 
   if (!listing.ok) {
     const isAuth = listing.error.name === "SharesAuthError";
+
     return envelope({
       ok: true,
       command: "extension_shares",
@@ -309,6 +320,7 @@ async function listShares(args: {
   const shares = listing.data.artifacts.map((artifact: ListedArtifact) => {
     seen.add(artifact.artifactId);
     const entry = byId.get(artifact.artifactId);
+
     return {
       ...artifact,
       owner: artifact.owner ?? null,
@@ -421,6 +433,7 @@ async function revokeShare(args: {
 }): Promise<string> {
   const supplied = String(args.artifactId || args.url || "").trim();
   const ref = parseArtifactRef(supplied);
+
   if (!ref) {
     return envelope({
       ok: false,
@@ -449,6 +462,7 @@ async function revokeShare(args: {
     token: token || "",
     api: args.api,
   };
+
   if (token) {
     const gate = await evaluateApproval({
       ...gateInput,
@@ -478,6 +492,7 @@ async function revokeShare(args: {
       },
     });
   }
+
   const result = await revokeArtifact({
     artifactId: ref,
     token,
@@ -507,6 +522,7 @@ async function revokeShare(args: {
         value: { action: "revoke", artifactId: ref },
       });
     }
+
     if (
       token &&
       !args.approvalId &&
@@ -515,7 +531,9 @@ async function revokeShare(args: {
     ) {
       return requestApprovalAfterRefusal(gateInput);
     }
+
     const isAuth = result.error.name === "SharesAuthError";
+
     return envelope({
       ok: false,
       command: "extension_shares",
@@ -587,6 +605,7 @@ export async function handler(args: {
       ...(args.project ? { project: args.project } : {}),
     });
   }
+
   return listShares({
     ...(args.projectPath ? { projectPath: args.projectPath } : {}),
     ...(args.status ? { status: args.status } : {}),

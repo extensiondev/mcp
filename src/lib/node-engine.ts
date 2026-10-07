@@ -20,6 +20,7 @@ export function engineNodeRange(): { range: string; engine: string } | null {
       engines?: { node?: string };
     };
     const range = pkg.engines?.node?.trim();
+
     return range ? { range, engine: pkg.version ?? "unknown" } : null;
   } catch {
     return null;
@@ -28,6 +29,7 @@ export function engineNodeRange(): { range: string; engine: string } | null {
 
 function parts(version: string): number[] | null {
   const m = version.trim().match(/^v?(\d+)(?:\.(\d+))?(?:\.(\d+))?/);
+
   return m ? [Number(m[1]), Number(m[2] ?? 0), Number(m[3] ?? 0)] : null;
 }
 
@@ -36,10 +38,12 @@ export function meetsNodeRange(version: string, range: string): boolean | null {
   const have = parts(version);
   const need = m ? parts(m[1]) : null;
   if (!have || !need) return null;
+
   for (let i = 0; i < 3; i++) {
     if (have[i] > need[i]) return true;
     if (have[i] < need[i]) return false;
   }
+
   return true;
 }
 
@@ -51,6 +55,7 @@ export function nodeCheck(version: string): {
 } {
   const where = `Node ${version} on ${process.platform}/${process.arch}`;
   const engine = engineNodeRange();
+
   if (!engine) {
     return {
       check: "node",
@@ -58,7 +63,9 @@ export function nodeCheck(version: string): {
       detail: `${where}; the installed engine declares no Node range, so this version is unverified.`,
     };
   }
+
   const verdict = meetsNodeRange(version, engine.range);
+
   if (verdict === null) {
     return {
       check: "node",
@@ -66,6 +73,7 @@ export function nodeCheck(version: string): {
       detail: `${where}; extension-develop ${engine.engine} declares engines.node "${engine.range}", which this check cannot read.`,
     };
   }
+
   return {
     check: "node",
     status: verdict ? "pass" : "fail",

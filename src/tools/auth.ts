@@ -85,6 +85,7 @@ export async function handler(args: {
         "Pass either project (one login) or projects (one approval for several), not both.",
       );
     }
+
     return loginToProjects({
       projects: args.projects,
       deviceCode: args.deviceCode,

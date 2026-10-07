@@ -9,6 +9,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
@@ -57,6 +58,7 @@ afterEach(() => {
     if (saved[key] === undefined) delete process.env[key];
     else process.env[key] = saved[key];
   }
+
   vi.unstubAllGlobals();
   fs.rmSync(tmp, { recursive: true, force: true });
 });
@@ -67,12 +69,15 @@ describe("--project", () => {
       ok: true,
       options: { project: "acme/app" },
     });
+
     expect(resolveServerOptions(["--project=acme/app"], {})).toMatchObject({
       options: { project: "acme/app" },
     });
+
     expect(
       resolveServerOptions([], { EXTENSION_DEV_PROJECT: "acme/app" }),
     ).toMatchObject({ options: { project: "acme/app" } });
+
     expect(resolveServerOptions([], {})).toEqual({
       ok: true,
       options: DEFAULT_SERVER_OPTIONS,
@@ -135,6 +140,7 @@ describe("pinProjectArgs", () => {
       pinned,
     );
     expect("refused" in out).toBe(true);
+
     if ("refused" in out) {
       const body = JSON.parse(out.refused);
       expect(body.status).toBe("project-pinned");
@@ -146,9 +152,11 @@ describe("pinProjectArgs", () => {
     expect(
       pinProjectArgs("extension_auth", { action: "status" }, schema, pinned),
     ).toEqual({ args: { action: "status" } });
+
     expect(pinProjectArgs("extension_dev", {}, { properties: {} }, pinned)).toEqual({
       args: {},
     });
+
     expect(
       pinProjectArgs("extension_submit", { project: "x/y" }, schema, DEFAULT_SERVER_OPTIONS),
     ).toEqual({ args: { project: "x/y" } });

@@ -3,17 +3,21 @@
  * token and from the stored login otherwise; a lane is closed on the
  * server's code only. */
 
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
+
 import { writeCredentials } from "../lib/credentials";
 import { laneClosedByServer, readTokenClaims, resolveCredential } from "../lib/credential-source";
 
 const FUTURE = Math.floor(Date.now() / 1000) + 3600;
+
 function claimsToken(u: string, p: string, exp = FUTURE): string {
   return `${Buffer.from(JSON.stringify({ u, p, exp, n: "x", a: "cli" })).toString("base64url")}.sig`;
 }
+
 function login(workspace: string, project: string) {
   writeCredentials({ version: 1, token: `stored-${project}`, workspaceSlug: workspace, projectSlug: project, expiresAt: FUTURE, api: "https://www.extension.dev" });
 }
@@ -27,11 +31,13 @@ beforeEach(() => {
   delete process.env.EXTENSION_DEV_TOKEN;
   delete process.env.EXTENSION_DEV_PROJECT;
 });
+
 afterEach(() => {
   for (const [key, value] of Object.entries(saved)) {
     if (value === undefined) delete process.env[key];
     else process.env[key] = value;
   }
+
   fs.rmSync(tmp, { recursive: true, force: true });
 });
 
@@ -39,6 +45,7 @@ describe("readTokenClaims", () => {
   it("reads the workspace, project and expiry off a platform token", () => {
     expect(readTokenClaims(claimsToken("Acme", "Widget", 123))).toEqual({ workspace: "acme", project: "widget", expiresAt: 123 });
   });
+
   it("answers null for a token with no readable claims", () => {
     expect(readTokenClaims("not-a-token")).toBeNull();
     expect(readTokenClaims("")).toBeNull();

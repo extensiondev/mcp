@@ -1,5 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
+import { templateCatalogUrl } from "../lib/template-artifact-source";
+import { searchTemplates } from "../tools/list-templates";
+
 const ROWS = [
     {
       slug: "content-react",
@@ -20,9 +23,6 @@ vi.mock("../lib/templates-cache", () => ({
   listTemplates: async () => ROWS,
   listTemplatesWithSource: async () => ({ templates: ROWS, source: "live" }),
 }));
-
-import { templateCatalogUrl } from "../lib/template-artifact-source";
-import { searchTemplates } from "../tools/list-templates";
 
 beforeEach(() => {
   delete process.env.EXTENSION_DEV_API_URL;
@@ -58,6 +58,7 @@ describe("extension_templates list emission", () => {
     expect(t.downloads).toEqual({
       chrome: "https://example.com/content-react-chrome.zip",
     });
+
     expect(t.catalogUrl).toBe(
       "https://templates.extension.dev/content-react?utm_source=mcp&utm_medium=tool",
     );

@@ -41,11 +41,13 @@ function header(file) {
 
 async function main() {
   await fs.mkdir(VENDOR_DIR, { recursive: true });
+
   for (const file of FILES) {
     const raw = await fs.readFile(path.join(SOURCE_DIR, file), "utf8");
     await fs.writeFile(path.join(VENDOR_DIR, file), header(file) + raw, "utf8");
     process.stderr.write(`synced ${file}\n`);
   }
+
   process.stderr.write(`Vendored ${FILES.length} file(s) into ${VENDOR_DIR}\n`);
 }
 

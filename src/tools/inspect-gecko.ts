@@ -44,11 +44,13 @@ function buildBridgeInspectExpression(opts: {
   maxBytes: number;
 }): string {
   const parts: string[] = ["const out = {};"];
+
   if (opts.meta) {
     parts.push(
       `try { out.meta = { url: location.href, title: document.title, readyState: document.readyState }; } catch (e) {}`,
     );
   }
+
   if (opts.summary) {
     parts.push(
       `try {
@@ -64,6 +66,7 @@ function buildBridgeInspectExpression(opts: {
       } catch (e) { out.summary = {}; }`,
     );
   }
+
   if (opts.html) {
     parts.push(
       `try {
@@ -74,20 +77,25 @@ function buildBridgeInspectExpression(opts: {
       } catch (e) { (out.failedSections = out.failedSections || []).push({ section: "html", reason: String(e) }); }`,
     );
   }
+
   if (opts.domSnapshot) {
     parts.push(`try { out.domSnapshot = ${domSnapshotScript(500)}; } catch (e) { (out.failedSections = out.failedSections || []).push({ section: "dom_snapshot", reason: String(e) }); }`);
   }
+
   if (opts.extensionRoots) {
     parts.push(
       `try { out.extensionRoots = ${EXTENSION_ROOT_META_SCRIPT}; } catch (e) {}`,
     );
   }
+
   if (opts.probes.length) {
     parts.push(
       `out.probes = ${probeSelectorsScript(opts.probes)};`,
     );
   }
+
   parts.push("return out;");
+
   return `(() => { ${parts.join("\n")} })()`;
 }
 
@@ -114,14 +122,17 @@ function closedShadowWalkerCode(cap: number): string {
    test, so https://www.youtube.com/* matched no tab. */
 export function matchPatternRegexSource(pattern: string): string {
   if (pattern === "<all_urls>") return "^(https?|file|ftp):";
+
   const m = /^(\*|https?|file|ftp|wss?):\/\/([^/]*)(\/.*)?$/.exec(pattern);
-  if (!m) return "^" + pattern.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*") + "$";
+  if (!m) return `^${  pattern.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*")  }$`;
+
   const scheme = m[1] === "*" ? "https?" : m[1];
   const host = m[2] === "*" ? "[^/]*" : m[2].startsWith("*.")
-    ? "([^/]*\\.)?" + m[2].slice(2).replace(/[.]/g, "\\.")
+    ? `([^/]*\\.)?${  m[2].slice(2).replace(/[.]/g, "\\.")}`
     : m[2].replace(/[.]/g, "\\.");
   const pathPart = (m[3] ?? "/").replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*");
-  return "^" + scheme + "://" + host + pathPart + "$";
+
+  return `^${  scheme  }://${  host  }${pathPart  }$`;
 }
 
 export function executeScriptExpression(
@@ -137,6 +148,7 @@ export function executeScriptExpression(
           ? `tabs.find(function (t) { return new RegExp(${JSON.stringify(matchPatternRegexSource(urlFilter))}).test(String(t.url || "")); })`
           : `tabs.find(function (t) { return String(t.url || "").toLowerCase().indexOf(${JSON.stringify(urlFilter.toLowerCase())}) !== -1; })`
         : `(tabs.find(function (t) { return t.active; }) || tabs[0])`;
+
   return `browser.tabs.query({}).then(function (tabs) {
     var tab = ${pick};
     if (!tab) return { error: "no matching tab" };
@@ -171,13 +183,16 @@ async function collectGeckoDeepDom(
     TOOL,
   );
   let parsed: any;
+
   try {
     parsed = JSON.parse(raw);
   } catch {
     parsed = null;
   }
+
   const value = parsed?.ok === true ? parsed.value : null;
   const frame = Array.isArray(value?.frames) ? value.frames[0] : null;
+
   if (frame && Array.isArray(frame.closed)) {
     result.closedShadowRoots = frame.closed.map(
       (c: { host?: string; html?: string; truncated?: boolean }) => ({
@@ -187,15 +202,19 @@ async function collectGeckoDeepDom(
         ...(c.truncated ? { truncated: true } : {}),
       }),
     );
+
     result.deepDom = true;
     result.closedShadowRootsVisible = frame.api === true;
+
     if (frame.api !== true) {
       notes.push(
         `deepDom on ${browser}: this content-script context has no openOrClosedShadowRoot, so closed shadow roots could not be seen; an empty list here does not mean there are none.`,
       );
     }
+
     return;
   }
+
   const reason =
     value?.error ??
     parsed?.error?.message ??
@@ -216,10 +235,13 @@ async function collectGeckoConsole(
   const resolved = await resolveRdpPort(args.projectPath, browser, {
     waitMs: 5_000,
   });
+
   if (!resolved) {
     notes.push(fallbackNote);
+
     return;
   }
+
   try {
     const messages = await rdpCollectConsoleMessages(resolved.port, {
       urlFilter,
@@ -251,8 +273,10 @@ export async function inspectViaBridge(
   const surface = args.url
     ? surfaceForExtensionUrl(args.projectPath, browser, args.url)
     : null;
+
   if (args.url && !surface && EXTENSION_ORIGIN.test(args.url)) {
     const declared = declaredSurfaces(args.projectPath, browser) ?? [];
+
     return envelope({
       ok: false,
       command: TOOL,
@@ -276,7 +300,9 @@ export async function inspectViaBridge(
       TOOL,
     );
     if ("error" in listed) return listed.error;
+
     const already = listed.tabs.some((t) => t.url.includes(args.url!));
+
     if (!already) {
       const nav = await navigateToUrlViaBridge(
         args.projectPath,
@@ -285,6 +311,7 @@ export async function inspectViaBridge(
         args.timeout,
         TOOL,
       );
+
       try {
         if (JSON.parse(nav)?.ok !== true) return nav;
       } catch {
@@ -324,6 +351,7 @@ export async function inspectViaBridge(
     TOOL,
   );
   let parsed: any;
+
   try {
     parsed = JSON.parse(raw);
   } catch {
@@ -331,6 +359,7 @@ export async function inspectViaBridge(
   }
 
   let value = parsed?.ok === true ? (parsed.value ?? {}) : null;
+
   if (
     value === null &&
     /scripting is not available/i.test(String(parsed?.error?.message ?? ""))
@@ -350,14 +379,17 @@ export async function inspectViaBridge(
       args.timeout,
       TOOL,
     );
+
     try {
       parsed = JSON.parse(raw);
     } catch {
       return raw;
     }
+
     const frame = Array.isArray(parsed?.value?.frames)
       ? parsed.value.frames[0]
       : null;
+
     if (parsed?.ok === true && frame && typeof frame === "object") {
       value = frame;
     } else if (parsed?.ok === true) {
@@ -376,24 +408,31 @@ export async function inspectViaBridge(
       });
     }
   }
+
   if (value === null) return raw;
+
   const result: Record<string, unknown> = {
     browser,
     transport: "bridge",
     ...(surface ? { surface: surface.context, document: surface.document } : {}),
   };
+
   if (value.meta) {
     result.target = { url: value.meta.url, title: value.meta.title };
     if (include.has("meta")) result.meta = value.meta;
   }
+
   if (include.has("summary") && value.summary) result.summary = value.summary;
+
   if (include.has("html") && typeof value.html === "string") {
     result.html = value.html;
     if (value.htmlTruncated) result.htmlTruncated = true;
   }
+
   if (include.has("dom_snapshot") && value.domSnapshot) {
     const snap = normalizeDomSnapshot(value.domSnapshot, 500);
     result.domSnapshot = Array.isArray(value.domSnapshot) ? value.domSnapshot : snap.nodes;
+
     if (snap.truncated) {
       result.domSnapshotTruncated = {
         listed: snap.nodes.length,
@@ -403,24 +442,31 @@ export async function inspectViaBridge(
       };
     }
   }
+
   const failedSections: Array<{ section: string; reason: string }> = Array.isArray(value.failedSections)
     ? value.failedSections.filter((f: unknown) => f && typeof f === "object")
     : [];
+
   if (failedSections.length) {
     result.failedSections = failedSections;
+
     for (const f of failedSections) {
       notes.push(`${f.section} could not be read: ${f.reason}. Its value is absent, not empty.`);
     }
   }
+
   if (include.has("extension_roots") && value.extensionRoots !== undefined) {
     result.extensionRoots = value.extensionRoots;
   }
+
   let probeWarning: string | null = null;
+
   if (value.probes) {
     result.probes = value.probes;
     const jsLooking = (args.probe ?? []).filter((p) =>
       /^typeof\s|^(chrome|browser|window|document)\.|\(\)|=>|===/.test(p),
     );
+
     if (jsLooking.length) {
       probeWarning =
         `Probes are CSS selectors run through querySelectorAll against the live page, NOT JavaScript expressions. ` +
@@ -440,6 +486,7 @@ export async function inspectViaBridge(
   if (include.has("console")) {
     await collectGeckoConsole(args, browser, urlFilter, result, notes);
   }
+
   if (args.deepDom) {
     const cap = maxBytes > 0 ? maxBytes : 65536;
     await collectGeckoDeepDom(args, browser, urlFilter, cap, result, notes);

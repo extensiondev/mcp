@@ -1,8 +1,12 @@
-import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+
+import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
+
 import type { RdpAddon } from "../lib/rdp";
+import type * as RdpModule from "../lib/rdp";
+import type * as CdpPortModule from "../lib/cdp-port";
 
 
 let rdpAddons: RdpAddon[] = [];
@@ -11,19 +15,22 @@ let rdpPort: number | null = 9223;
 const listAddonsCalls: number[] = [];
 
 vi.mock("../lib/rdp", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../lib/rdp")>();
+  const actual = await importOriginal<typeof RdpModule>();
+
   return {
     ...actual,
     rdpListAddons: async (port: number) => {
       listAddonsCalls.push(port);
       if (rdpError) throw rdpError;
+
       return rdpAddons;
     },
   };
 });
 
 vi.mock("../lib/cdp-port", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../lib/cdp-port")>();
+  const actual = await importOriginal<typeof CdpPortModule>();
+
   return {
     ...actual,
     resolveRdpPort: async () =>
@@ -44,6 +51,7 @@ function project(contract: Record<string, unknown> = {}): string {
     path.join(readyDir, "ready.json"),
     JSON.stringify({ status: "ready", ...contract }),
   );
+
   return dir;
 }
 
@@ -77,6 +85,7 @@ describe("extension_list_extensions on Gecko (RDP root listAddons)", () => {
         isWebExtension: true,
       },
     ];
+
     const dir = project({ extensionName: "RDP Probe" });
 
     const result = JSON.parse(
@@ -98,6 +107,7 @@ describe("extension_list_extensions on Gecko (RDP root listAddons)", () => {
       contexts: [],
       source: "rdp-root",
     });
+
     expect(result.value.extensions[1].id).toBe("uBlock0@raymondhill.net");
     expect(result.value.extensions[1].ownExtension).toBeUndefined();
     expect(listAddonsCalls).toEqual([9223]);
@@ -121,6 +131,7 @@ describe("extension_list_extensions on Gecko (RDP root listAddons)", () => {
       { id: "gmp-widevinecdm", name: "Widevine CDM" },
       { id: "keep@ext", name: "Keeper", isWebExtension: true },
     ];
+
     const dir = project({});
 
     const result = JSON.parse(
@@ -140,6 +151,7 @@ describe("extension_list_extensions on Gecko (RDP root listAddons)", () => {
       },
       { id: "other@ext", name: "Other", isWebExtension: true },
     ];
+
     const dir = project({
       extensionName: "My Project",
       extensionVersion: "0.1.0",

@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { logsPath, readyContractPath } from "../lib/session-paths";
@@ -50,11 +51,13 @@ vi.mock("../lib/cdp", async (importOriginal) => {
     }
     disconnect() {}
   }
+
   return { ...actual, CDPClient: FakeCdp };
 });
 
 vi.mock("../lib/cdp-port", async (importOriginal) => {
   const actual = await importOriginal<Record<string, unknown>>();
+
   return {
     ...actual,
     resolveCdpPort: async () =>
@@ -64,6 +67,7 @@ vi.mock("../lib/cdp-port", async (importOriginal) => {
 
 vi.mock("../lib/act", async (importOriginal) => {
   const actual = await importOriginal<Record<string, unknown>>();
+
   return { ...actual, runActVerb: async () => live.storageFrame };
 });
 
@@ -113,6 +117,7 @@ async function assertOnce(clause: Record<string, unknown>) {
     expect: [clause],
   });
   const frame = JSON.parse(raw);
+
   return { frame, check: frame.value?.checks?.[0] };
 }
 
@@ -144,6 +149,7 @@ describe("background-worker-booted", () => {
     live.targets = [
       { id: "sw", type: "service_worker", url: `chrome-extension://${GUEST_ID}/sw.js` },
     ];
+
     const { frame, check } = await assertOnce({
       assert: "background-worker-booted",
     });
@@ -166,6 +172,7 @@ describe("background-worker-booted", () => {
     live.targets = [
       { id: "sw", type: "service_worker", url: "chrome-extension://ponmlkjihgfedcbaponmlkjihgfedcba/sw.js" },
     ];
+
     const { check } = await assertOnce({ assert: "background-worker-booted" });
     expect(check.outcome).not.toBe("pass");
     expect(JSON.stringify(check)).toContain("ponmlkjihgfedcbaponmlkjihgfedcba");
@@ -184,6 +191,7 @@ describe("background-worker-booted", () => {
       extensionId: GUEST_ID,
       cdpPort: 9222,
     });
+
     live.targets = [];
     const { check } = await assertOnce({ assert: "background-worker-booted" });
     expect(check.outcome).toBe("fail");
@@ -196,8 +204,10 @@ describe("background-worker-booted", () => {
     live.targets = [
       { id: "popup", type: "page", url: `chrome-extension://${GUEST_ID}/popup.html` },
     ];
+
     live.render = { readyState: "complete", renderedElementCount: 3, renderedTextLength: 9 };
     live.probeError = "SyntaxError: 'div[' is not a valid selector";
+
     try {
       const { check } = await assertOnce({ assert: "surface-rendered", surface: "popup", selector: "div[" });
       expect(check.outcome).toBe("inconclusive");
@@ -213,6 +223,7 @@ describe("background-worker-booted", () => {
     live.targets = [
       { id: "companion", type: "page", url: `chrome-extension://${COMPANION_ID}/x.html` },
     ];
+
     const { check } = await assertOnce({ assert: "background-worker-booted" });
     expect(check.outcome).toBe("inconclusive");
     expect(check.detail).toContain("no other target of this extension");
@@ -227,6 +238,7 @@ describe("background-worker-booted", () => {
     live.targets = [
       { id: "popup", type: "page", url: `chrome-extension://${GUEST_ID}/popup.html` },
     ];
+
     const { frame, check } = await assertOnce({
       assert: "background-worker-booted",
     });
@@ -243,9 +255,11 @@ describe("background-worker-booted", () => {
       logHeader("run-1"),
       { context: "background", level: "info", seq: 1, messageParts: ["booted"] },
     ]);
+
     live.targets = [
       { id: "popup", type: "page", url: `chrome-extension://${GUEST_ID}/popup.html` },
     ];
+
     const { check } = await assertOnce({ assert: "background-worker-booted" });
     expect(check.outcome).toBe("pass");
     expect(check.detail).toContain("run run-1");
@@ -259,6 +273,7 @@ describe("background-worker-booted", () => {
       logHeader("run-1"),
       { v: 1, id: "e1", timestamp: 1, level: "error", context: "background", messageParts: ["Failed to load resource: 404"], url: `chrome-extension://${GUEST_ID}/x.png`, data: { channel: "browser" }, runId: "run-1", seq: 1 },
     ]);
+
     const { check } = await assertOnce({ assert: "background-worker-booted" });
     expect(check.outcome).toBe("inconclusive");
     expect(check.detail).toMatch(/relayed by the browser/);
@@ -286,13 +301,16 @@ describe("background-worker-booted", () => {
       distPath: path.join(project, "dist", BROWSER),
       extensionId: GUEST_ID,
     });
+
     writeLogs([
       logHeader("run-1"),
       { context: "background", level: "info", seq: 1, messageParts: ["booted"] },
     ]);
+
     live.targets = [
       { id: "popup", type: "page", url: `chrome-extension://${GUEST_ID}/popup.html` },
     ];
+
     const { check } = await assertOnce({ assert: "background-worker-booted" });
     expect(check.outcome).toBe("inconclusive");
   });
@@ -338,11 +356,13 @@ describe("surface-rendered", () => {
     live.targets = [
       { id: "popup", type: "page", url: `chrome-extension://${GUEST_ID}/popup.html` },
     ];
+
     live.render = {
       readyState: "complete",
       bodyElementCount: 12,
       textLength: 40,
     };
+
     const { check } = await assertOnce({
       assert: "surface-rendered",
       surface: "popup",
@@ -356,6 +376,7 @@ describe("surface-rendered", () => {
     live.targets = [
       { id: "popup", type: "page", url: `chrome-extension://${GUEST_ID}/popup.html` },
     ];
+
     live.render = { readyState: "complete", bodyElementCount: 1, textLength: 0 };
     const { check } = await assertOnce({
       assert: "surface-rendered",
@@ -371,6 +392,7 @@ describe("surface-rendered", () => {
     live.targets = [
       { id: "popup", type: "page", url: `chrome-extension://${GUEST_ID}/popup.html` },
     ];
+
     live.render = { readyState: "loading", bodyElementCount: 0, textLength: 0 };
     const { check } = await assertOnce({
       assert: "surface-rendered",
@@ -385,6 +407,7 @@ describe("surface-rendered", () => {
     live.targets = [
       { id: "popup", type: "page", url: `chrome-extension://${GUEST_ID}/popup.html` },
     ];
+
     live.render = { readyState: "complete", bodyElementCount: 9, textLength: 5 };
     live.probeCount = 2;
     const enough = await assertOnce({
@@ -414,6 +437,7 @@ describe("surface-rendered reads what a person would see", () => {
     live.targets = [
       { id: "popup", type: "page", url: `chrome-extension://${GUEST_ID}/popup.html` },
     ];
+
     live.render = {
       readyState: "complete",
       bodyElementCount: 3,
@@ -422,6 +446,7 @@ describe("surface-rendered reads what a person would see", () => {
       visualElementCount: 0,
       renderedTextLength: 0,
     };
+
     const { check } = await assertOnce({ assert: "surface-rendered", surface: "popup" });
     expect(check.outcome).toBe("fail");
   });
@@ -432,6 +457,7 @@ describe("surface-rendered reads what a person would see", () => {
     live.targets = [
       { id: "popup", type: "page", url: `chrome-extension://${GUEST_ID}/popup.html` },
     ];
+
     live.render = {
       readyState: "complete",
       bodyElementCount: 1,
@@ -440,6 +466,7 @@ describe("surface-rendered reads what a person would see", () => {
       visualElementCount: 1,
       renderedTextLength: 0,
     };
+
     const { check } = await assertOnce({ assert: "surface-rendered", surface: "popup" });
     expect(check.outcome).toBe("pass");
   });
@@ -450,6 +477,7 @@ describe("surface-rendered reads what a person would see", () => {
     live.targets = [
       { id: "popup", type: "page", url: `chrome-extension://${GUEST_ID}/popup.html` },
     ];
+
     live.render = { readyState: "complete", renderedElementCount: 2, renderedTextLength: 9 };
     const low = await assertOnce({ assert: "surface-rendered", surface: "popup", minNodes: 5 });
     expect(low.check.outcome).toBe("fail");
@@ -499,6 +527,7 @@ describe("content-script-injected matches the page, in this build", () => {
       { context: "content", level: "info", seq: 1, url: "https://shop.example/cart/checkout?step=2", messageParts: ["hi"] },
       { context: "content", level: "info", seq: 2, url: "https://evil.test/?next=https://shop.example/cart", messageParts: ["hi"] },
     ]);
+
     const { check } = await assertOnce({ assert: "content-script-injected", url: "https://shop.example/cart" });
     expect(check.outcome).toBe("inconclusive");
   });
@@ -515,10 +544,12 @@ describe("content-script-injected matches the page, in this build", () => {
       cdpPort: 9222,
       compiledAt: "2026-10-05T12:00:00.000Z",
     });
+
     writeLogs([
       logHeader("run-1"),
       { context: "content", level: "info", seq: 1, url: "https://shop.example/cart", timestamp: Date.parse("2026-10-05T11:59:00.000Z"), messageParts: ["old"] },
     ]);
+
     const { check } = await assertOnce({ assert: "content-script-injected", url: "https://shop.example/cart" });
     expect(check.outcome).toBe("inconclusive");
   });
@@ -569,6 +600,7 @@ describe("content-script-injected", () => {
         messageParts: ["hello"],
       },
     ]);
+
     const { check } = await assertOnce({
       assert: "content-script-injected",
       url: "https://shop.example/cart",
@@ -696,10 +728,12 @@ describe("console-errors-empty", () => {
       runId: "run-9",
       instanceId: "inst-9",
     });
+
     writeLogs([
       logHeader("run-1"),
       { context: "popup", level: "info", seq: 1, messageParts: ["hi"] },
     ]);
+
     const { check } = await assertOnce({ assert: "console-errors-empty" });
     expect(check.outcome).toBe("inconclusive");
     expect(check.detail).toContain("do not belong to a live run");
@@ -712,6 +746,7 @@ describe("console-errors-empty", () => {
       { v: 1, id: "e1", timestamp: 1, level: "log", context: "background", messageParts: ["hello"], runId: "run-1", seq: 1 },
       { v: 1, id: "e2", timestamp: 2, level: "error", context: "background", messageParts: ["Uncaught TypeError in sw"], url: "https://www.youtube.com/sw.js", data: { channel: "browser" }, runId: "run-1", seq: 2 },
     ]);
+
     const { check } = await assertOnce({ assert: "console-errors-empty" });
     expect(check.outcome).toBe("pass");
     expect(check.detail).toMatch(/1 browser-relayed error/);
@@ -723,6 +758,7 @@ describe("console-errors-empty", () => {
       logHeader("run-1"),
       { v: 1, id: "e2", timestamp: 2, level: "error", context: "background", messageParts: ["Uncaught TypeError in sw"], url: `chrome-extension://${GUEST_ID}/sw.js`, data: { channel: "browser" }, runId: "run-1", seq: 2 },
     ]);
+
     const { check } = await assertOnce({ assert: "console-errors-empty" });
     expect(check.outcome).toBe("fail");
   });
@@ -734,6 +770,7 @@ describe("console-errors-empty", () => {
       { context: "background", level: "error", seq: 1, messageParts: ["boom"] },
       { context: "popup", level: "info", seq: 2, messageParts: ["fine"] },
     ]);
+
     const { check } = await assertOnce({ assert: "console-errors-empty" });
     expect(check.outcome).toBe("fail");
     expect(check.detail).toContain("boom");
@@ -755,6 +792,7 @@ describe("console-errors-empty", () => {
       { context: "popup", level: "info", seq: 1, messageParts: ["fine"] },
       { v: 1, type: "gap", reason: "disk_slow", dropped: 7 },
     ]);
+
     const { check } = await assertOnce({ assert: "console-errors-empty" });
     expect(check.outcome).toBe("inconclusive");
     expect(check.detail).toMatch(/dropped 7 line/);
@@ -766,6 +804,7 @@ describe("console-errors-empty", () => {
       logHeader("run-1"),
       { context: "popup", level: "info", seq: 1, messageParts: ["fine"] },
     ]);
+
     const clean = await assertOnce({ assert: "console-errors-empty" });
     expect(clean.check.outcome).toBe("pass");
 
@@ -778,6 +817,7 @@ describe("console-errors-empty", () => {
         messageParts: ["ResizeObserver loop limit exceeded"],
       },
     ]);
+
     const ignored = await assertOnce({
       assert: "console-errors-empty",
       ignore: ["ResizeObserver"],
@@ -792,6 +832,7 @@ describe("console-errors-empty", () => {
       { context: "content", level: "error", seq: 1, messageParts: ["page blew up"] },
       { context: "background", level: "info", seq: 2, messageParts: ["fine"] },
     ]);
+
     const scoped = await assertOnce({
       assert: "console-errors-empty",
       context: ["background"],
@@ -816,6 +857,7 @@ describe("the verdict document", () => {
       extensionId: GUEST_ID,
       cdpPort: 9222,
     });
+
     live.targets = [];
     const { frame } = await assertOnce({ assert: "background-worker-booted" });
     expect(frame.warnings.join("\n")).toMatch(/records 1 compile error/);
@@ -829,9 +871,11 @@ describe("the verdict document", () => {
       logHeader("run-1"),
       { context: "background", level: "info", seq: 1, messageParts: ["booted"] },
     ]);
+
     live.targets = [
       { id: "sw", type: "service_worker", url: `chrome-extension://${GUEST_ID}/sw.js` },
     ];
+
     const frame = JSON.parse(
       await handler({
         projectPath: project,
@@ -857,9 +901,11 @@ describe("the verdict document", () => {
       logHeader("run-1"),
       { context: "background", level: "info", seq: 1, messageParts: ["booted"] },
     ]);
+
     live.targets = [
       { id: "sw", type: "service_worker", url: `chrome-extension://${GUEST_ID}/sw.js` },
     ];
+
     const frame = JSON.parse(
       await handler({
         projectPath: project,
@@ -874,6 +920,7 @@ describe("the verdict document", () => {
       "pass",
       "inconclusive",
     ]);
+
     expect(frame.value.outcome).toBe("inconclusive");
     expect(frame.value.passed).toBe(false);
     expect(frame.ok).toBe(false);
@@ -908,10 +955,12 @@ describe("the verdict document", () => {
       action: { default_popup: "popup.html" },
       options_ui: { page: "options.html" },
     });
+
     liveSession();
     live.targets = [
       { id: "popup", type: "page", url: `chrome-extension://${GUEST_ID}/popup.html` },
     ];
+
     live.render = { readyState: "complete", bodyElementCount: 5, textLength: 9 };
     const frame = JSON.parse(
       await handler({
@@ -927,6 +976,7 @@ describe("the verdict document", () => {
       "popup",
       "options",
     ]);
+
     expect(frame.value.checks.map((c: { outcome: string }) => c.outcome)).toEqual([
       "pass",
       "fail",

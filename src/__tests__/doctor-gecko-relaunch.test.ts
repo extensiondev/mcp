@@ -4,12 +4,16 @@ import path from "node:path";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { handler } from "../tools/doctor";
+
+import type * as ExecModule from "../lib/exec";
+
 const cli = vi.hoisted(() => ({
   response: { code: 1, stdout: "", stderr: "" },
 }));
 
 vi.mock("../lib/exec", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../lib/exec")>()),
+  ...(await importOriginal<typeof ExecModule>()),
   runExtensionCli: async () => cli.response,
   pinnedCliVersion: () => "",
 }));
@@ -19,12 +23,12 @@ vi.mock("../lib/engine-version", () => ({
   outputFlagRefusalMessage: async () => "unused",
 }));
 
-import { handler } from "../tools/doctor";
-
 const tmpDirs: string[] = [];
+
 function tmpProject(): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-doctor-relaunch-"));
   tmpDirs.push(dir);
+
   return dir;
 }
 
@@ -45,6 +49,7 @@ function report(checks: Array<Record<string, unknown>>): string {
 
 afterEach(() => {
   cli.response = { code: 1, stdout: "", stderr: "" };
+
   for (const dir of tmpDirs.splice(0)) {
     fs.rmSync(dir, { recursive: true, force: true });
   }

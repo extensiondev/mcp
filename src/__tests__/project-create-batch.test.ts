@@ -1,7 +1,8 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { handler, schema } from "../tools/project-create";
 import {
@@ -49,6 +50,7 @@ function harness(options: {
       body,
       headers: (init?.headers ?? {}) as Record<string, string>,
     });
+
     if (href.endsWith("/api/cli/login/config")) {
       return jsonResponse({
         deviceCodeUrl: "/api/cli/device/code",
@@ -66,6 +68,7 @@ function harness(options: {
             }),
       });
     }
+
     if (href.endsWith("/api/cli/device/code")) {
       const route = options.code ?? {
         status: 200,
@@ -79,8 +82,10 @@ function harness(options: {
           expires_in: 900,
         },
       };
+
       return jsonResponse(route.body, route.status);
     }
+
     if (href.endsWith("/api/cli/device/token")) {
       const list = options.token ?? [];
       const next = list[Math.min(tokenCalls, list.length - 1)] ?? {
@@ -88,8 +93,10 @@ function harness(options: {
         body: { error: "authorization_pending" },
       };
       tokenCalls += 1;
+
       return jsonResponse(next.body, next.status);
     }
+
     if (href.endsWith("/api/cli/projects/create")) {
       createCalls += 1;
       clock += options.createTakesMs ?? 1_000;
@@ -99,14 +106,17 @@ function harness(options: {
         ? options.create(ref, slug, createCalls)
         : created(slug);
       if (route === "network-error") throw new Error("socket hang up");
+
       return new Response(JSON.stringify(route.body), {
         status: route.status,
         headers: route.headers,
       });
     }
+
     throw new Error(`Unexpected fetch: ${href}`);
   });
   vi.stubGlobal("fetch", fn);
+
   return {
     fn,
     calls,
@@ -173,9 +183,11 @@ beforeEach(() => {
       throw new Error("batch create tests never reach the network");
     }),
   );
+
   for (const key of ["XDG_CONFIG_HOME", "EXTENSION_DEV_API_URL", "EXTENSION_DEV_TOKEN", "EXTENSION_DEV_PROJECT"]) {
     saved[key] = process.env[key];
   }
+
   tmp = fs.mkdtempSync(path.join(os.tmpdir(), "extdev-batchcreate-"));
   process.env.XDG_CONFIG_HOME = tmp;
   process.env.EXTENSION_DEV_API_URL = API;
@@ -189,10 +201,12 @@ beforeEach(() => {
 afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
+
   for (const [key, value] of Object.entries(saved)) {
     if (value === undefined) delete process.env[key];
     else process.env[key] = value;
   }
+
   fs.rmSync(tmp, { recursive: true, force: true });
 });
 
@@ -370,6 +384,7 @@ describe("extension_project_create with projects: one approval", () => {
       deviceCode: "dev-code",
       projects: ["acme/alpha", "acme/beta", "acme/gamma"],
     });
+
     expect(out.hint).toContain("lists all 3 projects");
     expect(out.hint).toContain("7 days");
 
@@ -380,10 +395,12 @@ describe("extension_project_create with projects: one approval", () => {
       clientName: "extension-mcp",
       intent: "create",
     });
+
     expect(h.to("/api/cli/device/token")[0]?.body).toEqual({
       device_code: "dev-code",
       projects: ["acme/alpha", "acme/beta", "acme/gamma"],
     });
+
     expect(h.to("/api/cli/projects/create")).toHaveLength(0);
   });
 
@@ -399,6 +416,7 @@ describe("extension_project_create with projects: one approval", () => {
       "acme/beta",
       "acme/gamma",
     ]);
+
     for (const [index, call] of creates.entries()) {
       expect(call.headers.authorization).toBe(`Bearer ${GRANT}`);
       expect(call.body.workspaceSlug).toBe("acme");
@@ -408,6 +426,7 @@ describe("extension_project_create with projects: one approval", () => {
         repo: `${SLUGS[index]}-src`,
       });
     }
+
     expect(h.to("/api/cli/device/code")).toHaveLength(0);
     expect(h.to("/api/cli/device/token")).toHaveLength(1);
   });
@@ -427,6 +446,7 @@ describe("extension_project_create with projects: one approval", () => {
         expiresAt: new Date(1_900_000_000 * 1000).toISOString(),
       })),
     );
+
     expect(out.value.counts).toEqual({
       listed: 3,
       created: 3,
@@ -435,6 +455,7 @@ describe("extension_project_create with projects: one approval", () => {
       unconfirmed: 0,
       notAttempted: 0,
     });
+
     for (const slug of SLUGS) {
       expect(readCredentials({ project: `acme/${slug}` })).toMatchObject({
         token: `seven-day-token-for-${slug}`,
@@ -444,6 +465,7 @@ describe("extension_project_create with projects: one approval", () => {
         api: API,
       });
     }
+
     expect(listCredentials()).toHaveLength(3);
   });
 
@@ -470,10 +492,12 @@ describe("extension_project_create with projects: one approval", () => {
     expect(JSON.parse(creatingAgain).status).toBe("creating");
     expect(JSON.parse(mismatch).status).toBe("bad-request");
     expect(JSON.parse(done).status).toBe("created");
+
     for (const text of [pending, creating, creatingAgain, mismatch, done]) {
       expect(text).not.toContain(GRANT);
       expect(text).not.toContain("seven-day-token-for-");
     }
+
     expect(fs.readFileSync(credentialsPath(), "utf8")).not.toContain(GRANT);
   });
 
@@ -486,6 +510,7 @@ describe("extension_project_create with projects: one approval", () => {
       expiresAt: 1_900_000_000,
       api: API,
     });
+
     harness({ token: [grant(SLUGS)] });
     await run({ projects: THREE, deviceCode: "dev-code" });
 
@@ -525,6 +550,7 @@ describe("extension_project_create with projects: one approval", () => {
       installCommand: "pnpm install",
       buildCommand: "pnpm build",
     });
+
     expect(alpha.build.edge.enabled).toBe(true);
     expect(alpha.build.firefox.enabled).toBe(false);
     expect(alpha.info.displayName).toBe("alpha");
@@ -533,6 +559,7 @@ describe("extension_project_create with projects: one approval", () => {
       installCommand: "pnpm install",
       buildCommand: "pnpm build:beta",
     });
+
     expect(beta.build.chrome.enabled).toBe(false);
     expect(beta.info.displayName).toBe("Beta Tool");
   });
@@ -557,6 +584,7 @@ describe("extension_project_create with projects: every project keeps its own an
             }
           : created(slug),
     });
+
     const out = await run({ projects: THREE, deviceCode: "dev-code" });
 
     expect(out.ok).toBe(true);
@@ -567,9 +595,11 @@ describe("extension_project_create with projects: every project keeps its own an
       loggedIn: false,
       tokenCode: "PROJECT_TOKEN_NOT_ISSUED",
     });
+
     expect(out.value.nextSteps[0]).toBe(
       "extension_auth (action: login, projects: ['acme/beta'])",
     );
+
     expect(out.warnings[0]).toContain("acme/beta");
     expect(readCredentials({ project: "acme/beta" })).toBeNull();
     expect(readCredentials({ project: "acme/alpha" })?.token).toBe(
@@ -593,14 +623,17 @@ describe("extension_project_create with projects: every project keeps its own an
       ["acme/beta", "created"],
       ["acme/gamma", "created"],
     ]);
+
     expect(out.value.results[0]).toMatchObject({
       httpStatus: 409,
       code: "PROJECT_EXISTS",
       message: "refused: PROJECT_EXISTS",
     });
+
     expect(out.value.nextSteps[0]).toBe(
       "extension_auth (action: login, projects: ['acme/alpha'])",
     );
+
     expect(out.error.message).toContain("2 of 3 projects were created");
     expect(listCredentials().map((entry) => entry.projectSlug).sort()).toEqual([
       "beta",
@@ -630,6 +663,7 @@ describe("extension_project_create with projects: every project keeps its own an
       },
       { project: "acme/gamma", status: "not-attempted", code: "RATE_LIMITED" },
     ]);
+
     expect(out.value.results[1].hint).toContain("limits create requests to 10 per hour");
     expect(out.value.results[1].hint).toContain("1800 seconds");
     expect(out.hint).toContain("limits create requests to 10 per hour");
@@ -645,6 +679,7 @@ describe("extension_project_create with projects: every project keeps its own an
         headers: { "retry-after": "2400" },
       }),
     });
+
     const out = await run({ projects: THREE, deviceCode: "dev-code" });
 
     expect(out.value.results[0]).toMatchObject({
@@ -652,6 +687,7 @@ describe("extension_project_create with projects: every project keeps its own an
       code: "RATE_LIMITED",
       retryAfterSeconds: 2400,
     });
+
     expect(out.value.results[0].hint).toContain("2400 seconds");
   });
 
@@ -674,10 +710,12 @@ describe("extension_project_create with projects: every project keeps its own an
       "not-attempted",
       "not-attempted",
     ]);
+
     expect(out.value.results[0].code).toBe(code);
     expect(out.value.results[0].connectUrl).toBe(
       "https://www.extension.dev/connect/github",
     );
+
     expect(out.value.results[2].code).toBe(code);
   });
 
@@ -700,6 +738,7 @@ describe("extension_project_create with projects: every project keeps its own an
       token: [grant(SLUGS)],
       create: () => refused(403, "PLATFORM_NOT_OPEN"),
     });
+
     const out = await run({ projects: THREE, deviceCode: "dev-code" });
 
     expect(out.ok).toBe(false);
@@ -713,6 +752,7 @@ describe("extension_project_create with projects: every project keeps its own an
       token: [grant(SLUGS)],
       create: () => refused(403, "CLI_PROJECT_CREATE_DISABLED"),
     });
+
     const out = await run({ projects: THREE, deviceCode: "dev-code" });
 
     expect(out.status).toBe("lane-closed");
@@ -725,6 +765,7 @@ describe("extension_project_create with projects: every project keeps its own an
       token: [grant(["alpha"])],
       create: () => created("alpha-2"),
     });
+
     const out = await run({ projects: [THREE[0]], deviceCode: "dev-code" });
 
     expect(out.value.results[0]).toMatchObject({
@@ -733,6 +774,7 @@ describe("extension_project_create with projects: every project keeps its own an
       loggedIn: false,
       tokenCode: "PROJECT_NAME_MISMATCH",
     });
+
     expect(listCredentials()).toHaveLength(0);
   });
 
@@ -741,6 +783,7 @@ describe("extension_project_create with projects: every project keeps its own an
       token: [grant(["alpha"])],
       create: () => created("alpha", { tokenIssued: false, tokenCode: "PROJECT_TOKEN_NOT_ISSUED" }),
     });
+
     const out = await run({ projects: [THREE[0]], deviceCode: "dev-code" });
 
     expect(out.value.results[0]).toMatchObject({
@@ -748,6 +791,7 @@ describe("extension_project_create with projects: every project keeps its own an
       loggedIn: false,
       tokenCode: "PROJECT_TOKEN_NOT_ISSUED",
     });
+
     expect(listCredentials()).toHaveLength(0);
   });
 
@@ -756,6 +800,7 @@ describe("extension_project_create with projects: every project keeps its own an
       token: [grant(["alpha"])],
       create: () => created("alpha", { workspaceSlug: "globex" }),
     });
+
     const out = await run({ projects: [THREE[0]], deviceCode: "dev-code" });
 
     expect(out.value.results[0].loggedIn).toBe(false);
@@ -774,6 +819,7 @@ describe("extension_project_create with projects: every project keeps its own an
       project: "acme/alpha",
       status: "unconfirmed",
     });
+
     expect(first.value.remaining).toEqual(["acme/beta", "acme/gamma"]);
 
     const second = await run({ projects: THREE, deviceCode: "dev-code" });
@@ -783,6 +829,7 @@ describe("extension_project_create with projects: every project keeps its own an
       "acme/beta",
       "acme/gamma",
     ]);
+
     expect(second.status).toBe("batch-incomplete");
     expect(second.value.counts).toMatchObject({ created: 2, unconfirmed: 1 });
     expect(second.value.nextSteps.join(" ")).toContain("check ['acme/alpha'] in the console");
@@ -800,6 +847,7 @@ describe("extension_project_create with projects: every project keeps its own an
       "unconfirmed",
       "not-attempted",
     ]);
+
     expect(second.value.results[2].code).toBe("PLATFORM_UNREACHABLE");
   });
 });
@@ -835,6 +883,7 @@ describe("extension_project_create with projects: the grant and the list", () =>
       "pending",
       "pending",
     ]);
+
     expect(first.hint).toContain("same deviceCode");
     expect(readCredentials({ project: "acme/alpha" })?.token).toBe(
       "seven-day-token-for-alpha",
@@ -912,6 +961,7 @@ describe("extension_project_create with projects: the grant and the list", () =>
     harness({
       token: [{ status: 403, body: { error: "access_denied", message: "closed", code: "CLI_PROJECT_CREATE_DISABLED" } }],
     });
+
     const closed = await run({ projects: THREE, deviceCode: "dev-code" });
     expect(closed.status).toBe("lane-closed");
   });
@@ -920,6 +970,7 @@ describe("extension_project_create with projects: the grant and the list", () =>
     harness({
       code: { status: 403, body: { error: "access_denied", message: "not open", code: "CLI_PROJECT_CREATE_DISABLED" } },
     });
+
     const out = await run({ projects: THREE });
 
     expect(out.status).toBe("lane-closed");
@@ -930,6 +981,7 @@ describe("extension_project_create with projects: the grant and the list", () =>
     harness({
       code: { status: 400, body: { message: "Field 'project' must be in the form '<workspace>/<project>'." } },
     });
+
     const out = await run({ projects: THREE });
 
     expect(out.status).toBe("create-failed");
@@ -948,6 +1000,7 @@ describe("extension_project_create with projects: the grant and the list", () =>
         },
       },
     });
+
     const out = await run({
       projects: Array.from({ length: 11 }, (_, i) => ({
         project: `acme/app-${i + 1}`,
@@ -991,6 +1044,7 @@ describe("extension_project_create with projects: the grant and the list", () =>
       device_code: "dev-code",
       project: "acme/ghost-app",
     });
+
     expect("project" in h.to("/api/cli/projects/create")[0]!.body).toBe(false);
     expect(listCredentials()).toHaveLength(0);
     expect(out.value.nextSteps[0]).toContain("extension_auth (action: login");
@@ -1018,6 +1072,7 @@ describe("extension_project_create with projects: a first build is counted, neve
             })
           : created(slug),
     });
+
     const out = await run({ projects: THREE, deviceCode: "dev-code" });
 
     expect(out.ok).toBe(true);
@@ -1026,6 +1081,7 @@ describe("extension_project_create with projects: a first build is counted, neve
       dispatched: false,
       reason: "allowance_exhausted",
     });
+
     expect(out.hint).not.toContain("each first build was dispatched");
     expect(out.hint).toContain("2 of 3 first builds were dispatched");
     expect(out.value.allowance.spent).toContain("the 2 first builds");
@@ -1039,6 +1095,7 @@ describe("extension_project_create with projects: a first build is counted, neve
       create: (_ref, slug) =>
         slug === "gamma" ? created(slug, { initialBuild: undefined }) : created(slug),
     });
+
     const out = await run({ projects: THREE, deviceCode: "dev-code" });
 
     expect(out.value.results[2].firstBuild).toEqual({ dispatched: null });
@@ -1075,6 +1132,7 @@ describe("extension_project_create with projects: an answer that proves nothing 
         body: { success: true, tokenIssued: true, token: "orphan-token", expiresAt: 1_900_000_000 },
       }),
     });
+
     const out = await run({
       projects: [THREE[0]],
       deviceCode: "dev-code",
@@ -1096,6 +1154,7 @@ describe("extension_project_create with projects: a created project keeps its ro
     expect(out.error?.code).not.toBe("E_INTERNAL");
     expect(out.status).toBe("created");
     expect(out.value.counts).toMatchObject({ created: 3, loggedIn: 0, refused: 0 });
+
     for (const row of out.value.results) {
       expect(row.status).toBe("created");
       expect(row.loggedIn).toBe(false);
@@ -1103,6 +1162,7 @@ describe("extension_project_create with projects: a created project keeps its ro
       expect(row.hint).toContain("could not be stored");
       expect(row.hint).toContain("is not valid JSON");
     }
+
     expect(h.to("/api/cli/projects/create")).toHaveLength(3);
     expect(out.hint).toContain("no token was stored for acme/alpha, acme/beta, acme/gamma");
     expect(fs.readFileSync(file, "utf8")).toBe("{ not json");
@@ -1115,6 +1175,7 @@ describe("extension_project_create with projects: a created project keeps its ro
     fs.writeFileSync(file, "{ not json");
     const h = harness({ token: [grant(SLUGS)], createTakesMs: 21_000 });
     let out = await run({ projects: THREE, deviceCode: "dev-code" });
+
     for (let call = 0; out.status === "creating" && call < 5; call += 1) {
       out = await run({ projects: THREE, deviceCode: "dev-code" });
     }

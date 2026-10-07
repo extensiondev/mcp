@@ -24,6 +24,7 @@ if (!fs.existsSync(path.join(source, "manifest.json"))) {
   console.error(`No built carrier at ${source}; run pnpm build there first.`);
   process.exit(1);
 }
+
 fs.rmSync(target, { recursive: true, force: true });
 fs.cpSync(source, target, { recursive: true });
 const manifest = JSON.parse(

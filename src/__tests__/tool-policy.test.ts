@@ -26,12 +26,14 @@ async function connected(options?: ServerOptions): Promise<Client> {
   await createServer(options).connect(serverTransport);
   const client = new Client({ name: "policy-probe", version: "0.0.0" });
   await client.connect(clientTransport);
+
   return client;
 }
 
 async function call(client: Client, name: string, args: Record<string, unknown>) {
   const result = await client.callTool({ name, arguments: args });
   const text = (result.content as Array<{ text: string }>)[0].text;
+
   return { isError: result.isError, body: JSON.parse(text) };
 }
 
@@ -78,6 +80,7 @@ describe("resolveServerOptions", () => {
       ok: true,
       options: DEFAULT_SERVER_OPTIONS,
     });
+
     expect(resolveServerOptions(["--features=local,platform"], {})).toEqual({
       ok: true,
       options: { features: ["local", "platform"], noShip: false },
@@ -90,6 +93,7 @@ describe("resolveServerOptions", () => {
         EXTENSION_DEV_FEATURES: "platform",
       }),
     ).toEqual({ ok: true, options: { features: ["local"], noShip: false } });
+
     expect(resolveServerOptions(["--features=platform,local", "--no-ship"], {})).toEqual({
       ok: true,
       options: { features: ["local", "platform"], noShip: true },
@@ -103,6 +107,7 @@ describe("resolveServerOptions", () => {
         EXTENSION_DEV_NO_SHIP: "1",
       }),
     ).toEqual({ ok: true, options: { features: ["local"], noShip: true } });
+
     expect(
       resolveServerOptions([], { EXTENSION_DEV_NO_SHIP: "false" }),
     ).toEqual({ ok: true, options: DEFAULT_SERVER_OPTIONS });
@@ -112,6 +117,7 @@ describe("resolveServerOptions", () => {
     const group = resolveServerOptions(["--features=local,database"], {});
     expect(group.ok).toBe(false);
     if (!group.ok) expect(group.message).toContain('"database"');
+
     const flag = resolveServerOptions(["--read-only"], {});
     expect(flag.ok).toBe(false);
     if (!flag.ok) expect(flag.message).toContain("--read-only");
@@ -123,6 +129,7 @@ describe("the server honours the options", () => {
     const client = await connected({ features: ["local", "platform"], noShip: false });
     const listed = (await client.listTools()).tools;
     expect(listed.map((t) => t.name).sort()).toEqual(registered);
+
     for (const tool of listed) {
       expect(tool.annotations, tool.name).toEqual(TOOL_POLICY[tool.name].annotations);
     }
@@ -176,6 +183,7 @@ describe("the server honours the options", () => {
 
   it("lets the non-shipping calls of a guarded tool through no-ship mode", () => {
     const noShip = { features: [...FEATURE_GROUPS], noShip: true };
+
     for (const [name, args] of [
       ["extension_submit", { buildSha: "abc", browsers: ["chrome"] }],
       ["extension_submit", { buildSha: "abc", browsers: ["chrome"], dryRun: true }],

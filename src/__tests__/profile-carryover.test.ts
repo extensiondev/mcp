@@ -11,9 +11,11 @@ import {
 import { profileCarriesTabsOver } from "../lib/profile-carryover";
 
 const tmpDirs: string[] = [];
+
 function tmpProject(): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-profile-carry-"));
   tmpDirs.push(dir);
+
   return dir;
 }
 
@@ -24,6 +26,7 @@ function seedPersistedProfile(projectPath: string, browser: string): string {
   );
   fs.mkdirSync(path.join(dir, "Default"), { recursive: true });
   fs.writeFileSync(path.join(dir, "Default", "Preferences"), "{}");
+
   return dir;
 }
 

@@ -38,10 +38,12 @@ function encodeTemplateFile(
 ): { content: string; encoding: "utf8" | "base64" } {
   if (TEXTUAL.test(filePath)) {
     const text = bytes.toString("utf8");
+
     if (Buffer.from(text, "utf8").equals(bytes)) {
       return { content: text, encoding: "utf8" };
     }
   }
+
   return { content: bytes.toString("base64"), encoding: "base64" };
 }
 
@@ -101,9 +103,11 @@ export async function readTemplateSource(args: {
     args.files.map(async (filePath) => {
       const urls = await templateFileUrls(args.slug, filePath);
       let lastStatus = 0;
+
       for (const url of urls) {
         try {
           const response = await fetch(url);
+
           if (response.ok) {
             const encoded = encodeTemplateFile(
               filePath,
@@ -111,13 +115,16 @@ export async function readTemplateSource(args: {
             );
             fileContents[filePath] = encoded.content;
             fileEncodings[filePath] = encoded.encoding;
+
             return;
           }
+
           lastStatus = response.status;
         } catch {
           // Try the next source.
         }
       }
+
       errors.push(`${filePath}: ${lastStatus || "fetch failed"}`);
     }),
   );

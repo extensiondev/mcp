@@ -1,7 +1,9 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
 import {
   writeCredentials,
   type StoredCredentials,
@@ -41,12 +43,14 @@ describe("whoami reports the stored token identity, not the cwd", () => {
   afterEach(() => {
     if (prevXdg === undefined) delete process.env.XDG_CONFIG_HOME;
     else process.env.XDG_CONFIG_HOME = prevXdg;
+
     fs.rmSync(tmp, { recursive: true, force: true });
     vi.unstubAllGlobals();
   });
 
   it("says the identity comes from the stored token, not the directory", async () => {
     if (process.platform === "win32") return;
+
     writeCredentials(sample());
 
     const result = JSON.parse(await auth.handler({}));
@@ -95,6 +99,7 @@ describe("whoami reports the stored token identity, not the cwd", () => {
 
     it("never asserts a bare `api` field; labels the recorded login base", async () => {
       if (process.platform === "win32") return;
+
       writeCredentials(sample());
 
       const result = JSON.parse(await auth.handler({}));
@@ -106,6 +111,7 @@ describe("whoami reports the stored token identity, not the cwd", () => {
 
     it("flags a stale localhost login base instead of presenting it as the api", async () => {
       if (process.platform === "win32") return;
+
       writeCredentials(sample({ api: "http://localhost:3100" }));
 
       const result = JSON.parse(await auth.handler({}));
@@ -117,6 +123,7 @@ describe("whoami reports the stored token identity, not the cwd", () => {
       expect(result.hint).toContain(
         "access grants for private registry reads use that recorded base",
       );
+
       expect(result.hint).not.toContain("do not read that recorded value");
       expect(result.hint).toContain("https://www.extension.dev");
       expect(
@@ -128,6 +135,7 @@ describe("whoami reports the stored token identity, not the cwd", () => {
 
     it("omits the recorded base entirely when the stored file never had one", async () => {
       if (process.platform === "win32") return;
+
       writeCredentials(sample({ api: "" }));
 
       const result = JSON.parse(await auth.handler({}));
@@ -139,8 +147,10 @@ describe("whoami reports the stored token identity, not the cwd", () => {
 
     it("discloses that EXTENSION_DEV_TOKEN outranks the stored login", async () => {
       if (process.platform === "win32") return;
+
       const prevToken = process.env.EXTENSION_DEV_TOKEN;
       process.env.EXTENSION_DEV_TOKEN = "env-token";
+
       try {
         writeCredentials(sample());
         const result = JSON.parse(await auth.handler({}));
@@ -150,6 +160,7 @@ describe("whoami reports the stored token identity, not the cwd", () => {
             w.includes("EXTENSION_DEV_TOKEN is set"),
           ),
         ).toBe(true);
+
         expect(result.hint).toContain("EXTENSION_DEV_TOKEN is set");
       } finally {
         if (prevToken === undefined) delete process.env.EXTENSION_DEV_TOKEN;
@@ -178,6 +189,7 @@ describe("7-day token TTL disclosure", () => {
   afterEach(() => {
     if (prevXdg === undefined) delete process.env.XDG_CONFIG_HOME;
     else process.env.XDG_CONFIG_HOME = prevXdg;
+
     fs.rmSync(tmp, { recursive: true, force: true });
     vi.unstubAllGlobals();
   });
@@ -189,6 +201,7 @@ describe("7-day token TTL disclosure", () => {
 
   it("whoami carries the TTL note with the deep console access-tokens URL", async () => {
     if (process.platform === "win32") return;
+
     writeCredentials({
       version: 1,
       token: "claims.sig",

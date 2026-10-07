@@ -1,5 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 
+import { readTemplateSource } from "../tools/get-template-source";
+
 vi.mock("../lib/templates-cache", () => ({
   getTemplateBySlug: async (slug: string) =>
     slug === "action"
@@ -26,8 +28,6 @@ vi.mock("../lib/template-artifact-source", () => ({
   ],
   resolvedTemplateCommit: async () => "abc1234",
 }));
-
-import { readTemplateSource } from "../tools/get-template-source";
 
 const PNG = Buffer.from([
   0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d,
@@ -68,6 +68,7 @@ async function readValue(files: string[]) {
       fileEncodings: Record<string, string>;
     };
   };
+
   return frame;
 }
 

@@ -7,7 +7,9 @@
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
 import path from "node:path";
+
 import { extensionInstall, getManagedBrowsersCacheRoot } from "extension-install";
+
 import { envelope } from "../lib/envelope";
 import { findManagedBinaryIn } from "./detect-browsers";
 
@@ -16,6 +18,7 @@ import { findManagedBinaryIn } from "./detect-browsers";
 async function withMachineOutput<T>(run: () => Promise<T>): Promise<T> {
   const previous = process.env.EXTENSION_OUTPUT;
   process.env.EXTENSION_OUTPUT = "json";
+
   try {
     return await run();
   } finally {
@@ -40,6 +43,7 @@ export async function installManagedBrowser(
 
     const destination = path.join(getManagedBrowsersCacheRoot(), browser);
     const binaryPath = findManagedBinaryIn(destination, browser);
+
     if (!binaryPath) {
       return envelope({
         ok: false,

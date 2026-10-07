@@ -8,7 +8,9 @@
 
 import * as fs from "node:fs";
 import * as path from "node:path";
+
 import { getManagedBrowsersCacheRoot } from "extension-install";
+
 import { envelope } from "../lib/envelope";
 import { findManagedBinaryIn } from "./detect-browsers";
 
@@ -16,6 +18,7 @@ const BROWSER_NAMES = ["chrome", "chromium", "edge", "firefox"] as const;
 
 function getDirSize(dir: string): number {
   let total = 0;
+
   try {
     for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
       const full = path.join(dir, entry.name);
@@ -31,6 +34,7 @@ function getDirSize(dir: string): number {
     }
   } catch {
   }
+
   return total;
 }
 
@@ -59,8 +63,10 @@ export async function listManagedBrowsers(): Promise<string> {
   for (const browser of BROWSER_NAMES) {
     const browserDir = path.join(cacheRoot, browser);
     if (!fs.existsSync(browserDir)) continue;
+
     const size = getDirSize(browserDir);
     const binaryPath = findManagedBinaryIn(browserDir, browser);
+
     if (binaryPath) {
       installed.push({
         browser,

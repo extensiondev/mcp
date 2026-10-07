@@ -1,10 +1,11 @@
 /* @invariant the smaller sentences are cut to what was
  * read or name their source. Each cell failed before its fix. */
 
-import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+
+import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
 
 import { contradictoryRef } from "../tools/store-status";
 import { readReleases as releaseList } from "../tools/release-list";
@@ -33,6 +34,7 @@ describe("112", () => {
 
   it("names its own thresholds in the analyze answer", async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-analyze-notes-"));
+
     try {
       const dist = path.join(root, "dist", "chrome");
       fs.mkdirSync(dist, { recursive: true });
@@ -50,10 +52,12 @@ describe("112", () => {
       vi.stubEnv("EXTENSION_DEV_API_URL", "https://www.extension.dev");
       vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ query: "x", results: [] }), { status: 200, headers: { "content-type": "application/json" } })));
     });
+
     afterEach(() => {
       vi.unstubAllGlobals();
       vi.unstubAllEnvs();
     });
+
     it("says platform pages can be filtered out while the hold is on", async () => {
       const out = JSON.parse(await docsSearch({ query: "billing" }));
       expect(out.status).toBe("no-match");

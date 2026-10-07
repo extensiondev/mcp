@@ -33,6 +33,7 @@ function typeOf(property: PropertySchema): string {
   if (base === "array" && property.items?.enum) return `array of ${property.items.enum.map((v) => JSON.stringify(v)).join(" | ")}`;
   if (base === "array" && property.items?.type) return `array of ${property.items.type}`;
   if (property.enum) return property.enum.map((v) => JSON.stringify(v)).join(" | ");
+
   return base;
 }
 
@@ -44,6 +45,7 @@ export function renderToolsDoc(tools: ToolSchemaLike[]): string {
   lines.push("");
   lines.push(`${tools.length} tools.`);
   lines.push("");
+
   for (const tool of [...tools].sort((a, b) => a.name.localeCompare(b.name))) {
     lines.push(`## ${tool.name}`);
     lines.push("");
@@ -52,11 +54,13 @@ export function renderToolsDoc(tools: ToolSchemaLike[]): string {
     const properties = (tool.inputSchema.properties ?? {}) as Record<string, PropertySchema>;
     const required = new Set(tool.inputSchema.required ?? []);
     const names = Object.keys(properties);
+
     if (names.length === 0) {
       lines.push("Inputs: none.");
     } else {
       lines.push("| input | type | required | default | description |");
       lines.push("| --- | --- | --- | --- | --- |");
+
       for (const name of names) {
         const property = properties[name] ?? {};
         const def = property.default === undefined ? "" : `\`${JSON.stringify(property.default)}\``;
@@ -64,7 +68,9 @@ export function renderToolsDoc(tools: ToolSchemaLike[]): string {
         lines.push(`| \`${name}\` | ${typeOf(property).replace(/\|/g, "\\|")} | ${required.has(name) ? "yes" : "no"} | ${def} | ${description} |`);
       }
     }
+
     lines.push("");
   }
+
   return lines.join("\n");
 }

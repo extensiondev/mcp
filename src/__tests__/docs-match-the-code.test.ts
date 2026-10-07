@@ -3,10 +3,11 @@
  * and the numbers the docs quote are the code's. Each cell failed before its
  * fix. */
 
-import { describe, it, expect } from "vitest";
 import fs from "node:fs";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
+
+import { describe, it, expect } from "vitest";
 
 import { tools } from "../index";
 import { renderToolsDoc } from "../lib/docs-tools";
@@ -34,8 +35,10 @@ function looseJson(objectText: string): Record<string, unknown> | null {
     .replace(/([{,]\s*)([A-Za-z_][A-Za-z0-9_]*)\s*:/g, '$1"$2":')
     .replace(/'([^'\\]*)'/g, '"$1"')
     .replace(/,\s*([}\]])/g, "$1");
+
   try {
     const parsed = JSON.parse(quoted);
+
     return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : null;
   } catch {
     return null;
@@ -44,10 +47,12 @@ function looseJson(objectText: string): Record<string, unknown> | null {
 
 describe("109: the docs say what the code does", () => {
   it("renders the tool reference from the schemas, and the file on disk is that rendering", () => {
-    const rendered = renderToolsDoc(tools.map((t) => t.schema)) + "\n";
+    const rendered = `${renderToolsDoc(tools.map((t) => t.schema))  }\n`;
+
     if (process.env.WRITE_TOOLS_DOC === "1") {
       fs.writeFileSync(fileURLToPath(new URL("../../claude/rules/mcp-tools.md", import.meta.url)), rendered);
     }
+
     expect(read("claude/rules/mcp-tools.md")).toBe(rendered);
     for (const tool of tools) expect(read("claude/rules/mcp-tools.md")).toContain(`## ${tool.schema.name}`);
   });
@@ -55,20 +60,24 @@ describe("109: the docs say what the code does", () => {
   it("validates every example call in the docs against the current schemas", () => {
     const byName = new Map(tools.map((t) => [t.schema.name, t.schema]));
     let checked = 0;
+
     for (const rel of DOCS) {
       const text = read(rel);
       const calls = text.matchAll(/\b(extension_[a-z_]+)\(\s*(\{[\s\S]*?\})\s*\)/g);
+
       for (const call of calls) {
         const [, name, objectText] = call;
         const schema = byName.get(name);
         expect(schema, `${rel} calls ${name}, which is not a tool`).toBeDefined();
         const args = looseJson(objectText);
         if (!args) continue;
+
         checked += 1;
         const issues = validateToolInput(schema!.inputSchema as Record<string, unknown>, args);
         expect(issues, `${rel}: ${name}(${objectText.replace(/\s+/g, " ")}) -> ${issues.map((i) => i.message ?? JSON.stringify(i)).join("; ")}`).toEqual([]);
       }
     }
+
     expect(checked).toBeGreaterThanOrEqual(3);
   });
 

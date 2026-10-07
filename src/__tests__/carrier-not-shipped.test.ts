@@ -1,17 +1,23 @@
-import { describe, it, expect, afterEach, vi } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+
+import { describe, it, expect, afterEach, vi } from "vitest";
+
 import { browserFromCliArgs, buildCliAnswer, writeEngineDist } from "./fixtures/engine-answers";
+
+import type * as ExecModule from "../lib/exec";
 
 let carrierAtCliTime: boolean | null = null;
 let projectAtCliTime: string | null = null;
 vi.mock("../lib/exec", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../lib/exec")>();
+  const actual = await importOriginal<typeof ExecModule>();
+
   return {
     ...actual,
     runExtensionCli: async (args: string[]) => {
       if (args[0] === "build") writeEngineDist(args[1]!, browserFromCliArgs(args));
+
       carrierAtCliTime =
         projectAtCliTime === null
           ? null
@@ -22,6 +28,7 @@ vi.mock("../lib/exec", async (importOriginal) => {
                 "extension-dev-live-preview",
               ),
             );
+
       return buildCliAnswer(args[1]!, browserFromCliArgs(args));
     },
   };
@@ -35,6 +42,7 @@ function storedZip(entries: Array<[string, string]>): Buffer {
   const bodies: Buffer[] = [];
   const directory: Buffer[] = [];
   let offset = 0;
+
   for (const [name, content] of entries) {
     const nameBuf = Buffer.from(name, "utf8");
     const data = Buffer.from(content, "utf8");
@@ -60,6 +68,7 @@ function storedZip(entries: Array<[string, string]>): Buffer {
 
     offset += local.length + nameBuf.length + data.length;
   }
+
   const body = Buffer.concat(bodies);
   const central = Buffer.concat(directory);
   const eocd = Buffer.alloc(22);
@@ -68,8 +77,10 @@ function storedZip(entries: Array<[string, string]>): Buffer {
   eocd.writeUInt16LE(entries.length, 10);
   eocd.writeUInt32LE(central.length, 12);
   eocd.writeUInt32LE(body.length, 16);
+
   return Buffer.concat([body, central, eocd]);
 }
+
 const { CARRIER_DIR_NAME, materializeCarrier, removeCarrier } = await import(
   "../lib/carrier"
 );
@@ -90,6 +101,7 @@ function project(): string {
     path.join(dir, "src", "manifest.json"),
     JSON.stringify({ manifest_version: 3, name: "probe", version: "1.0.0" }),
   );
+
   return dir;
 }
 
@@ -102,12 +114,14 @@ function placeCarrier(dir: string, managed = true): string {
   fs.mkdirSync(target, { recursive: true });
   fs.writeFileSync(path.join(target, "manifest.json"), "{}");
   if (managed) fs.writeFileSync(path.join(target, MARKER), "{}");
+
   return target;
 }
 
 afterEach(() => {
   carrierAtCliTime = null;
   projectAtCliTime = null;
+
   for (const dir of tmpDirs.splice(0)) {
     fs.rmSync(dir, { recursive: true, force: true });
   }
@@ -151,6 +165,7 @@ describe("the carrier never reaches a build", () => {
     fs.mkdirSync(path.join(dist, "extensions", CARRIER_DIR_NAME), {
       recursive: true,
     });
+
     fs.writeFileSync(
       path.join(dist, "manifest.json"),
       JSON.stringify({ manifest_version: 3, name: "probe", version: "1.0.0" }),
@@ -175,6 +190,7 @@ describe("the carrier never reaches a build", () => {
       path.join(dist, "chrome", "manifest.json"),
       JSON.stringify({ manifest_version: 3, name: "probe", version: "1.0.0" }),
     );
+
     fs.writeFileSync(
       path.join(dist, "probe-1.0.0-source.zip"),
       storedZip([
@@ -209,6 +225,7 @@ describe("the carrier never reaches a build", () => {
       path.join(dist, "chrome", "manifest.json"),
       JSON.stringify({ manifest_version: 3, name: "probe", version: "1.0.0" }),
     );
+
     fs.mkdirSync(path.join(dist, "edge", "extensions", CARRIER_DIR_NAME), {
       recursive: true,
     });
@@ -231,6 +248,7 @@ describe("the carrier never reaches a build", () => {
       path.join(dist, "manifest.json"),
       JSON.stringify({ manifest_version: 3, name: "probe", version: "1.0.0" }),
     );
+
     fs.writeFileSync(path.join(dist, "broken.zip"), "not really a zip at all");
 
     const result = JSON.parse(
@@ -266,6 +284,7 @@ describe("reading a zip's table of contents", () => {
         ["nested/deep/b.txt", "two"],
       ]),
     );
+
     expect(readZipEntryNames(zip)).toEqual({
       names: ["a.txt", "nested/deep/b.txt"],
       readable: true,
@@ -311,10 +330,12 @@ describe("removeCarrier", () => {
 describe("extension_stop", () => {
   it("reports a carrier it could not remove instead of saying nothing", async () => {
     if (process.platform === "win32" || process.getuid?.() === 0) return;
+
     const dir = project();
     placeCarrier(dir);
     const parent = path.join(dir, "extensions");
     fs.chmodSync(parent, 0o555);
+
     try {
       const outcome = await stop.stopOne(dir, "chrome");
       expect(outcome.carrierRemoved).toBeUndefined();
@@ -344,6 +365,7 @@ describe("materializeCarrier", () => {
     expect(fs.readFileSync(path.join(dir, ".gitignore"), "utf-8")).toContain(
       `extensions/${CARRIER_DIR_NAME}/`,
     );
+
     materializeCarrier(dir, "chrome");
     const lines = fs
       .readFileSync(path.join(dir, ".gitignore"), "utf-8")
@@ -365,10 +387,12 @@ describe("materializeCarrier", () => {
 
   it("says so when the .gitignore could not be written", () => {
     if (process.platform === "win32" || process.getuid?.() === 0) return;
+
     const dir = project();
     fs.mkdirSync(path.join(dir, ".git"));
     fs.writeFileSync(path.join(dir, ".gitignore"), "node_modules\n");
     fs.chmodSync(path.join(dir, ".gitignore"), 0o444);
+
     try {
       const result = materializeCarrier(dir, "chrome");
       expect(result.loaded).toBe(true);

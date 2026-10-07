@@ -1,9 +1,10 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import fs from "node:fs";
 import http from "node:http";
 import os from "node:os";
 import path from "node:path";
 import { spawn, type ChildProcess } from "node:child_process";
+
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { resolveCdpPort } from "../lib/cdp-port";
 import { writeModernContract } from "./fixtures/ready-contract";
@@ -23,6 +24,7 @@ afterEach(() => {
       // gone
     }
   }
+
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
@@ -46,6 +48,7 @@ describe("resolveCdpPort dials only the project's own live session", () => {
   it("answers null for a project with no contract and dials no debug port at all", async () => {
     const cdp = await fakeCdp();
     const get = vi.spyOn(http, "get");
+
     try {
       const resolved = await resolveCdpPort(dir, "chrome", { waitMs: 50 });
       expect(resolved).toBeNull();
@@ -75,6 +78,7 @@ describe("resolveCdpPort dials only the project's own live session", () => {
 
   it("answers null for a contract whose pid now belongs to a stranger", async () => {
     if (process.platform === "win32") return;
+
     const stranger = spawn("sleep", ["300"], { detached: true, stdio: "ignore" });
     stranger.unref();
     children.push(stranger);

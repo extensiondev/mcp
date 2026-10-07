@@ -1,21 +1,25 @@
-import { describe, it, expect, afterEach } from "vitest";
 import { spawn } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+
+import { describe, it, expect, afterEach } from "vitest";
 
 import * as stop from "../tools/stop";
 
 const posixOnly = process.platform === "win32" ? it.skip : it;
 
 const tmpDirs: string[] = [];
+
 function tmpProject(): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-stop-hints-"));
   tmpDirs.push(dir);
+
   return dir;
 }
 
 const holders: number[] = [];
+
 function spawnHolder(args: string[]): number {
   const child = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)", ...args], {
     detached: true,
@@ -23,12 +27,14 @@ function spawnHolder(args: string[]): number {
   });
   child.unref();
   holders.push(child.pid as number);
+
   return child.pid as number;
 }
 
 function isAlive(pid: number): boolean {
   try {
     process.kill(pid, 0);
+
     return true;
   } catch {
     return false;
@@ -38,8 +44,10 @@ function isAlive(pid: number): boolean {
 async function waitGone(pid: number): Promise<boolean> {
   for (let i = 0; i < 40; i++) {
     if (!isAlive(pid)) return true;
+
     await new Promise((r) => setTimeout(r, 100));
   }
+
   return !isAlive(pid);
 }
 
@@ -63,6 +71,7 @@ afterEach(() => {
     } catch {
     }
   }
+
   for (const dir of tmpDirs.splice(0)) {
     fs.rmSync(dir, { recursive: true, force: true });
   }
@@ -104,6 +113,7 @@ describe("extension_stop reaps the browser the launcher recorded, not only the o
       expect(result.value.reaped).toEqual(
         expect.arrayContaining([browserPid, launcherPid]),
       );
+
       expect(await waitGone(browserPid)).toBe(true);
       expect(await waitGone(launcherPid)).toBe(true);
     },
@@ -122,6 +132,7 @@ describe("extension_stop reaps the browser the launcher recorded, not only the o
       profilePath: "/tmp/p",
       pids: [4242],
     });
+
     expect(stop.contractProcessHints(projectPath, "chrome")).toEqual({ pids: [] });
   });
 });

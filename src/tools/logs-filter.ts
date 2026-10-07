@@ -11,6 +11,7 @@ import {
   readLogEvents as engineReadLogEvents,
   type LogQuery,
 } from "extension-develop/bridge";
+
 import { engineProjectRoot } from "../lib/session-paths";
 
 export { type LogQuery };
@@ -38,6 +39,7 @@ export function readLogEvents(
 export function readLogDropped(projectPath: string, browser: string): number {
   return engineReadLogEvents(engineProjectRoot(projectPath), browser, {}).reduce((sum, event) => {
     const record = event as { type?: unknown; dropped?: unknown };
+
     return record.type === "gap" && typeof record.dropped === "number" ? sum + record.dropped : sum;
   }, 0);
 }
@@ -87,6 +89,7 @@ export function makeFilter(args: LogsArgs): (event: unknown) => boolean {
     url: args.url,
     tab: args.tab,
   };
+
   return (event: unknown): boolean => matchesLogQuery(event as never, query);
 }
 
@@ -97,11 +100,14 @@ export function makeFilter(args: LogsArgs): (event: unknown) => boolean {
    channel was written by the extension's own producer. */
 export function isBrowserChannelEvent(event: unknown): boolean {
   const data = (event as { data?: { channel?: unknown } })?.data;
+
   return data?.channel === "browser";
 }
 
 export function browserEventBelongsTo(event: unknown, guestIds: string[]): boolean {
   if (!isBrowserChannelEvent(event)) return true;
+
   const url = String((event as { url?: unknown })?.url ?? "");
+
   return guestIds.some((id) => url.startsWith(`chrome-extension://${id}/`));
 }

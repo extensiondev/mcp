@@ -1,7 +1,8 @@
-import { describe, it, expect, afterEach } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+
+import { describe, it, expect, afterEach } from "vitest";
 
 import {
   findManagedBinary,
@@ -11,9 +12,11 @@ import {
 } from "../tools/detect-browsers";
 
 const tmpDirs: string[] = [];
+
 function cacheRoot(): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-managed-cache-"));
   tmpDirs.push(dir);
+
   return dir;
 }
 
@@ -21,6 +24,7 @@ function plant(root: string, relative: string): string {
   const full = path.join(root, relative);
   fs.mkdirSync(path.dirname(full), { recursive: true });
   fs.writeFileSync(full, "#!/bin/sh\nexit 0\n", { mode: 0o755 });
+
   return full;
 }
 
@@ -28,6 +32,7 @@ const savedEnv = process.env.EXT_BROWSERS_CACHE_DIR;
 afterEach(() => {
   if (savedEnv === undefined) delete process.env.EXT_BROWSERS_CACHE_DIR;
   else process.env.EXT_BROWSERS_CACHE_DIR = savedEnv;
+
   for (const dir of tmpDirs.splice(0)) {
     fs.rmSync(dir, { recursive: true, force: true });
   }
@@ -97,6 +102,7 @@ describe("the managed-cache search reaches the binary the engine really launches
 
     expect(firefox.source).toBe("managed");
     expect(firefox.binaryPath).toBe(exe);
+
     if (firefox.systemBinaryPath) {
       expect(firefox.devLaunches).toContain("geckoBinary");
       expect(firefox.devLaunches).toContain(firefox.systemBinaryPath);

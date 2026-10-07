@@ -1,16 +1,18 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { createRequire } from "node:module";
+
 import { describe, expect, it } from "vitest";
 import {
   LOG_LEVEL_ORDER,
   matchesLogQuery,
   readLogEvents,
 } from "extension-develop/bridge";
+
 import { makeFilter } from "../tools/logs-filter";
 import { logsPath } from "../lib/session-paths";
 import { schema as logsSchema } from "../tools/logs-schema";
-import { createRequire } from "node:module";
 
 /* @invariant The CI matrix runs this suite against the stable engine and the
    canary side by side, and the two answer level 'off' differently, so the
@@ -19,6 +21,7 @@ function engineTreatsOffAsNone(): boolean {
   const require = createRequire(import.meta.url);
   const version = String(require("extension-develop/package.json").version);
   const [major, minor, patch] = version.split("-")[0].split(".").map(Number);
+
   return major > 4 || (major === 4 && (minor > 1 || (minor === 1 && patch >= 31)));
 }
 
@@ -212,12 +215,14 @@ describe("the schema's level vocabulary matches the engine's rank", () => {
           matchesLogQuery(event as never, { level }),
         ).length,
     );
+
     for (let i = 1; i < selected.length; i += 1) {
       expect(
         selected[i],
         `${severities[i]} must select at least as much as ${severities[i - 1]}`,
       ).toBeGreaterThanOrEqual(selected[i - 1]);
     }
+
     expect(selected[0]).toBeLessThan(selected[selected.length - 1]);
   });
 

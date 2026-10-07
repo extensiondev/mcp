@@ -6,12 +6,13 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
+import { UserlandProjectPage } from "@extension.dev/urls/userland";
+
 import { API_BASE } from "../lib/common-schema";
 import { resolveCredential } from "../lib/credential-source";
 import { envelope, type ErrorCode } from "../lib/envelope";
 import { PROJECT_TOKEN_INPUT, noStoredLoginHint } from "../lib/credentials";
 import { resolveApiBase, safeApiBase } from "../lib/login-flow";
-import { UserlandProjectPage } from "@extension.dev/urls/userland";
 import { platformHoldEnvelope, sawPlatformHold } from "../lib/platform-hold";
 import {
   approvalGateEnabled,
@@ -25,7 +26,6 @@ import {
   partialPromoteWarnings,
   readPromoteOutcome,
 } from "../lib/promote-outcome";
-
 import {
   consoleProjectUrl,
   fetchRegistryJson,
@@ -107,9 +107,11 @@ export async function handler(args: {
 }): Promise<string> {
   const credential = resolveCredential({ project: args.project });
   const token = credential.token;
+
   if (!token && args.project) {
     return fail("PromoteAuthError", noStoredLoginHint(args.project), "auth-required", "E_AUTH_REQUIRED");
   }
+
   if (!token) {
     return fail(
       "ReleaseAuthError",
@@ -121,6 +123,7 @@ export async function handler(args: {
 
   const buildId = String(args.buildId || "").trim();
   const channel = String(args.channel || "").trim();
+
   if (!buildId || !channel) {
     return fail(
       "ReleaseInputError",
@@ -131,6 +134,7 @@ export async function handler(args: {
   }
 
   const apiCheck = safeApiBase(resolveApiBase(args.api), args.api);
+
   if (!apiCheck.ok) {
     return fail(
       "ReleaseConfigError",
@@ -139,6 +143,7 @@ export async function handler(args: {
       "E_CONFIG",
     );
   }
+
   const url = `${apiCheck.base}/api/cli/release/promote`;
 
   const sourceChannel = args.sourceChannel
@@ -174,13 +179,16 @@ export async function handler(args: {
   const approvalId = gate.approvalId ?? (args.approvalId ? String(args.approvalId).trim() : "");
   if (approvalId) body.approvalId = approvalId;
   if (args.sourceChannel) body.sourceChannel = String(args.sourceChannel).trim();
+
   if (Array.isArray(args.browsers) && args.browsers.length) {
     body.browsers = args.browsers.map((b) => String(b).trim()).filter(Boolean);
   }
+
   if (args.version) body.version = String(args.version).trim();
   if (args.releaseNotes) body.releaseNotes = String(args.releaseNotes);
 
   let res: Response;
+
   try {
     res = await fetch(url, {
       method: "POST",
@@ -201,6 +209,7 @@ export async function handler(args: {
 
   const text = await res.text();
   let data: any;
+
   try {
     data = JSON.parse(text);
   } catch {
@@ -219,9 +228,11 @@ export async function handler(args: {
         value: { channel, buildId },
       });
     }
+
     if (!args.approvalId && platformRequiresApproval(res, data)) {
       return requestApprovalAfterRefusal(gateInput);
     }
+
     const code = typeof data?.code === "string" ? data.code : undefined;
     const enrich: Record<string, unknown> = {};
     let hint = "";
@@ -231,17 +242,20 @@ export async function handler(args: {
       enrich.buildsPageUrl = consoleProjectUrl(ref, "builds", args.api);
       hint =
         "Run extension_release_status to see this project's channels, their promoted shas, and recent builds.";
+
       if (ref) {
         const channelsUrl = registryFileUrl(ref, "channels.json");
         const channelsRes = await fetchRegistryJson(channelsUrl, fetch, {
           ref,
           api: args.api,
         });
+
         if (channelsRes.ok) {
           const rows = channelsShapeProblem(channelsRes.json) ? [] : parseChannels(channelsRes.json).filter((c) => c.sha);
           enrich.validChannelShas = Object.fromEntries(
             rows.map((c) => [c.channel, c.sha]),
           );
+
           enrich.registryChannelsUrl = channelsUrl;
         }
       }
@@ -291,6 +305,7 @@ export async function handler(args: {
   const statusRead = `extension_release_status (include: ['releases']${
     args.project ? `, project: '${args.project}'` : ""
   })`;
+
   if (outcome.state === "unconfirmed") {
     return envelope({
       ok: false,
@@ -305,6 +320,7 @@ export async function handler(args: {
       hint: `Do not promote again blind: a promote that did go through would be dispatched a second time. Read ${statusRead} and promote again only if ${channel} does not name ${buildId}.`,
     });
   }
+
   if (outcome.state === "partial") {
     return envelope({
       ok: true,
@@ -323,6 +339,7 @@ export async function handler(args: {
       warnings: [...partialPromoteWarnings(outcome, channel), credential.note],
     });
   }
+
   return envelope({
     ok: true,
     command: "extension_release_promote",

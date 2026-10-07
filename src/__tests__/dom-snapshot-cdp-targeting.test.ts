@@ -1,15 +1,21 @@
 import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
+
 import { actFrame, tabRows } from "./fixtures/engine-answers";
+
+import type * as ActModule from "../lib/act";
+import type * as CdpPortModule from "../lib/cdp-port";
 
 
 const calls: string[][] = [];
 let actResponder: (cli: string[]) => string = () => JSON.stringify({ ok: true });
 vi.mock("../lib/act", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../lib/act")>();
+  const actual = await importOriginal<typeof ActModule>();
+
   return {
     ...actual,
     runActVerb: async (cli: string[]) => {
       calls.push(cli);
+
       return actResponder(cli);
     },
   };
@@ -17,7 +23,8 @@ vi.mock("../lib/act", async (importOriginal) => {
 
 let cdpPort: { port: number; source: string } | null = { port: 9222, source: "contract" };
 vi.mock("../lib/cdp-port", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../lib/cdp-port")>();
+  const actual = await importOriginal<typeof CdpPortModule>();
+
   return { ...actual, resolveCdpPort: async () => cdpPort };
 });
 
@@ -28,6 +35,7 @@ vi.mock("../lib/cdp", () => {
       return cdpTargets;
     }
   }
+
   return { CDPClient };
 });
 
@@ -63,6 +71,7 @@ describe("dom_snapshot listTargets", () => {
       { targetId: "AAA1", type: "page", url: "https://example.com/", title: "Example Domain" },
       { targetId: "BBB2", type: "page", url: "https://developer.chrome.com/docs", title: "Chrome Docs" },
     ]);
+
     expect(calls).toHaveLength(0);
   });
 
@@ -187,6 +196,7 @@ describe("dom_snapshot tabUrl targeting", () => {
       "AAA1",
       "EEE5",
     ]);
+
     expect(result.hint).toContain("Narrow");
     expect(calls).toHaveLength(0);
   });
@@ -258,6 +268,7 @@ describe("dom_snapshot tabUrl targeting", () => {
     expect(result.value.availableTabs).toEqual([
       { tabId: 7, url: "https://example.com/", title: "Example" },
     ]);
+
     expect(calls).toHaveLength(1);
   });
 
@@ -285,6 +296,7 @@ describe("dom_snapshot tabUrl targeting", () => {
     expect(result.value.matchingTabs.map((t: { tabId: number }) => t.tabId)).toEqual([
       7, 9,
     ]);
+
     expect(calls).toHaveLength(1);
   });
 });

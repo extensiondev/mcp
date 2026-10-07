@@ -3,32 +3,40 @@
  * target is refused, the default build target's issues block, and the
  * permission scan says when it stopped. */
 
-import { describe, it, expect, afterEach, vi } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
+import { describe, it, expect, afterEach, vi } from "vitest";
+
+import type * as TemplatesCacheModule from "../lib/templates-cache";
+
 vi.mock("../lib/templates-cache", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../lib/templates-cache")>();
+  const actual = await importOriginal<typeof TemplatesCacheModule>();
+
   return { ...actual, listTemplates: async () => [] };
 });
 
 const manifestValidate = await import("../tools/manifest-validate");
 
 const dirs: string[] = [];
+
 function project(manifest: Record<string, unknown>, files: string[] = [], where: "src" | "root" = "src"): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-validate-browsers-"));
   dirs.push(dir);
   const manifestDir = where === "src" ? path.join(dir, "src") : dir;
   fs.mkdirSync(manifestDir, { recursive: true });
   fs.writeFileSync(path.join(manifestDir, "manifest.json"), JSON.stringify(manifest));
+
   for (const rel of files) {
     const full = path.join(dir, rel);
     fs.mkdirSync(path.dirname(full), { recursive: true });
     fs.writeFileSync(full, "");
   }
+
   return dir;
 }
+
 afterEach(() => {
   for (const d of dirs.splice(0)) fs.rmSync(d, { recursive: true, force: true });
 });

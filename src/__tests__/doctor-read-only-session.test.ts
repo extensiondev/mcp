@@ -4,12 +4,17 @@ import path from "node:path";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { handler } from "../tools/doctor";
+import { DOCTOR_CONTROL_OFF_DETAIL } from "./fixtures/engine-answers";
+
+import type * as ExecModule from "../lib/exec";
+
 const cli = vi.hoisted(() => ({
   response: { code: 1, stdout: "", stderr: "" },
 }));
 
 vi.mock("../lib/exec", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../lib/exec")>()),
+  ...(await importOriginal<typeof ExecModule>()),
   runExtensionCli: async () => cli.response,
   pinnedCliVersion: () => "",
 }));
@@ -19,13 +24,12 @@ vi.mock("../lib/engine-version", () => ({
   outputFlagRefusalMessage: async () => "unused",
 }));
 
-import { handler } from "../tools/doctor";
-import { DOCTOR_CONTROL_OFF_DETAIL } from "./fixtures/engine-answers";
-
 const tmpDirs: string[] = [];
+
 function tmpProject(): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-doctor-readonly-"));
   tmpDirs.push(dir);
+
   return dir;
 }
 
@@ -209,6 +213,7 @@ describe("the read-only verdict keys on the wording the CLI writes", () => {
     expect(DOCTOR_CONTROL_OFF_DETAIL).toBe(
       "refused: control is off in the session that answered",
     );
+
     expect(DOCTOR_CONTROL_OFF_DETAIL).not.toContain("was not started with");
   });
 });

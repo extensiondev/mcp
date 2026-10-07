@@ -1,12 +1,16 @@
-import { describe, it, expect, vi, afterEach } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { spawn } from "node:child_process";
-import type { ChildProcess } from "node:child_process";
 
-type SpawnedCli = import("../lib/exec").SpawnedCli;
+import { describe, it, expect, vi, afterEach } from "vitest";
+
+import type { ChildProcess } from "node:child_process";
+import type * as ExecModule from "../lib/exec";
+import type { SpawnedCli } from "../lib/exec";
+
 const spawned: ChildProcess[] = [];
+
 function fakeCli(script: string): SpawnedCli {
   const logDir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-fake-cli-"));
   const logPath = path.join(logDir, "session.log");
@@ -16,6 +20,7 @@ function fakeCli(script: string): SpawnedCli {
   });
   fs.closeSync(fd);
   spawned.push(child);
+
   return {
     child,
     logPath,
@@ -32,7 +37,8 @@ function fakeCli(script: string): SpawnedCli {
 let nextChild: () => SpawnedCli = () => fakeCli("setTimeout(()=>{}, 60000)");
 
 vi.mock("../lib/exec", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../lib/exec")>();
+  const actual = await importOriginal<typeof ExecModule>();
+
   return {
     ...actual,
     spawnExtensionCli: () => nextChild(),
@@ -51,9 +57,11 @@ const {
 } = await import("./fixtures/ready-contract");
 
 const tmpDirs: string[] = [];
+
 function tmpProject(): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-dev-health-"));
   tmpDirs.push(dir);
+
   return dir;
 }
 
@@ -65,12 +73,14 @@ afterEach(() => {
       // already gone
     }
   }
+
   for (const dir of tmpDirs.splice(0)) {
     try {
       removeSession(dir, "chrome");
     } catch {
       // no session registered
     }
+
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
@@ -121,6 +131,7 @@ describe("extension_dev health tick", () => {
 
   it("reads a failed first compile off the machine contract, not the output", async () => {
     const project = tmpProject();
+
     nextChild = () => {
       const cli = fakeCli('console.log("building"); setTimeout(()=>{}, 60000);');
       setTimeout(() => {
@@ -130,6 +141,7 @@ describe("extension_dev health tick", () => {
           errors: ["Module not found: ./src/panel.js"],
         });
       }, 300);
+
       return cli;
     };
 
@@ -145,6 +157,7 @@ describe("extension_dev health tick", () => {
 
   it("calls a browser launch failure a boot failure, not a compile story", async () => {
     const project = tmpProject();
+
     nextChild = () => {
       const cli = fakeCli('console.log("building"); setTimeout(()=>{}, 60000);');
       setTimeout(() => {
@@ -153,6 +166,7 @@ describe("extension_dev health tick", () => {
           message: "the browser process could not start: spawn ENOENT",
         });
       }, 300);
+
       return cli;
     };
 
@@ -172,6 +186,7 @@ describe("extension_dev health tick", () => {
     const project = tmpProject();
     nextChild = () =>
       fakeCli('console.error("HEADLINE " + "x".repeat(3000)); process.exit(1);');
+
     const result = JSON.parse(await dev.handler({ projectPath: project }));
     expect(result.status).toBe("exited");
     expect(result.value.output.length).toBe(2000);
@@ -181,13 +196,16 @@ describe("extension_dev health tick", () => {
 
   it("reports the control channel from the contract, not from the request", async () => {
     const project = tmpProject();
+
     nextChild = () => {
       const cli = fakeCli('console.log("building"); setTimeout(()=>{}, 60000);');
       setTimeout(() => {
         writeModernContract(project, "chrome", { controlPort: null, controlPortUnavailableReason: "EADDRINUSE 43210" });
       }, 300);
+
       return cli;
     };
+
     const result = JSON.parse(await dev.handler({ projectPath: project, allowControl: true }));
     expect(result.status).toBe("started");
     expect(result.value.capabilities.controlChannel).toMatchObject({ requested: true, port: null, unavailableReason: "EADDRINUSE 43210" });
@@ -197,11 +215,14 @@ describe("extension_dev health tick", () => {
 
   it("names the shared output, not a profile lock, when a session already runs", async () => {
     const project = tmpProject();
+
     nextChild = () => {
       const cli = fakeCli('console.log("building"); setTimeout(()=>{}, 60000);');
       setTimeout(() => writeModernContract(project, "chrome", { controlPort: 43210 }), 300);
+
       return cli;
     };
+
     const first = JSON.parse(await dev.handler({ projectPath: project }));
     expect(first.status).toBe("started");
     const second = JSON.parse(await dev.handler({ projectPath: project }));
@@ -212,6 +233,7 @@ describe("extension_dev health tick", () => {
 
   it("trusts the profile-lock stamp even from a CLI that declares no schema", async () => {
     const project = tmpProject();
+
     nextChild = () => {
       const cli = fakeCli('console.log("building"); setTimeout(()=>{}, 60000);');
       setTimeout(() => {
@@ -221,6 +243,7 @@ describe("extension_dev health tick", () => {
           profileLockOwner: { host: "h", pid: 77 },
         });
       }, 300);
+
       return cli;
     };
 
@@ -251,6 +274,7 @@ describe("extension_dev health tick", () => {
 
   it("splits a locked profile out of browser-exited when the contract says so", async () => {
     const project = tmpProject();
+
     nextChild = () => {
       const cli = fakeCli('console.log("building"); setTimeout(()=>{}, 60000);');
       setTimeout(() => {
@@ -262,6 +286,7 @@ describe("extension_dev health tick", () => {
           profileLockOwner: { host: "somehost", pid: 4242 },
         });
       }, 300);
+
       return cli;
     };
 
@@ -274,6 +299,7 @@ describe("extension_dev health tick", () => {
     expect(result.error.message).toContain(
       "/dist/extension-js/profiles/chrome-profile/tidy-amber-otter",
     );
+
     expect(result.value.owner).toEqual({ host: "somehost", pid: 4242 });
     expect(result.value.lockedAt).toBe("2026-07-27T09:00:00.000Z");
     expect(result.warnings).toEqual([]);
@@ -298,6 +324,7 @@ describe("extension_dev health tick", () => {
 describe("extension_dev port truth", () => {
   it("reports the bound port from ready.json and never disagrees with wait", async () => {
     const project = tmpProject();
+
     nextChild = () => {
       const cli = fakeCli(
         'console.log("ready in 300ms"); setTimeout(()=>{}, 60000);',
@@ -311,6 +338,7 @@ describe("extension_dev port truth", () => {
           executorAttachedAt: new Date().toISOString(),
         });
       }, 1000);
+
       return cli;
     };
 

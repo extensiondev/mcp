@@ -1,4 +1,5 @@
 import path from "node:path";
+
 import { describe, expect, it } from "vitest";
 
 import {
@@ -46,6 +47,7 @@ describe("engine session-path helpers match the layout this package used to hard
     expect(sessionArtifactsRootDir(PROJECT)).toBe(
       path.resolve(PROJECT, "dist", "extension-js"),
     );
+
     expect(browserArtifactsDir(PROJECT, "chrome")).toBe(
       path.resolve(PROJECT, "dist", "extension-js", "chrome"),
     );
@@ -53,6 +55,7 @@ describe("engine session-path helpers match the layout this package used to hard
 
   it("keeps every artifact inside the per-browser directory", () => {
     const dir = browserArtifactsDir(PROJECT, "chrome");
+
     for (const file of [
       readyContractPath(PROJECT, "chrome"),
       logsPath(PROJECT, "chrome"),
@@ -73,6 +76,7 @@ describe("engine session-path helpers match the layout this package used to hard
     expect(readyContractPath(PROJECT, "chrome")).not.toBe(
       readyContractPath(PROJECT, "firefox"),
     );
+
     expect(logsPath(PROJECT, "chrome")).not.toBe(logsPath(PROJECT, "firefox"));
   });
 });

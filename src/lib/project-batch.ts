@@ -24,6 +24,7 @@ export interface BatchCapability {
 function capFrom(value: unknown, fallback: number): number {
   const count = Number(value);
   if (!Number.isInteger(count) || count < 1) return fallback;
+
   return Math.min(count, MAX_BATCH_PROJECTS);
 }
 
@@ -44,7 +45,9 @@ function capFrom(value: unknown, fallback: number): number {
 export function readBatchCapability(config: unknown): BatchCapability | null {
   const raw = (config as { batchOnboarding?: unknown } | null)?.batchOnboarding;
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+
   const record = raw as Record<string, unknown>;
+
   return {
     createProjectsPerApproval: capFrom(
       record.createProjectsPerApproval,
@@ -94,60 +97,74 @@ export function parseProjectBatch(input: unknown): ProjectBatchParse {
       message: "projects must be an array of '<workspace>/<project>' names.",
     };
   }
+
   if (input.length < 1 || input.length > MAX_BATCH_PROJECTS) {
     return {
       ok: false,
       message: `projects must name between 1 and ${MAX_BATCH_PROJECTS} projects; got ${input.length}. One approval covers at most ${MAX_BATCH_PROJECTS}, so split a longer list into separate calls.`,
     };
   }
+
   const refs: string[] = [];
   const slugs: string[] = [];
   let workspace = "";
+
   for (const entry of input) {
     const raw = typeof entry === "string" ? entry.trim() : "";
+
     if (!/^[^/]+\/[^/]+$/.test(raw)) {
       return {
         ok: false,
         message: `Every entry in projects must be '<workspace>/<project>'; got ${JSON.stringify(entry)}.`,
       };
     }
+
     const slash = raw.indexOf("/");
     const entryWorkspace = raw.slice(0, slash).trim().toLowerCase();
     const slug = raw.slice(slash + 1).trim().toLowerCase();
+
     if (!entryWorkspace || entryWorkspace.length > MAX_WORKSPACE_SLUG_LENGTH) {
       return {
         ok: false,
         message: `The workspace in '${raw}' must be a slug of at most ${MAX_WORKSPACE_SLUG_LENGTH} characters.`,
       };
     }
+
     if (!isExactProjectSlug(slug)) {
       return {
         ok: false,
         message: `'${raw}' does not name a project by its exact slug. A batch takes each project slug exactly as the platform registers it: lowercase letters and digits joined by single dashes, at most ${MAX_PROJECT_SLUG_LENGTH} characters. The console address bar shows it as console.extension.dev/<workspace>/<project>.`,
       };
     }
+
     if (workspace && entryWorkspace !== workspace) {
       return {
         ok: false,
         message: `One approval covers one workspace: '${raw}' is in '${entryWorkspace}' but the list started in '${workspace}'. Make one call per workspace.`,
       };
     }
+
     workspace = entryWorkspace;
+
     if (slugs.includes(slug)) {
       return {
         ok: false,
         message: `'${entryWorkspace}/${slug}' is named twice in projects. Name each project once.`,
       };
     }
+
     slugs.push(slug);
     refs.push(`${entryWorkspace}/${slug}`);
   }
+
   return { ok: true, batch: { workspace, slugs, refs } };
 }
 
 export function sameProjectSet(a: string[], b: string[]): boolean {
   if (a.length !== b.length) return false;
+
   const wanted = new Set(a.map((value) => value.toLowerCase()));
+
   return b.every((value) => wanted.has(value.toLowerCase()));
 }
 

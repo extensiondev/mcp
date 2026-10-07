@@ -18,10 +18,12 @@ vi.mock("../lib/cdp", () => ({
   CDPClient: {
     discoverTargets: async () => {
       if (discoverThrows) throw discoverThrows;
+
       return targets;
     },
   },
 }));
+
 vi.mock("../lib/cdp-port", () => ({
   resolveCdpPort: async () => resolved,
 }));
@@ -39,6 +41,7 @@ const STRANGER = "ponmlkjihgfedcbaponmlkjihgfedcba";
 const EDGE_COMPANION = "aabbccddeeffgghhaabbccddeeffgghh";
 
 let project = "/proj";
+
 function session(contract: Record<string, unknown> = { extensionId: GUEST }): void {
   project = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-oracle-"));
   const file = readyContractPath(project, "chrome");
@@ -59,6 +62,7 @@ describe("verifyGuestLoaded", () => {
       target(`chrome-extension://${COMPANION}/devtools.html`, "page"),
       target(`chrome-extension://${GUEST}/service_worker.js`),
     ];
+
     const r = await verifyGuestLoaded(project, "chrome");
     expect(r.checked).toBe(true);
     expect(r.loaded).toBe(true);
@@ -85,6 +89,7 @@ describe("verifyGuestLoaded", () => {
       target(`chrome-extension://${COMPANION}/x.html`, "page"),
       target(`chrome-extension://${CARRIER_EXTENSION_ID}/background.js`),
     ];
+
     const r = await verifyGuestLoaded(project, "chrome");
     expect(r.loaded).toBe(false);
   });
@@ -97,6 +102,7 @@ describe("verifyGuestLoaded", () => {
       target("http://localhost:8080/", "page"),
       target("chrome://extensions/", "page"),
     ];
+
     const r = await verifyGuestLoaded(project, "chrome");
     expect(r.checked).toBe(true);
     expect(r.loaded).toBe(false);
@@ -128,6 +134,7 @@ describe("verifyGuestLoaded matches the contract's own extension id", () => {
       target(`chrome-extension://${COMPANION}/devtools.html`, "page"),
       target(`chrome-extension://${STRANGER}/sw.js`),
     ];
+
     const r = await verifyGuestLoaded(project, "chrome");
     expect(r.checked).toBe(true);
     expect(r.loaded).toBe(false);
@@ -141,6 +148,7 @@ describe("verifyGuestLoaded matches the contract's own extension id", () => {
       extensionId: GUEST,
       managedExtensions: [{ path: "/engine/devtools/edge", id: EDGE_COMPANION }],
     });
+
     resolved = { port: 9333, source: "contract" };
     discoverThrows = null;
     targets = [target(`chrome-extension://${EDGE_COMPANION}/sw.js`)];

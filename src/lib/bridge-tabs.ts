@@ -8,6 +8,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
+
 import { actFrameJson, runActVerb } from "./act";
 import { envelope } from "./envelope";
 import { readyContractPath } from "./session-paths";
@@ -39,12 +40,15 @@ export async function listBridgeTabs(
     tool,
   );
   let parsed: any;
+
   try {
     parsed = JSON.parse(raw);
   } catch {
     return { error: raw };
   }
+
   if (parsed?.ok === false) return { error: raw };
+
   const list = Array.isArray(parsed?.tabs)
     ? parsed.tabs
     : Array.isArray(parsed?.value)
@@ -53,6 +57,7 @@ export async function listBridgeTabs(
         ? parsed.value.tabs
         : null;
   if (!list) return { error: raw };
+
   return {
     tabs: list.map((t: any) => ({
       tabId:
@@ -71,6 +76,7 @@ export function matchTabsByUrl(tabs: BridgeTab[], needle: string): BridgeTab[] {
   const wanted = needle.toLowerCase();
   const byUrl = tabs.filter((t) => t.url.toLowerCase().includes(wanted));
   if (byUrl.length > 0) return byUrl;
+
   return tabs.filter((t) => t.title.toLowerCase().includes(wanted));
 }
 
@@ -84,19 +90,24 @@ export async function pollForBridgeTab(
   const wanted = url.replace(/#.*$/, "");
   let listedOnce = false;
   let lastError: string | null = null;
+
   for (;;) {
     const listed = await listBridgeTabs(projectPath, browser);
+
     if ("tabs" in listed) {
       listedOnce = true;
+
       for (const t of listed.tabs) {
         if (t.url === wanted || t.url.startsWith(wanted)) return t;
       }
     } else {
       lastError = listed.error;
     }
+
     if (Date.now() >= deadline) {
       return !listedOnce && lastError !== null ? { unreadable: lastError } : null;
     }
+
     await new Promise((r) => setTimeout(r, 250));
   }
 }
@@ -119,12 +130,15 @@ async function pollForBridgeTabById(
   let seen: BridgeTab | null = null;
   let listedOnce = false;
   let lastError: string | null = null;
+
   for (;;) {
     const listed = await listBridgeTabs(projectPath, browser);
+
     if ("tabs" in listed) {
       listedOnce = true;
       const candidates =
         tabId != null ? listed.tabs.filter((t) => t.tabId === tabId) : listed.tabs;
+
       for (const t of candidates) {
         if (t.url === wanted || t.url.startsWith(wanted)) return { tab: t, seen: t };
         if (tabId != null) seen = t;
@@ -132,6 +146,7 @@ async function pollForBridgeTabById(
     } else {
       lastError = listed.error;
     }
+
     if (Date.now() >= deadline) {
       return {
         tab: null,
@@ -139,6 +154,7 @@ async function pollForBridgeTabById(
         ...(!listedOnce && lastError !== null ? { unreadable: lastError } : {}),
       };
     }
+
     await new Promise((r) => setTimeout(r, 250));
   }
 }
@@ -181,14 +197,17 @@ export async function navigateToUrlViaBridge(
     tool,
   );
   let verbFrame: any;
+
   try {
     verbFrame = JSON.parse(viaVerb);
   } catch {
     verbFrame = null;
   }
+
   const verbUnknown =
     verbFrame?.ok === false &&
     UNKNOWN_VERB.test(String(verbFrame?.error?.message ?? ""));
+
   if (verbFrame && !verbUnknown) {
     if (verbFrame.ok === false) {
       return actFrameJson(
@@ -200,6 +219,7 @@ export async function navigateToUrlViaBridge(
             },
       );
     }
+
     const value =
       verbFrame.value && typeof verbFrame.value === "object"
         ? verbFrame.value
@@ -210,6 +230,7 @@ export async function navigateToUrlViaBridge(
        so the tab is read back until it reports that url.
        A tab that never does is not "navigated"; what it shows is reported. */
     const landed = await pollForBridgeTabById(projectPath, browser, url, tabId, 3000);
+
     if (!landed.tab) {
       return envelope({
         ok: false,
@@ -232,6 +253,7 @@ export async function navigateToUrlViaBridge(
         hint: "Read the tab with extension_dom_snapshot (listTabs: true) to see what it shows; a url nothing serves, or a document the extension does not ship, lands on the browser's error page.",
       });
     }
+
     return envelope({
       ok: true,
       command: tool,
@@ -246,6 +268,7 @@ export async function navigateToUrlViaBridge(
       hint: `The tab reports ${landed.tab.url}${landed.tab.title ? ` ("${landed.tab.title}")` : ""}. Whether the page loaded or shows the browser's error page is in that title; read it with extension_inspect (url) to be sure. Content scripts that match it run on load; read them with extension_eval (context: 'content', url) or extension_assert content-script-injected.`,
     });
   }
+
   return navigateToUrlViaBackgroundEval(projectPath, browser, url, timeout, tool);
 }
 
@@ -281,8 +304,10 @@ async function navigateToUrlViaBackgroundEval(
     timeout,
     tool,
   );
+
   try {
     const parsed = JSON.parse(raw);
+
     if (parsed?.ok === false) {
       return actFrameJson(
         parsed.hint
@@ -303,6 +328,7 @@ async function navigateToUrlViaBackgroundEval(
     url,
     timeout != null ? Math.min(timeout, 6000) : 6000,
   );
+
   if (tabListUnreadable(settled)) {
     return envelope({
       ok: false,
@@ -316,6 +342,7 @@ async function navigateToUrlViaBackgroundEval(
       hint: "extension_doctor says whether the session is still up; if it is, read the tabs with extension_dom_snapshot listTabs: true.",
     });
   }
+
   if (!settled) {
     return envelope({
       ok: false,
@@ -329,6 +356,7 @@ async function navigateToUrlViaBackgroundEval(
       hint: "Confirm the URL, or discover open tabs with extension_dom_snapshot listTabs: true. For an extension page, the path must match the BUILT manifest.",
     });
   }
+
   return envelope({
     ok: true,
     command: tool,
@@ -361,6 +389,7 @@ export function geckoAddonId(projectPath: string, browser: string): string | nul
     manifest?.["gecko:browser_specific_settings"] ??
     manifest?.applications;
   const id = settings?.gecko?.id;
+
   return typeof id === "string" && id ? id : null;
 }
 
@@ -369,6 +398,7 @@ export function sessionProfilePath(projectPath: string, browser: string): string
     const contract = JSON.parse(
       fs.readFileSync(readyContractPath(projectPath, browser), "utf8"),
     ) as Record<string, unknown>;
+
     return typeof contract.profilePath === "string" && contract.profilePath.trim()
       ? contract.profilePath
       : null;
@@ -384,17 +414,22 @@ export function readGeckoBaseUrlFromProfile(
   const addonId = geckoAddonId(projectPath, browser);
   const profile = sessionProfilePath(projectPath, browser);
   if (!addonId || !profile) return null;
+
   let prefs: string;
+
   try {
     prefs = fs.readFileSync(path.join(profile, "prefs.js"), "utf8");
   } catch {
     return null;
   }
+
   const match = UUIDS_PREF.exec(prefs);
   if (!match) return null;
+
   try {
     const map = JSON.parse(JSON.parse(`"${match[1]}"`)) as Record<string, unknown>;
     const uuid = map[addonId];
+
     return typeof uuid === "string" && uuid ? `moz-extension://${uuid}/` : null;
   } catch {
     return null;
@@ -407,6 +442,7 @@ export async function resolveBridgeBaseUrl(
   timeout?: number,
 ): Promise<string | null> {
   const fromRelay = await resolveBridgeBaseUrlThroughRelay(projectPath, browser, timeout);
+
   return fromRelay ?? readGeckoBaseUrlFromProfile(projectPath, browser);
 }
 
@@ -429,13 +465,16 @@ async function resolveBridgeBaseUrlThroughRelay(
     projectPath,
     timeout,
   );
+
   try {
     const parsed = JSON.parse(raw);
+
     if (parsed?.ok && typeof parsed.value === "string" && parsed.value) {
       return parsed.value.endsWith("/") ? parsed.value : `${parsed.value}/`;
     }
   } catch {
     // fall through
   }
+
   return null;
 }

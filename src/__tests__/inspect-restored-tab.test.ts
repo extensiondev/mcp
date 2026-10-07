@@ -1,5 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { handler } from "../tools/inspect";
+
+import type * as ProfileCarryoverModule from "../lib/profile-carryover";
+
 const cdp = vi.hoisted(() => ({
   targets: [] as Array<{ id: string; type: string; url: string; title: string }>,
 }));
@@ -39,11 +43,9 @@ vi.mock("../lib/cdp-port", () => ({
 }));
 
 vi.mock("../lib/profile-carryover", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../lib/profile-carryover")>()),
+  ...(await importOriginal<typeof ProfileCarryoverModule>()),
   sessionProfileReused: () => profile.reused,
 }));
-
-import { handler } from "../tools/inspect";
 
 const GUEST = {
   id: "guest",

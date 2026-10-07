@@ -1,7 +1,8 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { listArtifacts, revokeArtifact } from "../lib/artifacts-api";
 import { uploadPreview } from "../lib/preview-upload";
@@ -42,6 +43,7 @@ function readIdentity(init: any): {
   tool: string;
 } {
   const headers = (init?.headers ?? {}) as Record<string, string>;
+
   return {
     install: headers[WIRE_INSTALL_HEADER] ?? "",
     session: headers[WIRE_SESSION_HEADER] ?? "",
@@ -60,6 +62,7 @@ function expectIdentity(init: any, tool: string) {
   expect(identity.install).toMatch(HEX_128);
   expect(identity.session).toMatch(HEX_128);
   expect(identity.tool).toBe(tool);
+
   return identity;
 }
 
@@ -69,6 +72,7 @@ function tmpDist(): string {
     path.join(dir, "manifest.json"),
     JSON.stringify({ manifest_version: 3, name: "Legs", version: "1.0.0" }),
   );
+
   return dir;
 }
 
@@ -96,6 +100,7 @@ describe("the six legs that terminate at www", () => {
     else process.env.XDG_CONFIG_HOME = prevXdg;
     if (prevToken === undefined) delete process.env.EXTENSION_DEV_TOKEN;
     else process.env.EXTENSION_DEV_TOKEN = prevToken;
+
     fs.rmSync(configDir, { recursive: true, force: true });
     resetSessionIdentityForTests();
   });
@@ -105,11 +110,13 @@ describe("the six legs that terminate at www", () => {
     let captured: any = null;
     const fetchImpl = vi.fn(async (url: any, init: any) => {
       captured = { url: String(url), init };
+
       return jsonResponse({
-        artifactId: "gen_" + "a".repeat(32),
+        artifactId: `gen_${  "a".repeat(32)}`,
         previewUrl: "https://preview.extension.dev/?preview=gen_abc",
       });
     });
+
     try {
       const out = await uploadPreview({
         distDir: dir,
@@ -130,6 +137,7 @@ describe("the six legs that terminate at www", () => {
     let captured: any = null;
     const fetchImpl = vi.fn(async (url: any, init: any) => {
       captured = { url: String(url), init };
+
       return jsonResponse({ artifacts: [] });
     });
     const out = await listArtifacts({ api: API, fetchImpl: fetchImpl as any });
@@ -142,10 +150,11 @@ describe("the six legs that terminate at www", () => {
     let captured: any = null;
     const fetchImpl = vi.fn(async (url: any, init: any) => {
       captured = { url: String(url), init };
+
       return jsonResponse({ revoked: true });
     });
     const out = await revokeArtifact({
-      artifactId: "gen_" + "a".repeat(32),
+      artifactId: `gen_${  "a".repeat(32)}`,
       api: API,
       fetchImpl: fetchImpl as any,
     });
@@ -158,6 +167,7 @@ describe("the six legs that terminate at www", () => {
     let captured: any = null;
     const fetchImpl = vi.fn(async (url: any, init: any) => {
       captured = { url: String(url), init };
+
       return jsonResponse({ shareUrl: "https://acme.extension.dev/widget" });
     });
     const out = await publish({ api: API, fetchImpl: fetchImpl as any });
@@ -170,6 +180,7 @@ describe("the six legs that terminate at www", () => {
     let captured: any = null;
     globalThis.fetch = (async (url: any, init: any) => {
       captured = { url: String(url), init };
+
       return jsonResponse({ ok: true, dryRun: true, message: "Preflight OK" });
     }) as unknown as typeof fetch;
 
@@ -187,14 +198,18 @@ describe("the six legs that terminate at www", () => {
     let captured: any = null;
     const fetchImpl = vi.fn(async (url: any, init: any) => {
       const href = String(url);
+
       if (href.includes("/api/access-grant")) {
         captured = { url: href, init };
+
         return jsonResponse({
           token: "short-lived",
           expiresAt: Math.floor(Date.now() / 1000) + 600,
         });
       }
+
       if (href.includes("t=short-lived")) return jsonResponse({ ok: true });
+
       return jsonResponse({ message: "unauthorized" }, 401);
     });
 
@@ -217,6 +232,7 @@ describe("the six legs that terminate at www", () => {
     const seen: Array<{ install: string; session: string; tool: string }> = [];
     const fetchImpl = vi.fn(async (_url: any, init: any) => {
       seen.push(readIdentity(init));
+
       return jsonResponse({ artifacts: [] });
     });
 
@@ -234,6 +250,7 @@ describe("the six legs that terminate at www", () => {
     let captured: any = null;
     const fetchImpl = vi.fn(async (url: any, init: any) => {
       captured = { url: String(url), init };
+
       return jsonResponse({ artifacts: [] });
     });
     await listArtifacts({ api: API, fetchImpl: fetchImpl as any });
@@ -248,6 +265,7 @@ describe("the six legs that terminate at www", () => {
     let captured: any = null;
     const fetchImpl = vi.fn(async (url: any, init: any) => {
       captured = { url: String(url), init };
+
       return jsonResponse({ artifacts: [] });
     });
     await listArtifacts({ api: API, fetchImpl: fetchImpl as any });

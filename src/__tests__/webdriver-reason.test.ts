@@ -1,7 +1,9 @@
-import { afterEach, describe, expect, it } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+
+import { afterEach, describe, expect, it } from "vitest";
+
 import {
   readWebDriverSession,
   readWebDriverUnavailableReason,
@@ -18,6 +20,7 @@ function projectWith(contract: unknown): string {
   const file = readyContractPath(dir, "safari");
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, JSON.stringify(contract));
+
   return dir;
 }
 
@@ -48,6 +51,7 @@ describe("The Safari session the engine now stamps", () => {
     expect(withReason).toContain("extension_dev --browser=safari");
     const without = webdriverSessionMissingHint(null);
     expect(without).toContain("4.1.32");
+
     for (const hint of [withReason, without]) {
       expect(hint).not.toMatch(/no Extension\.js release opens one/i);
       expect(hint).toContain("extension_logs");

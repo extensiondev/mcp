@@ -2,34 +2,43 @@
  * blocks only where the engine or the browser refuses, and each rule names
  * its source. */
 
-import { describe, it, expect, afterEach, vi } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
+import { describe, it, expect, afterEach, vi } from "vitest";
+
+import type * as TemplatesCacheModule from "../lib/templates-cache";
+
 vi.mock("../lib/templates-cache", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../lib/templates-cache")>();
+  const actual = await importOriginal<typeof TemplatesCacheModule>();
+
   return { ...actual, listTemplates: async () => [] };
 });
 
 const manifestValidate = await import("../tools/manifest-validate");
 
 const dirs: string[] = [];
+
 function project(manifest: Record<string, unknown>, files: Record<string, string> = {}): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-validate-rules-"));
   dirs.push(dir);
   fs.mkdirSync(path.join(dir, "src"), { recursive: true });
   fs.writeFileSync(path.join(dir, "src", "manifest.json"), JSON.stringify(manifest));
+
   for (const [rel, body] of Object.entries(files)) {
     const full = path.join(dir, rel);
     fs.mkdirSync(path.dirname(full), { recursive: true });
     fs.writeFileSync(full, body);
   }
+
   return dir;
 }
+
 afterEach(() => {
   for (const d of dirs.splice(0)) fs.rmSync(d, { recursive: true, force: true });
 });
+
 const validate = (projectPath: string, browsers?: string[]) =>
   manifestValidate.handler({ projectPath, ...(browsers ? { browsers } : {}) }).then((s) => JSON.parse(s));
 const BASE = { name: "x", version: "1.0.0", manifest_version: 3 };
@@ -37,6 +46,7 @@ const BASE = { name: "x", version: "1.0.0", manifest_version: 3 };
 describe("95b: the view is the engine's own prefix filter", () => {
   it("gives zen and floorp the firefox: keys", async () => {
     const dir = project({ ...BASE, "firefox:background": { scripts: ["missing-bg.js"] } });
+
     for (const browser of ["zen", "floorp"]) {
       const out = await validate(dir, [browser]);
       expect(out.status, browser).toBe("invalid");
@@ -91,6 +101,7 @@ describe("95e, 95f, 95g: wording and sources", () => {
     const dir = project({ ...BASE, side_panel: { default_path: "p.html" }, permissions: ["sidePanel"] }, { "src/p.html": "" });
     const out = await validate(dir, ["edge"]);
     const edgeNote = out.warnings.find((w: string) => /inert on Edge/.test(w));
+
     if (edgeNote) {
       expect(edgeNote).toMatch(/"chrome:/);
       expect(edgeNote).not.toMatch(/only if you also target Chrome/);

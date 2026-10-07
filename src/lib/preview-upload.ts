@@ -80,33 +80,42 @@ function encodeFile(
 ): { content: string; encoding: "utf8" | "base64" } {
   if (TEXTUAL.test(relativePath)) {
     const text = bytes.toString("utf8");
+
     if (Buffer.from(text, "utf8").equals(bytes)) {
       return { content: text, encoding: "utf8" };
     }
   }
+
   return { content: bytes.toString("base64"), encoding: "base64" };
 }
 
 export function collectDistFiles(distDir: string): PreviewUploadFile[] {
   const files: PreviewUploadFile[] = [];
+
   const walk = (dir: string) => {
     for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
       if (IGNORED_SEGMENTS.has(entry.name)) continue;
+
       const absolute = path.join(dir, entry.name);
       if (entry.isSymbolicLink()) continue;
+
       if (entry.isDirectory()) {
         walk(absolute);
         continue;
       }
+
       if (!entry.isFile()) continue;
       if (IGNORED_FILES.test(entry.name)) continue;
+
       const relative = path.relative(distDir, absolute).split(path.sep).join("/");
       const bytes = fs.readFileSync(absolute);
       const { content, encoding } = encodeFile(relative, bytes);
       files.push({ path: relative, content, encoding });
     }
   };
+
   walk(distDir);
+
   return files.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
 }
 
@@ -119,6 +128,7 @@ export async function uploadPreview(options: {
   fetchImpl?: FetchImpl;
 }): Promise<PreviewUploadOutcome> {
   const token = options.token ?? resolveToken();
+
   if (!token) {
     return {
       ok: false,
@@ -131,6 +141,7 @@ export async function uploadPreview(options: {
   }
 
   const apiCheck = safeApiBase(resolveApiBase(options.api), options.api);
+
   if (!apiCheck.ok) {
     return {
       ok: false,
@@ -139,6 +150,7 @@ export async function uploadPreview(options: {
   }
 
   let files: PreviewUploadFile[];
+
   try {
     files = collectDistFiles(options.distDir);
   } catch (err: any) {
@@ -160,6 +172,7 @@ export async function uploadPreview(options: {
       },
     };
   }
+
   if (files.length > MAX_FILES) {
     return {
       ok: false,
@@ -169,7 +182,9 @@ export async function uploadPreview(options: {
       },
     };
   }
+
   const totalChars = files.reduce((sum, file) => sum + file.content.length, 0);
+
   if (totalChars > MAX_CONTENT_CHARS) {
     /* @invariant
      * The number in this message is the budget the caller actually has.
@@ -187,6 +202,7 @@ export async function uploadPreview(options: {
       0,
     );
     const mb = (value: number) => (value / (1024 * 1024)).toFixed(1);
+
     return {
       ok: false,
       error: {
@@ -214,6 +230,7 @@ export async function uploadPreview(options: {
 
   const doFetch = options.fetchImpl ?? fetch;
   let res: Response;
+
   try {
     res = await doFetch(`${apiCheck.base}/api/artifacts`, {
       method: "POST",
@@ -248,6 +265,7 @@ export async function uploadPreview(options: {
 
   const text = await res.text();
   let data: Record<string, unknown>;
+
   try {
     data = JSON.parse(text);
   } catch {
@@ -266,6 +284,7 @@ export async function uploadPreview(options: {
         },
       };
     }
+
     return {
       ok: false,
       error: {
@@ -279,6 +298,7 @@ export async function uploadPreview(options: {
 
   const artifactId = typeof data.artifactId === "string" ? data.artifactId : "";
   const previewUrl = typeof data.previewUrl === "string" ? data.previewUrl : "";
+
   if (!artifactId || !previewUrl) {
     return {
       ok: false,

@@ -1,23 +1,27 @@
 import { describe, expect, it, vi } from "vitest";
 
+import { navigateToUrlViaBridge } from "../lib/bridge-tabs";
+import { actFrame, tabRows } from "./fixtures/engine-answers";
+
+import type * as ActModule from "../lib/act";
+
 const act = vi.hoisted(() => ({
   calls: [] as string[][],
   replies: [] as string[],
 }));
 
 vi.mock("../lib/act", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../lib/act")>();
+  const actual = await importOriginal<typeof ActModule>();
+
   return {
     ...actual,
     runActVerb: async (cli: string[]) => {
       act.calls.push(cli);
+
       return act.replies.shift() ?? JSON.stringify({ ok: true, value: {} });
     },
   };
 });
-
-import { navigateToUrlViaBridge } from "../lib/bridge-tabs";
-import { actFrame, tabRows } from "./fixtures/engine-answers";
 
 function reset(...replies: unknown[]) {
   act.calls.length = 0;
@@ -31,6 +35,7 @@ describe("navigateToUrlViaBridge asks the engine's navigate verb first", () => {
       { ok: true, command: "navigate", status: "ok", value: { tabId: 7, url: "https://a.test/", created: false } },
       actFrame("inspect", tabRows([{ id: 7, url: "https://a.test/", title: "A" }])),
     );
+
     const parsed = JSON.parse(await navigateToUrlViaBridge("/p", "safari", "https://a.test/"));
     expect(parsed.ok).toBe(true);
     expect(parsed.status).toBe("navigated");
@@ -46,6 +51,7 @@ describe("navigateToUrlViaBridge asks the engine's navigate verb first", () => {
       actFrame("inspect", tabRows([{ id: 7, url: "about:blank", title: "" }])),
       actFrame("inspect", tabRows([{ id: 7, url: "about:blank", title: "" }])),
     );
+
     const parsed = JSON.parse(await navigateToUrlViaBridge("/p", "firefox", "http://localhost:5173/"));
     expect(parsed.ok).toBe(false);
     expect(parsed.status).toBe("navigation-unconfirmed");
@@ -66,6 +72,7 @@ describe("navigateToUrlViaBridge asks the engine's navigate verb first", () => {
       { ok: true, value: { tabId: 3 } },
       { ok: true, value: [{ id: 3, url: "https://b.test/", title: "B" }] },
     );
+
     const parsed = JSON.parse(await navigateToUrlViaBridge("/p", "firefox", "https://b.test/"));
     expect(parsed.ok).toBe(true);
     expect(parsed.status).toBe("navigated");
@@ -78,6 +85,7 @@ describe("navigateToUrlViaBridge asks the engine's navigate verb first", () => {
       { ok: false, error: { code: "E_CLI", message: "error: unknown command 'navigate'" } },
       { ok: false, error: { name: "Unsupported", message: "eval is blocked in the extension background by CSP" } },
     );
+
     const parsed = JSON.parse(await navigateToUrlViaBridge("/p", "safari", "https://b.test/"));
     expect(parsed.ok).toBe(false);
     expect(parsed.hint).toContain("extension navigate");

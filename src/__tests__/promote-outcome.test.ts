@@ -1,7 +1,8 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { handler, schema } from "../tools/release-promote";
 import { readPromoteOutcome } from "../lib/promote-outcome";
@@ -17,16 +18,20 @@ function stubPromote(body: unknown, status = 200) {
     "fetch",
     vi.fn(async (url: any, init?: RequestInit) => {
       const href = String(url);
+
       if (href.endsWith("/api/cli/release/promote")) {
         calls.push({ url: href, body: JSON.parse(String(init?.body ?? "{}")) });
+
         return new Response(
           typeof body === "string" ? body : JSON.stringify(body),
           { status },
         );
       }
+
       throw new Error(`Unexpected fetch: ${href}`);
     }),
   );
+
   return calls;
 }
 
@@ -50,6 +55,7 @@ beforeEach(() => {
   ]) {
     saved[key] = process.env[key];
   }
+
   tmp = fs.mkdtempSync(path.join(os.tmpdir(), "extdev-promote-"));
   process.env.XDG_CONFIG_HOME = tmp;
   process.env.EXTENSION_DEV_API_URL = API;
@@ -59,10 +65,12 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+
   for (const [key, value] of Object.entries(saved)) {
     if (value === undefined) delete process.env[key];
     else process.env[key] = value;
   }
+
   fs.rmSync(tmp, { recursive: true, force: true });
 });
 
@@ -87,6 +95,7 @@ describe("extension_release_promote reads the platform's answer, not its status 
         queuedBrowsers: ["chrome", "firefox"],
       }),
     );
+
     const out = await promote();
 
     expect(out.status).toBe("promoted-partially");
@@ -113,6 +122,7 @@ describe("extension_release_promote reads the platform's answer, not its status 
         mirrorSync: { ok: false, pending: ["release-notes"] },
       }),
     );
+
     const out = await promote();
 
     expect(out.status).toBe("promoted-partially");
@@ -214,6 +224,7 @@ describe("extension_release_promote says what notarization will not do", () => {
         },
       }),
     );
+
     const out = await promote();
 
     expect(out.status).toBe("promoted");
@@ -229,6 +240,7 @@ describe("extension_release_promote says what notarization will not do", () => {
         notarization: { ok: false, started: [], pending: ["safari"] },
       }),
     );
+
     const out = await promote();
 
     expect(out.status).toBe("promoted");

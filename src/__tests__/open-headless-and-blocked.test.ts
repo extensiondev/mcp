@@ -1,20 +1,28 @@
-import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+
+import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
+
 import { envelope } from "../lib/envelope";
+
+import type * as ActModule from "../lib/act";
+import type * as BridgeTabsModule from "../lib/bridge-tabs";
+import type * as CdpPortModule from "../lib/cdp-port";
 
 const actCalls: string[][] = [];
 let attachedId = "";
 let engineReply: (cli: string[]) => string = (cli) =>
   envelope({ ok: true, command: "extension_open", status: "ok", value: { opened: cli[1] } });
 vi.mock("../lib/act", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../lib/act")>();
+  const actual = await importOriginal<typeof ActModule>();
+
   return {
     ...actual,
     runActVerb: async (cli: string[]) => {
       actCalls.push(cli);
+
       return engineReply(cli);
     },
   };
@@ -22,19 +30,22 @@ vi.mock("../lib/act", async (importOriginal) => {
 
 const bridgeNavigations: string[] = [];
 vi.mock("../lib/bridge-tabs", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../lib/bridge-tabs")>();
+  const actual = await importOriginal<typeof BridgeTabsModule>();
+
   return {
     ...actual,
     resolveBridgeBaseUrl: async () => "moz-extension://abc/",
     navigateToUrlViaBridge: async (_p: string, _b: string, url: string) => {
       bridgeNavigations.push(url);
+
       return envelope({ ok: true, command: "extension_open", status: "navigated", value: { url, created: true } });
     },
   };
 });
 
 vi.mock("../lib/cdp-port", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../lib/cdp-port")>();
+  const actual = await importOriginal<typeof CdpPortModule>();
+
   return { ...actual, resolveCdpPort: async () => ({ port: 9222, source: "contract" as const }) };
 });
 
@@ -61,6 +72,7 @@ vi.mock("../lib/cdp", () => {
     async connect() {}
     async attachToTarget(id: string) {
       attachedId = id;
+
       return "session-1";
     }
     async enableDomains() {}
@@ -75,18 +87,22 @@ vi.mock("../lib/cdp", () => {
         const url = String(params?.url ?? "");
         createdTabs.push(url);
         cdpTargets = [...cdpTargets, { id: "created", type: "page", url }];
+
         if (afterLanding) {
           const swap = afterLanding;
           setTimeout(() => {
             cdpTargets = swap(cdpTargets);
           }, 150);
         }
+
         return { targetId: "created" };
       }
+
       return {};
     }
     disconnect() {}
   }
+
   return { CDPClient };
 });
 
@@ -95,14 +111,17 @@ const open = await import("../tools/open");
 function expectedId(distPath: string): string {
   const d = crypto.createHash("sha256").update(distPath).digest();
   let id = "";
+
   for (let i = 0; i < 16; i++) {
     id += String.fromCharCode(97 + (d[i] >> 4));
     id += String.fromCharCode(97 + (d[i] & 0x0f));
   }
+
   return id;
 }
 
 const dirs: string[] = [];
+
 function project(browser = "chrome"): { dir: string; id: string } {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-open-headless-"));
   dirs.push(dir);
@@ -128,6 +147,7 @@ function project(browser = "chrome"): { dir: string; id: string } {
   const readyDir = path.join(dir, "dist", "extension-js", browser);
   fs.mkdirSync(readyDir, { recursive: true });
   fs.writeFileSync(path.join(readyDir, "ready.json"), JSON.stringify({ status: "ready", distPath }));
+
   return { dir, id: expectedId(distPath) };
 }
 
@@ -144,6 +164,7 @@ afterEach(() => {
     if (savedEnv[key] === undefined) delete process.env[key];
     else process.env[key] = savedEnv[key];
   }
+
   actCalls.length = 0;
   createdTabs.length = 0;
   bridgeNavigations.length = 0;
@@ -153,6 +174,7 @@ afterEach(() => {
   browserUserAgent = "Mozilla/5.0 Chrome/151.0.0.0 Safari/537.36";
   engineReply = (cli) =>
     envelope({ ok: true, command: "extension_open", status: "ok", value: { opened: cli[1] } });
+
   for (const d of dirs.splice(0)) fs.rmSync(d, { recursive: true, force: true });
 });
 

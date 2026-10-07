@@ -1,12 +1,16 @@
-import { describe, it, expect, vi, afterEach } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { spawn } from "node:child_process";
-import type { ChildProcess } from "node:child_process";
 
-type SpawnedCli = import("../lib/exec").SpawnedCli;
+import { describe, it, expect, vi, afterEach } from "vitest";
+
+import type { ChildProcess } from "node:child_process";
+import type * as ExecModule from "../lib/exec";
+import type { SpawnedCli } from "../lib/exec";
+
 const spawned: ChildProcess[] = [];
+
 function fakeCli(script: string): SpawnedCli {
   const logDir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-fake-cli-"));
   const logPath = path.join(logDir, "session.log");
@@ -16,6 +20,7 @@ function fakeCli(script: string): SpawnedCli {
   });
   fs.closeSync(fd);
   spawned.push(child);
+
   return {
     child,
     logPath,
@@ -32,7 +37,8 @@ function fakeCli(script: string): SpawnedCli {
 let nextChild: () => SpawnedCli = () => fakeCli("setTimeout(()=>{}, 60000)");
 
 vi.mock("../lib/exec", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../lib/exec")>();
+  const actual = await importOriginal<typeof ExecModule>();
+
   return {
     ...actual,
     spawnExtensionCli: () => nextChild(),
@@ -43,9 +49,11 @@ const start = await import("../tools/start");
 const { removeSession } = await import("../lib/process-manager");
 
 const tmpDirs: string[] = [];
+
 function tmpProject(): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-preview-health-"));
   tmpDirs.push(dir);
+
   return dir;
 }
 
@@ -71,12 +79,14 @@ afterEach(() => {
       // already gone
     }
   }
+
   for (const dir of tmpDirs.splice(0)) {
     try {
       removeSession(dir, "chrome");
     } catch {
       // no session registered
     }
+
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
@@ -103,9 +113,11 @@ describe("extension_start build:false health tick", () => {
 
   it("reports browser-exited when the CLI survives but ready.json carries the browser_exited stamp", async () => {
     const project = tmpProject();
+
     nextChild = () => {
       const cli = fakeCli("setTimeout(()=>{}, 60000)");
       setTimeout(() => stampBrowserExited(project, "chrome"), 1000);
+
       return cli;
     };
 
@@ -154,9 +166,11 @@ describe("extension_start build:false health tick", () => {
 
   it("extension_start reads the browser_exited stamp too", async () => {
     const project = tmpProject();
+
     nextChild = () => {
       const cli = fakeCli("setTimeout(()=>{}, 60000)");
       setTimeout(() => stampBrowserExited(project, "chrome"), 1000);
+
       return cli;
     };
 

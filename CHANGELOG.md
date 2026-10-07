@@ -13,14 +13,24 @@
   per browser, headless, through create, build, dev, wait, logs, list,
   open, dom snapshot, eval, storage, reload, assert and stop, and writes a
   verdict table. On 2026-10-07 it passed on Chrome, Edge, Firefox, Brave,
-  Opera, Vivaldi, Yandex, Waterfox, Zen and Floorp; LibreWolf refuses to
-  launch until its overrides file turns remote debugging on, which the
-  README now says.
+  Opera, Vivaldi, Yandex, Waterfox, Zen and Floorp. LibreWolf refuses to
+  launch until its overrides file turns remote debugging on, so it is no
+  longer listed as a dev browser (the `browser` enum still accepts it).
 - The build test fixtures feed the engine's own `--output json` envelope on
   stdout and its narration on stderr instead of prose the engine never
   prints; the Safari webdriver seed names the 4.1.32 writer it copies; the
   Gecko assert cells run the real list-tabs reader on the engine's tab
   rows; `extension_reload` has its own test.
+- The package lints with the console's rules: eslint-config-auditor's
+  recommended and typescript presets, the house style plugin (blank lines
+  between statements, curly, banner-aware header rules, no JSDoc prose),
+  consistent type imports and the migration warnings, with the React and
+  Tailwind layers left out. Every source file was reformatted by the fixer;
+  no behaviour changed.
+- Measured on Extension.js 4.1.32: a Firefox MV3 event page answers
+  `extension_eval` in `background` like an MV2 page does. The CSP refusal
+  rewrite applies to a declared content_security_policy, never to MV3 as
+  such.
 
 ## 10.10.13
 

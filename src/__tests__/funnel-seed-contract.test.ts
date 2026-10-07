@@ -45,6 +45,7 @@ beforeEach(() => {
     saved[key] = process.env[key];
     delete process.env[key];
   }
+
   process.env.EXTENSION_TEMPLATES_COMMIT = TEST_COMMIT;
   resetSessionIdentityForTests();
 });
@@ -54,6 +55,7 @@ afterEach(() => {
     if (saved[key] === undefined) delete process.env[key];
     else process.env[key] = saved[key];
   }
+
   resetSessionIdentityForTests();
 });
 
@@ -82,6 +84,7 @@ describe("creation funnel payload", () => {
     expect(payload!.api_key).toBe(
       "phc_t8hwHt3uJdjxil8TUA9AIWUFeWyJtTxhfXV58bPiV6T",
     );
+
     expect(payload!.distinct_id).toBe(payload!.properties.session_id);
     expect(String(payload!.distinct_id)).toMatch(HEX_128);
     expect(payload!.properties).toMatchObject({
@@ -123,6 +126,7 @@ describe("creation funnel gates", () => {
     expect(
       await captureTemplateSeed({ slug: "react" }, fetchMock as never),
     ).toBeNull();
+
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
@@ -134,6 +138,7 @@ describe("creation funnel gates", () => {
     expect(
       await captureTemplateSeed({ slug: "react" }, fetchMock as never),
     ).toBeNull();
+
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
@@ -146,6 +151,7 @@ describe("creation funnel gates", () => {
     expect(
       await captureTemplateSeed({ slug: "react" }, fetchMock as never),
     ).toBeNull();
+
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
@@ -170,6 +176,7 @@ describe("creation funnel gates", () => {
     expect(
       await captureTemplateSeed({ slug: "  " }, fetchMock as never),
     ).toBeNull();
+
     expect(fetchMock).not.toHaveBeenCalled();
   });
 

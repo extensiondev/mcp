@@ -6,8 +6,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { handler, schema } from "../tools/preview-web";
 
+import type * as CdpPortModule from "../lib/cdp-port";
+
 vi.mock("../lib/cdp-port", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../lib/cdp-port")>()),
+  ...(await importOriginal<typeof CdpPortModule>()),
   resolveCdpPort: async () => null,
   resolveRdpPort: async () => null,
 }));
@@ -22,12 +24,14 @@ const MANIFEST = {
 
 function tmpDist(manifest?: unknown): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "preview-web-"));
+
   if (manifest !== undefined) {
     fs.writeFileSync(
       path.join(dir, "manifest.json"),
       JSON.stringify(manifest),
     );
   }
+
   return dir;
 }
 
@@ -54,6 +58,7 @@ describe("extension_preview_web", () => {
 
   it("defaults to preview and emits a base64url-round-tripping preview://build deep link (probe off)", async () => {
     const dir = tmpDist(MANIFEST);
+
     try {
       const out = JSON.parse(
         await handler({ projectPath: dir, build: false, distPath: dir, probe: false }),
@@ -65,9 +70,11 @@ describe("extension_preview_web", () => {
         version: "1.2.3",
         manifestVersion: 3,
       });
+
       expect(out.value.surfaces).toEqual(
         expect.arrayContaining(["popup", "background-worker"]),
       );
+
       expect(new URL(out.value.deepLink).port).toBe("3110");
       const internal = new URL(out.value.deepLink).searchParams.get("url") ?? "";
       expect(internal.startsWith("preview://build/")).toBe(true);
@@ -82,6 +89,7 @@ describe("extension_preview_web", () => {
 
   it("honours hostUrl and keeps preview as the only door", async () => {
     const dir = tmpDist(MANIFEST);
+
     try {
       const overridden = JSON.parse(
         await handler({
@@ -119,6 +127,7 @@ describe("extension_preview_web", () => {
       manifest: { name: "Probe Ext" },
       files: [1, 2, 3],
     });
+
     try {
       const out = JSON.parse(
         await handler({
@@ -149,6 +158,7 @@ describe("extension_preview_web", () => {
       manifest: { name: "Probe Ext" },
       files: [1, 2, 3],
     });
+
     try {
       const out = JSON.parse(
         await handler({
@@ -175,6 +185,7 @@ describe("extension_preview_web", () => {
       manifest: { name: "Some Fleet App" },
       files: [1],
     });
+
     try {
       const out = JSON.parse(
         await handler({ projectPath: dir, build: false, distPath: dir }),
@@ -203,6 +214,7 @@ describe("extension_preview_web", () => {
       manifest: { name: "y".repeat(500) },
       files: [],
     });
+
     try {
       const out = JSON.parse(
         await handler({ projectPath: dir, build: false, distPath: dir }),
@@ -219,6 +231,7 @@ describe("extension_preview_web", () => {
   it("treats a JSON answer that is not a preview payload as not loadable", async () => {
     const dir = tmpDist(MANIFEST);
     global.fetch = jsonFetch("just a string");
+
     try {
       const out = JSON.parse(
         await handler({ projectPath: dir, build: false, distPath: dir }),
@@ -238,6 +251,7 @@ describe("extension_preview_web", () => {
     global.fetch = (async () => {
       throw new Error("fetch failed");
     }) as unknown as typeof fetch;
+
     try {
       process.chdir(os.tmpdir());
       const out = JSON.parse(
@@ -264,11 +278,13 @@ describe("extension_preview_web", () => {
       path.join(appDir, "package.json"),
       JSON.stringify({ name: "preview.extension.dev" }),
     );
+
     const nested = path.join(checkout, "packages", "probe");
     fs.mkdirSync(nested, { recursive: true });
     global.fetch = (async () => {
       throw new Error("fetch failed");
     }) as unknown as typeof fetch;
+
     try {
       const out = JSON.parse(
         await handler({ projectPath: nested, build: false, distPath: dir }),
@@ -287,8 +303,10 @@ describe("extension_preview_web", () => {
     let reached = false;
     global.fetch = (async () => {
       reached = true;
+
       throw new Error("should never be called");
     }) as unknown as typeof fetch;
+
     try {
       const out = JSON.parse(
         await handler({
@@ -315,6 +333,7 @@ describe("extension_preview_web", () => {
       manifest: { name: "Probe Ext" },
       files: [1, 2, 3],
     });
+
     try {
       const out = JSON.parse(
         await handler({
@@ -335,6 +354,7 @@ describe("extension_preview_web", () => {
   it("treats a non-JSON answer (deployed static host) as not loadable", async () => {
     const dir = tmpDist(MANIFEST);
     global.fetch = jsonFetch("<!doctype html>", "text/html");
+
     try {
       const out = JSON.parse(
         await handler({ projectPath: dir, build: false, distPath: dir }),
@@ -349,6 +369,7 @@ describe("extension_preview_web", () => {
   it("errors when the dist manifest is not valid JSON", async () => {
     const dir = tmpDist();
     fs.writeFileSync(path.join(dir, "manifest.json"), "{ not json");
+
     try {
       const out = JSON.parse(
         await handler({ projectPath: dir, build: false, distPath: dir, probe: false }),
@@ -367,6 +388,7 @@ describe("extension_preview_web", () => {
   it("does not read a directory of the same name as a manifest", async () => {
     const dir = tmpDist();
     fs.mkdirSync(path.join(dir, "manifest.json"));
+
     try {
       const out = JSON.parse(
         await handler({ projectPath: dir, build: false, distPath: dir, probe: false }),
@@ -381,6 +403,7 @@ describe("extension_preview_web", () => {
 
   it("errors when the dist has no manifest", async () => {
     const dir = tmpDist();
+
     try {
       const out = JSON.parse(
         await handler({ projectPath: dir, build: false, distPath: dir, probe: false }),
@@ -395,6 +418,7 @@ describe("extension_preview_web", () => {
 
   it("open:true without a live session reports opened.ok false and keeps the deep link", async () => {
     const dir = tmpDist(MANIFEST);
+
     try {
       const out = JSON.parse(
         await handler({
@@ -429,6 +453,7 @@ describe("extension_preview_web", () => {
         path.join(app, "package.json"),
         JSON.stringify({ name: "preview.extension.dev" }),
       );
+
       return root;
     }
 
@@ -436,6 +461,7 @@ describe("extension_preview_web", () => {
       const dir = tmpDist(MANIFEST);
       vi.spyOn(process, "cwd").mockReturnValue(dir);
       unreachable();
+
       try {
         const out = JSON.parse(
           await handler({ projectPath: dir, build: false, distPath: dir }),
@@ -461,6 +487,7 @@ describe("extension_preview_web", () => {
       fs.writeFileSync(path.join(dir, "manifest.json"), JSON.stringify(MANIFEST));
       vi.spyOn(process, "cwd").mockReturnValue(os.tmpdir());
       unreachable();
+
       try {
         const out = JSON.parse(
           await handler({ projectPath: dir, build: false, distPath: dir }),
@@ -468,6 +495,7 @@ describe("extension_preview_web", () => {
         expect(out.error.message).toContain(
           "pnpm --filter preview.extension.dev dev",
         );
+
         expect(out.error.message).toContain(root);
         expect(out.error.message).toContain("share:true");
       } finally {
@@ -494,8 +522,10 @@ describe("extension_preview_web", () => {
       let reached = false;
       global.fetch = (async () => {
         reached = true;
+
         throw new Error("network is forbidden here");
       }) as unknown as typeof fetch;
+
       try {
         const out = JSON.parse(
           await handler({ projectPath: dir, build: false, distPath: dir, probe: false }),
@@ -529,6 +559,7 @@ describe("extension_preview_web", () => {
       global.fetch = (async () => {
         throw new Error("fetch failed");
       }) as unknown as typeof fetch;
+
       try {
         const out = JSON.parse(
           await handler({ projectPath: dir, build: false, distPath: dir }),
@@ -579,6 +610,7 @@ describe("extension_preview_web", () => {
         if (v === undefined) delete process.env[k];
         else process.env[k] = v;
       };
+
       restore("XDG_CONFIG_HOME", prevXdg);
       restore("EXTENSION_DEV_TOKEN", prevToken);
       restore("EXTENSION_DEV_API_URL", prevApi);
@@ -588,6 +620,7 @@ describe("extension_preview_web", () => {
 
     it("degrades gracefully with a login hint when not authenticated", async () => {
       const dir = tmpDist(MANIFEST);
+
       try {
         const out = JSON.parse(
           await handler({ projectPath: dir, build: false, distPath: dir, probe: false, share: true }),
@@ -613,22 +646,27 @@ describe("extension_preview_web", () => {
       };
       global.fetch = (async (input: any, init: any) => {
         const url = String(input);
+
         if (init?.method === "POST") {
           return new Response(JSON.stringify(uploaded), {
             status: 201,
             headers: { "content-type": "application/json" },
           });
         }
+
         if (url.includes("/__preview/fetch")) {
           return new Response("not here", {
             status: 404,
             headers: { "content-type": "text/plain" },
           });
         }
+
         const hop = zipHops[url];
         if (!hop) throw new Error(`unrouted ${url}`);
+
         return typeof hop === "function" ? hop() : hop;
       }) as unknown as typeof fetch;
+
       return uploaded;
     }
 
@@ -637,7 +675,7 @@ describe("extension_preview_web", () => {
       process.env.EXTENSION_DEV_TOKEN = "tok_test";
       const signed = "https://acct.r2.cloudflarestorage.com/b/gen_cors.zip?s=1";
       const uploaded = shareFleet({
-        ["https://www.extension.dev/api/artifacts/gen_cors/source.zip"]: () =>
+        "https://www.extension.dev/api/artifacts/gen_cors/source.zip": () =>
           new Response(null, {
             status: 302,
             headers: {
@@ -651,6 +689,7 @@ describe("extension_preview_web", () => {
             headers: { "content-type": "application/zip" },
           }),
       });
+
       try {
         const out = JSON.parse(
           await handler({ projectPath: dir, build: false, distPath: dir, share: true }),
@@ -673,7 +712,7 @@ describe("extension_preview_web", () => {
       process.env.EXTENSION_DEV_TOKEN = "tok_test";
       const signed = "https://acct.r2.cloudflarestorage.com/b/gen_cors.zip?s=1";
       shareFleet({
-        ["https://www.extension.dev/api/artifacts/gen_cors/source.zip"]: () =>
+        "https://www.extension.dev/api/artifacts/gen_cors/source.zip": () =>
           new Response(null, {
             status: 302,
             headers: { location: signed, "access-control-allow-origin": "*" },
@@ -681,11 +720,14 @@ describe("extension_preview_web", () => {
         [signed]: () =>
           new Response(null, { status: 200, headers: { "content-type": "application/zip" } }),
       });
+
       const fleet = global.fetch;
       global.fetch = (async (input: any, init: any) => {
         if (String(input).includes("/__preview/fetch")) throw new Error("ECONNREFUSED");
+
         return fleet(input, init);
       }) as unknown as typeof fetch;
+
       try {
         const out = JSON.parse(
           await handler({ projectPath: dir, build: false, distPath: dir, share: true }),
@@ -708,8 +750,10 @@ describe("extension_preview_web", () => {
         if (init?.method === "POST") {
           return new Response(JSON.stringify({ message: "Payload too large" }), { status: 413 });
         }
+
         throw new Error("unrouted");
       }) as unknown as typeof fetch;
+
       try {
         const out = JSON.parse(
           await handler({ projectPath: dir, build: false, distPath: dir, share: true, probe: false }),
@@ -725,7 +769,7 @@ describe("extension_preview_web", () => {
       const dir = tmpDist(MANIFEST);
       process.env.EXTENSION_DEV_TOKEN = "tok_test";
       shareFleet({
-        ["https://www.extension.dev/api/artifacts/gen_cors/source.zip"]: () =>
+        "https://www.extension.dev/api/artifacts/gen_cors/source.zip": () =>
           new Response(null, {
             status: 200,
             headers: {
@@ -734,6 +778,7 @@ describe("extension_preview_web", () => {
             },
           }),
       });
+
       try {
         const out = JSON.parse(
           await handler({ projectPath: dir, build: false, distPath: dir, share: true }),
@@ -754,6 +799,7 @@ describe("extension_preview_web", () => {
         expect(String(url)).toContain("/api/artifacts");
         expect(init.headers.authorization).toBe("Bearer tok_test");
         uploaded = JSON.parse(init.body);
+
         return {
           ok: true,
           status: 201,
@@ -767,6 +813,7 @@ describe("extension_preview_web", () => {
             }),
         };
       }) as unknown as typeof fetch;
+
       try {
         const out = JSON.parse(
           await handler({ projectPath: dir, build: false, distPath: dir, probe: false, share: true }),
@@ -775,6 +822,7 @@ describe("extension_preview_web", () => {
         expect(out.value.share.previewUrl).toBe(
           "https://preview.extension.dev/?preview=gen_abc123",
         );
+
         expect(out.value.share.serves).toBe("uploaded-local-build");
         expect(out.value.share.localBuildUploaded).toBe(true);
         expect(out.value.share.revokeUrl).toBeTruthy();
@@ -812,6 +860,7 @@ describe("extension_preview_web", () => {
               }),
           };
         }
+
         if (String(url).includes("/source.zip")) {
           return {
             ok: true,
@@ -822,8 +871,10 @@ describe("extension_preview_web", () => {
             },
           };
         }
+
         throw new Error("fetch failed");
       }) as unknown as typeof fetch;
+
       try {
         const out = JSON.parse(
           await handler({ projectPath: dir, build: false, distPath: dir, share: true, probe: true }),
@@ -834,6 +885,7 @@ describe("extension_preview_web", () => {
         expect(out.value.share.previewUrl).toBe(
           "https://preview.extension.dev/?preview=gen_abc123",
         );
+
         expect(out.value.hostReachable).toBe(false);
         expect(out.value.previewLoadable).toBe(false);
         expect(out.warnings.join(" ")).toMatch(/share link works/);
@@ -858,6 +910,7 @@ describe("extension_preview_web", () => {
             expiresAt: "2026-08-23T00:00:00.000Z",
           }),
       })) as unknown as typeof fetch;
+
       try {
         const out = JSON.parse(
           await handler({ projectPath: dir, build: false, distPath: dir, probe: false, share: true }),
@@ -865,6 +918,7 @@ describe("extension_preview_web", () => {
         expect(out.value.share.revokeUrl).toBe(
           "https://www.extension.dev/api/artifacts/gen_apex1",
         );
+
         const recordPath = path.join(dir, ".extension.dev", "shared-previews.json");
         const record = JSON.parse(fs.readFileSync(recordPath, "utf8"));
         expect(record.shares[0].revokeUrl).toBe(
@@ -881,6 +935,7 @@ describe("extension_preview_web", () => {
       let served = 0;
       global.fetch = (async () => {
         served += 1;
+
         return {
           ok: true,
           status: 201,
@@ -894,6 +949,7 @@ describe("extension_preview_web", () => {
             }),
         };
       }) as unknown as typeof fetch;
+
       try {
         const first = JSON.parse(
           await handler({ projectPath: dir, build: false, distPath: dir, probe: false, share: true }),
@@ -915,6 +971,7 @@ describe("extension_preview_web", () => {
           name: MANIFEST.name,
           browser: "chrome",
         });
+
         expect(typeof afterFirst.shares[0].sharedAt).toBe("string");
 
         const second = JSON.parse(
@@ -945,6 +1002,7 @@ describe("extension_preview_web", () => {
             revokeUrl: "https://www.extension.dev/api/artifacts/gen_ignored",
           }),
       })) as unknown as typeof fetch;
+
       try {
         const out = JSON.parse(
           await handler({ projectPath: dir, build: false, distPath: dir, probe: false, share: true }),
@@ -985,6 +1043,7 @@ describe("extension_preview_web", () => {
             revokeUrl: "https://www.extension.dev/api/artifacts/gen_keep",
           }),
       })) as unknown as typeof fetch;
+
       try {
         const out = JSON.parse(
           await handler({ projectPath: dir, build: false, distPath: dir, probe: false, share: true }),
@@ -1015,6 +1074,7 @@ describe("extension_preview_web", () => {
             revokeUrl: "https://www.extension.dev/api/artifacts/gen_nowrite",
           }),
       })) as unknown as typeof fetch;
+
       try {
         const out = JSON.parse(
           await handler({ projectPath: dir, build: false, distPath: dir, probe: false, share: true }),
@@ -1025,6 +1085,7 @@ describe("extension_preview_web", () => {
         expect(String(out.value.share.note)).toMatch(
           /Keep the revokeUrl in this response/,
         );
+
         expect(String(out.value.share.note)).toMatch(/extension_shares/);
       } finally {
         fs.rmSync(dir, { recursive: true, force: true });
@@ -1039,6 +1100,7 @@ describe("extension_preview_web", () => {
         status: 500,
         text: async () => JSON.stringify({ message: "Server error." }),
       })) as unknown as typeof fetch;
+
       try {
         const out = JSON.parse(
           await handler({ projectPath: dir, build: false, distPath: dir, probe: false, share: true }),
@@ -1059,6 +1121,7 @@ describe("extension_preview_web", () => {
         status: 413,
         text: async () => JSON.stringify({ message: "Payload is too large." }),
       })) as unknown as typeof fetch;
+
       try {
         const out = JSON.parse(
           await handler({ projectPath: dir, build: false, distPath: dir, probe: false, share: true }),

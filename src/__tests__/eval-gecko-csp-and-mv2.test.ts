@@ -1,8 +1,13 @@
-import { describe, it, expect, afterEach, vi } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+
+import { describe, it, expect, afterEach, vi } from "vitest";
+
 import { envelope } from "../lib/envelope";
+
+import type * as ActModule from "../lib/act";
+import type * as CdpPortModule from "../lib/cdp-port";
 
 type Call = { cli: string[]; expression: string };
 const calls: Call[] = [];
@@ -10,32 +15,37 @@ let respond: (call: Call, index: number) => string = () =>
   envelope({ ok: true, command: "extension_eval", status: "ok", value: 1 });
 
 vi.mock("../lib/act", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../lib/act")>();
+  const actual = await importOriginal<typeof ActModule>();
+
   return {
     ...actual,
     runActVerb: async (cli: string[]) => {
       const at = cli.indexOf("--");
       const call = { cli, expression: at === -1 ? "" : cli[at + 1] };
       calls.push(call);
+
       return respond(call, calls.length - 1);
     },
   };
 });
 
 vi.mock("../lib/cdp-port", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../lib/cdp-port")>();
+  const actual = await importOriginal<typeof CdpPortModule>();
+
   return { ...actual, resolveCdpPort: async () => null };
 });
 
 const evalTool = await import("../tools/eval");
 
 const dirs: string[] = [];
+
 function project(manifest: Record<string, unknown>): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-eval-gecko-"));
   dirs.push(dir);
   const dist = path.join(dir, "dist", "firefox");
   fs.mkdirSync(dist, { recursive: true });
   fs.writeFileSync(path.join(dist, "manifest.json"), JSON.stringify(manifest));
+
   return dir;
 }
 
@@ -124,8 +134,10 @@ describe("extension_eval on MV2 Gecko reaches a tab through tabs.executeScript",
   it("addresses the tab the caller named, not the active one", async () => {
     const dir = project(MV2);
     const seen: string[] = [];
+
     respond = (call, index) => {
       seen.push(call.expression);
+
       return index === 0
         ? noScripting()
         : envelope({

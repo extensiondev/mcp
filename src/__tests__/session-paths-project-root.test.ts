@@ -1,7 +1,8 @@
-import { describe, it, expect, afterEach } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+
+import { describe, it, expect, afterEach } from "vitest";
 import * as bridge from "extension-develop/bridge";
 
 import {
@@ -13,9 +14,11 @@ import {
 } from "../lib/session-paths";
 
 const dirs: string[] = [];
+
 function tmp(): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-project-root-"));
   dirs.push(dir);
+
   return dir;
 }
 
@@ -60,6 +63,7 @@ describe("a package root is adopted only when it owns the manifest, as the engin
     const where = sub ? path.join(dir, sub) : dir;
     fs.mkdirSync(where, { recursive: true });
     fs.writeFileSync(path.join(where, "manifest.json"), JSON.stringify({ manifest_version: 3, name: "F" }));
+
     return where;
   }
 
@@ -87,6 +91,7 @@ describe("a package root is adopted only when it owns the manifest, as the engin
       path.join(repo, "package.json"),
       JSON.stringify({ name: "ryd", devDependencies: { extension: "^4.1.30" } }),
     );
+
     const combined = manifestAt(repo, path.join("Extensions", "combined"));
 
     expect(engineProjectRoot(combined)).toBe(repo);
@@ -108,6 +113,7 @@ describe("a package root is adopted only when it owns the manifest, as the engin
       path.join(repo, "deno.json"),
       JSON.stringify({ imports: { extension: "npm:extension@4.1.30" } }),
     );
+
     const nested = manifestAt(repo, "ext");
 
     expect(engineProjectRoot(nested)).toBe(repo);

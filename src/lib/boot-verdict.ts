@@ -7,8 +7,7 @@
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
 import fs from "node:fs";
-import type { ChildProcess } from "node:child_process";
-import type { ReadyContract } from "./types";
+
 import { readyContractPath } from "./session-paths";
 import {
   LEGACY_FIDELITY_WARNING,
@@ -16,6 +15,9 @@ import {
   legacyCompileScrape,
   legacyProfileLockScrape,
 } from "./legacy-stdout";
+
+import type { ChildProcess } from "node:child_process";
+import type { ReadyContract } from "./types";
 
 export interface ProfileLockOwner {
   host?: string;
@@ -78,6 +80,7 @@ function readContract(
     const stat = fs.statSync(file);
     const contract = JSON.parse(fs.readFileSync(file, "utf8"));
     if (!contract || typeof contract !== "object") return null;
+
     return { contract, fresh: stat.mtimeMs >= since };
   } catch {
     return null;
@@ -100,7 +103,9 @@ function profileLockOwner(
 ): ProfileLockOwner | null {
   const owner = contract.profileLockOwner;
   if (!owner || typeof owner !== "object") return null;
+
   const { host, pid } = owner as ProfileLockOwner;
+
   return { ...(host ? { host } : {}), ...(pid != null ? { pid } : {}) };
 }
 
@@ -129,6 +134,7 @@ function contractVerdict(
     contract.code === "browser_exited" ||
     contract.browserExitCode !== undefined ||
     contract.browserExitedAt !== undefined;
+
   if (!noBrowser && browserExited) {
     return {
       kind: "browser-exited",
@@ -149,6 +155,7 @@ function contractVerdict(
     typeof contract.code !== "string" ||
     contract.code === "first_compile" ||
     contract.code === "compile_error";
+
   if (compileCode || (compileErrors.length > 0 && typeof contract.code !== "string")) {
     return {
       kind: "compile-failed",
@@ -156,6 +163,7 @@ function contractVerdict(
       compileErrors,
     };
   }
+
   return {
     kind: "boot-failed",
     code: contract.code,
@@ -203,8 +211,10 @@ export async function pollBootVerdict(
     }
 
     contractSeen = readContract(projectPath, browser, since) ?? contractSeen;
+
     if (contractSeen) {
       const verdict = contractVerdict(contractSeen, noBrowser);
+
       if (verdict) {
         return {
           verdict,
@@ -216,6 +226,7 @@ export async function pollBootVerdict(
     }
 
     if (Date.now() >= deadline) break;
+
     await new Promise((resolve) =>
       setTimeout(resolve, Math.min(intervalMs, Math.max(deadline - Date.now(), 1))),
     );

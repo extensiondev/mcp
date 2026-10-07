@@ -23,32 +23,40 @@ const PATTERN = /^([a-z*][a-z0-9*+.-]*):\/\/([^/]*)(\/.*)$/i;
 
 function globToRegExp(glob: string): RegExp {
   const escaped = glob.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
   return new RegExp(`^${escaped.replace(/\\\*/g, ".*")}$`);
 }
 
 function hostMatches(patternHost: string, host: string): boolean {
   if (patternHost === "*") return true;
+
   const lower = patternHost.toLowerCase();
+
   if (lower.startsWith("*.")) {
     const suffix = lower.slice(2);
+
     return host === suffix || host.endsWith(`.${suffix}`);
   }
+
   return host === lower;
 }
 
 export function matchPatternCovers(pattern: string, url: string): boolean {
   let parsed: URL;
+
   try {
     parsed = new URL(url);
   } catch {
     return false;
   }
+
   const scheme = parsed.protocol.replace(/:$/, "").toLowerCase();
 
   if (pattern.trim() === ALL_URLS) return ALL_URLS_SCHEMES.has(scheme);
 
   const parts = PATTERN.exec(pattern.trim());
   if (!parts) return false;
+
   const [, patternScheme, patternHost, patternPath] = parts;
 
   const schemeOk =
@@ -64,6 +72,7 @@ export function matchPatternCovers(pattern: string, url: string): boolean {
   }
 
   const path = `${parsed.pathname}${parsed.search}`;
+
   return globToRegExp(patternPath).test(path);
 }
 
@@ -122,9 +131,11 @@ export function contentScriptsForbidden(url: string, browser?: string): string |
   const trimmed = String(url ?? "").trim();
   const chromium =
     browser === undefined || !/firefox|gecko|waterfox|librewolf|zen|floorp|safari|webkit/i.test(browser);
+
   for (const rule of FORBIDDEN) {
     if (!chromium && rule.chromiumOnly) continue;
     if (rule.test.test(trimmed)) return rule.reason;
   }
+
   return null;
 }

@@ -1,7 +1,8 @@
-import { describe, it, expect } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+
+import { describe, it, expect } from "vitest";
 import spawn from "cross-spawn";
 
 const execSource = fs.readFileSync(
@@ -36,8 +37,10 @@ describe("exec.ts spawns without a shell", () => {
       child.on("close", () => resolve());
       child.on("error", () => resolve());
     });
+
     const created = fs.existsSync(marker);
     if (created) fs.rmSync(marker, { force: true });
+
     expect(created).toBe(false);
   });
 });

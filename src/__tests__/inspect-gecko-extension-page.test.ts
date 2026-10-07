@@ -1,17 +1,24 @@
-import { describe, it, expect, afterEach, vi } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+
+import { describe, it, expect, afterEach, vi } from "vitest";
+
 import { envelope } from "../lib/envelope";
+
+import type * as ActModule from "../lib/act";
+import type * as CdpPortModule from "../lib/cdp-port";
 
 const calls: string[][] = [];
 let deepDomApi: boolean | null = null;
 vi.mock("../lib/act", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../lib/act")>();
+  const actual = await importOriginal<typeof ActModule>();
+
   return {
     ...actual,
     runActVerb: async (cli: string[]) => {
       calls.push(cli);
+
       if (cli[0] === "eval" && deepDomApi !== null) {
         return envelope({
           ok: true,
@@ -20,6 +27,7 @@ vi.mock("../lib/act", async (importOriginal) => {
           value: { frames: [{ api: deepDomApi, closed: [] }] },
         });
       }
+
       return envelope({
         ok: true,
         command: "extension_inspect",
@@ -39,13 +47,15 @@ vi.mock("../lib/bridge-tabs", () => ({
   listBridgeTabs: async () => ({ tabs: listed }),
   navigateToUrlViaBridge: async (_p: string, _b: string, url: string) => {
     navigations.push(url);
+
     return envelope({ ok: true, command: "extension_inspect", status: "navigated", value: {} });
   },
   resolveBridgeBaseUrl: async () => "moz-extension://abc/",
 }));
 
 vi.mock("../lib/cdp-port", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../lib/cdp-port")>();
+  const actual = await importOriginal<typeof CdpPortModule>();
+
   return { ...actual, resolveCdpPort: async () => null, resolveRdpPort: async () => null };
 });
 
@@ -53,12 +63,14 @@ const inspect = await import("../tools/inspect");
 const gecko = await import("../tools/inspect-gecko");
 
 const dirs: string[] = [];
+
 function project(manifest: Record<string, unknown>): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-inspect-gecko-"));
   dirs.push(dir);
   const dist = path.join(dir, "dist", "firefox");
   fs.mkdirSync(dist, { recursive: true });
   fs.writeFileSync(path.join(dist, "manifest.json"), JSON.stringify(manifest));
+
   return dir;
 }
 
@@ -110,14 +122,17 @@ describe("extension_inspect on Gecko reads a page inside the extension through i
         "moz-extension://20bc13c2-7ff4-4103-b112-0c7c6e67d612/chrome_url_overrides/newtab.html?x=1",
       ),
     ).toEqual({ context: "newtab", document: "chrome_url_overrides/newtab.html" });
+
     expect(gecko.surfaceForExtensionUrl(dir, "firefox", "newtab.html")).toEqual({
       context: "newtab",
       document: "chrome_url_overrides/newtab.html",
     });
+
     expect(gecko.surfaceForExtensionUrl(dir, "firefox", "sidebar/index.html")).toEqual({
       context: "sidebar",
       document: "sidebar/index.html",
     });
+
     expect(gecko.surfaceForExtensionUrl(dir, "firefox", "https://example.com/")).toBeNull();
   });
 

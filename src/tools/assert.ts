@@ -6,12 +6,13 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
+import fs from "node:fs";
+
 import {
   CALL_TIMEOUT,
   SESSION_BROWSER,
   SESSION_PROJECT_PATH,
 } from "../lib/common-schema";
-import fs from "node:fs";
 import { runActVerb } from "../lib/act";
 import { listBridgeTabs } from "../lib/bridge-tabs";
 import { isChromiumFamily, WEBKIT_FAMILY } from "../lib/browser-family";
@@ -51,7 +52,6 @@ import {
   verdictSentence,
   type CheckResult,
 } from "../lib/verdict";
-import { version } from "../../package.json";
 import { readLogEvents,
   browserEventBelongsTo,
   isBrowserChannelEvent,
@@ -65,6 +65,8 @@ import {
   surfaceDocument,
   SURFACE_MANIFEST_KEYS,
 } from "./open";
+
+import { version } from "../../package.json";
 
 const COMMAND = "extension_assert";
 
@@ -167,9 +169,11 @@ interface ParseResult {
 export function parseClauses(raw: unknown): ParseResult {
   const clauses: Clause[] = [];
   const issues: string[] = [];
+
   if (!Array.isArray(raw)) {
     return { clauses, issues: ["expect must be an array of objects"] };
   }
+
   if (raw.length === 0) {
     return {
       clauses,
@@ -178,38 +182,53 @@ export function parseClauses(raw: unknown): ParseResult {
       ],
     };
   }
+
   raw.forEach((entry, index) => {
     const at = `expect[${index}]`;
+
     if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
       issues.push(`${at} must be an object`);
+
       return;
     }
+
     const clause = entry as Record<string, unknown>;
     const kind = String(clause.assert ?? "");
+
     if (!ASSERT_KINDS.includes(kind)) {
       issues.push(
         `${at}.assert is ${JSON.stringify(clause.assert)}; expected one of: ${ASSERT_KINDS.join(", ")}`,
       );
+
       return;
     }
+
     if (kind === BACKGROUND) {
       clauses.push({ assert: BACKGROUND, subject: null });
+
       return;
     }
+
     if (kind === SURFACE) {
       const surface = String(clause.surface ?? "");
+
       if (!(SURFACES as readonly string[]).includes(surface)) {
         issues.push(
           `${at}.surface is ${JSON.stringify(clause.surface)}; expected one of: ${SURFACES.join(", ")}`,
         );
+
         return;
       }
+
       const minNodes =
         clause.minNodes === undefined ? undefined : Number(clause.minNodes);
+
       if (minNodes !== undefined && (!Number.isFinite(minNodes) || minNodes < 1)) {
         issues.push(`${at}.minNodes must be a number of at least 1`);
+
         return;
       }
+
       const selector =
         clause.selector === undefined ? undefined : String(clause.selector);
       clauses.push({
@@ -219,34 +238,48 @@ export function parseClauses(raw: unknown): ParseResult {
         ...(selector === undefined ? {} : { selector }),
         ...(minNodes === undefined ? {} : { minNodes }),
       });
+
       return;
     }
+
     if (kind === CONTENT_SCRIPT) {
       const url = String(clause.url ?? "").trim();
+
       if (!url) {
         issues.push(
           `${at}.url is required: a content script is asserted against the page it should have injected into`,
         );
+
         return;
       }
+
       clauses.push({ assert: CONTENT_SCRIPT, subject: url, url });
+
       return;
     }
+
     if (kind === STORAGE) {
       const key = String(clause.key ?? "").trim();
+
       if (!key) {
         issues.push(`${at}.key is required`);
+
         return;
       }
+
       const area = String(clause.area ?? "local");
+
       if (!(STORAGE_AREAS as readonly string[]).includes(area)) {
         issues.push(
           `${at}.area is ${JSON.stringify(clause.area)}; expected one of: ${STORAGE_AREAS.join(", ")}`,
         );
+
         return;
       }
+
       const context =
         clause.context === undefined ? undefined : String(clause.context);
+
       if (
         context !== undefined &&
         !(STORAGE_CONTEXTS as readonly string[]).includes(context)
@@ -254,8 +287,10 @@ export function parseClauses(raw: unknown): ParseResult {
         issues.push(
           `${at}.context is ${JSON.stringify(clause.context)}; expected one of: ${STORAGE_CONTEXTS.join(", ")}`,
         );
+
         return;
       }
+
       clauses.push({
         assert: STORAGE,
         subject: `${area}.${key}`,
@@ -265,14 +300,17 @@ export function parseClauses(raw: unknown): ParseResult {
         ...("equals" in clause ? { equals: clause.equals } : {}),
         ...(context === undefined ? {} : { context }),
       });
+
       return;
     }
+
     const context =
       clause.context === undefined
         ? undefined
         : Array.isArray(clause.context)
           ? clause.context.map(String)
           : [String(clause.context)];
+
     /* @invariant The console context set is the engine's, so the engine's
        filter is run once on a probe event at parse time. It throws a
        RangeError on a context it does not know, lazily on the first event, and
@@ -283,14 +321,19 @@ export function parseClauses(raw: unknown): ParseResult {
         makeFilter({ context } as never)({ context: "background", level: "info", seq: 0, ts: 0 });
       } catch (error) {
         issues.push(`${at}.context: ${error instanceof Error ? error.message : String(error)}`);
+
         return;
       }
     }
+
     const since = clause.since === undefined ? undefined : Number(clause.since);
+
     if (since !== undefined && !Number.isFinite(since)) {
       issues.push(`${at}.since must be a number, the seq cursor to read from`);
+
       return;
     }
+
     const ignore =
       clause.ignore === undefined
         ? undefined
@@ -311,15 +354,18 @@ export function parseClauses(raw: unknown): ParseResult {
      so a repeat would make it undecidable which one gates, exactly as the
      upstream contract says about a repeated id. */
   const seen = new Set<string>();
+
   for (const clause of clauses) {
     const key = clause.subject
       ? `${clause.assert}:${clause.subject}`
       : clause.assert;
+
     if (seen.has(key)) {
       issues.push(
         `${key} is asserted more than once, so which verdict gates would be undecidable`,
       );
     }
+
     seen.add(key);
   }
 
@@ -356,6 +402,7 @@ class Stage {
 
   webdriver(): WebDriverClient | null {
     const info = readWebDriverSession(this.projectPath, this.browser);
+
     return info ? new WebDriverClient(info) : null;
   }
 
@@ -365,12 +412,14 @@ class Stage {
       const resolved = await resolveCdpPort(this.projectPath, this.browser);
       this.cdpPort = resolved ? resolved.port : null;
     }
+
     return this.cdpPort;
   }
 
   async targets(): Promise<CdpTarget[] | null> {
     const port = await this.port();
     if (port === null) return null;
+
     if (this.discovered === null) {
       try {
         this.discovered = (await CDPClient.discoverTargets(
@@ -380,6 +429,7 @@ class Stage {
         return null;
       }
     }
+
     return this.discovered;
   }
 
@@ -387,6 +437,7 @@ class Stage {
     if (this.manifestRead === undefined) {
       this.manifestRead = readBuiltManifest(this.projectPath, this.browser);
     }
+
     return this.manifestRead;
   }
 
@@ -397,6 +448,7 @@ class Stage {
         this.browser,
       );
     }
+
     return this.extensionIdRead;
   }
 
@@ -405,6 +457,7 @@ class Stage {
   ): Promise<{ cdp: CDPClient; sessionId: string } | null> {
     const port = await this.port();
     if (port === null) return null;
+
     try {
       if (!this.client) {
         const ws = await CDPClient.discoverBrowserWsUrl(port);
@@ -412,8 +465,10 @@ class Stage {
         await cdp.connect(ws);
         this.client = cdp;
       }
+
       const sessionId = await this.client.attachToTarget(targetId);
       await this.client.enableDomains(sessionId);
+
       return { cdp: this.client, sessionId };
     } catch {
       return null;
@@ -426,6 +481,7 @@ class Stage {
     } catch {
       this.client = null;
     }
+
     this.client = null;
   }
 
@@ -462,11 +518,13 @@ class Stage {
 
 function truncate(value: unknown, max = 200): string {
   let text: string;
+
   try {
     text = JSON.stringify(value) ?? String(value);
   } catch {
     text = String(value);
   }
+
   return text.length > max ? `${text.slice(0, max)}…` : text;
 }
 
@@ -486,6 +544,7 @@ async function assertBackgroundWorker(
   if (!read) return stage.noManifest(id, null);
 
   const background = declaredBackground(read.manifest);
+
   if (background.kind === "none") {
     return failCheck(
       id,
@@ -494,21 +553,26 @@ async function assertBackgroundWorker(
       { manifestFile: read.file },
     );
   }
+
   /* @invariant THE DEV BUILD INJECTS A BACKGROUND OF ITS OWN (the bridge
      producer) when the project declares none, so the built manifest always
      declares one and a booted worker there is the engine's. The source manifest says what the extension declares. */
   const injected = (() => {
     if (isSourceManifest(read.file, stage.projectPath)) return false;
+
     for (const file of manifestCandidates(stage.projectPath, stage.browser)) {
       if (!isSourceManifest(file, stage.projectPath)) continue;
+
       try {
         const source = JSON.parse(fs.readFileSync(file, "utf8"));
         if (!source || typeof source !== "object") continue;
+
         return declaredBackground(engineManifestView(source as Record<string, unknown>, stage.browser)).kind === "none";
       } catch {
         continue;
       }
     }
+
     return false;
   })();
   const injectedVerdict = (): CheckResult =>
@@ -519,6 +583,7 @@ async function assertBackgroundWorker(
       "Declare a background in src/manifest.json (background.service_worker, or firefox:background.scripts), rebuild, then assert again.",
       { manifestFile: read.file, injectedBackground: true },
     );
+
   if (!stage.chromium) {
     /* @invariant On Gecko the proof is the control channel itself: the
        bridge executor that answers it runs inside the extension's background,
@@ -530,6 +595,7 @@ async function assertBackgroundWorker(
       stage.timeout,
       "extension_assert",
     );
+
     if ("tabs" in listed) {
       return passCheck(
         id,
@@ -538,6 +604,7 @@ async function assertBackgroundWorker(
         { backgroundKind: background.kind, tabsSeen: listed.tabs.length },
       );
     }
+
     return inconclusiveCheck(
       id,
       null,
@@ -550,9 +617,11 @@ async function assertBackgroundWorker(
   if (targets === null) return stage.noSession(id, null);
 
   const guest = await verifyGuestLoaded(stage.projectPath, stage.browser);
+
   if (!guest.checked) {
     return inconclusiveCheck(id, null, guest.reason, NO_SESSION_SETTLED_BY);
   }
+
   /* @invariant NO TARGET IS NOT "NOT LOADED". An idle MV3 worker with no
      page of its extension open lists nothing, exactly like a rejected load,
      so the target list alone cannot tell them apart. The one thing that can
@@ -561,6 +630,7 @@ async function assertBackgroundWorker(
      log evidence and, failing that, to inconclusive. */
   if (!guest.loaded) {
     const refusal = contractLoadRefusal(stage.projectPath, stage.browser);
+
     if (refusal) {
       return failCheck(
         id,
@@ -578,8 +648,10 @@ async function assertBackgroundWorker(
         String(target.url ?? "").startsWith(`chrome-extension://${guestId}/`),
       ),
   );
+
   if (workers.length > 0) {
     if (injected) return injectedVerdict();
+
     return passCheck(
       id,
       null,
@@ -602,8 +674,10 @@ async function assertBackgroundWorker(
   });
   const backgroundLines = backgroundContextLines.filter((event) => !isBrowserChannelEvent(event));
   const relayedLines = backgroundContextLines.length - backgroundLines.length;
+
   if (backgroundLines.length > 0 && !stale) {
     if (injected) return injectedVerdict();
+
     return passCheck(
       id,
       null,
@@ -651,10 +725,13 @@ export function renderedFromEvidence(evidence: {
     const rendered = evidence.renderedElementCount;
     const text = evidence.renderedTextLength ?? 0;
     const visual = evidence.visualElementCount ?? 0;
+
     return rendered > 0 && (text > 0 || visual > 0 || rendered > 1);
   }
+
   const elements = evidence.bodyElementCount ?? 0;
   const text = evidence.textLength ?? 0;
+
   return elements > 0 && (text > 0 || elements > 1);
 }
 
@@ -672,6 +749,7 @@ async function assertSurfaceRendered(
     stage.browser,
     clause.surface,
   );
+
   if (!document) {
     return failCheck(
       id,
@@ -684,6 +762,7 @@ async function assertSurfaceRendered(
       { declaredSurfaces: declared },
     );
   }
+
   if (!stage.chromium) {
     /* @invariant On Gecko the surface relay answers only from an open
        document, so an inspect in that context is the rendering proof. A selector cannot be probed through that verb, so a clause
@@ -705,13 +784,16 @@ async function assertSurfaceRendered(
       "extension_assert",
     );
     let parsed: any = null;
+
     try {
       parsed = JSON.parse(raw);
     } catch {
     }
+
     if (parsed?.ok === true) {
       const summary = parsed.value?.summary ?? {};
       const children = Number(summary.bodyChildCount ?? 0);
+
       if (clause.selector) {
         return inconclusiveCheck(
           id,
@@ -721,6 +803,7 @@ async function assertSurfaceRendered(
           { url: parsed.value?.url, summary },
         );
       }
+
       if (children === 0) {
         return failCheck(
           id,
@@ -729,6 +812,7 @@ async function assertSurfaceRendered(
           { url: parsed.value?.url, summary },
         );
       }
+
       if (clause.minNodes != null && children < clause.minNodes) {
         return failCheck(
           id,
@@ -737,6 +821,7 @@ async function assertSurfaceRendered(
           { url: parsed.value?.url, summary },
         );
       }
+
       return passCheck(
         id,
         subject,
@@ -744,7 +829,9 @@ async function assertSurfaceRendered(
         { url: parsed.value?.url, summary },
       );
     }
+
     const message = String(parsed?.error?.message ?? raw);
+
     if (parsed?.error?.code === "E_TARGET_NOT_FOUND" || /\bis not open\b/i.test(message)) {
       return failCheck(
         id,
@@ -753,6 +840,7 @@ async function assertSurfaceRendered(
         { document },
       );
     }
+
     return inconclusiveCheck(
       id,
       subject,
@@ -765,6 +853,7 @@ async function assertSurfaceRendered(
   if (targets === null) return stage.noSession(id, subject);
 
   const extensionId = await stage.extensionId();
+
   if (!extensionId) {
     return inconclusiveCheck(
       id,
@@ -780,6 +869,7 @@ async function assertSurfaceRendered(
       candidate.type === "page" &&
       String(candidate.url ?? "").startsWith(wanted),
   );
+
   if (!target) {
     return failCheck(
       id,
@@ -795,6 +885,7 @@ async function assertSurfaceRendered(
   }
 
   const attached = await stage.attach(target.id);
+
   if (!attached) {
     return inconclusiveCheck(
       id,
@@ -805,6 +896,7 @@ async function assertSurfaceRendered(
   }
 
   const evidence = await attached.cdp.getRenderEvidence(attached.sessionId);
+
   if (!evidence) {
     return inconclusiveCheck(
       id,
@@ -813,6 +905,7 @@ async function assertSurfaceRendered(
       "Assert again once the page has settled, or read it with extension_inspect to see what the document is doing.",
     );
   }
+
   if (evidence.readyState === "loading") {
     return inconclusiveCheck(
       id,
@@ -828,6 +921,7 @@ async function assertSurfaceRendered(
       clause.selector,
     ]);
     const probe = probes?.[0];
+
     if (probe?.error) {
       return inconclusiveCheck(
         id,
@@ -837,8 +931,10 @@ async function assertSurfaceRendered(
         { evidence: evidence as Record<string, unknown> },
       );
     }
+
     const count = probe?.count ?? 0;
     const wantedCount = clause.minNodes ?? 1;
+
     return count >= wantedCount
       ? passCheck(
           id,
@@ -856,6 +952,7 @@ async function assertSurfaceRendered(
 
   if (clause.minNodes != null) {
     const rendered = evidence.renderedElementCount ?? evidence.bodyElementCount ?? 0;
+
     return rendered >= clause.minNodes
       ? passCheck(
           id,
@@ -870,6 +967,7 @@ async function assertSurfaceRendered(
           { evidence: evidence as Record<string, unknown> },
         );
   }
+
   return renderedFromEvidence(evidence)
     ? passCheck(
         id,
@@ -889,6 +987,7 @@ function contractCompileErrors(projectPath: string, browser: string): string[] {
   try {
     const contract = JSON.parse(fs.readFileSync(readyContractPath(projectPath, browser), "utf8"));
     if (contract?.status !== "error") return [];
+
     return Array.isArray(contract.errors) ? contract.errors.map(String) : [];
   } catch {
     return [];
@@ -901,6 +1000,7 @@ function contractLoadRefusal(projectPath: string, browser: string): string | nul
       fs.readFileSync(readyContractPath(projectPath, browser), "utf8"),
     ) as { code?: unknown; message?: unknown; extensionLoadRefusedReason?: unknown };
     if (contract.code !== "extension_load_refused") return null;
+
     return String(contract.extensionLoadRefusedReason || contract.message || "extension_load_refused");
   } catch {
     return null;
@@ -910,10 +1010,12 @@ function contractLoadRefusal(projectPath: string, browser: string): string | nul
 function samePage(eventUrl: string, wanted: string): boolean {
   if (!eventUrl || !wanted) return false;
   if (eventUrl === wanted) return true;
+
   try {
     const a = new URL(eventUrl);
     const b = new URL(wanted);
     const strip = (pathname: string) => pathname.replace(/\/+$/, "") || "/";
+
     return a.origin === b.origin && strip(a.pathname) === strip(b.pathname);
   } catch {
     return false;
@@ -926,6 +1028,7 @@ function contractCompiledAtMs(projectPath: string, browser: string): number | nu
       fs.readFileSync(readyContractPath(projectPath, browser), "utf8"),
     ) as { compiledAt?: unknown };
     const ms = typeof contract.compiledAt === "string" ? Date.parse(contract.compiledAt) : NaN;
+
     return Number.isFinite(ms) ? ms : null;
   } catch {
     return null;
@@ -940,6 +1043,7 @@ async function assertContentScriptInjected(
   const subject = clause.subject;
 
   const forbidden = contentScriptsForbidden(clause.url, stage.browser);
+
   if (forbidden) {
     return failCheck(
       id,
@@ -969,9 +1073,11 @@ async function assertContentScriptInjected(
   }).filter((event) => {
     const ev = event as { url?: unknown; timestamp?: unknown };
     if (!samePage(String(ev.url ?? ""), clause.url)) return false;
+
     if (compiledAt !== null && typeof ev.timestamp === "number" && ev.timestamp < compiledAt) {
       return false;
     }
+
     return true;
   });
 
@@ -1024,6 +1130,7 @@ async function assertBackgroundOnWebKit(
   const lines = readLogEvents(stage.projectPath, stage.browser, {
     context: ["background"],
   });
+
   if (lines.length > 0 && !stale) {
     return passCheck(
       id,
@@ -1032,6 +1139,7 @@ async function assertBackgroundOnWebKit(
       { lines: lines.length, runId },
     );
   }
+
   return inconclusiveCheck(
     id,
     subject,
@@ -1058,6 +1166,7 @@ async function assertContentScriptInjectedOnWebKit(
   const id = CONTENT_SCRIPT;
   const subject = clause.subject;
   const client = stage.webdriver();
+
   if (!client) {
     return inconclusiveCheck(
       id,
@@ -1069,12 +1178,15 @@ async function assertContentScriptInjectedOnWebKit(
   }
 
   let reading: Awaited<ReturnType<typeof readExtensionRoots>>;
+
   try {
     const current = await client.currentUrl();
+
     if (!sameDocument(current, clause.url)) {
       await client.navigate(clause.url);
       await new Promise((resolve) => setTimeout(resolve, 1200));
     }
+
     reading = await readExtensionRoots(client);
   } catch (error) {
     return inconclusiveCheck(
@@ -1089,6 +1201,7 @@ async function assertContentScriptInjectedOnWebKit(
   const extensionId =
     readyExtensionId(stage.projectPath, stage.browser) ??
     (await stage.extensionId());
+
   if (!extensionId) {
     return inconclusiveCheck(
       id,
@@ -1098,9 +1211,11 @@ async function assertContentScriptInjectedOnWebKit(
       { roots: reading.roots, owners: reading.owners, url: reading.url },
     );
   }
+
   const owned = reading.owners.filter(
     (owner) => owner.length > 0 && owner.includes(extensionId),
   );
+
   if (owned.length > 0) {
     return passCheck(
       id,
@@ -1147,16 +1262,21 @@ export function readStorageValue(value: unknown, key: string): StorageRead {
   if (value === null || value === undefined) return { shape: "absent" };
   if (typeof value !== "object") return { shape: "found", value };
   if (Array.isArray(value)) return { shape: "unreadable" };
+
   const record = value as Record<string, unknown>;
+
   if (key in record) {
     return record[key] === undefined
       ? { shape: "absent" }
       : { shape: "found", value: record[key] };
   }
+
   if (record.result !== undefined) return readStorageValue(record.result, key);
+
   if (record.value !== undefined && record.key === key) {
     return { shape: "found", value: record.value };
   }
+
   return { shape: "absent" };
 }
 
@@ -1164,6 +1284,7 @@ export function readStorageValue(value: unknown, key: string): StorageRead {
 function canonical(value: unknown): string {
   const walk = (node: unknown): unknown => {
     if (Array.isArray(node)) return node.map(walk);
+
     if (node && typeof node === "object") {
       return Object.fromEntries(
         Object.keys(node as Record<string, unknown>)
@@ -1171,9 +1292,12 @@ function canonical(value: unknown): string {
           .map((key) => [key, walk((node as Record<string, unknown>)[key])]),
       );
     }
+
     return node === undefined ? null : node;
   };
+
   const encoded = JSON.stringify(walk(value));
+
   return encoded ?? "null";
 }
 
@@ -1197,11 +1321,13 @@ async function assertStorageKeyPresent(
     clause.key,
   ];
   if (clause.context) cli.push("--context", clause.context);
+
   cli.push("--browser", stage.browser);
   if (stage.timeout != null) cli.push("--timeout", String(stage.timeout));
 
   const raw = await runActVerb(cli, stage.projectPath, stage.timeout, COMMAND);
   let frame: unknown;
+
   try {
     frame = JSON.parse(raw);
   } catch {
@@ -1222,6 +1348,7 @@ async function assertStorageKeyPresent(
       isEnvelope(frame) && frame.error
         ? frame.error.message
         : `the read did not return a usable envelope: ${truncate(frame)}`;
+
     return inconclusiveCheck(
       id,
       subject,
@@ -1232,6 +1359,7 @@ async function assertStorageKeyPresent(
   }
 
   const read = readStorageValue(frame.value, clause.key);
+
   if (read.shape === "unreadable") {
     return inconclusiveCheck(
       id,
@@ -1240,6 +1368,7 @@ async function assertStorageKeyPresent(
       "Read it with extension_storage and compare the frame; this check refuses to guess a value out of it.",
     );
   }
+
   if (read.shape === "absent") {
     return failCheck(
       id,
@@ -1248,6 +1377,7 @@ async function assertStorageKeyPresent(
       { area: clause.area, key: clause.key },
     );
   }
+
   if (clause.hasEquals && !sameValue(read.value, clause.equals)) {
     return failCheck(
       id,
@@ -1256,6 +1386,7 @@ async function assertStorageKeyPresent(
       { area: clause.area, key: clause.key, value: read.value },
     );
   }
+
   return passCheck(
     id,
     subject,
@@ -1277,6 +1408,7 @@ function assertConsoleErrorsEmpty(
   const maxSeq = all.reduce(
     (max, event) => {
       const seq = (event as { seq?: unknown }).seq;
+
       return typeof seq === "number" && seq > max ? seq : max;
     },
     -1,
@@ -1289,6 +1421,7 @@ function assertConsoleErrorsEmpty(
      it. */
   if (all.length === 0) {
     const reason = emptyReason(stage.projectPath, stage.browser);
+
     return inconclusiveCheck(
       id,
       subject,
@@ -1301,6 +1434,7 @@ function assertConsoleErrorsEmpty(
 
   const runId = readLogRunId(stage.projectPath, stage.browser);
   const stale = staleFileNote(stage.projectPath, stage.browser, runId);
+
   if (stale) {
     return inconclusiveCheck(
       id,
@@ -1321,6 +1455,7 @@ function assertConsoleErrorsEmpty(
     ...(clause.context ? { context: clause.context } : {}),
     ...(clause.since === undefined ? {} : { since: clause.since }),
   };
+
   if (clause.since !== undefined && clause.since > maxSeq) {
     return inconclusiveCheck(
       id,
@@ -1330,7 +1465,9 @@ function assertConsoleErrorsEmpty(
       { logFile: file, runId, maxSeq },
     );
   }
+
   const inScope = readLogEvents(stage.projectPath, stage.browser, scopeQuery);
+
   if (inScope.length === 0) {
     return inconclusiveCheck(
       id,
@@ -1342,6 +1479,7 @@ function assertConsoleErrorsEmpty(
       { logFile: file, runId, events: all.length },
     );
   }
+
   /* @invariant A WEBSITE'S OWN ERROR IS NOT THE EXTENSION'S. Browser-relayed
      lines come from any extension url or service worker, a visited site's
      included; one is counted only when its url is this extension's
@@ -1362,7 +1500,9 @@ function assertConsoleErrorsEmpty(
         ? ev.message
         : "";
     if (!text && typeof ev.errorName === "string") text = ev.errorName;
+
     text = text.replace(/\s+/g, " ").trim();
+
     return text || "(error event with no message text)";
   });
   const ignored = clause.ignore ?? [];
@@ -1389,6 +1529,7 @@ function assertConsoleErrorsEmpty(
      behind and recorded gap sentinels, "no errors" covers only the lines that
      reached the file, so the clean answer is inconclusive. */
   const droppedLines = readLogDropped(stage.projectPath, stage.browser);
+
   if (droppedLines > 0) {
     return inconclusiveCheck(
       id,
@@ -1398,6 +1539,7 @@ function assertConsoleErrorsEmpty(
       { events: all.length, dropped: droppedLines, runId },
     );
   }
+
   return passCheck(
     id,
     subject,
@@ -1417,6 +1559,7 @@ async function evaluateClause(
   if (stage.webkit && clause.assert === BACKGROUND) {
     return assertBackgroundOnWebKit(clause, stage);
   }
+
   switch (clause.assert) {
     case BACKGROUND:
       return assertBackgroundWorker(clause, stage);
@@ -1438,6 +1581,7 @@ export async function handler(args: {
   timeout?: number;
 }): Promise<string> {
   const { clauses, issues } = parseClauses(args.expect);
+
   if (issues.length > 0) {
     return envelope({
       ok: false,
@@ -1465,6 +1609,7 @@ export async function handler(args: {
   );
   const stage = new Stage(args.projectPath, browser, args.timeout);
   const checks: CheckResult[] = [];
+
   try {
     for (const clause of clauses) {
       checks.push(await evaluateClause(clause, stage));
@@ -1483,6 +1628,7 @@ export async function handler(args: {
      sentence "this platform cannot cover the question today" is not the
      reason when ready.json records compile errors. */
   const compileErrors = contractCompileErrors(args.projectPath, browser);
+
   return envelope({
     ok: verdict.passed,
     command: COMMAND,

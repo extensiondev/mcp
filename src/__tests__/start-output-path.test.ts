@@ -1,14 +1,18 @@
-import { describe, it, expect, vi, afterEach } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { spawn } from "node:child_process";
-import type { ChildProcess } from "node:child_process";
 
-type SpawnedCli = import("../lib/exec").SpawnedCli;
+import { describe, it, expect, vi, afterEach } from "vitest";
+
+import type { ChildProcess } from "node:child_process";
+import type * as ExecModule from "../lib/exec";
+import type { SpawnedCli } from "../lib/exec";
+
 
 const spawned: ChildProcess[] = [];
 const spawnedArgs: string[][] = [];
+
 function fakeCli(): SpawnedCli {
   const logDir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-fake-cli-"));
   const logPath = path.join(logDir, "session.log");
@@ -18,6 +22,7 @@ function fakeCli(): SpawnedCli {
   });
   fs.closeSync(fd);
   spawned.push(child);
+
   return {
     child,
     logPath,
@@ -32,11 +37,13 @@ function fakeCli(): SpawnedCli {
 }
 
 vi.mock("../lib/exec", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../lib/exec")>();
+  const actual = await importOriginal<typeof ExecModule>();
+
   return {
     ...actual,
     spawnExtensionCli: (args: string[]) => {
       spawnedArgs.push(args);
+
       return fakeCli();
     },
   };
@@ -54,9 +61,11 @@ const start = await import("../tools/start");
 const { removeSession } = await import("../lib/process-manager");
 
 const tmpDirs: string[] = [];
+
 function tmpProject(): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-start-output-"));
   tmpDirs.push(dir);
+
   return dir;
 }
 
@@ -67,12 +76,15 @@ afterEach(() => {
     } catch {
     }
   }
+
   spawnedArgs.length = 0;
+
   for (const dir of tmpDirs.splice(0)) {
     try {
       removeSession(dir, "chrome");
     } catch {
     }
+
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });

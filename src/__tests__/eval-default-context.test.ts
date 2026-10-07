@@ -1,9 +1,14 @@
-import { describe, it, expect, afterEach, vi } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+
+import { describe, it, expect, afterEach, vi } from "vitest";
+
 import { envelope } from "../lib/envelope";
 import { writeEvalToken } from "./fixtures/ready-contract";
+
+import type * as ActModule from "../lib/act";
+import type * as CdpPortModule from "../lib/cdp-port";
 
 const okFrame = () =>
   envelope({ ok: true, command: "extension_eval", status: "ok", value: 42 });
@@ -11,18 +16,21 @@ const okFrame = () =>
 const calls: string[][] = [];
 let reply: () => string = okFrame;
 vi.mock("../lib/act", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../lib/act")>();
+  const actual = await importOriginal<typeof ActModule>();
+
   return {
     ...actual,
     runActVerb: async (cli: string[]) => {
       calls.push(cli);
+
       return reply();
     },
   };
 });
 
 vi.mock("../lib/cdp-port", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../lib/cdp-port")>();
+  const actual = await importOriginal<typeof CdpPortModule>();
+
   return { ...actual, resolveCdpPort: async () => null };
 });
 
@@ -30,15 +38,19 @@ const evalTool = await import("../tools/eval");
 const { toMcpSpeak } = await import("../lib/act");
 
 const dirs: string[] = [];
+
 function project(manifests: Record<string, Record<string, unknown>>): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-eval-default-"));
   dirs.push(dir);
+
   for (const [rel, manifest] of Object.entries(manifests)) {
     const file = path.join(dir, rel, "manifest.json");
     fs.mkdirSync(path.dirname(file), { recursive: true });
     fs.writeFileSync(file, JSON.stringify(manifest));
   }
+
   writeEvalToken(dir, "chrome");
+
   return dir;
 }
 
@@ -192,6 +204,7 @@ describe("eval error prose speaks tool args, not CLI flags", () => {
     expect(toMcpSpeak("inspect a content/page (with --tab) or an open surface")).toBe(
       "inspect a content/page (with `tab`) or an open surface",
     );
+
     expect(toMcpSpeak("pass --url or --context to choose")).toBe(
       "pass `url` or `context` to choose",
     );

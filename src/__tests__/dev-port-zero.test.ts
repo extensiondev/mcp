@@ -1,13 +1,17 @@
-import { describe, it, expect, vi, afterEach } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { spawn } from "node:child_process";
-import type { ChildProcess } from "node:child_process";
 
-type SpawnedCli = import("../lib/exec").SpawnedCli;
+import { describe, it, expect, vi, afterEach } from "vitest";
+
+import type { ChildProcess } from "node:child_process";
+import type * as ExecModule from "../lib/exec";
+import type { SpawnedCli } from "../lib/exec";
+
 
 const spawned: ChildProcess[] = [];
+
 function fakeCli(script: string): SpawnedCli {
   const logDir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-fake-cli-"));
   const logPath = path.join(logDir, "session.log");
@@ -17,6 +21,7 @@ function fakeCli(script: string): SpawnedCli {
   });
   fs.closeSync(fd);
   spawned.push(child);
+
   return {
     child,
     logPath,
@@ -32,7 +37,8 @@ function fakeCli(script: string): SpawnedCli {
 
 let nextChild: () => SpawnedCli = () => fakeCli("setTimeout(()=>{}, 60000)");
 vi.mock("../lib/exec", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../lib/exec")>();
+  const actual = await importOriginal<typeof ExecModule>();
+
   return {
     ...actual,
     spawnExtensionCli: () => nextChild(),
@@ -44,9 +50,11 @@ const { removeSession } = await import("../lib/process-manager");
 const { writeModernContract } = await import("./fixtures/ready-contract");
 
 const tmpDirs: string[] = [];
+
 function tmpProject(): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-dev-port-zero-"));
   tmpDirs.push(dir);
+
   return dir;
 }
 
@@ -57,19 +65,23 @@ afterEach(() => {
     } catch {
     }
   }
+
   for (const dir of tmpDirs.splice(0)) {
     try {
       removeSession(dir, "chrome");
     } catch {
     }
+
     fs.rmSync(dir, { recursive: true, force: true });
   }
+
   nextChild = () => fakeCli("setTimeout(()=>{}, 60000)");
 });
 
 describe("extension_dev with port 0 asks for any free port, which is never a collision", () => {
   it("says the engine picked the port instead of calling port 0 unavailable", async () => {
     const project = tmpProject();
+
     nextChild = () => {
       const cli = fakeCli('console.log("ready in 300ms"); setTimeout(()=>{}, 60000);');
       setTimeout(() => {
@@ -81,6 +93,7 @@ describe("extension_dev with port 0 asks for any free port, which is never a col
           executorAttachedAt: new Date().toISOString(),
         });
       }, 1000);
+
       return cli;
     };
 
@@ -97,6 +110,7 @@ describe("extension_dev with port 0 asks for any free port, which is never a col
 
   it("keeps the collision wording for a numbered port the server could not bind", async () => {
     const project = tmpProject();
+
     nextChild = () => {
       const cli = fakeCli('console.log("ready in 300ms"); setTimeout(()=>{}, 60000);');
       setTimeout(() => {
@@ -108,6 +122,7 @@ describe("extension_dev with port 0 asks for any free port, which is never a col
           executorAttachedAt: new Date().toISOString(),
         });
       }, 1000);
+
       return cli;
     };
 

@@ -1,7 +1,9 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
+
 import * as manifestValidate from "../tools/manifest-validate";
 
 
@@ -24,6 +26,7 @@ beforeEach(() => {
       action: {},
     }),
   );
+
   write("src/background.js", "chrome.runtime.onInstalled.addListener(() => {});");
 });
 
@@ -42,6 +45,7 @@ describe("companion extensions are not linted against the root manifest", () => 
         permissions: ["bookmarks", "history", "cookies", "downloads"],
       }),
     );
+
     write(
       "extensions/extension-dev-live-preview/background/service_worker.js",
       [
@@ -62,6 +66,7 @@ describe("companion extensions are not linted against the root manifest", () => 
       ...(parsed.value.errors ?? []),
       ...(parsed.value.warnings ?? []),
     ].join("\n");
+
     for (const api of [
       "bookmarks",
       "history",
@@ -72,6 +77,7 @@ describe("companion extensions are not linted against the root manifest", () => 
     ]) {
       expect(blame).not.toContain(`chrome.${api}`);
     }
+
     expect(parsed.value.buildBlocking).toBeFalsy();
   });
 

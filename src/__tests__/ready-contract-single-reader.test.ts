@@ -2,9 +2,10 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { afterEach, describe, expect, it } from "vitest";
 
+import { afterEach, describe, expect, it } from "vitest";
 import * as bridge from "extension-develop/bridge";
+
 import { readReadyContract, readyContractPath } from "../lib/session-paths";
 import { handler as doctorHandler } from "../tools/doctor";
 import { handler as logsHandler } from "../tools/logs";
@@ -16,6 +17,7 @@ const tmpDirs: string[] = [];
 function tmpProject(): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-ready-reader-"));
   tmpDirs.push(dir);
+
   return dir;
 }
 
@@ -61,6 +63,7 @@ describe("the engine publishes the ready-contract reader", () => {
       published,
       "extension-develop/bridge no longer exports readReadyContract: tools/logs.ts would have to parse ready.json by hand again",
     ).toBeTypeOf("function");
+
     expect(readReadyContract).toBe(published);
   });
 });
@@ -121,6 +124,7 @@ describe("the engine's reader on every edge the deleted copy covered", () => {
       controlPort: null,
       instanceId: "inst-1",
     });
+
     expect(readReadyContract(project, "chrome")).toBeNull();
   });
 
@@ -131,6 +135,7 @@ describe("the engine's reader on every edge the deleted copy covered", () => {
       controlPort: "51515",
       instanceId: "inst-1",
     });
+
     expect(readReadyContract(project, "chrome")).toBeNull();
   });
 
@@ -143,6 +148,7 @@ describe("the engine's reader on every edge the deleted copy covered", () => {
       controlPort: 51515,
       instanceId: "",
     });
+
     expect(readReadyContract(project, "firefox")).toBeNull();
   });
 
@@ -154,6 +160,7 @@ describe("the engine's reader on every edge the deleted copy covered", () => {
       instanceId: 42,
       runId: 7,
     });
+
     expect(readReadyContract(project, "chrome")).toMatchObject({
       controlPort: 51515,
       instanceId: "42",
@@ -168,6 +175,7 @@ describe("the engine's reader on every edge the deleted copy covered", () => {
       controlPort: 51515,
       instanceId: "inst-1",
     });
+
     expect(readReadyContract(project, "chrome")?.runId).toBe("");
   });
 
@@ -179,11 +187,13 @@ describe("the engine's reader on every edge the deleted copy covered", () => {
       instanceId: "inst-1",
       runId: "run-1",
     });
+
     expect(readReadyContract(project, "firefox")).toMatchObject({
       controlPort: 51515,
       instanceId: "inst-1",
       runId: "run-1",
     });
+
     expect(readReadyContract(project, "chrome")).toBeNull();
   });
 });
@@ -320,6 +330,7 @@ describe("tools/doctor.ts keeps its own reader, and this is the difference", () 
         runtime,
         "doctor lost the runtime-errors check for an errored session with no control port",
       ).toBeDefined();
+
       expect(runtime!.status).toBe("fail");
       expect(runtime!.detail).toContain("Cannot find module");
       expect(out.ok).toBe(false);
@@ -342,6 +353,7 @@ describe("tools/doctor.ts keeps its own reader, and this is the difference", () 
       const carried = readReadyContract(project, "chrome");
       expect(carried, "the contract is dialable, so this is not the null case")
         .not.toBeNull();
+
       for (const field of ["code", "errors", "message"]) {
         expect(
           (carried as unknown as Record<string, unknown>)[field],

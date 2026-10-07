@@ -58,9 +58,11 @@ async function resolveRelease(): Promise<ResolvedRelease | null> {
 
   const origin = mediaOrigin();
   const override = pinnedCommitOverride();
+
   if (override) {
     releaseCache = releaseForCommit(origin, override);
     releaseCacheExpiresAt = now + CHANNEL_CACHE_TTL_MS;
+
     return releaseCache;
   }
 
@@ -71,11 +73,14 @@ async function resolveRelease(): Promise<ResolvedRelease | null> {
         headers: { Accept: "application/json" },
       });
       if (!response.ok) return null;
+
       const pointer = (await response.json()) as { commit?: string };
       const commit = String(pointer?.commit || "").trim();
       if (!commit) return null;
+
       releaseCache = releaseForCommit(origin, commit);
       releaseCacheExpiresAt = Date.now() + CHANNEL_CACHE_TTL_MS;
+
       return releaseCache;
     } catch {
       return null;
@@ -96,11 +101,13 @@ export function templateCatalogUrl(
   utmSource: TemplateCatalogUtmSource = "mcp",
 ): string {
   const origin = mcpOrigins().templates.replace(/\/+$/, "");
+
   return `${origin}/${encodeURIComponent(slug)}?utm_source=${utmSource}&utm_medium=tool`;
 }
 
 export async function resolvedTemplateCommit(): Promise<string> {
   const release = await resolveRelease();
+
   return release?.commit || PINNED_COMMIT;
 }
 
@@ -108,7 +115,9 @@ export async function templateMetaUrls(): Promise<string[]> {
   const urls: string[] = [];
   const release = await resolveRelease();
   if (release) urls.push(release.metaUrl);
+
   urls.push(`${rawBaseForCommit(PINNED_COMMIT)}/templates-meta.json`);
+
   return urls;
 }
 
@@ -120,6 +129,7 @@ export function stripTemplatePathPrefix(
     const prefix = `${dir}/${slug}/`;
     if (relativePath.startsWith(prefix)) return relativePath.slice(prefix.length);
   }
+
   return relativePath;
 }
 
@@ -131,6 +141,8 @@ export async function templateFileUrls(
   const urls: string[] = [];
   const release = await resolveRelease();
   if (release) urls.push(`${release.filesBaseUrl}/${slug}/${relative}`);
+
   urls.push(`${rawBaseForCommit(PINNED_COMMIT)}/examples/${slug}/${relative}`);
+
   return urls;
 }

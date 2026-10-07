@@ -1,12 +1,13 @@
-import { describe, expect, it } from "vitest";
 import fs from "node:fs";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
-
-import { version } from "../index";
 import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
+
+import { describe, expect, it } from "vitest";
+
+import { version } from "../index";
 
 const require = createRequire(import.meta.url);
 
@@ -67,6 +68,7 @@ describe("the release rails fail closed", () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-readme-width-"));
     const readme = path.join(dir, "README.md");
     fs.writeFileSync(readme, "<img src=\"logo.png\" width=\"99%\">\n");
+
     try {
       const result = spawnSync(process.execPath, [fileURLToPath(new URL("../../scripts/readme-logo-width.mjs", import.meta.url)), "npm"], {
         env: { ...process.env, README_LOGO_WIDTH_PATH: readme },

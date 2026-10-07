@@ -49,15 +49,20 @@ export function readFirstBuild(body: unknown): FirstBuild {
       ? (body as Record<string, unknown>)
       : null;
   const fact = record?.initialBuild;
+
   if (!fact || typeof fact !== "object" || Array.isArray(fact)) {
     return { state: "unsaid" };
   }
+
   const dispatched = (fact as Record<string, unknown>).dispatched;
   if (dispatched === true) return { state: "dispatched" };
+
   if (dispatched === false) {
     const reason = String((fact as Record<string, unknown>).reason ?? "").trim();
+
     return { state: "withheld", reason: reason || "unstated" };
   }
+
   return { state: "unsaid" };
 }
 
@@ -75,9 +80,11 @@ export function firstBuildValue(build: FirstBuild): {
   reason?: string;
 } {
   if (build.state === "dispatched") return { dispatched: true };
+
   if (build.state === "withheld") {
     return { dispatched: false, reason: build.reason };
   }
+
   return { dispatched: null };
 }
 
@@ -86,8 +93,10 @@ export function firstBuildSentence(
   buildsPageUrl: string,
 ): string {
   if (build.state === "dispatched") return "Its first build was dispatched.";
+
   if (build.state === "withheld") {
     return `No first build was dispatched: ${withheldBecause(build.reason)}. The project exists without a build; start one from ${buildsPageUrl} once that is resolved.`;
   }
+
   return `The platform's answer did not say whether a first build was dispatched, so none is claimed here; ${buildsPageUrl} shows whether one is running.`;
 }

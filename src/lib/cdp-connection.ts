@@ -7,6 +7,7 @@
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
 import WebSocket from "ws";
+
 import { summarizeConsoleMessages } from "./console-summary";
 
 const COMMAND_TIMEOUT_MS = 15_000;
@@ -57,6 +58,7 @@ export class CDPConnection {
         this.ws.close();
       } catch {
       }
+
       this.ws = null;
     }
   }
@@ -78,6 +80,7 @@ export class CDPConnection {
             pending.resolve(message.result);
           }
         }
+
         return;
       }
 
@@ -121,6 +124,7 @@ export class CDPConnection {
         const details = (message.params as Record<string, unknown>)?.exceptionDetails as
           | { text?: unknown; exception?: { description?: unknown }; timestamp?: unknown }
           | undefined;
+
         if (details) {
           const text = String(details.exception?.description ?? details.text ?? "Uncaught exception");
           this.consoleMessages.push({

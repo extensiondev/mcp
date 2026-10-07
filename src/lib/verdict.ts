@@ -156,11 +156,13 @@ export interface CheckResult {
 
 function declarationFor(id: string): AssertCheckDeclaration {
   const declaration = assertCheckById(id);
+
   if (!declaration) {
     throw new Error(
       `${id} is not a declared check; mint it in ASSERT_CHECKS before a verdict can carry it`,
     );
   }
+
   return declaration;
 }
 
@@ -173,6 +175,7 @@ function result(
   settledBy?: string,
 ): CheckResult {
   const declaration = declarationFor(id);
+
   return {
     id,
     subject,
@@ -228,9 +231,11 @@ export function checkKey(check: CheckResult): string {
    is divergence 3 at the head of this file. */
 export function verdictOutcome(checks: CheckResult[]): VerdictOutcome {
   if (checks.length === 0) return OUTCOME_INCONCLUSIVE;
+
   if (checks.some((check) => check.outcome === OUTCOME_FAIL)) {
     return OUTCOME_FAIL;
   }
+
   if (
     checks.some(
       (check) =>
@@ -240,6 +245,7 @@ export function verdictOutcome(checks: CheckResult[]): VerdictOutcome {
   ) {
     return OUTCOME_INCONCLUSIVE;
   }
+
   return OUTCOME_PASS;
 }
 
@@ -266,16 +272,21 @@ export interface VerdictInput {
 export function assertVerdict(input: VerdictInput): AssertVerdict {
   const checks = input.checks;
   const seen = new Set<string>();
+
   for (const check of checks) {
     const key = checkKey(check);
+
     if (seen.has(key)) {
       throw new Error(
         `${key} appears more than once in one verdict, so which one gates is undecidable`,
       );
     }
+
     seen.add(key);
   }
+
   const outcome = verdictOutcome(checks);
+
   return {
     contract: ASSERT_CONTRACT_NAME,
     contractVersion: ASSERT_CONTRACT_VERSION,
@@ -302,17 +313,21 @@ export function verdictSentence(verdict: AssertVerdict): string {
   if (verdict.checks.length === 0) {
     return "No expectation was stated, so nothing was judged and this is not a pass.";
   }
+
   const passed = verdict.checks.filter(
     (check) => check.outcome === OUTCOME_PASS,
   ).length;
   const parts = [`${passed}/${verdict.checks.length} passed`];
+
   if (verdict.failures.length > 0) {
     parts.push(`${verdict.failures.length} failed`);
   }
+
   if (verdict.inconclusive.length > 0) {
     parts.push(
       `${verdict.inconclusive.length} inconclusive, meaning this platform cannot cover the question today: not a pass, not a bug in the extension, and each one carries the evidence that would settle it in settledBy`,
     );
   }
+
   return `${parts.join(", ")}.`;
 }

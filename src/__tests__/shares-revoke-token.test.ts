@@ -1,7 +1,8 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { writeCredentials } from "../lib/credentials";
 import { handler } from "../tools/shares";
@@ -27,6 +28,7 @@ beforeEach(() => {
   for (const key of ["XDG_CONFIG_HOME", "EXTENSION_DEV_API_URL", "EXTENSION_DEV_TOKEN", "EXTENSION_DEV_PROJECT", "EXTENSION_DEV_APPROVAL_GATE"]) {
     saved[key] = process.env[key];
   }
+
   tmp = fs.mkdtempSync(path.join(os.tmpdir(), "extdev-shares-revoke-"));
   process.env.XDG_CONFIG_HOME = tmp;
   process.env.EXTENSION_DEV_API_URL = "https://api.test";
@@ -37,10 +39,12 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+
   for (const [key, value] of Object.entries(saved)) {
     if (value === undefined) delete process.env[key];
     else process.env[key] = value;
   }
+
   fs.rmSync(tmp, { recursive: true, force: true });
 });
 
@@ -50,9 +54,11 @@ function captureDelete(body: unknown = { artifactId: FULL_ID, revoked: true }, s
     "fetch",
     vi.fn(async (_url: any, init?: RequestInit) => {
       headers.push((init?.headers ?? {}) as Record<string, string>);
+
       return new Response(JSON.stringify(body), { status });
     }),
   );
+
   return headers;
 }
 

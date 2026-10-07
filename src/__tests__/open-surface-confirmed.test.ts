@@ -1,9 +1,14 @@
-import { describe, it, expect, afterEach, vi } from "vitest";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+
+import { describe, it, expect, afterEach, vi } from "vitest";
+
 import { envelope } from "../lib/envelope";
+
+import type * as ActModule from "../lib/act";
+import type * as CdpPortModule from "../lib/cdp-port";
 
 const openedFrame = () =>
   envelope({
@@ -20,18 +25,21 @@ const attached: string[] = [];
 let nextCreatedId = 0;
 
 vi.mock("../lib/act", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../lib/act")>();
+  const actual = await importOriginal<typeof ActModule>();
+
   return {
     ...actual,
     runActVerb: async (cli: string[]) => {
       actCalls.push(cli);
+
       return actResult;
     },
   };
 });
 
 vi.mock("../lib/cdp-port", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../lib/cdp-port")>();
+  const actual = await importOriginal<typeof CdpPortModule>();
+
   return { ...actual, resolveCdpPort: async () => ({ port: 9222, source: "contract" as const }) };
 });
 
@@ -46,6 +54,7 @@ vi.mock("../lib/cdp", () => {
     async connect() {}
     async attachToTarget(id: string) {
       attached.push(id);
+
       return `session-${id}`;
     }
     async enableDomains() {}
@@ -60,12 +69,15 @@ vi.mock("../lib/cdp", () => {
       if (method === "Target.createTarget") {
         const id = `created-${++nextCreatedId}`;
         cdpTargets = [...cdpTargets, { id, type: "page", url: String(params?.url ?? "") }];
+
         return { targetId: id };
       }
+
       return {};
     }
     disconnect() {}
   }
+
   return { CDPClient };
 });
 
@@ -74,14 +86,17 @@ const open = await import("../tools/open");
 function expectedId(distPath: string): string {
   const d = crypto.createHash("sha256").update(distPath).digest();
   let id = "";
+
   for (let i = 0; i < 16; i++) {
     id += String.fromCharCode(97 + (d[i] >> 4));
     id += String.fromCharCode(97 + (d[i] & 0x0f));
   }
+
   return id;
 }
 
 const tmpDirs: string[] = [];
+
 function project(): { dir: string; id: string } {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-open-confirm-"));
   tmpDirs.push(dir);
@@ -94,6 +109,7 @@ function project(): { dir: string; id: string } {
       options_ui: { page: "options.html" },
     }),
   );
+
   const distPath = path.join(dir, "dist", "chrome");
   const readyDir = path.join(dir, "dist", "extension-js", "chrome");
   fs.mkdirSync(readyDir, { recursive: true });
@@ -101,6 +117,7 @@ function project(): { dir: string; id: string } {
     path.join(readyDir, "ready.json"),
     JSON.stringify({ status: "ready", distPath }),
   );
+
   return { dir, id: expectedId(distPath) };
 }
 
@@ -110,6 +127,7 @@ afterEach(() => {
   actCalls.length = 0;
   attached.length = 0;
   open.renderedTabTargets.clear();
+
   for (const dir of tmpDirs.splice(0)) {
     fs.rmSync(dir, { recursive: true, force: true });
   }
@@ -204,6 +222,7 @@ describe("extension_open surface confirmation", () => {
         side_panel: { default_path: "sidebar.html" },
       }),
     );
+
     cdpTargets = [{ id: "panel", type: "page", url: `chrome-extension://${p.id}/sidebar.html` }];
 
     const result = JSON.parse(await open.handler({ projectPath: p.dir, surface: "options", asTab: true }));

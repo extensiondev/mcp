@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 
 import { afterEach, beforeEach, describe, it, expect } from "vitest";
+
 import { schema, handler, storeMdWarnings } from "../tools/submit";
 import { writeCredentials } from "../lib/credentials";
 import { tools as ALL_TOOLS } from "../index";
@@ -33,6 +34,7 @@ describe("extension_submit: registration + schema", () => {
     const props = Object.keys(
       (schema.inputSchema as { properties: Record<string, unknown> }).properties,
     );
+
     for (const p of props) {
       expect(p).not.toMatch(
         /secret|token|apiKey|clientId|clientSecret|refreshToken|serviceAccount|zip|publisherId/i,
@@ -66,6 +68,7 @@ describe("extension_submit: platform submit handler", () => {
     else process.env.EXTENSION_DEV_TOKEN = prevToken;
     if (prevGate === undefined) delete process.env.EXTENSION_DEV_APPROVAL_GATE;
     else process.env.EXTENSION_DEV_APPROVAL_GATE = prevGate;
+
     global.fetch = prevFetch;
     fs.rmSync(tmp, { recursive: true, force: true });
   });
@@ -74,8 +77,10 @@ describe("extension_submit: platform submit handler", () => {
     let called = false;
     global.fetch = (async () => {
       called = true;
+
       return jsonResponse({});
     }) as unknown as typeof fetch;
+
     const out = JSON.parse(
       await handler({ browsers: ["chrome"], buildSha: "abc1234" }),
     );
@@ -91,8 +96,10 @@ describe("extension_submit: platform submit handler", () => {
     let called = false;
     global.fetch = (async () => {
       called = true;
+
       return jsonResponse({});
     }) as unknown as typeof fetch;
+
     const noBrowsers = JSON.parse(
       await handler({ browsers: [], buildSha: "abc1234" }),
     );
@@ -110,6 +117,7 @@ describe("extension_submit: platform submit handler", () => {
     let captured: { url: string; init: any } | null = null;
     global.fetch = (async (url: string, init: any) => {
       captured = { url, init };
+
       return jsonResponse({ ok: true, dryRun: true, message: "Preflight OK" });
     }) as unknown as typeof fetch;
 
@@ -134,10 +142,12 @@ describe("extension_submit: platform submit handler", () => {
     expect(out.status).toBe("preflight");
     expect(out.value.platformMessage).toBe("Preflight OK");
     expect(out.value.preflight).toHaveLength(2);
+
     for (const row of out.value.preflight) {
       expect(row.ok).toBe(false);
       expect(row.configured).toBe("unknown");
     }
+
     expect(out.hint).toContain("cannot be verified");
     expect(out.hint).toContain("advisory only");
   });
@@ -150,6 +160,7 @@ describe("extension_submit: platform submit handler", () => {
         dryRun: true,
         message: "Build abc1234 has no completed build",
       })) as unknown as typeof fetch;
+
     const out = JSON.parse(
       await handler({ browsers: ["chrome"], buildSha: "abc1234" }),
     );
@@ -169,19 +180,25 @@ describe("extension_submit: platform submit handler", () => {
       expiresAt: Math.floor(Date.now() / 1000) + 3600,
       api: "https://www.extension.dev",
     });
+
     global.fetch = (async (url: string) => {
       const u = String(url);
+
       if (u.includes("/api/cli/stores/submit")) {
         return jsonResponse({ ok: false, dryRun: true, message: "Denied" });
       }
+
       if (u.includes("stores/health.json")) {
         return jsonResponse({ stores: { chrome: { ok: true } } });
       }
+
       if (u.includes("channels.json")) {
         return jsonResponse({ stable: { sha: "abc1234" } });
       }
+
       return jsonResponse({});
     }) as unknown as typeof fetch;
+
     const out = JSON.parse(
       await handler({ browsers: ["chrome"], buildSha: "abc1234" }),
     );
@@ -201,19 +218,25 @@ describe("extension_submit: platform submit handler", () => {
       expiresAt: Math.floor(Date.now() / 1000) + 3600,
       api: "https://www.extension.dev",
     });
+
     global.fetch = (async (url: string) => {
       const u = String(url);
+
       if (u.includes("/api/cli/stores/submit")) {
         return jsonResponse({ ok: true, dryRun: true });
       }
+
       if (u.includes("stores/health.json")) {
         return jsonResponse({ stores: {} });
       }
+
       if (u.includes("channels.json")) {
         return jsonResponse({ stable: { sha: "abc1234" } });
       }
+
       return jsonResponse({});
     }) as unknown as typeof fetch;
+
     const out = JSON.parse(
       await handler({ browsers: ["chrome"], buildSha: "abc1234" }),
     );
@@ -226,6 +249,7 @@ describe("extension_submit: platform submit handler", () => {
     process.env.EXTENSION_DEV_TOKEN = claimsToken("acme", "widget");
     global.fetch = (async () =>
       jsonResponse({ ok: true, dryRun: true })) as unknown as typeof fetch;
+
     const project = path.join(tmp, "project");
     fs.mkdirSync(project, { recursive: true });
     fs.writeFileSync(
@@ -239,10 +263,12 @@ describe("extension_submit: platform submit handler", () => {
         "Guidance.",
       ].join("\n"),
     );
+
     const elsewhere = path.join(tmp, "elsewhere");
     fs.mkdirSync(elsewhere, { recursive: true });
     const prevCwd = process.cwd();
     process.chdir(elsewhere);
+
     try {
       const out = JSON.parse(
         await handler({
@@ -264,8 +290,10 @@ describe("extension_submit: platform submit handler", () => {
     let body: any = null;
     global.fetch = (async (_url: string, init: any) => {
       body = JSON.parse(init.body);
+
       return jsonResponse(submitAnswer(["edge"]));
     }) as unknown as typeof fetch;
+
     await handler({ browsers: ["edge"], buildSha: "def5678", dryRun: false });
     expect(body.dryRun).toBe(false);
   });
@@ -274,8 +302,10 @@ describe("extension_submit: platform submit handler", () => {
     process.env.EXTENSION_DEV_TOKEN = claimsToken("acme", "widget");
     global.fetch = (async () =>
       jsonResponse({ ok: true, dryRun: true })) as unknown as typeof fetch;
+
     const prevCwd = process.cwd();
     process.chdir(tmp);
+
     try {
       const out = JSON.parse(
         await handler({ browsers: ["firefox"], buildSha: "abc1234" }),
@@ -296,6 +326,7 @@ describe("extension_submit: platform submit handler", () => {
         false,
         404,
       )) as unknown as typeof fetch;
+
     const out = JSON.parse(
       await handler({ browsers: ["chrome"], buildSha: "deadbeef" }),
     );
@@ -340,6 +371,7 @@ describe("storeMdWarnings", () => {
         "Real guidance here.",
       ].join("\n"),
     );
+
     const warnings = storeMdWarnings(["firefox", "edge"], tmp);
     expect(warnings).toHaveLength(1);
     expect(warnings[0]).toContain("Firefox reviewer notes");
@@ -357,6 +389,7 @@ describe("storeMdWarnings", () => {
         "Guidance.",
       ].join("\n"),
     );
+
     const warnings = storeMdWarnings(["firefox", "edge"], tmp);
     expect(warnings).toHaveLength(1);
     expect(warnings[0]).toContain(path.join(tmp, "STORE.md"));
@@ -375,6 +408,7 @@ describe("storeMdWarnings", () => {
         "Guidance.",
       ].join("\n"),
     );
+
     const warnings = storeMdWarnings(["firefox", "edge"], tmp);
     expect(warnings).toHaveLength(2);
     expect(warnings[0]).toContain("no Firefox reviewer notes");

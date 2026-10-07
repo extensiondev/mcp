@@ -42,9 +42,11 @@ export function surfaceForExtensionUrl(
     .replace(/^\.?\//, "")
     .replace(/[?#].*$/, "");
   if (!bare) return null;
+
   for (const context of EXTENSION_PAGE_CONTEXTS) {
     const document = surfaceDocument(projectPath, browser, context);
     if (!document) continue;
+
     if (
       bare === document ||
       bare.endsWith(`/${document}`) ||
@@ -53,5 +55,6 @@ export function surfaceForExtensionUrl(
       return { context, document };
     }
   }
+
   return null;
 }

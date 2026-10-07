@@ -2,10 +2,13 @@
  * read off the cache and the binary, never off a directory, a return or a
  * silent probe; and the installer's prose never reaches the JSON-RPC stream. */
 
-import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+
+import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
+
+import type * as ExtensionInstallModule from "extension-install";
 
 const installer = vi.hoisted(() => ({
   outputDuringCall: null as string | null | undefined,
@@ -13,13 +16,15 @@ const installer = vi.hoisted(() => ({
   calls: 0,
 }));
 vi.mock("extension-install", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("extension-install")>();
+  const actual = await importOriginal<typeof ExtensionInstallModule>();
+
   return {
     ...actual,
     extensionInstall: vi.fn(async ({ browser }: { browser: string }) => {
       installer.calls += 1;
       installer.outputDuringCall = process.env.EXTENSION_OUTPUT;
       if (installer.plant) plantBinary(browser);
+
       return undefined;
     }),
   };
@@ -27,11 +32,13 @@ vi.mock("extension-install", async (importOriginal) => {
 
 const tmpDirs: string[] = [];
 let root = "";
+
 function plantBinary(browser: string): string {
   const name = browser === "firefox" ? "firefox" : "chrome";
   const full = path.join(root, browser, browser, "mac_arm-151.0.0.0", name);
   fs.mkdirSync(path.dirname(full), { recursive: true });
   fs.writeFileSync(full, "#!/bin/sh\nexit 0\n", { mode: 0o755 });
+
   return full;
 }
 
@@ -46,11 +53,13 @@ beforeEach(() => {
   installer.plant = true;
   installer.calls = 0;
 });
+
 afterEach(() => {
   if (savedEnv === undefined) delete process.env.EXT_BROWSERS_CACHE_DIR;
   else process.env.EXT_BROWSERS_CACHE_DIR = savedEnv;
   if (savedOutput === undefined) delete process.env.EXTENSION_OUTPUT;
   else process.env.EXTENSION_OUTPUT = savedOutput;
+
   for (const dir of tmpDirs.splice(0)) fs.rmSync(dir, { recursive: true, force: true });
 });
 

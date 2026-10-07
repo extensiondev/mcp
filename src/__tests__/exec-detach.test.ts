@@ -1,8 +1,10 @@
-import { describe, it, expect, afterEach } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
+
+import { describe, it, expect, afterEach } from "vitest";
+
 import { runExtensionCli, spawnExtensionCli, type SpawnedCli } from "../lib/exec";
 
 
@@ -17,6 +19,7 @@ function fakeProject(binScript: string): string {
   fs.writeFileSync(bin, `#!/bin/sh\n${binScript}\n`);
   fs.chmodSync(bin, 0o755);
   cleanups.push(() => fs.rmSync(dir, { recursive: true, force: true }));
+
   return dir;
 }
 
@@ -32,6 +35,7 @@ afterEach(() => {
       }
     }
   }
+
   live = undefined;
   for (const fn of cleanups.splice(0)) fn();
 });
@@ -75,6 +79,7 @@ describe("spawnExtensionCli detach contract", () => {
     async () => {
       const previousPath = process.env.PATH;
       process.env.PATH = "/nonexistent-mcp-test-bin";
+
       try {
         const spawned = spawnExtensionCli(["--version"]);
         await new Promise((r) => setTimeout(r, 300));

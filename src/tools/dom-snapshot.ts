@@ -149,18 +149,22 @@ async function snapshotExtensionPageOverProtocol(
   consoleAsked: boolean,
 ): Promise<string | null> {
   if (!url || !isGeckoFamily(browser) || !GECKO_EXTENSION_URL.test(url)) return null;
+
   try {
     const refused = JSON.parse(raw);
     if (!refused || refused.ok !== false) return null;
   } catch {
     return null;
   }
+
   const resolved = await resolveRdpPort(args.projectPath, browser, {
     waitMs: 3_000,
     graceMs: 1_000,
   });
   if (!resolved) return null;
+
   const wantHtml = args.include?.includes("html") === true;
+
   try {
     const outcome = await rdpEvaluateInTab(resolved.port, {
       select: (tabs) => tabs.find((tab) => sameDocumentUrl(tab.url, url)),
@@ -168,16 +172,17 @@ async function snapshotExtensionPageOverProtocol(
       timeoutMs: args.timeout ?? 10_000,
     });
     if (!outcome.ok) return null;
+
     return envelope({
       ok: true,
       command: schema.name,
       status: "ok",
       value: outcome.value,
       warnings: [
-        `${url} is a page inside the extension, which Firefox lets no script be injected into, so this snapshot was read over the debugger protocol from the tab showing it.` +
-          (consoleAsked
+        `${url} is a page inside the extension, which Firefox lets no script be injected into, so this snapshot was read over the debugger protocol from the tab showing it.${ 
+          consoleAsked
             ? " Console lines are not collected on this path; read them with extension_logs."
-            : ""),
+            : ""}`,
       ],
     });
   } catch {
@@ -204,7 +209,9 @@ async function cdpPortOrError(
       }),
     };
   }
+
   const resolved = await resolveCdpPort(projectPath, browser);
+
   if (!resolved) {
     return {
       error: envelope({
@@ -219,6 +226,7 @@ async function cdpPortOrError(
       }),
     };
   }
+
   return { port: resolved.port };
 }
 
@@ -239,8 +247,10 @@ export async function handler(
 
   if (args.listTargets) {
     const { browser } = resolveSessionBrowser(args.projectPath, args.browser);
+
     if (isGeckoFamily(browser)) {
       const resolved = await resolveRdpPort(args.projectPath, browser);
+
       if (!resolved) {
         return envelope({
           ok: false,
@@ -253,8 +263,10 @@ export async function handler(
           },
         });
       }
+
       try {
         const tabs = await rdpListTabs(resolved.port);
+
         return envelope({
           ok: true,
           command: schema.name,
@@ -286,10 +298,13 @@ export async function handler(
         });
       }
     }
+
     const cdp = await cdpPortOrError(args.projectPath, browser, "listTargets");
     if ("error" in cdp) return cdp.error;
+
     try {
       const targets = await listPageTargets(cdp.port);
+
       return envelope({
         ok: true,
         command: schema.name,
@@ -331,6 +346,7 @@ export async function handler(
   let targetUrl = args.url;
   let targetTab = args.tab;
   let resolvedTarget: Record<string, unknown> | null = null;
+
   if (args.tabUrl) {
     if (args.tab != null || args.url) {
       return envelope({
@@ -345,7 +361,9 @@ export async function handler(
         },
       });
     }
+
     const { browser } = resolveSessionBrowser(args.projectPath, args.browser);
+
     if (!isChromiumFamily(browser)) {
       const listed = await listBridgeTabs(
         args.projectPath,
@@ -353,7 +371,9 @@ export async function handler(
         args.timeout,
       );
       if ("error" in listed) return listed.error;
+
       const matches = matchTabsByUrl(listed.tabs, args.tabUrl);
+
       if (matches.length === 0) {
         return envelope({
           ok: false,
@@ -368,6 +388,7 @@ export async function handler(
           hint: "Pick one from availableTabs and retry with a `tabUrl` substring of its url, or open the page first (extension_open with `url`).",
         });
       }
+
       if (matches.length > 1) {
         return envelope({
           ok: false,
@@ -382,13 +403,16 @@ export async function handler(
           hint: "Narrow `tabUrl` to a longer substring that matches exactly one url in matchingTabs, or pass its numeric tabId as `tab`.",
         });
       }
+
       resolvedTarget = { ...matches[0] };
       if (matches[0].tabId != null) targetTab = matches[0].tabId;
       else targetUrl = matches[0].url;
     } else {
       const cdp = await cdpPortOrError(args.projectPath, browser, "tabUrl");
       if ("error" in cdp) return cdp.error;
+
       let targets: Awaited<ReturnType<typeof listPageTargets>>;
+
       try {
         targets = await listPageTargets(cdp.port);
       } catch (e) {
@@ -404,7 +428,9 @@ export async function handler(
           hint: "Confirm the session is ready (extension_wait), then retry, or target with `url`/`tab` instead.",
         });
       }
+
       const matches = matchTargetsByUrl(targets, args.tabUrl);
+
       if (matches.length === 0) {
         return envelope({
           ok: false,
@@ -419,6 +445,7 @@ export async function handler(
           hint: `Pick one from availableTargets and retry with a \`tabUrl\` substring of its url, or open the page first (extension_open with \`url\`). ${TARGET_ID_NOTE}`,
         });
       }
+
       if (matches.length > 1) {
         return envelope({
           ok: false,
@@ -433,6 +460,7 @@ export async function handler(
           hint: `Narrow \`tabUrl\` to a longer substring that matches exactly one url in matchingTargets. ${TARGET_ID_NOTE}`,
         });
       }
+
       resolvedTarget = { ...matches[0] };
       targetUrl = matches[0].url;
     }
@@ -445,8 +473,10 @@ export async function handler(
   if (args.include?.length) cli.push("--include", args.include.join(","));
   if (args.maxBytes != null) cli.push("--max-bytes", String(args.maxBytes));
   if (withConsole != null) cli.push("--with-console", String(withConsole));
+
   cli.push("--browser", resolveSessionBrowser(args.projectPath, args.browser).browser);
   if (args.timeout != null) cli.push("--timeout", String(args.timeout));
+
   const sessionBrowser = resolveSessionBrowser(args.projectPath, args.browser).browser;
   const asked = await runActVerb(cli, args.projectPath, args.timeout, schema.name);
   const overProtocol = await snapshotExtensionPageOverProtocol(
@@ -458,11 +488,13 @@ export async function handler(
   );
   const raw = overProtocol ?? asked;
   if (!resolvedTarget) return raw;
+
   try {
     const parsed = JSON.parse(raw);
     patchValue(parsed, {
       resolvedTarget: { ...resolvedTarget, matchedBy: "tabUrl" },
     });
+
     const reported =
       typeof parsed?.value?.meta?.url === "string"
         ? parsed.value.meta.url
@@ -470,12 +502,14 @@ export async function handler(
           ? parsed.value.url
           : null;
     const resolvedUrl = typeof resolvedTarget.url === "string" ? resolvedTarget.url : null;
+
     if (reported && resolvedUrl && reported.replace(/#.*$/, "") !== resolvedUrl.replace(/#.*$/, "")) {
       addWarning(
         parsed,
         `The snapshot reports ${reported} while the target this server resolved was ${resolvedUrl}; the tab navigated between the two reads, and the values describe what the snapshot reports.`,
       );
     }
+
     return actFrameJson(parsed);
   } catch {
     return raw;

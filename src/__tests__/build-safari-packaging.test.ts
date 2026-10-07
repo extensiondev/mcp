@@ -1,8 +1,12 @@
-import { describe, it, expect, afterEach, vi } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+
+import { describe, it, expect, afterEach, vi } from "vitest";
+
 import { browserFromCliArgs, buildNarration, writeEngineDist } from "./fixtures/engine-answers";
+
+import type * as ExecModule from "../lib/exec";
 
 interface CliResponse {
   code: number;
@@ -15,15 +19,18 @@ let cliResponse: CliResponse = { code: 0, stdout: "", stderr: "" };
 let cliResponder: ((args: string[]) => CliResponse) | null = null;
 
 vi.mock("../lib/exec", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../lib/exec")>();
+  const actual = await importOriginal<typeof ExecModule>();
+
   return {
     ...actual,
     runExtensionCli: async (args: string[]) => {
       cliCalls.push(args);
       const answer = cliResponder ? cliResponder(args) : cliResponse;
+
       if (args[0] === "build" && answer.code === 0) {
         writeEngineDist(args[1]!, browserFromCliArgs(args));
       }
+
       return answer;
     },
   };
@@ -64,6 +71,7 @@ function project(): string {
     path.join(dir, "src", "manifest.json"),
     JSON.stringify(MANIFEST),
   );
+
   return dir;
 }
 
@@ -125,7 +133,7 @@ function engineSaid(value: Record<string, unknown>, human = ""): CliResponse {
   };
 }
 
-function summariesOf(...summaries: Record<string, unknown>[]): CliResponse {
+function summariesOf(...summaries: Array<Record<string, unknown>>): CliResponse {
   return engineSaid({
     projectPath: ".",
     browsers: summaries.map((s) => s.browser),
@@ -140,6 +148,7 @@ afterEach(() => {
   cliCalls.length = 0;
   cliResponder = null;
   cliResponse = { code: 0, stdout: "", stderr: "" };
+
   for (const dir of tmpDirs.splice(0)) {
     fs.rmSync(dir, { recursive: true, force: true });
   }
@@ -217,6 +226,7 @@ describe("extension_build drives the Safari web-extension conversion", () => {
       xcodeProjectPath: "/tmp/safari-xcode/Reading List.xcodeproj",
       macOsOnly: true,
     });
+
     expect((result.warnings ?? []).join(" ")).not.toContain("locked out");
   });
 
@@ -256,6 +266,7 @@ describe("extension_build drives the Safari web-extension conversion", () => {
     expect(result.value.safariApp.bundleId).toBe(
       "dev.extensionjs.Reading-List",
     );
+
     const warnings = (result.warnings ?? []).join(" ");
     expect(warnings).toContain("dev.extensionjs.Reading-List");
     expect(warnings).toContain("locked out");
@@ -272,11 +283,13 @@ describe("extension_build drives the Safari web-extension conversion", () => {
         bundleIdDerived: true,
       },
     });
+
     const warnings = (
       (await run({ projectPath: dir, browser: "safari" })).warnings ?? []
     ).join(" ");
 
     expect(warnings).toContain("locked out");
+
     for (const claim of [
       "reject it for distribution",
       "Apple will reject",
@@ -434,6 +447,7 @@ describe("extension_build against an engine older than the summaries contract", 
       browsers: ["chrome"],
       mode: "production",
     });
+
     persistSummary(dir, "chrome", {
       browser: "chrome",
       total_assets: 3,
@@ -460,6 +474,7 @@ describe("extension_build against an engine older than the summaries contract", 
       stdout: "",
       stderr: buildNarration("chrome", "Reading List"),
     };
+
     persistSummary(dir, "chrome", {
       browser: "chrome",
       total_bytes: 999,
@@ -493,6 +508,7 @@ describe("extension_build against an engine older than the summaries contract", 
     expect(result.value.safariApp.bundleId).toBe(
       "dev.extensionjs.Reading-List",
     );
+
     expect((result.warnings ?? []).join(" ")).toContain("locked out");
   });
 
@@ -508,6 +524,7 @@ describe("extension_build against an engine older than the summaries contract", 
     expect(warnings).toContain(
       path.join(dir, "dist", "extension-js", "chrome", "build-summary.json"),
     );
+
     expect(warnings).toContain("The extension that was built is unaffected");
     expect(warnings).toContain("its layout may differ");
   });
@@ -563,6 +580,7 @@ describe("extension_build survives an engine that has no --output flag at all", 
       stdout: "",
       stderr: buildNarration("chrome", "Reading List"),
     });
+
     persistSummary(dir, "chrome", {
       browser: "chrome",
       total_assets: 4,
@@ -805,6 +823,7 @@ describe("extension_build refuses a Safari packaging option it cannot honour", (
       const result = await run({ projectPath: dir, browser: "safari", bundleId: accepted });
       expect(result.status, `${accepted} is one the engine accepts`).not.toBe("invalid-bundle-id");
     }
+
     for (const bad of [
       "com.acme.",
       "com..acme",
@@ -849,6 +868,7 @@ describe("the local bundle-id validator stays the engine's validator", () => {
     expect(build.BUNDLE_ID_PATTERN.source).toBe(
       ENGINE_IS_VALID_BUNDLE_ID_SOURCE,
     );
+
     expect(build.BUNDLE_ID_PATTERN.flags).toBe("");
   });
 

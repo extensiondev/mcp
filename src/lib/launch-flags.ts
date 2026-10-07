@@ -60,7 +60,9 @@ export function launchFlagArgs(args: LaunchFlagArgs): string[] {
   if (args.geckoBinary) cli.push("--gecko-binary", args.geckoBinary);
   if (args.host) cli.push("--host", args.host);
   if (args.publicHost) cli.push("--public-host", args.publicHost);
+
   if (args.extensions?.length)
-    cli.push("--extensions", args.extensions.join(","));
+    {cli.push("--extensions", args.extensions.join(","));}
+
   return cli;
 }

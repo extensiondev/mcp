@@ -69,6 +69,7 @@ export async function handler(args: {
         },
       });
     }
+
     return installManagedBrowser(args.browser);
   }
 

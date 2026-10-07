@@ -2,10 +2,11 @@
  * "uninstalled" or "Safe to create" without reading the thing it was
  * describing. */
 
-import { describe, it, expect, vi, afterEach } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+
+import { describe, it, expect, vi, afterEach } from "vitest";
 
 let uninstallAnswer: unknown = [];
 vi.mock("extension-install", () => ({
@@ -20,11 +21,14 @@ const uninstall = await import("../tools/uninstall-browser");
 const addFeature = await import("../tools/add-feature");
 
 const tmpDirs: string[] = [];
+
 function tmpDir(prefix: string): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
   tmpDirs.push(dir);
+
   return dir;
 }
+
 afterEach(() => {
   uninstallAnswer = [];
   for (const dir of tmpDirs.splice(0)) fs.rmSync(dir, { recursive: true, force: true });
@@ -34,10 +38,12 @@ function distWith(files: Record<string, string>): string {
   const root = tmpDir("mcp-analyze-");
   const dist = path.join(root, "dist", "chrome");
   fs.mkdirSync(dist, { recursive: true });
+
   for (const [rel, body] of Object.entries(files)) {
     fs.mkdirSync(path.dirname(path.join(dist, rel)), { recursive: true });
     fs.writeFileSync(path.join(dist, rel), body);
   }
+
   return root;
 }
 
@@ -179,6 +185,7 @@ describe("81a: extension_browsers uninstall reads the per-browser result", () =>
       { browser: "chrome", removed: true, path: "/cache/chrome" },
       { browser: "firefox", removed: false, path: "/cache/firefox" },
     ];
+
     const partial = JSON.parse(await uninstall.uninstallManagedBrowser({ all: true }));
     expect(partial.status).toBe("uninstalled-partially");
     expect(partial.value.removed).toEqual(["chrome"]);
@@ -201,6 +208,7 @@ describe("90b: extension_add_feature reads the manifest before saying safe", () 
     const root = tmpDir("mcp-addfeat-");
     fs.mkdirSync(path.join(root, "src"), { recursive: true });
     fs.writeFileSync(path.join(root, "src", "manifest.json"), manifest);
+
     return root;
   }
 

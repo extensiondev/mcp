@@ -8,6 +8,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
+
 import WebSocket from "ws";
 
 import {
@@ -47,6 +48,7 @@ function capRecent(
   limit: number,
 ): { events: any[]; windowTruncated: boolean } {
   if (events.length <= limit) return { events, windowTruncated: false };
+
   return {
     events: events.slice(events.length - limit),
     windowTruncated: true,
@@ -58,6 +60,7 @@ export function emptyReason(
   browser: string,
 ): string | undefined {
   let contract: { status?: string; errors?: string[]; pid?: number };
+
   try {
     contract = JSON.parse(
       fs.readFileSync(readyContractPath(projectPath, browser), "utf8"),
@@ -65,17 +68,22 @@ export function emptyReason(
   } catch {
     return `No ready.json for this project/browser: no dev session has produced a build here, so there is nothing to log. Start one with extension_dev. ${sessionPathHint(readyContractPath(projectPath, browser))}`;
   }
+
   if (contract.status === "error") {
     const errs = contract.errors;
     const code = (contract as { code?: unknown }).code;
+
     if (code === "browser_exited") {
       return `The dev session recorded status:"error" with code browser_exited: the browser exited after the build, so logging stopped when it did. Whatever was written before is in the file; nothing new will arrive until the session is relaunched.`;
     }
+
     if (errs?.length || code === "compile_error" || code === "first_compile") {
       return `The dev session recorded status:"error"${errs?.length ? ` (${errs.join("; ")})` : ""}, so the extension never ran. There are no logs because there was no working build, not because your code is silent.`;
     }
+
     return `The dev session recorded status:"error"${typeof code === "string" ? ` (${code})` : ""}, so the extension is not running. Nothing is logging until the session is relaunched.`;
   }
+
   if (typeof contract.pid === "number") {
     try {
       process.kill(contract.pid, 0);
@@ -83,6 +91,7 @@ export function emptyReason(
       return `ready.json reports ready but its dev-server pid ${contract.pid} is dead: the session exited. Logs stop at the moment it died. Restart with extension_dev; extension_doctor will confirm.`;
     }
   }
+
   return undefined;
 }
 
@@ -120,6 +129,7 @@ function summarize(
             : undefined))
       : undefined;
   const stale = Boolean(staleNote) && matched > 0;
+
   return envelope({
     ok: true,
     command: TOOL,
@@ -150,6 +160,7 @@ export function staleFileNote(
   eventsRunId: string,
 ): string | undefined {
   let contract: { pid?: number; runId?: unknown; instanceId?: unknown };
+
   try {
     contract = JSON.parse(
       fs.readFileSync(readyContractPath(projectPath, browser), "utf8"),
@@ -157,6 +168,7 @@ export function staleFileNote(
   } catch {
     return "These events survive from a previous session: no ready.json exists for this project/browser now, so nothing current is producing logs.";
   }
+
   if (typeof contract.pid === "number") {
     try {
       process.kill(contract.pid, 0);
@@ -164,12 +176,15 @@ export function staleFileNote(
       return `These events are from a PAST run: the session that wrote them (pid ${contract.pid}) is dead. Nothing current is producing logs; do not read these as live output.`;
     }
   }
+
   const liveIds = [contract.runId, contract.instanceId]
     .map((v) => String(v || ""))
     .filter(Boolean);
+
   if (eventsRunId && liveIds.length > 0 && !liveIds.includes(eventsRunId)) {
     return `These events carry runId ${eventsRunId} but the current session is run ${liveIds.join(" / ")}, which has written nothing yet. Do not read these as the current run's output.`;
   }
+
   return undefined;
 }
 
@@ -180,24 +195,31 @@ export function staleFileNote(
    they are judging; they must not re-derive it from a different field. */
 export function readLogRunId(projectPath: string, browser: string): string {
   let text: string;
+
   try {
     text = fs.readFileSync(logsPath(projectPath, browser), "utf8");
   } catch {
     return "";
   }
+
   let runId = "";
+
   for (const line of text.split("\n")) {
     if (!line) continue;
+
     let event: { type?: unknown; runId?: unknown };
+
     try {
       event = JSON.parse(line);
     } catch {
       continue;
     }
+
     if (event && event.type === "header" && event.runId) {
       runId = String(event.runId);
     }
   }
+
   return runId;
 }
 
@@ -207,6 +229,7 @@ async function readFromFile(
   limit: number,
 ): Promise<string> {
   const file = logsPath(args.projectPath, browser);
+
   if (!fs.existsSync(file)) {
     return envelope({
       ok: false,
@@ -236,37 +259,47 @@ async function readFromFile(
   let total = 0;
   let maxSeq = -1;
   const events: any[] = [];
+
   for (const line of lines) {
     let event: any;
+
     try {
       event = JSON.parse(line);
     } catch {
       continue;
     }
+
     if (event && event.type === "header") {
       if (event.runId) runId = String(event.runId);
       if (typeof event.rotatedFrom === "string" && event.rotatedFrom) rotatedFrom = event.rotatedFrom;
+
       continue;
     }
+
     if (event && event.type === "gap") {
       dropped += Number(event.dropped) || 0;
       continue;
     }
+
     total += 1;
     if (typeof event?.seq === "number" && event.seq > maxSeq) maxSeq = event.seq;
     if (matches(event)) events.push(event);
   }
+
   const notes: string[] = [];
+
   if (rotatedFrom) {
     notes.push(
       `This file was rotated (it continues run ${rotatedFrom}); earlier events of the run sit in ${path.basename(file).replace(/\.ndjson$/, ".1.ndjson")} and are not in this answer.`,
     );
   }
+
   if (dropped > 0) {
     notes.push(
       `The engine dropped ${dropped} event(s) it could not write in time (disk_slow); this answer is missing them.`,
     );
   }
+
   if (events.length === 0 && total > 0) {
     notes.push(
       args.since !== undefined && Number(args.since) > maxSeq
@@ -274,6 +307,7 @@ async function readFromFile(
         : `No event matched this filter, but the run holds ${total} event(s); the session is not silent, the filter is.`,
     );
   }
+
   return summarize(
     events,
     "file",
@@ -326,6 +360,7 @@ export function controlRefusal(
   if (!Number.isFinite(closeCode) || closeCode < CLOSE_REFUSAL_FLOOR) {
     return undefined;
   }
+
   const said = reason.trim();
   const preamble = `The dev server refused the control channel at ${url}: close code ${closeCode}${said ? ` ("${said}")` : ""}.`;
 
@@ -379,6 +414,7 @@ async function readFromStream(
   limit: number,
 ): Promise<string> {
   const ready = readReadyContract(engineProjectRoot(args.projectPath), browser);
+
   if (!ready) {
     const running = knownSessionBrowsers(args.projectPath).filter(
       (b) => b !== browser,
@@ -386,6 +422,7 @@ async function readFromStream(
     const retarget = running.length
       ? `An active session exists for browser(s): ${running.join(", ")}, pass that as \`browser\`. Otherwise run`
       : "Run";
+
     return envelope({
       ok: false,
       command: TOOL,
@@ -424,6 +461,7 @@ async function readFromStream(
     let settled = false;
     const url = `ws://127.0.0.1:${ready.controlPort}${CONTROL_WS_PATH}`;
     let socket: WebSocket;
+
     try {
       socket = new WebSocket(url);
     } catch (err) {
@@ -440,6 +478,7 @@ async function readFromStream(
           },
         }),
       );
+
       return;
     }
 
@@ -447,12 +486,15 @@ async function readFromStream(
 
     const finish = () => {
       if (settled) return;
+
       settled = true;
       clearTimeout(timer);
+
       try {
         socket.close();
       } catch {
       }
+
       resolve(
         summarize(
           events,
@@ -492,6 +534,7 @@ async function readFromStream(
     socket.on("open", () => {
       opened = true;
       connectedAt = Date.now();
+
       try {
         socket.send(
           JSON.stringify({
@@ -507,11 +550,13 @@ async function readFromStream(
 
     socket.on("message", (data: WebSocket.RawData) => {
       let frame: any;
+
       try {
         frame = JSON.parse(data.toString());
       } catch {
         return;
       }
+
       if (frame.type === "ready") {
         readySeen = true;
         if (frame.runId) runId = String(frame.runId);
@@ -531,17 +576,22 @@ async function readFromStream(
 
     socket.on("error", () => {
       if (settled) return;
+
       if (events.length > 0 || dropped > 0) {
         streamNote = `The control channel at ${url} errored before the follow window ended, so this is a partial read. The dev session may have stopped or the control port changed; re-check with extension_wait.`;
         finish();
+
         return;
       }
+
       settled = true;
       clearTimeout(timer);
+
       try {
         socket.close();
       } catch {
       }
+
       resolve(
         envelope({
           ok: false,
@@ -558,28 +608,36 @@ async function readFromStream(
 
     socket.on("close", (code: number, reason: Buffer) => {
       if (settled) return;
+
       const refusal = controlRefusal(
         code,
         reason?.toString() ?? "",
         url,
         CONTROL_ENVELOPE_VERSION,
       );
+
       if (!refusal) {
         /* @invariant A CLOSE BEFORE THE WINDOW ENDS IS A PARTIAL READ: the
            server exited or restarted mid-window, and finishing silently read
            as the whole window. */
         const elapsed = Date.now() - startedAt;
+
         if (elapsed < followMs - 250) {
           streamNote = `The control channel closed after ${Math.round(elapsed / 1000)} s of the ${Math.round(followMs / 1000)} s window (close code ${code}${reason?.length ? `, "${reason.toString()}"` : ""}), so this is a partial read; the dev session may have stopped or restarted. Re-check with extension_wait.`;
         }
+
         finish();
+
         return;
       }
+
       if (events.length > 0 || dropped > 0) {
         streamNote = refusal.message;
         finish();
+
         return;
       }
+
       settled = true;
       clearTimeout(timer);
       resolve(
@@ -624,5 +682,6 @@ export async function handler(args: LogsArgs): Promise<string> {
   if (args.follow) {
     return readFromStream(args, browser, limit);
   }
+
   return readFromFile(args, browser, limit);
 }

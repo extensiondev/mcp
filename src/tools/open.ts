@@ -6,13 +6,14 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
+import fs from "node:fs";
+import path from "node:path";
+
 import {
   CALL_TIMEOUT,
   SESSION_BROWSER,
   SESSION_PROJECT_PATH,
 } from "../lib/common-schema";
-import fs from "node:fs";
-import path from "node:path";
 import {
   runActVerb,
   actFrameJson,
@@ -90,19 +91,24 @@ async function pollForTarget(
   let redirected: SettledTarget | null = null;
   let listed = false;
   let lastError: string | null = null;
+
   for (;;) {
     try {
       const targets = await CDPClient.discoverTargets(port);
       listed = true;
+
       for (const t of targets) {
         const tUrl = String(t.url ?? "");
         if (t.type !== "page") continue;
         if (excludeIds?.has(String(t.id))) continue;
         if (navigatedTargetId && String(t.id) !== navigatedTargetId) continue;
+
         const title = typeof t.title === "string" ? t.title : undefined;
+
         if (tUrl === wanted || tUrl.startsWith(wanted)) {
           return { id: String(t.id), url: tUrl, title };
         }
+
         if (
           navigatedTargetId &&
           tUrl &&
@@ -116,12 +122,14 @@ async function pollForTarget(
     } catch (err) {
       lastError = err instanceof Error ? err.message : String(err);
     }
+
     /* @invariant A POLL THAT NEVER READ THE LIST IS NOT "NO TARGET". Every
        throw used to be swallowed as transient, and the caller said the
        navigation "did not produce a live page target". */
     if (Date.now() >= deadline) {
       return !listed && lastError !== null ? { unreadable: lastError } : redirected;
     }
+
     await new Promise((r) => setTimeout(r, 250));
   }
 }
@@ -137,18 +145,22 @@ async function landedOnErrorPage(
   targetId: string,
 ): Promise<{ url: string; title?: string } | null | "unreadable"> {
   await new Promise((r) => setTimeout(r, 400));
+
   try {
     const target = (await CDPClient.discoverTargets(port)).find(
       (t) => String(t.id) === targetId,
     );
     if (!target) return "unreadable";
+
     const url = String(target?.url ?? "");
+
     if (/^(chrome|edge)-error:\/\//.test(url)) {
       return { url, title: typeof target?.title === "string" ? target.title : undefined };
     }
   } catch {
     return "unreadable";
   }
+
   return null;
 }
 
@@ -163,15 +175,19 @@ async function browserRunsHeadless(
   browser: string,
 ): Promise<boolean> {
   if (!isChromiumFamily(browser)) return false;
+
   try {
     const resolved = await resolveCdpPort(projectPath, browser, { waitMs: 2000 });
     if (!resolved) return false;
+
     const product = await CDPClient.discoverBrowserVersion(resolved.port);
     if (typeof product === "string" && /headless/i.test(product)) return true;
+
     const agent =
       typeof CDPClient.discoverUserAgent === "function"
         ? await CDPClient.discoverUserAgent(resolved.port)
         : null;
+
     return typeof agent === "string" && /headless/i.test(agent);
   } catch {
     return false;
@@ -186,7 +202,9 @@ function isDisposableTab(
   if (!tabUrl || tabUrl === "about:blank") return true;
   if (/^chrome:\/\/(newtab|new-tab-page)/.test(tabUrl)) return true;
   if (reuse === "blank") return false;
+
   const origin = destination.match(/^chrome-extension:\/\/[a-p]{32}\//)?.[0];
+
   return Boolean(origin && tabUrl.startsWith(origin));
 }
 
@@ -203,9 +221,12 @@ async function navigateToUrlViaWebDriver(
 ): Promise<string> {
   const info = readWebDriverSession(projectPath, browser);
   if (!info) return navigateToUrlViaBridge(projectPath, browser, url);
+
   const client = new WebDriverClient(info);
+
   try {
     await client.navigate(url);
+
     return envelope({
       ok: true,
       command: schema.name,
@@ -236,20 +257,25 @@ export async function navigateToUrl(
   options: NavigateOptions = {},
 ): Promise<string> {
   const reuse = options.reuse ?? "blank";
+
   if (options.tab != null) {
     return navigateToUrlViaBridge(projectPath, browser, url, timeout, schema.name, {
       tab: options.tab,
     });
   }
+
   if (WEBKIT_FAMILY.has(browser) && readWebDriverSession(projectPath, browser)) {
     return navigateToUrlViaWebDriver(projectPath, browser, url);
   }
+
   if (!isChromiumFamily(browser)) {
     return navigateToUrlViaBridge(projectPath, browser, url, timeout, schema.name, {
       newTab: true,
     });
   }
+
   const resolved = await resolveCdpPort(projectPath, browser);
+
   if (!resolved) {
     return envelope({
       ok: false,
@@ -262,9 +288,12 @@ export async function navigateToUrl(
       },
     });
   }
+
   const cdp = new CDPClient();
+
   try {
     let targets: Awaited<ReturnType<typeof CDPClient.discoverTargets>>;
+
     try {
       targets = await CDPClient.discoverTargets(resolved.port);
     } catch (err) {
@@ -280,6 +309,7 @@ export async function navigateToUrl(
         hint: "The session's debug port did not answer. extension_doctor says whether the browser is still up; if it is, retry.",
       });
     }
+
     const pageTargets = targets.filter(
       (t) => t.type === "page" && !String(t.url || "").startsWith("devtools://"),
     );
@@ -299,6 +329,7 @@ export async function navigateToUrl(
     let navigatedTargetId: string | undefined;
     let previousUrl: string | undefined;
     let openedNewTab = false;
+
     if (reusable) {
       navigatedTargetId = String(reusable.id);
       previousUrl = String(reusable.url ?? "");
@@ -313,6 +344,7 @@ export async function navigateToUrl(
         | undefined;
       navigatedTargetId =
         typeof created?.targetId === "string" ? created.targetId : undefined;
+
       openedNewTab = true;
     }
 
@@ -323,6 +355,7 @@ export async function navigateToUrl(
       navigatedTargetId,
       previousUrl,
     );
+
     if (targetsUnreadable(polled)) {
       return envelope({
         ok: false,
@@ -337,6 +370,7 @@ export async function navigateToUrl(
         hint: "The session's debug port did not answer. extension_doctor says whether the browser is still up; if it is, read the tabs with extension_dom_snapshot listTargets: true.",
       });
     }
+
     const settled = polled;
     /* @invariant A target can match the requested url for an instant and then
        be swapped to the browser's own error page: Edge answered a blocked
@@ -350,6 +384,7 @@ export async function navigateToUrl(
       blockedRead === "unreadable"
         ? "The landed page could not be re-read after it settled, so whether the browser swapped it for its own error page was not checked."
         : null;
+
     if (blocked) {
       return envelope({
         ok: false,
@@ -364,8 +399,10 @@ export async function navigateToUrl(
         hint: "Nothing is rendering the requested document. Read the tab title for the browser's reason (Edge, for one, blocks some extension pages with ERR_BLOCKED_BY_CLIENT); try another browser with extension_dev, or a different document of the same extension.",
       });
     }
+
     if (!settled) {
       const isExtensionPage = url.startsWith("chrome-extension://");
+
       return envelope({
         ok: false,
         command: schema.name,
@@ -384,6 +421,7 @@ export async function navigateToUrl(
           : "Confirm the URL loads in a normal browser and that the dev session's browser has network access. The extension under test is implicated only if it blocks the request itself (declarativeNetRequest rules or a webRequest listener); otherwise nothing about the bundle is.",
       });
     }
+
     return envelope({
       ok: true,
       command: schema.name,
@@ -433,8 +471,10 @@ export async function resolveExtensionId(
 ): Promise<string | null> {
   const distPath = readDistPath(projectPath, browser);
   const computedIds: string[] = [];
+
   if (distPath) {
     computedIds.push(unpackedExtensionId(distPath));
+
     try {
       const real = fs.realpathSync(distPath);
       if (real !== distPath) computedIds.push(unpackedExtensionId(real));
@@ -446,10 +486,12 @@ export async function resolveExtensionId(
   if (!resolved) return computedIds[0] ?? null;
 
   const ids = new Set<string>();
+
   try {
     for (const t of await CDPClient.discoverTargets(resolved.port)) {
       const url = String(t.url ?? "");
       if (!url.startsWith("chrome-extension://")) continue;
+
       const id = url.slice("chrome-extension://".length).split("/")[0];
       if (id) ids.add(id);
     }
@@ -459,9 +501,11 @@ export async function resolveExtensionId(
   for (const id of computedIds) {
     if (ids.has(id)) return id;
   }
+
   if (ids.size > 0) {
     const guest = await verifyGuestLoaded(projectPath, browser);
     if (guest.checked && guest.guestIds.length === 1) return guest.guestIds[0]!;
+
     /* @invariant A lone live extension stands in for the computed hash only
        when the contract stamped no id of its own (an older engine, or no
        contract yet). A stamped id is the engine's word and a stranger's
@@ -474,7 +518,9 @@ export async function resolveExtensionId(
       return guest.otherExtensionIds[0]!;
     }
   }
+
   if (computedIds.length > 0) return computedIds[0];
+
   return ids.size === 1 ? [...ids][0] : null;
 }
 
@@ -483,14 +529,17 @@ function declaredCommands(projectPath: string, browser: string): string[] | null
     try {
       const manifest = JSON.parse(fs.readFileSync(file, "utf8"));
       const commands = manifest?.commands;
+
       if (commands && typeof commands === "object") {
         return Object.keys(commands);
       }
+
       return [];
     } catch {
       continue;
     }
   }
+
   return null;
 }
 
@@ -498,6 +547,7 @@ function readDistPath(projectPath: string, browser: string): string | null {
   try {
     const file = readyContractPath(projectPath, browser);
     const contract = JSON.parse(fs.readFileSync(file, "utf8"));
+
     return typeof contract?.distPath === "string" ? contract.distPath : null;
   } catch {
     return null;
@@ -511,11 +561,13 @@ export function surfaceDocument(
 ): string | null {
   for (const file of manifestCandidates(projectPath, browser)) {
     let manifest: Record<string, any>;
+
     try {
       manifest = JSON.parse(fs.readFileSync(file, "utf8"));
     } catch {
       continue;
     }
+
     const action = manifest.action ?? manifest.browser_action;
     const ref =
       surface === "popup" || surface === "action"
@@ -532,6 +584,7 @@ export function surfaceDocument(
                 : null;
     if (typeof ref === "string" && ref) return ref.replace(/^\.?\//, "");
   }
+
   return null;
 }
 
@@ -552,12 +605,14 @@ export function declaredSurfaces(
   const readable = manifestCandidates(projectPath, browser).some((file) => {
     try {
       JSON.parse(fs.readFileSync(file, "utf8"));
+
       return true;
     } catch {
       return false;
     }
   });
   if (!readable) return null;
+
   return Object.keys(SURFACE_MANIFEST_KEYS).filter(
     (s) => surfaceDocument(projectPath, browser, s) !== null,
   );
@@ -570,6 +625,7 @@ function missingSurfaceError(
   consequence: string,
 ): string {
   const declared = declaredSurfaces(projectPath, browser);
+
   if (declared === null) {
     return envelope({
       ok: false,
@@ -583,12 +639,14 @@ function missingSurfaceError(
       hint: "Check projectPath, or build the project first (extension_build).",
     });
   }
+
   const key = SURFACE_MANIFEST_KEYS[surface] ?? surface;
   const others = declared.filter((s) => s !== surface);
   const nextVerb =
     surface === "popup"
       ? 'To exercise the toolbar button of a popup-less extension, call extension_open with surface: "action", which replays chrome.action.onClicked. To give the extension a popup, set action.default_popup in the manifest and rebuild.'
       : `To add one, set ${key} in the manifest and rebuild.`;
+
   return envelope({
     ok: false,
     command: schema.name,
@@ -617,6 +675,7 @@ export function clampPopupBounds(
 ): { width: number; height: number; clamped: boolean } {
   const w = Math.min(Math.max(Math.ceil(width), POPUP_MIN), POPUP_MAX_WIDTH);
   const h = Math.min(Math.max(Math.ceil(height), POPUP_MIN), POPUP_MAX_HEIGHT);
+
   return { width: w, height: h, clamped: w !== Math.ceil(width) || h !== Math.ceil(height) };
 }
 
@@ -627,7 +686,9 @@ async function applyPopupBounds(
 ): Promise<{ width: number; height: number; clamped: boolean } | null> {
   const resolved = await resolveCdpPort(projectPath, browser);
   if (!resolved) return null;
+
   const cdp = new CDPClient();
+
   try {
     const ws = await CDPClient.discoverBrowserWsUrl(resolved.port);
     await cdp.connect(ws);
@@ -645,6 +706,7 @@ async function applyPopupBounds(
         return { w: Math.ceil(w), h: Math.ceil(h) };
       })()`,
     )) as { w?: number; h?: number } | undefined;
+
     if (
       !measured ||
       typeof measured.w !== "number" ||
@@ -654,24 +716,29 @@ async function applyPopupBounds(
     ) {
       return null;
     }
+
     const bounds = clampPopupBounds(measured.w, measured.h);
     const win = (await cdp.sendCommand("Browser.getWindowForTarget", {
       targetId,
     })) as { windowId?: number } | undefined;
     if (typeof win?.windowId !== "number") return null;
+
     await cdp.sendCommand("Browser.setWindowBounds", {
       windowId: win.windowId,
       bounds: { width: bounds.width, height: bounds.height },
     });
+
     const after = (await cdp.sendCommand("Browser.getWindowBounds", {
       windowId: win.windowId,
     })) as { bounds?: { width?: number; height?: number } } | undefined;
+
     if (
       after?.bounds?.width !== bounds.width ||
       after?.bounds?.height !== bounds.height
     ) {
       return null;
     }
+
     return bounds;
   } catch {
     return null;
@@ -689,6 +756,7 @@ async function openSurfaceAsTab(
   surface: string,
 ): Promise<string> {
   const doc = surfaceDocument(projectPath, browser, surface);
+
   if (!doc) {
     return missingSurfaceError(
       projectPath,
@@ -697,10 +765,13 @@ async function openSurfaceAsTab(
       "so there is no page to render as a tab",
     );
   }
+
   let url: string;
   let extensionId: string | null;
+
   if (isChromiumFamily(browser)) {
     extensionId = await resolveExtensionId(projectPath, browser);
+
     if (!extensionId) {
       return envelope({
         ok: false,
@@ -715,9 +786,11 @@ async function openSurfaceAsTab(
         hint: `Confirm the session is ready (extension_wait). ${CDP_PORT_MISSING_HINT}`,
       });
     }
+
     url = `chrome-extension://${extensionId}/${doc}`;
   } else {
     const base = await resolveBridgeBaseUrl(projectPath, browser);
+
     if (!base) {
       return envelope({
         ok: false,
@@ -732,9 +805,11 @@ async function openSurfaceAsTab(
         hint: "Confirm the session is ready (extension_wait) and was started with allowEval: true (extension_dev); the profile route needs browser_specific_settings.gecko.id in the built manifest and profilePath in the session contract.",
       });
     }
+
     url = `${base}${doc}`;
     extensionId = base.replace(/^.*:\/\//, "").replace(/\/$/, "");
   }
+
   const avoidUrls = isChromiumFamily(browser)
     ? PERSISTENT_WINDOW_SURFACES.map((s) => surfaceDocument(projectPath, browser, s))
         .filter((d): d is string => typeof d === "string")
@@ -744,8 +819,10 @@ async function openSurfaceAsTab(
     reuse: "surface",
     avoidUrls,
   });
+
   try {
     const parsed = JSON.parse(raw);
+
     if (parsed?.ok) {
       const renderedAsTab: Record<string, unknown> = {
         surface,
@@ -756,8 +833,10 @@ async function openSurfaceAsTab(
       const target = parsed.value?.target ?? parsed.target;
       if (typeof target?.targetId === "string") renderedTabTargets.add(target.targetId);
       if (!isChromiumFamily(browser)) renderedGeckoSurfaces.set(`${path.resolve(projectPath)}::${browser}::${surface}`, url);
+
       let popupBounds: { width: number; height: number; clamped: boolean } | null =
         null;
+
       if (
         (surface === "popup" || surface === "action") &&
         typeof target?.targetId === "string"
@@ -767,8 +846,10 @@ async function openSurfaceAsTab(
           browser,
           target.targetId,
         );
+
         if (popupBounds) renderedAsTab.popupBounds = popupBounds;
       }
+
       /* @invariant EVERY HINT NAMES A CONTEXT THAT EXISTS: `action` is a
          surface name, the readers take `popup`. */
       const readerContext = surface === "action" ? "popup" : surface;
@@ -777,18 +858,20 @@ async function openSurfaceAsTab(
         `To run code in it, call extension_eval with context: '${readerContext}' (on Chromium this goes over CDP, which the extension page CSP does not govern); ` +
         "do NOT pass this extension-page url as a tab target for script injection, which cannot reach extension pages.";
       parsed.hint = OVERRIDE_SURFACES.includes(surface)
-        ? `Opened the ${surface} override document by url in a tab. Whether the browser serves it as its ${surface} page was not read: open a new ${surface === "newtab" ? "tab" : surface + " view"} in the dev browser to see that. ` +
-          reachIt
-        : `Rendered the ${surface} document in a real tab, which is how you inspect a surface headlessly. ` +
-          (popupBounds
+        ? `Opened the ${surface} override document by url in a tab. Whether the browser serves it as its ${surface} page was not read: open a new ${surface === "newtab" ? "tab" : `${surface  } view`} in the dev browser to see that. ${ 
+          reachIt}`
+        : `Rendered the ${surface} document in a real tab, which is how you inspect a surface headlessly. ${ 
+          popupBounds
             ? `The window was resized to the popup's content size (${popupBounds.width}x${popupBounds.height}${popupBounds.clamped ? ", clamped to Chrome's 25x25-800x600 popup bounds" : ""}), approximating real popup rendering. This resizes the WHOLE browser window for the session. It is the same document with the same extension APIs, opened without a user gesture (no activeTab grant, and an active-tab query can return this tab itself), and window.close() closes the tab. `
-            : "It is the same document with the same extension APIs, but it is NOT hosted in a popup window: no popup sizing, no user gesture (no activeTab grant, and an active-tab query can return this tab itself), and window.close() closes the tab. ") +
-          reachIt;
+            : "It is the same document with the same extension APIs, but it is NOT hosted in a popup window: no popup sizing, no user gesture (no activeTab grant, and an active-tab query can return this tab itself), and window.close() closes the tab. " 
+          }${reachIt}`;
+
       return actFrameJson(parsed);
     }
   } catch {
     // non-JSON payload; return as-is
   }
+
   return raw;
 }
 
@@ -799,12 +882,15 @@ async function confirmSurfaceTarget(
   raw: string,
 ): Promise<string> {
   let parsed: any;
+
   try {
     parsed = JSON.parse(raw);
   } catch {
     return raw;
   }
+
   if (parsed?.ok === false) return raw;
+
   /* @invariant AN UNCONFIRMED OPEN SAYS SO. Confirmation runs over CDP for a
      document the manifest declares; every path that could not run it used
      to return the engine's "opened" bare. */
@@ -814,21 +900,27 @@ async function confirmSurfaceTarget(
       parsed,
       `The engine reported the ${surface} as opened, and this server could not confirm a document for it: ${why}. Read it with extension_dom_snapshot context: '${surface}' to be sure.`,
     );
+
     return actFrameJson(parsed);
   };
+
   if (!isChromiumFamily(browser)) {
     return unconfirmed(`confirmation reads the CDP target list, which ${browser} has none of`);
   }
+
   const doc = surfaceDocument(projectPath, browser, surface);
   if (!doc) return unconfirmed("the manifest declares no document for this surface");
+
   const resolved = await resolveCdpPort(projectPath, browser);
   const extensionId = resolved
     ? await resolveExtensionId(projectPath, browser)
     : null;
   if (!resolved) return unconfirmed("no CDP port is recorded for this session");
   if (!extensionId) return unconfirmed("the extension id could not be resolved from the session");
+
   const wanted = `chrome-extension://${extensionId}/${doc}`;
   const settled = await pollForTarget(resolved.port, wanted, 3000, undefined, undefined, renderedTabTargets);
+
   if (targetsUnreadable(settled)) {
     return envelope({
       ok: false,
@@ -843,13 +935,16 @@ async function confirmSurfaceTarget(
       hint: "extension_doctor says whether the browser is still up; if it is, retry or read the targets with extension_dom_snapshot listTargets: true.",
     });
   }
+
   if (settled) {
     patchValue(parsed, {
       confirmed: true,
       surfaceTarget: { targetId: settled.id, url: settled.url },
     });
+
     return actFrameJson(parsed);
   }
+
   return envelope({
     ok: false,
     command: schema.name,
@@ -922,6 +1017,7 @@ export const schema = {
 
 export function sessionIsHeadless(): boolean {
   if (/^(1|true)$/i.test(process.env.EXTENSION_HEADLESS ?? "")) return true;
+
   return /(^|\s|=)-{1,2}headless\b/i.test(
     process.env.EXTENSION_BROWSER_FLAGS ?? "",
   );
@@ -941,9 +1037,11 @@ async function resolveExtensionDocumentUrl(
   relative: string,
 ): Promise<string | { refusal: string }> {
   const doc = relative.replace(/^\.?\//, "");
+
   if (isChromiumFamily(browser)) {
     const extensionId = await resolveExtensionId(projectPath, browser);
     if (extensionId) return `chrome-extension://${extensionId}/${doc}`;
+
     return {
       refusal: envelope({
         ok: false,
@@ -958,8 +1056,10 @@ async function resolveExtensionDocumentUrl(
       }),
     };
   }
+
   const base = await resolveBridgeBaseUrl(projectPath, browser);
   if (base) return `${base}${doc}`;
+
   return {
     refusal: envelope({
       ok: false,
@@ -997,12 +1097,14 @@ export async function handler(
       ? args.url
       : await resolveExtensionDocumentUrl(args.projectPath, browser, args.url);
     if (typeof absolute !== "string") return absolute.refusal;
+
     return navigateToUrl(args.projectPath, browser, absolute, args.timeout, {
       tab: args.tab,
     });
   }
 
   const AS_TAB_SURFACES = ["popup", "options", "sidebar", ...OVERRIDE_SURFACES];
+
   /* @invariant An override page has no window of its own: the browser renders
      chrome_url_overrides pages in a tab and nowhere else, and the engine's open
      verb knows only popup, options, sidebar, action and command. Resolving the
@@ -1011,9 +1113,11 @@ export async function handler(
   if (args.surface && OVERRIDE_SURFACES.includes(args.surface)) {
     return openSurfaceAsTab(args.projectPath, browser, args.surface);
   }
+
   if (args.asTab && args.surface && AS_TAB_SURFACES.includes(args.surface)) {
     return openSurfaceAsTab(args.projectPath, browser, args.surface);
   }
+
   if (!args.surface) {
     return envelope({
       ok: false,
@@ -1030,6 +1134,7 @@ export async function handler(
 
   if (args.surface === "command") {
     const declared = declaredCommands(args.projectPath, browser);
+
     if (declared && args.name && !declared.includes(args.name)) {
       return envelope({
         ok: false,
@@ -1054,6 +1159,7 @@ export async function handler(
      extension with no options page read as opened. */
   if (["popup", "options", "sidebar"].includes(args.surface)) {
     const declared = declaredSurfaces(args.projectPath, browser);
+
     if (declared && !declared.includes(args.surface)) {
       return missingSurfaceError(
         args.projectPath,
@@ -1074,14 +1180,17 @@ export async function handler(
     (await browserRunsHeadless(args.projectPath, browser))
   ) {
     const asTab = await openSurfaceAsTab(args.projectPath, browser, args.surface);
+
     try {
       const parsedTab = JSON.parse(asTab);
       if (parsedTab?.status === "no-surface" || parsedTab?.status === "no-manifest") return asTab;
+
       if (parsedTab?.ok) {
         addWarning(
           parsedTab,
           `The dev browser reports itself headless, and a headless browser closes a popup window before the next call and never shows an options or sidebar window, so the ${args.surface} was rendered as a tab instead (the same document and APIs). For the real window, ${HEADED_RELAUNCH}.`,
         );
+
         return actFrameJson(parsedTab);
       }
     } catch {
@@ -1090,11 +1199,14 @@ export async function handler(
 
   const cli = ["open", args.surface, args.projectPath];
   if (args.surface === "command" && args.name) cli.push("--name", args.name);
+
   cli.push("--browser", browser);
   if (args.timeout != null) cli.push("--timeout", String(args.timeout));
+
   const raw = await runActVerb(cli, args.projectPath, args.timeout, schema.name);
 
   const refusal = readWindowRefusal(raw, args.surface, browser);
+
   if (refusal) {
     if (
       args.surface === "sidebar" &&
@@ -1105,45 +1217,59 @@ export async function handler(
     ) {
       return openSidebarThroughGesture(args.projectPath, browser, refusal.frame);
     }
+
     if (args.surface === "sidebar" && isGeckoFamily(browser)) {
       return openGeckoSidebar(args.projectPath, browser, refusal.frame, args.timeout);
     }
+
     const fallback = await openSurfaceAsTab(args.projectPath, browser, args.surface);
     const parsedFallback = tryParseEnvelope(fallback);
+
     if (parsedFallback?.ok) {
       addWarning(parsedFallback, windowRefusalWarning(refusal, args.surface, browser));
+
       return actFrameJson(parsedFallback);
     }
+
     addWarning(
       refusal.frame,
       `The browser refused the ${args.surface} window and the tab route failed too: ${String(parsedFallback?.error?.message ?? "no answer")}${typeof parsedFallback?.hint === "string" ? ` ${parsedFallback.hint}` : ""}`,
     );
+
     if (!refusal.frame.hint) {
       refusal.frame.hint =
         refusal.kind === "gesture"
           ? "This surface can only open from a real user gesture, which automation cannot produce. Retry with asTab: true to render the surface document in a tab instead."
           : `The dev browser has no window for this surface. Retry with asTab: true to render the surface document in a tab, or for the real window, ${HEADED_RELAUNCH}.`;
     }
+
     return actFrameJson(refusal.frame);
   }
+
   if (!AS_TAB_SURFACES.includes(args.surface)) return raw;
+
   const confirmed = await confirmSurfaceTarget(args.projectPath, browser, args.surface, raw);
   const parsedConfirmed = tryParseEnvelope(confirmed);
   if (parsedConfirmed?.status !== "surface-did-not-open") return confirmed;
+
   /* @invariant An engine "opened" with no document behind it within 3s is a
      window the browser never showed, which is what a headless browser does
      with an options or popup window whatever the launch flags said. The document is rendered in a tab instead and the
      warning says so; the engine's answer rides along for the record. */
   const fallback = await openSurfaceAsTab(args.projectPath, browser, args.surface);
   const parsedFallback = tryParseEnvelope(fallback);
+
   if (parsedFallback?.ok) {
     addWarning(
       parsedFallback,
       `The engine reported the ${args.surface} as opened, but no document for it appeared within 3s (a headless browser never shows an options or popup window), so the ${args.surface} document was rendered in a tab instead (the same document and APIs). For the real window, ${HEADED_RELAUNCH}.`,
     );
+
     patchValue(parsedFallback, { engineResult: parsedConfirmed.value?.engineResult ?? null });
+
     return actFrameJson(parsedFallback);
   }
+
   return confirmed;
 }
 
@@ -1173,12 +1299,16 @@ function readWindowRefusal(
   browser: string,
 ): WindowRefusal | null {
   if (!["popup", "action", "sidebar", "options"].includes(surface)) return null;
+
   const gesture = readGestureRefusal(raw);
   if (gesture) return { kind: "gesture", frame: gesture };
+
   const parsed = tryParseEnvelope(raw);
   if (!parsed || parsed.ok !== false) return null;
+
   const code = typeof parsed.error?.code === "string" ? parsed.error.code : "";
   const message = String(parsed.error?.message ?? "");
+
   /* @invariant A MISSING SESSION IS NOT A MISSING WINDOW. The engine says
      "No active control channel found for <browser>" with E_SESSION_NOT_FOUND,
      and "no active" used to match the no-window arm, so a session that was
@@ -1191,15 +1321,19 @@ function readWindowRefusal(
   ) {
     return null;
   }
+
   if (code === "E_TARGET_NOT_FOUND" || /active browser window|no active|headless/i.test(message)) {
     return { kind: "no-window", frame: parsed };
   }
+
   if (isGeckoFamily(browser) && surface !== "options") {
     const unsupported = readUnsupportedRefusal(raw);
+
     if (unsupported || /popup is disabled|not implemented/i.test(message)) {
       return { kind: "unsupported", frame: parsed };
     }
   }
+
   return null;
 }
 
@@ -1210,6 +1344,7 @@ function windowRefusalWarning(
 ): string {
   const noun = surface === "sidebar" ? "sidebar" : surface === "options" ? "options page" : "popup";
   const said = String(refusal.frame.error?.message ?? "").replace(/\s+/g, " ").trim();
+
   /* @invariant THE WARNING SAYS WHAT WAS OBSERVED: the engine's refusal,
      quoted, and what this server did about it. The browser was never asked
      (the engine's open verb refuses a gesture-gated surface in its own
@@ -1220,6 +1355,7 @@ function windowRefusalWarning(
       ? `The engine refused to open the ${noun} on ${browser} before asking the browser (its open verb carries no user gesture: ${said}), so the ${noun} document was rendered in a tab instead: the same document and APIs, without the toolbar anchoring and without a user gesture or an activeTab grant.`
       : `The engine refused to open the ${noun} on ${browser} (${said}), so the ${noun} document was rendered in a tab instead: the same document and APIs, without the toolbar anchoring and without a user gesture or an activeTab grant.`;
   }
+
   return refusal.kind === "gesture"
     ? `Chromium opens the ${noun} only from a real user gesture, and the engine refused before asking the browser because its open verb carries none (${said}), so the ${noun} document was rendered in a tab instead (the same document and APIs, without a user gesture or an activeTab grant). For the real window, ${HEADED_RELAUNCH} and click the toolbar icon.`
     : `The engine reported no window to show the ${noun} in (${said}), so the ${noun} document was rendered in a tab instead (the same document and APIs, without a user gesture or an activeTab grant). For the real window, ${HEADED_RELAUNCH}.`;
@@ -1255,7 +1391,9 @@ async function openDevToolsSurface(
         : "Open the developer tools by hand in the headed Firefox window (F12) and switch to the panel, or run the same project on chrome to drive the panel from here; extension_logs (context: ['devtools']) shows what the devtools page writes either way.",
     });
   }
+
   const doc = surfaceDocument(args.projectPath, browser, "devtools");
+
   if (!doc) {
     return missingSurfaceError(
       args.projectPath,
@@ -1264,7 +1402,9 @@ async function openDevToolsSurface(
       "so there is no DevTools page to register a panel",
     );
   }
+
   const resolved = await resolveCdpPort(args.projectPath, browser);
+
   if (!resolved) {
     return envelope({
       ok: false,
@@ -1277,7 +1417,9 @@ async function openDevToolsSurface(
       },
     });
   }
+
   const extensionId = await resolveExtensionId(args.projectPath, browser);
+
   if (!extensionId) {
     return envelope({
       ok: false,
@@ -1292,6 +1434,7 @@ async function openDevToolsSurface(
       hint: `Confirm the session is ready (extension_wait). ${CDP_PORT_MISSING_HINT}`,
     });
   }
+
   const pages = await listPageTargets(resolved.port).catch(() => []);
   const candidates = args.url
     ? matchTargetsByUrl(pages, args.url)
@@ -1303,6 +1446,7 @@ async function openDevToolsSurface(
             t.url !== "about:blank"),
       );
   const inspected = candidates[0] ?? (args.url ? undefined : pages[0]);
+
   if (!inspected) {
     return envelope({
       ok: false,
@@ -1318,6 +1462,7 @@ async function openDevToolsSurface(
       hint: "Open the page first with extension_open (url: the address), then open the devtools surface with the same url. extension_dom_snapshot with listTargets: true lists what is open.",
     });
   }
+
   const devtoolsPageUrl = `chrome-extension://${extensionId}/${doc}`;
   const budgetMs =
     typeof args.waitMs === "number" && args.waitMs > 0
@@ -1333,6 +1478,7 @@ async function openDevToolsSurface(
     budgetMs,
     reloadInspected: args.reload === true,
   });
+
   if (!outcome.opened) {
     if (outcome.stage === "open" || outcome.stage === "frontend") {
       return envelope({
@@ -1347,9 +1493,11 @@ async function openDevToolsSurface(
         hint: "This browser build's protocol lacks or refused Target.openDevTools (Chrome 151 and Edge 154 honor it, headed or headless). Open DevTools by hand in a headed session, or run the project on a current Chrome; extension_logs (context: ['devtools']) reads the devtools page either way.",
       });
     }
+
     const registered = (outcome.panels ?? []).filter((id) =>
       id.startsWith(`chrome-extension://${extensionId}`),
     );
+
     return envelope({
       ok: false,
       command: schema.name,
@@ -1375,7 +1523,9 @@ async function openDevToolsSurface(
           : `The devtools page registers panels with chrome.devtools.panels.create; extension_logs (context: ['devtools']) shows what ${doc} wrote or threw. An extension that creates its panel only when the page reports to it (Preact Devtools does, through its content script) needs the page loaded with DevTools already open: retry with reload: true, and waitMs for a longer wait. DevTools stays open on the tab.`,
     });
   }
+
   const panelUrl = outcome.panelTarget?.url ?? null;
+
   return envelope({
     ok: true,
     command: schema.name,
@@ -1422,14 +1572,18 @@ export const E_USER_GESTURE_REQUIRED = "E_USER_GESTURE_REQUIRED";
 
 function readGestureRefusal(raw: string): Record<string, any> | null {
   let parsed: any;
+
   try {
     parsed = JSON.parse(raw);
   } catch {
     return null;
   }
+
   if (parsed?.ok !== false) return null;
+
   const code = typeof parsed.error?.code === "string" ? parsed.error.code : "";
   const message = String(parsed.error?.message ?? "");
+
   /* @invariant The code is the engine's own name for this refusal and the prose
      arm reads the browser's message, which the engine quotes verbatim
      ("may only be called in response to a user gesture"); neither is CLI copy. */
@@ -1440,14 +1594,18 @@ function readGestureRefusal(raw: string): Record<string, any> | null {
 
 function readUnsupportedRefusal(raw: string): Record<string, any> | null {
   let parsed: any;
+
   try {
     parsed = JSON.parse(raw);
   } catch {
     return null;
   }
+
   if (parsed?.ok !== false) return null;
+
   const code = typeof parsed.error?.code === "string" ? parsed.error.code : "";
   const message = String(parsed.error?.message ?? "");
+
   return code === "E_NOT_IMPLEMENTED" || /not available/i.test(message)
     ? parsed
     : null;
@@ -1475,6 +1633,7 @@ async function openGeckoSidebar(
   timeout?: number,
 ): Promise<string> {
   const doc = surfaceDocument(projectPath, browser, "sidebar");
+
   if (!doc) {
     return missingSurfaceError(
       projectPath,
@@ -1483,6 +1642,7 @@ async function openGeckoSidebar(
       "so there is no sidebar panel to open",
     );
   }
+
   const probe = await runActVerb(
     [
       "inspect",
@@ -1501,11 +1661,14 @@ async function openGeckoSidebar(
   );
   let open: Record<string, any> | null = null;
   let probeFailure: string | null = null;
+
   try {
     const parsed = JSON.parse(probe);
+
     if (parsed?.ok === true) open = parsed;
     else {
       const signature = `${parsed?.error?.code ?? ""} ${parsed?.error?.message ?? ""}`;
+
       if (!GECKO_PANEL_CLOSED.test(signature)) {
         probeFailure = `${parsed?.error?.code ?? "no code"}: ${parsed?.error?.message ?? probe.slice(0, 200)}`;
       }
@@ -1513,6 +1676,7 @@ async function openGeckoSidebar(
   } catch {
     probeFailure = `unreadable answer: ${probe.slice(0, 200)}`;
   }
+
   if (open) {
     const url =
       typeof open.value?.url === "string"
@@ -1526,11 +1690,13 @@ async function openGeckoSidebar(
        "open" is unverified. */
     const renderedUrl = renderedGeckoSurfaces.get(`${path.resolve(projectPath)}::${browser}::sidebar`);
     let renderedTabListed = false;
+
     if (renderedUrl) {
       const listed = await listBridgeTabs(projectPath, browser);
       renderedTabListed =
         "tabs" in listed && listed.tabs.some((t) => t.url.replace(/#.*$/, "") === renderedUrl.replace(/#.*$/, ""));
     }
+
     return envelope({
       ok: true,
       command: schema.name,
@@ -1553,9 +1719,12 @@ async function openGeckoSidebar(
         : `The sidebar panel is open in the ${browser} window already: read it with extension_dom_snapshot context: 'sidebar' or run code in it with extension_eval context: 'sidebar'. ${GECKO_SIDEBAR_GESTURE}, and it did not need to.`,
     });
   }
+
   const fallback = await openSurfaceAsTab(projectPath, browser, "sidebar");
+
   try {
     const parsedFallback = JSON.parse(fallback);
+
     if (parsedFallback?.ok) {
       addWarning(
         parsedFallback,
@@ -1563,16 +1732,20 @@ async function openGeckoSidebar(
           ? `${GECKO_SIDEBAR_GESTURE}, and whether the panel is open could not be read (${probeFailure}), so the sidebar document was rendered as a tab instead. The DOM is the same document the panel would show; the panel hosting stays unverified. A person opens the real panel from the toolbar button or View > Sidebar.`
           : `${GECKO_SIDEBAR_GESTURE}, and the panel is not open now, so the sidebar document was rendered as a tab instead. The DOM is the same document the panel would show; the panel hosting stays unverified. A person opens the real panel from the toolbar button or View > Sidebar.`,
       );
+
       return actFrameJson(parsedFallback);
     }
   } catch {
   }
+
   refusal.error = {
     ...(refusal.error ?? {}),
     message: `${GECKO_SIDEBAR_GESTURE}. Rendering the document ${doc} as a tab failed as well.`,
   };
+
   refusal.hint =
     "Start the session with allowEval: true so the document can be opened by url through the bridge, or open the panel from the toolbar button in the dev browser and read it with extension_dom_snapshot context: 'sidebar'.";
+
   return actFrameJson(refusal);
 }
 
@@ -1585,6 +1758,7 @@ async function openSidebarThroughGesture(
   refusal: Record<string, any>,
 ): Promise<string> {
   const doc = surfaceDocument(projectPath, browser, "sidebar");
+
   if (!doc) {
     return missingSurfaceError(
       projectPath,
@@ -1593,12 +1767,14 @@ async function openSidebarThroughGesture(
       "so there is no sidebar panel to open",
     );
   }
+
   const resolved = doc ? await resolveCdpPort(projectPath, browser) : null;
   const extensionId = resolved
     ? await resolveExtensionId(projectPath, browser)
     : null;
   let reason =
     "the sidebar document or the session's CDP port could not be resolved";
+
   if (doc && resolved && extensionId) {
     const hostUrl = `chrome-extension://${extensionId}/${doc}`;
     const outcome = await openSidePanelWithSyntheticGesture(
@@ -1606,6 +1782,7 @@ async function openSidebarThroughGesture(
       hostUrl,
       renderedTabTargets,
     );
+
     if (outcome.opened) {
       return envelope({
         ok: true,
@@ -1621,25 +1798,32 @@ async function openSidebarThroughGesture(
           "Read the panel with extension_dom_snapshot context: 'sidebar' (include: ['html']) or run code in it with extension_eval context: 'sidebar'. To exercise the toolbar path itself, a person must click the toolbar icon in the dev browser.",
       });
     }
+
     reason = outcome.reason;
   }
+
   const fallback = await openSurfaceAsTab(projectPath, browser, "sidebar");
+
   try {
     const parsedFallback = JSON.parse(fallback);
+
     if (parsedFallback?.ok) {
       addWarning(
         parsedFallback,
         `Chrome opens the side panel only from a user gesture, the engine's open verb carries none, and the server's synthetic click did not open it either (${reason}), so the sidebar document was rendered as a tab instead. The DOM is the same React tree the panel would show; the panel hosting and the toolbar wiring stay unverified. Opening the real panel needs a toolbar click from a person in the dev browser.`,
       );
+
       return actFrameJson(parsedFallback);
     }
   } catch {
   }
+
   refusal.hint =
-    `Chrome opens the side panel only from a user gesture, which the engine's open verb cannot carry, and the server's synthetic click did not open it either (${reason}). ` +
-    (doc && extensionId
+    `Chrome opens the side panel only from a user gesture, which the engine's open verb cannot carry, and the server's synthetic click did not open it either (${reason}). ${ 
+    doc && extensionId
       ? `To read the panel page anyway, call extension_open with url: "chrome-extension://${extensionId}/${doc}" and then extension_dom_snapshot context: 'sidebar' on it. `
-      : "To read the panel page anyway, open its document by url with extension_open and read it with extension_dom_snapshot context: 'sidebar'. ") +
-    "Opening the real panel needs a toolbar click from a person in the dev browser.";
+      : "To read the panel page anyway, open its document by url with extension_open and read it with extension_dom_snapshot context: 'sidebar'. " 
+    }Opening the real panel needs a toolbar click from a person in the dev browser.`;
+
   return actFrameJson(refusal);
 }

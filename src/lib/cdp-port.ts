@@ -7,9 +7,11 @@
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
 import fs from "node:fs";
-import type { ReadyContract } from "./types";
+
 import { readyContractPath } from "./session-paths";
 import { pidState } from "./process-identity";
+
+import type { ReadyContract } from "./types";
 
 async function resolveContractPort(
   projectPath: string,
@@ -24,6 +26,7 @@ async function resolveContractPort(
   const deadline = Date.now() + waitMs;
   let contractSeen = false;
   let contractSeenAt: number | null = null;
+
   for (;;) {
     try {
       const contract = JSON.parse(
@@ -31,6 +34,7 @@ async function resolveContractPort(
       ) as ReadyContract & { cdpPort?: number; rdpPort?: number; pid?: number };
       contractSeen = true;
       if (contractSeenAt == null) contractSeenAt = Date.now();
+
       /* @invariant A DEAD SESSION'S PORT IS NOBODY'S. The contract keeps the
          port of the dev server that wrote it; once that pid is gone the port
          may belong to another project's browser, and every reader that
@@ -38,17 +42,20 @@ async function resolveContractPort(
       if (typeof contract.pid === "number" && pidState(contract.pid) !== "alive") {
         return { port: null, contractSeen };
       }
+
       if (typeof contract[field] === "number") {
         return { port: contract[field] as number, contractSeen };
       }
     } catch {
       if (!contractSeen) break;
     }
+
     const effectiveDeadline =
       contractSeenAt != null
         ? Math.min(deadline, contractSeenAt + graceMs)
         : deadline;
     if (Date.now() >= effectiveDeadline) break;
+
     await new Promise((resolve) => setTimeout(resolve, 500));
   }
 
@@ -72,6 +79,7 @@ export async function resolveCdpPort(
     "cdpPort",
     options,
   );
+
   return port != null ? { port, source: "contract" } : null;
 }
 
@@ -86,6 +94,7 @@ export async function resolveRdpPort(
     "rdpPort",
     options,
   );
+
   return port != null ? { port, source: "contract" } : null;
 }
 

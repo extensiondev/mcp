@@ -103,15 +103,19 @@ function withSessionContext(
     ? CONTROL_CHANNEL_DOWN_CODES.has(code)
     : legacyControlChannelScrape(message);
   if (!isControlError) return message;
+
   /* @invariant Only the browser the call named may explain the failure: a
      chrome call once cited "firefox ready.json still says ready but its pid
      is dead", another session's stale contract. */
   const dead = deadReadySession(projectPath, browser);
+
   if (dead) {
     return `${message}\nLikely cause: the dev server has exited, ${dead.browser} ready.json still says ready but its pid ${dead.pid} is dead. Restart with extension_dev (this is not an allowControl problem); extension_doctor confirms.`;
   }
+
   const running = knownSessionBrowsers(projectPath);
   if (running.length === 0) return message;
+
   return `${message} Active session browser(s) for this project: ${running.join(
     ", ",
   )}, pass that as \`browser\`, or restart it via extension_dev with allowControl: true if the control channel is off.`;
@@ -119,11 +123,13 @@ function withSessionContext(
 
 function browserFlag(args: string[]): string | undefined {
   const at = args.indexOf("--browser");
+
   return at !== -1 && typeof args[at + 1] === "string" ? args[at + 1] : undefined;
 }
 
 function translateFrame(frame: any, projectPath: string, browser?: string): any {
   if (!frame || frame.ok !== false) return frame;
+
   if (frame.error && typeof frame.error.message === "string") {
     frame.error.message = withSessionContext(
       toMcpSpeak(frame.error.message),
@@ -132,12 +138,15 @@ function translateFrame(frame: any, projectPath: string, browser?: string): any 
       browser,
     );
   }
+
   if (typeof frame.error?.hint === "string") {
     frame.error.hint = toMcpSpeak(frame.error.hint);
   }
+
   if (typeof frame.hint === "string") {
     frame.hint = toMcpSpeak(frame.hint);
   }
+
   return frame;
 }
 
@@ -201,6 +210,7 @@ function wrapLegacyFrame(frame: any, command: string): Record<string, unknown> {
       ...(Array.isArray(notes) ? notes.map((n) => String(n)) : []),
     ],
   });
+
   return { ...extras, ...wrapped };
 }
 
@@ -226,6 +236,7 @@ export async function runActVerb(
     timeoutMs,
   });
   const out = stdout.trim();
+
   /* @invariant AN ANSWER THAT DID NOT COME BACK IS NOT A FAILURE OF THE
      VERB. A run this server stopped, or one that exited 0 with stdout it
      cannot read, may already have acted (a storage set, an open), so it is
@@ -243,20 +254,25 @@ export async function runActVerb(
       },
     });
   }
+
   if (out) {
     try {
       const frame = translateFrame(JSON.parse(out), projectPath, browserFlag(args));
+
       if (isEnvelope(frame)) {
         frame.command = command;
         if (!Array.isArray(frame.warnings)) frame.warnings = [];
+
         return JSON.stringify(frame);
       }
+
       if (frame && typeof frame === "object") {
         return JSON.stringify(wrapLegacyFrame(frame, command));
       }
     } catch {
     }
   }
+
   /* @invariant Diagnose the refusal only once it has happened.
    *
    * `build` probes the version BEFORE it runs, because discovering the floor by
@@ -281,6 +297,7 @@ export async function runActVerb(
       hint: "extension_doctor reports the project's engine version next to the one this server pins.",
     });
   }
+
   if (code === 0 && out) {
     return envelope({
       ok: false,
@@ -293,7 +310,9 @@ export async function runActVerb(
       },
     });
   }
+
   const message = stderr.trim() || `extension exited with code ${code}`;
+
   return envelope({
     ok: false,
     command,
@@ -332,10 +351,13 @@ function patchKeepingScalarResult(
 
 export function patchValue(frame: any, patch: Record<string, unknown>): void {
   const current = frame.value;
+
   if (current && typeof current === "object" && !Array.isArray(current)) {
     Object.assign(current, patch);
+
     return;
   }
+
   frame.value = patchKeepingScalarResult(current, patch);
 }
 
@@ -355,5 +377,6 @@ export function commonFlags(args: ActArgs): string[] {
   if (args.tab != null) flags.push("--tab", String(args.tab));
   if (args.browser) flags.push("--browser", args.browser);
   if (args.timeout != null) flags.push("--timeout", String(args.timeout));
+
   return flags;
 }

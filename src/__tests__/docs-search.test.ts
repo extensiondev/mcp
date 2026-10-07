@@ -9,6 +9,7 @@ function respond(status: number, body: unknown) {
     "fetch",
     vi.fn(async (url: string) => {
       calls.push(String(url));
+
       return new Response(JSON.stringify(body), {
         status,
         headers: { "content-type": "application/json" },
@@ -77,6 +78,7 @@ describe("extension_docs_search", () => {
       "fetch",
       vi.fn(async () => new Response("<html>maintenance</html>", { status: 200, headers: { "content-type": "text/html" } })),
     );
+
     const out = JSON.parse(await handler({ query: "side panel" }));
     expect(out.ok).toBe(false);
     expect(out.status).toBe("search-unreadable");

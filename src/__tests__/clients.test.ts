@@ -10,6 +10,7 @@ const recipe = (client: ClientId, reach: Reach = "everything", strictApproval = 
 describe("buildRecipe", () => {
   it("covers every listed client", () => {
     expect(CLIENTS.map((c) => c.id)).toEqual(["claude-code", "cursor", "vscode", "codex", "json"]);
+
     for (const client of CLIENTS) {
       expect(recipe(client.id).login).toBe("npx @extension.dev/mcp login --project acme/app");
     }
@@ -40,12 +41,15 @@ describe("buildRecipe", () => {
     expect(recipe("claude-code", "everything", true).command).toBe(
       "claude mcp add extension-dev -e EXTENSION_DEV_APPROVAL_GATE=1 -- npx @extension.dev/mcp --features=local,platform --project acme/app",
     );
+
     expect(recipe("codex", "everything", true).command).toBe(
       "codex mcp add extension-dev --env EXTENSION_DEV_APPROVAL_GATE=1 -- npx @extension.dev/mcp --features=local,platform --project acme/app",
     );
+
     expect(recipe("codex", "everything", true).config?.text).toContain(
       '[mcp_servers.extension-dev.env]\nEXTENSION_DEV_APPROVAL_GATE = "1"',
     );
+
     expect(JSON.parse(recipe("json", "everything", true).config!.text)).toEqual({
       mcpServers: {
         "extension-dev": {
@@ -67,6 +71,7 @@ describe("buildRecipe", () => {
       command: "npx",
       args: ["@extension.dev/mcp", "--features=local,platform", "--project", "acme/app"],
     });
+
     const vscode = recipe("vscode").deeplink!;
     expect(vscode.startsWith("vscode:mcp/install?")).toBe(true);
     expect(JSON.parse(decodeURIComponent(vscode.slice("vscode:mcp/install?".length)))).toEqual({
@@ -74,6 +79,7 @@ describe("buildRecipe", () => {
       command: "npx",
       args: ["@extension.dev/mcp", "--features=local,platform", "--project", "acme/app"],
     });
+
     expect(recipe("claude-code").deeplink).toBeUndefined();
     expect(recipe("codex").deeplink).toBeUndefined();
   });

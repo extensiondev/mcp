@@ -1,7 +1,10 @@
-import { describe, it, expect, afterEach, vi } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+
+import { describe, it, expect, afterEach, vi } from "vitest";
+
+import type * as ExecModule from "../lib/exec";
 
 const cliCalls: string[][] = [];
 let cliResultOverride: { code: number; stdout: string; stderr: string } | null =
@@ -9,7 +12,8 @@ let cliResultOverride: { code: number; stdout: string; stderr: string } | null =
 let onCli: ((args: string[]) => void) | null = null;
 let skipDist = false;
 vi.mock("../lib/exec", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../lib/exec")>();
+  const actual = await importOriginal<typeof ExecModule>();
+
   return {
     ...actual,
     runExtensionCli: async (args: string[]) => {
@@ -18,6 +22,7 @@ vi.mock("../lib/exec", async (importOriginal) => {
       const browser = browserFromCliArgs(args);
       const answer = cliResultOverride ?? buildCliAnswer(args[1]!, browser);
       if (answer.code === 0 && !skipDist) writeEngineDist(args[1]!, browser);
+
       return answer;
     },
   };
@@ -28,6 +33,7 @@ const { buildSummaryPath } = await import("../lib/session-paths");
 const { buildCliAnswer, buildSummary, zipArtifacts, browserFromCliArgs, writeEngineDist } = await import("./fixtures/engine-answers");
 
 const tmpDirs: string[] = [];
+
 function project(manifest: Record<string, unknown>, files: string[] = []): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-build-gate-"));
   tmpDirs.push(dir);
@@ -36,11 +42,13 @@ function project(manifest: Record<string, unknown>, files: string[] = []): strin
     path.join(dir, "src", "manifest.json"),
     JSON.stringify(manifest, null, 2),
   );
+
   for (const file of files) {
     const full = path.join(dir, "src", file);
     fs.mkdirSync(path.dirname(full), { recursive: true });
     fs.writeFileSync(full, "// present");
   }
+
   return dir;
 }
 
@@ -49,6 +57,7 @@ afterEach(() => {
   cliResultOverride = null;
   onCli = null;
   skipDist = false;
+
   for (const dir of tmpDirs.splice(0)) {
     fs.rmSync(dir, { recursive: true, force: true });
   }
@@ -139,6 +148,7 @@ describe("extension_build validation gate", () => {
       path.join(distDir, "manifest.json"),
       JSON.stringify({ action: { default_popup: "popup.html" } }),
     );
+
     fs.writeFileSync(path.join(distDir, "popup.html"), "<html></html>");
 
     const result = JSON.parse(await build.handler({ projectPath: dir }));
@@ -190,6 +200,7 @@ describe("extension_build zip path reporting", () => {
       path.join(distDir, "manifest.json"),
       JSON.stringify({ manifest_version: 3, name, version: "1.0.0" }),
     );
+
     return dir;
   }
 
@@ -199,6 +210,7 @@ describe("extension_build zip path reporting", () => {
         fs.mkdirSync(path.dirname(file), { recursive: true });
         fs.writeFileSync(file, "PK");
       }
+
       if (summary) {
         const file = buildSummaryPath(dir, "chrome");
         fs.mkdirSync(path.dirname(file), { recursive: true });
@@ -399,17 +411,20 @@ describe("extension_build believes the disk, not the exit code", () => {
       path.join(root, "package.json"),
       JSON.stringify({ name: "mono", devDependencies: { extension: "4.1.31" } }),
     );
+
     const sub = path.join(root, "Extensions", "combined");
     fs.mkdirSync(path.join(sub, "src"), { recursive: true });
     fs.writeFileSync(
       path.join(sub, "src", "manifest.json"),
       JSON.stringify({ manifest_version: 3, name: "Sub", version: "1.0.0" }),
     );
+
     onCli = () => {
       const dist = path.join(root, "dist", "chrome");
       fs.mkdirSync(dist, { recursive: true });
       fs.writeFileSync(path.join(dist, "manifest.json"), JSON.stringify({ manifest_version: 3, name: "Sub", version: "1.0.0" }));
     };
+
     skipDist = true;
 
     const result = JSON.parse(await build.handler({ projectPath: sub }));

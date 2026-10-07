@@ -33,7 +33,7 @@ export const PLATFORM_HOLD_STATUS = "platform-held";
  * that whichever way the ruling goes on the MCP side is this one line and no reader of
  * the tarball can read the date out of it in the meantime.
  */
-export const PLATFORM_HOLD_RELAYS_THE_PLATFORM_DATE: boolean = false;
+export const PLATFORM_HOLD_RELAYS_THE_PLATFORM_DATE = false;
 
 /* @invariant
  * A REFUSAL THAT ONLY REFUSES IS WHAT MAKES SOMEONE CONCLUDE THE PRODUCT IS
@@ -93,12 +93,14 @@ function asRecord(body: unknown): Record<string, unknown> | null {
 export function readPlatformCode(body: unknown): string {
   const record = asRecord(body);
   const code = record?.code;
+
   return typeof code === "string" ? code.trim() : "";
 }
 
 export function readPlatformMessage(body: unknown): string {
   const record = asRecord(body);
   const message = record?.message;
+
   return typeof message === "string" ? message.trim() : "";
 }
 
@@ -120,25 +122,30 @@ export function sawPlatformHold(
   body?: unknown,
 ): boolean {
   if (readPlatformCode(body) === PLATFORM_HOLD_CODE) return true;
+
   try {
     const marker = res?.headers?.get?.(PLATFORM_HOLD_HEADER);
     if (typeof marker === "string" && marker.trim() === "held") return true;
   } catch {
     return false;
   }
+
   return false;
 }
 
 function relayedDate(body: unknown): string {
   if (!PLATFORM_HOLD_RELAYS_THE_PLATFORM_DATE) return "";
+
   const record = asRecord(body);
   const opensAt = record?.opensAt;
+
   return typeof opensAt === "string" && opensAt.trim() ? opensAt.trim() : "";
 }
 
 export function platformHoldMessage(body?: unknown, apiHint?: string): string {
   const condition = readPlatformMessage(body) || HOLD_CONDITION_FALLBACK;
   const date = relayedDate(body);
+
   return [
     condition,
     date ? `The platform reports it opens on ${date}.` : "",

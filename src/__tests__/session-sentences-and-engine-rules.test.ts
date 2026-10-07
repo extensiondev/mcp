@@ -3,10 +3,11 @@
  * the review scan follow the engine's own rules. Each cell failed before
  * its fix. */
 
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
 
 import { registerSession, removeSession, readSessionMarkers, sessionStateDir } from "../lib/process-manager";
 import { handler as stop } from "../tools/stop";
@@ -25,21 +26,26 @@ import { handler as themeVerify } from "../tools/theme-verify";
 import { writeModernContract } from "./fixtures/ready-contract";
 
 const tmpDirs: string[] = [];
+
 function tmpDir(prefix: string): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
   tmpDirs.push(dir);
+
   return dir;
 }
+
 const saved: Record<string, string | undefined> = {};
 beforeEach(() => {
   for (const key of ["EXTENSION_MCP_SESSION_DIR", "EXT_BROWSERS_CACHE_DIR"]) saved[key] = process.env[key];
   process.env.EXTENSION_MCP_SESSION_DIR = tmpDir("mcp-sessions-");
 });
+
 afterEach(() => {
   for (const [key, value] of Object.entries(saved)) {
     if (value === undefined) delete process.env[key];
     else process.env[key] = value;
   }
+
   for (const dir of tmpDirs.splice(0)) fs.rmSync(dir, { recursive: true, force: true });
 });
 
@@ -47,6 +53,7 @@ describe("107a: stop all keeps to this server's sessions", () => {
   it("writes the owning server into every marker", () => {
     const project = tmpDir("mcp-proj-");
     registerSession({ pid: process.pid, browser: "chrome", projectPath: project, command: "dev" });
+
     try {
       const marker = readSessionMarkers().markers.find((m) => path.resolve(m.projectPath) === path.resolve(project));
       expect(marker?.serverPid).toBe(process.pid);
@@ -63,6 +70,7 @@ describe("107a: stop all keeps to this server's sessions", () => {
       path.join(dir, "foreign.json"),
       JSON.stringify({ pid: 999_999, browser: "chrome", projectPath: project, command: "dev", serverPid: process.ppid, registeredAt: new Date().toISOString() }),
     );
+
     const out = JSON.parse(await stop({ all: true } as never));
     expect(out.value.skippedForeign).toEqual([{ projectPath: project, browser: "chrome", serverPid: process.ppid }]);
     expect(out.warnings.join("\n")).toMatch(/other MCP servers that are still running/);
@@ -102,6 +110,7 @@ describe("107 sentences", () => {
     process.env.EXT_BROWSERS_CACHE_DIR = tmpDir("mcp-cache-");
     const out = JSON.parse(await detectBrowsers(["yandex"]));
     const row = out.value.detected.find((d: { browser: string }) => d.browser === "yandex");
+
     if (row.source === "not_found") {
       expect(out.hint).toMatch(/Not found at the paths this server checks/);
       expect(out.hint).not.toMatch(/^Missing browser/);

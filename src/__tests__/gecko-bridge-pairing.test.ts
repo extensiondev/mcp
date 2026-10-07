@@ -1,21 +1,30 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
+
 import { actFrame, tabRows } from "./fixtures/engine-answers";
+
+import type * as ActModule from "../lib/act";
+import type * as CdpPortModule from "../lib/cdp-port";
+import type * as RdpModule from "../lib/rdp";
+import type * as SessionBrowserModule from "../lib/session-browser";
 
 
 const calls: string[][] = [];
 let actResponder: (cli: string[]) => string = () => JSON.stringify({ ok: true });
 vi.mock("../lib/act", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../lib/act")>();
+  const actual = await importOriginal<typeof ActModule>();
+
   return {
     ...actual,
     runActVerb: async (cli: string[]) => {
       calls.push(cli);
+
       if (cli[0] === "navigate") {
         return JSON.stringify({
           ok: false,
           error: { code: "E_CLI", message: "error: unknown command 'navigate'" },
         });
       }
+
       return actResponder(cli);
     },
   };
@@ -24,7 +33,8 @@ vi.mock("../lib/act", async (importOriginal) => {
 let mockRdpPort: number | null = null;
 let mockConsoleMessages: Array<{ level: string; text: string }> = [];
 vi.mock("../lib/cdp-port", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../lib/cdp-port")>();
+  const actual = await importOriginal<typeof CdpPortModule>();
+
   return {
     ...actual,
     resolveRdpPort: async () =>
@@ -33,8 +43,10 @@ vi.mock("../lib/cdp-port", async (importOriginal) => {
         : { port: mockRdpPort, source: "contract" as const },
   };
 });
+
 vi.mock("../lib/rdp", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../lib/rdp")>();
+  const actual = await importOriginal<typeof RdpModule>();
+
   return {
     ...actual,
     rdpCollectConsoleMessages: async () => mockConsoleMessages,
@@ -42,7 +54,8 @@ vi.mock("../lib/rdp", async (importOriginal) => {
 });
 
 vi.mock("../lib/session-browser", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../lib/session-browser")>();
+  const actual = await importOriginal<typeof SessionBrowserModule>();
+
   return {
     ...actual,
     resolveSessionBrowser: (_p: string, browser?: string, fallback?: string) => ({
@@ -77,7 +90,9 @@ describe("extension_open url on Gecko (bridge navigation)", () => {
           actFrame("inspect", tabRows([{ id: 7, url: "https://example.com/", title: "Example" }])),
         );
       }
+
       if (isEval(cli)) return JSON.stringify({ ok: true, value: { tabId: 7 } });
+
       return JSON.stringify({ ok: true });
     };
 
@@ -98,6 +113,7 @@ describe("extension_open url on Gecko (bridge navigation)", () => {
       url: "https://example.com/",
       title: "Example",
     });
+
     const evalCall = calls.find(isEval)!;
     expect(evalCall[1]).toContain("tabs.query");
     expect(evalCall[1]).toContain("https://example.com/");
@@ -133,6 +149,7 @@ describe("extension_open url on Gecko (bridge navigation)", () => {
           actFrame("inspect", tabRows([{ id: 7, url: "about:blank", title: "" }])),
         );
       }
+
       return JSON.stringify({ ok: true, value: { tabId: 7 } });
     };
 
@@ -164,7 +181,9 @@ describe("extension_inspect on Gecko (bridge inspection)", () => {
           actFrame("inspect", tabRows([{ id: 7, url: "https://example.com/", title: "Example" }])),
         );
       }
+
       if (isEval(cli)) return JSON.stringify({ ok: true, value: pageValue });
+
       return JSON.stringify({ ok: true });
     };
 
@@ -191,6 +210,7 @@ describe("extension_inspect on Gecko (bridge inspection)", () => {
 
   it("navigates first when the url is not open in any tab", async () => {
     let navigated = false;
+
     actResponder = (cli) => {
       if (isListTabs(cli)) {
         return JSON.stringify({
@@ -200,11 +220,15 @@ describe("extension_inspect on Gecko (bridge inspection)", () => {
             : [{ tabId: 7, url: "about:blank", title: "" }],
         });
       }
+
       if (isEval(cli) && String(cli[1]).includes("tabs.query")) {
         navigated = true;
+
         return JSON.stringify({ ok: true, value: { tabId: 7 } });
       }
+
       if (isEval(cli)) return JSON.stringify({ ok: true, value: pageValue });
+
       return JSON.stringify({ ok: true });
     };
 
@@ -225,18 +249,21 @@ describe("extension_inspect on Gecko (bridge inspection)", () => {
   it("pairs dom_snapshot and extension_roots over the bridge with the CDP page scripts", async () => {
     const snapshot = [{ tag: "html", depth: 0, childCount: 2 }];
     const roots = { rootCount: 1, markerCount: 0, latestGeneration: 3, roots: [], markers: [] };
+
     actResponder = (cli) => {
       if (isListTabs(cli)) {
         return JSON.stringify(
           actFrame("inspect", tabRows([{ id: 7, url: "https://example.com/", title: "Example" }])),
         );
       }
+
       if (isEval(cli)) {
         return JSON.stringify({
           ok: true,
           value: { ...pageValue, domSnapshot: snapshot, extensionRoots: roots },
         });
       }
+
       return JSON.stringify({ ok: true });
     };
 
@@ -266,13 +293,16 @@ describe("extension_inspect on Gecko (bridge inspection)", () => {
       { level: "log", text: "hi" },
       { level: "error", text: "boom" },
     ];
+
     actResponder = (cli) => {
       if (isListTabs(cli)) {
         return JSON.stringify(
           actFrame("inspect", tabRows([{ id: 7, url: "https://example.com/", title: "Example" }])),
         );
       }
+
       if (isEval(cli)) return JSON.stringify({ ok: true, value: pageValue });
+
       return JSON.stringify({ ok: true });
     };
 
@@ -293,6 +323,7 @@ describe("extension_inspect on Gecko (bridge inspection)", () => {
       text: "hi",
       count: 2,
     });
+
     expect(JSON.stringify(result.warnings)).not.toContain("extension_logs");
   });
 
@@ -318,7 +349,9 @@ describe("extension_inspect on Gecko (bridge inspection)", () => {
   it("walks closed shadow roots via a background executeScript eval", async () => {
     actResponder = (cli) => {
       if (!isEval(cli)) return JSON.stringify({ ok: true });
+
       const context = cli[cli.indexOf("--context") + 1];
+
       if (context === "background") {
         return JSON.stringify({
           ok: true,
@@ -332,6 +365,7 @@ describe("extension_inspect on Gecko (bridge inspection)", () => {
           },
         });
       }
+
       return JSON.stringify({ ok: true, value: pageValue });
     };
 
@@ -348,6 +382,7 @@ describe("extension_inspect on Gecko (bridge inspection)", () => {
     expect(result.value.closedShadowRoots).toEqual([
       { host: "div", type: "closed", html: "<p>secret</p>" },
     ]);
+
     const bgCall = calls.find(
       (c) => isEval(c) && c[c.indexOf("--context") + 1] === "background",
     )!;
@@ -358,13 +393,16 @@ describe("extension_inspect on Gecko (bridge inspection)", () => {
   it("notes the deepDom failure with the host-permissions hint", async () => {
     actResponder = (cli) => {
       if (!isEval(cli)) return JSON.stringify({ ok: true });
+
       const context = cli[cli.indexOf("--context") + 1];
+
       if (context === "background") {
         return JSON.stringify({
           ok: true,
           value: { error: "Missing host permission for the tab" },
         });
       }
+
       return JSON.stringify({ ok: true, value: pageValue });
     };
 
@@ -389,8 +427,11 @@ describe("extension_inspect on Gecko (bridge inspection)", () => {
           actFrame("inspect", tabRows([{ id: 7, url: "https://example.com/", title: "Example" }])),
         );
       }
+
       if (!isEval(cli)) return JSON.stringify({ ok: true });
+
       const context = cli[cli.indexOf("--context") + 1];
+
       if (context === "page") {
         return JSON.stringify({
           ok: false,
@@ -401,6 +442,7 @@ describe("extension_inspect on Gecko (bridge inspection)", () => {
           },
         });
       }
+
       return JSON.stringify({ ok: true, value: { frames: [pageValue] } });
     };
 
@@ -425,13 +467,16 @@ describe("extension_inspect on Gecko (bridge inspection)", () => {
   it("surfaces the MV2 fallback's content-script failure as InspectFailed", async () => {
     actResponder = (cli) => {
       if (!isEval(cli)) return JSON.stringify({ ok: true });
+
       const context = cli[cli.indexOf("--context") + 1];
+
       if (context === "page") {
         return JSON.stringify({
           ok: false,
           error: { name: "Unsupported", message: "chrome.scripting is not available on this engine" },
         });
       }
+
       return JSON.stringify({
         ok: true,
         value: { error: "Missing host permission for the tab" },

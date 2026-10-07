@@ -6,9 +6,9 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-import { PROJECT_PATH, SESSION_BROWSER } from "../lib/common-schema";
 import fs from "node:fs";
-import type { ReadyContract } from "../lib/types";
+
+import { PROJECT_PATH, SESSION_BROWSER } from "../lib/common-schema";
 import { findSessionInfo, sessionSinceMs } from "../lib/process-manager";
 import { resolveSessionBrowser } from "../lib/session-browser";
 import { readyContractPath } from "../lib/session-paths";
@@ -19,6 +19,8 @@ import {
 import { verifyGuestLoaded } from "../lib/guest-load-oracle";
 import { recentErrorLogs } from "./doctor";
 
+import type { ReadyContract } from "../lib/types";
+
 const SAFE_CEILING_MS = 50_000;
 const DEFAULT_TIMEOUT_MS = 45_000;
 const MIN_TIMEOUT_MS = 1_000;
@@ -27,6 +29,7 @@ const CONTRACT_FRESHNESS_SLACK_MS = 2_000;
 function isAlive(pid: number): boolean {
   try {
     process.kill(pid, 0);
+
     return true;
   } catch {
     return false;
@@ -105,14 +108,18 @@ export async function handler(args: {
         contract.status !== "ready" &&
         typeof contract.pid === "number" &&
         !isAlive(contract.pid);
+
       if (stampedBeforeSession || deadOrphanStamp) {
         staleContractNote = stampedBeforeSession
           ? `A ready.json contract stamped before this session started (status: ${contract.status}) was ignored; it describes the previous run, not this one.`
           : `A ready.json contract whose dev-server pid ${contract.pid} is dead (status: ${contract.status}) was ignored; it describes a session that already exited.`;
+
         await new Promise((resolve) => setTimeout(resolve, pollInterval));
         continue;
       }
+
       lastContractStatus = contract.status;
+
       /* @invariant A BUILD'S CONTRACT IS NOT A SESSION. extension_build
          leaves status "ready" with command "build" and the finished build's
          pid, which read as a dev session whose server had died. */
@@ -129,6 +136,7 @@ export async function handler(args: {
           hint: "Start a session with extension_dev (or extension_start), then call extension_wait.",
         });
       }
+
       if (contract.status === "stopped") {
         return envelope({
           ok: false,
@@ -161,6 +169,7 @@ export async function handler(args: {
             },
           });
         }
+
         /* @invariant ATTACHED IS THE PRESENT TENSE. The engine keeps
            `executorAttachedAt` after the executor goes and flips `runtime` to
            "detached", and a browser that dies after ready leaves `status:
@@ -170,6 +179,7 @@ export async function handler(args: {
         const browserGone =
           contract.runtime === "detached" ||
           typeof (contract as { browserExitedAt?: unknown }).browserExitedAt === "string";
+
         if (browserGone) {
           const exit = contract as {
             browserExitedAt?: string;
@@ -177,6 +187,7 @@ export async function handler(args: {
             browserExitSignal?: string | null;
             executorDetachedAt?: string;
           };
+
           return envelope({
             ok: false,
             command: schema.name,
@@ -206,9 +217,11 @@ export async function handler(args: {
             hint: "Call extension_stop for this project, then extension_dev again; extension_logs (level: error) and the session log may say why the browser left.",
           });
         }
+
         const attached =
           contract.runtime === "attached" ||
           typeof contract.executorAttachedAt === "string";
+
         if (!attached && buildOnly) {
           return envelope({
             ok: true,
@@ -232,6 +245,7 @@ export async function handler(args: {
             hint: "Build-only session (noBrowser): the extension compiled and the dev server is live, but no browser was launched, so browserAttached will never become true. Do not call extension_wait again to wait for a browser. The control verbs (storage/reload/open/dom_snapshot/eval) need a live browser and will not work against this session.",
           });
         }
+
         if (!attached && (contract.command === "start" || contract.command === "preview")) {
           /* @invariant A start session runs the production build with no dev
              bridge in it, so no executor ever attaches and waiting for one is
@@ -255,24 +269,29 @@ export async function handler(args: {
             hint: `This is an extension_start session (${contract.command === "preview" ? "a prebuilt dist served by the engine's preview verb" : "the production build"}): the contract says the build landed, not that a browser shows it, and a production build carries no dev bridge, so browserAttached stays false for good and extension_eval, extension_storage, extension_reload, extension_open and extension_dom_snapshot cannot drive it. Do not call extension_wait again. To drive or read the extension, run it with extension_dev; to check the production artifact, extension_build reports its summary and extension_preview_web renders the built dist.`,
           });
         }
+
         if (!attached) {
           await new Promise((r) => setTimeout(r, pollInterval));
           sawCompiledButUnattached = true;
           continue;
         }
+
         const runtimeErrors = recentErrorLogs(args.projectPath, browser, 3);
         const guestCheck = await verifyGuestLoaded(args.projectPath, browser);
         const warnings: string[] = [];
+
         if (runtimeErrors.length) {
           warnings.push(
             `Compiled and attached, but the extension is throwing at runtime (${runtimeErrors.length} recent error event${runtimeErrors.length === 1 ? "" : "s"} above). Check extension_logs (level: error) or extension_doctor before trusting this session.`,
           );
         }
+
         if (guestCheck.checked && !guestCheck.loaded) {
           warnings.push(
             `The engine reports the runtime attached, but the browser's own target list shows no chrome-extension:// target under your extension's id. ${guestCheck.reason} The control verbs will fail against a guest that is not there. Check the manifest and extension_logs.`,
           );
         }
+
         return envelope({
           ok: true,
           command: schema.name,
@@ -378,6 +397,7 @@ export async function handler(args: {
       hint: "Check projectPath and browser, or start a session with extension_dev, then call extension_wait.",
     });
   }
+
   return envelope({
     ok: false,
     command: schema.name,

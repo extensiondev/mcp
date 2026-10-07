@@ -63,6 +63,7 @@ describe("extension_shares", () => {
     else process.env.EXTENSION_DEV_TOKEN = origToken;
     if (origGate === undefined) delete process.env.EXTENSION_DEV_APPROVAL_GATE;
     else process.env.EXTENSION_DEV_APPROVAL_GATE = origGate;
+
     fs.rmSync(emptyConfig, { recursive: true, force: true });
     if (origXdg === undefined) delete process.env.XDG_CONFIG_HOME;
     else process.env.XDG_CONFIG_HOME = origXdg;
@@ -83,17 +84,21 @@ describe("extension_shares", () => {
     expect(
       parseArtifactRef(`https://preview.extension.dev/?preview=${LOCAL_ID}`),
     ).toBe(LOCAL_ID);
+
     expect(
       parseArtifactRef(`https://www.extension.dev/api/artifacts/${LOCAL_ID}`),
     ).toBe(LOCAL_ID);
+
     expect(
       parseArtifactRef(
         `https://www.extension.dev/api/artifacts/${LOCAL_ID}/source.zip`,
       ),
     ).toBe(LOCAL_ID);
+
     expect(parseArtifactRef(`https://templates.extension.dev/a/${LOCAL_ID}`)).toBe(
       LOCAL_ID,
     );
+
     expect(parseArtifactRef("not-a-share")).toBeNull();
     expect(parseArtifactRef("")).toBeNull();
   });
@@ -104,14 +109,17 @@ describe("extension_shares", () => {
     expect(
       parseArtifactRef(`https://preview.extension.dev/?preview=${FULL_ID}`),
     ).toBe(FULL_ID);
+
     expect(
       parseArtifactRef(`https://www.extension.dev/api/artifacts/${FULL_ID}`),
     ).toBe(FULL_ID);
+
     expect(
       parseArtifactRef(
         `https://www.extension.dev/api/artifacts/${FULL_ID}/source.zip`,
       ),
     ).toBe(FULL_ID);
+
     expect(parseArtifactRef(`revoke ${FULL_ID} please`)).toBe(FULL_ID);
   });
 
@@ -131,6 +139,7 @@ describe("extension_shares", () => {
     let requested = "";
     global.fetch = (async (url: unknown) => {
       requested = String(url);
+
       return {
         ok: true,
         status: 200,
@@ -259,6 +268,7 @@ describe("extension_shares", () => {
       workspace: "acme",
       project: "tab-sorter",
     });
+
     expect(share.sharedBy.tokenId).toBe("tok_9f3");
     expect(share.attribution).toEqual({
       ownership: "project",
@@ -267,6 +277,7 @@ describe("extension_shares", () => {
       creditSource: "login",
       revocableBy: expect.stringContaining("Any member of the owning workspace"),
     });
+
     expect(out.value.server.ownership).toEqual({
       project: 1,
       personal: 0,
@@ -331,6 +342,7 @@ describe("extension_shares", () => {
     expect(out.value.shares[0].attribution.revocableBy).toContain(
       "cannot pull it back",
     );
+
     expect(out.value.server.ownership.personal).toBe(1);
   });
 
@@ -352,6 +364,7 @@ describe("extension_shares", () => {
     expect(out.value.shares[0].attribution.credit).toContain(
       "predates publisher attribution",
     );
+
     expect(out.value.server.ownership.unknown).toBe(1);
   });
 
@@ -385,11 +398,13 @@ describe("extension_shares", () => {
     });
 
     const out = JSON.parse(await handler({}));
+
     for (const share of out.value.shares) {
       expect(share.attribution.creditSource).toBe("none");
       expect(share.attribution.credit).not.toContain("acme");
       expect(share.attribution.credit).not.toContain("tab-sorter");
     }
+
     expect(out.value.shares[0].attribution.credit).toContain("could not resolve");
     expect(out.value.shares[1].attribution.credit).toContain("predates");
   });
@@ -450,6 +465,7 @@ describe("extension_shares", () => {
     expect(
       out.warnings.some((w: string) => w.includes("not the whole set")),
     ).toBe(true);
+
     expect(out.value.localOnly[0].status).toContain("unknown");
   });
 
@@ -509,6 +525,7 @@ describe("extension_shares", () => {
     expect(out.value.localOnly[0].status).not.toContain(
       "not owned by this token",
     );
+
     expect(out.value.server.truncatedNote).toContain("cannot be called whole");
     expect(
       out.warnings.some((w: string) => w.includes("cannot be called whole")),
@@ -554,6 +571,7 @@ describe("extension_shares", () => {
       limit: 100,
       scanned: 1,
     });
+
     const unsaid = JSON.parse(await handler({ projectPath: dir }));
     expect(unsaid.value.server.truncated).toBe(false);
     expect(unsaid.value.localOnly[0].status).toContain("did not say");
@@ -597,13 +615,16 @@ describe("extension_shares", () => {
     expect(
       out.warnings.some((w: string) => w.includes("reports the share revoked")),
     ).toBe(true);
+
     expect(
       out.warnings.some((w: string) => w.includes("Whether the stored zip was deleted is not reported")),
     ).toBe(true);
+
     expect(out.warnings.join("\n")).not.toMatch(/permanently: the zip is deleted/);
     expect(
       out.warnings.some((w: string) => w.includes("not rewritten")),
     ).toBe(true);
+
     expect(fs.readFileSync(sharedPreviewsPath(dir), "utf8")).toBe(before);
   });
 
@@ -618,6 +639,7 @@ describe("extension_shares", () => {
     expect(
       out.warnings.some((w: string) => w.includes("permanently")),
     ).toBe(false);
+
     expect(
       out.warnings.some((w: string) => w.includes("did not confirm")),
     ).toBe(true);
@@ -638,6 +660,7 @@ describe("extension_shares", () => {
     const reshared = `gen_${"a".repeat(64)}`;
     const burned = `gen_${"b".repeat(64)}`;
     const minted = `gen_${"c".repeat(64)}`;
+
     const row = (
       artifactId: string,
       sharedAt: string,
@@ -704,6 +727,7 @@ describe("extension_shares", () => {
     const dir = tmpProject();
     const reshared = `gen_${"a".repeat(64)}`;
     const listed = `gen_${"d".repeat(64)}`;
+
     for (const sharedAt of [
       "2026-08-01T10:00:00.000Z",
       "2026-08-03T10:00:00.000Z",
@@ -752,6 +776,7 @@ describe("extension_shares", () => {
     delete process.env.EXTENSION_DEV_TOKEN;
     const dir = tmpProject();
     const reshared = `gen_${"a".repeat(64)}`;
+
     for (const sharedAt of [
       "2026-08-01T10:00:00.000Z",
       "2026-08-03T10:00:00.000Z",
@@ -771,6 +796,7 @@ describe("extension_shares", () => {
     expect(out.value.localOnly[0].revokeUrl).toBe(
       `https://www.extension.dev/api/artifacts/${reshared}`,
     );
+
     expect(out.value.localRecord.entries).toBe(2);
     expect(out.value.localRecord.shares).toBe(1);
   });

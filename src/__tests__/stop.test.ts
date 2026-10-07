@@ -1,8 +1,10 @@
-import { describe, it, expect, afterEach, afterAll } from "vitest";
 import { spawn } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+
+import { describe, it, expect, afterEach, afterAll } from "vitest";
+
 import * as stop from "../tools/stop";
 import {
   registerSession,
@@ -22,6 +24,7 @@ afterAll(() => {
   } else {
     process.env.EXTENSION_MCP_SESSION_DIR = previousSessionDir;
   }
+
   fs.rmSync(sessionDir, { recursive: true, force: true });
 });
 
@@ -32,12 +35,14 @@ function spawnVictim(): number {
     { detached: true, stdio: "ignore" },
   );
   child.unref();
+
   return child.pid!;
 }
 
 function isAlive(pid: number): boolean {
   try {
     process.kill(pid, 0);
+
     return true;
   } catch {
     return false;
@@ -46,17 +51,22 @@ function isAlive(pid: number): boolean {
 
 async function waitGone(pid: number, budgetMs = 2_000): Promise<boolean> {
   const deadline = Date.now() + budgetMs;
+
   while (Date.now() < deadline) {
     if (!isAlive(pid)) return true;
+
     await new Promise((r) => setTimeout(r, 50));
   }
+
   return !isAlive(pid);
 }
 
 const tmpDirs: string[] = [];
+
 function tmpProject(): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-stop-test-"));
   tmpDirs.push(dir);
+
   return dir;
 }
 
@@ -148,6 +158,7 @@ describe("extension_stop", () => {
       projectPath: projectA,
       command: "dev",
     });
+
     registerSession({
       pid: pidB,
       browser: "firefox",
@@ -191,6 +202,7 @@ const posixOnly = process.platform === "win32" ? it.skip : it;
 function spawnHolder(command: string, args: string[]): number {
   const child = spawn(command, args, { detached: true, stdio: "ignore" });
   child.unref();
+
   return child.pid!;
 }
 
@@ -343,6 +355,7 @@ describe("extension_stop never signals a pid that is no longer the session", () 
       expect(result.value.detail).toContain("Nothing was signalled");
       expect(result.value.detail).toContain('"sleep"');
       expect(result.value.staleRecord).toBe(true);
+
       try {
         process.kill(stranger, "SIGKILL");
       } catch {
@@ -364,6 +377,7 @@ describe("extension_stop says when it could not look for survivors", () => {
       const previousPath = process.env.PATH;
       process.env.PATH = emptyBin;
       let result: any;
+
       try {
         result = JSON.parse(await stop.handler({ projectPath, browser: "chrome" }));
       } finally {

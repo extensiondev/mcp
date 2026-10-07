@@ -7,7 +7,9 @@
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
 import fs from "node:fs";
+
 import { readyContractPath } from "./session-paths";
+
 import type { ReadyContract } from "./types";
 
 const SAFARI_LOG_FALLBACK =
@@ -24,6 +26,7 @@ export function webdriverSessionMissingHint(reason: string | null): string {
   if (reason) {
     return `The dev session opened no safaridriver session: ${reason}. Fix that, then restart extension_dev --browser=safari so it opens one. ${SAFARI_LOG_FALLBACK}`;
   }
+
   return `ready.json records no safaridriver session (webdriverPort and webdriverSessionId) and no reason for its absence. Extension.js 4.1.32 and later open one under extension_dev --browser=safari and say why when they cannot, so an older engine in the project, or a session that is not a dev session, is the likely cause. ${SAFARI_LOG_FALLBACK}`;
 }
 
@@ -36,6 +39,7 @@ export function readWebDriverUnavailableReason(
       fs.readFileSync(readyContractPath(projectPath, browser), "utf8"),
     ) as ReadyContract;
     const reason = String(contract.webdriverUnavailableReason ?? "").trim();
+
     return reason.length > 0 ? reason : null;
   } catch {
     return null;
@@ -55,6 +59,7 @@ export function readWebDriverSession(
     const contract = JSON.parse(
       fs.readFileSync(readyContractPath(projectPath, browser), "utf8"),
     ) as ReadyContract;
+
     if (
       typeof contract.webdriverPort === "number" &&
       Number.isFinite(contract.webdriverPort) &&
@@ -69,6 +74,7 @@ export function readWebDriverSession(
   } catch {
     return null;
   }
+
   return null;
 }
 
@@ -81,6 +87,7 @@ export function readyExtensionId(
       fs.readFileSync(readyContractPath(projectPath, browser), "utf8"),
     ) as ReadyContract & { extensionId?: string };
     const id = String(contract.extensionId || "").trim();
+
     return id.length > 0 ? id : null;
   } catch {
     return null;
@@ -107,6 +114,7 @@ export class WebDriverClient {
   ): Promise<unknown> {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
+
     try {
       const response = await this.fetchFn(`${this.base}${route}`, {
         method,
@@ -116,22 +124,26 @@ export class WebDriverClient {
       });
       const text = await response.text();
       let parsed: DriverReply = {};
+
       try {
         parsed = text ? (JSON.parse(text) as DriverReply) : {};
       } catch {
         parsed = { value: { message: text } };
       }
+
       if (!response.ok) {
         const value = (parsed.value || {}) as {
           message?: string;
           error?: string;
         };
+
         throw new Error(
           String(
             value.message || value.error || `${response.status} on ${route}`,
           ),
         );
       }
+
       return parsed.value;
     } finally {
       clearTimeout(timer);
@@ -141,6 +153,7 @@ export class WebDriverClient {
   async alive(): Promise<boolean> {
     try {
       await this.call("GET", "/url");
+
       return true;
     } catch {
       return false;
@@ -149,6 +162,7 @@ export class WebDriverClient {
 
   async currentUrl(): Promise<string | null> {
     const value = await this.call("GET", "/url");
+
     return typeof value === "string" ? value : null;
   }
 
@@ -199,6 +213,7 @@ export async function readExtensionRoots(
   const value = (await client.execute(EXTENSION_ROOT_READING_SCRIPT)) as
     | Partial<ExtensionRootReading>
     | null;
+
   return {
     roots: typeof value?.roots === "number" ? value.roots : 0,
     owners: Array.isArray(value?.owners)
@@ -211,6 +226,8 @@ export async function readExtensionRoots(
 
 export function sameDocument(current: string | null, wanted: string): boolean {
   if (!current) return false;
+
   const strip = (u: string) => u.replace(/[#?].*$/, "").replace(/\/+$/, "");
+
   return strip(current) === strip(wanted);
 }

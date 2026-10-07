@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
@@ -63,11 +64,14 @@ function platform(routes: {
       urls.push(href);
       const auth = String((init?.headers as Record<string, string> | undefined)?.authorization ?? "");
       if (auth) bearers.push(auth);
+
       const registry = href.match(
         /registry\.extension\.land\/([^/]+)\/([^/]+)\/_extension-dev\/(.+?)(\?|$)/,
       );
+
       if (registry) {
         const slug = decodeURIComponent(String(registry[2]));
+
         if (registry[3] === "builds/index.json") {
           return json({
             items: [
@@ -81,21 +85,28 @@ function platform(routes: {
             ],
           });
         }
+
         if (registry[3] === "channels.json") {
           return json({ stable: { sha: `stable-of-${slug}` } });
         }
+
         return json({}, 404);
       }
+
       if (href.endsWith("/api/cli/publish")) {
         return json(routes.publish ?? { shareUrl: "https://share.test/x", visibility: "private" });
       }
+
       if (href.endsWith("/api/cli/release/promote")) {
         const route = routes.promote ?? { status: 200, body: promoteAnswer() };
+
         return json(route.body, route.status);
       }
+
       if (href.endsWith("/api/cli/stores/submit")) {
         return json(routes.submit ?? { ok: true, results: [] });
       }
+
       throw new Error(`Unexpected fetch: ${href}`);
     }),
   );
@@ -119,6 +130,7 @@ beforeEach(() => {
       throw new Error("named-project tests never reach the network");
     }),
   );
+
   login("refined-github");
   login("vue-devtools");
   login(ACTIVE_SLUG);
@@ -129,6 +141,7 @@ afterEach(() => {
     if (saved[key] === undefined) delete process.env[key];
     else process.env[key] = saved[key];
   }
+
   vi.unstubAllGlobals();
   fs.rmSync(tmp, { recursive: true, force: true });
 });
@@ -177,6 +190,7 @@ describe("resolveProjectRef", () => {
       workspace: "other-workspace",
       project: "solo",
     });
+
     expect(resolveProjectRef({ project: "nowhere" })).toEqual({ workspace: WS, project: "nowhere" });
     expect(resolveProjectRef({ workspace: "acme", project: "app" })).toEqual({
       workspace: "acme",
@@ -194,6 +208,7 @@ describe("extension_publish with project", () => {
     expect(out.value.registryUrl).toBe(
       `https://registry.extension.land/${WS}/refined-github/_extension-dev/builds/index.json`,
     );
+
     expect(JSON.stringify(out)).not.toContain(ACTIVE_SLUG);
     expect(bearers).toEqual(["Bearer token-for-refined-github"]);
   });
@@ -210,6 +225,7 @@ describe("extension_publish with project", () => {
 
   it("does the same for each of several named projects in turn", async () => {
     platform({ publish: { shareUrl: "https://share.test/x" } });
+
     for (const slug of ["refined-github", "vue-devtools", ACTIVE_SLUG]) {
       const out = JSON.parse(await publish({ project: `${WS}/${slug}` }));
       expect(out.value.registryUrl).toContain(`/${slug}/_extension-dev/`);
@@ -267,6 +283,7 @@ describe("the sibling tools that take project", () => {
     await releaseStatus({ project: "acme/app", include: ["releases"] });
 
     expect(registryReads().length).toBeGreaterThan(0);
+
     for (const url of registryReads()) {
       expect(url).toContain("registry.extension.land/acme/app/_extension-dev/");
       expect(url).not.toContain("%2F");
@@ -284,6 +301,7 @@ describe("the sibling tools that take project", () => {
     await client.callTool({ name: "extension_release_status", arguments: { include: ["releases"] } });
 
     expect(registryReads().length).toBeGreaterThan(0);
+
     for (const url of registryReads()) {
       expect(url).toContain(`registry.extension.land/${WS}/refined-github/_extension-dev/`);
       expect(url).not.toContain("%2F");
@@ -297,6 +315,7 @@ describe("a private registry read asks its grant with the named project's login"
     const tokens = new RegistryAccessTokens({
       fetchImpl: (async (_url: any, init?: RequestInit) => {
         sent.push(String((init?.headers as Record<string, string>).authorization));
+
         return json({ token: "grant", expiresAt: Math.floor(Date.now() / 1000) + 600 });
       }) as unknown as typeof fetch,
     });

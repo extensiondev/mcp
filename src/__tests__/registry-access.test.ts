@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { writeCredentials, type StoredCredentials } from "../lib/credentials";
@@ -61,6 +62,7 @@ describe("public projects", () => {
     const calls: string[] = [];
     const fetchImpl = vi.fn(async (url: any) => {
       calls.push(String(url));
+
       return jsonResponse({ "chrome-stable": { sha: "abc1234" } });
     });
 
@@ -100,10 +102,12 @@ class Probe extends RegistryAccessTokens {
 describe("the grant is asked with the named project's stored login first", () => {
   it("sends the stored login, not EXTENSION_DEV_TOKEN, when both exist", async () => {
     process.env.EXTENSION_DEV_TOKEN = claimsToken("other", "thing");
+
     try {
       const bearers: string[] = [];
       const fetchImpl = vi.fn(async (_url: any, init?: any) => {
         bearers.push(String(init?.headers?.authorization ?? ""));
+
         return jsonResponse({ token: "short", expiresAt: Math.floor(Date.now() / 1000) + 600 });
       });
       const grant = await new Probe({ fetchImpl: fetchImpl as any }).mintFor(REF);
@@ -117,6 +121,7 @@ describe("the grant is asked with the named project's stored login first", () =>
   it("does not send an env token whose claims name another project", async () => {
     process.env.EXTENSION_DEV_TOKEN = claimsToken("other", "thing");
     setStored(null);
+
     try {
       const fetchImpl = vi.fn(async () => jsonResponse({ token: "short", expiresAt: 1 }));
       const grant = await new Probe({ fetchImpl: fetchImpl as any }).mintFor(REF);
@@ -130,10 +135,12 @@ describe("the grant is asked with the named project's stored login first", () =>
   it("sends an env token whose claims name this project when nothing is stored", async () => {
     process.env.EXTENSION_DEV_TOKEN = claimsToken("acme", "widget");
     setStored(null);
+
     try {
       const bearers: string[] = [];
       const fetchImpl = vi.fn(async (_url: any, init?: any) => {
         bearers.push(String(init?.headers?.authorization ?? ""));
+
         return jsonResponse({ token: "short", expiresAt: Math.floor(Date.now() / 1000) + 600 });
       });
       const grant = await new Probe({ fetchImpl: fetchImpl as any }).mintFor(REF);
@@ -158,18 +165,22 @@ describe("private projects", () => {
     const fetchImpl = vi.fn(async (url: any, init?: any) => {
       const href = String(url);
       calls.push(href);
+
       if (href.includes("/api/access-grant")) {
         expect(init?.headers?.authorization).toBe(
           "Bearer stored-long-lived-token",
         );
+
         return jsonResponse({
           token: "short-lived-token",
           expiresAt: Math.floor(Date.now() / 1000) + 600,
         });
       }
+
       if (href.includes("t=short-lived-token")) {
         return jsonResponse({ "chrome-stable": { sha: "abc1234" } });
       }
+
       return jsonResponse({ message: "unauthorized" }, 401);
     });
 
@@ -189,10 +200,13 @@ describe("private projects", () => {
     const fetchImpl = vi.fn(async (url: any) => {
       const href = String(url);
       calls.push(href);
+
       if (href.includes("/api/access-grant")) {
         return jsonResponse({ token: "short-lived-token", expiresAt: 0 });
       }
+
       if (href.includes("t=")) return jsonResponse({});
+
       return jsonResponse({}, 401);
     });
 
@@ -208,14 +222,18 @@ describe("private projects", () => {
     let mints = 0;
     const fetchImpl = vi.fn(async (url: any) => {
       const href = String(url);
+
       if (href.includes("/api/access-grant")) {
         mints += 1;
+
         return jsonResponse({
           token: "short-lived-token",
           expiresAt: Math.floor(Date.now() / 1000) + 600,
         });
       }
+
       if (href.includes("t=short-lived-token")) return jsonResponse({ ok: 1 });
+
       return jsonResponse({}, 401);
     });
 
@@ -239,6 +257,7 @@ describe("private projects", () => {
       ...STORED,
       expiresAt: Math.floor(Date.now() / 1000) - 60,
     });
+
     const fetchImpl = vi.fn(async () => jsonResponse({}, 401));
     const res = await fetchRegistryJson(URL_UNDER_TEST, fetchImpl as any, {
       ref: REF,
@@ -277,6 +296,7 @@ describe("withAccessToken", () => {
     expect(withAccessToken("https://x.test/a", "tok")).toBe(
       "https://x.test/a?t=tok",
     );
+
     expect(withAccessToken("https://x.test/a", "")).toBe("https://x.test/a");
     expect(withAccessToken("not a url", "tok")).toBe("not a url");
   });

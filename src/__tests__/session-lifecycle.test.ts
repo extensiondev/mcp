@@ -1,13 +1,17 @@
-import { describe, it, expect, vi, afterEach } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { spawn } from "node:child_process";
+
+import { describe, it, expect, vi, afterEach } from "vitest";
+
 import type { ChildProcess } from "node:child_process";
+import type * as ExecModule from "../lib/exec";
+import type { SpawnedCli } from "../lib/exec";
 
 
-type SpawnedCli = import("../lib/exec").SpawnedCli;
 const spawned: ChildProcess[] = [];
+
 function fakeCli(script: string): SpawnedCli {
   const logDir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-fake-cli-"));
   const logPath = path.join(logDir, "session.log");
@@ -17,6 +21,7 @@ function fakeCli(script: string): SpawnedCli {
   });
   fs.closeSync(fd);
   spawned.push(child);
+
   return {
     child,
     logPath,
@@ -33,7 +38,8 @@ function fakeCli(script: string): SpawnedCli {
 let nextChild: () => SpawnedCli = () => fakeCli("setTimeout(()=>{}, 60000)");
 
 vi.mock("../lib/exec", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../lib/exec")>();
+  const actual = await importOriginal<typeof ExecModule>();
+
   return {
     ...actual,
     spawnExtensionCli: () => nextChild(),
@@ -53,12 +59,14 @@ function spawnVictim(): number {
   });
   child.unref();
   spawned.push(child);
+
   return child.pid!;
 }
 
 function isAlive(pid: number): boolean {
   try {
     process.kill(pid, 0);
+
     return true;
   } catch {
     return false;
@@ -93,9 +101,11 @@ function stampBrowserExited(project: string, browser: string): void {
 }
 
 const tmpDirs: string[] = [];
+
 function tmpProject(): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-session-life-"));
   tmpDirs.push(dir);
+
   return dir;
 }
 
@@ -107,12 +117,14 @@ afterEach(() => {
       // already gone
     }
   }
+
   for (const dir of tmpDirs.splice(0)) {
     try {
       removeSession(dir, "chrome");
     } catch {
       // no session registered
     }
+
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
@@ -120,6 +132,7 @@ afterEach(() => {
 describe("extension_dev fork guard", () => {
   it("does not take a stranger holding a recorded pid for a live session", async () => {
     if (process.platform === "win32") return;
+
     const project = tmpProject();
     const stranger = spawn("sleep", ["300"], { detached: true, stdio: "ignore" });
     stranger.unref();
@@ -191,6 +204,7 @@ describe("extension_dev replace:true believes the stop, not its own request", ()
       reaped: [],
       detail: "Sent SIGTERM and SIGKILL but the process still reports alive; it may be exiting. Warning: 1 browser process(es) still alive after reap (pids 4242).",
     });
+
     try {
       const result = JSON.parse(await dev.handler({ projectPath: project, replace: true }));
 
@@ -200,6 +214,7 @@ describe("extension_dev replace:true believes the stop, not its own request", ()
       expect(result.value.replacedSession).toBeUndefined();
     } finally {
       stopSpy.mockRestore();
+
       try {
         process.kill(pid, "SIGKILL");
       } catch {
@@ -228,9 +243,11 @@ describe("extension_dev exit cleanup", () => {
 describe("extension_dev browser leg health", () => {
   it("reports ok:false when the browser died behind a surviving dev server", async () => {
     const project = tmpProject();
+
     nextChild = () => {
       const cli = fakeCli("setTimeout(()=>{}, 60000)");
       setTimeout(() => stampBrowserExited(project, "chrome"), 1000);
+
       return cli;
     };
 
@@ -262,6 +279,7 @@ describe("extension_dev browser leg health", () => {
     expect(result.hint).toContain(
       path.join(project, "dist", "extension-js", "profiles", "chrome-profile"),
     );
+
     expect(result.hint).not.toContain("extension-profile-chrome");
     expect(result.warnings.join(" ")).toContain("machine contract");
   }, 15_000);
@@ -295,6 +313,7 @@ describe("extension_stop all:true discovery", () => {
     for (const m of listSessionMarkers()) {
       await stop.handler({ projectPath: m.projectPath, browser: m.browser, all: false });
     }
+
     const result = JSON.parse(await stop.handler({ all: true }));
     expect(result.value.stopped).toEqual([]);
     expect(result.status).toBe("nothing-to-stop");

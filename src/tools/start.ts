@@ -8,6 +8,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
+
 import { LAUNCH_BROWSER, PROJECT_PATH } from "../lib/common-schema";
 import { pollBootVerdict,
   bootFailureHint,
@@ -88,8 +89,10 @@ export async function handler(
     typeof args.outputPath === "string" && args.outputPath.trim()
       ? path.resolve(args.projectPath, args.outputPath.trim())
       : null;
+
   if (outputPath) {
     const manifest = path.join(outputPath, "manifest.json");
+
     if (!fs.existsSync(manifest)) {
       return envelope({
         ok: false,
@@ -104,8 +107,10 @@ export async function handler(
       });
     }
   }
+
   const building = args.build !== false && !outputPath;
   const command = building ? "start" : "preview";
+
   /* @invariant WHAT THE ENGINE REFUSES IS REFUSED HERE, BEFORE A SPAWN:
      its preview verb has no --host or --public-host and both verbs refuse
      Safari, and a refused spawn used to read as "exited" with a dist hint
@@ -122,6 +127,7 @@ export async function handler(
       hint: "Use extension_dev with browser: \"safari\", or extension_build with browser: \"safari\" for the packaged app.",
     });
   }
+
   if (!building && (args.host || args.publicHost)) {
     return envelope({
       ok: false,
@@ -134,11 +140,13 @@ export async function handler(
       hint: "Drop host and publicHost, or let extension_start build (build: true, no outputPath).",
     });
   }
+
   const cliArgs = [command, args.projectPath, "--browser", browser];
   if (outputPath) cliArgs.push("--output-path", outputPath);
   if (building && args.polyfill === false) cliArgs.push("--polyfill", "false");
   if (args.port !== undefined) cliArgs.push("--port", String(args.port));
   if (args.noBrowser) cliArgs.push("--no-browser");
+
   cliArgs.push(...launchFlagArgs(args));
 
   /* @invariant
@@ -160,9 +168,11 @@ export async function handler(
   const spawnedAt = Date.now();
   const spawned = spawnExtensionCli(cliArgs, { projectDir: args.projectPath });
   const { child, logPath } = spawned;
+
   if (child.pid === undefined) {
     return spawnFailedEnvelope(schema.name, spawned);
   }
+
   const pid = child.pid;
 
   const markerWarning = registerSession({
@@ -189,6 +199,7 @@ export async function handler(
 
   if (boot.verdict.kind === "exited") {
     const { exitCode: code, signal } = boot.verdict;
+
     return envelope({
       ok: false,
       command: schema.name,
@@ -215,6 +226,7 @@ export async function handler(
 
   if (boot.verdict.kind === "boot-failed") {
     const { code, message } = boot.verdict;
+
     return envelope({
       ok: false,
       command: schema.name,
@@ -236,6 +248,7 @@ export async function handler(
 
   if (boot.verdict.kind === "compile-failed") {
     const { compileErrors } = boot.verdict;
+
     return envelope({
       ok: false,
       command: schema.name,
@@ -262,6 +275,7 @@ export async function handler(
   ) {
     const stamp =
       boot.verdict.kind === "browser-exited" ? boot.verdict.stamp : {};
+
     return envelope({
       ok: false,
       command: schema.name,

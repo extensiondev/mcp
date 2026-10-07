@@ -1,7 +1,9 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+
 import {
   clearCredentials,
   credentialsPath,
@@ -40,11 +42,13 @@ describe("credentials store", () => {
   afterEach(() => {
     if (prevXdg === undefined) delete process.env.XDG_CONFIG_HOME;
     else process.env.XDG_CONFIG_HOME = prevXdg;
+
     fs.rmSync(tmp, { recursive: true, force: true });
   });
 
   it("writes under XDG_CONFIG_HOME and round-trips", () => {
     if (process.platform === "win32") return;
+
     const file = credentialsPath();
     expect(file).toBe(path.join(tmp, "extension-dev", "auth.json"));
 
@@ -58,6 +62,7 @@ describe("credentials store", () => {
 
   it("writes the file 0600", () => {
     if (process.platform === "win32") return;
+
     const file = writeCredentials(sample());
     const mode = fs.statSync(file).mode & 0o777;
     expect(mode).toBe(0o600);
@@ -65,6 +70,7 @@ describe("credentials store", () => {
 
   it("writes the containing directory 0700 (private secrets dir)", () => {
     if (process.platform === "win32") return;
+
     const file = writeCredentials(sample());
     const mode = fs.statSync(path.dirname(file)).mode & 0o777;
     expect(mode).toBe(0o700);
@@ -72,6 +78,7 @@ describe("credentials store", () => {
 
   it("tightens a pre-existing world-readable dir to 0700", () => {
     if (process.platform === "win32") return;
+
     const dir = path.dirname(credentialsPath());
     fs.mkdirSync(dir, { recursive: true, mode: 0o755 });
     fs.chmodSync(dir, 0o755);
@@ -123,11 +130,13 @@ describe("several logins live side by side, one per workspace/project", () => {
   afterEach(() => {
     if (prevXdg === undefined) delete process.env.XDG_CONFIG_HOME;
     else process.env.XDG_CONFIG_HOME = prevXdg;
+
     fs.rmSync(tmp, { recursive: true, force: true });
   });
 
   it("keeps the first login when a second project logs in, and makes the latest the default", () => {
     if (process.platform === "win32") return;
+
     writeCredentials(sample({ token: "t-widget", projectSlug: "widget" }));
     writeCredentials(sample({ token: "t-gadget", projectSlug: "gadget" }));
 
@@ -144,6 +153,7 @@ describe("several logins live side by side, one per workspace/project", () => {
 
   it("re-login to a known project replaces only that entry", () => {
     if (process.platform === "win32") return;
+
     writeCredentials(sample({ token: "t-widget", projectSlug: "widget" }));
     writeCredentials(sample({ token: "t-gadget", projectSlug: "gadget" }));
     writeCredentials(sample({ token: "t-widget-2", projectSlug: "widget" }));
@@ -155,6 +165,7 @@ describe("several logins live side by side, one per workspace/project", () => {
 
   it("reads a version 1 file as a store of one and rewrites it as version 2 on the next login", () => {
     if (process.platform === "win32") return;
+
     const file = credentialsPath();
     fs.mkdirSync(path.dirname(file), { recursive: true });
     fs.writeFileSync(file, JSON.stringify(sample({ token: "legacy" })));
@@ -171,6 +182,7 @@ describe("several logins live side by side, one per workspace/project", () => {
 
   it("logs one project out and leaves the others, moving the default when needed", () => {
     if (process.platform === "win32") return;
+
     writeCredentials(sample({ token: "t-widget", projectSlug: "widget" }));
     writeCredentials(sample({ token: "t-gadget", projectSlug: "gadget" }));
 
@@ -190,6 +202,7 @@ describe("several logins live side by side, one per workspace/project", () => {
 
   it("selects by project for the validity read too", () => {
     if (process.platform === "win32") return;
+
     writeCredentials(sample({ token: "fresh", projectSlug: "widget" }));
     writeCredentials(sample({ token: "stale", projectSlug: "gadget", expiresAt: 10 }));
 
@@ -203,6 +216,7 @@ describe("a token that arrives without an expiry is not stored as eternal", () =
     const now = Math.floor(Date.now() / 1000);
     expect(tokenExpiry(1_900_000_000)).toBe(1_900_000_000);
     expect(tokenExpiry("1900000000")).toBe(1_900_000_000);
+
     for (const bad of [undefined, null, 0, -5, "soon", NaN]) {
       const got = tokenExpiry(bad);
       expect(got).toBeGreaterThanOrEqual(now + 7 * 24 * 3600 - 2);

@@ -13,6 +13,7 @@ describe("extension_auth login names where the project slug lives", () => {
     expect(result.error.message).toContain(
       "console.extension.dev/<workspace>/<project>",
     );
+
     expect(result.error.message).toMatch(/extension\.dev\/new/);
   });
 

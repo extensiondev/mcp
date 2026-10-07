@@ -2,16 +2,21 @@
  * manifest declares instead of replacing it through a prefixed key, and the
  * catalog is read before saying no template ships a surface. */
 
-import { describe, it, expect, vi, afterEach } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+
+import { describe, it, expect, vi, afterEach } from "vitest";
+
 import snapshot from "../lib/templates-meta.snapshot.json";
+
+import type * as TemplatesCacheModule from "../lib/templates-cache";
 
 type Row = { slug: string; surfaces?: string[]; uiFramework?: string; keyFiles?: string[]; files?: string[] };
 const rows = (snapshot as { templates: Row[] }).templates;
 vi.mock("../lib/templates-cache", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../lib/templates-cache")>();
+  const actual = await importOriginal<typeof TemplatesCacheModule>();
+
   return {
     ...actual,
     listTemplates: async (filters?: { surface?: string }) =>
@@ -23,13 +28,16 @@ vi.mock("../lib/templates-cache", async (importOriginal) => {
 const addFeature = await import("../tools/add-feature");
 
 const tmpDirs: string[] = [];
+
 function project(manifest: Record<string, unknown>): string {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-addfeat-catalog-"));
   tmpDirs.push(root);
   fs.mkdirSync(path.join(root, "src"), { recursive: true });
   fs.writeFileSync(path.join(root, "src", "manifest.json"), JSON.stringify(manifest));
+
   return root;
 }
+
 afterEach(() => {
   for (const dir of tmpDirs.splice(0)) fs.rmSync(dir, { recursive: true, force: true });
 });
@@ -54,6 +62,7 @@ describe("97b: list additions merge with the manifest's own values", () => {
 describe("97c: the catalog is read for every surface", () => {
   it("references a devtools and an options template the catalog ships", async () => {
     const root = project({ manifest_version: 3, name: "x", version: "1.0" });
+
     for (const feature of ["devtools", "options"]) {
       const out = JSON.parse(await addFeature.handler({ projectPath: root, feature }));
       expect(out.value.referenceTemplate, feature).toBeDefined();

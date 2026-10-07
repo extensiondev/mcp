@@ -6,21 +6,21 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-import { PROJECT_PATH, REAL_BROWSERS } from "../lib/common-schema";
 import fs from "node:fs";
 import path from "node:path";
+
+import { PROJECT_PATH, REAL_BROWSERS } from "../lib/common-schema";
 import * as build from "./build";
 import { navigateToUrl } from "./open";
 import { ZIP_URL_REDIRECT_NOTE } from "../lib/artifacts-api";
 import { resolveToken } from "../lib/publish";
 import { PROJECT_TOKEN_INPUT } from "../lib/credentials";
 import { uploadPreview } from "../lib/preview-upload";
-import { spendNarration } from "../lib/allowance";
+import { spendNarration, ALLOWANCE_PHRASE  } from "../lib/allowance";
 import { recordSharedPreview } from "../lib/share-record";
 import { probeShareCors } from "../lib/share-cors-probe";
 import { envelope } from "../lib/envelope";
 import { engineBrowserName } from "../lib/browser-family";
-import { ALLOWANCE_PHRASE } from "../lib/allowance";
 import { engineProjectRoot } from "../lib/session-paths";
 import {
   PLATFORM_HOLD_CODE,
@@ -52,6 +52,7 @@ function safeHostBase(
 ): { ok: true; base: string } | { ok: false; message: string } {
   const trimmed = String(raw || "").replace(/\/+$/, "");
   let parsed: URL;
+
   try {
     parsed = new URL(trimmed);
   } catch {
@@ -60,16 +61,19 @@ function safeHostBase(
       message: `hostUrl is not a URL: ${raw}. Leave it unset to use ${DEFAULT_PREVIEW_DEV_URL}.`,
     };
   }
+
   const isLocal =
     LOCAL_HOSTS.has(parsed.hostname) ||
     parsed.hostname.endsWith(".localhost") ||
     parsed.hostname === "preview.extension.dev";
+
   if (!isLocal) {
     return {
       ok: false,
       message: `Refusing to use ${raw} as the preview host: hostUrl may only name a local preview dev server. Leave it unset to use ${DEFAULT_PREVIEW_DEV_URL}, or pass share:true for a link that needs no local server.`,
     };
   }
+
   return { ok: true, base: trimmed };
 }
 
@@ -106,6 +110,7 @@ function expectedPreviewIdentifier(
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, "-")
       .replace(/^-|-$/g, "") || "extension";
+
   return base.startsWith("local-") ? base : `local-${base}`;
 }
 
@@ -136,18 +141,24 @@ const PREVIEW_APP_LOCATIONS = [
  */
 function previewDevCheckout(startPaths: string[]): string | null {
   const seen = new Set<string>();
+
   for (const start of startPaths) {
     let dir: string;
+
     try {
       dir = path.resolve(start);
     } catch {
       continue;
     }
+
     for (let depth = 0; depth < 8; depth++) {
       if (seen.has(dir)) break;
+
       seen.add(dir);
+
       for (const location of PREVIEW_APP_LOCATIONS) {
         const manifest = path.join(dir, ...location, "package.json");
+
         try {
           const parsed = JSON.parse(fs.readFileSync(manifest, "utf8")) as {
             name?: string;
@@ -156,17 +167,21 @@ function previewDevCheckout(startPaths: string[]): string | null {
         } catch {
         }
       }
+
       const parent = path.dirname(dir);
       if (parent === dir) break;
+
       dir = parent;
     }
   }
+
   return null;
 }
 
 function localLaneRemedy(checkout: string | null): string {
   const shareOut =
     "Pass share:true for a link that needs no local server and opens for anyone.";
+
   return checkout
     ? `Start it with '${SURFACE.devCommand}' in ${checkout}. ${shareOut}`
     : `${SURFACE.label} is a private app of the extension.dev monorepo and no npm install of this server can start it, so the default lane cannot resolve on this machine. ${shareOut}`;
@@ -182,7 +197,9 @@ function unrequestedShare(args: {
   if (args.browser) call.browser = args.browser;
   if (args.build === false) call.build = false;
   if (args.distPath) call.distPath = args.distPath;
+
   call.share = true;
+
   return {
     requested: false,
     localLinkNeeds: `deepLink renders only against a ${SURFACE.label} dev server running on this machine, so to anyone else it is a dead link.`,
@@ -214,8 +231,10 @@ async function buildShare(
     browser,
     ...(project ? { token: resolveToken({ project }) } : {}),
   });
+
   if (!result.ok) {
     const isAuth = result.error.name === "PreviewAuthError";
+
     return {
       requested: true,
       ok: false,
@@ -282,21 +301,23 @@ async function buildShare(
       : { browserLoadable: null }),
     record,
     note:
-      "Anyone with this link can open the build you just made, running in the emulator. No install, no sign-in, no dev server. They can also download the whole build as a zip from zipUrl, so the link hands over the built code. It stays live until expiresAt; DELETE revokeUrl with the same token to kill it sooner, and a revoked link stays dead. revokeUrl is the handle that pulls this link early. Re-sharing an unchanged build returns this same link rather than a second one, and only a revoked link is replaced by a different one, so " +
-      (record.recorded
+      `Anyone with this link can open the build you just made, running in the emulator. No install, no sign-in, no dev server. They can also download the whole build as a zip from zipUrl, so the link hands over the built code. It stays live until expiresAt; DELETE revokeUrl with the same token to kill it sooner, and a revoked link stays dead. revokeUrl is the handle that pulls this link early. Re-sharing an unchanged build returns this same link rather than a second one, and only a revoked link is replaced by a different one, so ${ 
+      record.recorded
         ? `it was also written to ${record.path} (record.path), which lists every share from this project.`
-        : `keep it: ${record.note}`) +
-      " To find this link again later, or to pull it back once it has left this conversation, run extension_shares: it lists every link this token has shared with its live or dead state, and revokes one by artifactId or by pasting any of its URLs." +
-      (result.data.zipUrl ? ` ${ZIP_URL_REDIRECT_NOTE}` : "") +
-      (record.warning ? ` ${record.warning}` : ""),
+        : `keep it: ${record.note}` 
+      } To find this link again later, or to pull it back once it has left this conversation, run extension_shares: it lists every link this token has shared with its live or dead state, and revokes one by artifactId or by pasting any of its URLs.${ 
+      result.data.zipUrl ? ` ${ZIP_URL_REDIRECT_NOTE}` : "" 
+      }${record.warning ? ` ${record.warning}` : ""}`,
   };
 }
 
 function detectSurfaces(manifest: Record<string, any>): string[] {
   const surfaces: string[] = [];
+
   const push = (surface: string, condition: unknown) => {
     if (condition) surfaces.push(surface);
   };
+
   const action = manifest.action ?? manifest.browser_action;
   push("popup", action?.default_popup);
   push("newtab", manifest.chrome_url_overrides?.newtab);
@@ -309,8 +330,10 @@ function detectSurfaces(manifest: Record<string, any>): string[] {
     "side-panel",
     manifest.side_panel?.default_path || manifest.sidebar_action?.default_panel,
   );
+
   push("devtools", manifest.devtools_page);
   push("sandbox-page", manifest.sandbox?.pages?.[0]);
+
   return surfaces;
 }
 
@@ -389,6 +412,7 @@ export async function handler(args: {
 }): Promise<string> {
   const browser = args.browser ?? "chrome";
   const host = safeHostBase(args.hostUrl ?? SURFACE.defaultOrigin);
+
   if (!host.ok) {
     return envelope({
       ok: false,
@@ -398,17 +422,21 @@ export async function handler(args: {
       value: { stage: "resolve-host", hostUrl: args.hostUrl },
     });
   }
+
   const hostBase = host.base;
   const shouldBuild = args.distPath ? false : args.build !== false;
 
   let buildResult: Record<string, unknown> | null = null;
+
   if (shouldBuild) {
     const raw = await build.handler({ projectPath: args.projectPath, browser });
+
     try {
       buildResult = JSON.parse(raw);
     } catch {
       buildResult = { ok: false, raw };
     }
+
     if (!buildResult || buildResult.ok !== true) {
       return envelope({
         ok: false,
@@ -428,6 +456,7 @@ export async function handler(args: {
     ? path.resolve(args.distPath)
     : path.join(engineProjectRoot(args.projectPath), "dist", engineBrowserName(browser));
   const manifestPath = path.join(distDir, "manifest.json");
+
   if (!fs.existsSync(manifestPath)) {
     return envelope({
       ok: false,
@@ -442,6 +471,7 @@ export async function handler(args: {
   }
 
   let manifest: Record<string, any>;
+
   try {
     manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
   } catch (err) {
@@ -474,9 +504,11 @@ export async function handler(args: {
     surfaces: detectSurfaces(manifest),
     ...(buildResult ? { built: true } : { built: false }),
   };
+
   if (!args.share) {
     result.share = unrequestedShare(args);
   }
+
   const checkout = previewDevCheckout([args.projectPath, process.cwd()]);
   const remedy = localLaneRemedy(checkout);
   const hint = `Open deepLink in a browser to see the extension render in ${SURFACE.label}'s emulator, where the Trace tab shows every chrome.* call it makes and the lane toggle switches between the emulated backend and a real carrier-equipped browser. It needs that surface's dev server running on this machine. ${remedy}`;
@@ -486,13 +518,16 @@ export async function handler(args: {
     const sessionBrowser = args.openIn ?? browser;
     const navRaw = await navigateToUrl(args.projectPath, sessionBrowser, deepLink);
     let opened: Record<string, unknown>;
+
     try {
       opened = JSON.parse(navRaw);
     } catch {
       opened = { ok: false, raw: navRaw };
     }
+
     result.opened = opened;
     result.openedIn = sessionBrowser;
+
     if (opened.ok !== true) {
       previewWarnings.push(
         "Could not open the preview in a browser. This needs a live dev session (run extension_dev, then extension_wait for ready). The deepLink above still works if you open it yourself.",
@@ -510,6 +545,7 @@ export async function handler(args: {
       args.project,
     );
     result.share = share;
+
     if (share.ok !== true) {
       previewWarnings.push(
         `share: true was asked for and the upload did NOT produce a share: ${
@@ -517,6 +553,7 @@ export async function handler(args: {
         }. There is no public link; the result below is the local preview only.`,
       );
     }
+
     if (share.ok === true && share.browserLoadable === false) {
       const check = share.browserCheck as { reason?: string } | undefined;
       previewWarnings.push(
@@ -541,12 +578,14 @@ export async function handler(args: {
   const probeUrl = `${hostBase}${SURFACE.fetchPath}?url=${encodeURIComponent(
     internalUrl,
   )}`;
+
   try {
     const res = await fetch(probeUrl, {
       headers: { accept: "application/json" },
     });
     const contentType = res.headers.get("content-type") ?? "";
     let raw: unknown = null;
+
     if (res.ok && contentType.includes("application/json")) {
       try {
         raw = await res.json();
@@ -554,6 +593,7 @@ export async function handler(args: {
         raw = null;
       }
     }
+
     const payload =
       raw && typeof raw === "object" && !Array.isArray(raw)
         ? (raw as {
@@ -563,6 +603,7 @@ export async function handler(args: {
             files?: unknown;
           })
         : null;
+
     if (!payload) {
       return envelope({
         ok: true,
@@ -584,6 +625,7 @@ export async function handler(args: {
         ],
       });
     }
+
     const localName = typeof manifest.name === "string" ? manifest.name : null;
     const localVersion =
       typeof manifest.version === "string" ? manifest.version : null;
@@ -597,6 +639,7 @@ export async function handler(args: {
     const matchesDist =
       (localName === null || remoteName === localName) &&
       (localVersion === null || remoteVersion === localVersion);
+
     if (!matchesDist) {
       const hostReported = {
         ...(remoteIdentifier !== null
@@ -607,6 +650,7 @@ export async function handler(args: {
           ? { version: clipHostClaim(remoteVersion) }
           : {}),
       };
+
       return envelope({
         ok: true,
         command: COMMAND,
@@ -630,6 +674,7 @@ export async function handler(args: {
         ],
       });
     }
+
     const identifierConfirmed =
       remoteIdentifier !== null &&
       remoteIdentifier === expectedPreviewIdentifier(localName, distDir);
@@ -644,6 +689,7 @@ export async function handler(args: {
         ? { version: clipHostClaim(remoteVersion) }
         : {}),
     };
+
     return envelope({
       ok: true,
       command: COMMAND,
@@ -700,6 +746,7 @@ export async function handler(args: {
     const shared = result.share as
       | { ok?: unknown; browserLoadable?: unknown; heldFromPublic?: unknown; zipUrl?: unknown }
       | undefined;
+
     if (args.share && shared?.ok === true) {
       /* @invariant "THE SHARE LINK WORKS" IS THE PROBE'S VERDICT, NOT THE
          UPLOAD'S. This branch used to say the link works on `share.ok`
@@ -718,6 +765,7 @@ export async function handler(args: {
             : shared.browserLoadable === true
               ? `The share link works; only the local ${SURFACE.label} dev lane at ${hostBase} is unreachable, which is expected outside the extension.dev monorepo.`
               : "The share uploaded, but whether its link renders was not checked (no probe verdict).";
+
       return envelope({
         ok: true,
         command: COMMAND,
@@ -736,6 +784,7 @@ export async function handler(args: {
         warnings: [...previewWarnings, linkNote],
       });
     }
+
     return envelope({
       ok: false,
       command: COMMAND,

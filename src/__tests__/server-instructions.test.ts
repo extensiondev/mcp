@@ -12,6 +12,7 @@ async function initialized(): Promise<Client> {
   await server.connect(serverTransport);
   const client = new Client({ name: "instructions-probe", version: "0.0.0" });
   await client.connect(clientTransport);
+
   return client;
 }
 
@@ -25,6 +26,7 @@ describe("the initialize result carries instructions, the one field a search-fir
 
   it("names the moments and the tools that replace hand-rolled session plumbing", () => {
     expect(SERVER_INSTRUCTIONS).toMatch(/search this server first/);
+
     for (const name of [
       "extension_dev",
       "extension_wait",
@@ -36,6 +38,7 @@ describe("the initialize result carries instructions, the one field a search-fir
     ]) {
       expect(SERVER_INSTRUCTIONS).toContain(name);
     }
+
     expect(SERVER_INSTRUCTIONS).toMatch(/ps, curl/);
     expect(SERVER_INSTRUCTIONS).toMatch(/CDP or Playwright/);
   });
@@ -44,6 +47,7 @@ describe("the initialize result carries instructions, the one field a search-fir
     const registered = new Set(tools.map((t) => t.schema.name));
     const named = SERVER_INSTRUCTIONS.match(/\bextension_[a-z_]+/g) ?? [];
     expect(named.length).toBeGreaterThan(5);
+
     for (const name of named) {
       expect(registered.has(name), `${name} is not a registered tool`).toBe(true);
     }

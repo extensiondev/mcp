@@ -7,6 +7,7 @@
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
 import crypto from "node:crypto";
+
 import { envelope } from "./envelope";
 import { resolveApiBase, safeApiBase } from "./login-flow";
 import { platformHoldEnvelope, sawPlatformHold } from "./platform-hold";
@@ -96,6 +97,7 @@ export function approvalGateEnabled(defaultOn = false): boolean {
     .trim()
     .toLowerCase();
   if (raw === "") return defaultOn;
+
   return raw !== "0" && raw !== "false" && raw !== "off";
 }
 
@@ -119,6 +121,7 @@ export async function requestApprovalAfterRefusal(
     approvalId: undefined,
     enabled: true,
   });
+
   return gate.blocked
     ? gate.envelope
     : envelope({
@@ -142,6 +145,7 @@ function canonicalScope(scope: ApprovalScope): string {
       const rendered = Array.isArray(value)
         ? [...value].map((v) => String(v)).sort().join(",")
         : String(value);
+
       return `${key}=${rendered}`;
     })
     .join("\n");
@@ -198,8 +202,10 @@ function block(
 
 async function readJson(res: Response): Promise<Record<string, unknown>> {
   const text = await res.text();
+
   try {
     const parsed = JSON.parse(text);
+
     return parsed && typeof parsed === "object" && !Array.isArray(parsed)
       ? (parsed as Record<string, unknown>)
       : { message: text };
@@ -217,6 +223,7 @@ async function requestApproval(params: {
   const { base, fingerprint, input, doFetch } = params;
   const url = `${base}/api/cli/approvals`;
   let res: Response;
+
   try {
     res = await doFetch(url, {
       method: "POST",
@@ -245,6 +252,7 @@ async function requestApproval(params: {
   }
 
   const data = await readJson(res);
+
   if (sawPlatformHold(res, data)) {
     return {
       blocked: true,
@@ -275,6 +283,7 @@ async function requestApproval(params: {
 
   const approvalId = String(data.approvalId || "").trim();
   const approvalUrl = String(data.approvalUrl || "").trim();
+
   /* @invariant An approval request the platform answered without an id is
      not an approval to wait for: telling the agent to "call again with the
      approvalId from the response" described one that may not exist. */
@@ -288,6 +297,7 @@ async function requestApproval(params: {
       { action: input.action, fingerprint, description: input.description },
     );
   }
+
   return block(
     input.command,
     APPROVAL_REQUIRED_STATUS,
@@ -322,6 +332,7 @@ async function verifyApproval(params: {
   const approvalId = String(input.approvalId || "").trim();
   const url = `${base}/api/cli/approvals/${encodeURIComponent(approvalId)}`;
   let res: Response;
+
   try {
     res = await doFetch(url, {
       method: "GET",
@@ -344,6 +355,7 @@ async function verifyApproval(params: {
   }
 
   const data = await readJson(res);
+
   if (sawPlatformHold(res, data)) {
     return {
       blocked: true,
@@ -480,6 +492,7 @@ export async function evaluateApproval(
   if (!enabled) return { blocked: false };
 
   const apiCheck = safeApiBase(resolveApiBase(input.api), input.api);
+
   if (!apiCheck.ok) {
     return block(
       input.command,
@@ -497,5 +510,6 @@ export async function evaluateApproval(
   if (!String(input.approvalId || "").trim()) {
     return requestApproval({ base: apiCheck.base, fingerprint, input, doFetch });
   }
+
   return verifyApproval({ base: apiCheck.base, fingerprint, input, doFetch });
 }

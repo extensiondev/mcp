@@ -1,7 +1,9 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
+
 import { handler, schema } from "../tools/wait";
 import {
   registerSession,
@@ -17,6 +19,7 @@ let dir: string;
 beforeEach(() => {
   dir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-wait-narration-"));
 });
+
 afterEach(() => {
   removeSession(dir, "chrome");
   removeSessionMarker(dir, "chrome");
@@ -37,6 +40,7 @@ describe("extension_wait budget disclosure", () => {
   it("narrates a timeout: budget, elapsed, and what was observed", async () => {
     registerSession({ pid: process.pid, browser: "chrome", projectPath: dir, command: "dev" });
     let result;
+
     try {
       result = JSON.parse(
         await handler({ projectPath: dir, browser: "chrome", timeoutMs: 1200 }),
@@ -165,6 +169,7 @@ describe("extension_wait ignores contracts from a previous run", () => {
       projectPath: dir,
       command: "dev",
     });
+
     writeModernContract(dir, "chrome", {
       status: "error",
       message: "fresh compile failed",
@@ -273,6 +278,7 @@ describe("extension_wait in build-only sessions", () => {
       command: "dev",
       noBrowser: true,
     });
+
     writeCompiledUnattachedContract(dir, "chrome", { pid: process.pid });
 
     const before = Date.now();
@@ -296,6 +302,7 @@ describe("extension_wait in build-only sessions", () => {
       command: "dev",
       noBrowser: true,
     });
+
     removeSession(dir, "chrome");
     writeCompiledUnattachedContract(dir, "chrome", { pid: process.pid });
 

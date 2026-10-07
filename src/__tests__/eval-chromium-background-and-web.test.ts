@@ -1,20 +1,27 @@
-import { describe, it, expect, afterEach, vi } from "vitest";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+
+import { describe, it, expect, afterEach, vi } from "vitest";
+
 import { envelope } from "../lib/envelope";
 import { writeEvalToken } from "./fixtures/ready-contract";
+
+import type * as ActModule from "../lib/act";
+import type * as CdpPortModule from "../lib/cdp-port";
 
 const cliCalls: string[][] = [];
 let relayReply: () => string = () =>
   envelope({ ok: true, command: "extension_eval", status: "ok", value: "relay" });
 vi.mock("../lib/act", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../lib/act")>();
+  const actual = await importOriginal<typeof ActModule>();
+
   return {
     ...actual,
     runActVerb: async (cli: string[]) => {
       cliCalls.push(cli);
+
       return relayReply();
     },
   };
@@ -22,7 +29,8 @@ vi.mock("../lib/act", async (importOriginal) => {
 
 let cdpPort: { port: number; source: "contract" } | null = { port: 9222, source: "contract" };
 vi.mock("../lib/cdp-port", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../lib/cdp-port")>();
+  const actual = await importOriginal<typeof CdpPortModule>();
+
   return { ...actual, resolveCdpPort: async () => cdpPort };
 });
 
@@ -51,23 +59,31 @@ vi.mock("../lib/cdp", () => {
     async sendCommand(method: string, params: Record<string, unknown> = {}, sessionId?: string, timeoutMs?: number) {
       if (method === "Runtime.evaluate") lastEvaluateTimeout = timeoutMs ?? null;
       if (method === "Runtime.evaluate" && evaluateRejects) throw new Error(evaluateRejects);
+
       if (method === "Runtime.evaluate") {
         evaluations.push({ params, sessionId });
+
         return evaluateResponse(params);
       }
+
       if (method === "Runtime.awaitPromise") {
         awaited.push(params);
+
         return { result: { type: "number", value: 42 } };
       }
+
       otherCommands.push({ method, params, sessionId });
+
       if (method === "ServiceWorker.startWorker") {
         const scope = String(params.scopeURL ?? "");
         cdpTargets = [...cdpTargets, { id: "sw-woken", type: "service_worker", url: `${scope}background.js`, title: "" }];
       }
+
       return {};
     }
     disconnect() {}
   }
+
   return { CDPClient };
 });
 
@@ -76,14 +92,17 @@ const evalTool = await import("../tools/eval");
 function expectedId(distPath: string): string {
   const d = crypto.createHash("sha256").update(distPath).digest();
   let id = "";
+
   for (let i = 0; i < 16; i++) {
     id += String.fromCharCode(97 + (d[i] >> 4));
     id += String.fromCharCode(97 + (d[i] & 0x0f));
   }
+
   return id;
 }
 
 const dirs: string[] = [];
+
 function project(manifest: Record<string, unknown>): { dir: string; id: string } {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-eval-bg-web-"));
   dirs.push(dir);
@@ -94,6 +113,7 @@ function project(manifest: Record<string, unknown>): { dir: string; id: string }
   fs.mkdirSync(readyDir, { recursive: true });
   fs.writeFileSync(path.join(readyDir, "ready.json"), JSON.stringify({ status: "ready", distPath }));
   writeEvalToken(dir, "chrome");
+
   return { dir, id: expectedId(distPath) };
 }
 
@@ -146,6 +166,7 @@ describe("extension_eval reaches the Chromium background over CDP, where the ext
     cdpTargets = [
       { id: "sw", type: "service_worker", url: `chrome-extension://${p.id}/background.js`, title: "" },
     ];
+
     evaluateResponse = (params) =>
       params.replMode === true
         ? { result: { type: "object", value: {} } }
@@ -172,6 +193,7 @@ describe("extension_eval reaches the Chromium background over CDP, where the ext
     cdpTargets = [
       { id: "sw", type: "service_worker", url: `chrome-extension://${p.id}/background.js`, title: "" },
     ];
+
     evaluateResponse = (params) =>
       params.replMode === true
         ? { result: { type: "object", subtype: "promise", objectId: "promise-1" } }
@@ -199,6 +221,7 @@ describe("extension_eval reaches the Chromium background over CDP, where the ext
     cdpTargets = [
       { id: "web", type: "page", url: "https://example.com/", title: "Example" },
     ];
+
     evaluateResponse = (params) =>
       params.replMode === true
         ? { result: { type: "object", subtype: "promise", objectId: "promise-2" } }
@@ -457,6 +480,7 @@ describe("the debug-port eval honours the caller's timeout and says when it ran 
     const p = project(MV3);
     cdpTargets = [{ id: "sw", type: "service_worker", url: `chrome-extension://${p.id}/sw.js`, title: "" }];
     evaluateRejects = "CDP command timed out (15000ms): Runtime.evaluate";
+
     try {
       const result = JSON.parse(
         await evalTool.handler({ projectPath: p.dir, context: "background", expression: "1" }),

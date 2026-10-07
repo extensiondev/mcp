@@ -62,13 +62,16 @@ export function readPlatformAllowance(
 ): { used: number; limit: number } | null {
   const record = asRecord(body);
   if (!record) return null;
+
   for (const key of ["allowance", "quota"]) {
     const nested = asRecord(record[key]);
     if (!nested) continue;
+
     const used = asCount(nested.used);
     const limit = asCount(nested.limit);
     if (used !== null && limit !== null) return { used, limit };
   }
+
   return null;
 }
 
@@ -78,6 +81,7 @@ export function spendNarration(options: {
   api?: string;
 }): SpendNarration {
   const counted = readPlatformAllowance(options.body);
+
   return {
     spent: `${options.what} ${ALLOWANCE_PHRASE}.`,
     remains: counted

@@ -1,7 +1,8 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   credentialsPath,
@@ -43,6 +44,7 @@ beforeEach(() => {
   for (const key of ["XDG_CONFIG_HOME", "EXTENSION_DEV_TOKEN", "EXTENSION_DEV_PROJECT"]) {
     saved[key] = process.env[key];
   }
+
   tmp = fs.mkdtempSync(path.join(os.tmpdir(), "extdev-logout-"));
   process.env.XDG_CONFIG_HOME = tmp;
   delete process.env.EXTENSION_DEV_TOKEN;
@@ -51,10 +53,12 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.restoreAllMocks();
+
   for (const [key, value] of Object.entries(saved)) {
     if (value === undefined) delete process.env[key];
     else process.env[key] = value;
   }
+
   fs.rmSync(tmp, { recursive: true, force: true });
 });
 

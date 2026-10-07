@@ -1,7 +1,8 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { handler } from "../tools/publish";
 import { publishAnswer } from "./fixtures/platform-answers";
@@ -14,9 +15,11 @@ function stubPublish(body: unknown, status = 200) {
     "fetch",
     vi.fn(async (url: any) => {
       const href = String(url);
+
       if (href.endsWith("/api/cli/publish")) {
         return new Response(typeof body === "string" ? body : JSON.stringify(body), { status });
       }
+
       throw new Error(`Unexpected fetch: ${href}`);
     }),
   );
@@ -26,6 +29,7 @@ beforeEach(() => {
   for (const key of ["XDG_CONFIG_HOME", "EXTENSION_DEV_API_URL", "EXTENSION_DEV_TOKEN", "EXTENSION_DEV_PROJECT"]) {
     saved[key] = process.env[key];
   }
+
   tmp = fs.mkdtempSync(path.join(os.tmpdir(), "extdev-publish-outcome-"));
   process.env.XDG_CONFIG_HOME = tmp;
   process.env.EXTENSION_DEV_API_URL = "https://api.test";
@@ -35,10 +39,12 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+
   for (const [key, value] of Object.entries(saved)) {
     if (value === undefined) delete process.env[key];
     else process.env[key] = value;
   }
+
   fs.rmSync(tmp, { recursive: true, force: true });
 });
 
@@ -78,6 +84,7 @@ describe("extension_publish says what the share serves", () => {
       { message: "Build abc1234 was not found in this project's build index.", code: "UNKNOWN_BUILD" },
       404,
     );
+
     const out = JSON.parse(await handler({ buildSha: "abc1234" }));
 
     expect(out.status).toBe("build-unknown");
@@ -91,6 +98,7 @@ describe("extension_publish says what the share serves", () => {
       { message: "Project not found", code: "PROJECT_NOT_FOUND", createProjectUrl: "https://www.extension.dev/new" },
       404,
     );
+
     const out = JSON.parse(await handler({}));
 
     expect(out.status).not.toBe("build-unknown");

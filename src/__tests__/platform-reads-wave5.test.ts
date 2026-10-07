@@ -34,12 +34,14 @@ describe("wave 5: platform reads that cannot be read say so", () => {
     const missing = await listArtifacts({ token: "t", api: "https://www.extension.dev", fetchImpl: json({ count: 0 }) } as never);
     expect(missing.ok).toBe(false);
     if (!missing.ok) expect(missing.error.message).toMatch(/without an artifacts list/);
+
     const partial = await listArtifacts({
       token: "t",
       api: "https://www.extension.dev",
       fetchImpl: json({ artifacts: [{ artifactId: `gen_${"a".repeat(64)}` }, { nope: 1 }], truncated: false }),
     } as never);
     expect(partial.ok, JSON.stringify(partial)).toBe(true);
+
     if (partial.ok) {
       expect(partial.data.artifacts).toHaveLength(1);
       expect(partial.data.malformedRows).toBe(1);

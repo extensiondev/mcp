@@ -1,7 +1,8 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import path from "node:path";
 import os from "node:os";
 import fs from "node:fs";
+
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { actionFingerprint, evaluateApproval } from "../lib/approval-gate";
 import { handler as submitHandler } from "../tools/submit";
@@ -28,7 +29,8 @@ function router(
     const url = String(input);
     const method = String(init?.method || "GET").toUpperCase();
     const pathname = new URL(url).pathname;
-    let body: unknown = undefined;
+    let body: unknown;
+
     if (typeof init?.body === "string") {
       try {
         body = JSON.parse(init.body);
@@ -36,12 +38,15 @@ function router(
         body = init.body;
       }
     }
+
     const call: Call = { key: `${method} ${pathname}`, url, method, body };
     calls.push(call);
+
     for (const [prefix, respond] of Object.entries(routes)) {
       const [rmethod, rpath] = prefix.split(" ");
       if (method === rmethod && pathname.startsWith(rpath)) return respond(call);
     }
+
     throw new Error(`unrouted ${call.key}`);
   }) as unknown as typeof fetch;
 }
@@ -72,6 +77,7 @@ describe("the approval gate guards irreversible outward actions and cannot self-
     else process.env.EXTENSION_DEV_APPROVAL_GATE = prevGate;
     if (prevApi === undefined) delete process.env.EXTENSION_DEV_API_URL;
     else process.env.EXTENSION_DEV_API_URL = prevApi;
+
     global.fetch = prevFetch;
   });
 
@@ -128,6 +134,7 @@ describe("the approval gate guards irreversible outward actions and cannot self-
         "POST /api/cli/approvals": approvalRoute,
         "POST /api/cli/stores/submit": () => jsonResponse(submitAnswer()),
       });
+
       const out = JSON.parse(
         await submitHandler({ browsers: ["chrome"], buildSha: "abc1234", dryRun: false }),
       );
@@ -140,6 +147,7 @@ describe("the approval gate guards irreversible outward actions and cannot self-
         "POST /api/cli/approvals": approvalRoute,
         "POST /api/cli/release/promote": () => jsonResponse(promoteAnswer()),
       });
+
       const stable = JSON.parse(
         await promoteHandler({ buildId: "abc1234", channel: "stable" }),
       );
@@ -156,6 +164,7 @@ describe("the approval gate guards irreversible outward actions and cannot self-
         "POST /api/cli/approvals": approvalRoute,
         "DELETE /api/artifacts": () => jsonResponse({ revoked: true }),
       });
+
       const out = JSON.parse(await sharesHandler({ action: "revoke", artifactId: GEN_ID }));
       expect(out.status).toBe("approval-required");
       expect(hit("DELETE /api/artifacts")).toBe(false);
@@ -166,6 +175,7 @@ describe("the approval gate guards irreversible outward actions and cannot self-
       global.fetch = router(calls, {
         "POST /api/cli/stores/submit": () => jsonResponse(submitAnswer()),
       });
+
       const out = JSON.parse(
         await submitHandler({ browsers: ["chrome"], buildSha: "abc1234", dryRun: false }),
       );
@@ -179,6 +189,7 @@ describe("the approval gate guards irreversible outward actions and cannot self-
         "POST /api/cli/release/promote": () =>
           jsonResponse({ code: "APPROVAL_REQUIRED", message: "needs approval" }, 403),
       });
+
       const out = JSON.parse(
         await promoteHandler({ buildId: "abc1234", channel: "beta" }),
       );
@@ -204,6 +215,7 @@ describe("the approval gate guards irreversible outward actions and cannot self-
           }),
         "POST /api/cli/stores/submit": () => jsonResponse(submitAnswer()),
       });
+
       const out = JSON.parse(
         await submitHandler({
           browsers: ["chrome"],
@@ -223,11 +235,13 @@ describe("the approval gate guards irreversible outward actions and cannot self-
       global.fetch = router(calls, {
         "POST /api/cli/stores/submit": () => jsonResponse(submitAnswer()),
       });
+
       await submitHandler({
         browsers: ["chrome"],
         buildSha: "abc1234",
         dryRun: true,
       });
+
       expect(hit("POST /api/cli/approvals")).toBe(false);
       expect(hit("POST /api/cli/stores/submit")).toBe(true);
     });
@@ -236,6 +250,7 @@ describe("the approval gate guards irreversible outward actions and cannot self-
       global.fetch = router(calls, {
         "GET /api/artifacts": () => jsonResponse({ artifacts: [], count: 0 }),
       });
+
       const out = JSON.parse(await sharesHandler({ action: "list" }));
       expect(hit("POST /api/cli/approvals")).toBe(false);
       expect(out.ok).toBe(true);
@@ -247,6 +262,7 @@ describe("the approval gate guards irreversible outward actions and cannot self-
           jsonResponse(approvalRecord("deadbeef")),
         "POST /api/cli/stores/submit": () => jsonResponse(submitAnswer()),
       });
+
       const out = JSON.parse(
         await submitHandler({
           browsers: ["chrome"],
@@ -266,6 +282,7 @@ describe("the approval gate guards irreversible outward actions and cannot self-
         "GET /api/cli/approvals": () => jsonResponse({ status: "pending" }),
         "POST /api/cli/stores/submit": () => jsonResponse(submitAnswer()),
       });
+
       const out = JSON.parse(
         await submitHandler({
           browsers: ["chrome"],
@@ -284,6 +301,7 @@ describe("the approval gate guards irreversible outward actions and cannot self-
           jsonResponse({ message: "not found" }, 404),
         "POST /api/cli/stores/submit": () => jsonResponse(submitAnswer()),
       });
+
       const out = JSON.parse(
         await submitHandler({
           browsers: ["chrome"],
@@ -308,6 +326,7 @@ describe("the approval gate guards irreversible outward actions and cannot self-
           jsonResponse(approvalRecord(fingerprint)),
         "POST /api/cli/stores/submit": () => jsonResponse(submitAnswer()),
       });
+
       const out = JSON.parse(
         await submitHandler({
           browsers: ["chrome"],
@@ -319,6 +338,7 @@ describe("the approval gate guards irreversible outward actions and cannot self-
       expect(
         calls.some((c) => c.key.startsWith("GET /api/cli/approvals/")),
       ).toBe(true);
+
       expect(out.status).toBe("submitted");
       const submitCall = calls.find(
         (c) => c.key === "POST /api/cli/stores/submit",
@@ -337,6 +357,7 @@ describe("the approval gate guards irreversible outward actions and cannot self-
           }),
         "POST /api/cli/release/promote": () => jsonResponse(promoteAnswer()),
       });
+
       const out = JSON.parse(
         await promoteHandler({ buildId: "abc1234", channel: "stable" }),
       );
@@ -355,6 +376,7 @@ describe("the approval gate guards irreversible outward actions and cannot self-
           jsonResponse(approvalRecord(submitFingerprint)),
         "POST /api/cli/release/promote": () => jsonResponse(promoteAnswer()),
       });
+
       const out = JSON.parse(
         await promoteHandler({
           buildId: "abc1234",
@@ -377,6 +399,7 @@ describe("the approval gate guards irreversible outward actions and cannot self-
           jsonResponse(approvalRecord(fingerprint)),
         "POST /api/cli/release/promote": () => jsonResponse(promoteAnswer()),
       });
+
       const out = JSON.parse(
         await promoteHandler({
           buildId: "abc1234",
@@ -397,6 +420,7 @@ describe("the approval gate guards irreversible outward actions and cannot self-
           }),
         "DELETE /api/artifacts": () => jsonResponse({ revoked: true }),
       });
+
       const out = JSON.parse(
         await sharesHandler({ action: "revoke", artifactId: GEN_ID }),
       );
@@ -413,6 +437,7 @@ describe("the approval gate guards irreversible outward actions and cannot self-
           jsonResponse(approvalRecord(fingerprint)),
         "DELETE /api/artifacts": () => jsonResponse({ revoked: true }),
       });
+
       const out = JSON.parse(
         await sharesHandler({
           action: "revoke",
@@ -443,6 +468,7 @@ describe("the approval gate guards irreversible outward actions and cannot self-
         "POST /api/cli/approvals": () =>
           jsonResponse({ approvalId: "apr_x", approvalUrl: "https://www.extension.dev/a" }),
       });
+
       const result = await evaluateApproval({
         command: "extension_submit",
         action: "extension_submit",
@@ -527,6 +553,7 @@ describe("an approval the caller presents travels even with the local gate off",
     global.fetch = router(calls, {
       "POST /api/cli/release/promote": () => jsonResponse(promoteAnswer({ targetChannel: "beta" })),
     });
+
     try {
       const out = JSON.parse(
         await promoteHandler({ buildId: "abc1234", channel: "beta", approvalId: "apr_given" }),
@@ -541,6 +568,7 @@ describe("an approval the caller presents travels even with the local gate off",
       else process.env.EXTENSION_DEV_TOKEN = previousToken;
       if (previousXdg === undefined) delete process.env.XDG_CONFIG_HOME;
       else process.env.XDG_CONFIG_HOME = previousXdg;
+
       fs.rmSync(isolated, { recursive: true, force: true });
     }
   });

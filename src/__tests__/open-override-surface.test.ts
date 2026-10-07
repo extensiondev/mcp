@@ -1,16 +1,22 @@
-import { describe, it, expect, afterEach, vi } from "vitest";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
+import { describe, it, expect, afterEach, vi } from "vitest";
+
+import type * as ActModule from "../lib/act";
+import type * as CdpPortModule from "../lib/cdp-port";
+
 const cliCalls: string[][] = [];
 vi.mock("../lib/act", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../lib/act")>();
+  const actual = await importOriginal<typeof ActModule>();
+
   return {
     ...actual,
     runActVerb: async (cli: string[]) => {
       cliCalls.push(cli);
+
       return JSON.stringify({
         schema: 1,
         ok: false,
@@ -29,7 +35,8 @@ vi.mock("../lib/act", async (importOriginal) => {
 });
 
 vi.mock("../lib/cdp-port", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../lib/cdp-port")>();
+  const actual = await importOriginal<typeof CdpPortModule>();
+
   return { ...actual, resolveCdpPort: async () => ({ port: 9222, source: "contract" as const }) };
 });
 
@@ -48,6 +55,7 @@ vi.mock("../lib/cdp", () => {
     async connect() {}
     async attachToTarget(id: string) {
       attachedId = id;
+
       return "session-1";
     }
     async enableDomains() {}
@@ -65,12 +73,15 @@ vi.mock("../lib/cdp", () => {
         const url = String(params?.url ?? "");
         navigations.push(url);
         cdpTargets = [...cdpTargets, { id: "created", type: "page", url }];
+
         return { targetId: "created" };
       }
+
       return {};
     }
     disconnect() {}
   }
+
   return { CDPClient };
 });
 
@@ -79,14 +90,17 @@ const open = await import("../tools/open");
 function expectedId(distPath: string): string {
   const d = crypto.createHash("sha256").update(distPath).digest();
   let id = "";
+
   for (let i = 0; i < 16; i++) {
     id += String.fromCharCode(97 + (d[i] >> 4));
     id += String.fromCharCode(97 + (d[i] & 0x0f));
   }
+
   return id;
 }
 
 const tmpDirs: string[] = [];
+
 function project(manifest: Record<string, unknown>): { dir: string; id: string } {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-open-override-"));
   tmpDirs.push(dir);
@@ -95,6 +109,7 @@ function project(manifest: Record<string, unknown>): { dir: string; id: string }
     path.join(dir, "src", "manifest.json"),
     JSON.stringify(manifest),
   );
+
   const distPath = path.join(dir, "dist", "chrome");
   const readyDir = path.join(dir, "dist", "extension-js", "chrome");
   fs.mkdirSync(readyDir, { recursive: true });
@@ -102,6 +117,7 @@ function project(manifest: Record<string, unknown>): { dir: string; id: string }
     path.join(readyDir, "ready.json"),
     JSON.stringify({ status: "ready", distPath }),
   );
+
   return { dir, id: expectedId(distPath) };
 }
 
@@ -109,6 +125,7 @@ afterEach(() => {
   cliCalls.length = 0;
   navigations.length = 0;
   cdpTargets = [];
+
   for (const dir of tmpDirs.splice(0)) {
     fs.rmSync(dir, { recursive: true, force: true });
   }
@@ -133,11 +150,13 @@ describe("extension_open resolves override pages itself: the engine's open verb 
     expect(navigations).toEqual([
       `chrome-extension://${p.id}/chrome_url_overrides/newtab.html`,
     ]);
+
     expect(result.value.renderedAsTab).toMatchObject({
       surface: "newtab",
       document: "chrome_url_overrides/newtab.html",
       extensionId: p.id,
     });
+
     expect(result.hint).toMatch(/override document by url in a tab/);
     expect(result.hint).toMatch(/was not read/);
     expect(result.hint).not.toMatch(/the only place the browser ever renders/);

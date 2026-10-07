@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+
 import { beforeEach } from "vitest";
 
 process.env.EXTENSION_MCP_SESSION_DIR = fs.mkdtempSync(

@@ -4,6 +4,9 @@ import path from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { handler } from "../tools/publish";
+import { writeCredentials } from "../lib/credentials";
+
 const platform = vi.hoisted(() => ({
   result: {
     ok: true,
@@ -16,14 +19,12 @@ const platform = vi.hoisted(() => ({
    the token resolution and response reading are the shipped ones. */
 function publishAnswer(url: string): Response | null {
   if (!url.endsWith("/api/cli/publish")) return null;
+
   return new Response(JSON.stringify(platform.result.data), {
     status: platform.result.ok ? 200 : 500,
     headers: { "content-type": "application/json" },
   });
 }
-
-import { handler } from "../tools/publish";
-import { writeCredentials } from "../lib/credentials";
 
 const OLD_SHA = "aaaaaaaa1111111122222222333333334444aaaa";
 const NEW_SHA = "bbbbbbbb1111111122222222333333334444bbbb";
@@ -53,6 +54,7 @@ function registryFetch(body: unknown): typeof fetch {
   return (async (input: string | URL | Request) => {
     const answer = publishAnswer(String(input instanceof Request ? input.url : input));
     if (answer) return answer;
+
     return {
       ok: true,
       status: 200,
@@ -83,15 +85,18 @@ describe("extension_publish build pin enrichment", () => {
       expiresAt: Math.floor(Date.now() / 1000) + 3600,
       api: "https://www.extension.dev",
     });
+
     global.fetch = registryFetch(buildsIndex());
   });
 
   afterEach(() => {
     if (prevXdg === undefined) delete process.env.XDG_CONFIG_HOME;
     else process.env.XDG_CONFIG_HOME = prevXdg;
+
     global.fetch = prevFetch;
     if (prevToken === undefined) delete process.env.EXTENSION_DEV_TOKEN;
     else process.env.EXTENSION_DEV_TOKEN = prevToken;
+
     fs.rmSync(tmp, { recursive: true, force: true });
   });
 
@@ -181,6 +186,7 @@ describe("extension_publish build pin enrichment", () => {
     expect(out.value.buildSha).toBe(
       "a8a86d7c0ffee000000000000000000000000001",
     );
+
     expect(out.value.version).toBe("9.0.0.0");
     expect(out.value.builtAt).toBe("2026-10-01T10:00:00.000Z");
   });

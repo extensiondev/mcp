@@ -1,24 +1,32 @@
-import { describe, it, expect, afterEach, vi } from "vitest";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+
+import { describe, it, expect, afterEach, vi } from "vitest";
+
 import { envelope } from "../lib/envelope";
+
+import type * as ActModule from "../lib/act";
+import type * as CdpPortModule from "../lib/cdp-port";
 
 const actCalls: string[][] = [];
 vi.mock("../lib/act", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../lib/act")>();
+  const actual = await importOriginal<typeof ActModule>();
+
   return {
     ...actual,
     runActVerb: async (cli: string[]) => {
       actCalls.push(cli);
+
       return envelope({ ok: true, command: "extension_open", status: "ok", value: {} });
     },
   };
 });
 
 vi.mock("../lib/cdp-port", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../lib/cdp-port")>();
+  const actual = await importOriginal<typeof CdpPortModule>();
+
   return { ...actual, resolveCdpPort: async () => ({ port: 9222, source: "contract" as const }) };
 });
 
@@ -51,23 +59,31 @@ vi.mock("../lib/cdp", () => {
     async sendCommand(method: string, params?: Record<string, unknown>, sessionId?: string) {
       commands.push(method);
       if (method === "Page.reload" && reloadRejects) throw new Error("Target closed");
+
       if (method === "Target.openDevTools") {
         if (!openDevToolsSupported) throw new Error("'Target.openDevTools' wasn't found");
+
         cdpTargets = [
           ...cdpTargets,
           { id: "dt", type: "page", url: "devtools://devtools/bundled/devtools_app.html?targetType=tab", title: "DevTools" },
           { id: "dtpage", type: "iframe", url: `chrome-extension://${extensionId}/devtools/index.html`, title: "" },
         ];
+
         return { targetId: "dt" };
       }
+
       if (method === "Runtime.evaluate") {
         const expression = String(params?.expression ?? "");
+
         if (expression.includes("tabIds()")) {
           expect(sessionId).toBe("session-dt");
+
           if (registryThrows) {
             return { exceptionDetails: { text: "Uncaught", exception: { description: "TypeError: Failed to fetch dynamically imported module" } } };
           }
+
           const registered = panelRegisters === true || (panelRegisters === "after-reload" && reloaded);
+
           return {
             result: {
               value: registered
@@ -76,25 +92,32 @@ vi.mock("../lib/cdp", () => {
             },
           };
         }
+
         if (expression.includes("showPanel(")) {
           const shownId = /showPanel\("([^"]+)"\)/.exec(expression)?.[1] ?? "";
           const doc = shownId.endsWith("Second") ? "devtools/second.html" : "devtools/panel.html";
+
           if (showAddsFrame) {
             cdpTargets = [
               ...cdpTargets,
               { id: "panel", type: "iframe", url: `chrome-extension://${extensionId}/${doc}`, title: "" },
             ];
           }
+
           return { result: { value: "shown" } };
         }
+
         return { result: { value: 1 } };
       }
+
       otherCommands.push({ method, sessionId });
       if (method === "Page.reload") reloaded = true;
+
       return {};
     }
     disconnect() {}
   }
+
   return { CDPClient };
 });
 
@@ -105,14 +128,17 @@ const evalTool = await import("../tools/eval");
 function expectedId(distPath: string): string {
   const d = crypto.createHash("sha256").update(distPath).digest();
   let id = "";
+
   for (let i = 0; i < 16; i++) {
     id += String.fromCharCode(97 + (d[i] >> 4));
     id += String.fromCharCode(97 + (d[i] & 0x0f));
   }
+
   return id;
 }
 
 const dirs: string[] = [];
+
 function project(options: { devtools?: boolean; browser?: string } = {}): { dir: string; id: string } {
   const browser = options.browser ?? "chrome";
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-open-devtools-"));
@@ -124,6 +150,7 @@ function project(options: { devtools?: boolean; browser?: string } = {}): { dir:
     action: { default_popup: "action/index.html" },
   };
   if (options.devtools !== false) manifest.devtools_page = "devtools/index.html";
+
   fs.writeFileSync(path.join(dir, "src", "manifest.json"), JSON.stringify(manifest));
   const distPath = path.join(dir, "dist", browser);
   fs.mkdirSync(distPath, { recursive: true });
@@ -132,6 +159,7 @@ function project(options: { devtools?: boolean; browser?: string } = {}): { dir:
   fs.mkdirSync(readyDir, { recursive: true });
   fs.writeFileSync(path.join(readyDir, "ready.json"), JSON.stringify({ status: "ready", distPath }));
   extensionId = expectedId(distPath);
+
   return { dir, id: extensionId };
 }
 

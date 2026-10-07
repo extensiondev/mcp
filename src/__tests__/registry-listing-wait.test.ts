@@ -1,6 +1,7 @@
-import { describe, expect, it } from "vitest";
 import fs from "node:fs";
 import { fileURLToPath } from "node:url";
+
+import { describe, expect, it } from "vitest";
 
 /* @invariant The release publishes the tarball and then asks npm for it, and
    npm has served a fresh version anywhere from seconds to several minutes

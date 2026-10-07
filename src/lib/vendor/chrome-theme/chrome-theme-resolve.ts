@@ -99,7 +99,7 @@ export interface ResolvedChromeTheme {
     ntpBackgroundRepeat: "no-repeat" | "repeat" | "repeat-x" | "repeat-y";
   };
   /** Honored manifest keys that were dropped/ignored, with reasons. */
-  ignoredKeys: { key: string; reason: string; section?: "colors" | "tints" | "properties" }[];
+  ignoredKeys: Array<{ key: string; reason: string; section?: "colors" | "tints" | "properties" }>;
   /** Fidelity caveats (e.g. image-derived colors not modeled). */
   caveats: string[];
 }

@@ -1,7 +1,9 @@
-import { describe, it, expect } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+
+import { describe, it, expect } from "vitest";
+
 import { runExtensionCli } from "../lib/exec";
 import { handler as build } from "../tools/build";
 import { buildSummary, readyContract } from "./fixtures/engine-answers";
@@ -17,8 +19,10 @@ function fixtureProject(name: string): string {
       background: { service_worker: "background.js" },
     }),
   );
+
   fs.writeFileSync(path.join(dir, "package.json"), JSON.stringify({ name, version: "1.0.0" }));
   fs.writeFileSync(path.join(dir, "background.js"), "console.log('ok')\n");
+
   return dir;
 }
 
@@ -29,6 +33,7 @@ function missingKeys(fixture: Record<string, unknown>, real: Record<string, unkn
 describe.skipIf(!process.env.RUN_CLI_SMOKE)("real-CLI smoke (npx pin)", () => {
   it("builds a fixture project through the pinned extension CLI", async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-cli-smoke-"));
+
     try {
       fs.writeFileSync(
         path.join(dir, "manifest.json"),
@@ -39,10 +44,12 @@ describe.skipIf(!process.env.RUN_CLI_SMOKE)("real-CLI smoke (npx pin)", () => {
           background: { service_worker: "background.js" },
         }),
       );
+
       fs.writeFileSync(
         path.join(dir, "package.json"),
         JSON.stringify({ name: "cli-smoke", version: "1.0.0" }),
       );
+
       fs.writeFileSync(path.join(dir, "background.js"), "console.log('ok')\n");
 
       const { code, stdout, stderr } = await runExtensionCli(
@@ -63,6 +70,7 @@ describe.skipIf(!process.env.RUN_CLI_SMOKE)("real-CLI smoke (npx pin)", () => {
      that dist/chrome existed. */
   it("reads the pinned engine's own build answer and matches the fixtures to it", async () => {
     const dir = fixtureProject("cli-smoke-json");
+
     try {
       const result = JSON.parse(await build({ projectPath: dir, browser: "chrome" } as never));
       expect(result.ok, JSON.stringify(result.error)).toBe(true);

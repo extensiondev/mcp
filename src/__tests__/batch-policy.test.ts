@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
@@ -34,11 +35,13 @@ async function connected(options: ServerOptions): Promise<Client> {
   await createServer(options).connect(serverTransport);
   const client = new Client({ name: "batch-policy-probe", version: "0.0.0" });
   await client.connect(clientTransport);
+
   return client;
 }
 
 async function call(client: Client, name: string, args: Record<string, unknown>) {
   const result = await client.callTool({ name, arguments: args });
+
   return {
     isError: result.isError === true,
     body: JSON.parse((result.content as Array<{ text: string }>)[0]!.text),
@@ -50,6 +53,7 @@ function platformAnswers() {
     const href = String(url);
     const json = (body: unknown, status = 200) =>
       new Response(JSON.stringify(body), { status });
+
     if (href.endsWith("/api/cli/login/config")) {
       return json({
         batchOnboarding: {
@@ -58,6 +62,7 @@ function platformAnswers() {
         },
       });
     }
+
     if (href.endsWith("/api/cli/device/code")) {
       return json({
         device_code: "dev-code",
@@ -67,9 +72,11 @@ function platformAnswers() {
         body: init?.body,
       });
     }
+
     if (href.endsWith("/api/cli/device/token")) {
       return json({ error: "authorization_pending" }, 400);
     }
+
     throw new Error(`Unexpected fetch: ${href}`);
   });
 }
@@ -90,6 +97,7 @@ beforeEach(() => {
   fetchMock = vi.fn(async () => {
     throw new Error("batch policy tests never reach the network");
   });
+
   vi.stubGlobal("fetch", fetchMock);
   resetBatchCreateSessions();
 });
@@ -99,6 +107,7 @@ afterEach(() => {
     if (saved[key] === undefined) delete process.env[key];
     else process.env[key] = saved[key];
   }
+
   vi.unstubAllGlobals();
   fs.rmSync(tmp, { recursive: true, force: true });
 });
@@ -114,6 +123,7 @@ describe("a batch sits in the same policy row as its single twin", () => {
 
   it("is refused with its twin when the platform group is off", async () => {
     const client = await connected({ features: ["local"], noShip: false });
+
     for (const [name, single, batch] of [
       ["extension_project_create", { project: "acme/app", repo: "octo/app" }, { projects: CREATE_LIST }],
       ["extension_auth", { action: "login", project: "acme/app" }, { action: "login", projects: LOGIN_LIST }],
@@ -125,11 +135,13 @@ describe("a batch sits in the same policy row as its single twin", () => {
       expect(many.body.error.code, name).toBe("E_TOOL_DISABLED");
       expect(many.body.status, name).toBe(one.body.status);
     }
+
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("is let through no-ship mode exactly as its twin is", () => {
     const noShip = { features: [...FEATURE_GROUPS], noShip: true };
+
     for (const [name, single, batch] of [
       ["extension_project_create", { project: "acme/app", repo: "octo/app" }, { projects: CREATE_LIST }],
       ["extension_auth", { action: "login", project: "acme/app" }, { action: "login", projects: LOGIN_LIST }],
@@ -157,6 +169,7 @@ describe("--project holds a batch to the pinned project, name by name", () => {
   ] as const)("refuses %s", (_label, name, args, toolSchema) => {
     const out = pinProjectArgs(name, args, toolSchema.inputSchema, pinned);
     expect("refused" in out).toBe(true);
+
     if ("refused" in out) {
       const body = JSON.parse(out.refused);
       expect(body.status).toBe("project-pinned");
@@ -173,6 +186,7 @@ describe("--project holds a batch to the pinned project, name by name", () => {
       pinned,
     );
     expect("refused" in out).toBe(true);
+
     if ("refused" in out) {
       expect(JSON.parse(out.refused).value.named).toEqual(["acme/other", "acme/third"]);
     }
@@ -187,6 +201,7 @@ describe("--project holds a batch to the pinned project, name by name", () => {
         args,
       });
     }
+
     const create = { projects: [{ project: "acme/app", repo: "octo/app" }] };
     expect(
       pinProjectArgs("extension_project_create", create, createSchema.inputSchema, pinned),
@@ -202,6 +217,7 @@ describe("--project holds a batch to the pinned project, name by name", () => {
 
   it("refuses both batches through a real pinned server before any request leaves", async () => {
     const client = await connected(pinned);
+
     for (const [name, args] of [
       ["extension_project_create", { projects: CREATE_LIST }],
       ["extension_auth", { action: "login", projects: LOGIN_LIST }],
@@ -211,6 +227,7 @@ describe("--project holds a batch to the pinned project, name by name", () => {
       expect(out.body.status, name).toBe("project-pinned");
       expect(out.body.value.named, name).toEqual(["acme/other"]);
     }
+
     expect(fetchMock).not.toHaveBeenCalled();
   });
 

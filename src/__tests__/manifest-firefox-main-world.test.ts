@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+
 import { handler } from "../tools/manifest-validate";
 
 describe("extension_manifest_validate: content_scripts world MAIN on firefox", () => {
@@ -15,6 +16,7 @@ describe("extension_manifest_validate: content_scripts world MAIN on firefox", (
     global.fetch = (async () => {
       throw new Error("offline");
     }) as unknown as typeof fetch;
+
     fs.writeFileSync(path.join(tmp, "content.js"), "console.log('hi');\n");
     fs.writeFileSync(
       path.join(tmp, "manifest.json"),

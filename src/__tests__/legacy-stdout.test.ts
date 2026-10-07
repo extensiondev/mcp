@@ -2,7 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import type { ChildProcess } from "node:child_process";
+
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
@@ -17,6 +17,8 @@ import {
   writePreSchema1ContractError,
   writeSchema1ContractError,
 } from "./fixtures/ready-contract";
+
+import type { ChildProcess } from "node:child_process";
 
 const srcDir = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -61,10 +63,12 @@ describe("the deprecated stdout fallback", () => {
     expect(
       legacyCompileScrape("✖✖✖ Probe compiled with errors in 180 ms."),
     ).toBe(true);
+
     expect(legacyCompileScrape("ready in 300ms")).toBe(false);
     expect(
       legacyProfileLockScrape("Failed to create SingletonLock: File exists"),
     ).toBe(true);
+
     expect(legacyProfileLockScrape("ready in 300ms")).toBe(false);
   });
 });
@@ -75,6 +79,7 @@ describe("the capability probe", () => {
     expect(speaksMachineContract({ schemaVersion: 2, status: "error" })).toBe(
       false,
     );
+
     expect(speaksMachineContract({ schema: "1" })).toBe(false);
     expect(speaksMachineContract(null)).toBe(false);
   });
@@ -107,6 +112,7 @@ describe("the scrapes are still reachable, and only below the schema-1 floor", (
     const file = readyContractPath(dir, "chrome");
     fs.mkdirSync(path.dirname(file), { recursive: true });
     fs.writeFileSync(file, JSON.stringify(contract));
+
     return dir;
   }
 
@@ -219,9 +225,11 @@ describe("the scrapes are still reachable, and only below the schema-1 floor", (
       ),
     ).version as string;
     const release = /^(\d+)\.(\d+)\.(\d+)(?:[-+].*)?$/.exec(installed);
+
     if (!release) {
       throw new Error(`engine version is not a semver release: ${installed}`);
     }
+
     const [major, minor, patch] = release.slice(1).map(Number);
     expect(major * 1_000_000 + minor * 1_000 + patch).toBeGreaterThanOrEqual(
       4 * 1_000_000 + 0 * 1_000 + 17,

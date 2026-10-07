@@ -29,21 +29,25 @@ export function buildCreateBody(args: {
     ).map((name) => String(name).trim().toLowerCase()),
   );
   const several = wanted.size > 1;
+
   const outputFor = (name: string) => {
     const override = args.outputDirectories?.[name];
     if (typeof override === "string" && override.trim()) return override.trim();
+
     const pattern = String(args.outputDirectory || "").trim();
     if (pattern.includes("<browser>")) return pattern.replaceAll("<browser>", name);
     if (pattern && !several) return pattern;
 
     return `dist/${name}`;
   };
+
   const browser = (name: string) => ({
     enabled: wanted.has(name),
     installCommand,
     buildCommand,
     outputDirectory: outputFor(name),
   });
+
   return {
     info: {
       id: "",

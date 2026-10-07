@@ -46,15 +46,19 @@ export function parseSafariDriverHelp(helpText: string): {
       (m) => m[1],
     ),
   );
+
   return { mcp: flags.has("mcp"), bidi: flags.has("bidi") };
 }
 
 export function safariDriverCandidates(safariBinary: string | null): string[] {
   const candidates: string[] = [];
+
   if (safariBinary) {
     candidates.push(path.join(path.dirname(safariBinary), "safaridriver"));
   }
+
   candidates.push("/usr/bin/safaridriver");
+
   return Array.from(new Set(candidates));
 }
 
@@ -66,10 +70,12 @@ export async function readSafariDriverHelp(
       timeout: 5000,
       env: { ...process.env },
     });
+
     return `${stdout}\n${stderr}`;
   } catch (error) {
     const failed = error as { stdout?: string; stderr?: string };
     const text = `${failed.stdout ?? ""}\n${failed.stderr ?? ""}`.trim();
+
     return text.length > 0 ? text : null;
   }
 }
@@ -85,13 +91,17 @@ export async function detectSafariAutomation(
      SUCH. A candidate whose --help could not be read used to fall through
      to the absent-driver answer. */
   let unreadable: string | null = null;
+
   for (const candidate of safariDriverCandidates(safariBinary)) {
     if (!fs.existsSync(candidate)) continue;
+
     const help = await readSafariDriverHelp(candidate);
+
     if (help === null) {
       unreadable = unreadable ?? candidate;
       continue;
     }
+
     return { safaridriver: candidate, ...parseSafariDriverHelp(help) };
   }
 
@@ -103,6 +113,7 @@ export async function detectSafariAutomation(
       helpUnreadable: `${unreadable} --help printed nothing or could not be run, so whether it has --mcp is unknown`,
     };
   }
+
   return { safaridriver: null, mcp: false, bidi: false };
 }
 
@@ -111,6 +122,7 @@ export async function readSafariVersion(
 ): Promise<string | null> {
   const plist = path.resolve(safariBinary, "..", "..", "Info.plist");
   if (!fs.existsSync(plist)) return null;
+
   try {
     const { stdout } = await execFileAsync(
       "/usr/bin/defaults",
@@ -118,6 +130,7 @@ export async function readSafariVersion(
       { timeout: 5000 },
     );
     const version = stdout.trim();
+
     return /^\d+(\.\d+)*$/.test(version) ? version : null;
   } catch {
     return null;
@@ -132,11 +145,13 @@ export function safariAutomationHint(automation: SafariAutomation): string {
       "It drives an isolated automation window with page-level tools (tabs, console, network, screenshots, evaluate); it has no extension-aware tool, so use it to read a page your content script touches, not the popup or background."
     );
   }
+
   if (automation.safaridriver) {
     return (
       `This safaridriver (${automation.safaridriver}) has no --mcp flag: Apple's Safari MCP server needs Safari 27 or Safari Technology Preview 247+. ` +
       "Until then a Safari session is build, open and enable only: this server's inspect and DOM readers do not reach it, while extension_logs still reads what the extension itself logs through the bridge."
     );
   }
+
   return "No safaridriver found beside Safari, so no automation reading is possible for it from this machine.";
 }

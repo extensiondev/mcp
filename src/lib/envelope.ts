@@ -187,19 +187,23 @@ export interface EnvelopeInit {
   error?: EnvelopeError | null;
   truncated?: boolean;
   hint?: string;
-  warnings?: (string | null | undefined | false)[];
+  warnings?: Array<string | null | undefined | false>;
 }
 
 const collectWarnings = (
   warnings: EnvelopeInit["warnings"],
 ): string[] => {
   if (!warnings) return [];
+
   const kept: string[] = [];
+
   for (const warning of warnings) {
     if (typeof warning !== "string") continue;
+
     const text = warning.trim();
     if (text && !kept.includes(text)) kept.push(text);
   }
+
   return kept;
 };
 
@@ -215,6 +219,7 @@ export function envelopeObject(init: EnvelopeInit): Envelope {
   };
   if (init.truncated !== undefined) frame.truncated = init.truncated;
   if (typeof init.hint === "string" && init.hint) frame.hint = init.hint;
+
   return frame;
 }
 

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+
 import { makeFilter } from "../tools/logs-filter";
 import { validateToolInput } from "../lib/validate-input";
 import { schema as logsSchema } from "../tools/logs";
@@ -9,9 +10,11 @@ describe("extension_logs level: off", () => {
     expect(
       matches({ context: "background", level: "error", message: "boom" }),
     ).toBe(false);
+
     expect(
       matches({ context: "content", level: "info", message: "hi" }),
     ).toBe(false);
+
     expect(matches({ context: "popup", level: "trace" })).toBe(false);
   });
 

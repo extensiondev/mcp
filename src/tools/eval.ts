@@ -6,13 +6,14 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
+import crypto from "node:crypto";
+import fs from "node:fs";
+
 import {
   CALL_TIMEOUT,
   SESSION_BROWSER,
   SESSION_PROJECT_PATH,
 } from "../lib/common-schema";
-import crypto from "node:crypto";
-import fs from "node:fs";
 import {
   RELAY_MARK,
   readRelayFrame,
@@ -100,16 +101,19 @@ export function chromiumManifestVersion(
 ): 2 | 3 | null {
   for (const file of manifestCandidates(projectPath, browser)) {
     let manifest: Record<string, any>;
+
     try {
       manifest = JSON.parse(fs.readFileSync(file, "utf8"));
     } catch {
       continue;
     }
+
     const version =
       manifest["chromium:manifest_version"] ?? manifest.manifest_version;
     if (version === 3) return 3;
     if (version === 2) return 2;
   }
+
   return null;
 }
 
@@ -119,11 +123,13 @@ export function geckoManifestVersion(
 ): 2 | 3 | null {
   for (const file of manifestCandidates(projectPath, browser)) {
     let manifest: Record<string, any>;
+
     try {
       manifest = JSON.parse(fs.readFileSync(file, "utf8"));
     } catch {
       continue;
     }
+
     const version =
       manifest["firefox:manifest_version"] ??
       manifest["gecko:manifest_version"] ??
@@ -131,6 +137,7 @@ export function geckoManifestVersion(
     if (version === 3) return 3;
     if (version === 2) return 2;
   }
+
   return null;
 }
 
@@ -139,6 +146,7 @@ export function resolveDefaultEvalContext(
   browser: string,
 ): "background" | "page" {
   if (!isChromiumFamily(browser)) return "background";
+
   return chromiumManifestVersion(projectPath, browser) === 3
     ? "page"
     : "background";
@@ -164,6 +172,7 @@ export function wantsExtensionPageOverCdp(
   if (!isChromiumFamily(browser) || !context) return false;
   if (context === "background") return true;
   if (context === "page") return typeof url === "string" && url.length > 0;
+
   return (
     EXTENSION_PAGE_CONTEXTS.includes(context) &&
     chromiumManifestVersion(projectPath, browser) === 3
@@ -191,8 +200,10 @@ async function evaluateOnChromiumExtensionPage(
   resolved: { port: number },
 ): Promise<string> {
   let wanted: string;
+
   if (context === "background") {
     const extensionId = await resolveExtensionId(args.projectPath, browser);
+
     if (!extensionId) {
       return envelope({
         ok: false,
@@ -207,13 +218,17 @@ async function evaluateOnChromiumExtensionPage(
         hint: `Confirm the session is ready (extension_wait). ${CDP_PORT_MISSING_HINT}`,
       });
     }
+
     const workersRead = await readExtensionWorkerTargets(resolved.port, extensionId);
     if ("unreadable" in workersRead) return targetsUnreadable(workersRead.unreadable);
+
     let workers = workersRead.targets.filter((t) => BACKGROUND_TARGET_TYPES.has(t.type));
     const wakeWarnings: string[] = [];
+
     if (workers.length === 0) {
       const wake = await wakeExtensionWorker(resolved.port, extensionId);
       const woken = wake.woken ? wake.targets.filter((t) => BACKGROUND_TARGET_TYPES.has(t.type)) : [];
+
       if (wake.woken && woken.length > 0) {
         workers = woken;
         wakeWarnings.push(
@@ -233,6 +248,7 @@ async function evaluateOnChromiumExtensionPage(
         });
       }
     }
+
     const target = workers[0];
     const outcome = await evaluateOnExtensionPage(
       resolved.port,
@@ -240,6 +256,7 @@ async function evaluateOnChromiumExtensionPage(
       args.expression,
       args.timeout,
     );
+
     if (!outcome.ok) {
       return envelope({
         ok: false,
@@ -255,6 +272,7 @@ async function evaluateOnChromiumExtensionPage(
           : "The session's debug port refused the call or the worker went away mid-call. extension_doctor names which.",
       });
     }
+
     return envelope({
       ok: true,
       command: schema.name,
@@ -272,18 +290,23 @@ async function evaluateOnChromiumExtensionPage(
       hint: `Evaluated over CDP in the extension's ${target.type} (${target.url}), the inspector path the extension CSP does not govern; a returned promise is awaited.`,
     });
   }
+
   if (context === "page" && !isExtensionUrl(args.url)) {
     const url = args.url as string;
     const matches = matchTargetsByUrl(await listPageTargets(resolved.port), url);
     if (matches.length === 0) return RELAY_INSTEAD;
+
     return evaluateOnWebTarget(args, matches, url, browser);
   }
+
   if (context === "page") {
     wanted = args.url as string;
   } else {
     const doc = surfaceDocument(args.projectPath, browser, context);
+
     if (!doc) {
       const key = SURFACE_MANIFEST_KEYS[context] ?? context;
+
       return envelope({
         ok: false,
         command: schema.name,
@@ -296,7 +319,9 @@ async function evaluateOnChromiumExtensionPage(
         hint: `To add one, set ${key} in the manifest and rebuild.`,
       });
     }
+
     const extensionId = await resolveExtensionId(args.projectPath, browser);
+
     if (!extensionId) {
       return envelope({
         ok: false,
@@ -311,11 +336,15 @@ async function evaluateOnChromiumExtensionPage(
         hint: `Confirm the session is ready (extension_wait). ${CDP_PORT_MISSING_HINT}`,
       });
     }
+
     wanted = `chrome-extension://${extensionId}/${doc}`;
   }
+
   const pagesRead = await readExtensionPageTargets(resolved.port, wanted);
   if ("unreadable" in pagesRead) return targetsUnreadable(pagesRead.unreadable);
+
   const targets = pagesRead.targets.filter((t) => !isBrowserErrorPage(t.url));
+
   if (targets.length === 0) {
     return envelope({
       ok: false,
@@ -332,6 +361,7 @@ async function evaluateOnChromiumExtensionPage(
           : `Open it first with extension_open surface: "${context}", then retry. extension_dom_snapshot with listTargets: true lists what is open.`,
     });
   }
+
   const target = targets[0];
   const outcome = await evaluateOnExtensionPage(
     resolved.port,
@@ -345,6 +375,7 @@ async function evaluateOnChromiumExtensionPage(
         `${targets.length} open pages match ${wanted}; evaluated in target ${target.targetId} (${target.url}). The others: ${others.map((t) => t.targetId).join(", ")}. Close the copies you do not mean, or navigate away from them.`,
       ]
     : [];
+
   if (!outcome.ok) {
     return envelope({
       ok: false,
@@ -361,6 +392,7 @@ async function evaluateOnChromiumExtensionPage(
         : "The session's debug port refused the call or the target went away. extension_doctor names which; a session that ended needs extension_dev again.",
     });
   }
+
   return envelope({
     ok: true,
     command: schema.name,
@@ -383,14 +415,18 @@ async function evaluateOnWebKitPage(
   info: WebDriverSessionInfo,
 ): Promise<string> {
   const client = new WebDriverClient(info);
+
   if (args.url) {
     const current = await client.currentUrl().catch(() => null);
+
     if (!current || !current.startsWith(args.url)) {
       await client.navigate(args.url);
     }
   }
+
   try {
     const value = await client.execute(`return (${args.expression});`);
+
     return envelope({
       ok: true,
       command: schema.name,
@@ -436,7 +472,9 @@ async function evaluateOnWebTarget(
 ): Promise<string> {
   const resolved = await resolveCdpPort(args.projectPath, browser);
   if (!resolved) return RELAY_INSTEAD;
+
   const live = matches.filter((t) => !isBrowserErrorPage(t.url));
+
   if (live.length === 0) {
     return envelope({
       ok: false,
@@ -450,8 +488,10 @@ async function evaluateOnWebTarget(
       hint: "The page was blocked or failed to load; open it again with extension_open and read the browser's reason in the tab title.",
     });
   }
+
   const target = live[0];
   const outcome = await evaluateOnExtensionPage(resolved.port, target.targetId, args.expression, args.timeout);
+
   if (!outcome.ok) {
     return envelope({
       ok: false,
@@ -467,6 +507,7 @@ async function evaluateOnWebTarget(
         : "The session's debug port refused the call or the tab went away. extension_doctor names which.",
     });
   }
+
   return envelope({
     ok: true,
     command: schema.name,
@@ -492,6 +533,7 @@ const RELAY_DEFAULT_BUDGET_MS = 30_000;
 function tryParseFrame(raw: string): Record<string, any> | null {
   try {
     const parsed = JSON.parse(raw);
+
     return parsed && typeof parsed === "object" ? parsed : null;
   } catch {
     return null;
@@ -521,13 +563,18 @@ async function evaluateThroughRelay(
     );
   let raw = await run(relaySafeExpression(args.expression, token));
   let parsed = tryParseFrame(raw);
+
   if (isGeckoFamily(browser) && cspRefusedFrame(parsed)) {
     return evaluatePastSurfaceCsp(args, context, run);
   }
+
   if (!parsed || parsed.ok !== true) return raw;
+
   let frame = readRelayFrame(parsed.value);
   if (!frame) return raw;
+
   let polls = 0;
+
   while (!frame.done) {
     if (Date.now() >= deadline) {
       return envelope({
@@ -543,15 +590,19 @@ async function evaluateThroughRelay(
         hint: `Its outcome lands in globalThis.${RELAY_MARK}[${JSON.stringify(token)}] inside the ${context} page when it settles ({done, ok, value}): read it with extension_eval in the same context, or pass a larger timeout to wait here.`,
       });
     }
+
     await new Promise((r) => setTimeout(r, RELAY_POLL_MS));
     polls += 1;
     raw = await run(relayPollExpression(token));
     parsed = tryParseFrame(raw);
     if (!parsed || parsed.ok !== true) return raw;
+
     const next = readRelayFrame(parsed.value);
     if (!next) return raw;
+
     frame = next;
   }
+
   if (frame.ok === false) {
     return envelope({
       ok: false,
@@ -565,20 +616,26 @@ async function evaluateThroughRelay(
       hint: `The expression threw, or the promise it returned rejected, inside the ${context} page.`,
     });
   }
+
   parsed.value = frame.value === undefined ? null : frame.value;
+
   if (polls > 0) {
     parsed.hint =
-      `The expression returned a promise; the ${context} page settled it and this call polled ${polls} time${polls === 1 ? "" : "s"} for the result. ` +
-      (typeof parsed.hint === "string" ? parsed.hint : "");
+      `The expression returned a promise; the ${context} page settled it and this call polled ${polls} time${polls === 1 ? "" : "s"} for the result. ${ 
+      typeof parsed.hint === "string" ? parsed.hint : ""}`;
   }
+
   return actFrameJson(parsed);
 }
 
 /* @invariant The engine blames the expression for the extension's own CSP:
    "call to eval() blocked by CSP" comes back as E_EVAL with "check the
-   expression itself", while any expression fails the same way in a page whose
-   content_security_policy forbids eval (every MV3 extension page with an
-   explicit policy, and MV3 backgrounds). The hint names the policy and the
+   expression itself", while any expression fails the same way in a document
+   whose content_security_policy forbids eval. That is a declared policy, not
+   MV3 as such: measured 2026-10-07 on Extension.js 4.1.32, a Firefox MV3
+   event page built from the action template (firefox:manifest_version 3,
+   firefox:scripts background) answered background evals ok, as its MV2 twin
+   did. The hint names the policy and the
    paths that do not go through eval. From Extension.js
    4.1.31 the engine names the refusal itself as E_CSP_BLOCKS_EVAL, in every
    context, so both spellings are read here: a check for E_EVAL alone goes
@@ -587,8 +644,10 @@ const CSP_EVAL_REFUSAL = /blocked by CSP|call to eval|unsafe-eval|Content Securi
 
 function cspRefusedFrame(parsed: Record<string, any> | null): boolean {
   if (!parsed || parsed.ok !== false) return false;
+
   const code = typeof parsed.error?.code === "string" ? parsed.error.code : "";
   if (code === "E_CSP_BLOCKS_EVAL") return true;
+
   return code === "E_EVAL" && CSP_EVAL_REFUSAL.test(String(parsed.error?.message ?? ""));
 }
 
@@ -599,12 +658,14 @@ function cspRefusalHint(context: string | undefined): string {
       "Pass url so the tab is evaluated through the browser's debugger, which the policy does not govern (CDP on Chromium, the debugger protocol on Firefox), or read the page with extension_dom_snapshot or extension_inspect."
     );
   }
+
   if (context === "content") {
     return (
       "The extension's content_security_policy forbids eval in its content-script world on this engine, so no string runs there; this is the extension's policy, not a fault in the expression. " +
       'Evaluate the page itself with context: "page" and a url, or read the DOM the content script sees with extension_dom_snapshot or extension_inspect.'
     );
   }
+
   return (
     `The extension's content_security_policy (or the MV3 default) forbids eval in its own ${context ?? "background"} context, so the in-page executor cannot run any expression there; this is the extension's policy, not a fault in the expression. ` +
     "Read the page instead with extension_dom_snapshot or extension_inspect, evaluate a web page with context: \"page\" and a url, or read the extension's console with extension_logs. On a Chromium MV3 session the extension's own pages evaluate over CDP, which the page policy does not govern. " +
@@ -615,9 +676,11 @@ function cspRefusalHint(context: string | undefined): string {
 function explainCspRefusal(raw: string, context: string | undefined): string | null {
   const parsed = tryParseFrame(raw);
   if (!parsed || !cspRefusedFrame(parsed)) return null;
+
   parsed.error.name = "CspBlocksEval";
   parsed.hint = cspRefusalHint(context);
   if (typeof parsed.error.hint === "string") delete parsed.error.hint;
+
   return actFrameJson(parsed);
 }
 
@@ -642,6 +705,7 @@ function pageEvalRefusedByCsp(parsed: Record<string, any>): boolean {
 function isSingleExpression(source: string): boolean {
   try {
     new Function(`return (${source}\n)`);
+
     return true;
   } catch {
     return false;
@@ -685,14 +749,18 @@ async function evaluatePastSurfaceCsp(
   run: (expression: string) => Promise<string>,
 ): Promise<string> {
   if (!isSingleExpression(args.expression)) return notOneExpression();
+
   const direct = await run(args.expression);
   const frame = tryParseFrame(direct);
   if (!frame) return direct;
   if (cspRefusedFrame(frame)) return explainCspRefusal(direct, context) ?? direct;
+
   if (frame.ok === true && frame.value === undefined) {
     frame.value = null;
+
     return actFrameJson(frame);
   }
+
   return direct;
 }
 
@@ -708,6 +776,7 @@ function tabByUrl(tabs: RdpTab[], url: string, seen?: { matched: number }): RdpT
     ? covered
     : tabs.filter((tab) => String(tab.url ?? "").includes(url));
   if (seen) seen.matched = candidates.length;
+
   return candidates.find((tab) => tab.selected === true) ?? candidates[0];
 }
 
@@ -736,7 +805,9 @@ async function evaluateInGeckoTab(
      published port whose call threw used to return null too, and the caller
      then said the url "matches none of the surface documents". */
   if (!resolved) return null;
+
   let outcome: Awaited<ReturnType<typeof rdpEvaluateInTab>>;
+
   try {
     outcome = await rdpEvaluateInTab(resolved.port, {
       select,
@@ -756,6 +827,7 @@ async function evaluateInGeckoTab(
       hint: "extension_doctor says whether the browser is still up; if it is, retry.",
     });
   }
+
   if (outcome.ok) {
     /* @invariant THE ANSWER NAMES THE TAB IT RAN IN, and says when several
        tabs matched the url and one was picked. */
@@ -772,6 +844,7 @@ async function evaluateInGeckoTab(
       ],
     });
   }
+
   if (outcome.name === "TargetNotFound") {
     return envelope({
       ok: false,
@@ -781,6 +854,7 @@ async function evaluateInGeckoTab(
       hint: "Open the page first with extension_open and its url, then retry; extension_dom_snapshot with listTabs: true lists what is open.",
     });
   }
+
   if (outcome.name === "Timeout") {
     return envelope({
       ok: false,
@@ -790,11 +864,13 @@ async function evaluateInGeckoTab(
       hint: "The expression returned a promise that is still pending; pass a larger timeout to wait for it.",
     });
   }
+
   /* @invariant THE HINT FOLLOWS WHAT FAILED. Unsupported means nothing ran
      and EvalLost means the document went away mid-call; only EvalError is
      the expression's own throw. */
   const lost = outcome.name === "EvalLost";
   const unsupported = outcome.name === "Unsupported";
+
   return envelope({
     ok: false,
     command: schema.name,
@@ -821,10 +897,12 @@ function backgroundRouteRefusedStatements(
   raw: string,
 ): boolean {
   if (!isGeckoFamily(browser) || (context ?? "background") !== "background") return false;
+
   const failed = tryParseFrame(raw);
   if (!failed || failed.ok !== false) return false;
   if (failed.error?.name !== "Unavailable") return false;
   if (!/SyntaxError/.test(String(failed.error?.message ?? ""))) return false;
+
   return !isSingleExpression(args.expression);
 }
 
@@ -838,8 +916,10 @@ async function evaluatePagePastSiteCsp(
   if (!cspRefusedFrame(tryParseFrame(raw))) return null;
   if (!args.url && args.tab != null) return null;
   if (!isSingleExpression(args.expression)) return notOneExpression();
+
   const url = args.url;
   const seen = { matched: 0 };
+
   return evaluateInGeckoTab(
     args,
     browser,
@@ -859,14 +939,17 @@ async function evaluateThroughExecuteScript(
 ): Promise<string | null> {
   if (context !== "page" && context !== "content") return null;
   if (isChromiumFamily(browser)) return null;
+
   const parsed = tryParseFrame(raw);
   if (!parsed || parsed.ok !== false) return null;
+
   const noScriptingApi = NO_SCRIPTING_API.test(String(parsed.error?.message ?? ""));
   const cspRefused =
     !noScriptingApi &&
     pageEvalRefusedByCsp(parsed) &&
     geckoManifestVersion(args.projectPath, browser) === 2;
   if (!noScriptingApi && !cspRefused) return null;
+
   const why = cspRefused
     ? "the page's content security policy refused the in-page eval"
     : `${browser} MV2 has no scripting API`;
@@ -887,7 +970,9 @@ async function evaluateThroughExecuteScript(
   );
   const frame = tryParseFrame(wrapped);
   if (!frame || frame.ok !== true) return wrapped ?? raw;
+
   const value = frame.value;
+
   if (value && typeof value === "object" && typeof value.error === "string") {
     return envelope({
       ok: false,
@@ -897,11 +982,13 @@ async function evaluateThroughExecuteScript(
       hint: `Because ${why}, the expression went through tabs.executeScript from the background and that call failed. The tab must be a web page the extension holds host permissions for; extension pages cannot be injected into.`,
     });
   }
+
   const first = Array.isArray(value?.frames) ? value.frames[0] : undefined;
   const result =
     first && typeof first === "object" && first.__extensionDevExec === 1
       ? first
       : { ok: true, value: first === undefined ? null : first };
+
   if (result.ok === false) {
     return envelope({
       ok: false,
@@ -915,6 +1002,7 @@ async function evaluateThroughExecuteScript(
       hint: "The expression threw inside the tab (run through tabs.executeScript in the content world).",
     });
   }
+
   return envelope({
     ok: true,
     command: schema.name,
@@ -933,14 +1021,17 @@ export async function handler(
   args: ActArgs & { expression: string },
 ): Promise<string> {
   const { browser } = resolveSessionBrowser(args.projectPath, args.browser);
+
   if (WEBKIT_FAMILY.has(browser) && args.context === "page") {
     const info = readWebDriverSession(args.projectPath, browser);
     if (info) return evaluateOnWebKitPage(args, browser, info);
   }
+
   const defaulted =
     !args.context &&
     resolveDefaultEvalContext(args.projectPath, browser) === "page";
   const context = defaulted ? "page" : args.context;
+
   if (wantsExtensionPageOverCdp(args.projectPath, browser, context, args.url)) {
     if (!evalTokenPresent(args.projectPath, browser)) {
       return envelope({
@@ -956,7 +1047,9 @@ export async function handler(
         hint: "Call extension_dev again with allowEval: true and replace: true (it stops this session first), then extension_eval again. Reads that need no eval still work: extension_dom_snapshot, extension_inspect, extension_logs, extension_assert.",
       });
     }
+
     const resolved = await resolveCdpPort(args.projectPath, browser);
+
     if (resolved) {
       const overCdp = await evaluateOnChromiumExtensionPage(
         args,
@@ -967,6 +1060,7 @@ export async function handler(
       if (overCdp !== RELAY_INSTEAD) return overCdp;
     }
   }
+
   /* @invariant On an engine with no CDP, a page inside the extension has one
      door: the surface relay of the context that document belongs to. The
      engine's page path answers "chrome.scripting is not available ... use
@@ -979,6 +1073,7 @@ export async function handler(
       browser,
       args.url as string,
     );
+
     if (surface) {
       const raw = await evaluateThroughRelay(
         { ...args, url: undefined, tab: undefined },
@@ -986,17 +1081,22 @@ export async function handler(
         surface.context,
       );
       const parsed = tryParseFrame(raw);
+
       if (parsed) {
         addWarning(
           parsed,
           `${args.url} is the extension's own ${surface.context} document (${surface.document}), which script injection cannot reach on any engine, so this evaluated through the ${surface.context} surface relay. Pass context: "${surface.context}" directly next time.`,
         );
+
         return actFrameJson(parsed);
       }
+
       return raw;
     }
+
     if (isGeckoFamily(browser)) {
       if (!isSingleExpression(args.expression)) return notOneExpression();
+
       const url = args.url as string;
       const overProtocol = await evaluateInGeckoTab(
         args,
@@ -1006,7 +1106,9 @@ export async function handler(
       );
       if (overProtocol !== null) return overProtocol;
     }
+
     const declared = declaredSurfaces(args.projectPath, browser) ?? [];
+
     return envelope({
       ok: false,
       command: schema.name,
@@ -1021,9 +1123,11 @@ export async function handler(
         : "Declare the page as a surface in the manifest (action.default_popup, options_ui.page, sidebar_action.default_panel or chrome_url_overrides) and rebuild.",
     });
   }
+
   if (context && EXTENSION_PAGE_CONTEXTS.includes(context)) {
     return evaluateThroughRelay(args, browser, context);
   }
+
   /* @invariant Options before "--", positionals after: the engine's commander
      parser reads a dash-leading expression as an unknown option unless the
      separator precedes it, and treats everything after "--" as operands. */
@@ -1042,39 +1146,50 @@ export async function handler(
 
   const mv2Fallback = await evaluateThroughExecuteScript(args, browser, context, raw);
   if (mv2Fallback !== null) return mv2Fallback;
+
   const pastSiteCsp = await evaluatePagePastSiteCsp(args, browser, context, raw);
   if (pastSiteCsp !== null) return pastSiteCsp;
+
   if (backgroundRouteRefusedStatements(args, browser, context, raw)) {
     return notOneExpression();
   }
+
   const cspRefusal = explainCspRefusal(raw, context);
   if (cspRefusal !== null) return cspRefusal;
+
   const trustedTypes = tryParseFrame(raw);
+
   if (
     trustedTypes?.ok === false &&
     TRUSTED_TYPES_REFUSAL.test(String(trustedTypes.error?.message ?? ""))
   ) {
     trustedTypes.hint =
       "This site enforces Trusted Types, which refuse a string evaluated inside the page. Pass url so the tab is evaluated over CDP (the inspector path the policy does not govern), or use context: \"content\" for a DOM read from the extension's isolated world.";
+
     return actFrameJson(trustedTypes);
   }
+
   if (args.context === "content") {
     try {
       const parsed = JSON.parse(raw);
+
       if (parsed?.ok === true && (parsed.value === null || parsed.value === undefined)) {
         addWarning(
           parsed,
           "On Extension.js >= 4.0.14 a failed injection errors explicitly, so this null is the expression's real result. On OLDER engines (bug 61) it could mean the injection never ran; if this result looks wrong, check the engine version with extension_doctor, or verify with extension_logs or context:'page'.",
         );
+
         return actFrameJson(parsed);
       }
     } catch {
       // non-JSON payload; pass through untouched
     }
   }
+
   if (defaulted) {
     try {
       const parsed = JSON.parse(raw);
+
       if (parsed && typeof parsed === "object") {
         /* @invariant THE PAGE'S VALUE IS NEVER EDITED: the default is said in
            a warning, not written into what the expression returned. */
@@ -1082,6 +1197,7 @@ export async function handler(
           parsed,
           'No context given: defaulted to "page" (the active tab). Pass context: "background" to evaluate in the service worker, which this tool reaches over the debug port.',
         );
+
         const code =
           typeof parsed.error?.code === "string" ? parsed.error.code : "";
         /* @invariant The code arm is the right one to read and still is not the
@@ -1100,15 +1216,18 @@ export async function handler(
           /cannot access|chrome-extension:\/\/|chrome:\/\/|no active tab|missing host permission/i.test(
             JSON.stringify(parsed.error ?? ""),
           );
+
         if (parsed.ok === false && unreachable) {
           parsed.hint =
             "The active tab could not be reached: it is a browser or extension page, a site outside the extension's host permissions, or there is no active tab. Navigate the dev browser to a page the extension may script, or pass url (match pattern) or tab to pick one; extension_dom_snapshot with listTabs: true lists open tabs.";
         }
+
         return actFrameJson(parsed);
       }
     } catch {
       // non-JSON payload; pass through untouched
     }
   }
+
   return raw;
 }

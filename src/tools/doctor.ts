@@ -9,6 +9,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
+
 import { exactVersion, pinnedCliVersion, runExtensionCli } from "../lib/exec";
 import { nodeCheck } from "../lib/node-engine";
 import {
@@ -34,6 +35,7 @@ import {
   readyContractPath,
   sessionArtifactsRootDir,
 } from "../lib/session-paths";
+
 import type { ReadyContract } from "../lib/types";
 
 /* @invariant Deliberately NOT the engine's readReadyContract, which
@@ -59,6 +61,7 @@ function readContractForDiagnosis(
       readyContractPath(projectPath, browser),
       "utf8",
     );
+
     return JSON.parse(raw) as ReadyContract;
   } catch {
     return null;
@@ -78,21 +81,26 @@ function readContractForDiagnosis(
    whatever its status, outranks the hardcoded default. */
 function sightedContractBrowser(projectPath: string): string | null {
   let dirs: string[];
+
   try {
     dirs = fs.readdirSync(sessionArtifactsRootDir(projectPath));
   } catch {
     return null;
   }
+
   let best: { browser: string; mtimeMs: number } | null = null;
+
   for (const dir of dirs) {
     try {
       const stat = fs.statSync(readyContractPath(projectPath, dir));
+
       if (!best || stat.mtimeMs > best.mtimeMs) {
         best = { browser: dir, mtimeMs: stat.mtimeMs };
       }
     } catch {
     }
   }
+
   return best ? best.browser : null;
 }
 
@@ -181,6 +189,7 @@ async function environmentPreflight(): Promise<string> {
   }
 
   const healthy = checks.every((c) => c.status !== "fail");
+
   return envelope({
     ok: healthy,
     command: schema.name,
@@ -193,6 +202,7 @@ async function environmentPreflight(): Promise<string> {
 function safeStringify(value: unknown): string {
   try {
     const text = JSON.stringify(value);
+
     return text ?? String(value);
   } catch {
     return String(value);
@@ -206,6 +216,7 @@ export function recentErrorLogs(
   query: Omit<LogQuery, "level"> = {},
 ): string[] {
   const errs: string[] = [];
+
   for (const event of readLogEvents(projectPath, browser, {
     ...query,
     level: "error",
@@ -227,9 +238,11 @@ export function recentErrorLogs(
       ? parts.map((p) => (typeof p === "string" ? p : safeStringify(p))).join(" ")
       : ev.message || ev.text || "";
     if (!msg && ev.errorName) msg = ev.stack ? `${ev.errorName}: ${ev.stack}` : ev.errorName;
+
     msg = msg.replace(/\s+/g, " ").trim();
     if (msg) errs.push(msg.slice(0, 300));
   }
+
   return [...new Set(errs)].slice(-max);
 }
 
@@ -241,6 +254,7 @@ function projectEngineVersion(projectPath: string): string | null {
       "extension",
       "package.json",
     );
+
     return JSON.parse(fs.readFileSync(p, "utf8")).version || null;
   } catch {
     return null;
@@ -257,8 +271,10 @@ function projectEngineVersion(projectPath: string): string | null {
    print one. */
 function capabilityProbeChecks(parsed: unknown): unknown {
   if (!isEnvelope(parsed)) return parsed;
+
   const value = parsed.value;
   if (Array.isArray(value)) return value;
+
   return (value as { checks?: unknown } | null)?.checks;
 }
 
@@ -283,6 +299,7 @@ const CONTROL_OFF_BY_CHOICE =
 function pidIsAlive(pid: number): boolean {
   try {
     process.kill(pid, 0);
+
     return true;
   } catch {
     return false;
@@ -307,6 +324,7 @@ function reconcileRelaunchedBrowser(
       /\bexited\b/i.test(String(leg.detail ?? "")),
   );
   if (!exitedLeg) return false;
+
   /* @invariant ONLY THE EXECUTOR LEG PROVES THE BROWSER ANSWERED. The
      control channel is the dev server's own socket, which lives on after
      the browser dies; counting it relaunched a crashed browser. */
@@ -316,14 +334,17 @@ function reconcileRelaunchedBrowser(
   const browserAlive =
     typeof contract?.browserPid === "number" && pidIsAlive(contract.browserPid);
   if (!executorAnswered && !browserAlive) return false;
+
   exitedLeg.status = "warn";
   exitedLeg.detail = `${exitedLeg.detail ?? "browser exited"}. ${
     browserAlive
       ? `The browser pid the launcher recorded (${contract?.browserPid}) is alive`
       : "The executor answered a probe after that exit"
   }, so the session is live and the recorded exit was an earlier process: Firefox hands a fresh profile to a relaunched process and the first one exits 0.`;
+
   exitedLeg.remediation =
     "Nothing to do. If a later call finds the session unreachable, extension_stop and extension_dev again.";
+
   return true;
 }
 
@@ -346,6 +367,7 @@ export async function handler(args: {
   if (!args.projectPath) {
     return environmentPreflight();
   }
+
   const projectPath = args.projectPath;
   const resolved = resolveSessionBrowser(projectPath, args.browser);
   const browser =
@@ -381,14 +403,18 @@ export async function handler(args: {
   }
 
   const out = stdout.trim();
+
   try {
     const parsed = JSON.parse(out);
     const probed = capabilityProbeChecks(parsed);
     if (!Array.isArray(probed)) throw new Error("not a check array");
+
     const checks = probed as DoctorCheck[];
     const readOnlyLeg = controlOffByChoiceLeg(checks);
+
     for (const check of checks) {
       if (typeof check.detail === "string") check.detail = toMcpSpeak(check.detail);
+
       if (typeof check.remediation === "string") {
         check.remediation = toMcpSpeak(check.remediation);
       }
@@ -397,9 +423,11 @@ export async function handler(args: {
     let healthy = code === 0;
     const contract = readContractForDiagnosis(projectPath, browser);
     const relaunched = reconcileRelaunchedBrowser(checks, contract);
+
     if (relaunched) {
       healthy = !checks.some((leg) => leg.status === "fail");
     }
+
     if (contract?.status === "error" && !relaunched) {
       healthy = false;
       const browserExited =
@@ -425,6 +453,7 @@ export async function handler(args: {
       });
     } else {
       const errs = recentErrorLogs(projectPath, browser);
+
       if (errs.length) {
         healthy = false;
         checks.push({
@@ -438,6 +467,7 @@ export async function handler(args: {
     }
 
     const engineVersion = projectEngineVersion(projectPath);
+
     if (engineVersion) {
       const pin = pinnedCliVersion();
       const mismatch =
@@ -455,6 +485,7 @@ export async function handler(args: {
           : {}),
       });
     }
+
     /* @invariant The window is an extra on Safari, never the session. The
      * bridge legs above are what a Safari dev session runs on, so a missing
      * safaridriver stamp is a skip that costs nothing, and only a recorded
@@ -464,6 +495,7 @@ export async function handler(args: {
       const info = readWebDriverSession(projectPath, browser);
       const alive = info ? await new WebDriverClient(info).alive() : false;
       if (info && !alive) healthy = false;
+
       checks.push({
         check: "safari-window",
         status: info ? (alive ? "pass" : "fail") : "skip",
@@ -473,6 +505,7 @@ export async function handler(args: {
             : `ready.json records a Safari automation session on port ${info.port}, but it no longer answers: the window or the driver is gone`
           : (() => {
               const reason = readWebDriverUnavailableReason(projectPath, browser);
+
               return reason
                 ? `the dev session opened no safaridriver session: ${reason}; page-world eval and open by url use the bridge, and everything else already does`
                 : "no safaridriver session recorded; page-world eval and open by url use the bridge, and everything else already does";
@@ -498,12 +531,14 @@ export async function handler(args: {
     const failures = checks.filter((leg) => leg.status === "fail");
     const readOnly =
       readOnlyLeg !== null && failures.length === 1 && failures[0] === readOnlyLeg;
+
     if (readOnly && readOnlyLeg) {
       readOnlyLeg.status = "warn";
       readOnlyLeg.detail = `read-only by choice: ${readOnlyLeg.detail}`;
       readOnlyLeg.remediation =
         "Nothing failed. To unlock the control verbs, call extension_dev again with allowControl: true (or allowEval: true) plus replace: true, which stops this session first; a plain second call is refused so the session does not fork.";
     }
+
     return envelope({
       ok: healthy || readOnly,
       command: schema.name,
@@ -531,6 +566,7 @@ export async function handler(args: {
      * The stale-CLI guess is only offered when there is no output to show. */
     const message = stderr.trim() || `extension exited with code ${code}`;
     const cliReport = toMcpSpeak(out).trim().slice(0, 4000);
+
     return envelope({
       ok: false,
       command: schema.name,

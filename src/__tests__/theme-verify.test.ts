@@ -1,7 +1,8 @@
-import { describe, it, expect, afterEach } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+
+import { describe, it, expect, afterEach } from "vitest";
 
 import { handler, schema } from "../tools/theme-verify";
 
@@ -91,6 +92,7 @@ describe("leg [4] D4 acceptance gap: keys Chrome silently discards", () => {
     expect(d4.some((f: { key: string }) => f.key === "colors.tab_text_inactive")).toBe(
       true,
     );
+
     expect(
       JSON.stringify(r.value.legs.chromeAccepts.discarded),
     ).toContain("tab_text_inactive");

@@ -1,7 +1,9 @@
-import { describe, it, expect, afterEach } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+
+import { describe, it, expect, afterEach } from "vitest";
+
 import {
   findSessionInfo,
   getSession,
@@ -13,9 +15,11 @@ import {
 } from "../lib/process-manager";
 
 const tmpDirs: string[] = [];
+
 function tmpProject(): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-registry-guard-"));
   tmpDirs.push(dir);
+
   return dir;
 }
 

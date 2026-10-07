@@ -1,5 +1,7 @@
-import { describe, it, expect, afterEach } from "vitest";
 import net from "node:net";
+
+import { describe, it, expect, afterEach } from "vitest";
+
 import {
   encodeRdpPacket,
   RdpPacketDecoder,
@@ -24,6 +26,7 @@ describe("RDP packet framing", () => {
     expect(encoded.toString("utf8")).toBe(
       `${Buffer.byteLength(json, "utf8")}:${json}`,
     );
+
     expect(new RdpPacketDecoder().push(encoded)).toEqual([{ name: "café" }]);
   });
 
@@ -70,6 +73,7 @@ function listen(script: ServerScript): Promise<number> {
     socket.write(
       encodeRdpPacket({ from: "root", applicationType: "browser" }),
     );
+
     script(socket, null);
     socket.on("data", (chunk) => {
       const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
@@ -77,6 +81,7 @@ function listen(script: ServerScript): Promise<number> {
     });
   });
   servers.push(server);
+
   return new Promise((resolve) => {
     server.listen(0, "127.0.0.1", () => {
       resolve((server.address() as net.AddressInfo).port);
@@ -99,7 +104,9 @@ describe("rdpListAddons", () => {
     const requests: Array<Record<string, unknown>> = [];
     const port = await listen((socket, packet) => {
       if (!packet) return;
+
       requests.push(packet);
+
       if (packet.type === "listAddons") {
         socket.write(encodeRdpPacket({ from: "root", addons: ADDONS }));
       }
@@ -112,9 +119,11 @@ describe("rdpListAddons", () => {
   it("skips unsolicited root packets while waiting for the addons reply", async () => {
     const port = await listen((socket, packet) => {
       if (packet?.type !== "listAddons") return;
+
       socket.write(
         encodeRdpPacket({ from: "root", type: "addonListChanged" }),
       );
+
       socket.write(encodeRdpPacket({ from: "root", addons: ADDONS }));
     });
 
@@ -124,6 +133,7 @@ describe("rdpListAddons", () => {
   it("rejects on a root actor error reply", async () => {
     const port = await listen((socket, packet) => {
       if (packet?.type !== "listAddons") return;
+
       socket.write(
         encodeRdpPacket({
           from: "root",
@@ -157,6 +167,7 @@ describe("rdpCollectConsoleMessages", () => {
   it("collects the watcher replay, events-before-reply ordering included", async () => {
     const port = await listen((socket, packet) => {
       if (!packet) return;
+
       if (packet.type === "listTabs") {
         socket.write(
           encodeRdpPacket({
@@ -167,9 +178,11 @@ describe("rdpCollectConsoleMessages", () => {
           }),
         );
       }
+
       if (packet.type === "getWatcher" && packet.to === "tab1") {
         socket.write(encodeRdpPacket({ from: "tab1", actor: "watcher1" }));
       }
+
       if (packet.type === "watchTargets") {
         socket.write(
           encodeRdpPacket({
@@ -178,8 +191,10 @@ describe("rdpCollectConsoleMessages", () => {
             target: {},
           }),
         );
+
         socket.write(encodeRdpPacket({ from: "watcher1" }));
       }
+
       if (packet.type === "watchResources") {
         socket.write(
           encodeRdpPacket({
@@ -200,6 +215,7 @@ describe("rdpCollectConsoleMessages", () => {
             ],
           }),
         );
+
         socket.write(encodeRdpPacket({ from: "watcher1" }));
       }
     });
@@ -238,7 +254,9 @@ describe("rdpListTabs", () => {
     const requests: Array<Record<string, unknown>> = [];
     const port = await listen((socket, packet) => {
       if (!packet) return;
+
       requests.push(packet);
+
       if (packet.type === "listTabs") {
         socket.write(encodeRdpPacket({ from: "root", tabs }));
       }

@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+
 import { describe, expect, it } from "vitest";
 
 import { ENVELOPE_SCHEMA, ERROR_CODES, envelopeObject } from "../lib/envelope";
@@ -56,9 +57,11 @@ const resolveEngineVersion = (): string | null => {
       pin.cliPackage,
       "package.json",
     );
+
     if (fs.existsSync(manifest)) {
       return JSON.parse(fs.readFileSync(manifest, "utf8")).version ?? null;
     }
+
     if (dir === path.parse(dir).root) return null;
   }
 };
@@ -76,6 +79,7 @@ describe("the copied CLI contract is the same bytes on both sides", () => {
         recorded,
         `${name} is not listed in ${PIN_FILE}; add its sha256 there`,
       ).toBeDefined();
+
       expect(
         sha256(path.join(contractDir, name)),
         `${name} was edited locally. Re-copy it from ${pin.cliPackage}@${pin.cliVersion} (${pin.upstreamPath}/${name}) and refresh ${PIN_FILE}.`,
@@ -97,17 +101,23 @@ describe("the copied CLI contract is the same bytes on both sides", () => {
 
   it("matches the contract the resolved engine ships, when it ships one", () => {
     const shipped = resolveShippedContract();
+
     if (!shipped) {
       console.warn(
         `[envelope-contract] ${pin.cliPackage} ships no ${pin.shippedPath}/ yet, so the upstream byte comparison is skipped. Remove this skip once the CLI stable that carries the machine contract is pinned.`,
       );
+
       return;
     }
+
     const engineVersion = resolveEngineVersion();
+
     for (const name of copiedFiles) {
       const upstream = path.join(shipped, name);
       if (!fs.existsSync(upstream)) continue;
+
       const same = sha256(upstream) === pin.files[name];
+
       if (engineVersion === pin.cliVersion) {
         expect(
           same,
@@ -143,6 +153,7 @@ describe("this package produces what the copied schema describes, checked by a h
     const pattern = new RegExp(
       schema.properties.error.oneOf[1].properties.code.pattern,
     );
+
     for (const code of ERROR_CODES) {
       expect(pattern.test(code), `${code} is not a legal error code`).toBe(true);
     }
@@ -181,6 +192,7 @@ describe("this package produces what the copied schema describes, checked by a h
       validateAgainstSchema({ schema: 1, ok: true, command: "x" }, schema)
         .length,
     ).toBeGreaterThan(0);
+
     expect(
       validateAgainstSchema(
         {

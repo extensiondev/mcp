@@ -1,8 +1,11 @@
-import { describe, it, expect, afterEach, vi } from "vitest";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+
+import { describe, it, expect, afterEach, vi } from "vitest";
+
+import type * as CdpPortModule from "../lib/cdp-port";
 
 const navigations: string[] = [];
 let cdpTargets: Array<{ id: string; type: string; url: string; title?: string }> =
@@ -17,7 +20,8 @@ const evaluatedExpressions: string[] = [];
 const createdTabs: Array<{ url: string; background: boolean }> = [];
 
 vi.mock("../lib/cdp-port", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../lib/cdp-port")>();
+  const actual = await importOriginal<typeof CdpPortModule>();
+
   return { ...actual, resolveCdpPort: async () => cdpPort };
 });
 
@@ -32,11 +36,13 @@ vi.mock("../lib/cdp", () => {
     async connect() {}
     async attachToTarget(id: string) {
       attachedId = id;
+
       return "session-1";
     }
     async enableDomains() {}
     async navigate(_session: string, url: string) {
       navigations.push(url);
+
       if (navigationLands) {
         cdpTargets = cdpTargets.map((t) =>
           t.id === attachedId ? { ...t, url, title: "Landed" } : t,
@@ -48,6 +54,7 @@ vi.mock("../lib/cdp", () => {
     }
     async evaluate(_session: string, expression: string) {
       evaluatedExpressions.push(expression);
+
       return popupMeasure ? { w: popupMeasure.w, h: popupMeasure.h } : null;
     }
     async sendCommand(method: string, params?: Record<string, unknown>) {
@@ -55,26 +62,34 @@ vi.mock("../lib/cdp", () => {
         const url = String(params?.url ?? "");
         navigations.push(url);
         createdTabs.push({ url, background: params?.background === true });
+
         if (navigationLands) {
           cdpTargets = [
             ...cdpTargets,
             { id: "created", type: "page", url, title: "Landed" },
           ];
         }
+
         return { targetId: "created" };
       }
+
       if (method === "Browser.getWindowForTarget") return { windowId: 7 };
+
       if (method === "Browser.setWindowBounds") {
         if (windowResizeHonored) {
           windowBounds = { ...(params?.bounds as Record<string, number>) };
         }
+
         return {};
       }
+
       if (method === "Browser.getWindowBounds") return { bounds: windowBounds };
+
       return {};
     }
     disconnect() {}
   }
+
   return { CDPClient };
 });
 
@@ -83,14 +98,17 @@ const open = await import("../tools/open");
 function expectedId(distPath: string): string {
   const d = crypto.createHash("sha256").update(distPath).digest();
   let id = "";
+
   for (let i = 0; i < 16; i++) {
     id += String.fromCharCode(97 + (d[i] >> 4));
     id += String.fromCharCode(97 + (d[i] & 0x0f));
   }
+
   return id;
 }
 
 const tmpDirs: string[] = [];
+
 function project(
   manifest: Record<string, unknown>,
   opts: { browser?: string; withReady?: boolean } = {},
@@ -103,7 +121,9 @@ function project(
     path.join(dir, "src", "manifest.json"),
     JSON.stringify(manifest),
   );
+
   const distPath = path.join(dir, "dist", browser);
+
   if (opts.withReady !== false) {
     const readyDir = path.join(dir, "dist", "extension-js", browser);
     fs.mkdirSync(readyDir, { recursive: true });
@@ -112,6 +132,7 @@ function project(
       JSON.stringify({ status: "ready", distPath }),
     );
   }
+
   return { dir, distPath, id: expectedId(distPath) };
 }
 
@@ -125,6 +146,7 @@ afterEach(() => {
   windowBounds = {};
   evaluatedExpressions.length = 0;
   createdTabs.length = 0;
+
   for (const dir of tmpDirs.splice(0)) {
     fs.rmSync(dir, { recursive: true, force: true });
   }
@@ -302,6 +324,7 @@ describe("open surface asTab", () => {
       path.join(p.distPath, "manifest.json"),
       JSON.stringify({ action: { default_popup: "action/index.html" } }),
     );
+
     cdpTargets = [{ id: "t1", type: "page", url: "https://example.com" }];
 
     await open.handler({
@@ -385,6 +408,7 @@ describe("open trusts the live browser over the computed id hash", () => {
       path.join(readyDir, "ready.json"),
       JSON.stringify({ status: "ready", distPath: linkedDist }),
     );
+
     const realId = expectedId(fs.realpathSync(linkedDist));
     cdpTargets = [
       {
@@ -422,6 +446,7 @@ describe("open never destroys the page you were watching", () => {
     expect(createdTabs).toEqual([
       { url: `chrome-extension://${p.id}/popup.html`, background: true },
     ]);
+
     expect(
       cdpTargets.find((t) => t.id === "watched")?.url,
     ).toBe("https://example.com/watched");
@@ -479,6 +504,7 @@ describe("open never destroys the page you were watching", () => {
         title: "Landed",
       },
     ];
+
     const result = JSON.parse(await pending);
 
     expect(result.ok).toBe(true);
@@ -486,6 +512,7 @@ describe("open never destroys the page you were watching", () => {
       from: asked,
       to: "https://example.com/landed",
     });
+
     expect(result.value.target.targetId).toBe("created");
   }, 15_000);
 
@@ -513,7 +540,9 @@ describe("popup-as-tab window sizing", () => {
       path.join(p.distPath, "manifest.json"),
       JSON.stringify({ action: { default_popup: "popup.html" } }),
     );
+
     cdpTargets = [{ id: "t1", type: "page", url: "https://example.com" }];
+
     return p;
   }
 
@@ -531,6 +560,7 @@ describe("popup-as-tab window sizing", () => {
       height: 240,
       clamped: false,
     });
+
     expect(windowBounds).toEqual({ width: 360, height: 240 });
     expect(result.hint).toContain("resized to the popup's content size (360x240");
   });
@@ -548,6 +578,7 @@ describe("popup-as-tab window sizing", () => {
       height: 600,
       clamped: true,
     });
+
     expect(result.hint).toContain("clamped");
   });
 
@@ -607,6 +638,7 @@ describe("open never calls a tab that stayed put navigated", () => {
       { id: "other", type: "page", url: "https://example.com/other" },
       { id: "blank", type: "page", url: "about:blank" },
     ];
+
     navigationLands = false;
 
     const result = JSON.parse(
