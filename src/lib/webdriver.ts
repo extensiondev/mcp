@@ -10,8 +10,37 @@ import fs from "node:fs";
 import { readyContractPath } from "./session-paths";
 import type { ReadyContract } from "./types";
 
-export const WEBDRIVER_SESSION_MISSING_HINT =
-  "A Safari page is readable only through a safaridriver session the dev session records in ready.json (webdriverPort and webdriverSessionId), and no Extension.js release opens one today: Safari grants one automation session at a time, so this server never opens its own. What Safari does give you is the dev session's log file, which extension_logs and the log-based assertions read once the extension is enabled; the rest is Web Inspector, attended.";
+const SAFARI_LOG_FALLBACK =
+  "Without one, the dev session's log file is still read: extension_logs and the log-based assertions see what the extension writes once it is enabled.";
+
+/* @invariant The engine says why it opened no Safari session, so this
+   server relays it instead of guessing. Extension.js 4.1.32 opens a
+   safaridriver session under dev --browser safari and stamps
+   webdriverPort/webdriverSessionId, or webdriverUnavailableReason when it
+   could not. This hint used
+   to say no release opens one, which 4.1.32 made false. Safari grants one
+   automation session at a time, so this server still never opens its own. */
+export function webdriverSessionMissingHint(reason: string | null): string {
+  if (reason) {
+    return `The dev session opened no safaridriver session: ${reason}. Fix that, then restart extension_dev --browser=safari so it opens one. ${SAFARI_LOG_FALLBACK}`;
+  }
+  return `ready.json records no safaridriver session (webdriverPort and webdriverSessionId) and no reason for its absence. Extension.js 4.1.32 and later open one under extension_dev --browser=safari and say why when they cannot, so an older engine in the project, or a session that is not a dev session, is the likely cause. ${SAFARI_LOG_FALLBACK}`;
+}
+
+export function readWebDriverUnavailableReason(
+  projectPath: string,
+  browser: string,
+): string | null {
+  try {
+    const contract = JSON.parse(
+      fs.readFileSync(readyContractPath(projectPath, browser), "utf8"),
+    ) as ReadyContract;
+    const reason = String(contract.webdriverUnavailableReason ?? "").trim();
+    return reason.length > 0 ? reason : null;
+  } catch {
+    return null;
+  }
+}
 
 export interface WebDriverSessionInfo {
   port: number;

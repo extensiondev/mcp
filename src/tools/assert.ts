@@ -20,7 +20,8 @@ import {
   readWebDriverSession,
   readyExtensionId,
   sameDocument,
-  WEBDRIVER_SESSION_MISSING_HINT,
+  readWebDriverUnavailableReason,
+  webdriverSessionMissingHint,
   WebDriverClient,
 } from "../lib/webdriver";
 import { CDPClient } from "../lib/cdp";
@@ -1062,7 +1063,7 @@ async function assertContentScriptInjectedOnWebKit(
       id,
       subject,
       `The content context logged nothing at ${clause.url} in this run, and no safaridriver session is recorded for ${stage.browser}, so no page was read either.${declared.covering.length ? ` ${declared.covering.length} declared match(es) cover the url (${declared.covering.join(", ")}), which is not proof the script ran.` : ""}`,
-      `Open ${clause.url} in Safari with the extension enabled, have the content script write one line (a console call), and assert again: the line reaches the dev session's log over the bridge. ${WEBDRIVER_SESSION_MISSING_HINT}`,
+      `Open ${clause.url} in Safari with the extension enabled, have the content script write one line (a console call), and assert again: the line reaches the dev session's log over the bridge. ${webdriverSessionMissingHint(readWebDriverUnavailableReason(stage.projectPath, stage.browser))}`,
       { coveringMatches: declared.covering, declaredMatches: declared.patterns },
     );
   }

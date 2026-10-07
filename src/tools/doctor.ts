@@ -19,7 +19,11 @@ import { toMcpSpeak } from "../lib/act";
 import { envelope, isEnvelope } from "../lib/envelope";
 import { resolveSessionBrowser } from "../lib/session-browser";
 import { WEBKIT_FAMILY } from "../lib/browser-family";
-import { readWebDriverSession, WebDriverClient } from "../lib/webdriver";
+import {
+  readWebDriverSession,
+  readWebDriverUnavailableReason,
+  WebDriverClient,
+} from "../lib/webdriver";
 import {
   detectSafariAutomation,
   safariMcpAddCommand,
@@ -467,7 +471,12 @@ export async function handler(args: {
           ? alive
             ? `Safari automation window recorded by the dev session (safaridriver on port ${info.port}, session ${info.sessionId})`
             : `ready.json records a Safari automation session on port ${info.port}, but it no longer answers: the window or the driver is gone`
-          : "no safaridriver session recorded; page-world eval and open by url use the bridge, and everything else already does",
+          : (() => {
+              const reason = readWebDriverUnavailableReason(projectPath, browser);
+              return reason
+                ? `the dev session opened no safaridriver session: ${reason}; page-world eval and open by url use the bridge, and everything else already does`
+                : "no safaridriver session recorded; page-world eval and open by url use the bridge, and everything else already does";
+            })(),
         ...(info && !alive
           ? {
               remediation:

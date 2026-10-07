@@ -91,6 +91,22 @@ export function readyContract(
   return { ...base, ...overrides };
 }
 
+/* @invariant A Safari dev contract as Extension.js 4.1.32 writes it: the
+ * launcher holds one safaridriver session and stamps its port (a number) and
+ * session id (a string), or webdriverUnavailableReason when it could not open
+ * one, and the ready writer keeps all three across recompiles
+ *. */
+export function safariDevContract(
+  session: { port: number; sessionId: string } | { unavailableReason: string },
+  overrides: Body = {},
+): Body {
+  const stamp =
+    "unavailableReason" in session
+      ? { webdriverUnavailableReason: session.unavailableReason }
+      : { webdriverPort: session.port, webdriverSessionId: session.sessionId };
+  return readyContract("dev", "safari", { ...stamp, ...overrides });
+}
+
 /* @invariant The launcher's stamps on a dev contract once the browser is up and the
  * executor has connected (CLI: the ready.json stamps after launch). */
 export function attachedDevContract(browser: string, overrides: Body = {}): Body {

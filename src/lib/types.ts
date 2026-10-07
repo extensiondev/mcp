@@ -70,6 +70,7 @@ export interface ReadyContract {
   cdpPort?: number;
   webdriverPort?: number;
   webdriverSessionId?: string;
+  webdriverUnavailableReason?: string;
   pid?: number;
   ts?: string;
   compiledAt?: string | null;

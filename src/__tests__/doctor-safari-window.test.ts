@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { safariDevContract } from "./fixtures/engine-answers";
 
 const cli = vi.hoisted(() => ({
   response: { code: 0, stdout: "[]", stderr: "" },
@@ -76,13 +77,7 @@ describe("extension_doctor's safari-window leg", () => {
   it("passes while the recorded session answers", async () => {
     const dir = tmpProject();
     const port = await answeringDriver();
-    writeContract(dir, {
-      status: "ready",
-      browser: "safari",
-      pid: process.pid,
-      webdriverPort: port,
-      webdriverSessionId: "S-1",
-    });
+    writeContract(dir, safariDevContract({ port, sessionId: "S-1" }));
     const parsed = JSON.parse(await handler({ projectPath: dir, browser: "safari" }));
     const leg = legOf(parsed);
     expect(leg?.status).toBe("pass");
@@ -95,13 +90,7 @@ describe("extension_doctor's safari-window leg", () => {
     const port = await answeringDriver();
     await new Promise<void>((resolve) => server?.close(() => resolve()));
     server = null;
-    writeContract(dir, {
-      status: "ready",
-      browser: "safari",
-      pid: process.pid,
-      webdriverPort: port,
-      webdriverSessionId: "S-1",
-    });
+    writeContract(dir, safariDevContract({ port, sessionId: "S-1" }));
     const parsed = JSON.parse(await handler({ projectPath: dir, browser: "safari" }));
     const leg = legOf(parsed);
     expect(leg?.status).toBe("fail");
@@ -117,6 +106,19 @@ describe("extension_doctor's safari-window leg", () => {
     const leg = legOf(parsed);
     expect(leg?.status).toBe("skip");
     expect(leg?.detail).toContain("bridge");
+    expect(parsed.ok).toBe(true);
+  });
+
+  it("relays the engine's reason when the dev session opened no window", async () => {
+    const dir = tmpProject();
+    writeContract(
+      dir,
+      safariDevContract({ unavailableReason: "Allow Remote Automation is off" }),
+    );
+    const parsed = JSON.parse(await handler({ projectPath: dir, browser: "safari" }));
+    const leg = legOf(parsed);
+    expect(leg?.status).toBe("skip");
+    expect(leg?.detail).toContain("Allow Remote Automation is off");
     expect(parsed.ok).toBe(true);
   });
 
