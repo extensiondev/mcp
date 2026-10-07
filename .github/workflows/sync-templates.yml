@@ -59,9 +59,9 @@ jobs:
         uses: peter-evans/create-pull-request@v8
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          commit-message: "chore: sync template catalog from examples repo"
-          branch: chore/sync-templates
-          title: "chore: sync template catalog"
+          commit-message: "Sync the template catalog from the examples repo"
+          branch: sync-templates
+          title: "Sync the template catalog from the examples repo"
           body: |
             Auto-generated PR — the upstream [templates-meta.json](https://github.com/extension-js/examples/releases/tag/nightly) has changed.
 

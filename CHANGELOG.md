@@ -39,6 +39,12 @@
 - `@modelcontextprotocol/sdk` moves to 1.32.1, past GHSA-6qxp-vccf-f47h
   (the OAuth client paths it fixes are not used here). Its stdio reader now
   refuses a single client message over 10 MiB.
+- Housekeeping: the July comment inventory left the repository, local
+  audit folders and the package's own `.mcp.json` are ignored, and the
+  template sync workflow commits with a plain sentence. The published
+  tarball was checked file by file: only `dist`, `bin`, `claude`,
+  `extensions`, the plugin manifests, `server.json` and the three top-level
+  documents ship. The Extension.js pins already match npm's latest 4.1.32.
 - Measured on this machine without a window: `extension_build` for Safari
   validates the manifest, generates the Xcode project and builds the app
   (31 s, bundle id derived from the app name). A Safari dev session and
