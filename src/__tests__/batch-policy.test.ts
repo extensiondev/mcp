@@ -9,6 +9,7 @@ import { createServer } from "../index";
 import { resetBatchCreateSessions } from "../lib/project-create-batch";
 import {
   DEFAULT_SERVER_OPTIONS,
+  FEATURE_GROUPS,
   TOOL_POLICY,
   disabledToolEnvelope,
   pinProjectArgs,
@@ -128,7 +129,7 @@ describe("a batch sits in the same policy row as its single twin", () => {
   });
 
   it("is let through no-ship mode exactly as its twin is", () => {
-    const noShip = { ...DEFAULT_SERVER_OPTIONS, noShip: true };
+    const noShip = { features: [...FEATURE_GROUPS], noShip: true };
     for (const [name, single, batch] of [
       ["extension_project_create", { project: "acme/app", repo: "octo/app" }, { projects: CREATE_LIST }],
       ["extension_auth", { action: "login", project: "acme/app" }, { action: "login", projects: LOGIN_LIST }],
@@ -141,7 +142,7 @@ describe("a batch sits in the same policy row as its single twin", () => {
 });
 
 describe("--project holds a batch to the pinned project, name by name", () => {
-  const pinned = { ...DEFAULT_SERVER_OPTIONS, project: "acme/app" };
+  const pinned = { features: [...FEATURE_GROUPS], noShip: false, project: "acme/app" };
 
   it.each([
     ["a create list naming another project", "extension_project_create", { projects: CREATE_LIST }, createSchema],
@@ -253,7 +254,7 @@ describe("--project holds a batch to the pinned project, name by name", () => {
 
 describe("the input validator sees the list", () => {
   it("refuses a list of the wrong shape as an input error, through the real server", async () => {
-    const client = await connected(DEFAULT_SERVER_OPTIONS);
+    const client = await connected({ features: [...FEATURE_GROUPS], noShip: false });
     const login = await call(client, "extension_auth", {
       action: "login",
       projects: [1, 2],

@@ -7,7 +7,7 @@
 
 # @extension.dev/mcp [![Version][npm-version-image]][npm-version-url] [![Downloads][npm-downloads-image]][npm-downloads-url] [![Discord][discord-image]][discord-url]
 
-> Give your AI agent hands for browser extension development. 32 MCP tools that scaffold, run, inspect, debug, and publish cross-browser extensions.
+> Give your AI agent hands for browser extension development. 32 MCP tools that scaffold, run, inspect, debug, and build cross-browser extensions on your machine, plus a platform lane (private alpha) to share and publish them.
 
 <img alt="Logo" align="right" src="https://media.extension.land/brand/extension-dev/logo-dock.png" width="20.7%" />
 
@@ -26,10 +26,10 @@ Extensions fail silently: content scripts that never inject, panels that never o
 These tools give agents eyes on the live browser, so they debug from evidence instead of guessing:
 
 - **Scaffold** from the 50+ template catalog behind [templates.extension.dev](https://templates.extension.dev), or add a popup, sidebar, or content script to an existing project
-- **Run** the dev server with HMR in Chrome, Edge, Firefox, Brave, Opera, Vivaldi, Yandex, Waterfox, LibreWolf, Zen, Floorp, or any Chromium- or Gecko-based binary, plus Safari on macOS (no HMR yet), no build config
+- **Run** the dev server with HMR in Chrome, Edge, Firefox, Brave, Opera, Vivaldi, Yandex, Waterfox, LibreWolf, Zen, Floorp, or any Chromium- or Gecko-based binary, plus Safari on macOS (no HMR yet), no build config (LibreWolf ships with remote debugging off; the engine's launch error names the two `librewolf.overrides.cfg` lines that turn it on)
 - **See** the live DOM, unified logs from every extension context, `chrome.storage` contents, and the loaded-extension list
 - **Act**: evaluate code in any context, trigger the action button and commands, reload the extension, replay events
-- **Ship**: validate the manifest cross-browser, build for production, publish a shareable preview, and promote builds to release channels (a stable promotion asks for a human approval first)
+- **Ship**: validate the manifest cross-browser and build for production. On the [platform lane](#platform-private-alpha): publish a shareable preview and promote builds to release channels (a stable promotion asks for a human approval first)
 
 Built on [Extension.js](https://extension.js.org), the open-source cross-browser extension framework.
 
@@ -50,7 +50,7 @@ Built on [Extension.js](https://extension.js.org), the open-source cross-browser
 ### Claude Code
 
 ```bash
-claude mcp add extension-dev -- npx @extension.dev/mcp
+claude mcp add extension-dev -- npx @extension.dev/mcp --features=local,platform
 ```
 
 Or install it as a plugin, the MCP server plus the `/extension`, `/extension-add`, `/extension-debug`, and `/extension-publish` commands in one step:
@@ -62,7 +62,7 @@ Or install it as a plugin, the MCP server plus the `/extension`, `/extension-add
 
 ### Cursor
 
-[![Install MCP Server](https://cursor.com/deeplink/mcp-install-dark.svg)](https://cursor.com/en/install-mcp?name=extension-dev&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyJAZXh0ZW5zaW9uLmRldi9tY3AiXX0%3D)
+[![Install MCP Server](https://cursor.com/deeplink/mcp-install-dark.svg)](https://cursor.com/en/install-mcp?name=extension-dev&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyJAZXh0ZW5zaW9uLmRldi9tY3AiLCItLWZlYXR1cmVzPWxvY2FsLHBsYXRmb3JtIl19)
 
 `.cursor/mcp.json`:
 
@@ -72,7 +72,8 @@ Or install it as a plugin, the MCP server plus the `/extension`, `/extension-add
     "extension-dev": {
       "command": "npx",
       "args": [
-        "@extension.dev/mcp"
+        "@extension.dev/mcp",
+        "--features=local,platform"
       ]
     }
   }
@@ -82,7 +83,7 @@ Or install it as a plugin, the MCP server plus the `/extension`, `/extension-add
 ### VS Code (Also GitHub Copilot)
 
 ```bash
-code --add-mcp '{"name":"extension-dev","command":"npx","args":["@extension.dev/mcp"]}'
+code --add-mcp '{"name":"extension-dev","command":"npx","args":["@extension.dev/mcp","--features=local,platform"]}'
 ```
 
 `.vscode/mcp.json`:
@@ -94,7 +95,8 @@ code --add-mcp '{"name":"extension-dev","command":"npx","args":["@extension.dev/
       "type": "stdio",
       "command": "npx",
       "args": [
-        "@extension.dev/mcp"
+        "@extension.dev/mcp",
+        "--features=local,platform"
       ]
     }
   }
@@ -104,7 +106,7 @@ code --add-mcp '{"name":"extension-dev","command":"npx","args":["@extension.dev/
 ### Codex
 
 ```bash
-codex mcp add extension-dev -- npx @extension.dev/mcp
+codex mcp add extension-dev -- npx @extension.dev/mcp --features=local,platform
 ```
 
 `~/.codex/config.toml`:
@@ -112,7 +114,7 @@ codex mcp add extension-dev -- npx @extension.dev/mcp
 ```toml
 [mcp_servers.extension-dev]
 command = "npx"
-args = ["@extension.dev/mcp"]
+args = ["@extension.dev/mcp", "--features=local,platform"]
 ```
 
 ### Other clients (Claude Desktop and .mcp.json)
@@ -125,28 +127,21 @@ args = ["@extension.dev/mcp"]
     "extension-dev": {
       "command": "npx",
       "args": [
-        "@extension.dev/mcp"
+        "@extension.dev/mcp",
+        "--features=local,platform"
       ]
     }
   }
 }
 ```
 
-### Signing in and pinning a project
-
-The platform tools need a login. Sign in once per project, then add `--project <workspace>/<project>` to the server's arguments (or set `EXTENSION_DEV_PROJECT`) so that server only ever acts on that project, however many logins this machine holds. The console's Connect dialog fills both in for your project.
-
-```bash
-npx @extension.dev/mcp login --project <workspace>/<project>
-```
-
 <!-- setup:end -->
 
 ### Choosing what the agent can reach
 
-Two flags (or environment variables) narrow the server before an agent sees it:
+The tools come in two groups, and two flags (or environment variables) set what an agent sees:
 
-- `--features=local` exposes the tools that work on this machine (create, run, inspect, build, plus docs search), which leaves 23 of the 32 tools (the 9 platform tools are off). `--features=platform` exposes only the extension.dev account, share, release and store tools. Both are on by default. Env: `EXTENSION_DEV_FEATURES`.
+- By default the server exposes the 23 of its 32 tools that work on this machine (the 9 platform tools are off): create, run, inspect, build, plus docs search. `--features=local,platform` turns the platform group on as well, the extension.dev account, share, release and store tools described under [Platform](#platform-private-alpha); `--features=platform` exposes only that group. Env: `EXTENSION_DEV_FEATURES`.
 - `--no-ship` refuses the calls that put something in front of other people: `extension_publish`, `extension_release_promote`, `extension_submit` with `dryRun: false`, `extension_preview_web` with `share: true`, and a share revoke. Dry runs, share listing, login and project or workspace creation still work. Env: `EXTENSION_DEV_NO_SHIP=1`.
 
 A refused call answers `E_TOOL_DISABLED` with the flag to change.
@@ -162,7 +157,7 @@ Answers that can carry text a web page or an extension wrote (logs, DOM, eval re
   "mcpServers": {
     "extension-dev": {
       "command": "npx",
-      "args": ["@extension.dev/mcp", "--no-ship"]
+      "args": ["@extension.dev/mcp", "--features=local,platform", "--no-ship"]
     }
   }
 }
@@ -192,6 +187,8 @@ cp node_modules/@extension.dev/mcp/claude/commands/*.md ~/my-extension/.claude/c
 
 ## Tools
 
+On by default, the 23 that work on this machine:
+
 | Tier | Tool | Description |
 | ---- | ---- | ----------- |
 | build | `extension_create` | Scaffold from a template |
@@ -217,6 +214,11 @@ cp node_modules/@extension.dev/mcp/claude/commands/*.md ~/my-extension/.claude/c
 | act | `extension_reload` | Reload extension or tab |
 | act | `extension_open` | Open a surface (popup, options, sidebar, devtools panel, override pages) / trigger `action`, `command` |
 | browsers | `extension_browsers` | Detect, list, install, and uninstall browsers |
+
+On with `--features=local,platform`, the 9 that reach the extension.dev platform (private alpha):
+
+| Tier | Tool | Description |
+| ---- | ---- | ----------- |
 | platform | `extension_auth` | Device login at extension.dev for one project or a list of them, plus login status and logout |
 | platform | `extension_workspace_create` | Create an extension.dev workspace, headless, via device approval; the approver becomes its owner |
 | platform | `extension_project_create` | Create the extension.dev project for a built extension, or several under one approval, headless, via device approval |
@@ -295,14 +297,28 @@ automation and external agents", then
 `claude mcp add safari-mcp -- "/usr/bin/safaridriver" --mcp`). It drives an
 isolated automation window with page-level tools and has no extension-aware
 tool. It runs beside a Safari dev session, because this server never opens
-an automation session of its own: if a dev session ever records one in
-`ready.json` (`webdriverPort`, `webdriverSessionId`), `extension_eval` with
-context `page` and `extension_open` with `url` use it for the page's main
-world, and `extension_doctor` shows it as a `safari-window` leg; today no
-Extension.js release records one, and that leg reads `skip`.
+an automation session of its own: on Extension.js 4.1.32 or newer the dev
+session opens one and records it in `ready.json` (`webdriverPort`,
+`webdriverSessionId`), `extension_eval` with context `page` and
+`extension_open` with `url` use it for the page's main world, and
+`extension_doctor` shows it as a `safari-window` leg. When the engine could
+not open one (Allow Remote Automation off, `safaridriver --enable` not run),
+that leg reads `skip` with the engine's own reason.
 `extension_browsers` reports whether the machine's safaridriver has `--mcp`.
 
-## Sharing a build in progress
+## Platform (private alpha)
+
+The platform tools connect agents to [extension.dev](https://extension.dev). The platform is in private alpha: these nine tools stay off until the server is started with `--features=local,platform` (or `EXTENSION_DEV_FEATURES=local,platform`), and sharing, publishing, promoting and submitting need a login.
+
+### Signing in and pinning a project
+
+The platform tools need a login. Sign in once per project, then add `--project <workspace>/<project>` to the server's arguments (or set `EXTENSION_DEV_PROJECT`) so that server only ever acts on that project, however many logins this machine holds. The console's Connect dialog fills both in for your project.
+
+```bash
+npx @extension.dev/mcp login --project <workspace>/<project>
+```
+
+### Sharing a build in progress
 
 An unpacked extension is unusually hard to hand to someone: the only way to look at a colleague's work-in-progress has been to take their zip and run untrusted code with real browser permissions on your own machine. `extension_preview_web` with `share: true` uploads the `dist/` it just built and returns a link that renders those exact bytes in the emulator. Whoever opens it installs nothing and signs in to nothing, which is what lets a designer, a PM, or a reviewer into the loop at all. Those bytes run in an isolated sandbox origin or they do not run at all: preview refuses a shared build rather than serving it in its own renderer. Sharing needs auth (`extension_auth` or `EXTENSION_DEV_TOKEN`), the link lives for the workspace plan's share window (30 days on Free, longer on Pro) and the answer carries its exact `expiresAt`, and `DELETE`ing the returned `revokeUrl` with the same token kills it early. Re-sharing an unchanged build returns that same link rather than a second one, and only a revoked link is replaced by a different one, because revocation is permanent: the address is burned and never resolves again. That makes `revokeUrl` the handle to the link you just made, so every share is also appended to `.extension.dev/shared-previews.json` in the project (gitignored) so it survives losing the tool output. The upload holds up to 2,000 files and about 64MB of text, or roughly 48MB when the build is mostly images, fonts or wasm, which travel base64-encoded. Without `share`, the tool returns a local-only deep link and uploads nothing.
 
@@ -310,7 +326,7 @@ An unpacked extension is unusually hard to hand to someone: the only way to look
 
 That is a different job from shipping. Use `share` for the build you are holding right now; use `extension_publish` and `extension_release_promote` below for builds your CI has released.
 
-## From preview to store
+### From preview to store
 
 The platform tools connect agents to [extension.dev](https://extension.dev): `extension_auth` runs extension.dev's own device flow (you approve the code at [extension.dev/device](https://extension.dev/device), and GitHub is federated server-side, so no GitHub token ever reaches your machine) and stores a project-scoped token locally (never returned to the agent), `extension_publish` turns a build your project has already published into a shareable URL, and `extension_release_promote` promotes a tested build to a release channel from CI or an agent session, no browser required. `extension_submit` submits a built extension to the Chrome Web Store, Edge Add-ons, and Firefox AMO through extension.dev, which holds your store credentials and dispatches the release from your project's mirror CI, it defaults to a dry run and store credentials are never tool arguments. Safari and the App Store are one paid lane on the platform, so a free workspace is refused there and the other three stores are unaffected. The two verbs are not interchangeable: `extension_publish` pushes to the extension.dev platform, `extension_submit` sends the build into a store's review queue, which is irreversible. After a real submission, `extension_release_status` reads the recorded outcome, per-store credential health, and review state from the project's public registry, so agents and CI can answer "was it approved?" without a console visit. Access tokens live at most 7 days; CI pipelines re-mint them from the console's Access tokens page.
 

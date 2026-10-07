@@ -3,6 +3,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 
 import { createServer, SERVER_INSTRUCTIONS, tools } from "../index";
+import { DEFAULT_SERVER_OPTIONS, isToolListed } from "../lib/tool-policy";
 
 async function initialized(): Promise<Client> {
   const [clientTransport, serverTransport] =
@@ -54,7 +55,10 @@ describe("the initialize result carries instructions, the one field a search-fir
     const listed = await client.listTools();
 
     expect(listed.tools.map((t) => t.name).sort()).toEqual(
-      tools.map((t) => t.schema.name).sort(),
+      tools
+        .map((t) => t.schema.name)
+        .filter((name) => isToolListed(name, DEFAULT_SERVER_OPTIONS))
+        .sort(),
     );
   });
 });

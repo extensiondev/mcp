@@ -53,10 +53,14 @@ export const PACKAGE = "@extension.dev/mcp";
  * server. There is deliberately no way to emit EXTENSION_DEV_APPROVAL_GATE=0;
  * turning human approval off stays a README-only, by-hand decision. Strict approval is only meaningful when the agent can ship, so
  * it is dropped for the other two reaches. A local-only server reads no login,
- * so it is not pinned.
+ * so it is not pinned. The server's own default is the local group alone
+ * (DEFAULT_SERVER_OPTIONS), so the two reaches that need the platform name
+ * both groups explicitly. The local reach keeps naming its group too, so
+ * the recipe reads the same against a server published before the flip.
  */
 export function serverArgs(input: Omit<RecipeInput, "client">): string[] {
   const args = [PACKAGE];
+  if (input.reach !== "local") args.push("--features=local,platform");
   if (input.reach !== "local" && input.project) args.push("--project", input.project);
   if (input.reach === "no-ship") args.push("--no-ship");
   if (input.reach === "local") args.push("--features=local");

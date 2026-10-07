@@ -18,6 +18,7 @@ import { readCredentials, writeCredentials } from "../lib/credentials";
 import { resolveToken } from "../lib/publish";
 import {
   DEFAULT_SERVER_OPTIONS,
+  FEATURE_GROUPS,
   pinProjectArgs,
   resolveServerOptions,
 } from "../lib/tool-policy";
@@ -110,7 +111,7 @@ describe("a pinned server reads only the pinned login", () => {
 
 describe("pinProjectArgs", () => {
   const schema = { properties: { project: { type: "string" } } };
-  const pinned = { ...DEFAULT_SERVER_OPTIONS, project: "acme/app" };
+  const pinned = { features: [...FEATURE_GROUPS], noShip: false, project: "acme/app" };
 
   it("fills the pinned project into a tool that takes one", () => {
     expect(pinProjectArgs("extension_release_status", {}, schema, pinned)).toEqual({

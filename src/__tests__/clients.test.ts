@@ -17,21 +17,31 @@ describe("buildRecipe", () => {
 
   it("pins the project and adds --no-ship for the no-ship reach", () => {
     expect(recipe("claude-code", "no-ship").command).toBe(
-      "claude mcp add extension-dev -- npx @extension.dev/mcp --project acme/app --no-ship",
+      "claude mcp add extension-dev -- npx @extension.dev/mcp --features=local,platform --project acme/app --no-ship",
     );
   });
 
-  it("drops the pin and strict approval for a local-only server", () => {
+  it("drops the pin and strict approval for a local-only server, and still names the group", () => {
     const local = recipe("claude-code", "local", true);
     expect(local.command).toBe("claude mcp add extension-dev -- npx @extension.dev/mcp --features=local");
+    expect(resolveServerOptions([], {})).toEqual(resolveServerOptions(["--features=local"], {}));
+  });
+
+  it("names both groups whenever the agent may reach the platform", () => {
+    for (const reach of ["everything", "no-ship"] as const) {
+      const args = JSON.parse(recipe("json", reach).config!.text).mcpServers["extension-dev"].args;
+      expect(args, reach).toContain("--features=local,platform");
+      const resolved = resolveServerOptions(args.slice(1), {});
+      expect(resolved.ok && resolved.options.features, reach).toEqual(["local", "platform"]);
+    }
   });
 
   it("passes strict approval as env in each client's own syntax", () => {
     expect(recipe("claude-code", "everything", true).command).toBe(
-      "claude mcp add extension-dev -e EXTENSION_DEV_APPROVAL_GATE=1 -- npx @extension.dev/mcp --project acme/app",
+      "claude mcp add extension-dev -e EXTENSION_DEV_APPROVAL_GATE=1 -- npx @extension.dev/mcp --features=local,platform --project acme/app",
     );
     expect(recipe("codex", "everything", true).command).toBe(
-      "codex mcp add extension-dev --env EXTENSION_DEV_APPROVAL_GATE=1 -- npx @extension.dev/mcp --project acme/app",
+      "codex mcp add extension-dev --env EXTENSION_DEV_APPROVAL_GATE=1 -- npx @extension.dev/mcp --features=local,platform --project acme/app",
     );
     expect(recipe("codex", "everything", true).config?.text).toContain(
       '[mcp_servers.extension-dev.env]\nEXTENSION_DEV_APPROVAL_GATE = "1"',
@@ -40,7 +50,7 @@ describe("buildRecipe", () => {
       mcpServers: {
         "extension-dev": {
           command: "npx",
-          args: ["@extension.dev/mcp", "--project", "acme/app"],
+          args: ["@extension.dev/mcp", "--features=local,platform", "--project", "acme/app"],
           env: { EXTENSION_DEV_APPROVAL_GATE: "1" },
         },
       },
@@ -55,14 +65,14 @@ describe("buildRecipe", () => {
     const cursor = new URL(recipe("cursor").deeplink!);
     expect(JSON.parse(atob(cursor.searchParams.get("config")!))).toEqual({
       command: "npx",
-      args: ["@extension.dev/mcp", "--project", "acme/app"],
+      args: ["@extension.dev/mcp", "--features=local,platform", "--project", "acme/app"],
     });
     const vscode = recipe("vscode").deeplink!;
     expect(vscode.startsWith("vscode:mcp/install?")).toBe(true);
     expect(JSON.parse(decodeURIComponent(vscode.slice("vscode:mcp/install?".length)))).toEqual({
       name: "extension-dev",
       command: "npx",
-      args: ["@extension.dev/mcp", "--project", "acme/app"],
+      args: ["@extension.dev/mcp", "--features=local,platform", "--project", "acme/app"],
     });
     expect(recipe("claude-code").deeplink).toBeUndefined();
     expect(recipe("codex").deeplink).toBeUndefined();

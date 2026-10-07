@@ -13,6 +13,7 @@ import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { createServer, tools } from "../index";
 import {
   DEFAULT_SERVER_OPTIONS,
+  FEATURE_GROUPS,
   TOOL_POLICY,
   disabledToolEnvelope,
   resolveServerOptions,
@@ -71,10 +72,15 @@ describe("the tool policy table", () => {
 });
 
 describe("resolveServerOptions", () => {
-  it("defaults to every group with shipping allowed", () => {
+  it("defaults to the local group alone, with shipping allowed", () => {
+    expect(DEFAULT_SERVER_OPTIONS).toEqual({ features: ["local"], noShip: false });
     expect(resolveServerOptions([], {})).toEqual({
       ok: true,
       options: DEFAULT_SERVER_OPTIONS,
+    });
+    expect(resolveServerOptions(["--features=local,platform"], {})).toEqual({
+      ok: true,
+      options: { features: ["local", "platform"], noShip: false },
     });
   });
 
@@ -113,13 +119,24 @@ describe("resolveServerOptions", () => {
 });
 
 describe("the server honours the options", () => {
-  it("lists every tool with its annotations by default", async () => {
-    const client = await connected();
+  it("lists every tool with its annotations when both groups are named", async () => {
+    const client = await connected({ features: ["local", "platform"], noShip: false });
     const listed = (await client.listTools()).tools;
     expect(listed.map((t) => t.name).sort()).toEqual(registered);
     for (const tool of listed) {
       expect(tool.annotations, tool.name).toEqual(TOOL_POLICY[tool.name].annotations);
     }
+  });
+
+  it("lists no platform tool on a bare start", async () => {
+    const client = await connected();
+    const listed = (await client.listTools()).tools.map((t) => t.name).sort();
+    const local = registered.filter((name) => TOOL_POLICY[name].group === "local");
+    expect(listed).toEqual(local);
+    expect(listed).toHaveLength(23);
+    const out = await call(client, "extension_auth", { action: "status" });
+    expect(out.body.error.code).toBe("E_TOOL_DISABLED");
+    expect(out.body.hint).toContain("--features");
   });
 
   it("lists only the local group and refuses a platform call with E_TOOL_DISABLED", async () => {
@@ -136,7 +153,7 @@ describe("the server honours the options", () => {
   });
 
   it("hides always-shipping tools in no-ship mode and refuses the shipping calls of the rest", async () => {
-    const client = await connected({ ...DEFAULT_SERVER_OPTIONS, noShip: true });
+    const client = await connected({ features: [...FEATURE_GROUPS], noShip: true });
     const listed = (await client.listTools()).tools.map((t) => t.name);
     expect(listed).not.toContain("extension_publish");
     expect(listed).not.toContain("extension_release_promote");
@@ -158,7 +175,7 @@ describe("the server honours the options", () => {
   });
 
   it("lets the non-shipping calls of a guarded tool through no-ship mode", () => {
-    const noShip = { ...DEFAULT_SERVER_OPTIONS, noShip: true };
+    const noShip = { features: [...FEATURE_GROUPS], noShip: true };
     for (const [name, args] of [
       ["extension_submit", { buildSha: "abc", browsers: ["chrome"] }],
       ["extension_submit", { buildSha: "abc", browsers: ["chrome"], dryRun: true }],

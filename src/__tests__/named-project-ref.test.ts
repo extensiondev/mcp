@@ -9,7 +9,7 @@ import { createServer } from "../index";
 import { writeCredentials } from "../lib/credentials";
 import { loginProjectRef, resolveProjectRef } from "../lib/registry";
 import { RegistryAccessTokens } from "../lib/registry-access";
-import { DEFAULT_SERVER_OPTIONS } from "../lib/tool-policy";
+import { FEATURE_GROUPS } from "../lib/tool-policy";
 import { handler as publish } from "../tools/publish";
 import { handler as promote } from "../tools/release-promote";
 import { handler as releaseStatus } from "../tools/release-status";
@@ -276,7 +276,7 @@ describe("the sibling tools that take project", () => {
   it("extension_release_status on a pinned server reads the pinned project, not a glued address", async () => {
     platform();
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
-    await createServer({ ...DEFAULT_SERVER_OPTIONS, project: NAMED }).connect(serverTransport);
+    await createServer({ features: [...FEATURE_GROUPS], noShip: false, project: NAMED }).connect(serverTransport);
     const client = new Client({ name: "named-ref-probe", version: "0.0.0" });
     await client.connect(clientTransport);
     process.env.EXTENSION_DEV_PROJECT = NAMED;

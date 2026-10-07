@@ -186,8 +186,14 @@ export interface ServerOptions {
   project?: string;
 }
 
+/* @invariant THE DEFAULT IS THE LOCAL GROUP ALONE. A server started with no
+ * flag and no env exposes the 23 tools that work on this machine and none
+ * of the 9 platform tools, because the platform is in private alpha and the
+ * local tools are what is being put in front of strangers. The platform group comes on only by name:
+ * --features=local,platform or EXTENSION_DEV_FEATURES=local,platform. The
+ * console's Connect recipes say it explicitly for that reason. */
 export const DEFAULT_SERVER_OPTIONS: ServerOptions = {
-  features: [...FEATURE_GROUPS],
+  features: ["local"],
   noShip: false,
 };
 
@@ -230,7 +236,10 @@ export function resolveServerOptions(
   }
   const pin = project ? { project } : {};
   if (rawFeatures === undefined || rawFeatures.trim() === "") {
-    return { ok: true, options: { features: [...FEATURE_GROUPS], noShip, ...pin } };
+    return {
+      ok: true,
+      options: { features: [...DEFAULT_SERVER_OPTIONS.features], noShip, ...pin },
+    };
   }
   const names = rawFeatures
     .split(",")

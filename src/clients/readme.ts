@@ -42,15 +42,6 @@ export function renderReadmeSetup(): string {
     if (recipe.client === "claude-code") body.push(PLUGIN_NOTE, "");
     sections.push(body.join("\n").trimEnd());
   }
-  sections.push(
-    [
-      "### Signing in and pinning a project",
-      "",
-      "The platform tools need a login. Sign in once per project, then add `--project <workspace>/<project>` to the server's arguments (or set `EXTENSION_DEV_PROJECT`) so that server only ever acts on that project, however many logins this machine holds. The console's Connect dialog fills both in for your project.",
-      "",
-      fence("bash", "npx @extension.dev/mcp login --project <workspace>/<project>"),
-    ].join("\n"),
-  );
   return [README_SETUP_START, "", sections.join("\n\n"), "", README_SETUP_END].join("\n");
 }
 

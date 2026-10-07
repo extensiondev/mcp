@@ -14,7 +14,7 @@ claude/
     extension.md          /extension: create, dev, build, add features, debug
     extension-add.md      /extension-add: plan a sidebar, popup, content script, etc. (the tool writes no files)
     extension-debug.md    /extension-debug: live DOM/console inspection
-    extension-publish.md  /extension-publish: store submission prep
+    extension-publish.md  /extension-publish: store checklist and zips; submission needs the platform group
   rules/
     extension-dev.md      Core rules: project structure, manifest, commands
     cross-browser.md      Cross-browser manifest field mapping

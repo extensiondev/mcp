@@ -91,6 +91,6 @@ describe("109: the docs say what the code does", () => {
     const server = require("../../server.json") as { description: string };
     expect(server.description).toContain(`${tools.length} tools, ${REAL_BROWSERS.length} browsers`);
     const local = Object.values(TOOL_POLICY).filter((p) => p.group === "local").length;
-    expect(read("README.md")).toContain(`leaves ${local} of the ${tools.length} tools (the ${tools.length - local} platform tools are off)`);
+    expect(read("README.md")).toContain(`exposes the ${local} of its ${tools.length} tools that work on this machine (the ${tools.length - local} platform tools are off)`);
   });
 });

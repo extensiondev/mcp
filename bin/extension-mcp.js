@@ -24,7 +24,7 @@ Usage:
   extension-mcp --version       Print the version
 
 Server flags:
-  --features=local,platform     Tool groups to expose (default: both)
+  --features=local,platform     Tool groups to expose (default: local)
   --no-ship                     Refuse publish, promote, real submits,
                                 share links and share revokes
   --project <workspace>/<proj>  Use only this project's login

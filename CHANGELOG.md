@@ -1,5 +1,27 @@
 # Changelog
 
+## Unreleased
+
+- The server starts with the local group alone: the 23 of its 32 tools that
+  work on this machine. The 9 platform tools (account, share, release and
+  store) come on with `--features=local,platform` or
+  `EXTENSION_DEV_FEATURES=local,platform` while the platform is in private
+  alpha. The Connect recipes name both groups for the two reaches that need
+  the platform. The README moves signing in, sharing and the store lane
+  under one Platform heading.
+- `scripts/live-lane.mjs` drives the real server and the real pinned engine
+  per browser, headless, through create, build, dev, wait, logs, list,
+  open, dom snapshot, eval, storage, reload, assert and stop, and writes a
+  verdict table. On 2026-10-07 it passed on Chrome, Edge, Firefox, Brave,
+  Opera, Vivaldi, Yandex, Waterfox, Zen and Floorp; LibreWolf refuses to
+  launch until its overrides file turns remote debugging on, which the
+  README now says.
+- The build test fixtures feed the engine's own `--output json` envelope on
+  stdout and its narration on stderr instead of prose the engine never
+  prints; the Safari webdriver seed names the 4.1.32 writer it copies; the
+  Gecko assert cells run the real list-tabs reader on the engine's tab
+  rows; `extension_reload` has its own test.
+
 ## 10.10.13
 
 Built on Extension.js 4.1.32. It closes the last findings of the 2026-10-05 audits.
