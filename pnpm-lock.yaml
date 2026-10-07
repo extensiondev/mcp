@@ -43,14 +43,14 @@ importers:
         specifier: ^7.0.6
         version: 7.0.6
       extension-create:
-        specifier: 4.1.31
-        version: 4.1.31
+        specifier: 4.1.32
+        version: 4.1.32
       extension-develop:
-        specifier: 4.1.31
-        version: 4.1.31(@swc/helpers@0.5.21)(svelte@5.56.6(@typescript-eslint/types@8.67.0))(typescript@6.0.2)(webpack@5.108.4(postcss@8.5.23))
+        specifier: 4.1.32
+        version: 4.1.32(@swc/helpers@0.5.21)(svelte@5.56.6(@typescript-eslint/types@8.67.0))(typescript@6.0.2)(webpack@5.108.4(postcss@8.5.23))
       extension-install:
-        specifier: 4.1.31
-        version: 4.1.31
+        specifier: 4.1.32
+        version: 4.1.32
       ws:
         specifier: ^8.21.0
         version: 8.21.0
@@ -1756,12 +1756,12 @@ packages:
     resolution: {integrity: sha512-hIS4idWWai69NezIdRt2xFVofaF4j+6INOpJlVOLDO8zXGpUVEVzIYk12UUi2JzjEzWL3IOAxcTubgz9Po0yXw==}
     engines: {node: '>= 18'}
 
-  extension-create@4.1.31:
-    resolution: {integrity: sha512-8gwG6qNz9DvF5kh/qc5epZsQIbHkckbjcT++JHYkqbLRYShKFTH0RncXjS92Ht2eXkod5o4jUBcSflrPY7jmUw==}
+  extension-create@4.1.32:
+    resolution: {integrity: sha512-w7+7fUw1gJfTffq7b5lOp/RbGVXZTfmN5T1+HZD+yH1Kxsd8CJyNQCPaGWbfOGLVOHfoVDYQO94uqtXbVn8Xgg==}
     engines: {node: '>=22.12'}
 
-  extension-develop@4.1.31:
-    resolution: {integrity: sha512-GZnaneEu/T9kZA3JfO6grYbFxXOttpwyZbzB2q6+uBMh/NcBcazQ1I+5LwRMKUNoGOysNypjB67PFdGvT+1R4Q==}
+  extension-develop@4.1.32:
+    resolution: {integrity: sha512-0RmuS3Os3M/bhdvFOvLWvRtDbt+J35QjFyuffAt2p7QQY5KHbSMHBc+hwNsAJOCnm/4n9cC/xHtSM/0ETIu2gw==}
     engines: {node: '>=22.12'}
 
   extension-from-store@0.2.5:
@@ -1769,8 +1769,8 @@ packages:
     engines: {node: '>=16'}
     hasBin: true
 
-  extension-install@4.1.31:
-    resolution: {integrity: sha512-2+RRuSU+uFA9u/WLF2c5Zmxy/iMU91IE2eoWDKxGRCaw1PhvMDaTZaZxgPfLSTHY9rj7YNqE4wspiCRbTdaxUg==}
+  extension-install@4.1.32:
+    resolution: {integrity: sha512-Yq80DdMGqxL8+OMydtKFgGOdiCbLZyicOQYae/S5lbw/yBVxdUOgPiK5jr3oAIfrAlLOQ+K8s3JPkHwP0DQ5Yw==}
     engines: {node: '>=22.12'}
 
   fast-deep-equal@3.1.3:
@@ -2552,8 +2552,13 @@ packages:
     resolution: {integrity: sha512-g50586zr4bZmwFiTlflMu8E0bDTb5I5gertgwAKmsdUlTQIhZtunzUlD1WSzwcVWPoAVpsrA6vlfCD7oXvRwgg==}
     engines: {node: ^10 || ^12 || >=14}
 
-  preact@10.27.3:
-    resolution: {integrity: sha512-ZieIP3zQHiQsNF3BA+SNVS8dcuRIg/nsxlkFbCMBLS2L1Ww4Bkxd9n6Md2A1crfTZsEbQPADV0neYmh/EElgeQ==}
+  preact@11.0.0:
+    resolution: {integrity: sha512-LRTLKuSe6VYPhvBDjwFaX+nuZnpsw6IN2GSboisAvhGsncylBmrbDCERhgKDn6yP2mAwbGvsB5OVyTe33M8gBg==}
+    peerDependencies:
+      preact-render-to-string: '>=6.7.0'
+    peerDependenciesMeta:
+      preact-render-to-string:
+        optional: true
 
   prefers-yarn@2.0.1:
     resolution: {integrity: sha512-laDDLNlUaBMG6ae/MxsbAuRPiDilHL6Cs8jHFWL2AC1wnSug6Y3MvgJB98nzr+yAfYOhZjIPnsSfH8eQGgMsAQ==}
@@ -3767,9 +3772,9 @@ snapshots:
 
   '@oxc-project/types@0.139.0': {}
 
-  '@prefresh/core@1.5.9(preact@10.27.3)':
+  '@prefresh/core@1.5.9(preact@11.0.0)':
     dependencies:
-      preact: 10.27.3
+      preact: 11.0.0
 
   '@prefresh/utils@1.2.1': {}
 
@@ -3974,9 +3979,9 @@ snapshots:
 
   '@rspack/lite-tapable@1.1.0': {}
 
-  '@rspack/plugin-preact-refresh@2.0.1(@prefresh/core@1.5.9(preact@10.27.3))(@prefresh/utils@1.2.1)(@rspack/core@2.2.3(@swc/helpers@0.5.21))':
+  '@rspack/plugin-preact-refresh@2.0.1(@prefresh/core@1.5.9(preact@11.0.0))(@prefresh/utils@1.2.1)(@rspack/core@2.2.3(@swc/helpers@0.5.21))':
     dependencies:
-      '@prefresh/core': 1.5.9(preact@10.27.3)
+      '@prefresh/core': 1.5.9(preact@11.0.0)
       '@prefresh/utils': 1.2.1
     optionalDependencies:
       '@rspack/core': 2.2.3(@swc/helpers@0.5.21)
@@ -4778,7 +4783,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  extension-create@4.1.31:
+  extension-create@4.1.32:
     dependencies:
       axios: 1.20.0
       cross-spawn: 7.0.6
@@ -4790,15 +4795,15 @@ snapshots:
       - debug
       - supports-color
 
-  extension-develop@4.1.31(@swc/helpers@0.5.21)(svelte@5.56.6(@typescript-eslint/types@8.67.0))(typescript@6.0.2)(webpack@5.108.4(postcss@8.5.23)):
+  extension-develop@4.1.32(@swc/helpers@0.5.21)(svelte@5.56.6(@typescript-eslint/types@8.67.0))(typescript@6.0.2)(webpack@5.108.4(postcss@8.5.23)):
     dependencies:
       '@babel/core': 7.29.7
       '@babel/preset-typescript': 7.29.7(@babel/core@7.29.7)
-      '@prefresh/core': 1.5.9(preact@10.27.3)
+      '@prefresh/core': 1.5.9(preact@11.0.0)
       '@prefresh/utils': 1.2.1
       '@rspack/core': 2.2.3(@swc/helpers@0.5.21)
       '@rspack/dev-server': 2.1.0(@rspack/core@2.2.3(@swc/helpers@0.5.21))
-      '@rspack/plugin-preact-refresh': 2.0.1(@prefresh/core@1.5.9(preact@10.27.3))(@prefresh/utils@1.2.1)(@rspack/core@2.2.3(@swc/helpers@0.5.21))
+      '@rspack/plugin-preact-refresh': 2.0.1(@prefresh/core@1.5.9(preact@11.0.0))(@prefresh/utils@1.2.1)(@rspack/core@2.2.3(@swc/helpers@0.5.21))
       '@rspack/plugin-react-refresh': 2.0.2(@rspack/core@2.2.3(@swc/helpers@0.5.21))(react-refresh@0.18.0)
       '@vue/compiler-sfc': 3.5.43
       acorn: 8.17.0
@@ -4822,7 +4827,7 @@ snapshots:
       postcss-loader: 8.2.1(@rspack/core@2.2.3(@swc/helpers@0.5.21))(postcss@8.5.23)(typescript@6.0.2)(webpack@5.108.4(postcss@8.5.23))
       postcss-preset-env: 11.1.1(postcss@8.5.23)
       postcss-scss: 4.0.9(postcss@8.5.23)
-      preact: 10.27.3
+      preact: 11.0.0
       prefers-yarn: 2.0.1
       react-refresh: 0.18.0
       sass-loader: 17.0.0(@rspack/core@2.2.3(@swc/helpers@0.5.21))(webpack@5.108.4(postcss@8.5.23))
@@ -4839,6 +4844,7 @@ snapshots:
       - '@module-federation/runtime-tools'
       - '@swc/helpers'
       - bufferutil
+      - preact-render-to-string
       - sass
       - sass-embedded
       - selfsigned
@@ -4853,7 +4859,7 @@ snapshots:
     dependencies:
       fflate: 0.8.3
 
-  extension-install@4.1.31:
+  extension-install@4.1.32:
     dependencies:
       cross-spawn: 7.0.6
       pintor: 0.3.0
@@ -5580,7 +5586,7 @@ snapshots:
       picocolors: 1.1.1
       source-map-js: 1.2.2
 
-  preact@10.27.3: {}
+  preact@11.0.0: {}
 
   prefers-yarn@2.0.1: {}
 

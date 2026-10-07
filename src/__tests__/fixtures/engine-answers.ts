@@ -1,5 +1,5 @@
 /* @invariant THESE ARE THE ENGINE'S REAL SHAPES, KEY FOR KEY, FROM ITS OWN
- * WRITERS. Each builder returns what extension-develop 4.1.31 (or its CLI)
+ * WRITERS. Each builder returns what extension-develop 4.1.32 (or its CLI)
  * writes today, with the file and symbol that writes it named beside it, so
  * a test that wants a session, a log line, a build or an act reply feeds the
  * client what the engine feeds it. A test that wants a degraded or older
@@ -71,7 +71,7 @@ export function readyContract(
     port: command === "dev" ? 8080 : null,
     ...(command === "build" ? {} : { host: "localhost" }),
     controlPort: command === "dev" ? 43210 : null,
-    toolchainVersion: "4.1.31",
+    toolchainVersion: "4.1.32",
     extensionName: "Fixture",
     extensionVersion: "1.0.0",
     status: "ready",

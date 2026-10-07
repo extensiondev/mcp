@@ -274,7 +274,7 @@ interface DoctorCheck {
    over a channel that may equally have died, so matching the flag name alone
    would launder a dead session into a healthy verdict. The 4003 detail the
    CLI writes is "refused: control is off in the session that answered"
-   (cli.cjs runDoctor, 4.1.29 to 4.1.31); an older spelling of this pattern
+   (cli.cjs runDoctor, 4.1.29 to 4.1.32); an older spelling of this pattern
    matched no text any engine emits, so the read-only verdict was never
    reachable and every default session read unhealthy. */
 const CONTROL_OFF_BY_CHOICE =
