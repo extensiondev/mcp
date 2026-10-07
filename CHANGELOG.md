@@ -39,6 +39,12 @@
 - `@modelcontextprotocol/sdk` moves to 1.32.1, past GHSA-6qxp-vccf-f47h
   (the OAuth client paths it fixes are not used here). Its stdio reader now
   refuses a single client message over 10 MiB.
+- Measured on this machine without a window: `extension_build` for Safari
+  validates the manifest, generates the Xcode project and builds the app
+  (31 s, bundle id derived from the app name). A Safari dev session and
+  its surface reads still need Allow Remote Automation on and the
+  extension enabled in Safari > Settings > Extensions, which are attended
+  steps, so the live lane does not run Safari on its own.
 - Measured on Extension.js 4.1.32: a Firefox MV3 event page answers
   `extension_eval` in `background` like an MV2 page does. The CSP refusal
   rewrite applies to a declared content_security_policy, never to MV3 as
