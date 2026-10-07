@@ -15,6 +15,7 @@ import {
 } from "../lib/common-schema";
 import { runActVerb } from "../lib/act";
 import { listBridgeTabs } from "../lib/bridge-tabs";
+import { readExecutorStamp } from "../lib/executor-stamp";
 import { isChromiumFamily, WEBKIT_FAMILY } from "../lib/browser-family";
 import {
   readExtensionRoots,
@@ -602,6 +603,18 @@ async function assertBackgroundWorker(
         null,
         `The ${background.kind} answered a tabs query over the control channel; the bridge executor runs inside the background, so it has booted.`,
         { backgroundKind: background.kind, tabsSeen: listed.tabs.length },
+      );
+    }
+
+    const stamp = readExecutorStamp(stage.projectPath, stage.browser);
+
+    if (stamp?.runtime === "detached") {
+      return inconclusiveCheck(
+        id,
+        null,
+        `The control channel did not answer on ${stage.browser}: ready.json says the bridge executor detached at ${stamp.executorDetachedAt ?? "an unstated time"} and has not attached again, so the background is between generations (a reload or a crash) and could not be asked.`,
+        "Wait until ready.json reads runtime \"attached\" (extension_reload now waits for that itself), then assert again; extension_logs (context: ['background']) shows what the new background wrote meanwhile.",
+        { executorDetachedAt: stamp.executorDetachedAt },
       );
     }
 

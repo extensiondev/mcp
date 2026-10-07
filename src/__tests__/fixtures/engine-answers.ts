@@ -417,3 +417,40 @@ export function doctorFrame(
 
 export const DOCTOR_CONTROL_OFF_DETAIL =
   "refused: control is off in the session that answered";
+
+/* @invariant extension-develop/dist/rspack-config~0.mjs, the bridge executor's
+ * `op === "reload"` branch: a background reload is acknowledged with
+ * `replyOk(cmdId, {reloading: true})` and `chrome.runtime.reload()` runs 50 ms
+ * later, so the frame precedes the reload; a tab reload answers
+ * `replyOk(cmdId, {reloaded: target.tabId})` after `tabs.reload` returned. */
+export function reloadFrame(target: "background" | number = "background", overrides: Body = {}): Body {
+  return actFrame("reload", target === "background" ? { reloading: true } : { reloaded: target }, overrides);
+}
+
+/* @invariant extension-develop/dist/832~0.mjs, `stampExecutorDetached` and
+ * `stampExecutorAttached` of the ready-contract writer, applied to a contract
+ * file the way the engine applies them: detached sets `runtime` and
+ * `executorDetachedAt` only when `executorAttachedAt` is already a string;
+ * attached sets `runtime`, deletes `executorDetachedAt`, and moves `ts` when
+ * `executorAttachedAt` already exists (a reattach), else stamps
+ * `executorAttachedAt` for the first time. */
+export function stampExecutorDetached(contractFile: string, at = new Date().toISOString()): void {
+  const prev = JSON.parse(fs.readFileSync(contractFile, "utf8")) as Body;
+  if (typeof prev.executorAttachedAt !== "string") return;
+  prev.runtime = "detached";
+  prev.executorDetachedAt = at;
+  prev.ts = at;
+  fs.writeFileSync(contractFile, JSON.stringify(prev, null, 2));
+}
+
+export function stampExecutorAttached(contractFile: string, at = new Date().toISOString()): void {
+  const prev = JSON.parse(fs.readFileSync(contractFile, "utf8")) as Body;
+  prev.runtime = "attached";
+  delete prev.executorDetachedAt;
+  if (typeof prev.executorAttachedAt === "string") {
+    prev.ts = at;
+  } else {
+    prev.executorAttachedAt = at;
+  }
+  fs.writeFileSync(contractFile, JSON.stringify(prev, null, 2));
+}

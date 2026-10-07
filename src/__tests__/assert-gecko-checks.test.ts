@@ -6,6 +6,7 @@ import { describe, it, expect, afterEach, vi } from "vitest";
 
 import { envelope } from "../lib/envelope";
 import { actFrame, cliRefusal, tabRows } from "./fixtures/engine-answers";
+import { writeModernContract } from "./fixtures/ready-contract";
 
 import type * as ActModule from "../lib/act";
 import type * as CdpPortModule from "../lib/cdp-port";
@@ -123,6 +124,32 @@ describe("extension_assert reads Gecko through the control channel instead of an
 
     expect(leg.outcome ?? leg.status ?? leg.verdict).toMatch(/inconclusive/i);
     expect(JSON.stringify(leg)).toContain("allowControl");
+  });
+
+  it("names the contract's detach stamp when the channel is silent because the background is between generations", async () => {
+    controlChannel = "silent";
+    const projectPath = project();
+    writeModernContract(projectPath, "firefox", {
+      runtime: "detached",
+      executorAttachedAt: "2026-10-07T12:00:00.000Z",
+      executorDetachedAt: "2026-10-07T12:00:09.000Z",
+      ts: "2026-10-07T12:00:09.000Z",
+    });
+
+    const result = JSON.parse(
+      await assertTool.handler({
+        projectPath,
+        browser: "firefox",
+        expect: [{ assert: "background-worker-booted" }],
+      }),
+    );
+    const leg = check(result, "background-worker-booted");
+
+    expect(leg.outcome ?? leg.status ?? leg.verdict).toMatch(/inconclusive/i);
+    expect(JSON.stringify(leg)).toContain("detached at 2026-10-07T12:00:09.000Z and has not attached again");
+    expect(JSON.stringify(leg)).toContain("between generations");
+    expect(JSON.stringify(leg)).toContain("2026-10-07T12:00:09.000Z");
+    expect(JSON.stringify(leg)).not.toContain("allowControl");
   });
 
   it("passes surface-rendered when the surface relay answers with a document", async () => {

@@ -311,7 +311,7 @@ Read where a project stands on extension.dev, from the public registry (registry
 
 ## extension_reload
 
-Reload a running extension's background context, or a tab. Start the session with allowControl:true (extension_dev).
+Reload a running extension's background context, or a tab. Start the session with allowControl:true (extension_dev). A background reload answers once the engine's ready.json shows the new background attached to the dev server again (value.reattached, value.reattachedMs), so the next read or assertion meets the new generation and not the gap between them; if it has not come back within the budget (timeout, at most 5 seconds) the answer is status reloading with the contract's own stamps.
 
 | input | type | required | default | description |
 | --- | --- | --- | --- | --- |
