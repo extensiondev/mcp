@@ -24,18 +24,14 @@ type ServerCheck =
   | { kind: "not-asked"; detail: string };
 
 /* @invariant
- * THE LOCAL FILE CLAIMS, THE SERVER ANSWERS, AND THE TWO ARE NEVER BLENDED.
- *
- * Before this check, status said "logged-in" for any unexpired bytes in
- * auth.json, including a token the platform had revoked or one minted for a
- * different environment's audience, because no endpoint answered identity for
- * a bearer token. Now the platform's /api/cli/whoami is asked with the same
- * credential every authenticated tool sends, and its verdict is reported AS
- * the server's verdict: a refusal flips the status to refused-by-server, and
- * an unreachable or endpoint-less server is said out loud instead of being
- * dressed up as confirmation. The one thing this must never do is fall back
- * to the local claim in a way that reads as server-confirmed.
- */
+  * THE LOCAL FILE CLAIMS, THE SERVER ANSWERS, AND THE TWO ARE NEVER BLENDED.
+  * Now the platform's /api/cli/whoami is asked with the same credential every
+  * authenticated tool sends, and its verdict is reported AS the server's
+  * verdict: a refusal flips the status to refused-by-server, and an
+  * unreachable or endpoint-less server is said out loud instead of being
+  * dressed up as confirmation. The one thing this must never do is fall back
+  * to the local claim in a way that reads as server-confirmed.
+  */
 function describeServer(check: ServerCheck, api: string) {
   if (check.kind === "confirmed") {
     return {

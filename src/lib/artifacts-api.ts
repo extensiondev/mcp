@@ -255,8 +255,6 @@ export async function listArtifacts(options: {
     };
   }
 
-  /* @invariant A LISTING WITHOUT ITS LIST IS NOT ZERO SHARES, and a row
-     without an id is not a share. */
   if (!Array.isArray(data.artifacts)) {
     return {
       ok: false,
@@ -288,17 +286,6 @@ export async function listArtifacts(options: {
       matched: num(data.matched, artifacts.length),
       limit: num(data.limit, artifacts.length),
       truncated: data.truncated === true,
-      /* @invariant
-       * A listing that never mentions truncated is not a whole listing.
-       *
-       * `truncated === true` collapses a missing field into false, and false is
-       * the reading that lets extension_shares call a local record "not owned
-       * by this token", which a reader hears as "that link is dead". The field
-       * going away in a server release would therefore turn every share the
-       * page did not reach into a false accusation, silently and in
-       * production. Reporting whether the server said anything at all keeps
-       * absent distinguishable from whole.
-       */
       truncatedReported: typeof data.truncated === "boolean",
       scanned: num(data.scanned, 0),
     },

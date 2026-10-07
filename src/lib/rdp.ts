@@ -11,7 +11,6 @@ import { setTimeout as sleep } from "node:timers/promises";
 
 import type { ConsoleMessage } from "./console-summary";
 
-
 export interface RdpAddon {
   id?: string;
   actor?: string;
@@ -379,16 +378,6 @@ const RDP_FRAME_WAIT_MS = 5_000;
 const RDP_FRAME_POLL_MS = 50;
 const RDP_RESULT_POLL_MS = 100;
 
-/* @invariant A console actor evaluates outside the document's content
-   security policy, which is the whole reason to come here: the in-page
-   executors (the surface relay, scripting.executeScript, tabs.executeScript
-   with a string) are all refused by a policy that forbids eval, the
-   extension's own or a site's. It answers an
-   object with an actor grip rather than a value and never awaits a promise,
-   so the expression is settled inside the document, JSON-encoded there,
-   parked under a token and read back as a string. The expression is
-   embedded as source, never passed to eval, or the page policy would refuse
-   the wrapper for the same reason it refused the relay. */
 export function rdpStartExpression(expression: string, token: string): string {
   const key = JSON.stringify(token);
 

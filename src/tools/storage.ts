@@ -93,8 +93,8 @@ export async function handler(
 
   const raw = await runActVerb(cli, args.projectPath, args.timeout, schema.name);
   /* @invariant THE ENGINE READS NO CONTEXT FOR STORAGE and `{set: [key]}` is
-     the request echoed, not a read. A caller's context is
-     named as not honoured, and a set is read back before it is called set. */
+     the request echoed, not a read. A caller's context is named as not
+     honoured, and a set is read back before it is called set. */
   let parsed: any;
 
   try {

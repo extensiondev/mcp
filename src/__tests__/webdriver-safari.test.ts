@@ -284,6 +284,29 @@ describe("Safari sessions over the dev window's WebDriver connection", () => {
     expect(parsed.error.message).toContain("boom from the page");
   });
 
+  it("reads the roots as soon as the navigated page shows one instead of waiting a fixed 1200 ms", async () => {
+    withWindow();
+    safari.roots = [
+      { owner: "content_scripts/content-0::script-0@dev.extensionjs.Demo.Extension (TEAM)" },
+    ];
+
+    const started = Date.now();
+
+    const parsed = JSON.parse(
+      await assertTool.handler({
+        projectPath: project,
+        browser: BROWSER,
+        expect: [
+          { assert: "content-script-injected", url: "https://example.test/page" },
+        ],
+      }),
+    );
+
+    expect(parsed.value.checks[0].outcome).toBe("pass");
+    expect(safari.calls.some((c) => c.route === "/session/S-9/url")).toBe(true);
+    expect(Date.now() - started).toBeLessThan(600);
+  });
+
   it("passes content-script-injected on a root owned by this extension", async () => {
     withWindow();
     safari.roots = [
@@ -436,7 +459,6 @@ describe("Safari sessions over the dev window's WebDriver connection", () => {
     expect(act.calls.some((cli) => cli[0] === "storage")).toBe(true);
     expect(safari.calls).toHaveLength(0);
   });
-
 
   it("explains a missing Safari log file in Safari's terms", async () => {
     withWindow();

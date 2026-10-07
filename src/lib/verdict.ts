@@ -202,11 +202,6 @@ export function failCheck(
   return result(id, subject, OUTCOME_FAIL, detail, evidence);
 }
 
-/* @invariant An inconclusive check cannot be built without naming the evidence
-   that would settle it. The upstream contract makes inconclusive gate exactly
-   as hard as a failure unless a consumer opts in; a caller who cannot say what
-   would settle a question is describing a shrug, and a shrug that gates is
-   indistinguishable from a bug in the tool. */
 export function inconclusiveCheck(
   id: string,
   subject: string | null,
@@ -221,10 +216,6 @@ export function checkKey(check: CheckResult): string {
   return check.subject ? `${check.id}:${check.subject}` : check.id;
 }
 
-/* @invariant The same rule the upstream verifier applies: a failure outranks an
-   unresolved check, an unresolved check outranks a pass, and a pass is only
-   what is left when nothing else is present. Empty is inconclusive here, which
-   is divergence 3 at the head of this file. */
 export function verdictOutcome(checks: CheckResult[]): VerdictOutcome {
   if (checks.length === 0) return OUTCOME_INCONCLUSIVE;
 

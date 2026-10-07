@@ -316,10 +316,10 @@ export async function handler(args: SubmitToolArgs): Promise<string> {
     const saidNothingDispatched = data?.retryable === true;
     const maybeDispatched =
       !dryRun && res.status >= 500 && !saidNothingDispatched;
-    /* @invariant AN APPROVAL IS SPENT BEFORE THE QUOTA AND CHANNEL CHECKS.
-       The platform consumes a presented approvalId once the owner, runner
-       and dispatch-pause checks pass, so a refusal after those has already
-       used it. */
+    /* @invariant AN APPROVAL IS SPENT BEFORE THE QUOTA AND CHANNEL CHECKS. The
+       platform consumes a presented approvalId once the owner, runner and
+       dispatch-pause checks pass, so a refusal after those has already used
+       it. */
     const BEFORE_APPROVAL = new Set(["BUILD_DISPATCH_DISABLED", "OWNER_REQUIRED", "TOKEN_ISSUER_UNKNOWN", "APPROVAL_REQUIRED", "APPROVAL_NOT_FOUND", "APPROVAL_SCOPE_MISMATCH", "APPROVAL_USED", "APPROVAL_EXPIRED"]);
     const platformCode = typeof data?.code === "string" ? data.code : "";
     const approvalSpent = !dryRun && Boolean(body.approvalId) && res.status < 500 && !BEFORE_APPROVAL.has(platformCode);
@@ -356,10 +356,10 @@ export async function handler(args: SubmitToolArgs): Promise<string> {
     });
   }
 
-  /* @invariant THE PLATFORM'S WARNING OBJECTS ARE RENDERED. The dry run
-     answers `{code, store, message, docsUrl}` objects (every Firefox
-     preflight carries FIREFOX_DATA_COLLECTION_PERMISSIONS), and the envelope
-     keeps strings only, so they were dropped on the floor. */
+  /* @invariant THE PLATFORM'S WARNING OBJECTS ARE RENDERED. The dry run answers
+     `{code, store, message, docsUrl}` objects (every Firefox preflight
+     carries FIREFOX_DATA_COLLECTION_PERMISSIONS), and the envelope keeps
+     strings only, so they were dropped on the floor. */
   const warnings: Array<string | null | undefined | false> = Array.isArray(
     data?.warnings,
   )

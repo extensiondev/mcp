@@ -72,10 +72,6 @@ export async function readReleases(args: {
 
   const buildsPageUrl = consoleProjectUrl(ref, "builds", args.api);
 
-  /* @invariant A held refusal names no console page. The Builds page is on
-   * console.extension.dev, which the public hold answers with 503, so quoting
-   * it here would refuse honestly and then send the reader to an error. The
-   * hold branch is tested first for that reason. */
   const heldRead = [channelsRes, metaRes, buildsRes].find(
     (res) => !res.ok && res.held === true,
   );
@@ -114,8 +110,8 @@ export async function readReleases(args: {
     new Set(channels.map((c) => c.sha).filter(Boolean)),
   );
 
-  /* @invariant Undeclared visibility is PRIVATE, as the platform reads it;
-     an unreadable meta.json is unknown, never public. */
+  /* @invariant Undeclared visibility is PRIVATE, as the platform reads it; an
+     unreadable meta.json is unknown, never public. */
   const visibility = metaRes.ok ? String(meta?.visibility || "private").toLowerCase() : "unknown";
   const isPrivate = visibility !== "public";
   const publicProjectUrl = userlandProjectUrl(ref, "", args.api);

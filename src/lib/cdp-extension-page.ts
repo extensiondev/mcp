@@ -19,12 +19,13 @@ import { listDocumentTargets, type PageTarget } from "./cdp-targets";
    session already publishes the debug port it needs. Everything here speaks to
    an extension page over that port and nothing else. */
 
-/* @invariant replMode is what lets a bare top-level `await` parse, the way the
-   DevTools console accepts it; without it Runtime.evaluate answers
-   "await is only valid in async functions", measured on Chrome 151. It is NOT
-   in the defaults: with replMode on, Chrome 151 answers a promise-valued
-   expression with the promise object itself and ignores awaitPromise, on
-   pages and workers alike, so every promise serialized to {}. evaluateOnExtensionPage turns it on only for the retry an await needs. */
+/* @invariant replMode is what lets a bare top-level `await` parse, the way
+   the DevTools console accepts it; without it Runtime.evaluate answers "await
+   is only valid in async functions", measured on Chrome 151. It is NOT in the
+   defaults: with replMode on, Chrome 151 answers a promise-valued expression
+   with the promise object itself and ignores awaitPromise, on pages and
+   workers alike, so every promise serialized to {}. evaluateOnExtensionPage
+   turns it on only for the retry an await needs. */
 const RUNTIME_EVALUATE_DEFAULTS = {
   returnByValue: true,
   awaitPromise: true,
@@ -75,18 +76,15 @@ export const WORKER_TARGET_TYPES = new Set([
   "worker",
 ]);
 
-/* @invariant A DEDICATED WORKER IS NOT THE BACKGROUND: it has no chrome.*
-   and lives beside an idle service worker, so taking the first listed
-   worker ran the expression there with no wake attempted. */
+/* @invariant A DEDICATED WORKER IS NOT THE BACKGROUND: it has no chrome.* and
+   lives beside an idle service worker, so taking the first listed worker ran
+   the expression there with no wake attempted. */
 export const BACKGROUND_TARGET_TYPES = new Set(["service_worker", "background_page"]);
 
 /* @invariant The background has no page target: an MV3 service worker and an
    MV2 background page are targets of their own types, and Runtime.evaluate on
    them is the inspector path the extension CSP does not govern, the same way
    it is for the extension's pages. */
-/* @invariant A LIST THAT COULD NOT BE READ IS NOT AN EMPTY LIST. These used
-   to answer `[]` when the target fetch threw, and the callers told the agent
-   "no open page" or the idle-worker story. */
 export type TargetsRead<T> = { targets: T[] } | { unreadable: string };
 
 export async function readExtensionWorkerTargets(
@@ -127,10 +125,9 @@ export type WorkerWake =
    fault: Chrome stops it after about 30 s without events and lists no target
    for it. The ServiceWorker domain is not on the browser session, but any
    page session carries it, and ServiceWorker.startWorker on the extension's
-   scope brings the worker back and relists it, measured on Chrome 151
-  . The page the command is issued from is incidental; an
-   extension page is preferred only because it certainly exists in the same
-   profile. */
+   scope brings the worker back and relists it, measured on Chrome 151. The
+   page the command is issued from is incidental; an extension page is
+   preferred only because it certainly exists in the same profile. */
 export async function wakeExtensionWorker(
   port: number,
   extensionId: string,
@@ -254,11 +251,6 @@ const TOP_LEVEL_AWAIT_REFUSAL = /await is only valid in async functions/i;
    handed back by reference and settled through Runtime.awaitPromise, the one
    call that awaits a replMode result honestly. Measured on Chrome 151 on a
    page, a DevTools iframe and a service worker. */
-/* @invariant THE CALLER'S TIMEOUT IS THE EVALUATE'S TIMEOUT. The connection's
-   fixed 15 s used to cut an expression the caller gave 60 s, and the answer
-   blamed the debug port while the expression ran on, so a retry did its
-   side effect twice. A timed-out evaluate is answered as
-   such. */
 export async function evaluateOnExtensionPage(
   port: number,
   targetId: string,

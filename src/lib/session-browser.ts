@@ -165,9 +165,6 @@ export function contractBoundPort(
   }
 }
 
-/* @invariant THE CONTROL CHANNEL IS REPORTED FROM THE CONTRACT. A control
-   server that cannot bind leaves controlPort null and
-   controlPortUnavailableReason in ready.json. */
 export function contractControlState(
   projectPath: string,
   browser: string,

@@ -1,6 +1,8 @@
-/* @invariant EACH CELL HERE FAILED BEFORE ITS FIX. Each guards against a tool that read "analyzed", "headless-clean", "pass",
- * "uninstalled" or "Safe to create" without reading the thing it was
- * describing. */
+/* @invariant
+  * EACH CELL HERE FAILED BEFORE ITS FIX. a tool that read "analyzed",
+  * "headless-clean", "pass", "uninstalled" or "Safe to create" without
+  * reading the thing it was describing.
+  */
 
 import fs from "node:fs";
 import os from "node:os";

@@ -74,15 +74,14 @@ describe("control-channel constants come from the engine, not from literals", ()
     );
   });
 
-  /* @invariant This used to assert the pinned bridge WITHHELD the close codes, which was
-     the condition that justified carrying them as literals. The pin moved to
-     4.0.19, that assertion fired, and the copy became a re-export. What it
-     asserts now is the risk that survives the adoption: an import cannot be a
-     transposed digit, but it CAN quietly become undefined if a future pin walks
-     back the export or renames one, and undefined compares equal to nothing, so
-     every refusal would fall through to the generic 4xxx remedy while the four
-     tests below still pass on their own literals. Identity against the module
-     namespace is what proves the value is the engine's and not a fallback. */
+  /* @invariant The pin moved to 4.0.19, that assertion fired, and the copy
+     became a re-export. What it asserts now is the risk that survives the
+     adoption: an import cannot be a transposed digit, but it CAN quietly
+     become undefined if a future pin walks back the export or renames one,
+     and undefined compares equal to nothing, so every refusal would fall
+     through to the generic 4xxx remedy while the four tests below still pass
+     on their own literals. Identity against the module namespace is what
+     proves the value is the engine's and not a fallback. */
   it("takes the close codes from the engine, by identity", () => {
     const published = bridge as unknown as Record<string, number | undefined>;
     const adopted: Record<string, number> = {

@@ -1,6 +1,7 @@
-/* @invariant the validator's view is the engine's, a rule
- * blocks only where the engine or the browser refuses, and each rule names
- * its source. */
+/* @invariant
+  * the validator's view is the engine's, a rule blocks only where the engine
+  * or the browser refuses, and each rule names its source.
+  */
 
 import fs from "node:fs";
 import os from "node:os";

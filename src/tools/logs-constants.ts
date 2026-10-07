@@ -6,32 +6,28 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-/* @invariant The control-channel wire constants come from the engine, not from
-   literals typed here. They are not layout, they are protocol: the running dev
-   server's broker compares the hello frame's `v` against ITS OWN
+/* @invariant The control-channel wire constants come from the engine, not
+   from literals typed here. They are not layout, they are protocol: the
+   running dev server's broker compares the hello frame's `v` against ITS OWN
    CONTROL_ENVELOPE_VERSION and closes the socket with 4002 "unsupported
    envelope version" on any mismatch, and its WebSocketServer is bound to a
-   single path so a wrong CONTROL_WS_PATH is refused at the HTTP upgrade.
-
-   That makes version skew load-bearing here in a way it is not for file paths.
-   This package pins one engine version; the project it drives may have an older
-   one installed. A literal "1" typed here is frozen at whatever the protocol was
-   when someone typed it and drifts silently; importing the engine's constant at
-   least means the value moves with a reviewable version bump and always matches
-   the engine this package is tested against. Neither choice can make the MCP
-   speak two protocol versions at once. What closes the gap is legibility, so
-   readFromStream reports the close code and reason verbatim instead of
-   returning an empty read: a 4xxx close naming the envelope version is a
-   diagnosis, an empty log is not.
-
-   The four CLOSE_ codes belong to the same contract and arrive the same way.
-   They were carried as literals here while the pinned bridge withheld them,
-   because a refusal that names the wrong remedy is worse than a copied number:
-   an envelope-version mismatch, a stale instance, an unavailable control
-   channel and a dropped slow reader need four different actions from the
-   caller, and the close code is the only thing that tells them apart. The pin
-   now resolves 4.0.19, whose bridge entry publishes all four, so the copy is
-   gone and the numbers move with the engine. */
+   single path so a wrong CONTROL_WS_PATH is refused at the HTTP upgrade. That
+   makes version skew load-bearing here in a way it is not for file paths.
+   This package pins one engine version; the project it drives may have an
+   older one installed. A literal "1" typed here is frozen at whatever the
+   protocol was when someone typed it and drifts silently; importing the
+   engine's constant at least means the value moves with a reviewable version
+   bump and always matches the engine this package is tested against. Neither
+   choice can make the MCP speak two protocol versions at once. What closes
+   the gap is legibility, so readFromStream reports the close code and reason
+   verbatim instead of returning an empty read: a 4xxx close naming the
+   envelope version is a diagnosis, an empty log is not. The four CLOSE_ codes
+   belong to the same contract and arrive the same way. They were carried as
+   literals here while the pinned bridge withheld them, because a refusal that
+   names the wrong remedy is worse than a copied number: an envelope-version
+   mismatch, a stale instance, an unavailable control channel and a dropped
+   slow reader need four different actions from the caller, and the close code
+   is the only thing that tells them apart. */
 export {
   CLOSE_BAD_HELLO,
   CLOSE_BAD_INSTANCE,

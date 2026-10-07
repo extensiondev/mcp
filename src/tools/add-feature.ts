@@ -162,10 +162,6 @@ export async function handler(args: {
   };
   const featureDir = FEATURE_DIR[args.feature] ?? args.feature;
 
-  /* @invariant THE CATALOG IS READ BEFORE SAYING NO TEMPLATE SHIPS A SURFACE.
-     devtools and options had no row in the map and were answered "No
-     catalog template ships this surface yet" while the catalog carried
-     several. */
   let templateSlug: string | undefined = FEATURE_TEMPLATE_MAP[args.feature]?.[framework];
   let referenceNote: string | undefined;
 
@@ -280,10 +276,6 @@ export async function handler(args: {
     fs.existsSync(path.join(projectPath, f.path)),
   );
 
-  /* @invariant "SAFE TO CREATE" READS THE MANIFEST. The plan's additions
-     replace keys the manifest may already declare (background, action,
-     side_panel); conflicts used to be file paths only, and an unparseable
-     manifest read as no conflict. */
   const bareKey = (key: string): string =>
     key.replace(/^(chromium|chrome|firefox|gecko|safari|edge|opera|brave):/, "");
   let manifestKeys: string[] | null = null;
@@ -300,11 +292,11 @@ export async function handler(args: {
     manifestUnreadable = err instanceof Error ? err.message : String(err);
   }
 
-  /* @invariant A PREFIXED KEY REPLACES THE UNPREFIXED ONE IN THE ENGINE, so
-     an addition like `chromium:permissions: ["sidePanel"]` dropped the
-     project's existing permissions on Chromium. A list
-     addition is merged with what the manifest already declares for that
-     key, and the merge is listed, not counted as a conflict. */
+  /* @invariant A PREFIXED KEY REPLACES THE UNPREFIXED ONE IN THE ENGINE, so an
+     addition like `chromium:permissions: ["sidePanel"]` dropped the project's
+     existing permissions on Chromium. A list addition is merged with what the
+     manifest already declares for that key, and the merge is listed, not
+     counted as a conflict. */
   const merged: string[] = [];
 
   for (const [key, value] of Object.entries(manifestUpdates)) {

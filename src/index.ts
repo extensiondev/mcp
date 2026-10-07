@@ -363,9 +363,6 @@ export async function runCli(cmd: string, args: string[]): Promise<number> {
         parsed = null;
       }
 
-      /* @invariant Only an envelope that says ok: true exits 0. An answer that
-         does not parse is an unknown outcome, and a release script reading
-         the exit code must not take it as a promotion. */
       if (parsed?.ok === true) return 0;
 
       if (parsed === null || typeof parsed !== "object") {

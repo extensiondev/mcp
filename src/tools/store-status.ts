@@ -220,8 +220,6 @@ export async function readStores(args: {
     fetchRegistryJson(submissionsUrl, fetch, { ref, api: args.api }),
   ]);
 
-  /* @invariant A held refusal names no console page, and the Submissions page
-   * is on console.extension.dev, which the public hold answers with 503. */
   const heldRead = [healthRes, statusRes, submissionsRes].find(
     (res) => !res.ok && res.held === true,
   );

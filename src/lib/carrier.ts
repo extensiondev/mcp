@@ -15,20 +15,10 @@ import { isChromiumFamily } from "./browser-family";
 import { ensureProjectIgnored } from "./project-ignore";
 import { forgetCarrier, rememberCarrier } from "./carrier-registry";
 
-
 export const CARRIER_DIR_NAME = "extension-dev-live-preview";
 
 export const CARRIER_EXTENSION_ID = "ibppeifnekhjjjmpjfiobccjlicbmgcb";
 
-/* @invariant THE ORIGIN SENTENCE IS THE BUNDLED WORKER'S RULE, OR IT IS NOT
- * SAID. The shipped carrier is a copy of a build from apps/extension-core,
- * and for a while the copy was an older build whose listener never read its
- * sender while this sentence promised that it did. The
- * trusted origins, hosts and ports are listed here as data, the sentence is
- * made from them, and carrier-bundle.test.ts reads the shipped worker and
- * refuses the package when any of them is missing from it or the refusal
- * sentence is. A sync that ships a worker without the check reddens the
- * gate instead of shipping a false promise. */
 export const CARRIER_TRUSTED_ORIGINS = [
   "https://preview.extension.dev",
   "https://code.extension.dev",
@@ -150,22 +140,6 @@ export type CarrierClaim =
   | { ours: true; how: "marker" | "payload" | "partial" }
   | { ours: false; how: "foreign" };
 
-/* @invariant
- * The marker is the usual proof of ownership, never the only one.
- *
- * Removal and replacement were both gated on managed-by-extension-dev-mcp.json
- * alone, so a copy, a mv or a materialization that died between cpSync and the
- * marker write left a directory this tool had placed and could then never take
- * back: extension_stop and extension_build refused it forever, and
- * materializeCarrier refused to overwrite it, which locks the carrier lane out
- * of that project with no way forward that does not ask the user to delete
- * something by hand. The payload itself carries proof the marker cannot beat: a
- * manifest key that hashes to the carrier's own extension id, which nothing but
- * this package's payload has. A half-copied directory has no manifest at all,
- * so the second recogniser accepts one only when every file in it is also a
- * file of the bundled payload. Anything else stays foreign and is never
- * touched.
- */
 export function claimCarrier(target: string): CarrierClaim {
   if (fs.existsSync(path.join(target, MARKER_FILE))) {
     return { ours: true, how: "marker" };
@@ -244,10 +218,6 @@ export function removeCarrier(projectPath: string): CarrierRemoval {
   };
 }
 
-/* @invariant A FAILED IGNORE IS SAID. `failed` and `not-a-repo` used to
-   collapse into the same null as `already-ignored`, so a carrier the tool
-   described as gitignored could sit unignored in a repo whose .gitignore it
-   could not write. */
 export function ensureCarrierIgnored(projectPath: string): {
   entry: string | null;
   state: "added" | "already-ignored" | "not-a-repo" | "failed";

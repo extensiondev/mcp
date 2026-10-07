@@ -98,9 +98,6 @@ export async function handler(args: {
     });
   }
 
-  /* @invariant A 2xx THE TOOL CANNOT READ IS NOT "NO MATCH". An HTML, empty
-     or reshaped body used to become `{}` and answer "No page matched" from
-     the tool agents consult before answering from memory. */
   if (bodyUnreadable !== null || !Array.isArray(body.results)) {
     return envelope({
       ok: false,

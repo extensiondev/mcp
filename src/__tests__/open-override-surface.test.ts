@@ -5,6 +5,8 @@ import path from "node:path";
 
 import { describe, it, expect, afterEach, vi } from "vitest";
 
+import { readyContract } from "./fixtures/engine-answers";
+
 import type * as ActModule from "../lib/act";
 import type * as CdpPortModule from "../lib/cdp-port";
 
@@ -115,7 +117,7 @@ function project(manifest: Record<string, unknown>): { dir: string; id: string }
   fs.mkdirSync(readyDir, { recursive: true });
   fs.writeFileSync(
     path.join(readyDir, "ready.json"),
-    JSON.stringify({ status: "ready", distPath }),
+    JSON.stringify(readyContract("dev", "chrome", { distPath })),
   );
 
   return { dir, id: expectedId(distPath) };

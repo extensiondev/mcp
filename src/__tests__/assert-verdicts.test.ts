@@ -776,7 +776,8 @@ describe("console-errors-empty", () => {
     expect(check.detail).toContain("boom");
   });
 
-  /* @invariant a gap sentinel is not an event, and lines the writer dropped may have been errors. */
+  /* @invariant a gap sentinel is not an event, and lines the writer dropped may
+   have been errors. */
   it("does not count a gap sentinel as an event", async () => {
     liveSession();
     writeLogs([logHeader("run-1"), { v: 1, type: "gap", reason: "disk_slow", dropped: 4 }]);

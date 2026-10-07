@@ -13,8 +13,6 @@ import { extensionInstall, getManagedBrowsersCacheRoot } from "extension-install
 import { envelope } from "../lib/envelope";
 import { findManagedBinaryIn } from "./detect-browsers";
 
-/* @invariant THE INSTALLER PRINTS WITH console.log UNLESS EXTENSION_OUTPUT IS
-   json OR ndjson, and this server's stdout is the JSON-RPC stream. The switch is set for the call and restored after. */
 async function withMachineOutput<T>(run: () => Promise<T>): Promise<T> {
   const previous = process.env.EXTENSION_OUTPUT;
   process.env.EXTENSION_OUTPUT = "json";

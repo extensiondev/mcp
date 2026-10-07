@@ -127,9 +127,6 @@ export async function handler(args: {
   });
 
   if (!result.ok) {
-    /* @invariant The held branch precedes the 404 branch because its hint sends
-     * the reader to extension.dev/new, which the public hold answers with 503.
-     * A refusal may not hand somebody an error page as its way forward. */
     if (result.held) {
       return platformHoldEnvelope({
         command: "extension_publish",
@@ -181,12 +178,9 @@ export async function handler(args: {
 
   const data = result.data as Record<string, unknown>;
 
-  /* @invariant A SHARE IS A URL THE PLATFORM NAMED, OVER A BUILD IT NAMED.
-     "published" used to be any 2xx: an empty body, an HTML page, and a
-     share minted over a project with no successful build (the platform
-     mints it and answers `buildSha: null`) all read as published with a
-     link that renders nothing. No share URL is
-     unconfirmed; a share with no build is said to be exactly that. */
+  /* @invariant A SHARE IS A URL THE PLATFORM NAMED, OVER A BUILD IT NAMED. No
+     share URL is unconfirmed; a share with no build is said to be exactly
+     that. */
   if (typeof data.shareUrl !== "string" || !data.shareUrl.trim()) {
     return envelope({
       ok: false,
@@ -265,10 +259,10 @@ export async function handler(args: {
           .sort((a, b) =>
             String(b.timestamp ?? "").localeCompare(String(a.timestamp ?? "")),
           )[0];
-        /* @invariant THE PLATFORM'S SHA WINS. When the platform names the
-           build it served, the index row is matched to that sha; the newest
-           build fills in only when the platform named none, and then it is
-           said to be a guess. */
+        /* @invariant THE PLATFORM'S SHA WINS. When the platform names the build it
+           served, the index row is matched to that sha; the newest build
+           fills in only when the platform named none, and then it is said to
+           be a guess. */
         const platformSha = typeof data.buildSha === "string" && data.buildSha ? String(data.buildSha).toLowerCase() : null;
         const served = platformSha
           ? items.find((item) => item.sha.toLowerCase().startsWith(platformSha) || platformSha.startsWith(item.sha.toLowerCase()))

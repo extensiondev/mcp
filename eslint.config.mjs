@@ -14,20 +14,19 @@ import { migrationWarnings } from "./eslint/migration-warnings.mjs";
 import { styleRules } from "./eslint/style-rules.mjs";
 
 /* @invariant
- * THIS IS THE CONSOLE'S LINT, MINUS WHAT A NODE PACKAGE CANNOT USE.
- *
- * apps/web/console.extension.dev in the monorepo lints through
- * @extensiondev/config/eslint/react-internal: eslint-config-auditor's
- * recommended and typescript presets, consistent type imports, the 400-line
- * warning, the migration warnings, the house style plugin (padding lines,
- * curly, banner-aware header and divider rules, no JSDoc prose) and the
- * house-rule bypass. This repository is published on its own and cannot
- * depend on that private package, so eslint/ carries a copy of the two house
- * modules and this file mirrors base.js plus react-internal.js by hand. Left
- * out on purpose: the React and jsx-a11y layers, the browser globals, the
- * Tailwind rhythm rules and the icon or image import bans, none of which
- * has a target in a stdio server. Keep this in step with the monorepo copy.
- */
+  * THIS IS THE CONSOLE'S LINT, MINUS WHAT A NODE PACKAGE CANNOT USE.
+  * apps/web/console.extension.dev in the monorepo lints through
+  * @extensiondev/config/eslint/react-internal: eslint-config-auditor's
+  * recommended and typescript presets, consistent type imports, the 400-line
+  * warning, the migration warnings, the house style plugin (padding lines,
+  * curly, banner-aware header and divider rules, no JSDoc prose) and the
+  * house-rule bypass. This repository is published on its own and cannot
+  * depend on that private package, so eslint/ carries a copy of the two house
+  * modules and this file mirrors base.js plus react-internal.js by hand. Left
+  * out on purpose: the React and jsx-a11y layers, the browser globals, the
+  * Tailwind rhythm rules and the icon or image import bans, none of which has
+  * a target in a stdio server. Keep this in step with the monorepo copy.
+  */
 const houseRuleBypass = {
   rules: {
     "no-await-in-loop": "off",

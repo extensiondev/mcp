@@ -36,9 +36,6 @@ export interface DomSnapshot {
   maxDepth: number;
 }
 
-/* @invariant A CAP IS SAID. The snapshot used to stop at 500 nodes or depth
-   20 with no marker; an older or foreign answer that is
-   a bare array is kept as untruncated-unknown. */
 export function normalizeDomSnapshot(result: unknown, maxNodes: number): DomSnapshot {
   if (Array.isArray(result)) {
     return { nodes: result, totalElements: result.length, truncated: false, maxNodes, maxDepth: 20 };
@@ -76,8 +73,8 @@ export class CDPClient extends CDPConnection {
   /* @invariant The browser says whether it is headless in its own product
      string ("HeadlessChrome/151..."), which is the only reading that survives
      a launcher shim adding --headless=new behind the caller's back; the
-     environment variables this server also consults describe the request,
-     not the process that came up. */
+     environment variables this server also consults describe the request, not
+     the process that came up. */
   static async discoverBrowserVersion(
     port: number,
     host = "127.0.0.1",
@@ -94,10 +91,10 @@ export class CDPClient extends CDPConnection {
     }
   }
 
-  /* @invariant Chrome's new headless mode (--headless=new, the mode every
-     launcher shim here adds) keeps "Chrome/151..." in the Browser field and
-     says HeadlessChrome only in the User-Agent field of /json/version,
-     measured on Chrome 151. Both fields are read. */
+  /* @invariant Chrome's new headless mode (--headless=new, the mode a launcher
+     shim adds) keeps "Chrome/151..." in the Browser field and says
+     HeadlessChrome only in the User-Agent field of /json/version, measured on
+     Chrome 151. Both fields are read. */
   static async discoverUserAgent(
     port: number,
     host = "127.0.0.1",
@@ -166,8 +163,7 @@ export class CDPClient extends CDPConnection {
   async navigate(sessionId: string, url: string): Promise<void> {
     /* @invariant Page.navigate answers `errorText` (net::ERR_NAME_NOT_RESOLVED,
        net::ERR_CONNECTION_REFUSED, net::ERR_BLOCKED_BY_CLIENT) without a
-       protocol error. Dropping it called a refused navigation navigated
-      . */
+       protocol error. Dropping it called a refused navigation navigated. */
     const reply = (await this.sendCommand("Page.navigate", { url }, sessionId)) as
       | { errorText?: unknown }
       | undefined;
@@ -189,10 +185,6 @@ export class CDPClient extends CDPConnection {
     });
   }
 
-  /* @invariant A THROW IS NOT AN EMPTY VALUE. `exceptionDetails` sits beside
-     `result`, not inside it, so an expression that threw used to read as
-     `undefined` and the wrappers turned that into "", {} or [] under
-     status "inspected". */
   async evaluate(sessionId: string, expression: string): Promise<unknown> {
     const response = (await this.sendCommand(
       "Runtime.evaluate",

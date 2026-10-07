@@ -101,26 +101,6 @@ export function seedRef(slug: unknown, commit: unknown): string {
   return `${String(slug || "").trim()}@${String(commit || "").trim()}`;
 }
 
-/* @invariant One shape, two lanes, or the sum is a lie.
- *
- * These properties are Joan's `captureCreationFunnelEvent` in
- * code.extension.dev/src/workspace/funnel-telemetry.ts, key for key:
- * seed_source, seed_ref, seed_slug, session_id, entry, environment, source,
- * emitted_from and `$process_person_profile: false`. Only `entry`, `source` and
- * `emitted_from` differ in value, which is the whole point: one funnel, two
- * named denominators, summable because nothing else moved. Adding a property
- * here that the web lane does not send, or renaming one it does, forks the
- * funnel silently, and a silently forked funnel gets summed anyway.
- *
- * The distinct id is the PROCESS SESSION id and never the install id. The
- * install id persists across runs and would make a person count out of a
- * session count, which is the defect the preview disclosure already taught us
- * once. These rows are sessions from birth and may never be quoted as users.
- *
- * `draft_id` is null on this lane on purpose: a scaffolded directory is not a
- * draft row and inventing an id for it would put a key in the funnel that joins
- * to nothing.
- */
 export function creationFunnelPayload(
   event: string,
   properties: CreationFunnelProperties,
@@ -149,22 +129,6 @@ export function creationFunnelPayload(
   };
 }
 
-/* @invariant THIS CAPTURE HAS NO DURABLE ROW BEHIND IT ON THIS LANE.
- *
- * The web lane writes the draft row, the checkpoint and the provenance stamp
- * BEFORE it captures, so a dropped capture loses no fact and the board's
- * durable-rows-first rule holds. `extension_create` writes to the caller's disk
- * and talks to no endpoint of ours, and the one durable tool-lane record we do
- * keep, agent-sessions, is fixed at four fields by its own invariant and has no
- * room for a seed ref. So this event is the ONLY record that a tool-lane start
- * happened, which makes it a convenience view over nothing. Read it to compare
- * templates against each other; do not quote it as a company number under the
- * analytics tier rule until a durable seed row exists to back it.
- *
- * Never awaited by a tool handler and never able to fail one: the commit
- * resolution behind `seed_ref` is a network read with a pinned fallback, and no
- * scaffold may wait on it or die with it.
- */
 export async function captureCreationFunnelEvent(
   event: string,
   properties: CreationFunnelProperties,

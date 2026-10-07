@@ -124,9 +124,7 @@ const FORBIDDEN: Array<{ test: RegExp; reason: string; chromiumOnly?: boolean }>
 ];
 
 /* @invariant A rule about one browser's policy is applied to that browser.
-   The Web Store block is Chrome's; asserting a content script there on
-   Firefox or Safari used to be a hard FAIL "no manifest change makes this
-   true" for a page those browsers inject into like any other. The protocol rules (view-source:, extension origins) hold everywhere. */
+   The protocol rules (view-source:, extension origins) hold everywhere. */
 export function contentScriptsForbidden(url: string, browser?: string): string | null {
   const trimmed = String(url ?? "").trim();
   const chromium =

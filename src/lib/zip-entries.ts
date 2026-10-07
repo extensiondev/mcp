@@ -21,18 +21,6 @@ export interface ZipListing {
 
 const UNREADABLE: ZipListing = { names: [], readable: false };
 
-/* @invariant
- * A zip whose table of contents cannot be read is never reported as empty.
- *
- * This exists so a guard can look inside a packaged artifact rather than only
- * at the loose files beside it, and a guard that answers "no entries" for a
- * zip64 archive, a truncated download or something that is not a zip at all
- * would turn every unreadable artifact into a clean bill of health. Every
- * failure path therefore returns readable:false, and the entry count in the
- * end-of-central-directory record is checked against what was actually walked
- * so a partial walk cannot pass as a whole one. Only the central directory is
- * read, so the cost does not scale with what the archive holds.
- */
 export function readZipEntryNames(zipPath: string): ZipListing {
   let handle: number | null = null;
 

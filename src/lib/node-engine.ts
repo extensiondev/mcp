@@ -8,10 +8,7 @@
 
 import { createRequire } from "node:module";
 
-/* @invariant THE NODE FLOOR IS THE ENGINE'S, READ FROM THE INSTALLED
-   PACKAGE. The doctor used to pass any Node >= 20 while the pinned
-   extension-develop declares `>=22.12`; a hardcoded
-   floor goes stale the moment the engine moves. */
+/* @invariant THE NODE FLOOR IS THE ENGINE'S, READ FROM THE INSTALLED PACKAGE. */
 export function engineNodeRange(): { range: string; engine: string } | null {
   try {
     const require = createRequire(import.meta.url);

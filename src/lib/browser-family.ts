@@ -41,8 +41,8 @@ export function isGeckoFamily(browser: string): boolean {
 }
 
 /* @invariant THE ENGINE NAMES ITS OUTPUT DIRECTORY AFTER ITS OWN NORMALISED
-   BROWSER NAME: "firefox-based" becomes "gecko-based" (extension-develop,
-   the browser name resolver), so every dist and session path built from the
+   BROWSER NAME: "firefox-based" becomes "gecko-based" (extension-develop, the
+   browser name resolver), so every dist and session path built from the
    requested name read nothing for that target. */
 export function engineBrowserName(browser: string): string {
   return browser === "firefox-based" ? "gecko-based" : browser;

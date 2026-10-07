@@ -191,9 +191,6 @@ export async function handler(args: {
     });
   }
 
-  /* @invariant NO THEME BLOCK IS NOT A CLEAN THEME. An ordinary extension
-     manifest, or one with a misspelled `theme` key, used to resolve to `{}`
-     and read `headless-clean`. */
   const manifest = coerced.manifest;
 
   if (coerced.theme === null) {

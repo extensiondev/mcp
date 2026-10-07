@@ -24,14 +24,6 @@ const IGNORED_SEGMENTS = new Set([
   "__MACOSX",
 ]);
 
-/* @invariant
- * Secrets never ride along into a public share.
- *
- * A share link serves the uploaded bytes to anyone who opens it and offers the
- * whole build as a downloadable zip, so anything a build step copied into
- * dist/ is published the moment it is shared. A stray .env is the common case
- * and the expensive one.
- */
 const IGNORED_FILES = /^\.env(\..*)?$|\.(pem|key|p12|pfx|keystore)$/i;
 
 const TEXTUAL = /\.(json|js|mjs|cjs|ts|tsx|jsx|html|htm|css|svg|txt|md|map)$/i;
@@ -62,18 +54,6 @@ export type PreviewUploadOutcome =
       body?: unknown;
     };
 
-/* @invariant
- * A file only travels as text if it survives the round trip byte for byte.
- *
- * Classifying by extension alone is a guess about encoding, and Buffer's utf8
- * conversion answers a failed guess by substituting U+FFFD rather than by
- * failing. The extension list cannot be tightened out of the problem either:
- * ".ts" is TypeScript here and MPEG transport stream elsewhere, and a
- * manifest.json written by a PowerShell redirect is UTF-16. Because the
- * substitution happens before the upload, nothing downstream can undo it, so
- * the check belongs here: re-encode, compare, and fall back to base64 for
- * anything that did not survive.
- */
 function encodeFile(
   relativePath: string,
   bytes: Buffer,
@@ -186,16 +166,6 @@ export async function uploadPreview(options: {
   const totalChars = files.reduce((sum, file) => sum + file.content.length, 0);
 
   if (totalChars > MAX_CONTENT_CHARS) {
-    /* @invariant
-     * The number in this message is the budget the caller actually has.
-     *
-     * The cap counts encoded characters, and binary files are base64, which
-     * costs four characters for every three bytes. Quoting the raw cap told
-     * someone whose dist is mostly images and fonts that their 50MB build was
-     * "over 64MB", and pointed them at source maps that were not what filled
-     * the budget. Reporting what was measured, in the units they can act on,
-     * is the difference between an actionable limit and an argument.
-     */
     const encodedBytes = files.reduce(
       (sum, file) =>
         sum + Buffer.byteLength(file.content, file.encoding),

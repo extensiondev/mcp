@@ -70,23 +70,21 @@ const CONTROL_CHANNEL_DOWN_CODES = new Set([
 ]);
 
 /* @invariant The prose match reached when there is no code to read, which is
-   two situations and only one of them is about an old engine.
-
-   From 4.0.17 the CLI's act layer stamps a code on every failing frame, and the
-   control-channel ones land in the set above: E_SESSION_NOT_FOUND when no ready
-   contract exists, E_CONTROL_DENIED for a 40xx close, E_CONTROL_UNAVAILABLE for
-   a handshake that never completed. An engine at or above that floor never
-   reaches this function through translateFrame. The floor is days old, though,
-   and this server drives whatever binary the project has in node_modules/.bin,
-   so a 3.x or early-4.x project is an ordinary thing to meet and the scrape is
-   what keeps its errors legible.
-
-   The second situation does not expire with any version. When the CLI writes
-   nothing parseable to stdout, runActVerb builds its own frame out of stderr,
-   and stderr is text: there is no code on it to consult, whatever engine
-   produced it. So this stays after the version argument is gone, and it is
-   deliberately matched against the engine's message and not the CLI's decorated
-   copy, which is why it trips none of the tokens no-prose-scraping bans. */
+   two situations and only one of them is about an old engine. From 4.0.17 the
+   CLI's act layer stamps a code on every failing frame, and the
+   control-channel ones land in the set above: E_SESSION_NOT_FOUND when no
+   ready contract exists, E_CONTROL_DENIED for a 40xx close,
+   E_CONTROL_UNAVAILABLE for a handshake that never completed. An engine at or
+   above that floor never reaches this function through translateFrame. This
+   server drives whatever binary the project has in node_modules/.bin, so a
+   3.x or early-4.x project is an ordinary thing to meet and the scrape is
+   what keeps its errors legible. The second situation does not expire with
+   any version. When the CLI writes nothing parseable to stdout, runActVerb
+   builds its own frame out of stderr, and stderr is text: there is no code on
+   it to consult, whatever engine produced it. So this stays after the version
+   argument is gone, and it is deliberately matched against the engine's
+   message and not the CLI's decorated copy, which is why it trips none of the
+   tokens no-prose-scraping bans. */
 function legacyControlChannelScrape(message: string): boolean {
   return /no active control channel|control channel refused|\b1006\b|no executor connected|is the session started with allowControl/i.test(
     message,
@@ -102,6 +100,7 @@ function withSessionContext(
   const isControlError = code
     ? CONTROL_CHANNEL_DOWN_CODES.has(code)
     : legacyControlChannelScrape(message);
+
   if (!isControlError) return message;
 
   /* @invariant Only the browser the call named may explain the failure: a
@@ -237,11 +236,6 @@ export async function runActVerb(
   });
   const out = stdout.trim();
 
-  /* @invariant AN ANSWER THAT DID NOT COME BACK IS NOT A FAILURE OF THE
-     VERB. A run this server stopped, or one that exited 0 with stdout it
-     cannot read, may already have acted (a storage set, an open), so it is
-     reported as unconfirmed with that warning, never as "exited with code
-     0/null". */
   if (timedOut) {
     return envelope({
       ok: false,

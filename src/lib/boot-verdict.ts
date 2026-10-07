@@ -63,8 +63,6 @@ export interface PollOptions {
   intervalMs?: number;
 }
 
-
-
 interface ContractReading {
   contract: ReadyContract & Record<string, unknown>;
   fresh: boolean;
@@ -146,10 +144,9 @@ function contractVerdict(
     };
   }
 
-  /* @invariant A CONTRACT ERROR THAT IS NOT A COMPILE ERROR IS NOT CALLED
-     ONE. The engine stamps browser_launch_failed, extension_load_refused and
-     dev_server_start_failed too, and every one used to read "the first
-     compile failed, the server will recompile". */
+  /* @invariant A CONTRACT ERROR THAT IS NOT A COMPILE ERROR IS NOT CALLED ONE.
+     The engine stamps browser_launch_failed, extension_load_refused and
+     dev_server_start_failed too. */
   const compileErrors = Array.isArray(contract.errors) ? contract.errors : [];
   const compileCode =
     typeof contract.code !== "string" ||

@@ -331,10 +331,10 @@ async function listGeckoExtensions(
       const temporary = extensions.filter((e) => e.temporarilyInstalled);
 
       if (temporary.length === 1) {
-        /* @invariant A lone temporary add-on is this project's only by
-           inference: when the project's own add-on failed to install, the
-           one temporary install left can be the engine's companion, so the
-           match is labelled inferred and never stated as read. */
+        /* @invariant A lone temporary add-on is this project's only by inference:
+           when the project's own add-on failed to install, the one temporary
+           install left can be the engine's companion, so the match is
+           labelled inferred and never stated as read. */
         temporary[0].ownExtension = true;
         temporary[0].ownExtensionInferred = true;
 

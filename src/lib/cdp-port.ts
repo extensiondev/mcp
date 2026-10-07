@@ -36,10 +36,10 @@ async function resolveContractPort(
       contractSeen = true;
       if (contractSeenAt == null) contractSeenAt = Date.now();
 
-      /* @invariant A DEAD SESSION'S PORT IS NOBODY'S. The contract keeps the
-         port of the dev server that wrote it; once that pid is gone the port
-         may belong to another project's browser, and every reader that
-         dialled it answered for the wrong session. */
+      /* @invariant A DEAD SESSION'S PORT IS NOBODY'S. The contract keeps the port
+         of the dev server that wrote it; once that pid is gone the port may
+         belong to another project's browser, and every reader that dialled it
+         answered for the wrong session. */
       if (typeof contract.pid === "number" && pidState(contract.pid) !== "alive") {
         return { port: null, contractSeen };
       }
@@ -68,12 +68,9 @@ export async function resolveCdpPort(
   browser: string,
   options?: { waitMs?: number; graceMs?: number },
 ): Promise<{ port: number; source: "contract" } | null> {
-  /* @invariant NO CONTRACT MEANS NO SESSION. This used to fall back to
-     whatever answered on 127.0.0.1:9222, and every caller read only the port,
-     so a project that was never started was asserted, inspected, navigated
-     and evaluated against another session's browser. The
-     only port this package dials is the one the project's own contract
-     names, while the process that wrote it is alive. */
+  /* @invariant NO CONTRACT MEANS NO SESSION. The only port this package dials
+     is the one the project's own contract names, while the process that wrote
+     it is alive. */
   const { port } = await resolveContractPort(
     projectPath,
     browser,

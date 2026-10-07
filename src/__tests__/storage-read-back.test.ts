@@ -1,5 +1,5 @@
-/* @invariant a set is read back before it is called set,
- * and a context the engine never reads is named as not honoured. */
+/* @invariant a set is read back before it is called set, and a context the
+   engine never reads is named as not honoured. */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
 

@@ -115,9 +115,6 @@ function summarize(
         -1,
       )
     : -1;
-  /* @invariant THE EMPTY REASON IS ABOUT THE SESSION ONLY WHEN THE FILE IS
-     EMPTY. A filter that matched none of N events used to carry "no dev
-     session has produced a build here". */
   const fileHasEvents = typeof extra.total === "number" && extra.total > 0;
   const reason =
     matched === 0 && projectPath
@@ -188,11 +185,6 @@ export function staleFileNote(
   return undefined;
 }
 
-/* @invariant The run a log FILE belongs to is the last header record in it,
-   which is the same record and the same rule readFromFile below applies while
-   it collects events. Callers outside this tool need the run id on its own, to
-   hand to staleFileNote before they treat a line as evidence about the session
-   they are judging; they must not re-derive it from a different field. */
 export function readLogRunId(projectPath: string, browser: string): string {
   let text: string;
 
@@ -247,10 +239,10 @@ async function readFromFile(
      50,000 lines or 8 MB (the new header carries `rotatedFrom`) and appends a
      `{type: "gap", reason: "disk_slow", dropped}` sentinel when it could not
      keep up; both were invisible here, so an agent read a rotated or gapped
-     file as the whole run and a filter that matched nothing as a session
-     that logged nothing. The answer now carries the run's
-     total, what was dropped and whether it was rotated, and an empty match
-     over a live file says the filter is what matched nothing. */
+     file as the whole run and a filter that matched nothing as a session that
+     logged nothing. The answer now carries the run's total, what was dropped
+     and whether it was rotated, and an empty match over a live file says the
+     filter is what matched nothing. */
   const matches = makeFilter(args);
   const lines = fs.readFileSync(file, "utf8").split("\n").filter(Boolean);
   let runId = "";
@@ -443,9 +435,9 @@ async function readFromStream(
   const events: any[] = [];
   let dropped = 0;
   let runId = ready.runId;
-  /* @invariant A FOLLOW RETURNS HISTORY PLUS THE WINDOW. The broker replays
-     its whole ring (5,000 events) to a new consumer before any live frame,
-     so `matched` counts both; the two are told apart by the event's own
+  /* @invariant A FOLLOW RETURNS HISTORY PLUS THE WINDOW. The broker replays its
+     whole ring (5,000 events) to a new consumer before any live frame, so
+     `matched` counts both; the two are told apart by the event's own
      timestamp against the moment this reader connected and reported
      separately. */
   let connectedAt = Date.now();
@@ -617,9 +609,6 @@ async function readFromStream(
       );
 
       if (!refusal) {
-        /* @invariant A CLOSE BEFORE THE WINDOW ENDS IS A PARTIAL READ: the
-           server exited or restarted mid-window, and finishing silently read
-           as the whole window. */
         const elapsed = Date.now() - startedAt;
 
         if (elapsed < followMs - 250) {

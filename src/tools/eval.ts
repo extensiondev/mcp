@@ -158,13 +158,13 @@ export { EXTENSION_PAGE_CONTEXTS };
 
 /* @invariant On Chromium every context the server can name is a CDP target:
    the extension's pages, its background (a service worker on MV3, a
-   background page on MV2) and any web tab. Runtime.evaluate on the target
-   is the inspector path, which neither the extension's CSP nor a site's
-   Trusted Types policy governs, while the in-page string eval the relay and
-   chrome.scripting use is refused by both. So on
-   Chromium the background always goes over CDP, a page named by url goes
-   over CDP, and the relay is kept for content (the isolated world only the
-   extension has) and for the active tab when no url names it. */
+   background page on MV2) and any web tab. Runtime.evaluate on the target is
+   the inspector path, which neither the extension's CSP nor a site's Trusted
+   Types policy governs, while the in-page string eval the relay and
+   chrome.scripting use is refused by both. So on Chromium the background
+   always goes over CDP, a page named by url goes over CDP, and the relay is
+   kept for content (the isolated world only the extension has) and for the
+   active tab when no url names it. */
 export function wantsExtensionPageOverCdp(
   projectPath: string,
   browser: string,
@@ -463,9 +463,9 @@ export function isBrowserErrorPage(url: string): boolean {
 }
 
 /* @invariant A web tab named by url evaluates on its own CDP target, so a
-   site's Trusted Types policy (YouTube, Gmail, most Google properties) or
-   CSP never sees the expression; the in-page string eval the relay performs
-   is exactly what those policies refuse. */
+   site's Trusted Types policy (YouTube, Gmail, most Google properties) or CSP
+   never sees the expression; the in-page string eval the relay performs is
+   exactly what those policies refuse. */
 async function evaluateOnWebTarget(
   args: ActArgs & { expression: string },
   matches: Array<{ targetId: string; url: string; title: string }>,
@@ -624,14 +624,13 @@ async function evaluateThroughRelay(
    "call to eval() blocked by CSP" comes back as E_EVAL with "check the
    expression itself", while any expression fails the same way in a document
    whose content_security_policy forbids eval. That is a declared policy, not
-   MV3 as such: measured 2026-10-07 on Extension.js 4.1.32, a Firefox MV3
-   event page built from the action template (firefox:manifest_version 3,
-   firefox:scripts background) answered background evals ok, as its MV2 twin
-   did. The hint names the policy and the
-   paths that do not go through eval. From Extension.js
-   4.1.31 the engine names the refusal itself as E_CSP_BLOCKS_EVAL, in every
-   context, so both spellings are read here: a check for E_EVAL alone goes
-   dead on the engine this server pins. */
+   MV3 as such: measured on Extension.js 4.1.32, a Firefox MV3 event page
+   built from the action template (firefox:manifest_version 3, firefox:scripts
+   background) answered background evals ok, as its MV2 twin did. The hint
+   names the policy and the paths that do not go through eval. From
+   Extension.js 4.1.31 the engine names the refusal itself as
+   E_CSP_BLOCKS_EVAL, in every context, so both spellings are read here: a
+   check for E_EVAL alone goes dead on the engine this server pins. */
 const CSP_EVAL_REFUSAL = /blocked by CSP|call to eval|unsafe-eval|Content Security Policy/i;
 
 function cspRefusedFrame(parsed: Record<string, any> | null): boolean {
@@ -680,16 +679,18 @@ function explainCspRefusal(raw: string, context: string | undefined): string | n
    content eval with "chrome.scripting is not available ... use context
    background", which cannot read the tab. tabs.executeScript can: the same
    background-side wrapper extension_inspect already uses runs the expression
-   in the tab's content world and hands the completion value back. An expression that parses as one expression is wrapped so a
-   throw comes back as data; a statement list runs as the script's completion
-   value, the way executeScript defines it. */
+   in the tab's content world and hands the completion value back. An
+   expression that parses as one expression is wrapped so a throw comes back
+   as data; a statement list runs as the script's completion value, the way
+   executeScript defines it. */
 const NO_SCRIPTING_API = /scripting is not available/i;
 
 /* @invariant The same wrapper is the answer when the PAGE refuses: a site
    whose CSP forbids eval (YouTube) makes the in-page string executor fail
    with "call to eval() blocked by CSP" on Gecko, while tabs.executeScript
-   injects as the extension and the page policy does not govern it. Only an MV2 build has tabs.executeScript; an MV3 Gecko build
-   keeps the policy explanation, since protocol-level eval there is the engine's own concern. */
+   injects as the extension and the page policy does not govern it. Only an
+   MV2 build has tabs.executeScript; an MV3 Gecko build keeps the policy
+   explanation, since protocol-level eval there is the engine's own concern. */
 function pageEvalRefusedByCsp(parsed: Record<string, any>): boolean {
   return cspRefusedFrame(parsed);
 }
@@ -726,15 +727,13 @@ function notOneExpression(): string {
 }
 
 /* @invariant The relay wrapper settles a promise inside the page, and it
-   reaches the expression through (0, eval). Under a policy that forbids
-   eval that inner call is what throws, whoever evaluates the wrapper: the
-   engine's protocol route ran the
-   wrapper past the policy and the wrapper then refused itself, so popup and
-   options still answered "blocked by CSP" on an engine that could read them
-  . The bare expression has no
-   inner eval: the bridge refuses it, the engine takes it over the protocol,
-   awaits a promise there and hands the value back, so the wrapper is not
-   needed on this path at all. */
+   reaches the expression through (0, eval). Under a policy that forbids eval
+   that inner call is what throws, whoever evaluates the wrapper: the engine's
+   protocol route ran the wrapper past the policy and the wrapper then refused
+   itself, so popup and options still answered "blocked by CSP" on an engine
+   that could read them. The bare expression has no inner eval: the bridge
+   refuses it, the engine takes it over the protocol, awaits a promise there
+   and hands the value back, so the wrapper is not needed on this path at all. */
 async function evaluatePastSurfaceCsp(
   args: ActArgs & { expression: string },
   context: string,
@@ -776,11 +775,11 @@ function tabByUrl(tabs: RdpTab[], url: string, seen?: { matched: number }): RdpT
    govern: its console actor over the debugger protocol, the same server the
    session already publishes as rdpPort. It reaches what no injection can: a
    page inside the extension that the manifest declares as no surface
-   (pages/*), which has no relay to ask and refuses executeScript whatever
-   the host permissions, and a web page whose own policy
-   forbids eval on an MV3 build, which has no tabs.executeScript to fall back
-   on. Null means the protocol could not be reached, so the
-   caller keeps the answer it already had. */
+   (pages/*), which has no relay to ask and refuses executeScript whatever the
+   host permissions, and a web page whose own policy forbids eval on an MV3
+   build, which has no tabs.executeScript to fall back on. Null means the
+   protocol could not be reached, so the caller keeps the answer it already
+   had. */
 async function evaluateInGeckoTab(
   args: ActArgs & { expression: string },
   browser: string,
@@ -792,10 +791,6 @@ async function evaluateInGeckoTab(
     waitMs: 3_000,
     graceMs: 1_000,
   });
-  /* @invariant A DEBUGGER PORT THAT DID NOT ANSWER IS SAID AS SUCH. A port
-     the session never published falls through to the relay's own answer; a
-     published port whose call threw used to return null too, and the caller
-     then said the url "matches none of the surface documents". */
   if (!resolved) return null;
 
   let outcome: Awaited<ReturnType<typeof rdpEvaluateInTab>>;
@@ -821,8 +816,6 @@ async function evaluateInGeckoTab(
   }
 
   if (outcome.ok) {
-    /* @invariant THE ANSWER NAMES THE TAB IT RAN IN, and says when several
-       tabs matched the url and one was picked. */
     return envelope({
       ok: true,
       command: schema.name,
@@ -857,9 +850,6 @@ async function evaluateInGeckoTab(
     });
   }
 
-  /* @invariant THE HINT FOLLOWS WHAT FAILED. Unsupported means nothing ran
-     and EvalLost means the document went away mid-call; only EvalError is
-     the expression's own throw. */
   const lost = outcome.name === "EvalLost";
   const unsupported = outcome.name === "Unsupported";
 
@@ -1057,8 +1047,8 @@ export async function handler(
      door: the surface relay of the context that document belongs to. The
      engine's page path answers "chrome.scripting is not available ... use
      context background" for a moz-extension:// url, Chromium vocabulary on
-     Gecko pointing at a context that cannot read the page;
-     the url is mapped to its surface here and the relay is asked instead. */
+     Gecko pointing at a context that cannot read the page; the url is mapped
+     to its surface here and the relay is asked instead. */
   if (context === "page" && isExtensionUrl(args.url)) {
     const surface = surfaceForExtensionUrl(
       args.projectPath,
@@ -1183,8 +1173,6 @@ export async function handler(
       const parsed = JSON.parse(raw);
 
       if (parsed && typeof parsed === "object") {
-        /* @invariant THE PAGE'S VALUE IS NEVER EDITED: the default is said in
-           a warning, not written into what the expression returned. */
         addWarning(
           parsed,
           'No context given: defaulted to "page" (the active tab). Pass context: "background" to evaluate in the service worker, which this tool reaches over the debug port.',

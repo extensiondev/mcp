@@ -101,9 +101,6 @@ export async function requestDeviceCode(args: {
     verificationUriComplete: String(
       data.verification_uri_complete || data.verification_uri || "",
     ),
-    /* @invariant A non-numeric interval or expiry is the default, never NaN:
-       NaN defeated both the sleep and the deadline, so the poll ran hot with
-       no end. */
     interval: positiveNumber(data.interval, 5),
     expiresIn: positiveNumber(data.expires_in, 900),
   };
@@ -129,13 +126,6 @@ export type DeviceGrantPollResult =
       body?: Record<string, unknown>;
     };
 
-/* @invariant This poll returns the raw token response and PERSISTS NOTHING.
- * The provisioning lane rides it: a provisioning grant lives minutes, opens
- * exactly one endpoint, and writing it into the credentials file would
- * overwrite a real project login with a credential every other tool's door
- * refuses. Only pollDeviceToken, the login lane, may persist, and it does so
- * by delegating here and writing afterwards.
- */
 export async function pollDeviceGrant(args: {
   apiBase: string;
   path: string;

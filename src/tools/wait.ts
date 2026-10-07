@@ -121,9 +121,6 @@ export async function handler(args: {
 
       lastContractStatus = contract.status;
 
-      /* @invariant A BUILD'S CONTRACT IS NOT A SESSION. extension_build
-         leaves status "ready" with command "build" and the finished build's
-         pid, which read as a dev session whose server had died. */
       if ((contract as { command?: unknown }).command === "build") {
         return envelope({
           ok: false,
@@ -175,8 +172,8 @@ export async function handler(args: {
            `executorAttachedAt` after the executor goes and flips `runtime` to
            "detached", and a browser that dies after ready leaves `status:
            "ready"` beside its exit stamps. Reading the attach stamp alone
-           called a dead browser ready. A detached runtime
-           or an exit stamp is the browser gone, said as such. */
+           called a dead browser ready. A detached runtime or an exit stamp is
+           the browser gone, said as such. */
         const browserGone =
           contract.runtime === "detached" ||
           typeof (contract as { browserExitedAt?: unknown }).browserExitedAt === "string";
@@ -248,10 +245,6 @@ export async function handler(args: {
         }
 
         if (!attached && (contract.command === "start" || contract.command === "preview")) {
-          /* @invariant A start session runs the production build with no dev
-             bridge in it, so no executor ever attaches and waiting for one is
-             not transient. The build landing is the answer,
-             and it is given at once rather than after the budget. */
           return envelope({
             ok: true,
             command: schema.name,
@@ -349,9 +342,6 @@ export async function handler(args: {
         });
       }
     } catch (err) {
-      /* @invariant ENOENT is "no contract yet"; anything else is a contract
-         that exists and could not be read, which the timeout must say
-         instead of "no ready contract was observed". */
       const code = (err as NodeJS.ErrnoException)?.code;
       contractUnreadable =
         code === "ENOENT" ? null : `${readyPath} exists but could not be read: ${(err as Error)?.message ?? String(err)}`;
@@ -381,9 +371,6 @@ export async function handler(args: {
     });
   }
 
-  /* @invariant "STILL BUILDING" NEEDS A BUILD. With no contract and no
-     session this server knows of, the honest answer is that there is no
-     session at this path, not a timeout to retry. */
   if (lastContractStatus === null && !contractUnreadable && !staleContractNote && !findSessionInfo(args.projectPath, browser)) {
     return envelope({
       ok: false,

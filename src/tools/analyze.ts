@@ -135,9 +135,6 @@ export async function handler(args: {
   let manifest: Record<string, unknown> = {};
   const manifestPath = path.join(distPath, "manifest.json");
 
-  /* @invariant AN UNREADABLE DIST IS NOT AN ANALYZED ONE. A manifest that
-     could not be parsed used to become `{}` and the readiness flags all
-     passed on nothing. */
   try {
     const parsed = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("not an object");

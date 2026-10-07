@@ -217,8 +217,6 @@ export async function handler(args: {
   }
 
   if (!res.ok) {
-    /* @invariant Held first: every other branch below enriches with a console
-     * Builds URL, and console answers 503 while the hold is on. */
     if (sawPlatformHold(res, data)) {
       return platformHoldEnvelope({
         command: "extension_release_promote",

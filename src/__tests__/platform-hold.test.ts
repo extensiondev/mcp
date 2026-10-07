@@ -112,10 +112,9 @@ describe("the published client had no hold awareness at all, so this file is the
     expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
 
-  /* @invariant Gabe's three parts, asserted one at a time so a failure names
-     which part went missing. (b) is the one the published bytes lacked
-     entirely, and it is the reason a reader concludes the product works
-     rather than that it is broken. */
+  /* @invariant (b) is the one the published bytes lacked entirely, and it is
+     the reason a reader concludes the product works rather than that it is
+     broken. */
   it("answers a held publish with the condition, what still works, and a way back", async () => {
     vi.stubGlobal(
       "fetch",

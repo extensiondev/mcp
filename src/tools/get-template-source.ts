@@ -20,18 +20,6 @@ const COMMAND = "extension_templates";
 const TEXTUAL =
   /\.(json|js|mjs|cjs|ts|tsx|jsx|html|htm|css|scss|sass|less|svg|txt|md|map|vue|svelte|ya?ml)$/i;
 
-/* @invariant
- * A template file only travels as text if it survives the round trip.
- *
- * The corpus serves the template icons itself since 2026-08-26, so a request
- * for src/images/icon.png reaches real PNG bytes now instead of a 404. Reading
- * those bytes with response.text() decodes them as utf8 and Buffer answers a
- * failed decode by substituting U+FFFD, so the agent used to receive mojibake
- * that no decoder downstream can undo. Extension alone is a guess about
- * encoding, so the rule is preview-upload's: re-encode, compare, and fall back
- * to base64 for anything that did not survive. fileEncodings names the
- * encoding of every file that was read, so base64 is never mistaken for text.
- */
 function encodeTemplateFile(
   filePath: string,
   bytes: Buffer,

@@ -30,6 +30,7 @@ export function renderReadmeSetup(): string {
       strictApproval: false,
       project: "",
     });
+
     const title = client.subtitle ? `${client.label} (${client.subtitle})` : client.label;
     const body: string[] = [`### ${title}`, ""];
 
@@ -53,6 +54,7 @@ export function renderReadmeSetup(): string {
 export function spliceReadmeSetup(readme: string): string {
   const start = readme.indexOf(README_SETUP_START);
   const end = readme.indexOf(README_SETUP_END);
+
   if (start < 0 || end < start) throw new Error("README has no setup markers");
 
   return readme.slice(0, start) + renderReadmeSetup() + readme.slice(end + README_SETUP_END.length);

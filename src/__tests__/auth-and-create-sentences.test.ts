@@ -1,5 +1,5 @@
-/* @invariant the auth and create tools describe what the
- * platform does. Each cell failed before its fix. */
+/* @invariant the auth and create tools describe what the platform does. Each
+   cell failed before its fix. */
 
 import { describe, it, expect } from "vitest";
 

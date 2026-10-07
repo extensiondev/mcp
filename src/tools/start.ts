@@ -81,10 +81,10 @@ export async function handler(
 ): Promise<string> {
   const browser = args.browser ?? "chrome";
   /* @invariant A prebuilt directory is the engine's preview verb with
-     --output-path: nothing is built, so the directory is read as it is and
-     an extension another toolchain produced can be run and watched here
-    . The path is checked first, because the engine would
-     otherwise fall back to dist/<browser> and launch something else. */
+     --output-path: nothing is built, so the directory is read as it is and an
+     extension another toolchain produced can be run and watched here. The
+     path is checked first, because the engine would otherwise fall back to
+     dist/<browser> and launch something else. */
   const outputPath =
     typeof args.outputPath === "string" && args.outputPath.trim()
       ? path.resolve(args.projectPath, args.outputPath.trim())
@@ -111,10 +111,8 @@ export async function handler(
   const building = args.build !== false && !outputPath;
   const command = building ? "start" : "preview";
 
-  /* @invariant WHAT THE ENGINE REFUSES IS REFUSED HERE, BEFORE A SPAWN:
-     its preview verb has no --host or --public-host and both verbs refuse
-     Safari, and a refused spawn used to read as "exited" with a dist hint
-    . */
+  /* @invariant WHAT THE ENGINE REFUSES IS REFUSED HERE, BEFORE A SPAWN: its
+     preview verb has no --host or --public-host and both verbs refuse Safari. */
   if (browser === "safari" || browser === "webkit-based") {
     return envelope({
       ok: false,
@@ -149,15 +147,6 @@ export async function handler(
 
   cliArgs.push(...launchFlagArgs(args));
 
-  /* @invariant
-   * A carrier left over from a dead dev session does not get loaded here.
-   *
-   * extension_start has no carrier option, but Extension.js auto-loads
-   * everything in ./extensions, so a carrier that outlived its dev session
-   * would be launched beside the extension anyway, silently handing a debug
-   * companion with <all_urls> to a run that never asked for one. Removal is
-   * marker-guarded, so this only ever clears a copy this server placed.
-   */
   const stale = removeCarrier(args.projectPath);
 
   const profileReused = profileCarriesTabsOver(

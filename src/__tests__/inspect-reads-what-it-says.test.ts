@@ -1,11 +1,11 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 
 import type * as CdpModule from "../lib/cdp";
-/* @invariant the inspect envelope names the document it
- * read, a throw is a failed section and never an empty value, an uncaught
- * exception counts as a console error, and every cap is said. Each cell
- * failed before its fix. */
-
+/* @invariant
+  * the inspect envelope names the document it read, a throw is a failed
+  * section and never an empty value, an uncaught exception counts as a
+  * console error, and every cap is said. Each cell failed before its fix.
+  */
 
 const cdp = vi.hoisted(() => ({
   order: [] as string[],

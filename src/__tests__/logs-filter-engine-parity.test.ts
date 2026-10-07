@@ -183,23 +183,21 @@ describe("level off is this package's meaning, not the engine's", () => {
   });
 });
 
-/* @invariant The engine publishes logLevelRank and LOG_LEVEL_ORDER, and nothing in this
-   package ranks or orders levels by hand: makeFilter hands every severity
-   comparison to matchesLogQuery, which applies the engine's rank. What this
-   package does own is the VOCABULARY the tool schema offers an agent, and that
-   is a separate copy of the same ordering, written as a JSON Schema enum.
-   Reordering the engine's rank without touching the enum would leave the schema
-   promising "a level includes everything more severe" about an order that is no
-   longer the one being applied, so the enum is checked against the engine.
-
-   It is checked twice, because the two checks catch different things and
-   neither subsumes the other. LOG_LEVEL_ORDER is the engine's DECLARED
-   ordering, and comparing the enum to it catches a level added, dropped or
-   swapped even where this corpus cannot tell two levels apart. The count
-   comparison then catches the case the declared array cannot: an ordering that
-   matchesLogQuery does not actually apply. Only the first was unavailable while
-   the pin withheld LOG_LEVEL_ORDER, which is why this used to lean entirely on
-   the second. */
+/* @invariant The engine publishes logLevelRank and LOG_LEVEL_ORDER, and
+   nothing in this package ranks or orders levels by hand: makeFilter hands
+   every severity comparison to matchesLogQuery, which applies the engine's
+   rank. What this package does own is the VOCABULARY the tool schema offers
+   an agent, and that is a separate copy of the same ordering, written as a
+   JSON Schema enum. Reordering the engine's rank without touching the enum
+   would leave the schema promising "a level includes everything more severe"
+   about an order that is no longer the one being applied, so the enum is
+   checked against the engine. It is checked twice, because the two checks
+   catch different things and neither subsumes the other. LOG_LEVEL_ORDER is
+   the engine's DECLARED ordering, and comparing the enum to it catches a
+   level added, dropped or swapped even where this corpus cannot tell two
+   levels apart. The count comparison then catches the case the declared array
+   cannot: an ordering that matchesLogQuery does not actually apply. Only the
+   first was unavailable while the pin withheld LOG_LEVEL_ORDER. */
 describe("the schema's level vocabulary matches the engine's rank", () => {
   const severities = (logsSchema.inputSchema.properties.level.enum as string[])
     .filter((level) => level !== "all" && level !== "off");

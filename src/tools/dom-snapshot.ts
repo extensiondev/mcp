@@ -135,12 +135,11 @@ export function protocolSnapshotExpression(
    whatever host permissions the manifest holds, so the bridge's inspect
    answers "Missing host permission for the tab" for a page inside the
    extension that is open in a tab, and a page the manifest declares as no
-   surface (pages/*) has no relay to ask either. The tab's
-   console actor reads it over the debugger protocol. The snapshot is built
-   there in the engine's own shape, so a caller reads the same fields
-   whichever door answered. Null keeps the engine's refusal: no rdpPort, no
-   such tab, or a protocol failure are all reasons to say what the engine
-   said. */
+   surface (pages/*) has no relay to ask either. The tab's console actor reads
+   it over the debugger protocol. The snapshot is built there in the engine's
+   own shape, so a caller reads the same fields whichever door answered. Null
+   keeps the engine's refusal: no rdpPort, no such tab, or a protocol failure
+   are all reasons to say what the engine said. */
 async function snapshotExtensionPageOverProtocol(
   args: ActArgs & { include?: string[]; maxBytes?: number },
   browser: string,

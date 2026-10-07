@@ -36,15 +36,6 @@ export function credentialsPath(): string {
   return path.join(base, "extension-dev", "auth.json");
 }
 
-/* @invariant A token is scoped to one workspace/project, and an agent that
-   works across projects logs in to each in turn; one slot made the second
-   login erase the first and left copying raw tokens out of this file as the
-   only multi-project route. The file now keeps one entry per
-   workspace/project with the latest login marked active, and every reader
-   that used to take the single entry takes the active one unless it names a
-   project. A version 1 file (one entry) is read as a store of one and
-   rewritten as version 2 on the next login, so nothing stored before this is
-   lost or asked for again. */
 export interface CredentialStore {
   version: 2;
   active: string | null;
@@ -82,18 +73,14 @@ function readEntry(data: unknown): StoredCredentials | null {
 }
 
 /* @invariant
- * "NO LOGINS" IS A FILE THAT IS NOT THERE. EVERYTHING ELSE IS "CANNOT READ".
- *
- * Every failure to read the store used to come back as null: a file another
- * process was halfway through writing, one cut short by a crash, one this
- * user may not read, one written by a newer client. The writers then built
- * the next store from nothing and wrote it over the file, so signing in to
- * one project erased every other login, and the answer said "logged in".
- * The read now has three outcomes and only one of them may be written over:
- * absent (or a file holding no usable entry). An unreadable store keeps its
- * bytes, the write refuses and says why, and status reports it as unreadable
- * instead of "logged out".
- */
+  * "NO LOGINS" IS A FILE THAT IS NOT THERE. EVERYTHING ELSE IS "CANNOT READ".
+  * The writers then built the next store from nothing and wrote it over the
+  * file, so signing in to one project erased every other login, and the
+  * answer said "logged in". The read now has three outcomes and only one of
+  * them may be written over: absent (or a file holding no usable entry). An
+  * unreadable store keeps its bytes, the write refuses and says why, and
+  * status reports it as unreadable instead of "logged out".
+  */
 export type CredentialStoreRead =
   | { state: "absent" }
   | { state: "ok"; store: CredentialStore }
@@ -210,11 +197,9 @@ export function credentialStoreProblem(): { path: string; reason: string } | nul
     : null;
 }
 
-/* @invariant A TOKEN WITHOUT AN EXPIRY IS NOT ETERNAL. A missing or
-   non-numeric `expiresAt` used to be stored as 0, which the reader treats as
-   "never expires" while the sentence said seven days. The
-   platform mints seven-day tokens; a token that arrives without its expiry
-   is stored with that documented life, counted from now. */
+/* @invariant A TOKEN WITHOUT AN EXPIRY IS NOT ETERNAL. The platform mints
+   seven-day tokens; a token that arrives without its expiry is stored with
+   that documented life, counted from now. */
 export const TOKEN_TTL_SECONDS = 7 * 24 * 3600;
 
 export function tokenExpiry(value: unknown): number {
@@ -240,16 +225,6 @@ export function sameProject(named: string, pinned: string): boolean {
   return a.includes("/") ? a === pinned : a === pinned.split("/")[1];
 }
 
-/* @invariant
- * A PINNED SERVER READS ONE PROJECT'S LOGIN AND NO OTHER.
- *
- * With several logins stored, an unnamed read used to take the most recent
- * one, so an agent configured for project A acted on project B the moment the
- * person signed in to B in another terminal. EXTENSION_DEV_PROJECT (or the
- * --project flag, which sets it) names the project a server was configured
- * for; every unnamed read then selects that login. The dispatch layer refuses
- * a call that names a different project, so the pin cannot be argued around.
- */
 function selectEntry(
   store: CredentialStore,
   selector: CredentialSelector | undefined,
@@ -300,11 +275,6 @@ function ensureStoreDir(): string {
   return file;
 }
 
-/* @invariant THE STORE IS REPLACED WHOLE OR NOT AT ALL. The bytes go to a
- * sibling file and are renamed over the store, so a reader, in this process
- * or another server's, sees the old store or the new one and never a file cut
- * off mid-write. A crash between the two leaves the old store and a stray
- * temp file, which is the harmless way round. */
 function writeStore(store: CredentialStore): string {
   const file = ensureStoreDir();
   const tmpFile = `${file}.${process.pid}.${Date.now()}.tmp`;
@@ -337,14 +307,6 @@ function pause(ms: number): void {
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 }
 
-/* @invariant ONE WRITER READS AND REPLACES THE STORE AT A TIME. Two servers
- * signing in at once each read the store, added their login and wrote it
- * back, and the second write dropped the first one's login. The read, the
- * change and the replace happen under a lock file taken with an exclusive
- * create; a lock older than two seconds belongs to a writer that died (the
- * work under it takes milliseconds) and is taken over. A writer that cannot
- * take the lock in time refuses instead of writing over a store it could not
- * read under the lock. */
 function takeLock(lock: string): boolean {
   try {
     fs.closeSync(fs.openSync(lock, "wx", 0o600));
@@ -416,15 +378,6 @@ export function writeCredentials(creds: StoredCredentials): string {
   });
 }
 
-/* @invariant A BATCH ADDS LOGINS AND DOES NOT CHOOSE THE DEFAULT ONE. A
- * single login makes its project the active entry because signing in to one
- * project is a statement about which project comes next. One approval for a
- * list says no such thing, and letting whichever name happened to be written
- * last become the default would silently repoint every unnamed token read. So
- * the active entry is kept when there is one, and only an empty store takes
- * the first name of the batch. Every entry lands in one replace of the file,
- * so a reader never sees half a batch.
- */
 export function writeCredentialBatch(batch: StoredCredentials[]): string | null {
   if (batch.length === 0) return null;
 
@@ -446,13 +399,6 @@ export function writeCredentialBatch(batch: StoredCredentials[]): string | null 
   });
 }
 
-/* @invariant A LOGOUT THAT DID NOT REMOVE THE TOKEN SAYS SO. Only a file
- * that is not there means "nothing to remove". Every other failure to delete
- * or rewrite the store used to be read as that, or swallowed, so a logout
- * answered "removed from this machine" over a token still on disk and still
- * in use, and "no stored credentials" over a file it could not delete. A
- * failure now comes back as `failure` with the reason and the store as it
- * still stands, and nothing is reported removed. */
 export function clearCredentials(selector?: CredentialSelector): {
   cleared: boolean;
   path: string;

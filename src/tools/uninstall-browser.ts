@@ -30,10 +30,7 @@ export async function uninstallManagedBrowser(args: {
 
   try {
     const answer = await extensionUninstall({ browser: args.browser, all: args.all });
-    /* @invariant "UNINSTALLED" IS READ FROM THE PER-BROWSER RESULT. The
-       library answers `{browser, removed, path}` per target and `removed:
-       false` for a browser that was never installed; the array used to be
-       discarded. */
+    /* @invariant "UNINSTALLED" IS READ FROM THE PER-BROWSER RESULT. */
     const rows: Array<{ browser: string; removed: boolean; path: string }> = Array.isArray(answer)
       ? (answer as unknown[]).flatMap((row) => {
           const r = row as { browser?: unknown; removed?: unknown; path?: unknown } | null;

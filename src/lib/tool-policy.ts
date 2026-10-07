@@ -186,12 +186,15 @@ export interface ServerOptions {
   project?: string;
 }
 
-/* @invariant THE DEFAULT IS THE LOCAL GROUP ALONE. A server started with no
- * flag and no env exposes the 23 tools that work on this machine and none
- * of the 9 platform tools, because the platform is in private alpha and the
- * local tools are what is being put in front of strangers. The platform group comes on only by name:
- * --features=local,platform or EXTENSION_DEV_FEATURES=local,platform. The
- * console's Connect recipes say it explicitly for that reason. */
+/* @invariant
+  * THE DEFAULT IS THE LOCAL GROUP ALONE. A server started with no flag and no
+  * env exposes the 23 tools that work on this machine and none of the 9
+  * platform tools, because the platform is in private alpha and the local
+  * tools are what is being put in front of strangers. The platform group
+  * comes on only by name: --features=local,platform or
+  * EXTENSION_DEV_FEATURES=local,platform. The console's Connect recipes say
+  * it explicitly for that reason.
+  */
 export const DEFAULT_SERVER_OPTIONS: ServerOptions = {
   features: ["local"],
   noShip: false,
@@ -327,16 +330,6 @@ export function pinProjectArgs(
   const pinned = options.project;
   if (!pinned) return { args };
 
-  /* @invariant A LIST IS HELD TO THE PIN NAME BY NAME, AND THE PIN IS NEVER
-   * INJECTED BESIDE ONE. A pinned server acts on one project, so a batch that
-   * names any other project is refused here exactly as a single call naming
-   * it would be, before validation and before any handler runs. An entry this
-   * layer cannot read a name out of counts as naming something else: the pin
-   * is a refusal unless every entry is provably the pinned project. A list
-   * that passes is handed on untouched, because writing the pinned `project`
-   * beside `projects` would turn a valid batch of one into a call that names
-   * its target twice.
-   */
   if (args.projects !== undefined && args.projects !== null) {
     const entries = Array.isArray(args.projects) ? args.projects : [args.projects];
     const names = entries.map((entry) =>

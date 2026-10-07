@@ -69,14 +69,13 @@ describe("the engine publishes the ready-contract reader", () => {
   });
 });
 
-/* @invariant These are the cases tools/logs.ts used to handle in a local copy of
-   this function. Deleting that copy is only safe if the engine's version answers
-   every one of them identically, so each case below is written as the behaviour
-   the deleted code had, not as a description of the engine. A future engine that
-   starts returning a partial object where the copy returned null would make
-   readFromStream dial ws://127.0.0.1:undefined and report a transport failure
-   instead of "no active control channel", which is the wrong diagnosis for a
-   session that never opened one. */
+/* @invariant Deleting that copy is only safe if the engine's version answers
+   every one of them identically, so each case below is written as the
+   behaviour the deleted code had, not as a description of the engine. A
+   future engine that starts returning a partial object where the copy
+   returned null would make readFromStream dial ws://127.0.0.1:undefined and
+   report a transport failure instead of "no active control channel", which is
+   the wrong diagnosis for a session that never opened one. */
 describe("the engine's reader on every edge the deleted copy covered", () => {
   it("returns null when no contract has ever been written", () => {
     expect(readReadyContract(tmpProject(), "chrome")).toBeNull();

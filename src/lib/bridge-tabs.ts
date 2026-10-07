@@ -57,6 +57,7 @@ export async function listBridgeTabs(
       : Array.isArray(parsed?.value?.tabs)
         ? parsed.value.tabs
         : null;
+
   if (!list) return { error: raw };
 
   return {
@@ -76,6 +77,7 @@ export async function listBridgeTabs(
 export function matchTabsByUrl(tabs: BridgeTab[], needle: string): BridgeTab[] {
   const wanted = needle.toLowerCase();
   const byUrl = tabs.filter((t) => t.url.toLowerCase().includes(wanted));
+
   if (byUrl.length > 0) return byUrl;
 
   return tabs.filter((t) => t.title.toLowerCase().includes(wanted));
@@ -226,10 +228,10 @@ export async function navigateToUrlViaBridge(
         ? verbFrame.value
         : {};
     const tabId = typeof value.tabId === "number" ? value.tabId : null;
-    /* @invariant THE VERB'S ANSWER IS THE REQUEST, NOT THE LANDING. The
-       engine replies from the tabs callback with the url it was ASKED for,
-       so the tab is read back until it reports that url.
-       A tab that never does is not "navigated"; what it shows is reported. */
+    /* @invariant THE VERB'S ANSWER IS THE REQUEST, NOT THE LANDING. The engine
+       replies from the tabs callback with the url it was ASKED for, so the
+       tab is read back until it reports that url. A tab that never does is
+       not "navigated"; what it shows is reported. */
     const landed = await pollForBridgeTabById(projectPath, browser, url, tabId, 3000);
 
     if (!landed.tab) {
@@ -373,12 +375,12 @@ async function navigateToUrlViaBackgroundEval(
 /* @invariant The relay resolves the base with a background eval of
    runtime.getURL, and an extension whose CSP forbids eval (every MV3 Gecko
    build with an explicit policy, Redux, Preact, Web Scrobbler) refuses that
-   eval, so the tab route for its surfaces died before it started. Firefox writes the same answer to disk: the
-   profile's prefs.js holds extensions.webextensions.uuids, a JSON map from
-   the add-on id the built manifest declares (or the engine injected) to the
-   moz-extension host, and the session contract names the profile. That read
-   needs no eval and no permission, so it is the fallback whenever the relay
-   does not answer. */
+   eval, so the tab route for its surfaces died before it started. Firefox
+   writes the same answer to disk: the profile's prefs.js holds
+   extensions.webextensions.uuids, a JSON map from the add-on id the built
+   manifest declares (or the engine injected) to the moz-extension host, and
+   the session contract names the profile. That read needs no eval and no
+   permission, so it is the fallback whenever the relay does not answer. */
 const UUIDS_PREF = /user_pref\("extensions\.webextensions\.uuids",\s*"((?:[^"\\]|\\.)*)"\)/;
 
 export function geckoAddonId(projectPath: string, browser: string): string | null {

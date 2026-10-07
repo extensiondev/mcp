@@ -1,7 +1,8 @@
-/* @invariant the shipped docs validate against the
- * schemas the server registers, the tool reference is generated from them,
- * and the numbers the docs quote are the code's. Each cell failed before its
- * fix. */
+/* @invariant
+  * the shipped docs validate against the schemas the server registers, the
+  * tool reference is generated from them, and the numbers the docs quote are
+  * the code's. Each cell failed before its fix.
+  */
 
 import fs from "node:fs";
 import { createRequire } from "node:module";

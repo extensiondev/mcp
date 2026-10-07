@@ -115,13 +115,6 @@ function text(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
 }
 
-/* @invariant
- * Ownership is read off `owner` and never off `sharedBy`. The owner decides who
- * may revoke a share, and the publisher is a separate fact kept for credit
- * only: a project share stays revocable by the whole workspace no matter who
- * pressed the button, and a personal share stays that one person's no matter
- * which project they were working in at the time.
- */
 function ownershipOf(owner: ArtifactOwner | null | undefined): Ownership {
   const kind = text(owner?.kind);
   if (kind === "project") return "project";
@@ -175,19 +168,6 @@ function attributionOf(artifact: ListedArtifact): ShareAttribution {
   };
 }
 
-/* @invariant
- * The unit of everything this tool counts is one artifactId, which is one live
- * address and one revoke handle, and never one row of the record file.
- *
- * `.extension.dev/shared-previews.json` is append-only by design, so re-sharing
- * an unchanged build writes a second row for the SAME id, and revoking then
- * re-sharing writes a row for a DIFFERENT id because a revoked id is burned.
- * Rows therefore over-count the first case and correctly count the second, and
- * a reader auditing what is still out there is asking about addresses. Mapping
- * rows straight to output made a project with four rows over three shares
- * report three dead links where two existed (B4 walk, 2026-08-04). The newest
- * row per id wins, because a later re-share carries the later expiresAt.
- */
 function localIndex(entries: SharedPreviewEntry[]): Map<string, SharedPreviewEntry> {
   const index = new Map<string, SharedPreviewEntry>();
 
@@ -471,12 +451,6 @@ async function revokeShare(args: {
     if (gate.blocked) return gate.envelope;
   }
 
-  /* @invariant THE DELETE GOES OUT WITH THE TOKEN THE APPROVAL WAS ASKED
-     WITH. The gate above resolved the named project's login; the request
-     used to fall back to the active login or the env token, so a share of a
-     non-active project was approved as one project and revoked as another
-    . A named project with no stored login is refused
-     before anything is sent. */
   if (!token) {
     return envelope({
       ok: false,

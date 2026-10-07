@@ -16,48 +16,37 @@ export const PLATFORM_HOLD_HEADER = "x-extensiondev-hold";
 export const PLATFORM_HOLD_STATUS = "platform-held";
 
 /* @invariant
- * THIS CLIENT HOLDS NO DATE, AND THE BOOLEAN BELOW CANNOT INVENT ONE.
- *
- * extensiondev-readiness records that no announcement date is published and
- * that nothing built from LAUNCH_DATE or LAUNCH_DATE_COPY may be rendered,
- * served or shipped. A published npm tarball is shipped bytes that anyone can
- * unpack, so a date parked here behind a false flag would disclose the day just
- * as loudly as an API body would, and www's own gate already removed it from
- * the refusal for the narrower reason that an agent repeats what it is told.
- *
- * So the flag does not switch a date on, it switches a RELAY on. When it is
- * true this module will quote a day the platform itself put in the refusal
- * body, and when it is false it drops that field on the floor. Today the
- * platform sends no such field, which is why flipping this alone changes
- * nothing visible: it is the client half of a two-sided answer, pre-built so
- * that whichever way the ruling goes on the MCP side is this one line and no reader of
- * the tarball can read the date out of it in the meantime.
- */
+  * THIS CLIENT HOLDS NO DATE, AND THE BOOLEAN BELOW CANNOT INVENT ONE.
+  * extensiondev-readiness records that no announcement date is published and
+  * that nothing built from LAUNCH_DATE or LAUNCH_DATE_COPY may be rendered,
+  * served or shipped. A published npm tarball is shipped bytes that anyone
+  * can unpack, so a date parked here behind a false flag would disclose the
+  * day just as loudly as an API body would, and www's own gate already
+  * removed it from the refusal for the narrower reason that an agent repeats
+  * what it is told. So the flag does not switch a date on, it switches a
+  * RELAY on. When it is true this module will quote a day the platform itself
+  * put in the refusal body, and when it is false it drops that field on the
+  * floor.
+  */
 export const PLATFORM_HOLD_RELAYS_THE_PLATFORM_DATE = false;
 
 /* @invariant
- * A REFUSAL THAT ONLY REFUSES IS WHAT MAKES SOMEONE CONCLUDE THE PRODUCT IS
- * BROKEN, AND A REFUSAL THAT POINTS AT A HELD SURFACE IS WORSE THAN SILENT.
- *
- * Gabe measured the published client and found the honest half without the
- * useful half: the lanes that carried a refusal at all then sent the reader to
- * console.extension.dev or extension.dev/new, both of which answer 503 while
- * the hold is on. Best case was refuse, then hand somebody an error page.
- *
- * The three parts below are the whole contract. (a) the condition comes from
- * the platform's own sentence where there is one, so the wording is changed in
- * one place and not two. (b) what still works is the part that was missing
- * entirely and is the reason this file exists: creation, development and
- * packaging run on the reader's own machine, they are free forever, and the
- * hold does not touch them, so the true answer to "can I build an extension
- * today" is yes. (c) a way back names templates.extension.dev because it is
- * the one surface the hold leaves open, which makes it the only link a refusal
- * can carry that will not 503, and it needs no date to be useful.
- *
- * ANY URL ADDED HERE MUST BE ONE THE HOLD LEAVES OPEN. That is the whole rule.
- * console, www, code, docs, inspect, preview, themes and userland are held; a
- * link to any of them belongs to the reader's future, not to this refusal.
- */
+  * A REFUSAL THAT ONLY REFUSES IS WHAT MAKES SOMEONE CONCLUDE THE PRODUCT IS
+  * BROKEN, AND A REFUSAL THAT POINTS AT A HELD SURFACE IS WORSE THAN SILENT.
+  * Best case was refuse, then hand somebody an error page. The three parts
+  * below are the whole contract. (a) the condition comes from the platform's
+  * own sentence where there is one, so the wording is changed in one place
+  * and not two. (b) what still works is the part that was missing entirely
+  * and is the reason this file exists: creation, development and packaging
+  * run on the reader's own machine, they are free forever, and the hold does
+  * not touch them, so the true answer to "can I build an extension today" is
+  * yes. (c) a way back names templates.extension.dev because it is the one
+  * surface the hold leaves open, which makes it the only link a refusal can
+  * carry that will not 503, and it needs no date to be useful. ANY URL ADDED
+  * HERE MUST BE ONE THE HOLD LEAVES OPEN. That is the whole rule. console,
+  * www, code, docs, inspect, preview, themes and userland are held; a link to
+  * any of them belongs to the reader's future, not to this refusal.
+  */
 const HOLD_CONDITION_FALLBACK = "extension.dev is not open to the public yet.";
 
 const HOLD_STILL_WORKS =

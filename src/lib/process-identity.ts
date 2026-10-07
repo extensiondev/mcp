@@ -10,18 +10,6 @@ import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 
-/* @invariant
- * A RECORDED PID IS A CLAIM, NOT A SESSION. A session's pid lives on in
- * ready.json and in the tmpdir marker after a crash, a reboot or a server
- * that exited first, and the number is handed to whatever process the OS
- * starts next. Reading `kill(pid, 0)` alone then called that stranger our
- * session: the fork guard refused to start, and `extension_stop` sent it
- * SIGTERM and SIGKILL, process group first. Every reader
- * of a recorded pid now asks what the process IS before it believes the
- * record: alive and plausibly a session process, dead, or foreign (a live
- * process whose command is readable and names nothing a session runs, or
- * one this user may not signal at all). Only "alive" is ever acted on.
- */
 export type PidState = "alive" | "dead" | "foreign";
 
 export const PLAUSIBLE_SESSION_BINARY =
@@ -35,9 +23,10 @@ export interface WindowsProcessRow {
 
 /* @invariant WINDOWS ANSWERS FROM ITS OWN PROCESS TABLE. There is no /proc,
    ps or pgrep there, so processCommand answered "" and the session filter
-   dropped every match, and the survivor search could never run, so every
-   stop answered stopped: false and a dev replace always refused. One CIM query reads id, image name and command line for every
-   process; null means the query itself could not run, never "no processes". */
+   dropped every match, and the survivor search could never run, so every stop
+   answered stopped: false and a dev replace always refused. One CIM query
+   reads id, image name and command line for every process; null means the
+   query itself could not run, never "no processes". */
 export function readWindowsProcessTable(): WindowsProcessRow[] | null {
   try {
     const out = execFileSync(

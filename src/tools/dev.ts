@@ -140,12 +140,6 @@ export async function handler(
       });
     }
 
-    /* @invariant REPLACED MEANS STOPPED. The outcome of each stop used to be
-       dropped, so a session that survived its stop was still reported as
-       replaced and the new session was started over it, which is the
-       profile-lock fork the guard exists to prevent. A
-       stale record (a pid that is no longer the session) counts as gone; a
-       live survivor refuses the start. */
     for (const s of existing) {
       const outcome = await stopOne(args.projectPath, s.browser);
 
@@ -212,17 +206,12 @@ export async function handler(
     profileReused,
   });
   /* @invariant
-   * The carrier leaves when the session does, however the session ends.
-   *
-   * It is a debug companion with <all_urls>, cookies, history and management,
-   * and the promise made about it is that it is never part of a release.
-   * Removal used to live only in extension_stop and extension_build, so the
-   * ordinary ways a dev session actually ends, closing the browser, a crash, a
-   * kill, left it sitting in the auto-loaded ./extensions folder for the next
-   * build to pick up. Tying removal to the child's exit covers every one of
-   * those, and removeCarrier only touches a copy this server marked as its
-   * own.
-   */
+    * The carrier leaves when the session does, however the session ends. It
+    * is a debug companion with <all_urls>, cookies, history and management,
+    * and the promise made about it is that it is never part of a release.
+    * Tying removal to the child's exit covers every one of those, and
+    * removeCarrier only touches a copy this server marked as its own.
+    */
   child.on("exit", () => {
     removeSession(args.projectPath, browser, pid);
     removeSessionMarker(args.projectPath, browser, pid);
@@ -385,10 +374,6 @@ export async function handler(
   }
 
   const controlVerbs = "storage, reload, open, dom_snapshot";
-  /* @invariant THE CONTROL CHANNEL IS REPORTED FROM THE CONTRACT. A control
-     server that cannot bind leaves controlPort null and
-     controlPortUnavailableReason in ready.json; echoing the request said
-     "ON" over it. */
   const control = contractControlState(args.projectPath, browser, spawnedAt);
   const controlBound = allowControl && control.port !== null;
   const capabilities = {
@@ -430,10 +415,6 @@ export async function handler(
             : {}),
         }
       : { requestedPort: args.port ?? 8080 };
-  /* @invariant Port 0 is the request for any free port on every socket API,
-     so a bound port that differs from it is the answer, not a collision. The
-     collision wording is for a numbered request the server could not bind
-    . */
   const autoAssigned = args.port === 0;
   const portNote =
     boundPort !== null

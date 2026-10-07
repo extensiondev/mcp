@@ -78,6 +78,12 @@
   `extension_eval` in `background` like an MV2 page does. The CSP refusal
   rewrite applies to a declared content_security_policy, never to MV3 as
   such.
+- The invariant comments are cut to their rule: 509 blocks become 386 and
+  3,744 lines become 2,814, with every ledger citation, date, commit, run
+  id, first name and machine reference gone, the 120 that only restated a
+  tested rule deleted, and five that no longer matched the code corrected
+  (the build is an rslib bundle, the engine stamps the profile path, the
+  Safari bundle id pattern is the engine's).
 - The six inline `<workspace>/<project>` checks on login, project create
   and the create list now go through `isProjectRef`, so a ref with a space
   is refused where it enters instead of by the platform one call later. The

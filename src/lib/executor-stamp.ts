@@ -18,17 +18,6 @@ export interface ExecutorStamp {
   executorDetachedAt: string | null;
 }
 
-/* @invariant THE EXECUTOR'S LIFE IS READ FROM THE CONTRACT, NEVER GUESSED.
- * extension-develop's ready-contract writer (dist/832~0.mjs,
- * `stampExecutorDetached` and `stampExecutorAttached`) stamps
- * `runtime: "detached"` plus `executorDetachedAt` when the last bridge
- * producer's socket closes, and `runtime: "attached"` (deleting
- * `executorDetachedAt`, touching `ts`) when one connects. The first attach
- * sets `executorAttachedAt`; a reattach after a reload keeps that first
- * value and only moves `ts`, so a reattach is proven by `runtime` turning
- * back to attached, or by `ts` moving while runtime reads attached, never by
- * `executorAttachedAt` changing. Both are read here and nowhere else.
- */
 export function readExecutorStamp(projectPath: string, browser: string): ExecutorStamp | null {
   try {
     const contract = JSON.parse(fs.readFileSync(readyContractPath(projectPath, browser), "utf8")) as Record<string, unknown>;

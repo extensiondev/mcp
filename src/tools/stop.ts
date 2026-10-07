@@ -81,8 +81,6 @@ interface StopOutcome {
   survivorsUnverified?: boolean;
 }
 
-/* @invariant A carrier that could not be removed is reported, not folded
-   into "there was no carrier". */
 function cleanCarrier(projectPath: string): { carrierRemoved?: string; carrierNote?: string } {
   const removal = removeCarrier(projectPath);
   if (removal.removed) return { carrierRemoved: removal.path };
@@ -92,14 +90,10 @@ function cleanCarrier(projectPath: string): { carrierRemoved?: string; carrierNo
     : {};
 }
 
-/* @invariant "NO SURVIVORS" IS A SEARCH THAT RAN AND FOUND NONE. pgrep exits
-   1 for no match and fails outright when it is absent (a slim image) or
-   cannot run; both used to read as an empty list, so a stop answered
-   "stopped, reaped: []" with the browser still up. A
-   search that could not run answers null, and the outcome says the
-   survivors were not verified. Windows has no pgrep and matches the same
-   patterns against its own process table instead, case-insensitively as
-   its paths are. */
+/* @invariant A search that could not run answers null, and the outcome says
+   the survivors were not verified. Windows has no pgrep and matches the same
+   patterns against its own process table instead, case-insensitively as its
+   paths are. */
 function pgrepPids(
   pattern: string,
   windowsTable?: () => WindowsProcessRow[] | null,
@@ -150,13 +144,13 @@ export interface ContractProcessHints {
 }
 
 /* @invariant The launcher stamps the browser it started into ready.json
-   (profilePath, browserPid, and launcherPid once Firefox hands the session
-   to a relaunched process), and those are the only handles that survive a
-   custom --profile or a browser whose argv never names the project: the
-   pgrep pattern below matches the managed profiles root, which such a
-   browser does not carry, so it answered reaped: [] over a Firefox still
-   holding its profile. Read before the kill: the engine's
-   shutdown and this tool's own cleanup both remove the contract. */
+   (profilePath, browserPid, and launcherPid once Firefox hands the session to
+   a relaunched process), and those are the only handles that survive a custom
+   --profile or a browser whose argv never names the project: the pgrep
+   pattern below matches the managed profiles root, which such a browser does
+   not carry, so it answered reaped: [] over a Firefox still holding its
+   profile. Read before the kill: the engine's shutdown and this tool's own
+   cleanup both remove the contract. */
 export function contractProcessHints(
   projectPath: string,
   browser: string,
@@ -246,9 +240,7 @@ function sessionProcessPids(
   };
 }
 
-/* @invariant Reaped means confirmed gone. A kill that was sent is not a
-   death: the count used to be the candidates signalled, so "reaped 2" could
-   stand over two browsers still running. Each pid is read again after the
+/* @invariant Reaped means confirmed gone. Each pid is read again after the
    kill, and one still alive is reported apart. */
 async function reapSessionProcesses(
   projectPath: string,
@@ -359,9 +351,6 @@ export async function stopOne(
   const state = pidState(pid);
 
   if (state === "foreign") {
-    /* @invariant A record whose pid is now someone else's is cleaned, never
-       signalled: the session it described is gone, and the number belongs to
-       a process this server did not start. */
     removeSession(projectPath, browser);
     removeSessionMarker(projectPath, browser);
 
@@ -400,10 +389,7 @@ export async function stopOne(
 
   const { reaped } = await reapSessionProcesses(projectPath, hints);
 
-  /* @invariant THE RECORDS GO ONLY WHEN THE SESSION IS KNOWN TO BE GONE. They
-     used to be erased before the survivors were counted, so a stop that left
-     a browser running also left nothing for the fork guard or a second stop
-     to find. */
+  /* @invariant THE RECORDS GO ONLY WHEN THE SESSION IS KNOWN TO BE GONE. */
   const { pids: survivors, verified } = sessionProcessPids(projectPath, hints);
   const dead = pidState(pid) === "dead";
   const stopped = dead && verified && survivors.length === 0;
@@ -451,10 +437,6 @@ export async function handler(args: {
       candidates.set(`${path.resolve(s.projectPath)}::${s.browser}`, s);
     }
 
-    /* @invariant THE MARKER DIRECTORY IS SHARED BY EVERY MCP SERVER OF THIS
-       USER, so "all" used to kill sessions a RUNNING sibling server owns
-      . A marker whose serverPid is alive and is not this
-       process is skipped and reported unless the caller asked for it. */
     const markersRead = readSessionMarkers();
     const skippedForeign: Array<{ projectPath: string; browser: string; serverPid: number }> = [];
 
@@ -477,16 +459,6 @@ export async function handler(args: {
       outcomes.push(await stopOne(c.projectPath, c.browser));
     }
 
-    /* @invariant
-     * A carrier is swept even where no session was ever registered for it.
-     *
-     * A project the user simply walked away from keeps its carrier: the dev
-     * child's exit handler dies with the server, and the session marker for it
-     * is removed the moment the session is reaped, so a later all=true had
-     * nothing left pointing at that project. The carrier record outlives the
-     * session record for exactly this case, and sweeping it is safe because
-     * removeCarrier still refuses anything it cannot recognise as ours.
-     */
     const visited = new Set(
       outcomes.map((outcome) => path.resolve(outcome.projectPath)),
     );

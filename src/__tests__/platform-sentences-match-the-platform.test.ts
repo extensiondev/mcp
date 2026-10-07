@@ -1,6 +1,7 @@
-/* @invariant what submit, publish, shares and
- * the registry readers say about the platform is what the platform does.
- * Each cell failed before its fix. */
+/* @invariant
+  * what submit, publish, shares and the registry readers say about the
+  * platform is what the platform does. Each cell failed before its fix.
+  */
 
 import fs from "node:fs";
 import os from "node:os";

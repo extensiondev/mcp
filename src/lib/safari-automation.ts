@@ -84,9 +84,6 @@ export async function detectSafariAutomation(
     return { safaridriver: null, mcp: false, bidi: false };
   }
 
-  /* @invariant A DRIVER THAT EXISTS BUT COULD NOT BE READ IS REPORTED AS
-     SUCH. A candidate whose --help could not be read used to fall through
-     to the absent-driver answer. */
   let unreadable: string | null = null;
 
   for (const candidate of safariDriverCandidates(safariBinary)) {

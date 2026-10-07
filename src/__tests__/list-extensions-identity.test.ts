@@ -5,8 +5,9 @@ import path from "node:path";
 
 import { describe, it, expect, afterEach, vi } from "vitest";
 
-import type * as CdpPortModule from "../lib/cdp-port";
+import { readyContract } from "./fixtures/engine-answers";
 
+import type * as CdpPortModule from "../lib/cdp-port";
 
 let cdpTargets: Array<{ type: string; url: string }> = [];
 let domainInfo: Record<string, { name: string; version: string }> = {};
@@ -78,16 +79,14 @@ function project(
   fs.mkdirSync(readyDir, { recursive: true });
   fs.writeFileSync(
     path.join(readyDir, "ready.json"),
-    JSON.stringify({
-      schemaVersion: 2,
-      status: "ready",
-      command: "dev",
-      browser: "chrome",
-      pid: process.pid,
+    JSON.stringify(readyContract("dev", "chrome", {
       cdpPort: 9222,
       distPath,
+      extensionId: undefined,
+      extensionName: undefined,
+      extensionVersion: undefined,
       ...contract,
-    }),
+    })),
   );
 
   if (opts.distManifest !== undefined && opts.distManifest !== null) {

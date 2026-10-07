@@ -1,5 +1,5 @@
-/* @invariant the smaller sentences are cut to what was
- * read or name their source. Each cell failed before its fix. */
+/* @invariant the smaller sentences are cut to what was read or name their
+   source. Each cell failed before its fix. */
 
 import fs from "node:fs";
 import os from "node:os";

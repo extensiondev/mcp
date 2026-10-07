@@ -8,12 +8,8 @@
 
 import { filterKeysForThisBrowser } from "extension-develop/manifest";
 
-/* @invariant THE VALIDATOR'S VIEW OF A MANIFEST IS THE ENGINE'S. The view
-   used to come from browser-extension-manifest-fields 2.2.9, whose prefix
-   rules differ from the pinned engine's: zen and floorp got no firefox:
-   keys, and chrome:/edge: keys applied to every Chromium target instead of
-   the named one. This is the engine's own filter,
-   exported from extension-develop/manifest. */
+/* @invariant THE VALIDATOR'S VIEW OF A MANIFEST IS THE ENGINE'S. This is the
+   engine's own filter, exported from extension-develop/manifest. */
 export function engineManifestView(
   manifest: Record<string, unknown>,
   browser: string,

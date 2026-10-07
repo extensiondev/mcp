@@ -73,14 +73,6 @@ export interface ResolvedCredential {
   note: string | null;
 }
 
-/* @invariant ONE RESOLVER ANSWERS THE TOKEN AND THE PROJECT IT BELONGS TO.
-   The token came from one reader and the project from another (the ACTIVE
-   stored login), so an EXTENSION_DEV_TOKEN for project A was sent while the
-   build index, store health, channels and console links in the same answer
-   were B's. A named project, or a server pinned to one,
-   sends that project's stored login first; an unnamed call sends the env
-   token first and takes its project from the token's own claims, never
-   from whichever login happens to be active. */
 export function resolveCredential(options: { project?: string } = {}): ResolvedCredential {
   const named = String(options.project ?? "").trim();
   const pinned = pinnedProject();
@@ -174,9 +166,6 @@ export function resolveCredential(options: { project?: string } = {}): ResolvedC
   return { token: "", source: "none", ref: null, refSource: "none", mismatch: null, note: null };
 }
 
-/* @invariant A LANE IS CLOSED ON THE SERVER'S CODE ONLY. Matching the
-   digits 403 in a sentence read a proxy or firewall refusal as "not on the
-   allowlist". */
 export function laneClosedByServer(err: unknown, code: string): boolean {
   return String((err as { serverCode?: unknown })?.serverCode ?? "").trim() === code;
 }

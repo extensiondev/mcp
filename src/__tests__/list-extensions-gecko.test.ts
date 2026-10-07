@@ -4,10 +4,11 @@ import path from "node:path";
 
 import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
 
+import { readyContract } from "./fixtures/engine-answers";
+
 import type { RdpAddon } from "../lib/rdp";
 import type * as RdpModule from "../lib/rdp";
 import type * as CdpPortModule from "../lib/cdp-port";
-
 
 let rdpAddons: RdpAddon[] = [];
 let rdpError: Error | null = null;
@@ -49,7 +50,7 @@ function project(contract: Record<string, unknown> = {}): string {
   fs.mkdirSync(readyDir, { recursive: true });
   fs.writeFileSync(
     path.join(readyDir, "ready.json"),
-    JSON.stringify({ status: "ready", ...contract }),
+    JSON.stringify(readyContract("dev", "firefox", contract)),
   );
 
   return dir;

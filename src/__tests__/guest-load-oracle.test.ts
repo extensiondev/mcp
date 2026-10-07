@@ -53,7 +53,7 @@ function target(url: string, type = "service_worker"): RawTarget {
   return { id: `t-${url}`, type, url, title: "", webSocketDebuggerUrl: "" };
 }
 
-describe("verifyGuestLoaded", () => {
+describe("verifyGuestLoaded oracle", () => {
   it("reports loaded when a non-companion extension target is present", async () => {
     session();
     resolved = { port: 9333, source: "contract" };
@@ -78,7 +78,7 @@ describe("verifyGuestLoaded", () => {
     const r = await verifyGuestLoaded(project, "chrome");
     expect(r.checked).toBe(true);
     expect(r.loaded).toBe(false);
-    expect(r.reason).toMatch(/§83|silently rejected/i);
+    expect(r.reason).toMatch(/silently rejected/i);
   });
 
   it("does not count the live-preview carrier as the guest", async () => {

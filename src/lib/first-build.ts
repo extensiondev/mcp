@@ -7,19 +7,17 @@
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
 /* @invariant
- * A FIRST BUILD IS SAID TO BE DISPATCHED ONLY WHEN THE PLATFORM SAID SO.
- *
- * Creating a project and dispatching its first build are two acts on the
- * platform, and the second one is withheld in ordinary cases: a repository
- * with no commits or no build workflow, a spent monthly allowance, a paused
- * dispatch, a testing workspace. The create answer is 200 in every one of
- * them, because the project does exist. This client used to print "its first
- * build was dispatched" on any 200, so a workspace at its build cap was told
- * a build was running. The answer now carries `initialBuild`, and this module
- * is the only reader of it: `dispatched` is true only on a literal true, a
- * literal false carries the platform's reason, and an answer without the
- * field is "unsaid", which is a third thing and never rounds up to yes.
- */
+  * A FIRST BUILD IS SAID TO BE DISPATCHED ONLY WHEN THE PLATFORM SAID SO.
+  * Creating a project and dispatching its first build are two acts on the
+  * platform, and the second one is withheld in ordinary cases: a repository
+  * with no commits or no build workflow, a spent monthly allowance, a paused
+  * dispatch, a testing workspace. The create answer is 200 in every one of
+  * them, because the project does exist. The answer now carries
+  * `initialBuild`, and this module is the only reader of it: `dispatched` is
+  * true only on a literal true, a literal false carries the platform's
+  * reason, and an answer without the field is "unsaid", which is a third
+  * thing and never rounds up to yes.
+  */
 export type FirstBuild =
   | { state: "dispatched" }
   | { state: "withheld"; reason: string }

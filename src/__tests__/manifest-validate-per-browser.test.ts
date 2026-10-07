@@ -1,7 +1,8 @@
-/* @invariant "valid" is said only for what was checked.
- * References are checked in every requested browser's view, an unknown
- * target is refused, the default build target's issues block, and the
- * permission scan says when it stopped. */
+/* @invariant
+  * "valid" is said only for what was checked. References are checked in every
+  * requested browser's view, an unknown target is refused, the default build
+  * target's issues block, and the permission scan says when it stopped.
+  */
 
 import fs from "node:fs";
 import os from "node:os";

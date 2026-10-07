@@ -6,11 +6,6 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-/* @invariant THE TOOL REFERENCE IS RENDERED FROM THE SCHEMAS, NEVER TYPED.
-   The hand-written claude/rules/mcp-tools.md documented inputs the server
-   refuses as unknown, so the file is generated from the
-   schemas the server registers and a test fails when it drifts. */
-
 interface PropertySchema {
   type?: string | string[];
   description?: string;

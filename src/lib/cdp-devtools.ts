@@ -40,11 +40,11 @@ type EvaluateResponse = {
 };
 
 /* @invariant The DevTools frontend has no global for its panel registry: on
-   Chrome 151 `InspectorView` is undefined on window, and the only reach is the
-   ES module the frontend itself loads, `./ui/legacy/legacy.js`, resolved
+   Chrome 151 `InspectorView` is undefined on window, and the only reach is
+   the ES module the frontend itself loads, `./ui/legacy/legacy.js`, resolved
    against the frontend's own devtools:// url. A dynamic import from
    Runtime.evaluate on the frontend target lands in that module graph, so the
-   same InspectorView instance the UI uses answers. Measured 2026-10-01. */
+   same InspectorView instance the UI uses answers. Measured on. */
 const PANEL_IDS_EXPRESSION =
   "import('./ui/legacy/legacy.js').then((m) => m.InspectorView.InspectorView.instance().tabbedPane.tabIds())";
 
@@ -127,19 +127,7 @@ export async function openDevToolsPanel(
     reached = "frontend";
     const sessionId = await cdp.attachToTarget(devtoolsTargetId);
 
-    /* @invariant Some extensions register their panel only when the page
-       reports to them (Preact Devtools creates it once the page's debug hook
-       speaks through the content script), which happens on a load that
-       starts with DevTools already open. A reload of the inspected tab after
-       the frontend is up is that load; it is opt-in because it discards the
-       page state under test. */
     if (options.reloadInspected) {
-      /* @invariant The reload is useful only once the extension's devtools
-         page is up and its port to the inspected tab is connected (Preact
-         registers its MAIN-world hook on that connection); a reload sent the
-         instant the frontend attaches lands before that and the panel never
-         comes. So the devtools_page frame is awaited first, then a settle,
-         measured at about 3 s after open by the hand driver that works. */
       const frameDeadline = Date.now() + Math.min(5000, budgetMs / 2);
 
       while (Date.now() < frameDeadline) {
@@ -176,10 +164,7 @@ export async function openDevToolsPanel(
           return null;
         })) as EvaluateResponse | null);
     /* @invariant A REGISTRY THAT COULD NOT BE READ IS NOT AN EMPTY ONE. The
-       panel list is read through a module import that another Chromium or
-       Edge build may not have; a rejected read used to end as "no panel
-       registered" and send the agent to panels.create.
-       The devtools_page frame is checked on the way too. */
+       devtools_page frame is checked on the way too. */
     let registryAnswered = false;
     let registryError: string | null = null;
     let devtoolsPageLoaded = false;
@@ -219,11 +204,6 @@ export async function openDevToolsPanel(
 
       if (panelId) break;
 
-      /* @invariant The devtools_page is an iframe inside the frontend, and a
-         headless frontend has been seen to leave it idle for seconds before
-         its panels.create call lands. Attaching to that frame and evaluating a
-         constant costs nothing and has been seen to wake it, so it is done once,
-         after a few seconds, and only when the panel is still missing. */
       if (!nudged && Date.now() >= nudgeAt) {
         nudged = true;
         const frame = (await listTargets().catch(() => [])).find(
@@ -283,11 +263,6 @@ export async function openDevToolsPanel(
     }
 
     reached = "show";
-    /* @invariant THE PANEL FRAME IS THE ONE THAT APPEARED. Taking frames[0]
-       on the first read returned another panel's, or an own-origin iframe
-       the extension injects, before the 3 s poll ran. A
-       frame already listed is used only when it is the sole candidate once
-       the poll ends, and then it is marked inferred. */
     let panelTarget: { targetId: string; url: string } | null = null;
     let panelTargetInferred = false;
     let panelFrameCandidates = 0;
@@ -332,9 +307,7 @@ export async function openDevToolsPanel(
       reloadedInspected,
     };
   } catch (error) {
-    /* @invariant THE STAGE IS THE ONE REACHED. Any throw after the frontend
-       opened used to be stage "open", and the tool said the protocol "lacks
-       or refused Target.openDevTools". */
+    /* @invariant THE STAGE IS THE ONE REACHED. */
     return {
       opened: false,
       stage: reached,

@@ -65,12 +65,6 @@ export async function handler(args: {
   const action = args.action ?? "status";
   const hasList = args.projects !== undefined && args.projects !== null;
 
-  /* @invariant A list means a batch login and nothing else. It is refused on
-   * logout and status rather than ignored, because an agent that passed
-   * twenty names to logout and saw success would believe twenty logins were
-   * gone when every stored login was, and it is refused beside `project`
-   * because a call that names its target two ways leaves this tool to pick
-   * one. */
   if (hasList && action !== "login") {
     return listMisuse(
       `projects is a login input: action '${action}' does not take a list. Use project to name one login, or call once per project.`,

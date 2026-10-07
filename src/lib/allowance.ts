@@ -8,15 +8,15 @@
 
 import { mcpOrigins } from "./origins";
 
-/* @invariant ONE SENTENCE ABOUT THE ALLOWANCE, AND IT CLAIMS NOTHING THE
- * LANES DO DIFFERENTLY. It used to say "counts against your free allowance"
- * and "when the allowance runs out, the platform refuses with its own
- * numbers". A share publish is recorded and never refused; a share upload has
- * caps but no plan allowance; a promote or submit meters each browser or
- * store dispatched; a create at its build cap is a 200 with the build
- * withheld; and "free" is wrong on a paid plan. The
- * sentence now says only what is true on every lane: the act is metered
- * against the plan's allowance, and the pricing page owns the rest. */
+/* @invariant
+  * ONE SENTENCE ABOUT THE ALLOWANCE, AND IT CLAIMS NOTHING THE LANES DO
+  * DIFFERENTLY. A share publish is recorded and never refused; a share upload
+  * has caps but no plan allowance; a promote or submit meters each browser or
+  * store dispatched; a create at its build cap is a 200 with the build
+  * withheld; and "free" is wrong on a paid plan. The sentence now says only
+  * what is true on every lane: the act is metered against the plan's
+  * allowance, and the pricing page owns the rest.
+  */
 export const ALLOWANCE_PHRASE = "is metered against your plan's allowance on extension.dev";
 
 /* @invariant
@@ -61,6 +61,7 @@ export function readPlatformAllowance(
   body: unknown,
 ): { used: number; limit: number } | null {
   const record = asRecord(body);
+
   if (!record) return null;
 
   for (const key of ["allowance", "quota"]) {
@@ -69,6 +70,7 @@ export function readPlatformAllowance(
 
     const used = asCount(nested.used);
     const limit = asCount(nested.limit);
+
     if (used !== null && limit !== null) return { used, limit };
   }
 

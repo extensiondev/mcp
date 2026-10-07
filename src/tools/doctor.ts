@@ -308,11 +308,11 @@ function pidIsAlive(pid: number): boolean {
 
 /* @invariant An exit the executor outlived was not the session's browser.
    Firefox on macOS hands a fresh profile to a relaunched process and the
-   first one exits 0, which the launcher stamps as browser_exited; the engine's
-   doctor then fails its browser leg while the same session keeps answering
-   storage probes and evals. The executor leg is the live
-   reading, and the contract's browserPid is the second: either one alive
-   after the recorded exit makes that exit history, not a verdict. */
+   first one exits 0, which the launcher stamps as browser_exited; the
+   engine's doctor then fails its browser leg while the same session keeps
+   answering storage probes and evals. The executor leg is the live reading,
+   and the contract's browserPid is the second: either one alive after the
+   recorded exit makes that exit history, not a verdict. */
 function reconcileRelaunchedBrowser(
   checks: DoctorCheck[],
   contract: { browserPid?: number | null } | null,
@@ -325,9 +325,9 @@ function reconcileRelaunchedBrowser(
   );
   if (!exitedLeg) return false;
 
-  /* @invariant ONLY THE EXECUTOR LEG PROVES THE BROWSER ANSWERED. The
-     control channel is the dev server's own socket, which lives on after
-     the browser dies; counting it relaunched a crashed browser. */
+  /* @invariant ONLY THE EXECUTOR LEG PROVES THE BROWSER ANSWERED. The control
+     channel is the dev server's own socket, which lives on after the browser
+     dies; counting it relaunched a crashed browser. */
   const executorAnswered = checks.some(
     (leg) => leg.check === "executor" && leg.status === "pass",
   );

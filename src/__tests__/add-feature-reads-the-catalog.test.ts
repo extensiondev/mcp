@@ -1,6 +1,8 @@
-/* @invariant a list addition merges with what the
- * manifest declares instead of replacing it through a prefixed key, and the
- * catalog is read before saying no template ships a surface. */
+/* @invariant
+  * a list addition merges with what the manifest declares instead of
+  * replacing it through a prefixed key, and the catalog is read before saying
+  * no template ships a surface.
+  */
 
 import fs from "node:fs";
 import os from "node:os";

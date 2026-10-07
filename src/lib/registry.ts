@@ -49,19 +49,6 @@ function splitProjectName(name: string): ProjectRef | null {
   return { workspace, project };
 }
 
-/* @invariant A `project` WRITTEN AS '<workspace>/<project>' IS ONE NAME, NOT A
- * SLUG WITH A SLASH IN IT. Every token-scoped tool takes `project` in that
- * form, and a pinned server writes it in that form into any tool that has a
- * `project` input, so this resolver receives it whether or not the tool that
- * called it documented a bare slug. Read as a slug, the pair was joined to the
- * active login's workspace and percent-encoded into a registry address that
- * names no project. It is split here instead. A workspace given beside it must
- * agree, and one that does not is a contradiction this refuses to settle.
- *
- * A bare slug with no workspace takes its workspace from the stored login that
- * slug names, when exactly one does, and only otherwise from the active login,
- * which is what it always did.
- */
 export function resolveProjectRef(overrides?: {
   workspace?: string;
   project?: string;
@@ -92,18 +79,6 @@ export function resolveProjectRef(overrides?: {
   return { workspace: ws, project: proj };
 }
 
-/* @invariant THE PROJECT A CALL NAMED IS THE PROJECT ITS ANSWER DESCRIBES.
- * A token-scoped tool picks its token with `project`, so every address it
- * builds afterwards, the registry index it reads, the console page and the
- * public URL it returns, has to come from that same login. Resolving them
- * with no argument took the ACTIVE login instead: with ten logins stored, a
- * publish for one project returned another project's registry address and
- * could fill a missing build sha or version from another project's build
- * index. This takes the same selector the token took. A
- * name with no stored login is used as written when it is a full
- * '<workspace>/<project>', and is no project at all otherwise: an answer that
- * names nothing is right where one that names the wrong project is not.
- */
 export function loginProjectRef(selector?: string): ProjectRef | null {
   const named = String(selector ?? "").trim();
   if (!named) return resolveProjectRef();
@@ -147,9 +122,6 @@ export interface RegistryFetchRefusal {
 
 export type RegistryFetchResult<T> = { ok: true; json: T } | RegistryFetchRefusal;
 
-/* @invariant A FILE OF THE WRONG SHAPE IS UNREADABLE, NOT EMPTY. A 200 whose
-   body is not the channels map or the build index used to parse to [] and
-   read as "nothing recorded". */
 export function channelsShapeProblem(json: unknown): string | null {
   if (!json || typeof json !== "object" || Array.isArray(json)) return "the body is not a channels map";
 
@@ -189,19 +161,14 @@ async function readJson<T>(
 }
 
 /* @invariant
- * A REFUSAL BODY SURVIVES THE HOP OR THE READER GETS A NUMBER.
- *
- * This function used to answer `${url} returned ${status}` and never open the
- * body at all, so every sentence the platform wrote to explain itself, the
- * hold's PLATFORM_NOT_OPEN refusal included, was thrown away one line before it
- * reached a person. Measured against the published 10.4.3 tarball: an agent
- * asking why a read failed was handed "https://... returned 403" and nothing
- * else. Reading the body costs one await on a path that has already failed.
- *
- * It is read ONCE and carried, because a Response body is a stream and a second
- * read throws. Everything downstream reads `body` from the result rather than
- * touching the response again.
- */
+  * A REFUSAL BODY SURVIVES THE HOP OR THE READER GETS A NUMBER. Measured
+  * against the published 10.4.3 tarball: an agent asking why a read failed
+  * was handed "https://... returned 403" and nothing else. Reading the body
+  * costs one await on a path that has already failed. It is read ONCE and
+  * carried, because a Response body is a stream and a second read throws.
+  * Everything downstream reads `body` from the result rather than touching
+  * the response again.
+  */
 async function readRefusal(
   res: Response,
 ): Promise<{ body: unknown; message: string; code: string }> {
@@ -375,12 +342,6 @@ export interface BuildIndexItem {
   browsers?: string[];
 }
 
-/* @invariant THE INDEX SAYS "ready" FOR A FINISHED BUILD. The deploy lane
- * writes `ready` into builds/index.json and the console reads `ready` and
- * `success` as one state, while this package only accepted `success`, so
- * extension_publish answered buildSha/version/builtAt as null for a project
- * with three READY builds. The vocabulary lives here
- * once and every "successful build" read goes through it. */
 export function isSuccessfulBuild(item: Pick<BuildIndexItem, "status" | "summaryStatus">): boolean {
   const status = String(item?.status ?? "")
     .trim()
@@ -390,8 +351,8 @@ export function isSuccessfulBuild(item: Pick<BuildIndexItem, "status" | "summary
 }
 
 /* @invariant THE WRITER SETS status: "success" BESIDE summaryStatus:
-   "partial" WHEN AT LEAST ONE BROWSER BUILT, so a build with a failed
-   browser read as the newest successful, promotable build. */
+   "partial" WHEN AT LEAST ONE BROWSER BUILT, so a build with a failed browser
+   read as the newest successful, promotable build. */
 export function isPartialBuild(item: Pick<BuildIndexItem, "summaryStatus">): boolean {
   return String(item?.summaryStatus ?? "").trim().toLowerCase() === "partial";
 }

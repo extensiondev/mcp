@@ -7,11 +7,9 @@ import { browserArtifactsDir, readyContractPath } from "../../lib/session-paths"
 import { attachedDevContract, errorContract, readyContract } from "./engine-answers";
 
 /* @invariant A session fixture that wants eval writes the engine's own token
-   file, at the path the engine publishes, the way `extension dev --allow-eval`
-   does. A fixture that only says "ready" models a session started WITHOUT
-   allowEval, and every eval route refuses it; the suites that evaluate over
-   the debug port used to pass on such sessions, which is how the gate went
-   unenforced there. */
+   file, at the path the engine publishes, the way `extension dev
+   --allow-eval` does. A fixture that only says "ready" models a session
+   started WITHOUT allowEval. */
 export function writeEvalToken(projectPath: string, browser: string): string {
   const file = bridge.controlTokenPath(projectPath, browser);
   fs.mkdirSync(path.dirname(file), { recursive: true });
@@ -38,10 +36,7 @@ function writeContract(
 
 /* @invariant A "modern" contract is the one the pinned engine writes: the
    full `readyContract("dev")` base with the launcher's stamps, `schema: 1`
-   included. The hand-written shape this used to be (status, pid, ports and
-   nothing else) let every dev and start cell skip the machine-contract branch
-   of the boot verdict and never carried the fields wait and assert read
-  . */
+   included. */
 export function writeModernContract(
   projectPath: string,
   browser: string,
@@ -131,17 +126,13 @@ export function writeSchema1ContractError(
 }
 
 /* @invariant An engine BELOW 4.0.17: the ready contract's own schemaVersion,
-   with no `schema: 1` machine-contract declaration. This used to say "what the
-   shipped engine writes today", which stopped being true the moment 4.0.17
-   added the stamp, and the name that went with it (writeShippedEngineContract-
-   Error) then read as the current shape rather than the old one.
-
-   The fixture is worth more than the wrong label was. Every release before
-   4.0.17 is still an ordinary thing for a user's project to have, and this is
-   the shape those sessions write. What it pins is that such a contract's error
-   stamps are authoritative on their own: a verdict must never be gated on the
-   capability probe, because the probe is about how much detail the contract can
-   carry, not about whether to believe it. */
+   with no `schema: 1` machine-contract declaration. The fixture is worth more
+   than the wrong label was. Every release before 4.0.17 is still an ordinary
+   thing for a user's project to have, and this is the shape those sessions
+   write. What it pins is that such a contract's error stamps are
+   authoritative on their own: a verdict must never be gated on the capability
+   probe, because the probe is about how much detail the contract can carry,
+   not about whether to believe it. */
 export function writePreSchema1ContractError(
   projectPath: string,
   browser: string,

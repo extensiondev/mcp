@@ -136,29 +136,12 @@ interface Session {
   unanswered: number;
 }
 
-/* @invariant THE GRANT LIVES IN THIS PROCESS'S MEMORY AND NOWHERE ELSE.
- * One approval of a list mints one provisioning grant, and creating a project
- * takes long enough that a list cannot be finished inside one tool call, so
- * the grant has to outlive the call that redeemed it. It is kept here, keyed
- * by the device code the agent already holds, for the fifteen minutes it
- * lives. It is never written to disk and never returned in an envelope: a
- * grant on disk would sit beside real project logins as a credential every
- * other door refuses, and a grant in an envelope would be in a model's
- * context. The cost is stated in the envelope rather than hidden: if this
- * server process exits before the list is done, the grant is gone, the
- * projects already created stay created, and the rest need a new approval.
- */
 const sessions = new Map<string, Session>();
 
 export function resetBatchCreateSessions(): void {
   sessions.clear();
 }
 
-/* @invariant A session outlives its grant by an hour, on purpose. The rows
- * it holds are the only record on this machine of which projects one approval
- * created, and an agent that comes back after the grant ran out must still be
- * told that, project by project, rather than be handed a bare "expired". The
- * grant inside is dead by then and is dropped the moment that is noticed. */
 const SESSION_KEEP_SECONDS = 3600;
 
 function sweepSessions(nowSeconds: number): void {
@@ -588,15 +571,12 @@ async function createOne(session: Session, entry: BatchEntry, installationId: st
    * login on this machine for a project nobody named here. */
   if (data.tokenIssued === true && token && scoped) {
     const expiresAt = tokenExpiry(data.expiresAt);
-    /* @invariant THE PROJECT IS RECORDED AS CREATED BEFORE ANYTHING ELSE CAN
-     * FAIL. The platform has made the project by the time its answer is
-     * here. Filing the token used to sit unguarded between that answer and
-     * the row, so a login store that could not be written threw the row away:
-     * the call ended in an internal error, the resumed call asked to create
-     * the same project and was told it exists, and the summary counted a
-     * project that was made as one that was not. A token that cannot be
-     * filed is a created project without a stored login, said so with the
-     * reason, and the token is not kept anywhere. */
+    /* @invariant
+      * THE PROJECT IS RECORDED AS CREATED BEFORE ANYTHING ELSE CAN FAIL. The
+      * platform has made the project by the time its answer is here. A token
+      * that cannot be filed is a created project without a stored login, said
+      * so with the reason, and the token is not kept anywhere.
+      */
     let storeFailure = "";
 
     try {
@@ -1111,11 +1091,6 @@ export async function createProjectBatch(args: BatchCreateArgs): Promise<string>
     ? (grant.projectSlugs as unknown[]).map((slug) => String(slug).toLowerCase())
     : null;
 
-  /* @invariant The grant is used only when it is the one that was asked for:
-   * a provisioning grant, for this workspace, for exactly this list. A grant
-   * for a different or longer list is discarded unused, because creating
-   * "the listed projects" under it would be acting on an approval this call
-   * cannot describe. */
   if (
     String(grant.tokenKind || "") !== "provisioning" ||
     !grantSlugs ||

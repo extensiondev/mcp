@@ -1,6 +1,8 @@
-/* @invariant a sentence describes what this
- * call observed, every hint names inputs that exist, and a count says which
- * reads it covers. Each cell failed before its fix. */
+/* @invariant
+  * a sentence describes what this call observed, every hint names inputs that
+  * exist, and a count says which reads it covers. Each cell failed before its
+  * fix.
+  */
 
 import fs from "node:fs";
 import os from "node:os";

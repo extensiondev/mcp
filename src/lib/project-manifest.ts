@@ -54,9 +54,9 @@ export function readBuiltManifest(
       const manifest = JSON.parse(fs.readFileSync(file, "utf8"));
 
       if (manifest && typeof manifest === "object") {
-        /* @invariant A SOURCE manifest is read through the engine's prefix
-           rule before it is judged. The built manifest has its browser
-           prefixes folded in; the source one still carries them, so a
+        /* @invariant A SOURCE manifest is read through the engine's prefix rule
+           before it is judged. The built manifest has its browser prefixes
+           folded in; the source one still carries them, so a
            `chromium:service_worker` read raw declared no background and the
            assertion failed the worker that was running. */
         const folded = isSourceManifest(file, projectPath)

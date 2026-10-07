@@ -44,13 +44,7 @@ async function waitFor(check: () => boolean, budgetMs: number): Promise<boolean>
 }
 
 /* @invariant This is the one cell that runs the Windows stop for real. The
-   other stop cells signal POSIX process groups and are skipped here, and the
-   win32 cell in lifecycle-wave6 only fakes the platform, so before this cell
-   no run had shown taskkill /T /F ending a real tree. The
-   parent stands in for the dev server and its child for the browser it
-   launched; the child is what a shim-only kill used to leave running. Since
-   the survivor search reads the Windows process table, so a
-   stop that ended the tree says stopped instead of unverified. */
+   other stop cells signal POSIX process groups and are skipped here. */
 describe("extension_stop on a real Windows host", () => {
   windowsOnly(
     "ends the session's whole process tree and confirms nothing of it is left",

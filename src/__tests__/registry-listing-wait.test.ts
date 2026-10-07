@@ -3,12 +3,8 @@ import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
 
-/* @invariant The release publishes the tarball and then asks npm for it, and
-   npm has served a fresh version anywhere from seconds to several minutes
-   later. On 2026-09-25 the 10.10.0 tarball took longer than the 150 s this
-   script used to wait, so the listing step failed on a release that had
-   already shipped and the repair lane had to run by hand. The budget below is
-   the floor that covers every propagation measured so far. */
+/* @invariant The release publishes the tarball and then asks npm for it. The
+   budget below is the floor that covers every propagation measured so far. */
 const MIN_WAIT_SECONDS = 600;
 
 describe("the registry listing waits long enough for npm to serve the tarball it describes", () => {

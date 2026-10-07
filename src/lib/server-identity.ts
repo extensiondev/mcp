@@ -13,17 +13,6 @@ export type ServerIdentityAnswer =
 
 const DEFAULT_TIMEOUT_MS = 5000;
 
-/* @invariant
- * ONLY A 200 CONFIRMS AND ONLY A 401 REFUSES. EVERYTHING ELSE IS SILENCE.
- *
- * The whole point of asking the server is to stop reporting "logged in" for a
- * credential production would refuse, so the answer must never be inferred
- * from anything weaker than the server's own verdict. A 404 is a deploy that
- * does not carry the endpoint yet, a 5xx is an outage, a network error is a
- * network error: reading any of those as either "confirmed" or "refused"
- * would recreate the local-file guess this call exists to replace, just with
- * extra steps. Callers get "unavailable" and must say so out loud.
- */
 export async function askServerIdentity(args: {
   apiBase: string;
   token: string;

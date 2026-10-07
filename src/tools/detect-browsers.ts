@@ -231,9 +231,10 @@ function resolveCacheRoot(): string {
 /* @invariant The managed cache nests a binary six levels under its browser
    directory on macOS (firefox/<channel>_<version>/<Name>.app/Contents/MacOS/
    <exe>), and a search that gave up at four reported "no managed firefox"
-   while extension_dev launched exactly that Nightly a moment later. The depth covers the deepest layout the engine writes, and an
-   app bundle is resolved to the executable it wraps rather than matched by a
-   fixed bundle name, so a Nightly or Developer Edition bundle counts. */
+   while extension_dev launched exactly that Nightly a moment later. The depth
+   covers the deepest layout the engine writes, and an app bundle is resolved
+   to the executable it wraps rather than matched by a fixed bundle name, so a
+   Nightly or Developer Edition bundle counts. */
 const MANAGED_SEARCH_DEPTH = 8;
 
 const MANAGED_EXEC_NAMES: Record<string, string[]> = {
@@ -287,10 +288,10 @@ export function findManagedBinaryIn(
 
   const names = MANAGED_EXEC_NAMES[browser] ?? [];
 
-  /* @invariant Two managed versions sit side by side after an upgrade, and
-     the engine launches the newest; a readdir-ordered search reported the
-     older one as the binary dev would launch. Version-like
-     names are visited newest first, so the first hit is the engine's pick. */
+  /* @invariant Two managed versions sit side by side after an upgrade, and the
+     engine launches the newest; a readdir-ordered search reported the older
+     one as the binary dev would launch. Version-like names are visited newest
+     first, so the first hit is the engine's pick. */
   function search(dir: string, depth: number): string | null {
     if (depth > MANAGED_SEARCH_DEPTH) return null;
 
@@ -401,9 +402,6 @@ export async function detectBrowsers(
       source === "managed" && systemBinaryPath && systemBinaryPath !== binaryPath
         ? systemBinaryPath
         : null;
-    /* @invariant A BINARY THAT DID NOT ANSWER --version IS UNVERIFIED, NOT
-       AVAILABLE: a quarantined or half-downloaded bundle used to keep its
-       source and join "All requested browsers are available". */
     detected.push({
       browser,
       binaryPath,

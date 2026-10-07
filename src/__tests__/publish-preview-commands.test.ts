@@ -11,8 +11,8 @@ const platform = vi.hoisted(() => ({
 }));
 
 /* @invariant The real publish client runs: only the network is faked, and
-   only /api/cli/publish answers with the platform body each cell sets, so
-   the token resolution and response reading are the shipped ones. */
+   only /api/cli/publish answers with the platform body each cell sets, so the
+   token resolution and response reading are the shipped ones. */
 function publishAnswer(url: string): Response | null {
   if (!url.endsWith("/api/cli/publish")) return null;
 

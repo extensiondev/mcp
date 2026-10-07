@@ -292,10 +292,6 @@ async function finishFromPoll(
     .trim()
     .toLowerCase();
 
-  /* @invariant The grant must be the WORKSPACE kind for the WORKSPACE asked.
-   * A project token or a project provisioning grant answering this poll
-   * means the record was not ours, and sending either to the create endpoint
-   * would only earn a refusal; nothing is created and nothing is stored. */
   if (workspaceSlug !== ctx.workspace) {
     return fail(
       "CreateScopeError",

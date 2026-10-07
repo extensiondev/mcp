@@ -1,6 +1,8 @@
-/* @invariant a read that threw is said as unreadable, with
- * why, never reported as an empty list that sends the agent after the wrong
- * fix. Each cell here failed before its fix. */
+/* @invariant
+  * a read that threw is said as unreadable, with why, never reported as an
+  * empty list that sends the agent after the wrong fix. Each cell here failed
+  * before its fix.
+  */
 
 import crypto from "node:crypto";
 import fs from "node:fs";

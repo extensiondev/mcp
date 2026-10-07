@@ -1,7 +1,9 @@
-/* @invariant the scaffolder's own card (name, template,
- * path) goes through the captured logger, so the words in a project's name
- * must never make its failure read as a network error, and a `.git` that
- * was there before the call is not one the scaffolder initialized. */
+/* @invariant
+  * the scaffolder's own card (name, template, path) goes through the captured
+  * logger, so the words in a project's name must never make its failure read
+  * as a network error, and a `.git` that was there before the call is not one
+  * the scaffolder initialized.
+  */
 
 import fs from "node:fs";
 import os from "node:os";

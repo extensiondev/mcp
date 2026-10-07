@@ -30,7 +30,6 @@ import {
 
 const COMMAND = "extension_preview_web";
 
-
 const DEFAULT_PREVIEW_DEV_URL = "http://localhost:3110";
 
 const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]", "::1"]);
@@ -728,31 +727,11 @@ export async function handler(args: {
       warnings: previewWarnings,
     });
   } catch (err) {
-    /* @invariant
-     * Nothing rendered, so this is not a success.
-     *
-     * ok:true here reported "previewed" for a run where the host never
-     * answered and the link cannot open. Callers branch on ok before they read
-     * status, so an agent would relay a deep link as though it worked, and the
-     * remedy it then offers is a dev server the caller may not even have.
-     *
-     * The share lane is the one exception, in the other direction. With
-     * share:true the thing the caller asked for is the uploaded link, and on
-     * any machine outside the monorepo the local dev host is expected to be
-     * absent; failing the whole envelope over that leg reported a working
-     * share as a failure. When the share succeeded, the local lane's absence
-     * is a warning on a success, not a verdict.
-     */
     const shared = result.share as
       | { ok?: unknown; browserLoadable?: unknown; heldFromPublic?: unknown; zipUrl?: unknown }
       | undefined;
 
     if (args.share && shared?.ok === true) {
-      /* @invariant "THE SHARE LINK WORKS" IS THE PROBE'S VERDICT, NOT THE
-         UPLOAD'S. This branch used to say the link works on `share.ok`
-         alone, which only means the bytes went up, while the same envelope
-         could carry the CORS probe's "it will not render for anyone" or a
-         hold from the public. */
       const linkWorks =
         shared.browserLoadable === true &&
         shared.heldFromPublic !== true &&

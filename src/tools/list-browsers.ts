@@ -57,9 +57,7 @@ export async function listManagedBrowsers(): Promise<string> {
   }> = [];
   const incomplete: Array<{ browser: string; path: string; size: number; sizeFormatted: string }> = [];
 
-  /* @invariant INSTALLED MEANS A BINARY IS THERE. A directory left by an
-     interrupted download used to count as "1 managed browser(s) found" and
-     drop out of availableToInstall. */
+  /* @invariant INSTALLED MEANS A BINARY IS THERE. */
   for (const browser of BROWSER_NAMES) {
     const browserDir = path.join(cacheRoot, browser);
     if (!fs.existsSync(browserDir)) continue;

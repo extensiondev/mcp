@@ -292,18 +292,6 @@ function parseCapabilities(stdout: string): EngineFacts | null {
 }
 
 /* @invariant
- * The npx fallback answers without spawning anything.
- *
- * When no project-local binary exists the invocation is `npx extension@<spec>`
- * with the spec this package pins, so the version that will run is already
- * written in the arguments about to be passed. Reading it out of the argument
- * rather than off a probe is both free and more truthful than a second source
- * would be. A spec that is not an exact version, such as `latest` or an
- * operator override, parses to null and falls through to a real probe. The pin
- * carries no roster, so support questions about it are answered from the floor
- * table, which is exact for a version this package chose itself.
- */
-/* @invariant
  * Ask the engine what it can do before deducing it from what it is.
  *
  * Since 4.0.20 the engine has `extension capabilities` for exactly this

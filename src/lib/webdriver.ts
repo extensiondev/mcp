@@ -15,13 +15,12 @@ import type { ReadyContract } from "./types";
 const SAFARI_LOG_FALLBACK =
   "Without one, the dev session's log file is still read: extension_logs and the log-based assertions see what the extension writes once it is enabled.";
 
-/* @invariant The engine says why it opened no Safari session, so this
-   server relays it instead of guessing. Extension.js 4.1.32 opens a
-   safaridriver session under dev --browser safari and stamps
+/* @invariant The engine says why it opened no Safari session, so this server
+   relays it instead of guessing. Extension.js 4.1.32 opens a safaridriver
+   session under dev --browser safari and stamps
    webdriverPort/webdriverSessionId, or webdriverUnavailableReason when it
-   could not. This hint used
-   to say no release opens one, which 4.1.32 made false. Safari grants one
-   automation session at a time, so this server still never opens its own. */
+   could not. Safari grants one automation session at a time, so this server
+   still never opens its own. */
 export function webdriverSessionMissingHint(reason: string | null): string {
   if (reason) {
     return `The dev session opened no safaridriver session: ${reason}. Fix that, then restart extension_dev --browser=safari so it opens one. ${SAFARI_LOG_FALLBACK}`;

@@ -98,10 +98,6 @@ function readText(distPath: string, rel: string): string | null {
   }
 }
 
-/* @invariant THE SCAN SAYS WHAT IT DID NOT READ. An unreadable script used
-   to read as "" and a permission used only there was reported unused with
-   the fix "Remove ..."; scripts past the byte cap were silently skipped
-  . */
 export interface ReviewReport {
   risks: ReviewRisk[];
   unreadable: string[];
@@ -109,17 +105,6 @@ export interface ReviewReport {
   manifestUnreadable?: string;
 }
 
-/* @invariant
- * THESE ARE THE THINGS A STORE REVIEWER REJECTS OR QUESTIONS, READ OFF THE
- * BUILT PACKAGE, AND THEY NEVER BLOCK A BUILD.
- *
- * Each finding names what a reviewer will see and the one change that removes
- * it. They are warnings because each has a legitimate use a scan cannot see:
- * a password manager needs every site, a bundled library can carry an eval it
- * never calls, and an API can be reached through a wrapper this scan does not
- * follow. The scan reads only the built files, never the network, and stops at
- * MAX_SCAN_BYTES of script so a huge bundle cannot stall the build result.
- */
 export function reviewRisks(input: Parameters<typeof reviewRisksReport>[0]): ReviewRisk[] {
   return reviewRisksReport(input).risks;
 }
@@ -264,15 +249,14 @@ export function reviewCoverageNotes(report: ReviewReport): string[] {
 }
 
 /* @invariant
- * A DEV BUILD IS NOT WHAT A STORE RECEIVES, SO ITS CODE IS NOT JUDGED.
- *
- * Measured 2026-10-05 on seven published extensions' dev dists: every one
- * tripped eval() or new Function() from the hot-reload runtime and most showed
- * a `management` permission the dev session injects, while a production build
- * of an official template tripped neither. So on a dev build the code checks
- * are skipped and only the manifest checks (host access, Firefox data
- * collection) still run.
- */
+  * A DEV BUILD IS NOT WHAT A STORE RECEIVES, SO ITS CODE IS NOT JUDGED.
+  * Measured on seven published extensions' dev dists: every one tripped
+  * eval() or new Function() from the hot-reload runtime and most showed a
+  * `management` permission the dev session injects, while a production build
+  * of an official template tripped neither. So on a dev build the code checks
+  * are skipped and only the manifest checks (host access, Firefox data
+  * collection) still run.
+  */
 export function isDevelopmentBuild(files: Array<{ path: string }>): boolean {
   return files.some((f) => /hot-update\./.test(f.path) || /(^|\/)extension-js(-devtools)?\//.test(f.path));
 }

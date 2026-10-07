@@ -17,15 +17,15 @@ import { engineProjectRoot } from "../lib/session-paths";
 export { type LogQuery };
 
 /* @invariant THE LOG IS READ WHERE THE ENGINE WROTE IT. The engine's own
-   reader takes the path as given, while the engine writes the file under
-   its project root (the package.json that owns the manifest). Every reader
-   here that re-exported it unrooted answered "no log events" for a project
-   whose manifest sits in a subfolder, and doctor, wait and assert then said
-   there were no runtime errors. */
-/* @invariant A SENTINEL IS NOT A LOG LINE. The engine's reader hands back
-   its `type: "gap"` drop markers beside the events, so assert counted a
-   header-plus-sentinel file as "1 event" and a passing timeline. Typed records are kept out of the events and the gaps are
-   read on their own. */
+   reader takes the path as given, while the engine writes the file under its
+   project root (the package.json that owns the manifest). Every reader here
+   that re-exported it unrooted answered "no log events" for a project whose
+   manifest sits in a subfolder, and doctor, wait and assert then said there
+   were no runtime errors. */
+/* @invariant A SENTINEL IS NOT A LOG LINE. The engine's reader hands back its
+   `type: "gap"` drop markers beside the events, so assert counted a
+   header-plus-sentinel file as "1 event" and a passing timeline. Typed
+   records are kept out of the events and the gaps are read on their own. */
 export function readLogEvents(
   projectPath: string,
   browser: string,

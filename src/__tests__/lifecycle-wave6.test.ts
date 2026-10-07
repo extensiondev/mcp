@@ -153,10 +153,10 @@ describe("Reaped means confirmed gone", () => {
   );
 });
 
-/* @invariant Windows stop reads its own process table.
-   pgrep and ps fail here as they do on Windows, so a pass cannot come from
-   the host's own pgrep; powershell and tasklist answer from the table each
-   cell sets, and taskkill really kills the holder. */
+/* @invariant Windows stop reads its own process table. pgrep and ps fail here
+   as they do on Windows, so a pass cannot come from the host's own pgrep;
+   powershell and tasklist answer from the table each cell sets, and taskkill
+   really kills the holder. */
 describe("A Windows stop can verify what it ended", () => {
   function onWindows<T>(run: () => Promise<T>): Promise<T> {
     const platform = Object.getOwnPropertyDescriptor(process, "platform")!;

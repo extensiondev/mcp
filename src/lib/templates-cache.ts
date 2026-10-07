@@ -66,10 +66,6 @@ function cacheAgeMs(): number | undefined {
   }
 }
 
-/* @invariant THE ANSWER NAMES ITS SOURCE, AND A GOOD LIVE READ IS NEVER
-   THROWN AWAY OVER A CACHE WRITE. The cache write used to sit in the fetch's
-   try, so an unwritable ~/.cache turned a live catalog into the bundled
-   snapshot, and nothing said which source answered. */
 export async function fetchTemplatesMetaWithSource(): Promise<TemplatesMetaRead> {
   if (isCacheValid()) {
     const cached = readCachedMeta();

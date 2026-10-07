@@ -1,13 +1,14 @@
-/* @invariant THESE ARE THE ENGINE'S REAL SHAPES, KEY FOR KEY, FROM ITS OWN
- * WRITERS. Each builder returns what extension-develop 4.1.32 (or its CLI)
- * writes today, with the file and symbol that writes it named beside it, so
- * a test that wants a session, a log line, a build or an act reply feeds the
- * client what the engine feeds it. A test that wants a degraded or older
- * shape has to say which key it changed. Hand-written shapes (`message` on a
- * log event, `{tabs: [...]}` on a list-tabs frame, a `ready.json` without
- * `schema: 1`) are how a run of defects stayed invisible.
- * When the pinned engine changes a writer, this file changes with it.
- */
+/* @invariant
+  * THESE ARE THE ENGINE'S REAL SHAPES, KEY FOR KEY, FROM ITS OWN WRITERS.
+  * Each builder returns what extension-develop 4.1.32 (or its CLI) writes
+  * today, with the file and symbol that writes it named beside it, so a test
+  * that wants a session, a log line, a build or an act reply feeds the client
+  * what the engine feeds it. A test that wants a degraded or older shape has
+  * to say which key it changed. Hand-written shapes (`message` on a log
+  * event, `{tabs: [...]}` on a list-tabs frame, a `ready.json` without
+  * `schema: 1`) are how a run of defects stayed invisible. When the pinned
+  * engine changes a writer, this file changes with it.
+  */
 
 import fs from "node:fs";
 import path from "node:path";
@@ -45,7 +46,6 @@ export function browserFromCliArgs(args: string[]): string {
   const at = args.indexOf("--browser");
   return at >= 0 && args[at + 1] ? String(args[at + 1]) : "chrome";
 }
-
 
 const NOW = "2026-10-05T12:00:00.000Z";
 
@@ -93,12 +93,14 @@ export function readyContract(
   return { ...base, ...overrides };
 }
 
-/* @invariant A Safari dev contract as Extension.js 4.1.32 writes it: the
- * launcher holds one safaridriver session and stamps its port (a number) and
- * session id (a string), or webdriverUnavailableReason when it could not open
- * one (extension/dist/browsers.cjs `stampReadyWebDriver`, which deletes the
- * other two keys whichever way it goes), and the ready writer keeps all three
- * across recompiles. */
+/* @invariant
+  * A Safari dev contract as Extension.js 4.1.32 writes it: the launcher holds
+  * one safaridriver session and stamps its port (a number) and session id (a
+  * string), or webdriverUnavailableReason when it could not open one
+  * (extension/dist/browsers.cjs `stampReadyWebDriver`, which deletes the
+  * other two keys whichever way it goes), and the ready writer keeps all
+  * three across recompiles.
+  */
 export function safariDevContract(
   session: { port: number; sessionId: string } | { unavailableReason: string },
   overrides: Body = {},
@@ -291,14 +293,16 @@ export function buildSummary(
   };
 }
 
-/* @invariant What `extension build <dir> --browser <b> --output json` prints on
- * STDOUT with Extension.js 4.1.32, measured 2026-10-07 on a fixture project
- * (cli.cjs, the build command's json reporter): one envelope line, nothing
- * else. The summaries sit inline under value.summaries, one per browser, and
- * each output_path is the real dist the build wrote: dist/<browser> under the
- * package.json that owns the manifest (840~0.mjs `getDistPath`), which is why
- * it is resolved through the same root reader the tool uses. The human report
- * never touches stdout; it goes to stderr (`buildNarration`). */
+/* @invariant
+  * What `extension build <dir> --browser <b> --output json` prints on STDOUT
+  * with Extension.js 4.1.32, measured on a fixture project (cli.cjs, the
+  * build command's json reporter): one envelope line, nothing else. The
+  * summaries sit inline under value.summaries, one per browser, and each
+  * output_path is the real dist the build wrote: dist/<browser> under the
+  * package.json that owns the manifest (840~0.mjs `getDistPath`), which is
+  * why it is resolved through the same root reader the tool uses. The human
+  * report never touches stdout; it goes to stderr (`buildNarration`).
+  */
 export function buildFrame(
   projectPath: string,
   browsers: string[],

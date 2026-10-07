@@ -5,6 +5,8 @@ import path from "node:path";
 
 import { describe, it, expect, afterEach, vi } from "vitest";
 
+import { readyContract } from "./fixtures/engine-answers";
+
 import type * as CdpPortModule from "../lib/cdp-port";
 
 const navigations: string[] = [];
@@ -129,7 +131,7 @@ function project(
     fs.mkdirSync(readyDir, { recursive: true });
     fs.writeFileSync(
       path.join(readyDir, "ready.json"),
-      JSON.stringify({ status: "ready", distPath }),
+      JSON.stringify(readyContract("dev", "chrome", { distPath, extensionId: undefined })),
     );
   }
 
@@ -406,7 +408,7 @@ describe("open trusts the live browser over the computed id hash", () => {
     const readyDir = path.join(p.dir, "dist", "extension-js", "chrome");
     fs.writeFileSync(
       path.join(readyDir, "ready.json"),
-      JSON.stringify({ status: "ready", distPath: linkedDist }),
+      JSON.stringify(readyContract("dev", "chrome", { distPath: linkedDist, extensionId: undefined })),
     );
 
     const realId = expectedId(fs.realpathSync(linkedDist));

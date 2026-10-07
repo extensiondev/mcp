@@ -39,17 +39,16 @@ import * as bridge from "extension-develop/bridge";
    artifact lands under THAT directory's dist/. A caller that hands this
    module a manifest subfolder as projectPath would otherwise wait on a
    ready.json the engine never writes and time out with compiled: false while
-   the session runs. The same walk is applied here, in the
-   one module that knows the layout, so every reader agrees with the writer.
-
-   Since 4.1.31 the engine adopts that nearest project manifest only when it
-   OWNS the extension manifest (develop/lib/project.ts ownsManifest): same
-   directory, the documented <project>/src/manifest.json layout, a dependency
-   on extension, extension-develop or extension-create, or an
-   extension.config.* beside it. A stranger's package.json the manifest merely
-   sits inside is declined and the directory the engine was invoked on, the
-   caller's projectPath, is the project, so its dist/ is where ready.json
-   lands. The same four tests are applied here. */
+   the session runs. The same walk is applied here, in the one module that
+   knows the layout, so every reader agrees with the writer. Since 4.1.31 the
+   engine adopts that nearest project manifest only when it OWNS the extension
+   manifest (develop/lib/project.ts ownsManifest): same directory, the
+   documented <project>/src/manifest.json layout, a dependency on extension,
+   extension-develop or extension-create, or an extension.config.* beside it.
+   A stranger's package.json the manifest merely sits inside is declined and
+   the directory the engine was invoked on, the caller's projectPath, is the
+   project, so its dist/ is where ready.json lands. The same four tests are
+   applied here. */
 const PROJECT_MANIFEST_FILENAMES = ["package.json", "deno.jsonc", "deno.json"];
 const PACKAGE_MANIFEST = "package.json";
 const DENO_MANIFESTS = ["deno.jsonc", "deno.json"];
@@ -199,10 +198,10 @@ export {
 /* @invariant THE EVAL GATE IS THE ENGINE'S TOKEN FILE, ON EVERY ROUTE. The
    engine writes a 0600 session token only when the dev session was started
    with --allow-eval, and its relay refuses eval without it. The debug-port
-   routes this package added answered without
-   looking, so a session started without allowEval evaluated anyway while the
-   tool description promised the gate. The same file, read at the
-   root the engine writes under, is now the gate for those routes too. */
+   routes this package added answered without looking, so a session started
+   without allowEval evaluated anyway while the tool description promised the
+   gate. The same file, read at the root the engine writes under,
+   is now the gate for those routes too. */
 export function evalTokenPresent(projectPath: string, browser: string): boolean {
   return Boolean(
     bridge.readControlToken(engineProjectRoot(projectPath), browser),
@@ -218,38 +217,28 @@ export function sessionPathHint(file: string): string {
   return `Looked at ${file} (the session-state layout this MCP's pinned engine publishes). If the project runs an older Extension.js, its layout may differ and this path will never appear.`;
 }
 
-/* @invariant Everything below models the managed browser-profile layout, and it
-   is a MODEL rather than an adoption. The engine publishes no profile helper and
-   stamps no profile path into ready.json, so unlike the session artifacts above
-   there is nothing to import: the engine builds
-   `<distRoot>/extension-js/profiles/<browser>-profile` inside each launcher
+/* @invariant Everything below models the managed browser-profile layout, and
+   it is a MODEL rather than an adoption. The engine stamps profilePath into
+   ready.json once a browser is up, and tools/stop.ts reads it from the
+   contract; the model here serves the moments without a contract (a session
+   that never reached ready, a profile left by a crash) and mirrors the
+   engine's launchers, which build
+   `<distRoot>/extension-js/profiles/<browser>-profile`
    (run-chromium/chromium-launch/browser-config.ts and
-   run-firefox/firefox-launch/browser-config.ts) and never exports it. That gap
-   is filed upstream with the engine; when the
-   engine ships browserProfileRootDir and stamps the resolved profile into the
-   contract, these functions become re-exports and the reads below become reads
-   of a published fact.
-
-   Until then the guess lives here and only here, because the previous copy of it
-   was spread across a remediation string and a pgrep pattern and both were
-   wrong: they still said dist/extension-profile-<browser>, a layout no shipping
-   engine has written for some time. The remediation named a directory that could
-   not exist, and the pgrep pattern that was supposed to reap the session's
-   browser matched nothing, so extension_stop reported a clean stop over a live
-   browser. One place to be wrong is the whole point; two places to be wrong is
-   how this shipped.
-
-   Only the leading segment is borrowed rather than guessed:
-   sessionArtifactsRootDir is the engine's own helper, so `dist/extension-js`
-   moves with the pin. `profiles` and the `<browser>-profile` suffix are the
-   guess.
-
-   What this deliberately does NOT model is the run directory inside
-   <browser>-profile. A persisted profile gets `dev`; an ephemeral one gets three
-   random words from uniqueNamesGenerator, freshly drawn on every restart
-   (resolve-profile.ts). That name is unguessable in principle, not merely in
-   practice, so no function here returns a full profile path, and any caller that
-   needs one has to look at the directory instead of computing it. */
+   run-firefox/firefox-launch/browser-config.ts) without exporting a path
+   helper. One place to be wrong is the whole point: a remediation string and
+   a pgrep pattern that each guessed the layout on their own both named a
+   directory no shipping engine writes, so extension_stop reported a clean
+   stop over a live browser. Only the leading segment is borrowed rather than
+   guessed: sessionArtifactsRootDir is the engine's own helper, so
+   `dist/extension-js` moves with the pin. `profiles` and the
+   `<browser>-profile` suffix are the guess. What this deliberately does NOT
+   model is the run directory inside <browser>-profile. A persisted profile
+   gets `dev`; an ephemeral one gets three random words from
+   uniqueNamesGenerator, freshly drawn on every restart (resolve-profile.ts).
+   That name is unguessable in principle, not merely in practice, so no
+   function here returns a full profile path, and any caller that needs one
+   has to look at the directory instead of computing it. */
 export function profilesRootDir(projectPath: string): string {
   return path.join(sessionArtifactsRootDir(projectPath), "profiles");
 }

@@ -1,7 +1,8 @@
-/* @invariant session tools say what they
- * observed, stop-all keeps to this server's sessions, and build, analyze and
- * the review scan follow the engine's own rules. Each cell failed before
- * its fix. */
+/* @invariant
+  * session tools say what they observed, stop-all keeps to this server's
+  * sessions, and build, analyze and the review scan follow the engine's own
+  * rules. Each cell failed before its fix.
+  */
 
 import fs from "node:fs";
 import os from "node:os";

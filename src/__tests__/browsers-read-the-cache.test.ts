@@ -1,6 +1,8 @@
-/* @invariant "installed", "available" and "installed" are
- * read off the cache and the binary, never off a directory, a return or a
- * silent probe; and the installer's prose never reaches the JSON-RPC stream. */
+/* @invariant
+  * "installed", "available" and "installed" are read off the cache and the
+  * binary, never off a directory, a return or a silent probe; and the
+  * installer's prose never reaches the JSON-RPC stream.
+  */
 
 import fs from "node:fs";
 import os from "node:os";

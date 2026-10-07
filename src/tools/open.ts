@@ -50,11 +50,11 @@ export const OVERRIDE_SURFACES = ["newtab", "history", "bookmarks"];
 
 /* @invariant A TAB THIS SERVER RENDERED IS NEVER COUNTED AS THE SURFACE. A
    popup or sidebar document rendered as a tab by an earlier call matched the
-   url the confirmation polls for, so the next call reported the window open
-  . The target ids of rendered tabs are remembered here
-   for the life of the server and excluded from every confirmation; on
-   Gecko, where tabs are not target ids, the rendered document url is
-   remembered per project and surface. */
+   url the confirmation polls for, so the next call reported the window open.
+   The target ids of rendered tabs are remembered here for the life of the
+   server and excluded from every confirmation; on Gecko, where tabs are not
+   target ids, the rendered document url is remembered per project and
+   surface. */
 export const renderedTabTargets = new Set<string>();
 export const renderedGeckoSurfaces = new Map<string, string>();
 const PERSISTENT_WINDOW_SURFACES = ["sidebar"];
@@ -66,14 +66,9 @@ type SettledTarget = {
   redirectedFrom?: string;
 };
 
-/* @invariant THE TARGET THAT WAS NAVIGATED IS THE ONE THAT ANSWERS. The poll
-   used to take the FIRST page whose url started with the wanted one, so a tab
-   already at a sibling path answered for a new navigation, and it called any
-   url the navigated tab showed a redirect, including the url it had BEFORE
-   (a reused new-tab page sent to a download or a hanging server stayed on
-   chrome://newtab and was reported navigated there). With a known target
-   only that target is read; its pre-navigation url is never a landing
-  . */
+/* @invariant THE TARGET THAT WAS NAVIGATED IS THE ONE THAT ANSWERS. With a
+   known target only that target is read; its pre-navigation url is never a
+   landing. */
 type PolledTarget = SettledTarget | null | { unreadable: string };
 
 function targetsUnreadable(polled: PolledTarget): polled is { unreadable: string } {
@@ -125,9 +120,6 @@ async function pollForTarget(
       lastError = err instanceof Error ? err.message : String(err);
     }
 
-    /* @invariant A POLL THAT NEVER READ THE LIST IS NOT "NO TARGET". Every
-       throw used to be swallowed as transient, and the caller said the
-       navigation "did not produce a live page target". */
     if (Date.now() >= deadline) {
       return !listed && lastError !== null ? { unreadable: lastError } : redirected;
     }
@@ -136,12 +128,6 @@ async function pollForTarget(
   }
 }
 
-/* @invariant A tab is disposable when nothing of the user's is in it: a
-   blank or new-tab page always, and a page of the extension's own origin only
-   when the caller is re-rendering a surface, where the earlier copy of that
-   surface is the thing being replaced. A url navigation never takes an
-   extension page over: the tab it replaced held the Redux store the panel
-   under test was meant to show. */
 async function landedOnErrorPage(
   port: number,
   targetId: string,
@@ -168,10 +154,10 @@ async function landedOnErrorPage(
 
 /* @invariant The browser is asked whether it is headless, because the
    environment this server reads only describes the request: a launcher shim
-   on this machine adds --headless=new behind every caller, and a headless
-   Chrome closes a popup window before the next call can read it. HeadlessChrome names itself in /json/version: old headless in
-   the Browser field, new headless (--headless=new) only in the User-Agent
-   field, so both are read. */
+   can add --headless=new behind every caller, and a headless Chrome closes a
+   popup window before the next call can read it. HeadlessChrome names itself
+   in /json/version: old headless in the Browser field, new headless
+   (--headless=new) only in the User-Agent field, so both are read. */
 async function browserRunsHeadless(
   projectPath: string,
   browser: string,
@@ -318,10 +304,6 @@ export async function navigateToUrl(
     const browserWsUrl = await CDPClient.discoverBrowserWsUrl(resolved.port);
     await cdp.connect(browserWsUrl);
 
-    /* @invariant A LIVE POPUP OR SIDE PANEL IS NEVER NAVIGATED IN PLACE: its
-       target is a page of the extension's origin like any other, and a
-       surface re-render used to take it over and call it a tab. A target at a window-hosted document is reused only when
-       this server rendered it as a tab itself. */
     const avoid = new Set(options.avoidUrls ?? []);
     const reusable = pageTargets.find(
       (t) =>
@@ -374,10 +356,11 @@ export async function navigateToUrl(
     }
 
     const settled = polled;
-    /* @invariant A target can match the requested url for an instant and then
-       be swapped to the browser's own error page: Edge answered a blocked
-       extension page that way and the tool reported it navigated. The landed target is read once more after it settles, and
-       an error page is a refusal with the browser's title as the reason. */
+    /* @invariant A target can match the requested url for an instant and then be
+       swapped to the browser's own error page: Edge answered a blocked
+       extension page that way and the tool reported it navigated. The landed
+       target is read once more after it settles, and an error page is a
+       refusal with the browser's title as the reason. */
     const blockedRead = settled
       ? await landedOnErrorPage(resolved.port, settled.id)
       : null;
@@ -466,7 +449,6 @@ export async function navigateToUrl(
   }
 }
 
-
 export async function resolveExtensionId(
   projectPath: string,
   browser: string,
@@ -508,10 +490,10 @@ export async function resolveExtensionId(
     const guest = await verifyGuestLoaded(projectPath, browser);
     if (guest.checked && guest.guestIds.length === 1) return guest.guestIds[0]!;
 
-    /* @invariant A lone live extension stands in for the computed hash only
-       when the contract stamped no id of its own (an older engine, or no
-       contract yet). A stamped id is the engine's word and a stranger's
-       worker never overrides it. */
+    /* @invariant A lone live extension stands in for the computed hash only when
+       the contract stamped no id of its own (an older engine, or no contract
+       yet). A stamped id is the engine's word and a stranger's worker never
+       overrides it. */
     if (
       guest.checked &&
       sessionGuestIdentity(projectPath, browser).source !== "contract" &&
@@ -852,8 +834,6 @@ async function openSurfaceAsTab(
         if (popupBounds) renderedAsTab.popupBounds = popupBounds;
       }
 
-      /* @invariant EVERY HINT NAMES A CONTEXT THAT EXISTS: `action` is a
-         surface name, the readers take `popup`. */
       const readerContext = surface === "action" ? "popup" : surface;
       const reachIt =
         `Inspect it with extension_dom_snapshot context: '${readerContext}' (include: ['html']), or extension_inspect with this url. ` +
@@ -893,9 +873,7 @@ async function confirmSurfaceTarget(
 
   if (parsed?.ok === false) return raw;
 
-  /* @invariant AN UNCONFIRMED OPEN SAYS SO. Confirmation runs over CDP for a
-     document the manifest declares; every path that could not run it used
-     to return the engine's "opened" bare. */
+  /* @invariant AN UNCONFIRMED OPEN SAYS SO. */
   const unconfirmed = (why: string): string => {
     patchValue(parsed, { confirmed: false, confirmation: why });
     addWarning(
@@ -1155,10 +1133,10 @@ export async function handler(
     }
   }
 
-  /* @invariant EVERY WINDOW SURFACE IS CHECKED AGAINST THE MANIFEST BEFORE
-     THE ENGINE IS ASKED. The engine answers `opened: "options"` from
-     chrome.runtime.openOptionsPage without reading lastError, so an
-     extension with no options page read as opened. */
+  /* @invariant EVERY WINDOW SURFACE IS CHECKED AGAINST THE MANIFEST BEFORE THE
+     ENGINE IS ASKED. The engine answers `opened: "options"` from
+     chrome.runtime.openOptionsPage without reading lastError, so an extension
+     with no options page read as opened. */
   if (["popup", "options", "sidebar"].includes(args.surface)) {
     const declared = declaredSurfaces(args.projectPath, browser);
 
@@ -1256,8 +1234,9 @@ export async function handler(
 
   /* @invariant An engine "opened" with no document behind it within 3s is a
      window the browser never showed, which is what a headless browser does
-     with an options or popup window whatever the launch flags said. The document is rendered in a tab instead and the
-     warning says so; the engine's answer rides along for the record. */
+     with an options or popup window whatever the launch flags said. The
+     document is rendered in a tab instead and the warning says so; the
+     engine's answer rides along for the record. */
   const fallback = await openSurfaceAsTab(args.projectPath, browser, args.surface);
   const parsedFallback = parseFrameObject(fallback);
 
@@ -1303,10 +1282,8 @@ function readWindowRefusal(
   const code = typeof parsed.error?.code === "string" ? parsed.error.code : "";
   const message = String(parsed.error?.message ?? "");
 
-  /* @invariant A MISSING SESSION IS NOT A MISSING WINDOW. The engine says
-     "No active control channel found for <browser>" with E_SESSION_NOT_FOUND,
-     and "no active" used to match the no-window arm, so a session that was
-     never started took the tab route. */
+  /* @invariant A MISSING SESSION IS NOT A MISSING WINDOW. The engine says "No
+     active control channel found for <browser>" with E_SESSION_NOT_FOUND. */
   if (
     code === "E_SESSION_NOT_FOUND" ||
     code === "E_NO_SESSION" ||
@@ -1342,8 +1319,8 @@ function windowRefusalWarning(
   /* @invariant THE WARNING SAYS WHAT WAS OBSERVED: the engine's refusal,
      quoted, and what this server did about it. The browser was never asked
      (the engine's open verb refuses a gesture-gated surface in its own
-     preflight), so no sentence here describes browser behaviour this call
-     did not measure. */
+     preflight), so no sentence here describes browser behaviour this call did
+     not measure. */
   if (isGeckoFamily(browser)) {
     return refusal.kind === "gesture"
       ? `The engine refused to open the ${noun} on ${browser} before asking the browser (its open verb carries no user gesture: ${said}), so the ${noun} document was rendered in a tab instead: the same document and APIs, without the toolbar anchoring and without a user gesture or an activeTab grant.`
@@ -1615,9 +1592,7 @@ const GECKO_SIDEBAR_GESTURE =
    rendered, an open one is reported as open, and a closed one gets its
    document as a tab through the same path the override pages use, with the
    gesture rule stated instead of a foreign API name. */
-/* @invariant THE RELAY'S "NOT OPEN" ANSWER IS THE ONLY CLOSED PANEL. A probe
-   refused for any other reason (no session, a CLI error, an unparsable
-   answer) used to read "the panel is not open now". */
+/* @invariant THE RELAY'S "NOT OPEN" ANSWER IS THE ONLY CLOSED PANEL. */
 const GECKO_PANEL_CLOSED = /E_TARGET_NOT_FOUND|is not open|not open|no sidebar|no .*sidebar context/i;
 
 async function openGeckoSidebar(
@@ -1678,10 +1653,6 @@ async function openGeckoSidebar(
         : typeof open.value?.meta?.url === "string"
           ? open.value.meta.url
           : undefined;
-    /* @invariant THE RELAY MATCHES ON CONTEXT ALONE, so a tab this server
-       rendered with the sidebar document answers a sidebar probe as readily
-       as the panel does. When such a tab is still listed,
-       "open" is unverified. */
     const renderedUrl = renderedGeckoSurfaces.get(`${path.resolve(projectPath)}::${browser}::sidebar`);
     let renderedTabListed = false;
 

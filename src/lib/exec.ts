@@ -34,10 +34,9 @@ function descendantPids(pid: number): number[] {
   }
 }
 
-/* @invariant Windows has no process groups, pgrep or POSIX signals, so a
-   kill there ends only the cmd.exe shim and leaves the engine and browser
-   running. taskkill /T walks the tree Windows itself records and /F ends it
-  . */
+/* @invariant Windows has no process groups, pgrep or POSIX signals, so a kill
+   there ends only the cmd.exe shim and leaves the engine and browser running.
+   taskkill /T walks the tree Windows itself records and /F ends it. */
 export function killWindowsTree(pid: number): boolean {
   try {
     execFileSync("taskkill", ["/PID", String(pid), "/T", "/F"], { stdio: "ignore" });
@@ -175,13 +174,6 @@ export function runExtensionCli(
       stdio: ["ignore", outFd, errFd],
       env: { ...process.env, FORCE_COLOR: "0", NO_COLOR: "1" },
     });
-    /* @invariant A RUN THIS SERVER KILLED SAYS SO, AND THE KILL REACHES THE
-       WHOLE TREE. The close event's signal was dropped, so a build that ran
-       past the timer answered "exited with code null" with a hint about
-       compile errors; and the spawn's own timer signalled only the wrapper
-       (an npx or sh shim), whose grandchild kept running and whose exit then
-       read as a clean 0. The timer here signals every
-       descendant, SIGTERM then SIGKILL, and marks the result `timedOut`. */
     let timedOut = false;
     const timer = setTimeout(() => {
       timedOut = true;

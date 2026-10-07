@@ -15,8 +15,8 @@ const platform = vi.hoisted(() => ({
 }));
 
 /* @invariant The real publish client runs: only the network is faked, and
-   only /api/cli/publish answers with the platform body each cell sets, so
-   the token resolution and response reading are the shipped ones. */
+   only /api/cli/publish answers with the platform body each cell sets, so the
+   token resolution and response reading are the shipped ones. */
 function publishAnswer(url: string): Response | null {
   if (!url.endsWith("/api/cli/publish")) return null;
 
@@ -138,11 +138,9 @@ describe("extension_publish build pin enrichment", () => {
     ).toBe(true);
   });
 
-  /*
-   * @invariant the deploy lane marks a finished build
-   * `ready`, which this tool used to skip, so a project with three READY
-   * builds published with buildSha and version null.
-   */
+  /* @invariant
+    * the deploy lane marks a finished build `ready`.
+    */
   it("reads a build the index marks ready as the newest successful build", async () => {
     global.fetch = registryFetch({
       items: [

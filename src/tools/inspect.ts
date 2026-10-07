@@ -141,10 +141,6 @@ export async function handler(args: {
     const sessionId = await cdp.attachToTarget(target.id);
     await cdp.enableDomains(sessionId);
 
-    /* @invariant THE ENVELOPE NAMES THE DOCUMENT THAT WAS READ. After a
-       navigation the target used to keep its pre-navigation url and title,
-       and a refused navigation (errorText) was not distinguished from a
-       landed one. */
     let landed: { url: string; title?: string } | null = null;
     let landingUnread: string | null = null;
 

@@ -346,19 +346,15 @@ function engineZipBase(distDir: string, projectPath: string): string {
 }
 
 /* @invariant
- * THE ZIP IS THE ONE THE ENGINE SAYS IT WROTE, AND IT IS NEWER THAN THE BUILD.
- *
- * The summary carries `zip_artifacts` with the real paths, and the engine
- * names its archives `dist/<sanitized name>-<version>-<browser>.zip` and
- * `dist/<...>-source.zip` (an explicit zipFilename keeps its stem and case
- * and gets the browser suffix). This used to look inside dist/<browser> for
- * `<name>-<version>.zip`, a layout the engine left, so `zip: true` reported
- * no zip and blamed the engine; and the source locator returned an archive
- * from an earlier build when one sat at the default name.
- * Order now: the summary's path, then the engine's name at the dist root,
- * then the newest matching archive, then the old layout for older engines,
- * and nothing older than this build's start is ever returned.
- */
+  * THE ZIP IS THE ONE THE ENGINE SAYS IT WROTE, AND IT IS NEWER THAN THE
+  * BUILD. The summary carries `zip_artifacts` with the real paths, and the
+  * engine names its archives `dist/<sanitized name>-<version>-<browser>.zip`
+  * and `dist/<...>-source.zip` (an explicit zipFilename keeps its stem and
+  * case and gets the browser suffix). Order now: the summary's path, then the
+  * engine's name at the dist root, then the newest matching archive, then the
+  * old layout for older engines, and nothing older than this build's start is
+  * ever returned.
+  */
 function zipFromSummary(
   summary: EngineBuildSummary | null,
   kind: "dist" | "source",
@@ -372,11 +368,10 @@ function zipFromSummary(
   return null;
 }
 
-/* @invariant FILESYSTEM MTIMES COME FROM A COARSE KERNEL CLOCK that can
-   trail Date.now() by a few milliseconds, so a file the engine wrote just
-   after the build started can carry an mtime before it (seen on CI's Linux
-   runners). A second of slack still tells this run's output from an older
-   build's. */
+/* @invariant FILESYSTEM MTIMES COME FROM A COARSE KERNEL CLOCK that can trail
+   Date.now() by a few milliseconds, so a file the engine wrote just after the
+   build started can carry an mtime before it. A second of slack still tells
+   this run's output from an older build's. */
 const MTIME_SLACK_MS = 1000;
 
 function freshFile(file: string, since: number): boolean {
@@ -448,7 +443,6 @@ function locateSourceZip(
 
   return newestZip(distRoot, since, (name) => name.endsWith("-source.zip"));
 }
-
 
 export const schema = {
   name: "extension_build",
@@ -525,26 +519,25 @@ export const schema = {
 const SAFARI_VENDORS = new Set(["safari", "webkit-based"]);
 
 /* @invariant
- * The bundle identifier is checked here as well as in the engine, on purpose.
- *
- * `extension build` rejects a malformed --bundle-id by writing one line to
- * stderr and exiting 1, which reaches an agent as a generic E_BUILD_FAILED
- * after a full compile has already been paid for. Checking the same shape
- * before the spawn turns a wasted build into a named refusal the model can act
- * on. The pattern is Apple's: dot-separated segments of letters, digits and
- * hyphens, each beginning with a letter, at least two of them.
- *
- * The engine now exports the same check as isValidBundleId, from `extension`'s
- * ./browsers subpath rather than its root entry, and this copy stays anyway.
- * Importing it would make the CLI package a
- * dependency of this one, and the whole point of resolveExtensionInvocation is
- * that this server drives whichever engine the user's project has installed
- * rather than one it bundles; a pinned second engine in the tree would be a
- * copy that validates nothing anybody runs. One regex is the cheaper duplicate.
- * It is duplicated rather than drifted: loosening this copy would only move the
- * rejection back to where it is expensive, never accept more. The parity test
- * in build-safari-packaging pins the pattern to the engine's own literal.
- */
+  * The bundle identifier is checked here as well as in the engine, on
+  * purpose. `extension build` rejects a malformed --bundle-id by writing one
+  * line to stderr and exiting 1, which reaches an agent as a generic
+  * E_BUILD_FAILED after a full compile has already been paid for. Checking
+  * the same shape before the spawn turns a wasted build into a named refusal
+  * the model can act on. The pattern is the engine's own: one or more
+  * dot-separated segments of letters, digits and hyphens, a digit-leading
+  * segment allowed. The engine now exports the same check as isValidBundleId,
+  * from `extension`'s ./browsers subpath rather than its root entry, and this
+  * copy stays anyway. Importing it would make the CLI package a dependency of
+  * this one, and the whole point of resolveExtensionInvocation is that this
+  * server drives whichever engine the user's project has installed rather
+  * than one it bundles; a pinned second engine in the tree would be a copy
+  * that validates nothing anybody runs. One regex is the cheaper duplicate.
+  * It is duplicated rather than drifted: loosening this copy would only move
+  * the rejection back to where it is expensive, never accept more. The parity
+  * test in build-safari-packaging pins the pattern to the engine's own
+  * literal.
+  */
 export const BUNDLE_ID_PATTERN = /^[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*$/;
 
 function manifestDivergence(projectPath: string, browser: string): string[] {
@@ -625,18 +618,16 @@ function carrierEntriesInZip(zipPath: string): Contamination {
 }
 
 /* @invariant
- * The guard looks at the whole of dist, and inside the archives it holds.
- *
- * It used to walk dist/<browser> only, and only from inside extension_build,
- * which removes the carrier before it runs the engine. The leak it therefore
- * could not see is `extension build --zip-source` driven straight at the
- * engine: that packs the project's own tree, ./extensions and all, so the
- * carrier ends up inside a source zip at the root of dist rather than loose in
- * the browser output. A carrier a reviewer can unzip out of a submission is
- * exactly the thing this must never let past, so both the loose walk and the
- * archives are checked, and a zip whose entry table cannot be read is reported
- * as unchecked rather than silently passed.
- */
+  * The guard looks at the whole of dist, and inside the archives it holds.
+  * The leak it therefore could not see is `extension build --zip-source`
+  * driven straight at the engine: that packs the project's own tree,
+  * ./extensions and all, so the carrier ends up inside a source zip at the
+  * root of dist rather than loose in the browser output. A carrier a reviewer
+  * can unzip out of a submission is exactly the thing this must never let
+  * past, so both the loose walk and the archives are checked, and a zip whose
+  * entry table cannot be read is reported as unchecked rather than silently
+  * passed.
+  */
 function carrierContamination(dir: string, depth = 0): Contamination {
   if (depth > 4) return { paths: [], unchecked: [] };
 
@@ -683,12 +674,6 @@ interface ValidationPreflight {
   warnings: string[];
 }
 
-/* @invariant THREE STATES, NOT TWO. The gate used to collapse "the validator
-   threw" and "the validator could not read the manifest" into the same null
-   that `skipValidation` yields, so a build went on with no word that nothing
-   had been checked. A preflight that could not run is a
-   warning on whatever follows; a validator envelope that refused (an
-   unparseable manifest) carries its errors forward. */
 type PreflightOutcome =
   | { state: "ran"; preflight: ValidationPreflight }
   | { state: "could-not-run"; reason: string };
@@ -858,8 +843,7 @@ export async function handler(args: {
   );
   const warnings: string[] = carrierNotes;
   /* @invariant THE CLOBBER WARNING IS SAID ONLY ON A BUILD THAT WROTE: the
-     engine never promotes its staging dir on a failed build, and this note
-     used to ride every failure envelope. */
+     engine never promotes its staging dir on a failed build. */
   const clobberNotes: string[] = clobberedSessions.map(
       (session) =>
         `A live dev session (pid ${session.pid}) is running on this project for ${browser}, and this build wrote over its dist/${browser} output. The dev browser may now serve the production artifact instead of the dev build until the next recompile. Run extension_stop, or let dev recompile on the next source change, to resolve it.`,
@@ -968,13 +952,11 @@ export async function handler(args: {
       engineSummary.warnings_count > buildWarnings.length
         ? engineSummary.warnings_count
         : undefined;
-    /* @invariant "BUILT" IS A DIST THIS RUN WROTE, AT THE PATH THE ENGINE
-     * NAMES. The guards below used to read projectPath/dist/<browser> by hand
-     * and read an empty answer as clean, so an exit 0 with nothing on disk,
-     * or a manifest in a subfolder whose dist lives at the package root, was
-     * "built" with no entrypoints and no review.
-     * The dist is the summary's output_path, else the engine's project root;
-     * its manifest must exist and be newer than this build's start. */
+    /* @invariant
+      * "BUILT" IS A DIST THIS RUN WROTE, AT THE PATH THE ENGINE NAMES. The
+      * dist is the summary's output_path, else the engine's project root; its
+      * manifest must exist and be newer than this build's start.
+      */
     const distDir =
       typeof engineSummary?.output_path === "string" && engineSummary.output_path
         ? path.resolve(engineSummary.output_path)
@@ -1200,9 +1182,7 @@ export async function handler(args: {
     stderr.trim() ||
     out ||
     `extension build exited with code ${code}`;
-  /* @invariant A failed build used to answer "Build failed with errors" and a
-     hint about src/manifest.json, a location the engine does not require, so
-     an agent had to leave the server to see a single compiler error. The one-shot build stamps the same ready.json a dev session
+  /* @invariant The one-shot build stamps the same ready.json a dev session
      does, with the compile errors on it, so those are read back here; when
      the contract carries none, the engine's own output tail travels instead. */
   const compileErrors = buildCompileErrors(args.projectPath, browser, start);

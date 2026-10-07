@@ -6,6 +6,7 @@ import path from "node:path";
 import { describe, it, expect, afterEach, vi } from "vitest";
 
 import { envelope } from "../lib/envelope";
+import { readyContract } from "./fixtures/engine-answers";
 
 import type * as ActModule from "../lib/act";
 import type * as CdpPortModule from "../lib/cdp-port";
@@ -157,7 +158,7 @@ function project(options: { devtools?: boolean; browser?: string } = {}): { dir:
   fs.writeFileSync(path.join(distPath, "manifest.json"), JSON.stringify(manifest));
   const readyDir = path.join(dir, "dist", "extension-js", browser);
   fs.mkdirSync(readyDir, { recursive: true });
-  fs.writeFileSync(path.join(readyDir, "ready.json"), JSON.stringify({ status: "ready", distPath }));
+  fs.writeFileSync(path.join(readyDir, "ready.json"), JSON.stringify(readyContract("dev", "chrome", { distPath })));
   extensionId = expectedId(distPath);
 
   return { dir, id: extensionId };
@@ -246,7 +247,6 @@ describe("extension_open surface devtools opens the real DevTools and shows the 
     expect(result.hint).toContain("extension_logs");
   }, 15_000);
 
-  /* @invariant */
   it("never hands back a frame that was already there when two of the extension's frames sit in DevTools", async () => {
     const p = project();
     showAddsFrame = false;

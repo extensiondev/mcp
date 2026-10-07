@@ -28,18 +28,6 @@ function recordPath(resolved: string): string {
   return path.join(recordDir(), `${digest}.json`);
 }
 
-/* @invariant
- * A placed carrier is written down before anything is asked to remove it.
- *
- * Removal used to be reachable only through a session: extension_stop walks
- * the sessions this server registered plus the markers on disk, so a project
- * whose session record was already gone, or whose carrier was placed by an
- * MCP server that has since been replaced, had nothing left pointing at it and
- * kept a debug companion with <all_urls> in its auto-loaded ./extensions
- * folder forever. This record is the second pointer, and it is deliberately
- * kept beside the session markers rather than in the project, so a project
- * that is never opened again is still reachable from the machine.
- */
 export function rememberCarrier(projectPath: string): void {
   const resolved = path.resolve(projectPath);
   placedHere.add(resolved);

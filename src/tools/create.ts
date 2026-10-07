@@ -145,11 +145,6 @@ export async function handler(args: {
 
   const logTail = (max = 20): string[] => logLines.slice(-max);
 
-  /* @invariant THE PROJECT'S OWN NAME IS NOT A NETWORK ERROR. The scaffolder
-     logs a card with the name, template and path through this logger, so a
-     project called network-monitor used to read as a transient fetch failure
-    . The name and both paths are scrubbed before the
-     markers are matched, and the thrown error's message is matched too. */
   const scrubbed = (text: string): string => {
     const noise = [args.projectName, projectInput, path.resolve(projectInput), args.parentDir ? path.resolve(args.parentDir) : ""]
       .filter((part) => part.length > 0)
@@ -239,11 +234,9 @@ export async function handler(args: {
     }
   }
 
-  /* @invariant THE MANIFEST IS FOUND THE WAY THE SCAFFOLDER FINDS IT: the
-     four common locations, then a breadth-first walk to depth 3 skipping
-     node_modules and .git (extension-create `findManifestJsonPath`). A
-     monorepo template keeps it at packages/extension/src/manifest.json and
-     used to be called incomplete. */
+  /* @invariant THE MANIFEST IS FOUND THE WAY THE SCAFFOLDER FINDS IT: the four
+     common locations, then a breadth-first walk to depth 3 skipping
+     node_modules and .git (extension-create `findManifestJsonPath`). */
   const manifestPath = findScaffoldManifest(result.projectPath);
 
   if (!manifestPath) {
@@ -264,10 +257,6 @@ export async function handler(args: {
     });
   }
 
-  /* @invariant The seed fires here and nowhere earlier: a scaffold with no
-     manifest is a failed start, and counting it would put starts in the
-     denominator that the funnel's other end can never reach. Discarded on
-     purpose so no scaffold waits on it or dies with it. */
   void captureTemplateSeed({ slug: result.template, source: "template" });
 
   const packageManager =

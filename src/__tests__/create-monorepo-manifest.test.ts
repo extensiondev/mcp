@@ -1,5 +1,5 @@
-/* @invariant the manifest is found the way the scaffolder
- * finds it, so a complete monorepo scaffold is not called incomplete. */
+/* @invariant the manifest is found the way the scaffolder finds it, so a
+   complete monorepo scaffold is not called incomplete. */
 
 import fs from "node:fs";
 import os from "node:os";

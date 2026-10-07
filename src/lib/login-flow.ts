@@ -125,9 +125,7 @@ export async function fetchLoginConfig(
     );
   }
 
-  /* @invariant AN UNREADABLE CONFIG IS NOT A PLATFORM THAT LACKS BATCH. A
-     body that did not parse used to become {} and read as
-     batch-unsupported, stated as a fact about the platform. */
+  /* @invariant AN UNREADABLE CONFIG IS NOT A PLATFORM THAT LACKS BATCH. */
   const read = parseJsonObject(await res.text());
 
   if ("problem" in read) {

@@ -329,8 +329,8 @@ export async function inspectViaBridge(
     probes: args.probe ?? [],
     maxBytes,
   });
-  /* @invariant A page inside the extension is asked through its surface
-     relay, never through a tab injection: Firefox refuses executeScript into
+  /* @invariant A page inside the extension is asked through its surface relay,
+     never through a tab injection: Firefox refuses executeScript into
      moz-extension:// documents whatever host permissions the manifest holds,
      so the page path's MV2 fallback answers "Missing host permission for the
      tab" for a page the relay reads without complaint. */

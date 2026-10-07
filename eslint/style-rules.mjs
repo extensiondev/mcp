@@ -14,24 +14,9 @@ const DASH_WRAPPED_TITLE = /^\s*-{2,}\s+(.*?)\s+-{2,}\s*$/
 const BOX_RULE = /[─━═]{3,}/
 const BOX_EDGES = /^[\s─━═]+|[\s─━═]+$/g
 
-/* @invariant
- * A comment a tool reads is code, not prose, and none of these rules may
- * delete or rewrite one. The list mirrors DIRECTIVE_COMMENT in
- * the monorepo's scripts/code-standards.mjs, which is the sweep that already strips every
- * other comment in this repository, plus the pragmas bundlers and minifiers
- * act on. A comment that matches is invisible to every rule below, wherever
- * it sits in the file. Widen it here and in code-standards together.
- */
 const FUNCTIONAL_COMMENT =
   /^\s*(@invariant\b|@deprecated\b|eslint|global\s|globals\s|exported\s|@ts-|@type\b|@typedef\b|@template\b|@satisfies\b|@import\b|prettier-ignore|biome-ignore|design-lint-ignore|v8 ignore|c8 ignore|istanbul ignore|webpack[A-Z]|@vite-ignore|@jsx|@vitest-|@jest-environment|@flow\b|@vue|@refresh\b|[#@]__(PURE|NO_SIDE_EFFECTS|INLINE|KEY)__|<reference|#\s*source(Mapping)?URL|@license|@preserve)/
 
-/* @invariant
- * Every file in this repository opens with the ASCII banner and one line
- * "Apache License 2.0 (c) 2026 ...". The monorepo copy of this rule keeps
- * only comments that say @license, @preserve, copyright or an SPDX id, so a
- * verbatim copy would strip the license line from every banner. The two
- * extra alternatives are the one place this copy differs from the monorepo.
- */
 const LEGAL_COMMENT =
   /@license|@preserve|copyright|SPDX-License-Identifier|Apache License|\(c\) \d{4}/i
 
@@ -309,12 +294,6 @@ export const styleRulesPlugin = {
 
 const STYLE_FILES = ["**/*.{js,jsx,mjs,cjs,ts,tsx,mts,cts}"]
 
-/* @invariant
- * Generated, vendored, minified and fixture sources are bytes this repository
- * republishes or asserts against, not code it writes, so a style fix there is
- * either reverted by the next regeneration or silently changes what a test
- * compares. The list mirrors EXCLUDED_PATH in the monorepo's scripts/code-standards.mjs.
- */
 const STYLE_IGNORES = [
   "**/vendor/**",
   "**/__fixtures__/**",

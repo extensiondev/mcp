@@ -1,7 +1,8 @@
-/* @invariant one resolver answers the token and
- * the project it belongs to, read from the token's own claims for an env
- * token and from the stored login otherwise; a lane is closed on the
- * server's code only. */
+/* @invariant
+  * one resolver answers the token and the project it belongs to, read from
+  * the token's own claims for an env token and from the stored login
+  * otherwise; a lane is closed on the server's code only.
+  */
 
 import fs from "node:fs";
 import os from "node:os";

@@ -72,9 +72,6 @@ import { version } from "../../package.json";
 
 const COMMAND = "extension_assert";
 
-/* @invariant The vocabulary an agent types IS the check registry's id list. A
-   second spelling of the same five expectations is a second thing to keep in
-   sync, and the one that drifts is always the one the caller reads. */
 export const ASSERT_KINDS: string[] = ASSERT_CHECKS.map((check) => check.id);
 
 const BACKGROUND = "background-worker-booted";
@@ -313,11 +310,9 @@ export function parseClauses(raw: unknown): ParseResult {
           ? clause.context.map(String)
           : [String(clause.context)];
 
-    /* @invariant The console context set is the engine's, so the engine's
-       filter is run once on a probe event at parse time. It throws a
-       RangeError on a context it does not know, lazily on the first event, and
-       that used to surface mid-stage as E_INTERNAL for
-       the whole call instead of a refused clause. */
+    /* @invariant The console context set is the engine's, so the engine's filter
+       is run once on a probe event at parse time. It throws a RangeError on a
+       context it does not know, lazily on the first event. */
     if (context !== undefined) {
       try {
         makeFilter({ context } as never)({ context: "background", level: "info", seq: 0, ts: 0 });
@@ -351,10 +346,6 @@ export function parseClauses(raw: unknown): ParseResult {
     });
   });
 
-  /* @invariant Two clauses that judge the same thing are rejected before the
-     run, not after it. The verdict document is keyed by check id and subject,
-     so a repeat would make it undecidable which one gates, exactly as the
-     upstream contract says about a repeated id. */
   const seen = new Set<string>();
 
   for (const clause of clauses) {
@@ -407,7 +398,6 @@ class Stage {
 
     return info ? new WebDriverClient(info) : null;
   }
-
 
   async port(): Promise<number | null> {
     if (this.cdpPort === undefined) {
@@ -558,7 +548,8 @@ async function assertBackgroundWorker(
 
   /* @invariant THE DEV BUILD INJECTS A BACKGROUND OF ITS OWN (the bridge
      producer) when the project declares none, so the built manifest always
-     declares one and a booted worker there is the engine's. The source manifest says what the extension declares. */
+     declares one and a booted worker there is the engine's. The source
+     manifest says what the extension declares. */
   const injected = (() => {
     if (isSourceManifest(read.file, stage.projectPath)) return false;
 
@@ -587,10 +578,11 @@ async function assertBackgroundWorker(
     );
 
   if (!stage.chromium) {
-    /* @invariant On Gecko the proof is the control channel itself: the
-       bridge executor that answers it runs inside the extension's background,
-       so a tabs query that comes back is a background that booted. Silence is inconclusive, since the channel may be off by
-       choice or the session not attached yet. */
+    /* @invariant On Gecko the proof is the control channel itself: the bridge
+       executor that answers it runs inside the extension's background, so a
+       tabs query that comes back is a background that booted. Silence is
+       inconclusive, since the channel may be off by choice or the session not
+       attached yet. */
     const listed = await listBridgeTabs(
       stage.projectPath,
       stage.browser,
@@ -636,10 +628,10 @@ async function assertBackgroundWorker(
     return inconclusiveCheck(id, null, guest.reason, NO_SESSION_SETTLED_BY);
   }
 
-  /* @invariant NO TARGET IS NOT "NOT LOADED". An idle MV3 worker with no
-     page of its extension open lists nothing, exactly like a rejected load,
-     so the target list alone cannot tell them apart. The one thing that can
-     is the contract: the CLI stamps `extension_load_refused` when the browser
+  /* @invariant NO TARGET IS NOT "NOT LOADED". An idle MV3 worker with no page
+     of its extension open lists nothing, exactly like a rejected load, so the
+     target list alone cannot tell them apart. The one thing that can is the
+     contract: the CLI stamps `extension_load_refused` when the browser
      refused the load. That is the FAIL; anything else falls through to the
      log evidence and, failing that, to inconclusive. */
   if (!guest.loaded) {
@@ -726,8 +718,8 @@ async function assertBackgroundWorker(
    textContent fallback, fifty characters of noscript prose: that passed the
    old count. A rendered reading excludes script, style, noscript, template,
    link and meta, measures innerText only, and counts a lone canvas, image or
-   control as rendered. The old fields stay for an
-   engine that does not report the new ones. */
+   control as rendered. The old fields stay for an engine that does not report
+   the new ones. */
 export function renderedFromEvidence(evidence: {
   bodyElementCount?: number;
   textLength?: number;
@@ -778,9 +770,10 @@ async function assertSurfaceRendered(
   }
 
   if (!stage.chromium) {
-    /* @invariant On Gecko the surface relay answers only from an open
-       document, so an inspect in that context is the rendering proof. A selector cannot be probed through that verb, so a clause
-       with one stays inconclusive and says which tool reads it. */
+    /* @invariant On Gecko the surface relay answers only from an open document,
+       so an inspect in that context is the rendering proof. A selector cannot
+       be probed through that verb, so a clause with one stays inconclusive
+       and says which tool reads it. */
     const raw = await runActVerb(
       [
         "inspect",
@@ -1076,9 +1069,9 @@ async function assertContentScriptInjected(
   const runId = readLogRunId(stage.projectPath, stage.browser);
   const stale = staleFileNote(stage.projectPath, stage.browser, runId);
   /* @invariant A LINE COUNTS WHEN IT CAME FROM THAT PAGE, IN THIS BUILD. The
-     engine's url filter is a substring test, so a line from /cart/checkout
-     or from a page whose query carried the wanted url passed for /cart; and
-     a line written early in the run kept passing after an edit broke the
+     engine's url filter is a substring test, so a line from /cart/checkout or
+     from a page whose query carried the wanted url passed for /cart; and a
+     line written early in the run kept passing after an edit broke the
      script. The event's origin and path must equal the clause's, and the
      event must be newer than the contract's compiledAt. */
   const compiledAt = contractCompiledAtMs(stage.projectPath, stage.browser);
@@ -1196,12 +1189,20 @@ async function assertContentScriptInjectedOnWebKit(
   try {
     const current = await client.currentUrl();
 
-    if (!sameDocument(current, clause.url)) {
-      await client.navigate(clause.url);
-      await sleep(1200);
-    }
+    const navigated = !sameDocument(current, clause.url);
+
+    if (navigated) await client.navigate(clause.url);
 
     reading = await readExtensionRoots(client);
+
+    if (navigated) {
+      const settleUntil = Date.now() + 1200;
+
+      while (reading.roots === 0 && Date.now() < settleUntil) {
+        await sleep(100);
+        reading = await readExtensionRoots(client);
+      }
+    }
   } catch (error) {
     return inconclusiveCheck(
       id,
@@ -1294,7 +1295,6 @@ export function readStorageValue(value: unknown, key: string): StorageRead {
   return { shape: "absent" };
 }
 
-/* @invariant EQUAL OBJECTS ARE EQUAL WHATEVER THEIR KEY ORDER: the comparison is structural, with keys sorted at every level. */
 function canonical(value: unknown): string {
   const walk = (node: unknown): unknown => {
     if (Array.isArray(node)) return node.map(walk);
@@ -1428,11 +1428,6 @@ function assertConsoleErrorsEmpty(
     -1,
   );
 
-  /* @invariant An empty timeline is inconclusive, never a pass. "No errors"
-     read off a session that never built, exited, or wrote a single line is the
-     false green this whole stage exists to stop: extension_logs already says
-     so in a warning, and an agent counting events in the payload cannot see
-     it. */
   if (all.length === 0) {
     const reason = emptyReason(stage.projectPath, stage.browser);
 
@@ -1459,12 +1454,6 @@ function assertConsoleErrorsEmpty(
     );
   }
 
-  /* @invariant THE GUARD AND THE VERDICT READ THE SAME SCOPE. The empty-
-     timeline guard used to run unscoped while the verdict ran with the
-     clause's context and since, so "no errors in popup" passed on a popup
-     that never opened, and a since cursor from an earlier process (seq
-     restarts at 1) passed over everything. Errors are
-     counted as EVENTS, so one with empty text still counts. */
   const scopeQuery = {
     ...(clause.context ? { context: clause.context } : {}),
     ...(clause.since === undefined ? {} : { since: clause.since }),
@@ -1496,8 +1485,7 @@ function assertConsoleErrorsEmpty(
 
   /* @invariant A WEBSITE'S OWN ERROR IS NOT THE EXTENSION'S. Browser-relayed
      lines come from any extension url or service worker, a visited site's
-     included; one is counted only when its url is this extension's
-    . */
+     included; one is counted only when its url is this extension's. */
   const guestIds = sessionGuestIdentity(stage.projectPath, stage.browser).expectedIds;
   const allErrorEvents = readLogEvents(stage.projectPath, stage.browser, {
     ...scopeQuery,
@@ -1539,9 +1527,6 @@ function assertConsoleErrorsEmpty(
     );
   }
 
-  /* @invariant DROPPED LINES MAY HAVE BEEN ERRORS. When the writer fell
-     behind and recorded gap sentinels, "no errors" covers only the lines that
-     reached the file, so the clean answer is inconclusive. */
   const droppedLines = readLogDropped(stage.projectPath, stage.browser);
 
   if (droppedLines > 0) {
