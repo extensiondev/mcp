@@ -1,5 +1,22 @@
 # Changelog
 
+## 10.10.13
+
+Built on Extension.js 4.1.32. It closes the last findings of the 2026-10-05 audits.
+
+- Safari dev sessions: Extension.js 4.1.32 opens a `safaridriver` session
+  and records it in `ready.json`, which is what this server's Safari page
+  reads were built on. When the engine could not open one, the hint and
+  `extension_doctor` now relay the engine's own reason (Allow Remote
+  Automation off, `safaridriver --enable` not run) instead of saying no
+  release opens a session.
+- The engine pins move to 4.1.32. Its Vue pin is now 3.5.43, so installs no
+  longer carry the `@vue/server-renderer` advisory.
+- Windows: a session-state folder that is a file, or sits under one, is
+  reported as unreadable instead of as "no sessions", for both session
+  markers and Live Preview carriers.
+- The test suite runs on Windows on every push.
+
 ## 10.10.12
 
 - `extension_stop` on Windows reads the Windows process table to find what
