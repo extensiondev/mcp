@@ -27,6 +27,18 @@
   consistent type imports and the migration warnings, with the React and
   Tailwind layers left out. Every source file was reformatted by the fixer;
   no behaviour changed.
+- `extension_reload` of the background waits, bounded, for the engine's
+  `ready.json` to stamp the executor detached and attached again, and
+  reports `reattachedMs`, `detachedAt` and `attachedTs`; when the new
+  background has not connected within the budget it answers `reloading`
+  with a warning instead of `reloaded`. Before this the engine answered
+  `reloading` 50 ms before the old background died, and a read landing in
+  the detach-to-reattach gap (measured 11 to 129 ms on Zen and Floorp) got
+  "the control channel did not answer". `extension_assert` names that gap
+  when its Gecko read lands in it. Zen and Floorp pass the live lane 5 of 5.
+- `@modelcontextprotocol/sdk` moves to 1.32.1, past GHSA-6qxp-vccf-f47h
+  (the OAuth client paths it fixes are not used here). Its stdio reader now
+  refuses a single client message over 10 MiB.
 - Measured on Extension.js 4.1.32: a Firefox MV3 event page answers
   `extension_eval` in `background` like an MV2 page does. The CSP refusal
   rewrite applies to a declared content_security_policy, never to MV3 as

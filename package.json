@@ -94,7 +94,7 @@
   ],
   "dependencies": {
     "@extension.dev/urls": "^0.8.2",
-    "@modelcontextprotocol/sdk": "^1.12.1",
+    "@modelcontextprotocol/sdk": "^1.32.1",
     "browser-extension-manifest-fields": "^2.2.9",
     "cross-spawn": "^7.0.6",
     "extension-create": "4.1.32",
