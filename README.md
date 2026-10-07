@@ -26,7 +26,7 @@ Extensions fail silently: content scripts that never inject, panels that never o
 These tools give agents eyes on the live browser, so they debug from evidence instead of guessing:
 
 - **Scaffold** from the 50+ template catalog behind [templates.extension.dev](https://templates.extension.dev), or add a popup, sidebar, or content script to an existing project
-- **Run** the dev server with HMR in Chrome, Edge, Firefox, Brave, Opera, Vivaldi, Yandex, Waterfox, LibreWolf, Zen, Floorp, or any Chromium- or Gecko-based binary, plus Safari on macOS (no HMR yet), no build config (LibreWolf ships with remote debugging off; the engine's launch error names the two `librewolf.overrides.cfg` lines that turn it on)
+- **Run** the dev server with HMR in Chrome, Edge, Firefox, Brave, Opera, Vivaldi, Yandex, Waterfox, Zen, Floorp, or any Chromium- or Gecko-based binary, plus Safari on macOS (no HMR yet), no build config
 - **See** the live DOM, unified logs from every extension context, `chrome.storage` contents, and the loaded-extension list
 - **Act**: evaluate code in any context, trigger the action button and commands, reload the extension, replay events
 - **Ship**: validate the manifest cross-browser and build for production. On the [platform lane](#platform-private-alpha): publish a shareable preview and promote builds to release channels (a stable promotion asks for a human approval first)
