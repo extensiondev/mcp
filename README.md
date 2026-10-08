@@ -149,7 +149,7 @@ On by default, the 23 that work on this machine:
 | build | `extension_create` | Scaffold from a template |
 | build | `extension_templates` | Browse 50+ templates (`list`) and read one's source (`source`) |
 | build | `extension_docs_search` | Search the Extension.js and extension.dev docs by keyword |
-| build | `extension_add_feature` | Plan a sidebar, popup, or content script for an existing project |
+| build | `extension_add_feature` | Plan an options page, popup, side panel, content script, devtools panel or new tab page for an existing project |
 | build | `extension_build` | Build for production |
 | run | `extension_dev` | Dev server with HMR |
 | run | `extension_start` | Build + launch the production build (`build: false` launches the existing dist; `outputPath` launches any prebuilt unpacked directory) |

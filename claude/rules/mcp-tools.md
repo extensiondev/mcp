@@ -6,7 +6,7 @@ Generated from the schemas the server registers (`src/index.ts`); do not edit by
 
 ## extension_add_feature
 
-Plan a new feature surface for an existing extension. This returns step-by-step instructions, the manifest additions to make, and reference templates from the extension.dev catalog. It modifies no files: apply the returned plan yourself.
+Plan the surface before adding an options page, a popup, a side panel, a content script, a devtools panel, a new tab page or a background script to an existing extension. It answers with the manifest additions, the files to create and the catalog template to copy from, and modifies nothing: write what the plan says, then validate the manifest and run extension_dev.
 
 | input | type | required | default | description |
 | --- | --- | --- | --- | --- |

@@ -24,7 +24,7 @@ const EXAMPLES_TREE_BASE = `https://github.com/extension-js/examples/tree/${PINN
 export const schema = {
   name: "extension_add_feature",
   description:
-    "Plan a new feature surface for an existing extension. This returns step-by-step instructions, the manifest additions to make, and reference templates from the extension.dev catalog. It modifies no files: apply the returned plan yourself.",
+    "Plan the surface before adding an options page, a popup, a side panel, a content script, a devtools panel, a new tab page or a background script to an existing extension. It answers with the manifest additions, the files to create and the catalog template to copy from, and modifies nothing: write what the plan says, then validate the manifest and run extension_dev.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -356,7 +356,7 @@ export async function handler(args: {
         templateSlug
           ? `4. Reference template source: ${EXAMPLES_TREE_BASE}/${templateSlug}/src`
           : "4. No catalog template ships this surface yet: build from the manifest additions and file hints above",
-        "5. Run npm run dev to test",
+        "5. Validate the manifest with extension_manifest_validate, then run extension_dev (npm run dev without the server) to test",
       ].filter(Boolean),
     },
     warnings: [

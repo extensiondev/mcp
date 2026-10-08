@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- `extension_add_feature`'s description is the trigger: it names the asks it answers (add an options page, a popup, a side panel, a content script, a devtools panel, a new tab page or a background script), says it plans the surface and the agent writes what the plan says, and hands the follow-up to the manifest check and `extension_dev`.
+
 ## 10.11.1
 
 Built on Extension.js 4.1.33.
