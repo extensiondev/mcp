@@ -21,8 +21,8 @@ importers:
         specifier: 4.1.32
         version: 4.1.32
       extension-develop:
-        specifier: 4.1.32
-        version: 4.1.32(@swc/helpers@0.5.21)(svelte@5.56.6(@typescript-eslint/types@8.71.1))(typescript@6.0.2)(webpack@5.108.4(postcss@8.5.23))
+        specifier: 4.1.33
+        version: 4.1.33(@swc/helpers@0.5.21)(svelte@5.56.6(@typescript-eslint/types@8.71.1))(typescript@6.0.2)(webpack@5.108.4(postcss@8.5.23))
       extension-install:
         specifier: 4.1.32
         version: 4.1.32
@@ -1522,14 +1522,6 @@ packages:
     resolution: {integrity: sha512-RZNwNclF7+MS/8bDg70amg32dyeZGZxiDuQmZxKLAlQjr3jGyLx+4Kkk58UO7D2QdgFIQCovuSuZESne6RG6XQ==}
     engines: {node: '>= 6.0.0'}
 
-  ajv-formats@2.1.1:
-    resolution: {integrity: sha512-Wx0Kx52hxE7C18hkMEggYlEifqWZtYaRgouJor+WMdPnQyEK13vgEWyVNup7SoeeoLMsr4kf5h6dOW11I15MUA==}
-    peerDependencies:
-      ajv: ^8.0.0
-    peerDependenciesMeta:
-      ajv:
-        optional: true
-
   ajv-formats@3.0.1:
     resolution: {integrity: sha512-8iUql50EUR+uUcdRQ3HDqa6EVyo3docL8g5WJ3FNcWmu62IbkGUue/pEyLBW8VGKKucTPgqeks4fIU1DA4yowQ==}
     peerDependencies:
@@ -1662,11 +1654,6 @@ packages:
     engines: {node: '>=6.0.0'}
     hasBin: true
 
-  baseline-browser-mapping@2.11.5:
-    resolution: {integrity: sha512-xJo6a6YZnwZfnyGmQKWMbVOcii7XRibjOskRh+WJ9UHQoX16xrQrcIgAMQOzfvs8XiLMx6ih/fsLPF73iY2D1A==}
-    engines: {node: '>=6.0.0'}
-    hasBin: true
-
   big.js@5.2.2:
     resolution: {integrity: sha512-vyL2OymJxmarO8gxMr0mhChsO9QGwhynfuu4+MHTAW6czfq9humCB7rKpUjDd9YUiDPU4mzpyupFSvOClAwbmQ==}
 
@@ -1688,11 +1675,6 @@ packages:
   browser-extension-manifest-fields@3.0.2:
     resolution: {integrity: sha512-oPF3ph5oRKehC55Sady0A3Oe6LJJTll4LtSwUQDkiIYM1Y0sCA1hudDsYTuqxXI1i4K1V7MqFuj3K2xq2ZwGHw==}
     engines: {node: '>=18'}
-
-  browserslist@4.28.7:
-    resolution: {integrity: sha512-JxV13hNrFxqjOc8alRbq9dK1MM79NEXYpma2B2J4wAtpWS5zIEIKqWPGCl7N4o7Uc7B7itylh7SuDujATRyyTw==}
-    engines: {node: ^6 || ^7 || ^8 || ^9 || ^10 || ^11 || ^12 || >=13.7}
-    hasBin: true
 
   browserslist@4.29.3:
     resolution: {integrity: sha512-1R4kiYKXGViqEN0CnoDrXc1StD9niAwu+j2dukWzrD4bJgsD4lDmEp0CRbc6E/vYJIfTHwPmwyaKtVSudICdPA==}
@@ -1721,9 +1703,6 @@ packages:
   callsites@3.1.0:
     resolution: {integrity: sha512-P8BjAsXvZS+VIDUI11hHCQEv74YT67YUi5JJFNWIqL235sBmjX4+qx9Muvls5ivyNENctx46xQLQ3aTuE7ssaQ==}
     engines: {node: '>=6'}
-
-  caniuse-lite@1.0.30001806:
-    resolution: {integrity: sha512-72Cuvd95zbSYPKq6Fhg8eDJRlzgWDf7/mtoZv6Qe/DYNCEBdNxoA3+rZAU2ZhGCpZlns3EssFavaZomckT5Uuw==}
 
   caniuse-lite@1.0.30001815:
     resolution: {integrity: sha512-uDybUEyfgbyJJ93J1vikTylBX31AkdVYeVPeffMQpf8XN7hSfr0oZOn4VFOIMNvtU5+rHvC5Udg2TgtJKHm23Q==}
@@ -1933,9 +1912,6 @@ packages:
 
   ee-first@1.1.1:
     resolution: {integrity: sha512-WMwm9LhRUo+WUaRN+vRuETqG89IgZphVSNkdFgeb6sS/E4OrDIN7t48CAewSHXc6C8lefD8KKfr5vY61brQlow==}
-
-  electron-to-chromium@1.5.396:
-    resolution: {integrity: sha512-yHiw2Y3C3H9U6TMbOfoWK/BPreiOPXRfTWPBwQBoZG6/8TB6eOPnsy5oaRYuatR7Fw2SJ4kKforgufeo7fq0EQ==}
 
   electron-to-chromium@1.5.451:
     resolution: {integrity: sha512-vUNKPrUzw8ByEMOxloq0a71iD/mPuPxVkbDm3G5YhnxTzOw/I6qAg2MUS0cYj/c267lWmw26yW4Vv7foxTxPLg==}
@@ -2297,8 +2273,8 @@ packages:
     resolution: {integrity: sha512-w7+7fUw1gJfTffq7b5lOp/RbGVXZTfmN5T1+HZD+yH1Kxsd8CJyNQCPaGWbfOGLVOHfoVDYQO94uqtXbVn8Xgg==}
     engines: {node: '>=22.12'}
 
-  extension-develop@4.1.32:
-    resolution: {integrity: sha512-0RmuS3Os3M/bhdvFOvLWvRtDbt+J35QjFyuffAt2p7QQY5KHbSMHBc+hwNsAJOCnm/4n9cC/xHtSM/0ETIu2gw==}
+  extension-develop@4.1.33:
+    resolution: {integrity: sha512-i+Vem3rhMkdk1xah/uPVL540YepC4kYzct9Ho+vH1mSWh6KkbT7vduEolCjimsHSTYMeCqtubckKFPe9XSnEEQ==}
     engines: {node: '>=22.12'}
 
   extension-from-store@0.2.5:
@@ -3022,10 +2998,6 @@ packages:
   neo-async@2.6.2:
     resolution: {integrity: sha512-Yd3UES5mWCSqR+qNT93S3UoYUkqAZ9lLg8a7g9rimsWmYGK8cVToA4/sF3RrshdyV3sAGMXVUmpMYOw+dLpOuw==}
 
-  node-releases@2.0.51:
-    resolution: {integrity: sha512-wRNIrw4DmVLKQlbgOMdkMx27Wrpzes2hh5Jtbi2bjPd+4wJstWIqP5A+lscnqbm0xxmT5Bpg8Lec5ItEBwx6BQ==}
-    engines: {node: '>=18'}
-
   node-releases@2.0.57:
     resolution: {integrity: sha512-kQK9LGGFiHtrWiNhZtA7Qbw17AQz+dmsEKODRIVTXA9+e5MS/2gZEBhYJt13GrAz5/IOZKddH/0Z3TP/Zgo+yw==}
     engines: {node: '>=18'}
@@ -3475,10 +3447,6 @@ packages:
     resolution: {integrity: sha512-6R3J5M4AcbtLUdZmRv2SygeVaM7IhrLXu9BmnOGmmACak8fiUtOsYNWUS4uK7upbmHIBbLBeFeI//477BKLBzA==}
     engines: {node: '>=11.0.0'}
 
-  schema-utils@4.3.3:
-    resolution: {integrity: sha512-eflK8wEtyOE6+hsaRVPxvUKYCpRgzLqDTb8krvAsRIwOGlHoSgYLgBXoubGgLd2fT41/OUYdb48v4k4WWHQurA==}
-    engines: {node: '>= 10.13.0'}
-
   schema-utils@4.5.0:
     resolution: {integrity: sha512-zJlMCZ0cAR5p/Y4oVpRoqioDMJcGxaXRrQ/4rP4WyR84vc5z/DolXdbvXeDpTwbtocDFr2rhPqHPErDCUtz2kA==}
     engines: {node: '>= 10.13.0'}
@@ -3722,12 +3690,6 @@ packages:
 
   unrs-resolver@1.12.2:
     resolution: {integrity: sha512-dmlRxBJJayXjqTwC+JtF1HhJmgf3ftQ3YejFcZrf4+KKtJv0qDsK1pjqaaVjG7wJ5NJ6UVP1OqRMQ71Z4C3rxQ==}
-
-  update-browserslist-db@1.2.3:
-    resolution: {integrity: sha512-Js0m9cx+qOgDxo0eMiFGEueWztz+d4+M3rGlmKPT+T4IS/jP4ylw3Nwpu6cpTTP8R1MAC1kF4VbdLt3ARf209w==}
-    hasBin: true
-    peerDependencies:
-      browserslist: '>= 4.21.0'
 
   update-browserslist-db@1.3.4:
     resolution: {integrity: sha512-t8wonIOdQyOjtPd2VktlBu6QjTVTks6v8bSi7kd0r2Vll8TK1JYDZtRRdbmCHOAMphkZgrzK+L+vXK4pyZ8t4A==}
@@ -4031,7 +3993,7 @@ snapshots:
     dependencies:
       '@babel/compat-data': 7.29.7
       '@babel/helper-validator-option': 7.29.7
-      browserslist: 4.28.7
+      browserslist: 4.29.3
       lru-cache: 5.1.1
       semver: 6.3.1
 
@@ -4685,7 +4647,7 @@ snapshots:
 
   '@jridgewell/gen-mapping@0.3.13':
     dependencies:
-      '@jridgewell/sourcemap-codec': 1.5.5
+      '@jridgewell/sourcemap-codec': 1.6.0
       '@jridgewell/trace-mapping': 0.3.31
 
   '@jridgewell/remapping@2.3.5':
@@ -4707,7 +4669,7 @@ snapshots:
   '@jridgewell/trace-mapping@0.3.31':
     dependencies:
       '@jridgewell/resolve-uri': 3.1.2
-      '@jridgewell/sourcemap-codec': 1.5.5
+      '@jridgewell/sourcemap-codec': 1.6.0
 
   '@modelcontextprotocol/sdk@1.32.1(zod@4.3.6)':
     dependencies:
@@ -5512,10 +5474,6 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  ajv-formats@2.1.1(ajv@8.18.0):
-    optionalDependencies:
-      ajv: 8.18.0
-
   ajv-formats@3.0.1(ajv@8.18.0):
     optionalDependencies:
       ajv: 8.18.0
@@ -5523,11 +5481,6 @@ snapshots:
   ajv-formats@3.0.1(ajv@8.20.0):
     optionalDependencies:
       ajv: 8.20.0
-
-  ajv-keywords@5.1.0(ajv@8.18.0):
-    dependencies:
-      ajv: 8.18.0
-      fast-deep-equal: 3.1.3
 
   ajv-keywords@5.1.0(ajv@8.20.0):
     dependencies:
@@ -5615,8 +5568,8 @@ snapshots:
 
   autoprefixer@10.5.0(postcss@8.5.23):
     dependencies:
-      browserslist: 4.28.7
-      caniuse-lite: 1.0.30001806
+      browserslist: 4.29.3
+      caniuse-lite: 1.0.30001815
       fraction.js: 5.3.4
       picocolors: 1.1.1
       postcss: 8.5.23
@@ -5668,8 +5621,6 @@ snapshots:
 
   baseline-browser-mapping@2.11.27: {}
 
-  baseline-browser-mapping@2.11.5: {}
-
   big.js@5.2.2: {}
 
   body-parser@2.3.0:
@@ -5701,14 +5652,6 @@ snapshots:
 
   browser-extension-manifest-fields@3.0.2: {}
 
-  browserslist@4.28.7:
-    dependencies:
-      baseline-browser-mapping: 2.11.5
-      caniuse-lite: 1.0.30001806
-      electron-to-chromium: 1.5.396
-      node-releases: 2.0.51
-      update-browserslist-db: 1.2.3(browserslist@4.28.7)
-
   browserslist@4.29.3:
     dependencies:
       baseline-browser-mapping: 2.11.27
@@ -5739,8 +5682,6 @@ snapshots:
       get-intrinsic: 1.3.0
 
   callsites@3.1.0: {}
-
-  caniuse-lite@1.0.30001806: {}
 
   caniuse-lite@1.0.30001815: {}
 
@@ -5908,8 +5849,6 @@ snapshots:
       gopd: 1.2.0
 
   ee-first@1.1.1: {}
-
-  electron-to-chromium@1.5.396: {}
 
   electron-to-chromium@1.5.451: {}
 
@@ -6439,7 +6378,7 @@ snapshots:
       - debug
       - supports-color
 
-  extension-develop@4.1.32(@swc/helpers@0.5.21)(svelte@5.56.6(@typescript-eslint/types@8.71.1))(typescript@6.0.2)(webpack@5.108.4(postcss@8.5.23)):
+  extension-develop@4.1.33(@swc/helpers@0.5.21)(svelte@5.56.6(@typescript-eslint/types@8.71.1))(typescript@6.0.2)(webpack@5.108.4(postcss@8.5.23)):
     dependencies:
       '@babel/core': 7.29.7
       '@babel/preset-typescript': 7.29.7(@babel/core@7.29.7)
@@ -6450,7 +6389,7 @@ snapshots:
       '@rspack/plugin-preact-refresh': 2.0.1(@prefresh/core@1.5.9(preact@11.0.0))(@prefresh/utils@1.2.1)(@rspack/core@2.2.3(@swc/helpers@0.5.21))
       '@rspack/plugin-react-refresh': 2.0.2(@rspack/core@2.2.3(@swc/helpers@0.5.21))(react-refresh@0.18.0)
       '@vue/compiler-sfc': 3.5.43
-      acorn: 8.17.0
+      acorn: 8.19.0
       babel-loader: 10.1.1(@babel/core@7.29.7)(@rspack/core@2.2.3(@swc/helpers@0.5.21))(webpack@5.108.4(postcss@8.5.23))
       babel-preset-solid: 1.9.15(@babel/core@7.29.7)
       browser-extension-manifest-fields: 3.0.2
@@ -6475,7 +6414,7 @@ snapshots:
       prefers-yarn: 2.0.1
       react-refresh: 0.18.0
       sass-loader: 17.0.0(@rspack/core@2.2.3(@swc/helpers@0.5.21))(webpack@5.108.4(postcss@8.5.23))
-      schema-utils: 4.3.3
+      schema-utils: 4.5.0
       svelte-loader: 3.2.4(svelte@5.56.6(@typescript-eslint/types@8.71.1))
       tiny-glob: 0.2.9
       vue: 3.5.43(typescript@6.0.2)
@@ -7119,8 +7058,6 @@ snapshots:
 
   neo-async@2.6.2: {}
 
-  node-releases@2.0.51: {}
-
   node-releases@2.0.57: {}
 
   object-assign@4.1.1: {}
@@ -7418,7 +7355,7 @@ snapshots:
       '@csstools/postcss-trigonometric-functions': 5.0.2(postcss@8.5.23)
       '@csstools/postcss-unset-value': 5.0.0(postcss@8.5.23)
       autoprefixer: 10.5.0(postcss@8.5.23)
-      browserslist: 4.28.7
+      browserslist: 4.29.3
       css-blank-pseudo: 8.0.1(postcss@8.5.23)
       css-has-pseudo: 8.0.0(postcss@8.5.23)
       css-prefers-color-scheme: 11.0.0(postcss@8.5.23)
@@ -7632,13 +7569,6 @@ snapshots:
 
   sax@1.6.0:
     optional: true
-
-  schema-utils@4.3.3:
-    dependencies:
-      '@types/json-schema': 7.0.15
-      ajv: 8.18.0
-      ajv-formats: 2.1.1(ajv@8.18.0)
-      ajv-keywords: 5.1.0(ajv@8.18.0)
 
   schema-utils@4.5.0:
     dependencies:
@@ -7976,12 +7906,6 @@ snapshots:
       '@unrs/resolver-binding-win32-arm64-msvc': 1.12.2
       '@unrs/resolver-binding-win32-ia32-msvc': 1.12.2
       '@unrs/resolver-binding-win32-x64-msvc': 1.12.2
-
-  update-browserslist-db@1.2.3(browserslist@4.28.7):
-    dependencies:
-      browserslist: 4.28.7
-      escalade: 3.2.0
-      picocolors: 1.1.1
 
   update-browserslist-db@1.3.4(browserslist@4.29.3):
     dependencies:

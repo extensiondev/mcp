@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+## 10.11.1
+
+Built on Extension.js 4.1.33.
+
+- The engine pin moves from 4.1.32 to 4.1.33, the release whose bundled
+  javascript template matches the examples corpus and whose eval ok golden
+  answers the bare value the CLI answers (#834).
+- The golden-frames test no longer records `golden.eval.ok.json` as the one
+  golden that disagrees with the engine: 4.1.33 ships it with the bare value,
+  so the file now goes through the same builder comparison as every other
+  golden.
+
 ## 10.11.0
 
 Built on Extension.js 4.1.32.

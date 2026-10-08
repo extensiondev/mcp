@@ -28,9 +28,6 @@ const GOLDEN_WITHOUT_A_BUILDER = [
   "golden.dev.ready.json",
 ];
 
-const GOLDEN_THAT_DISAGREES_WITH_THE_ENGINE = ["golden.eval.ok.json"];
-
-
 const builderFor: Record<string, () => Record<string, unknown>> = {
   "golden.build.built.json": () => buildFrame("/tmp/project", ["chrome"]),
   "golden.doctor.healthy.json": () =>
@@ -44,6 +41,7 @@ const builderFor: Record<string, () => Record<string, unknown>> = {
         remediation: "Start a dev session first",
       },
     ]),
+  "golden.eval.ok.json": () => evalFrame(4),
   "golden.eval.eval.json": () =>
     evalRefusal(
       { code: "E_EVAL", message: "ReferenceError: chrom is not defined", name: "EvalError", hint: "The expression threw inside the page." },
@@ -74,7 +72,7 @@ describe("every golden frame the installed engine ships is compared key for key 
   it("names every golden file that has no builder, so a new golden file is a red cell", () => {
     const shipped = goldenFiles();
     const uncovered = shipped.filter((name) => !(name in builderFor));
-    const expected = [...GOLDEN_WITHOUT_A_BUILDER, ...GOLDEN_THAT_DISAGREES_WITH_THE_ENGINE]
+    const expected = GOLDEN_WITHOUT_A_BUILDER
       .filter((name) => shipped.includes(name))
       .sort();
 
@@ -91,13 +89,4 @@ describe("every golden frame the installed engine ships is compared key for key 
       expect(shipped.status).toBe(built.status);
     });
   }
-});
-
-describe("the eval ok golden disagrees with the engine it ships with, and the builder follows the engine", () => {
-  it.skipIf(!goldenFiles().includes("golden.eval.ok.json"))("golden.eval.ok.json wraps value as { result, context } while the executor and the CLI answer the bare value", () => {
-    const shipped = golden("golden.eval.ok.json");
-
-    expect(Object.keys(shipped.value as object).sort()).toEqual(["context", "result"]);
-    expect(evalFrame(2).value).toBe(2);
-  });
 });
