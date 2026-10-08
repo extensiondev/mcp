@@ -7,7 +7,7 @@
 
 # @extension.dev/mcp [![Version][npm-version-image]][npm-version-url] [![Downloads][npm-downloads-image]][npm-downloads-url] [![Discord][discord-image]][discord-url]
 
-> Give your AI agent hands for browser extension development. 32 MCP tools that scaffold, run, inspect, debug, and build cross-browser extensions on your machine, plus a platform lane (private alpha) to share and publish them.
+> Give your AI agent hands for browser extension development. 32 MCP tools that scaffold, run, inspect, debug, test, and build cross-browser extensions on your machine, plus a platform lane (private alpha) to share and publish them.
 
 <img alt="Logo" align="right" src="https://media.extension.land/brand/extension-dev/logo-dock.png" width="20.7%" />
 
@@ -17,21 +17,24 @@ claude mcp add extension-dev npx @extension.dev/mcp
 
 Works with Claude Code, Claude Desktop, Cursor, and any MCP client.
 
-[extension.dev](https://extension.dev) · [Extension.js](https://extension.js.org) · [Templates](https://templates.extension.dev) · [Examples](https://github.com/extension-js/examples) · [Discord](https://discord.gg/v9h2RgeTSN)
+[extension.dev](https://extension.dev) · [Docs](https://docs.extension.dev/tools/mcp) · [Templates](https://templates.extension.dev) · [Discord](https://discord.gg/v9h2RgeTSN)
 
 ## Why an MCP server for extensions
 
-Extensions fail silently: content scripts that never inject, panels that never open, permissions that return `undefined` with no error. An agent editing files blind will happily "fix" all of them without noticing none of them work.
+Extensions fail silently: content scripts that never inject, panels that never open, permissions that return `undefined` with no error. An agent editing files blind will "fix" all of them without noticing none of them work. These tools give the agent eyes on the live browser, so it debugs from evidence instead of guessing.
 
-These tools give agents eyes on the live browser, so they debug from evidence instead of guessing:
-
-- **Scaffold** from the 50+ template catalog behind [templates.extension.dev](https://templates.extension.dev), or add a popup, sidebar, or content script to an existing project
+- **Scaffold** from the 50+ templates behind [templates.extension.dev](https://templates.extension.dev), or add a popup, sidebar, or content script to an existing project
 - **Run** the dev server with HMR in Chrome, Edge, Firefox, Brave, Opera, Vivaldi, Yandex, Waterfox, Zen, Floorp, or any Chromium- or Gecko-based binary, plus Safari on macOS (no HMR yet), no build config
-- **See** the live DOM, unified logs from every extension context, `chrome.storage` contents, and the loaded-extension list
+- **See** the live DOM, logs from every extension context, `chrome.storage`, and the loaded-extension list
 - **Act**: evaluate code in any context, trigger the action button and commands, reload the extension, replay events
-- **Ship**: validate the manifest cross-browser and build for production. On the [platform lane](#platform-private-alpha): publish a shareable preview and promote builds to release channels (a stable promotion asks for a human approval first)
+- **Test**: state expectations about the running extension and get one verdict each
+- **Ship**: validate the manifest cross-browser and build for production. On the [platform lane](#platform-private-alpha): share a preview link, promote a build to a release channel, and submit to the stores (a stable promotion asks a human first)
 
-Built on [Extension.js](https://extension.js.org), the open-source cross-browser extension framework.
+Built on [Extension.js](https://extension.js.org), the open source framework extension.dev sponsors.
+
+## Watch it work
+
+[![The agent starts the dev session, the browser opens with the extension loaded, and the agent reads its logs](https://media.extension.land/video/extension-dev/mcp/install-and-run.gif)](https://docs.extension.dev/tools/mcp#install)
 
 ## Clients
 
@@ -137,18 +140,19 @@ args = ["@extension.dev/mcp", "--features=local,platform"]
 
 <!-- setup:end -->
 
-### Choosing what the agent can reach
+### What the agent can reach
 
-The tools come in two groups, and two flags (or environment variables) set what an agent sees:
+Two tool groups, three flags, each also an environment variable:
 
-- By default the server exposes the 23 of its 32 tools that work on this machine (the 9 platform tools are off): create, run, inspect, build, plus docs search. `--features=local,platform` turns the platform group on as well, the extension.dev account, share, release and store tools described under [Platform](#platform-private-alpha); `--features=platform` exposes only that group. Env: `EXTENSION_DEV_FEATURES`.
-- `--no-ship` refuses the calls that put something in front of other people: `extension_publish`, `extension_release_promote`, `extension_submit` with `dryRun: false`, `extension_preview_web` with `share: true`, and a share revoke. Dry runs, share listing, login and project or workspace creation still work. Env: `EXTENSION_DEV_NO_SHIP=1`.
+- By default the server exposes the 23 of its 32 tools that work on this machine (the 9 platform tools are off): create, run, inspect, test, build, and docs search. `--features=local,platform` adds the platform group (account, share, release, and store tools, described under [Platform](#platform-private-alpha)); `--features=platform` exposes only that group. Env: `EXTENSION_DEV_FEATURES`.
+- `--no-ship` refuses the calls that put something in front of other people: `extension_publish`, `extension_release_promote`, `extension_submit` with `dryRun: false`, `extension_preview_web` with `share: true`, and a share revoke. Dry runs, share listing, login, and workspace or project creation still work. Env: `EXTENSION_DEV_NO_SHIP=1`.
+- `--project <workspace>/<project>` pins the server to one project, however many logins this machine holds; a call naming another project is refused. Env: `EXTENSION_DEV_PROJECT`.
 
 A refused call answers `E_TOOL_DISABLED` with the flag to change.
 
-A real store submission, a promotion to stable and a share revoke also wait for a person by default: the first call answers `approval-required` with a link on extension.dev, a workspace member approves exactly that action (a store submission needs a workspace owner), and the same call with the returned `approvalId` runs it once. `EXTENSION_DEV_APPROVAL_GATE=1` extends this to every promotion; `EXTENSION_DEV_APPROVAL_GATE=0` turns it off.
+A real store submission, a promotion to stable, and a share revoke also wait for a person by default: the first call answers `approval-required` with a link on extension.dev, a workspace member approves exactly that action (a store submission needs a workspace owner), and the same call with the returned `approvalId` runs it once. `EXTENSION_DEV_APPROVAL_GATE=1` extends this to every promotion; `EXTENSION_DEV_APPROVAL_GATE=0` turns it off.
 
-Every tool also carries MCP annotations (`readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`), so clients can auto-approve reads and ask before the rest.
+Every tool carries MCP annotations (`readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`), so clients can auto-approve reads and ask before the rest.
 
 Answers that can carry text a web page or an extension wrote (logs, DOM, eval results, storage, titles, runtime errors) fence it between `<untrusted-data-ID>` and `</untrusted-data-ID>`, with a fresh random `ID` per call in `untrusted.boundary`. The page cannot predict the ID or close the fence early, and the JSON still parses to the same fields. A fence is a signal to the model, not a gate: pair it with `--no-ship` when the agent reads pages you do not trust.
 
@@ -169,22 +173,17 @@ Answers that can carry text a web page or an extension wrote (logs, DOM, eval re
 
 ### Pair with the skill
 
-This server gives agents hands; [`@extension.dev/skill`](https://www.npmjs.com/package/@extension.dev/skill) gives them judgment: the cross-browser rules, silent-failure gotchas, debugging playbooks, and store checklist, packaged in the open [Agent Skills](https://agentskills.io) format. With both installed, agents know to verify against the live browser instead of guessing, and these tools make that a one-call operation.
+This server gives agents hands; [`@extension.dev/skill`](https://www.npmjs.com/package/@extension.dev/skill) gives them judgment: the cross-browser rules, silent-failure gotchas, debugging playbooks, and store checklist, in the open [Agent Skills](https://agentskills.io) format.
 
 ```bash
 npm i -D @extension.dev/skill
 mkdir -p .claude/skills && cp -R node_modules/@extension.dev/skill/skills/extension-dev .claude/skills/
 ```
 
-### Claude Code project integration
-
-The package ships drop-in instructions, slash commands, and rules for extension projects:
+The package also ships Claude Code rules and the four slash commands for extension projects:
 
 ```bash
-# Rules (how Claude understands your project)
 cp node_modules/@extension.dev/mcp/claude/CLAUDE.md ~/my-extension/.claude/CLAUDE.md
-
-# Slash commands (/extension, /extension-add, /extension-debug, /extension-publish)
 mkdir -p ~/my-extension/.claude/commands
 cp node_modules/@extension.dev/mcp/claude/commands/*.md ~/my-extension/.claude/commands/
 ```
@@ -198,7 +197,7 @@ On by default, the 23 that work on this machine:
 | build | `extension_create` | Scaffold from a template |
 | build | `extension_templates` | Browse 50+ templates (`list`) and read one's source (`source`) |
 | build | `extension_docs_search` | Search the Extension.js and extension.dev docs by keyword |
-| build | `extension_add_feature` | Add sidebar/popup/content script |
+| build | `extension_add_feature` | Plan a sidebar, popup, or content script for an existing project |
 | build | `extension_build` | Build for production |
 | run | `extension_dev` | Dev server with HMR |
 | run | `extension_start` | Build + launch the production build (`build: false` launches the existing dist; `outputPath` launches any prebuilt unpacked directory) |
@@ -233,15 +232,15 @@ On with `--features=local,platform`, the 9 that reach the extension.dev platform
 | platform | `extension_submit` | Submit for store review: Chrome, Firefox, Edge and Safari, through extension.dev |
 | platform | `extension_release_status` | Read release channels, recent builds, and store submission and review state |
 
+`extension_dev` is the only tool that unlocks the act tools: `allowControl: true` for `extension_storage`, `extension_reload`, `extension_open` and `extension_dom_snapshot`; `allowEval: true` for `extension_eval` (it implies `allowControl`). A session started without a gate does not grow one on a second call: call `extension_dev` again with the flag you need plus `replace: true`, which stops the first session.
+
 Browser-launching tools (`dev`, `start`) shell out to the `extension` CLI, the project's own `node_modules/.bin/extension` when present, otherwise `npx extension@<pinned>` at the version this package is verified against; build, doctor, eval, storage, reload, open, dom_snapshot and assert spawn that CLI too, and the rest runs in-process.
 
 ## Asserting instead of guessing
 
-Every other tool here hands back a reading: a DOM, a log window, an evaluated
-expression. Turning a reading into "the popup works" was left to the agent, as
-a string of JavaScript it wrote on the spot, which is the guesswork the paired
-skill exists to prevent. `extension_assert` states the expectation and returns
-the verdict.
+Every other tool hands back a reading. `extension_assert` states the expectation and returns the verdict.
+
+[![Five expectations go in, five verdicts come back: pass, fail, or inconclusive with what would settle it](https://media.extension.land/video/extension-dev/mcp/assert-verdicts.gif)](https://docs.extension.dev/tools/mcp#run-and-debug)
 
 ```jsonc
 {
@@ -256,85 +255,43 @@ the verdict.
 }
 ```
 
-Each check comes back as `pass`, `fail` or `inconclusive`, and the run is a
-pass only when every check passed. `inconclusive` is the part that matters: it
-means this platform cannot cover the question today, and the check carries a
-`settledBy` naming the evidence that would answer it. A content script's
-execution is not observable from outside its isolated world, so
-`content-script-injected` passes only on a line the script itself wrote and is
-inconclusive over a declared match, never a pass. "No console errors" over a
-session that never built is inconclusive too, because zero errors and zero
-events are the same number. A read the platform refuses, such as
-`chrome.storage` on a session started without `allowControl`, is inconclusive
-rather than a failure: nothing was learned about the extension.
-
-The verdict document is the same grammar the preview lane's CI verdict uses
-(`@extension.dev/preview-verdict`), with its own contract name and its own
-check registry, so a document from one lane can never be mistaken for the
-other's. Each check here names the preview check it is the live-browser
-counterpart of, and a contract test holds the two grammars together.
+Each check comes back `pass`, `fail` or `inconclusive`, and the run passes only when every check passed. `inconclusive` means this platform cannot cover the question today, and the check carries `settledBy` naming the evidence that would answer it. A content script's execution is not observable from outside its isolated world, so `content-script-injected` passes only on a line the script itself wrote, never on a declared match alone. "No console errors" over a session that never built is inconclusive, because zero errors and zero events are the same number. A read the platform refuses, such as `chrome.storage` on a session started without `allowControl`, is inconclusive rather than a failure.
 
 ## Safari
 
-A Safari dev session runs on the same bridge as every other engine. On
-Extension.js 4.1.28 or newer, `extension_dev --browser=safari` (macOS with
-Xcode) builds the app, opens it, and, once you enable the extension in
-Safari > Settings > Extensions, reloads it on every save through the
-extension's own socket to the dev server and streams its background and
-content lines into the session's log file. With `allowControl` or
-`allowEval`, the control channel is on too: `extension_storage`,
-`extension_reload`, `extension_dom_snapshot` (by tab id), `extension_open`
-for surfaces, `extension_logs`, and the assertions `content-script-injected`
-(on a content line at the url), `background-worker-booted`,
-`storage-key-present` and `console-errors-empty` all work against it.
-`extension_eval` in `content` or `page` needs a tab already open at the url,
-and `extension_open` with `url` cannot open one on Safari: the bridge
-navigates through a background eval, and Safari's MV3 background CSP blocks
-eval, which also blocks `extension_eval` in `background`. Open the page in
-Safari by hand, then read it. Safari has no CDP or RDP, so
-`extension_inspect` has no Safari path; `surface-rendered` reads the
-surface through the relay there and can pass or fail.
+A Safari dev session runs on the same bridge as every other engine. On Extension.js 4.1.28 or newer, `extension_dev` with `browser: "safari"` (macOS with Xcode) builds the app, opens it, and, once you enable the extension in Safari > Settings > Extensions, reloads it on every save and streams its background and content lines into the session log. With `allowControl` or `allowEval`, `extension_storage`, `extension_reload`, `extension_dom_snapshot` (by tab id), `extension_open` for surfaces, `extension_logs`, and the assertions `content-script-injected` (on a content line at the url), `background-worker-booted`, `storage-key-present` and `console-errors-empty` work against it.
 
-Safari 27 and Safari Technology Preview 247 also ship Apple's own MCP server
-inside `safaridriver` (enable Safari > Settings > Developer > "Allow remote
-automation and external agents", then
-`claude mcp add safari-mcp -- "/usr/bin/safaridriver" --mcp`). It drives an
-isolated automation window with page-level tools and has no extension-aware
-tool. It runs beside a Safari dev session, because this server never opens
-an automation session of its own: on Extension.js 4.1.32 or newer the dev
-session opens one and records it in `ready.json` (`webdriverPort`,
-`webdriverSessionId`), `extension_eval` with context `page` and
-`extension_open` with `url` use it for the page's main world, and
-`extension_doctor` shows it as a `safari-window` leg. When the engine could
-not open one (Allow Remote Automation off, `safaridriver --enable` not run),
-that leg reads `skip` with the engine's own reason.
-`extension_browsers` reports whether the machine's safaridriver has `--mcp`.
+The limits: Safari's MV3 background CSP blocks eval, so `extension_eval` in `background` fails. Safari has no CDP or RDP, so `extension_inspect` has no Safari path; `surface-rendered` reads the surface through the relay and can pass or fail. `extension_open` with `url` and `extension_eval` with context `page` ride a safaridriver automation session, which the dev session opens on Extension.js 4.1.32 or newer when Safari > Settings > Developer > "Allow remote automation and external agents" is on (`ready.json` records `webdriverPort` and `webdriverSessionId`; `extension_doctor` shows it as a `safari-window` leg, `skip` with the engine's own reason when it could not open one). Without that session `extension_open` cannot open a tab on Safari, so open the page by hand, and `extension_eval` in `content` or `page` needs that tab already open at the url. Apple's own MCP server in `safaridriver --mcp` has page-level tools and no extension-aware tool, and runs beside a Safari dev session; `extension_browsers` reports whether the machine's safaridriver has `--mcp`.
 
 ## Platform (private alpha)
 
 The platform tools connect agents to [extension.dev](https://extension.dev). The platform is in private alpha: these nine tools stay off until the server is started with `--features=local,platform` (or `EXTENSION_DEV_FEATURES=local,platform`), and sharing, publishing, promoting and submitting need a login.
 
-### Signing in and pinning a project
-
-The platform tools need a login. Sign in once per project, then add `--project <workspace>/<project>` to the server's arguments (or set `EXTENSION_DEV_PROJECT`) so that server only ever acts on that project, however many logins this machine holds. The console's Connect dialog fills both in for your project.
+### Sign in and pin a project
 
 ```bash
 npx @extension.dev/mcp login --project <workspace>/<project>
 ```
 
-### Sharing a build in progress
+Or call `extension_auth` with `action: "login"`: you approve a code at [extension.dev/device](https://extension.dev/device), GitHub is federated server-side so no GitHub token reaches your machine, and the project-scoped token is stored locally, never returned to the agent, and lives at most 7 days. CI re-mints from the console's Access tokens page, or sets `EXTENSION_DEV_TOKEN`. Add `--project <workspace>/<project>` to the server's arguments so that server only ever acts on that project; the console's Connect dialog fills both in.
 
-An unpacked extension is unusually hard to hand to someone: the only way to look at a colleague's work-in-progress has been to take their zip and run untrusted code with real browser permissions on your own machine. `extension_preview_web` with `share: true` uploads the `dist/` it just built and returns a link that renders those exact bytes in the emulator. Whoever opens it installs nothing and signs in to nothing, which is what lets a designer, a PM, or a reviewer into the loop at all. Those bytes run in an isolated sandbox origin or they do not run at all: preview refuses a shared build rather than serving it in its own renderer. Sharing needs auth (`extension_auth` or `EXTENSION_DEV_TOKEN`), the link lives for the workspace plan's share window (30 days on Free, longer on Pro) and the answer carries its exact `expiresAt`, and `DELETE`ing the returned `revokeUrl` with the same token kills it early. Re-sharing an unchanged build returns that same link rather than a second one, and only a revoked link is replaced by a different one, because revocation is permanent: the address is burned and never resolves again. That makes `revokeUrl` the handle to the link you just made, so every share is also appended to `.extension.dev/shared-previews.json` in the project (gitignored) so it survives losing the tool output. The upload holds up to 2,000 files and about 64MB of text, or roughly 48MB when the build is mostly images, fonts or wasm, which travel base64-encoded. Without `share`, the tool returns a local-only deep link and uploads nothing.
+### Share a build in progress
 
-`extension_shares` is the other half of that: it lists every link the token has shared, live and dead, with the `previewUrl` and `revokeUrl` of each, and revokes one by `artifactId` or by pasting any of its URLs. Pass `projectPath` and it reconciles the platform's answer with the project's own record, so a link shared from another machine shows up as `remoteOnly` and a record with nothing behind it any more shows up under `localOnly`. It never rewrites the local file.
+[![The agent shares the build it just made and the link opens in the web emulator with nothing installed](https://media.extension.land/video/extension-dev/mcp/share-a-build.gif)](https://docs.extension.dev/tools/mcp#preview-and-share)
 
-That is a different job from shipping. Use `share` for the build you are holding right now; use `extension_publish` and `extension_release_promote` below for builds your CI has released.
+`extension_preview_web` with `share: true` uploads the `dist/` it just built and returns a link that renders those exact bytes in the emulator: whoever opens it installs nothing and signs in to nothing, the bytes run in an isolated sandbox origin or not at all, and the link also serves the build as a zip, so it hands over the built code. The link lives for the workspace plan's share window (30 days on Free, longer on Pro) and the answer carries its exact `expiresAt` and a `revokeUrl`; re-sharing an unchanged build returns the same link, a revoke is permanent, and every share is appended to `.extension.dev/shared-previews.json` in the project (gitignored). The upload holds up to 2,000 files and about 64MB of text, roughly 48MB when the build is mostly images, fonts or wasm. Without `share`, the tool returns a local-only deep link and uploads nothing. `extension_shares` lists every link the token has shared, live and dead, with each `previewUrl` and `revokeUrl`, revokes one by `artifactId` or any of its URLs, and with `projectPath` reconciles against the project's own record (`remoteOnly`, `localOnly`) without rewriting it.
 
-### From preview to store
+### Publish, promote, submit
 
-The platform tools connect agents to [extension.dev](https://extension.dev): `extension_auth` runs extension.dev's own device flow (you approve the code at [extension.dev/device](https://extension.dev/device), and GitHub is federated server-side, so no GitHub token ever reaches your machine) and stores a project-scoped token locally (never returned to the agent), `extension_publish` turns a build your project has already published into a shareable URL, and `extension_release_promote` promotes a tested build to a release channel from CI or an agent session, no browser required. `extension_submit` submits a built extension to the Chrome Web Store, Edge Add-ons, and Firefox AMO through extension.dev, which holds your store credentials and dispatches the release from your project's mirror CI, it defaults to a dry run and store credentials are never tool arguments. Safari and the App Store are one paid lane on the platform, so a free workspace is refused there and the other three stores are unaffected. The two verbs are not interchangeable: `extension_publish` pushes to the extension.dev platform, `extension_submit` sends the build into a store's review queue, which is irreversible. After a real submission, `extension_release_status` reads the recorded outcome, per-store credential health, and review state from the project's public registry, so agents and CI can answer "was it approved?" without a console visit. Access tokens live at most 7 days; CI pipelines re-mint them from the console's Access tokens page.
+[![A dry-run store submission comes back with one verdict per store and dispatches nothing](https://media.extension.land/video/extension-dev/mcp/submit-dry-run.gif)](https://docs.extension.dev/tools/mcp#publish-is-not-submit)
 
-Onboarding several extensions at once costs one approval, not two per project. `extension_project_create` takes `projects`, a list of `{ project, repo }` entries in one workspace, in place of `project` and `repo`: the approval page at extension.dev/device lists every name, each project is created by its own request, and each one's 7-day token is stored as that project's login. `extension_auth` with `action: "login"` takes `projects`, a list of `<workspace>/<project>` names of existing projects, and stores one token per project, which is also how logins that expire together are renewed. Both lists are checked before a device code is spent: one workspace, 1 to 20 names, each by its exact slug (lowercase letters and digits joined by single dashes, at most 48 characters), none twice. A create list is capped at 10, because the platform creates at most 10 projects per hour for one approving account; a longer one is refused with that reason rather than split, and the next 10 can start in a new call once that limit allows. The platform states both caps, and that it takes a list at all, in its login config; a list sent to a platform that does not advertise it is refused before a device code is spent. Creating takes a few calls: while projects remain the answer is `status: "creating"` with the same `deviceCode` to call again, and the answer always carries one row per project, so a refusal on one never hides the others. A server pinned with `--project` refuses a list that names any other project.
+Two verbs, not interchangeable. `extension_publish` returns the shareable URL of a build extension.dev already holds, nothing is uploaded: the public page for a public project, a time-limited `?share=` link for a private one. `extension_submit` sends a built extension into store review (Chrome Web Store, Edge Add-ons, Firefox AMO and the App Store for Safari) through extension.dev, which holds your store credentials and dispatches from your project's mirror CI; credentials are never tool arguments. It defaults to a dry run, and `dryRun: false` is irreversible and needs the workspace owner's token. Safari and the App Store are one paid lane, so a free workspace is refused there and the other three stores are unaffected.
+
+`extension_release_promote` moves a release channel to a tested build, headless, from CI or an agent session. After a real submission, `extension_release_status` reads the recorded outcome, per-store credential health, and review state from the project's public registry, so agents and CI can answer "was it approved?" without a console visit.
+
+### Several projects under one approval
+
+`extension_project_create` takes `projects`, a list of `{ project, repo }` entries in one workspace, in place of `project` and `repo`: one approval page lists every name, each project is created by its own request, and each one's 7-day token is stored as that project's login. `extension_auth` with `action: "login"` takes `projects`, a list of `<workspace>/<project>` names of existing projects, and stores one token per project, which is also how logins that expire together are renewed. Both lists: one workspace, 1 to 20 names, each by its exact slug (lowercase letters and digits joined by single dashes, at most 48 characters), none twice. A create list is capped at 10, the platform's limit per approving account per hour, and a longer list is refused, never split. While projects remain the answer is `status: "creating"` with the same `deviceCode` to call again, always with one row per project, so a refusal on one never hides the others. A server pinned with `--project` refuses a list that names any other project.
 
 ## The extension.dev stack
 
