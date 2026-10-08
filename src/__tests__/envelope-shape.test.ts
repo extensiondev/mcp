@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 import { tools as ALL_TOOLS } from "../index";
-import { DECISION_D6, ERROR_CODES, envelopeObject } from "../lib/envelope";
+import { ERROR_CODES, envelopeObject } from "../lib/envelope";
 import { validateAgainstSchema } from "./envelope-validate";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -46,10 +46,6 @@ const RAW_SERIALIZER_ALLOWED = new Map<string, string>([
 ]);
 
 describe("envelope() and envelopeObject() are the only serializers allowed to produce a handler's return value", () => {
-  it("registers 28 tools, all of them named in an envelope call", () => {
-    expect(registered.size).toBe(ALL_TOOLS.length);
-  });
-
   for (const { relative, text } of sources) {
     if (RAW_SERIALIZER_ALLOWED.has(relative)) continue;
 
@@ -71,23 +67,7 @@ describe("envelope() and envelopeObject() are the only serializers allowed to pr
     });
   }
 
-  it("keeps the legacy `name` key only while lib/act.ts and tools/shares.ts branch on it", () => {
-    const actText = sources.find((s) => s.relative === "lib/act.ts")?.text ?? "";
-    const sharesText =
-      sources.find((s) => s.relative === "tools/shares.ts")?.text ?? "";
-    expect(
-      /LEGACY_NAME_TO_CODE\[/.test(actText),
-      "lib/act.ts no longer maps error.name to a code; retire `name` from EnvelopeError",
-    ).toBe(true);
-
-    expect(
-      /error\.name ===/.test(sharesText),
-      "tools/shares.ts no longer branches on error.name; retire `name` from EnvelopeError",
-    ).toBe(true);
-  });
-
-  it("names only registered tools in `command`, per decision D6", () => {
-    expect(DECISION_D6).toContain("`command`");
+  it("names only registered tools in `command`", () => {
     const named = new Set<string>();
 
     for (const { text } of sources) {

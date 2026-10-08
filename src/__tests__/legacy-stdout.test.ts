@@ -26,15 +26,6 @@ const srcDir = path.resolve(
 );
 
 describe("the deprecated stdout fallback", () => {
-  it("declares when it can be deleted", () => {
-    const source = fs.readFileSync(
-      path.join(srcDir, "lib", "legacy-stdout.ts"),
-      "utf8",
-    );
-    expect(source).toContain("@deprecated");
-    expect(source).toContain("schema: 1");
-  });
-
   it("drops npm's cold-install notice, which reads as a compile failure", () => {
     const raw = [
       "npm warn exec The following package was not found and will be installed: extension@4.0.16",

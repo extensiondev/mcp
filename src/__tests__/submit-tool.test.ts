@@ -6,7 +6,6 @@ import { afterEach, beforeEach, describe, it, expect } from "vitest";
 
 import { schema, handler, storeMdWarnings } from "../tools/submit";
 import { writeCredentials } from "../lib/credentials";
-import { tools as ALL_TOOLS } from "../index";
 import { submitAnswer } from "./fixtures/platform-answers";
 
 function claimsToken(u: string, p: string): string {
@@ -22,11 +21,6 @@ function jsonResponse(body: unknown, ok = true, status = 200): Response {
 }
 
 describe("extension_submit: registration + schema", () => {
-  it("is registered under the extension_submit name", () => {
-    expect(schema.name).toBe("extension_submit");
-    expect(ALL_TOOLS.map((t) => t.schema.name)).toContain("extension_submit");
-  });
-
   it("requires browsers + buildSha and exposes no credential/zip/path property", () => {
     const req = (schema.inputSchema as { required: string[] }).required;
     expect(req).toContain("browsers");

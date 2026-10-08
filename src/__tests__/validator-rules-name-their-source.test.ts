@@ -95,14 +95,13 @@ describe("95a, 95c, 95d: rules the engine folds are not refusals", () => {
 
 describe("95e, 95f, 95g: wording and sources", () => {
   it("tells Edge users to use the chrome: prefix, which the engine scopes to Chrome", async () => {
-    const dir = project({ ...BASE, side_panel: { default_path: "p.html" }, permissions: ["sidePanel"] }, { "src/p.html": "" });
+    const dir = project({ ...BASE, file_browser_handlers: [{ id: "open", default_title: "Open", file_filters: ["filesystem:*.txt"] }] });
     const out = await validate(dir, ["edge"]);
     const edgeNote = out.warnings.find((w: string) => /inert on Edge/.test(w));
 
-    if (edgeNote) {
-      expect(edgeNote).toMatch(/"chrome:/);
-      expect(edgeNote).not.toMatch(/only if you also target Chrome/);
-    }
+    expect(edgeNote).toBeDefined();
+    expect(edgeNote).toMatch(/"chrome:/);
+    expect(edgeNote).not.toMatch(/only if you also target Chrome/);
   });
 
   it("warns, and names the text search, instead of blocking the build on an undeclared crash-level API", async () => {

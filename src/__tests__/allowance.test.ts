@@ -47,9 +47,6 @@ describe("the allowance narration", () => {
       body: { allowance: { used: 7, limit: 100 } },
     });
     expect(n.remains).toBe("The platform reports 7 of 100 used.");
-  });
-
-  it("reads a quota record the same way", () => {
     expect(readPlatformAllowance({ quota: { used: 3, limit: 25 } })).toEqual({
       used: 3,
       limit: 25,

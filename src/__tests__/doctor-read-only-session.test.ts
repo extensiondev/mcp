@@ -5,7 +5,6 @@ import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { handler } from "../tools/doctor";
-import { DOCTOR_CONTROL_OFF_DETAIL } from "./fixtures/engine-answers";
 
 import type * as ExecModule from "../lib/exec";
 
@@ -73,7 +72,7 @@ function skippedLegs(): Check[] {
 const controlOffByChoice: Check = {
   check: "control-channel",
   status: "fail",
-  detail: DOCTOR_CONTROL_OFF_DETAIL,
+  detail: "refused: control is off in the session that answered",
   remediation:
     "Restart with control enabled: extension dev --browser=chrome --allow-control",
 };
@@ -205,15 +204,5 @@ describe("extension_doctor on a session that is read-only by choice", () => {
 
     expect(out.ok).toBe(true);
     expect(out.status).toBe("read-only");
-  });
-});
-
-describe("the read-only verdict keys on the wording the CLI writes", () => {
-  it("does not match the spelling no engine emits", () => {
-    expect(DOCTOR_CONTROL_OFF_DETAIL).toBe(
-      "refused: control is off in the session that answered",
-    );
-
-    expect(DOCTOR_CONTROL_OFF_DETAIL).not.toContain("was not started with");
   });
 });

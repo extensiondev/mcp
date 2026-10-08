@@ -5,7 +5,6 @@ import path from "node:path";
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 
 import { resolveCdpPort } from "../lib/cdp-port";
-import { resolveExtensionInvocation } from "../lib/exec";
 import {
   knownSessionBrowsers,
   resolveSessionBrowser,
@@ -69,20 +68,6 @@ describe("legacy ready-contract compatibility", () => {
     const outcome = result.value;
     expect(outcome.stopped).toBe(false);
     expect(outcome.pid).toBeNull();
-  });
-
-  it("EXTENSION_MCP_CLI_VERSION overrides the npx pin", () => {
-    const prev = process.env.EXTENSION_MCP_CLI_VERSION;
-    process.env.EXTENSION_MCP_CLI_VERSION = "9.9.9-skewtest.1";
-
-    try {
-      const { command, prefixArgs } = resolveExtensionInvocation();
-      expect(command).toBe("npx");
-      expect(prefixArgs).toEqual(["extension@9.9.9-skewtest.1"]);
-    } finally {
-      if (prev === undefined) delete process.env.EXTENSION_MCP_CLI_VERSION;
-      else process.env.EXTENSION_MCP_CLI_VERSION = prev;
-    }
   });
 
   it("ignores legacy engine-state files (port slot, shared token)", () => {

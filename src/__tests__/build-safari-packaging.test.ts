@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { describe, it, expect, afterEach, vi } from "vitest";
 
@@ -855,20 +856,20 @@ describe("extension_build refuses a Safari packaging option it cannot honour", (
   });
 });
 
-const ENGINE_IS_VALID_BUNDLE_ID_SOURCE =
-  "^[A-Za-z0-9-]+(\\.[A-Za-z0-9-]+)*$";
+function engineIsValidBundleId(): RegExp {
+  const dist = fs.readFileSync(
+    path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../node_modules/extension-develop/dist/840~0.mjs"),
+    "utf8",
+  );
+  const match = dist.match(/function isValidBundleId\(value\) \{\s*return \/(.+?)\/\.test\(value\);/);
+  if (!match) throw new Error("extension-develop no longer defines isValidBundleId as a regex test");
+
+  return new RegExp(match[1]);
+}
 
 describe("the local bundle-id validator stays the engine's validator", () => {
-  it("is character for character the regex isValidBundleId applies", () => {
-    expect(build.BUNDLE_ID_PATTERN.source).toBe(
-      ENGINE_IS_VALID_BUNDLE_ID_SOURCE,
-    );
-
-    expect(build.BUNDLE_ID_PATTERN.flags).toBe("");
-  });
-
-  it("agrees with the engine's rules on every shape either side cares about", () => {
-    const engine = new RegExp(ENGINE_IS_VALID_BUNDLE_ID_SOURCE);
+  it("agrees with the engine's own isValidBundleId on every shape either side cares about", () => {
+    const engine = engineIsValidBundleId();
     const cases = [
       "com.acme.readinglist",
       "dev.extensionjs.reading-list",

@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { navigateToUrlViaBridge } from "../lib/bridge-tabs";
-import { actFrame, tabRows } from "./fixtures/engine-answers";
+import { actFailure, actFrame, tabRows } from "./fixtures/engine-answers";
 
 import type * as ActModule from "../lib/act";
 
@@ -69,8 +69,8 @@ describe("navigateToUrlViaBridge asks the engine's navigate verb first", () => {
   it("falls back to the background eval only when the engine does not know the verb", async () => {
     reset(
       { ok: false, error: { code: "E_CLI", message: "error: unknown command 'navigate'" } },
-      { ok: true, value: { tabId: 3 } },
-      { ok: true, value: [{ id: 3, url: "https://b.test/", title: "B" }] },
+      actFrame("eval", { tabId: 3 }),
+      actFrame("inspect", tabRows([{ id: 3, url: "https://b.test/", title: "B" }])),
     );
 
     const parsed = JSON.parse(await navigateToUrlViaBridge("/p", "firefox", "https://b.test/"));
@@ -83,7 +83,7 @@ describe("navigateToUrlViaBridge asks the engine's navigate verb first", () => {
   it("names the upgrade when the fallback eval is refused", async () => {
     reset(
       { ok: false, error: { code: "E_CLI", message: "error: unknown command 'navigate'" } },
-      { ok: false, error: { name: "Unsupported", message: "eval is blocked in the extension background by CSP" } },
+      actFailure("eval", { name: "Unsupported", code: "E_UNSUPPORTED", message: "eval is blocked in the extension background by CSP" }),
     );
 
     const parsed = JSON.parse(await navigateToUrlViaBridge("/p", "safari", "https://b.test/"));

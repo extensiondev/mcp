@@ -616,7 +616,6 @@ describe("extension_project_create", () => {
 
   it("promises the firstBuild field in its description", () => {
     expect(schema.description).toContain("`firstBuild`");
-    expect(schema.description).not.toContain("and dispatches the first build.");
   });
 
   async function createAnswers(create: Route | "no-answer") {

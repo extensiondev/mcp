@@ -29,13 +29,39 @@
             "message": { "type": "string" },
             "name": { "type": "string" },
             "engine": { "type": "string" },
-            "hint": { "type": "string" }
+            "hint": { "type": "string" },
+            "refs": {
+              "type": "object",
+              "properties": {
+                "flag": { "type": "string" },
+                "command": { "type": "string" },
+                "path": { "type": "string" },
+                "version": { "type": "string" }
+              }
+            },
+            "details": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["message", "severity"],
+                "properties": {
+                  "code": { "type": "string", "pattern": "^E_[A-Z0-9_]+$" },
+                  "message": { "type": "string" },
+                  "file": { "type": "string" },
+                  "line": { "type": "integer" },
+                  "column": { "type": "integer" },
+                  "severity": { "enum": ["error", "warning"] },
+                  "name": { "type": "string" }
+                }
+              }
+            }
           }
         }
       ]
     },
     "truncated": { "type": "boolean" },
     "hint": { "type": "string" },
+    "browser": { "type": "string", "minLength": 1 },
     "warnings": { "type": "array", "items": { "type": "string" } }
   },
   "additionalProperties": true

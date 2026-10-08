@@ -78,6 +78,20 @@
   `extension_eval` in `background` like an MV2 page does. The CSP refusal
   rewrite applies to a declared content_security_policy, never to MV3 as
   such.
+- The envelope contract copied under the tests is the one Extension.js
+  4.1.32 ships (it had stayed at the 4.0.17 bytes, so the byte comparison
+  against the installed engine only warned), and the comparison now fails
+  on any engine at or above the pinned release instead of only on an exact
+  match. A new cell checks the build and doctor fixture builders key for
+  key against the engine's golden frames.
+- Test-only exports left the public surface: `reviewDist` (callers use
+  `reviewDistReport`), `loginProjectRef`, `resolvedEngineVersion`
+  (`resolvedEngineFacts` carries the version), the
+  `HOLD_STILL_WORKS_SENTENCE` alias and the carrier registry's
+  `rememberedCarriers`. A test-audit pass also removed cells that restated
+  constants, pinned source spellings, or passed for a reason other than
+  the one in their title, and fed the remaining hand-written frames from
+  the engine's builders.
 - No comments remain in the package beyond the file banner and tool-read
   directives. Every former invariant block is carried by a name, a cell
   title, or a `*-rules.test.ts` cell that fails when the rule is broken;

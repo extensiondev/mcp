@@ -10,7 +10,6 @@ import {
   readStores as handler,
 } from "../tools/store-status";
 import { schema, handler as releaseStatus } from "../tools/release-status";
-import { tools as ALL_TOOLS } from "../index";
 import { writeCredentials } from "../lib/credentials";
 
 function jsonResponse(body: unknown, ok = true, status = 200): Response {
@@ -111,11 +110,7 @@ const STATUS_V3 = {
 };
 
 describe("extension_release_status: registration + schema", () => {
-  it("is registered and mirrors release_list's project override contract", () => {
-    expect(schema.name).toBe("extension_release_status");
-    expect(ALL_TOOLS.map((t) => t.schema.name)).toContain(
-      "extension_release_status",
-    );
+  it("mirrors release_list's project override contract", () => {
 
     const props = Object.keys(
       (schema.inputSchema as { properties: Record<string, unknown> })

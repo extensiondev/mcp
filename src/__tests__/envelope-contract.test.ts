@@ -49,6 +49,17 @@ const resolveShippedContract = (): string | null => {
   }
 };
 
+const semverAtLeast = (version: string, floor: string): boolean => {
+  const parse = (v: string) => v.split("-")[0].split(".").map(Number);
+  const [a, b] = [parse(version), parse(floor)];
+
+  for (let i = 0; i < 3; i++) {
+    if ((a[i] ?? 0) !== (b[i] ?? 0)) return (a[i] ?? 0) > (b[i] ?? 0);
+  }
+
+  return true;
+};
+
 const resolveEngineVersion = (): string | null => {
   for (let dir = here; ; dir = path.dirname(dir)) {
     const manifest = path.join(
@@ -67,9 +78,10 @@ const resolveEngineVersion = (): string | null => {
 };
 
 describe("the copied CLI contract is the same bytes on both sides", () => {
-  it("copies at least the envelope schema", () => {
+  it("copies at least the envelope schema and names the CLI release it was cut from", () => {
     expect(copiedFiles).toContain("envelope.schema.json");
     expect(copiedFiles.length).toBeGreaterThan(0);
+    expect(pin.cliVersion).toMatch(/^\d+\.\d+\.\d+/);
   });
 
   for (const name of copiedFiles) {
@@ -91,12 +103,7 @@ describe("the copied CLI contract is the same bytes on both sides", () => {
     expect(Object.keys(pin.files).sort()).toEqual(copiedFiles);
   });
 
-  it("names the CLI release the copy was cut from", () => {
-    expect(pin.cliVersion).toMatch(/^\d+\.\d+\.\d+/);
-    expect(fs.existsSync(path.join(contractDir, PIN_FILE))).toBe(true);
-  });
-
-  it("matches the contract the resolved engine ships, when it ships one", () => {
+  it("matches the contract the resolved engine ships byte for byte, from the pinned release up", () => {
     const shipped = resolveShippedContract();
 
     if (!shipped) {
@@ -115,14 +122,14 @@ describe("the copied CLI contract is the same bytes on both sides", () => {
 
       const same = sha256(upstream) === pin.files[name];
 
-      if (engineVersion === pin.cliVersion) {
+      if (engineVersion && semverAtLeast(engineVersion, pin.cliVersion)) {
         expect(
           same,
-          `${name} drifted from ${pin.cliPackage}@${engineVersion}. Re-copy it and refresh ${PIN_FILE}.`,
+          `${name} drifted from ${pin.cliPackage}@${engineVersion}, which is at or above the pinned ${pin.cliVersion}. Re-copy it and refresh ${PIN_FILE}.`,
         ).toBe(true);
       } else if (!same) {
         console.warn(
-          `[envelope-contract] ${name} differs from ${pin.cliPackage}@${engineVersion}, which is not the pinned ${pin.cliVersion}. CI runs a version matrix, so this is a warning, not a failure.`,
+          `[envelope-contract] ${name} differs from ${pin.cliPackage}@${engineVersion}, which is below the pinned ${pin.cliVersion}. The CI floor leg runs an older engine, so this is a warning there, not a failure.`,
         );
       }
     }

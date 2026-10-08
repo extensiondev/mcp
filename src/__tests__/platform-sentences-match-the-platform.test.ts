@@ -47,7 +47,6 @@ describe("submit says what the platform checks and answers", () => {
     expect(submitSchema.description).toMatch(/does not run the owner gate, the approval, the build quota/);
     expect(submitSchema.description).toMatch(/absent_mode: safe/);
     expect(submitSchema.description).toMatch(/workspace owner/);
-    expect(submitSchema.description).not.toMatch(/which does not check store health/);
   });
 
   it("renders the platform's warning objects and keeps a failing store configured but unhealthy", async () => {
@@ -148,10 +147,8 @@ describe("publish, promote, builds, the share probe and the grant refusal", () =
   it("publish and promote describe the platform's actual sha and browser handling", () => {
     const buildSha = (publishSchema.inputSchema.properties as Record<string, { description: string }>).buildSha.description;
     expect(buildSha).toMatch(/echoes the sha back/);
-    expect(buildSha).not.toMatch(/always points at a real build/);
     const browsers = (promoteSchema.inputSchema.properties as Record<string, { description: string }>).browsers.description;
     expect(browsers).toMatch(/falls back to chrome alone/);
-    expect(browsers).not.toMatch(/auto-detected from the build\)/);
   });
 
   it("does not call a partial build successful", () => {

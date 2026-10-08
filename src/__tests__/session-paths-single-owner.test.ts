@@ -8,8 +8,6 @@ const SRC = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 const OWNER = path.join(SRC, "lib", "session-paths.ts");
 
-const NOT_YET_MIGRATED = new Set<string>([]);
-
 function productionFiles(dir: string, out: string[] = []): string[] {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     const full = path.join(dir, entry.name);
@@ -32,7 +30,7 @@ function productionFiles(dir: string, out: string[] = []): string[] {
 
 describe("only lib/session-paths.ts knows the session-state layout", () => {
   const files = productionFiles(SRC);
-  const scanned = files.filter((file) => !NOT_YET_MIGRATED.has(file));
+  const scanned = files;
 
   it("finds production sources to scan", () => {
     expect(scanned.length).toBeGreaterThan(30);
@@ -95,32 +93,5 @@ describe("only lib/session-paths.ts knows the session-state layout", () => {
     }
 
     expect(offenders).toEqual([]);
-  });
-
-  it("has stop.ts matching the session's browser through the owner module", () => {
-    const source = fs.readFileSync(path.join(SRC, "tools", "stop.ts"), "utf8");
-    expect(source).toContain("profilesRootDir(form)");
-    expect(source).toContain('from "../lib/session-paths"');
-  });
-
-  it("has dev.ts naming the profile through the owner module", () => {
-    const source = fs.readFileSync(path.join(SRC, "tools", "dev.ts"), "utf8");
-    expect(source).toContain("profileRemediation({");
-    expect(source).toContain("browserProfileRootDir(args.projectPath, browser)");
-    expect(source).toContain('from "../lib/session-paths"');
-  });
-
-  it("scans every production file, with nothing held back", () => {
-    expect(NOT_YET_MIGRATED.size).toBe(0);
-    expect(scanned).toEqual(files);
-  });
-
-  it("has build.ts reading the build summary through the owner module", () => {
-    const source = fs.readFileSync(
-      path.join(SRC, "tools", "build.ts"),
-      "utf8",
-    );
-    expect(source).toContain("buildSummaryPath(projectPath, browser)");
-    expect(source).toContain('from "../lib/session-paths"');
   });
 });

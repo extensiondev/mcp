@@ -5,7 +5,7 @@ import { spawnSync } from "node:child_process";
 
 import { describe, it, expect, vi, afterEach } from "vitest";
 
-import { remoteValueNote, BACKGROUND_TARGET_TYPES } from "../lib/cdp-extension-page";
+import { remoteValueNote } from "../lib/cdp-extension-page";
 import { matchPatternRegexSource, executeScriptExpression } from "../tools/inspect-gecko";
 import { CALL_TIMEOUT } from "../lib/common-schema";
 import { schema as evalSchema } from "../tools/eval";
@@ -25,10 +25,12 @@ afterEach(() => {
 });
 
 describe("wave 1: extension_eval says where and what it ran", () => {
-  it("a dedicated worker is never taken for the background", () => {
-    expect(BACKGROUND_TARGET_TYPES.has("service_worker")).toBe(true);
-    expect(BACKGROUND_TARGET_TYPES.has("background_page")).toBe(true);
-    expect(BACKGROUND_TARGET_TYPES.has("worker")).toBe(false);
+  it("maps a legacy frame's error name to its code when the engine sent no code", async () => {
+    exec.result = { code: 1, stdout: JSON.stringify({ ok: false, error: { name: "NoSession", message: "no session" } }), stderr: "", timedOut: false, signal: null };
+    const out = JSON.parse(await runActVerb(["storage", "get", "/p"], "/p", 1000, "extension_storage"));
+    expect(out.ok).toBe(false);
+    expect(out.error.code).toBe("E_NO_SESSION");
+    expect(out.error.name).toBe("NoSession");
   });
 
   it("a run this server stopped is unconfirmed, not 'exited with code null'", async () => {
@@ -83,9 +85,7 @@ describe("wave 1: extension_eval says where and what it ran", () => {
   });
 
   it("and 99c, 99f: the descriptions say what the routes do", () => {
-    expect(CALL_TIMEOUT.description).not.toMatch(/default 5000/);
     expect(CALL_TIMEOUT.description).toMatch(/30000.*10000.*15000/);
-    expect(evalSchema.description).not.toMatch(/get that explanation back/);
     expect(evalSchema.description).toMatch(/user gesture/);
   });
 });

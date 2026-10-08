@@ -15,10 +15,6 @@ describe("the invocation cache key separator is written as an escape, never as a
   it("holds no raw NUL byte anywhere in the module", () => {
     expect(source.includes("\u0000")).toBe(false);
   });
-
-  it("joins the command and its prefix arguments with the escaped NUL", () => {
-    expect(source).toContain('join("\\0")');
-  });
 });
 
 describe("the engine's refusal of --output json is recognised in both of its phrasings and never in a real failure", () => {

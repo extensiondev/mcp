@@ -4,7 +4,7 @@ import path from "node:path";
 
 import { describe, it, expect, afterEach } from "vitest";
 
-import { handler, schema } from "../tools/theme-verify";
+import { handler } from "../tools/theme-verify";
 
 const tmp: string[] = [];
 afterEach(() => {
@@ -20,14 +20,6 @@ const CLEAN = {
   version: "1.0",
   theme: { colors: { frame: [30, 60, 90], toolbar: [240, 240, 240] } },
 };
-
-describe("schema", () => {
-  it("is a well-formed, theme-namespaced tool schema", () => {
-    expect(schema.name).toBe("extension_theme_verify");
-    expect(schema.inputSchema.type).toBe("object");
-    expect(schema.description.length).toBeGreaterThan(10);
-  });
-});
 
 describe("happy path is honest about what it did NOT verify", () => {
   it("returns headless-clean but still flags the two attended legs", async () => {

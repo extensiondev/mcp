@@ -4,15 +4,13 @@ import { describe, it, expect } from "vitest";
 import { schema as authSchema } from "../tools/auth";
 import { schema as createSchema, laneClosedHint } from "../tools/project-create";
 import { createRateLimitNote } from "../lib/project-batch";
-import { HOLD_STILL_WORKS_SENTENCE } from "../lib/platform-hold";
+import { platformHoldMessage } from "../lib/platform-hold";
 import { pollDeviceGrant } from "../lib/device-flow";
 
 describe("the auth and create tools describe what the platform does", () => {
   it("auth status names the statuses it emits, and create names who approves", () => {
     expect(authSchema.description).toMatch(/value\.server\.verdict as confirmed, refused or unavailable/);
-    expect(authSchema.description).not.toMatch(/or unverified when the server cannot be reached/);
     expect(createSchema.description).toMatch(/a signed-in member of the workspace approves/);
-    expect(createSchema.description).not.toMatch(/signed-in workspace owner approves/);
   });
 
   it("the lane hint defers to the platform's message and names the hold's console state", () => {
@@ -25,12 +23,10 @@ describe("the auth and create tools describe what the platform does", () => {
   it("the rate note says what the platform counts", () => {
     const note = createRateLimitNote();
     expect(note).toMatch(/counted before the existence check/);
-    expect(note).not.toMatch(/creates at most .* projects per hour/);
-    expect(note).not.toMatch(/lives 15 minutes/);
   });
 
   it("the hold sentence lists approvals and workspace create among what is closed, and claims no 'free forever'", () => {
-    const text = HOLD_STILL_WORKS_SENTENCE;
+    const text = platformHoldMessage({});
     expect(text).toMatch(/requesting an approval/);
     expect(text).toMatch(/project or workspace/);
     expect(text).not.toMatch(/free forever/);

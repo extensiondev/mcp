@@ -6,6 +6,7 @@ import { describe, it, expect, afterEach } from "vitest";
 
 import {
   describeExtensionInvocation,
+  resolveExtensionInvocation,
   spawnExtensionCli,
   type SpawnedCli,
 } from "../lib/exec";
@@ -75,5 +76,21 @@ describe("the engine runs in the project, not where the MCP client started the s
 
     expect(described).toContain("npx extension@");
     expect(described).toContain("pinned engine");
+  });
+});
+
+describe("the npx fallback takes its version from the pin or the override", () => {
+  it("EXTENSION_MCP_CLI_VERSION overrides the npx pin", () => {
+    const prev = process.env.EXTENSION_MCP_CLI_VERSION;
+    process.env.EXTENSION_MCP_CLI_VERSION = "9.9.9-skewtest.1";
+
+    try {
+      const { command, prefixArgs } = resolveExtensionInvocation();
+      expect(command).toBe("npx");
+      expect(prefixArgs).toEqual(["extension@9.9.9-skewtest.1"]);
+    } finally {
+      if (prev === undefined) delete process.env.EXTENSION_MCP_CLI_VERSION;
+      else process.env.EXTENSION_MCP_CLI_VERSION = prev;
+    }
   });
 });

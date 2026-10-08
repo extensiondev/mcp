@@ -21,7 +21,6 @@ import {
   carriersPlacedHere,
   forgetCarrier,
   rememberCarrier,
-  rememberedCarriers,
 } from "../lib/carrier-registry";
 import * as stop from "../tools/stop";
 
@@ -121,31 +120,19 @@ describe("a carrier this tool placed stays recognisable without its marker", () 
 describe("the carrier is written down so something can still find it later", () => {
   it("records a placed carrier and forgets a removed one", () => {
     const dir = withCarrier();
-    expect(rememberedCarriers().map((p) => path.resolve(p))).toContain(
-      path.resolve(dir),
-    );
-
     expect(carriersPlacedHere()).toContain(path.resolve(dir));
 
     removeCarrier(dir);
-    expect(rememberedCarriers().map((p) => path.resolve(p))).not.toContain(
-      path.resolve(dir),
-    );
-
     expect(carriersPlacedHere()).not.toContain(path.resolve(dir));
   });
 
   it("stops recording a project whose carrier was already gone", () => {
     const dir = project();
     rememberCarrier(dir);
-    expect(rememberedCarriers().map((p) => path.resolve(p))).toContain(
-      path.resolve(dir),
-    );
+    expect(carriersPlacedHere()).toContain(path.resolve(dir));
 
     removeCarrier(dir);
-    expect(rememberedCarriers().map((p) => path.resolve(p))).not.toContain(
-      path.resolve(dir),
-    );
+    expect(carriersPlacedHere()).not.toContain(path.resolve(dir));
   });
 });
 

@@ -51,8 +51,7 @@ describe("extension_preview_web", () => {
     vi.restoreAllMocks();
   });
 
-  it("names the tool and requires projectPath", () => {
-    expect(schema.name).toBe("extension_preview_web");
+  it("requires projectPath", () => {
     expect(schema.inputSchema.required).toContain("projectPath");
   });
 

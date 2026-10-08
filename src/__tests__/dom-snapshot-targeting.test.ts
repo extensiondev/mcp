@@ -210,7 +210,6 @@ describe("open popup validates against the manifest", () => {
 describe("dom_snapshot description honesty about CDP", () => {
   it("names the subpaths that need the debug port instead of claiming no CDP", () => {
     const description = domSnapshot.schema.description;
-    expect(description).not.toContain("(no CDP, localhost only)");
     expect(description).toContain("listTargets");
     expect(description).toContain("debug port");
   });

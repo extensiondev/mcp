@@ -22,12 +22,9 @@ describe("the smaller sentences are cut to what was read or name their source", 
     expect(out.error.message).not.toMatch(/No project to list/);
   });
 
-  it("dates no share-id claim and names the retired width as retired", () => {
+  it("dates no share-id claim", () => {
     const text = JSON.stringify(sharesSchema);
     expect(text).not.toMatch(/2026-07-30/);
-    const src = fs.readFileSync(new URL("../tools/shares.ts", import.meta.url), "utf8");
-    expect(src).not.toMatch(/minted before 2026-07-30/);
-    expect(src).toMatch(/retired derived form was 32/);
   });
 
   it("names its own thresholds in the analyze answer", async () => {

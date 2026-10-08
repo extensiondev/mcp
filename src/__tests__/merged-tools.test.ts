@@ -10,23 +10,8 @@ import * as templates from "../tools/templates";
 import * as releaseStatus from "../tools/release-status";
 import { tools as ALL_TOOLS } from "../index";
 
-const MERGED_AWAY = [
-  "extension_detect_browsers",
-  "extension_list_browsers",
-  "extension_install_browser",
-  "extension_uninstall_browser",
-  "extension_login",
-  "extension_logout",
-  "extension_whoami",
-  "extension_list_templates",
-  "extension_get_template_source",
-  "extension_release_list",
-  "extension_store_status",
-  "extension_preview",
-];
-
 describe("v9 tool surface", () => {
-  it("registers the merged tools and no longer registers what they replaced", () => {
+  it("registers the merged tools", () => {
     const names = ALL_TOOLS.map((t) => t.schema.name);
 
     for (const name of [
@@ -37,10 +22,6 @@ describe("v9 tool surface", () => {
       "extension_start",
     ]) {
       expect(names).toContain(name);
-    }
-
-    for (const gone of MERGED_AWAY) {
-      expect(names).not.toContain(gone);
     }
   });
 

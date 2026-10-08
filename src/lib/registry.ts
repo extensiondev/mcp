@@ -76,17 +76,6 @@ export function resolveProjectRef(overrides?: {
   return { workspace: ws, project: proj };
 }
 
-export function loginProjectRef(selector?: string): ProjectRef | null {
-  const named = String(selector ?? "").trim();
-  if (!named) return resolveProjectRef();
-
-  const creds = readCredentials({ project: named });
-  const workspace = String(creds?.workspaceSlug || "").trim();
-  const project = String(creds?.projectSlug || "").trim();
-  if (workspace && project) return { workspace, project };
-
-  return splitProjectName(named);
-}
 
 export function registryFileUrl(ref: ProjectRef, file: string): string {
   return `${registryBase()}/${encodeURIComponent(ref.workspace)}/${encodeURIComponent(

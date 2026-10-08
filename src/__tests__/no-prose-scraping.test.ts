@@ -59,19 +59,6 @@ describe("no tool reads the CLI's human copy: each token above appears only in f
     expect(EXEMPT.size).toBeLessThanOrEqual(1);
   });
 
-  it("no longer exempts the three files that never matched CLI copy", () => {
-    for (const relative of ["lib/act.ts", "tools/open.ts", "tools/eval.ts"]) {
-      expect(EXEMPT.has(relative), `${relative} is exempt again`).toBe(false);
-      const source = sources.find((s) => s.relative === relative);
-      expect(source, `${relative} no longer exists`).toBeDefined();
-      expect(
-        CLI_COPY_TOKENS.filter((token) =>
-          (source as { text: string }).text.includes(token),
-        ),
-      ).toEqual([]);
-    }
-  });
-
   for (const { relative, text } of sources) {
     const hits = CLI_COPY_TOKENS.filter((token) => text.includes(token));
     if (EXEMPT.has(relative)) continue;

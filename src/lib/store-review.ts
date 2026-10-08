@@ -282,10 +282,6 @@ function listFiles(dir: string, base = ""): Array<{ path: string }> {
   return out;
 }
 
-export function reviewDist(distPath: string, browser: string): ReviewRisk[] {
-  return reviewDistReport(distPath, browser).risks;
-}
-
 export function reviewDistReport(distPath: string, browser: string): ReviewReport {
   let manifest: Record<string, unknown>;
 

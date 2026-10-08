@@ -586,6 +586,7 @@ describe("extension_shares", () => {
     expect(out.ok).toBe(true);
     expect(out.status).toBe("listed-local-only");
     expect(out.value.server.listed).toBe(false);
+    expect(out.value.server.errorName).toBe("SharesAuthError");
     expect(out.value.server.loginHint).toContain("extension_auth");
     expect(out.value.localOnly).toHaveLength(1);
     expect(out.value.localOnly[0].revokeUrl).toContain(LOCAL_ID);

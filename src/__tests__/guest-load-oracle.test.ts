@@ -31,6 +31,7 @@ vi.mock("../lib/cdp-port", () => ({
 const { verifyGuestLoaded } = await import("../lib/guest-load-oracle");
 const { CARRIER_EXTENSION_ID } = await import("../lib/carrier");
 const { readyContractPath } = await import("../lib/session-paths");
+const { readyContract } = await import("./fixtures/engine-answers");
 const fs = await import("node:fs");
 const os = await import("node:os");
 const path = await import("node:path");
@@ -46,7 +47,7 @@ function session(contract: Record<string, unknown> = { extensionId: GUEST }): vo
   project = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-oracle-"));
   const file = readyContractPath(project, "chrome");
   fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.writeFileSync(file, JSON.stringify({ status: "ready", cdpPort: 9333, ...contract }));
+  fs.writeFileSync(file, JSON.stringify(readyContract("dev", "chrome", { cdpPort: 9333, ...contract })));
 }
 
 function target(url: string, type = "service_worker"): RawTarget {
@@ -159,7 +160,7 @@ describe("verifyGuestLoaded matches the contract's own extension id", () => {
 
   it("falls back to the id derived from distPath when the contract stamps none", async () => {
     const { unpackedExtensionId } = await import("../lib/extension-identity");
-    session({ distPath: "/tmp/some/dist/chrome" });
+    session({ distPath: "/tmp/some/dist/chrome", extensionId: undefined });
     const derived = unpackedExtensionId("/tmp/some/dist/chrome");
     resolved = { port: 9333, source: "contract" };
     discoverThrows = null;
@@ -170,7 +171,7 @@ describe("verifyGuestLoaded matches the contract's own extension id", () => {
   });
 
   it("is inconclusive, not loaded, when the contract names no id at all", async () => {
-    session({});
+    session({ extensionId: undefined, distPath: undefined });
     resolved = { port: 9333, source: "contract" };
     discoverThrows = null;
     targets = [target(`chrome-extension://${GUEST}/sw.js`)];

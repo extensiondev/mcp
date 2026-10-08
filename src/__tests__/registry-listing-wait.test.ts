@@ -16,7 +16,5 @@ describe("the registry listing waits long enough for npm to serve the tarball it
     expect(attempts).toBeGreaterThan(0);
     expect(seconds).toBeGreaterThan(0);
     expect(attempts * seconds).toBeGreaterThanOrEqual(NPM_PROPAGATION_FLOOR_SECONDS);
-    expect(script).toContain('for attempt in $(seq 1 "$NPM_WAIT_ATTEMPTS")');
-    expect(script).toContain('sleep "$NPM_WAIT_SECONDS"');
   });
 });

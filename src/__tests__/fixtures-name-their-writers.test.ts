@@ -4,7 +4,6 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { ENGINE_WRITERS } from "./fixtures/engine-answers";
-import { PLATFORM_WRITERS } from "./fixtures/platform-answers";
 
 const engineDist = path.resolve(
   path.dirname(new URL(import.meta.url).pathname),
@@ -30,12 +29,6 @@ describe("every fixture builder names the engine or platform writer it copies ke
       if (!writer.file.startsWith("extension-develop/dist/")) continue;
 
       expect(engineSource.includes(writer.marker), `${builder}: ${writer.marker}`).toBe(true);
-    }
-  });
-
-  it("names the www handler behind every platform builder", () => {
-    for (const [builder, source] of Object.entries(PLATFORM_WRITERS)) {
-      expect(source, builder).toMatch(/^www src\/app\/api\//);
     }
   });
 });

@@ -8,7 +8,7 @@ import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 
 import { createServer } from "../index";
 import { writeCredentials } from "../lib/credentials";
-import { loginProjectRef, resolveProjectRef } from "../lib/registry";
+import { resolveProjectRef } from "../lib/registry";
 import { RegistryAccessTokens } from "../lib/registry-access";
 import { FEATURE_GROUPS } from "../lib/tool-policy";
 import { handler as publish } from "../tools/publish";
@@ -137,29 +137,6 @@ afterEach(() => {
 
   vi.unstubAllGlobals();
   fs.rmSync(tmp, { recursive: true, force: true });
-});
-
-describe("loginProjectRef", () => {
-  it("answers the login a call named, not the active one", () => {
-    expect(resolveProjectRef()).toEqual({ workspace: WS, project: ACTIVE_SLUG });
-    expect(loginProjectRef(NAMED)).toEqual({ workspace: WS, project: "refined-github" });
-    expect(loginProjectRef("vue-devtools")).toEqual({ workspace: WS, project: "vue-devtools" });
-    expect(loginProjectRef("OPEN-SOURCE-DEMO/Refined-GitHub")).toEqual({
-      workspace: WS,
-      project: "refined-github",
-    });
-  });
-
-  it("answers the active login only when nothing is named", () => {
-    expect(loginProjectRef()).toEqual({ workspace: WS, project: ACTIVE_SLUG });
-    expect(loginProjectRef("  ")).toEqual({ workspace: WS, project: ACTIVE_SLUG });
-  });
-
-  it("uses a full name as written when no login is stored for it, and nothing for a bare slug it cannot place", () => {
-    expect(loginProjectRef("acme/unknown")).toEqual({ workspace: "acme", project: "unknown" });
-    expect(loginProjectRef("unknown")).toBeNull();
-    expect(loginProjectRef("a/b/c")).toBeNull();
-  });
 });
 
 describe("resolveProjectRef", () => {

@@ -19,18 +19,6 @@ export function promoteAnswer(overrides: Body = {}): Body {
   };
 }
 
-export function projectCreatedAnswer(overrides: Body = {}): Body {
-  return {
-    success: true,
-    message: "Repository created successfully",
-    projectId: "prj_new",
-    projectSlug: "ghost-app",
-    workspaceSlug: "acme",
-    idempotencyKey: "idem-1",
-    initialBuild: { dispatched: true },
-    ...overrides,
-  };
-}
 
 export function submitAnswer(
   stores: string[] = ["chrome"],
@@ -87,7 +75,6 @@ export function approvalRecord(fingerprint: string, overrides: Body = {}): Body 
 
 export const PLATFORM_WRITERS = {
   promoteAnswer: "www src/app/api/projects/[projectId]/releases/releases-route.create.ts via /api/cli/release/promote",
-  projectCreatedAnswer: "www src/app/api/clone/core/create-project-from-clone/seed-and-build.ts via /api/cli/projects/create",
   submitAnswer: "www src/app/api/cli/stores/submit/route.ts, one row per store, dispatched one at a time",
   publishAnswer: "www src/app/api/cli/publish/route.ts, private project 200; a public project answers the same keys with no expiry",
   approvalRecord: "www src/app/api/cli/approvals/[approvalId]/route.ts, the record a verify reads",

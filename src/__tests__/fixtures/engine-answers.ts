@@ -95,16 +95,6 @@ export function attachedDevContract(browser: string, overrides: Body = {}): Body
   });
 }
 
-export function browserExitedAfterReadyContract(browser: string, overrides: Body = {}): Body {
-  return attachedDevContract(browser, {
-    browserExitedAt: NOW,
-    browserExitCode: 0,
-    browserExitSignal: null,
-    executorDetachedAt: NOW,
-    runtime: "detached",
-    ...overrides,
-  });
-}
 
 export function errorContract(
   browser: string,
@@ -326,12 +316,14 @@ export function zipArtifacts(
 
 export function doctorFrame(
   legs: Array<{ check: string; status: "pass" | "fail" | "warn" | "skip"; detail: string; remediation?: string }>,
+  browser = "chrome",
 ): Body {
   const failed = legs.filter((leg) => leg.status === "fail").length;
   return {
     schema: 1,
     ok: failed === 0,
     command: "doctor",
+    browser,
     status: failed === 0 ? "healthy" : "unhealthy",
     value: legs,
     error:
@@ -342,8 +334,6 @@ export function doctorFrame(
   };
 }
 
-export const DOCTOR_CONTROL_OFF_DETAIL =
-  "refused: control is off in the session that answered";
 
 export function reloadFrame(target: "background" | number = "background", overrides: Body = {}): Body {
   return actFrame("reload", target === "background" ? { reloading: true } : { reloaded: target }, overrides);
@@ -375,7 +365,6 @@ export const ENGINE_WRITERS = {
   readyContract: { file: "extension-develop/dist/832~0.mjs", marker: "writeReady" },
   safariDevContract: { file: "extension/dist/browsers.cjs", marker: "stampReadyWebDriver" },
   attachedDevContract: { file: "extension/dist/browsers.cjs", marker: "stampReadyBrowser" },
-  browserExitedAfterReadyContract: { file: "extension-develop/dist/832~0.mjs", marker: "writeReady" },
   errorContract: { file: "extension-develop/dist/832~0.mjs", marker: "writeError" },
   logHeader: { file: "extension-develop/dist/dev-server~0.mjs", marker: "writeHeader" },
   logEvent: { file: "extension-develop/dist/rspack-config~0.mjs", marker: "messageParts" },

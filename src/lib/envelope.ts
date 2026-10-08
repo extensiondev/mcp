@@ -8,8 +8,6 @@
 
 export const ENVELOPE_SCHEMA = 1 as const;
 
-export const DECISION_D6 =
-  "The MCP tool name owns the envelope `command` key; forking the key to `tool` would fork the schema the checksum test pins.";
 
 export type ErrorCode =
   | "E_AMBIGUOUS_TARGET"

@@ -4,7 +4,7 @@ import path from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { reviewDist, reviewDistReport, reviewRisksReport } from "../lib/store-review";
+import { reviewDistReport, reviewRisksReport } from "../lib/store-review";
 
 let dist: string;
 
@@ -18,7 +18,7 @@ function manifest(extra: Record<string, unknown>) {
   write("manifest.json", JSON.stringify({ manifest_version: 3, name: "x", version: "1.0.0", ...extra }));
 }
 
-const codes = (browser = "chrome") => reviewDist(dist, browser).map((r) => r.code);
+const codes = (browser = "chrome") => reviewDistReport(dist, browser).risks.map((r) => r.code);
 
 beforeEach(() => {
   dist = fs.mkdtempSync(path.join(os.tmpdir(), "extdev-review-"));
@@ -28,7 +28,7 @@ afterEach(() => {
   fs.rmSync(dist, { recursive: true, force: true });
 });
 
-describe("reviewDist", () => {
+describe("reviewDistReport risks", () => {
   it("finds nothing in a narrow, self-contained package", () => {
     manifest({
       permissions: ["storage"],
@@ -53,7 +53,7 @@ describe("reviewDist", () => {
     write("a.js", "const run = (s) => eval(s);");
     write("b.js", 'importScripts("https://cdn.example.com/x.js");');
     write("page.html", '<script src="https://cdn.example.com/y.js"></script>');
-    const risk = reviewDist(dist, "chrome").find((r) => r.code === "REMOTE_CODE")!;
+    const risk = reviewDistReport(dist, "chrome").risks.find((r) => r.code === "REMOTE_CODE")!;
     expect(risk.message).toContain("eval()");
     expect(risk.message).toContain("importScripts from a URL");
     expect(risk.message).toContain("a <script> loaded from a URL");
@@ -74,7 +74,7 @@ describe("reviewDist", () => {
   it("flags API permissions no shipped script uses, and leaves activeTab and hosts alone", () => {
     manifest({ permissions: ["storage", "tabs", "activeTab", "notifications"] });
     write("bg.js", "chrome.storage.sync.get(); browser.notifications.create('x', {});");
-    const risk = reviewDist(dist, "chrome").find((r) => r.code === "UNUSED_PERMISSION")!;
+    const risk = reviewDistReport(dist, "chrome").risks.find((r) => r.code === "UNUSED_PERMISSION")!;
     expect(risk.permissions).toEqual(["tabs"]);
   });
 

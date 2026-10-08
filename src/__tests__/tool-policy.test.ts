@@ -140,7 +140,6 @@ describe("the server honours the options", () => {
     const listed = (await client.listTools()).tools.map((t) => t.name).sort();
     const local = registered.filter((name) => TOOL_POLICY[name].group === "local");
     expect(listed).toEqual(local);
-    expect(listed).toHaveLength(23);
     const out = await call(client, "extension_auth", { action: "status" });
     expect(out.body.error.code).toBe("E_TOOL_DISABLED");
     expect(out.body.hint).toContain("--features");

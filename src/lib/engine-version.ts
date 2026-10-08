@@ -221,12 +221,6 @@ export async function resolvedEngineFacts(
   }
 }
 
-export async function resolvedEngineVersion(
-  projectPath?: string,
-): Promise<string | null> {
-  return (await resolvedEngineFacts(projectPath)).version;
-}
-
 export interface OutputJsonVerdict {
   supported: boolean | null;
   version: string | null;

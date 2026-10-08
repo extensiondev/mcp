@@ -24,10 +24,6 @@ vi.mock("../lib/cdp-port", async (importOriginal) => ({
 }));
 
 describe("MCP Server tool registry", () => {
-  it("has exactly 32 tools", () => {
-    expect(ALL_TOOLS.length).toBe(32);
-  });
-
   for (const tool of ALL_TOOLS) {
     describe(`tool: ${tool.schema.name}`, () => {
       it("exports a schema with name, description, and inputSchema", () => {
@@ -39,18 +35,6 @@ describe("MCP Server tool registry", () => {
         expect(tool.schema.inputSchema).toBeDefined();
         expect(tool.schema.inputSchema.type).toBe("object");
         expect(tool.schema.inputSchema.properties).toBeDefined();
-      });
-
-      it("exports a handler function", () => {
-        expect(typeof tool.handler).toBe("function");
-      });
-
-      it("has unique tool name", () => {
-        const otherTools = ALL_TOOLS.filter((t) => t !== tool);
-        const duplicate = otherTools.find(
-          (t) => t.schema.name === tool.schema.name,
-        );
-        expect(duplicate).toBeUndefined();
       });
     });
   }

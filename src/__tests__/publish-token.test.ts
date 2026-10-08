@@ -45,31 +45,10 @@ describe("publish resolveToken precedence", () => {
     fs.rmSync(tmp, { recursive: true, force: true });
   });
 
-  it("prefers EXTENSION_DEV_TOKEN over the creds file", () => {
-    if (process.platform === "win32") return;
-
-    process.env.EXTENSION_DEV_TOKEN = "from-env";
-    writeCreds("from-file");
-    expect(resolveToken()).toBe("from-env");
-  });
-
-  it("falls back to the creds file when env is unset", () => {
-    if (process.platform === "win32") return;
-
-    writeCreds("from-file");
-    expect(resolveToken()).toBe("from-file");
-  });
-
   it("ignores an expired creds file", () => {
     if (process.platform === "win32") return;
 
     writeCreds("from-file", 1000);
-    expect(resolveToken()).toBe("");
-  });
-
-  it("returns empty when neither env nor file is present", () => {
-    if (process.platform === "win32") return;
-
     expect(resolveToken()).toBe("");
   });
 

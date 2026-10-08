@@ -11,7 +11,6 @@ import { resetBatchCreateSessions } from "../lib/project-create-batch";
 import {
   DEFAULT_SERVER_OPTIONS,
   FEATURE_GROUPS,
-  TOOL_POLICY,
   disabledToolEnvelope,
   pinProjectArgs,
   type ServerOptions,
@@ -113,14 +112,6 @@ afterEach(() => {
 });
 
 describe("a batch sits in the same policy row as its single twin", () => {
-  it("adds no tool: the list is an input of the two tools that already exist", () => {
-    expect(TOOL_POLICY.extension_project_create?.group).toBe("platform");
-    expect(TOOL_POLICY.extension_auth?.group).toBe("platform");
-    expect(TOOL_POLICY.extension_project_create?.ships).toBeUndefined();
-    expect(TOOL_POLICY.extension_auth?.ships).toBeUndefined();
-    expect(Object.keys(TOOL_POLICY).filter((name) => /batch/i.test(name))).toEqual([]);
-  });
-
   it("is refused with its twin when the platform group is off", async () => {
     const client = await connected({ features: ["local"], noShip: false });
 

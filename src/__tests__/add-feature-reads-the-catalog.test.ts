@@ -11,6 +11,7 @@ import type * as TemplatesCacheModule from "../lib/templates-cache";
 
 type Row = { slug: string; surfaces?: string[]; uiFramework?: string; keyFiles?: string[]; files?: string[] };
 const rows = (snapshot as { templates: Row[] }).templates;
+
 vi.mock("../lib/templates-cache", async (importOriginal) => {
   const actual = await importOriginal<typeof TemplatesCacheModule>();
 
@@ -43,6 +44,7 @@ describe("list additions merge with the manifest's own values", () => {
   it("keeps existing permissions beside sidePanel instead of replacing them on Chromium", async () => {
     const root = project({ manifest_version: 3, name: "x", version: "1.0", permissions: ["storage", "tabs"] });
     const out = JSON.parse(await addFeature.handler({ projectPath: root, feature: "sidebar", framework: "vanilla" }));
+
     expect(out.value.manifestUpdates["chromium:permissions"]).toEqual(["storage", "tabs", "sidePanel"]);
     expect(out.value.manifestMerged).toEqual(["chromium:permissions"]);
     expect(out.value.manifestConflicts).not.toContain("chromium:permissions");
@@ -52,6 +54,7 @@ describe("list additions merge with the manifest's own values", () => {
   it("merges with the prefixed key when the manifest already uses one", async () => {
     const root = project({ manifest_version: 3, name: "x", version: "1.0", "chromium:permissions": ["storage"], permissions: ["tabs"] });
     const out = JSON.parse(await addFeature.handler({ projectPath: root, feature: "sidebar", framework: "vanilla" }));
+
     expect(out.value.manifestUpdates["chromium:permissions"]).toEqual(["storage", "sidePanel"]);
   });
 });
@@ -62,8 +65,11 @@ describe("the catalog is read for every surface", () => {
 
     for (const feature of ["devtools", "options"]) {
       const out = JSON.parse(await addFeature.handler({ projectPath: root, feature }));
+
       expect(out.value.referenceTemplate, feature).toBeDefined();
+
       const row = rows.find((t) => t.slug === out.value.referenceTemplate.slug);
+
       expect(row?.surfaces, feature).toContain(feature);
       expect(out.value.instructions.join("\n")).toMatch(/Reference template source/);
       expect(out.value.instructions.join("\n")).not.toMatch(/No catalog template ships this surface yet/);

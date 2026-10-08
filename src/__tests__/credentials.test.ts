@@ -101,7 +101,7 @@ describe("credentials store", () => {
   it("rejects an unknown version", () => {
     const file = credentialsPath();
     fs.mkdirSync(path.dirname(file), { recursive: true });
-    fs.writeFileSync(file, JSON.stringify({ version: 2, token: "x" }));
+    fs.writeFileSync(file, JSON.stringify({ version: 3, token: "x" }));
     expect(readCredentials()).toBeNull();
   });
 

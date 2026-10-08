@@ -229,7 +229,6 @@ describe("compareVersions follows semver precedence on real engine shapes", () =
   });
 
   it("orders numeric identifiers that collide as doubles", () => {
-    expect(Number("9007199254740993") - Number("9007199254740992")).toBe(0);
     expect(
       cmp("4.0.19-canary.9007199254740993", "4.0.19-canary.9007199254740992"),
     ).toBeGreaterThan(0);
@@ -479,7 +478,7 @@ describe("an engine that answers capabilities is judged from its own roster", ()
     expect(buildCalls()[0]).toContain("--output");
   });
 
-  it("answers resolvedEngineVersion from the envelope's own version", async () => {
+  it("answers the version from the envelope's own version", async () => {
     const dir = projectWithLocalEngine();
     cliResponder = engineWithCapabilities("4.0.20", {
       code: 0,
@@ -487,7 +486,7 @@ describe("an engine that answers capabilities is judged from its own roster", ()
       stderr: "",
     });
 
-    const version = await engineVersion.resolvedEngineVersion(dir);
+    const { version } = await engineVersion.resolvedEngineFacts(dir);
 
     expect(version).toBe("4.0.20");
     expect(capabilityCalls()).toHaveLength(1);
@@ -654,14 +653,14 @@ describe("the verdict is cached so a build does not pay for a probe", () => {
     persistSummary(dir, { browser: "chrome", size: 1234, warnings: [] });
     cliResponder = engine("4.0.16", { code: 0, stdout: "", stderr: "" });
 
-    await engineVersion.resolvedEngineVersion(dir);
+    await engineVersion.resolvedEngineFacts(dir);
     expect(probeCalls()).toHaveLength(1);
 
     const realNow = Date.now;
     Date.now = () => realNow() + 61_000;
 
     try {
-      await engineVersion.resolvedEngineVersion(dir);
+      await engineVersion.resolvedEngineFacts(dir);
     } finally {
       Date.now = realNow;
     }
@@ -679,7 +678,7 @@ describe("the verdict is cached so a build does not pay for a probe", () => {
       ),
     ).dependencies["extension-develop"];
 
-    const version = await engineVersion.resolvedEngineVersion(dir);
+    const { version } = await engineVersion.resolvedEngineFacts(dir);
 
     expect(probeCalls()).toHaveLength(0);
     expect(version).toBe(pinned);

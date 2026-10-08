@@ -100,6 +100,3 @@ export function readRememberedCarriers(): { carriers: string[]; unreadable: stri
   };
 }
 
-export function rememberedCarriers(): string[] {
-  return readRememberedCarriers().carriers;
-}
