@@ -42,7 +42,7 @@ const RDP_ACTOR_NOTE =
 export const schema = {
   name: "extension_dom_snapshot",
   description:
-    "Take a shallow structured DOM snapshot of one chosen surface through the agent bridge (localhost only; the snapshot itself needs no CDP, but listTargets and `tabUrl` resolution ask the browser directly and need the session's debug port: CDP page targets on Chromium, RDP tab descriptors on Firefox): element counts, extension roots, open shadow roots, optional byte-capped HTML, and optional recent console lines. This is the SURFACE PICKER: the only tool that reads an open extension surface by name (`context`: popup, options, sidebar, devtools) or an override page, the only one that takes a numeric chrome.tabs id, and the only one that enumerates what is open (listTargets for CDP targetIds and RDP tab actors, listTabs for numeric tab ids). An ambiguous `tabUrl` returns the candidates instead of guessing. It does not pierce closed shadow roots, run selector probes, or navigate: use extension_inspect for those, and for a deep read of an already-open web page. Start the session with allowControl:true (extension_dev).",
+    "Take a shallow structured DOM snapshot of one chosen surface through the agent bridge (localhost only; the snapshot itself needs no CDP, but listTargets and `tabUrl` resolution ask the browser directly and need the session's debug port: CDP page targets on Chromium, RDP tab descriptors on Firefox): element counts, extension roots, open shadow roots, optional byte-capped HTML, and optional recent console lines. This is the SURFACE PICKER: the only tool that reads an open extension surface by name (`context`: popup, options, sidebar, devtools) or an override page, the only one that takes a numeric chrome.tabs id, and the only one that enumerates what is open (listTargets for CDP targetIds and RDP tab actors, listTabs for numeric tab ids). An ambiguous `tabUrl` returns the candidates instead of guessing. It does not pierce closed shadow roots, run selector probes, or navigate: use extension_inspect for those, and for a deep read of an already-open web page. Rides the dev session's control channel, on unless extension_dev was called with allowControl:false.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -284,7 +284,7 @@ export async function handler(
             name: "RdpError",
             message: `Could not list tab targets over RDP: ${e instanceof Error ? e.message : String(e)}`,
           },
-          hint: "Confirm the session is ready (extension_wait), then retry. listTabs: true is the bridge alternative (needs allowControl).",
+          hint: "Confirm the session is ready (extension_wait), then retry. listTabs: true is the bridge alternative (rides the control channel, on unless the session was started with allowControl: false).",
         });
       }
     }

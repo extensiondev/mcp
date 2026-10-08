@@ -204,7 +204,7 @@ describe("extension_dev health tick", () => {
       return cli;
     };
 
-    const result = JSON.parse(await dev.handler({ wait: false, projectPath: project, allowControl: true }));
+    const result = JSON.parse(await dev.handler({ wait: false, projectPath: project }));
     expect(result.status).toBe("started");
     expect(result.value.capabilities.controlChannel).toMatchObject({ requested: true, port: null, unavailableReason: "EADDRINUSE 43210" });
     expect(result.hint).toMatch(/reports no control port \(EADDRINUSE 43210\)/);

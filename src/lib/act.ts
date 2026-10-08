@@ -24,9 +24,9 @@ export function toMcpSpeak(text: string): string {
     text
       .replace(
         /`?extension dev(?: [^\s`]*)? --browser[= ]([\w-]+) --allow-control`?/g,
-        'extension_dev with { browser: "$1", allowControl: true }',
+        'extension_dev with { browser: "$1" } (its control channel is on unless allowControl: false)',
       )
-      .replace(/--allow-control/g, "allowControl: true (extension_dev)")
+      .replace(/--allow-control/g, "allowControl (on by default on extension_dev, off only with allowControl: false)")
       .replace(/--allow-eval/g, "allowEval: true (extension_dev)")
       .replace(
         /Use --context page --tab <id>/g,
@@ -98,7 +98,7 @@ function withSessionContext(
 
   return `${message} Active session browser(s) for this project: ${running.join(
     ", ",
-  )}, pass that as \`browser\`, or restart it via extension_dev with allowControl: true if the control channel is off.`;
+  )}, pass that as \`browser\`, or restart it via extension_dev without allowControl: false if the control channel is off.`;
 }
 
 function browserFlag(args: string[]): string | undefined {

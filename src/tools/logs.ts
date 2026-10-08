@@ -349,7 +349,7 @@ export function controlRefusal(
       code: "E_NO_CONTROL_CHANNEL",
       status: "control-channel-unavailable",
       message: `${preamble} That code is what the pinned broker sends a CONTROLLER when the session runs without allowControl; this reader dialed as a consumer, which that broker never refuses this way, so the engine in this project closes consumers on a rule the pin does not have. Nothing is known about the session's logs from this read.`,
-      hint: "Read the file instead by calling extension_logs without follow, and compare the engine versions with extension_doctor; if the project's engine is the pin, relaunch the session with extension_dev and allowControl: true.",
+      hint: "Read the file instead by calling extension_logs without follow, and compare the engine versions with extension_doctor; if the project's engine is the pin, relaunch the session with extension_dev without allowControl: false.",
     };
   }
 

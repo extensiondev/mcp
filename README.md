@@ -184,7 +184,7 @@ On with `--features=local,platform`, the 9 that reach the extension.dev platform
 | platform | `extension_submit` | Submit for store review: Chrome, Firefox, Edge and Safari, through extension.dev |
 | platform | `extension_release_status` | Read release channels, recent builds, and store submission and review state |
 
-`extension_dev` is the only tool that unlocks the act tools: `allowControl: true` for `extension_storage`, `extension_reload`, `extension_open` and `extension_dom_snapshot`; `allowEval: true` for `extension_eval` (it implies `allowControl`). A session started without a gate does not grow one on a second call: call `extension_dev` again with the flag you need plus `replace: true`, which stops the first session.
+A dev session carries the control channel that `extension_storage`, `extension_reload`, `extension_open` and `extension_dom_snapshot` ride: it is local, same machine, same user, and on unless `extension_dev` is called with `allowControl: false`. `extension_eval` is the one gate that stays off until `allowEval: true` is passed on `extension_dev` (it implies control). A session does not change its gates on a second call: call `extension_dev` again with what you need plus `replace: true`, which stops the first session.
 
 ## Asserting instead of guessing
 
@@ -205,7 +205,7 @@ Every other tool hands back a reading. `extension_assert` states the expectation
 }
 ```
 
-Each check comes back `pass`, `fail` or `inconclusive`, and the run passes only when every check passed. `inconclusive` means this platform cannot cover the question today, and the check carries `settledBy` naming the evidence that would answer it: a content script passes only on a line it wrote itself, "no console errors" over a session that never built is inconclusive, and a read the session refuses (`chrome.storage` without `allowControl`) is inconclusive rather than a failure.
+Each check comes back `pass`, `fail` or `inconclusive`, and the run passes only when every check passed. `inconclusive` means this platform cannot cover the question today, and the check carries `settledBy` naming the evidence that would answer it: a content script passes only on a line it wrote itself, "no console errors" over a session that never built is inconclusive, and a read the session refuses (`chrome.storage` on a session started with `allowControl: false`) is inconclusive rather than a failure.
 
 ## Safari
 

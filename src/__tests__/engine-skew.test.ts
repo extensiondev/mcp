@@ -211,7 +211,7 @@ describe("older engine, different control envelope", () => {
       expect(refusal?.hint).not.toMatch(/Update the project's Extension\.js/);
     });
 
-    it("reads 4003 as a session started without allowControl", () => {
+    it("reads 4003 as a session started with allowControl: false", () => {
       const refusal = controlRefusal(
         CLOSE_CONTROL_UNAVAILABLE,
         "control channel not available",
@@ -220,7 +220,7 @@ describe("older engine, different control envelope", () => {
       );
       expect(refusal?.code).toBe("E_NO_CONTROL_CHANNEL");
       expect(refusal?.status).toBe("control-channel-unavailable");
-      expect(refusal?.hint).toMatch(/allowControl: true/);
+      expect(refusal?.hint).toMatch(/without allowControl: false/);
       expect(refusal?.hint).not.toMatch(/Update the project's Extension\.js/);
     });
 

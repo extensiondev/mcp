@@ -82,7 +82,7 @@ function sightedContractBrowser(projectPath: string): string | null {
 export const schema = {
   name: "extension_doctor",
   description:
-    "Diagnose a dev session end to end: ready contract, dev-server process, control-port agreement, control channel, eval token, executor, browser liveness. This returns one {check, status, detail, remediation?} per leg, in dependency order. Read a 'skip' as blocked, not as a pass: it names the check that blocked it. A session started without allowControl comes back ok:true with status 'read-only', not as an error: its control channel is off by choice. Run this first when any act tool (storage, reload, eval, open) errors unexpectedly. Call it with no projectPath for a pre-flight environment check (node, the Extension.js CLI, the template cache) before any project exists.",
+    "Diagnose a dev session end to end: ready contract, dev-server process, control-port agreement, control channel, eval token, executor, browser liveness. This returns one {check, status, detail, remediation?} per leg, in dependency order. Read a 'skip' as blocked, not as a pass: it names the check that blocked it. A session started with allowControl: false comes back ok:true with status 'read-only', not as an error: its control channel is off by choice. Run this first when any act tool (storage, reload, eval, open) errors unexpectedly. Call it with no projectPath for a pre-flight environment check (node, the Extension.js CLI, the template cache) before any project exists.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -462,7 +462,7 @@ export async function handler(args: {
       readOnlyLeg.status = "warn";
       readOnlyLeg.detail = `read-only by choice: ${readOnlyLeg.detail}`;
       readOnlyLeg.remediation =
-        "Nothing failed. To unlock the control verbs, call extension_dev again with allowControl: true (or allowEval: true) plus replace: true, which stops this session first; a plain second call is refused so the session does not fork.";
+        "Nothing failed. To unlock the control verbs, call extension_dev again without allowControl: false (allowEval: true for eval as well) plus replace: true, which stops this session first; a plain second call is refused so the session does not fork.";
     }
 
     return envelope({
@@ -477,7 +477,7 @@ export async function handler(args: {
       },
       ...(readOnly
         ? {
-            hint: "This session is read-only because it was started without allowControl, not because anything is wrong: logs, inspect, wait and doctor all work, while storage, reload, open, dom_snapshot and eval stay locked.",
+            hint: "This session is read-only because it was started with allowControl: false, not because anything is wrong: logs, inspect, wait and doctor all work, while storage, reload, open, dom_snapshot and eval stay locked.",
           }
         : {}),
     });

@@ -211,7 +211,7 @@ export async function navigateToUrlViaBridge(
           ? verbFrame
           : {
               ...verbFrame,
-              hint: "URL navigation rides the agent bridge, so the dev session must be started with allowControl: true (extension_dev).",
+              hint: "URL navigation rides the agent bridge, so the dev session needs its control channel: start it with extension_dev without allowControl: false.",
             },
       );
     }

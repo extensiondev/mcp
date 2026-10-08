@@ -16,7 +16,7 @@ export interface ToolDocsMeta {
 
 const NONE = "none";
 const SESSION = "a live dev or start session";
-const CONTROL = "a session started with allowControl: true on extension_dev";
+const CONTROL = "a dev session, which carries control unless started with allowControl: false";
 const EVAL = "a session started with allowEval: true on extension_dev";
 const PLATFORM = "the server started with --features=local,platform";
 const LOGIN = `${PLATFORM}, and a login`;

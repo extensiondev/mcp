@@ -195,7 +195,7 @@ https://github.com/extension-js/examples/tree/main/examples/<slug>/src
 
 Two ways to see inside a running extension. Both need an active dev session.
 
-**Agent bridge (CDP-free, localhost): `extension inspect`.** Requires the session to be started with `--allow-control` (or `allowControl: true` on the `extension_dev` MCP tool). Sees open shadow roots but not closed ones.
+**Agent bridge (CDP-free, localhost): `extension inspect`.** Needs the control channel: `--allow-control` on the CLI; an `extension_dev` MCP session carries it unless started with `allowControl: false`. Sees open shadow roots but not closed ones.
 
 ```bash
 # Structured summary of the content-script DOM in a tab
@@ -254,7 +254,7 @@ npm run dev -- --logs info --log-url "example.com"
 - `extension dev --wait` on the CLI blocks until the ready.json contract is stamped; the `extension_dev` tool already does this, so an answer whose `ready.status` is `ready` needs no `extension_wait` after it
 - Use `npm run start` to test production builds (builds first, then launches)
 
-### Triggering events without clicking (requires `--allow-control`)
+### Triggering events without clicking (needs the control channel: `--allow-control` on the CLI, on by default on `extension_dev`)
 
 - `extension open action`, fire the toolbar action (opens its popup, or replays `chrome.action.onClicked`).
 - `extension open command --name <cmd>`, replay a `chrome.commands.onCommand` keyboard shortcut.

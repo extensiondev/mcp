@@ -49,7 +49,7 @@ const REUSED_PROFILE_NOTE =
 export const schema = {
   name: "extension_dev",
   description:
-    "Run the extension while you edit it: dev build, hot module replacement, and a browser with the extension loaded. Reach for this first when the ask is \"run my extension\": by default it waits for the session to be ready and answers with the readiness and the first log lines, so one call covers the ask; pass wait:false to return as soon as the server is spawned. ONLY this tool unlocks the control channel that extension_storage, extension_reload, extension_open and extension_dom_snapshot need (allowControl:true) and the eval channel that extension_eval needs (allowEval:true, which implies allowControl, so you never need to pass both). Use extension_start instead to run the production build in a browser. When the answer's ready.status is \"ready\" the session is up and nothing else needs calling before extension_logs, extension_inspect or the control verbs; extension_wait is only for wait:false, an answer whose ready.status was not ready, or a build-only session.",
+    "Run the extension while you edit it: dev build, hot module replacement, and a browser with the extension loaded. Reach for this first when the ask is \"run my extension\": by default it waits for the session to be ready and answers with the readiness and the first log lines, so one call covers the ask; pass wait:false to return as soon as the server is spawned. A dev session carries the control channel that extension_storage, extension_reload, extension_open and extension_dom_snapshot need (local, same machine, same user) unless you pass allowControl:false; the eval channel that extension_eval needs is the one gate that stays off until you pass allowEval:true (which implies control, so you never need to pass both). Use extension_start instead to run the production build in a browser. When the answer's ready.status is \"ready\" the session is up and nothing else needs calling before extension_logs, extension_inspect or the control verbs; extension_wait is only for wait:false, an answer whose ready.status was not ready, or a build-only session.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -78,9 +78,9 @@ export const schema = {
       },
       allowControl: {
         type: "boolean",
-        default: false,
+        default: true,
         description:
-          "Enable the agent-bridge control channel that extension_storage/reload/open/dom_snapshot need",
+          "The agent-bridge control channel that extension_storage/reload/open/dom_snapshot ride (local, same machine). On unless you pass false; eval is the gate that stays off (allowEval).",
       },
       wait: {
         type: "boolean",
@@ -166,7 +166,7 @@ export async function handler(
     }
   }
 
-  const allowControl = Boolean(args.allowControl || args.allowEval);
+  const allowControl = args.allowControl !== false || Boolean(args.allowEval);
   const profileReused = profileCarriesTabsOver(
     args.projectPath,
     browser,
@@ -453,7 +453,7 @@ export async function handler(
             : control.unavailableReason
               ? `Control was requested, but the engine reports no control port (${control.unavailableReason}), so extension_${controlVerbs.split(", ").join("/extension_")} will be refused until the session is relaunched.`
               : `Control was requested; ready.json has not stamped the control port yet, so extension_wait is what confirms extension_${controlVerbs.split(", ").join("/extension_")} will work.`
-          : "Control channel is OFF: extension_storage/reload/open/dom_snapshot need allowControl: true, and extension_eval needs allowEval: true (which also implies allowControl). To unlock them, call extension_dev again with the flag you need plus replace: true (it stops this session first); a plain second call is refused so the session does not fork." 
+          : "Control channel is OFF because this session was started with allowControl: false: extension_storage/reload/open/dom_snapshot are locked, and extension_eval needs allowEval: true. To unlock them, call extension_dev again without allowControl: false (plus allowEval: true for eval) and replace: true (it stops this session first); a plain second call is refused so the session does not fork."
         } When you are done, call extension_stop to shut down the dev server and browser.`,
   });
 }

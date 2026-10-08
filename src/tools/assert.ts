@@ -603,7 +603,7 @@ async function assertBackgroundWorker(
       id,
       null,
       `The control channel did not answer on ${stage.browser}, so the background could not be asked.`,
-      "Start the session with allowControl: true (extension_dev) and extension_wait for ready, then assert again; extension_logs (context: ['background']) shows what the background wrote meanwhile.",
+      "Start the session with extension_dev (its control channel is on unless allowControl: false) and extension_wait for ready, then assert again; extension_logs (context: ['background']) shows what the background wrote meanwhile.",
     );
   }
 
@@ -819,7 +819,7 @@ async function assertSurfaceRendered(
       id,
       subject,
       `The surface relay could not be asked on ${stage.browser}: ${message.slice(0, 200)}`,
-      "Start the session with allowControl: true (extension_dev) and extension_wait for ready, then assert again.",
+      "Start the session with extension_dev (its control channel is on unless allowControl: false) and extension_wait for ready, then assert again.",
     );
   }
 
@@ -1299,7 +1299,7 @@ async function assertStorageKeyPresent(
       subject,
       `The platform refused the read, so ${subject} was never observed: ${message}`,
       (isEnvelope(frame) && typeof frame.hint === "string" && frame.hint) ||
-        "Start the session with extension_dev and allowControl: true, then assert again.",
+        "Start the session with extension_dev (its control channel is on unless allowControl: false), then assert again.",
     );
   }
 

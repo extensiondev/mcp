@@ -20,11 +20,11 @@ Debug the currently running extension dev session. The user said: $ARGUMENTS
    - Report the results in a structured way
 
    If MCP is not available:
-   - If the session was started with `--allow-control`, suggest the CLI equivalent: `npx extension inspect --tab <id> --include summary,html --with-console 20`
+   - If the session has the control channel (`--allow-control` on the CLI; an `extension_dev` session has it unless started with `allowControl: false`), suggest the CLI equivalent: `npx extension inspect --tab <id> --include summary,html --with-console 20`
    - Otherwise read `dist/extension-js/chrome/ready.json` to get the CDP port and suggest Chrome DevTools inspection
 
 3. **Exercise event handlers (when the bug is in an action / command / shortcut)**
-   If the session was started with `--allow-control`, fire the events a user would, without clicking:
+   If the session has the control channel (`--allow-control` on the CLI; an `extension_dev` session has it unless started with `allowControl: false`), fire the events a user would, without clicking:
    - `extension_open` with `surface: "action"`, triggers the toolbar action (opens its popup, or replays `chrome.action.onClicked`).
    - `extension_open` with `surface: "command"` and `name: "<cmd>"`, replays a `chrome.commands.onCommand` keyboard shortcut.
    - Then re-inspect or read `extension_logs` to see what the handler did.

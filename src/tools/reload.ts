@@ -18,7 +18,7 @@ import { resolveSessionBrowser } from "../lib/session-browser";
 export const schema = {
   name: "extension_reload",
   description:
-    "Reload a running extension's background context, or a tab. Start the session with allowControl:true (extension_dev). A background reload answers once the engine's ready.json shows the new background attached to the dev server again (value.reattached, value.reattachedMs), so the next read or assertion meets the new generation and not the gap between them; if it has not come back within the budget (timeout, at most 5 seconds) the answer is status reloading with the contract's own stamps.",
+    "Reload a running extension's background context, or a tab. Rides the dev session's control channel, on unless extension_dev was called with allowControl:false. A background reload answers once the engine's ready.json shows the new background attached to the dev server again (value.reattached, value.reattachedMs), so the next read or assertion meets the new generation and not the gap between them; if it has not come back within the budget (timeout, at most 5 seconds) the answer is status reloading with the contract's own stamps.",
   inputSchema: {
     type: "object" as const,
     properties: {

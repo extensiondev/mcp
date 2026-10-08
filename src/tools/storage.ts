@@ -18,7 +18,7 @@ import { resolveSessionBrowser } from "../lib/session-browser";
 export const schema = {
   name: "extension_storage",
   description:
-    "Read or write chrome.storage in a running extension. Every call runs in the extension's background (the engine honours no context), so it proves nothing about what a content script or page can read. A set is read back and the answer says whether the stored value matches. Start the session with allowControl:true (extension_dev). Set one key per call: there is no bulk-object set.",
+    "Read or write chrome.storage in a running extension. Every call runs in the extension's background (the engine honours no context), so it proves nothing about what a content script or page can read. A set is read back and the answer says whether the stored value matches. Rides the dev session's control channel, on unless extension_dev was called with allowControl:false. Set one key per call: there is no bulk-object set.",
   inputSchema: {
     type: "object" as const,
     properties: {

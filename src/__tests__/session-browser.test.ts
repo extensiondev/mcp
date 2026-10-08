@@ -199,13 +199,13 @@ describe("toMcpSpeak", () => {
     const cli =
       "No active control channel found for chromium. Run `extension dev --browser=chromium --allow-control` first.";
     expect(toMcpSpeak(cli)).toBe(
-      'No active control channel found for chromium. Run extension_dev with { browser: "chromium", allowControl: true } first.',
+      'No active control channel found for chromium. Run extension_dev with { browser: "chromium" } (its control channel is on unless allowControl: false) first.',
     );
   });
 
   it("rewrites bare --allow-control / --allow-eval mentions", () => {
     expect(toMcpSpeak("Is the session started with --allow-control?")).toBe(
-      "Is the session started with allowControl: true (extension_dev)?",
+      "Is the session started with allowControl (on by default on extension_dev, off only with allowControl: false)?",
     );
 
     expect(toMcpSpeak("eval requires --allow-eval")).toBe(
