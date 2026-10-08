@@ -58,6 +58,11 @@ export const migrationWarnings = [
     rules: toWarn(CORE_RULES),
   },
   {
+    name: "extensiondev/migration-warnings-js",
+    files: ["**/*.{js,jsx,mjs,cjs}"],
+    rules: toWarn(["no-unused-vars"]),
+  },
+  {
     name: "extensiondev/migration-warnings-ts",
     files: ["**/*.{ts,tsx,mts,cts}"],
     rules: toWarn(TS_RULES),
