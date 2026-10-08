@@ -102,7 +102,7 @@ Built on Extension.js 4.1.32.
   between statements, curly, banner-aware header rules, no JSDoc prose),
   consistent type imports and the migration warnings, with the React and
   Tailwind layers left out. Every source file was reformatted by the fixer;
-  no behaviour changed.
+  no behavior changed.
 - `extension_reload` of the background waits, bounded, for the engine's
   `ready.json` to stamp the executor detached and attached again, and
   reports `reattachedMs`, `detachedAt` and `attachedTs`; when the new
