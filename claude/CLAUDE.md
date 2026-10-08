@@ -155,6 +155,16 @@ export default {
 5. **Asset imports.** Import images/fonts directly in your code. The build system handles bundling.
 6. **CSS Modules.** Use `*.module.css` / `*.module.scss`. Never use the `?url` suffix for CSS module imports, it breaks class name hashing.
 
+## Answering questions about extension APIs
+
+A question about a WebExtension API, a manifest key or a browser difference
+("does Firefox support the side panel API?", "why is my service worker
+losing state?") is answered from the docs, not from memory: call
+`extension_docs_search` first, cite the page it returned, and only when it
+returns nothing answer from what you know and say so. The search covers the
+Extension.js docs and the extension.dev docs, which carry the per-browser
+facts and the engine's own conventions.
+
 ## When creating new extensions
 
 1. Check if an existing template matches the use case (see template catalog above)

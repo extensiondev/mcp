@@ -65,7 +65,7 @@ describe("spawn failure never registers a phantom session", () => {
   it("extension_dev fails the call with E_CLI and registers nothing", async () => {
     const project = tmpProject();
 
-    const result = JSON.parse(await dev.handler({ projectPath: project }));
+    const result = JSON.parse(await dev.handler({ wait: false, projectPath: project }));
 
     expect(result.ok).toBe(false);
     expect(result.status).toBe("spawn-failed");

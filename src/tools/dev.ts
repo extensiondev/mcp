@@ -35,6 +35,8 @@ import {
   liveProjectSessions,
 } from "../lib/session-browser";
 import { stopOne } from "./stop";
+import { handler as waitHandler } from "./wait";
+import { handler as logsHandler } from "./logs";
 import {
   LAUNCH_FLAG_SCHEMA,
   launchFlagArgs,
@@ -47,7 +49,7 @@ const REUSED_PROFILE_NOTE =
 export const schema = {
   name: "extension_dev",
   description:
-    "Run the extension while you edit it: dev build, hot module replacement, and a browser with the extension loaded. Reach for this first when the ask is \"run my extension\". ONLY this tool unlocks the control channel that extension_storage, extension_reload, extension_open and extension_dom_snapshot need (allowControl:true) and the eval channel that extension_eval needs (allowEval:true, which implies allowControl, so you never need to pass both). Use extension_start instead to run the production build in a browser. The result carries the process info that extension_wait and extension_inspect need.",
+    "Run the extension while you edit it: dev build, hot module replacement, and a browser with the extension loaded. Reach for this first when the ask is \"run my extension\": by default it waits for the session to be ready and answers with the readiness and the first log lines, so one call covers the ask; pass wait:false to return as soon as the server is spawned. ONLY this tool unlocks the control channel that extension_storage, extension_reload, extension_open and extension_dom_snapshot need (allowControl:true) and the eval channel that extension_eval needs (allowEval:true, which implies allowControl, so you never need to pass both). Use extension_start instead to run the production build in a browser. The result carries the process info that extension_wait and extension_inspect need.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -80,6 +82,12 @@ export const schema = {
         description:
           "Enable the agent-bridge control channel that extension_storage/reload/open/dom_snapshot need",
       },
+      wait: {
+        type: "boolean",
+        default: true,
+        description:
+          "Wait for the session to be ready before answering (the same contract extension_wait reads, up to 45s) and include the first log lines. false returns as soon as the server is spawned; call extension_wait and extension_logs yourself then.",
+      },
       allowEval: {
         type: "boolean",
         default: false,
@@ -101,6 +109,7 @@ export async function handler(
     replace?: boolean;
     allowControl?: boolean;
     allowEval?: boolean;
+    wait?: boolean;
   } & LaunchFlagArgs,
 ): Promise<string> {
   const browser = args.browser ?? "chrome";
@@ -399,6 +408,9 @@ export async function handler(
         ? "Port 0 asked the engine for any free port, and it has not stamped its ready.json contract yet, so the port it picked is not known at response time. extension_wait reports it from that contract once it lands."
         : "The engine has not stamped its ready.json contract yet, so the bound port is not known at response time (a taken port makes the server bind the next free one). extension_wait reports the bound port from that contract once it lands; requestedPort above is only what was asked for.";
 
+  const readiness =
+    args.wait === false || args.noBrowser ? null : await awaitReadyAndFirstLogs(args.projectPath, browser);
+
   return envelope({
     ok: true,
     command: schema.name,
@@ -407,6 +419,7 @@ export async function handler(
       pid,
       browser,
       ...portReport,
+      ...(readiness ?? {}),
       projectPath: args.projectPath,
       ...(replaced.length > 0
         ? {
@@ -436,4 +449,21 @@ export async function handler(
           : "Control channel is OFF: extension_storage/reload/open/dom_snapshot need allowControl: true, and extension_eval needs allowEval: true (which also implies allowControl). To unlock them, call extension_dev again with the flag you need plus replace: true (it stops this session first); a plain second call is refused so the session does not fork." 
         } When you are done, call extension_stop to shut down the dev server and browser.`,
   });
+}
+
+async function awaitReadyAndFirstLogs(projectPath: string, browser: string) {
+  const ready = JSON.parse(await waitHandler({ projectPath, browser, timeoutMs: 45_000 })) as {
+    status: string;
+    value?: Record<string, unknown>;
+  };
+  const logs = JSON.parse(await logsHandler({ projectPath, browser, limit: 20 })) as {
+    ok: boolean;
+    status: string;
+    value?: Record<string, unknown>;
+  };
+
+  return {
+    ready: { status: ready.status, ...(ready.value ?? {}) },
+    firstLogs: logs.ok ? (logs.value ?? {}) : { status: logs.status },
+  };
 }

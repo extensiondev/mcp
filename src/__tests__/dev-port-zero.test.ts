@@ -97,7 +97,7 @@ describe("extension_dev with port 0 asks for any free port, which is never a col
       return cli;
     };
 
-    const result = JSON.parse(await dev.handler({ projectPath: project, port: 0 }));
+    const result = JSON.parse(await dev.handler({ wait: false, projectPath: project, port: 0 }));
 
     expect(result.ok).toBe(true);
     expect(result.value.port).toBe(53753);
@@ -126,7 +126,7 @@ describe("extension_dev with port 0 asks for any free port, which is never a col
       return cli;
     };
 
-    const result = JSON.parse(await dev.handler({ projectPath: project, port: 8080 }));
+    const result = JSON.parse(await dev.handler({ wait: false, projectPath: project, port: 8080 }));
 
     expect(result.warnings.join(" ")).toContain("Requested port 8080 was not available");
   }, 20_000);
@@ -136,7 +136,7 @@ describe("extension_dev with port 0 asks for any free port, which is never a col
     nextChild = () =>
       fakeCli('console.log("ready in 300ms"); setTimeout(()=>{}, 60000);');
 
-    const result = JSON.parse(await dev.handler({ projectPath: project, port: 0 }));
+    const result = JSON.parse(await dev.handler({ wait: false, projectPath: project, port: 0 }));
 
     expect(result.ok).toBe(true);
     expect(result.value.requestedPort).toBe(0);

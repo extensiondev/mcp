@@ -91,7 +91,7 @@ Create a browser extension project from a template in the extension.dev catalog.
 
 ## extension_dev
 
-Run the extension while you edit it: dev build, hot module replacement, and a browser with the extension loaded. Reach for this first when the ask is "run my extension". ONLY this tool unlocks the control channel that extension_storage, extension_reload, extension_open and extension_dom_snapshot need (allowControl:true) and the eval channel that extension_eval needs (allowEval:true, which implies allowControl, so you never need to pass both). Use extension_start instead to run the production build in a browser. The result carries the process info that extension_wait and extension_inspect need.
+Run the extension while you edit it: dev build, hot module replacement, and a browser with the extension loaded. Reach for this first when the ask is "run my extension": by default it waits for the session to be ready and answers with the readiness and the first log lines, so one call covers the ask; pass wait:false to return as soon as the server is spawned. ONLY this tool unlocks the control channel that extension_storage, extension_reload, extension_open and extension_dom_snapshot need (allowControl:true) and the eval channel that extension_eval needs (allowEval:true, which implies allowControl, so you never need to pass both). Use extension_start instead to run the production build in a browser. The result carries the process info that extension_wait and extension_inspect need.
 
 | input | type | required | default | description |
 | --- | --- | --- | --- | --- |
@@ -109,6 +109,7 @@ Run the extension while you edit it: dev build, hot module replacement, and a br
 | `extensions` | array of string | no |  | Extra extension paths or store URLs to load alongside the project |
 | `replace` | boolean | no | `false` | Stop the live session for this projectPath first, reported as replacedSession. Without it a second call is refused rather than forking: two sessions fight over one profile and the newer browser dies on the lock. |
 | `allowControl` | boolean | no | `false` | Enable the agent-bridge control channel that extension_storage/reload/open/dom_snapshot need |
+| `wait` | boolean | no | `true` | Wait for the session to be ready before answering (the same contract extension_wait reads, up to 45s) and include the first log lines. false returns as soon as the server is spawned; call extension_wait and extension_logs yourself then. |
 | `allowEval` | boolean | no | `false` | Enable extension_eval (runs code in a context; writes a 0600 session token). Implies allowControl, so you never need to pass both. |
 
 ## extension_docs_search

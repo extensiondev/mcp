@@ -48,6 +48,35 @@ vi.mock("../lib/exec", async (importOriginal) => {
   };
 });
 
+const waitCalls: Array<Record<string, unknown>> = [];
+const logsCalls: Array<Record<string, unknown>> = [];
+
+vi.mock("../tools/wait", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../tools/wait")>();
+
+  return {
+    ...actual,
+    handler: async (args: Record<string, unknown>) => {
+      waitCalls.push(args);
+
+      return JSON.stringify({ ok: true, status: "ready", value: { compiled: true, browserAttached: true, guestLoaded: true } });
+    },
+  };
+});
+
+vi.mock("../tools/logs", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../tools/logs")>();
+
+  return {
+    ...actual,
+    handler: async (args: Record<string, unknown>) => {
+      logsCalls.push(args);
+
+      return JSON.stringify({ ok: true, status: "ok", value: { count: 2, lines: ["[background] hello", "[newtab] hello"] } });
+    },
+  };
+});
+
 const dev = await import("../tools/dev");
 const stop = await import("../tools/stop");
 const { registerSession, removeSession, listSessionMarkers } = await import(
@@ -140,7 +169,7 @@ describe("extension_dev fork guard", () => {
     await new Promise((r) => setTimeout(r, 200));
     registerSession({ pid: stranger.pid!, browser: "chrome", projectPath: project, command: "dev" });
 
-    const result = JSON.parse(await dev.handler({ projectPath: project }));
+    const result = JSON.parse(await dev.handler({ wait: false, projectPath: project }));
 
     expect(result.status).not.toBe("session-exists");
   });
@@ -150,7 +179,7 @@ describe("extension_dev fork guard", () => {
     const pid = spawnVictim();
     registerSession({ pid, browser: "chrome", projectPath: project, command: "dev" });
 
-    const result = JSON.parse(await dev.handler({ projectPath: project }));
+    const result = JSON.parse(await dev.handler({ wait: false, projectPath: project }));
 
     expect(result.ok).toBe(false);
     expect(result.status).toBe("session-exists");
@@ -161,12 +190,33 @@ describe("extension_dev fork guard", () => {
     expect(isAlive(pid)).toBe(true);
   });
 
+  it("answers with the readiness and the first logs by default, from the wait and logs tools", async () => {
+    const project = tmpProject();
+    const result = JSON.parse(await dev.handler({ projectPath: project }));
+
+    expect(result.ok).toBe(true);
+    expect(result.status).toBe("started");
+    expect(result.value.ready).toMatchObject({ status: "ready", browserAttached: true });
+    expect(result.value.firstLogs).toMatchObject({ count: 2 });
+    expect(waitCalls).toEqual([{ projectPath: project, browser: "chrome", timeoutMs: 45_000 }]);
+    expect(logsCalls).toEqual([{ projectPath: project, browser: "chrome", limit: 20 }]);
+  });
+
+  it("returns as soon as the server is spawned with wait: false", async () => {
+    const project = tmpProject();
+    const result = JSON.parse(await dev.handler({ wait: false, projectPath: project }));
+
+    expect(result.status).toBe("started");
+    expect(result.value.ready).toBeUndefined();
+    expect(result.value.firstLogs).toBeUndefined();
+  });
+
   it("also sees a live session recorded only in the ready.json contract", async () => {
     const project = tmpProject();
     const pid = spawnVictim();
     writeReadyContract(project, "chrome", pid);
 
-    const result = JSON.parse(await dev.handler({ projectPath: project }));
+    const result = JSON.parse(await dev.handler({ wait: false, projectPath: project }));
 
     expect(result.ok).toBe(false);
     expect(result.status).toBe("session-exists");
@@ -181,7 +231,7 @@ describe("extension_dev fork guard", () => {
       fakeCli('console.log("ready in 300ms"); setTimeout(()=>{}, 60000);');
 
     const result = JSON.parse(
-      await dev.handler({ projectPath: project, replace: true }),
+      await dev.handler({ wait: false, projectPath: project, replace: true }),
     );
 
     expect(result.ok).toBe(true);
@@ -206,7 +256,7 @@ describe("extension_dev replace:true believes the stop, not its own request", ()
     });
 
     try {
-      const result = JSON.parse(await dev.handler({ projectPath: project, replace: true }));
+      const result = JSON.parse(await dev.handler({ wait: false, projectPath: project, replace: true }));
 
       expect(result.ok).toBe(false);
       expect(result.status).toBe("replace-failed");
@@ -228,7 +278,7 @@ describe("extension_dev exit cleanup", () => {
     const project = tmpProject();
     nextChild = () => fakeCli('console.log("boot"); process.exit(1);');
 
-    const result = JSON.parse(await dev.handler({ projectPath: project }));
+    const result = JSON.parse(await dev.handler({ wait: false, projectPath: project }));
 
     expect(result.status).toBe("exited");
     await new Promise((r) => setTimeout(r, 200));
@@ -250,7 +300,7 @@ describe("extension_dev browser leg health", () => {
       return cli;
     };
 
-    const result = JSON.parse(await dev.handler({ projectPath: project }));
+    const result = JSON.parse(await dev.handler({ wait: false, projectPath: project }));
 
     expect(result.ok).toBe(false);
     expect(result.status).toBe("browser-exited");
@@ -269,7 +319,7 @@ describe("extension_dev browser leg health", () => {
         'console.log("Failed to create a ProcessSingleton for your profile directory"); setTimeout(()=>{}, 60000);',
       );
 
-    const result = JSON.parse(await dev.handler({ projectPath: project }));
+    const result = JSON.parse(await dev.handler({ wait: false, projectPath: project }));
 
     expect(result.ok).toBe(false);
     expect(result.status).toBe("profile-locked");

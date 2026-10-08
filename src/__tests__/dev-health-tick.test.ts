@@ -91,7 +91,7 @@ describe("extension_dev health tick", () => {
         'console.error("Error: listen EADDRINUSE: address already in use :::8080"); process.exit(1);',
       );
 
-    const result = JSON.parse(await dev.handler({ projectPath: project }));
+    const result = JSON.parse(await dev.handler({ wait: false, projectPath: project }));
 
     expect(result.schema).toBe(1);
     expect(result.command).toBe("extension_dev");
@@ -107,7 +107,7 @@ describe("extension_dev health tick", () => {
     const project = tmpProject();
     nextChild = () => fakeCli("process.kill(process.pid, 'SIGKILL')");
 
-    const result = JSON.parse(await dev.handler({ projectPath: project }));
+    const result = JSON.parse(await dev.handler({ wait: false, projectPath: project }));
 
     expect(result.ok).toBe(false);
     expect(result.status).toBe("exited");
@@ -143,7 +143,7 @@ describe("extension_dev health tick", () => {
       return cli;
     };
 
-    const result = JSON.parse(await dev.handler({ projectPath: project }));
+    const result = JSON.parse(await dev.handler({ wait: false, projectPath: project }));
 
     expect(result.ok).toBe(false);
     expect(result.status).toBe("compile-failed");
@@ -168,7 +168,7 @@ describe("extension_dev health tick", () => {
       return cli;
     };
 
-    const result = JSON.parse(await dev.handler({ projectPath: project }));
+    const result = JSON.parse(await dev.handler({ wait: false, projectPath: project }));
 
     expect(result.ok).toBe(false);
     expect(result.status).toBe("boot-failed");
@@ -185,7 +185,7 @@ describe("extension_dev health tick", () => {
     nextChild = () =>
       fakeCli('console.error("HEADLINE " + "x".repeat(3000)); process.exit(1);');
 
-    const result = JSON.parse(await dev.handler({ projectPath: project }));
+    const result = JSON.parse(await dev.handler({ wait: false, projectPath: project }));
     expect(result.status).toBe("exited");
     expect(result.value.output.length).toBe(2000);
     expect(result.value.outputTruncated).toMatchObject({ shown: 2000, kept: "head" });
@@ -204,7 +204,7 @@ describe("extension_dev health tick", () => {
       return cli;
     };
 
-    const result = JSON.parse(await dev.handler({ projectPath: project, allowControl: true }));
+    const result = JSON.parse(await dev.handler({ wait: false, projectPath: project, allowControl: true }));
     expect(result.status).toBe("started");
     expect(result.value.capabilities.controlChannel).toMatchObject({ requested: true, port: null, unavailableReason: "EADDRINUSE 43210" });
     expect(result.hint).toMatch(/reports no control port \(EADDRINUSE 43210\)/);
@@ -221,9 +221,9 @@ describe("extension_dev health tick", () => {
       return cli;
     };
 
-    const first = JSON.parse(await dev.handler({ projectPath: project }));
+    const first = JSON.parse(await dev.handler({ wait: false, projectPath: project }));
     expect(first.status).toBe("started");
-    const second = JSON.parse(await dev.handler({ projectPath: project }));
+    const second = JSON.parse(await dev.handler({ wait: false, projectPath: project }));
     expect(second.status).toBe("session-exists");
     expect(second.error.message).toMatch(/last compile wins/);
     expect(second.error.message).not.toMatch(/dies on the profile lock/);
@@ -245,7 +245,7 @@ describe("extension_dev health tick", () => {
       return cli;
     };
 
-    const result = JSON.parse(await dev.handler({ projectPath: project }));
+    const result = JSON.parse(await dev.handler({ wait: false, projectPath: project }));
 
     expect(result.status).toBe("profile-locked");
     expect(result.error.code).toBe("E_PROFILE_LOCKED");
@@ -260,7 +260,7 @@ describe("extension_dev health tick", () => {
         'console.log("\\u2716\\u2716\\u2716 Probe compiled with errors in 180 ms. ERROR in ./src/panel.js NOT FOUND"); setTimeout(()=>{}, 60000);',
       );
 
-    const result = JSON.parse(await dev.handler({ projectPath: project }));
+    const result = JSON.parse(await dev.handler({ wait: false, projectPath: project }));
 
     expect(result.ok).toBe(false);
     expect(result.status).toBe("compile-failed");
@@ -288,7 +288,7 @@ describe("extension_dev health tick", () => {
       return cli;
     };
 
-    const result = JSON.parse(await dev.handler({ projectPath: project }));
+    const result = JSON.parse(await dev.handler({ wait: false, projectPath: project }));
 
     expect(result.ok).toBe(false);
     expect(result.status).toBe("profile-locked");
@@ -308,7 +308,7 @@ describe("extension_dev health tick", () => {
     nextChild = () =>
       fakeCli('console.log("ready in 300ms"); setTimeout(()=>{}, 60000);');
 
-    const result = JSON.parse(await dev.handler({ projectPath: project }));
+    const result = JSON.parse(await dev.handler({ wait: false, projectPath: project }));
 
     expect(result.schema).toBe(1);
     expect(result.ok).toBe(true);
@@ -341,7 +341,7 @@ describe("extension_dev port truth", () => {
     };
 
     const result = JSON.parse(
-      await dev.handler({ projectPath: project, port: 8080 }),
+      await dev.handler({ wait: false, projectPath: project, port: 8080 }),
     );
 
     expect(result.ok).toBe(true);
@@ -361,7 +361,7 @@ describe("extension_dev port truth", () => {
       fakeCli('console.log("ready in 300ms"); setTimeout(()=>{}, 60000);');
 
     const result = JSON.parse(
-      await dev.handler({ projectPath: project, port: 8080 }),
+      await dev.handler({ wait: false, projectPath: project, port: 8080 }),
     );
 
     expect(result.ok).toBe(true);
@@ -378,7 +378,7 @@ describe("extension_dev build-only sessions", () => {
       fakeCli('console.log("ready in 300ms"); setTimeout(()=>{}, 60000);');
 
     const result = JSON.parse(
-      await dev.handler({ projectPath: project, noBrowser: true }),
+      await dev.handler({ wait: false, projectPath: project, noBrowser: true }),
     );
 
     expect(result.ok).toBe(true);
@@ -410,7 +410,7 @@ describe("extension_dev boot noise", () => {
           "setTimeout(()=>{}, 60000);",
       );
 
-    const result = JSON.parse(await dev.handler({ projectPath: project }));
+    const result = JSON.parse(await dev.handler({ wait: false, projectPath: project }));
 
     expect(result.ok).toBe(true);
     expect(result.status).toBe("started");
@@ -429,7 +429,7 @@ describe("extension_dev boot noise", () => {
           "process.exit(1);",
       );
 
-    const result = JSON.parse(await dev.handler({ projectPath: project }));
+    const result = JSON.parse(await dev.handler({ wait: false, projectPath: project }));
 
     expect(result.ok).toBe(false);
     expect(result.value.output).not.toContain("asm.js");
