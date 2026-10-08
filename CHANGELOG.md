@@ -6,6 +6,11 @@
 
 Built on Extension.js 4.1.32.
 
+- The release workflow renders `docs/tools.json` and `docs/clients.json`
+  right after it bumps the package version and commits them with the
+  release: both files carry the version and the suite asserts the files on
+  disk are the current rendering, so the first 10.11.0 run failed its own
+  bump.
 - The Safari automation hint names the setting the way the engine does: Safari > Settings > Developer > "Allow remote automation", with the Develop menu item on older Safari.
 
 - `extension_dev` carries the control channel by default: `allowControl` defaults to true, so `extension_storage`, `extension_reload`, `extension_open` and `extension_dom_snapshot` work on a plain dev session and a later "reload it" costs no restart; pass `allowControl: false` for a read-only session. `allowEval` stays off until asked and still implies control. The descriptions, the hints, the docs gates, the README and the shipped rules say control is on unless asked off.

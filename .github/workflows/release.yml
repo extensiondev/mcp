@@ -150,6 +150,13 @@ jobs:
             });
           "
 
+      # docs/tools.json and docs/clients.json carry the package version and
+      # the suite asserts the files on disk are the current rendering, so the
+      # bump above has to be rendered into them before the suite runs or the
+      # release fails on its own version (10.11.0, 2026-10-08).
+      - name: Render the docs json for the release version
+        run: pnpm docs:tools
+
       - name: Build
         run: pnpm compile
 
@@ -220,7 +227,7 @@ jobs:
           VERSION: ${{ steps.validate.outputs.version }}
           TAG: ${{ steps.validate.outputs.tag }}
         run: |
-          git add package.json pnpm-lock.yaml server.json .claude-plugin
+          git add package.json pnpm-lock.yaml server.json .claude-plugin docs/tools.json docs/clients.json
           if ! git diff --cached --quiet; then
             git commit -m "Release v$VERSION"
           fi
