@@ -277,13 +277,11 @@ Or call `extension_auth` with `action: "login"`: you approve a code at [extensio
 
 ### Share a build in progress
 
-[![The agent shares the build it just made and the link opens in the web emulator with nothing installed](https://media.extension.land/video/extension-dev/mcp/share-a-build.gif)](https://docs.extension.dev/tools/mcp#preview-and-share)
+[![The agent shares the build it just made and gets back the link, when it expires, and the handle that revokes it](https://media.extension.land/video/extension-dev/mcp/share-a-build.gif)](https://docs.extension.dev/tools/mcp#preview-and-share)
 
 `extension_preview_web` with `share: true` uploads the `dist/` it just built and returns a link that renders those exact bytes in the emulator: whoever opens it installs nothing and signs in to nothing, the bytes run in an isolated sandbox origin or not at all, and the link also serves the build as a zip, so it hands over the built code. The link lives for the workspace plan's share window (30 days on Free, longer on Pro) and the answer carries its exact `expiresAt` and a `revokeUrl`; re-sharing an unchanged build returns the same link, a revoke is permanent, and every share is appended to `.extension.dev/shared-previews.json` in the project (gitignored). The upload holds up to 2,000 files and about 64MB of text, roughly 48MB when the build is mostly images, fonts or wasm. Without `share`, the tool returns a local-only deep link and uploads nothing. `extension_shares` lists every link the token has shared, live and dead, with each `previewUrl` and `revokeUrl`, revokes one by `artifactId` or any of its URLs, and with `projectPath` reconciles against the project's own record (`remoteOnly`, `localOnly`) without rewriting it.
 
 ### Publish, promote, submit
-
-[![A dry-run store submission comes back with one verdict per store and dispatches nothing](https://media.extension.land/video/extension-dev/mcp/submit-dry-run.gif)](https://docs.extension.dev/tools/mcp#publish-is-not-submit)
 
 Two verbs, not interchangeable. `extension_publish` returns the shareable URL of a build extension.dev already holds, nothing is uploaded: the public page for a public project, a time-limited `?share=` link for a private one. `extension_submit` sends a built extension into store review (Chrome Web Store, Edge Add-ons, Firefox AMO and the App Store for Safari) through extension.dev, which holds your store credentials and dispatches from your project's mirror CI; credentials are never tool arguments. It defaults to a dry run, and `dryRun: false` is irreversible and needs the workspace owner's token. Safari and the App Store are one paid lane, so a free workspace is refused there and the other three stores are unaffected.
 
