@@ -33,6 +33,15 @@ describe("extension_docs_search", () => {
     expect(schema.description.split(/\s+/).length).toBeLessThan(60);
   });
 
+  it("tells an agent holding only the schema when to call it, what comes back, and when memory is allowed", () => {
+    expect(schema.description).toMatch(
+      /before answering any question about a WebExtension API, a manifest key, a permission, or a difference between Chrome, Firefox, Edge and Safari/,
+    );
+
+    expect(schema.description).toMatch(/answers with the pages, each with its URL/);
+    expect(schema.description).toMatch(/Memory is the fallback only when it returns nothing\.$/);
+  });
+
   it("asks the public route and returns its results", async () => {
     const results = [
       { title: "implementation-guide/html > Side panel", url: "https://extension.js.org/docs/implementation-guide/html", snippet: "x", score: 9 },
@@ -54,6 +63,7 @@ describe("extension_docs_search", () => {
     expect(out.ok).toBe(true);
     expect(out.status).toBe("no-match");
     expect(out.hint).toMatch(/extension\.js\.org\/docs/);
+    expect(out.hint).toMatch(/answer from memory only after that, and say the docs had no page/);
   });
 
   it("reports the rate limit with how long to wait", async () => {

@@ -139,6 +139,18 @@ describe("build consumes the engine's persisted BuildSummary when the frame on s
     expect(result.value.buildWarningsTruncated).toBeUndefined();
   });
 
+  it("hands the reading of the build to extension_analyze, with the projectPath and browser it takes", async () => {
+    const project = completeProject();
+
+    const result = JSON.parse(await build.handler({ projectPath: project }));
+
+    expect(result.ok).toBe(true);
+    expect(result.hint).toMatch(/call extension_analyze with this projectPath and browser "chrome"/);
+    expect(result.hint).toMatch(/sizes, the entry points and the store checks/);
+    expect(result.hint).toMatch(/no need to list or grep the folder by hand/);
+    expect(result.hint).toContain(result.value.outputPath);
+  });
+
   it("names the folder it read as outputPath even when the engine reported no summary", async () => {
     const project = completeProject();
 

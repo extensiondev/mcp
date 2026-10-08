@@ -9,8 +9,8 @@ Debug the currently running extension dev session. The user said: $ARGUMENTS
 
 1. **Check for a running dev session**
    - Look for `dist/extension-js/chrome/ready.json` in the project root
-   - If MCP tool `extension_wait` is available, use it with a short timeout (3s) to check
-   - If no session: tell the user to start one with `/extension dev` or `npm run dev`
+   - If MCP tool `extension_doctor` is available, call it with the project path: it reports whether a session is live, leg by leg (`extension_wait` with a short timeout is only for a session that is still starting)
+   - If no session: start one with `extension_dev` (it answers when the session is ready) or tell the user to run `/extension dev` or `npm run dev`
 
 2. **Inspect the live state**
    If MCP tool `extension_inspect` is available:

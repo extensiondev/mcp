@@ -52,6 +52,9 @@ vi.mock("../lib/exec", async (importOriginal) => {
 
 const waitCalls: Array<Record<string, unknown>> = [];
 const logsCalls: Array<Record<string, unknown>> = [];
+let waitAnswer = (): string =>
+  JSON.stringify({ ok: true, status: "ready", value: { compiled: true, browserAttached: true, guestLoaded: true } });
+const readyAnswer = waitAnswer;
 
 vi.mock("../tools/wait", async (importOriginal) => {
   const actual = await importOriginal<typeof WaitModule>();
@@ -61,7 +64,7 @@ vi.mock("../tools/wait", async (importOriginal) => {
     handler: async (args: Record<string, unknown>) => {
       waitCalls.push(args);
 
-      return JSON.stringify({ ok: true, status: "ready", value: { compiled: true, browserAttached: true, guestLoaded: true } });
+      return waitAnswer();
     },
   };
 });
@@ -143,6 +146,8 @@ function tmpProject(): string {
 }
 
 afterEach(() => {
+  waitAnswer = readyAnswer;
+
   for (const child of spawned.splice(0)) {
     try {
       child.kill("SIGKILL");
@@ -204,6 +209,26 @@ describe("extension_dev fork guard", () => {
     expect(logsCalls).toEqual([{ projectPath: project, browser: "chrome", limit: 20 }]);
   });
 
+  it("sends the agent on from a ready answer instead of to extension_wait", async () => {
+    const project = tmpProject();
+    const result = JSON.parse(await dev.handler({ projectPath: project }));
+
+    expect(result.value.ready.status).toBe("ready");
+    expect(result.hint).toMatch(/^The session is ready \(ready\.status: ready\)[^.]*no extension_wait is needed/);
+    expect(result.hint).not.toMatch(/Use extension_wait/);
+  });
+
+  it("keeps extension_wait as the next call when the readiness it waited for was not ready", async () => {
+    waitAnswer = () =>
+      JSON.stringify({ ok: false, status: "timeout", value: { compiled: false, browserAttached: false } });
+
+    const project = tmpProject();
+    const result = JSON.parse(await dev.handler({ projectPath: project }));
+
+    expect(result.value.ready.status).toBe("timeout");
+    expect(result.hint).toMatch(/^ready\.status is timeout, not ready: call extension_wait/);
+  });
+
   it("returns as soon as the server is spawned with wait: false", async () => {
     const project = tmpProject();
     const result = JSON.parse(await dev.handler({ wait: false, projectPath: project }));
@@ -211,6 +236,7 @@ describe("extension_dev fork guard", () => {
     expect(result.status).toBe("started");
     expect(result.value.ready).toBeUndefined();
     expect(result.value.firstLogs).toBeUndefined();
+    expect(result.hint).toMatch(/^Use extension_wait to check when the extension is fully loaded/);
   });
 
   it("also sees a live session recorded only in the ready.json contract", async () => {

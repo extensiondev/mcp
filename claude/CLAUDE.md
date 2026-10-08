@@ -128,6 +128,15 @@ npm run build -- --browser=firefox
 npm run build -- --zip
 ```
 
+With the MCP server, `extension_dev` is the whole run recipe: it starts the
+dev server and the browser, waits for the session and answers with `ready`
+and `firstLogs`. `ready.status: "ready"` means the session is up and nothing
+else needs calling; `extension_wait` is only for a session started with
+`wait: false`, an answer whose `ready.status` was not ready, or a build-only
+(`noBrowser`) session. After `extension_build`, read what was built with
+`extension_analyze` (sizes, entry points, store checks) instead of listing
+the output folder by hand.
+
 ## extension.config.js
 
 ```javascript
@@ -172,7 +181,7 @@ facts and the engine's own conventions.
 3. If no: start from `manifest.json`, define what the extension needs
 4. Add entry points referenced by the manifest (background, content scripts, UI pages)
 5. Install framework deps if needed (React, Vue, etc.), the framework auto-detects them
-6. Run `npm run dev`, the dev server handles the rest
+6. Run it: `extension_dev` with the MCP server (one call, it answers when the session is ready; a scaffold needs no build to verify), or `npm run dev` without it
 
 **Learning from examples:** When building a feature you haven't done before, read the source of a relevant template from the examples repo. The source for any template is at:
 
@@ -242,7 +251,7 @@ npm run dev -- --logs info --log-url "example.com"
 - Use `--browser=firefox` to test cross-browser compatibility
 - **Safari (macOS).** On Extension.js 4.1.21 or newer, `--browser=safari` builds the app, opens it, and after you enable the extension in Safari > Settings > Extensions it reloads on every save through the extension's bridge and streams background and content lines into the session log. Start it with `allowEval: true` and the bridge tools work: `extension_storage`, `extension_reload`, `extension_open` for surfaces, `extension_dom_snapshot` by tab id, `extension_logs`, and the assertions (`surface-rendered` reads the surface through the relay there). `extension_eval` in `content` or `page` needs a tab already open at the url, which you open in Safari by hand: `extension_open` with `url` and `extension_eval` in `background` are blocked by Safari's MV3 background CSP, and the engine says so. Safari has no CDP or RDP, so `extension_inspect` has no Safari path. Apple's Safari MCP server (`claude mcp add safari-mcp -- "/usr/bin/safaridriver" --mcp`, Safari 27+, after enabling Safari > Settings > Developer > "Allow remote automation and external agents") reads a page in its own isolated window with no extension-aware tool, and runs beside a dev session, since this server opens no automation session of its own.
 - Read the build output from the path the build answered with (`extension_build` returns it as `outputPath`, `extension build` prints it) instead of assuming a folder name: a plain `npm run build` passes no `--browser`, so the engine targets chromium and writes `dist/chromium/`, while `--browser=chrome` and `extension_build` (chrome by default) write `dist/chrome/`
-- Use `--wait` flag to check if dev session is ready (outputs ready.json contract)
+- `extension dev --wait` on the CLI blocks until the ready.json contract is stamped; the `extension_dev` tool already does this, so an answer whose `ready.status` is `ready` needs no `extension_wait` after it
 - Use `npm run start` to test production builds (builds first, then launches)
 
 ### Triggering events without clicking (requires `--allow-control`)

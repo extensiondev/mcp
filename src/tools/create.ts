@@ -54,7 +54,7 @@ function detectPackageManager(projectPath: string): string {
 export const schema = {
   name: "extension_create",
   description:
-    "Create a browser extension project from a template in the extension.dev catalog. Call extension_templates first to see what is available. The scaffolder may initialize a git repository in the new project (with a first commit), and it also writes store metadata and a .gitignore of its own. Read the result's defaultsApplied block for the decisions this tool can read back: parent directory, template, package manager, target browser and whether a git repository was initialized by this call. The result's `scripts` lists every package.json script that runs the engine, with the browser it targets and the folder it writes: the scaffolder passes no --browser to `dev`, `start` and `build`, so the engine runs them as chromium and `npm run build` writes dist/chromium, while `build:chrome` writes dist/chrome; read the folder from that list instead of assuming one. After a successful scaffold this tool sends one telemetry event, draft_seeded (template slug, source and commit, a random install id, never a path or a name), to PostHog; the Telemetry section of this package's readme names the two environment variables that turn it off.",
+    "Create a browser extension project from a template in the extension.dev catalog. Call extension_templates first to see what is available. The scaffolder may initialize a git repository in the new project (with a first commit), and it also writes store metadata and a .gitignore of its own. Read the result's defaultsApplied block for the decisions this tool can read back: parent directory, template, package manager, target browser and whether a git repository was initialized by this call. The result's `scripts` lists every package.json script that runs the engine, with the browser it targets and the folder it writes: the scaffolder passes no --browser to `dev`, `start` and `build`, so the engine runs them as chromium and `npm run build` writes dist/chromium, while `build:chrome` writes dist/chrome; read the folder from that list instead of assuming one. A scaffold that answers `created` is verified (its manifest was found and read): it needs no build to prove it, so do not run `npm run build` to check it; the next step is extension_dev with the answered projectPath, which runs it in a browser, as the answer's `nextSteps` says. After a successful scaffold this tool sends one telemetry event, draft_seeded (template slug, source and commit, a random install id, never a path or a name), to PostHog; the Telemetry section of this package's readme names the two environment variables that turn it off.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -317,9 +317,11 @@ export async function handler(args: {
       scripts,
       duration: Date.now() - start,
       nextSteps: [
+        `The scaffold is complete and verified (manifest read at ${manifestPath}${result.depsInstalled ? ", dependencies installed" : ""}): it needs no build to check, so do not run a build to verify it.`,
         ...(result.depsInstalled
-          ? [`cd ${result.projectPath}`, runDev]
-          : [`cd ${result.projectPath}`, `${packageManager} install`, runDev]),
+          ? []
+          : [`Dependencies were not installed: run \`${packageManager} install\` in ${result.projectPath} first.`]),
+        `Run it with extension_dev (projectPath: ${result.projectPath}); its answer says when the session is ready. Without the MCP server: cd ${result.projectPath} && ${runDev}.`,
         `To ship: extension_create scaffolds and runs locally, it does not host. Open ${deployUrl} to deploy this template to the web.`,
       ],
     },

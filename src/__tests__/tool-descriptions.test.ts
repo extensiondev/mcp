@@ -30,6 +30,7 @@ const IMPERATIVE_VERBS = [
 ];
 
 const ACRONYMS_ARE_NAMES_NOT_EMPHASIS = new Set([
+  "API",
   "AMO",
   "CDP",
   "CI",

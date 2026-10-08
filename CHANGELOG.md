@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- `extension_wait` now says when it is needed (a session started with `wait: false`, a dev answer whose `ready.status` was not ready, a build-only session); `extension_dev`'s answer and the shipped rules say a ready answer ends the run recipe.
+- `extension_docs_search`'s description is the trigger: any WebExtension API, manifest key, permission or browser-difference question is answered from the docs first, memory only when nothing matches.
+- `extension_build` hands the reading of the output to `extension_analyze` in its hint, and `extension_create` says the scaffold needs no build to verify and names `extension_dev` as the next step.
+
 - The `extension_logs` hint for a Safari session with no log file, the
   README, the rules and the `/extension debug` command name 4.1.21 as the
   Extension.js floor for Safari log streaming in place of 4.1.28, which no

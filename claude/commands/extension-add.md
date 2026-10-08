@@ -60,4 +60,4 @@ Add a new feature surface to the current extension project. The user said: $ARGU
    ```
 
 6. **Report what was done**
-   List all files created and manifest changes made. Suggest `npm run dev` to test.
+   List all files created and manifest changes made. Suggest running it with `extension_dev` (or `npm run dev` without the MCP server) to test.

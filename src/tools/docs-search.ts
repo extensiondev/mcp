@@ -15,7 +15,7 @@ const COMMAND = "extension_docs_search";
 export const schema = {
   name: COMMAND,
   description:
-    "Find pages in the Extension.js and extension.dev docs by keyword, each with a short excerpt. Use it before answering from memory on anything version-specific: a CLI flag, a manifest field across browsers, a store submission rule. Free and needs no login.",
+    "Find the docs page to cite before answering any question about a WebExtension API, a manifest key, a permission, or a difference between Chrome, Firefox, Edge and Safari. It searches the Extension.js and extension.dev docs (free, no login) and answers with the pages, each with its URL and an excerpt. Memory is the fallback only when it returns nothing.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -120,6 +120,6 @@ export async function handler(args: {
     value: { query, results },
     ...(results.length
       ? {}
-      : { hint: "No page matched. Try fewer or different words, or browse https://extension.js.org/docs. While the public hold is on, the platform filters its own platform pages out of these results server-side, so an extension.dev topic can be absent for that reason alone." }),
+      : { hint: "No page matched. Try fewer or different words, or browse https://extension.js.org/docs; answer from memory only after that, and say the docs had no page. While the public hold is on, the platform filters its own platform pages out of these results server-side, so an extension.dev topic can be absent for that reason alone." }),
   });
 }

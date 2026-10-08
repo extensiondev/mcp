@@ -49,7 +49,7 @@ const REUSED_PROFILE_NOTE =
 export const schema = {
   name: "extension_dev",
   description:
-    "Run the extension while you edit it: dev build, hot module replacement, and a browser with the extension loaded. Reach for this first when the ask is \"run my extension\": by default it waits for the session to be ready and answers with the readiness and the first log lines, so one call covers the ask; pass wait:false to return as soon as the server is spawned. ONLY this tool unlocks the control channel that extension_storage, extension_reload, extension_open and extension_dom_snapshot need (allowControl:true) and the eval channel that extension_eval needs (allowEval:true, which implies allowControl, so you never need to pass both). Use extension_start instead to run the production build in a browser. The result carries the process info that extension_wait and extension_inspect need.",
+    "Run the extension while you edit it: dev build, hot module replacement, and a browser with the extension loaded. Reach for this first when the ask is \"run my extension\": by default it waits for the session to be ready and answers with the readiness and the first log lines, so one call covers the ask; pass wait:false to return as soon as the server is spawned. ONLY this tool unlocks the control channel that extension_storage, extension_reload, extension_open and extension_dom_snapshot need (allowControl:true) and the eval channel that extension_eval needs (allowEval:true, which implies allowControl, so you never need to pass both). Use extension_start instead to run the production build in a browser. When the answer's ready.status is \"ready\" the session is up and nothing else needs calling before extension_logs, extension_inspect or the control verbs; extension_wait is only for wait:false, an answer whose ready.status was not ready, or a build-only session.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -354,6 +354,10 @@ export async function handler(
     });
   }
 
+  const readiness =
+    args.wait === false || args.noBrowser ? null : await awaitReadyAndFirstLogs(args.projectPath, browser);
+  const sessionReady = readiness?.ready.status === "ready";
+
   const controlVerbs = "storage, reload, open, dom_snapshot";
   const control = contractControlState(args.projectPath, browser, spawnedAt);
   const controlBound = allowControl && control.port !== null;
@@ -408,8 +412,11 @@ export async function handler(
         ? "Port 0 asked the engine for any free port, and it has not stamped its ready.json contract yet, so the port it picked is not known at response time. extension_wait reports it from that contract once it lands."
         : "The engine has not stamped its ready.json contract yet, so the bound port is not known at response time (a taken port makes the server bind the next free one). extension_wait reports the bound port from that contract once it lands; requestedPort above is only what was asked for.";
 
-  const readiness =
-    args.wait === false || args.noBrowser ? null : await awaitReadyAndFirstLogs(args.projectPath, browser);
+  const nextStep = sessionReady
+    ? "The session is ready (ready.status: ready) and the first log lines are in firstLogs, so no extension_wait is needed: extension_inspect reads the live state and extension_logs the console."
+    : readiness
+      ? `ready.status is ${readiness.ready.status}, not ready: call extension_wait to keep waiting on the same contract, then extension_inspect to inspect the live state.`
+      : "Use extension_wait to check when the extension is fully loaded, then extension_inspect to inspect the live state.";
 
   return envelope({
     ok: true,
@@ -439,7 +446,7 @@ export async function handler(
     ],
     hint: args.noBrowser
       ? "Build-only session (noBrowser: true): no browser will launch, so no runtime will ever attach. extension_wait returns as soon as the first compile lands (compiled: true, browserAttached: false) instead of waiting out its budget; do not wait for a browser. The control verbs (storage/reload/open/dom_snapshot/eval) need a live browser and will not work against this session. When you are done, call extension_stop to shut down the dev server."
-      : `Use extension_wait to check when the extension is fully loaded, then extension_inspect to inspect the live state. ${ 
+      : `${nextStep} ${
         allowControl
           ? controlBound
             ? `Control channel is ON (port ${control.port} per ready.json): extension_${controlVerbs.split(", ").join("/extension_")}${args.allowEval ? "/extension_eval" : ""} will work against this session.`

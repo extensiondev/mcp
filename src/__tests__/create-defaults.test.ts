@@ -117,7 +117,22 @@ describe("extension_create defaultsApplied", () => {
       { name: "build:edge", run: "bun run build:edge", command: "extension build --browser edge", browser: "edge", writes: "dist/edge" },
     ]);
 
-    expect(result.value.nextSteps).toContain("bun run dev");
+    expect(result.value.nextSteps.join(" ")).toContain("bun run dev");
+  });
+
+  it("says the scaffold is verified without a build and that extension_dev is the next step", async () => {
+    scaffoldTarget = path.join(tmpDir(), "probe");
+
+    const result = JSON.parse(await create.handler({ projectName: "probe" }));
+    const steps: string[] = result.value.nextSteps;
+
+    expect(steps[0]).toMatch(/^The scaffold is complete and verified \(manifest read at /);
+    expect(steps[0]).toContain(result.value.manifestPath);
+    expect(steps[0]).toMatch(/needs no build to check, so do not run a build to verify it\.$/);
+    expect(steps[1]).toMatch(/^Run it with extension_dev \(projectPath: /);
+    expect(steps[1]).toContain(scaffoldTarget);
+    expect(steps.join(" ")).not.toMatch(/run build/);
+    expect(create.schema.description).toMatch(/needs no build to prove it, so do not run `npm run build` to check it; the next step is extension_dev/);
   });
 
   it("resolves a monorepo script's folder under the package the engine builds", async () => {
