@@ -50,18 +50,11 @@
   ],
   "scripts": {
     "docs:tools": "WRITE_TOOLS_DOC=1 vitest run src/__tests__/docs-match-the-code.test.ts",
-    "clean": "rm -rf dist",
     "readme:clients": "UPDATE_README=1 vitest run src/__tests__/readme-clients.test.ts",
-    "watch": "rslib build --watch",
     "compile": "rslib build",
-    "build": "pnpm run compile",
-    "start": "node bin/extension-mcp.js",
     "lint": "eslint . --report-unused-disable-directives",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit && tsc --noEmit -p src/__tests__/tsconfig.json",
-    "prepack": "node scripts/readme-logo-width.mjs npm",
-    "postpack": "node scripts/readme-logo-width.mjs github",
-    "prepublishOnly": "pnpm run test && pnpm run compile"
+    "typecheck": "tsc --noEmit && tsc --noEmit -p src/__tests__/tsconfig.json"
   },
   "publishConfig": {
     "access": "public",
@@ -95,7 +88,6 @@
   "dependencies": {
     "@extension.dev/urls": "^0.8.2",
     "@modelcontextprotocol/sdk": "^1.32.1",
-    "browser-extension-manifest-fields": "^2.2.9",
     "cross-spawn": "^7.0.6",
     "extension-create": "4.1.32",
     "extension-develop": "4.1.32",
@@ -103,7 +95,6 @@
     "ws": "^8.20.0"
   },
   "devDependencies": {
-    "@eslint/js": "^10.0.1",
     "@rslib/core": "^0.19.4",
     "@stylistic/eslint-plugin": "^5.10.0",
     "@types/cross-spawn": "^6.0.6",
@@ -113,32 +104,6 @@
     "eslint-config-auditor": "^3.0.0",
     "globals": "^17.7.0",
     "typescript": "6.0.2",
-    "typescript-eslint": "^8.64.0",
-    "vite": "^8.1.5",
     "vitest": "^4.1.11"
-  },
-  "pnpm": {
-    "overrides": {
-      "hono": "^4.13.12",
-      "@hono/node-server": "^2.0.5",
-      "ws@>=8 <8.21.0": "^8.21.0",
-      "form-data@4": "^4.0.6",
-      "js-yaml@4": "^4.3.2",
-      "fast-uri@3": "^3.1.8",
-      "postcss@8": "^8.5.18",
-      "body-parser@2": "^2.3.0",
-      "ip-address@10": "^10.7.2",
-      "qs@6": "^6.16.0",
-      "vite@8": "^8.0.16",
-      "axios@1": "^1.20.0",
-      "brace-expansion@5": "^5.0.12",
-      "nanoid@3": "^3.3.19",
-      "devalue@5": "^5.9.2",
-      "postcss-selector-parser@7": "^7.1.6",
-      "proxy-addr@2": "^2.0.8",
-      "source-map-js@1": "^1.2.2",
-      "vue@3": "^3.5.43",
-      "@vue/compiler-sfc@3": "^3.5.43"
-    }
   }
 }

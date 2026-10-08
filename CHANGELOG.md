@@ -136,6 +136,20 @@
   key and names the three without a counterpart. The detect sentences are
   a pure function, so the not-found cell no longer runs a 20 s scan; the
   tool description rules are five tables instead of 160 cells.
+- The manifest is trimmed: the 20 `pnpm.overrides` floors from the
+  September advisory sweep are gone (the tree resolves past every one of
+  them now, and the audit reads the same with or without them),
+  `browser-extension-manifest-fields`, `vite`, `@eslint/js` and
+  `typescript-eslint` leave the dependencies (nothing imported them), and
+  the `clean`, `watch`, `start`, `build` and npm hook scripts leave
+  (nothing called them; the release lane publishes with scripts ignored).
+- Thirteen test cells that hand-wrote the CLI eval or target-not-found
+  envelope now feed the fixture builders; one cell pinned `E_NO_SESSION`,
+  a code the engine never sends, and now asserts the engine's
+  `E_SESSION_NOT_FOUND`. The engine's own `golden.eval.ok.json` wraps the
+  value as `{ result, context }` while its executor and CLI answer the bare
+  value; the eval builder follows the engine and a cell names the
+  disagreement until upstream settles it.
 
 ## 10.10.13
 
