@@ -138,4 +138,13 @@ describe("build consumes the engine's persisted BuildSummary when the frame on s
     expect(result.ok).toBe(true);
     expect(result.value.buildWarningsTruncated).toBeUndefined();
   });
+
+  it("names the folder it read as outputPath even when the engine reported no summary", async () => {
+    const project = completeProject();
+
+    const result = JSON.parse(await build.handler({ projectPath: project }));
+
+    expect(result.ok).toBe(true);
+    expect(result.value.outputPath).toBe(path.join(project, "dist", "chrome"));
+  });
 });

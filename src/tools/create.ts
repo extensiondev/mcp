@@ -17,6 +17,7 @@ import { mcpOrigins } from "../lib/registry";
 import { captureTemplateSeed } from "../lib/funnel-telemetry";
 import { templateCatalogUrl } from "../lib/template-artifact-source";
 import { envelope } from "../lib/envelope";
+import { scaffoldScripts } from "../lib/scaffold-scripts";
 
 const COMMAND = "extension_create";
 
@@ -53,7 +54,7 @@ function detectPackageManager(projectPath: string): string {
 export const schema = {
   name: "extension_create",
   description:
-    "Create a browser extension project from a template in the extension.dev catalog. Call extension_templates first to see what is available. The scaffolder may initialize a git repository in the new project (with a first commit), and it also writes store metadata and a .gitignore of its own. Read the result's defaultsApplied block for the decisions this tool can read back: parent directory, template, package manager, target browser and whether a git repository was initialized by this call. After a successful scaffold this tool sends one telemetry event, draft_seeded (template slug, source and commit, a random install id, never a path or a name), to PostHog; the Telemetry section of this package's readme names the two environment variables that turn it off.",
+    "Create a browser extension project from a template in the extension.dev catalog. Call extension_templates first to see what is available. The scaffolder may initialize a git repository in the new project (with a first commit), and it also writes store metadata and a .gitignore of its own. Read the result's defaultsApplied block for the decisions this tool can read back: parent directory, template, package manager, target browser and whether a git repository was initialized by this call. The result's `scripts` lists every package.json script that runs the engine, with the browser it targets and the folder it writes: the scaffolder passes no --browser to `dev`, `start` and `build`, so the engine runs them as chromium and `npm run build` writes dist/chromium, while `build:chrome` writes dist/chrome; read the folder from that list instead of assuming one. After a successful scaffold this tool sends one telemetry event, draft_seeded (template slug, source and commit, a random install id, never a path or a name), to PostHog; the Telemetry section of this package's readme names the two environment variables that turn it off.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -256,6 +257,7 @@ export async function handler(args: {
     (result as { packageManager?: string }).packageManager ||
     (result.depsInstalled ? detectPackageManager(result.projectPath) : "npm");
   const runDev = `${packageManager} run dev`;
+  const scripts = scaffoldScripts(result.projectPath, packageManager);
   const addDev = (spec: string): string =>
     packageManager === "npm"
       ? `npm i -D ${spec}`
@@ -309,9 +311,10 @@ export async function handler(args: {
           : {}),
         packageManager: `${packageManager} (auto-detected by the scaffolder, not asked)`,
         browser:
-          "chrome (default: extension_dev and extension_build target chrome and write dist/chrome unless you pass browser; the scaffolded npm run dev and npm run build scripts pass no --browser, so the engine runs them as chromium and npm run build writes dist/chromium)",
+          "chrome (default: extension_dev and extension_build target chrome and write dist/chrome unless you pass browser; the scaffolded scripts pass no --browser, so the engine runs them as chromium: scripts below names the folder each one writes)",
         gitInit,
       },
+      scripts,
       duration: Date.now() - start,
       nextSteps: [
         ...(result.depsInstalled

@@ -5,14 +5,33 @@ import path from "node:path";
 import { describe, it, expect, vi, afterEach } from "vitest";
 
 
+import { scaffoldScripts } from "./fixtures/scaffolder-answers";
+
 let scaffoldTarget = "";
 let withGit = false;
+let withScripts = false;
 
 vi.mock("extension-create", () => ({
   extensionCreate: vi.fn(async (_input: string, opts: { template: string }) => {
-    fs.mkdirSync(scaffoldTarget, { recursive: true });
-    fs.writeFileSync(path.join(scaffoldTarget, "manifest.json"), "{}");
+    const monorepo = opts.template.includes("monorepo");
+    const manifestDir = monorepo ? path.join(scaffoldTarget, "packages", "extension", "src") : scaffoldTarget;
+    fs.mkdirSync(manifestDir, { recursive: true });
+    fs.writeFileSync(path.join(manifestDir, "manifest.json"), "{}");
     if (withGit) fs.mkdirSync(path.join(scaffoldTarget, ".git"));
+
+    if (withScripts) {
+      fs.writeFileSync(
+        path.join(scaffoldTarget, "package.json"),
+        JSON.stringify({ name: path.basename(scaffoldTarget), scripts: scaffoldScripts(opts.template) }),
+      );
+
+      if (monorepo) {
+        fs.writeFileSync(
+          path.join(scaffoldTarget, "packages", "extension", "package.json"),
+          JSON.stringify({ name: "extension" }),
+        );
+      }
+    }
 
     return {
       projectPath: scaffoldTarget,
@@ -37,6 +56,7 @@ function tmpDir(): string {
 
 afterEach(() => {
   withGit = false;
+  withScripts = false;
 
   for (const dir of tmpDirs.splice(0)) {
     fs.rmSync(dir, { recursive: true, force: true });
@@ -78,6 +98,39 @@ describe("extension_create defaultsApplied", () => {
     expect(result.value.defaultsApplied.packageManager).toContain("auto-detected");
     expect(result.value.defaultsApplied.browser).toContain("chrome");
     expect(result.value.defaultsApplied.browser).toContain("default");
+    expect(result.value.scripts).toEqual([]);
+  });
+
+  it("lists every engine script with the browser it targets and the folder it writes", async () => {
+    withScripts = true;
+    scaffoldTarget = path.join(tmpDir(), "probe");
+
+    const result = JSON.parse(await create.handler({ projectName: "probe" }));
+
+    expect(result.value.scripts).toEqual([
+      { name: "dev", run: "bun run dev", command: "extension dev", browser: "chromium", writes: "dist/chromium" },
+      { name: "start", run: "bun run start", command: "extension start", browser: "chromium", writes: "dist/chromium" },
+      { name: "build", run: "bun run build", command: "extension build", browser: "chromium", writes: "dist/chromium" },
+      { name: "preview", run: "bun run preview", command: "extension preview", browser: "chromium", writes: null },
+      { name: "build:chrome", run: "bun run build:chrome", command: "extension build --browser chrome", browser: "chrome", writes: "dist/chrome" },
+      { name: "build:firefox", run: "bun run build:firefox", command: "extension build --browser firefox", browser: "firefox", writes: "dist/firefox" },
+      { name: "build:edge", run: "bun run build:edge", command: "extension build --browser edge", browser: "edge", writes: "dist/edge" },
+    ]);
+
+    expect(result.value.nextSteps).toContain("bun run dev");
+  });
+
+  it("resolves a monorepo script's folder under the package the engine builds", async () => {
+    withScripts = true;
+    scaffoldTarget = path.join(tmpDir(), "mono");
+
+    const result = JSON.parse(
+      await create.handler({ projectName: "mono", template: "sidebar-monorepo-turborepo" }),
+    );
+
+    const byName = Object.fromEntries(result.value.scripts.map((s: { name: string }) => [s.name, s]));
+    expect(byName.build).toMatchObject({ command: "extension build packages/extension", browser: "chromium", writes: "packages/extension/dist/chromium" });
+    expect(byName["build:chrome"]).toMatchObject({ browser: "chrome", writes: "packages/extension/dist/chrome" });
   });
 
   it("admits when the scaffolder initialized a git repository", async () => {
@@ -94,5 +147,6 @@ describe("extension_create defaultsApplied", () => {
     expect(props.projectName.description).toContain("Alias: name");
     expect(props.parentDir.description).toContain("MCP server process cwd");
     expect(create.schema.description).toContain("git repository");
+    expect(create.schema.description).toMatch(/`scripts` .*dist\/chromium/);
   });
 });

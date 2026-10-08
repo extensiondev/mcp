@@ -13,6 +13,14 @@ describe("the auth and create tools describe what the platform does", () => {
     expect(createSchema.description).toMatch(/a signed-in member of the workspace approves/);
   });
 
+  it("create says the platform runs the stored build command as it is, so its default names the browser", () => {
+    const buildCommand = createSchema.inputSchema.properties.buildCommand;
+    expect(buildCommand.default).toBe("npm run build -- --browser <browser>");
+    expect(buildCommand.description).toMatch(/as it is/);
+    expect(buildCommand.description).toMatch(/does not add --browser/);
+    expect(createSchema.description).toMatch(/exactly as stored/);
+  });
+
   it("the lane hint defers to the platform's message and names the hold's console state", () => {
     const hint = laneClosedHint();
     expect(hint).toMatch(/its own message above says which case this is/);

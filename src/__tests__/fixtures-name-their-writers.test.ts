@@ -5,10 +5,16 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 import { ENGINE_WRITERS } from "./fixtures/engine-answers";
+import { SCAFFOLDER_WRITERS } from "./fixtures/scaffolder-answers";
 
 const engineDist = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   "../../node_modules/extension-develop/dist",
+);
+
+const scaffolderSource = fs.readFileSync(
+  path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../node_modules/extension-create/dist/module.cjs"),
+  "utf8",
 );
 
 const engineSource = fs
@@ -30,6 +36,13 @@ describe("every fixture builder names the engine or platform writer it copies ke
       if (!writer.file.startsWith("extension-develop/dist/")) continue;
 
       expect(engineSource.includes(writer.marker), `${builder}: ${writer.marker}`).toBe(true);
+    }
+  });
+
+  it("finds each scaffolder marker in the installed extension-create's own source", () => {
+    for (const [builder, writer] of Object.entries(SCAFFOLDER_WRITERS)) {
+      expect(writer.file, builder).toMatch(/^extension-create\/dist\//);
+      expect(scaffolderSource.includes(writer.marker), `${builder}: ${writer.marker}`).toBe(true);
     }
   });
 });

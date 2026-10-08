@@ -6,6 +6,8 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
+export const DEFAULT_BUILD_COMMAND = "npm run build -- --browser <browser>";
+
 export function buildCreateBody(args: {
   workspace: string;
   projectSlug: string;
@@ -21,7 +23,7 @@ export function buildCreateBody(args: {
   outputDirectories?: Record<string, unknown>;
 }): Record<string, unknown> {
   const installCommand = String(args.installCommand || "npm install").trim();
-  const buildCommand = String(args.buildCommand || "npm run build").trim();
+  const buildCommand = String(args.buildCommand || DEFAULT_BUILD_COMMAND).trim();
   const wanted = new Set(
     (Array.isArray(args.browsers) && args.browsers.length
       ? args.browsers
@@ -44,7 +46,7 @@ export function buildCreateBody(args: {
   const browser = (name: string) => ({
     enabled: wanted.has(name),
     installCommand,
-    buildCommand,
+    buildCommand: buildCommand.replaceAll("<browser>", name),
     outputDirectory: outputFor(name),
   });
 

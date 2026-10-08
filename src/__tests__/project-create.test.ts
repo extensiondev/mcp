@@ -299,15 +299,28 @@ describe("extension_project_create", () => {
     return JSON.parse(String(createCall!.init?.body));
   }
 
-  it("keeps the Chrome-only default when no browsers are named", async () => {
+  it("keeps the Chrome-only default when no browsers are named, with the browser named in the build command", async () => {
     const body = await createBodyFor({});
     expect(body.build.chrome).toMatchObject({
       enabled: true,
+      buildCommand: "npm run build -- --browser chrome",
       outputDirectory: "dist/chrome",
     });
 
     expect(body.build.edge.enabled).toBe(false);
     expect(body.build.firefox.enabled).toBe(false);
+  });
+
+  it("names each enabled browser in its own default build command", async () => {
+    const body = await createBodyFor({ browsers: ["chrome", "edge", "firefox"] });
+
+    for (const name of ["chrome", "edge", "firefox"]) {
+      expect(body.build[name]).toMatchObject({
+        enabled: true,
+        buildCommand: `npm run build -- --browser ${name}`,
+        outputDirectory: `dist/${name}`,
+      });
+    }
   });
 
   it("enables every named browser with its own Extension.js output", async () => {
@@ -330,9 +343,11 @@ describe("extension_project_create", () => {
   it("fills a <browser> placeholder and lets a per-browser override win", async () => {
     const body = await createBodyFor({
       browsers: ["chrome", "edge", "firefox"],
+      buildCommand: "pnpm build -- --browser <browser>",
       outputDirectory: "packages/ext/dist/<browser>",
       outputDirectories: { edge: "build/manifestv3" },
     });
+    expect(body.build.firefox.buildCommand).toBe("pnpm build -- --browser firefox");
     expect(body.build.chrome.outputDirectory).toBe("packages/ext/dist/chrome");
     expect(body.build.edge.outputDirectory).toBe("build/manifestv3");
     expect(body.build.firefox.outputDirectory).toBe(

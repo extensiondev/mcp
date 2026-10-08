@@ -370,7 +370,7 @@ function locateSourceZip(
 export const schema = {
   name: "extension_build",
   description:
-    "Build a browser extension for production. This tool always passes --browser (chrome unless you set it), so the output lands in dist/<browser>/ (dist/chrome by default) and the answer's outputPath names the folder that was written: read that path instead of assuming one. A scaffolded project's own `npm run build` runs `extension build` with no --browser, which the engine defaults to chromium, so that script writes dist/chromium/ instead. Pass zip:true to also package a .zip for store submission. With browser:'safari' the build converts the extension into a macOS app through Xcode, and bundleId sets the identifier it ships under. The build refuses a manifest with build-blocking errors unless you pass skipValidation:true, because such a manifest yields a broken bundle the bundler itself never flags.",
+    "Build a browser extension for production. This tool always passes --browser (chrome unless you set it), so the output lands in dist/<browser>/ (dist/chrome by default) and the answer's outputPath always names the folder that was written (the engine's reported path, else dist/<browser> under the package root, the same folder this tool checked for the manifest), with zipPath beside it when a zip was asked for: read those paths instead of assuming one. A scaffolded project's own `npm run build` runs `extension build` with no --browser, which the engine defaults to chromium, so that script writes dist/chromium/ instead. Pass zip:true to also package a .zip for store submission. With browser:'safari' the build converts the extension into a macOS app through Xcode, and bundleId sets the identifier it ships under. The build refuses a manifest with build-blocking errors unless you pass skipValidation:true, because such a manifest yields a broken bundle the bundler itself never flags.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -932,9 +932,7 @@ export async function handler(args: {
       value: {
         browser,
         ...(safariIdentity ? { safariApp: safariIdentity } : {}),
-        ...(typeof engineSummary?.output_path === "string"
-          ? { outputPath: engineSummary.output_path }
-          : {}),
+        outputPath: distDir,
         ...(typeof engineSummary?.total_bytes === "number"
           ? { totalBytes: engineSummary.total_bytes }
           : {}),

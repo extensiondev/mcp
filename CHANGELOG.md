@@ -2,6 +2,26 @@
 
 ## Unreleased
 
+- `extension_build` always answers `outputPath`, the folder it checked the
+  manifest in: the engine's reported path when the summary carries one, else
+  `dist/<browser>` under the package root. On an engine older than the
+  summaries contract the field used to be missing and an agent guessed the
+  folder. `zipPath` stays beside it when a zip was asked for.
+- `extension_create` answers `scripts`: every package.json script the
+  scaffolder wrote that runs the engine, with the command, the browser it
+  targets and the folder it writes (`npm run build` is flagless, so chromium
+  into `dist/chromium`; `build:chrome` into `dist/chrome`; a monorepo
+  script's folder is resolved under the package the engine builds). The
+  `defaultsApplied.browser` sentence points at that list instead of
+  restating it, and the description says to read the folder from there.
+- `extension_project_create` defaults the build command to
+  `npm run build -- --browser <browser>`, the browser's name per enabled
+  browser, in place of `npm run build`: the platform runs the stored command
+  as it is and reads `dist/<browser>` afterwards, and a flagless
+  `extension build` writes `dist/chromium`, so a default-created project
+  produced an empty artifact. `<browser>` in a command of your own is
+  replaced the same way `outputDirectory` already did. The description and
+  the `buildCommand` input say what the platform does with the command.
 - The rules, the `/extension build` command and the `extension_build`,
   `extension_create` and `extension_project_create` descriptions now say
   what the engine does: `extension build` with no `--browser` targets
