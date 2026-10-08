@@ -7,6 +7,8 @@ import { describe, it, expect, vi, afterEach } from "vitest";
 
 import { readyContract } from "./fixtures/engine-answers";
 
+import type * as WaitModule from "../tools/wait";
+import type * as LogsModule from "../tools/logs";
 import type { ChildProcess } from "node:child_process";
 import type * as ExecModule from "../lib/exec";
 import type { SpawnedCli } from "../lib/exec";
@@ -52,7 +54,7 @@ const waitCalls: Array<Record<string, unknown>> = [];
 const logsCalls: Array<Record<string, unknown>> = [];
 
 vi.mock("../tools/wait", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../tools/wait")>();
+  const actual = await importOriginal<typeof WaitModule>();
 
   return {
     ...actual,
@@ -65,7 +67,7 @@ vi.mock("../tools/wait", async (importOriginal) => {
 });
 
 vi.mock("../tools/logs", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../tools/logs")>();
+  const actual = await importOriginal<typeof LogsModule>();
 
   return {
     ...actual,
