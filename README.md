@@ -34,7 +34,7 @@ Built on [Extension.js](https://extension.js.org), the open source framework ext
 
 ## Watch it work
 
-[![The agent starts the dev session, the browser opens with the extension loaded, and the agent reads its logs](https://media.extension.land/video/extension-dev/mcp/install-and-run.gif)](https://docs.extension.dev/tools/mcp#install)
+[![Asked to run the extension, the agent starts the dev session, Chrome opens with it loaded, and the agent reports the session, from a real Claude Code session](https://media.extension.land/video/extension-dev/mcp/run.gif)](https://docs.extension.dev/tools/mcp/dev)
 
 ## Browsers
 
@@ -190,7 +190,7 @@ On with `--features=local,platform`, the 9 that reach the extension.dev platform
 
 Every other tool hands back a reading. `extension_assert` states the expectation and returns the verdict.
 
-[![Five expectations go in, five verdicts come back: pass, fail, or inconclusive with what would settle it](https://media.extension.land/video/extension-dev/mcp/assert-verdicts.gif)](https://docs.extension.dev/tools/mcp#run-and-debug)
+[![Asked whether the extension works, the agent runs it, states expectations and reads one verdict each, from a real Claude Code session](https://media.extension.land/video/extension-dev/mcp/test.gif)](https://docs.extension.dev/tools/mcp/assert)
 
 ```jsonc
 {
