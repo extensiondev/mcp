@@ -2,8 +2,8 @@
   "version": "2",
   "sourceRepo": "extension-js/examples",
   "generatorVersion": "2",
-  "commit": "2c3a486af58dc1e0819d940db6a32e11426ef5eb",
-  "generatedAt": "2026-09-29T11:55:46.874Z",
+  "commit": "b354429f2bd498537460e60422b79fcbf47da8af",
+  "generatedAt": "2026-10-08T02:07:58.690Z",
   "templates": [
     {
       "slug": "action",
@@ -1490,7 +1490,6 @@
         "src/images/icon-32.png",
         "src/images/icon-48.png",
         "src/images/icon-64.png",
-        "src/images/icon.png",
         "src/images/preact.png",
         "src/images/tailwind.png",
         "src/images/tailwind_bg.png",
@@ -1507,7 +1506,7 @@
         "firefox"
       ],
       "screenshot": "examples/content-preact/screenshot.png",
-      "icon": "examples/content-preact/src/images/icon.png"
+      "icon": "examples/content-preact/src/images/icon-128.png"
     },
     {
       "slug": "content-react",
@@ -2063,7 +2062,6 @@
         "src/images/tailwind.png",
         "src/images/tailwind_bg.png",
         "src/images/typescript.png",
-        "src/images/vue.png",
         "src/manifest.json",
         "src/options/OptionsApp.vue",
         "src/options/index.html",
@@ -2220,7 +2218,6 @@
         "src/images/icon-32.png",
         "src/images/icon-48.png",
         "src/images/icon-64.png",
-        "src/images/icon.png",
         "src/images/preact.png",
         "src/manifest.json",
         "src/panel/PanelApp.tsx",
@@ -2234,7 +2231,7 @@
         "firefox"
       ],
       "screenshot": "examples/devtools-preact/screenshot.png",
-      "icon": "examples/devtools-preact/src/images/icon.png"
+      "icon": "examples/devtools-preact/src/images/icon-128.png"
     },
     {
       "slug": "devtools-react",
@@ -2301,7 +2298,6 @@
         "src/images/icon-32.png",
         "src/images/icon-48.png",
         "src/images/icon-64.png",
-        "src/images/icon.png",
         "src/images/react.png",
         "src/manifest.json",
         "src/panel/PanelApp.tsx",
@@ -2315,7 +2311,7 @@
         "firefox"
       ],
       "screenshot": "examples/devtools-react/screenshot.png",
-      "icon": "examples/devtools-react/src/images/icon.png"
+      "icon": "examples/devtools-react/src/images/icon-128.png"
     },
     {
       "slug": "devtools-svelte",
@@ -2382,7 +2378,6 @@
         "src/images/icon-32.png",
         "src/images/icon-48.png",
         "src/images/icon-64.png",
-        "src/images/icon.png",
         "src/images/svelte.png",
         "src/manifest.json",
         "src/panel/PanelApp.svelte",
@@ -2397,7 +2392,7 @@
         "firefox"
       ],
       "screenshot": "examples/devtools-svelte/screenshot.png",
-      "icon": "examples/devtools-svelte/src/images/icon.png"
+      "icon": "examples/devtools-svelte/src/images/icon-128.png"
     },
     {
       "slug": "devtools-typescript",
@@ -2463,7 +2458,6 @@
         "src/images/icon-32.png",
         "src/images/icon-48.png",
         "src/images/icon-64.png",
-        "src/images/icon.png",
         "src/images/typescript.png",
         "src/manifest.json",
         "src/panel/index.html",
@@ -2476,7 +2470,7 @@
         "firefox"
       ],
       "screenshot": "examples/devtools-typescript/screenshot.png",
-      "icon": "examples/devtools-typescript/src/images/icon.png"
+      "icon": "examples/devtools-typescript/src/images/icon-128.png"
     },
     {
       "slug": "devtools-vue",
@@ -2543,7 +2537,6 @@
         "src/images/icon-32.png",
         "src/images/icon-48.png",
         "src/images/icon-64.png",
-        "src/images/icon.png",
         "src/images/vue.png",
         "src/manifest.json",
         "src/panel/PanelApp.vue",
@@ -2558,7 +2551,7 @@
         "firefox"
       ],
       "screenshot": "examples/devtools-vue/screenshot.png",
-      "icon": "examples/devtools-vue/src/images/icon.png"
+      "icon": "examples/devtools-vue/src/images/icon-128.png"
     },
     {
       "slug": "init",
@@ -2613,9 +2606,6 @@
         "src/images/icon-32.png",
         "src/images/icon-48.png",
         "src/images/icon-64.png",
-        "src/images/icon.png",
-        "src/images/javascript.png",
-        "src/index.js",
         "src/manifest.json"
       ],
       "browsers": [
@@ -2624,7 +2614,7 @@
         "firefox"
       ],
       "screenshot": "examples/init/screenshot.png",
-      "icon": "examples/init/src/images/icon.png"
+      "icon": "examples/init/src/images/icon-128.png"
     },
     {
       "slug": "javascript",
@@ -2666,7 +2656,8 @@
         }
       },
       "permissions": [
-        "sidePanel"
+        "sidePanel",
+        "tabs"
       ],
       "host_permissions": [],
       "optional_permissions": [],
@@ -2705,6 +2696,7 @@
         "src/manifest.json",
         "src/sidebar/SidebarApp.js",
         "src/sidebar/index.html",
+        "src/sidebar/page-title.js",
         "src/sidebar/scripts.js",
         "src/sidebar/styles.css"
       ],
@@ -4071,7 +4063,8 @@
         }
       },
       "permissions": [
-        "sidePanel"
+        "sidePanel",
+        "tabs"
       ],
       "host_permissions": [],
       "optional_permissions": [],
@@ -4112,6 +4105,7 @@
         "src/manifest.json",
         "src/sidebar/SidebarApp.tsx",
         "src/sidebar/index.html",
+        "src/sidebar/page-title.ts",
         "src/sidebar/scripts.tsx",
         "src/sidebar/styles.css"
       ],
@@ -4164,7 +4158,8 @@
         }
       },
       "permissions": [
-        "sidePanel"
+        "sidePanel",
+        "tabs"
       ],
       "host_permissions": [],
       "optional_permissions": [],
@@ -4203,6 +4198,7 @@
         "src/manifest.json",
         "src/sidebar/SidebarApp.tsx",
         "src/sidebar/index.html",
+        "src/sidebar/page-title.ts",
         "src/sidebar/scripts.tsx",
         "src/sidebar/styles.css"
       ],
@@ -4742,8 +4738,6 @@
         "src/images/icon-32.png",
         "src/images/icon-48.png",
         "src/images/icon-64.png",
-        "src/images/icon.png",
-        "src/images/javascript.png",
         "src/manifest.json",
         "src/sandbox/eval.js",
         "src/sandbox/index.html",
@@ -4756,7 +4750,7 @@
         "firefox"
       ],
       "screenshot": "examples/special-folders-pages/screenshot.png",
-      "icon": "examples/special-folders-pages/src/images/icon.png"
+      "icon": "examples/special-folders-pages/src/images/icon-128.png"
     },
     {
       "slug": "special-folders-scripts",
@@ -4836,7 +4830,6 @@
         "src/images/icon-48.png",
         "src/images/icon-64.png",
         "src/images/icon.png",
-        "src/images/javascript.png",
         "src/manifest.json"
       ],
       "browsers": [
@@ -4888,7 +4881,8 @@
         }
       },
       "permissions": [
-        "sidePanel"
+        "sidePanel",
+        "tabs"
       ],
       "host_permissions": [],
       "optional_permissions": [],
@@ -4928,6 +4922,7 @@
         "src/manifest.json",
         "src/sidebar/SidebarApp.svelte",
         "src/sidebar/index.html",
+        "src/sidebar/page-title.ts",
         "src/sidebar/scripts.ts",
         "src/sidebar/styles.css"
       ],
@@ -5076,7 +5071,8 @@
         }
       },
       "permissions": [
-        "sidePanel"
+        "sidePanel",
+        "tabs"
       ],
       "host_permissions": [],
       "optional_permissions": [],
@@ -5115,6 +5111,7 @@
         "src/manifest.json",
         "src/sidebar/SidebarApp.ts",
         "src/sidebar/index.html",
+        "src/sidebar/page-title.ts",
         "src/sidebar/scripts.ts",
         "src/sidebar/styles.css"
       ],
@@ -5167,7 +5164,8 @@
         }
       },
       "permissions": [
-        "sidePanel"
+        "sidePanel",
+        "tabs"
       ],
       "host_permissions": [],
       "optional_permissions": [],
@@ -5208,6 +5206,7 @@
         "src/shims-vue.d.ts",
         "src/sidebar/SidebarApp.vue",
         "src/sidebar/index.html",
+        "src/sidebar/page-title.ts",
         "src/sidebar/scripts.ts",
         "src/sidebar/styles.css"
       ],
