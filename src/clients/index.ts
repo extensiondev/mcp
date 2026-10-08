@@ -19,7 +19,7 @@ export interface ClientInfo {
 export const CLIENTS: readonly ClientInfo[] = [
   { id: "claude-code", label: "Claude Code" },
   { id: "cursor", label: "Cursor" },
-  { id: "vscode", label: "VS Code", subtitle: "Also GitHub Copilot" },
+  { id: "vscode", label: "VS Code" },
   { id: "codex", label: "Codex" },
   { id: "json", label: "Other clients", subtitle: "Claude Desktop and .mcp.json" },
 ];

@@ -56,7 +56,7 @@ The Chromium family and Firefox get HMR, control, eval, inspect and assert (Fire
 
 | <img alt="Claude Code" src="https://media.extension.land/logos/devtools/claude-code.svg" width="70"> | <img alt="Claude Desktop" src="https://media.extension.land/logos/ai/claude.svg" width="70"> | <picture><source media="(prefers-color-scheme: dark)" srcset="https://media.extension.land/logos/devtools/cursor-dark.svg"><img alt="Cursor" src="https://media.extension.land/logos/devtools/cursor.svg" width="70"></picture> | <img alt="VS Code" src="https://media.extension.land/logos/devtools/vscode.svg" width="70"> | <picture><source media="(prefers-color-scheme: dark)" srcset="https://media.extension.land/logos/devtools/codex-dark.svg"><img alt="Codex" src="https://media.extension.land/logos/devtools/codex.svg" width="70"></picture> |
 | :-: | :-: | :-: | :-: | :-: |
-| <sup>Claude Code</sup> | <sup>Claude Desktop</sup> | <sup>Cursor</sup> | <sup>VS Code<br>also GitHub Copilot</sup> | <sup>Codex</sup> |
+| <sup>Claude Code</sup> | <sup>Claude Desktop</sup> | <sup>Cursor</sup> | <sup>VS Code</sup> | <sup>Codex</sup> |
 
 </div>
 
@@ -83,7 +83,7 @@ Or install it as a plugin, the MCP server plus the `/extension`, `/extension-add
 
 Or paste the `.mcp.json` block below into `.cursor/mcp.json`.
 
-### VS Code (Also GitHub Copilot)
+### VS Code
 
 ```bash
 code --add-mcp '{"name":"extension-dev","command":"npx","args":["@extension.dev/mcp","--features=local,platform"]}'
@@ -225,20 +225,11 @@ You approve a code at [extension.dev/device](https://extension.dev/device); no G
 
 | <img alt="Chrome Web Store" src="https://media.extension.land/logos/stores/chrome-web-store.png" width="70"> | <img alt="Firefox Add-ons" src="https://media.extension.land/logos/stores/firefox-addons.png" width="70"> | <img alt="Edge Add-ons" src="https://media.extension.land/logos/stores/microsoft-edge-addons.svg" width="70"> | <img alt="App Store" src="https://media.extension.land/logos/stores/app-store.svg" width="70"> |
 | :-: | :-: | :-: | :-: |
-| <sup>Chrome Web Store<br>`extension_submit` through extension.dev</sup> | <sup>Firefox Add-ons<br>`extension_submit` through extension.dev</sup> | <sup>Edge Add-ons<br>`extension_submit` through extension.dev</sup> | <sup>App Store for Safari<br>paid lane, a free workspace is refused</sup> |
+| <sup>Chrome Web Store</sup> | <sup>Firefox Add-ons</sup> | <sup>Edge Add-ons</sup> | <sup>App Store</sup> |
 
 </div>
 
 The details, the approval flow and the batch login for several projects are under [Share a build in progress](https://docs.extension.dev/tools/mcp#share-a-build-in-progress), [Publish is not submit](https://docs.extension.dev/tools/mcp#publish-is-not-submit) and [Login](https://docs.extension.dev/tools/mcp#login).
-
-## The extension.dev stack
-
-| Package | Use it to |
-| --- | --- |
-| [`@extension.dev/skill`](https://www.npmjs.com/package/@extension.dev/skill) | Teach AI agents the judgment half: cross-browser rules, gotchas, playbooks |
-| [`@extension.dev/artifact-integrity`](https://www.npmjs.com/package/@extension.dev/artifact-integrity) | Check an artifact against a declared SHA-256 and gate CI on the result|
-
-All of it rides on [Extension.js](https://github.com/extension-js/extension.js), the open-source cross-browser extension framework.
 
 ## Community
 
