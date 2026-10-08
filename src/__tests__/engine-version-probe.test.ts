@@ -35,8 +35,8 @@ vi.mock("../lib/exec", async (importOriginal) => {
   };
 });
 
-const engineVersion = await import("../lib/engine-version");
-const build = await import("../tools/build");
+let engineVersion = await import("../lib/engine-version");
+let build = await import("../tools/build");
 
 const UNKNOWN_OUTPUT = "error: unknown option '--output'";
 const UNKNOWN_OUTPUT_REDESIGNED =
@@ -185,14 +185,15 @@ const capabilityCalls = () =>
 const run = async (args: Parameters<typeof build.handler>[0]) =>
   JSON.parse(await build.handler(args));
 
-beforeEach(() => {
-  engineVersion.resetEngineVersionCache();
+beforeEach(async () => {
+  vi.resetModules();
+  engineVersion = await import("../lib/engine-version");
+  build = await import("../tools/build");
 });
 
 afterEach(() => {
   cliCalls.length = 0;
   cliResponder = null;
-  engineVersion.resetEngineVersionCache();
 
   for (const dir of tmpDirs.splice(0)) {
     fs.rmSync(dir, { recursive: true, force: true });

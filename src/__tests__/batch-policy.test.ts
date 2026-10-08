@@ -7,7 +7,6 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 
 import { createServer } from "../index";
-import { resetBatchCreateSessions } from "../lib/project-create-batch";
 import {
   DEFAULT_SERVER_OPTIONS,
   FEATURE_GROUPS,
@@ -98,7 +97,6 @@ beforeEach(() => {
   });
 
   vi.stubGlobal("fetch", fetchMock);
-  resetBatchCreateSessions();
 });
 
 afterEach(() => {

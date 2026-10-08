@@ -22,7 +22,7 @@ import {
 
 const execFileAsync = promisify(execFile);
 
-interface DetectedBrowser {
+export interface DetectedBrowser {
   browser: string;
   binaryPath: string | null;
   source: "managed" | "system" | "not_found";
@@ -411,13 +411,7 @@ export async function detectBrowsers(
     });
   }
 
-  const available = detected.filter((d) => d.source !== "not_found" && d.versionProbe === "ok");
-  const unverified = detected.filter((d) => d.source !== "not_found" && d.versionProbe === "failed");
-  const missing = detected.filter((d) => d.source === "not_found");
-  const safari = detected.find((d) => d.automation);
-  const safariHint = safari?.automation
-    ? ` ${safariAutomationHint(safari.automation)}`
-    : "";
+  const sentences = detectSentences(detected);
 
   return envelope({
     ok: true,
@@ -426,11 +420,43 @@ export async function detectBrowsers(
     value: {
       detected,
       managed,
-      summary: {
-        available: available.map((d) => d.browser),
-        unverified: unverified.map((d) => d.browser),
-        missing: missing.map((d) => d.browser),
-      },
+      summary: sentences.summary,
+    },
+    ...(sentences.warnings ? { warnings: sentences.warnings } : {}),
+    hint: sentences.hint,
+  });
+}
+
+export function detectSentences(detected: DetectedBrowser[]): {
+  summary: { available: string[]; unverified: string[]; missing: string[] };
+  warnings?: string[];
+  hint: string;
+} {
+  const available = detected.filter((d) => d.source !== "not_found" && d.versionProbe === "ok");
+  const unverified = detected.filter((d) => d.source !== "not_found" && d.versionProbe === "failed");
+  const missing = detected.filter((d) => d.source === "not_found");
+  const safari = detected.find((d) => d.automation);
+  const safariHint = safari?.automation
+    ? ` ${safariAutomationHint(safari.automation)}`
+    : "";
+  const hint = missing.length
+    ? `Not found at the paths this server checks (the managed cache and the usual install locations): ${missing.map((d) => d.browser).join(", ")}.${
+        missing.some((d) => MANAGED_INSTALLABLE.has(d.browser))
+          ? ` Use extension_browsers with action: "install" to install ${missing
+              .filter((d) => MANAGED_INSTALLABLE.has(d.browser))
+              .map((d) => d.browser)
+              .join(", ")}.`
+          : ""
+      }${safariHint}`
+    : unverified.length
+      ? `${available.map((d) => d.browser).join(", ") || "No browser"} answered a version probe; ${unverified.map((d) => d.browser).join(", ")} did not and ${unverified.length === 1 ? "is" : "are"} unverified.${safariHint}`
+      : `All requested browsers are available.${safariHint}`;
+
+  return {
+    summary: {
+      available: available.map((d) => d.browser),
+      unverified: unverified.map((d) => d.browser),
+      missing: missing.map((d) => d.browser),
     },
     ...(unverified.length
       ? {
@@ -439,17 +465,6 @@ export async function detectBrowsers(
           ),
         }
       : {}),
-    hint: missing.length
-      ? `Not found at the paths this server checks (the managed cache and the usual install locations): ${missing.map((d) => d.browser).join(", ")}.${
-          missing.some((d) => MANAGED_INSTALLABLE.has(d.browser))
-            ? ` Use extension_browsers with action: "install" to install ${missing
-                .filter((d) => MANAGED_INSTALLABLE.has(d.browser))
-                .map((d) => d.browser)
-                .join(", ")}.`
-            : ""
-        }${safariHint}`
-      : unverified.length
-        ? `${available.map((d) => d.browser).join(", ") || "No browser"} answered a version probe; ${unverified.map((d) => d.browser).join(", ")} did not and ${unverified.length === 1 ? "is" : "are"} unverified.${safariHint}`
-        : `All requested browsers are available.${safariHint}`,
-  });
+    hint,
+  };
 }

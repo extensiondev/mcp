@@ -28,9 +28,6 @@ vi.mock("extension-create", () => ({
 }));
 
 const create = await import("../tools/create");
-const { resetSessionIdentityForTests } = await import(
-  "../lib/session-identity"
-);
 
 const tmpDirs: string[] = [];
 
@@ -63,7 +60,6 @@ beforeEach(() => {
   process.env.EXTENSION_TEMPLATES_COMMIT = TEST_COMMIT;
   captures = [];
   writeManifest = true;
-  resetSessionIdentityForTests();
   vi.stubGlobal(
     "fetch",
     vi.fn(async (url: string, init?: { body?: string }) => {
@@ -88,8 +84,6 @@ afterEach(() => {
   for (const dir of tmpDirs.splice(0)) {
     fs.rmSync(dir, { recursive: true, force: true });
   }
-
-  resetSessionIdentityForTests();
 });
 
 async function seedCaptures(): Promise<Capture[]> {

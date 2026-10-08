@@ -6,8 +6,8 @@ import { describe, it, expect, afterEach } from "vitest";
 
 import {
   findSessionInfo,
-  getSession,
   listSessionMarkers,
+  listSessions,
   registerSession,
   removeSession,
   removeSessionMarker,
@@ -15,6 +15,11 @@ import {
 } from "../lib/process-manager";
 
 const tmpDirs: string[] = [];
+
+const inMemorySession = (projectPath: string, browser: string) =>
+  listSessions().find(
+    (s) => path.resolve(s.projectPath) === path.resolve(projectPath) && s.browser === browser,
+  );
 
 function tmpProject(): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-registry-guard-"));
@@ -39,7 +44,7 @@ describe("pid-guarded removal after replace", () => {
 
     removeSession(project, "chrome", 111);
 
-    expect(getSession(project, "chrome")?.pid).toBe(222);
+    expect(inMemorySession(project, "chrome")?.pid).toBe(222);
   });
 
   it("a matching pid still removes the session", () => {
@@ -48,7 +53,7 @@ describe("pid-guarded removal after replace", () => {
 
     removeSession(project, "chrome", 333);
 
-    expect(getSession(project, "chrome")).toBeUndefined();
+    expect(inMemorySession(project, "chrome")).toBeUndefined();
   });
 
   it("a stale exit handler cannot delete the successor's marker", () => {

@@ -84,37 +84,40 @@ const emphasisRuns = (description: string): string[] => {
 };
 
 describe("every tool description is the first thing an agent reads about a tool, so it follows the CLI's own command-help copy rules", () => {
-  for (const tool of ALL_TOOLS) {
-    const { name, description } = tool.schema;
+  const table = ALL_TOOLS.map((tool) => [tool.schema.name, tool.schema.description] as const);
 
-    it(`${name} opens with an imperative verb`, () => {
-      const first = description.split(/\s+/)[0].replace(/[,:]$/, "");
-      expect(
-        IMPERATIVE_VERBS,
-        `${name} opens with "${first}", which is not an approved imperative verb`,
-      ).toContain(first);
-    });
+  it.each(table)("%s opens with an imperative verb", (name, description) => {
+    const first = description.split(/\s+/)[0].replace(/[,:]$/, "");
 
-    it(`${name} ends its last sentence with a period`, () => {
-      expect(description.trimEnd().endsWith(".")).toBe(true);
-    });
+    expect(
+      IMPERATIVE_VERBS,
+      `${name} opens with "${first}", which is not an approved imperative verb`,
+    ).toContain(first);
+  });
 
-    it(`${name} writes an ellipsis as a single character`, () => {
-      expect(description).not.toContain("...");
-    });
+  it.each(table)("%s ends its last sentence with a period", (name, description) => {
+    expect(description.trimEnd().endsWith("."), `${name} does not end with a period`).toBe(true);
+  });
 
-    it(`${name} spells the brand Extension.js`, () => {
-      expect(/\bextension\.js\b/.test(description)).toBe(false);
-    });
+  it.each(table)("%s writes an ellipsis as a single character", (name, description) => {
+    expect(description, `${name} spells an ellipsis as three dots`).not.toContain("...");
+  });
 
-    it(`${name} shouts at most once, only on the word that separates it from the neighbour it is confused with`, () => {
+  it.each(table)("%s spells the brand Extension.js", (name, description) => {
+    expect(/\bextension\.js\b/.test(description), `${name} lowercases the brand`).toBe(false);
+  });
+
+  it.each(table)(
+    "%s shouts at most once, only on the word that separates it from the neighbour it is confused with",
+    (name, description) => {
       const runs = emphasisRuns(description);
+
       expect(
         runs.length,
         `${name} shouts ${runs.length} times (${runs.join(", ")}); carry the rest as "Use <other tool> for X"`,
       ).toBeLessThanOrEqual(EMPHASIS_BUDGET);
-    });
-  }
+    },
+  );
 
   it("keeps the whole surface under a handful of shouted words", () => {
     const total = ALL_TOOLS.reduce(

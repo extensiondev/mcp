@@ -37,11 +37,16 @@ vi.mock("../lib/exec", async (importOriginal) => {
 
 const dev = await import("../tools/dev");
 const start = await import("../tools/start");
-const { getSession, listSessionMarkers } = await import(
+const { listSessions, listSessionMarkers } = await import(
   "../lib/process-manager"
 );
 
 const tmpDirs: string[] = [];
+
+const inMemorySession = (projectPath: string, browser: string) =>
+  listSessions().find(
+    (s) => path.resolve(s.projectPath) === path.resolve(projectPath) && s.browser === browser,
+  );
 
 function tmpProject(): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-spawn-failure-"));
@@ -68,7 +73,7 @@ describe("spawn failure never registers a phantom session", () => {
     expect(result.error.message).toContain("ENOENT");
     expect(result.error.message).toContain("nothing was registered");
     expect(result.hint).toContain("npm i -D extension");
-    expect(getSession(project, "chrome")).toBeUndefined();
+    expect(inMemorySession(project, "chrome")).toBeUndefined();
     const markers = listSessionMarkers().map((m) => path.resolve(m.projectPath));
     expect(markers).not.toContain(path.resolve(project));
   });
@@ -81,6 +86,6 @@ describe("spawn failure never registers a phantom session", () => {
     expect(result.ok).toBe(false);
     expect(result.status).toBe("spawn-failed");
     expect(result.error.code).toBe("E_CLI");
-    expect(getSession(project, "chrome")).toBeUndefined();
+    expect(inMemorySession(project, "chrome")).toBeUndefined();
   });
 });

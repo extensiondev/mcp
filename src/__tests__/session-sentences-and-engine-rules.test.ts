@@ -12,7 +12,7 @@ import { contractControlState } from "../lib/session-browser";
 import { LAUNCH_FLAG_SCHEMA } from "../lib/launch-flags";
 import { SERVER_INSTRUCTIONS } from "../index";
 import { schema as browsersSchema } from "../tools/browsers";
-import { detectBrowsers } from "../tools/detect-browsers";
+import { detectSentences } from "../tools/detect-browsers";
 import { BUNDLE_ID_PATTERN } from "../tools/build";
 import { isDevelopmentBuild, reviewRisksReport } from "../lib/store-review";
 import { handler as analyze } from "../tools/analyze";
@@ -20,6 +20,8 @@ import { manifestCandidates } from "../lib/project-manifest";
 import { engineBrowserName } from "../lib/browser-family";
 import { handler as themeVerify } from "../tools/theme-verify";
 import { writeModernContract } from "./fixtures/ready-contract";
+
+import type { DetectedBrowser } from "../tools/detect-browsers";
 
 const tmpDirs: string[] = [];
 
@@ -102,16 +104,26 @@ describe("sentences", () => {
     expect(browsersSchema.description).not.toMatch(/580 to 625 MB/);
   });
 
-  it("says where it looked when a browser is not found", async () => {
-    process.env.EXT_BROWSERS_CACHE_DIR = tmpDir("mcp-cache-");
-    const out = JSON.parse(await detectBrowsers(["yandex"]));
-    const row = out.value.detected.find((d: { browser: string }) => d.browser === "yandex");
+  it("says where it looked when a browser is not found, and names the install only for a managed one", () => {
+    const notFound = (browser: string): DetectedBrowser => ({
+      browser,
+      binaryPath: null,
+      source: "not_found",
+      engine: "chromium",
+      version: null,
+      cdpSupport: true,
+      rdpSupport: false,
+    });
+    const yandex = detectSentences([notFound("yandex")]);
 
-    if (row.source === "not_found") {
-      expect(out.hint).toMatch(/Not found at the paths this server checks/);
-      expect(out.hint).not.toMatch(/^Missing browser/);
-    }
-  }, 20_000);
+    expect(yandex.hint).toMatch(/^Not found at the paths this server checks \(the managed cache and the usual install locations\): yandex\./);
+    expect(yandex.hint).not.toMatch(/action: "install"/);
+    expect(yandex.summary.missing).toEqual(["yandex"]);
+
+    const chrome = detectSentences([notFound("chrome")]);
+
+    expect(chrome.hint).toMatch(/Use extension_browsers with action: "install" to install chrome\./);
+  });
 });
 
 describe("the engine's rules", () => {

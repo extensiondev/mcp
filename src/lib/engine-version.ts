@@ -109,10 +109,6 @@ interface CachedFacts extends EngineFacts {
 
 const verdicts = new Map<string, CachedFacts>();
 
-export function resetEngineVersionCache(): void {
-  verdicts.clear();
-}
-
 function invocationKey(command: string, prefixArgs: string[]): string {
   return [command, ...prefixArgs].join("\0");
 }

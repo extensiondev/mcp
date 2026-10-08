@@ -138,10 +138,6 @@ interface Session {
 
 const sessions = new Map<string, Session>();
 
-export function resetBatchCreateSessions(): void {
-  sessions.clear();
-}
-
 const SESSION_KEEP_SECONDS = 3600;
 
 function sweepSessions(nowSeconds: number): void {

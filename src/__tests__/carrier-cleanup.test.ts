@@ -2,27 +2,15 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import {
-  CARRIER_DIR_NAME,
-  CARRIER_EXTENSION_ID,
-  carrierPath,
-  claimCarrier,
-  materializeCarrier,
-  removeCarrier,
-} from "../lib/carrier";
-import {
-  installCarrierExitCleanup,
-  sweepCarriers,
-  uninstallCarrierExitCleanup,
-} from "../lib/carrier-exit";
-import {
-  carriersPlacedHere,
-  forgetCarrier,
-  rememberCarrier,
-} from "../lib/carrier-registry";
-import * as stop from "../tools/stop";
+let carrier = await import("../lib/carrier");
+let carrierExit = await import("../lib/carrier-exit");
+let registry = await import("../lib/carrier-registry");
+let stop = await import("../tools/stop");
+
+const PROCESS_EVENTS = ["exit", "SIGINT", "SIGTERM", "SIGHUP"] as const;
+const listenersBefore = new Map<string, Set<(...a: unknown[]) => void>>();
 
 const MARKER = "managed-by-extension-dev-mcp.json";
 const tmpDirs: string[] = [];
@@ -36,16 +24,34 @@ function project(): string {
 
 function withCarrier(): string {
   const dir = project();
-  expect(materializeCarrier(dir, "chrome").loaded).toBe(true);
+  expect(carrier.materializeCarrier(dir, "chrome").loaded).toBe(true);
 
   return dir;
 }
 
+beforeEach(async () => {
+  for (const event of PROCESS_EVENTS) {
+    listenersBefore.set(event, new Set(process.listeners(event) as Array<(...a: unknown[]) => void>));
+  }
+
+  vi.resetModules();
+  carrier = await import("../lib/carrier");
+  carrierExit = await import("../lib/carrier-exit");
+  registry = await import("../lib/carrier-registry");
+  stop = await import("../tools/stop");
+});
+
 afterEach(() => {
-  uninstallCarrierExitCleanup();
+  for (const event of PROCESS_EVENTS) {
+    const before = listenersBefore.get(event) ?? new Set();
+
+    for (const listener of process.listeners(event) as Array<(...a: unknown[]) => void>) {
+      if (!before.has(listener)) process.removeListener(event, listener);
+    }
+  }
 
   for (const dir of tmpDirs.splice(0)) {
-    forgetCarrier(dir);
+    registry.forgetCarrier(dir);
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
@@ -53,86 +59,86 @@ afterEach(() => {
 describe("a carrier this tool placed stays recognisable without its marker", () => {
   it("takes back its own payload when the marker is gone", () => {
     const dir = withCarrier();
-    fs.rmSync(path.join(carrierPath(dir), MARKER));
+    fs.rmSync(path.join(carrier.carrierPath(dir), MARKER));
 
-    expect(claimCarrier(carrierPath(dir))).toEqual({
+    expect(carrier.claimCarrier(carrier.carrierPath(dir))).toEqual({
       ours: true,
       how: "payload",
     });
 
-    const removal = removeCarrier(dir);
+    const removal = carrier.removeCarrier(dir);
     expect(removal.removed).toBe(true);
-    expect(removal.note).toContain(CARRIER_EXTENSION_ID);
-    expect(fs.existsSync(carrierPath(dir))).toBe(false);
+    expect(removal.note).toContain(carrier.CARRIER_EXTENSION_ID);
+    expect(fs.existsSync(carrier.carrierPath(dir))).toBe(false);
   });
 
   it("replaces its own unmarked payload instead of refusing forever", () => {
     const dir = withCarrier();
-    fs.rmSync(path.join(carrierPath(dir), MARKER));
+    fs.rmSync(path.join(carrier.carrierPath(dir), MARKER));
 
-    const again = materializeCarrier(dir, "chrome");
+    const again = carrier.materializeCarrier(dir, "chrome");
     expect(again.loaded).toBe(true);
-    expect(fs.existsSync(path.join(carrierPath(dir), MARKER))).toBe(true);
+    expect(fs.existsSync(path.join(carrier.carrierPath(dir), MARKER))).toBe(true);
   });
 
   it("takes back a half-written copy that never got a manifest", () => {
     const dir = project();
-    const target = carrierPath(dir);
+    const target = carrier.carrierPath(dir);
     fs.mkdirSync(path.join(target, "action"), { recursive: true });
     fs.writeFileSync(path.join(target, "action", "index.css"), "");
 
-    expect(claimCarrier(target)).toEqual({ ours: true, how: "partial" });
-    expect(removeCarrier(dir).removed).toBe(true);
+    expect(carrier.claimCarrier(target)).toEqual({ ours: true, how: "partial" });
+    expect(carrier.removeCarrier(dir).removed).toBe(true);
     expect(fs.existsSync(target)).toBe(false);
   });
 
   it("still refuses a directory it never wrote, and says what to do instead", () => {
     const dir = project();
-    const target = carrierPath(dir);
+    const target = carrier.carrierPath(dir);
     fs.mkdirSync(target, { recursive: true });
     fs.writeFileSync(
       path.join(target, "manifest.json"),
       JSON.stringify({ name: "someone else", version: "1.0.0" }),
     );
 
-    const removal = removeCarrier(dir);
+    const removal = carrier.removeCarrier(dir);
     expect(removal.removed).toBe(false);
     expect(removal.note).toContain("left untouched");
     expect(removal.note).toContain("rename it");
     expect(fs.existsSync(path.join(target, "manifest.json"))).toBe(true);
 
-    const materialized = materializeCarrier(dir, "chrome");
+    const materialized = carrier.materializeCarrier(dir, "chrome");
     expect(materialized.loaded).toBe(false);
     expect(materialized.note).toContain("Rename it");
   });
 
   it("refuses a directory holding files the payload never had", () => {
     const dir = project();
-    const target = carrierPath(dir);
+    const target = carrier.carrierPath(dir);
     fs.mkdirSync(target, { recursive: true });
     fs.writeFileSync(path.join(target, "notes.txt"), "mine");
 
-    expect(claimCarrier(target)).toEqual({ ours: false, how: "foreign" });
-    expect(removeCarrier(dir).removed).toBe(false);
+    expect(carrier.claimCarrier(target)).toEqual({ ours: false, how: "foreign" });
+    expect(carrier.removeCarrier(dir).removed).toBe(false);
   });
 });
 
 describe("the carrier is written down so something can still find it later", () => {
   it("records a placed carrier and forgets a removed one", () => {
     const dir = withCarrier();
-    expect(carriersPlacedHere()).toContain(path.resolve(dir));
+    expect(registry.carriersPlacedHere()).toContain(path.resolve(dir));
 
-    removeCarrier(dir);
-    expect(carriersPlacedHere()).not.toContain(path.resolve(dir));
+    carrier.removeCarrier(dir);
+    expect(registry.carriersPlacedHere()).not.toContain(path.resolve(dir));
   });
 
   it("stops recording a project whose carrier was already gone", () => {
     const dir = project();
-    rememberCarrier(dir);
-    expect(carriersPlacedHere()).toContain(path.resolve(dir));
+    registry.rememberCarrier(dir);
+    expect(registry.carriersPlacedHere()).toContain(path.resolve(dir));
 
-    removeCarrier(dir);
-    expect(carriersPlacedHere()).not.toContain(path.resolve(dir));
+    carrier.removeCarrier(dir);
+    expect(registry.carriersPlacedHere()).not.toContain(path.resolve(dir));
   });
 });
 
@@ -141,7 +147,7 @@ describe("extension_stop all=true reaches a project that was never stopped", () 
     const dir = withCarrier();
 
     const out = JSON.parse(await stop.handler({ all: true }));
-    expect(fs.existsSync(carrierPath(dir))).toBe(false);
+    expect(fs.existsSync(carrier.carrierPath(dir))).toBe(false);
     const swept = (out.value.carriersSwept ?? []).map((c: any) =>
       path.resolve(c.projectPath),
     );
@@ -151,10 +157,10 @@ describe("extension_stop all=true reaches a project that was never stopped", () 
 
   it("leaves a directory it does not own where it is", async () => {
     const dir = project();
-    const target = carrierPath(dir);
+    const target = carrier.carrierPath(dir);
     fs.mkdirSync(target, { recursive: true });
     fs.writeFileSync(path.join(target, "manifest.json"), '{"name":"theirs"}');
-    rememberCarrier(dir);
+    registry.rememberCarrier(dir);
 
     await stop.handler({ all: true });
     expect(fs.existsSync(path.join(target, "manifest.json"))).toBe(true);
@@ -174,14 +180,14 @@ describe("the server dying takes the carriers with it", () => {
     process.on("SIGTERM", keepAlive);
 
     try {
-      installCarrierExitCleanup();
+      carrierExit.installCarrierExitCleanup();
       const ours = ourListeners("SIGTERM").filter((l) => l !== keepAlive);
       expect(ours).toHaveLength(1);
 
       ours[0]();
 
-      expect(fs.existsSync(carrierPath(dir))).toBe(false);
-      expect(carriersPlacedHere()).not.toContain(path.resolve(dir));
+      expect(fs.existsSync(carrier.carrierPath(dir))).toBe(false);
+      expect(registry.carriersPlacedHere()).not.toContain(path.resolve(dir));
     } finally {
       process.off("SIGTERM", keepAlive);
     }
@@ -193,7 +199,7 @@ describe("the server dying takes the carriers with it", () => {
     process.on("SIGTERM", keepAlive);
 
     try {
-      installCarrierExitCleanup();
+      carrierExit.installCarrierExitCleanup();
       const before = process.listenerCount("SIGTERM");
       const ours = ourListeners("SIGTERM").filter((l) => l !== keepAlive);
       ours[0]();
@@ -206,18 +212,18 @@ describe("the server dying takes the carriers with it", () => {
 
   it("sweeps on a plain exit as well", () => {
     const dir = withCarrier();
-    installCarrierExitCleanup();
+    carrierExit.installCarrierExitCleanup();
     const exitHandlers = process.listeners("exit") as Array<() => void>;
     for (const handler of exitHandlers) handler();
-    expect(fs.existsSync(carrierPath(dir))).toBe(false);
+    expect(fs.existsSync(carrier.carrierPath(dir))).toBe(false);
   });
 
   it("installs one set of handlers however often it is called", () => {
     const before = process.listenerCount("SIGINT");
-    installCarrierExitCleanup();
+    carrierExit.installCarrierExitCleanup();
     const after = process.listenerCount("SIGINT");
-    installCarrierExitCleanup();
-    installCarrierExitCleanup();
+    carrierExit.installCarrierExitCleanup();
+    carrierExit.installCarrierExitCleanup();
     expect(process.listenerCount("SIGINT")).toBe(after);
     expect(after).toBe(before + 1);
   });
@@ -231,7 +237,7 @@ describe("the server dying takes the carriers with it", () => {
     process.on("SIGTERM", keepAlive);
 
     try {
-      installCarrierExitCleanup();
+      carrierExit.installCarrierExitCleanup();
       const ours = ourListeners("SIGTERM").filter((l) => l !== keepAlive);
       expect(() => ours[0]()).not.toThrow();
       expect(() => ours[0]()).not.toThrow();
@@ -242,9 +248,9 @@ describe("the server dying takes the carriers with it", () => {
 
   it("is idempotent: a second sweep of the same project is a no-op", () => {
     const dir = withCarrier();
-    expect(sweepCarriers([dir])[0].removed).toBe(true);
-    expect(sweepCarriers([dir])).toEqual([]);
-    expect(fs.existsSync(path.join(dir, "extensions", CARRIER_DIR_NAME))).toBe(
+    expect(carrierExit.sweepCarriers([dir])[0].removed).toBe(true);
+    expect(carrierExit.sweepCarriers([dir])).toEqual([]);
+    expect(fs.existsSync(path.join(dir, "extensions", carrier.CARRIER_DIR_NAME))).toBe(
       false,
     );
   });

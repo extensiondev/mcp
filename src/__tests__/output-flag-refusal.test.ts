@@ -28,9 +28,9 @@ vi.mock("../lib/exec", async (importOriginal) => {
   };
 });
 
-const engineVersion = await import("../lib/engine-version");
-const act = await import("../lib/act");
-const doctor = await import("../tools/doctor");
+let engineVersion = await import("../lib/engine-version");
+let act = await import("../lib/act");
+let doctor = await import("../tools/doctor");
 
 const UNKNOWN_OUTPUT = "error: unknown option '--output'";
 const UNKNOWN_OUTPUT_REDESIGNED =
@@ -78,14 +78,16 @@ function engineThatRefusesTheFlag(
 
 const probeCalls = () => cliCalls.filter((args) => args[0] === "--version");
 
-beforeEach(() => {
-  engineVersion.resetEngineVersionCache();
+beforeEach(async () => {
+  vi.resetModules();
+  engineVersion = await import("../lib/engine-version");
+  act = await import("../lib/act");
+  doctor = await import("../tools/doctor");
 });
 
 afterEach(() => {
   cliCalls.length = 0;
   cliResponder = null;
-  engineVersion.resetEngineVersionCache();
 
   for (const dir of tmpDirs.splice(0)) {
     fs.rmSync(dir, { recursive: true, force: true });

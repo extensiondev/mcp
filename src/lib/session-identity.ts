@@ -138,11 +138,6 @@ export function sessionId(): string {
   return processSessionId;
 }
 
-export function resetSessionIdentityForTests(): void {
-  processSessionId = "";
-  ephemeralInstallId = "";
-}
-
 export function identityHeaders(tool: string): Record<string, string> {
   try {
     if (telemetryDisabled()) return {};

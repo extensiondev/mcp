@@ -318,18 +318,61 @@ export function doctorFrame(
   legs: Array<{ check: string; status: "pass" | "fail" | "warn" | "skip"; detail: string; remediation?: string }>,
   browser = "chrome",
 ): Body {
-  const failed = legs.filter((leg) => leg.status === "fail").length;
+  const failed = legs.filter((leg) => leg.status === "fail");
+  const remediation = failed.find((leg) => leg.remediation)?.remediation;
   return {
     schema: 1,
-    ok: failed === 0,
+    ok: failed.length === 0,
     command: "doctor",
     browser,
-    status: failed === 0 ? "healthy" : "unhealthy",
+    status: failed.length === 0 ? "healthy" : "unhealthy",
     value: legs,
     error:
-      failed === 0
+      failed.length === 0
         ? null
-        : { code: "E_DOCTOR", message: `${failed} of ${legs.length} doctor checks failed.` },
+        : { code: "E_DOCTOR", message: `${failed.length} of ${legs.length} doctor checks failed.` },
+    ...(remediation ? { hint: remediation } : {}),
+    warnings: [],
+  };
+}
+
+export function evalFrame(result: unknown, context = "background", overrides: Body = {}): Body {
+  return {
+    schema: 1,
+    ok: true,
+    command: "eval",
+    status: "ok",
+    value: { result, context },
+    error: null,
+    warnings: [],
+    ...overrides,
+  };
+}
+
+const EVAL_STATUS_FOR_CODE: Record<string, string> = {
+  E_TIMEOUT: "timeout",
+  E_SESSION_NOT_FOUND: "not-found",
+  E_TARGET_NOT_FOUND: "not-found",
+  E_CONTROL_DENIED: "denied",
+  E_EVAL_REFUSED: "denied",
+  E_CSP_BLOCKS_EVAL: "denied",
+  E_TOKEN_MISSING: "denied",
+  E_ARGS: "usage",
+  E_FLAG_VALUE_INVALID: "usage",
+};
+
+export function evalRefusal(
+  error: { code: string; message: string; name: string; engine?: string; hint?: string },
+  options: { truncated?: boolean } = {},
+): Body {
+  return {
+    schema: 1,
+    ok: false,
+    command: "eval",
+    status: EVAL_STATUS_FOR_CODE[error.code] ?? "failed",
+    value: null,
+    error: { engine: "chromium", ...error },
+    ...(options.truncated ? { truncated: true } : {}),
     warnings: [],
   };
 }
@@ -376,6 +419,8 @@ export const ENGINE_WRITERS = {
   buildFrame: { file: "extension/dist/cli.cjs", marker: "--output json" },
   buildNarration: { file: "extension/dist/cli.cjs", marker: "Extension built for production" },
   doctorFrame: { file: "extension/dist/cli.cjs", marker: "runDoctor" },
+  evalFrame: { file: "extension/dist/cli.cjs", marker: "buildActEnvelope" },
+  evalRefusal: { file: "extension/dist/cli.cjs", marker: "statusForCode" },
   reloadFrame: { file: "extension-develop/dist/rspack-config~0.mjs", marker: "reloading" },
   stampExecutorDetached: { file: "extension-develop/dist/832~0.mjs", marker: "stampExecutorDetached" },
 } as const;

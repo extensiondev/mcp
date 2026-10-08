@@ -9,11 +9,16 @@ import * as stop from "../tools/stop";
 import {
   registerSession,
   removeSession,
-  getSession,
   listSessionMarkers,
+  listSessions,
 } from "../lib/process-manager";
 import { resolveExtensionInvocation } from "../lib/exec";
 import { readyContract } from "./fixtures/engine-answers";
+
+const inMemorySession = (projectPath: string, browser: string) =>
+  listSessions().find(
+    (s) => path.resolve(s.projectPath) === path.resolve(projectPath) && s.browser === browser,
+  );
 
 const previousSessionDir = process.env.EXTENSION_MCP_SESSION_DIR;
 const sessionDir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-stop-markers-"));
@@ -106,7 +111,7 @@ describe("extension_stop", () => {
     expect(result.value.pid).toBe(pid);
     expect(result.value.stopped).toBe(true);
     expect(isAlive(pid)).toBe(false);
-    expect(getSession(projectPath, "chrome")).toBeUndefined();
+    expect(inMemorySession(projectPath, "chrome")).toBeUndefined();
   });
 
   it("resolves sessions registered under a relative path via normalized keys", async () => {

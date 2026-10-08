@@ -10,7 +10,6 @@ import {
   seedRef,
   shouldSendCreationFunnelEvent,
 } from "../lib/funnel-telemetry";
-import { resetSessionIdentityForTests } from "../lib/session-identity";
 
 const TEST_COMMIT = "f7f4e6efb56a7e5ae08d58dbff3972d94af7d021";
 
@@ -47,7 +46,6 @@ beforeEach(() => {
   }
 
   process.env.EXTENSION_TEMPLATES_COMMIT = TEST_COMMIT;
-  resetSessionIdentityForTests();
 });
 
 afterEach(() => {
@@ -55,8 +53,6 @@ afterEach(() => {
     if (saved[key] === undefined) delete process.env[key];
     else process.env[key] = saved[key];
   }
-
-  resetSessionIdentityForTests();
 });
 
 describe("creation funnel payload", () => {

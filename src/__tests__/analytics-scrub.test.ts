@@ -2,7 +2,6 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { sanitizeMcpProperties } from "../lib/analytics-scrub";
 import { creationFunnelPayload } from "../lib/funnel-telemetry";
-import { resetSessionIdentityForTests } from "../lib/session-identity";
 
 describe("the mcp lane's scrub", () => {
   it("closes a repository reference welded into a compound string", () => {
@@ -58,8 +57,6 @@ describe("the emitter applies it", () => {
       saved[key] = process.env[key];
       delete process.env[key];
     }
-
-    resetSessionIdentityForTests();
   });
 
   afterEach(() => {
@@ -67,8 +64,6 @@ describe("the emitter applies it", () => {
       if (saved[key] === undefined) delete process.env[key];
       else process.env[key] = saved[key];
     }
-
-    resetSessionIdentityForTests();
   });
 
   it("scrubs a caller-supplied property on the way into the payload", () => {

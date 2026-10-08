@@ -4,7 +4,7 @@ import path from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { handler, schema } from "../tools/project-create";
+import { schema } from "../tools/project-create";
 import {
   credentialsPath,
   listCredentials,
@@ -12,10 +12,7 @@ import {
   writeCredentials,
 } from "../lib/credentials";
 import { PLATFORM_HOLD_STATUS } from "../lib/platform-hold";
-import {
-  parseBatchCreateArgs,
-  resetBatchCreateSessions,
-} from "../lib/project-create-batch";
+import { parseBatchCreateArgs } from "../lib/project-create-batch";
 
 const API = "https://api.test";
 const GRANT = "batch-grant-secret-value";
@@ -169,14 +166,18 @@ const THREE = [
 ];
 const SLUGS = ["alpha", "beta", "gamma"];
 
+let projectCreate = await import("../tools/project-create");
+
 async function run(args: Record<string, unknown>) {
-  return JSON.parse(await handler(args as never));
+  return JSON.parse(await projectCreate.handler(args as never));
 }
 
 let tmp: string;
 const saved: Record<string, string | undefined> = {};
 
-beforeEach(() => {
+beforeEach(async () => {
+  vi.resetModules();
+  projectCreate = await import("../tools/project-create");
   vi.stubGlobal(
     "fetch",
     vi.fn(async () => {
@@ -195,7 +196,6 @@ beforeEach(() => {
   delete process.env.EXTENSION_DEV_PROJECT;
   clock = 1_800_000_000_000;
   vi.spyOn(Date, "now").mockImplementation(() => clock);
-  resetBatchCreateSessions();
 });
 
 afterEach(() => {
@@ -471,7 +471,7 @@ describe("extension_project_create with projects: one approval", () => {
 
   it("never puts the grant or a project token in the envelope, and never writes the grant to disk", async () => {
     harness({ token: [grant(SLUGS)] });
-    const text = await handler({ projects: THREE, deviceCode: "dev-code" } as never);
+    const text = await projectCreate.handler({ projects: THREE, deviceCode: "dev-code" } as never);
 
     expect(text).not.toContain(GRANT);
     expect(text).not.toContain("seven-day-token-for-");
@@ -480,13 +480,13 @@ describe("extension_project_create with projects: one approval", () => {
 
   it("keeps the grant out of every envelope a list can answer with on the way", async () => {
     harness({ token: [{ status: 400, body: { error: "authorization_pending" } }] });
-    const pending = await handler({ projects: THREE } as never);
+    const pending = await projectCreate.handler({ projects: THREE } as never);
 
     harness({ token: [grant(SLUGS)], createTakesMs: 21_000 });
-    const creating = await handler({ projects: THREE, deviceCode: "dev-code" } as never);
-    const creatingAgain = await handler({ projects: THREE, deviceCode: "dev-code" } as never);
-    const mismatch = await handler({ projects: [THREE[0]], deviceCode: "dev-code" } as never);
-    const done = await handler({ projects: THREE, deviceCode: "dev-code" } as never);
+    const creating = await projectCreate.handler({ projects: THREE, deviceCode: "dev-code" } as never);
+    const creatingAgain = await projectCreate.handler({ projects: THREE, deviceCode: "dev-code" } as never);
+    const mismatch = await projectCreate.handler({ projects: [THREE[0]], deviceCode: "dev-code" } as never);
+    const done = await projectCreate.handler({ projects: THREE, deviceCode: "dev-code" } as never);
 
     expect(JSON.parse(creating).status).toBe("creating");
     expect(JSON.parse(creatingAgain).status).toBe("creating");
@@ -943,7 +943,8 @@ describe("extension_project_create with projects: the grant and the list", () =>
       createTakesMs: 21_000,
     });
     await run({ projects: THREE, deviceCode: "dev-code" });
-    resetBatchCreateSessions();
+    vi.resetModules();
+    projectCreate = await import("../tools/project-create");
     const out = await run({ projects: THREE, deviceCode: "dev-code" });
 
     expect(out.ok).toBe(false);

@@ -12,7 +12,6 @@ import { fetchRegistryJson } from "../lib/registry";
 import { handler as submitHandler } from "../tools/submit";
 import {
   INSTALL_HEADER,
-  resetSessionIdentityForTests,
   SESSION_HEADER,
   TOOL_HEADER,
 } from "../lib/session-identity";
@@ -87,7 +86,6 @@ describe("the six legs that terminate at www, their header names spelled as www 
     process.env.EXTENSION_DEV_TOKEN = "tok_legs";
     delete process.env.EXTENSION_DEV_NO_TELEMETRY;
     delete process.env.DO_NOT_TRACK;
-    resetSessionIdentityForTests();
   });
 
   afterEach(() => {
@@ -98,7 +96,6 @@ describe("the six legs that terminate at www, their header names spelled as www 
     else process.env.EXTENSION_DEV_TOKEN = prevToken;
 
     fs.rmSync(configDir, { recursive: true, force: true });
-    resetSessionIdentityForTests();
   });
 
   it("leg 1: preview upload POSTs /api/artifacts as extension_preview_web", async () => {

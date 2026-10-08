@@ -95,9 +95,4 @@ export function installCarrierExitCleanup(): void {
   }
 }
 
-export function uninstallCarrierExitCleanup(): void {
-  for (const entry of installed.splice(0)) {
-    process.removeListener(entry.event as NodeJS.Signals, entry.handler);
-  }
-}
 

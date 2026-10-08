@@ -125,6 +125,17 @@
   moved to `src/lib/console-urls.ts`, which ends the login-flow, registry,
   registry-access import cycle; four shadowed names renamed; the
   platform-hold header read lost a catch nothing could reach.
+- Five exports that existed only for tests are gone: `getSession`,
+  `resetEngineVersionCache`, `resetSessionIdentityForTests`,
+  `resetBatchCreateSessions` and `uninstallCarrierExitCleanup`. The cells
+  that used them now read the in-memory registry through `listSessions`,
+  or start a fresh module graph per cell, which is what "a new process"
+  meant in those cells all along.
+- The eval envelope has fixture builders in both shapes, and the golden
+  frame cell now compares nine of the engine's twelve golden files key for
+  key and names the three without a counterpart. The detect sentences are
+  a pure function, so the not-found cell no longer runs a 20 s scan; the
+  tool description rules are five tables instead of 160 cells.
 
 ## 10.10.13
 

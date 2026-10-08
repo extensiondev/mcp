@@ -182,13 +182,6 @@ export function sessionSinceMs(
   return null;
 }
 
-export function getSession(
-  projectPath: string,
-  browser: string,
-): ProcessInfo | undefined {
-  return sessions.get(sessionKey(projectPath, browser));
-}
-
 export function findSessionInfo(
   projectPath: string,
   browser: string,
