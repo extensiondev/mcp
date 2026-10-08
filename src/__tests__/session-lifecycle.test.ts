@@ -116,7 +116,6 @@ afterEach(() => {
     try {
       child.kill("SIGKILL");
     } catch {
-      // already gone
     }
   }
 
@@ -124,7 +123,6 @@ afterEach(() => {
     try {
       removeSession(dir, "chrome");
     } catch {
-      // no session registered
     }
 
     fs.rmSync(dir, { recursive: true, force: true });
@@ -220,7 +218,6 @@ describe("extension_dev replace:true believes the stop, not its own request", ()
       try {
         process.kill(pid, "SIGKILL");
       } catch {
-        // gone
       }
     }
   });

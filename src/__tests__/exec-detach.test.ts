@@ -31,7 +31,6 @@ afterEach(() => {
       try {
         live.child.kill("SIGKILL");
       } catch {
-        // already gone
       }
     }
   }

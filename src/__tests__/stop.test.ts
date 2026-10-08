@@ -347,7 +347,6 @@ describe("extension_stop never signals a pid that is no longer the session", () 
       try {
         process.kill(stranger, "SIGKILL");
       } catch {
-        // already gone
       }
     },
     15_000,

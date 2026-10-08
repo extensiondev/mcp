@@ -55,7 +55,6 @@ afterEach(() => {
     fs.chmodSync(path.join(tmp, "extension-dev"), 0o700);
     fs.chmodSync(credentialsPath(), 0o600);
   } catch {
-    // The cell may not have created them.
   }
 
   fs.rmSync(tmp, { recursive: true, force: true });

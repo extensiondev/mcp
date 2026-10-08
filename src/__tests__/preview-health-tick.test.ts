@@ -76,7 +76,6 @@ afterEach(() => {
     try {
       child.kill("SIGKILL");
     } catch {
-      // already gone
     }
   }
 
@@ -84,7 +83,6 @@ afterEach(() => {
     try {
       removeSession(dir, "chrome");
     } catch {
-      // no session registered
     }
 
     fs.rmSync(dir, { recursive: true, force: true });

@@ -21,7 +21,6 @@ afterEach(() => {
     try {
       child.kill("SIGKILL");
     } catch {
-      // gone
     }
   }
 
