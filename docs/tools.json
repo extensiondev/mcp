@@ -1,6 +1,6 @@
 {
   "generatedFrom": "src/index.ts schemas, src/lib/tool-policy.ts, src/lib/docs-meta.ts; regenerate with pnpm docs:tools",
-  "version": "10.11.0",
+  "version": "10.11.1",
   "count": 32,
   "tools": [
     {
