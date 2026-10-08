@@ -1,5 +1,12 @@
 name: Sync template catalog
 
+# The catalog snapshot used to land through a pull request opened with the
+# runner token, and a pull request opened that way gets no CI run, so the
+# snapshot sat unchecked for a week (PR #7). The job now runs the suite on the
+# new snapshot itself and pushes to main when it is green, over the deploy key
+# the main ruleset lists as its bypass actor, the way the release lane does.
+# The push still triggers the CI matrix on main. Decided 2026-10-08.
+
 on:
   schedule:
     - cron: "0 6 * * *"
@@ -7,7 +14,6 @@ on:
 
 permissions:
   contents: write
-  pull-requests: write
 
 jobs:
   sync:
@@ -27,7 +33,7 @@ jobs:
         run: |
           CACHED="src/lib/templates-meta.snapshot.json"
           if [ ! -f "$CACHED" ]; then
-            echo "No snapshot exists yet — will create one."
+            echo "No snapshot exists yet, one will be created."
             echo "changed=true" >> "$GITHUB_OUTPUT"
           elif ! diff -q /tmp/templates-meta-latest.json "$CACHED" > /dev/null 2>&1; then
             echo "Template catalog has changed."
@@ -41,30 +47,80 @@ jobs:
         if: steps.diff.outputs.changed == 'true'
         run: cp /tmp/templates-meta-latest.json src/lib/templates-meta.snapshot.json
 
-      - name: Extract template table for CLAUDE.md
+      - name: Summarise the catalog
         if: steps.diff.outputs.changed == 'true'
         run: |
           node -e "
             const meta = require('/tmp/templates-meta-latest.json');
             const templates = meta.templates || [];
-            const featured = templates.filter(t => t.featured);
-            const count = templates.length;
-            console.log('Total templates: ' + count);
-            console.log('Featured: ' + featured.length);
+            console.log('Catalog commit: ' + meta.commit + ' generated ' + meta.generatedAt);
+            console.log('Total templates: ' + templates.length);
+            console.log('Featured: ' + templates.filter(t => t.featured).length);
             console.log('Surfaces: ' + [...new Set(templates.flatMap(t => t.surfaces || []))].sort().join(', '));
           "
 
-      - name: Create pull request
+      - name: Setup pnpm
         if: steps.diff.outputs.changed == 'true'
-        uses: peter-evans/create-pull-request@v8
+        uses: pnpm/action-setup@v5
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          commit-message: "Sync the template catalog from the examples repo"
-          branch: sync-templates
-          title: "Sync the template catalog from the examples repo"
-          body: |
-            Auto-generated PR — the upstream [templates-meta.json](https://github.com/extension-js/examples/releases/tag/nightly) has changed.
+          version: 10.19.0
 
-            Review the snapshot diff to see what templates were added, removed, or modified.
-          labels: automated
-          delete-branch: true
+      - name: Setup Node.js
+        if: steps.diff.outputs.changed == 'true'
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        if: steps.diff.outputs.changed == 'true'
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        if: steps.diff.outputs.changed == 'true'
+        run: pnpm compile
+
+      - name: Typecheck (src and tests)
+        if: steps.diff.outputs.changed == 'true'
+        run: pnpm typecheck
+
+      - name: Lint
+        if: steps.diff.outputs.changed == 'true'
+        run: pnpm lint
+
+      - name: Test on the new snapshot
+        if: steps.diff.outputs.changed == 'true'
+        run: pnpm test
+
+      - name: Configure git identity
+        if: steps.diff.outputs.changed == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Authenticate the push as the deploy key
+        if: steps.diff.outputs.changed == 'true'
+        env:
+          RELEASE_PUSH_KEY: ${{ secrets.RELEASE_PUSH_KEY }}
+        run: |
+          if [ -z "$RELEASE_PUSH_KEY" ]; then
+            echo "RELEASE_PUSH_KEY is unset; the catalog push would be rejected by the main ruleset" >&2
+            exit 1
+          fi
+          mkdir -p ~/.ssh
+          printf '%s\n' "$RELEASE_PUSH_KEY" > ~/.ssh/release_push_key
+          chmod 600 ~/.ssh/release_push_key
+          ssh-keyscan github.com >> ~/.ssh/known_hosts 2>/dev/null
+          git remote set-url --push origin "git@github.com:${{ github.repository }}.git"
+          git config core.sshCommand "ssh -i ~/.ssh/release_push_key -o IdentitiesOnly=yes"
+
+      - name: Commit and push to main
+        if: steps.diff.outputs.changed == 'true'
+        run: |
+          git add src/lib/templates-meta.snapshot.json
+          if git diff --cached --quiet; then
+            echo "Nothing to commit."
+            exit 0
+          fi
+          git commit -m "Sync the template catalog from the examples nightly"
+          git push origin HEAD:main
