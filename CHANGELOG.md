@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 10.11.0
+
+Built on Extension.js 4.1.32.
+
 - The Safari automation hint names the setting the way the engine does: Safari > Settings > Developer > "Allow remote automation", with the Develop menu item on older Safari.
 
 - `extension_dev` carries the control channel by default: `allowControl` defaults to true, so `extension_storage`, `extension_reload`, `extension_open` and `extension_dom_snapshot` work on a plain dev session and a later "reload it" costs no restart; pass `allowControl: false` for a read-only session. `allowEval` stays off until asked and still implies control. The descriptions, the hints, the docs gates, the README and the shipped rules say control is on unless asked off.
