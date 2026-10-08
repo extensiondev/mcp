@@ -24,7 +24,7 @@ Works with Claude Code, Claude Desktop, Cursor, and any MCP client.
 Extensions fail silently: content scripts that never inject, panels that never open, permissions that return `undefined` with no error. An agent editing files blind will "fix" all of them without noticing none of them work. These tools give the agent eyes on the live browser, so it debugs from evidence instead of guessing.
 
 - **Scaffold** from the 50+ templates behind [templates.extension.dev](https://templates.extension.dev), or add a popup, sidebar, or content script to an existing project
-- **Run** the dev server with HMR in Chrome, Edge, Firefox, Brave, Opera, Vivaldi, Yandex, Waterfox, Zen, Floorp, or any Chromium- or Gecko-based binary, plus Safari on macOS (no HMR yet), no build config
+- **Run** the dev server with HMR in Chrome, Firefox, Edge and [every browser below](#browsers), plus Safari on macOS (no HMR yet), no build config
 - **See** the live DOM, logs from every extension context, `chrome.storage`, and the loaded-extension list
 - **Act**: evaluate code in any context, trigger the action button and commands, reload the extension, replay events
 - **Test**: state expectations about the running extension and get one verdict each
@@ -36,13 +36,27 @@ Built on [Extension.js](https://extension.js.org), the open source framework ext
 
 [![The agent starts the dev session, the browser opens with the extension loaded, and the agent reads its logs](https://media.extension.land/video/extension-dev/mcp/install-and-run.gif)](https://docs.extension.dev/tools/mcp#install)
 
+## Browsers
+
+`extension_dev` opens the extension in the browser you name. The Chromium family rides the Chrome DevTools Protocol. Firefox rides the debugger protocol and the agent bridge. Safari rides the same bridge with the limits under [Safari](#safari).
+
+<div align="center">
+
+| <img alt="Chrome" src="https://media.extension.land/logos/browsers/chrome.svg" width="70"> | <img alt="Chromium" src="https://media.extension.land/logos/browsers/chromium.svg" width="70"> | <img alt="Edge" src="https://media.extension.land/logos/browsers/edge.svg" width="70"> | <img alt="Brave" src="https://media.extension.land/logos/browsers/brave.svg" width="70"> | <img alt="Opera" src="https://media.extension.land/logos/browsers/opera.svg" width="70"> | <img alt="Firefox" src="https://media.extension.land/logos/browsers/firefox.svg" width="70"> | <img alt="Safari" src="https://media.extension.land/logos/browsers/safari.svg" width="70"> |
+| :-: | :-: | :-: | :-: | :-: | :-: | :-: |
+| <sup>Google Chrome<br>HMR, control, eval, inspect, assert</sup> | <sup>Chromium<br>HMR, control, eval, inspect, assert</sup> | <sup>Microsoft Edge<br>HMR, control, eval, inspect, assert</sup> | <sup>Brave<br>HMR, control, eval, inspect, assert</sup> | <sup>Opera<br>HMR, control, eval, inspect, assert</sup> | <sup>Mozilla Firefox<br>HMR, control, eval, inspect, assert<br>over RDP and the bridge, no CDP</sup> | <sup>Apple Safari<br>dev and build on macOS<br>no HMR, no inspect</sup> |
+
+</div>
+
+Plus Vivaldi, Yandex, Waterfox, Zen and Floorp, and any Chromium or Gecko binary by path.
+
 ## Clients
 
 <div align="center">
 
-| <img alt="Claude Code" src="https://media.extension.land/logos/devtools/claude-code.svg" width="70"> | <img alt="Claude Desktop" src="https://media.extension.land/logos/ai/claude.svg" width="70"> | <picture><source media="(prefers-color-scheme: dark)" srcset="https://media.extension.land/logos/devtools/cursor-dark.svg"><img alt="Cursor" src="https://media.extension.land/logos/devtools/cursor.svg" width="70"></picture> |
-| :-: | :-: | :-: |
-| Claude Code | Claude Desktop | Cursor |
+| <img alt="Claude Code" src="https://media.extension.land/logos/devtools/claude-code.svg" width="70"> | <img alt="Claude Desktop" src="https://media.extension.land/logos/ai/claude.svg" width="70"> | <picture><source media="(prefers-color-scheme: dark)" srcset="https://media.extension.land/logos/devtools/cursor-dark.svg"><img alt="Cursor" src="https://media.extension.land/logos/devtools/cursor.svg" width="70"></picture> | <img alt="VS Code" src="https://media.extension.land/logos/devtools/vscode.svg" width="70"> | <picture><source media="(prefers-color-scheme: dark)" srcset="https://media.extension.land/logos/devtools/codex-dark.svg"><img alt="Codex" src="https://media.extension.land/logos/devtools/codex.svg" width="70"></picture> |
+| :-: | :-: | :-: | :-: | :-: |
+| <sup>Claude Code</sup> | <sup>Claude Desktop</sup> | <sup>Cursor</sup> | <sup>VS Code<br>also GitHub Copilot</sup> | <sup>Codex</sup> |
 
 </div>
 
@@ -67,21 +81,7 @@ Or install it as a plugin, the MCP server plus the `/extension`, `/extension-add
 
 [![Install MCP Server](https://cursor.com/deeplink/mcp-install-dark.svg)](https://cursor.com/en/install-mcp?name=extension-dev&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyJAZXh0ZW5zaW9uLmRldi9tY3AiLCItLWZlYXR1cmVzPWxvY2FsLHBsYXRmb3JtIl19)
 
-`.cursor/mcp.json`:
-
-```json
-{
-  "mcpServers": {
-    "extension-dev": {
-      "command": "npx",
-      "args": [
-        "@extension.dev/mcp",
-        "--features=local,platform"
-      ]
-    }
-  }
-}
-```
+Or paste the `.mcp.json` block below into `.cursor/mcp.json`.
 
 ### VS Code (Also GitHub Copilot)
 
@@ -89,22 +89,7 @@ Or install it as a plugin, the MCP server plus the `/extension`, `/extension-add
 code --add-mcp '{"name":"extension-dev","command":"npx","args":["@extension.dev/mcp","--features=local,platform"]}'
 ```
 
-`.vscode/mcp.json`:
-
-```json
-{
-  "servers": {
-    "extension-dev": {
-      "type": "stdio",
-      "command": "npx",
-      "args": [
-        "@extension.dev/mcp",
-        "--features=local,platform"
-      ]
-    }
-  }
-}
-```
+Or paste it into `.vscode/mcp.json` under `servers`, with `"type": "stdio"` on the entry.
 
 ### Codex
 
@@ -112,13 +97,7 @@ code --add-mcp '{"name":"extension-dev","command":"npx","args":["@extension.dev/
 codex mcp add extension-dev -- npx @extension.dev/mcp --features=local,platform
 ```
 
-`~/.codex/config.toml`:
-
-```toml
-[mcp_servers.extension-dev]
-command = "npx"
-args = ["@extension.dev/mcp", "--features=local,platform"]
-```
+Or write it into `~/.codex/config.toml` as a `[mcp_servers.extension-dev]` table with the same `command` and `args`.
 
 ### Other clients (Claude Desktop and .mcp.json)
 
@@ -284,6 +263,14 @@ Or call `extension_auth` with `action: "login"`: you approve a code at [extensio
 ### Publish, promote, submit
 
 Two verbs, not interchangeable. `extension_publish` returns the shareable URL of a build extension.dev already holds, nothing is uploaded: the public page for a public project, a time-limited `?share=` link for a private one. `extension_submit` sends a built extension into store review (Chrome Web Store, Edge Add-ons, Firefox AMO and the App Store for Safari) through extension.dev, which holds your store credentials and dispatches from your project's mirror CI; credentials are never tool arguments. It defaults to a dry run, and `dryRun: false` is irreversible and needs the workspace owner's token. Safari and the App Store are one paid lane, so a free workspace is refused there and the other three stores are unaffected.
+
+<div align="center">
+
+| <img alt="Chrome Web Store" src="https://media.extension.land/logos/stores/chrome-web-store.png" width="70"> | <img alt="Firefox Add-ons" src="https://media.extension.land/logos/stores/firefox-addons.png" width="70"> | <img alt="Edge Add-ons" src="https://media.extension.land/logos/stores/microsoft-edge-addons.svg" width="70"> | <img alt="App Store" src="https://media.extension.land/logos/stores/app-store.svg" width="70"> |
+| :-: | :-: | :-: | :-: |
+| <sup>Chrome Web Store<br>`extension_submit` through extension.dev</sup> | <sup>Firefox Add-ons<br>`extension_submit` through extension.dev</sup> | <sup>Edge Add-ons<br>`extension_submit` through extension.dev</sup> | <sup>App Store for Safari<br>paid lane, a free workspace is refused</sup> |
+
+</div>
 
 `extension_release_promote` moves a release channel to a tested build, headless, from CI or an agent session. After a real submission, `extension_release_status` reads the recorded outcome, per-store credential health, and review state from the project's public registry, so agents and CI can answer "was it approved?" without a console visit.
 
