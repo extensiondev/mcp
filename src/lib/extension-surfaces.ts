@@ -24,13 +24,6 @@ export function isExtensionUrl(url: string | undefined): boolean {
   return typeof url === "string" && EXTENSION_ORIGIN.test(url);
 }
 
-/* @invariant A url inside the extension names one of its own documents, and
-   the only way to reach such a document on every engine is the surface
-   relay for the context that document belongs to: script injection never
-   reaches an extension page, on Chromium or on Gecko. So a url is mapped to
-   a declared surface here, by the full extension address, by the document
-   path the manifest declares, or by that document's file name, and the
-   caller asks that context instead of a tab. */
 export function surfaceForExtensionUrl(
   projectPath: string,
   browser: string,

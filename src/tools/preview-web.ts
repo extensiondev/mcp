@@ -34,18 +34,6 @@ const DEFAULT_PREVIEW_DEV_URL = "http://localhost:3110";
 
 const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]", "::1"]);
 
-/* @invariant
- * hostUrl names a preview server, not an arbitrary place to send things.
- *
- * This is a tool argument, so a model can be steered into supplying it by
- * anything it reads. Three things go to whatever it names: the base64url of an
- * absolute local build path, a deepLink the hint then tells the user to open,
- * and with open:true a real navigation of the author's session browser. What
- * comes back is worse, because identifier, loadedName and loadedVersion are
- * echoed into the tool envelope the model reads next, which makes an arbitrary
- * host a text channel into the agent's context. A preview dev server is always
- * local, so requiring that costs nothing real.
- */
 function safeHostBase(
   raw: string,
 ): { ok: true; base: string } | { ok: false; message: string } {
@@ -76,22 +64,6 @@ function safeHostBase(
   return { ok: true, base: trimmed };
 }
 
-/* @invariant
- * The probe certifies the artifact this call minted, never the port.
- *
- * Anything can be listening on the probed local port: this repo's own dev
- * fleet serves 3110 when preview's server is down, and hostReachable and
- * previewLoadable read true off whatever JSON it happened to answer. Worse,
- * the strings that JSON carried (identifier, loadedName, loadedVersion) were
- * echoed into the tool envelope the model reads next, unmarked, which makes
- * any local server a text channel into the agent's context. So the payload is
- * only certified when it describes the minted build: name and version must
- * match the dist manifest read off disk, and the identifier is echoed only
- * when it equals the derivation the real middleware uses (local-<slug of the
- * manifest name>). Everything the host claimed that could not be confirmed
- * locally travels clipped under probe.hostReported, named as the host's own
- * claim, or not at all.
- */
 const HOST_CLAIM_MAX_CHARS = 120;
 
 function clipHostClaim(value: string): string {
@@ -127,17 +99,6 @@ const PREVIEW_APP_LOCATIONS = [
   ["preview.extension.dev"],
 ];
 
-/* @invariant
- * The pnpm command is only ever printed to someone who could run it.
- *
- * preview.extension.dev is a private app of the extension.dev monorepo, so
- * `pnpm --filter preview.extension.dev dev` is unrunnable for everyone who
- * installed @extension.dev/mcp from npm. Printing it as the remedy sent that
- * majority down a road with no end, and an agent relaying it burns a turn
- * proving the filter matches nothing. Finding the app's own package.json is
- * the only honest evidence that the command exists here, so the remedy for
- * everyone else names share:true instead, which needs no local server at all.
- */
 function previewDevCheckout(startPaths: string[]): string | null {
   const seen = new Set<string>();
 
@@ -698,17 +659,6 @@ export async function handler(args: {
         hostReachable: true,
         previewLoadable: fileCount > 0,
         ...(fileCount > 0 ? {} : { previewLoadableNote: "the host answered this build's name and version but listed no files, so nothing is known to render; previewLoadable stays false" }),
-        /* @invariant
-         * previewLoadable says what this probe proved, and no more.
-         *
-         * It is a server-side fetch of a dev-only middleware on this machine,
-         * so it proves the local host parsed the build; it cannot see a CORS
-         * refusal, because a server does not enforce one. It sat one key away
-         * from share.previewUrl in the same envelope, and readers took it as a
-         * verdict on the shared link, which it never was: that link is read
-         * cross-origin by a browser, and only share.browserCheck asks that
-         * question. Naming the lane keeps the two apart.
-         */
         previewLoadableLane: "local-dev-host",
         probe: {
           ...(identifierConfirmed ? { identifier: remoteIdentifier } : {}),

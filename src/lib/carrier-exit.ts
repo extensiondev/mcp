@@ -60,20 +60,6 @@ let installed: Array<{
   handler: () => void;
 }> = [];
 
-/* @invariant
- * The server dying is one of the ways a session ends, so it cleans up too.
- *
- * extension_dev ties carrier removal to its child's exit, which covers a
- * browser closing or crashing but not this process being killed: the child is
- * killed with it and its exit handler never runs, leaving the carrier behind
- * for the next build to pack. The signal handlers below re-raise after
- * sweeping, because installing any listener for SIGINT or SIGTERM takes away
- * Node's default disposition, and a server that swallows Ctrl+C would be a
- * worse bug than the one being fixed. They only re-raise once nothing else is
- * listening, so a host that installs its own shutdown handler still owns the
- * shutdown. The sweep itself removes only carriers this process placed, is
- * idempotent because a removed carrier is forgotten, and never throws.
- */
 export function installCarrierExitCleanup(): void {
   if (installed.length) return;
 

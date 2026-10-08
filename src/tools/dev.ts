@@ -205,13 +205,6 @@ export async function handler(
     noBrowser: Boolean(args.noBrowser),
     profileReused,
   });
-  /* @invariant
-    * The carrier leaves when the session does, however the session ends. It
-    * is a debug companion with <all_urls>, cookies, history and management,
-    * and the promise made about it is that it is never part of a release.
-    * Tying removal to the child's exit covers every one of those, and
-    * removeCarrier only touches a copy this server marked as its own.
-    */
   child.on("exit", () => {
     removeSession(args.projectPath, browser, pid);
     removeSessionMarker(args.projectPath, browser, pid);
@@ -220,7 +213,6 @@ export async function handler(
       try {
         removeCarrier(args.projectPath);
       } catch {
-        // A carrier we cannot remove here is still refused by the build guard.
       }
     }
   });

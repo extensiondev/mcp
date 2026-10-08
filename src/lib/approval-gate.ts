@@ -13,65 +13,6 @@ import { parseJsonObject } from "./json-object";
 import { resolveApiBase, safeApiBase } from "./login-flow";
 import { platformHoldEnvelope, sawPlatformHold } from "./platform-hold";
 
-/* @invariant
-  * THIS IS THE HUMAN-IN-THE-LOOP GATE FOR IRREVERSIBLE, OUTWARD ACTIONS, AND
-  * THE LOCAL HALF CANNOT SELF-APPROVE. The Stripe-MCP insight: an agent may
-  * reach a store submission, a channel promotion, or a permanent delete with
-  * no human in the loop. This gate puts one there. It defends the boundary
-  * between an agent's intent and an action a human cannot take back, against
-  * a principal that is the agent itself acting on bad input, a poisoned
-  * README, or a compromised session. The whole point is that the LOCAL MCP
-  * HAS NO AUTHORITY TO APPROVE. It holds no signing key and mints no grant.
-  * Approval is a record the server creates and a human turns from pending to
-  * approved at extension.dev while signed in with the same device-auth
-  * identity every other lane uses. So the gate here is a relay and a
-  * fail-closed guard, never the decision. Two-phase flow, both phases below:
-  * 1. First call with no approvalId: the gate POSTs a pending approval to the
-  * server bound to (action, fingerprint, scope, description) and returns an
-  * approval-required envelope carrying the approvalId and the approvalUrl a
-  * human opens. IT DOES NOT EXECUTE. If the server cannot mint one, the gate
-  * still refuses; it never proceeds. 2. Second call with the approvalId: the
-  * gate GETs the approval, and only proceeds when the server says approved
-  * AND the fingerprint it stored equals the fingerprint recomputed from THIS
-  * call's action and args AND the grant is unused and unexpired. A grant
-  * minted for one action can never authorize another because the fingerprint
-  * would not match. On any doubt, network failure, or absent endpoint, it
-  * refuses. Fail closed. The tool then carries the approvalId on its own
-  * mutating request so the SERVER performs the authoritative single-use
-  * consume at the moment it acts, closing the gap between this verify and
-  * that write. The client check is for a legible refusal and fail-closed
-  * safety; the server is the source of truth. SERVER CONTRACT. The gate is ON
-  * by default for a real store submission, a promotion to stable and a share
-  * revoke, OFF by default for every other promotion, and
-  * EXTENSION_DEV_APPROVAL_GATE set to 1 or 0 overrides both ways. The
-  * platform is the authority either way: when it requires an approval the
-  * client did not ask for, it answers APPROVAL_REQUIRED and the tool turns
-  * that refusal into this same two-phase flow. POST {base}/api/cli/approvals
-  * auth: Bearer <device-auth project token> body: { action, fingerprint,
-  * scope, description } 201: { approvalId, approvalUrl, expiresAt } The
-  * server stores the fingerprint, the scope, the description, the
-  * approver-to-be (from the token's project) and a short TTL. approvalId is
-  * server-minted high-entropy; it is a handle, not a bearer secret, and is
-  * inert without the project token. approvalUrl shows the human the exact
-  * described action before they approve, under their extension.dev session.
-  * While the public hold is on, this route refuses with PLATFORM_NOT_OPEN.
-  * GET {base}/api/cli/approvals/{approvalId} auth: Bearer <device-auth
-  * project token> 200: { status, fingerprint, expiresAt, used, approver? }
-  * status is "pending" | "approved" | "denied" | "expired". 404: unknown
-  * approvalId, or the endpoint is not implemented yet. The mutating endpoints
-  * (/api/cli/stores/submit with dryRun:false, /api/cli/release/promote,
-  * DELETE /api/artifacts/{id}) re-verify the same grant and consume it
-  * single-use before acting, recomputing the fingerprint from the request
-  * body server-side. The client fingerprint is never trusted; it is
-  * recomputed and compared on both ends. FINGERPRINT: sha256hex( action +
-  * "\n" + canonicalScope ), where canonicalScope sorts the scope keys,
-  * renders each as "key=value", joins an array value as its elements sorted
-  * and comma-joined, and joins the pairs with "\n". Callers normalize values
-  * (lowercased sha, defaulted channel, sorted browsers) BEFORE handing the
-  * scope in, so both ends hash the same bytes. The action is part of the hash
-  * so a submit grant cannot promote and a promote grant cannot delete.
-  */
-
 export const APPROVAL_GATE_ENV = "EXTENSION_DEV_APPROVAL_GATE";
 
 export const APPROVAL_REQUIRED_STATUS = "approval-required";
@@ -263,9 +204,6 @@ async function requestApproval(params: {
   const approvalId = String(data.approvalId || "").trim();
   const approvalUrl = String(data.approvalUrl || "").trim();
 
-  /* @invariant An approval request the platform answered without an id is not
-     an approval to wait for: telling the agent to "call again with the
-     approvalId from the response" described one that may not exist. */
   if (!approvalId) {
     return block(
       input.command,

@@ -70,11 +70,6 @@ export class CDPClient extends CDPConnection {
     throw new Error("No webSocketDebuggerUrl in /json/version response");
   }
 
-  /* @invariant The browser says whether it is headless in its own product
-     string ("HeadlessChrome/151..."), which is the only reading that survives
-     a launcher shim adding --headless=new behind the caller's back; the
-     environment variables this server also consults describe the request, not
-     the process that came up. */
   static async discoverBrowserVersion(
     port: number,
     host = "127.0.0.1",
@@ -91,10 +86,6 @@ export class CDPClient extends CDPConnection {
     }
   }
 
-  /* @invariant Chrome's new headless mode (--headless=new, the mode a launcher
-     shim adds) keeps "Chrome/151..." in the Browser field and says
-     HeadlessChrome only in the User-Agent field of /json/version, measured on
-     Chrome 151. Both fields are read. */
   static async discoverUserAgent(
     port: number,
     host = "127.0.0.1",
@@ -161,9 +152,6 @@ export class CDPClient extends CDPConnection {
   }
 
   async navigate(sessionId: string, url: string): Promise<void> {
-    /* @invariant Page.navigate answers `errorText` (net::ERR_NAME_NOT_RESOLVED,
-       net::ERR_CONNECTION_REFUSED, net::ERR_BLOCKED_BY_CLIENT) without a
-       protocol error. Dropping it called a refused navigation navigated. */
     const reply = (await this.sendCommand("Page.navigate", { url }, sessionId)) as
       | { errorText?: unknown }
       | undefined;

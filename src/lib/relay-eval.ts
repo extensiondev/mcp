@@ -6,17 +6,6 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-/* @invariant The surface relay inside the extension evaluates synchronously
-   and hands sendResponse whatever the expression returned. A promise is not a
-   cloneable value: Chrome's relay falls back to String(value) and answers
-   "[object Promise]", Firefox reports the clone failure to the sender as no
-   response at all, and the bridge then calls the surface "not open" while the
-   page is still running the expression. So nothing thenable ever reaches
-   sendResponse: the wrapper below settles it inside the page, parks the
-   outcome under a token, and hands back a small cloneable frame the caller
-   polls for. A value that cannot be cloned is stringified in the page, where
-   that is a choice rather than a lost reply. */
-
 export const RELAY_MARK = "__extensionDevRelay";
 
 export interface RelayFrame {

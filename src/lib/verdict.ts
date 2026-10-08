@@ -6,38 +6,6 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-/* @invariant This is a PORT of @extension.dev/preview-verdict's grammar, not a
-   second opinion about what a verdict is, and src/__tests__/verdict-contract.test.ts
-   is what keeps the two honest.
-
-   Sharing the module itself is not available: that package is private to the
-   monorepo (C11) and this one publishes to npm, so a dependency on it would
-   404 for every reader outside the company. The store-md port answered the
-   same boundary the same way, so the same instrument is used: the vocabulary,
-   the check-declaration shape and the aggregation rule are asserted against
-   the upstream package's own code whenever a monorepo checkout is reachable,
-   and the pin is asserted non-degenerate when it is not.
-
-   Three divergences are deliberate and are asserted as divergences rather than
-   left to be discovered:
-
-   1. A different contract name and a different registry. These checks judge a
-      real browser over the DevTools protocol, not a preview envelope, so
-      reusing the upstream's ids would break its own rule that an id is a
-      promise about meaning. The two id spaces are asserted disjoint, and each
-      check here names the preview check it is the live-browser counterpart of.
-
-   2. A check is keyed by id AND subject. One stage routinely asserts
-      surface-rendered over the popup and the options page in the same run,
-      which the upstream verifier would read as a duplicate id whose gating is
-      undecidable. Uniqueness is enforced over the pair instead.
-
-   3. A document with no checks is inconclusive here, where the upstream rule
-      computes a pass. Upstream that is safe because the CONSUMER recomputes
-      coverage from its own pin and rejects the gap; this document has no such
-      consumer, so an empty stage that reported a pass would be a false green
-      with nothing downstream to catch it. */
-
 export const ASSERT_CONTRACT_NAME = "extension.dev/assert-verdict";
 
 export const ASSERT_CONTRACT_VERSION = 1;

@@ -90,10 +90,6 @@ function cleanCarrier(projectPath: string): { carrierRemoved?: string; carrierNo
     : {};
 }
 
-/* @invariant A search that could not run answers null, and the outcome says
-   the survivors were not verified. Windows has no pgrep and matches the same
-   patterns against its own process table instead, case-insensitively as its
-   paths are. */
 function pgrepPids(
   pattern: string,
   windowsTable?: () => WindowsProcessRow[] | null,
@@ -143,14 +139,6 @@ export interface ContractProcessHints {
   pids: number[];
 }
 
-/* @invariant The launcher stamps the browser it started into ready.json
-   (profilePath, browserPid, and launcherPid once Firefox hands the session to
-   a relaunched process), and those are the only handles that survive a custom
-   --profile or a browser whose argv never names the project: the pgrep
-   pattern below matches the managed profiles root, which such a browser does
-   not carry, so it answered reaped: [] over a Firefox still holding its
-   profile. Read before the kill: the engine's shutdown and this tool's own
-   cleanup both remove the contract. */
 export function contractProcessHints(
   projectPath: string,
   browser: string,
@@ -211,23 +199,10 @@ function sessionProcessPids(
 
   for (const form of projectPathForms(projectPath)) {
     const escaped = escapeRegex(form);
-    /* @invariant The second pattern is the only thing that reaps the session's
-       BROWSER. The first one matches the CLI's own command line, and killing the
-       dev server does not take the browser with it, so a stale pattern here does
-       not fail loudly: sessionProcessPids returns fewer pids, `survivors` comes
-       back empty, and stopOne reports stopped:true over a browser that is still
-       running and still holding its profile. It stayed broken for exactly that
-       reason. It matches on the managed profile directory because that is the
-       one thing the launched browser carries in its argv (Chromium as
-       --user-data-dir=<path>, Firefox as --profile "<path>"), and it stops at the
-       profiles root so it covers every browser and every per-run directory
-       underneath, whose names are random. */
-    const patterns = [
-      `extension[^ ]* (dev|start|preview) ${escaped}`,
-      `${escapeRegex(profilesRootDir(form))}${escapeRegex(path.sep)}`,
-    ];
+    const cliCommandLine = `extension[^ ]* (dev|start|preview) ${escaped}`;
+    const browserArgvNamingTheManagedProfile = `${escapeRegex(profilesRootDir(form))}${escapeRegex(path.sep)}`;
 
-    for (const pattern of patterns) {
+    for (const pattern of [cliCommandLine, browserArgvNamingTheManagedProfile]) {
       for (const pid of found(pattern)) pids.add(pid);
     }
   }
@@ -240,8 +215,6 @@ function sessionProcessPids(
   };
 }
 
-/* @invariant Reaped means confirmed gone. Each pid is read again after the
-   kill, and one still alive is reported apart. */
 async function reapSessionProcesses(
   projectPath: string,
   hints: ContractProcessHints = { pids: [] },
@@ -389,7 +362,6 @@ export async function stopOne(
 
   const { reaped } = await reapSessionProcesses(projectPath, hints);
 
-  /* @invariant THE RECORDS GO ONLY WHEN THE SESSION IS KNOWN TO BE GONE. */
   const { pids: survivors, verified } = sessionProcessPids(projectPath, hints);
   const dead = pidState(pid) === "dead";
   const stopped = dead && verified && survivors.length === 0;

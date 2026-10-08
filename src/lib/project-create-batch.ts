@@ -180,16 +180,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
-/* @invariant EVERY ENTRY IS CHECKED BEFORE A DEVICE CODE IS SPENT, AND AN
- * ENTRY THIS TOOL DOES NOT UNDERSTAND IS REFUSED, NOT SKIPPED. A list with
- * one bad entry would otherwise reach the approval page looking complete,
- * get approved, and then fail one project at a time against a grant that is
- * already running out. The list rules are the platform's own. How many
- * projects one approval may create is the platform's number too, read from
- * its login config before a code is asked for: a list longer than that is
- * refused with the reason instead of being split quietly into approvals
- * nobody asked for.
- */
 export function parseBatchCreateArgs(
   args: BatchCreateArgs,
 ):
@@ -346,18 +336,7 @@ function pendingEnvelope(args: {
   });
 }
 
-/* @invariant A STOP IS A REFUSAL THAT SAYS THIS GRANT CAN DO NO MORE RIGHT
- * NOW, AND IT IS READ OFF THE PLATFORM'S CODE. An expired or invalid grant,
- * an approver who left the workspace, a closed lane, the public hold, the
- * hourly creation limit, the plan's project limit and a missing GitHub App
- * installation are all facts about the approval or the account, not about the
- * one project that happened to hit them, so asking again for the next project
- * would only collect the same refusal and spend the limiter. Everything else,
- * a name taken, a reserved slug, a build that rolled back, is about that
- * project alone and the list goes on. A stop never hides the rest: every
- * project not reached gets its own row saying it was not attempted and why.
- */
-const STOP_CODES = new Set([
+const GRANT_LEVEL_STOP_CODES = new Set([
   "TOKEN_EXPIRED",
   "BAD_TOKEN",
   "AUTH_REQUIRED",
@@ -439,13 +418,6 @@ async function createOne(session: Session, entry: BatchEntry, installationId: st
       body: JSON.stringify(body),
     });
   } catch (err: any) {
-    /* @invariant A request that got no answer is "unconfirmed", never
-     * "refused" and never retried. The platform may have created the project
-     * before the connection died, and a second create racing the first is two
-     * builds claiming one name. So the row says what is known, the slice ends,
-     * and a second request in a row with no answer stops the list: the names
-     * after it were never sent, and saying so is truer than marking each of
-     * them unconfirmed one call at a time. */
     session.unanswered += 1;
     const message = `Could not reach ${url}: ${err?.message || err}`;
 
@@ -463,11 +435,6 @@ async function createOne(session: Session, entry: BatchEntry, installationId: st
     };
   }
 
-  /* @invariant An answer that cannot be read is no answer. The same holds
-   * for a server error with no platform code, which comes from in front of
-   * the platform while the create may still be running behind it. Both leave
-   * the project's existence unknown, so both take the unconfirmed row and end
-   * the slice exactly as a dropped connection does. */
   const unknownOutcome = (message: string): CreateOutcome => {
     session.unanswered += 1;
 
@@ -520,10 +487,6 @@ async function createOne(session: Session, entry: BatchEntry, installationId: st
       data.message || (data as { error?: unknown }).error || text || "unknown error",
     ).slice(0, 500);
     const connectUrl = String(data.connectUrl || "").trim();
-    /* @invariant The wait is read from the body or from the Retry-After
-     * header, whichever the platform sent. Its two creation limiters answer
-     * the same code with different bodies, and the one that counts creations
-     * per approving account states the wait only in the header. */
     const retryAfterSeconds =
       Number(data.retryAfterSeconds || res.headers.get("retry-after") || 0) ||
       undefined;
@@ -539,7 +502,7 @@ async function createOne(session: Session, entry: BatchEntry, installationId: st
       ...(hint ? { hint } : {}),
     };
 
-    return STOP_CODES.has(code)
+    return GRANT_LEVEL_STOP_CODES.has(code)
       ? { row, stop: { code, message, body: data, held } }
       : { row };
   }
@@ -565,18 +528,8 @@ async function createOne(session: Session, entry: BatchEntry, installationId: st
     finalWorkspace.toLowerCase() === entry.workspace &&
     finalProject.toLowerCase() === entry.slug;
 
-  /* @invariant A token is stored only under the name this call asked for. The
-   * platform says which project it made, and a token is filed under that
-   * answer; if the answer is not the listed project, filing it would put a
-   * login on this machine for a project nobody named here. */
   if (data.tokenIssued === true && token && scoped) {
     const expiresAt = tokenExpiry(data.expiresAt);
-    /* @invariant
-      * THE PROJECT IS RECORDED AS CREATED BEFORE ANYTHING ELSE CAN FAIL. The
-      * platform has made the project by the time its answer is here. A token
-      * that cannot be filed is a created project without a stored login, said
-      * so with the reason, and the token is not kept anywhere.
-      */
     let storeFailure = "";
 
     try {
@@ -686,11 +639,6 @@ function finalEnvelope(session: Session): string {
   const unconfirmed = rows
     .filter((row) => row.status === "unconfirmed")
     .map((row) => row.project);
-  /* @invariant "Each first build was dispatched" is a count of rows whose
-   * answer said so, never a property of having been created. A project the
-   * platform made without a build (no commits, a spent allowance, a paused
-   * dispatch) and one whose answer did not say are both named, each with what
-   * is known about it, so the list is never rounded up to "all building". */
   const built = created.filter(
     (row) => row.status === "created" && row.firstBuild.dispatched === true,
   );

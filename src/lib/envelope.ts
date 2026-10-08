@@ -6,10 +6,6 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-/* @invariant The one shape every tool returns. It is duplicated from the CLI's
-   schema-1 envelope on purpose: src/__tests__/contract/ holds the bytes that
-   keep the two copies honest, so neither repo gains a dependency on the other. */
-
 export const ENVELOPE_SCHEMA = 1 as const;
 
 export const DECISION_D6 =

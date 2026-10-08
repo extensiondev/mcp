@@ -8,7 +8,6 @@
 
 import { createRequire } from "node:module";
 
-/* @invariant THE NODE FLOOR IS THE ENGINE'S, READ FROM THE INSTALLED PACKAGE. */
 export function engineNodeRange(): { range: string; engine: string } | null {
   try {
     const require = createRequire(import.meta.url);

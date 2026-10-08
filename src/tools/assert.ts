@@ -310,9 +310,6 @@ export function parseClauses(raw: unknown): ParseResult {
           ? clause.context.map(String)
           : [String(clause.context)];
 
-    /* @invariant The console context set is the engine's, so the engine's filter
-       is run once on a probe event at parse time. It throws a RangeError on a
-       context it does not know, lazily on the first event. */
     if (context !== undefined) {
       try {
         makeFilter({ context } as never)({ context: "background", level: "info", seq: 0, ts: 0 });
@@ -546,10 +543,6 @@ async function assertBackgroundWorker(
     );
   }
 
-  /* @invariant THE DEV BUILD INJECTS A BACKGROUND OF ITS OWN (the bridge
-     producer) when the project declares none, so the built manifest always
-     declares one and a booted worker there is the engine's. The source
-     manifest says what the extension declares. */
   const injected = (() => {
     if (isSourceManifest(read.file, stage.projectPath)) return false;
 
@@ -578,11 +571,6 @@ async function assertBackgroundWorker(
     );
 
   if (!stage.chromium) {
-    /* @invariant On Gecko the proof is the control channel itself: the bridge
-       executor that answers it runs inside the extension's background, so a
-       tabs query that comes back is a background that booted. Silence is
-       inconclusive, since the channel may be off by choice or the session not
-       attached yet. */
     const listed = await listBridgeTabs(
       stage.projectPath,
       stage.browser,
@@ -628,12 +616,6 @@ async function assertBackgroundWorker(
     return inconclusiveCheck(id, null, guest.reason, NO_SESSION_SETTLED_BY);
   }
 
-  /* @invariant NO TARGET IS NOT "NOT LOADED". An idle MV3 worker with no page
-     of its extension open lists nothing, exactly like a rejected load, so the
-     target list alone cannot tell them apart. The one thing that can is the
-     contract: the CLI stamps `extension_load_refused` when the browser
-     refused the load. That is the FAIL; anything else falls through to the
-     log evidence and, failing that, to inconclusive. */
   if (!guest.loaded) {
     const refusal = contractLoadRefusal(stage.projectPath, stage.browser);
 
@@ -692,9 +674,6 @@ async function assertBackgroundWorker(
     );
   }
 
-  /* @invariant Absence of a worker target is not a failed boot. Chrome delists
-     an idle MV3 service worker, so a red here would accuse the extension of a
-     bug the browser's own lifecycle produced. */
   return inconclusiveCheck(
     id,
     null,
@@ -712,14 +691,6 @@ async function assertBackgroundWorker(
   );
 }
 
-/* @invariant RENDERED MEANS SOMETHING A PERSON WOULD SEE. The templates ship
-   `<noscript>You need to enable JavaScript</noscript><div id="root"></div>`,
-   which an unmounted bundle leaves as two or three elements and, through the
-   textContent fallback, fifty characters of noscript prose: that passed the
-   old count. A rendered reading excludes script, style, noscript, template,
-   link and meta, measures innerText only, and counts a lone canvas, image or
-   control as rendered. The old fields stay for an engine that does not report
-   the new ones. */
 export function renderedFromEvidence(evidence: {
   bodyElementCount?: number;
   textLength?: number;
@@ -770,10 +741,6 @@ async function assertSurfaceRendered(
   }
 
   if (!stage.chromium) {
-    /* @invariant On Gecko the surface relay answers only from an open document,
-       so an inspect in that context is the rendering proof. A selector cannot
-       be probed through that verb, so a clause with one stays inconclusive
-       and says which tool reads it. */
     const raw = await runActVerb(
       [
         "inspect",
@@ -1068,12 +1035,6 @@ async function assertContentScriptInjected(
 
   const runId = readLogRunId(stage.projectPath, stage.browser);
   const stale = staleFileNote(stage.projectPath, stage.browser, runId);
-  /* @invariant A LINE COUNTS WHEN IT CAME FROM THAT PAGE, IN THIS BUILD. The
-     engine's url filter is a substring test, so a line from /cart/checkout or
-     from a page whose query carried the wanted url passed for /cart; and a
-     line written early in the run kept passing after an edit broke the
-     script. The event's origin and path must equal the clause's, and the
-     event must be newer than the contract's compiledAt. */
   const compiledAt = contractCompiledAtMs(stage.projectPath, stage.browser);
   const lines = readLogEvents(stage.projectPath, stage.browser, {
     context: ["content"],
@@ -1104,11 +1065,6 @@ async function assertContentScriptInjected(
     });
   }
 
-  /* @invariant A declared match is never a pass. Whether a content script ran
-     on a given page is not observable from outside its isolated world, so the
-     only positive evidence this platform holds is a line the script itself
-     wrote. Passing on coverage would report on the manifest while claiming to
-     report on the run, which is the guess this tool exists to replace. */
   return inconclusiveCheck(
     id,
     subject,
@@ -1120,12 +1076,6 @@ async function assertContentScriptInjected(
   );
 }
 
-/* @invariant On Safari the background is observable only through the line
- * it writes into the dev session's log stream over the extension's bridge,
- * because no debugging protocol lists its worker. A written line is a booted
- * background; silence is inconclusive, since a background that logs nothing
- * looks identical to one that never started.
- */
 async function assertBackgroundOnWebKit(
   clause: BackgroundClause,
   stage: Stage,
@@ -1156,15 +1106,6 @@ async function assertBackgroundOnWebKit(
   );
 }
 
-/* @invariant On Safari the evidence is a DOM root the script mounted, read
- * from the page's main world through the dev session's automation window,
- * because that window is the only reach Safari grants and it carries no
- * console feed. An Extension.js content script stamps each root it mounts
- * with an owner naming the extension, so an owned root is proof the script
- * ran on this page. A page with no root is not proof it did not: a script
- * that mounts nothing leaves nothing to read, so that reading stays
- * inconclusive and names the marker that would settle it.
- */
 async function assertContentScriptInjectedOnWebKit(
   clause: ContentScriptClause,
   stage: Stage,
@@ -1267,12 +1208,6 @@ interface StorageRead {
   value?: unknown;
 }
 
-/* @invariant chrome.storage.get answers with an object that simply lacks the
-   key when nothing is stored, so an object without the key is a real absence
-   and not a shape this reader failed to understand. Anything that is neither
-   that object nor a bare value is reported unreadable, which is inconclusive;
-   guessing a value out of an unrecognised frame is how an assertion passes
-   over a read that never happened. */
 export function readStorageValue(value: unknown, key: string): StorageRead {
   if (value === null || value === undefined) return { shape: "absent" };
   if (typeof value !== "object") return { shape: "found", value };
@@ -1353,10 +1288,6 @@ async function assertStorageKeyPresent(
     );
   }
 
-  /* @invariant A platform refusal is inconclusive, not a failed expectation. A
-     session started without allowControl, a dead control channel or an engine
-     below the flag's floor all mean the key was never read, and reporting that
-     as a failure blames the extension for the harness. */
   if (!isEnvelope(frame) || frame.ok === false) {
     const message =
       isEnvelope(frame) && frame.error
@@ -1483,9 +1414,6 @@ function assertConsoleErrorsEmpty(
     );
   }
 
-  /* @invariant A WEBSITE'S OWN ERROR IS NOT THE EXTENSION'S. Browser-relayed
-     lines come from any extension url or service worker, a visited site's
-     included; one is counted only when its url is this extension's. */
   const guestIds = sessionGuestIdentity(stage.projectPath, stage.browser).expectedIds;
   const allErrorEvents = readLogEvents(stage.projectPath, stage.browser, {
     ...scopeQuery,
@@ -1623,9 +1551,6 @@ export async function handler(args: {
     subject: { projectPath: args.projectPath, browser },
   });
 
-  /* @invariant A BUILD THAT FAILED EXPLAINS ITS OWN INCONCLUSIVES: the stage
-     sentence "this platform cannot cover the question today" is not the
-     reason when ready.json records compile errors. */
   const compileErrors = contractCompileErrors(args.projectPath, browser);
 
   return envelope({

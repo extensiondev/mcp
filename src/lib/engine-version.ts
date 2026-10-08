@@ -8,34 +8,6 @@
 
 import { resolveExtensionInvocation, runExtensionCli } from "./exec";
 
-/* @invariant
- * The floor for each command is the release that first accepted --output json,
- * read off the engine's own history rather than assumed from the pin this
- * package carries. `doctor` got the flag in 4.0.11, and `dev` and `build` only
- * in 4.0.17. They are listed together because a single table is the honest
- * record of what was verified. Only the entry a caller asks for is ever
- * consulted, so listing a floor here does not put the flag in front of any
- * command that is not already sending it.
- *
- * Since 4.0.20 this table is the fallback, not the authority. An engine from
- * 4.0.20 on answers `extension capabilities` with the roster of commands that
- * accept --output json, read off its own live registrations, and an engine
- * that answers is judged from that roster instead of these hand-kept numbers.
- * Only engines that predate the command, which is every release below 4.0.20,
- * are still judged here, and that set is closed: no release that will ever
- * need a new row can be cut again, so the table is finished rather than
- * merely current.
- *
- * The `act` entry is the one number here that is NOT the release it claims to
- * be. `programs/extension/commands/act.ts` does not exist before 3.18.0 and
- * already registers `--output <pretty|json>` in that first release, so the true
- * floor is 3.18.0 and the 3.18.1 below is one patch high. It is left alone
- * rather than quietly corrected because the error is conservative in the only
- * direction that matters: too high means a 3.18.0 engine is judged "too old",
- * and the act family never acts on that verdict except to explain a refusal
- * that a 3.18.0 engine will not produce, since it accepts the flag. Moving it
- * is a behaviour change and wants its own commit, not a comment sweep.
- */
 export const OUTPUT_JSON_FLOOR = {
   act: "3.18.1",
   doctor: "4.0.11",
@@ -45,34 +17,9 @@ export const OUTPUT_JSON_FLOOR = {
 
 export type OutputJsonCommand = keyof typeof OUTPUT_JSON_FLOOR;
 
-/* @invariant
- * One minute, and the number is a judgement about which way to be wrong.
- *
- * This server can run for days, so a verdict cached forever would outlive a
- * user upgrading their engine mid-session and keep answering with the version
- * they replaced. No cache at all is also wrong for a different reason: an agent
- * that builds chrome, firefox and edge back to back would pay three probes for
- * one answer.
- *
- * A minute takes both. It is shorter than any realistic upgrade-then-build
- * cycle, so an upgrade is honoured almost immediately, and it still collapses a
- * burst of builds onto a single probe. The worst case is bounded on both sides
- * and neither side breaks a build: a stale "too old" costs the richer inline
- * report for up to a minute, and a stale "new enough" costs exactly the double
- * build the retry already handles. The probe itself is one non-compiling exec
- * against a local binary, which is nothing next to the compile it protects.
- */
-const VERDICT_TTL_MS = 60_000;
+const VERDICT_TTL_MS_SHORTER_THAN_AN_UPGRADE_LONGER_THAN_A_BURST = 60_000;
 
-/* @invariant
- * The probe must never become the slow part. A local node_modules/.bin exec
- * answers in tens of milliseconds; the only path that can be slow is the npx
- * fallback with an unpinned spec, which has to fetch before it can answer. The
- * ceiling is generous enough for that fetch and still short enough that a
- * wedged binary cannot hold a build hostage, because a timeout here is read as
- * "unknown" and the build proceeds exactly as it did before this probe existed.
- */
-const PROBE_TIMEOUT_MS = 20_000;
+const PROBE_TIMEOUT_MS_READ_AS_UNKNOWN_ON_EXPIRY = 20_000;
 
 const SEMVER =
   /^v?(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$/;
@@ -92,17 +39,6 @@ function decompose(version: string): VersionParts | null {
   };
 }
 
-/* @invariant
- * A version is only accepted from a line that is nothing but a version.
- *
- * `extension --version` prints the bare string, but the same stream also
- * carries the Node guard's refusal, which names a Node version of its own.
- * Scanning for the first version-shaped substring anywhere in the output would
- * happily read that guard's number and decide the engine is ancient. Matching
- * whole lines means unfamiliar output yields null, which is the answer that
- * falls back to the flag and the retry rather than the answer that silently
- * downgrades a modern engine.
- */
 export function parseVersion(text: string): string | null {
   for (const line of text.split("\n")) {
     const candidate = line.trim();
@@ -122,26 +58,6 @@ function compareNumericIdentifiers(a: string, b: string): number {
   return left < right ? -1 : 1;
 }
 
-/* @invariant
- * Semver precedence, not string order and not a numeric triple.
- *
- * The versions this server meets include canaries such as
- * 4.0.19-canary.1785200797.ce99a79e, and every naive shortcut gets one of them
- * wrong: string compare puts 4.0.9 above 4.0.17, and comparing only the triple
- * calls 4.0.17-canary.1 an equal of 4.0.17 when it precedes it. So the rule is
- * the spec's: the release triple decides first, a version with a prerelease
- * ranks below the same triple without one, and prereleases are compared
- * identifier by identifier with numeric identifiers ordered numerically and
- * ranked below alphanumeric ones. Numeric identifiers are compared by digit
- * count then lexically rather than through Number, so a timestamp identifier
- * long enough to lose precision as a double still orders exactly.
- *
- * Ranking 4.0.17-canary.N below the 4.0.17 floor is deliberate even though the
- * flag landed before that tag was cut. It is the reading the spec gives and the
- * one the ecosystem expects, and the cost of the conservative answer is only
- * the optimisation: such a canary is sent the flag, accepts it, and nothing is
- * paid twice.
- */
 export function compareVersions(a: string, b: string): number | null {
   const left = decompose(a);
   const right = decompose(b);
@@ -182,17 +98,6 @@ export function compareVersions(a: string, b: string): number | null {
   return 0;
 }
 
-/* @invariant
- * One record answers both questions, or the cache would double the probes.
- *
- * The version and the roster arrive from the same exec when the engine can
- * answer `capabilities`, and from execs against the same binary when it
- * cannot, so caching them separately would let their TTLs drift apart and a
- * support question land on a version the roster no longer describes. A null
- * roster is itself an answer: this binary was probed and did not produce one,
- * so support questions must fall back to the floor table rather than probing
- * again inside the TTL.
- */
 export interface EngineFacts {
   version: string | null;
   outputJsonCommands: readonly string[] | null;
@@ -208,46 +113,12 @@ export function resetEngineVersionCache(): void {
   verdicts.clear();
 }
 
-/* @invariant
- * The cache is keyed on the invocation, never on the project.
- *
- * resolveExtensionInvocation reads the user's own node_modules/.bin, so two
- * projects on one machine can be on different engines and a project-keyed cache
- * would answer for one of them with the other's version. Keying on the command
- * and its prefix arguments is the truthful key: every project that resolves to
- * the same binary shares one answer, which is what makes a monorepo of packages
- * pay a single probe, and a project that resolves anywhere else gets its own.
- */
-/* @invariant
- * The separator is written as an escape, never as a raw NUL byte.
- *
- * A NUL cannot appear in a command path or an argument, which is what makes it
- * the right separator here. Typing the byte itself into the source is a
- * different matter: git then classifies the whole file as binary and shows no
- * diff for any change to it, so every later edit arrives unreviewable. This
- * repository has already been bitten once, in the artifact store, where a
- * formatter pass silently replaced raw separators with empty strings and every
- * test still passed because nothing could see what changed. An escape carries
- * the same byte at runtime and stays legible to humans and tools.
- */
 function invocationKey(command: string, prefixArgs: string[]): string {
   return [command, ...prefixArgs].join("\0");
 }
 
 const NPX_PIN = /^extension@(.+)$/;
 
-/* @invariant
- * A roster is only believed from a frame that is unmistakably the answer.
- *
- * `extension capabilities` compiles nothing, opens no session, and prints one
- * schema-1 envelope on stdout. An engine that predates the command exits
- * non-zero without a frame, and an engine broken enough to print something
- * else must not have that something read as a roster, so every gate is
- * checked: a line that parses as JSON, schema 1, ok true, command
- * "capabilities", a version that parses as one, and a roster that is an array
- * of strings. Anything less answers null, which is the answer that falls back
- * to the floor table rather than the answer that invents a capability set.
- */
 function parseCapabilities(stdout: string): EngineFacts | null {
   for (const line of stdout.split("\n")) {
     const candidate = line.trim();
@@ -291,22 +162,6 @@ function parseCapabilities(stdout: string): EngineFacts | null {
   return null;
 }
 
-/* @invariant
- * Ask the engine what it can do before deducing it from what it is.
- *
- * Since 4.0.20 the engine has `extension capabilities` for exactly this
- * caller: one non-compiling, session-free exec that prints the running
- * artifact's version and the full roster of commands accepting --output json,
- * read off its live registrations rather than kept by hand in another
- * repository. An engine that answers settles both questions in one exec and
- * makes the floor table below it unnecessary. An engine that does not answer,
- * which is every release before 4.0.20, exits non-zero with no frame and
- * falls through to the --version probe and the floor table exactly as the
- * world was before capabilities existed. Both probes share one cache record
- * per invocation key and one TTL, so a cache miss on a pre-capabilities
- * engine costs two bounded execs for a minute of answers and a modern engine
- * costs one.
- */
 export async function resolvedEngineFacts(
   projectPath?: string,
 ): Promise<EngineFacts> {
@@ -322,7 +177,7 @@ export async function resolvedEngineFacts(
   }
 
   const remember = (found: EngineFacts): EngineFacts => {
-    verdicts.set(key, { ...found, expiresAt: Date.now() + VERDICT_TTL_MS });
+    verdicts.set(key, { ...found, expiresAt: Date.now() + VERDICT_TTL_MS_SHORTER_THAN_AN_UPGRADE_LONGER_THAN_A_BURST });
 
     return found;
   };
@@ -336,7 +191,7 @@ export async function resolvedEngineFacts(
   try {
     const probe = await runExtensionCli(["capabilities"], {
       cwd: projectPath,
-      timeoutMs: PROBE_TIMEOUT_MS,
+      timeoutMs: PROBE_TIMEOUT_MS_READ_AS_UNKNOWN_ON_EXPIRY,
     });
 
     if (probe.code === 0) {
@@ -344,13 +199,12 @@ export async function resolvedEngineFacts(
       if (answered) return remember(answered);
     }
   } catch {
-    // An exec that falls over is an engine that cannot answer capabilities
   }
 
   try {
     const probe = await runExtensionCli(["--version"], {
       cwd: projectPath,
-      timeoutMs: PROBE_TIMEOUT_MS,
+      timeoutMs: PROBE_TIMEOUT_MS_READ_AS_UNKNOWN_ON_EXPIRY,
     });
 
     if (probe.code !== 0) {
@@ -379,15 +233,6 @@ export interface OutputJsonVerdict {
   floor: string;
 }
 
-/* @invariant
- * The floor table keys `act` as one family because its verbs gained the flag
- * together, but the engine's roster names every verb individually, since it
- * is read off the live commander registrations. This map is the bridge: a
- * family is supported when every verb it covers is in the roster, so a roster
- * that ever drops one verb downgrades the whole family rather than vouching
- * for a verb it cannot see. The single-name rows exist so the lookup has one
- * shape for every key.
- */
 const ROSTER_NAMES: Record<OutputJsonCommand, readonly string[]> = {
   act: ["eval", "inspect", "open", "reload", "storage"],
   doctor: ["doctor"],
@@ -395,24 +240,6 @@ const ROSTER_NAMES: Record<OutputJsonCommand, readonly string[]> = {
   build: ["build"],
 } as const;
 
-/* @invariant
- * Three answers, and the third one is the whole safety story.
- *
- * `true` and `false` are worth an opinion: the caller can skip a flag the
- * engine would refuse, which is the double build this exists to delete. `null`
- * means the version could not be read, could not be parsed, or the probe fell
- * over, and it must be treated exactly as the world was before this function
- * existed: send the flag and let the refusal retry catch it. The probe is an
- * optimisation, so its failure mode is losing the optimisation and never
- * breaking the build.
- *
- * When the engine answered `capabilities`, `true` and `false` come straight
- * off its roster and the floor table is not consulted at all, because the
- * engine's own registrations outrank a table kept by hand in this repository.
- * The floor comparison below the roster check is the pre-capabilities path,
- * and the floor still travels in the verdict either way so a refusal message
- * can name the release where the flag arrived.
- */
 export async function outputJsonVerdict(
   command: OutputJsonCommand,
   projectPath?: string,
@@ -445,50 +272,12 @@ export async function outputJsonVerdict(
   return { supported: ordering >= 0, version, floor };
 }
 
-/* @invariant The engine's refusal, matched in one place because the floors it
-   has to be explained against live here.
-
-   An engine that does not know --output json answers with one line on stderr
-   and exits before doing any work, but two generations of engine word that
-   line differently. Before the messaging redesign it is commander's own
-   lowercase "error: unknown option '--output'". From the redesign on it is
-   the styled "Unknown option --output." with a glyph prefix on the line and a
-   suggestion or remedy line after it. Today only pre-redesign engines can
-   refuse --output on the commands this package sends it to, so the second
-   phrasing is defence for the day a command gains the flag after the
-   redesign, bought now while both phrasings are in front of us. The match is
-   case-insensitive to cover both and still requires the line to name
-   --output, so a command that fails for a real reason is never mistaken for
-   one that refused a flag. */
-const UNKNOWN_OUTPUT_FLAG = /unknown option[^\n]*--output\b/i;
+const UNKNOWN_OUTPUT_FLAG_EITHER_PHRASING = /unknown option[^\n]*--output\b/i;
 
 export function refusedTheOutputFlag(stderr: string): boolean {
-  return UNKNOWN_OUTPUT_FLAG.test(stderr);
+  return UNKNOWN_OUTPUT_FLAG_EITHER_PHRASING.test(stderr);
 }
 
-/* @invariant What to say when a command that cannot drop the flag is refused it.
- *
- * `build` can answer a refusal by rebuilding without the flag, because the build
- * summary it persists says everything the envelope would have. `doctor` and the
- * act family have no such second source: without --output json they print a
- * report for a human, and reading that back is exactly the prose scraping this
- * package bans. So there is nothing to retry and no cost to save; the only thing
- * left to get right is the sentence the caller reads.
- *
- * Left alone that sentence is "unknown option '--output'", which names a flag
- * the user never typed, in a command they did not run, and points at nothing.
- * The probe turns it into the two facts that actually decide what to do: the
- * version installed in this project, and the version where the flag arrived.
- *
- * Three verdicts, three sentences, because a probe that guesses is worse than
- * one that admits it does not know. Below the floor is the ordinary case and
- * gets a plain upgrade instruction. At or above the floor is a contradiction
- * worth reporting as one: the binary being run is not the version it reports,
- * which usually means a stale node_modules or a shim on PATH, and telling that
- * user to upgrade would send them round a loop that cannot terminate. An
- * unreadable version says so and still names the floor, which is the part they
- * can act on either way.
- */
 export async function outputFlagRefusalMessage(
   command: OutputJsonCommand,
   cliName: string,

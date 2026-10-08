@@ -27,13 +27,6 @@ export function safariMcpAddCommand(driverPath: string | null): string {
   return `claude mcp add safari-mcp -- "${driverPath || "/usr/bin/safaridriver"}" --mcp`;
 }
 
-/* @invariant The reading comes from safaridriver's own usage text, never
- * from a Safari version number. Apple added `--mcp` in Safari 27 and Safari
- * Technology Preview 247, and the Preview ships its own safaridriver inside
- * the app bundle, so a version threshold would call a Preview on macOS 26
- * unsupported while its binary answers `--mcp` just fine. The usage text is
- * the one source that cannot disagree with the binary that prints it.
- */
 export function parseSafariDriverHelp(helpText: string): {
   mcp: boolean;
   bidi: boolean;

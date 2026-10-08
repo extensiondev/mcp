@@ -116,13 +116,6 @@ export const tools: ToolModule[] = [
   docsSearch,
 ];
 
-/* @invariant isError agrees with the envelope's own ok.
- *
- * Input-validation failures and thrown errors always carried isError:true,
- * while a tool-level refusal (publish 404, auth 401) returned with the flag
- * absent, so an agent branching on isError read a platform refusal as
- * success. The envelope's ok field is the one verdict every tool already
- * emits; the transport flag must repeat it, not contradict it. */
 export function toolResultFrame(
   result: string,
   untrusted = false,
@@ -164,13 +157,6 @@ for (const tool of tools) {
   toolMap.set(tool.schema.name, tool);
 }
 
-/* @invariant A client that hides tool descriptions behind a search step shows
-   the model nothing of this server but its name and tool count, and a frontier
-   agent with the server attached built a whole session by hand (ps, curl on
-   the debug port, inline CDP scripts) without ever searching it. The initialize
-   result's `instructions` is the one field such a client may place in the
-   system prompt, so it names the moments and the tools; the tool descriptions
-   stay the detailed contract. */
 export const SERVER_INSTRUCTIONS = [
   "extension-dev runs, inspects, drives, builds and publishes browser extensions (Chrome, Edge, Firefox, Safari and the other Chromium and Gecko browsers) through Extension.js and extension.dev.",
   "When the ask is to run, start, wait for, watch, inspect, drive, test, debug or build a browser extension, search this server first and use its tools: extension_dev starts the dev session (allowEval: true also turns on control), extension_wait blocks until it is ready, extension_logs streams its console, extension_open opens a surface or a url, extension_dom_snapshot and extension_inspect read a live page, extension_eval runs code in a context, extension_build makes a store-ready bundle, extension_stop ends the session.",

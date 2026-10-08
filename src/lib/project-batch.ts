@@ -28,20 +28,6 @@ function capFrom(value: unknown, fallback: number): number {
   return Math.min(count, MAX_BATCH_PROJECTS);
 }
 
-/* @invariant
-  * THE PLATFORM SAYS WHETHER IT TAKES A LIST, AND HOW LONG A LIST, AND THIS
-  * CLIENT BELIEVES IT BEFORE SPENDING A DEVICE CODE. The login config a call
-  * already reads carries `batchOnboarding` on a platform that accepts
-  * `projects`. A platform without it predates the list: sent one, it answers
-  * with its refusal for a malformed single project, a sentence no client can
-  * tell from any other, at the price of one of ten device codes. So absence
-  * is read as "no", here, before any code is asked for. The caps are the
-  * platform's to state. The create cap ruled is ten per approval, and ten is
-  * the fallback when the platform advertises the capability without a usable
-  * number, so a garbled field can never read as "no limit". A number above
-  * twenty is held to twenty, the most this client will ever put in one list,
-  * and the platform checks every list again.
-  */
 export function readBatchCapability(config: unknown): BatchCapability | null {
   const raw = (config as { batchOnboarding?: unknown } | null)?.batchOnboarding;
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
@@ -79,17 +65,6 @@ export type ProjectBatchParse =
   | { ok: true; batch: ProjectBatch }
   | { ok: false; message: string };
 
-/* @invariant THESE ARE THE PLATFORM'S RULES FOR A LIST, CHECKED HERE SO THE
- * REASON ARRIVES BEFORE A DEVICE CODE IS SPENT. One approval names one
- * workspace and at most twenty projects, each by the exact slug the platform
- * registers (lowercase letters and digits joined by single dashes, at most
- * forty-eight characters), with no name twice. The platform refuses a list
- * that breaks any of them whole, and its refusal costs one of the ten device
- * codes an address may start in ten minutes, so the same refusal is given
- * here first and names the entry that caused it. This is a courtesy and not
- * the gate: the platform checks every rule again, and a rule relaxed here
- * would only move the refusal one request later.
- */
 export function parseProjectBatch(input: unknown): ProjectBatchParse {
   if (!Array.isArray(input)) {
     return {

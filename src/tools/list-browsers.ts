@@ -57,7 +57,6 @@ export async function listManagedBrowsers(): Promise<string> {
   }> = [];
   const incomplete: Array<{ browser: string; path: string; size: number; sizeFormatted: string }> = [];
 
-  /* @invariant INSTALLED MEANS A BINARY IS THERE. */
   for (const browser of BROWSER_NAMES) {
     const browserDir = path.join(cacheRoot, browser);
     if (!fs.existsSync(browserDir)) continue;

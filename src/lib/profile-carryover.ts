@@ -25,18 +25,6 @@ function holdsState(dir: string): boolean {
   }
 }
 
-/* @invariant Asked BEFORE the engine launches, never after.
- *
- * The engine's default is a throwaway managed profile whose directory name is
- * three random words drawn fresh on every run, so the ordinary session cannot
- * inherit a tab from the last one. Three cases can: `profile: "false"` hands
- * the browser the developer's real profile, an explicit path is reused by
- * definition, and a project that sets persistProfile or keepProfileChanges
- * gets the stable `dev` directory instead of the random one. Only the last
- * matches the walk's report, and only from its SECOND run onward, which is why
- * the question is whether the directory already holds state rather than
- * whether it is persisted. Reading it after the launch would always answer
- * yes, since the browser fills the profile immediately. */
 export function profileCarriesTabsOver(
   projectPath: string,
   browser: string,

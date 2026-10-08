@@ -248,15 +248,6 @@ export function reviewCoverageNotes(report: ReviewReport): string[] {
   return notes;
 }
 
-/* @invariant
-  * A DEV BUILD IS NOT WHAT A STORE RECEIVES, SO ITS CODE IS NOT JUDGED.
-  * Measured on seven published extensions' dev dists: every one tripped
-  * eval() or new Function() from the hot-reload runtime and most showed a
-  * `management` permission the dev session injects, while a production build
-  * of an official template tripped neither. So on a dev build the code checks
-  * are skipped and only the manifest checks (host access, Firefox data
-  * collection) still run.
-  */
 export function isDevelopmentBuild(files: Array<{ path: string }>): boolean {
   return files.some((f) => /hot-update\./.test(f.path) || /(^|\/)extension-js(-devtools)?\//.test(f.path));
 }

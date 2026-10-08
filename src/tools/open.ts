@@ -48,13 +48,6 @@ import { sessionGuestIdentity, unpackedExtensionId } from "../lib/extension-iden
 
 export const OVERRIDE_SURFACES = ["newtab", "history", "bookmarks"];
 
-/* @invariant A TAB THIS SERVER RENDERED IS NEVER COUNTED AS THE SURFACE. A
-   popup or sidebar document rendered as a tab by an earlier call matched the
-   url the confirmation polls for, so the next call reported the window open.
-   The target ids of rendered tabs are remembered here for the life of the
-   server and excluded from every confirmation; on Gecko, where tabs are not
-   target ids, the rendered document url is remembered per project and
-   surface. */
 export const renderedTabTargets = new Set<string>();
 export const renderedGeckoSurfaces = new Map<string, string>();
 const PERSISTENT_WINDOW_SURFACES = ["sidebar"];
@@ -66,9 +59,6 @@ type SettledTarget = {
   redirectedFrom?: string;
 };
 
-/* @invariant THE TARGET THAT WAS NAVIGATED IS THE ONE THAT ANSWERS. With a
-   known target only that target is read; its pre-navigation url is never a
-   landing. */
 type PolledTarget = SettledTarget | null | { unreadable: string };
 
 function targetsUnreadable(polled: PolledTarget): polled is { unreadable: string } {
@@ -152,12 +142,6 @@ async function landedOnErrorPage(
   return null;
 }
 
-/* @invariant The browser is asked whether it is headless, because the
-   environment this server reads only describes the request: a launcher shim
-   can add --headless=new behind every caller, and a headless Chrome closes a
-   popup window before the next call can read it. HeadlessChrome names itself
-   in /json/version: old headless in the Browser field, new headless
-   (--headless=new) only in the User-Agent field, so both are read. */
 async function browserRunsHeadless(
   projectPath: string,
   browser: string,
@@ -356,11 +340,6 @@ export async function navigateToUrl(
     }
 
     const settled = polled;
-    /* @invariant A target can match the requested url for an instant and then be
-       swapped to the browser's own error page: Edge answered a blocked
-       extension page that way and the tool reported it navigated. The landed
-       target is read once more after it settles, and an error page is a
-       refusal with the browser's title as the reason. */
     const blockedRead = settled
       ? await landedOnErrorPage(resolved.port, settled.id)
       : null;
@@ -490,10 +469,6 @@ export async function resolveExtensionId(
     const guest = await verifyGuestLoaded(projectPath, browser);
     if (guest.checked && guest.guestIds.length === 1) return guest.guestIds[0]!;
 
-    /* @invariant A lone live extension stands in for the computed hash only when
-       the contract stamped no id of its own (an older engine, or no contract
-       yet). A stamped id is the engine's word and a stranger's worker never
-       overrides it. */
     if (
       guest.checked &&
       sessionGuestIdentity(projectPath, browser).source !== "contract" &&
@@ -851,7 +826,6 @@ async function openSurfaceAsTab(
       return actFrameJson(parsed);
     }
   } catch {
-    // non-JSON payload; return as-is
   }
 
   return raw;
@@ -873,7 +847,6 @@ async function confirmSurfaceTarget(
 
   if (parsed?.ok === false) return raw;
 
-  /* @invariant AN UNCONFIRMED OPEN SAYS SO. */
   const unconfirmed = (why: string): string => {
     patchValue(parsed, { confirmed: false, confirmation: why });
     addWarning(
@@ -1006,11 +979,6 @@ export function sessionIsHeadless(): boolean {
 const HEADED_RELAUNCH =
   "a person starts a headed session from a shell where EXTENSION_HEADLESS=0 is set and EXTENSION_BROWSER_FLAGS carries no --headless (extension_stop, then extension_dev from that shell; no tool input sets those variables)";
 
-/* @invariant A path with no scheme names a document inside the extension,
-   whatever the manifest declares about it: pages/options.html is reachable
-   by url even when no surface key points at it. The origin comes from the
-   live session (the Chromium id from CDP, the moz-extension base from the
-   bridge), the same way the surfaces resolve theirs. */
 async function resolveExtensionDocumentUrl(
   projectPath: string,
   browser: string,
@@ -1085,11 +1053,6 @@ export async function handler(
 
   const AS_TAB_SURFACES = ["popup", "options", "sidebar", ...OVERRIDE_SURFACES];
 
-  /* @invariant An override page has no window of its own: the browser renders
-     chrome_url_overrides pages in a tab and nowhere else, and the engine's open
-     verb knows only popup, options, sidebar, action and command. Resolving the
-     page here and opening it by url is the whole surface, not a fallback, so it
-     never reaches the CLI. */
   if (args.surface && OVERRIDE_SURFACES.includes(args.surface)) {
     return openSurfaceAsTab(args.projectPath, browser, args.surface);
   }
@@ -1133,10 +1096,6 @@ export async function handler(
     }
   }
 
-  /* @invariant EVERY WINDOW SURFACE IS CHECKED AGAINST THE MANIFEST BEFORE THE
-     ENGINE IS ASKED. The engine answers `opened: "options"` from
-     chrome.runtime.openOptionsPage without reading lastError, so an extension
-     with no options page read as opened. */
   if (["popup", "options", "sidebar"].includes(args.surface)) {
     const declared = declaredSurfaces(args.projectPath, browser);
 
@@ -1232,11 +1191,6 @@ export async function handler(
   const parsedConfirmed = parseFrameObject(confirmed);
   if (parsedConfirmed?.status !== "surface-did-not-open") return confirmed;
 
-  /* @invariant An engine "opened" with no document behind it within 3s is a
-     window the browser never showed, which is what a headless browser does
-     with an options or popup window whatever the launch flags said. The
-     document is rendered in a tab instead and the warning says so; the
-     engine's answer rides along for the record. */
   const fallback = await openSurfaceAsTab(args.projectPath, browser, args.surface);
   const parsedFallback = parseFrameObject(fallback);
 
@@ -1259,13 +1213,6 @@ type WindowRefusal = {
   frame: Record<string, any>;
 };
 
-/* @invariant Three refusals mean the same thing to the caller, "the window
-   did not open", and the tab route answers all three. The gesture code is the
-   engine's own; the no-window arm reads the BROWSER's words the engine quotes
-   (E_TARGET_NOT_FOUND, "no active browser window", "headless"); the
-   unsupported arm is Gecko answering that it cannot open a popup or sidebar
-   programmatically ("Popup is disabled", E_NOT_IMPLEMENTED). None of these is
-   gated on how the session was launched any more. */
 function readWindowRefusal(
   raw: string,
   surface: string,
@@ -1282,8 +1229,6 @@ function readWindowRefusal(
   const code = typeof parsed.error?.code === "string" ? parsed.error.code : "";
   const message = String(parsed.error?.message ?? "");
 
-  /* @invariant A MISSING SESSION IS NOT A MISSING WINDOW. The engine says "No
-     active control channel found for <browser>" with E_SESSION_NOT_FOUND. */
   if (
     code === "E_SESSION_NOT_FOUND" ||
     code === "E_NO_SESSION" ||
@@ -1316,11 +1261,6 @@ function windowRefusalWarning(
   const noun = surface === "sidebar" ? "sidebar" : surface === "options" ? "options page" : "popup";
   const said = String(refusal.frame.error?.message ?? "").replace(/\s+/g, " ").trim();
 
-  /* @invariant THE WARNING SAYS WHAT WAS OBSERVED: the engine's refusal,
-     quoted, and what this server did about it. The browser was never asked
-     (the engine's open verb refuses a gesture-gated surface in its own
-     preflight), so no sentence here describes browser behaviour this call did
-     not measure. */
   if (isGeckoFamily(browser)) {
     return refusal.kind === "gesture"
       ? `The engine refused to open the ${noun} on ${browser} before asking the browser (its open verb carries no user gesture: ${said}), so the ${noun} document was rendered in a tab instead: the same document and APIs, without the toolbar anchoring and without a user gesture or an activeTab grant.`
@@ -1334,13 +1274,6 @@ function windowRefusalWarning(
 
 const DEVTOOLS_PANEL_BUDGET_MS = 15_000;
 
-/* @invariant Chromium's browser-level CDP has Target.openDevTools, which opens
-   the real DevTools frontend on a target, headed or headless, and the
-   extension's devtools_page loads inside it like it would from a keyboard
-   shortcut; the frontend's own panel registry then shows the panel. Firefox's
-   protocols have no command that opens its developer tools, so on Gecko the
-   honest answer is a refusal, not a stand-in tab (a panel page outside DevTools
-   has no chrome.devtools and proves nothing). */
 const DEVTOOLS_PANEL_BUDGET_MAX_MS = 120_000;
 
 async function openDevToolsSurface(
@@ -1555,9 +1488,6 @@ function readGestureRefusal(raw: string): Record<string, any> | null {
   const code = typeof parsed.error?.code === "string" ? parsed.error.code : "";
   const message = String(parsed.error?.message ?? "");
 
-  /* @invariant The code is the engine's own name for this refusal and the prose
-     arm reads the browser's message, which the engine quotes verbatim
-     ("may only be called in response to a user gesture"); neither is CLI copy. */
   return code === E_USER_GESTURE_REQUIRED || /user gesture/i.test(message)
     ? parsed
     : null;
@@ -1585,14 +1515,6 @@ function readUnsupportedRefusal(raw: string): Record<string, any> | null {
 const GECKO_SIDEBAR_GESTURE =
   "Firefox opens a sidebar_action panel only from a user gesture (the toolbar button or View > Sidebar; Bugzilla 1392624), and the engine's open verb carries none, so it cannot open the panel";
 
-/* @invariant The engine names a Chromium API on a Gecko engine ("sidePanel
-   not available (engine: firefox)") and stops there, while the relay can say
-   whether the sidebar_action panel is open: an inspect in the sidebar context
-   answers only from an open panel. So the panel is asked before anything is
-   rendered, an open one is reported as open, and a closed one gets its
-   document as a tab through the same path the override pages use, with the
-   gesture rule stated instead of a foreign API name. */
-/* @invariant THE RELAY'S "NOT OPEN" ANSWER IS THE ONLY CLOSED PANEL. */
 const GECKO_PANEL_CLOSED = /E_TARGET_NOT_FOUND|is not open|not open|no sidebar|no .*sidebar context/i;
 
 async function openGeckoSidebar(

@@ -6,18 +6,6 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-/* @invariant THIS IS A PORT, NOT AN INTERPRETATION.
- *
- * The submission that reaches AMO and Partner Center is parsed by
- * `parseStoreMd` in @extension.dev/deploy, which is a PRIVATE package under
- * C11 and therefore cannot be a dependency of this PUBLIC one. So the rules
- * live here twice on purpose, and the copy is held to the original by
- * src/__tests__/store-md-contract.test.ts: it pins the upstream file's
- * sha256 and replays both implementations over the same corpus whenever the
- * upstream checkout is reachable. Change a rule here and that test reddens.
- * Change a rule there and it reddens too. Neither side may move alone.
- */
-
 export const STORE_MD_FILENAME = "STORE.md";
 
 export interface StoreMdData {

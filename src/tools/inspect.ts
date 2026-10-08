@@ -108,17 +108,6 @@ export async function handler(args: {
     const isExtensionSurface = (u: string): boolean =>
       u.startsWith("chrome-extension://") || u.startsWith("moz-extension://");
 
-    /* @invariant With no url, the guest outranks the toolchain.
-     *
-     * The dev session's first page target is routinely the Extension.js
-     * welcome surface: the engine companion's own pages, or the newtab
-     * override it installs when the guest has none. Taking pageTargets[0]
-     * made this tool silently inspect that toolchain page and report "your
-     * extension renders fine" about the wrong document while the guest sat
-     * loaded one target over. Default selection therefore ranks the guest's
-     * own chrome-extension:// surfaces first, plain web pages second, and
-     * override or companion pages last, and anything still ambiguous is
-     * named in a warning instead of passed off as the extension. */
     const defaultRank = (u: string): number => {
       if (isEngineCompanionUrl(u)) return 3;
       if (isOverridePage(u)) return 2;
@@ -212,17 +201,6 @@ export async function handler(args: {
           : `No url was given and only override pages were open, so this inspected ${target.url}. Unless this extension provides that override itself, this is the toolchain's welcome surface, not your extension: pass url or open a surface with extension_open.`;
     }
 
-    /* @invariant A no-target read never passes off a survivor as this run's.
-     *
-     * Tab state rides the browser profile, so a session on a profile that
-     * already held an earlier run comes up with that run's tabs restored, and
-     * the ranking above happily picks one: it sorts by what a url LOOKS like,
-     * and a stale chrome-extension:// surface or web page looks exactly like a
-     * fresh one. The walk saw a second extension_dev restore the first
-     * session's tab and a no-target inspect report on it with nothing said.
-     * The rank >= 2 toolchain warning below cannot cover this, because the
-     * tabs that survive are precisely the rank 0 and rank 1 ones it stays
-     * quiet about. */
     const profileReused =
       !args.url && sessionProfileReused(args.projectPath, browser);
 

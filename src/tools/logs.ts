@@ -235,14 +235,6 @@ async function readFromFile(
     });
   }
 
-  /* @invariant A CUT FILE IS SAID TO BE CUT. The engine rotates the file at
-     50,000 lines or 8 MB (the new header carries `rotatedFrom`) and appends a
-     `{type: "gap", reason: "disk_slow", dropped}` sentinel when it could not
-     keep up; both were invisible here, so an agent read a rotated or gapped
-     file as the whole run and a filter that matched nothing as a session that
-     logged nothing. The answer now carries the run's total, what was dropped
-     and whether it was rotated, and an empty match over a live file says the
-     filter is what matched nothing. */
   const matches = makeFilter(args);
   const lines = fs.readFileSync(file, "utf8").split("\n").filter(Boolean);
   let runId = "";
@@ -321,28 +313,6 @@ export interface ControlRefusal {
   hint: string;
 }
 
-/* @invariant A close code at or above 4000 is an application-level refusal by
-   the engine's broker, not a socket that simply ended, and WHICH refusal decides
-   what the caller should do next. Reporting only "close code N" was already
-   better than the silent empty read it replaced, but it collapsed four
-   unrelated faults into one sentence about version skew.
-
-   They are four different problems with four different remedies. 4002 is the
-   hello being rejected outright, and since this reader always dials as a
-   consumer the only part that can differ is the envelope version, so the remedy
-   is to align the project's engine with this server's pin. 4001 is an
-   instanceId from a previous session, meaning the ready.json this read trusted
-   is stale because the dev server restarted, so the remedy is to re-read the
-   contract, not to touch any version. 4003 is a broker with no control channel
-   to give because the session was started without allowControl, so the remedy is
-   to relaunch the session with it. 4008 is this reader being dropped for falling
-   behind, where nothing is wrong with the engine at all and the remedy is a
-   narrower query or a file read. Telling someone whose session simply restarted
-   to upgrade their engine sends them to the wrong repository for an afternoon.
-
-   An unrecognised 4xxx keeps the old generic wording, because a code this
-   package has never met is exactly the case where the broker's own reason
-   string is the only trustworthy part of the diagnosis. */
 export function controlRefusal(
   closeCode: number,
   reason: string,
@@ -435,11 +405,6 @@ async function readFromStream(
   const events: any[] = [];
   let dropped = 0;
   let runId = ready.runId;
-  /* @invariant A FOLLOW RETURNS HISTORY PLUS THE WINDOW. The broker replays its
-     whole ring (5,000 events) to a new consumer before any live frame, so
-     `matched` counts both; the two are told apart by the event's own
-     timestamp against the moment this reader connected and reported
-     separately. */
   let connectedAt = Date.now();
   let replayed = 0;
   let liveCount = 0;
@@ -649,12 +614,6 @@ export async function handler(args: LogsArgs): Promise<string> {
   const { browser } = resolveSessionBrowser(args.projectPath, args.browser);
   const limit = args.limit && args.limit > 0 ? args.limit : DEFAULT_LIMIT;
 
-  /* @invariant Safari has no CDP or RDP, but a dev session on an Extension.js
-   * that streams Safari logs (4.1.28) writes the same log file the other
-   * engines do, through the extension's own bridge to the dev server, with
-   * background and content contexts. So the file is read whenever it exists,
-   * and only a missing file is explained in Safari's terms.
-   */
   if (WEBKIT_FAMILY.has(browser) && !fs.existsSync(logsPath(args.projectPath, browser))) {
     return envelope({
       ok: false,

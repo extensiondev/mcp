@@ -38,21 +38,6 @@ export const schema = {
 
 const REATTACH_BUDGET_CEILING_MS = 5_000;
 
-/* @invariant
-  * THE ENGINE ANSWERS "RELOADING" BEFORE THE RELOAD HAPPENS. The bridge
-  * executor replies `{reloading: true}` and calls `chrome.runtime.reload()`
-  * 50 ms later (extension-develop dist/rspack-config~0.mjs, `op ===
-  * "reload"`), so the frame alone proves nothing about the new background.
-  * Measured on zen and floorp: a tabs query sent right after the answer was
-  * served by the OLD background (a pass that proved nothing), and one sent
-  * ~500 ms later fell in the gap between the old executor's socket closing
-  * and the new one connecting, which `extension_assert` reported as "did not
-  * answer". The reattach is waited for on the contract's own stamps
-  * (lib/executor-stamp.ts), bounded by the call's timeout and a 5 s ceiling,
-  * and every outcome is said in words that name the stamp it was read from. A
-  * tab reload is a different verb answer (`{reloaded: tabId}`) and is handed
-  * back as it came.
-  */
 export async function handler(args: ActArgs): Promise<string> {
   const { browser } = resolveSessionBrowser(args.projectPath, args.browser);
   const before = readExecutorStamp(args.projectPath, browser);

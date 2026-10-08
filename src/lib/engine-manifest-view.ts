@@ -8,8 +8,6 @@
 
 import { filterKeysForThisBrowser } from "extension-develop/manifest";
 
-/* @invariant THE VALIDATOR'S VIEW OF A MANIFEST IS THE ENGINE'S. This is the
-   engine's own filter, exported from extension-develop/manifest. */
 export function engineManifestView(
   manifest: Record<string, unknown>,
   browser: string,

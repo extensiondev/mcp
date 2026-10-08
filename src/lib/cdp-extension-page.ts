@@ -11,22 +11,7 @@ import { setTimeout as sleep } from "node:timers/promises";
 import { CDPClient } from "./cdp";
 import { listDocumentTargets, type PageTarget } from "./cdp-targets";
 
-/* @invariant Chrome's MV3 extension CSP governs scripts the page runs, and
-   chrome.scripting cannot inject into another extension's origin at all, so
-   neither the in-bundle relay nor a tab injection can evaluate a string in an
-   extension page. The inspector can: Runtime.evaluate on the page's own target
-   is the DevTools console path, which the page CSP does not see, and the dev
-   session already publishes the debug port it needs. Everything here speaks to
-   an extension page over that port and nothing else. */
-
-/* @invariant replMode is what lets a bare top-level `await` parse, the way
-   the DevTools console accepts it; without it Runtime.evaluate answers "await
-   is only valid in async functions", measured on Chrome 151. It is NOT in the
-   defaults: with replMode on, Chrome 151 answers a promise-valued expression
-   with the promise object itself and ignores awaitPromise, on pages and
-   workers alike, so every promise serialized to {}. evaluateOnExtensionPage
-   turns it on only for the retry an await needs. */
-const RUNTIME_EVALUATE_DEFAULTS = {
+const EVALUATE_DEFAULTS_WITHOUT_REPL_MODE = {
   returnByValue: true,
   awaitPromise: true,
   userGesture: true,
@@ -76,15 +61,8 @@ export const WORKER_TARGET_TYPES = new Set([
   "worker",
 ]);
 
-/* @invariant A DEDICATED WORKER IS NOT THE BACKGROUND: it has no chrome.* and
-   lives beside an idle service worker, so taking the first listed worker ran
-   the expression there with no wake attempted. */
 export const BACKGROUND_TARGET_TYPES = new Set(["service_worker", "background_page"]);
 
-/* @invariant The background has no page target: an MV3 service worker and an
-   MV2 background page are targets of their own types, and Runtime.evaluate on
-   them is the inspector path the extension CSP does not govern, the same way
-   it is for the extension's pages. */
 export type TargetsRead<T> = { targets: T[] } | { unreadable: string };
 
 export async function readExtensionWorkerTargets(
@@ -121,13 +99,6 @@ export type WorkerWake =
   | { woken: true; targets: Array<{ targetId: string; type: string; url: string }> }
   | { woken: false; reason: string };
 
-/* @invariant An idle MV3 worker is the normal state of an extension, not a
-   fault: Chrome stops it after about 30 s without events and lists no target
-   for it. The ServiceWorker domain is not on the browser session, but any
-   page session carries it, and ServiceWorker.startWorker on the extension's
-   scope brings the worker back and relists it, measured on Chrome 151. The
-   page the command is issued from is incidental; an extension page is
-   preferred only because it certainly exists in the same profile. */
 export async function wakeExtensionWorker(
   port: number,
   extensionId: string,
@@ -201,10 +172,6 @@ export async function findExtensionPageTargets(
   return "targets" in read ? read.targets : [];
 }
 
-/* @invariant A VALUE JSON CANNOT CARRY IS SAID, NOT PASSED OFF. NaN,
-   Infinity, -0 and BigInt come back from the protocol as strings in
-   unserializableValue, and undefined comes back as null; the caller sees the
-   converted value with a note naming the conversion. */
 export function remoteValueNote(result: RemoteObject | undefined): string | undefined {
   if (!result) return undefined;
   if (result.type === "undefined") return "the expression returned undefined, which is answered as null";
@@ -244,13 +211,6 @@ function describeException(
 
 const TOP_LEVEL_AWAIT_REFUSAL = /await is only valid in async functions/i;
 
-/* @invariant Two calls are the honest shape. The first evaluate runs without
-   replMode, so awaitPromise settles a promise-valued expression and
-   returnByValue serializes the result. Only when Chrome refuses the parse for
-   a top-level await is the expression re-run in replMode, with the promise
-   handed back by reference and settled through Runtime.awaitPromise, the one
-   call that awaits a replMode result honestly. Measured on Chrome 151 on a
-   page, a DevTools iframe and a service worker. */
 export async function evaluateOnExtensionPage(
   port: number,
   targetId: string,
@@ -265,7 +225,7 @@ export async function evaluateOnExtensionPage(
     const sessionId = await cdp.attachToTarget(targetId);
     let response = (await cdp.sendCommand(
       "Runtime.evaluate",
-      { expression, ...RUNTIME_EVALUATE_DEFAULTS },
+      { expression, ...EVALUATE_DEFAULTS_WITHOUT_REPL_MODE },
       sessionId,
       budget,
     )) as EvaluateResponse | undefined;
@@ -339,13 +299,6 @@ const SIDE_PANEL_API_READY =
 
 const SIDE_PANEL_STATE = "window.__extensionDevSidePanel";
 
-/* @invariant The click is what carries the gesture, not the evaluate. A
-   trusted Input.dispatchMouseEvent lands in the page as a real click with
-   transient user activation, the same activation a toolbar click would carry,
-   and chrome.sidePanel.open called from inside that click handler passes
-   Chrome's gesture check. The handler lives on an overlay that covers the
-   viewport and stops propagation, so the click reaches nothing the extension
-   itself listens to; the overlay removes itself once the call settles. */
 const ARM_SIDE_PANEL_SCRIPT = `(async () => {
   const win = await chrome.windows.getCurrent();
   const state = { phase: "armed", windowId: win.id };
@@ -432,7 +385,7 @@ export async function openSidePanelWithSyntheticGesture(
     const evaluate = async (expression: string): Promise<EvaluateResponse> =>
       (await cdp.sendCommand(
         "Runtime.evaluate",
-        { expression, ...RUNTIME_EVALUATE_DEFAULTS },
+        { expression, ...EVALUATE_DEFAULTS_WITHOUT_REPL_MODE },
         sessionId,
       )) as EvaluateResponse;
 

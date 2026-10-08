@@ -255,10 +255,6 @@ export async function handler(args: SubmitToolArgs): Promise<string> {
     });
   } catch (err: any) {
     if (!dryRun) {
-      /* @invariant A real submission that got no answer is unconfirmed, never
-       * failed. The request left this machine, and the platform dispatches a
-       * store's workflow before it answers, so "could not reach" would invite
-       * the retry that submits a second time. */
       return envelope({
         ok: false,
         command: "extension_submit",
@@ -305,21 +301,9 @@ export async function handler(args: SubmitToolArgs): Promise<string> {
       return requestApprovalAfterRefusal(gateInput);
     }
 
-    /* @invariant A server error on a real submission may come after a
-     * dispatch. The platform dispatches each store's workflow and only then
-     * records it and moves to the next store, so a 5xx can follow one or more
-     * stores already submitted. The failure is reported as a failure and says
-     * that, because the natural next move is to submit again. The exception
-     * is the platform's own `retryable: true`, which it sends only before any
-     * dispatch and which says so; that one is safe to repeat and is told as
-     * such, with the wait it asked for. */
     const saidNothingDispatched = data?.retryable === true;
     const maybeDispatched =
       !dryRun && res.status >= 500 && !saidNothingDispatched;
-    /* @invariant AN APPROVAL IS SPENT BEFORE THE QUOTA AND CHANNEL CHECKS. The
-       platform consumes a presented approvalId once the owner, runner and
-       dispatch-pause checks pass, so a refusal after those has already used
-       it. */
     const BEFORE_APPROVAL = new Set(["BUILD_DISPATCH_DISABLED", "OWNER_REQUIRED", "TOKEN_ISSUER_UNKNOWN", "APPROVAL_REQUIRED", "APPROVAL_NOT_FOUND", "APPROVAL_SCOPE_MISMATCH", "APPROVAL_USED", "APPROVAL_EXPIRED"]);
     const platformCode = typeof data?.code === "string" ? data.code : "";
     const approvalSpent = !dryRun && Boolean(body.approvalId) && res.status < 500 && !BEFORE_APPROVAL.has(platformCode);
@@ -356,10 +340,6 @@ export async function handler(args: SubmitToolArgs): Promise<string> {
     });
   }
 
-  /* @invariant THE PLATFORM'S WARNING OBJECTS ARE RENDERED. The dry run answers
-     `{code, store, message, docsUrl}` objects (every Firefox preflight
-     carries FIREFOX_DATA_COLLECTION_PERMISSIONS), and the envelope keeps
-     strings only, so they were dropped on the floor. */
   const warnings: Array<string | null | undefined | false> = Array.isArray(
     data?.warnings,
   )

@@ -249,18 +249,6 @@ function isGroupedCase(node) {
   return previous !== undefined && previous.consequent.length === 0
 }
 
-/* @invariant
- * Prettier without semicolons writes `;(async () => {})()` and `;[a, b]` so
- * the line cannot glue onto the one above it. The leading `;` is the empty
- * statement the upstream rule sees, and "always blank line after X" then
- * asks for a blank line between that `;` and the `(` on the SAME line, which
- * no fix can satisfy and Prettier would undo. Those reports are dropped.
- *
- * So is a blank line between an empty `case` label and the case after it.
- * Stacked labels are one branch with several names, and a blank line there
- * reads as a forgotten body and makes no-fallthrough report the label.
- * Every other report passes through unchanged.
- */
 const paddingLineBetweenStatements = {
   meta: basePadding.meta,
   create(context) {

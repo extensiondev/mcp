@@ -163,10 +163,6 @@ export async function handler(args: {
   };
 
   const gitBefore = fs.existsSync(path.join(path.resolve(projectInput), ".git"));
-  /* @invariant Only a directory this call created fresh may ever be wiped:
-     the scaffolder accepts pre-existing directories (dotfiles, LICENSE,
-     node_modules, .git), and rmSync on one deletes files the tool never
-     created. */
   const preExisting = fs.existsSync(projectInput);
 
   const cleanPartial = (): void => {
@@ -234,9 +230,6 @@ export async function handler(args: {
     }
   }
 
-  /* @invariant THE MANIFEST IS FOUND THE WAY THE SCAFFOLDER FINDS IT: the four
-     common locations, then a breadth-first walk to depth 3 skipping
-     node_modules and .git (extension-create `findManifestJsonPath`). */
   const manifestPath = findScaffoldManifest(result.projectPath);
 
   if (!manifestPath) {

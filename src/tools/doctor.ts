@@ -38,20 +38,6 @@ import {
 
 import type { ReadyContract } from "../lib/types";
 
-/* @invariant Deliberately NOT the engine's readReadyContract, which
-   lib/session-paths.ts re-exports and tools/logs.ts uses. That one exists to
-   answer whether this process can dial the control channel, so it returns null
-   whenever controlPort is not a number or instanceId is missing, and the
-   ReadyContractInfo it returns has no code, errors or message.
-
-   Both are wrong for a diagnosis. A session whose build failed and which has no
-   control port is the ordinary case here, not a corner: the engine's dev server
-   catches a failure to bind the control server and keeps running with its
-   control port left null, and a one-shot build receipt never sets one at all.
-   Either way ready.json says status:"error" and carries the build errors, and
-   either way the engine's reader answers null. Calling it here would drop the
-   runtime-errors check on exactly the session someone ran doctor to understand,
-   and report healthy. This parse is unconditional for that reason. */
 function readContractForDiagnosis(
   projectPath: string,
   browser: string,
@@ -68,17 +54,6 @@ function readContractForDiagnosis(
   }
 }
 
-/* @invariant The session diagnosed is the one that exists, ready or not.
-
-   resolveSessionBrowser only counts contracts whose status is "ready", which
-   is right for every tool that needs a drivable session and wrong for this
-   one: the session someone runs doctor on is routinely the one whose contract
-   says "error". Letting the shared resolver fall back to chrome made doctor
-   diagnose a browser with no session at all, label the report with it, and
-   read the wrong (absent) contract, so the walk saw a chromium label and a
-   healthy verdict over a chrome session that had failed. When the resolver
-   answers "fallback", any browser with a ready.json on disk, newest first and
-   whatever its status, outranks the hardcoded default. */
 function sightedContractBrowser(projectPath: string): string | null {
   let dirs: string[];
 
@@ -261,14 +236,6 @@ function projectEngineVersion(projectPath: string): string | null {
   }
 }
 
-/* @invariant Both engine shapes are read, because the shipped one is the
-   envelope. `extension doctor --output json` on the pinned CLI prints a
-   schema-1 envelope whose `value` IS the check array, not an object carrying
-   `checks`. Reading only `value.checks` found undefined there, threw "not a
-   check array", and dropped the whole diagnosis into the E_CLI catch below:
-   the walk saw the generic "extension exited with code 1" over a report that
-   had every answer in it. A bare array is still accepted for the engines that
-   print one. */
 function capabilityProbeChecks(parsed: unknown): unknown {
   if (!isEnvelope(parsed)) return parsed;
 
@@ -285,14 +252,6 @@ interface DoctorCheck {
   remediation?: string;
 }
 
-/* @invariant Only the engine's definitive 4003 wording counts as a choice.
-   Its 1006 leg asks "Is the session started with --allow-control?" as a guess
-   over a channel that may equally have died, so matching the flag name alone
-   would launder a dead session into a healthy verdict. The 4003 detail the
-   CLI writes is "refused: control is off in the session that answered"
-   (cli.cjs runDoctor, 4.1.29 to 4.1.32); an older spelling of this pattern
-   matched no text any engine emits, so the read-only verdict was never
-   reachable and every default session read unhealthy. */
 const CONTROL_OFF_BY_CHOICE =
   /\brefused: control is off in the session that answered\b/i;
 
@@ -306,13 +265,6 @@ function pidIsAlive(pid: number): boolean {
   }
 }
 
-/* @invariant An exit the executor outlived was not the session's browser.
-   Firefox on macOS hands a fresh profile to a relaunched process and the
-   first one exits 0, which the launcher stamps as browser_exited; the
-   engine's doctor then fails its browser leg while the same session keeps
-   answering storage probes and evals. The executor leg is the live reading,
-   and the contract's browserPid is the second: either one alive after the
-   recorded exit makes that exit history, not a verdict. */
 function reconcileRelaunchedBrowser(
   checks: DoctorCheck[],
   contract: { browserPid?: number | null } | null,
@@ -325,9 +277,6 @@ function reconcileRelaunchedBrowser(
   );
   if (!exitedLeg) return false;
 
-  /* @invariant ONLY THE EXECUTOR LEG PROVES THE BROWSER ANSWERED. The control
-     channel is the dev server's own socket, which lives on after the browser
-     dies; counting it relaunched a crashed browser. */
   const executorAnswered = checks.some(
     (leg) => leg.check === "executor" && leg.status === "pass",
   );
@@ -379,15 +328,6 @@ export async function handler(args: {
     { cwd: projectPath },
   );
 
-  /* @invariant The refusal is checked before the parse, not caught by it.
-   *
-   * A refused flag would otherwise fall through to the catch below and be
-   * reported as E_CLI carrying commander's line about `--output`, under a hint
-   * that only guesses the install "may predate it". That is the diagnosis this
-   * tool exists to give other tools, so it is the last place that should be
-   * guessing: doctor is what an agent is told to run when anything else looks
-   * wrong, and it has the floor table and the version probe in hand.
-   */
   if (refusedTheOutputFlag(stderr ?? "")) {
     return envelope({
       ok: false,
@@ -486,11 +426,6 @@ export async function handler(args: {
       });
     }
 
-    /* @invariant The window is an extra on Safari, never the session. The
-     * bridge legs above are what a Safari dev session runs on, so a missing
-     * safaridriver stamp is a skip that costs nothing, and only a recorded
-     * session that stopped answering is a failure.
-     */
     if (WEBKIT_FAMILY.has(browser)) {
       const info = readWebDriverSession(projectPath, browser);
       const alive = info ? await new WebDriverClient(info).alive() : false;
@@ -519,15 +454,6 @@ export async function handler(args: {
       });
     }
 
-    /* @invariant Read-only BY CHOICE is a condition, not a failure.
-     *
-     * A session started without allowControl refuses the control channel
-     * because it was asked to, and the engine has no way to say so: it exits
-     * 1 over a single failing leg, which made ok:false and so isError:true on
-     * the wire, and an agent branching on isError read a perfectly good
-     * read-only session as broken. The narrowing is deliberate. Only the
-     * definitive 4003 leg qualifies, and only when it is the ONLY failure, so
-     * a build error, a dead browser or a runtime-error log still refuses. */
     const failures = checks.filter((leg) => leg.status === "fail");
     const readOnly =
       readOnlyLeg !== null && failures.length === 1 && failures[0] === readOnlyLeg;
@@ -556,14 +482,6 @@ export async function handler(args: {
         : {}),
     });
   } catch {
-    /* @invariant The CLI's own report survives the parse failure.
-     *
-     * Doctor is what an agent runs when everything else looks wrong, so this
-     * is the last envelope allowed to swallow a diagnosis. When the engine
-     * exits nonzero its stdout usually carries the full check list and the
-     * real remediation in prose; discarding it and guessing "stale CLI"
-     * reported the one tool built to explain failures as itself unexplained.
-     * The stale-CLI guess is only offered when there is no output to show. */
     const message = stderr.trim() || `extension exited with code ${code}`;
     const cliReport = toMcpSpeak(out).trim().slice(0, 4000);
 

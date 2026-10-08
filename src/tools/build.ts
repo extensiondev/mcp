@@ -49,31 +49,6 @@ interface EngineBuildSummary {
   zip_artifacts?: Array<{ kind?: string; path?: string; size?: number }>;
 }
 
-/* @invariant
- * Two readers for one BuildSummary, because the engine that answers is not
- * the engine this package pins.
- *
- * `extension build --output json` returns the summary inline as
- * value.summaries[], and that is the reading this tool prefers: it belongs to
- * the run that just finished, so no freshness guess is involved. Engines older
- * than the summaries contract answer the same flag with an envelope that has no
- * summaries at all, and those still persist the identical BuildSummary to
- * a build summary on disk. Reading that file second keeps warnings, byte totals
- * and the output path alive against such a project instead of silently
- * reporting a build with no numbers on it. The file is mtime-guarded because it
- * outlives the build that wrote it.
- *
- * Where that file lives is asked of the engine's buildSummaryPath through the
- * one module allowed to know the session layout, never rebuilt from string
- * literals here. The helper describes the layout of the engine this package
- * pins, which against an older project is a claim rather than a fact, and it is
- * still the better of the two options: a literal is wrong in exactly the same
- * case, frozen at whatever the layout was the day someone typed it, and gives a
- * reviewer nothing to notice. What the helper cannot do is make a mismatch
- * visible, and this is the one reader that runs precisely when the engine is
- * already known to disagree with the pin, so a miss carries the absolute path
- * it tried back to the caller instead of reading as an empty answer.
- */
 interface PersistedSummary {
   file: string;
   summary: EngineBuildSummary | null;
@@ -89,7 +64,7 @@ function readBuildSummary(
   try {
     const stat = fs.statSync(file);
 
-    if (stat.mtimeMs >= since - MTIME_SLACK_MS) {
+    if (stat.mtimeMs >= since - COARSE_MTIME_CLOCK_SLACK_MS) {
       const summary = JSON.parse(fs.readFileSync(file, "utf8"));
       if (summary && typeof summary === "object") return { file, summary };
     }
@@ -132,44 +107,6 @@ function readEngineOutput(stdout: string, stderr: string): EngineOutput {
 
   return { frame, narration };
 }
-
-/* @invariant
- * One retry, and only for the one flag this server adds behind the caller's
- * back.
- *
- * `--output json` reached `extension build` in 4.0.17. A project pinned to
- * anything older has working builds today, and commander answers an
- * unrecognised flag by writing one line to stderr and exiting 1 before any
- * compile starts. Sending the flag unconditionally would therefore turn every
- * build in such a project into E_BUILD_FAILED carrying an error about a flag
- * the user never typed, which is breaking a working build to delete a regex.
- *
- * So the refusal is detected and the build is run once more without the flag,
- * where the persisted build summary still answers everything the envelope
- * would have. The match is deliberately narrow: it needs a non-zero exit AND
- * the engine's unknown-option line, in either of the two phrasings the
- * detector pins, AND that line to name --output. A real compile failure exits
- * non-zero without ever printing that, so it is reported as the failure it is
- * rather than being retried. There is no loop: the second run omits the only
- * flag that can produce this line, so its result is final whatever it says.
- *
- * The scope is the point. --macos-only is just as new, and it is NOT retried
- * away, because the caller asked for it: dropping it would build a macOS-only
- * project for someone who asked for a universal one and call that success.
- * A flag the caller chose fails loudly; a flag this server chose gets a second
- * chance without it.
- *
- * The version probe in front of this retry means it should almost never fire,
- * because an engine known to be below the floor is simply not sent the flag.
- * The retry stays anyway, and stays load-bearing: the probe answers "unknown"
- * whenever the version cannot be read or parsed, and an engine could in
- * principle report a version whose flag support does not match what the tag
- * history says. The probe removes a cost; only this retry removes a failure.
- *
- * The detector itself lives in lib/engine-version next to the floor table,
- * because doctor and the act family meet the same refusal and must explain it
- * against the same numbers. Only build can answer it by retrying.
- */
 
 function engineSummaries(frame: Envelope | null): EngineBuildSummary[] {
   const value = frame?.value as { summaries?: unknown } | null | undefined;
@@ -315,7 +252,7 @@ function newestZip(
 
         return { full, mtimeMs: fs.statSync(full).mtimeMs };
       })
-      .filter((entry) => entry.mtimeMs >= since - MTIME_SLACK_MS)
+      .filter((entry) => entry.mtimeMs >= since - COARSE_MTIME_CLOCK_SLACK_MS)
       .sort((a, b) => b.mtimeMs - a.mtimeMs);
 
     return fresh[0]?.full ?? null;
@@ -345,16 +282,6 @@ function engineZipBase(distDir: string, projectPath: string): string {
   return `${engineSanitize(rawName)}-${version}`;
 }
 
-/* @invariant
-  * THE ZIP IS THE ONE THE ENGINE SAYS IT WROTE, AND IT IS NEWER THAN THE
-  * BUILD. The summary carries `zip_artifacts` with the real paths, and the
-  * engine names its archives `dist/<sanitized name>-<version>-<browser>.zip`
-  * and `dist/<...>-source.zip` (an explicit zipFilename keeps its stem and
-  * case and gets the browser suffix). Order now: the summary's path, then the
-  * engine's name at the dist root, then the newest matching archive, then the
-  * old layout for older engines, and nothing older than this build's start is
-  * ever returned.
-  */
 function zipFromSummary(
   summary: EngineBuildSummary | null,
   kind: "dist" | "source",
@@ -368,15 +295,11 @@ function zipFromSummary(
   return null;
 }
 
-/* @invariant FILESYSTEM MTIMES COME FROM A COARSE KERNEL CLOCK that can trail
-   Date.now() by a few milliseconds, so a file the engine wrote just after the
-   build started can carry an mtime before it. A second of slack still tells
-   this run's output from an older build's. */
-const MTIME_SLACK_MS = 1000;
+const COARSE_MTIME_CLOCK_SLACK_MS = 1000;
 
 function freshFile(file: string, since: number): boolean {
   try {
-    return fs.statSync(file).mtimeMs >= since - MTIME_SLACK_MS;
+    return fs.statSync(file).mtimeMs >= since - COARSE_MTIME_CLOCK_SLACK_MS;
   } catch {
     return false;
   }
@@ -518,26 +441,6 @@ export const schema = {
 
 const SAFARI_VENDORS = new Set(["safari", "webkit-based"]);
 
-/* @invariant
-  * The bundle identifier is checked here as well as in the engine, on
-  * purpose. `extension build` rejects a malformed --bundle-id by writing one
-  * line to stderr and exiting 1, which reaches an agent as a generic
-  * E_BUILD_FAILED after a full compile has already been paid for. Checking
-  * the same shape before the spawn turns a wasted build into a named refusal
-  * the model can act on. The pattern is the engine's own: one or more
-  * dot-separated segments of letters, digits and hyphens, a digit-leading
-  * segment allowed. The engine now exports the same check as isValidBundleId,
-  * from `extension`'s ./browsers subpath rather than its root entry, and this
-  * copy stays anyway. Importing it would make the CLI package a dependency of
-  * this one, and the whole point of resolveExtensionInvocation is that this
-  * server drives whichever engine the user's project has installed rather
-  * than one it bundles; a pinned second engine in the tree would be a copy
-  * that validates nothing anybody runs. One regex is the cheaper duplicate.
-  * It is duplicated rather than drifted: loosening this copy would only move
-  * the rejection back to where it is expensive, never accept more. The parity
-  * test in build-safari-packaging pins the pattern to the engine's own
-  * literal.
-  */
 export const BUNDLE_ID_PATTERN = /^[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*$/;
 
 function manifestDivergence(projectPath: string, browser: string): string[] {
@@ -617,17 +520,6 @@ function carrierEntriesInZip(zipPath: string): Contamination {
   return { paths: hits, unchecked: [] };
 }
 
-/* @invariant
-  * The guard looks at the whole of dist, and inside the archives it holds.
-  * The leak it therefore could not see is `extension build --zip-source`
-  * driven straight at the engine: that packs the project's own tree,
-  * ./extensions and all, so the carrier ends up inside a source zip at the
-  * root of dist rather than loose in the browser output. A carrier a reviewer
-  * can unzip out of a submission is exactly the thing this must never let
-  * past, so both the loose walk and the archives are checked, and a zip whose
-  * entry table cannot be read is reported as unchecked rather than silently
-  * passed.
-  */
 function carrierContamination(dir: string, depth = 0): Contamination {
   if (depth > 4) return { paths: [], unchecked: [] };
 
@@ -736,18 +628,6 @@ export async function handler(args: {
   const browser = args.browser ?? "chrome";
   const safari = SAFARI_VENDORS.has(browser);
 
-  /* @invariant
-   * macOsOnly is listed raw while forceRegenerate is normalised to undefined
-   * when false, because the two flags carry different amounts of meaning.
-   * forceRegenerate: false is the default and asks for nothing, so refusing a
-   * chrome build over it would be refusing an empty request. macOsOnly: false
-   * is the caller asking for a universal macOS and iOS Xcode project, a real
-   * instruction this tool cannot honour for chrome, so it has to be refused
-   * rather than dropped. A truthy filter here would drop exactly that value and
-   * silently build for chrome instead; the engine shipped that bug on its own
-   * --macos-only and fixed it by testing for undefined, which is what the
-   * filter below does.
-   */
   const safariOnly = (
     [
       ["appName", args.appName],
@@ -842,8 +722,6 @@ export async function handler(args: {
     (session) => session.browser === browser,
   );
   const warnings: string[] = carrierNotes;
-  /* @invariant THE CLOBBER WARNING IS SAID ONLY ON A BUILD THAT WROTE: the
-     engine never promotes its staging dir on a failed build. */
   const clobberNotes: string[] = clobberedSessions.map(
       (session) =>
         `A live dev session (pid ${session.pid}) is running on this project for ${browser}, and this build wrote over its dist/${browser} output. The dev browser may now serve the production artifact instead of the dev build until the next recompile. Run extension_stop, or let dev recompile on the next source change, to resolve it.`,
@@ -865,17 +743,6 @@ export async function handler(args: {
   if (args.forceRegenerate) cliArgs.push("--force-regenerate");
 
   const spawn = { cwd: args.projectPath, timeoutMs: 180_000 };
-  /* @invariant
-   * Decide the version before spending a compile, not after.
-   *
-   * Discovering the engine is too old by watching it refuse the flag costs a
-   * whole second build, and a build is the most expensive thing this server
-   * does. Asking the resolved binary its version first costs one non-compiling
-   * exec, cached for a minute, which is nothing beside the compile it saves.
-   * Only a definite "too old" changes behaviour: an unknown verdict sends the
-   * flag exactly as before, so a probe that fails costs the optimisation and
-   * never the build.
-   */
   const verdict = await outputJsonVerdict("build", args.projectPath);
   const engineKnownTooOld = verdict.supported === false;
   let attempt = engineKnownTooOld
@@ -897,15 +764,6 @@ export async function handler(args: {
       "The Extension.js installed in this project is older than the one this server expects: it rejected --output json on build, so the build was run a second time without that flag and the result comes from the build summary the engine writes into dist/extension-js/ when this run left one there (a separate warning names the path when it did not). The extension that came out is exactly the same one. Upgrade the project's Extension.js to get the richer report back, including the Safari app identity and the byte totals from the run that just happened, and to stop paying for the second build.",
     );
   } else if (engineKnownTooOld) {
-    /* @invariant
-     * The same warning, minus the claim that is no longer true.
-     *
-     * Both paths land on an engine below the floor and both read the result off
-     * the persisted summary, so both must tell the user to upgrade. What the
-     * probe path must not say is that a second build was paid for, because the
-     * probe is precisely what stopped that from happening. Repeating the retry
-     * wording here would teach the user to expect a cost this code just removed.
-     */
     warnings.push(
       `The Extension.js installed in this project is older than the one this server expects: it reports ${verdict.version}, and --output json only reached extension build in ${verdict.floor}, so the build was run without that flag and the result comes from the build summary the engine writes into dist/extension-js/ when this run left one there (a separate warning names the path when it did not). The extension that came out is exactly the same one, and nothing was built twice. Upgrade the project's Extension.js to get the richer report back, including the Safari app identity and the byte totals from the run that just happened.`,
     );
@@ -926,18 +784,6 @@ export async function handler(args: {
       ? null
       : readBuildSummary(args.projectPath, browser, start);
     const engineSummary = inlineSummary ?? persisted?.summary ?? null;
-    /* @invariant
-     * A fallback that finds nothing says where it looked.
-     *
-     * The disk read only happens when the engine reported no summary inline,
-     * which already means the engine disagrees with the version this package
-     * pins. The path it reads comes from the pinned engine's layout helper, so
-     * an older project whose layout differs is exactly the case where the file
-     * is not there. Reporting no numbers without naming the path reads as "the
-     * build produced nothing", which sends the reader off to inspect a build
-     * that is in fact fine, so the path is stated and the note says plainly
-     * that the extension is unaffected.
-     */
     const summaryPathNote =
       persisted && !persisted.summary
         ? `This build reported no summary of its own, and no summary from this run was found on disk either, so the byte totals and the engine's structured warnings are missing from the result below. The extension that was built is unaffected. ${sessionPathHint(persisted.file)}`
@@ -952,11 +798,6 @@ export async function handler(args: {
       engineSummary.warnings_count > buildWarnings.length
         ? engineSummary.warnings_count
         : undefined;
-    /* @invariant
-      * "BUILT" IS A DIST THIS RUN WROTE, AT THE PATH THE ENGINE NAMES. The
-      * dist is the summary's output_path, else the engine's project root; its
-      * manifest must exist and be newer than this build's start.
-      */
     const distDir =
       typeof engineSummary?.output_path === "string" && engineSummary.output_path
         ? path.resolve(engineSummary.output_path)
@@ -1074,29 +915,6 @@ export async function handler(args: {
     }
 
     const divergence = manifestDivergence(args.projectPath, browser);
-    /* @invariant
-     * A Safari build reports the identity the packager says it produced, and
-     * the derived-identifier warning is driven by bundleIdDerived rather than by
-     * the shape of the identifier.
-     *
-     * The identifier can come from three places, in this order: the bundleId
-     * option, `browser.safari.bundleId` in the project config, and finally an
-     * identifier the engine derives from the app name. Only the packager knows
-     * which of the three it used. Matching a `dev.extensionjs.` prefix instead
-     * would get the answer right today and wrong twice over: a developer who
-     * legitimately owns that namespace would be warned about their own id, and
-     * the day the engine derives under a different prefix the warning goes
-     * quiet.
-     *
-     * What the cost actually is: Apple does NOT verify who owns the domain in a
-     * bundle id, so a foreign namespace is not rejected for being foreign. It
-     * binds an identifier permanently to the FIRST team that registers it, and
-     * a derived id is shared by every project built from the same template, so
-     * the real risk is a collision that locks out everyone after the first.
-     * Two pairs in the shipped template corpus already derive one id. The
-     * identity is baked into the project fingerprint, so discovering it at
-     * submission time means regenerating the project.
-     */
     const safariIdentity = safari ? (engineSummary?.safari ?? null) : null;
     const derivedBundleIdNote =
       safariIdentity?.bundleIdDerived === true
@@ -1182,9 +1000,6 @@ export async function handler(args: {
     stderr.trim() ||
     out ||
     `extension build exited with code ${code}`;
-  /* @invariant The one-shot build stamps the same ready.json a dev session
-     does, with the compile errors on it, so those are read back here; when
-     the contract carries none, the engine's own output tail travels instead. */
   const compileErrors = buildCompileErrors(args.projectPath, browser, start);
   const tail = [out, stderr.trim()].filter(Boolean).join("\n").trim();
 
@@ -1215,7 +1030,7 @@ function buildCompileErrors(
 ): string[] {
   try {
     const file = readyContractPath(projectPath, browser);
-    if (fs.statSync(file).mtimeMs < since - MTIME_SLACK_MS) return [];
+    if (fs.statSync(file).mtimeMs < since - COARSE_MTIME_CLOCK_SLACK_MS) return [];
 
     const contract = JSON.parse(fs.readFileSync(file, "utf8"));
     const errors = Array.isArray(contract?.errors) ? contract.errors : [];

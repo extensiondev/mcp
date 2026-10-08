@@ -34,13 +34,7 @@ const README_BROWSER_ORDER = [
   "safari",
 ];
 
-/* @invariant EVERY BROWSER THIS LANE LAUNCHES IS HEADLESS. A headed browser on
- * macOS activates itself and takes the operator's keyboard, so the engine is
- * started with EXTENSION_HEADLESS=1, which the pinned CLI reads for Chromium
- * (--headless=new) and for Gecko (-headless). Safari has no headless mode and
- * needs an attended setup, so it is refused here unless --allow-safari is
- * passed by a person sitting at the machine. */
-const HEADLESS_ENV = { EXTENSION_HEADLESS: "1", MOZ_HEADLESS: "1" };
+const HEADLESS_LAUNCH_ENV = { EXTENSION_HEADLESS: "1", MOZ_HEADLESS: "1" };
 
 const flag = (name, fallback) => {
   const at = process.argv.indexOf(`--${name}`);
@@ -129,7 +123,7 @@ async function openServer(sessionDir) {
     args: [path.join(root, "bin", "extension-mcp.js"), "--features=local"],
     env: {
       ...process.env,
-      ...HEADLESS_ENV,
+      ...HEADLESS_LAUNCH_ENV,
       EXTENSION_MCP_SESSION_DIR: sessionDir,
       FORCE_COLOR: "0",
       NO_COLOR: "1",
@@ -159,14 +153,6 @@ async function call(client, tool, args) {
   return { tool, ms: Date.now() - started, ok: env.ok === true, status: String(env.status ?? ""), note: firstNote(env), env };
 }
 
-/* @invariant
-  * A DOCUMENTED REFUSAL IS NOT A FAILURE OF THE LANE. The README says
-  * Safari's MV3 background CSP blocks eval, and only Safari's: measured on
-  * Extension.js 4.1.32, a Firefox MV3 event page answered background evals
-  * ok, so a Gecko refusal here is a failure the verdict names, not a promise
-  * coming true. Anything else that answers ok: false is a failure and is
-  * named in the verdict.
-  */
 const documentedOutcome = (browser, step, row) => {
   if (row.ok) return false;
 
@@ -245,13 +231,11 @@ async function runBrowser(browser, scratchRoot) {
   try {
     await client.close();
   } catch {
-    /* already gone */
   }
 
   try {
     await transport.close();
   } catch {
-    /* already gone */
   }
 
   if (!keepScratch) {

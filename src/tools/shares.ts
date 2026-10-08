@@ -123,14 +123,6 @@ function ownershipOf(owner: ArtifactOwner | null | undefined): Ownership {
   return "unknown";
 }
 
-/* @invariant
- * A login is the only thing that may be printed as a person. A CLI token whose
- * issuer the platform could not resolve arrives with `login: null`, and a share
- * made before attribution existed arrives with no `sharedBy` at all. Both are
- * reported as what they are. The workspace slug, the project slug and the owner
- * are never substituted, because naming a team where a human is expected reads
- * as an accusation against whoever the reader assumes that team to be.
- */
 function creditOf(sharedBy: ArtifactPublisher | null | undefined): {
   credit: string;
   creditSource: "login" | "tokenId" | "none";

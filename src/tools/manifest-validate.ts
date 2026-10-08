@@ -163,10 +163,6 @@ function collectPathRefs(m: Record<string, unknown>): string[] {
   return refs;
 }
 
-/* @invariant A web-accessible resource the manifest names and the tree lacks
-   is a runtime 404, not a build failure: the engine builds it and its
-   runtime-risk scan reports it, so it is a warning here, where a blocking
-   error would refuse a build the engine runs. */
 function collectWebAccessibleRefs(m: Record<string, unknown>): string[] {
   const refs: string[] = [];
   const war = m.web_accessible_resources;
@@ -315,7 +311,6 @@ export async function handler(args: {
     args = { ...args, browsers: [(args as { browser: string }).browser] };
   }
 
-  /* @invariant EVERY REQUESTED TARGET IS ONE THIS TOOL KNOWS HOW TO CHECK. */
   const explicitBrowsers = Array.isArray(args.browsers) && args.browsers.length > 0;
   const browsers = explicitBrowsers ? (args.browsers as string[]) : DEFAULT_BROWSERS;
   const unknownTargets = browsers.filter((b) => !KNOWN_TARGETS.includes(b));
@@ -410,10 +405,6 @@ export async function handler(args: {
 
   const chromiumManifest = engineManifestView(manifest, "chrome");
 
-  /* @invariant The engine serves public/ at the dist root, so an icon the
-     manifest names as images/icon.png may live at public/images/icon.png and
-     build fine; a check that never looked there called shipped icons
-     dangling. */
   const projectRoot =
     path.basename(manifestDir) === "src" ? path.dirname(manifestDir) : manifestDir;
   const roots = [
@@ -423,10 +414,6 @@ export async function handler(args: {
     path.join(manifestDir, "public"),
     path.join(projectRoot, "public"),
   ];
-  /* @invariant REFERENCES ARE CHECKED IN EACH REQUESTED BROWSER'S VIEW. The
-     Chromium view drops `firefox:` keys, so a missing Firefox panel or
-     background script read as valid, and a missing `chromium:` file blocked a
-     Firefox-only validation. */
   const effectiveByBrowser = new Map<string, Record<string, unknown>>();
 
   for (const b of browsers) {
@@ -521,10 +508,6 @@ export async function handler(args: {
 
     const base = `Code calls chrome.${api} but "${perm}" is not in permissions`;
 
-    /* @invariant THIS RULE IS A TEXT SEARCH, NOT A REFUSAL. The call is found by
-       a regex over up to ${SCAN_FILE_CAP} source files, comments and strings
-       included, and neither the engine nor the browser refuses the build; a
-       crash at runtime is the risk. So it warns and names its method. */
     if (HARD_APIS.has(api)) {
       result.warnings.push(
         `${base}; chrome.${api} is undefined without it and the call crashes its context at runtime. Found by a text search over the project's source files (comments and strings count), so confirm the call is live before adding "${perm}".`,
@@ -654,10 +637,6 @@ export async function handler(args: {
         }
       }
 
-      /* @invariant THE ENGINE FOLDS AN UNPREFIXED side_panel INTO sidebar_action
-         FOR GECKO (`sidebarFoldTarget`), so the Firefox build does ship the
-         sidebar; only a chromium:-prefixed side_panel leaves Firefox without
-         one. */
       const sidePanelPath = (chromiumManifest.side_panel as Record<string, unknown> | undefined)?.default_path;
       const unprefixedSidePanel = typeof (manifest.side_panel as Record<string, unknown> | undefined)?.default_path === "string";
 
@@ -721,9 +700,6 @@ export async function handler(args: {
 
       const bg = effective.background as Record<string, unknown> | undefined;
 
-      /* @invariant THE ENGINE REWRITES service_worker INTO scripts FOR GECKO
-         (`patchGeckoBackground`), so this is not a refusal and does not block
-         the build. */
       if (bg) {
         if (bg.service_worker && !bg.scripts) {
           result.warnings.push(
@@ -819,10 +795,6 @@ export async function handler(args: {
       ? support.issues.join("; ")
       : `${browser} is not supported by this manifest.`;
 
-    /* @invariant THE DEFAULT BUILD TARGET'S ISSUES STAY BLOCKING. With no
-       `browsers`, extension_build builds chrome, and its preflight passes
-       `browsers: ["chrome"]`; demoting chrome's own issue to an advisory here
-       said `valid` for a manifest that build then refused. */
     if (explicitBrowsers) {
       result.errors.push(`${browser}: ${issues}`);
     } else if (browser === DEFAULT_TARGET) {

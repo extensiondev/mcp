@@ -6,13 +6,6 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-/* @invariant This reading of the match-pattern grammar decides WORDING, never a
-   pass. extension_assert's content-script clause cannot pass on a declared
-   match, only on evidence that the script actually ran, so the worst a
-   disagreement with Chrome here can do is describe a refusal imprecisely. If a
-   later verb ever wants to pass on coverage alone, this file is not enough:
-   the browser's own answer is, and there is no reader for it today. */
-
 const ALL_URLS = "<all_urls>";
 
 const ALL_URLS_SCHEMES = new Set(["http", "https", "file", "ftp", "urn"]);
@@ -80,11 +73,6 @@ export function coveringMatches(patterns: string[], url: string): string[] {
   return patterns.filter((pattern) => matchPatternCovers(pattern, url));
 }
 
-/* @invariant Only schemes the browser refuses OUTRIGHT belong here, because a
-   hit is reported as a failed expectation rather than an unanswerable one.
-   about:blank is deliberately absent: match_about_blank injects there, so
-   calling it forbidden would be a wrong red. file:// is absent for the same
-   reason, since a profile launched with file access enabled does inject. */
 const FORBIDDEN: Array<{ test: RegExp; reason: string; chromiumOnly?: boolean }> = [
   {
     test: /^chrome:\/\//i,
@@ -123,8 +111,6 @@ const FORBIDDEN: Array<{ test: RegExp; reason: string; chromiumOnly?: boolean }>
   },
 ];
 
-/* @invariant A rule about one browser's policy is applied to that browser.
-   The protocol rules (view-source:, extension origins) hold everywhere. */
 export function contentScriptsForbidden(url: string, browser?: string): string | null {
   const trimmed = String(url ?? "").trim();
   const chromium =

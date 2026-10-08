@@ -21,12 +21,6 @@ export interface WindowsProcessRow {
   commandLine: string;
 }
 
-/* @invariant WINDOWS ANSWERS FROM ITS OWN PROCESS TABLE. There is no /proc,
-   ps or pgrep there, so processCommand answered "" and the session filter
-   dropped every match, and the survivor search could never run, so every stop
-   answered stopped: false and a dev replace always refused. One CIM query
-   reads id, image name and command line for every process; null means the
-   query itself could not run, never "no processes". */
 export function readWindowsProcessTable(): WindowsProcessRow[] | null {
   try {
     const out = execFileSync(

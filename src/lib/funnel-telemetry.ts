@@ -15,18 +15,6 @@ import { resolvedTemplateCommit } from "./template-artifact-source";
 
 const DEFAULT_POSTHOG_HOST = "https://us.i.posthog.com";
 
-/* @invariant This is the extension.dev PLATFORM project key, not the
- * Extension.js CLI one.
- *
- * `phc_Np5x...` belongs to "Extension.js Open Source Metrics" in a different
- * PostHog organization; it is deliberate where it ships and it is the wrong
- * destination here. A creation funnel whose web half lands in project 16972 and
- * whose tool half lands in 228739 is two funnels that can never be joined, so
- * the entry property would scope a denominator nobody can read. `phc_` project
- * keys are public write-only ingestion tokens by design, and this exact string
- * already ships in the code.extension.dev browser bundle, so shipping it in a
- * published package adds no disclosure.
- */
 const PLATFORM_PROJECT_KEY = "phc_t8hwHt3uJdjxil8TUA9AIWUFeWyJtTxhfXV58bPiV6T";
 
 export const DRAFT_SEEDED_EVENT = "draft_seeded";
@@ -60,16 +48,6 @@ function trimSlashes(value: string): string {
   return String(value || "").replace(/\/+$/, "");
 }
 
-/* @invariant The environment is read from the origin this install talks to,
- * never from NODE_ENV.
- *
- * The web lane learned that a mode string every build sets to "production"
- * separates nothing, so it picks the project key by environment instead. The
- * tool lane has no deploy environment at all: it runs on a developer's machine.
- * The only honest signal is which fleet it is pointed at, and pointing it
- * elsewhere is exactly what EXTENSION_DEV_API_URL does, so our own local runs
- * fall out of the production key by construction.
- */
 export function funnelEnvironment(): string {
   return trimSlashes(mcpOrigins().www) === trimSlashes(PROD_ORIGINS.www)
     ? "production"

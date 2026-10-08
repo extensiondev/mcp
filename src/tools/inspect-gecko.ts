@@ -118,8 +118,6 @@ function closedShadowWalkerCode(cap: number): string {
   `;
 }
 
-/* @invariant A MATCH PATTERN PICKS BY PATTERN. The picker was a substring
-   test, so https://www.youtube.com/* matched no tab. */
 export function matchPatternRegexSource(pattern: string): string {
   if (pattern === "<all_urls>") return "^(https?|file|ftp):";
 
@@ -329,11 +327,6 @@ export async function inspectViaBridge(
     probes: args.probe ?? [],
     maxBytes,
   });
-  /* @invariant A page inside the extension is asked through its surface relay,
-     never through a tab injection: Firefox refuses executeScript into
-     moz-extension:// documents whatever host permissions the manifest holds,
-     so the page path's MV2 fallback answers "Missing host permission for the
-     tab" for a page the relay reads without complaint. */
   let raw = await runActVerb(
     [
       "eval",

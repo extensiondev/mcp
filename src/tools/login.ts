@@ -310,11 +310,6 @@ function batchPending(args: {
   });
 }
 
-/* @invariant Every branch here reads the platform's `code`, never its
- * sentence. A list refused for a missing project, an approver who left the
- * workspace and a human pressing Deny all reach this function as a failed
- * poll, and the platform tells them apart only by code; the sentences are
- * shown to the reader and decide nothing. */
 function batchRefusal(
   poll: Extract<DeviceGrantPollResult, { ok: false }>,
   projects: string[],
@@ -384,15 +379,6 @@ function batchRefusal(
   );
 }
 
-/* @invariant ONE APPROVAL, ONE LIST, AND THE TOKENS NEVER LEAVE THIS PROCESS.
- * The list is checked here against the platform's own rules before a device
- * code is spent, the same list is sent on the code request and on every poll
- * so a code can only be redeemed for the names the approver was shown, and
- * what comes back is stored per project and reported as names and expiry
- * dates, never as token strings. The poll is the raw grant poll on purpose:
- * the login poll would persist the first token alone, under the latest-login
- * rule, before the rest of the batch had been checked.
- */
 export async function loginToProjects(args: {
   projects: unknown;
   deviceCode?: string;

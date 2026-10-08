@@ -86,15 +86,6 @@ export class RegistryAccessTokens {
     return result;
   }
 
-  /* @invariant THE GRANT FOR A PROJECT IS ASKED WITH THAT PROJECT'S LOGIN.
-   * Several logins live side by side, and a read of one project's private
-   * registry data has to present the token stored for it. Taking the active
-   * login meant a named project that was not the latest sign-in found a
-   * login for some other project, saw the mismatch and gave up with no
-   * credential, so its private builds read as missing. The login is looked up
-   * by the project the read is for; a project with no stored login still
-   * falls back to EXTENSION_DEV_TOKEN and to nothing after that.
-   */
   private async mint(ref: ProjectRef, apiHint?: string): Promise<AccessGrant> {
     const creds = readValidCredentials(undefined, {
       project: `${ref.workspace}/${ref.project}`,

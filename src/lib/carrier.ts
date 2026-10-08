@@ -34,14 +34,6 @@ const MARKER_FILE = "managed-by-extension-dev-mcp.json";
 
 export const CARRIER_LOOPBACK_ENV = "EXTENSION_DEV_CARRIER_LOOPBACK";
 
-/* @invariant THE PLACED COPY ADMITS NO LOOPBACK PAGE UNLESS THE SERVER SAYS
- * SO. The bundled worker trusts localhost on four ports that are this
- * company's own dev servers; on any other machine those ports belong to
- * whatever runs there, and a page on one of them would pair with an
- * extension holding cookies, history, scripting and <all_urls>. So the copy
- * written into the user's project drops the two loopback matches from
- * externally_connectable, which Chrome enforces before the worker's own
- * check runs, and only CARRIER_LOOPBACK_ENV=1 on the server keeps them. */
 export function carrierLoopbackAllowed(
   env: Record<string, string | undefined> = process.env,
 ): boolean {

@@ -42,22 +42,6 @@ export interface RecipeInput {
 export const SERVER_NAME = "extension-dev";
 export const PACKAGE = "@extension.dev/mcp";
 
-/* @invariant
-  * EVERY SETUP STRING IS BUILT HERE AND NOWHERE ELSE. The console's Connect
-  * dialog, the README's Setup section and therefore www's /mcp page (which
-  * renders the published README) all read these recipes, so an instruction
-  * cannot drift between them. Each option changes what the server actually
-  * does, or it is not offered: the project pin, --no-ship, --features=local
-  * and EXTENSION_DEV_APPROVAL_GATE=1 are all read by the server. There is
-  * deliberately no way to emit EXTENSION_DEV_APPROVAL_GATE=0; turning human
-  * approval off stays a README-only, by-hand decision. Strict approval is
-  * only meaningful when the agent can ship, so it is dropped for the other
-  * two reaches. A local-only server reads no login, so it is not pinned. The
-  * server's own default is the local group alone (DEFAULT_SERVER_OPTIONS), so
-  * the two reaches that need the platform name both groups explicitly. The
-  * local reach keeps naming its group too, so the recipe reads the same
-  * against a server published before the flip.
-  */
 export function serverArgs(input: Omit<RecipeInput, "client">): string[] {
   const args = [PACKAGE];
 

@@ -85,9 +85,6 @@ function readContract(
   }
 }
 
-/* @invariant The capability probe. It asks the artefact what it speaks, never
-   the pinned version: exec.ts prefers a project-local `.bin/extension` over the
-   pin, so a user project on an older CLI wins and a semver gate would be a lie. */
 export function speaksMachineContract(contract: unknown): boolean {
   return (
     !!contract &&
@@ -144,9 +141,6 @@ function contractVerdict(
     };
   }
 
-  /* @invariant A CONTRACT ERROR THAT IS NOT A COMPILE ERROR IS NOT CALLED ONE.
-     The engine stamps browser_launch_failed, extension_load_refused and
-     dev_server_start_failed too. */
   const compileErrors = Array.isArray(contract.errors) ? contract.errors : [];
   const compileCode =
     typeof contract.code !== "string" ||

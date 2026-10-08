@@ -36,11 +36,6 @@ const aliasToDist = (pkg: string, subpath = ".") => {
   return join(pkgDir, entry);
 };
 
-/* @invariant An exact-match RegExp, not a bare string key. Vite's string
-   aliases are PREFIX replacements, so a plain "extension-develop" entry also
-   swallows "extension-develop/bridge" and rewrites it to
-   <pkg>/dist/module.mjs/bridge, which resolves to nothing. Anchoring each
-   specifier keeps the subpath export reachable. */
 const exact = (specifier: string) =>
   new RegExp(`^${specifier.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`);
 
@@ -49,11 +44,6 @@ export default defineConfig({
     environment: "node",
     include: ["src/**/*.test.ts"],
     setupFiles: ["src/__tests__/setup-session-dir.ts"],
-    /* @invariant Windows reads its process table through a PowerShell CIM
-       query, and a cold PowerShell on a busy runner can
-       take several seconds by itself, so a cell that stops a session ran past
-       the 5 s default there (carrier-not-shipped, 2026-10-06). The longer
-       budget is Windows only; every other host keeps the default. */
     testTimeout: process.platform === "win32" ? 30_000 : 5_000,
   },
   resolve: {

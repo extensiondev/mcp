@@ -15,7 +15,6 @@ export const PAGE_HTML_SCRIPT = `(() => {
               + (doctype.systemId ? ' "' + doctype.systemId + '"' : '')
               + '>'
             : '';
-          // Include shadow DOM content from extension roots
           const roots = Array.from(document.querySelectorAll(
             '#extension-root,[data-extension-root]:not([data-extension-root="extension-js-devtools"])'
           ));

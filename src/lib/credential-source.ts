@@ -17,12 +17,6 @@ export interface TokenClaims extends CredentialRef {
   expiresAt: number | null;
 }
 
-/* @invariant THE TOKEN NAMES ITS OWN PROJECT. A platform access token is
-   `<base64url claims>.<signature>` and the claims carry `u` (workspace) and
-   `p` (project), which is what the platform itself compares a bearer
-   against. Reading them here names the project an EXTENSION_DEV_TOKEN is
-   for without a network call; nothing is verified, the signature is the
-   platform's to check. */
 export function readTokenClaims(token: string): TokenClaims | null {
   const first = String(token ?? "").trim().split(".")[0];
   if (!first) return null;

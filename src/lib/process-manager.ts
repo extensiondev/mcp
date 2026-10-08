@@ -27,10 +27,6 @@ export function sessionStateDir(): string {
   );
 }
 
-/* @invariant A missing directory is the one read error that means "none yet",
-   and only when the path simply does not exist yet: the nearest thing that
-   does exist above it is a directory. Windows answers ENOENT, not ENOTDIR,
-   for a path that is a file or runs through one. */
 export function directoryNotCreatedYet(dir: string): boolean {
   const target = path.resolve(dir);
   let probe = target;
@@ -143,10 +139,6 @@ function writeMarkerBestEffort(info: ProcessInfo, registeredAtMs: number): strin
 
     return null;
   } catch (error) {
-    /* @invariant A marker that did not land is said, never swallowed. The marker
-       is how stop all: true and the fork guard find a detached session after
-       this server restarts, so a silent failure left a live browser that a
-       later stop answered nothing-to-stop over. */
     return `The session marker could not be written to ${markerDir()} (${error instanceof Error ? error.message : String(error)}), so if this server restarts, extension_stop (all: true) and the fork guard will not see this session; stop it by projectPath and browser, or by its pid ${info.pid}.`;
   }
 }

@@ -178,9 +178,6 @@ export async function handler(args: {
 
   const data = result.data as Record<string, unknown>;
 
-  /* @invariant A SHARE IS A URL THE PLATFORM NAMED, OVER A BUILD IT NAMED. No
-     share URL is unconfirmed; a share with no build is said to be exactly
-     that. */
   if (typeof data.shareUrl !== "string" || !data.shareUrl.trim()) {
     return envelope({
       ok: false,
@@ -259,10 +256,6 @@ export async function handler(args: {
           .sort((a, b) =>
             String(b.timestamp ?? "").localeCompare(String(a.timestamp ?? "")),
           )[0];
-        /* @invariant THE PLATFORM'S SHA WINS. When the platform names the build it
-           served, the index row is matched to that sha; the newest build
-           fills in only when the platform named none, and then it is said to
-           be a guess. */
         const platformSha = typeof data.buildSha === "string" && data.buildSha ? String(data.buildSha).toLowerCase() : null;
         const served = platformSha
           ? items.find((item) => item.sha.toLowerCase().startsWith(platformSha) || platformSha.startsWith(item.sha.toLowerCase()))
@@ -292,12 +285,6 @@ export async function handler(args: {
     api: args.api,
   });
 
-  /* @invariant The preview commands come from the PLATFORM and are relayed,
-   * never rebuilt here: they carry the share token inside a registry URL, and
-   * a tool that assembled its own would be a tool that could be talked into
-   * pointing the token at another host. While the public hold keeps the share
-   * page dark the command is the only way the link is usable, so the hint
-   * names that outright instead of sending the reader to a 503. */
   const previewCommands = previewCommandsOf(data.previewCommands);
   const tokenCarried = previewCommands.every(([, command]) => /[?&]t=/.test(command));
   const previewHint =

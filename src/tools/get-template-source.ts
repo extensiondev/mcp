@@ -109,7 +109,6 @@ export async function readTemplateSource(args: {
 
           lastStatus = response.status;
         } catch {
-          // Try the next source.
         }
       }
 

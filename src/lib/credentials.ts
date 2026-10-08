@@ -72,15 +72,6 @@ function readEntry(data: unknown): StoredCredentials | null {
   };
 }
 
-/* @invariant
-  * "NO LOGINS" IS A FILE THAT IS NOT THERE. EVERYTHING ELSE IS "CANNOT READ".
-  * The writers then built the next store from nothing and wrote it over the
-  * file, so signing in to one project erased every other login, and the
-  * answer said "logged in". The read now has three outcomes and only one of
-  * them may be written over: absent (or a file holding no usable entry). An
-  * unreadable store keeps its bytes, the write refuses and says why, and
-  * status reports it as unreadable instead of "logged out".
-  */
 export type CredentialStoreRead =
   | { state: "absent" }
   | { state: "ok"; store: CredentialStore }
@@ -197,9 +188,6 @@ export function credentialStoreProblem(): { path: string; reason: string } | nul
     : null;
 }
 
-/* @invariant A TOKEN WITHOUT AN EXPIRY IS NOT ETERNAL. The platform mints
-   seven-day tokens; a token that arrives without its expiry is stored with
-   that documented life, counted from now. */
 export const TOKEN_TTL_SECONDS = 7 * 24 * 3600;
 
 export function tokenExpiry(value: unknown): number {
@@ -269,7 +257,6 @@ function ensureStoreDir(): string {
   try {
     fs.chmodSync(dir, 0o700);
   } catch {
-    // Best-effort: some filesystems (e.g. Windows) do not support chmod.
   }
 
   return file;
@@ -287,7 +274,6 @@ function writeStore(store: CredentialStore): string {
     try {
       fs.chmodSync(tmpFile, 0o600);
     } catch {
-      // Best-effort: some filesystems (e.g. Windows) do not support chmod.
     }
 
     fs.renameSync(tmpFile, file);

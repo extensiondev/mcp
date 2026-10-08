@@ -49,29 +49,6 @@ const acts = (
   ...over,
 });
 
-/* @invariant
- * EVERY REGISTERED TOOL HAS EXACTLY ONE ROW, AND A MERGED TOOL TAKES ITS
- * WORST ACTION.
- *
- * A client reads these hints once per tool to decide what to auto-approve, so
- * extension_shares is destructive because revoke is, even though list is the
- * default. `ships` marks a call that reaches people outside this machine: a
- * public link, a channel users install from, a store review queue. No-ship mode
- * hides the tools whose every call ships and refuses the shipping calls of the
- * rest, so a dry run and a share listing keep working. tool-policy.test.ts
- * fails a registered tool with no row and a row with no tool.
- *
- * `untrusted` marks a tool whose answer can carry text a web page or an
- * extension wrote at runtime (DOM, console, storage, titles, eval results,
- * runtime errors, other extensions' names); its envelope is fenced by
- * fenceUntrusted. It is per tool and takes the worst branch for the same
- * reason the hints do. Build, analyze, dev, start and the manifest checks are
- * left out on purpose: they carry the project's own source and compiler
- * output, the same bytes the agent reads unfenced with its own file tools, so
- * a fence there would claim a boundary that does not exist. extension_docs_search
- * is left out for the same kind of reason: it returns excerpts of our own
- * published docs, ranked by a route we run, not text any page wrote.
- */
 export const TOOL_POLICY: Record<string, ToolPolicy> = {
   extension_create: { group: "local", annotations: acts({ openWorldHint: true }) },
   extension_templates: { group: "local", annotations: reads(true) },
@@ -186,15 +163,6 @@ export interface ServerOptions {
   project?: string;
 }
 
-/* @invariant
-  * THE DEFAULT IS THE LOCAL GROUP ALONE. A server started with no flag and no
-  * env exposes the 23 tools that work on this machine and none of the 9
-  * platform tools, because the platform is in private alpha and the local
-  * tools are what is being put in front of strangers. The platform group
-  * comes on only by name: --features=local,platform or
-  * EXTENSION_DEV_FEATURES=local,platform. The console's Connect recipes say
-  * it explicitly for that reason.
-  */
 export const DEFAULT_SERVER_OPTIONS: ServerOptions = {
   features: ["local"],
   noShip: false,

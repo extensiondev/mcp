@@ -6,8 +6,6 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-import { PROD_ORIGINS } from "@extension.dev/urls/origins";
-import { consoleProjectPath } from "@extension.dev/urls/paths";
 import {
   userlandUrl,
 } from "@extension.dev/urls/userland";
@@ -18,7 +16,6 @@ import {
   type RegistryAccessTokens,
 } from "./registry-access";
 import { readCredentials } from "./credentials";
-import { consoleBase, consoleProjectUrl } from "./console-urls";
 import { mcpOrigins } from "./origins";
 import {
   platformHoldMessage,
@@ -160,15 +157,6 @@ async function readJson<T>(
   }
 }
 
-/* @invariant
-  * A REFUSAL BODY SURVIVES THE HOP OR THE READER GETS A NUMBER. Measured
-  * against the published 10.4.3 tarball: an agent asking why a read failed
-  * was handed "https://... returned 403" and nothing else. Reading the body
-  * costs one await on a path that has already failed. It is read ONCE and
-  * carried, because a Response body is a stream and a second read throws.
-  * Everything downstream reads `body` from the result rather than touching
-  * the response again.
-  */
 async function readRefusal(
   res: Response,
 ): Promise<{ body: unknown; message: string; code: string }> {
@@ -242,12 +230,6 @@ export async function fetchRegistryJson<T = unknown>(
 
   const authFailed = res.status === 401 || res.status === 403;
 
-  /* @invariant A held lane is not an auth problem, so it never buys a grant.
-   * The hold answers 403, which is the same status a private project answers,
-   * and minting an access token to retry a lane the platform has shut spends a
-   * round trip to be refused identically. Reading the code first also keeps the
-   * refusal the reader sees the platform's own, rather than the "this project
-   * is private" guess the grant path would attach to it. */
   if (held || !authFailed || !ref) {
     return refusalResult(url, res, refusal);
   }
@@ -350,9 +332,6 @@ export function isSuccessfulBuild(item: Pick<BuildIndexItem, "status" | "summary
   return (status === "success" || status === "ready") && !isPartialBuild(item);
 }
 
-/* @invariant THE WRITER SETS status: "success" BESIDE summaryStatus:
-   "partial" WHEN AT LEAST ONE BROWSER BUILT, so a build with a failed browser
-   read as the newest successful, promotable build. */
 export function isPartialBuild(item: Pick<BuildIndexItem, "summaryStatus">): boolean {
   return String(item?.summaryStatus ?? "").trim().toLowerCase() === "partial";
 }

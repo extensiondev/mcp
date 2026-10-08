@@ -78,20 +78,6 @@ export function safeApiBase(
     };
   }
 
-  /* @invariant
-   * An operator may point this anywhere. A tool argument may not.
-   *
-   * Self-hosting is supported, so the platform URL cannot be pinned to
-   * extension.dev outright: EXTENSION_DEV_API_URL and the CLI flag are set by
-   * the person running the server and are trusted to name any https host. The
-   * `api` tool argument is different in kind. A model can be talked into
-   * supplying it by anything it reads, a README, an issue body, a template
-   * description, and what travels here is a live project token that can
-   * publish, list and revoke. A scheme check answers "is this encrypted", not
-   * "is this us", and https is exactly what an attacker's host would offer.
-   * Where the value came from is the only thing that separates the two, so
-   * that is what this branches on.
-   */
   const fromCaller = String(callerSupplied || "").trim();
 
   if (fromCaller && !isLocalhost && !isExtensionDevHost(parsed.hostname)) {
@@ -125,7 +111,6 @@ export async function fetchLoginConfig(
     );
   }
 
-  /* @invariant AN UNREADABLE CONFIG IS NOT A PLATFORM THAT LACKS BATCH. */
   const read = parseJsonObject(await res.text());
 
   if ("problem" in read) {
@@ -188,16 +173,6 @@ export function persistTokenResponse(args: {
   return creds;
 }
 
-/* @invariant A BATCH LOGIN STORES EXACTLY THE LIST IT ASKED FOR, OR NOTHING.
- * The platform answers one approval of a list with one token per listed
- * project. Every token is checked before any is written: each must carry a
- * token string and a workspace/project scope, and the set of scopes must be
- * the set of names this call sent, no fewer and no others. A token scoped to
- * a project this call never named is the one thing that must not be stored,
- * because every later tool would then act on that project as if someone had
- * signed in to it, so a response that carries one is refused whole rather
- * than trimmed to the names that match.
- */
 export function persistBatchTokenResponse(args: {
   apiBase: string;
   projects: string[];

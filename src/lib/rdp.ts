@@ -471,10 +471,6 @@ function exceptionText(packet: RdpPacket): string {
     : "";
 }
 
-/* @invariant A string past Firefox's long-string threshold (10,000
-   characters) comes back as a grip holding only its first part, so a
-   document's HTML or a large JSON value would read as truncated or as no
-   string at all. The grip's own actor hands the rest back. */
 async function readStringResult(
   session: RdpSession,
   result: unknown,

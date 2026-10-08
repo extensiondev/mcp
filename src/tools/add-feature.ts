@@ -292,11 +292,6 @@ export async function handler(args: {
     manifestUnreadable = err instanceof Error ? err.message : String(err);
   }
 
-  /* @invariant A PREFIXED KEY REPLACES THE UNPREFIXED ONE IN THE ENGINE, so an
-     addition like `chromium:permissions: ["sidePanel"]` dropped the project's
-     existing permissions on Chromium. A list addition is merged with what the
-     manifest already declares for that key, and the merge is listed, not
-     counted as a conflict. */
   const merged: string[] = [];
 
   for (const [key, value] of Object.entries(manifestUpdates)) {

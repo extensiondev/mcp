@@ -6,22 +6,6 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-/* @invariant
-  * "PROMOTED" IS READ OFF THE ANSWER, NEVER OFF THE STATUS CODE. The platform
-  * answers a promote with 200 whenever at least one browser's release
-  * workflow was dispatched, and says in the body what did not happen:
-  * `failedBrowsers` for dispatches GitHub rejected, `mirrorSync.pending` for
-  * registry files it could not write ("channels" means the channel pointer
-  * does NOT name this build), `status: "degraded"` over both, and
-  * `githubRelease.ok: false` for a release it could not publish. Notarization
-  * is the one field that never changes the verdict: the platform treats it as
-  * a side effect of a promote, completed later by its own sweep, so a pending
-  * or plan-refused notarization is a note on a whole promote. A promote
-  * cannot be undone in place and a blind retry dispatches the release again,
-  * so the three outcomes are kept apart: whole, partial with each missing
-  * piece named, and unconfirmed when the answer does not carry the result at
-  * all.
-  */
 export interface PromoteNotarization {
   pending: string[];
   refused: { browsers: string[]; reason: string; upgradeUrl: string } | null;

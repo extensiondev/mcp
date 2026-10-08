@@ -13,11 +13,6 @@ import { engineManifestView } from "./engine-manifest-view";
 import { engineBrowserName } from "./browser-family";
 import { engineProjectRoot } from "./session-paths";
 
-/* @invariant One candidate list for the whole package. The built manifest is
-   the one a running browser loaded, so dist wins over src, and the ordering
-   below was already copied three times inside tools/open.ts alone. A reader
-   that consults a different list than the writer answers a different question
-   about the same extension. */
 export function manifestCandidates(
   projectPath: string,
   browser: string,
@@ -54,11 +49,6 @@ export function readBuiltManifest(
       const manifest = JSON.parse(fs.readFileSync(file, "utf8"));
 
       if (manifest && typeof manifest === "object") {
-        /* @invariant A SOURCE manifest is read through the engine's prefix rule
-           before it is judged. The built manifest has its browser prefixes
-           folded in; the source one still carries them, so a
-           `chromium:service_worker` read raw declared no background and the
-           assertion failed the worker that was running. */
         const folded = isSourceManifest(file, projectPath)
           ? (engineManifestView(manifest, browser) as Record<string, unknown>)
           : (manifest as Record<string, unknown>);

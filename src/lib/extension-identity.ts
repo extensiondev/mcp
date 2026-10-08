@@ -12,17 +12,6 @@ import fs from "node:fs";
 import { CARRIER_EXTENSION_ID } from "./carrier";
 import { readyContractPath } from "./session-paths";
 
-/* @invariant
-  * THE GUEST IS THE ID THE CONTRACT NAMES, NOT "ANY EXTENSION THAT IS NOT A
-  * COMPANION". The engine stamps `extensionId` into ready.json (a manifest
-  * `key` first, else the id Chromium derives from the dist path) and lists
-  * its own companions under `managedExtensions` with their ids. Reading
-  * "loaded" as "some non-companion target exists" counted a second extension
-  * in the profile, a built-in component worker, and on Edge the engine's own
-  * companion (whose manifest has no `key`, so its id is path-derived and not
-  * in the fixed list) as the guest, and a silently rejected --load-extension
-  * passed the one check that exists to catch it.
-  */
 const STATIC_COMPANION_IDS = new Set<string>([
   "kgdaecdpfkikjncaalnmmnjjfpofkcbl",
   CARRIER_EXTENSION_ID,

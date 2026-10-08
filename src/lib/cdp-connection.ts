@@ -124,9 +124,6 @@ export class CDPConnection {
       }
     }
 
-    /* @invariant AN UNCAUGHT EXCEPTION IS A CONSOLE ERROR. Chrome reports a
-       script that threw at load only as Runtime.exceptionThrown, which no
-       collector read, so `console.total` was 0 on a broken page. */
     if (message.method === "Runtime.exceptionThrown") {
       const details = (message.params as Record<string, unknown>)?.exceptionDetails as
         | { text?: unknown; exception?: { description?: unknown }; timestamp?: unknown }

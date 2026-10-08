@@ -80,11 +80,6 @@ export async function handler(
   } & LaunchFlagArgs,
 ): Promise<string> {
   const browser = args.browser ?? "chrome";
-  /* @invariant A prebuilt directory is the engine's preview verb with
-     --output-path: nothing is built, so the directory is read as it is and an
-     extension another toolchain produced can be run and watched here. The
-     path is checked first, because the engine would otherwise fall back to
-     dist/<browser> and launch something else. */
   const outputPath =
     typeof args.outputPath === "string" && args.outputPath.trim()
       ? path.resolve(args.projectPath, args.outputPath.trim())
@@ -111,8 +106,6 @@ export async function handler(
   const building = args.build !== false && !outputPath;
   const command = building ? "start" : "preview";
 
-  /* @invariant WHAT THE ENGINE REFUSES IS REFUSED HERE, BEFORE A SPAWN: its
-     preview verb has no --host or --public-host and both verbs refuse Safari. */
   if (browser === "safari" || browser === "webkit-based") {
     return envelope({
       ok: false,

@@ -15,12 +15,6 @@ import type { ReadyContract } from "./types";
 const SAFARI_LOG_FALLBACK =
   "Without one, the dev session's log file is still read: extension_logs and the log-based assertions see what the extension writes once it is enabled.";
 
-/* @invariant The engine says why it opened no Safari session, so this server
-   relays it instead of guessing. Extension.js 4.1.32 opens a safaridriver
-   session under dev --browser safari and stamps
-   webdriverPort/webdriverSessionId, or webdriverUnavailableReason when it
-   could not. Safari grants one automation session at a time, so this server
-   still never opens its own. */
 export function webdriverSessionMissingHint(reason: string | null): string {
   if (reason) {
     return `The dev session opened no safaridriver session: ${reason}. Fix that, then restart extension_dev --browser=safari so it opens one. ${SAFARI_LOG_FALLBACK}`;
@@ -189,13 +183,6 @@ export interface ExtensionRootReading {
   title: string;
 }
 
-/* @invariant The reading is the DOM the page shows, taken from the main
- * world, which is the one place a Safari automation session can look. An
- * Extension.js content script stamps every root it mounts with the owner
- * attribute, so a root whose owner names this extension's id is evidence the
- * script ran; a page with no root says nothing about the script, and the
- * caller must say so instead of turning silence into a verdict.
- */
 export const EXTENSION_ROOT_READING_SCRIPT = `
   const nodes = Array.from(document.querySelectorAll('#extension-root,[data-extension-root]'));
   return {

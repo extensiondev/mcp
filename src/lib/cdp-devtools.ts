@@ -39,22 +39,13 @@ type EvaluateResponse = {
   exceptionDetails?: { text?: string; exception?: { description?: string } };
 };
 
-/* @invariant The DevTools frontend has no global for its panel registry: on
-   Chrome 151 `InspectorView` is undefined on window, and the only reach is
-   the ES module the frontend itself loads, `./ui/legacy/legacy.js`, resolved
-   against the frontend's own devtools:// url. A dynamic import from
-   Runtime.evaluate on the frontend target lands in that module graph, so the
-   same InspectorView instance the UI uses answers. Measured on. */
-const PANEL_IDS_EXPRESSION =
+const PANEL_IDS_VIA_FRONTEND_MODULE_EXPRESSION =
   "import('./ui/legacy/legacy.js').then((m) => m.InspectorView.InspectorView.instance().tabbedPane.tabIds())";
 
 function showPanelExpression(panelId: string): string {
   return `import('./ui/legacy/legacy.js').then((m) => m.InspectorView.InspectorView.instance().showPanel(${JSON.stringify(panelId)})).then(() => "shown")`;
 }
 
-/* @invariant An extension panel's tab id is the extension origin without its
-   trailing slash followed by the panel title, as the frontend's extension
-   server builds it (`chrome-extension://<id>Live` for a panel titled Live). */
 export function panelIdPrefix(extensionId: string): string {
   return `chrome-extension://${extensionId}`;
 }
@@ -163,8 +154,6 @@ export async function openDevToolsPanel(
 
           return null;
         })) as EvaluateResponse | null);
-    /* @invariant A REGISTRY THAT COULD NOT BE READ IS NOT AN EMPTY ONE. The
-       devtools_page frame is checked on the way too. */
     let registryAnswered = false;
     let registryError: string | null = null;
     let devtoolsPageLoaded = false;
@@ -180,7 +169,7 @@ export async function openDevToolsPanel(
     const nudgeAt = Date.now() + Math.min(4000, budgetMs / 2);
 
     while (!panelId && Date.now() < deadline) {
-      const response = await evaluate(PANEL_IDS_EXPRESSION);
+      const response = await evaluate(PANEL_IDS_VIA_FRONTEND_MODULE_EXPRESSION);
       const ids = response?.result?.value;
 
       if (response?.exceptionDetails) {
@@ -307,7 +296,6 @@ export async function openDevToolsPanel(
       reloadedInspected,
     };
   } catch (error) {
-    /* @invariant THE STAGE IS THE ONE REACHED. */
     return {
       opened: false,
       stage: reached,

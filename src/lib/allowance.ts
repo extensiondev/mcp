@@ -8,33 +8,8 @@
 
 import { mcpOrigins } from "./origins";
 
-/* @invariant
-  * ONE SENTENCE ABOUT THE ALLOWANCE, AND IT CLAIMS NOTHING THE LANES DO
-  * DIFFERENTLY. A share publish is recorded and never refused; a share upload
-  * has caps but no plan allowance; a promote or submit meters each browser or
-  * store dispatched; a create at its build cap is a 200 with the build
-  * withheld; and "free" is wrong on a paid plan. The sentence now says only
-  * what is true on every lane: the act is metered against the plan's
-  * allowance, and the pricing page owns the rest.
-  */
 export const ALLOWANCE_PHRASE = "is metered against your plan's allowance on extension.dev";
 
-/* @invariant
- * THE NUMBERS AND THE DATES ARE THE PLATFORM'S, NEVER THIS TARBALL'S.
- *
- * Every spending result counts the allowance out loud, with the sizes and
- * dates sourced from the platform's own commerce and readiness modules and
- * never written as literals. Those modules are private workspace packages a
- * published npm client cannot depend on, so this module reads the same
- * sources one hop later: the wall sentence points at the pricing page, which
- * renders what those modules say at request time, and a count is spoken only
- * when a platform response carries one. Today no spend response does, so the
- * honest narration names the spend and the wall and refuses to guess a
- * number. The moment the platform answers with used and limit,
- * readPlatformAllowance threads them through with no release of this package.
- * Nothing here may ever hold a calendar date or an allowance size of its own;
- * the specs assert both absences.
- */
 export interface SpendNarration {
   spent: string;
   remains: string;

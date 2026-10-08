@@ -132,13 +132,6 @@ function fail(
   });
 }
 
-/* @invariant The console route travels as the hint, whatever sentence the
-   platform sends: under the public hold the server's own refusal drops the
-   "create it in the console" line the open-platform refusal carries. Since
-   monorepo c32894d1f the platform consults the hold allowlist before the hold
-   flag, so a workspace on WWW_MCP_ACTION_ALLOWED_WORKSPACES creates
-   headlessly through the hold and this refusal reaches only workspaces that
-   are not on it. */
 export function laneClosedHint(): string {
   return `The platform closed headless creation for this call; its own message above says which case this is (the public hold, an allowlist this workspace is not on, or a host that is not ready). Create the project in the console at ${consoleBase()} (workspace page, New project), then run extension_auth (action: login) against it; while the public hold is on, the console answers its gate page until the platform opens.`;
 }
@@ -400,10 +393,6 @@ async function finishFromPoll(
     );
   }
 
-  /* @invariant THE LOGIN THE PLATFORM MINTED IS KEPT. For a create-intent code
-     on a project that already exists the platform approves a plain login and
-     mints its 7-day token; dropping it and asking for a second approval cost
-     a human a click for nothing. */
   if (String(grant.tokenKind || "") !== "provisioning") {
     let stored: { workspaceSlug: string; projectSlug: string; expiresAt?: number } | null = null;
     let storeFailure: string | null = null;
@@ -512,8 +501,6 @@ async function finishFromPoll(
   if (!res.ok) {
     const code = String(data.code || "");
 
-    /* @invariant Held first. Every branch under it points somewhere on the
-     * platform, and the platform is what has been shut. */
     if (sawPlatformHold(res, data)) {
       return platformHoldEnvelope({
         command: COMMAND,
@@ -533,11 +520,6 @@ async function finishFromPoll(
       );
     }
 
-    /* @invariant The connect URL is echoed only when the PLATFORM sent one, and
-     * it is never constructed here. A tool that builds its own install link is
-     * a tool that can be talked into building a link to somebody else's page,
-     * and this envelope is read by a model that will hand the link to a human.
-     */
     const connectUrl = String(data.connectUrl || "").trim();
 
     if (

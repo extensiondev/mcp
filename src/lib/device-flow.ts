@@ -23,14 +23,6 @@ export interface DeviceCodeStart {
 
 export type DeviceIntent = "login" | "create" | "create-workspace";
 
-/* @invariant A workspace create names a workspace and no project, so the
- * request carries `workspace` instead of `project`; every other intent keeps
- * the `project` field byte for byte. The platform refuses a create-workspace
- * request whose slug has a slash, so the two shapes cannot be confused.
- *
- * A batch carries `projects` and never `project` beside it: the platform
- * refuses a request that names its target both ways, because the approver is
- * shown one of them. So a list wins here and the single name is left out. */
 export async function requestDeviceCode(args: {
   apiBase: string;
   path: string;
@@ -110,12 +102,6 @@ export type DevicePollResult =
   | { ok: true; creds: StoredCredentials }
   | { ok: false; reason: "pending" | "denied" | "expired" | "error"; message?: string };
 
-/* @invariant A refusal keeps the platform's own `code` and body beside the
- * reason. The reason is the four words every caller already branches on; the
- * code is what tells a lane that closed, a member who left or a list with a
- * missing project apart from a human pressing Deny, all of which the platform
- * answers under the same `access_denied` or with no RFC error word at all. A
- * caller reads the code, never the sentence. */
 export type DeviceGrantPollResult =
   | { ok: true; data: Record<string, unknown> }
   | {
@@ -168,10 +154,6 @@ export async function pollDeviceGrant(args: {
 
     const error = String(data.error || "");
 
-    /* @invariant A 2xx that carries neither a token nor an OAuth error is an
-       answer this client does not understand, not "still pending": a batch
-       code is spent when minting starts, so calling it pending lost the
-       tokens and the next call said expired. */
     if (res.ok && !error) {
       return {
         ok: false,

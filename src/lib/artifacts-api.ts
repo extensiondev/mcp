@@ -13,17 +13,6 @@ import { platformHoldMessage, sawPlatformHold } from "./platform-hold";
 
 type FetchImpl = typeof fetch;
 
-/* @invariant
- * The id shape below is the mint's, not this file's. www mints gen_ plus
- * crypto.randomBytes(32) as hex, 64 characters, and the only other width the
- * platform ever issued is the retired 32-character derived form. A width the
- * mint never produced is refused whole: the fallback extracts the maximal hex
- * run and accepts it only if the entire run is a minted width, because a
- * pattern that stops early turns a pasted 64-character id into its 32-character
- * prefix, and that truncated id then revokes nothing while reporting the wrong
- * causes. A ref that does not match is a named refusal, never a quiet
- * substring.
- */
 const ARTIFACT_ID = /^gen_(?:[0-9a-f]{32}|[0-9a-f]{64})$/;
 const ARTIFACT_ID_CANDIDATE = /gen_[0-9a-f]+/;
 
@@ -39,16 +28,6 @@ export interface ArtifactPublisher {
   tokenId: string | null;
 }
 
-/* @invariant Any zipUrl this package hands out travels with this sentence.
- *
- * The platform does not serve the archive from that address: it answers 302
- * and puts a short-lived presigned storage URL in Location, so a caller that
- * does not follow redirects reads an empty body and concludes the share is
- * empty when it is whole. This package's own read already follows the hops
- * (share-cors-probe walks them by hand), but the URL is also copied out to
- * humans and to agents that will curl it, and to them the 302 is invisible
- * until it costs them the download. Naming the redirect is the only part of
- * this that belongs here: the server's arm is www's to change, not ours. */
 export const ZIP_URL_REDIRECT_NOTE =
   "zipUrl does not serve the archive itself: it answers 302 with a short-lived presigned storage URL in Location. Follow redirects when you fetch it (curl -L; fetch and most HTTP clients already do), because a client that does not follow them reads 0 bytes and reports the share as empty when it is not.";
 
@@ -144,15 +123,6 @@ export function parseArtifactRef(input: string): string | null {
   return loose && ARTIFACT_ID.test(loose[0]) ? loose[0] : null;
 }
 
-/* @invariant
- * A revoke handle this package hands out must work with one plain DELETE.
- * The platform builds revokeUrl from its configured public origin, which in
- * production is the apex extension.dev, and the apex answers DELETE with a 307
- * to www.extension.dev. A caller who does not follow redirects gets
- * "Redirecting..." back and the share stays live, silently. Rewriting the apex
- * to the www host here makes the handle honest; any other host, including
- * localhost and self-hosted bases, passes through untouched.
- */
 export function wwwRevokeUrl(value: string): string {
   let parsed: URL;
 
@@ -358,9 +328,6 @@ export async function revokeArtifact(options: {
     };
   }
 
-  /* @invariant The platform's code is read before its status: a 404 with
-     APPROVAL_NOT_FOUND is a spent or unknown approval over a share that is
-     still live, not a share that is gone. */
   if (res.status === 404 && typeof data?.code === "string" && data.code !== "ARTIFACT_NOT_FOUND") {
     return {
       ok: false,

@@ -110,8 +110,6 @@ export async function readReleases(args: {
     new Set(channels.map((c) => c.sha).filter(Boolean)),
   );
 
-  /* @invariant Undeclared visibility is PRIVATE, as the platform reads it; an
-     unreadable meta.json is unknown, never public. */
   const visibility = metaRes.ok ? String(meta?.visibility || "private").toLowerCase() : "unknown";
   const isPrivate = visibility !== "public";
   const publicProjectUrl = userlandProjectUrl(ref, "", args.api);

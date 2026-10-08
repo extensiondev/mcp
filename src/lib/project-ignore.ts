@@ -20,15 +20,6 @@ export interface ProjectIgnoreOutcome {
   entry: string;
 }
 
-/* @invariant
-  * Being inside a repository is what matters, not being its root. The carrier
-  * is a 380KB extension carrying <all_urls>, cookies, history and management,
-  * and the tool description promises it is gitignored, so in a monorepo the
-  * next `git add -A` at the root committed exactly what the promise said it
-  * would not. A .gitignore written in the project directory is honoured by
-  * git no matter how deep it sits, so the fix is to look upward for the
-  * repository rather than to write the file somewhere else.
-  */
 function insideRepository(projectPath: string): boolean {
   let current = path.resolve(projectPath);
 

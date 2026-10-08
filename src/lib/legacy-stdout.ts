@@ -6,28 +6,6 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-/* @invariant
- * @deprecated The only module allowed to read the CLI's human output.
- *
- * Every regex here is coupled to first-party CLI copy, so a wording change in
- * the CLI silently changes agent behaviour. They survive as a fallback for a
- * project whose own `node_modules/.bin/extension` predates the machine
- * contract: `resolveExtensionInvocation` prefers that binary over the pinned
- * version, so the MCP can never assume what it is talking to.
- *
- * The condition for deleting this file, and the exemption for it in
- * `no-prose-scraping`: when the OLDEST engine this server still means to
- * support stamps `schema: 1` into ready.json. That stamp arrived in 4.0.17.
- * The condition is about the floor, NOT about the pin: a reader who checks
- * whether the pinned engine stamps it will always find that it does, and will
- * delete a fallback that only ever runs against engines older than the pin. It
- * has already been misread that way once. `legacy-stdout.test.ts` holds the
- * proof to re-run first: it shows what a pre-4.0.17 session's failure
- * degrades to without these, which is "started fine".
- *
- * Nothing else in `src/` may match on CLI prose.
- */
-
 const MERGED_FD_CHATTER = [
   /^npm warn Unknown project config/i,
   /This will stop working in the next major version of npm/i,
@@ -42,7 +20,7 @@ const MERGED_FD_CHATTER = [
   /Successfully compiled asm\.js/i,
 ];
 
-/** @deprecated see the module note. */
+/** @deprecated Delete with its no-prose-scraping exemption once the oldest supported engine stamps `schema: 1` into ready.json. */
 export function denoiseCliLog(raw: string): string {
   return raw
     .split("\n")

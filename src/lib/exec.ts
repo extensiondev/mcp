@@ -34,9 +34,6 @@ function descendantPids(pid: number): number[] {
   }
 }
 
-/* @invariant Windows has no process groups, pgrep or POSIX signals, so a kill
-   there ends only the cmd.exe shim and leaves the engine and browser running.
-   taskkill /T walks the tree Windows itself records and /F ends it. */
 export function killWindowsTree(pid: number): boolean {
   try {
     execFileSync("taskkill", ["/PID", String(pid), "/T", "/F"], { stdio: "ignore" });
@@ -72,11 +69,7 @@ export interface CliResult {
   stderr: string;
 }
 
-/* @invariant The outer kill timer must outlive the engine's own --timeout
-   envelope: the same timeoutMs is forwarded as the CLI's --timeout, and a
-   zero-margin race yields "exited with code null" instead of the engine's
-   structured timeout frame. */
-const SPAWN_KILL_HEADROOM_MS = 5_000;
+const KILL_HEADROOM_PAST_ENGINE_TIMEOUT_MS = 5_000;
 
 const PINNED_CLI_VERSION = String(
   dependencies["extension-develop"] ?? "latest",
@@ -168,7 +161,7 @@ export function runExtensionCli(
       }
     };
 
-    const budgetMs = (options?.timeoutMs ?? 30_000) + SPAWN_KILL_HEADROOM_MS;
+    const budgetMs = (options?.timeoutMs ?? 30_000) + KILL_HEADROOM_PAST_ENGINE_TIMEOUT_MS;
     const child = spawn(command, [...prefixArgs, ...args], {
       cwd: options?.cwd,
       stdio: ["ignore", outFd, errFd],
@@ -178,7 +171,7 @@ export function runExtensionCli(
     const timer = setTimeout(() => {
       timedOut = true;
       killTree(child.pid, "SIGTERM");
-      setTimeout(() => killTree(child.pid, "SIGKILL"), SPAWN_KILL_HEADROOM_MS);
+      setTimeout(() => killTree(child.pid, "SIGKILL"), KILL_HEADROOM_PAST_ENGINE_TIMEOUT_MS);
     }, budgetMs);
     child.on("close", (code, signal) => {
       clearTimeout(timer);
@@ -214,11 +207,6 @@ export function spawnExtensionCli(
   const logDir = fs.mkdtempSync(path.join(os.tmpdir(), "extension-mcp-"));
   const logPath = path.join(logDir, "session.log");
   const fd = fs.openSync(logPath, "a");
-  /* @invariant The engine runs in the project, never where the MCP client
-     happened to start this server: a bare npx in the server's cwd resolved
-     the engine against that directory's package.json, so the engine version
-     an agent drove depended on the client's working directory and the session
-     log named a package the project never heard of. */
   const child = spawn(command, [...prefixArgs, ...args], {
     cwd: options?.cwd ?? options?.projectDir,
     detached: true,

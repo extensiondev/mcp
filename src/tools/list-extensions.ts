@@ -75,10 +75,6 @@ function readOwnIdentity(
 
   const distPath =
     typeof contract?.distPath === "string" ? contract.distPath : null;
-  /* @invariant THE GUEST'S ID IS THE CONTRACT'S. The engine stamps
-     `extensionId` (a manifest `key` changes it from the path hash) and lists
-     its companions under `managedExtensions`; a path hash alone marked the
-     wrong row, or none, as ownExtension. */
   const ids: string[] = [...sessionGuestIdentity(projectPath, browser).expectedIds];
 
   let name =
@@ -331,10 +327,6 @@ async function listGeckoExtensions(
       const temporary = extensions.filter((e) => e.temporarilyInstalled);
 
       if (temporary.length === 1) {
-        /* @invariant A lone temporary add-on is this project's only by inference:
-           when the project's own add-on failed to install, the one temporary
-           install left can be the engine's companion, so the match is
-           labelled inferred and never stated as read. */
         temporary[0].ownExtension = true;
         temporary[0].ownExtensionInferred = true;
 

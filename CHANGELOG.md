@@ -78,6 +78,13 @@
   `extension_eval` in `background` like an MV2 page does. The CSP refusal
   rewrite applies to a declared content_security_policy, never to MV3 as
   such.
+- No comments remain in the package beyond the file banner and tool-read
+  directives. Every former invariant block is carried by a name, a cell
+  title, or a `*-rules.test.ts` cell that fails when the rule is broken;
+  each fixture builder names the engine or platform writer it copies, and
+  a cell checks the engine markers against the installed engine. The 40
+  browser, engine-internal and platform-server facts no code or cell can
+  hold left the repository for the maintainers' notes.
 - The invariant comments are cut to their rule: 509 blocks become 386 and
   3,744 lines become 2,814, with every ledger citation, date, commit, run
   id, first name and machine reference gone, the 120 that only restated a

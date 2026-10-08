@@ -162,13 +162,6 @@ async function pollForBridgeTabById(
   }
 }
 
-/* @invariant The engine's own `navigate` verb is asked first. It is a static
- * tabs call inside the extension, so it works where an MV3 background refuses
- * eval, which is every Safari session and any Chromium build with a strict
- * CSP. Only an engine that does not know the verb yet falls back to the
- * background eval, and that fallback is recognised by the engine's own
- * "unknown command" refusal, never by its version number.
- */
 const UNKNOWN_VERB = /unknown command/i;
 
 export interface NavigateTarget {
@@ -228,10 +221,6 @@ export async function navigateToUrlViaBridge(
         ? verbFrame.value
         : {};
     const tabId = typeof value.tabId === "number" ? value.tabId : null;
-    /* @invariant THE VERB'S ANSWER IS THE REQUEST, NOT THE LANDING. The engine
-       replies from the tabs callback with the url it was ASKED for, so the
-       tab is read back until it reports that url. A tab that never does is
-       not "navigated"; what it shows is reported. */
     const landed = await pollForBridgeTabById(projectPath, browser, url, tabId, 3000);
 
     if (!landed.tab) {
@@ -372,15 +361,6 @@ async function navigateToUrlViaBackgroundEval(
   });
 }
 
-/* @invariant The relay resolves the base with a background eval of
-   runtime.getURL, and an extension whose CSP forbids eval (every MV3 Gecko
-   build with an explicit policy, Redux, Preact, Web Scrobbler) refuses that
-   eval, so the tab route for its surfaces died before it started. Firefox
-   writes the same answer to disk: the profile's prefs.js holds
-   extensions.webextensions.uuids, a JSON map from the add-on id the built
-   manifest declares (or the engine injected) to the moz-extension host, and
-   the session contract names the profile. That read needs no eval and no
-   permission, so it is the fallback whenever the relay does not answer. */
 const UUIDS_PREF = /user_pref\("extensions\.webextensions\.uuids",\s*"((?:[^"\\]|\\.)*)"\)/;
 
 export function geckoAddonId(projectPath: string, browser: string): string | null {
@@ -476,7 +456,6 @@ async function resolveBridgeBaseUrlThroughRelay(
       return parsed.value.endsWith("/") ? parsed.value : `${parsed.value}/`;
     }
   } catch {
-    // fall through
   }
 
   return null;

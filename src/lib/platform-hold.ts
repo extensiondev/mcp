@@ -15,38 +15,8 @@ export const PLATFORM_HOLD_HEADER = "x-extensiondev-hold";
 
 export const PLATFORM_HOLD_STATUS = "platform-held";
 
-/* @invariant
-  * THIS CLIENT HOLDS NO DATE, AND THE BOOLEAN BELOW CANNOT INVENT ONE.
-  * extensiondev-readiness records that no announcement date is published and
-  * that nothing built from LAUNCH_DATE or LAUNCH_DATE_COPY may be rendered,
-  * served or shipped. A published npm tarball is shipped bytes that anyone
-  * can unpack, so a date parked here behind a false flag would disclose the
-  * day just as loudly as an API body would, and www's own gate already
-  * removed it from the refusal for the narrower reason that an agent repeats
-  * what it is told. So the flag does not switch a date on, it switches a
-  * RELAY on. When it is true this module will quote a day the platform itself
-  * put in the refusal body, and when it is false it drops that field on the
-  * floor.
-  */
 export const PLATFORM_HOLD_RELAYS_THE_PLATFORM_DATE = false;
 
-/* @invariant
-  * A REFUSAL THAT ONLY REFUSES IS WHAT MAKES SOMEONE CONCLUDE THE PRODUCT IS
-  * BROKEN, AND A REFUSAL THAT POINTS AT A HELD SURFACE IS WORSE THAN SILENT.
-  * Best case was refuse, then hand somebody an error page. The three parts
-  * below are the whole contract. (a) the condition comes from the platform's
-  * own sentence where there is one, so the wording is changed in one place
-  * and not two. (b) what still works is the part that was missing entirely
-  * and is the reason this file exists: creation, development and packaging
-  * run on the reader's own machine, they are free forever, and the hold does
-  * not touch them, so the true answer to "can I build an extension today" is
-  * yes. (c) a way back names templates.extension.dev because it is the one
-  * surface the hold leaves open, which makes it the only link a refusal can
-  * carry that will not 503, and it needs no date to be useful. ANY URL ADDED
-  * HERE MUST BE ONE THE HOLD LEAVES OPEN. That is the whole rule. console,
-  * www, code, docs, inspect, preview, themes and userland are held; a link to
-  * any of them belongs to the reader's future, not to this refusal.
-  */
 const HOLD_CONDITION_FALLBACK = "extension.dev is not open to the public yet.";
 
 const HOLD_STILL_WORKS =
@@ -93,19 +63,6 @@ export function readPlatformMessage(body: unknown): string {
   return typeof message === "string" ? message.trim() : "";
 }
 
-/* @invariant
- * THE SIGNAL IS A MACHINE FIELD, NEVER THE SENTENCE.
- *
- * `code` is what the gate promises a client may parse, and the header is what
- * the edge stamps on a held document for the cases where the body is the HTML
- * gate page rather than JSON. Matching the prose instead would tie every reader
- * of this package to a copy edit on www, which is the coupling the prose ban in
- * this repo exists to prevent.
- *
- * The header compare is `=== "held"` and not a presence check because the same
- * header carries "operator-enroll" on the 302 that lets us through the hold. A
- * presence check would read our own way in as a refusal.
- */
 export function sawPlatformHold(
   res?: { headers?: { get?: (name: string) => string | null } } | null,
   body?: unknown,
