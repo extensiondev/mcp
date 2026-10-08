@@ -21,7 +21,7 @@ export interface SafariAutomation {
 }
 
 export const SAFARI_MCP_SETTING =
-  'Safari > Settings > Developer > "Allow remote automation and external agents"';
+  'Safari > Settings > Developer > "Allow remote automation" (Safari > Develop > Allow Remote Automation on older Safari)';
 
 export function safariMcpAddCommand(driverPath: string | null): string {
   return `claude mcp add safari-mcp -- "${driverPath || "/usr/bin/safaridriver"}" --mcp`;

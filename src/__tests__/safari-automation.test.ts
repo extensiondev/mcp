@@ -65,7 +65,7 @@ describe("safariAutomationHint", () => {
       mcp: true,
       bidi: true,
     });
-    expect(hint).toContain("Allow remote automation and external agents");
+    expect(hint).toContain("Allow remote automation");
     expect(hint).toContain("claude mcp add safari-mcp");
     expect(hint).toContain("no extension-aware tool");
   });

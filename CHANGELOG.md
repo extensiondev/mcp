@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- The Safari automation hint names the setting the way the engine does: Safari > Settings > Developer > "Allow remote automation", with the Develop menu item on older Safari.
+
 - `extension_dev` carries the control channel by default: `allowControl` defaults to true, so `extension_storage`, `extension_reload`, `extension_open` and `extension_dom_snapshot` work on a plain dev session and a later "reload it" costs no restart; pass `allowControl: false` for a read-only session. `allowEval` stays off until asked and still implies control. The descriptions, the hints, the docs gates, the README and the shipped rules say control is on unless asked off.
 - `extension_wait` now says when it is needed (a session started with `wait: false`, a dev answer whose `ready.status` was not ready, a build-only session); `extension_dev`'s answer and the shipped rules say a ready answer ends the run recipe.
 - `extension_docs_search`'s description is the trigger: any WebExtension API, manifest key, permission or browser-difference question is answered from the docs first, memory only when nothing matches.
