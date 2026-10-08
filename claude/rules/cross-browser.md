@@ -81,7 +81,7 @@ npm run dev -- --browser=chrome
 npm run dev -- --browser=firefox
 npm run dev -- --browser=edge
 
-# Build for multiple browsers
+# Build for multiple browsers (each writes dist/<browser>/; a plain npm run build with no flag targets chromium and writes dist/chromium/)
 npm run build -- --browser=chrome
 npm run build -- --browser=firefox
 ```

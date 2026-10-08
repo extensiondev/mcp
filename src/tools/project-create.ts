@@ -86,7 +86,7 @@ export const schema = {
         type: "string",
         default: "dist/chrome",
         description:
-          "Directory the build writes the loadable extension into. With more than one browser, `<browser>` in the path becomes each browser's name (Extension.js writes `dist/<browser>`), and when it is left out every browser defaults to `dist/<browser>`.",
+          "Directory the build writes the loadable extension into. With more than one browser, `<browser>` in the path becomes each browser's name (Extension.js writes `dist/<browser>` for the browser its --browser flag names; `extension build` with no flag targets chromium and writes `dist/chromium`, so a buildCommand that leaves the flag out never fills `dist/chrome`), and when it is left out every browser defaults to `dist/<browser>`.",
       },
       browsers: {
         type: "array",

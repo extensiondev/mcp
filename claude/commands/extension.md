@@ -24,8 +24,8 @@ Parse the user's intent from `$ARGUMENTS` and execute the matching action:
 
 ### "build", Build for production
 
-1. Run `npm run build` (or `npx extension build`)
-2. After success, report the output in `dist/chrome/`
+1. If MCP tool `extension_build` is available, use it (chrome by default; its answer carries `outputPath`). Otherwise run `npm run build` (or `npx extension build`)
+2. After success, report the output folder the tool or the CLI answered with, never an assumed one: a plain `npm run build` passes no `--browser`, so the engine targets chromium and writes `dist/chromium/`; `--browser=chrome` and `extension_build` write `dist/chrome/`
 3. If the user mentions "firefox" or "both", also build with `--browser=firefox`
 4. If they mention "zip" or "store", add `--zip`
 

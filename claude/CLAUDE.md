@@ -111,7 +111,7 @@ npx extension@latest create my-extension --template=react
 npm run dev
 # or: npx extension dev
 
-# Build for production
+# Build for production (no --browser means chromium: the build lands in dist/chromium/)
 npm run build
 # or: npx extension build
 
@@ -119,7 +119,7 @@ npm run build
 npm run preview
 # or: npx extension preview
 
-# Target a specific browser
+# Target a specific browser (each build writes dist/<browser>/, so --browser=chrome writes dist/chrome/)
 npm run dev -- --browser=firefox
 npm run build -- --browser=chrome
 npm run build -- --browser=firefox
@@ -231,7 +231,7 @@ npm run dev -- --logs info --log-url "example.com"
 
 - Use `--browser=firefox` to test cross-browser compatibility
 - **Safari (macOS).** On Extension.js 4.1.28 or newer, `--browser=safari` builds the app, opens it, and after you enable the extension in Safari > Settings > Extensions it reloads on every save through the extension's bridge and streams background and content lines into the session log. Start it with `allowEval: true` and the bridge tools work: `extension_storage`, `extension_reload`, `extension_open` for surfaces, `extension_dom_snapshot` by tab id, `extension_logs`, and the assertions (`surface-rendered` reads the surface through the relay there). `extension_eval` in `content` or `page` needs a tab already open at the url, which you open in Safari by hand: `extension_open` with `url` and `extension_eval` in `background` are blocked by Safari's MV3 background CSP, and the engine says so. Safari has no CDP or RDP, so `extension_inspect` has no Safari path. Apple's Safari MCP server (`claude mcp add safari-mcp -- "/usr/bin/safaridriver" --mcp`, Safari 27+, after enabling Safari > Settings > Developer > "Allow remote automation and external agents") reads a page in its own isolated window with no extension-aware tool, and runs beside a dev session, since this server opens no automation session of its own.
-- Check `dist/<browser>/` for build output
+- Read the build output from the path the build answered with (`extension_build` returns it as `outputPath`, `extension build` prints it) instead of assuming a folder name: a plain `npm run build` passes no `--browser`, so the engine targets chromium and writes `dist/chromium/`, while `--browser=chrome` and `extension_build` (chrome by default) write `dist/chrome/`
 - Use `--wait` flag to check if dev session is ready (outputs ready.json contract)
 - Use `npm run start` to test production builds (builds first, then launches)
 

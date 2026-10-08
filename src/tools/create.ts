@@ -309,7 +309,7 @@ export async function handler(args: {
           : {}),
         packageManager: `${packageManager} (auto-detected by the scaffolder, not asked)`,
         browser:
-          "chrome (default: extension_dev and extension_build target chrome unless you pass browser)",
+          "chrome (default: extension_dev and extension_build target chrome and write dist/chrome unless you pass browser; the scaffolded npm run dev and npm run build scripts pass no --browser, so the engine runs them as chromium and npm run build writes dist/chromium)",
         gitInit,
       },
       duration: Date.now() - start,

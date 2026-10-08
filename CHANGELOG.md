@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- The rules, the `/extension build` command and the `extension_build`,
+  `extension_create` and `extension_project_create` descriptions now say
+  what the engine does: `extension build` with no `--browser` targets
+  chromium and writes `dist/chromium/`, so a scaffolded `npm run build`
+  lands there, while `--browser=chrome` and `extension_build` (chrome by
+  default) write `dist/chrome/`. The build rule tells the agent to read the
+  folder from the build's answer (`outputPath`) instead of assuming
+  `dist/chrome/`, which an agent did on 2026-10-08 and got `ls: exit 1`.
 - The README and the `extension_create` description now say that a
   successful scaffold sends one `draft_seeded` event to PostHog, what it
   carries, and that `EXTENSION_DEV_NO_TELEMETRY=1` or `DO_NOT_TRACK=1` turns
