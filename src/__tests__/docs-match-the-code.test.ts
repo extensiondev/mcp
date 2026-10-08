@@ -7,6 +7,8 @@ import { describe, it, expect } from "vitest";
 
 import { tools } from "../index";
 import { renderToolsDoc } from "../lib/docs-tools";
+import { renderClientsJson, renderToolsJson } from "../lib/docs-json";
+import { TOOL_DOCS } from "../lib/docs-meta";
 import { validateToolInput } from "../lib/validate-input";
 import { TOOL_POLICY } from "../lib/tool-policy";
 import { REAL_BROWSERS } from "../lib/common-schema";
@@ -51,6 +53,32 @@ describe("the docs say what the code does", () => {
 
     expect(read("claude/rules/mcp-tools.md")).toBe(rendered);
     for (const tool of tools) expect(read("claude/rules/mcp-tools.md")).toContain(`## ${tool.schema.name}`);
+  });
+
+  it("renders docs/tools.json and docs/clients.json for the docs site, and the files on disk are that rendering", () => {
+    const version = String((require("../../package.json") as { version: string }).version);
+    const toolsJson = `${JSON.stringify(renderToolsJson(tools.map((t) => t.schema), version), null, 2)}\n`;
+    const clientsJson = `${JSON.stringify(renderClientsJson(version), null, 2)}\n`;
+
+    if (process.env.WRITE_TOOLS_DOC === "1") {
+      fs.writeFileSync(fileURLToPath(new URL("../../docs/tools.json", import.meta.url)), toolsJson);
+      fs.writeFileSync(fileURLToPath(new URL("../../docs/clients.json", import.meta.url)), clientsJson);
+    }
+
+    expect(read("docs/tools.json")).toBe(toolsJson);
+    expect(read("docs/clients.json")).toBe(clientsJson);
+  });
+
+  it("gives every registered tool a tier, a gate and a sample prompt, and names no retired tool", () => {
+    const registered = tools.map((t) => t.schema.name).sort();
+
+    expect(Object.keys(TOOL_DOCS).sort()).toEqual(registered);
+
+    for (const [name, meta] of Object.entries(TOOL_DOCS)) {
+      expect(meta.samplePrompt.trim().length, `${name} sample prompt`).toBeGreaterThan(10);
+      expect(meta.gate.trim().length, `${name} gate`).toBeGreaterThan(0);
+      expect(TOOL_POLICY[name]?.group === "platform", `${name} tier vs group`).toBe(meta.tier === "platform");
+    }
   });
 
   it("validates every example call in the docs against the current schemas", () => {

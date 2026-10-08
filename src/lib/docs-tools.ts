@@ -6,7 +6,7 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-interface PropertySchema {
+export interface PropertySchema {
   type?: string | string[];
   description?: string;
   enum?: unknown[];
@@ -23,7 +23,7 @@ export interface ToolSchemaLike {
   };
 }
 
-function typeOf(property: PropertySchema): string {
+export function typeOf(property: PropertySchema): string {
   const base = Array.isArray(property.type) ? property.type.join(" | ") : property.type ?? "any";
   if (base === "array" && property.items?.enum) return `array of ${property.items.enum.map((v) => JSON.stringify(v)).join(" | ")}`;
   if (base === "array" && property.items?.type) return `array of ${property.items.type}`;
