@@ -48,7 +48,7 @@ Built on [Extension.js](https://extension.js.org), the open source framework ext
 
 </div>
 
-The Chromium family and Firefox get HMR, control, eval, inspect and assert (Firefox over its debugger protocol and the agent bridge, no CDP). Safari gets dev and build on macOS, no HMR and no inspect; the full list of what works there is under [Safari](https://docs.extension.dev/tools/mcp#safari). Plus Vivaldi, Yandex, Waterfox, Zen and Floorp, and any Chromium or Gecko binary by path.
+The Chromium family and Firefox get HMR, control, eval, inspect and assert (Firefox over its debugger protocol and the agent bridge, no CDP). Safari gets dev and build on macOS, no HMR and no inspect; the full list of what works there is under [Safari](https://docs.extension.dev/tools/mcp/safari). Plus Vivaldi, Yandex, Waterfox, Zen and Floorp, and any Chromium or Gecko binary by path.
 
 ## Clients
 
@@ -125,11 +125,11 @@ Or write it into `~/.codex/config.toml` as a `[mcp_servers.extension-dev]` table
 - `--no-ship` refuses every call that puts something in front of other people (publish, promote, a real submit, a shared preview, a revoke). Env: `EXTENSION_DEV_NO_SHIP=1`.
 - `--project <workspace>/<project>` pins the server to one project. Env: `EXTENSION_DEV_PROJECT`.
 
-A refused call answers `E_TOOL_DISABLED` with the flag to change. Human approval for store submissions and stable promotions, the MCP annotations every tool carries, and the `<untrusted-data-ID>` fence around page-written text are described under [Server flags](https://docs.extension.dev/tools/mcp#server-flags).
+A refused call answers `E_TOOL_DISABLED` with the flag to change. Human approval for store submissions and stable promotions, the MCP annotations every tool carries, and the `<untrusted-data-ID>` fence around page-written text are described under [Server flags](https://docs.extension.dev/tools/mcp/flags).
 
 ### Telemetry
 
-`extension_create` sends one `draft_seeded` event to PostHog at `us.i.posthog.com` after a successful scaffold (template slug, source and commit, a random per-install id, never a path or a name); nothing else sends anything. `EXTENSION_DEV_NO_TELEMETRY=1` or `DO_NOT_TRACK=1` turns it off. The full payload is listed under [Telemetry](https://docs.extension.dev/tools/mcp#telemetry).
+`extension_create` sends one `draft_seeded` event to PostHog at `us.i.posthog.com` after a successful scaffold (template slug, source and commit, a random per-install id, never a path or a name); nothing else sends anything. `EXTENSION_DEV_NO_TELEMETRY=1` or `DO_NOT_TRACK=1` turns it off. The full payload is listed under [Telemetry](https://docs.extension.dev/tools/mcp/flags#telemetry).
 
 ### Pair with the skill
 
@@ -209,7 +209,7 @@ Each check comes back `pass`, `fail` or `inconclusive`, and the run passes only 
 
 ## Safari
 
-A Safari dev session runs on the same bridge as every other engine: on Extension.js 4.1.28 or newer, `extension_dev` with `browser: "safari"` (macOS with Xcode) builds the app, opens it, reloads it on every save and streams its logs. Safari's MV3 background CSP blocks eval, there is no CDP or RDP path for `extension_inspect`, and opening a tab needs a safaridriver session; the limits are listed under [Safari](https://docs.extension.dev/tools/mcp#safari).
+A Safari dev session runs on the same bridge as every other engine: on Extension.js 4.1.28 or newer, `extension_dev` with `browser: "safari"` (macOS with Xcode) builds the app, opens it, reloads it on every save and streams its logs. Safari's MV3 background CSP blocks eval, there is no CDP or RDP path for `extension_inspect`, and opening a tab needs a safaridriver session; the limits are listed under [Safari](https://docs.extension.dev/tools/mcp/safari).
 
 ## Platform (private alpha)
 
@@ -229,7 +229,7 @@ You approve a code at [extension.dev/device](https://extension.dev/device); no G
 
 </div>
 
-The details, the approval flow and the batch login for several projects are under [Share a build in progress](https://docs.extension.dev/tools/mcp#share-a-build-in-progress), [Publish is not submit](https://docs.extension.dev/tools/mcp#publish-is-not-submit) and [Login](https://docs.extension.dev/tools/mcp#login).
+The details, the approval flow and the batch login for several projects are under [Share a build in progress](https://docs.extension.dev/tools/mcp/platform#share-a-build-in-progress), [Publish is not submit](https://docs.extension.dev/tools/mcp/platform#publish-is-not-submit) and [Login](https://docs.extension.dev/tools/mcp/platform#login).
 
 ## Community
 
