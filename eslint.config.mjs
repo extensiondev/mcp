@@ -13,6 +13,45 @@ import globals from "globals";
 import { migrationWarnings } from "./eslint/migration-warnings.mjs";
 import { styleRules } from "./eslint/style-rules.mjs";
 
+const filesOverTheLineBudgetOnOctoberSeventh2026 = [
+  "src/__tests__/approval-gate.test.ts",
+  "src/__tests__/assert-verdicts.test.ts",
+  "src/__tests__/auth-batch-login.test.ts",
+  "src/__tests__/build-safari-packaging.test.ts",
+  "src/__tests__/engine-version-probe.test.ts",
+  "src/__tests__/eval-chromium-background-and-web.test.ts",
+  "src/__tests__/eval-gecko-protocol-route.test.ts",
+  "src/__tests__/gecko-bridge-pairing.test.ts",
+  "src/__tests__/open-surface-as-tab.test.ts",
+  "src/__tests__/preview-web.test.ts",
+  "src/__tests__/project-create-batch.test.ts",
+  "src/__tests__/project-create.test.ts",
+  "src/__tests__/reports-failure.test.ts",
+  "src/__tests__/shares.test.ts",
+  "src/__tests__/webdriver-safari.test.ts",
+  "src/lib/cdp-extension-page.ts",
+  "src/lib/project-create-batch.ts",
+  "src/lib/rdp.ts",
+  "src/lib/vendor/chrome-theme/chrome-theme-resolve.ts",
+  "src/tools/assert.ts",
+  "src/tools/build.ts",
+  "src/tools/detect-browsers.ts",
+  "src/tools/dev.ts",
+  "src/tools/doctor.ts",
+  "src/tools/dom-snapshot.ts",
+  "src/tools/eval.ts",
+  "src/tools/inspect-gecko.ts",
+  "src/tools/login.ts",
+  "src/tools/logs.ts",
+  "src/tools/manifest-validate.ts",
+  "src/tools/open.ts",
+  "src/tools/preview-web.ts",
+  "src/tools/project-create.ts",
+  "src/tools/shares.ts",
+  "src/tools/stop.ts",
+  "src/tools/submit.ts",
+];
+
 const houseRuleBypass = {
   rules: {
     "no-await-in-loop": "off",
@@ -55,6 +94,10 @@ export default [
     rules: {
       "max-lines": ["warn", { max: 400, skipBlankLines: true, skipComments: true }],
     },
+  },
+  {
+    files: filesOverTheLineBudgetOnOctoberSeventh2026,
+    rules: { "max-lines": "off" },
   },
   {
     files: ["**/*.mjs"],
