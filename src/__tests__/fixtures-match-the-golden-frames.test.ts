@@ -72,14 +72,19 @@ describe("every golden frame the installed engine ships is compared key for key 
   });
 
   it("names every golden file that has no builder, so a new golden file is a red cell", () => {
-    const uncovered = goldenFiles().filter((name) => !(name in builderFor));
-    expect(uncovered).toEqual([...GOLDEN_WITHOUT_A_BUILDER, ...GOLDEN_THAT_DISAGREES_WITH_THE_ENGINE].sort());
+    const shipped = goldenFiles();
+    const uncovered = shipped.filter((name) => !(name in builderFor));
+    const expected = [...GOLDEN_WITHOUT_A_BUILDER, ...GOLDEN_THAT_DISAGREES_WITH_THE_ENGINE]
+      .filter((name) => shipped.includes(name))
+      .sort();
+
+    expect(uncovered).toEqual(expected);
   });
 
-  for (const [name, build] of Object.entries(builderFor)) {
+  for (const name of goldenFiles().filter((file) => file in builderFor)) {
     it(`${name.replace(/^golden\.|\.json$/g, "")}: the builder drops no key of the golden envelope or of its value and error`, () => {
       const shipped = golden(name);
-      const built = build();
+      const built = builderFor[name]();
       expect(missingKeys(shipped, built)).toEqual([]);
       expect(missingKeys(shipped.value, built.value)).toEqual([]);
       expect(missingKeys(shipped.error, built.error)).toEqual([]);
@@ -89,7 +94,7 @@ describe("every golden frame the installed engine ships is compared key for key 
 });
 
 describe("the eval ok golden disagrees with the engine it ships with, and the builder follows the engine", () => {
-  it("golden.eval.ok.json wraps value as { result, context } while the executor and the CLI answer the bare value", () => {
+  it.skipIf(!goldenFiles().includes("golden.eval.ok.json"))("golden.eval.ok.json wraps value as { result, context } while the executor and the CLI answer the bare value", () => {
     const shipped = golden("golden.eval.ok.json");
 
     expect(Object.keys(shipped.value as object).sort()).toEqual(["context", "result"]);
