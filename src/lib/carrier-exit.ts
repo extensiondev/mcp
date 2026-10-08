@@ -13,7 +13,6 @@ import {
   removeCarrier,
   type CarrierRemoval,
 } from "./carrier";
-import { carriersPlacedHere } from "./carrier-registry";
 
 export type CarrierSweepEntry = CarrierRemoval & { projectPath: string };
 
@@ -44,55 +43,3 @@ export function sweepCarriers(projectPaths: string[]): CarrierSweepEntry[] {
 
   return out;
 }
-
-export function sweepCarriersPlacedHere(): CarrierSweepEntry[] {
-  try {
-    return sweepCarriers(carriersPlacedHere());
-  } catch {
-    return [];
-  }
-}
-
-const EXIT_SIGNALS: NodeJS.Signals[] = ["SIGINT", "SIGTERM", "SIGHUP"];
-
-let installed: Array<{
-  event: NodeJS.Signals | "exit";
-  handler: () => void;
-}> = [];
-
-export function installCarrierExitCleanup(): void {
-  if (installed.length) return;
-
-  const onExit = () => {
-    sweepCarriersPlacedHere();
-  };
-
-  process.on("exit", onExit);
-  installed.push({ event: "exit", handler: onExit });
-
-  const signalHandler = (signal: NodeJS.Signals) => {
-    const onSignal = () => {
-      sweepCarriersPlacedHere();
-      process.removeListener(signal, onSignal);
-      installed = installed.filter((entry) => entry.handler !== onSignal);
-
-      if (process.listenerCount(signal) === 0) {
-        try {
-          process.kill(process.pid, signal);
-        } catch {
-        }
-      }
-    };
-
-    return onSignal;
-  };
-
-  for (const signal of EXIT_SIGNALS) {
-    const onSignal = signalHandler(signal);
-
-    process.on(signal, onSignal);
-    installed.push({ event: signal, handler: onSignal });
-  }
-}
-
-

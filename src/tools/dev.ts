@@ -10,7 +10,6 @@ import {
   LAUNCH_BROWSER,
   PROJECT_PATH,
 } from "../lib/common-schema";
-import { materializeCarrier, removeCarrier } from "../lib/carrier";
 import {
   browserProfileRootDir,
   profileRemediation,
@@ -87,12 +86,6 @@ export const schema = {
         description:
           "Enable extension_eval (runs code in a context; writes a 0600 session token). Implies allowControl, so you never need to pass both.",
       },
-      carrier: {
-        type: "boolean",
-        default: false,
-        description:
-          "Load the bundled Live Preview carrier beside your extension (Chromium only) so pages on preview.extension.dev, code.extension.dev and themes.extension.dev can pair with the session and stream its real-lane chrome.* trace. The carrier holds cookies, history, bookmarks, scripting and <all_urls>; the placed copy admits no localhost page unless the server sets the loopback switch named in the Live Preview carrier section of this package's readme, which exists for those apps' own dev servers. Written into the auto-loaded ./extensions folder, gitignored, and removed on extension_stop or extension_build: never part of a release.",
-      },
     },
     required: ["projectPath"],
   },
@@ -108,7 +101,6 @@ export async function handler(
     replace?: boolean;
     allowControl?: boolean;
     allowEval?: boolean;
-    carrier?: boolean;
   } & LaunchFlagArgs,
 ): Promise<string> {
   const browser = args.browser ?? "chrome";
@@ -165,10 +157,6 @@ export async function handler(
     }
   }
 
-  const carrier = args.carrier
-    ? materializeCarrier(args.projectPath, browser)
-    : null;
-
   const allowControl = Boolean(args.allowControl || args.allowEval);
   const profileReused = profileCarriesTabsOver(
     args.projectPath,
@@ -189,8 +177,6 @@ export async function handler(
   const { child, logPath } = spawned;
 
   if (child.pid === undefined) {
-    if (carrier?.loaded) removeCarrier(args.projectPath);
-
     return spawnFailedEnvelope(schema.name, spawned);
   }
 
@@ -209,12 +195,6 @@ export async function handler(
     removeSession(args.projectPath, browser, pid);
     removeSessionMarker(args.projectPath, browser, pid);
 
-    if (carrier) {
-      try {
-        removeCarrier(args.projectPath);
-      } catch {
-      }
-    }
   });
 
   const boot = await pollBootVerdict(args.projectPath, browser, {
@@ -428,7 +408,6 @@ export async function handler(
       browser,
       ...portReport,
       projectPath: args.projectPath,
-      ...(carrier ? { carrier } : {}),
       ...(replaced.length > 0
         ? {
             replacedSession: replaced[0],

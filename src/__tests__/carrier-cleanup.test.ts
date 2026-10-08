@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -7,12 +8,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 let carrier = await import("../lib/carrier");
 let carrierExit = await import("../lib/carrier-exit");
 let registry = await import("../lib/carrier-registry");
+let processManager = await import("../lib/process-manager");
 let stop = await import("../tools/stop");
 
-const PROCESS_EVENTS = ["exit", "SIGINT", "SIGTERM", "SIGHUP"] as const;
-const listenersBefore = new Map<string, Set<(...a: unknown[]) => void>>();
-
 const MARKER = "managed-by-extension-dev-mcp.json";
+const CARRIER_MANIFEST_KEY = "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA6QM4Vy/P3tIFJ+Jq7VyFEka5PICvw3LelaERWJzfVJ4avVWUfEa6vLX2+3Y21rmZ4nm2HhC203QWWRg24uCFlQWsyE9f3EW8yYR6HDvdTCPQxwq5Fv+d5m3YcNztse5IIf1XgnbZoCurI98CEHVilB4c8m6Yoel+PnPlRSjzkV5TjPyQ1NhZWfYfENAYmbxVzcpHD3eDFc9fveBvALOF9KU+21N2zubeLlnJlLjmDKv+Ud/zRLsMoc/5/zhdSE+rV/8DmA8ghyXeMQJ+WmjMgiBz/7wgg3Q1q0Bx1bzfMl18dO1pUjbW6nQC+CIxDBDthJpN4rSwuE/Xt3nEJZ5HtQIDAQAB";
 const tmpDirs: string[] = [];
 
 function project(): string {
@@ -22,74 +22,66 @@ function project(): string {
   return dir;
 }
 
-function withCarrier(): string {
-  const dir = project();
-  expect(carrier.materializeCarrier(dir, "chrome").loaded).toBe(true);
+function placedByAnEarlierServer(dir: string, withMarker = true): string {
+  const target = carrier.carrierPath(dir);
+  fs.mkdirSync(path.join(target, "action"), { recursive: true });
+  fs.writeFileSync(
+    path.join(target, "manifest.json"),
+    JSON.stringify({ name: "Extension.dev Live Preview", version: "0.0.2", key: CARRIER_MANIFEST_KEY }),
+  );
 
-  return dir;
+  fs.writeFileSync(path.join(target, "action", "index.css"), "");
+  if (withMarker) fs.writeFileSync(path.join(target, MARKER), "{}");
+
+  return target;
+}
+
+function recordedByAnEarlierServer(dir: string): void {
+  const resolved = path.resolve(dir);
+  const digest = crypto.createHash("sha1").update(resolved).digest("hex").slice(0, 16);
+  const recordDir = path.join(processManager.sessionStateDir(), "carriers");
+  fs.mkdirSync(recordDir, { recursive: true });
+  fs.writeFileSync(
+    path.join(recordDir, `${digest}.json`),
+    `${JSON.stringify({ projectPath: resolved, pid: 1, placedAt: "2026-10-01T00:00:00.000Z" })}\n`,
+  );
 }
 
 beforeEach(async () => {
-  for (const event of PROCESS_EVENTS) {
-    listenersBefore.set(event, new Set(process.listeners(event) as Array<(...a: unknown[]) => void>));
-  }
-
   vi.resetModules();
   carrier = await import("../lib/carrier");
   carrierExit = await import("../lib/carrier-exit");
   registry = await import("../lib/carrier-registry");
+  processManager = await import("../lib/process-manager");
   stop = await import("../tools/stop");
 });
 
 afterEach(() => {
-  for (const event of PROCESS_EVENTS) {
-    const before = listenersBefore.get(event) ?? new Set();
-
-    for (const listener of process.listeners(event) as Array<(...a: unknown[]) => void>) {
-      if (!before.has(listener)) process.removeListener(event, listener);
-    }
-  }
-
   for (const dir of tmpDirs.splice(0)) {
     registry.forgetCarrier(dir);
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
 
-describe("a carrier this tool placed stays recognisable without its marker", () => {
-  it("takes back its own payload when the marker is gone", () => {
-    const dir = withCarrier();
-    fs.rmSync(path.join(carrier.carrierPath(dir), MARKER));
+describe("a carrier an earlier server placed is still recognised and taken back", () => {
+  it("takes back a marked copy", () => {
+    const dir = project();
+    placedByAnEarlierServer(dir);
 
-    expect(carrier.claimCarrier(carrier.carrierPath(dir))).toEqual({
-      ours: true,
-      how: "payload",
-    });
+    const removal = carrier.removeCarrier(dir);
+    expect(removal.removed).toBe(true);
+    expect(removal.note).toBeUndefined();
+    expect(fs.existsSync(carrier.carrierPath(dir))).toBe(false);
+  });
+
+  it("takes back its own payload when the marker is gone, by the manifest key", () => {
+    const dir = project();
+    placedByAnEarlierServer(dir, false);
 
     const removal = carrier.removeCarrier(dir);
     expect(removal.removed).toBe(true);
     expect(removal.note).toContain(carrier.CARRIER_EXTENSION_ID);
     expect(fs.existsSync(carrier.carrierPath(dir))).toBe(false);
-  });
-
-  it("replaces its own unmarked payload instead of refusing forever", () => {
-    const dir = withCarrier();
-    fs.rmSync(path.join(carrier.carrierPath(dir), MARKER));
-
-    const again = carrier.materializeCarrier(dir, "chrome");
-    expect(again.loaded).toBe(true);
-    expect(fs.existsSync(path.join(carrier.carrierPath(dir), MARKER))).toBe(true);
-  });
-
-  it("takes back a half-written copy that never got a manifest", () => {
-    const dir = project();
-    const target = carrier.carrierPath(dir);
-    fs.mkdirSync(path.join(target, "action"), { recursive: true });
-    fs.writeFileSync(path.join(target, "action", "index.css"), "");
-
-    expect(carrier.claimCarrier(target)).toEqual({ ours: true, how: "partial" });
-    expect(carrier.removeCarrier(dir).removed).toBe(true);
-    expect(fs.existsSync(target)).toBe(false);
   });
 
   it("still refuses a directory it never wrote, and says what to do instead", () => {
@@ -106,45 +98,33 @@ describe("a carrier this tool placed stays recognisable without its marker", () 
     expect(removal.note).toContain("left untouched");
     expect(removal.note).toContain("rename it");
     expect(fs.existsSync(path.join(target, "manifest.json"))).toBe(true);
-
-    const materialized = carrier.materializeCarrier(dir, "chrome");
-    expect(materialized.loaded).toBe(false);
-    expect(materialized.note).toContain("Rename it");
   });
 
-  it("refuses a directory holding files the payload never had", () => {
+  it("refuses a directory with no marker and no manifest", () => {
     const dir = project();
     const target = carrier.carrierPath(dir);
     fs.mkdirSync(target, { recursive: true });
     fs.writeFileSync(path.join(target, "notes.txt"), "mine");
 
-    expect(carrier.claimCarrier(target)).toEqual({ ours: false, how: "foreign" });
     expect(carrier.removeCarrier(dir).removed).toBe(false);
+    expect(fs.existsSync(path.join(target, "notes.txt"))).toBe(true);
   });
 });
 
-describe("the carrier is written down so something can still find it later", () => {
-  it("records a placed carrier and forgets a removed one", () => {
-    const dir = withCarrier();
-    expect(registry.carriersPlacedHere()).toContain(path.resolve(dir));
-
-    carrier.removeCarrier(dir);
-    expect(registry.carriersPlacedHere()).not.toContain(path.resolve(dir));
-  });
-
-  it("stops recording a project whose carrier was already gone", () => {
+describe("the records an earlier server wrote still lead extension_stop to its carriers", () => {
+  it("reads a record and forgets it once the carrier is gone", () => {
     const dir = project();
-    registry.rememberCarrier(dir);
-    expect(registry.carriersPlacedHere()).toContain(path.resolve(dir));
+    recordedByAnEarlierServer(dir);
+    expect(registry.readRememberedCarriers().carriers).toContain(path.resolve(dir));
 
     carrier.removeCarrier(dir);
-    expect(registry.carriersPlacedHere()).not.toContain(path.resolve(dir));
+    expect(registry.readRememberedCarriers().carriers).not.toContain(path.resolve(dir));
   });
-});
 
-describe("extension_stop all=true reaches a project that was never stopped", () => {
   it("takes the carrier back with no session on record for it", async () => {
-    const dir = withCarrier();
+    const dir = project();
+    placedByAnEarlierServer(dir);
+    recordedByAnEarlierServer(dir);
 
     const out = JSON.parse(await stop.handler({ all: true }));
     expect(fs.existsSync(carrier.carrierPath(dir))).toBe(false);
@@ -160,98 +140,25 @@ describe("extension_stop all=true reaches a project that was never stopped", () 
     const target = carrier.carrierPath(dir);
     fs.mkdirSync(target, { recursive: true });
     fs.writeFileSync(path.join(target, "manifest.json"), '{"name":"theirs"}');
-    registry.rememberCarrier(dir);
+    recordedByAnEarlierServer(dir);
 
     await stop.handler({ all: true });
     expect(fs.existsSync(path.join(target, "manifest.json"))).toBe(true);
   });
-});
 
-describe("the server dying takes the carriers with it", () => {
-  function ourListeners(signal: NodeJS.Signals): Array<(...a: any[]) => void> {
-    return process.listeners(signal) as Array<(...a: any[]) => void>;
-  }
-
-  it("removes what this process placed when the server is signalled", () => {
-    const dir = withCarrier();
-
-    const keepAlive = () => {};
-
-    process.on("SIGTERM", keepAlive);
-
-    try {
-      carrierExit.installCarrierExitCleanup();
-      const ours = ourListeners("SIGTERM").filter((l) => l !== keepAlive);
-      expect(ours).toHaveLength(1);
-
-      ours[0]();
-
-      expect(fs.existsSync(carrier.carrierPath(dir))).toBe(false);
-      expect(registry.carriersPlacedHere()).not.toContain(path.resolve(dir));
-    } finally {
-      process.off("SIGTERM", keepAlive);
-    }
-  });
-
-  it("hands the signal back once nothing else is listening", () => {
-    const keepAlive = () => {};
-
-    process.on("SIGTERM", keepAlive);
-
-    try {
-      carrierExit.installCarrierExitCleanup();
-      const before = process.listenerCount("SIGTERM");
-      const ours = ourListeners("SIGTERM").filter((l) => l !== keepAlive);
-      ours[0]();
-      expect(process.listenerCount("SIGTERM")).toBe(before - 1);
-      expect(process.listeners("SIGTERM")).toContain(keepAlive);
-    } finally {
-      process.off("SIGTERM", keepAlive);
-    }
-  });
-
-  it("sweeps on a plain exit as well", () => {
-    const dir = withCarrier();
-    carrierExit.installCarrierExitCleanup();
-    const exitHandlers = process.listeners("exit") as Array<() => void>;
-    for (const handler of exitHandlers) handler();
+  it("is idempotent: a second sweep of the same project is a no-op", () => {
+    const dir = project();
+    placedByAnEarlierServer(dir);
+    expect(carrierExit.sweepCarriers([dir])[0].removed).toBe(true);
+    expect(carrierExit.sweepCarriers([dir])).toEqual([]);
     expect(fs.existsSync(carrier.carrierPath(dir))).toBe(false);
   });
 
-  it("installs one set of handlers however often it is called", () => {
-    const before = process.listenerCount("SIGINT");
-    carrierExit.installCarrierExitCleanup();
-    const after = process.listenerCount("SIGINT");
-    carrierExit.installCarrierExitCleanup();
-    carrierExit.installCarrierExitCleanup();
-    expect(process.listenerCount("SIGINT")).toBe(after);
-    expect(after).toBe(before + 1);
-  });
-
   it("never throws when the project is already gone", () => {
-    const dir = withCarrier();
+    const dir = project();
+    placedByAnEarlierServer(dir);
     fs.rmSync(dir, { recursive: true, force: true });
 
-    const keepAlive = () => {};
-
-    process.on("SIGTERM", keepAlive);
-
-    try {
-      carrierExit.installCarrierExitCleanup();
-      const ours = ourListeners("SIGTERM").filter((l) => l !== keepAlive);
-      expect(() => ours[0]()).not.toThrow();
-      expect(() => ours[0]()).not.toThrow();
-    } finally {
-      process.off("SIGTERM", keepAlive);
-    }
-  });
-
-  it("is idempotent: a second sweep of the same project is a no-op", () => {
-    const dir = withCarrier();
-    expect(carrierExit.sweepCarriers([dir])[0].removed).toBe(true);
-    expect(carrierExit.sweepCarriers([dir])).toEqual([]);
-    expect(fs.existsSync(path.join(dir, "extensions", carrier.CARRIER_DIR_NAME))).toBe(
-      false,
-    );
+    expect(() => carrierExit.sweepCarriers([dir])).not.toThrow();
   });
 });

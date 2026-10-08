@@ -150,6 +150,15 @@
   value as `{ result, context }` while its executor and CLI answer the bare
   value; the eval builder follows the engine and a cell names the
   disagreement until upstream settles it.
+- The Live Preview carrier leaves the package: the bundled extension under
+  `extensions/`, the `carrier` input on `extension_dev` and the loopback
+  switch are gone. The carrier only ever reached a machine through this
+  package, and with the platform in private alpha there is no public
+  delivery for it, so the public package no longer ships a companion that
+  holds `<all_urls>`, cookies, history, bookmarks and scripting. A copy an
+  earlier server placed is still taken back on `extension_stop`,
+  `extension_start` and `extension_build`, and a build that packs one is
+  still refused.
 
 ## 10.10.13
 

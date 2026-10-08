@@ -9,66 +9,14 @@
 import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 
-import { isChromiumFamily } from "./browser-family";
-import { ensureProjectIgnored } from "./project-ignore";
-import { forgetCarrier, rememberCarrier } from "./carrier-registry";
+import { forgetCarrier } from "./carrier-registry";
 
 export const CARRIER_DIR_NAME = "extension-dev-live-preview";
 
 export const CARRIER_EXTENSION_ID = "ibppeifnekhjjjmpjfiobccjlicbmgcb";
 
-export const CARRIER_TRUSTED_ORIGINS = [
-  "https://preview.extension.dev",
-  "https://code.extension.dev",
-  "https://themes.extension.dev",
-] as const;
-export const CARRIER_TRUSTED_LOCAL_HOSTS = ["localhost", "127.0.0.1"] as const;
-export const CARRIER_TRUSTED_LOCAL_PORTS = ["3103", "3104", "3110", "3111"] as const;
-export const CARRIER_REFUSAL_SENTENCE =
-  "This page is not one the Live Preview carrier answers.";
-export const CARRIER_ALLOWED_ORIGINS_SENTENCE = `${CARRIER_TRUSTED_ORIGINS.join(", ")}, and those same apps' dev servers on ${CARRIER_TRUSTED_LOCAL_HOSTS.map((host) => `http://${host}`).join(" and ")} (ports ${CARRIER_TRUSTED_LOCAL_PORTS.join(", ")}). The carrier checks the sender's origin, so a page on any other localhost port is refused.`;
-
 const MARKER_FILE = "managed-by-extension-dev-mcp.json";
-
-export const CARRIER_LOOPBACK_ENV = "EXTENSION_DEV_CARRIER_LOOPBACK";
-
-export function carrierLoopbackAllowed(
-  env: Record<string, string | undefined> = process.env,
-): boolean {
-  const raw = String(env[CARRIER_LOOPBACK_ENV] ?? "").trim().toLowerCase();
-
-  return raw !== "" && raw !== "0" && raw !== "false" && raw !== "off";
-}
-
-const LOOPBACK_MATCHES = new Set(
-  CARRIER_TRUSTED_LOCAL_HOSTS.map((host) => `http://${host}/*`),
-);
-
-export function carrierAllowedOriginsSentence(loopback: boolean): string {
-  if (loopback) return CARRIER_ALLOWED_ORIGINS_SENTENCE;
-
-  return `${CARRIER_TRUSTED_ORIGINS.join(", ")} only: the placed copy's externally_connectable lists no localhost or 127.0.0.1 match, so no page served on this machine can pair with the carrier. Set ${CARRIER_LOOPBACK_ENV}=1 on the server to admit those same apps' dev servers on ports ${CARRIER_TRUSTED_LOCAL_PORTS.join(", ")}.`;
-}
-
-function narrowPlacedManifest(target: string, loopback: boolean): void {
-  if (loopback) return;
-
-  const file = path.join(target, "manifest.json");
-  const placed = JSON.parse(fs.readFileSync(file, "utf-8")) as {
-    externally_connectable?: { matches?: string[] };
-  };
-  const matches = placed.externally_connectable?.matches;
-  if (!matches) return;
-
-  placed.externally_connectable = {
-    ...placed.externally_connectable,
-    matches: matches.filter((match) => !LOOPBACK_MATCHES.has(match)),
-  };
-
-  fs.writeFileSync(file, `${JSON.stringify(placed, null, 2)}\n`);
-}
 
 function deriveCarrierId(source: string): string | null {
   try {
@@ -97,42 +45,11 @@ export function carrierPath(projectPath: string): string {
   return path.join(projectPath, "extensions", CARRIER_DIR_NAME);
 }
 
-function relativeFiles(dir: string, base = dir, depth = 0): string[] | null {
-  if (depth > 4) return null;
-
-  let entries: fs.Dirent[];
-
-  try {
-    entries = fs.readdirSync(dir, { withFileTypes: true });
-  } catch {
-    return null;
-  }
-
-  const out: string[] = [];
-
-  for (const entry of entries) {
-    const full = path.join(dir, entry.name);
-
-    if (entry.isDirectory()) {
-      const nested = relativeFiles(full, base, depth + 1);
-      if (nested === null) return null;
-
-      out.push(...nested);
-      continue;
-    }
-
-    out.push(path.relative(base, full));
-    if (out.length > 500) return null;
-  }
-
-  return out;
-}
-
-export type CarrierClaim =
-  | { ours: true; how: "marker" | "payload" | "partial" }
+type CarrierClaim =
+  | { ours: true; how: "marker" | "payload" }
   | { ours: false; how: "foreign" };
 
-export function claimCarrier(target: string): CarrierClaim {
+function claimCarrier(target: string): CarrierClaim {
   if (fs.existsSync(path.join(target, MARKER_FILE))) {
     return { ours: true, how: "marker" };
   }
@@ -141,28 +58,12 @@ export function claimCarrier(target: string): CarrierClaim {
     return { ours: true, how: "payload" };
   }
 
-  if (fs.existsSync(path.join(target, "manifest.json"))) {
-    return { ours: false, how: "foreign" };
-  }
-
-  const source = findBundledCarrier("chromium");
-  const bundled = source ? relativeFiles(source) : null;
-  const present = relativeFiles(target);
-  if (!bundled || !present) return { ours: false, how: "foreign" };
-
-  const known = new Set(bundled);
-
-  return present.every((file) => known.has(file))
-    ? { ours: true, how: "partial" }
-    : { ours: false, how: "foreign" };
+  return { ours: false, how: "foreign" };
 }
 
-const RECOVERY_NOTE: Record<"payload" | "partial", string> = {
-  payload: `Its ${MARKER_FILE} marker was missing, but its manifest key derives the carrier's own extension id ${CARRIER_EXTENSION_ID}, which only this package's payload has, so it was recognised as ours and taken back.`,
-  partial: `Its ${MARKER_FILE} marker was missing and it holds no manifest, but every file in it belongs to the bundled carrier payload, so it was recognised as a half-written copy of ours and taken back.`,
-};
+const PAYLOAD_NOTE = `Its ${MARKER_FILE} marker was missing, but its manifest key derives the carrier's own extension id ${CARRIER_EXTENSION_ID}, which only the Live Preview carrier has, so it was recognised as one an earlier server placed and taken back.`;
 
-const FOREIGN_NOTE = `extensions/${CARRIER_DIR_NAME} has no ${MARKER_FILE} marker, does not carry the carrier's own manifest key, and holds files this package never ships, so it is not the carrier this tool placed and was left untouched. Nothing here deletes a directory this tool did not write: rename it or move it out of ./extensions yourself if you want the carrier to live at that path.`;
+const FOREIGN_NOTE = `extensions/${CARRIER_DIR_NAME} has no ${MARKER_FILE} marker and does not carry the carrier's own manifest key, so it is not a carrier this tool placed and was left untouched. Nothing here deletes a directory this tool did not write: rename it or move it out of ./extensions yourself.`;
 
 export type CarrierRemoval = {
   removed: boolean;
@@ -206,170 +107,6 @@ export function removeCarrier(projectPath: string): CarrierRemoval {
   return {
     removed: true,
     path: target,
-    ...(claim.how === "marker" ? {} : { note: RECOVERY_NOTE[claim.how] }),
+    ...(claim.how === "marker" ? {} : { note: PAYLOAD_NOTE }),
   };
-}
-
-export function ensureCarrierIgnored(projectPath: string): {
-  entry: string | null;
-  state: "added" | "already-ignored" | "not-a-repo" | "failed";
-} {
-  const outcome = ensureProjectIgnored(projectPath, {
-    entry: `extensions/${CARRIER_DIR_NAME}/`,
-    aliases: [
-      `extensions/${CARRIER_DIR_NAME}`,
-      "extensions/",
-      "extensions",
-    ],
-    comment:
-      "# Extension.dev live-preview carrier: a local debug companion, not part of your extension.",
-  });
-
-  return { entry: outcome.state === "added" ? outcome.entry : null, state: outcome.state };
-}
-
-export type CarrierMaterialization = {
-  loaded: boolean;
-  path?: string;
-  note: string;
-  gitignored?: string;
-  gitignoreNote?: string;
-  limitations?: string[];
-  graduation?: string;
-  bridgeProtocol?: {
-    carrierExtensionId: string;
-    allowedOrigins: string;
-    howTo: string;
-    example: string;
-  };
-};
-
-function findBundledCarrier(engine: string): string | null {
-  let dir = path.dirname(fileURLToPath(import.meta.url));
-
-  for (let depth = 0; depth < 6; depth++) {
-    const candidate = path.join(dir, "extensions", "live-preview", engine);
-    if (fs.existsSync(path.join(candidate, "manifest.json"))) return candidate;
-
-    const parent = path.dirname(dir);
-    if (parent === dir) break;
-
-    dir = parent;
-  }
-
-  return null;
-}
-
-export function materializeCarrier(
-  projectPath: string,
-  browser: string,
-): CarrierMaterialization {
-  if (!isChromiumFamily(browser)) {
-    return {
-      loaded: false,
-      note:
-        `The live-preview carrier is Chromium-family only for now (requested: ${browser}). ` +
-        "Firefox has no externally_connectable channel for web pages, so the carrier pairing cannot work there.",
-    };
-  }
-
-  const source = findBundledCarrier("chromium");
-
-  if (!source) {
-    return {
-      loaded: false,
-      note: "This install ships no bundled carrier payload (extensions/live-preview/chromium missing from the package).",
-    };
-  }
-
-  const target = carrierPath(projectPath);
-  const marker = path.join(target, MARKER_FILE);
-  const claim = fs.existsSync(target)
-    ? claimCarrier(target)
-    : ({ ours: true, how: "marker" } as CarrierClaim);
-
-  if (!claim.ours) {
-    return {
-      loaded: false,
-      path: target,
-      note:
-        `A directory already exists at extensions/${CARRIER_DIR_NAME} that this tool did not place: ` +
-        `no ${MARKER_FILE} marker, no carrier manifest key, and files this package never ships. ` +
-        "It was left untouched. Rename it or move it out of ./extensions to let extension_dev place the carrier there.",
-    };
-  }
-
-  const carrierId = deriveCarrierId(source);
-
-  try {
-    fs.rmSync(target, { recursive: true, force: true });
-    fs.cpSync(source, target, { recursive: true });
-    const loopback = carrierLoopbackAllowed();
-    narrowPlacedManifest(target, loopback);
-    const manifest = JSON.parse(
-      fs.readFileSync(path.join(source, "manifest.json"), "utf-8"),
-    ) as { version?: string };
-    fs.writeFileSync(
-      marker,
-      `${JSON.stringify(
-        {
-          managedBy: "@extension.dev/mcp",
-          carrierVersion: manifest.version ?? "unknown",
-          note: "Safe to delete; extension_dev recreates it when carrier: true. extension_stop and extension_build remove it for you.",
-        },
-        null,
-        2,
-      )}\n`,
-    );
-
-    rememberCarrier(projectPath);
-    const ignoreOutcome = ensureCarrierIgnored(projectPath);
-    const ignored = ignoreOutcome.entry;
-    const ignoreNote =
-      ignoreOutcome.state === "failed"
-        ? `The carrier could NOT be added to this project's .gitignore (the file could not be written); it is in ./extensions unignored, so do not commit it.`
-        : null;
-
-    return {
-      loaded: true,
-      path: target,
-      ...(ignored ? { gitignored: ignored } : {}),
-      ...(ignoreNote ? { gitignoreNote: ignoreNote } : {}),
-      note:
-        `Live-preview carrier placed in ./extensions; Extension.js loads it as a companion beside your extension when it loads that folder (not with noBrowser, and not when the project configures its own extensions list, which this server does not read). ` +
-        `Open https://preview.extension.dev/ in the dev browser, load a build from this machine, and switch the lane toggle to Real ` +
-        `to watch the session's real-lane chrome.* trace on the Trace tab. ` +
-        `It is a debug companion, never part of a release: extension_stop and extension_build remove it again${ 
-        ignored ? `, and ${ignored} was added to .gitignore.` : "."}`,
-      limitations: [
-        "The trace shows calls a PAGE bridges to the carrier. Your extension's own chrome.* calls run directly in its contexts and never cross the carrier, so they do not appear.",
-        "Bridged calls run under the CARRIER's identity, not your extension's. The preview assumes a single active guest and does not namespace per-extension state, so storage, action/badge state, messaging delivery, offscreen documents and relative script paths belong to the carrier. Rows affected are badged carrier-scoped in the Trace tab.",
-        "Chromium-family only: Firefox has no externally_connectable channel for web pages.",
-      ],
-      graduation:
-        "The carrier lane is the SHARED real lane: bridged calls run as the carrier, by design (see limitations). Your guest is already loaded as ITSELF in this same session, so for its own storage, identity, badge and messaging (the isolated real thing), drive the guest directly instead of the carrier bridge: extension_storage, extension_eval and extension_dom_snapshot against this projectPath all operate on the guest as itself. Start (or replace) this session with allowControl: true (or allowEval: true) to unlock them. Use the carrier bridge for the shared real-lane TRACE; use the control verbs for the guest's OWN state.",
-      ...(carrierId
-        ? {
-            bridgeProtocol: {
-              carrierExtensionId: carrierId,
-              allowedOrigins: carrierAllowedOriginsSentence(loopback),
-              howTo:
-                "From a page on an allowed origin, register your guest once with a 'session' message (it declares the permissions the carrier enforces), then send 'bridge' messages to run chrome.* for real; each one streams into the Trace tab. Use the EXACT dotted wire names the bridge dispatcher accepts: storage is storage.get/set/remove/clear with the AREA AS AN ARGUMENT, NOT storage.local.get.",
-              example: [
-                `const id = '${carrierId}'`,
-                "const send = (msg) => new Promise((r) => chrome.runtime.sendMessage(id, msg, r))",
-                "await send({ type: 'extensiondev:session', extensionId: 'my-guest', permissions: ['storage'] })",
-                "await send({ type: 'extensiondev:bridge', request: { type: 'EXTENSION_BRIDGE_REQUEST', extensionId: 'my-guest', requestId: 'r1', api: 'storage.get', args: [null, 'local'] } })",
-              ].join("\n"),
-            },
-          }
-        : {}),
-    };
-  } catch (error) {
-    return {
-      loaded: false,
-      path: target,
-      note: `Could not place the carrier: ${error instanceof Error ? error.message : String(error)}`,
-    };
-  }
 }

@@ -12,8 +12,6 @@ import path from "node:path";
 
 import { directoryNotCreatedYet, sessionStateDir } from "./process-manager";
 
-const placedHere = new Set<string>();
-
 function recordDir(): string {
   return path.join(sessionStateDir(), "carriers");
 }
@@ -28,36 +26,13 @@ function recordPath(resolved: string): string {
   return path.join(recordDir(), `${digest}.json`);
 }
 
-export function rememberCarrier(projectPath: string): void {
-  const resolved = path.resolve(projectPath);
-  placedHere.add(resolved);
-
-  try {
-    fs.mkdirSync(recordDir(), { recursive: true });
-    fs.writeFileSync(
-      recordPath(resolved),
-      `${JSON.stringify({
-        projectPath: resolved,
-        pid: process.pid,
-        placedAt: new Date().toISOString(),
-      })}\n`,
-    );
-  } catch {
-  }
-}
-
 export function forgetCarrier(projectPath: string): void {
   const resolved = path.resolve(projectPath);
-  placedHere.delete(resolved);
 
   try {
     fs.rmSync(recordPath(resolved), { force: true });
   } catch {
   }
-}
-
-export function carriersPlacedHere(): string[] {
-  return [...placedHere];
 }
 
 export function readRememberedCarriers(): { carriers: string[]; unreadable: string | null } {

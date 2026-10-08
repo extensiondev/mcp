@@ -40,7 +40,6 @@
   "files": [
     "dist",
     "bin",
-    "extensions",
     "claude",
     ".claude-plugin",
     "server.json",

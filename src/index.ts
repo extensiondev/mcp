@@ -55,7 +55,6 @@ import {
   validateToolInput,
 } from "./lib/validate-input";
 import { envelope, isEnvelope } from "./lib/envelope";
-import { installCarrierExitCleanup } from "./lib/carrier-exit";
 import { fenceUntrusted } from "./lib/untrusted-fence";
 import {
   DEFAULT_SERVER_OPTIONS,
@@ -295,7 +294,6 @@ export function createServer(
 export async function startServer(
   options: ServerOptions = DEFAULT_SERVER_OPTIONS,
 ): Promise<void> {
-  installCarrierExitCleanup();
   if (options.project) process.env.EXTENSION_DEV_PROJECT = options.project;
 
   const server = createServer(options);

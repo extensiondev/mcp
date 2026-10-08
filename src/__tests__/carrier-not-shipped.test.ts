@@ -81,9 +81,7 @@ function storedZip(entries: Array<[string, string]>): Buffer {
   return Buffer.concat([body, central, eocd]);
 }
 
-const { CARRIER_DIR_NAME, materializeCarrier, removeCarrier } = await import(
-  "../lib/carrier"
-);
+const { CARRIER_DIR_NAME, removeCarrier } = await import("../lib/carrier");
 
 const MARKER = "managed-by-extension-dev-mcp.json";
 const tmpDirs: string[] = [];
@@ -348,60 +346,5 @@ describe("extension_stop", () => {
     const outcome = await stop.stopOne(dir, "chrome");
     expect(outcome.carrierRemoved).toBe(carrierDir(dir));
     expect(fs.existsSync(carrierDir(dir))).toBe(false);
-  });
-});
-
-describe("materializeCarrier", () => {
-  it("gitignores itself in a git project so the first add -A cannot vendor it", () => {
-    const dir = project();
-    fs.mkdirSync(path.join(dir, ".git"));
-    const result = materializeCarrier(dir, "chrome");
-    expect(result.loaded).toBe(true);
-    expect(result.gitignored).toBe(`extensions/${CARRIER_DIR_NAME}/`);
-    expect(fs.readFileSync(path.join(dir, ".gitignore"), "utf-8")).toContain(
-      `extensions/${CARRIER_DIR_NAME}/`,
-    );
-
-    materializeCarrier(dir, "chrome");
-    const lines = fs
-      .readFileSync(path.join(dir, ".gitignore"), "utf-8")
-      .split("\n")
-      .filter((line) => line.trim() === `extensions/${CARRIER_DIR_NAME}/`);
-    expect(lines).toHaveLength(1);
-  });
-
-  it("respects a project that already ignores the whole folder", () => {
-    const dir = project();
-    fs.mkdirSync(path.join(dir, ".git"));
-    fs.writeFileSync(path.join(dir, ".gitignore"), "node_modules\nextensions/\n");
-    const result = materializeCarrier(dir, "chrome");
-    expect(result.gitignored).toBeUndefined();
-    expect(fs.readFileSync(path.join(dir, ".gitignore"), "utf-8")).toBe(
-      "node_modules\nextensions/\n",
-    );
-  });
-
-  it("says so when the .gitignore could not be written", () => {
-    if (process.platform === "win32" || process.getuid?.() === 0) return;
-
-    const dir = project();
-    fs.mkdirSync(path.join(dir, ".git"));
-    fs.writeFileSync(path.join(dir, ".gitignore"), "node_modules\n");
-    fs.chmodSync(path.join(dir, ".gitignore"), 0o444);
-
-    try {
-      const result = materializeCarrier(dir, "chrome");
-      expect(result.loaded).toBe(true);
-      expect(result.gitignored).toBeUndefined();
-      expect(result.gitignoreNote).toContain("could NOT be added");
-    } finally {
-      fs.chmodSync(path.join(dir, ".gitignore"), 0o644);
-    }
-  });
-
-  it("writes no .gitignore into a project that is not a git repo", () => {
-    const dir = project();
-    expect(materializeCarrier(dir, "chrome").loaded).toBe(true);
-    expect(fs.existsSync(path.join(dir, ".gitignore"))).toBe(false);
   });
 });
