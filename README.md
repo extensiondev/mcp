@@ -209,7 +209,7 @@ Each check comes back `pass`, `fail` or `inconclusive`, and the run passes only 
 
 ## Safari
 
-A Safari dev session runs on the same bridge as every other engine: on Extension.js 4.1.28 or newer, `extension_dev` with `browser: "safari"` (macOS with Xcode) builds the app, opens it, reloads it on every save and streams its logs. Safari's MV3 background CSP blocks eval, there is no CDP or RDP path for `extension_inspect`, and opening a tab needs a safaridriver session; the limits are listed under [Safari](https://docs.extension.dev/tools/mcp/safari).
+A Safari dev session runs on the same bridge as every other engine: on Extension.js 4.1.21 or newer, `extension_dev` with `browser: "safari"` (macOS with Xcode) builds the app, opens it, reloads it on every save and streams its logs. Safari's MV3 background CSP blocks eval, there is no CDP or RDP path for `extension_inspect`, and opening a tab needs a safaridriver session; the limits are listed under [Safari](https://docs.extension.dev/tools/mcp/safari).
 
 ## Platform (private alpha)
 

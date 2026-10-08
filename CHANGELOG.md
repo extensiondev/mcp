@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- The `extension_logs` hint for a Safari session with no log file, the
+  README, the rules and the `/extension debug` command name 4.1.21 as the
+  Extension.js floor for Safari log streaming in place of 4.1.28, which no
+  engine change backed (that number is the `navigate` verb's canary). The
+  engine first streamed Safari background and content lines through the
+  bridge in v4.1.20 (#533, the webkit background patch that stops Safari
+  from skipping the MV3 worker), and v4.1.21 (#566) gave the dev-injected
+  background of a project with no background of its own the same shape,
+  so 4.1.21 is the first release where every project streams.
 - `extension_build` always answers `outputPath`, the folder it checked the
   manifest in: the engine's reported path when the summary carries one, else
   `dist/<browser>` under the package root. On an engine older than the

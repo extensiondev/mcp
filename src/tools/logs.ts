@@ -623,7 +623,7 @@ export async function handler(args: LogsArgs): Promise<string> {
         code: "E_LOGS_MISSING",
         message: `No logs found at ${logsPath(args.projectPath, browser)}, and ${browser} has no CDP or RDP to read instead.`,
       },
-      hint: "Safari logs arrive through the extension's bridge to the dev server, with background and content contexts, once the extension is enabled and a dev session from an Extension.js that streams Safari logs (4.1.28 or newer) is running. Start extension_dev --browser=safari, enable the extension in Safari > Settings > Extensions, then read again. The page a content script changes is also readable with extension_eval (context: 'page') or extension_assert content-script-injected.",
+      hint: "Safari logs arrive through the extension's bridge to the dev server, with background and content contexts, once the extension is enabled and a dev session from an Extension.js that streams Safari logs (4.1.21 or newer) is running. Start extension_dev --browser=safari, enable the extension in Safari > Settings > Extensions, then read again. The page a content script changes is also readable with extension_eval (context: 'page') or extension_assert content-script-injected.",
     });
   }
 

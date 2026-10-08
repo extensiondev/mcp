@@ -33,7 +33,7 @@ Debug the currently running extension dev session. The user said: $ARGUMENTS
 
    To see what else is loaded in the browser (Chromium): `extension_list_extensions`.
 
-   **Safari sessions** (Extension.js 4.1.28+) have no CDP, but the bridge works once the extension is enabled in Safari: `extension_logs`, `extension_storage`, `extension_reload`, `extension_open` for surfaces, `extension_dom_snapshot` by tab id, and the assertions (`surface-rendered` reads the surface through the relay there). `extension_eval` in `content` or `page` needs a tab the user already opened at the url; `extension_open` with `url` and `extension_eval` in `background` are blocked by Safari's MV3 background CSP. `extension_inspect` has no Safari path. Apple's `safari-mcp` can read a page in its own window beside the dev session; neither it nor this server can open the popup or background page, which stay Web Inspector, attended.
+   **Safari sessions** (Extension.js 4.1.21+) have no CDP, but the bridge works once the extension is enabled in Safari: `extension_logs`, `extension_storage`, `extension_reload`, `extension_open` for surfaces, `extension_dom_snapshot` by tab id, and the assertions (`surface-rendered` reads the surface through the relay there). `extension_eval` in `content` or `page` needs a tab the user already opened at the url; `extension_open` with `url` and `extension_eval` in `background` are blocked by Safari's MV3 background CSP. `extension_inspect` has no Safari path. Apple's `safari-mcp` can read a page in its own window beside the dev session; neither it nor this server can open the popup or background page, which stay Web Inspector, attended.
 
 4. **Diagnose common issues**
    Based on what you find, check for:
