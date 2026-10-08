@@ -129,7 +129,7 @@ A refused call answers `E_TOOL_DISABLED` with the flag to change. Human approval
 
 ### Telemetry
 
-`extension_create` sends one `draft_seeded` event to PostHog at `us.i.posthog.com` after a successful scaffold (template slug, source and commit, a random per-install id, never a path or a name); nothing else sends anything. `EXTENSION_DEV_NO_TELEMETRY=1` or `DO_NOT_TRACK=1` turns it off. The full payload is listed under [Telemetry](https://docs.extension.dev/tools/mcp/flags#telemetry).
+`extension_create` sends one `draft_seeded` event to PostHog at `us.i.posthog.com` after a successful scaffold (template slug, source and commit, a random per-process session id, never a path or a name), and the platform tools send a per-install id header with their calls. `EXTENSION_DEV_NO_TELEMETRY=1` or `DO_NOT_TRACK=1` stops both. The full payload is listed under [Telemetry](https://docs.extension.dev/tools/mcp/flags#telemetry).
 
 ### Pair with the skill
 
