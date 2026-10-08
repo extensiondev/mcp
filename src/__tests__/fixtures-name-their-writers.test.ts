@@ -1,12 +1,13 @@
 import fs from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
 
 import { ENGINE_WRITERS } from "./fixtures/engine-answers";
 
 const engineDist = path.resolve(
-  path.dirname(new URL(import.meta.url).pathname),
+  path.dirname(fileURLToPath(import.meta.url)),
   "../../node_modules/extension-develop/dist",
 );
 

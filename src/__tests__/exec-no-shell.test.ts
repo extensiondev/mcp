@@ -6,6 +6,8 @@ import { describe, it, expect } from "vitest";
 
 import { runExtensionCli } from "../lib/exec";
 
+const posixOnly = process.platform === "win32" ? it.skip : it;
+
 const execSource = fs.readFileSync(
   new URL("../lib/exec.ts", import.meta.url),
   "utf8",
@@ -30,7 +32,7 @@ describe("exec.ts spawns the engine without a shell", () => {
     expect(/shell\s*:\s*true/.test(execSource)).toBe(false);
   });
 
-  it("hands shell metacharacters to the engine as one argument instead of interpreting them", async () => {
+  posixOnly("hands shell metacharacters to the engine as one argument instead of interpreting them (Windows runs the .cmd shim through cmd.exe by design)", async () => {
     const { project, argvFile } = projectWithRecordingEngine();
     const marker = path.join(project, "touched-by-a-shell");
 
