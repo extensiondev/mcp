@@ -1,8 +1,3 @@
-/* @invariant
-  * "valid" is said only for what was checked. References are checked in every
-  * requested browser's view, an unknown target is refused, the default build
-  * target's issues block, and the permission scan says when it stopped.
-  */
 
 import fs from "node:fs";
 import os from "node:os";
@@ -45,7 +40,7 @@ afterEach(() => {
 const validate = (projectPath: string, browsers?: string[]) =>
   manifestValidate.handler({ projectPath, ...(browsers ? { browsers } : {}) }).then((s) => JSON.parse(s));
 
-describe("75a: references are checked in each requested browser's view", () => {
+describe("references are checked in each requested browser's view", () => {
   const BASE = { "chromium:manifest_version": 3, "firefox:manifest_version": 2, name: "F", version: "1.0.0" };
 
   it("blocks a Firefox-only validation on a missing firefox: panel", async () => {
@@ -72,7 +67,7 @@ describe("75a: references are checked in each requested browser's view", () => {
   });
 });
 
-describe("75b: an unknown browser is refused, an empty list is the default list", () => {
+describe("an unknown browser is refused, an empty list is the default list", () => {
   const MV3 = { manifest_version: 3, name: "x", version: "1.0.0" };
 
   it("refuses a capitalised or misspelled target instead of passing it unchecked", async () => {
@@ -97,7 +92,7 @@ describe("75b: an unknown browser is refused, an empty list is the default list"
   });
 });
 
-describe("75c: the default build target's issues stay blocking", () => {
+describe("the default build target's issues stay blocking", () => {
   it("answers invalid for a chrome issue when no browsers were passed, as the chrome build would", async () => {
     const dir = project(
       { manifest_version: 3, name: "x", version: "1.0.0", side_panel: { default_path: "panel.html" } },
@@ -112,7 +107,7 @@ describe("75c: the default build target's issues stay blocking", () => {
   });
 });
 
-describe("75d: the permission scan reaches src/ first and says when it stopped", () => {
+describe("the permission scan reaches src/ first and says when it stopped", () => {
   it("finds the crash-level API under src/ past 301 files that sort before it, and reports the cap", async () => {
     const dir = project(
       { manifest_version: 3, name: "x", version: "1.0.0" },

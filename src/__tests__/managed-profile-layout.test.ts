@@ -44,10 +44,6 @@ function engineDistFiles(): string[] {
   return out;
 }
 
-/* @invariant The test that did not exist. dist/extension-profile-<browser> was
-   never checked against the engine, only against other copies of the same guess,
-   so every fixture agreed with the code and the code agreed with nothing. This
-   reads the engine artifact that is actually installed and asks it. */
 describe("the managed profile root matches the engine that is installed", () => {
   it("hangs the profiles root off the engine's own session-artifacts helper", () => {
     expect(profilesRootDir(PROJECT)).toBe(
@@ -91,11 +87,6 @@ describe("the managed profile root matches the engine that is installed", () => 
     }
   });
 
-  /* @invariant The browser root is the deepest thing this package may claim to
-     know. The run directory below it is "dev" for a persisted profile and three
-     freshly drawn random words for an ephemeral one, so a helper that returned a
-     full profile path would be inventing the one segment the engine alone can
-     name. */
   it("stops one level above the run directory the engine names at random", () => {
     const root = browserProfileRootDir(PROJECT, "chrome");
 
@@ -129,10 +120,6 @@ describe("the profile-locked remediation names a path that can exist", () => {
     expect(advice).not.toContain("extension-profile-");
   });
 
-  /* @invariant Naming the root is only half of it. The advice has to say how to
-     find the run directory inside, because a user who is told to remove a
-     literal that turns out not to exist deletes nothing and concludes the tool
-     is lying to them, which is what the old sentence did. */
   it("tells the caller to look inside rather than asserting a run directory", () => {
     const root = browserProfileRootDir(PROJECT, "chrome");
     const advice = profileRemediation({

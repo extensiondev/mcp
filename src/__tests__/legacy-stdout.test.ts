@@ -85,19 +85,7 @@ describe("the capability probe", () => {
   });
 });
 
-/* @invariant What the exemption in no-prose-scraping is actually buying, asserted
-   rather than argued. The probe keys on `schema: 1`, and the engine did not stamp
-   that field until 4.0.17, so 4.0.17 is the floor for BOTH scrapes: the compile
-   one and the profile-lock one alike. Every release before it, which is every
-   release a user's project is likely to already have, lands in the branch below.
-
-   These are the tests to read before deleting lib/legacy-stdout.ts. The day the
-   oldest engine worth supporting stamps schema:1, "an old contract" stops being
-   reachable, the first two cases here become unreproducible, and the module and
-   its exemption can go together. Until then a green run here is the evidence
-   that removing them would silently downgrade a real diagnosis to "started
-   fine". */
-describe("the scrapes are still reachable, and only below the schema-1 floor", () => {
+describe("the scrapes are still reachable, and only below the 4.0.17 schema-1 floor", () => {
   const tmpDirs: string[] = [];
 
   afterEach(() => {
@@ -174,12 +162,6 @@ describe("the scrapes are still reachable, and only below the schema-1 floor", (
     expect(reading.warnings).toEqual([]);
   });
 
-  /* @invariant The two contract fixtures sit either side of the floor, and this
-     is what stops them drifting into each other. The pre-schema-1 one is not a
-     hypothetical shape: it is what every release before 4.0.17 writes, and the
-     probe must read it as "cannot carry the detail" rather than as "do not
-     believe it". Adding schema:1 to it would make the case it exists to cover
-     unreachable while every test that uses it stayed green. */
   it("keeps one fixture below the floor and one above it", () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-legacy-fixture-"));
     tmpDirs.push(dir);
@@ -196,21 +178,6 @@ describe("the scrapes are still reachable, and only below the schema-1 floor", (
     expect(above.status).toBe("error");
   });
 
-  /* @invariant The floor is a claim about the USER'S engine, not about the pin.
-     The pin is comfortably above it, which is exactly why the pin cannot be the
-     thing that retires the module: this server drives whatever
-     node_modules/.bin/extension the project has.
-
-     The version is read through a semver release match because CI pins the
-     canary tag, whose versions carry a prerelease suffix
-     (4.0.20-canary.<ts>.<sha>). Splitting on "." made patch the string
-     "20-canary", Number() made it NaN, and the comparison below failed with
-     "expected NaN to be greater than or equal to 4000017" every night the
-     canary lane ran. The guard that was supposed to catch that,
-     expect([major, minor, patch]).not.toContain(NaN), CANNOT catch it:
-     toContain compares with ===, and NaN === NaN is false, so it passed on
-     [4, 0, NaN]. Measured, not reasoned about. A version that does not match
-     the release shape now throws by name instead of arriving as NaN. */
   it("pins an engine above the floor, and still cannot assume the project runs it", () => {
     const installed = JSON.parse(
       fs.readFileSync(

@@ -20,10 +20,6 @@ import {
 const API = "https://www.extension.dev";
 const HEX_128 = /^[0-9a-f]{32}$/;
 
-/* @invariant The wire names are spelled out rather than imported, because the reader of
-   these headers lives in another repo. Importing the constants from the module
-   under test made a rename update the assertion with it, so the one change
-   that actually breaks the server was the one this file could not see. */
 const WIRE_INSTALL_HEADER = "x-extensiondev-install";
 const WIRE_SESSION_HEADER = "x-extensiondev-session";
 const WIRE_TOOL_HEADER = "x-extensiondev-tool";
@@ -76,7 +72,7 @@ function tmpDist(): string {
   return dir;
 }
 
-describe("the six legs that terminate at www", () => {
+describe("the six legs that terminate at www, their header names spelled as www reads them rather than imported", () => {
   let configDir: string;
   let prevXdg: string | undefined;
   let prevToken: string | undefined;

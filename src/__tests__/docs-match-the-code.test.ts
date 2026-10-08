@@ -1,8 +1,3 @@
-/* @invariant
-  * the shipped docs validate against the schemas the server registers, the
-  * tool reference is generated from them, and the numbers the docs quote are
-  * the code's. Each cell failed before its fix.
-  */
 
 import fs from "node:fs";
 import { createRequire } from "node:module";
@@ -46,7 +41,7 @@ function looseJson(objectText: string): Record<string, unknown> | null {
   }
 }
 
-describe("109: the docs say what the code does", () => {
+describe("the docs say what the code does", () => {
   it("renders the tool reference from the schemas, and the file on disk is that rendering", () => {
     const rendered = `${renderToolsDoc(tools.map((t) => t.schema))  }\n`;
 

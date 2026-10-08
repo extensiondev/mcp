@@ -35,24 +35,6 @@ interface Pin {
 
 const pin: Pin = JSON.parse(fs.readFileSync(pinFile, "utf8"));
 
-/* @invariant THE UPSTREAM LEG NEVER SKIPS ITSELF INTO A GREEN.
- *
- * Same shape as store-md-contract.test.ts, and for the same reason. The
- * monorepo is detected by the file that DECLARES this package, its .gitmodules,
- * never by the upstream's own presence: declared and absent is a FAILURE that
- * names the missing path, while an ancestor that declares nothing is the
- * standalone package repo, where the pin is asserted non-degenerate instead of
- * quietly waved through.
- *
- * The pin deliberately does NOT hash the upstream file. store-md ports a parser
- * whose every byte decides an answer; what is ported here is a grammar, and the
- * upstream is a young package whose prose and evidence fields move weekly. A
- * byte hash would go red for a reworded title, which trains a reader to
- * regenerate the pin without reading it. What is pinned instead is the part a
- * consumer can be wrong about: the outcome vocabulary, the shape of a check and
- * of a document, and the aggregation rule, each asserted against the upstream's
- * OWN code rather than against a copy of its output.
- */
 const SELF_SUBMODULE = "packages/public-extensiondev-mcp";
 
 const findDeclaringRoot = (): string | null => {
@@ -118,7 +100,7 @@ const someChecks = (outcomes: CheckOutcome[]): CheckResult[] =>
     return outcome === "skipped" ? { ...check, outcome } : check;
   });
 
-describe("the ported verdict grammar is internally sound", () => {
+describe("the ported verdict grammar is internally sound and pinned to the upstream's own code, not a byte hash", () => {
   it("declares every check with the pinned declaration keys", () => {
     expect(ASSERT_CHECKS.length).toBeGreaterThan(0);
 
@@ -263,11 +245,6 @@ describe("the ported grammar against @extension.dev/preview-verdict", () => {
     }
   });
 
-  /* @invariant The aggregation rule is compared against the upstream's OWN
-     verifier rather than against a table someone typed, so "a failure outranks
-     an unresolved check, an unresolved check outranks a pass" cannot drift on
-     one side only. The upstream document is built over ITS required ids so its
-     coverage rule is satisfied and the only thing being compared is the rule. */
   it("aggregates outcomes exactly as the upstream verifier recomputes them", async () => {
     if (!monorepoRoot) return;
 
@@ -356,9 +333,6 @@ describe("the ported grammar against @extension.dev/preview-verdict", () => {
     }
   });
 
-  /* @invariant Divergence 1, asserted rather than described. A document from
-     this lane must be REJECTED by the upstream verifier, so no CI can pin the
-     preview contract and be handed a live-browser verdict that satisfies it. */
   it("produces a document the upstream verifier refuses to accept as its own", async () => {
     if (!monorepoRoot) return;
 

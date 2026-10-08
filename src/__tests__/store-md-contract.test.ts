@@ -31,18 +31,6 @@ const fixtures = fs
 const read = (name: string): string =>
   fs.readFileSync(path.join(fixturesDir, name), "utf8");
 
-/* @invariant THE UPSTREAM LEG NEVER SKIPS ITSELF INTO A GREEN.
- *
- * @extension.dev/deploy is private under C11, so the public MCP cannot depend
- * on it and its source is reachable only from a monorepo checkout. A plain
- * `if (exists) test()` would therefore pass by not running the day somebody
- * forgets the submodule, which is the exact false-green this contract is
- * built to prevent. So the monorepo is detected by the file that DECLARES the
- * upstream, its .gitmodules, and never by the upstream's own presence:
- * declared and absent is a FAILURE that names the missing checkout, while an
- * ancestor that declares nothing is the standalone package repo, where the pin
- * is asserted to be non-degenerate instead of quietly waved through.
- */
 const UPSTREAM_SUBMODULE = "packages/extensiondev-deploy";
 
 const findDeclaringRoot = (): string | null => {
@@ -67,7 +55,7 @@ const upstreamFile = monorepoRoot
   ? path.join(monorepoRoot, UPSTREAM_SUBMODULE, pin.upstreamPath)
   : null;
 
-describe("STORE.md contract corpus", () => {
+describe("STORE.md contract corpus, where an upstream declared in .gitmodules and absent is a failure, never a skip", () => {
   it("holds every fixture the pin was generated over", () => {
     expect(fixtures).toHaveLength(pin.fixtureCount);
     expect(fixtures.length).toBeGreaterThan(0);

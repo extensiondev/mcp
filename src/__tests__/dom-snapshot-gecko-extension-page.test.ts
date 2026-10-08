@@ -67,8 +67,6 @@ const domSnapshot = await import("../tools/dom-snapshot");
 
 const PANEL = "moz-extension://1e5c8097-57a9-4052-bd54-d5d37a7086de/pages/panel.html";
 
-/* @invariant Firefox's own answer to an injection into a page inside the extension,
-   whatever host permissions the manifest holds. */
 const missingHostPermission = () =>
   envelope({
     ok: false,

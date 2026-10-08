@@ -100,7 +100,7 @@ afterAll(() => {
   fs.rmSync(sessionDir, { recursive: true, force: true });
 });
 
-describe("Reaped means confirmed gone", () => {
+describe("reaped means confirmed gone", () => {
   posixOnly(
     "reports a holder that survived the kill apart from the reaped list",
     async () => {
@@ -153,11 +153,7 @@ describe("Reaped means confirmed gone", () => {
   );
 });
 
-/* @invariant Windows stop reads its own process table. pgrep and ps fail here
-   as they do on Windows, so a pass cannot come from the host's own pgrep;
-   powershell and tasklist answer from the table each cell sets, and taskkill
-   really kills the holder. */
-describe("A Windows stop can verify what it ended", () => {
+describe("a Windows stop verifies what it ended from its own process table", () => {
   function onWindows<T>(run: () => Promise<T>): Promise<T> {
     const platform = Object.getOwnPropertyDescriptor(process, "platform")!;
     Object.defineProperty(process, "platform", { value: "win32" });
@@ -228,7 +224,7 @@ describe("A Windows stop can verify what it ended", () => {
   );
 });
 
-describe("A marker that did not land is said", () => {
+describe("a marker that did not land is said", () => {
   it("returns a warning when the marker directory cannot be written", () => {
     const blocker = path.join(tmpProject(), "not-a-dir");
     fs.writeFileSync(blocker, "");
@@ -255,7 +251,7 @@ describe("A marker that did not land is said", () => {
   });
 });
 
-describe("Release promote exits non-zero on an unreadable answer", () => {
+describe("release promote exits non-zero on an unreadable answer", () => {
   it("exits 1 when the handler output is not an envelope", async () => {
     vi.spyOn(releasePromote, "handler").mockResolvedValue("<html>gateway</html>");
     vi.spyOn(process.stderr, "write").mockImplementation(() => true);

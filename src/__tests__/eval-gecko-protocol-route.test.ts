@@ -95,9 +95,6 @@ const MV2 = { manifest_version: 2, name: "F", background: { scripts: ["bg.js"] }
 
 const BASE = "moz-extension://1e5c8097-57a9-4052-bd54-d5d37a7086de/";
 
-/* @invariant What Extension.js 4.1.31 answers when the document's policy stops the eval
-   it was asked to run: the code is its own from that release on, where older
-   engines said E_EVAL with the same message. */
 const refusedByCsp = (name = "EvalError") =>
   envelope({
     ok: false,

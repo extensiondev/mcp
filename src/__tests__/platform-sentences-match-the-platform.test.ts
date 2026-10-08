@@ -1,7 +1,3 @@
-/* @invariant
-  * what submit, publish, shares and the registry readers say about the
-  * platform is what the platform does. Each cell failed before its fix.
-  */
 
 import fs from "node:fs";
 import os from "node:os";
@@ -24,7 +20,7 @@ function jsonResponse(body: unknown, ok = true, status = 200): Response {
   return { ok, status, headers: { get: () => null }, text: async () => JSON.stringify(body) } as unknown as Response;
 }
 
-describe("103: submit says what the platform checks and answers", () => {
+describe("submit says what the platform checks and answers", () => {
   let tmp = "";
   const saved: Record<string, string | undefined> = {};
   let prevFetch: typeof fetch;
@@ -148,7 +144,7 @@ describe("103: submit says what the platform checks and answers", () => {
   });
 });
 
-describe("104: publish, promote, builds, the share probe and the grant refusal", () => {
+describe("publish, promote, builds, the share probe and the grant refusal", () => {
   it("publish and promote describe the platform's actual sha and browser handling", () => {
     const buildSha = (publishSchema.inputSchema.properties as Record<string, { description: string }>).buildSha.description;
     expect(buildSha).toMatch(/echoes the sha back/);

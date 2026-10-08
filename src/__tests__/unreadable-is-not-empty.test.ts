@@ -1,8 +1,3 @@
-/* @invariant
-  * a read that threw is said as unreadable, with why, never reported as an
-  * empty list that sends the agent after the wrong fix. Each cell here failed
-  * before its fix.
-  */
 
 import crypto from "node:crypto";
 import fs from "node:fs";
@@ -165,7 +160,7 @@ function chromeProject(manifest: Record<string, unknown>): { dir: string; id: st
   return { dir, id: expectedId(distPath) };
 }
 
-describe("session markers and carrier records", () => {
+describe("a read that threw is unreadable with its reason, never an empty list: session markers and carrier records", () => {
   it("says the marker directory could not be read instead of listing nothing", () => {
     const file = path.join(tmpDir("mcp-markers-"), "sessions");
     fs.writeFileSync(file, "not a directory");

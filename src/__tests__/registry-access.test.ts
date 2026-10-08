@@ -11,9 +11,6 @@ import {
   withAccessToken,
 } from "../lib/registry-access";
 
-/* @invariant The real credential store answers: each cell writes its login to
-   a temporary config directory and the shipped readers resolve it, so expiry
-   and selection are the code's own. */
 const STORED: StoredCredentials = {
   version: 1,
   token: "stored-long-lived-token",

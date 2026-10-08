@@ -69,13 +69,6 @@ describe("the engine publishes the ready-contract reader", () => {
   });
 });
 
-/* @invariant Deleting that copy is only safe if the engine's version answers
-   every one of them identically, so each case below is written as the
-   behaviour the deleted code had, not as a description of the engine. A
-   future engine that starts returning a partial object where the copy
-   returned null would make readFromStream dial ws://127.0.0.1:undefined and
-   report a transport failure instead of "no active control channel", which is
-   the wrong diagnosis for a session that never opened one. */
 describe("the engine's reader on every edge the deleted copy covered", () => {
   it("returns null when no contract has ever been written", () => {
     expect(readReadyContract(tmpProject(), "chrome")).toBeNull();
@@ -210,10 +203,6 @@ describe("tools/logs.ts reads the contract through the engine, with no copy left
     );
   });
 
-  /* @invariant The refusal a follow read gives when the contract cannot name a
-     control channel. Every null case above lands here, and it has to keep saying
-     "no active control channel" and pointing at extension_dev: a caller told
-     instead that a socket failed goes looking for a port that was never opened. */
   for (const [label, body] of [
     ["a contract with no control port", { status: "ready", instanceId: "i" }],
     [
@@ -268,24 +257,7 @@ describe("tools/logs.ts reads the contract through the engine, with no copy left
   }, 15000);
 });
 
-/* @invariant Why tools/doctor.ts does NOT share the reader above, stated as a
-   falsifiable claim so it fails the day it stops being true.
-
-   The engine's reader exists to answer one question: can this process dial the
-   control channel. It therefore returns null whenever controlPort is not a
-   number or instanceId is missing, and it drops every field doctor's verdict is
-   built from (code, errors, message). Both are correct for a follow read and
-   both are wrong for a diagnosis.
-
-   The shape that proves it is a session that compiled with errors and has no
-   control port. That is not a hypothetical: the engine's dev server catches a
-   failure to bind the control server and keeps running with bridgeControlPort
-   left at null, and a one-shot `extension build` receipt never sets one at all.
-   In both cases ready.json says status:"error" and carries the compile errors,
-   and in both cases the engine's reader answers null. Routing doctor through it
-   would silently drop the runtime-errors check on exactly the session the caller
-   ran doctor to understand, and report healthy. */
-describe("tools/doctor.ts keeps its own reader, and this is the difference", () => {
+describe("tools/doctor.ts keeps its own reader: the engine's answers null for a session with compile errors and no control port, which doctor must still diagnose", () => {
   const erroredWithNoBridge = {
     schemaVersion: 2,
     schema: 1,

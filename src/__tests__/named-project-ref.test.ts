@@ -45,13 +45,6 @@ function json(body: unknown, status = 200): Response {
   });
 }
 
-/* @invariant
-  * several logins stored, the newest one active, and a token-scoped call that
-  * names an older one. The registry stub answers every project's build index
-  * with that project's own slug baked into the sha and version, so an answer
-  * filled from the wrong project's index is visible in the data and not only
-  * in the address.
-  */
 function platform(routes: {
   publish?: Record<string, unknown>;
   promote?: { status: number; body: Record<string, unknown> };

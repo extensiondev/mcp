@@ -1,17 +1,6 @@
-/* @invariant THESE ARE THE PLATFORM'S REAL ANSWERS, KEY FOR KEY. Each builder
- * returns the body the named www handler sends today, so a test that wants a
- * success feeds the client what production feeds it, and a test that wants a
- * degraded or shapeless answer has to say which key it changed. A bare
- * `{ ok: true }` is not an answer the platform gives, and tests that fed one
- * are how "any 2xx is success" went unseen. When a handler's body changes,
- * this file changes with it.
- */
 
 type Body = Record<string, unknown>;
 
-/* @invariant www: src/app/api/projects/[projectId]/releases/releases-route.create.ts,
- * the 200 at the end of the create handler, reached through
- * /api/cli/release/promote. All browsers failing is a 500, never this body. */
 export function promoteAnswer(overrides: Body = {}): Body {
   return {
     ok: true,
@@ -30,9 +19,6 @@ export function promoteAnswer(overrides: Body = {}): Body {
   };
 }
 
-/* @invariant www: src/app/api/clone/core/create-project-from-clone/seed-and-build.ts,
- * the one-body 200 of a freshly created project, reached through
- * /api/cli/projects/create. The MCP lane's success extras add the token keys. */
 export function projectCreatedAnswer(overrides: Body = {}): Body {
   return {
     success: true,
@@ -46,10 +32,6 @@ export function projectCreatedAnswer(overrides: Body = {}): Body {
   };
 }
 
-/* @invariant www: src/app/api/cli/stores/submit/route.ts, the 200 of a real submission
- * (dryRun false): one row per store dispatched, in the order asked, each
- * recorded as pending. The stores are dispatched one at a time, so a failure
- * mid-list is an error answer after earlier stores were already dispatched. */
 export function submitAnswer(
   stores: string[] = ["chrome"],
   overrides: Body = {},
@@ -77,11 +59,6 @@ export function submitAnswer(
   };
 }
 
-/* @invariant www: src/app/api/cli/publish/route.ts, the 200 of a private project: the
- * share URL, the served build (null fields when the project has no successful
- * build or the index could not be read), the token-bearing preview commands
- * and the expiry. A public project answers the same keys with no expiry and
- * token-less commands. */
 export function publishAnswer(overrides: Body = {}): Body {
   return {
     shareUrl: "https://preview.extension.dev/?preview=gen_0123456789abcdef0123456789abcdef",
@@ -97,9 +74,6 @@ export function publishAnswer(overrides: Body = {}): Body {
   };
 }
 
-/* @invariant www: src/app/api/cli/approvals/[approvalId]/route.ts, the record a verify
- * reads: the status, the fingerprint of the action it was granted for, its
- * expiry and whether it has been spent. */
 export function approvalRecord(fingerprint: string, overrides: Body = {}): Body {
   return {
     approvalId: "apr_1",
@@ -110,3 +84,11 @@ export function approvalRecord(fingerprint: string, overrides: Body = {}): Body 
     ...overrides,
   };
 }
+
+export const PLATFORM_WRITERS = {
+  promoteAnswer: "www src/app/api/projects/[projectId]/releases/releases-route.create.ts via /api/cli/release/promote",
+  projectCreatedAnswer: "www src/app/api/clone/core/create-project-from-clone/seed-and-build.ts via /api/cli/projects/create",
+  submitAnswer: "www src/app/api/cli/stores/submit/route.ts, one row per store, dispatched one at a time",
+  publishAnswer: "www src/app/api/cli/publish/route.ts, private project 200; a public project answers the same keys with no expiry",
+  approvalRecord: "www src/app/api/cli/approvals/[approvalId]/route.ts, the record a verify reads",
+} as const;

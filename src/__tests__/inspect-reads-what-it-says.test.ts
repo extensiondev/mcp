@@ -1,11 +1,6 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 
 import type * as CdpModule from "../lib/cdp";
-/* @invariant
-  * the inspect envelope names the document it read, a throw is a failed
-  * section and never an empty value, an uncaught exception counts as a
-  * console error, and every cap is said. Each cell failed before its fix.
-  */
 
 const cdp = vi.hoisted(() => ({
   order: [] as string[],
@@ -93,7 +88,7 @@ beforeEach(() => {
   cdp.domSnapshot = { nodes: [{ tag: "html", depth: 0 }], truncated: false, totalElements: 1 };
 });
 
-describe("71a: the envelope names the document that was read", () => {
+describe("the envelope names the document that was read", () => {
   it("reports the landed url and title after navigating, with the requested url beside it", async () => {
     const out = JSON.parse(await handler({ projectPath: "/p", browser: "chrome", url: "https://other.test/", include: [] }));
     expect(out.ok).toBe(true);
@@ -119,7 +114,7 @@ describe("71a: the envelope names the document that was read", () => {
   });
 });
 
-describe("102g: a navigating inspect reads the new document's console only", () => {
+describe("a navigating inspect reads the new document's console only", () => {
   it("drops the previous document's console before navigating", async () => {
     await handler({ projectPath: "/p", browser: "chrome", url: "https://other.test/", include: ["console"] });
     expect(cdp.order).toEqual(["resetConsole", "navigate"]);
@@ -131,7 +126,7 @@ describe("102g: a navigating inspect reads the new document's console only", () 
   });
 });
 
-describe("71c: a section that threw is named, never emptied", () => {
+describe("a section that threw is named, never emptied", () => {
   it("answers inspected-partially with the failed section and a null value", async () => {
     cdp.metaThrows = "the page threw while evaluating: TypeError: x is not a function";
     const out = JSON.parse(await handler({ projectPath: "/p", browser: "chrome", include: ["meta", "html"] }));
@@ -155,7 +150,7 @@ describe("71c: a section that threw is named, never emptied", () => {
   });
 });
 
-describe("71b: an uncaught exception is a console error", () => {
+describe("an uncaught exception is a console error", () => {
   it("counts Runtime.exceptionThrown in the summary", () => {
     const conn = new CDPConnection();
     (conn as unknown as { handleMessage: (data: string) => void }).handleMessage(
@@ -175,7 +170,7 @@ describe("71b: an uncaught exception is a console error", () => {
   });
 });
 
-describe("71d: every cap is said", () => {
+describe("every cap is said", () => {
   it("marks a truncated dom snapshot with the counts", async () => {
     cdp.domSnapshot = { nodes: Array.from({ length: 500 }, () => ({ tag: "div" })), truncated: true, totalElements: 1234 };
     const out = JSON.parse(await handler({ projectPath: "/p", browser: "chrome", include: ["dom_snapshot"] }));

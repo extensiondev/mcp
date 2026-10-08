@@ -32,20 +32,12 @@ const engineVersion = await import("../lib/engine-version");
 const act = await import("../lib/act");
 const doctor = await import("../tools/doctor");
 
-/* @invariant Old and new wordings of the same refusal, kept side by side. The
-   lowercase commander line is what pre-redesign engines print and stays as the
-   old-engine simulation. The styled line is the redesigned CLI's wording, held
-   here so the detector these tests exercise stays pinned to both. */
 const UNKNOWN_OUTPUT = "error: unknown option '--output'";
 const UNKNOWN_OUTPUT_REDESIGNED =
   "⏵⏵⏵ Unknown option --output.\nRun extension doctor --help to see the options.";
 
 const tmpDirs: string[] = [];
 
-/* @invariant The probe reads the project's OWN binary, so a project without one resolves
-   to `npx extension@<pin>` and answers from the pin without spawning anything.
-   These tests are about what a project's installed engine says, so they give it
-   a binary to resolve and let the mocked exec answer for it. */
 function projectWithLocalEngine(): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-refusal-"));
   tmpDirs.push(dir);
@@ -100,11 +92,6 @@ afterEach(() => {
   }
 });
 
-/* @invariant `--output json` is a flag this server adds behind the caller's back, so an
-   engine that refuses it produces an error about something the user never did.
-   build answers that by rebuilding without the flag; doctor and the act family
-   have no second source and can only answer with a truthful diagnosis. These
-   pin that the diagnosis names the two numbers that decide what to do. */
 describe("extension_doctor explains a refused --output instead of relaying it", () => {
   it("names the installed version and the release the flag reached", async () => {
     const dir = projectWithLocalEngine();
@@ -181,9 +168,6 @@ describe("the act family explains a refused --output instead of relaying it", ()
     expect(out.error.message).not.toContain("unknown option");
   });
 
-  /* @invariant A version at or above the floor that still refuses the flag is not a user
-     who needs to upgrade; it is a binary that is not what it claims to be.
-     Telling them to upgrade would send them round a loop with no exit. */
   it("reports a refusal from an engine that claims to be new enough as a contradiction", async () => {
     const dir = projectWithLocalEngine();
     cliResponder = engineThatRefusesTheFlag("4.0.18");

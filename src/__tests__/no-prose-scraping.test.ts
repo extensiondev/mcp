@@ -19,17 +19,6 @@ const CLI_COPY_TOKENS = [
   "Author says",
 ];
 
-/* @invariant Three entries left this map the day it was checked against the tokens above:
-   lib/act.ts, tools/open.ts and tools/eval.ts match NONE of them. Their prose
-   fallbacks read broker and browser messages, which is a different and much
-   weaker coupling than reading first-party CLI copy, and the ban was never what
-   held them back. Keeping them listed hid that, filled the cap, and implied a
-   version floor they were waiting on: they are not. The engine at the pin still
-   does not stamp a distinguishing code for a popup it cannot open in a headless
-   session, nor for an active tab eval cannot reach, so those fallbacks are load
-   bearing against the NEWEST engine rather than an old one. Removing the
-   exemption puts all three under the ban, where they pass, and where a future
-   edit that reached for CLI copy would now fail. */
 const EXEMPT = new Map<string, string>([
   [
     "lib/legacy-stdout.ts",
@@ -70,10 +59,6 @@ describe("no tool reads the CLI's human copy: each token above appears only in f
     expect(EXEMPT.size).toBeLessThanOrEqual(1);
   });
 
-  /* @invariant The cap only means something if it is tight. Naming the files that left
-     stops the next reader from re-adding one on the assumption the slot was
-     always spare, and fails if any of the three quietly starts matching CLI
-     copy again under cover of a fresh exemption. */
   it("no longer exempts the three files that never matched CLI copy", () => {
     for (const relative of ["lib/act.ts", "tools/open.ts", "tools/eval.ts"]) {
       expect(EXEMPT.has(relative), `${relative} is exempt again`).toBe(false);

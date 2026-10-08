@@ -92,9 +92,6 @@ describe("the copied CLI contract is the same bytes on both sides", () => {
   });
 
   it("names the CLI release the copy was cut from", () => {
-    /* @invariant Deliberately NOT read from package.json: MCP CI rewrites the
-       engine pin (`pnpm add extension-develop@<matrix>`) before it runs this
-       suite. */
     expect(pin.cliVersion).toMatch(/^\d+\.\d+\.\d+/);
     expect(fs.existsSync(path.join(contractDir, PIN_FILE))).toBe(true);
   });

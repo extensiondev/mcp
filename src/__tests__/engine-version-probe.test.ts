@@ -38,12 +38,6 @@ vi.mock("../lib/exec", async (importOriginal) => {
 const engineVersion = await import("../lib/engine-version");
 const build = await import("../tools/build");
 
-/* @invariant Two fixtures because two generations of engine word the refusal
-   differently. The lowercase commander line is what every pre-redesign engine
-   actually prints and stays as the old-engine simulation. The styled line with
-   the glyph prefix and the remedy after it is what the redesigned CLI prints
-   for an unknown option, held here so the matcher cannot quietly narrow back
-   to one phrasing. */
 const UNKNOWN_OUTPUT = "error: unknown option '--output'";
 const UNKNOWN_OUTPUT_REDESIGNED =
   "⏵⏵⏵ Unknown option --output.\nRun extension build --help to see the options.";
@@ -90,10 +84,6 @@ function persistSummary(dir: string, summary: Record<string, unknown>): void {
   fs.utimesSync(file, ahead, ahead);
 }
 
-/* @invariant Every pre-capabilities engine these helpers simulate must refuse
-   `capabilities` the way a real one does, with a non-zero exit and no schema-1
-   frame, or the tests would quietly stop exercising the fallback chain they
-   exist to pin. */
 const CAPABILITIES_UNKNOWN: CliResponse = {
   code: 1,
   stdout: "",
@@ -504,10 +494,6 @@ describe("an engine that answers capabilities is judged from its own roster", ()
     expect(probeCalls()).toHaveLength(0);
   });
 
-  /* @invariant The roster outranks the floor table. A version far above every
-     floor whose roster does not name the command must still be judged
-     unsupported, because the roster is read off the engine's live
-     registrations and the table is kept by hand in this repository. */
   it("lets the roster overrule a version the floor table would wave through", async () => {
     const dir = projectWithLocalEngine();
     cliResponder = engineWithCapabilities(
@@ -683,17 +669,7 @@ describe("the verdict is cached so a build does not pay for a probe", () => {
     expect(probeCalls()).toHaveLength(2);
   });
 
-  /* @invariant
-   * The expected version is read from the pin, never retyped beside it.
-   *
-   * With no project-local binary the invocation is `npx extension@<spec>`, so
-   * the version about to run is already in the argument and no probe is needed.
-   * Writing that version into the assertion as a literal made this test fail
-   * the moment the pin moved from a canary to its release, reporting a broken
-   * probe when the only thing that had changed was a dependency bump. Reading
-   * the same source the code reads keeps the test about the behaviour.
-   */
-  it("answers the npx fallback from the pinned spec without spawning", async () => {
+  it("answers the npx fallback from the pinned spec without spawning, the version read from the pin and never retyped", async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-probe-npx-"));
     tmpDirs.push(dir);
     const pinned = JSON.parse(

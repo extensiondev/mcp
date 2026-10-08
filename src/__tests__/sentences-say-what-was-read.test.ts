@@ -1,8 +1,3 @@
-/* @invariant
-  * a sentence describes what this call observed, every hint names inputs that
-  * exist, and a count says which reads it covers. Each cell failed before its
-  * fix.
-  */
 
 import fs from "node:fs";
 import os from "node:os";
@@ -22,7 +17,7 @@ import { logsPath, readyContractPath } from "../lib/session-paths";
 import { logEvent, logFile } from "./fixtures/engine-answers";
 import { writeModernContract } from "./fixtures/ready-contract";
 
-describe("100l: CLI recipes are translated into this server's inputs", () => {
+describe("CLI recipes are translated into this server's inputs", () => {
   it("rewrites the engine's list-tabs, inspect and logs recipes", () => {
     expect(toMcpSpeak("Run `extension inspect --list-tabs` to see tabs")).toContain("extension_dom_snapshot with listTabs: true");
     expect(toMcpSpeak("use extension logs --context background")).toContain('extension_logs context: "background"');
@@ -54,7 +49,7 @@ describe("102c, 102e, 102f: schema and fence sentences describe what is read", (
   });
 });
 
-describe("102i: the Safari recipe names the driver that was found", () => {
+describe("the Safari recipe names the driver that was found", () => {
   it("prints the Technology Preview driver when that is the one detected", () => {
     const tp = "/Applications/Safari Technology Preview.app/Contents/MacOS/safaridriver";
     expect(safariMcpAddCommand(tp)).toContain(tp);
@@ -63,7 +58,7 @@ describe("102i: the Safari recipe names the driver that was found", () => {
   });
 });
 
-describe("102b: the empty reason is about the session only when the file is empty", () => {
+describe("the empty reason is about the session only when the file is empty", () => {
   let dir = "";
   beforeEach(() => {
     dir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-logs-empty-"));
@@ -91,7 +86,7 @@ describe("102b: the empty reason is about the session only when the file is empt
   });
 });
 
-describe("102a: a follow reports the broker's replay and the live window apart", () => {
+describe("a follow reports the broker's replay and the live window apart", () => {
   let tmp = "";
   let wss: WebSocketServer;
   beforeEach(async () => {

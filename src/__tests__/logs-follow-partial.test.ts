@@ -105,8 +105,6 @@ describe("extension_logs follow: control channel error mid-stream", () => {
     expect(out.error.code).toBe("E_CONTROL_CHANNEL");
   }, 10000);
 
-  /* @invariant a channel that closes mid-window is a partial read, and the
-   broker's ring state is reported. */
   it("says a channel that closed before the window ended is a partial read", async () => {
     const port = (wss.address() as { port: number }).port;
     writeReady(tmp, "chromium", port);

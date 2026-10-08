@@ -1,7 +1,3 @@
-/* @invariant
-  * the validator's view is the engine's, a rule blocks only where the engine
-  * or the browser refuses, and each rule names its source.
-  */
 
 import fs from "node:fs";
 import os from "node:os";
@@ -44,7 +40,7 @@ const validate = (projectPath: string, browsers?: string[]) =>
   manifestValidate.handler({ projectPath, ...(browsers ? { browsers } : {}) }).then((s) => JSON.parse(s));
 const BASE = { name: "x", version: "1.0.0", manifest_version: 3 };
 
-describe("95b: the view is the engine's own prefix filter", () => {
+describe("the view is the engine's own prefix filter", () => {
   it("gives zen and floorp the firefox: keys", async () => {
     const dir = project({ ...BASE, "firefox:background": { scripts: ["missing-bg.js"] } });
 

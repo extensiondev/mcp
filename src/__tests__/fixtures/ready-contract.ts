@@ -6,10 +6,6 @@ import * as bridge from "extension-develop/bridge";
 import { browserArtifactsDir, readyContractPath } from "../../lib/session-paths";
 import { attachedDevContract, errorContract, readyContract } from "./engine-answers";
 
-/* @invariant A session fixture that wants eval writes the engine's own token
-   file, at the path the engine publishes, the way `extension dev
-   --allow-eval` does. A fixture that only says "ready" models a session
-   started WITHOUT allowEval. */
 export function writeEvalToken(projectPath: string, browser: string): string {
   const file = bridge.controlTokenPath(projectPath, browser);
   fs.mkdirSync(path.dirname(file), { recursive: true });
@@ -17,12 +13,6 @@ export function writeEvalToken(projectPath: string, browser: string): string {
   return file;
 }
 
-/* @invariant These fixtures go through the same owner module the production
-   readers use, so a layout change in the engine moves the code and its fixtures
-   together. Building dist/extension-js/<browser>/ready.json by hand here would
-   survive such a change and keep every suite green while writing files no reader
-   could find, which is the one failure the single-owner guard exists to prevent
-   and the one it cannot see, because it does not scan __tests__. */
 function writeContract(
   projectPath: string,
   browser: string,
@@ -34,9 +24,6 @@ function writeContract(
   return file;
 }
 
-/* @invariant A "modern" contract is the one the pinned engine writes: the
-   full `readyContract("dev")` base with the launcher's stamps, `schema: 1`
-   included. */
 export function writeModernContract(
   projectPath: string,
   browser: string,
@@ -56,9 +43,6 @@ export function writeModernContract(
   );
 }
 
-/* @invariant The contract after the compile landed and before any browser stamped it:
-   what a `noBrowser` session keeps for good, and what a launching session
-   shows for a moment. The base only, no launcher or executor fields. */
 export function writeCompiledUnattachedContract(
   projectPath: string,
   browser: string,
@@ -125,14 +109,6 @@ export function writeSchema1ContractError(
   });
 }
 
-/* @invariant An engine BELOW 4.0.17: the ready contract's own schemaVersion,
-   with no `schema: 1` machine-contract declaration. The fixture is worth more
-   than the wrong label was. Every release before 4.0.17 is still an ordinary
-   thing for a user's project to have, and this is the shape those sessions
-   write. What it pins is that such a contract's error stamps are
-   authoritative on their own: a verdict must never be gated on the capability
-   probe, because the probe is about how much detail the contract can carry,
-   not about whether to believe it. */
 export function writePreSchema1ContractError(
   projectPath: string,
   browser: string,
@@ -152,10 +128,6 @@ export function writeLegacyEngineState(
   projectPath: string,
   browser: string,
 ): { legacyPortFile: string; legacyTokenFile: string } {
-  /* @invariant The file NAMES here are deliberately literal: these are the slots
-     an OLD engine wrote, so they must not move when the current layout does. The
-     directory still comes from the owner module, because the legacy slots sat
-     inside the same per-browser artifacts dir the engine still uses. */
   const legacyPortFile = path.join(
     browserArtifactsDir(projectPath, browser),
     "control-port",

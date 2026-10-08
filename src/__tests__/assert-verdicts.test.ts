@@ -229,10 +229,7 @@ describe("background-worker-booted", () => {
     expect(check.detail).toContain("no other target of this extension");
   });
 
-  /* @invariant The muddy middle. A loaded extension with no worker target is
-     the shape a dormant MV3 worker takes, so this must never be a pass and
-     never a red against the extension. */
-  it("is inconclusive when the guest is loaded but no worker target and no background log exist", async () => {
+  it("is inconclusive when the guest is loaded but no worker target and no background log exist, the shape of a dormant MV3 worker", async () => {
     writeManifest({ background: { service_worker: "sw.js" } });
     liveSession();
     live.targets = [
@@ -571,9 +568,6 @@ describe("content-script-injected", () => {
     expect(check.detail).toContain("browser interface");
   });
 
-  /* @invariant The requirement this verb exists for: a declared match is a
-     statement about the manifest, and passing on it would report the manifest
-     while claiming to report the run. */
   it("refuses to pass on a declared match alone", async () => {
     writeManifest(withMatch);
     liveSession();
@@ -703,9 +697,6 @@ describe("storage-key-present", () => {
 });
 
 describe("console-errors-empty", () => {
-  /* @invariant The flagship. Zero errors over a session that never wrote a
-     line is "nothing happened", and an agent counting events in a payload
-     cannot tell that from a clean run. */
   it("is inconclusive over an empty timeline instead of passing", async () => {
     liveSession();
     const { frame, check } = await assertOnce({
@@ -776,8 +767,6 @@ describe("console-errors-empty", () => {
     expect(check.detail).toContain("boom");
   });
 
-  /* @invariant a gap sentinel is not an event, and lines the writer dropped may
-   have been errors. */
   it("does not count a gap sentinel as an event", async () => {
     liveSession();
     writeLogs([logHeader("run-1"), { v: 1, type: "gap", reason: "disk_slow", dropped: 4 }]);
@@ -893,8 +882,6 @@ describe("the verdict document", () => {
     expect(frame.value.contract).toBe("extension.dev/assert-verdict");
   });
 
-  /* @invariant One inconclusive check sinks the run. If this ever reads pass,
-     every honest refusal in this file has been converted into a green. */
   it("never reports a pass while a check is inconclusive", async () => {
     writeManifest({ background: { service_worker: "sw.js" } });
     liveSession();

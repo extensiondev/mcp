@@ -1,8 +1,3 @@
-/* @invariant
-  * EACH CELL HERE FAILED BEFORE ITS FIX. a tool that read "analyzed",
-  * "headless-clean", "pass", "uninstalled" or "Safe to create" without
-  * reading the thing it was describing.
-  */
 
 import fs from "node:fs";
 import os from "node:os";
@@ -49,7 +44,7 @@ function distWith(files: Record<string, string>): string {
   return root;
 }
 
-describe("76: extension_analyze reads the dist before calling it analyzed", () => {
+describe("extension_analyze reads the dist before calling it analyzed", () => {
   it("refuses a corrupt manifest instead of analyzing an empty object", async () => {
     const root = distWith({ "manifest.json": "{", "background.js": "x" });
     const out = JSON.parse(await analyze.handler({ projectPath: root }));
@@ -101,7 +96,7 @@ describe("76: extension_analyze reads the dist before calling it analyzed", () =
   });
 });
 
-describe("77: extension_theme_verify does not call a theme-less manifest clean", () => {
+describe("extension_theme_verify does not call a theme-less manifest clean", () => {
   const verify = (manifest: Record<string, unknown>) =>
     themeVerify.handler({ manifest }).then((s) => JSON.parse(s));
 
@@ -149,7 +144,7 @@ describe("77: extension_theme_verify does not call a theme-less manifest clean",
   });
 });
 
-describe("80b: the doctor's node leg reads the engine's declared floor", () => {
+describe("the doctor's node leg reads the engine's declared floor", () => {
   it("reads the installed extension-develop engines.node, not a hardcoded 20", () => {
     const engine = nodeEngine.engineNodeRange();
     expect(engine).not.toBeNull();
@@ -172,7 +167,7 @@ describe("80b: the doctor's node leg reads the engine's declared floor", () => {
   });
 });
 
-describe("81a: extension_browsers uninstall reads the per-browser result", () => {
+describe("extension_browsers uninstall reads the per-browser result", () => {
   it("says not-installed when the library removed nothing", async () => {
     uninstallAnswer = [{ browser: "chromium", removed: false, path: "/cache/chromium" }];
     const out = JSON.parse(await uninstall.uninstallManagedBrowser({ browser: "chromium" }));
@@ -205,7 +200,7 @@ describe("81a: extension_browsers uninstall reads the per-browser result", () =>
   });
 });
 
-describe("90b: extension_add_feature reads the manifest before saying safe", () => {
+describe("extension_add_feature reads the manifest before saying safe", () => {
   function project(manifest: string): string {
     const root = tmpDir("mcp-addfeat-");
     fs.mkdirSync(path.join(root, "src"), { recursive: true });

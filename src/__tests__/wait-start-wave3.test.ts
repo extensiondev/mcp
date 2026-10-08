@@ -27,15 +27,15 @@ afterEach(() => {
   for (const d of dirs.splice(0)) fs.rmSync(d, { recursive: true, force: true });
 });
 
-describe("94: wait and start say what they observed", () => {
-  it("94f: no session and no contract is no-session, not 'still building'", async () => {
+describe("wait and start say what they observed", () => {
+  it("no session and no contract is no-session, not 'still building'", async () => {
     const out = JSON.parse(await wait({ projectPath: project(), browser: "chrome", timeoutMs: 1100 }));
     expect(out.status).toBe("no-session");
     expect(out.error.code).toBe("E_NO_SESSION");
     expect(JSON.stringify(out)).not.toMatch(/Still building/);
   }, 10_000);
 
-  it("94g: a finished build's contract is not a session", async () => {
+  it("a finished build's contract is not a session", async () => {
     const dir = project();
     contract(dir, { schema: 1, status: "ready", command: "build", pid: 999999, browser: "chrome" });
     const out = JSON.parse(await wait({ projectPath: dir, browser: "chrome", timeoutMs: 1100 }));
@@ -43,14 +43,14 @@ describe("94: wait and start say what they observed", () => {
     expect(out.error.message).toMatch(/finished extension_build/);
   }, 10_000);
 
-  it("94f: a stopped contract says the session stopped", async () => {
+  it("a stopped contract says the session stopped", async () => {
     const dir = project();
     contract(dir, { schema: 1, status: "stopped", command: "dev", pid: process.pid, browser: "chrome" });
     const out = JSON.parse(await wait({ projectPath: dir, browser: "chrome", timeoutMs: 1100 }));
     expect(out.status).toBe("stopped");
   }, 10_000);
 
-  it("94e: start refuses what the engine refuses before spawning", async () => {
+  it("start refuses what the engine refuses before spawning", async () => {
     const safari = JSON.parse(await start({ projectPath: project(), browser: "safari" } as never));
     expect(safari.status).toBe("unsupported-browser");
     const host = JSON.parse(await start({ projectPath: project(), build: false, host: "0.0.0.0" } as never));
@@ -58,7 +58,7 @@ describe("94: wait and start say what they observed", () => {
     expect(host.error.message).toMatch(/not options of the engine's preview verb/);
   });
 
-  it("94d: the schema describes noBrowser and port as the engine runs them", () => {
+  it("the schema describes noBrowser and port as the engine runs them", () => {
     const props = startSchema.inputSchema.properties as unknown as Record<string, { description: string }>;
     expect(props.noBrowser.description).toMatch(/process ends once the build does/);
     expect(props.port.description).not.toBe("Server port (0 for auto-assign)");

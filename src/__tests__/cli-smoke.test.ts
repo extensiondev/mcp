@@ -63,11 +63,6 @@ describe.skipIf(!process.env.RUN_CLI_SMOKE)("real-CLI smoke (npx pin)", () => {
     }
   }, 320_000);
 
-  /* @invariant The pinned engine itself answers this cell, through the tool,
-     with --output json: the envelope must come from the summary the engine
-     reported, and the shapes the fixtures hand every other cell must be
-     shapes this engine writes. Before it, the only real-engine cell checked
-     that dist/chrome existed. */
   it("reads the pinned engine's own build answer and matches the fixtures to it", async () => {
     const dir = fixtureProject("cli-smoke-json");
 

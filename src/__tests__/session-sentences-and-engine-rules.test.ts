@@ -1,8 +1,3 @@
-/* @invariant
-  * session tools say what they observed, stop-all keeps to this server's
-  * sessions, and build, analyze and the review scan follow the engine's own
-  * rules. Each cell failed before its fix.
-  */
 
 import fs from "node:fs";
 import os from "node:os";
@@ -50,7 +45,7 @@ afterEach(() => {
   for (const dir of tmpDirs.splice(0)) fs.rmSync(dir, { recursive: true, force: true });
 });
 
-describe("107a: stop all keeps to this server's sessions", () => {
+describe("stop all keeps to this server's sessions", () => {
   it("writes the owning server into every marker", () => {
     const project = tmpDir("mcp-proj-");
     registerSession({ pid: process.pid, browser: "chrome", projectPath: project, command: "dev" });
@@ -86,7 +81,7 @@ describe("107a: stop all keeps to this server's sessions", () => {
   });
 });
 
-describe("107b: the control channel is read from the contract", () => {
+describe("the control channel is read from the contract", () => {
   it("reports a control port the engine could not bind, with its reason", () => {
     const project = tmpDir("mcp-control-");
     const since = Date.now() - 1000;
@@ -97,7 +92,7 @@ describe("107b: the control channel is read from the contract", () => {
   });
 });
 
-describe("107 sentences", () => {
+describe("sentences", () => {
   it("binary inputs, the instructions and the install size say what the code does", () => {
     const flags = LAUNCH_FLAG_SCHEMA as Record<string, { description: string }>;
     expect(flags.chromiumBinary.description).not.toMatch(/overrides browser/);
@@ -119,7 +114,7 @@ describe("107 sentences", () => {
   }, 20_000);
 });
 
-describe("108: the engine's rules", () => {
+describe("the engine's rules", () => {
   it("accepts every bundle id the engine accepts", () => {
     expect(BUNDLE_ID_PATTERN.test("abc")).toBe(true);
     expect(BUNDLE_ID_PATTERN.test("1a.b-c")).toBe(true);

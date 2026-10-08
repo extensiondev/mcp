@@ -28,10 +28,7 @@ afterEach(() => {
   for (const dir of dirs.splice(0)) fs.rmSync(dir, { recursive: true, force: true });
 });
 
-/* @invariant Extension.js 4.1.32 opens the Safari session the client side was
-   built for. These cells read contracts in the shape that release writes, and
-   pin that the hint no longer says no release opens one. */
-describe("The Safari session the engine now stamps", () => {
+describe("Extension.js 4.1.32 stamps the Safari session into ready.json", () => {
   it("reads the session from a contract shaped as the engine writes it", () => {
     const dir = projectWith(safariDevContract({ port: 61234, sessionId: "E3A9-webdriver-writer" }));
     expect(readWebDriverSession(dir, "safari")).toEqual({ port: 61234, sessionId: "E3A9-webdriver-writer" });

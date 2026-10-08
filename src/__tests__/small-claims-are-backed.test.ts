@@ -1,5 +1,3 @@
-/* @invariant the smaller sentences are cut to what was read or name their
-   source. Each cell failed before its fix. */
 
 import fs from "node:fs";
 import os from "node:os";
@@ -13,7 +11,7 @@ import { handler as analyze } from "../tools/analyze";
 import { handler as docsSearch } from "../tools/docs-search";
 import { schema as sharesSchema } from "../tools/shares";
 
-describe("112", () => {
+describe("the smaller sentences are cut to what was read or name their source", () => {
   it("names a workspace and project that disagree instead of saying there is no project", async () => {
     expect(contradictoryRef({ workspace: "acme", project: "other/widget" })).toMatch(/name different workspaces/);
     expect(contradictoryRef({ workspace: "acme", project: "acme/widget" })).toBeNull();

@@ -207,20 +207,7 @@ function spawnHolder(command: string, args: string[]): number {
   return child.pid!;
 }
 
-/* @invariant Spelled out from the engine's launchers rather than imported from
-   lib/session-paths, on purpose. These fixtures stand in for what a real browser
-   carries in its argv, so they have to be written the way the ENGINE writes the
-   path. Building them from our own helper would make the reaper agree with
-   itself, which is what happened before: the reaper matched
-   dist/extension-profile-<browser> and so did every fixture, so the pattern
-   could match nothing in the field and stay green here. managed-profile-layout
-   .test.ts is what holds this literal to the engine's real shape.
-
-   The holder carries the directory as a bare argument rather than as
-   --user-data-dir=<dir>, which is how Chromium spells it. node parses a trailing
-   --flag as its own option and exits before the process is ever there to reap,
-   and pgrep -f matches the substring either way. */
-function enginesProfileDir(
+function profileDirAsTheLauncherWritesIt(
   projectPath: string,
   browser: string,
   runName: string,
@@ -241,7 +228,7 @@ describe("extension_stop orphan reaping", () => {
     async () => {
       const projectPath = path.join(tmpProject(), "weird (c++) [v1]");
       fs.mkdirSync(projectPath, { recursive: true });
-      const holderArg = enginesProfileDir(
+      const holderArg = profileDirAsTheLauncherWritesIt(
         projectPath,
         "chrome",
         "tidy-amber-otter",
@@ -268,7 +255,7 @@ describe("extension_stop orphan reaping", () => {
     async () => {
       const projectPath = tmpProject();
       const watched = path.join(
-        enginesProfileDir(projectPath, "chrome", "tidy-amber-otter"),
+        profileDirAsTheLauncherWritesIt(projectPath, "chrome", "tidy-amber-otter"),
         "session.log",
       );
       fs.mkdirSync(path.dirname(watched), { recursive: true });

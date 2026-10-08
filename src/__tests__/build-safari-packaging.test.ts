@@ -36,11 +36,6 @@ vi.mock("../lib/exec", async (importOriginal) => {
   };
 });
 
-/* @invariant Two fixtures for one refusal, because two generations of engine
-   word it differently. The lowercase commander line is the old-engine
-   simulation every retry test here leans on. The styled line with the glyph
-   prefix and the remedy after it is the redesigned CLI's wording, kept beside
-   the old one so the retry path is pinned against both. */
 const UNKNOWN_OUTPUT = "error: unknown option '--output'";
 const UNKNOWN_OUTPUT_REDESIGNED =
   "⏵⏵⏵ Unknown option --output.\nRun extension build --help to see the options.";

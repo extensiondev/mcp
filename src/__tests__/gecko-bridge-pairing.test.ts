@@ -7,7 +7,6 @@ import type * as CdpPortModule from "../lib/cdp-port";
 import type * as RdpModule from "../lib/rdp";
 import type * as SessionBrowserModule from "../lib/session-browser";
 
-
 const calls: string[][] = [];
 let actResponder: (cli: string[]) => string = () => JSON.stringify({ ok: true });
 vi.mock("../lib/act", async (importOriginal) => {
@@ -65,10 +64,6 @@ vi.mock("../lib/session-browser", async (importOriginal) => {
   };
 });
 
-/* @invariant These cases model the engine before the navigate verb, so the
-   mock refuses that verb the way commander does and every navigation below
-   rides the background eval it was written against. The verb-first path has
-   its own file, bridge-navigate-verb.test.ts. */
 const open = await import("../tools/open");
 const inspectTool = await import("../tools/inspect");
 
@@ -82,7 +77,7 @@ beforeEach(() => {
   mockConsoleMessages = [];
 });
 
-describe("extension_open url on Gecko (bridge navigation)", () => {
+describe("extension_open url on Gecko over the background eval, the engine before the navigate verb (bridge-navigate-verb.test.ts holds the verb-first path)", () => {
   it("navigates via a background tabs.update eval and verifies against the tab list", async () => {
     actResponder = (cli) => {
       if (isListTabs(cli)) {

@@ -1,5 +1,3 @@
-/* @invariant a set is read back before it is called set, and a context the
-   engine never reads is named as not honoured. */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
@@ -44,7 +42,7 @@ beforeEach(() => {
   act.getFails = false;
 });
 
-describe("extension_storage", () => {
+describe("extension_storage reads a set back before calling it set", () => {
   it("offers no context, since the engine honours none", () => {
     expect((storage.schema.inputSchema.properties as Record<string, unknown>).context).toBeUndefined();
     expect(storage.schema.description).toMatch(/background/);

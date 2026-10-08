@@ -1,14 +1,3 @@
-/* @invariant
-  * THESE ARE THE ENGINE'S REAL SHAPES, KEY FOR KEY, FROM ITS OWN WRITERS.
-  * Each builder returns what extension-develop 4.1.32 (or its CLI) writes
-  * today, with the file and symbol that writes it named beside it, so a test
-  * that wants a session, a log line, a build or an act reply feeds the client
-  * what the engine feeds it. A test that wants a degraded or older shape has
-  * to say which key it changed. Hand-written shapes (`message` on a log
-  * event, `{tabs: [...]}` on a list-tabs frame, a `ready.json` without
-  * `schema: 1`) are how a run of defects stayed invisible. When the pinned
-  * engine changes a writer, this file changes with it.
-  */
 
 import fs from "node:fs";
 import path from "node:path";
@@ -17,12 +6,6 @@ import { engineProjectRoot } from "../../lib/session-paths";
 
 type Body = Record<string, unknown>;
 
-/* @invariant What `extension build` leaves on disk on exit 0: dist/<browser>/ with the
- * manifest and the files it references (modelled as a copy of src/), newer
- * than the build's start. A test fake that returns exit 0 calls this from
- * INSIDE the fake, the way the engine writes during the run; a dist seeded
- * before the call is an older build's, which the tool must refuse. A dist
- * the test already placed is touched, so its scenario stays. */
 export function writeEngineDist(projectPath: string, browser: string): string {
   const distDir = path.join(projectPath, "dist", browser);
   const manifest = path.join(distDir, "manifest.json");
@@ -49,12 +32,6 @@ export function browserFromCliArgs(args: string[]): string {
 
 const NOW = "2026-10-05T12:00:00.000Z";
 
-/* @invariant extension-develop/dist/832~0.mjs, the `base` object and `writeReady` of the
- * ready-contract writer: the fields every dev session stamps once it is
- * ready and the browser launcher has stamped its ports. `start` and
- * `preview` share the base with `port: null`, `controlPort: null` and no
- * instance, control or logs path. `build` leaves `command: "build"` with the
- * finished build's pid. */
 export function readyContract(
   command: "dev" | "start" | "preview" | "build",
   browser: string,
@@ -93,14 +70,6 @@ export function readyContract(
   return { ...base, ...overrides };
 }
 
-/* @invariant
-  * A Safari dev contract as Extension.js 4.1.32 writes it: the launcher holds
-  * one safaridriver session and stamps its port (a number) and session id (a
-  * string), or webdriverUnavailableReason when it could not open one
-  * (extension/dist/browsers.cjs `stampReadyWebDriver`, which deletes the
-  * other two keys whichever way it goes), and the ready writer keeps all
-  * three across recompiles.
-  */
 export function safariDevContract(
   session: { port: number; sessionId: string } | { unavailableReason: string },
   overrides: Body = {},
@@ -112,8 +81,6 @@ export function safariDevContract(
   return readyContract("dev", "safari", { ...stamp, ...overrides });
 }
 
-/* @invariant The launcher's stamps on a dev contract once the browser is up and the
- * executor has connected (CLI: the ready.json stamps after launch). */
 export function attachedDevContract(browser: string, overrides: Body = {}): Body {
   return readyContract("dev", browser, {
     cdpPort: 9333,
@@ -128,9 +95,6 @@ export function attachedDevContract(browser: string, overrides: Body = {}): Body
   });
 }
 
-/* @invariant A dev browser that died AFTER ready: the engine keeps `status: "ready"`,
- * adds the exit stamps and flips `runtime` to "detached" while keeping
- * `executorAttachedAt` (832~0.mjs `writeReady`, the `sameRun` block). */
 export function browserExitedAfterReadyContract(browser: string, overrides: Body = {}): Body {
   return attachedDevContract(browser, {
     browserExitedAt: NOW,
@@ -142,7 +106,6 @@ export function browserExitedAfterReadyContract(browser: string, overrides: Body
   });
 }
 
-/* @invariant `status: "error"` contracts, with the codes the writer stamps. */
 export function errorContract(
   browser: string,
   code:
@@ -170,13 +133,10 @@ export function errorContract(
   });
 }
 
-/* @invariant extension-develop/dist/dev-server~0.mjs `LogsFileWriter.writeHeader`. */
 export function logHeader(runId: string, rotatedFrom: string | null = null): Body {
   return { v: 1, type: "header", runId, startedAt: NOW, rotatedFrom };
 }
 
-/* @invariant The executor's console capture (rspack-config~0.mjs, the `send({type:
- * "log", event})` site): no `message` key, the parts are an array. */
 export function logEvent(
   context: string,
   level: "log" | "info" | "warn" | "error" | "debug" | "trace",
@@ -196,7 +156,6 @@ export function logEvent(
   };
 }
 
-/* @invariant `LogsFileWriter.maybeNoteDrops`. */
 export function logGap(dropped: number): Body {
   return { v: 1, type: "gap", reason: "disk_slow", dropped };
 }
@@ -208,8 +167,6 @@ export function logFile(runId: string, events: Body[], rotatedFrom: string | nul
     .concat("\n");
 }
 
-/* @invariant The CLI's act frame once the bridge answered (cli.cjs `runCommand`):
- * `command` is overwritten by this package with the tool name afterwards. */
 export function actFrame(command: string, value: unknown, overrides: Body = {}): Body {
   return {
     type: "result",
@@ -243,8 +200,6 @@ export function actFailure(
   };
 }
 
-/* @invariant A refusal the CLI makes before it reaches the bridge (cli.cjs `fail()`):
- * no `type`, `cmdId` or `engine`. */
 export function cliRefusal(command: string, code: string, message: string, hint?: string): Body {
   return {
     schema: 1,
@@ -257,8 +212,6 @@ export function cliRefusal(command: string, code: string, message: string, hint?
   };
 }
 
-/* @invariant The executor's reply to `tabs.query` behind `--list-tabs`
- * (rspack-config~0.mjs): a plain array, never `{tabs: [...]}`. */
 export function tabRows(
   rows: Array<{ id: number; url: string; title?: string; active?: boolean; windowId?: number }>,
 ): Array<{ id: number; url: string; title: string; active: boolean; windowId: number }> {
@@ -271,11 +224,6 @@ export function tabRows(
   }));
 }
 
-/* @invariant extension-develop/dist/840~0.mjs: the summary the build writes under
- * dist/extension-js/<browser>/build-summary.json, `zip_artifacts` included
- * when a zip was asked for (rspack-config~0.mjs names the archives).
- * `addon_lint` is on every summary; measured on a chrome build of 4.1.32 it
- * reads `{status: "skipped", reason: "browser"}`. */
 export function buildSummary(
   browser: string,
   overrides: Body = {},
@@ -293,16 +241,6 @@ export function buildSummary(
   };
 }
 
-/* @invariant
-  * What `extension build <dir> --browser <b> --output json` prints on STDOUT
-  * with Extension.js 4.1.32, measured on a fixture project (cli.cjs, the
-  * build command's json reporter): one envelope line, nothing else. The
-  * summaries sit inline under value.summaries, one per browser, and each
-  * output_path is the real dist the build wrote: dist/<browser> under the
-  * package.json that owns the manifest (840~0.mjs `getDistPath`), which is
-  * why it is resolved through the same root reader the tool uses. The human
-  * report never touches stdout; it goes to stderr (`buildNarration`).
-  */
 export function buildFrame(
   projectPath: string,
   browsers: string[],
@@ -329,21 +267,12 @@ export function buildFrame(
   };
 }
 
-/* @invariant The DEGRADED frame of an engine that already answered
- * `--output json` but predates the summaries contract: the same envelope
- * with `summaries` left out of value, which is the one key this changes. A
- * cell that feeds it is proving the fallback to the persisted
- * build-summary.json, and its title says so. */
 export function preSummariesBuildFrame(projectPath: string, browsers: string[]): Body {
   const frame = buildFrame(projectPath, browsers);
   const { summaries: _dropped, ...value } = frame.value as Body;
   return { ...frame, value };
 }
 
-/* @invariant The build's human report as 4.1.32 writes it to STDERR, measured
- * on the same run: the compile line, the header block, the asset tree and
- * the closing line. The tree is one manifest entry, which is enough for a
- * narration reader; no tool parses these lines. */
 export function buildNarration(
   browser: string,
   name = "Fixture",
@@ -367,10 +296,6 @@ export function buildNarration(
   ].join("\n");
 }
 
-/* @invariant What `runExtensionCli` hands back for a build that exited 0 on
- * 4.1.32: the frame on stdout, the narration on stderr. A fake that returns
- * this calls `writeEngineDist` first, the way the engine writes before it
- * prints. */
 export function buildCliAnswer(
   projectPath: string,
   browser: string,
@@ -399,8 +324,6 @@ export function zipArtifacts(
   return out;
 }
 
-/* @invariant cli.cjs `runDoctor`: the frame's `value` is the check array. The legs a
- * dev session answers, in the order the CLI emits them. */
 export function doctorFrame(
   legs: Array<{ check: string; status: "pass" | "fail" | "warn" | "skip"; detail: string; remediation?: string }>,
 ): Body {
@@ -422,22 +345,10 @@ export function doctorFrame(
 export const DOCTOR_CONTROL_OFF_DETAIL =
   "refused: control is off in the session that answered";
 
-/* @invariant extension-develop/dist/rspack-config~0.mjs, the bridge executor's
- * `op === "reload"` branch: a background reload is acknowledged with
- * `replyOk(cmdId, {reloading: true})` and `chrome.runtime.reload()` runs 50 ms
- * later, so the frame precedes the reload; a tab reload answers
- * `replyOk(cmdId, {reloaded: target.tabId})` after `tabs.reload` returned. */
 export function reloadFrame(target: "background" | number = "background", overrides: Body = {}): Body {
   return actFrame("reload", target === "background" ? { reloading: true } : { reloaded: target }, overrides);
 }
 
-/* @invariant extension-develop/dist/832~0.mjs, `stampExecutorDetached` and
- * `stampExecutorAttached` of the ready-contract writer, applied to a contract
- * file the way the engine applies them: detached sets `runtime` and
- * `executorDetachedAt` only when `executorAttachedAt` is already a string;
- * attached sets `runtime`, deletes `executorDetachedAt`, and moves `ts` when
- * `executorAttachedAt` already exists (a reattach), else stamps
- * `executorAttachedAt` for the first time. */
 export function stampExecutorDetached(contractFile: string, at = new Date().toISOString()): void {
   const prev = JSON.parse(fs.readFileSync(contractFile, "utf8")) as Body;
   if (typeof prev.executorAttachedAt !== "string") return;
@@ -458,3 +369,24 @@ export function stampExecutorAttached(contractFile: string, at = new Date().toIS
   }
   fs.writeFileSync(contractFile, JSON.stringify(prev, null, 2));
 }
+
+export const ENGINE_WRITERS = {
+  writeEngineDist: { file: "extension-develop/dist/840~0.mjs", marker: "getDistPath" },
+  readyContract: { file: "extension-develop/dist/832~0.mjs", marker: "writeReady" },
+  safariDevContract: { file: "extension/dist/browsers.cjs", marker: "stampReadyWebDriver" },
+  attachedDevContract: { file: "extension/dist/browsers.cjs", marker: "stampReadyBrowser" },
+  browserExitedAfterReadyContract: { file: "extension-develop/dist/832~0.mjs", marker: "writeReady" },
+  errorContract: { file: "extension-develop/dist/832~0.mjs", marker: "writeError" },
+  logHeader: { file: "extension-develop/dist/dev-server~0.mjs", marker: "writeHeader" },
+  logEvent: { file: "extension-develop/dist/rspack-config~0.mjs", marker: "messageParts" },
+  logGap: { file: "extension-develop/dist/dev-server~0.mjs", marker: "maybeNoteDrops" },
+  actFrame: { file: "extension/dist/cli.cjs", marker: "runCommand" },
+  cliRefusal: { file: "extension/dist/cli.cjs", marker: "fail" },
+  tabRows: { file: "extension-develop/dist/rspack-config~0.mjs", marker: "tabs.query" },
+  buildSummary: { file: "extension-develop/dist/840~0.mjs", marker: "build-summary.json" },
+  buildFrame: { file: "extension/dist/cli.cjs", marker: "--output json" },
+  buildNarration: { file: "extension/dist/cli.cjs", marker: "Extension built for production" },
+  doctorFrame: { file: "extension/dist/cli.cjs", marker: "runDoctor" },
+  reloadFrame: { file: "extension-develop/dist/rspack-config~0.mjs", marker: "reloading" },
+  stampExecutorDetached: { file: "extension-develop/dist/832~0.mjs", marker: "stampExecutorDetached" },
+} as const;

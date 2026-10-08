@@ -1,5 +1,3 @@
-/* @invariant the auth and create tools describe what the platform does. Each
-   cell failed before its fix. */
 
 import { describe, it, expect } from "vitest";
 
@@ -9,7 +7,7 @@ import { createRateLimitNote } from "../lib/project-batch";
 import { HOLD_STILL_WORKS_SENTENCE } from "../lib/platform-hold";
 import { pollDeviceGrant } from "../lib/device-flow";
 
-describe("106 sentences", () => {
+describe("the auth and create tools describe what the platform does", () => {
   it("auth status names the statuses it emits, and create names who approves", () => {
     expect(authSchema.description).toMatch(/value\.server\.verdict as confirmed, refused or unavailable/);
     expect(authSchema.description).not.toMatch(/or unverified when the server cannot be reached/);

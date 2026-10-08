@@ -143,12 +143,6 @@ describe("extension_reload hands the reload verb to the engine as it was asked",
   });
 });
 
-/* @invariant The engine answers reloading 50 ms BEFORE chrome.runtime.reload()
-   runs, so a background reload is only done once ready.json shows the new
-   executor attached again. These cells drive the contract the way the engine's
-   writer does (stampExecutorDetached, then stampExecutorAttached) and fail with
-   the watch removed from reload.ts: the first because value.reattached is
-   absent, the second and third because the warnings are. */
 describe("a background reload waits for the contract to show the executor back", () => {
   it("answers once ready.json flips detached then attached, and says what it read", async () => {
     session.browser = "zen";

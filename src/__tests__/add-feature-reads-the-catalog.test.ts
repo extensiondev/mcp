@@ -1,8 +1,3 @@
-/* @invariant
-  * a list addition merges with what the manifest declares instead of
-  * replacing it through a prefixed key, and the catalog is read before saying
-  * no template ships a surface.
-  */
 
 import fs from "node:fs";
 import os from "node:os";
@@ -44,7 +39,7 @@ afterEach(() => {
   for (const dir of tmpDirs.splice(0)) fs.rmSync(dir, { recursive: true, force: true });
 });
 
-describe("97b: list additions merge with the manifest's own values", () => {
+describe("list additions merge with the manifest's own values", () => {
   it("keeps existing permissions beside sidePanel instead of replacing them on Chromium", async () => {
     const root = project({ manifest_version: 3, name: "x", version: "1.0", permissions: ["storage", "tabs"] });
     const out = JSON.parse(await addFeature.handler({ projectPath: root, feature: "sidebar", framework: "vanilla" }));
@@ -61,7 +56,7 @@ describe("97b: list additions merge with the manifest's own values", () => {
   });
 });
 
-describe("97c: the catalog is read for every surface", () => {
+describe("the catalog is read for every surface", () => {
   it("references a devtools and an options template the catalog ships", async () => {
     const root = project({ manifest_version: 3, name: "x", version: "1.0" });
 

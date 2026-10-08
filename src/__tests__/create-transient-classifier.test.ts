@@ -1,9 +1,3 @@
-/* @invariant
-  * the scaffolder's own card (name, template, path) goes through the captured
-  * logger, so the words in a project's name must never make its failure read
-  * as a network error, and a `.git` that was there before the call is not one
-  * the scaffolder initialized.
-  */
 
 import fs from "node:fs";
 import os from "node:os";
@@ -49,7 +43,7 @@ afterEach(() => {
   for (const dir of tmpDirs.splice(0)) fs.rmSync(dir, { recursive: true, force: true });
 });
 
-describe("extension_create transient classifier", () => {
+describe("extension_create's transient classifier reads the scaffolder's card, never the project name", () => {
   it("does not retry or blame the network for a project named network-monitor", async () => {
     const parent = tmpDir();
 

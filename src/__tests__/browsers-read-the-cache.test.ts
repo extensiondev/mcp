@@ -1,8 +1,3 @@
-/* @invariant
-  * "installed", "available" and "installed" are read off the cache and the
-  * binary, never off a directory, a return or a silent probe; and the
-  * installer's prose never reaches the JSON-RPC stream.
-  */
 
 import fs from "node:fs";
 import os from "node:os";
@@ -69,7 +64,7 @@ const install = await import("../tools/install-browser");
 const list = await import("../tools/list-browsers");
 const detect = await import("../tools/detect-browsers");
 
-describe("81b: install", () => {
+describe("install reads the cache and the binary, never a directory, a return or a silent probe", () => {
   it("runs the installer with machine output on and restores the switch after", async () => {
     const out = JSON.parse(await install.installManagedBrowser("chrome"));
     expect(installer.calls).toBe(1);
@@ -89,7 +84,7 @@ describe("81b: install", () => {
   });
 });
 
-describe("81d: list", () => {
+describe("list", () => {
   it("does not count a directory with no binary as installed", async () => {
     fs.mkdirSync(path.join(root, "chrome", "chrome", "mac_arm-151.0.0.0"), { recursive: true });
     fs.writeFileSync(path.join(root, "chrome", "chrome", "mac_arm-151.0.0.0", "partial.zip"), "half");
@@ -109,7 +104,7 @@ describe("81d: list", () => {
   });
 });
 
-describe("81c: detect", () => {
+describe("detect", () => {
   it("calls a binary that did not answer --version unverified, not available", async () => {
     plantBinary("chrome");
     const out = JSON.parse(await detect.detectBrowsers(["chrome"]));

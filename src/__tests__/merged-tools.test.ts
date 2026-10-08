@@ -83,12 +83,7 @@ describe("extension_browsers dispatch", () => {
     expect(out.status).toBe("bad-request");
   });
 
-  /* @invariant This cell runs the real scan on purpose, and the scan execs
-     whatever Chrome the machine has for its version with a 5 s budget of its
-     own. Under vitest's 5 s default the cell lost that race on a CI runner
-     and passed on the rerun of the same tree, so the budget below is the
-     scan's, not the harness default. */
-  it("defaults to the detect scan", async () => {
+  it("defaults to the detect scan, within the scan's own 5 s budget rather than the harness default", async () => {
     const out = JSON.parse(await browsers.handler({ browsers: ["chrome"] }));
     expect(Array.isArray(out.value.detected)).toBe(true);
     expect(out.value.detected).toHaveLength(1);

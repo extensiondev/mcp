@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 
 import * as assertTool from "../tools/assert";
 
-describe("An unknown console context is a refused clause", () => {
+describe("an unknown console context is a refused clause", () => {
   it("answers bad-request naming the engine's contexts, not E_INTERNAL", async () => {
     const result = JSON.parse(
       await assertTool.handler({

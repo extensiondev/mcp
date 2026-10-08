@@ -34,10 +34,6 @@ describe("control-channel constants come from the engine, not from literals", ()
     expect(Number.isInteger(LOG_EVENT_VERSION)).toBe(true);
   });
 
-  /* @invariant A value comparison alone cannot catch a regression here: a re-hardcoded
-     "/extjs-control" equals the engine's constant today and the assertion above
-     stays green while the coupling is gone. The source is what proves the
-     coupling, so this reads it. */
   it("declares them as re-exports, with no literal to drift", () => {
     const source = fs.readFileSync(
       path.join(
@@ -74,15 +70,7 @@ describe("control-channel constants come from the engine, not from literals", ()
     );
   });
 
-  /* @invariant The pin moved to 4.0.19, that assertion fired, and the copy
-     became a re-export. What it asserts now is the risk that survives the
-     adoption: an import cannot be a transposed digit, but it CAN quietly
-     become undefined if a future pin walks back the export or renames one,
-     and undefined compares equal to nothing, so every refusal would fall
-     through to the generic 4xxx remedy while the four tests below still pass
-     on their own literals. Identity against the module namespace is what
-     proves the value is the engine's and not a fallback. */
-  it("takes the close codes from the engine, by identity", () => {
+  it("takes the close codes from the engine by identity, so a walked-back export cannot read as undefined", () => {
     const published = bridge as unknown as Record<string, number | undefined>;
     const adopted: Record<string, number> = {
       CLOSE_BAD_INSTANCE,
@@ -103,12 +91,6 @@ describe("control-channel constants come from the engine, not from literals", ()
     }
   });
 
-  /* @invariant The numbers the four remedies in tools/logs.ts were written against, kept
-     as literals HERE precisely because logs-constants no longer has any. An
-     engine that renumbers a close code under a compatible-looking version bump
-     would keep every identity assertion above green while handing a
-     slow-consumer drop the version-mismatch remedy, and this is the only place
-     that would notice. Read off the engine's own contracts.ts. */
   it("uses the broker's numbers, not numbers of its own", () => {
     expect(CLOSE_BAD_INSTANCE).toBe(4001);
     expect(CLOSE_BAD_HELLO).toBe(4002);
@@ -116,11 +98,6 @@ describe("control-channel constants come from the engine, not from literals", ()
     expect(CLOSE_SLOW_CONSUMER).toBe(4008);
   });
 
-  /* @invariant The floor is deliberately NOT adopted: the engine publishes no such
-     constant, and 4000 here is this package's reading rule for a code it does
-     not recognise, not a number the broker sends. It still has to sit below
-     every code it is meant to admit, or a real refusal would be read as an
-     ordinary transport close and reported as an empty log. */
   it("keeps the refusal floor local and below every code it admits", () => {
     expect(
       (bridge as unknown as Record<string, unknown>).CLOSE_REFUSAL_FLOOR,
@@ -140,11 +117,7 @@ describe("control-channel constants come from the engine, not from literals", ()
   });
 });
 
-/* @invariant Version skew: this MCP drives whatever engine the project has installed,
-   which can be OLDER than the one this package pins. These are the two shapes
-   that failure takes, and both must produce a sentence a caller can act on
-   rather than an answer that looks correct. */
-describe("older engine, different session layout", () => {
+describe("an engine older than the pin still gets a sentence a caller can act on", () => {
   let tmp: string;
 
   beforeEach(() => {
@@ -214,9 +187,6 @@ describe("older engine, different control envelope", () => {
     expect(refusal?.message).toMatch(/older/);
   });
 
-  /* @invariant The whole point of naming the codes: four refusals, four remedies. Each
-     assertion below pins the ONE action that fixes that close and, where the
-     confusion would be expensive, pins that the wrong action is not suggested. */
   describe("each refusal names its own remedy", () => {
     const url = "ws://127.0.0.1:9/extjs-control";
 

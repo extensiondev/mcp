@@ -1,5 +1,3 @@
-/* @invariant the manifest is found the way the scaffolder finds it, so a
-   complete monorepo scaffold is not called incomplete. */
 
 import fs from "node:fs";
 import os from "node:os";
@@ -35,7 +33,7 @@ afterEach(() => {
   for (const dir of tmpDirs.splice(0)) fs.rmSync(dir, { recursive: true, force: true });
 });
 
-describe("extension_create on a monorepo template", () => {
+describe("extension_create finds the manifest the way the scaffolder does on a monorepo template", () => {
   it("accepts a manifest at packages/extension/src and names it", async () => {
     const parent = tmpDir();
     const out = JSON.parse(await create.handler({ projectName: "mono", parentDir: parent, template: "sidebar-monorepo-turborepo" }));

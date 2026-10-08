@@ -99,9 +99,6 @@ afterEach(async () => {
   );
 });
 
-/* @invariant A stand-in Firefox: one tab, one frame target, and a console actor that
-   really runs what it is sent, in a VM, so the wrapper and the poll are
-   exercised end to end over the wire format. */
 function firefox(options: {
   tabs: Packet[];
   globals?: Record<string, unknown>;

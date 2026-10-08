@@ -14,9 +14,6 @@ import { makeFilter } from "../tools/logs-filter";
 import { logsPath } from "../lib/session-paths";
 import { schema as logsSchema } from "../tools/logs-schema";
 
-/* @invariant The CI matrix runs this suite against the stable engine and the
-   canary side by side, and the two answer level 'off' differently, so the
-   expectation is read off the engine actually installed rather than assumed. */
 function engineTreatsOffAsNone(): boolean {
   const require = createRequire(import.meta.url);
   const version = String(require("extension-develop/package.json").version);
@@ -52,11 +49,6 @@ function select(predicate: (event: unknown) => boolean): number[] {
   );
 }
 
-/* @invariant Every clause below is now the engine's. These assertions are what makes
-   deleting this package's copy of the level ranking, the glob matcher, the
-   context set and the header rule safe: they pin makeFilter to
-   matchesLogQuery's answer on the same corpus, so a divergence in either
-   direction fails here rather than quietly changing what an agent sees. */
 describe("makeFilter agrees with the engine's matchesLogQuery", () => {
   const cases: Array<{ name: string; args: Record<string, unknown>; query: Record<string, unknown> }> = [
     { name: "no filter", args: {}, query: {} },
@@ -145,12 +137,7 @@ describe("makeFilter agrees with the engine's matchesLogQuery", () => {
   });
 });
 
-/* @invariant The one clause deliberately NOT delegated. Level 'off' means
-   "logging disabled, signals only" to extension_logs; to the engine it meant
-   "all" through 4.1.30 and selects nothing from 4.1.31 (LOG_LEVEL_FILTERS
-   gained 'off' as none). Neither reading is this package's, and this test
-   states all three so nobody "fixes" the divergence by accident. */
-describe("level off is this package's meaning, not the engine's", () => {
+describe("level off means signals only here, while the engine read it as all through 4.1.30 and as none from 4.1.31", () => {
   it("the engine treats off as all through 4.1.30 and as none from 4.1.31", () => {
     const theirs = select((event) =>
       matchesLogQuery(event as never, { level: "off" }),
@@ -183,21 +170,6 @@ describe("level off is this package's meaning, not the engine's", () => {
   });
 });
 
-/* @invariant The engine publishes logLevelRank and LOG_LEVEL_ORDER, and
-   nothing in this package ranks or orders levels by hand: makeFilter hands
-   every severity comparison to matchesLogQuery, which applies the engine's
-   rank. What this package does own is the VOCABULARY the tool schema offers
-   an agent, and that is a separate copy of the same ordering, written as a
-   JSON Schema enum. Reordering the engine's rank without touching the enum
-   would leave the schema promising "a level includes everything more severe"
-   about an order that is no longer the one being applied, so the enum is
-   checked against the engine. It is checked twice, because the two checks
-   catch different things and neither subsumes the other. LOG_LEVEL_ORDER is
-   the engine's DECLARED ordering, and comparing the enum to it catches a
-   level added, dropped or swapped even where this corpus cannot tell two
-   levels apart. The count comparison then catches the case the declared array
-   cannot: an ordering that matchesLogQuery does not actually apply. Only the
-   first was unavailable while the pin withheld LOG_LEVEL_ORDER. */
 describe("the schema's level vocabulary matches the engine's rank", () => {
   const severities = (logsSchema.inputSchema.properties.level.enum as string[])
     .filter((level) => level !== "all" && level !== "off");
@@ -224,9 +196,6 @@ describe("the schema's level vocabulary matches the engine's rank", () => {
     expect(selected[0]).toBeLessThan(selected[selected.length - 1]);
   });
 
-  /* @invariant The console emits `log`; the filter vocabulary calls it `info`, and the
-     engine's rank is what aliases the two. Offering `log` in the enum would
-     imply a sixth level that ranks separately, which it does not. */
   it("does not offer log as a level of its own", () => {
     expect(severities).not.toContain("log");
     expect(severities).toContain("info");

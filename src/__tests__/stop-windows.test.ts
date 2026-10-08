@@ -43,8 +43,6 @@ async function waitFor(check: () => boolean, budgetMs: number): Promise<boolean>
   return check();
 }
 
-/* @invariant This is the one cell that runs the Windows stop for real. The
-   other stop cells signal POSIX process groups and are skipped here. */
 describe("extension_stop on a real Windows host", () => {
   windowsOnly(
     "ends the session's whole process tree and confirms nothing of it is left",

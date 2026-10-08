@@ -112,9 +112,6 @@ describe("the published client had no hold awareness at all, so this file is the
     expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
 
-  /* @invariant (b) is the one the published bytes lacked entirely, and it is
-     the reason a reader concludes the product works rather than that it is
-     broken. */
   it("answers a held publish with the condition, what still works, and a way back", async () => {
     vi.stubGlobal(
       "fetch",
@@ -169,9 +166,6 @@ describe("the published client had no hold awareness at all, so this file is the
     }
   });
 
-  /* @invariant The date is not merely absent from the sentence, it is absent
-     from the shipped bytes. A tarball is public, so a date parked in a string
-     behind a false flag would disclose the day to anyone who ran npm pack. */
   it("names no date, and the source tree holds none to name", () => {
     const message = platformHoldMessage(HELD_BODY);
     expect(message).not.toMatch(/\b20\d\d-\d\d-\d\d\b/);
