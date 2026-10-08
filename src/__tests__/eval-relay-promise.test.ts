@@ -5,6 +5,7 @@ import path from "node:path";
 import { describe, it, expect, afterEach, vi } from "vitest";
 
 import { envelope } from "../lib/envelope";
+import { actVerbAnswer, evalRefusal } from "./fixtures/engine-answers";
 
 import type * as ActModule from "../lib/act";
 import type * as CdpPortModule from "../lib/cdp-port";
@@ -192,18 +193,17 @@ describe("extension_eval on a relay surface never hands the relay a promise", ()
     const dir = project(GECKO);
     const { toMcpSpeak } = await import("../lib/act");
     respond = () =>
-      envelope({
-        ok: false,
-        command: "extension_eval",
-        status: "not-found",
-        error: {
+      actVerbAnswer(
+        evalRefusal({
           code: "E_TARGET_NOT_FOUND",
           name: "Unsupported",
           message: toMcpSpeak(
             "surface 'newtab' is not open (open it first: extension open newtab)",
           ),
-        },
-      });
+          engine: "firefox",
+        }),
+        "extension_eval",
+      );
 
     const result = JSON.parse(
       await evalTool.handler({

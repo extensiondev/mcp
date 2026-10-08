@@ -5,24 +5,20 @@ import path from "node:path";
 import { describe, it, expect, afterEach, vi } from "vitest";
 
 import { envelope } from "../lib/envelope";
+import { actFailure, actVerbAnswer, cliRefusal } from "./fixtures/engine-answers";
 
 import type * as ActModule from "../lib/act";
 
 const refusal = () =>
-  JSON.stringify({
-    schema: 1,
-    ok: false,
-    command: "extension_open",
-    status: "failed",
-    value: null,
-    error: {
+  actVerbAnswer(
+    actFailure("open", {
       name: "Unsupported",
       message: "sidePanel not available (engine: firefox)",
       engine: "firefox",
       code: "E_NOT_IMPLEMENTED",
-    },
-    warnings: [],
-  });
+    }),
+    "extension_open",
+  );
 
 const calls: string[][] = [];
 let openResult: () => string = refusal;
@@ -52,16 +48,14 @@ vi.mock("../lib/act", async (importOriginal) => {
                 summary: { bodyChildCount: 2 },
               },
             })
-          : envelope({
-              ok: false,
-              command: "extension_open",
-              status: "not-found",
-              error: {
-                code: "E_TARGET_NOT_FOUND",
-                name: "Unsupported",
-                message: "surface 'sidebar' is not open",
-              },
-            });
+          : actVerbAnswer(
+              actFailure(
+                "open",
+                { code: "E_TARGET_NOT_FOUND", name: "Unsupported", message: "surface 'sidebar' is not open", engine: "firefox" },
+                "not-found",
+              ),
+              "extension_open",
+            );
       }
 
       return envelope({ ok: true, command: "extension_open", status: "ok", value: null });
@@ -167,12 +161,12 @@ describe("extension_open sidebar on Gecko when the engine names a Chromium API i
   it("does not call the panel closed when the probe itself failed", async () => {
     const dir = project(MANIFEST);
     probeOverride = () =>
-      envelope({
-        ok: false,
-        command: "extension_open",
-        status: "failed",
-        error: { code: "E_NO_SESSION", name: "NoSession", message: "No active control channel found for firefox." },
-      });
+      JSON.stringify(
+        actVerbAnswer(
+          cliRefusal("open", "E_SESSION_NOT_FOUND", "No active control channel found for firefox."),
+          "extension_open",
+        ),
+      );
 
     const result = JSON.parse(
       await open.handler({ projectPath: dir, browser: "firefox", surface: "sidebar" }),
@@ -181,7 +175,7 @@ describe("extension_open sidebar on Gecko when the engine names a Chromium API i
     expect(result.ok).toBe(true);
     const warnings = result.warnings.join("\n");
     expect(warnings).toMatch(/whether the panel is open could not be read/);
-    expect(warnings).toMatch(/E_NO_SESSION/);
+    expect(warnings).toMatch(/E_SESSION_NOT_FOUND/);
     expect(warnings).not.toMatch(/panel is not open now/);
   });
 
@@ -224,12 +218,14 @@ describe("extension_open sidebar on Gecko when the engine names a Chromium API i
     expect(opened.value.opened).toBe("sidebar");
 
     openResult = () =>
-      envelope({
-        ok: false,
-        command: "extension_open",
-        status: "failed",
-        error: { code: "E_SESSION_NOT_FOUND", name: "CliError", message: "No active control channel found for firefox. Looked at /p/dist/extension-js/firefox/ready.json. Run `extension dev --browser=firefox --allow-control` first." },
-      });
+      actVerbAnswer(
+        cliRefusal(
+          "open",
+          "E_SESSION_NOT_FOUND",
+          "No active control channel found for firefox. Looked at /p/dist/extension-js/firefox/ready.json. Run `extension dev --browser=firefox --allow-control` first.",
+        ),
+        "extension_open",
+      );
 
     const failed = JSON.parse(
       await open.handler({ projectPath: dir, browser: "firefox", surface: "sidebar" }),

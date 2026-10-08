@@ -5,7 +5,7 @@ import path from "node:path";
 import { describe, it, expect, afterEach, vi } from "vitest";
 
 import { envelope } from "../lib/envelope";
-import { actFrame, cliRefusal, tabRows } from "./fixtures/engine-answers";
+import { actFailure, actFrame, actVerbAnswer, cliRefusal, tabRows } from "./fixtures/engine-answers";
 import { writeModernContract } from "./fixtures/ready-contract";
 
 import type * as ActModule from "../lib/act";
@@ -170,12 +170,14 @@ describe("extension_assert reads Gecko through the control channel instead of an
 
   it("fails surface-rendered when the relay has no open document to answer from", async () => {
     inspectReply = () =>
-      envelope({
-        ok: false,
-        command: "extension_assert",
-        status: "not-found",
-        error: { code: "E_TARGET_NOT_FOUND", name: "Unsupported", message: "surface 'newtab' is not open" },
-      });
+      actVerbAnswer(
+        actFailure(
+          "inspect",
+          { code: "E_TARGET_NOT_FOUND", name: "Unsupported", message: "surface 'newtab' is not open", engine: "firefox" },
+          "not-found",
+        ),
+        "extension_assert",
+      );
 
     const result = JSON.parse(
       await assertTool.handler({

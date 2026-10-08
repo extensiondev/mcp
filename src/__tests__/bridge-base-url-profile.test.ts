@@ -5,17 +5,17 @@ import path from "node:path";
 import { describe, it, expect, afterEach, vi } from "vitest";
 
 import { envelope } from "../lib/envelope";
-import { readyContract } from "./fixtures/engine-answers";
+import { actVerbAnswer, evalRefusal, readyContract } from "./fixtures/engine-answers";
 
 import type * as ActModule from "../lib/act";
 
-let relayReply: () => string = () =>
-  envelope({
-    ok: false,
-    command: "extension_open",
-    status: "failed",
-    error: { code: "E_EVAL", name: "EvalError", message: "call to eval() blocked by CSP" },
-  });
+const cspRefusedTheBackground = () =>
+  actVerbAnswer(
+    evalRefusal({ code: "E_EVAL", name: "EvalError", message: "call to eval() blocked by CSP", engine: "firefox" }),
+    "extension_open",
+  );
+
+let relayReply: () => string = cspRefusedTheBackground;
 vi.mock("../lib/act", async (importOriginal) => {
   const actual = await importOriginal<typeof ActModule>();
 
@@ -58,13 +58,7 @@ function project(options: { addonId?: string | null; uuid?: string; prefsFor?: s
 }
 
 afterEach(() => {
-  relayReply = () =>
-    envelope({
-      ok: false,
-      command: "extension_open",
-      status: "failed",
-      error: { code: "E_EVAL", name: "EvalError", message: "call to eval() blocked by CSP" },
-    });
+  relayReply = cspRefusedTheBackground;
 
   for (const d of dirs.splice(0)) fs.rmSync(d, { recursive: true, force: true });
 });

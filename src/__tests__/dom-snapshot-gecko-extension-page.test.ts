@@ -2,7 +2,7 @@ import vm from "node:vm";
 
 import { describe, it, expect, afterEach, vi } from "vitest";
 
-import { envelope } from "../lib/envelope";
+import { actFailure, actVerbAnswer } from "./fixtures/engine-answers";
 
 import type { RdpTab } from "../lib/rdp";
 import type * as ActModule from "../lib/act";
@@ -68,17 +68,19 @@ const domSnapshot = await import("../tools/dom-snapshot");
 const PANEL = "moz-extension://1e5c8097-57a9-4052-bd54-d5d37a7086de/pages/panel.html";
 
 const missingHostPermission = () =>
-  envelope({
-    ok: false,
-    command: "extension_dom_snapshot",
-    status: "not-found",
-    error: {
-      code: "E_TARGET_NOT_FOUND",
-      name: "TargetNotFound",
-      message: "Missing host permission for the tab",
-      engine: "firefox",
-    },
-  });
+  actVerbAnswer(
+    actFailure(
+      "inspect",
+      {
+        code: "E_TARGET_NOT_FOUND",
+        name: "TargetNotFound",
+        message: "Missing host permission for the tab",
+        engine: "firefox",
+      },
+      "not-found",
+    ),
+    "extension_dom_snapshot",
+  );
 
 afterEach(() => {
   calls.length = 0;

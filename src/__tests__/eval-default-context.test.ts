@@ -6,6 +6,7 @@ import { describe, it, expect, afterEach, vi } from "vitest";
 
 import { envelope } from "../lib/envelope";
 import { writeEvalToken } from "./fixtures/ready-contract";
+import { actVerbAnswer, evalRefusal } from "./fixtures/engine-answers";
 
 import type * as ActModule from "../lib/act";
 import type * as CdpPortModule from "../lib/cdp-port";
@@ -147,16 +148,14 @@ describe("eval default context", () => {
       "dist/chrome": { manifest_version: 3, name: "F", background: { service_worker: "background.js" } },
     });
     reply = () =>
-      envelope({
-        ok: false,
-        command: "extension_eval",
-        status: "failed",
-        error: {
+      actVerbAnswer(
+        evalRefusal({
           code: "E_EVAL",
           name: "EvalError",
           message: "Cannot access a chrome-extension:// URL of different extension",
-        },
-      });
+        }),
+        "extension_eval",
+      );
 
     const result = JSON.parse(
       await evalTool.handler({ projectPath: dir, expression: "1 + 1", browser: "chrome" }),

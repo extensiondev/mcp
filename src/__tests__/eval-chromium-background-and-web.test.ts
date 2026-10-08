@@ -7,6 +7,7 @@ import { describe, it, expect, afterEach, vi } from "vitest";
 
 import { envelope } from "../lib/envelope";
 import { writeEvalToken } from "./fixtures/ready-contract";
+import { actVerbAnswer, evalRefusal } from "./fixtures/engine-answers";
 
 import type * as ActModule from "../lib/act";
 import type * as CdpPortModule from "../lib/cdp-port";
@@ -412,17 +413,15 @@ describe("extension_eval evaluates a web tab named by url over CDP, so Trusted T
   it("names Trusted Types and the url route when the relay is refused on the active tab", async () => {
     const p = project(MV3);
     relayReply = () =>
-      envelope({
-        ok: false,
-        command: "extension_eval",
-        status: "failed",
-        error: {
+      actVerbAnswer(
+        evalRefusal({
           code: "E_EVAL",
           name: "EvalError",
           message:
             "Evaluating a string as JavaScript violates this document's Trusted Type assignment requirements.",
-        },
-      });
+        }),
+        "extension_eval",
+      );
 
     const result = JSON.parse(
       await evalTool.handler({ projectPath: p.dir, browser: "chrome", context: "page", expression: "1" }),

@@ -174,7 +174,7 @@ export function actFrame(command: string, value: unknown, overrides: Body = {}):
 
 export function actFailure(
   command: string,
-  error: { name: string; message: string; code: string; hint?: string },
+  error: { name: string; message: string; code: string; hint?: string; engine?: string },
   status: "failed" | "not-found" | "denied" | "timeout" | "usage" = "failed",
 ): Body {
   return {
@@ -342,7 +342,7 @@ export function evalFrame(result: unknown, context = "background", overrides: Bo
     ok: true,
     command: "eval",
     status: "ok",
-    value: { result, context },
+    value: result,
     error: null,
     warnings: [],
     ...overrides,
@@ -377,6 +377,10 @@ export function evalRefusal(
   };
 }
 
+
+export function actVerbAnswer(frame: Body, tool: string): string {
+  return JSON.stringify({ ...frame, command: tool });
+}
 
 export function reloadFrame(target: "background" | number = "background", overrides: Body = {}): Body {
   return actFrame("reload", target === "background" ? { reloading: true } : { reloaded: target }, overrides);

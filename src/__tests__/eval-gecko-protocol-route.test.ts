@@ -5,6 +5,7 @@ import path from "node:path";
 import { describe, it, expect, afterEach, vi } from "vitest";
 
 import { envelope } from "../lib/envelope";
+import { actVerbAnswer, evalRefusal } from "./fixtures/engine-answers";
 
 import type { RdpTab } from "../lib/rdp";
 import type * as ActModule from "../lib/act";
@@ -96,32 +97,28 @@ const MV2 = { manifest_version: 2, name: "F", background: { scripts: ["bg.js"] }
 const BASE = "moz-extension://1e5c8097-57a9-4052-bd54-d5d37a7086de/";
 
 const refusedByCsp = (name = "EvalError") =>
-  envelope({
-    ok: false,
-    command: "extension_eval",
-    status: "denied",
-    error: {
+  actVerbAnswer(
+    evalRefusal({
       code: "E_CSP_BLOCKS_EVAL",
       name,
       message: "call to eval() blocked by CSP",
       engine: "firefox",
       hint: "The extension's own content_security_policy forbids eval in this document, so no expression runs there, 1 + 1 included.",
-    },
-  });
+    }),
+    "extension_eval",
+  );
 
 const olderEngineRefusal = () =>
-  envelope({
-    ok: false,
-    command: "extension_eval",
-    status: "failed",
-    error: {
+  actVerbAnswer(
+    evalRefusal({
       code: "E_EVAL",
       name: "EvalError",
       message: "call to eval() blocked by CSP",
       engine: "firefox",
       hint: "The expression threw inside the page. Check the expression itself.",
-    },
-  });
+    }),
+    "extension_eval",
+  );
 
 const value = (v: unknown) =>
   envelope({ ok: true, command: "extension_eval", status: "ok", value: v });
@@ -165,12 +162,10 @@ describe("a Gecko surface whose policy forbids eval is evaluated without the rel
     respond = (call) =>
       call.expression.includes("(0, eval)")
         ? refusedByCsp()
-        : envelope({
-            ok: false,
-            command: "extension_eval",
-            status: "failed",
-            error: { code: "E_EVAL", name: "EvalError", message: "nope is not defined" },
-          });
+        : actVerbAnswer(
+            evalRefusal({ code: "E_EVAL", name: "EvalError", message: "nope is not defined", engine: "firefox" }),
+            "extension_eval",
+          );
 
     const result = JSON.parse(
       await evalTool.handler({

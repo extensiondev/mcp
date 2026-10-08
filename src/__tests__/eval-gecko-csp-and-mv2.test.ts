@@ -5,6 +5,7 @@ import path from "node:path";
 import { describe, it, expect, afterEach, vi } from "vitest";
 
 import { envelope } from "../lib/envelope";
+import { actVerbAnswer, evalRefusal } from "./fixtures/engine-answers";
 
 import type * as ActModule from "../lib/act";
 import type * as CdpPortModule from "../lib/cdp-port";
@@ -76,18 +77,16 @@ describe("extension_eval names the extension's CSP instead of blaming the expres
   it("rewrites the eval-blocked refusal with the policy and the paths around it", async () => {
     const dir = project({ ...MV2, manifest_version: 3 });
     respond = () =>
-      envelope({
-        ok: false,
-        command: "extension_eval",
-        status: "failed",
-        error: {
+      actVerbAnswer(
+        evalRefusal({
           code: "E_EVAL",
           name: "EvalError",
           message: "call to eval() blocked by CSP",
           engine: "firefox",
           hint: "The expression threw inside the page. Check the expression itself.",
-        },
-      });
+        }),
+        "extension_eval",
+      );
 
     const result = JSON.parse(
       await evalTool.handler({
@@ -109,12 +108,10 @@ describe("extension_eval names the extension's CSP instead of blaming the expres
   it("leaves a genuine expression error alone", async () => {
     const dir = project(MV2);
     respond = () =>
-      envelope({
-        ok: false,
-        command: "extension_eval",
-        status: "failed",
-        error: { code: "E_EVAL", name: "ReferenceError", message: "nope is not defined" },
-      });
+      actVerbAnswer(
+        evalRefusal({ code: "E_EVAL", name: "ReferenceError", message: "nope is not defined", engine: "firefox" }),
+        "extension_eval",
+      );
 
     const result = JSON.parse(
       await evalTool.handler({
@@ -198,12 +195,10 @@ describe("extension_eval on MV2 Gecko reaches a tab through tabs.executeScript",
     const dir = project(MV2);
     respond = (call, index) =>
       index === 0
-        ? envelope({
-            ok: false,
-            command: "extension_eval",
-            status: "failed",
-            error: { code: "E_EVAL", name: "EvalError", message: "call to eval() blocked by CSP", engine: "firefox" },
-          })
+        ? actVerbAnswer(
+            evalRefusal({ code: "E_EVAL", name: "EvalError", message: "call to eval() blocked by CSP", engine: "firefox" }),
+            "extension_eval",
+          )
         : envelope({
             ok: true,
             command: "extension_eval",
@@ -232,12 +227,10 @@ describe("extension_eval on MV2 Gecko reaches a tab through tabs.executeScript",
   it("keeps the CSP explanation on an MV3 Gecko build, which has no tabs.executeScript", async () => {
     const dir = project({ manifest_version: 3, name: "F", background: { scripts: ["bg.js"] } });
     respond = () =>
-      envelope({
-        ok: false,
-        command: "extension_eval",
-        status: "failed",
-        error: { code: "E_EVAL", name: "EvalError", message: "call to eval() blocked by CSP", engine: "firefox" },
-      });
+      actVerbAnswer(
+        evalRefusal({ code: "E_EVAL", name: "EvalError", message: "call to eval() blocked by CSP", engine: "firefox" }),
+        "extension_eval",
+      );
 
     const result = JSON.parse(
       await evalTool.handler({
