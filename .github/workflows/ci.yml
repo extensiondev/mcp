@@ -38,8 +38,16 @@ jobs:
           FLOOR=$(node -p "require('./package.json').dependencies['extension-develop'].replace(/^[~^]/,'')")
           echo "canary=$CANARY stable=$STABLE floor=$FLOOR"
           node -e '
+            const core = (v) => v.split("-")[0].split(".").map(Number);
+            const behind = (a, b) => {
+              const [x, y] = [core(a), core(b)];
+              for (let i = 0; i < 3; i++) if (x[i] !== y[i]) return x[i] < y[i];
+              return a.includes("-") && !b.includes("-");
+            };
+            const canary = behind(process.argv[1], process.argv[2]) ? process.argv[2] : process.argv[1];
+            if (canary !== process.argv[1]) console.error(`::notice::the canary tag (${process.argv[1]}) is behind stable (${process.argv[2]}), so the canary cell runs on stable`);
             const cells = [
-              ["canary", process.argv[1]],
+              ["canary", canary],
               ["stable", process.argv[2]],
               ["floor", process.argv[3]],
             ];

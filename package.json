@@ -88,9 +88,9 @@
     "@extension.dev/urls": "^0.8.2",
     "@modelcontextprotocol/sdk": "^1.32.1",
     "cross-spawn": "^7.0.6",
-    "extension-create": "4.1.32",
+    "extension-create": "4.1.33",
     "extension-develop": "4.1.33",
-    "extension-install": "4.1.32",
+    "extension-install": "4.1.33",
     "ws": "^8.20.0"
   },
   "devDependencies": {
