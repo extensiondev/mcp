@@ -51,13 +51,7 @@ jobs:
               ["stable", process.argv[2]],
               ["floor", process.argv[3]],
             ];
-            const seen = new Set();
-            const include = [];
-            for (const [name, version] of cells) {
-              if (seen.has(version)) continue;
-              seen.add(version);
-              include.push({name, version});
-            }
+            const include = cells.map(([name, version]) => ({name, version}));
             console.log("matrix=" + JSON.stringify({include}));
           ' "$CANARY" "$STABLE" "$FLOOR" >> "$GITHUB_OUTPUT"
 
