@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- `extension_assert`'s `surface-rendered` check on `newtab` finds the override where Chrome lists it: an overridden new tab page is a `chrome://newtab/` target, not `chrome-extension://<id>/newtab.html`, so the check failed with "nothing is rendering it" while the page was on screen. A `chrome://newtab/` page counts only when it answers with this extension's own `chrome.runtime.id`, so Chrome's default page or another extension's override still fails.
+
 ## 10.11.2
 
 Built on Extension.js 4.1.33.

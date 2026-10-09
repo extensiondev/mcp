@@ -19,6 +19,7 @@ const live = vi.hoisted(() => ({
   storageFrame: "",
   probeError: null as string | null,
   port: 9222 as number | null,
+  runtimeIds: {} as Record<string, string | null>,
 }));
 
 vi.mock("../lib/cdp", async (importOriginal) => {
@@ -46,8 +47,8 @@ vi.mock("../lib/cdp", async (importOriginal) => {
         ...(live.probeError ? { error: live.probeError } : {}),
       }));
     }
-    async evaluate() {
-      return undefined;
+    async evaluate(sessionId: string, expression: string) {
+      return expression.includes("chrome.runtime.id") ? live.runtimeIds[sessionId] : undefined;
     }
     disconnect() {}
   }
@@ -124,6 +125,7 @@ async function assertOnce(clause: Record<string, unknown>) {
 beforeEach(() => {
   project = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-assert-"));
   live.targets = [];
+  live.runtimeIds = {};
   live.render = null;
   live.probeCount = 0;
   live.port = 9222;
@@ -343,6 +345,37 @@ describe("surface-rendered", () => {
       assert: "surface-rendered",
       surface: "popup",
     });
+    expect(check.outcome).toBe("fail");
+    expect(check.detail).toContain("no page target");
+  });
+
+  it("passes on a new tab override Chrome lists as chrome://newtab/ once the page answers with this extension's id", async () => {
+    writeManifest({ chrome_url_overrides: { newtab: "newtab.html" } });
+    liveSession();
+    live.targets = [
+      { id: "sw", type: "service_worker", url: `chrome-extension://${GUEST_ID}/background/service_worker.js` },
+      { id: "ntp", type: "page", url: "chrome://newtab/" },
+    ];
+
+    live.runtimeIds = { "session-ntp": GUEST_ID };
+    live.render = { readyState: "complete", bodyElementCount: 12, textLength: 40 };
+
+    const { check } = await assertOnce({ assert: "surface-rendered", surface: "newtab" });
+    expect(check.outcome).toBe("pass");
+  });
+
+  it("still fails when the chrome://newtab/ page belongs to Chrome or another extension", async () => {
+    writeManifest({ chrome_url_overrides: { newtab: "newtab.html" } });
+    liveSession();
+    live.targets = [
+      { id: "sw", type: "service_worker", url: `chrome-extension://${GUEST_ID}/background/service_worker.js` },
+      { id: "ntp", type: "page", url: "chrome://newtab/" },
+    ];
+
+    live.runtimeIds = { "session-ntp": COMPANION_ID };
+    live.render = { readyState: "complete", bodyElementCount: 12, textLength: 40 };
+
+    const { check } = await assertOnce({ assert: "surface-rendered", surface: "newtab" });
     expect(check.outcome).toBe("fail");
     expect(check.detail).toContain("no page target");
   });

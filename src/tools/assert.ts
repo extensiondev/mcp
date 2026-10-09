@@ -838,11 +838,31 @@ async function assertSurfaceRendered(
   }
 
   const wanted = `chrome-extension://${extensionId}/${document}`;
-  const target = targets.find(
+  let target = targets.find(
     (candidate) =>
       candidate.type === "page" &&
       String(candidate.url ?? "").startsWith(wanted),
   );
+  let attached: Awaited<ReturnType<typeof stage.attach>> = null;
+
+  if (!target && clause.surface === "newtab") {
+    for (const candidate of targets) {
+      if (candidate.type !== "page" || !String(candidate.url ?? "").startsWith("chrome://newtab")) continue;
+
+      const probe = await stage.attach(candidate.id);
+      const owner = probe
+        ? await probe.cdp
+            .evaluate(probe.sessionId, "(() => { try { return chrome.runtime.id } catch { return null } })()")
+            .catch(() => null)
+        : null;
+
+      if (owner === extensionId) {
+        target = candidate;
+        attached = probe;
+        break;
+      }
+    }
+  }
 
   if (!target) {
     return failCheck(
@@ -858,7 +878,7 @@ async function assertSurfaceRendered(
     );
   }
 
-  const attached = await stage.attach(target.id);
+  attached ??= await stage.attach(target.id);
 
   if (!attached) {
     return inconclusiveCheck(
