@@ -119,7 +119,7 @@ describe("the Firefox report names what Firefox itself would say", () => {
       {
         ...BASE,
         "firefox:browser_specific_settings": {
-          gecko: { id: "f@example.com", data_collection_permissions: { required: ["none"] } },
+          gecko: { id: "f@example.com", strict_min_version: "140.0", data_collection_permissions: { required: ["none"] } },
         },
       },
       ["public/images/icon-16.png"],
@@ -237,5 +237,24 @@ describe("template similarity counts every surface the manifest declares", () =>
     expect(slugs[0]).toMatch(/^devtools/);
     expect(slugs.filter((s) => s.startsWith("devtools")).length).toBeGreaterThanOrEqual(3);
     expect(slugs.filter((s) => s.startsWith("ai-"))).toEqual([]);
+  });
+});
+
+describe("data_collection_permissions names the Firefox version that reads it", () => {
+  const withDataCollection = (gecko: Record<string, unknown>) => ({
+    ...BASE,
+    "firefox:browser_specific_settings": { gecko: { id: "f@example.com", data_collection_permissions: { required: ["none"] }, ...gecko } },
+  });
+
+  it("warns when no strict_min_version reaches 140", async () => {
+    const dir = project(withDataCollection({}), ["images/icon-16.png"]);
+    const out = JSON.stringify(JSON.parse(await manifestValidate.handler({ projectPath: dir, browsers: ["firefox"] })));
+    expect(out).toMatch(/data_collection_permissions is read by Firefox 140 and later/);
+  });
+
+  it("stays quiet once strict_min_version is 140 or later", async () => {
+    const dir = project(withDataCollection({ strict_min_version: "140.0" }), ["images/icon-16.png"]);
+    const out = JSON.stringify(JSON.parse(await manifestValidate.handler({ projectPath: dir, browsers: ["firefox"] })));
+    expect(out).not.toMatch(/data_collection_permissions is read by Firefox 140/);
   });
 });

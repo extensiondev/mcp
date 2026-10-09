@@ -1,5 +1,11 @@
 # Changelog
 
+## 10.11.5
+
+Built on Extension.js 4.1.33.
+
+- `extension_manifest_validate` says which Firefox reads `data_collection_permissions`: Firefox 140 and later (142 on Android), and AMO's linter reports the key as unsupported when `strict_min_version` is lower or absent, so the answer names the `strict_min_version` to set.
+
 ## 10.11.4
 
 Built on Extension.js 4.1.33.

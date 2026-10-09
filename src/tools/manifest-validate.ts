@@ -684,6 +684,15 @@ export async function handler(args: {
         );
       }
 
+      const minVersion = (bss?.gecko as Record<string, unknown> | undefined)?.strict_min_version;
+      const minMajor = typeof minVersion === "string" ? Number.parseInt(minVersion, 10) : Number.NaN;
+
+      if (dataCollection && typeof dataCollection === "object" && !(minMajor >= 140)) {
+        result.warnings.push(
+          `Firefox: data_collection_permissions is read by Firefox 140 and later (142 on Android), and ${typeof minVersion === "string" ? `strict_min_version is "${minVersion}"` : "no strict_min_version is set"}. AMO's linter reports the key as unsupported below that; set firefox:browser_specific_settings.gecko.strict_min_version to "140.0" (or "142.0" with Android) to match.`,
+        );
+      }
+
       for (const key of CHROMIUM_ONLY_KEYS) {
         if (effective[key] !== undefined) {
           if (key === "side_panel" && unprefixedSidePanel) continue;
