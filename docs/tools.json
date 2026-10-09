@@ -161,7 +161,7 @@
       "name": "extension_browsers",
       "tier": "browsers",
       "group": "local",
-      "description": "Find, install and remove the browsers Extension.js tooling can launch. Pass action:'detect' (the default) to scan both system-installed and managed browsers, and report each one's binary path, version, engine and debugger support. Pass action:'list' for the managed cache this tool downloads into, with sizes on disk. Pass action:'install' to download a managed binary: several hundred MB in one blocking call, so allow a generous client timeout. Pass action:'uninstall' to remove managed binaries; it never touches a system install.",
+      "description": "Find, install and remove the browsers Extension.js tooling can launch. Pass action:'detect' (the default) to scan both system-installed and managed browsers, and report each one's binary path, version, engine and debugger support. Pass action:'list' for the managed cache this tool downloads into, with each binary's version and size on disk. Both report the version the binary itself carries (its bundle metadata, else --version), prerelease suffix included (159.0a1), never the cache folder's name. Pass action:'install' to download a managed binary: several hundred MB in one blocking call, so allow a generous client timeout. Pass action:'uninstall' to remove managed binaries; it never touches a system install.",
       "gate": "none",
       "samplePrompt": "Which browsers are installed here? Install Firefox if it is missing",
       "readOnly": false,

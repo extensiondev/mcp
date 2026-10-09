@@ -556,14 +556,20 @@ export async function handler(args: {
       effectiveByBrowser.get(browser) ?? engineManifestView(manifest, browser);
     const issues: string[] = [];
 
+    // The Chromium view already resolves chromium: keys at any nesting, so a
+    // manifest that ships its own service worker or action is not told to port.
+    const chromiumBg = chromiumManifest.background as Record<string, unknown> | undefined;
+    const chromiumHasWorker = typeof chromiumBg?.service_worker === "string";
+    const firefoxBg = effective.background as Record<string, unknown> | undefined;
+    const firefoxScriptsOnly = Array.isArray(firefoxBg?.scripts) && !chromiumHasWorker;
+
     if (isFirefox && (effective.manifest_version as number) === 2) {
       const porting: string[] = [];
-      const bg2 = effective.background as Record<string, unknown> | undefined;
 
-      if (bg2 && Array.isArray(bg2.scripts))
+      if (firefoxScriptsOnly)
         {porting.push("background.scripts to a single chromium:service_worker");}
 
-      if (effective.browser_action)
+      if (effective.browser_action && !chromiumManifest.action)
         {porting.push("browser_action to chromium:action");}
 
       if (
@@ -585,6 +591,12 @@ export async function handler(args: {
           `${browser} stays on Manifest V2 here, and Firefox still runs it. To also target Chromium, which only loads MV3, the keys to port are: ${porting.join("; ")}. Keep both by prefixing the Chromium variants with chromium:.`,
         );
       }
+    }
+
+    if (isFirefox && (effective.manifest_version as number) === 3 && firefoxScriptsOnly) {
+      result.warnings.push(
+        `${browser}: background.scripts is declared and no service worker for Chromium. Firefox MV3 runs it, but Chromium MV3 only runs background.service_worker; to also target Chromium, declare chromium:service_worker next to firefox:scripts.`,
+      );
     }
 
     if (isChromium) {

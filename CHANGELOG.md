@@ -1,5 +1,12 @@
 # Changelog
 
+## 10.11.4
+
+Built on Extension.js 4.1.33.
+
+- `extension_manifest_validate` no longer tells a Firefox MV2 manifest to port `background.scripts` to `chromium:service_worker` when the manifest already declares one, nested under `background` or as a top-level `chromium:background`, and no longer asks for `chromium:action` when one is declared. A Firefox MV3 manifest whose only background is `background.scripts` now hears that Chromium MV3 runs only a service worker. The `newtab-react` template drew the port advice on every Firefox check.
+- `extension_browsers` reports one version per browser, read from the binary itself: the bundle's `Info.plist` or `application.ini` first (the way the engine's `firefox-location2` reads it), then `--version`, keeping a prerelease suffix such as `a1`, `b3` or `esr`. `detect` used to cut Nightly's "159.0a1" to "159.0", and `list` reported no version at all, so an agent compared the cache folder `mac_arm-nightly_158.0a1` of a self-updated Nightly with "159.0" and called it a mismatch. `list` now carries `version` beside `binaryPath`, and the folder name stays only in the path.
+
 ## 10.11.3
 
 Built on Extension.js 4.1.33.

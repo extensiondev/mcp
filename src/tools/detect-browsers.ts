@@ -326,23 +326,69 @@ function findSystemBinary(browser: string): string | null {
   return null;
 }
 
-async function getVersion(
-  binaryPath: string,
-  browser: string,
-): Promise<string | null> {
-  try {
-    const flag = browser === "firefox" ? "--version" : "--version";
-    const { stdout } = await execFileAsync(binaryPath, [flag], {
-      timeout: 5000,
-      env: { ...process.env },
-    });
-    const match = stdout.match(/[\d]+\.[\d]+[\d.]*/);
-    const text = match ? match[0] : stdout.trim().slice(0, 50);
+// Keeps a prerelease marker (159.0a1, 141.0b3, 128.5.0esr) so a Nightly or a
+// beta is never reported as the release it precedes.
+export function normalizeBrowserVersion(text: string | null | undefined): string | null {
+  const match = String(text ?? "").match(/(\d+(?:\.\d+){1,3}(?:[a-z]+\d*)?)/i);
 
-    return text.length > 0 ? text : null;
+  return match ? match[1] : null;
+}
+
+function readTextFile(file: string): string | null {
+  try {
+    return fs.readFileSync(file, "utf8");
   } catch {
     return null;
   }
+}
+
+// The bundle's own metadata, the way firefox-location2 getFirefoxVersion reads
+// it: a self-updated install rewrites these while its cache folder keeps the
+// version it was downloaded as.
+export function readBundledVersion(binaryPath: string): string | null {
+  const binDir = path.dirname(binaryPath);
+
+  if (path.basename(binDir) === "MacOS") {
+    const contents = path.dirname(binDir);
+    const plist = readTextFile(path.join(contents, "Info.plist"));
+    const short = plist?.match(/<key>CFBundleShortVersionString<\/key>\s*<string>([^<]+)<\/string>/);
+    const fromPlist = normalizeBrowserVersion(short?.[1]);
+    if (fromPlist) return fromPlist;
+
+    const ini = readTextFile(path.join(contents, "Resources", "application.ini"));
+    const fromIni = normalizeBrowserVersion(ini?.match(/^Version=(.+)$/m)?.[1]);
+    if (fromIni) return fromIni;
+
+    return null;
+  }
+
+  const ini = readTextFile(path.join(binDir, "application.ini"));
+
+  return normalizeBrowserVersion(ini?.match(/^Version=(.+)$/m)?.[1]);
+}
+
+async function probeVersion(binaryPath: string): Promise<string | null> {
+  try {
+    const { stdout } = await execFileAsync(binaryPath, ["--version"], {
+      timeout: 5000,
+      env: { ...process.env },
+    });
+
+    return normalizeBrowserVersion(stdout);
+  } catch {
+    return null;
+  }
+}
+
+export async function readBrowserVersion(
+  binaryPath: string,
+): Promise<{ version: string | null; versionProbe: "ok" | "failed" }> {
+  const probed = await probeVersion(binaryPath);
+
+  return {
+    version: readBundledVersion(binaryPath) ?? probed,
+    versionProbe: probed ? "ok" : "failed",
+  };
 }
 
 export async function detectBrowsers(
@@ -377,11 +423,13 @@ export async function detectBrowsers(
     }
 
     let version: string | null = null;
+    let versionProbe: DetectedBrowser["versionProbe"];
 
     if (binaryPath && !isWebkit) {
-      version = await getVersion(binaryPath, browser);
+      ({ version, versionProbe } = await readBrowserVersion(binaryPath));
     } else if (binaryPath && isWebkit) {
       version = await readSafariVersion(binaryPath);
+      versionProbe = version ? "ok" : "failed";
     }
 
     const automation =
@@ -397,7 +445,7 @@ export async function detectBrowsers(
       source,
       engine: isWebkit ? "webkit" : isGecko ? "gecko" : "chromium",
       version,
-      ...(binaryPath ? { versionProbe: version ? "ok" : "failed" } : {}),
+      ...(versionProbe ? { versionProbe } : {}),
       cdpSupport: !isGecko && !isWebkit,
       rdpSupport: isGecko,
       ...(automation ? { automation } : {}),
