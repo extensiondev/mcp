@@ -30,6 +30,7 @@ import {
 import { resolveSessionBrowser } from "../lib/session-browser";
 import { profilesRootDir, readyContractPath } from "../lib/session-paths";
 import { removeCarrier } from "../lib/carrier";
+import { contractBrowserPid, describeEnded, endedProcesses } from "../lib/stop-ended";
 import { sweepCarriers, type CarrierSweepEntry } from "../lib/carrier-exit";
 import { readRememberedCarriers } from "../lib/carrier-registry";
 import { envelope } from "../lib/envelope";
@@ -40,7 +41,7 @@ import type { ReadyContract } from "../lib/types";
 export const schema = {
   name: "extension_stop",
   description:
-    "Stop a session that extension_dev or extension_start is running: terminate the server and the browser it launched, and remove the live-preview carrier if extension_dev placed one. This covers extension_start build:false too, which the registry records as a preview session. Call it when you are done verifying, so sessions do not accumulate.",
+    "Stop a session that extension_dev or extension_start is running: terminate the server and the browser it launched, and remove the live-preview carrier if extension_dev placed one. The answer names the server pid and the browser pid the launcher recorded, each with whether it is gone (serverGone, browserGone), so a \"close its browser\" ask is settled by this answer with no process check by hand. This covers extension_start build:false too, which the registry records as a preview session. Call it when you are done verifying, so sessions do not accumulate.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -71,6 +72,9 @@ interface StopOutcome {
   projectPath: string;
   browser: string;
   pid: number | null;
+  serverGone: boolean | null;
+  browserPid: number | null;
+  browserGone: boolean | null;
   stopped: boolean;
   reaped: number[];
   reapUnconfirmed?: number[];
@@ -294,10 +298,13 @@ export async function stopOne(
   const session = findSessionInfo(projectPath, browser);
   const pid = session?.pid ?? pidFromReadyContract(projectPath, browser);
   const hints = contractProcessHints(projectPath, browser);
+  const browserPid = contractBrowserPid(projectPath, browser);
+  const noBrowser = session?.noBrowser === true;
 
   if (pid == null) {
     const { reaped, unconfirmed } = await reapSessionProcesses(projectPath, hints);
     removeSessionMarker(projectPath, browser);
+    const ended = endedProcesses(null, browserPid);
     let detail: string;
 
     if (unconfirmed.length) {
@@ -312,11 +319,12 @@ export async function stopOne(
       projectPath,
       browser,
       pid: null,
-      stopped: reaped.length > 0 && unconfirmed.length === 0,
+      ...ended,
+      stopped: reaped.length > 0 && unconfirmed.length === 0 && ended.browserGone !== false,
       reaped,
       ...(unconfirmed.length ? { reapUnconfirmed: unconfirmed } : {}),
       ...cleanCarrier(projectPath),
-      detail,
+      detail: `${detail} ${describeEnded(ended, null, noBrowser)}`,
     };
   }
 
@@ -332,15 +340,18 @@ export async function stopOne(
     } catch {
     }
 
+    const ended = endedProcesses(null, browserPid);
+
     return {
       projectPath,
       browser,
       pid,
+      ...ended,
       stopped: false,
       reaped: [],
       staleRecord: true,
       ...cleanCarrier(projectPath),
-      detail: `Nothing was signalled: ${describeForeignPid(pid)}. The session that recorded it is already gone; its stale records were removed.`,
+      detail: `Nothing was signalled: ${describeForeignPid(pid)}. The session that recorded it is already gone; its stale records were removed. ${describeEnded(ended, null, noBrowser)}`,
     };
   }
 
@@ -364,7 +375,8 @@ export async function stopOne(
 
   const { pids: survivors, verified } = sessionProcessPids(projectPath, hints);
   const dead = pidState(pid) === "dead";
-  const stopped = dead && verified && survivors.length === 0;
+  const ended = endedProcesses(dead, browserPid);
+  const stopped = dead && verified && survivors.length === 0 && ended.browserGone !== false;
 
   if (!verified) {
     detail += " Warning: the search for surviving browser processes could not run (pgrep is missing or failed), so survivors were NOT verified; the browser may still be up.";
@@ -373,6 +385,8 @@ export async function stopOne(
   } else if (reaped.length) {
     detail += ` Reaped ${reaped.length} browser process(es).`;
   }
+
+  detail += ` ${describeEnded(ended, pid, noBrowser)}`;
 
   if (dead) {
     removeSession(projectPath, browser);
@@ -388,6 +402,7 @@ export async function stopOne(
     projectPath,
     browser,
     pid,
+    ...ended,
     stopped,
     reaped,
     detail,

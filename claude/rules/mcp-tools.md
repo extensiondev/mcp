@@ -360,7 +360,7 @@ Run the PRODUCTION build in a browser: build the project, serve it, and launch. 
 
 ## extension_stop
 
-Stop a session that extension_dev or extension_start is running: terminate the server and the browser it launched, and remove the live-preview carrier if extension_dev placed one. This covers extension_start build:false too, which the registry records as a preview session. Call it when you are done verifying, so sessions do not accumulate.
+Stop a session that extension_dev or extension_start is running: terminate the server and the browser it launched, and remove the live-preview carrier if extension_dev placed one. The answer names the server pid and the browser pid the launcher recorded, each with whether it is gone (serverGone, browserGone), so a "close its browser" ask is settled by this answer with no process check by hand. This covers extension_start build:false too, which the registry records as a preview session. Call it when you are done verifying, so sessions do not accumulate.
 
 | input | type | required | default | description |
 | --- | --- | --- | --- | --- |
