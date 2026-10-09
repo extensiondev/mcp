@@ -5,6 +5,7 @@
 Built on Extension.js 4.1.33.
 
 - `extension_assert`'s `surface-rendered` check on `newtab` finds the override where Chrome lists it: an overridden new tab page is a `chrome://newtab/` target, not `chrome-extension://<id>/newtab.html`, so the check failed with "nothing is rendering it" while the page was on screen. A `chrome://newtab/` page counts only when it answers with this extension's own `chrome.runtime.id`, so Chrome's default page or another extension's override still fails.
+- `extension_manifest_validate` no longer tells a Firefox MV2 manifest to port `background.scripts` to `chromium:service_worker` when the manifest already declares one, nested under `background` or as a top-level `chromium:background`, and no longer asks for `chromium:action` when one is declared. A Firefox MV3 manifest whose only background is `background.scripts` now hears that Chromium MV3 runs only a service worker. The `newtab-react` template drew the port advice on every Firefox check.
 
 ## 10.11.2
 

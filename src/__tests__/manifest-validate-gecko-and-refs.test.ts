@@ -151,6 +151,77 @@ describe("the Firefox report names what Firefox itself would say", () => {
     expect(porting).toContain("declarativeNetRequest");
     expect(porting).toContain("[{resources, matches}]");
   });
+
+  it("never tells the newtab-react manifest to port the background it already prefixes", async () => {
+    const dir = project(
+      {
+        $schema: "https://json.schemastore.org/chrome-manifest.json",
+        "chromium:manifest_version": 3,
+        "firefox:manifest_version": 2,
+        version: "1.0.0",
+        "firefox:browser_specific_settings": {
+          gecko: { id: "newtab-react@extension.js", data_collection_permissions: { required: ["none"] } },
+        },
+        name: "React New Tab Example",
+        description: "Replaces your new tab page with a simple React page.",
+        icons: { "16": "images/icon-16.png" },
+        background: { "chromium:service_worker": "background.js", "firefox:scripts": ["background.js"] },
+        chrome_url_overrides: { newtab: "newtab/index.html" },
+      },
+      ["public/images/icon-16.png", "src/background.js", "src/newtab/index.html"],
+    );
+
+    const result = JSON.parse(await manifestValidate.handler({ projectPath: dir, browsers: ["firefox"] }));
+    const all = [...result.warnings, ...result.value.errors].join("\n");
+
+    expect(all).not.toContain("background.scripts to a single chromium:service_worker");
+    expect(all).not.toContain("no service worker for Chromium");
+  });
+
+  it("reads a service worker and action prefixed at the top level too", async () => {
+    const dir = project(
+      {
+        ...BASE,
+        "chromium:background": { service_worker: "bg.js" },
+        "firefox:background": { scripts: ["bg.js"] },
+        "chromium:action": { default_title: "x" },
+        "firefox:browser_action": { default_title: "x" },
+      },
+      ["public/images/icon-16.png", "src/bg.js"],
+    );
+
+    const result = JSON.parse(await manifestValidate.handler({ projectPath: dir, browsers: ["firefox"] }));
+
+    expect(result.warnings.find((w: string) => w.includes("stays on Manifest V2"))).toBeUndefined();
+  });
+
+  it("still gives a Firefox-only background.scripts manifest the port advice", async () => {
+    const mv2 = project(
+      { ...BASE, "firefox:background": { scripts: ["bg.js"] } },
+      ["public/images/icon-16.png", "src/bg.js"],
+    );
+    const mv2Result = JSON.parse(await manifestValidate.handler({ projectPath: mv2, browsers: ["firefox"] }));
+
+    expect(mv2Result.warnings.find((w: string) => w.includes("stays on Manifest V2"))).toContain(
+      "background.scripts to a single chromium:service_worker",
+    );
+
+    const mv3 = project(
+      {
+        manifest_version: 3,
+        name: "F",
+        version: "1.0.0",
+        icons: { "16": "images/icon-16.png" },
+        background: { scripts: ["bg.js"] },
+      },
+      ["public/images/icon-16.png", "src/bg.js"],
+    );
+    const mv3Result = JSON.parse(await manifestValidate.handler({ projectPath: mv3, browsers: ["firefox"] }));
+
+    expect(mv3Result.warnings.find((w: string) => w.includes("no service worker for Chromium"))).toContain(
+      "chromium:service_worker",
+    );
+  });
 });
 
 describe("template similarity counts every surface the manifest declares", () => {
