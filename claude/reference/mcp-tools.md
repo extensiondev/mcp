@@ -416,7 +416,7 @@ Browse the extension.dev template catalog. Pass action:'list' (the default) to s
 
 ## extension_theme_verify
 
-Verify a Chrome theme manifest before it ships. This settles the four-leg WYSIWYG contract (app-shows == manifest-says == chrome-paints, plus chrome-accepts) as far as is possible headless: it derives every color current Chrome would paint from the manifest through the transcribed Chromium resolver, and classifies each problem as D1 fabrication, D3 parity gap, or D4 acceptance gap (keys Chrome silently discards: dead legacy, incognito, unknown, out-of-range). It verifies only, and never authors or mutates a theme. The app-rendered and real-pixel legs need a browser, so they come back as needsAttended pointing at the assert:theme and install-parity harnesses, never as passed.
+Verify a Chrome theme manifest before it ships. This settles the four-leg WYSIWYG contract (app-shows == manifest-says == chrome-paints, plus chrome-accepts) as far as is possible headless: it derives every color current Chrome would paint from the manifest through the transcribed Chromium resolver, and classifies each problem as D1 fabrication, D3 parity gap, or D4 acceptance gap (keys Chrome silently discards: dead legacy, incognito, unknown, out-of-range). It verifies only, and never authors or mutates a theme. The app-rendered and real-pixel legs need a browser, so they come back as needsAttended with the step that settles each one (the theme editor at themes.extension.dev, and a dev session in Chrome), never as passed.
 
 | input | type | required | default | description |
 | --- | --- | --- | --- | --- |

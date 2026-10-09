@@ -25,7 +25,7 @@ const COMMAND = "extension_theme_verify";
 export const schema = {
   name: "extension_theme_verify",
   description:
-    "Verify a Chrome theme manifest before it ships. This settles the four-leg WYSIWYG contract (app-shows == manifest-says == chrome-paints, plus chrome-accepts) as far as is possible headless: it derives every color current Chrome would paint from the manifest through the transcribed Chromium resolver, and classifies each problem as D1 fabrication, D3 parity gap, or D4 acceptance gap (keys Chrome silently discards: dead legacy, incognito, unknown, out-of-range). It verifies only, and never authors or mutates a theme. The app-rendered and real-pixel legs need a browser, so they come back as needsAttended pointing at the assert:theme and install-parity harnesses, never as passed.",
+    "Verify a Chrome theme manifest before it ships. This settles the four-leg WYSIWYG contract (app-shows == manifest-says == chrome-paints, plus chrome-accepts) as far as is possible headless: it derives every color current Chrome would paint from the manifest through the transcribed Chromium resolver, and classifies each problem as D1 fabrication, D3 parity gap, or D4 acceptance gap (keys Chrome silently discards: dead legacy, incognito, unknown, out-of-range). It verifies only, and never authors or mutates a theme. The app-rendered and real-pixel legs need a browser, so they come back as needsAttended with the step that settles each one (the theme editor at themes.extension.dev, and a dev session in Chrome), never as passed.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -336,12 +336,12 @@ export async function handler(args: {
     {
       leg: "app-shows",
       proves: "the themes.extension.dev app renders exactly resolve(manifest)",
-      how: "assert:theme --theme <path> (themes.extension.dev dev harness; drives the theme through the ?__seed=1 door, headless, no focus steal)",
+      how: "open the theme in the theme editor at themes.extension.dev and compare its preview with the colors above",
     },
     {
       leg: "chrome-paints (real pixels)",
       proves: "real Chrome paints exactly what the resolver derived",
-      how: "install-parity (build-scripts/install-parity.mjs; installs the theme in real Chrome and diffs the capture, mac-local and headed)",
+      how: "run the theme with extension_dev and look at the browser window: the frame, toolbar, tabs and new tab page should show the colors above",
     },
     {
       leg: "chrome-accepts (live)",

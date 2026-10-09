@@ -31,8 +31,9 @@ describe("happy path is honest about what it did NOT verify", () => {
     expect(r.value.legs.appShows.status).toBe("needs-attended");
     expect(r.value.legs.chromePaints.realPaint.status).toBe("needs-attended");
     expect(r.value.legs.chromeAccepts.live.status).toBe("needs-attended");
-    expect(JSON.stringify(r.value.attended)).toMatch(/assert:theme/);
-    expect(JSON.stringify(r.value.attended)).toMatch(/install-parity/);
+    expect(JSON.stringify(r.value.attended)).toMatch(/themes\.extension\.dev/);
+    expect(JSON.stringify(r.value.attended)).toMatch(/extension_dev/);
+    expect(JSON.stringify(r.value)).not.toMatch(/assert:theme|install-parity|build-scripts/);
   });
 
   it("derives the paint colors as the headless resolver proxy for leg [3]", async () => {
