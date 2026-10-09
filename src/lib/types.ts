@@ -67,7 +67,9 @@ export interface ReadyContract {
   manifestPath?: string;
   port?: number | null;
   host?: string;
+  controlPort?: number | null;
   cdpPort?: number;
+  rdpPort?: number;
   webdriverPort?: number;
   webdriverSessionId?: string;
   webdriverUnavailableReason?: string;

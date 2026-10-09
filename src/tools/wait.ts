@@ -13,6 +13,7 @@ import { PROJECT_PATH, SESSION_BROWSER } from "../lib/common-schema";
 import { findSessionInfo, sessionSinceMs } from "../lib/process-manager";
 import { resolveSessionBrowser } from "../lib/session-browser";
 import { readyContractPath } from "../lib/session-paths";
+import { sessionPorts } from "../lib/session-ports";
 import {
   envelope,
   sessionCommandSinceEnvelopeOwnsCommand,
@@ -40,7 +41,7 @@ function isAlive(pid: number): boolean {
 export const schema = {
   name: "extension_wait",
   description:
-    "Wait for a running dev or start session to be ready. Call it for a session started with wait:false, after an extension_dev answer whose ready.status was not \"ready\", and for a build-only (noBrowser) session; an extension_dev answer with ready.status \"ready\" already carries this result, so there is nothing left to wait for. This polls the ready.json contract and reports compiled (the compiler finished), browserAttached (the runtime executor connected), and guestLoaded (the browser's own target list shows your extension). Read guestLoaded as the trustworthy load signal: it catches a silently rejected --load-extension that leaves ready.json stamped attached with empty logs. It is null when it could not be checked, for example a gecko session with no CDP port. Every result reports budgetMs and elapsedMs; on status 'timeout', call again to keep waiting on the same contract. In a noBrowser session this returns as soon as the compile lands, instead of waiting for a browser that will never attach. Ports come from the contract, so they match what the server actually bound.",
+    "Wait for a running dev or start session to be ready. Call it for a session started with wait:false, after an extension_dev answer whose ready.status was not \"ready\", and for a build-only (noBrowser) session; an extension_dev answer with ready.status \"ready\" already carries this result, so there is nothing left to wait for. This polls the ready.json contract and reports compiled (the compiler finished), browserAttached (the runtime executor connected), and guestLoaded (the browser's own target list shows your extension). Read guestLoaded as the trustworthy load signal: it catches a silently rejected --load-extension that leaves ready.json stamped attached with empty logs. It is null when it could not be checked, for example a gecko session with no CDP port. Every result reports budgetMs and elapsedMs; on status 'timeout', call again to keep waiting on the same contract. In a noBrowser session this returns as soon as the compile lands, instead of waiting for a browser that will never attach. Every ready answer carries the ports the session bound, read from the contract: port (the dev server), controlPort (the control channel) and cdpPort (the browser's debug port on Chromium) or rdpPort (on Gecko), or debugPortNote when the session opened no debug port, so a question about ports is answered here without a shell.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -222,7 +223,7 @@ export async function handler(args: {
               browserAttached: false,
               ...sessionCommandSinceEnvelopeOwnsCommand(contract),
               browser: contract.browser,
-              port: contract.port,
+              ...sessionPorts(contract),
               pid: contract.pid,
               distPath: contract.distPath,
               manifestPath: contract.manifestPath,
@@ -245,6 +246,7 @@ export async function handler(args: {
               browserAttached: false,
               sessionCommand: contract.command,
               browser: contract.browser,
+              ...sessionPorts(contract),
               pid: contract.pid,
               readyPath,
               budgetMs,
@@ -290,7 +292,7 @@ export async function handler(args: {
               : { guestLoadNote: guestCheck.reason }),
             ...sessionCommandSinceEnvelopeOwnsCommand(contract),
             browser: contract.browser,
-            port: contract.port,
+            ...sessionPorts(contract),
             pid: contract.pid,
             distPath: contract.distPath,
             manifestPath: contract.manifestPath,
