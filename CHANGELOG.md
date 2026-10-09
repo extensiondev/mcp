@@ -12,6 +12,7 @@ Built on Extension.js 4.1.33.
 - `extension_theme_verify` names steps a user can take for the two legs it cannot settle headless: open the theme in the editor at themes.extension.dev, and run it with `extension_dev` to look at the browser. It named two internal harnesses (`assert:theme`, `install-parity`) that exist only in the maintainers' repository, and agents read them out as next steps.
 - `extension_analyze` lists every page the manifest declares as an entry point: `chrome_url_overrides` (new tab, history, bookmarks), `options_ui.page` and `options_page`, `side_panel.default_path`, `sidebar_action.default_panel` and `devtools_page`, beside the background and popup it already read.
 - CI runs all three required engine cells (`verify (canary)`, `verify (stable)`, `verify (floor)`) on every run, even when two resolve to the same version. It de-duplicated them by version, so with all three at 4.1.33 only `verify (canary)` ran, the other two required checks never reported, and every pull request read BLOCKED.
+- `extension_theme_verify` calls a manifest with no `manifest_version` (and no Extension.js `chromium:manifest_version`) invalid: Chrome refuses to load any extension without it, themes included. It answered headless-clean, and agents had to warn on its own that Chrome "may refuse" the theme.
 
 ## 10.11.3
 

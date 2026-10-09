@@ -187,7 +187,7 @@ describe("the engine's rules", () => {
 
   it("does not call a theme with image-derived colours headless-clean", async () => {
     const out = JSON.parse(
-      await themeVerify({ manifest: { name: "T", version: "1.0", theme: { colors: { frame: [1, 2, 3] }, images: { theme_frame: "frame.png" } } } }),
+      await themeVerify({ manifest: { manifest_version: 3, name: "T", version: "1.0", theme: { colors: { frame: [1, 2, 3] }, images: { theme_frame: "frame.png" } } } }),
     );
     expect(out.status).toBe("headless-partial");
     expect(out.value.legs.chromePaints.resolver.detail).toMatch(/not a live Chrome read/);

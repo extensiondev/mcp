@@ -16,10 +16,26 @@ function verify(input: Record<string, unknown>) {
 }
 
 const CLEAN = {
+  manifest_version: 3,
   name: "Clean",
   version: "1.0",
   theme: { colors: { frame: [30, 60, 90], toolbar: [240, 240, 240] } },
 };
+
+describe("manifest_version is part of the grammar", () => {
+  it("is invalid with no manifest_version in either form", async () => {
+    const { manifest_version: _omit, ...bare } = CLEAN;
+    const r = await verify({ manifest: bare });
+    expect(r.status).toBe("invalid");
+    expect(JSON.stringify(r.value)).toMatch(/manifest_version is missing/);
+  });
+
+  it("accepts the Extension.js prefixed chromium:manifest_version", async () => {
+    const { manifest_version: _omit, ...bare } = CLEAN;
+    const r = await verify({ manifest: { ...bare, "chromium:manifest_version": 3 } });
+    expect(r.status).not.toBe("invalid");
+  });
+});
 
 describe("happy path is honest about what it did NOT verify", () => {
   it("returns headless-clean but still flags the two attended legs", async () => {
@@ -139,6 +155,7 @@ describe("D1 fabrication candidate is advisory, not a false failure", () => {
   it("flags opaque black on a derivable key without flipping the verdict", async () => {
     const r = await verify({
       manifest: {
+        manifest_version: 3,
         name: "Brand",
         version: "1.0",
         theme: { colors: { frame: [30, 60, 90], toolbar_text: [0, 0, 0] } },
@@ -154,7 +171,7 @@ describe("D1 fabrication candidate is advisory, not a false failure", () => {
 
   it("does not cry fabrication over a required frame set to black", async () => {
     const r = await verify({
-      manifest: { name: "Dark", version: "1.0", theme: { colors: { frame: [0, 0, 0] } } },
+      manifest: { manifest_version: 3, name: "Dark", version: "1.0", theme: { colors: { frame: [0, 0, 0] } } },
     });
     expect(r.value.findings.some((f: { class: string }) => f.class === "D1")).toBe(false);
   });

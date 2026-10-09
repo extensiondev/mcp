@@ -114,6 +114,7 @@ describe("extension_theme_verify does not call a theme-less manifest clean", () 
 
   it("lists a malformed tint as a key Chrome throws away", async () => {
     const out = await verify({
+      manifest_version: 3,
       name: "x",
       version: "1.0",
       theme: { colors: { frame: [1, 2, 3] }, tints: { buttons: [0.5, 0.5], frame: ["red", 0, 0] } },

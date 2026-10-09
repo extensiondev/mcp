@@ -219,6 +219,12 @@ export async function handler(args: {
   const grammarErrors: string[] = [];
   if (!nameValid) grammarErrors.push("name must be a non-empty string");
 
+  if (manifest.manifest_version === undefined && manifest["chromium:manifest_version"] === undefined) {
+    grammarErrors.push(
+      'manifest_version is missing: Chrome refuses to load any extension without it, themes included; add "manifest_version": 3 (or "chromium:manifest_version": 3 in an Extension.js project)',
+    );
+  }
+
   if (!versionValid) {
     grammarErrors.push(
       `version "${version}" is not a Chrome version (1-4 integers 0-65535, e.g. "1.0")`,
