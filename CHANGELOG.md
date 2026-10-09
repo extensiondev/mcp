@@ -10,6 +10,8 @@ Built on Extension.js 4.1.33.
 - `extension_storage` says when the project's source manifest does not declare the `storage` permission: the answer carries `manifestDeclaresStorage: false` and a warning that the dev session's control channel answered anyway while the extension's own code gets no `chrome.storage` without it.
 - The plugin's CLAUDE.md template table lists `ai-chatgpt` under Sidebar beside `ai-claude`; it sat under Action popup, and every AI template is a side panel.
 - `extension_theme_verify` names steps a user can take for the two legs it cannot settle headless: open the theme in the editor at themes.extension.dev, and run it with `extension_dev` to look at the browser. It named two internal harnesses (`assert:theme`, `install-parity`) that exist only in the maintainers' repository, and agents read them out as next steps.
+- `extension_analyze` lists every page the manifest declares as an entry point: `chrome_url_overrides` (new tab, history, bookmarks), `options_ui.page` and `options_page`, `side_panel.default_path`, `sidebar_action.default_panel` and `devtools_page`, beside the background and popup it already read.
+- `extension_theme_verify` names steps a user can take for the two legs it cannot settle headless: open the theme in the editor at themes.extension.dev, and run it with `extension_dev` to look at the browser. It named two internal harnesses (`assert:theme`, `install-parity`) that exist only in the maintainers' repository, and agents read them out as next steps.
 
 ## 10.11.3
 

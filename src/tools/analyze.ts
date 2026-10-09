@@ -199,6 +199,18 @@ export async function handler(args: {
   if (actionField?.default_popup)
     {addEntry("action.default_popup", actionField.default_popup);}
 
+  const overrides = (manifest.chrome_url_overrides ?? {}) as Record<string, unknown>;
+
+  for (const [page, ref] of Object.entries(overrides)) addEntry(`chrome_url_overrides.${page}`, ref);
+
+  const optionsUi = manifest.options_ui as Record<string, unknown> | undefined;
+
+  addEntry("options_ui.page", optionsUi?.page);
+  addEntry("options_page", manifest.options_page);
+  addEntry("side_panel.default_path", (manifest.side_panel as Record<string, unknown> | undefined)?.default_path);
+  addEntry("sidebar_action.default_panel", (manifest.sidebar_action as Record<string, unknown> | undefined)?.default_panel);
+  addEntry("devtools_page", manifest.devtools_page);
+
   const contentScripts = manifest.content_scripts as
     | Array<Record<string, unknown>>
     | undefined;

@@ -42,6 +42,40 @@ describe("the smaller sentences are cut to what was read or name their source", 
     }
   });
 
+  it("lists every page the manifest declares as an entry point, the new tab override included", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-analyze-entries-"));
+
+    try {
+      const dist = path.join(root, "dist", "chrome");
+      fs.mkdirSync(path.join(dist, "newtab"), { recursive: true });
+      fs.writeFileSync(path.join(dist, "newtab", "index.html"), "<html></html>");
+      fs.writeFileSync(path.join(dist, "bg.js"), "1");
+      fs.writeFileSync(
+        path.join(dist, "manifest.json"),
+        JSON.stringify({
+          name: "x",
+          version: "1.0",
+          manifest_version: 3,
+          background: { service_worker: "bg.js" },
+          chrome_url_overrides: { newtab: "newtab/index.html" },
+          options_ui: { page: "options.html" },
+          devtools_page: "devtools.html",
+        }),
+      );
+
+      const out = JSON.parse(await analyze({ projectPath: root }));
+      const roles = (out.value.entrypoints as Array<{ role: string; present: boolean }>).map((e) => `${e.role}:${e.present}`);
+      expect(roles).toEqual(expect.arrayContaining([
+        "background.service_worker:true",
+        "chrome_url_overrides.newtab:true",
+        "options_ui.page:false",
+        "devtools_page:false",
+      ]));
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   describe("docs search under the hold", () => {
     beforeEach(() => {
       vi.stubEnv("EXTENSION_DEV_API_URL", "https://www.extension.dev");
