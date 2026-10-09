@@ -1,3 +1,7 @@
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
@@ -80,5 +84,32 @@ describe("extension_storage reads a set back before calling it set", () => {
     const out = JSON.parse(await storage.handler({ projectPath: "/p", action: "get", key: "k", context: "content" } as never));
     expect(out.warnings.join("\n")).toMatch(/context: "content" is not honoured/);
     expect(act.calls[0]).not.toContain("--context");
+  });
+});
+
+describe("extension_storage says when the source manifest does not declare storage", () => {
+  function projectWith(manifest: Record<string, unknown>): string {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-storage-perm-"));
+    fs.mkdirSync(path.join(dir, "src"));
+    fs.writeFileSync(path.join(dir, "src", "manifest.json"), JSON.stringify(manifest));
+
+    return dir;
+  }
+
+  it("warns and marks manifestDeclaresStorage false when the permission is missing", async () => {
+    act.stored = { theme: "dark" };
+    const dir = projectWith({ manifest_version: 3, permissions: ["tabs"] });
+    const out = JSON.parse(await storage.handler({ projectPath: dir, action: "set", key: "theme", value: "dark" }));
+    expect(out.ok).toBe(true);
+    expect(out.value.manifestDeclaresStorage).toBe(false);
+    expect(out.warnings.join(" ")).toMatch(/src\/manifest\.json does not declare the "storage" permission/);
+  });
+
+  it("stays quiet when the manifest declares storage, including a browser-prefixed list", async () => {
+    act.stored = { theme: "dark" };
+    const dir = projectWith({ manifest_version: 3, "chromium:permissions": ["storage"] });
+    const out = JSON.parse(await storage.handler({ projectPath: dir, action: "set", key: "theme", value: "dark" }));
+    expect(out.value.manifestDeclaresStorage).toBeUndefined();
+    expect((out.warnings ?? []).join(" ")).not.toMatch(/does not declare/);
   });
 });

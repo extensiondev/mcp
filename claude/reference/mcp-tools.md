@@ -180,7 +180,7 @@ Inspect a running extension deeply over the browser's debugger protocol: full HT
 
 ## extension_list_extensions
 
-List the extensions in the running dev browser: id, name, version, and, on Chromium, live contexts. This session's own extension carries ownExtension:true, with name and version from the ready contract even when the browser exposes no identity. Chromium rides the Chrome DevTools Protocol, so an entry needs at least one live context, and a dormant MV3 service worker may be absent until it wakes. Firefox rides the RDP root actor (listAddons, engine 4.0.15 and later), so entries are installed add-ons regardless of contexts, are marked temporarilyInstalled where relevant, and carry no contexts. Other extensions' contexts are never attached to or evaluated in. This requires an active dev or start session.
+List the extensions in the running dev browser: id, name, version, and, on Chromium, live contexts. This session's own extension carries ownExtension:true, with name and version from the ready contract even when the browser exposes no identity. On Chromium, entries come from the live CDP targets and from the session profile's installed set, so an extension whose MV3 service worker is dormant is still listed, with running:false and no contexts. Firefox rides the RDP root actor (listAddons, engine 4.0.15 and later), so entries are installed add-ons regardless of contexts, are marked temporarilyInstalled where relevant, and carry no contexts. Other extensions' contexts are never attached to or evaluated in. This requires an active dev or start session.
 
 | input | type | required | default | description |
 | --- | --- | --- | --- | --- |

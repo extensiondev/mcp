@@ -6,6 +6,9 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
+import fs from "node:fs";
+import path from "node:path";
+
 import {
   CALL_TIMEOUT,
   SESSION_BROWSER,
@@ -43,6 +46,26 @@ export const schema = {
     required: ["projectPath", "action"],
   },
 };
+
+function sourceManifestDeclaresStorage(projectPath: string): { file: string; declares: boolean } | null {
+  for (const relative of ["src/manifest.json", "manifest.json"]) {
+    let manifest: Record<string, unknown>;
+
+    try {
+      manifest = JSON.parse(fs.readFileSync(path.join(projectPath, relative), "utf8"));
+    } catch {
+      continue;
+    }
+
+    const declared = Object.entries(manifest)
+      .filter(([key]) => key === "permissions" || key.endsWith(":permissions"))
+      .flatMap(([, value]) => (Array.isArray(value) ? value : []));
+
+    return { file: relative, declares: declared.includes("storage") };
+  }
+
+  return null;
+}
 
 export async function handler(
   args: ActArgs & {
@@ -106,6 +129,16 @@ export async function handler(
     addWarning(
       parsed,
       `context: "${args.context}" is not honoured: the engine runs every storage call in the background, so this says nothing about what the ${args.context} can read.`,
+    );
+  }
+
+  const source = parsed.ok === true ? sourceManifestDeclaresStorage(args.projectPath) : null;
+
+  if (source && !source.declares) {
+    patchValue(parsed, { manifestDeclaresStorage: false });
+    addWarning(
+      parsed,
+      `${source.file} does not declare the "storage" permission. This call went through the dev session's control channel and answered anyway, but the extension's own code gets no chrome.storage without it: add "storage" to permissions before relying on it in a build.`,
     );
   }
 

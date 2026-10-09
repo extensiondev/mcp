@@ -24,8 +24,8 @@ The extension.dev platform ships 50+ templates in the [examples](https://github.
 | Surface        | Vanilla      | React            | Vue           | Svelte           | AI               |
 | -------------- | ------------ | ---------------- | ------------- | ---------------- | ---------------- |
 | Content script | `content`    | `content-react`  | `content-vue` | `content-svelte` | n/a              |
-| Sidebar        | `sidebar`    | `sidebar-shadcn` | n/a           | n/a              | `ai-claude`      |
-| Action popup   | `action`     | n/a              | n/a           | n/a              | `ai-chatgpt`     |
+| Sidebar        | `sidebar`    | `sidebar-shadcn` | n/a           | n/a              | `ai-claude`, `ai-chatgpt` |
+| Action popup   | `action`     | n/a              | n/a           | n/a              | n/a              |
 | New tab        | `newtab`     | `newtab-react`   | `newtab-vue`  | `newtab-svelte`  | n/a              |
 | DevTools       | `devtools`   | `devtools-react` | `devtools-vue`| `devtools-svelte`| n/a              |
 | Full framework | `javascript` | `react`          | `vue`         | `svelte`         | n/a              |

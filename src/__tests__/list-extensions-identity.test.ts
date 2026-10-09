@@ -277,3 +277,42 @@ describe("list-extensions own-extension identity", () => {
     ).toBe(true);
   });
 });
+
+describe("an installed extension with nothing running is still listed", () => {
+  function withProfile(p: { dir: string; distPath: string; id: string }, settings: Record<string, unknown>): void {
+    const profilePath = path.join(p.dir, "dist", "extension-profile-chrome");
+    fs.mkdirSync(path.join(profilePath, "Default"), { recursive: true });
+    fs.writeFileSync(
+      path.join(profilePath, "Default", "Secure Preferences"),
+      JSON.stringify({ extensions: { settings } }),
+    );
+
+    const readyFile = path.join(p.dir, "dist", "extension-js", "chrome", "ready.json");
+    const ready = JSON.parse(fs.readFileSync(readyFile, "utf8"));
+    fs.writeFileSync(readyFile, JSON.stringify({ ...ready, profilePath }));
+  }
+
+  it("lists the session's own extension with running false when its worker is dormant", async () => {
+    const p = project({}, { distManifest: { name: "My Extension", version: "1.2.3" } });
+    withProfile(p, { [p.id]: { location: 8, path: p.distPath } });
+    cdpTargets = [];
+    const out = JSON.parse(await listExtensions.handler({ projectPath: p.dir }));
+    const rows = out.value.extensions as Array<{ id: string; name?: string; running?: boolean; ownExtension?: boolean; source: string }>;
+    expect(out.value.count).toBe(1);
+    expect(rows[0]).toMatchObject({ id: p.id, name: "My Extension", running: false, ownExtension: true, source: "profile" });
+  });
+
+  it("keeps a live extension as running and never lists a component extension", async () => {
+    const p = project({}, { distManifest: { name: "My Extension", version: "1.2.3" } });
+    withProfile(p, {
+      [p.id]: { location: 8, path: p.distPath },
+      mhjfbmdgcfjbbpaeojofohoefgiehjai: { location: 5, manifest: { name: "Chromium PDF Viewer", version: "1" } },
+    });
+
+    cdpTargets = [swTarget(p.id)];
+    const out = JSON.parse(await listExtensions.handler({ projectPath: p.dir }));
+    const rows = out.value.extensions as Array<{ id: string; running?: boolean }>;
+    expect(rows.map((r) => r.id)).toEqual([p.id]);
+    expect(rows[0].running).toBe(true);
+  });
+});

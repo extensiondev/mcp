@@ -30,7 +30,7 @@ import { readyContractPath } from "../lib/session-paths";
 export const schema = {
   name: "extension_list_extensions",
   description:
-    "List the extensions in the running dev browser: id, name, version, and, on Chromium, live contexts. This session's own extension carries ownExtension:true, with name and version from the ready contract even when the browser exposes no identity. Chromium rides the Chrome DevTools Protocol, so an entry needs at least one live context, and a dormant MV3 service worker may be absent until it wakes. Firefox rides the RDP root actor (listAddons, engine 4.0.15 and later), so entries are installed add-ons regardless of contexts, are marked temporarilyInstalled where relevant, and carry no contexts. Other extensions' contexts are never attached to or evaluated in. This requires an active dev or start session.",
+    "List the extensions in the running dev browser: id, name, version, and, on Chromium, live contexts. This session's own extension carries ownExtension:true, with name and version from the ready contract even when the browser exposes no identity. On Chromium, entries come from the live CDP targets and from the session profile's installed set, so an extension whose MV3 service worker is dormant is still listed, with running:false and no contexts. Firefox rides the RDP root actor (listAddons, engine 4.0.15 and later), so entries are installed add-ons regardless of contexts, are marked temporarilyInstalled where relevant, and carry no contexts. Other extensions' contexts are never attached to or evaluated in. This requires an active dev or start session.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -48,8 +48,9 @@ interface ExtensionEntry {
   ownExtension?: boolean;
   ownExtensionInferred?: boolean;
   temporarilyInstalled?: boolean;
+  running?: boolean;
   contexts: Array<{ type: string; url: string }>;
-  source: "extensions-domain" | "session-contract" | "target-only" | "rdp-root";
+  source: "extensions-domain" | "session-contract" | "target-only" | "rdp-root" | "profile";
   note?: string;
 }
 
@@ -110,6 +111,75 @@ function readOwnIdentity(
   if (ids.length === 0 && !name) return null;
 
   return { ids, name, version };
+}
+
+interface ProfileExtension {
+  id: string;
+  name?: string;
+  version?: string;
+}
+
+const COMPONENT_LOCATIONS = new Set([5, 10]);
+
+function readProfileExtensions(
+  projectPath: string,
+  browser: string,
+): ProfileExtension[] {
+  let profilePath: string | null = null;
+
+  try {
+    const contract = JSON.parse(
+      fs.readFileSync(readyContractPath(projectPath, browser), "utf8"),
+    );
+
+    profilePath =
+      typeof contract?.profilePath === "string" ? contract.profilePath : null;
+  } catch {
+    return [];
+  }
+
+  if (!profilePath) return [];
+
+  const settings: Record<string, Record<string, unknown>> = {};
+
+  for (const file of ["Preferences", "Secure Preferences"]) {
+    try {
+      const prefs = JSON.parse(
+        fs.readFileSync(path.join(profilePath, "Default", file), "utf8"),
+      );
+
+      Object.assign(settings, prefs?.extensions?.settings ?? {});
+    } catch {
+    }
+  }
+
+  const found: ProfileExtension[] = [];
+
+  for (const [id, entry] of Object.entries(settings)) {
+    if (COMPONENT_LOCATIONS.has(Number(entry?.location))) continue;
+
+    let manifest = entry?.manifest as Record<string, unknown> | undefined;
+
+    if (!manifest && typeof entry?.path === "string") {
+      try {
+        manifest = JSON.parse(
+          fs.readFileSync(path.join(entry.path, "manifest.json"), "utf8"),
+        );
+      } catch {
+      }
+    }
+
+    const name =
+      typeof manifest?.name === "string" && !manifest.name.startsWith("__MSG_")
+        ? manifest.name
+        : undefined;
+    const version =
+      typeof manifest?.version === "string" ? manifest.version : undefined;
+
+    found.push({ id, name, version });
+  }
+
+  return found;
 }
 
 const UNRESOLVED_NOTE =
@@ -188,6 +258,7 @@ export async function handler(args: {
     for (const [id, ctxTargets] of byId) {
       const entry: ExtensionEntry = {
         id,
+        running: true,
         contexts: ctxTargets.map((c) => ({ type: c.type, url: c.url })),
         source: "target-only",
       };
@@ -213,6 +284,37 @@ export async function handler(args: {
           if (own.version !== undefined) entry.version = own.version;
 
           entry.source = "session-contract";
+        }
+      }
+
+      extensions.push(entry);
+    }
+
+    for (const installed of readProfileExtensions(args.projectPath, browser)) {
+      const live = extensions.find((e) => e.id === installed.id);
+
+      if (live) {
+        live.name ??= installed.name;
+        live.version ??= installed.version;
+        continue;
+      }
+
+      const entry: ExtensionEntry = {
+        id: installed.id,
+        running: false,
+        contexts: [],
+        source: "profile",
+      };
+
+      if (installed.name !== undefined) entry.name = installed.name;
+      if (installed.version !== undefined) entry.version = installed.version;
+
+      if (own?.ids.includes(installed.id)) {
+        entry.ownExtension = true;
+
+        if (entry.name === undefined && own.name !== undefined) {
+          entry.name = own.name;
+          if (own.version !== undefined) entry.version = own.version;
         }
       }
 
@@ -250,7 +352,7 @@ export async function handler(args: {
         extensions,
       },
       warnings: [
-        "Lists extensions that currently have at least one live context (service worker or open page). An MV3 service worker that has gone dormant with no open page may be absent until it wakes. ownExtension marks the extension this dev session serves, identified from the session's ready contract. Other identity is read read-only via the Extensions domain; other extensions' contexts are never attached to or evaluated in.",
+        "Lists every extension installed in the session profile plus any with a live context: running:true carries the live contexts (service worker or open page), running:false is installed with nothing running right now, such as a dormant MV3 service worker. ownExtension marks the extension this dev session serves, identified from the session's ready contract. Other identity is read read-only via the Extensions domain; other extensions' contexts are never attached to or evaluated in.",
       ],
     });
   } catch (error) {
