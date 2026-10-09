@@ -81,6 +81,7 @@ export interface ReadyContract {
   profilePath?: string;
   browserPid?: number | null;
   launcherPid?: number;
+  extensionId?: string;
 }
 
 export interface ProcessInfo {

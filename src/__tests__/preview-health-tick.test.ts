@@ -158,7 +158,7 @@ describe("extension_start build:false health tick", () => {
 
     expect(result.ok).toBe(true);
     expect(result.status).toBe("started");
-    expect(result.value.logPath).toBeTruthy();
+    expect(result.value.logPath).toBeUndefined();
     expect(result.earlyOutput).toBeUndefined();
   }, 15_000);
 

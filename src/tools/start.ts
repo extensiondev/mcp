@@ -16,6 +16,7 @@ import { pollBootVerdict,
 import { profileCarriesTabsOver } from "../lib/profile-carryover";
 import { removeCarrier } from "../lib/carrier";
 import { envelope } from "../lib/envelope";
+import { productionLaunchEvidence, readFreshContract } from "../lib/production-launch";
 import { spawnExtensionCli, spawnFailedEnvelope } from "../lib/exec";
 import {
   registerSession,
@@ -31,7 +32,7 @@ import {
 export const schema = {
   name: "extension_start",
   description:
-    "Run the PRODUCTION build in a browser: build the project, serve it, and launch. There is no hot module replacement and no control channel, so your edits are not picked up and extension_eval, extension_storage, extension_reload, extension_open and extension_dom_snapshot cannot attach to this session. Use extension_dev while writing code, and this to check what actually ships. Pass build:false to launch an existing dist/<browser> without rebuilding, or outputPath to launch any prebuilt unpacked extension directory, one another toolchain produced included, which implies build:false.",
+    "Run the PRODUCTION build in a browser: build the project, serve it, and launch. There is no hot module replacement and no control channel, so your edits are not picked up and extension_eval, extension_storage, extension_reload, extension_open and extension_dom_snapshot cannot attach to this session. Use extension_dev while writing code, and this to check what actually ships. Pass build:false to launch an existing dist/<browser> without rebuilding, or outputPath to launch any prebuilt unpacked extension directory, one another toolchain produced included, which implies build:false. The answer says what it confirmed (the engine process, and the browser pid the launcher recorded once the contract lands) and what a production session cannot confirm (that the browser loaded the extension: it opens no debug port and has no console stream), and names extension_dev for a proven load.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -149,7 +150,7 @@ export async function handler(
   );
   const spawnedAt = Date.now();
   const spawned = spawnExtensionCli(cliArgs, { projectDir: args.projectPath });
-  const { child, logPath } = spawned;
+  const { child } = spawned;
 
   if (child.pid === undefined) {
     return spawnFailedEnvelope(schema.name, spawned);
@@ -177,7 +178,7 @@ export async function handler(
     noBrowser: Boolean(args.noBrowser),
   });
   const cleanOutput = boot.evidenceTail;
-  const session = { projectPath: args.projectPath, browser, pid, logPath };
+  const session = { projectPath: args.projectPath, browser, pid };
 
   if (boot.verdict.kind === "exited") {
     const { exitCode: code, signal } = boot.verdict;
@@ -277,6 +278,14 @@ export async function handler(
     });
   }
 
+  const launch = productionLaunchEvidence(
+    readFreshContract(args.projectPath, browser, spawnedAt),
+  );
+  const launchSeen =
+    launch.browserPid === null
+      ? "the contract has not recorded a browser launch yet; extension_wait reads it once the build lands (browserPid, browserAlive)"
+      : `the contract names the browser it launched (pid ${launch.browserPid}, ${launch.browserAlive ? "alive" : "gone"})`;
+
   return envelope({
     ok: true,
     command: schema.name,
@@ -285,13 +294,11 @@ export async function handler(
       pid,
       browser,
       projectPath: args.projectPath,
-      logPath,
       verb: command,
       observed: "the engine process was alive 5 s after it was spawned",
+      ...launch,
     },
-    hint: building
-      ? "The engine process was alive 5 s after spawn, which is all this answer knows; extension_wait reads whether the build landed. When you are done, call extension_stop to shut the session down."
-      : "The engine's preview process was alive 5 s after spawn, which is all this answer knows: whether a browser shows the extension is not read here. Call extension_stop when you are done.",
+    hint: `The engine's ${command} process was alive 5 s after spawn and ${launchSeen}. What a production session cannot confirm is that ${browser} loaded the extension: it opens no debug port and carries no dev bridge, so extension_logs has no console stream to read for it and the control verbs cannot attach. To prove the load, run it with extension_dev, whose answer carries guestLoaded. When you are done, call extension_stop to shut the session down.`,
     warnings: [
       ...boot.warnings,
       markerWarning,

@@ -339,7 +339,7 @@ List and revoke the public preview links this token has shared, which is what ex
 
 ## extension_start
 
-Run the PRODUCTION build in a browser: build the project, serve it, and launch. There is no hot module replacement and no control channel, so your edits are not picked up and extension_eval, extension_storage, extension_reload, extension_open and extension_dom_snapshot cannot attach to this session. Use extension_dev while writing code, and this to check what actually ships. Pass build:false to launch an existing dist/<browser> without rebuilding, or outputPath to launch any prebuilt unpacked extension directory, one another toolchain produced included, which implies build:false.
+Run the PRODUCTION build in a browser: build the project, serve it, and launch. There is no hot module replacement and no control channel, so your edits are not picked up and extension_eval, extension_storage, extension_reload, extension_open and extension_dom_snapshot cannot attach to this session. Use extension_dev while writing code, and this to check what actually ships. Pass build:false to launch an existing dist/<browser> without rebuilding, or outputPath to launch any prebuilt unpacked extension directory, one another toolchain produced included, which implies build:false. The answer says what it confirmed (the engine process, and the browser pid the launcher recorded once the contract lands) and what a production session cannot confirm (that the browser loaded the extension: it opens no debug port and has no console stream), and names extension_dev for a proven load.
 
 | input | type | required | default | description |
 | --- | --- | --- | --- | --- |
