@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## 10.11.2
+
+Built on Extension.js 4.1.33.
 
 - The generated tool reference moves from `claude/rules/mcp-tools.md` to `claude/reference/mcp-tools.md`. At 71k characters it restates the schemas the server already sends, and anyone who copied `claude/rules` into a project as Claude Code rules loaded it into every session; two such copies on one path (a workspace folder and a project in it) crossed Claude Code's 150k instruction limit and painted a warning naming the file. `claude/rules` now holds only the two hand-written rules, and a test keeps that folder under 10k characters.
 - `extension_start` and `extension_wait` on a production session say what they read and never point at a file: the answer carries `browserPid` and `browserAlive` from the contract the launcher stamps, `extensionLoaded: null` with `loadEvidence` saying plainly that a production launch opens no debug port and carries no dev bridge (so `extension_logs` has no stream for it and the load itself is unread), and names `extension_dev` for a proven load; the `/var/folders/.../session.log` path left the answer.
