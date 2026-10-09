@@ -684,13 +684,26 @@ export async function handler(args: {
         );
       }
 
-      const minVersion = (bss?.gecko as Record<string, unknown> | undefined)?.strict_min_version;
+      const gecko = bss?.gecko as Record<string, unknown> | undefined;
+      const minVersion = gecko?.strict_min_version;
       const minMajor = typeof minVersion === "string" ? Number.parseInt(minVersion, 10) : Number.NaN;
+      const androidMin = (bss?.gecko_android as Record<string, unknown> | undefined)?.strict_min_version;
+      const androidMajor = typeof androidMin === "string" ? Number.parseInt(androidMin, 10) : Number.NaN;
 
-      if (dataCollection && typeof dataCollection === "object" && !(minMajor >= 140)) {
-        result.warnings.push(
-          `Firefox: data_collection_permissions is read by Firefox 140 and later (142 on Android), and ${typeof minVersion === "string" ? `strict_min_version is "${minVersion}"` : "no strict_min_version is set"}. AMO's linter reports the key as unsupported below that; set firefox:browser_specific_settings.gecko.strict_min_version to "140.0" (or "142.0" with Android) to match.`,
-        );
+      // Measured with the bundled addons-linter (2026-10-09): no minimum at
+      // all draws nothing, a minimum below 140 draws the unsupported-key
+      // warning, and 140 or 141 without a gecko_android minimum of 142 draws
+      // the Android one.
+      if (dataCollection && typeof dataCollection === "object" && Number.isFinite(minMajor)) {
+        if (minMajor < 140) {
+          result.warnings.push(
+            `Firefox: data_collection_permissions is read by Firefox 140 and later, and strict_min_version is "${minVersion}", so AMO's linter reports the key as unsupported. Raise firefox:browser_specific_settings.gecko.strict_min_version to "140.0", or remove it.`,
+          );
+        } else if (minMajor < 142 && !(androidMajor >= 142)) {
+          result.warnings.push(
+            `Firefox: strict_min_version "${minVersion}" covers data_collection_permissions on desktop, but Firefox for Android reads it from 142, so AMO's linter warns for Android. Add firefox:browser_specific_settings.gecko_android.strict_min_version "142.0".`,
+          );
+        }
       }
 
       for (const key of CHROMIUM_ONLY_KEYS) {

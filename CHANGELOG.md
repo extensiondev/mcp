@@ -4,7 +4,7 @@
 
 Built on Extension.js 4.1.33.
 
-- `extension_manifest_validate` says which Firefox reads `data_collection_permissions`: Firefox 140 and later (142 on Android), and AMO's linter reports the key as unsupported when `strict_min_version` is lower or absent, so the answer names the `strict_min_version` to set.
+- `extension_manifest_validate` reports `data_collection_permissions` the way AMO's linter does, measured against the bundled linter: a `strict_min_version` below 140 draws the unsupported-key warning, and 140 or 141 without `gecko_android.strict_min_version` 142 draws the Android one; no minimum at all draws nothing, so the tool stays quiet then too.
 
 ## 10.11.4
 

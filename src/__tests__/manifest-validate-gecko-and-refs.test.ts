@@ -119,7 +119,7 @@ describe("the Firefox report names what Firefox itself would say", () => {
       {
         ...BASE,
         "firefox:browser_specific_settings": {
-          gecko: { id: "f@example.com", strict_min_version: "140.0", data_collection_permissions: { required: ["none"] } },
+          gecko: { id: "f@example.com", data_collection_permissions: { required: ["none"] } },
         },
       },
       ["public/images/icon-16.png"],
@@ -240,21 +240,28 @@ describe("template similarity counts every surface the manifest declares", () =>
   });
 });
 
-describe("data_collection_permissions names the Firefox version that reads it", () => {
-  const withDataCollection = (gecko: Record<string, unknown>) => ({
+describe("data_collection_permissions follows what AMO's linter reports", () => {
+  const withDataCollection = (bss: Record<string, unknown>) => ({
     ...BASE,
-    "firefox:browser_specific_settings": { gecko: { id: "f@example.com", data_collection_permissions: { required: ["none"] }, ...gecko } },
+    "firefox:browser_specific_settings": { gecko: { id: "f@example.com", data_collection_permissions: { required: ["none"] }, ...(bss.gecko as object) }, ...(bss.gecko_android ? { gecko_android: bss.gecko_android } : {}) },
   });
 
-  it("warns when no strict_min_version reaches 140", async () => {
-    const dir = project(withDataCollection({}), ["images/icon-16.png"]);
-    const out = JSON.stringify(JSON.parse(await manifestValidate.handler({ projectPath: dir, browsers: ["firefox"] })));
-    expect(out).toMatch(/data_collection_permissions is read by Firefox 140 and later/);
+  const report = async (bss: Record<string, unknown>) => {
+    const dir = project(withDataCollection(bss), ["images/icon-16.png"]);
+
+    return JSON.stringify(JSON.parse(await manifestValidate.handler({ projectPath: dir, browsers: ["firefox"] })));
+  };
+
+  it("says nothing when no minimum is set, as the linter does", async () => {
+    expect(await report({})).not.toMatch(/data_collection_permissions is read by|reads it from 142/);
   });
 
-  it("stays quiet once strict_min_version is 140 or later", async () => {
-    const dir = project(withDataCollection({ strict_min_version: "140.0" }), ["images/icon-16.png"]);
-    const out = JSON.stringify(JSON.parse(await manifestValidate.handler({ projectPath: dir, browsers: ["firefox"] })));
-    expect(out).not.toMatch(/data_collection_permissions is read by Firefox 140/);
+  it("warns when the minimum is below 140", async () => {
+    expect(await report({ gecko: { strict_min_version: "128.0" } })).toMatch(/strict_min_version is \\"128\.0\\", so AMO's linter reports the key as unsupported/);
+  });
+
+  it("names the Android minimum at 140 and stays quiet once gecko_android sets 142", async () => {
+    expect(await report({ gecko: { strict_min_version: "140.0" } })).toMatch(/Firefox for Android reads it from 142/);
+    expect(await report({ gecko: { strict_min_version: "140.0" }, gecko_android: { strict_min_version: "142.0" } })).not.toMatch(/reads it from 142/);
   });
 });
