@@ -12,7 +12,7 @@ import * as path from "node:path";
 import { getManagedBrowsersCacheRoot } from "extension-install";
 
 import { envelope } from "../lib/envelope";
-import { findManagedBinaryIn } from "./detect-browsers";
+import { findManagedBinaryIn, readBrowserVersion } from "./detect-browsers";
 
 const BROWSER_NAMES = ["chrome", "chromium", "edge", "firefox"] as const;
 
@@ -51,6 +51,7 @@ export async function listManagedBrowsers(): Promise<string> {
     browser: string;
     path: string;
     binaryPath: string;
+    version: string | null;
     size: number;
     sizeFormatted: string;
     engine: string;
@@ -65,10 +66,12 @@ export async function listManagedBrowsers(): Promise<string> {
     const binaryPath = findManagedBinaryIn(browserDir, browser);
 
     if (binaryPath) {
+      const { version } = await readBrowserVersion(binaryPath);
       installed.push({
         browser,
         path: browserDir,
         binaryPath,
+        version,
         size,
         sizeFormatted: formatBytes(size),
         engine: browser === "firefox" ? "gecko" : "chromium",
