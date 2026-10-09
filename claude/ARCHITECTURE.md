@@ -81,7 +81,7 @@ Claude now knows:
 
 ### Layer 3: MCP tools
 
-**Location:** `claude/rules/mcp-tools.md` (design doc)
+**Location:** `claude/reference/mcp-tools.md` (generated reference, read on demand)
 **Role in ecosystem:** Programmatic bridge between Claude and the extension.dev platform, sourced from the examples repo.
 
 ```

@@ -48,11 +48,20 @@ describe("the docs say what the code does", () => {
     const rendered = `${renderToolsDoc(tools.map((t) => t.schema))  }\n`;
 
     if (process.env.WRITE_TOOLS_DOC === "1") {
-      fs.writeFileSync(fileURLToPath(new URL("../../claude/rules/mcp-tools.md", import.meta.url)), rendered);
+      fs.writeFileSync(fileURLToPath(new URL("../../claude/reference/mcp-tools.md", import.meta.url)), rendered);
     }
 
-    expect(read("claude/rules/mcp-tools.md")).toBe(rendered);
-    for (const tool of tools) expect(read("claude/rules/mcp-tools.md")).toContain(`## ${tool.schema.name}`);
+    expect(read("claude/reference/mcp-tools.md")).toBe(rendered);
+    for (const tool of tools) expect(read("claude/reference/mcp-tools.md")).toContain(`## ${tool.schema.name}`);
+  });
+
+  it("keeps claude/rules small enough to load into every session, with the generated tool reference outside it", () => {
+    const dir = fileURLToPath(new URL("../../claude/rules/", import.meta.url));
+    const rules = fs.readdirSync(dir).filter((name) => name.endsWith(".md"));
+    const total = rules.reduce((sum, name) => sum + fs.readFileSync(`${dir}${name}`, "utf8").length, 0);
+
+    expect(rules).not.toContain("mcp-tools.md");
+    expect(total).toBeLessThan(10_000);
   });
 
   it("renders docs/tools.json and docs/clients.json for the docs site, and the files on disk are that rendering", () => {

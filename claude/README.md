@@ -18,7 +18,8 @@ claude/
   rules/
     extension-dev.md      Core rules: project structure, manifest, commands
     cross-browser.md      Cross-browser manifest field mapping
-    mcp-tools.md          MCP tool reference, generated from the server's schemas (pnpm docs:tools)
+  reference/
+    mcp-tools.md          MCP tool reference, generated from the server's schemas (pnpm docs:tools); read on demand, never a rule
   examples/
     create-extension.md   Example prompt: scaffold and customize an extension
     add-sidebar.md        Example prompt: add a sidebar panel to an existing extension
