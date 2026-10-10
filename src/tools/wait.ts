@@ -13,7 +13,7 @@ import { PROJECT_PATH, SESSION_BROWSER } from "../lib/common-schema";
 import { findSessionInfo, sessionSinceMs } from "../lib/process-manager";
 import { resolveSessionBrowser } from "../lib/session-browser";
 import { readyContractPath } from "../lib/session-paths";
-import { productionLaunchEvidence } from "../lib/production-launch";
+import { productionLaunchEvidence, readLoadOverDebugPort } from "../lib/production-launch";
 import { sessionPorts } from "../lib/session-ports";
 import {
   envelope,
@@ -238,7 +238,7 @@ export async function handler(args: {
         }
 
         if (!attached && (contract.command === "start" || contract.command === "preview")) {
-          const launch = productionLaunchEvidence(contract);
+          const launch = await readLoadOverDebugPort(contract, productionLaunchEvidence(contract));
 
           return envelope({
             ok: true,
@@ -257,7 +257,7 @@ export async function handler(args: {
               elapsedMs: Date.now() - start,
             },
             warnings: [clampNote, staleContractNote],
-            hint: `This is an extension_start session (${contract.command === "preview" ? "a prebuilt dist served by the engine's preview verb" : "the production build"}): the contract says the build landed${launch.browserPid === null ? "" : ` and names the browser it launched (pid ${launch.browserPid}, ${launch.browserAlive ? "alive" : "gone"})`}, not that the browser loaded the extension: a production launch opens no debug port and carries no dev bridge, so browserAttached stays false for good, extension_logs has no console stream for it, and extension_eval, extension_storage, extension_reload, extension_open and extension_dom_snapshot cannot drive it. Do not call extension_wait again. To prove the load, run it with extension_dev (its answer carries guestLoaded); to check the production artifact, extension_build reports its summary and extension_preview_web renders the built dist.`,
+            hint: `This is an extension_start session (${contract.command === "preview" ? "a prebuilt dist served by the engine's preview verb" : "the production build"}): the contract says the build landed${launch.browserPid === null ? "" : ` and names the browser it launched (pid ${launch.browserPid}, ${launch.browserAlive ? "alive" : "gone"})`}, ${launch.extensionLoaded === true ? `and the browser loaded the extension (${launch.loadEvidence})` : "not that the browser loaded the extension"}: a production launch carries no dev bridge, so browserAttached stays false for good, extension_logs has no console stream for it, and extension_eval, extension_storage, extension_reload, extension_open and extension_dom_snapshot cannot drive it. Do not call extension_wait again. To prove the load, run it with extension_dev (its answer carries guestLoaded); to check the production artifact, extension_build reports its summary and extension_preview_web renders the built dist.`,
           });
         }
 

@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- `extension_start` and `extension_wait` read the load off the browser's debug port when the engine names one on the production contract: a live `chrome-extension://<id>/` target sets `extensionLoaded: true` with the evidence, and a port that answers with no target of this extension leaves the load unread rather than calling it refused. An engine that names no port keeps the old answer.
+
 ## 10.11.5
 
 Built on Extension.js 4.1.33.

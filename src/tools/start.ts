@@ -16,7 +16,7 @@ import { pollBootVerdict,
 import { profileCarriesTabsOver } from "../lib/profile-carryover";
 import { removeCarrier } from "../lib/carrier";
 import { envelope } from "../lib/envelope";
-import { productionLaunchEvidence, readFreshContract } from "../lib/production-launch";
+import { productionLaunchEvidence, readFreshContract, readLoadOverDebugPort } from "../lib/production-launch";
 import { spawnExtensionCli, spawnFailedEnvelope } from "../lib/exec";
 import {
   registerSession,
@@ -278,9 +278,8 @@ export async function handler(
     });
   }
 
-  const launch = productionLaunchEvidence(
-    readFreshContract(args.projectPath, browser, spawnedAt),
-  );
+  const freshContract = readFreshContract(args.projectPath, browser, spawnedAt);
+  const launch = await readLoadOverDebugPort(freshContract, productionLaunchEvidence(freshContract));
   const launchSeen =
     launch.browserPid === null
       ? "the contract has not recorded a browser launch yet; extension_wait reads it once the build lands (browserPid, browserAlive)"
@@ -298,7 +297,9 @@ export async function handler(
       observed: "the engine process was alive 5 s after it was spawned",
       ...launch,
     },
-    hint: `The engine's ${command} process was alive 5 s after spawn and ${launchSeen}. What a production session cannot confirm is that ${browser} loaded the extension: it opens no debug port and carries no dev bridge, so extension_logs has no console stream to read for it and the control verbs cannot attach. To prove the load, run it with extension_dev, whose answer carries guestLoaded. When you are done, call extension_stop to shut the session down.`,
+    hint: launch.extensionLoaded === true
+      ? `The engine's ${command} process was alive 5 s after spawn and ${launchSeen}, and ${browser} loaded the extension: ${launch.loadEvidence} A production session carries no dev bridge, so extension_logs has no console stream for it and the control verbs cannot attach. When you are done, call extension_stop to shut the session down.`
+      : `The engine's ${command} process was alive 5 s after spawn and ${launchSeen}. What this answer cannot confirm is that ${browser} loaded the extension: ${launch.loadEvidence} A production session carries no dev bridge, so extension_logs has no console stream to read for it and the control verbs cannot attach. To prove the load, run it with extension_dev, whose answer carries guestLoaded. When you are done, call extension_stop to shut the session down.`,
     warnings: [
       ...boot.warnings,
       markerWarning,
