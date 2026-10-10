@@ -57,8 +57,10 @@ async function firefoxFromList() {
 }
 
 describe("a self-updated Nightly is reported by the version its binary carries", () => {
-  // The stand-in binary is a shell script, which Windows cannot execute; the
-  // plist and application.ini cases below cover the read on every platform.
+  /* @invariant
+   * The stand-in binary is a shell script, which Windows cannot execute; the
+   * plist and application.ini cases below cover the read on every platform.
+   */
   it.skipIf(process.platform === "win32")("reads 159.0a1 from --version in a folder named 158.0a1, in detect and in list", async () => {
     const exe = plantNightly("Mozilla Firefox 159.0a1");
 

@@ -326,8 +326,10 @@ function findSystemBinary(browser: string): string | null {
   return null;
 }
 
-// Keeps a prerelease marker (159.0a1, 141.0b3, 128.5.0esr) so a Nightly or a
-// beta is never reported as the release it precedes.
+/* @invariant
+ * Keeps a prerelease marker (159.0a1, 141.0b3, 128.5.0esr) so a Nightly or a
+ * beta is never reported as the release it precedes.
+ */
 export function normalizeBrowserVersion(text: string | null | undefined): string | null {
   const match = String(text ?? "").match(/(\d+(?:\.\d+){1,3}(?:[a-z]+\d*)?)/i);
 
@@ -342,9 +344,11 @@ function readTextFile(file: string): string | null {
   }
 }
 
-// The bundle's own metadata, the way firefox-location2 getFirefoxVersion reads
-// it: a self-updated install rewrites these while its cache folder keeps the
-// version it was downloaded as.
+/* @invariant
+ * The bundle's own metadata, the way firefox-location2 getFirefoxVersion reads
+ * it: a self-updated install rewrites these while its cache folder keeps the
+ * version it was downloaded as.
+ */
 export function readBundledVersion(binaryPath: string): string | null {
   const binDir = path.dirname(binaryPath);
 

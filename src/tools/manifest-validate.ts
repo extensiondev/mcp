@@ -556,8 +556,10 @@ export async function handler(args: {
       effectiveByBrowser.get(browser) ?? engineManifestView(manifest, browser);
     const issues: string[] = [];
 
-    // The Chromium view already resolves chromium: keys at any nesting, so a
-    // manifest that ships its own service worker or action is not told to port.
+    /* @invariant
+     * The Chromium view already resolves chromium: keys at any nesting, so a
+     * manifest that ships its own service worker or action is not told to port.
+     */
     const chromiumBg = chromiumManifest.background as Record<string, unknown> | undefined;
     const chromiumHasWorker = typeof chromiumBg?.service_worker === "string";
     const firefoxBg = effective.background as Record<string, unknown> | undefined;
@@ -690,10 +692,12 @@ export async function handler(args: {
       const androidMin = (bss?.gecko_android as Record<string, unknown> | undefined)?.strict_min_version;
       const androidMajor = typeof androidMin === "string" ? Number.parseInt(androidMin, 10) : Number.NaN;
 
-      // Measured with the bundled addons-linter (2026-10-09): no minimum at
-      // all draws nothing, a minimum below 140 draws the unsupported-key
-      // warning, and 140 or 141 without a gecko_android minimum of 142 draws
-      // the Android one.
+      /* @invariant
+       * Measured with the bundled addons-linter (2026-10-09): no minimum at
+       * all draws nothing, a minimum below 140 draws the unsupported-key
+       * warning, and 140 or 141 without a gecko_android minimum of 142 draws
+       * the Android one.
+       */
       if (dataCollection && typeof dataCollection === "object" && Number.isFinite(minMajor)) {
         if (minMajor < 140) {
           result.warnings.push(
