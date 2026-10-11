@@ -4,13 +4,13 @@
 
 Built on Extension.js 4.1.33.
 
-- `extension_start` and `extension_wait` read the load off the browser's debug port when the engine names one on the production contract: a live `chrome-extension://<id>/` target sets `extensionLoaded: true` with the evidence, and a port that answers with no target of this extension leaves the load unread rather than calling it refused. An engine that names no port keeps the old answer.
+- `extension_start` and `extension_wait` read the load off the browser's debug port when the engine names one on the production contract (Extension.js 4.1.34 and later): a live `chrome-extension://<id>/` target sets `extensionLoaded: true` with the evidence, and a port that answers with no target of this extension leaves the load unread rather than calling it refused. An engine that names no port keeps the old answer. Agents used to report that they could not confirm the load.
 
 ## 10.11.5
 
 Built on Extension.js 4.1.33.
 
-- `extension_manifest_validate` reports `data_collection_permissions` the way AMO's linter does, measured against the bundled linter: a `strict_min_version` below 140 draws the unsupported-key warning, and 140 or 141 without `gecko_android.strict_min_version` 142 draws the Android one; no minimum at all draws nothing, so the tool stays quiet then too.
+- `extension_manifest_validate` reports `data_collection_permissions` the way AMO's linter does, measured against the bundled linter: a `strict_min_version` below 140 draws the unsupported-key warning, and 140 or 141 without `gecko_android.strict_min_version` 142 draws the Android one; no minimum at all draws nothing, so the tool stays quiet then too. Agents used to add the 140 rule from memory.
 
 ## 10.11.4
 
@@ -18,19 +18,19 @@ Built on Extension.js 4.1.33.
 
 - `extension_manifest_validate` no longer tells a Firefox MV2 manifest to port `background.scripts` to `chromium:service_worker` when the manifest already declares one, nested under `background` or as a top-level `chromium:background`, and no longer asks for `chromium:action` when one is declared. A Firefox MV3 manifest whose only background is `background.scripts` now hears that Chromium MV3 runs only a service worker. The `newtab-react` template drew the port advice on every Firefox check.
 - `extension_browsers` reports one version per browser, read from the binary itself: the bundle's `Info.plist` or `application.ini` first (the way the engine's `firefox-location2` reads it), then `--version`, keeping a prerelease suffix such as `a1`, `b3` or `esr`. `detect` used to cut Nightly's "159.0a1" to "159.0", and `list` reported no version at all, so an agent compared the cache folder `mac_arm-nightly_158.0a1` of a self-updated Nightly with "159.0" and called it a mismatch. `list` now carries `version` beside `binaryPath`, and the folder name stays only in the path.
-- `extension_list_extensions` on Chromium lists every extension installed in the session profile, not only the ones with a live CDP target: an extension whose MV3 service worker has gone dormant is listed with `running: false` and no contexts, and live ones carry `running: true`. Component extensions (the PDF viewer) stay out.
-- `extension_storage` says when the project's source manifest does not declare the `storage` permission: the answer carries `manifestDeclaresStorage: false` and a warning that the dev session's control channel answered anyway while the extension's own code gets no `chrome.storage` without it.
-- The plugin's CLAUDE.md template table lists `ai-chatgpt` under Sidebar beside `ai-claude`; it sat under Action popup, and every AI template is a side panel.
+- `extension_list_extensions` on Chromium lists every extension installed in the session profile, not only the ones with a live CDP target: an extension whose MV3 service worker has gone dormant is listed with `running: false` and no contexts, and live ones carry `running: true`. Component extensions (the PDF viewer) stay out. Agents used to warn that an idle extension "could be missing".
+- `extension_storage` says when the project's source manifest does not declare the `storage` permission: the answer carries `manifestDeclaresStorage: false` and a warning that the dev session's control channel answered anyway while the extension's own code gets no `chrome.storage` without it. Agents used to guess why such a write worked.
+- The plugin's CLAUDE.md template table lists `ai-chatgpt` under Sidebar beside `ai-claude`; it sat under Action popup, and every AI template is a side panel. The table placed it wrong, so agents listed it wrong.
 - `extension_theme_verify` names steps a user can take for the two legs it cannot settle headless: open the theme in the editor at themes.extension.dev, and run it with `extension_dev` to look at the browser. It named two internal harnesses (`assert:theme`, `install-parity`) that exist only in the maintainers' repository, and agents read them out as next steps.
-- `extension_analyze` lists every page the manifest declares as an entry point: `chrome_url_overrides` (new tab, history, bookmarks), `options_ui.page` and `options_page`, `side_panel.default_path`, `sidebar_action.default_panel` and `devtools_page`, beside the background and popup it already read.
+- `extension_analyze` lists every page the manifest declares as an entry point: `chrome_url_overrides` (new tab, history, bookmarks), `options_ui.page` and `options_page`, `side_panel.default_path`, `sidebar_action.default_panel` and `devtools_page`, beside the background and popup it already read. Agents asked what ended up in the bundle found only the service worker and reported the new tab page missing.
 - CI runs all three required engine cells (`verify (canary)`, `verify (stable)`, `verify (floor)`) on every run, even when two resolve to the same version. It de-duplicated them by version, so with all three at 4.1.33 only `verify (canary)` ran, the other two required checks never reported, and every pull request read BLOCKED.
-- `extension_theme_verify` calls a manifest with no `manifest_version` (and no Extension.js `chromium:manifest_version`) invalid: Chrome refuses to load any extension without it, themes included. It answered headless-clean, and agents had to warn on its own that Chrome "may refuse" the theme.
+- `extension_theme_verify` calls a manifest with no `manifest_version` (and no Extension.js `chromium:manifest_version`) invalid: Chrome refuses to load any extension without it, themes included. It answered headless-clean, leaving agents to warn on their own that Chrome "may refuse" the theme.
 
 ## 10.11.3
 
 Built on Extension.js 4.1.33.
 
-- `extension_assert`'s `surface-rendered` check on `newtab` finds the override where Chrome lists it: an overridden new tab page is a `chrome://newtab/` target, not `chrome-extension://<id>/newtab.html`, so the check failed with "nothing is rendering it" while the page was on screen. A `chrome://newtab/` page counts only when it answers with this extension's own `chrome.runtime.id`, so Chrome's default page or another extension's override still fails.
+- `extension_assert`'s `surface-rendered` check on `newtab` finds the override where Chrome lists it: an overridden new tab page is a `chrome://newtab/` target, not `chrome-extension://<id>/newtab.html`, so the check failed with "nothing is rendering it" while the page was on screen. A `chrome://newtab/` page counts only when it answers with this extension's own `chrome.runtime.id`, so Chrome's default page or another extension's override still fails. Agents running a plain "check that it works" failed on that and had to open the page by hand.
 
 ## 10.11.2
 
@@ -39,10 +39,10 @@ Built on Extension.js 4.1.33.
 - `extension-create` and `extension-install` move from 4.1.32 to 4.1.33, the version `extension-develop` already ran on, so the nightly engine-pin check reads all three engines as current.
 - CI runs the canary cell on stable when npm's canary tag is behind it (the tag sat on 4.1.31-canary while stable was 4.1.33), so a stale canary no longer reds the required `verify (canary)` check on a golden the pinned engine already changed.
 - The generated tool reference moves from `claude/rules/mcp-tools.md` to `claude/reference/mcp-tools.md`. At 71k characters it restates the schemas the server already sends, and anyone who copied `claude/rules` into a project as Claude Code rules loaded it into every session; two such copies on one path (a workspace folder and a project in it) crossed Claude Code's 150k instruction limit and painted a warning naming the file. `claude/rules` now holds only the two hand-written rules, and a test keeps that folder under 10k characters.
-- `extension_start` and `extension_wait` on a production session say what they read and never point at a file: the answer carries `browserPid` and `browserAlive` from the contract the launcher stamps, `extensionLoaded: null` with `loadEvidence` saying plainly that a production launch opens no debug port and carries no dev bridge (so `extension_logs` has no stream for it and the load itself is unread), and names `extension_dev` for a proven load; the `/var/folders/.../session.log` path left the answer.
-- `extension_stop` says what it ended: the answer carries `serverGone`, the `browserPid` the launcher recorded in `ready.json` and `browserGone`, and its detail reads "Ended: the server (pid N) is gone; the browser the launcher recorded (pid M) is gone" (or that no browser pid was recorded, or that a build-only session launched none); a browser still alive keeps `stopped` false.
-- `extension_wait` answers with every port the session bound, read from the contract: `port` (the dev server), `controlPort` (the control channel) and `cdpPort` (the browser's debug port on Chromium) or `rdpPort` (on Gecko), or `debugPortNote` when the session opened none; `extension_dev`'s ready block inherits them.
-- `extension_add_feature`'s description is the trigger: it names the asks it answers (add an options page, a popup, a side panel, a content script, a devtools panel, a new tab page or a background script), says it plans the surface and the agent writes what the plan says, and hands the follow-up to the manifest check and `extension_dev`.
+- `extension_start` and `extension_wait` on a production session say what they read and never point at a file: the answer carries `browserPid` and `browserAlive` from the contract the launcher stamps, `extensionLoaded: null` with `loadEvidence` saying plainly that a production launch opens no debug port and carries no dev bridge (so `extension_logs` has no stream for it and the load itself is unread), and names `extension_dev` for a proven load; the `/var/folders/.../session.log` path left the answer. Agents used to show users that temp path and leave the load unproven.
+- `extension_stop` says what it ended: the answer carries `serverGone`, the `browserPid` the launcher recorded in `ready.json` and `browserGone`, and its detail reads "Ended: the server (pid N) is gone; the browser the launcher recorded (pid M) is gone" (or that no browser pid was recorded, or that a build-only session launched none); a browser still alive keeps `stopped` false. Agents used to run `ps` to check the browser because the stop answer confirmed only the server.
+- `extension_wait` answers with every port the session bound, read from the contract: `port` (the dev server), `controlPort` (the control channel) and `cdpPort` (the browser's debug port on Chromium) or `rdpPort` (on Gecko), or `debugPortNote` when the session opened none; `extension_dev`'s ready block inherits them. Agents asked for the ports could not name the CDP port, because it was in `ready.json` and in no answer.
+- `extension_add_feature`'s description is the trigger: it names the asks it answers (add an options page, a popup, a side panel, a content script, a devtools panel, a new tab page or a background script), says it plans the surface and the agent writes what the plan says, and hands the follow-up to the manifest check and `extension_dev`. Agents used to hand-write the files without ever calling it. The README row and the plan's last step say the same.
 
 ## 10.11.1
 
@@ -65,7 +65,7 @@ Built on Extension.js 4.1.32.
   release: both files carry the version and the suite asserts the files on
   disk are the current rendering, so the first 10.11.0 run failed its own
   bump.
-- The Safari automation hint names the setting the way the engine does: Safari > Settings > Developer > "Allow remote automation", with the Develop menu item on older Safari.
+- The Safari automation hint names the setting the way the engine does: Safari > Settings > Developer > "Allow remote automation", with the Develop menu item on older Safari (Extension.js #836).
 
 - `extension_dev` carries the control channel by default: `allowControl` defaults to true, so `extension_storage`, `extension_reload`, `extension_open` and `extension_dom_snapshot` work on a plain dev session and a later "reload it" costs no restart; pass `allowControl: false` for a read-only session. `allowEval` stays off until asked and still implies control. The descriptions, the hints, the docs gates, the README and the shipped rules say control is on unless asked off.
 - `extension_wait` now says when it is needed (a session started with `wait: false`, a dev answer whose `ready.status` was not ready, a build-only session); `extension_dev`'s answer and the shipped rules say a ready answer ends the run recipe.
@@ -269,7 +269,8 @@ Built on Extension.js 4.1.32.
 
 ## 10.10.13
 
-Built on Extension.js 4.1.32. It closes the last findings of the 2026-10-05 audits.
+Built on Extension.js 4.1.32. It closes the last findings of the 2026-10-05
+audits.
 
 - Safari dev sessions: Extension.js 4.1.32 opens a `safaridriver` session
   and records it in `ready.json`, which is what this server's Safari page
@@ -331,7 +332,9 @@ fields that wait on the engine.
 ## 10.10.10
 
 Every sentence the server says is now backed by something it read
-.
+(two audits of 2026-10-05: a claims
+census of about 2,030 sentences and a fixture sweep against the pinned
+engine and the platform).
 
 - Success is read, never assumed. Promote, submit, publish, project and
   workspace create, logout and uninstall read the platform's or the
@@ -379,8 +382,7 @@ Every sentence the server says is now backed by something it read
 
 ## 10.10.9
 
-- One approval now covers several projects in one workspace
- . Onboarding ten projects used to cost
+- One approval now covers several projects in one workspace. Onboarding ten projects used to cost
   twenty visits to extension.dev/device, one to create each project and
   one to sign in to it, and the ten tokens then expired together and cost
   ten more. This release is the client half and waits on the platform
@@ -461,8 +463,7 @@ Every sentence the server says is now backed by something it read
 ## 10.10.8
 
 - On Firefox, `extension_eval` now reads an extension whose content
-  security policy forbids eval, which is every MV3 extension page
- . Extension.js 4.1.31 evaluates such a
+  security policy forbids eval, which is every MV3 extension page. Extension.js 4.1.31 evaluates such a
   document over the debugger protocol, but the wrapper this server put
   around a popup, options, sidebar or override-page expression called
   eval itself, so those contexts still answered "blocked by CSP" on an
@@ -607,7 +608,8 @@ Every sentence the server says is now backed by something it read
 ## 10.10.2
 
 - The engine pin moves to the Extension.js canary
-  `4.1.31-canary.1791055414.4bbb683a`: `extension_dev`,
+  `4.1.31-canary.1791055414.4bbb683a` (chosen 2026-10-01, refreshed
+  2026-10-03 when the canary moved on): `extension_dev`,
   `extension_start` and `extension_build` spawn that build when a project
   has no engine of its own, and the nightly engine-pin check now reads a
   canary pin against the canary dist-tag instead of latest. The canary's
@@ -628,38 +630,41 @@ Every sentence the server says is now backed by something it read
   outranks `EXTENSION_DEV_TOKEN`; omitted, the order stays environment
   first, then the active login. `extension_auth` status lists every login
   under `logins`, and logout with `project` removes just that one. A
-  version 1 file is read as a store of one and rewritten on the next login
- .
-- Four findings from the six-browser sweep: `extension_open` reads new headless off the `User-Agent` field
+  version 1 file is read as a store of one and rewritten on the next login.
+- Four findings from a six-browser sweep: `extension_open` reads new headless off the `User-Agent` field
   of `/json/version` as well (`--headless=new` keeps `Chrome/151` in the
   `Browser` field) and, whatever the launch flags said, falls back to the
   tab route on any window refusal: Chromium's gesture refusal for a popup,
   an options or popup window the engine called opened but no document
   appeared for within 3 s, and Gecko's "Popup is disabled"; a Gecko
-  browser that gets Chromium's gesture sentence is answered with
+  browser that gets Chromium's gesture sentence (the engine counts every
+  non-Firefox name as
+  Chromium) is answered with
   Gecko wording; and when the background refuses the `runtime.getURL` eval
   the tab route needs (an extension CSP that forbids eval), the
   `moz-extension://` base is read off the profile's
   `extensions.webextensions.uuids` pref through the add-on id the built
-  manifest declares, so the fallback still lands (40). `extension_eval` context `background` wakes an idle
+  manifest declares, so the fallback still lands. `extension_eval` context `background` wakes an idle
   MV3 worker through `ServiceWorker.startWorker` from a page session
   before evaluating, with a warning that it was idle, instead of answering
-  `E_NO_TARGET` (41). `extension_open surface: "devtools"` takes `waitMs`
+  `E_NO_TARGET`. `extension_open surface: "devtools"` takes `waitMs`
   and `reload` (reload the inspected tab once DevTools is open, for
   extensions that create their panel when the page reports to them) and
-  the missing-panel hint names both (42). A page eval the PAGE's CSP
+  the missing-panel hint names both. A page eval the PAGE's CSP
   refuses on a Gecko MV2 build is re-run through `tabs.executeScript`, the
-  same wrapper the no-scripting-API case uses (43); an MV3 Gecko build
-  keeps the policy explanation, pending.
+  same wrapper the no-scripting-API case uses; an MV3 Gecko build
+  keeps the policy explanation, pending an engine fix.
 - `extension_eval` over CDP awaits a promise-valued expression again. The
-  CDP routes added for the background and url reads passed `replMode` on every
+  CDP routes added for the background and url
+  reads passed `replMode` on every
   `Runtime.evaluate`, and Chrome 151 answers a replMode evaluate with the
   promise object itself, ignoring `awaitPromise`, so `Promise.resolve(42)`,
   an async IIFE or `chrome.tabs.query({}).then(...)` read as `{}` with
   `ok: true` on pages and workers alike. The evaluate now runs without
   replMode, and only an expression Chrome refuses for a top-level `await`
   is re-run in replMode with the promise settled through
-  `Runtime.awaitPromise`.
+  `Runtime.awaitPromise` (a regression of
+  10.10.2's own, never released).
 - `extension_open` takes `surface: "devtools"` on Chromium: it opens the
   browser's real DevTools on a tab (the one `url` matches, else the first
   web page) through CDP `Target.openDevTools`, waits for the extension's
@@ -690,8 +695,8 @@ Every sentence the server says is now backed by something it read
   `newtab-preact`; the catalog-sync PR had failed on the old names every
   day since 2026-09-26.
 
-Nine findings from a session that brought ten third-party extensions under
-the server in one day:
+Findings from a session that brought ten third-party extensions under the
+server in one day:
 
 - `extension_dev` and `extension_start` spawn the engine in the project
   directory, not where the MCP client started the server, so the engine a
@@ -715,8 +720,7 @@ the server in one day:
   the engine refuses with "call to eval() blocked by CSP", instead of
   blaming the expression, and on MV2 Gecko a page or content
   eval goes through `tabs.executeScript` from the background when the
-  engine has no scripting API, with the content-world caveat stated
- .
+  engine has no scripting API, with the content-world caveat stated.
 - `extension_open` with a `url` opens a new tab unless `tab` names one, so
   a page under test is never taken over; a path with no scheme resolves
   against the extension's own origin on Chromium and Gecko.
@@ -751,15 +755,13 @@ Seven more from the same session's functional sweep:
   relay when the session has no debug port.
 - `extension_open` asks the browser whether it is headless (HeadlessChrome
   names itself) and renders popup, options and sidebar as a tab at once
-  when it is, instead of opening a popup that is gone before the next call
- . A page the browser swapped for its own error page answers
+  when it is, instead of opening a popup that is gone before the next call. A page the browser swapped for its own error page answers
   `navigate-blocked` with the browser's title instead of `navigated`, and
   eval refuses such a tab.
 - `extension_browsers` reports the newest managed version when several sit
   in the cache, the one the engine launches.
 - `extension_inspect` probes on Gecko return the same shape as on Chromium,
-  `{selector, count, samples[]}` with a text snippet per element
- .
+  `{selector, count, samples[]}` with a text snippet per element.
 - `extension_assert` on Gecko reads `background-worker-booted` off the
   control channel (the bridge executor runs in the background) and
   `surface-rendered` off the surface relay, instead of answering
@@ -777,8 +779,7 @@ Seven more from the same session's functional sweep:
 
 ## 10.10.1
 
-Five Gecko findings from one agent session on Firefox and Waterfox
-, each replayed against a live Firefox
+Five Gecko findings from one agent session on Firefox and Waterfox, each replayed against a live Firefox
 Nightly before and after the fix where the shape allowed it, plus four more
 that followed them the same week, and the engine release that carries the
 root-cause fix for the first of them.
@@ -887,8 +888,7 @@ has it.
   and `extension_doctor` adds a `safari-window` leg; with no such record
   the leg is a skip and both tools take the bridge.
 
-Four defects agents met while driving the server on real extension work
- close in the same release.
+Four defects agents met while driving the server on real extension work close in the same release.
 
 - The initialize result now carries `instructions`: four lines that name
   the moments (run, wait, inspect, drive, build an extension) and the tools
@@ -1095,7 +1095,7 @@ the host page, where it 404'd.
 The engine this server spawns had drifted nine releases behind the one a
 human gets from `npx extension@latest`. Agents were building on 4.0.20
 while the published CLI was 4.0.29, so every engine fix in that range was
-missing from the agent lane, including both theme-colour conversions
+missing from the agent lane, including both theme-color conversions
 shipped this week: a `theme.colors` project a human built green still
 failed when an agent built it. Nothing in this repository changed when
 the engine shipped, which is why it went unnoticed until a walk of the
