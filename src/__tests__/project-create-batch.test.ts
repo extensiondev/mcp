@@ -13,6 +13,7 @@ import {
 } from "../lib/credentials";
 import { PLATFORM_HOLD_STATUS } from "../lib/platform-hold";
 import { parseBatchCreateArgs } from "../lib/project-create-batch";
+import { heldBatchesPath } from "../lib/held-batches";
 
 const API = "https://api.test";
 const GRANT = "batch-grant-secret-value";
@@ -25,7 +26,7 @@ function jsonResponse(body: unknown, status = 200): Response {
 }
 
 type Route = { status: number; body: unknown; headers?: Record<string, string> };
-type CreateRoute = Route | "network-error";
+type CreateRoute = Route | "network-error" | "no-answer";
 
 let clock = 0;
 
@@ -35,8 +36,9 @@ function harness(options: {
   token?: Route[];
   create?: (project: string, slug: string, call: number) => CreateRoute;
   createTakesMs?: number;
+  tokenTakesMs?: number;
 }) {
-  const calls: Array<{ url: string; body: any; headers: Record<string, string> }> = [];
+  const calls: Array<{ url: string; body: any; headers: Record<string, string>; at: number }> = [];
   let tokenCalls = 0;
   let createCalls = 0;
   const fn = vi.fn(async (url: any, init?: RequestInit) => {
@@ -46,6 +48,7 @@ function harness(options: {
       url: href,
       body,
       headers: (init?.headers ?? {}) as Record<string, string>,
+      at: clock,
     });
 
     if (href.endsWith("/api/cli/login/config")) {
@@ -90,6 +93,7 @@ function harness(options: {
         body: { error: "authorization_pending" },
       };
       tokenCalls += 1;
+      clock += options.tokenTakesMs ?? 0;
 
       return jsonResponse(next.body, next.status);
     }
@@ -103,6 +107,12 @@ function harness(options: {
         ? options.create(ref, slug, createCalls)
         : created(slug);
       if (route === "network-error") throw new Error("socket hang up");
+
+      if (route === "no-answer") {
+        return new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener("abort", () => reject(init.signal?.reason));
+        });
+      }
 
       return new Response(JSON.stringify(route.body), {
         status: route.status,
@@ -469,7 +479,7 @@ describe("extension_project_create with projects: one approval", () => {
     expect(listCredentials()).toHaveLength(3);
   });
 
-  it("never puts the grant or a project token in the envelope, and never writes the grant to disk", async () => {
+  it("never puts the grant or a project token in the envelope, and never writes the grant into the login store", async () => {
     harness({ token: [grant(SLUGS)] });
     const text = await projectCreate.handler({ projects: THREE, deviceCode: "dev-code" } as never);
 
@@ -937,12 +947,13 @@ describe("extension_project_create with projects: the grant and the list", () =>
     ]);
   });
 
-  it("says what a restarted server lost instead of pretending nothing happened", async () => {
+  it("says what a restarted server lost when the held grant is gone from disk too", async () => {
     const h = harness({
       token: [grant(SLUGS), { status: 400, body: { error: "expired_token" } }],
       createTakesMs: 21_000,
     });
     await run({ projects: THREE, deviceCode: "dev-code" });
+    fs.rmSync(heldBatchesPath(), { force: true });
     vi.resetModules();
     projectCreate = await import("../tools/project-create");
     const out = await run({ projects: THREE, deviceCode: "dev-code" });
@@ -1183,5 +1194,180 @@ describe("extension_project_create with projects: a created project keeps its ro
 
     expect(out.status).toBe("created");
     expect(h.to("/api/cli/projects/create")).toHaveLength(3);
+  });
+});
+
+describe("extension_project_create with projects: every call answers before the client times out", () => {
+  async function callTimed(args: Record<string, unknown>) {
+    const startedAt = clock;
+    const out = await run(args);
+
+    return { out, startedAt, elapsedMs: clock - startedAt };
+  }
+
+  it("starts no create 20 s or more into a call, so an approval that lands late in the poll still answers in time", async () => {
+    const h = harness({ token: [grant(SLUGS)], tokenTakesMs: 14_000, createTakesMs: 18_000 });
+    const answers: Array<Awaited<ReturnType<typeof callTimed>>> = [];
+
+    for (let i = 0; i < 5; i += 1) {
+      const sentBefore = h.to("/api/cli/projects/create").length;
+      const answer = await callTimed({ projects: THREE, deviceCode: "dev-code" });
+      answers.push(answer);
+
+      for (const create of h.to("/api/cli/projects/create").slice(sentBefore)) {
+        expect(create.at - answer.startedAt).toBeLessThan(20_000);
+      }
+
+      expect(answer.elapsedMs).toBeLessThan(45_000);
+      if (answer.out.status !== "creating") break;
+    }
+
+    expect(answers[0]?.out.status).toBe("creating");
+    expect(answers[0]?.out.hint).toContain("answered early so the client does not time out");
+    expect(answers[answers.length - 1]?.out.status).toBe("created");
+    expect(h.to("/api/cli/projects/create")).toHaveLength(3);
+    expect(h.to("/api/cli/device/token")).toHaveLength(1);
+  });
+
+  it("polls a resumed approval for at most 15 s before answering pending", async () => {
+    harness({ token: [{ status: 400, body: { error: "authorization_pending" } }], tokenTakesMs: 16_000 });
+    const answer = await callTimed({ projects: THREE, deviceCode: "dev-code" });
+
+    expect(answer.out.status).toBe("authorization-pending");
+    expect(answer.elapsedMs).toBeLessThan(20_000);
+  });
+
+  it("abandons a create with no answer 45 s into the call, marks it unconfirmed and answers", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+
+    try {
+      const h = harness({
+        token: [grant(SLUGS)],
+        create: (_ref, _slug, call) => (call === 1 ? "no-answer" : created(SLUGS[call - 1] as string)),
+      });
+      const pending = run({ projects: THREE, deviceCode: "dev-code" });
+      await vi.advanceTimersByTimeAsync(45_000);
+      const out = await pending;
+
+      expect(out.status).toBe("creating");
+      expect(out.value.results[0]).toMatchObject({ project: "acme/alpha", status: "unconfirmed" });
+      expect(out.value.results[0].message).toContain("60 s request timeout");
+      expect(h.to("/api/cli/projects/create")).toHaveLength(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe("extension_project_create with projects: the grant survives a server restart", () => {
+  async function restart() {
+    vi.resetModules();
+    projectCreate = await import("../tools/project-create");
+  }
+
+  it("resumes the list after a restart with the same deviceCode, with no second approval", async () => {
+    const h = harness({
+      token: [grant(SLUGS), { status: 400, body: { error: "expired_token" } }],
+      createTakesMs: 21_000,
+    });
+    const first = await run({ projects: THREE, deviceCode: "dev-code" });
+    expect(first.status).toBe("creating");
+    expect(first.hint).toContain("a restarted server resumes it");
+
+    await restart();
+    const second = await run({ projects: THREE, deviceCode: "dev-code" });
+    await restart();
+    const third = await run({ projects: THREE, deviceCode: "dev-code" });
+
+    expect(second.status).toBe("creating");
+    expect(third.status).toBe("created");
+    expect(third.value.counts).toMatchObject({ created: 3, loggedIn: 3 });
+    expect(h.to("/api/cli/device/token")).toHaveLength(1);
+    expect(h.to("/api/cli/projects/create").map((call) => call.body.project)).toEqual([
+      "acme/alpha",
+      "acme/beta",
+      "acme/gamma",
+    ]);
+
+    expect(h.to("/api/cli/projects/create").every((call) => call.headers.authorization === `Bearer ${GRANT}`)).toBe(true);
+
+    for (const out of [first, second, third]) expect(JSON.stringify(out)).not.toContain(GRANT);
+  });
+
+  it("holds the grant 0600 beside the login store, keyed so the device code is not written, and deletes it when the list is done", async () => {
+    harness({ token: [grant(SLUGS)], createTakesMs: 21_000 });
+    await run({ projects: THREE, deviceCode: "dev-code" });
+
+    const file = heldBatchesPath();
+    expect(path.dirname(file)).toBe(path.dirname(credentialsPath()));
+    if (process.platform !== "win32") expect(fs.statSync(file).mode & 0o777).toBe(0o600);
+
+    const text = fs.readFileSync(file, "utf8");
+    expect(text).toContain(GRANT);
+    expect(text).not.toContain("dev-code");
+    expect(fs.readFileSync(credentialsPath(), "utf8")).not.toContain(GRANT);
+
+    await run({ projects: THREE, deviceCode: "dev-code" });
+    const done = await run({ projects: THREE, deviceCode: "dev-code" });
+
+    expect(done.status).toBe("created");
+    expect(fs.existsSync(file)).toBe(false);
+  });
+
+  it("does not resume a held grant for another server", async () => {
+    const h = harness({
+      token: [grant(SLUGS), { status: 400, body: { error: "expired_token" } }],
+      createTakesMs: 21_000,
+    });
+    await run({ projects: THREE, deviceCode: "dev-code" });
+    await restart();
+    process.env.EXTENSION_DEV_API_URL = "https://other.test";
+    const out = await run({ projects: THREE, deviceCode: "dev-code" });
+
+    expect(out.status).toBe("create-expired");
+    expect(h.to("/api/cli/projects/create")).toHaveLength(1);
+  });
+
+  it("drops a held grant once it has expired instead of sending it", async () => {
+    const h = harness({
+      token: [grant(SLUGS), { status: 400, body: { error: "expired_token" } }],
+      createTakesMs: 21_000,
+    });
+    await run({ projects: THREE, deviceCode: "dev-code" });
+    await restart();
+    clock += 15 * 60 * 1000;
+    const out = await run({ projects: THREE, deviceCode: "dev-code" });
+
+    expect(out.status).toBe("create-expired");
+    expect(h.to("/api/cli/projects/create")).toHaveLength(1);
+    expect(fs.existsSync(heldBatchesPath())).toBe(false);
+  });
+
+  it("does not send again a create whose call ended before its answer was read", async () => {
+    let heldDuringFirstCreate = "";
+    const h = harness({
+      token: [grant(SLUGS)],
+      createTakesMs: 21_000,
+      create: (_ref, slug, call) => {
+        if (call === 1) heldDuringFirstCreate = fs.readFileSync(heldBatchesPath(), "utf8");
+
+        return created(slug);
+      },
+    });
+    await run({ projects: THREE, deviceCode: "dev-code" });
+    fs.writeFileSync(heldBatchesPath(), heldDuringFirstCreate);
+    await restart();
+    await run({ projects: THREE, deviceCode: "dev-code" });
+    const out = await run({ projects: THREE, deviceCode: "dev-code" });
+
+    expect(h.to("/api/cli/projects/create").map((call) => call.body.project)).toEqual([
+      "acme/alpha",
+      "acme/beta",
+      "acme/gamma",
+    ]);
+
+    expect(out.status).toBe("batch-incomplete");
+    expect(out.value.results[0]).toMatchObject({ project: "acme/alpha", status: "unconfirmed" });
+    expect(out.value.counts).toMatchObject({ created: 2, unconfirmed: 1 });
   });
 });

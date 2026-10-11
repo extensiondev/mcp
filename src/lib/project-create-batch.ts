@@ -10,7 +10,9 @@ import { spendNarration } from "./allowance";
 import { writeCredentialBatch, tokenExpiry, isProjectRef } from "./credentials";
 import { answerIsUnknownOutcome, readCreatedProject } from "./create-answer";
 import { firstBuildValue, readFirstBuild, withheldBecause } from "./first-build";
+import { answerDeadline, RESUME_POLL_MS, START_WORK_WITHIN_MS } from "./call-budget";
 import { pollDeviceGrant, requestDeviceCode } from "./device-flow";
+import { dropHeldBatch, loadHeldBatch, saveHeldBatch } from "./held-batches";
 import { envelope, type ErrorCode } from "./envelope";
 import { fetchLoginConfig, resolveApiBase, safeApiBase } from "./login-flow";
 import { platformHoldEnvelope, sawPlatformHold } from "./platform-hold";
@@ -28,8 +30,6 @@ import { identityHeaders } from "./session-identity";
 const COMMAND = "extension_project_create";
 
 const FIRST_CALL_BUDGET_MS = 8_000;
-const RESUME_BUDGET_MS = 22_000;
-const SLICE_BUDGET_MS = 20_000;
 const GRANT_EXPIRY_MARGIN_SECONDS = 5;
 
 const ENTRY_KEYS = [
@@ -134,6 +134,7 @@ interface Session {
   stop: Stop | null;
   lastBody: Record<string, unknown> | null;
   unanswered: number;
+  persisted: boolean;
 }
 
 const sessions = new Map<string, Session>();
@@ -382,7 +383,28 @@ function refusalHint(code: string, ref: string, retryAfterSeconds?: number, gran
 
 type CreateOutcome = { row: Row; stop?: Stop; halt?: boolean };
 
-async function createOne(session: Session, entry: BatchEntry, installationId: string | undefined): Promise<CreateOutcome> {
+function persist(session: Session, deviceCode: string, inFlight?: BatchEntry): void {
+  const rows = rowsInOrder(session).filter((row) => row.status !== "pending");
+
+  if (inFlight) {
+    rows.push({
+      project: inFlight.ref,
+      status: "unconfirmed",
+      message: `The call that sent the create request for ${inFlight.ref} ended before its answer was read.`,
+      hint: `Whether ${inFlight.ref} now exists is unknown, so it is not sent again. Check the console at ${consoleBase()}; if it exists, sign in with extension_auth (action: login).`,
+    });
+  }
+
+  session.persisted = saveHeldBatch(session.apiBase, deviceCode, {
+    workspace: session.workspace,
+    refs: session.refs,
+    grant: session.grant,
+    grantExpiresAt: session.grantExpiresAt,
+    rows,
+  });
+}
+
+async function createOne(session: Session, entry: BatchEntry, installationId: string | undefined, callStartedAt: number): Promise<CreateOutcome> {
   const url = `${session.apiBase}/api/cli/projects/create`;
   const body = {
     ...buildCreateBody({
@@ -402,6 +424,7 @@ async function createOne(session: Session, entry: BatchEntry, installationId: st
     project: entry.ref,
   };
   let res: Response;
+  const deadline = answerDeadline(callStartedAt);
 
   try {
     res = await fetch(url, {
@@ -412,8 +435,10 @@ async function createOne(session: Session, entry: BatchEntry, installationId: st
         ...identityHeaders(COMMAND),
       },
       body: JSON.stringify(body),
+      signal: deadline.signal,
     });
   } catch (err: any) {
+    deadline.release();
     session.unanswered += 1;
     const message = `Could not reach ${url}: ${err?.message || err}`;
 
@@ -456,6 +481,8 @@ async function createOne(session: Session, entry: BatchEntry, installationId: st
     return unknownOutcome(
       `The platform answered ${res.status} for ${entry.ref} and the answer could not be read: ${err?.message || err}`,
     );
+  } finally {
+    deadline.release();
   }
 
   let data: Record<string, unknown>;
@@ -757,7 +784,7 @@ function finalEnvelope(session: Session): string {
   });
 }
 
-async function runSlice(session: Session, deviceCode: string, installationId: string | undefined): Promise<string> {
+async function runSlice(session: Session, deviceCode: string, installationId: string | undefined, callStartedAt: number): Promise<string> {
   if (session.busy) {
     return envelope({
       ok: true,
@@ -776,9 +803,6 @@ async function runSlice(session: Session, deviceCode: string, installationId: st
   let halted = false;
 
   try {
-    const started = Date.now();
-    let attempted = 0;
-
     for (const entry of session.entries) {
       if (session.rows.has(entry.ref)) continue;
       if (session.stop) break;
@@ -793,12 +817,14 @@ async function runSlice(session: Session, deviceCode: string, installationId: st
         break;
       }
 
-      if (attempted > 0 && Date.now() - started >= SLICE_BUDGET_MS) break;
+      if (Date.now() - callStartedAt >= START_WORK_WITHIN_MS) break;
 
-      attempted += 1;
-      const outcome = await createOne(session, entry, installationId);
+      persist(session, deviceCode, entry);
+      const outcome = await createOne(session, entry, installationId, callStartedAt);
       session.rows.set(entry.ref, outcome.row);
       if (outcome.stop) session.stop = outcome.stop;
+
+      persist(session, deviceCode);
 
       if (outcome.halt) {
         halted = true;
@@ -824,15 +850,44 @@ async function runSlice(session: Session, deviceCode: string, installationId: st
         results: rowsInOrder(session),
         remaining: remaining.map((entry) => entry.ref),
       },
-      hint: `${done} of ${session.entries.length} projects handled so far; ${remaining.length} still to create. Call extension_project_create again with this same deviceCode and the same arguments to continue. No new approval is needed: the grant is held in this server's memory until ${new Date(session.grantExpiresAt * 1000).toISOString()} and is lost if the server restarts.${
+      hint: `${done} of ${session.entries.length} projects handled so far; ${remaining.length} still to create. This call answered early so the client does not time out. Call extension_project_create again with this same deviceCode and the same arguments to continue. No new approval is needed: the grant is held ${session.persisted ? "on this machine, readable only by this user, so a restarted server resumes it," : "in this server's memory, and is lost if the server restarts,"} until ${new Date(session.grantExpiresAt * 1000).toISOString()}.${
         halted ? " The last request got no answer, so its project is marked unconfirmed and is not retried." : ""
       }`,
     });
   }
 
   sessions.delete(deviceCode);
+  dropHeldBatch(session.apiBase, deviceCode);
 
   return finalEnvelope(session);
+}
+
+function restoreSession(
+  apiBase: string,
+  deviceCode: string,
+  parsed: { entries: BatchEntry[] },
+): Session | undefined {
+  const held = loadHeldBatch<Row>(apiBase, deviceCode);
+  if (!held) return undefined;
+
+  const session: Session = {
+    apiBase,
+    workspace: held.workspace,
+    refs: held.refs,
+    entries: sameProjectSet(held.refs, parsed.entries.map((entry) => entry.ref)) ? parsed.entries : [],
+    grant: held.grant,
+    grantExpiresAt: held.grantExpiresAt,
+    rows: new Map(held.rows.map((row) => [row.project, row])),
+    busy: false,
+    stop: null,
+    lastBody: null,
+    unanswered: 0,
+    persisted: true,
+  };
+
+  if (session.entries.length) sessions.set(deviceCode, session);
+
+  return session;
 }
 
 export async function createProjectBatch(args: BatchCreateArgs): Promise<string> {
@@ -856,6 +911,7 @@ export async function createProjectBatch(args: BatchCreateArgs): Promise<string>
   }
 
   const refs = parsed.entries.map((entry) => entry.ref);
+  const callStartedAt = Date.now();
 
   const apiCheck = safeApiBase(resolveApiBase(args.api), args.api);
 
@@ -867,7 +923,7 @@ export async function createProjectBatch(args: BatchCreateArgs): Promise<string>
 
   sweepSessions(Math.floor(Date.now() / 1000));
   let deviceCode = String(args.deviceCode || "").trim();
-  const held = deviceCode ? sessions.get(deviceCode) : undefined;
+  const held = deviceCode ? (sessions.get(deviceCode) ?? restoreSession(apiBase, deviceCode, parsed)) : undefined;
 
   if (held) {
     if (held.apiBase !== apiBase || !sameProjectSet(held.refs, refs)) {
@@ -879,7 +935,7 @@ export async function createProjectBatch(args: BatchCreateArgs): Promise<string>
       );
     }
 
-    return runSlice(held, deviceCode, installationId || undefined);
+    return runSlice(held, deviceCode, installationId || undefined, callStartedAt);
   }
 
   let config;
@@ -924,7 +980,7 @@ export async function createProjectBatch(args: BatchCreateArgs): Promise<string>
   }
 
   let interval = 5;
-  let budgetMs = RESUME_BUDGET_MS;
+  let budgetMs = RESUME_POLL_MS;
   let start: Awaited<ReturnType<typeof requestDeviceCode>> | null = null;
 
   if (!deviceCode) {
@@ -1068,8 +1124,10 @@ export async function createProjectBatch(args: BatchCreateArgs): Promise<string>
     stop: null,
     lastBody: null,
     unanswered: 0,
+    persisted: false,
   };
   sessions.set(deviceCode, session);
+  persist(session, deviceCode);
 
-  return runSlice(session, deviceCode, installationId || undefined);
+  return runSlice(session, deviceCode, installationId || undefined, callStartedAt);
 }

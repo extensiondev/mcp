@@ -6,6 +6,7 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
+import { answerDeadline, RESUME_POLL_MS } from "../lib/call-budget";
 import { API_BASE } from "../lib/common-schema";
 import { pollDeviceGrant, requestDeviceCode } from "../lib/device-flow";
 import { laneClosedByServer } from "../lib/credential-source";
@@ -39,12 +40,11 @@ import {
 const COMMAND = "extension_project_create";
 
 const FIRST_CALL_BUDGET_MS = 8_000;
-const RESUME_BUDGET_MS = 22_000;
 
 export const schema = {
   name: "extension_project_create",
   description:
-    `Create an extension.dev project for an extension that does not have one yet, without opening the console. Use it right after extension_create and extension_build, once the extension's source is pushed to a GitHub repository, and BEFORE extension_auth: extension_auth can only log in to a project that already exists, and this tool is what brings that project into existence. Ask for nothing but the project slug and the repo; the platform finds the GitHub App installation on the approving account itself, and if there is none it returns a connect link to open. Two-phase, like login: the first call returns a code and a URL where a signed-in member of the workspace approves creating exactly this project; call again with the returned deviceCode to finish. The approval mints a provisioning grant that lives minutes, can only create the one named project, and is never stored on this machine. On success the platform creates the project and its mirror repository, and dispatches the first build when it can: the answer says in \`firstBuild\` whether one was dispatched and, when none was, why (no commits, no build workflow, a spent build allowance, a paused dispatch). Every build runs the stored build command for each enabled browser exactly as stored, then reads that browser's outputDirectory, so the default command is \`${DEFAULT_BUILD_COMMAND}\` (the browser's name in place of \`<browser>\`) into \`dist/<browser>\`. Then run extension_auth (action: login) against the new project, and extension_publish to share it. To create several projects in one workspace under one approval, pass \`projects\` instead of \`project\` and \`repo\`: the approval page lists every name, each project is created by its own request, and each one's 7-day token is stored as that project's login, so no extension_auth call is needed afterwards. A list takes a few calls to finish: while projects remain the answer is status 'creating' with the same deviceCode to call again, and the grant is held in this server's memory only. One approval creates at most ${DEFAULT_CREATE_PROJECTS_PER_APPROVAL} projects, the cap the platform states in its login config, because it creates at most ${PLATFORM_CREATES_PER_HOUR} per hour for one approving account; the next ${DEFAULT_CREATE_PROJECTS_PER_APPROVAL} can start in a new call once that limit allows. A longer list is refused before any approval is asked for, never split silently, and so is any list on a platform that does not advertise batch onboarding.`,
+    `Create an extension.dev project for an extension that does not have one yet, without opening the console. Use it right after extension_create and extension_build, once the extension's source is pushed to a GitHub repository, and BEFORE extension_auth: extension_auth can only log in to a project that already exists, and this tool is what brings that project into existence. Ask for nothing but the project slug and the repo; the platform finds the GitHub App installation on the approving account itself, and if there is none it returns a connect link to open. Two-phase, like login: the first call returns a code and a URL where a signed-in member of the workspace approves creating exactly this project; call again with the returned deviceCode to finish. The approval mints a provisioning grant that lives minutes, can only create the one named project, and is never stored on this machine. On success the platform creates the project and its mirror repository, and dispatches the first build when it can: the answer says in \`firstBuild\` whether one was dispatched and, when none was, why (no commits, no build workflow, a spent build allowance, a paused dispatch). Every build runs the stored build command for each enabled browser exactly as stored, then reads that browser's outputDirectory, so the default command is \`${DEFAULT_BUILD_COMMAND}\` (the browser's name in place of \`<browser>\`) into \`dist/<browser>\`. Then run extension_auth (action: login) against the new project, and extension_publish to share it. To create several projects in one workspace under one approval, pass \`projects\` instead of \`project\` and \`repo\`: the approval page lists every name, each project is created by its own request, and each one's 7-day token is stored as that project's login, so no extension_auth call is needed afterwards. A list takes a few calls to finish: while projects remain the answer is status 'creating' with the same deviceCode to call again, and each call answers within about 45 seconds. Until it expires the list's grant is kept in a file only this user can read, beside the stored logins, so a restarted server resumes the list with no second approval. One approval creates at most ${DEFAULT_CREATE_PROJECTS_PER_APPROVAL} projects, the cap the platform states in its login config, because it creates at most ${PLATFORM_CREATES_PER_HOUR} per hour for one approving account; the next ${DEFAULT_CREATE_PROJECTS_PER_APPROVAL} can start in a new call once that limit allows. A longer list is refused before any approval is asked for, never split silently, and so is any list on a platform that does not advertise batch onboarding.`,
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -183,6 +183,7 @@ export async function handler(args: {
     return createProjectBatch(args);
   }
 
+  const callStartedAt = Date.now();
   const project = String(args.project || "").trim();
 
   if (!isProjectRef(project)) {
@@ -239,7 +240,7 @@ export async function handler(args: {
 
   let deviceCode = String(args.deviceCode || "").trim();
   let interval = 5;
-  let budgetMs = RESUME_BUDGET_MS;
+  let budgetMs = RESUME_POLL_MS;
 
   if (!deviceCode) {
     let start;
@@ -291,6 +292,7 @@ export async function handler(args: {
       args,
       verificationUri: config.verificationUri,
       deviceCode,
+      callStartedAt,
     });
   }
 
@@ -309,6 +311,7 @@ export async function handler(args: {
     args,
     verificationUri: config.verificationUri,
     deviceCode,
+    callStartedAt,
   });
 }
 
@@ -330,6 +333,7 @@ async function finishFromPoll(
     };
     verificationUri: string;
     deviceCode: string;
+    callStartedAt: number;
   },
 ): Promise<string> {
   if (!poll.ok) {
@@ -462,6 +466,7 @@ async function finishFromPoll(
       hint: `Do not create it again blind: the grant is spent, and a second create racing the first is two builds claiming one name. Look for ${ctx.project} in the console at ${consoleBase()}. If it is there, sign in with extension_auth (action: login, project: '${ctx.project}'); only if it is not, call extension_project_create again.`,
     });
   let res: Response;
+  const deadline = answerDeadline(ctx.callStartedAt);
 
   try {
     res = await fetch(url, {
@@ -472,8 +477,11 @@ async function finishFromPoll(
         ...identityHeaders(COMMAND),
       },
       body: JSON.stringify(body),
+      signal: deadline.signal,
     });
   } catch (err: any) {
+    deadline.release();
+
     return unconfirmed(
       `The create request for ${ctx.project} left this machine and no answer came back (${err?.message || err})`,
       "E_NETWORK",
@@ -489,6 +497,8 @@ async function finishFromPoll(
       `The platform answered ${res.status} for ${ctx.project} and the answer could not be read (${err?.message || err})`,
       "E_NETWORK",
     );
+  } finally {
+    deadline.release();
   }
 
   let data: Record<string, unknown>;

@@ -6,6 +6,7 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
+import { answerDeadline, FIRST_CALL_POLL_MS, RESUME_POLL_MS } from "../lib/call-budget";
 import { API_BASE } from "../lib/common-schema";
 import { pollDeviceGrant, requestDeviceCode } from "../lib/device-flow";
 import { laneClosedByServer } from "../lib/credential-source";
@@ -21,9 +22,6 @@ import { identityHeaders } from "../lib/session-identity";
 import { answerIsUnknownOutcome, readCreatedWorkspace } from "../lib/create-answer";
 
 const COMMAND = "extension_workspace_create";
-
-const FIRST_CALL_BUDGET_MS = 8_000;
-const RESUME_BUDGET_MS = 22_000;
 
 const SLUG_PATTERN = /^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/i;
 
@@ -62,13 +60,7 @@ export const schema = {
   },
 };
 
-function fail(
-  name: string,
-  message: string,
-  status: string,
-  code: ErrorCode,
-  hint?: string,
-): string {
+function fail(name: string, message: string, status: string, code: ErrorCode, hint?: string): string {
   return envelope({
     ok: false,
     command: COMMAND,
@@ -89,8 +81,7 @@ function pendingEnvelope(start: {
   verificationUriComplete?: string;
 }): string {
   const complete = String(start.verificationUriComplete || "").trim();
-  const hasCompleteLink =
-    complete.length > 0 && complete !== start.verificationUri;
+  const hasCompleteLink = complete.length > 0 && complete !== start.verificationUri;
   const message = hasCompleteLink
     ? `Open ${complete} and approve creating the workspace (code ${start.userCode} is pre-filled), then call ${COMMAND} again with this deviceCode and the same arguments. If the page asks for a code, enter ${start.userCode} at ${start.verificationUri}. The GitHub account that approves becomes the workspace owner.`
     : `Open ${start.verificationUri}, enter code ${start.userCode}, approve creating the workspace, then call ${COMMAND} again with this deviceCode and the same arguments. The GitHub account that approves becomes the workspace owner.`;
@@ -117,9 +108,8 @@ export async function handler(args: {
   deviceCode?: string;
   api?: string;
 }): Promise<string> {
-  const workspace = String(args.workspace || "")
-    .trim()
-    .toLowerCase();
+  const callStartedAt = Date.now();
+  const workspace = String(args.workspace || "").trim().toLowerCase();
 
   if (!SLUG_PATTERN.test(workspace)) {
     return fail(
@@ -153,7 +143,7 @@ export async function handler(args: {
 
   let deviceCode = String(args.deviceCode || "").trim();
   let interval = 5;
-  let budgetMs = RESUME_BUDGET_MS;
+  let budgetMs = RESUME_POLL_MS;
 
   if (!deviceCode) {
     let start;
@@ -185,7 +175,7 @@ export async function handler(args: {
 
     deviceCode = start.deviceCode;
     interval = start.interval;
-    budgetMs = FIRST_CALL_BUDGET_MS;
+    budgetMs = FIRST_CALL_POLL_MS;
     const early = await pollDeviceGrant({
       apiBase,
       path: config.deviceTokenUrl,
@@ -205,6 +195,7 @@ export async function handler(args: {
       args,
       verificationUri: config.verificationUri,
       deviceCode,
+      callStartedAt,
     });
   }
 
@@ -223,6 +214,7 @@ export async function handler(args: {
     args,
     verificationUri: config.verificationUri,
     deviceCode,
+    callStartedAt,
   });
 }
 
@@ -234,6 +226,7 @@ async function finishFromPoll(
     args: { displayName?: string; description?: string; developerUrl?: string };
     verificationUri: string;
     deviceCode: string;
+    callStartedAt: number;
   },
 ): Promise<string> {
   if (!poll.ok) {
@@ -329,6 +322,7 @@ async function finishFromPoll(
       hint: `Do not create it again blind: the grant is spent, and the first request may have landed. Look for ${ctx.workspace} in the console at ${consoleBase()}. If it is there, go on to extension_project_create with project '${ctx.workspace}/<project>'; only if it is not, call extension_workspace_create again.`,
     });
   let res: Response;
+  const deadline = answerDeadline(ctx.callStartedAt);
 
   try {
     res = await fetch(url, {
@@ -343,8 +337,11 @@ async function finishFromPoll(
         description: String(ctx.args.description || "").trim(),
         developerUrl: String(ctx.args.developerUrl || "").trim(),
       }),
+      signal: deadline.signal,
     });
   } catch (err: any) {
+    deadline.release();
+
     return unconfirmed(
       `The create request for workspace ${ctx.workspace} left this machine and no answer came back (${err?.message || err})`,
       "E_NETWORK",
@@ -360,6 +357,8 @@ async function finishFromPoll(
       `The platform answered ${res.status} for workspace ${ctx.workspace} and the answer could not be read (${err?.message || err})`,
       "E_NETWORK",
     );
+  } finally {
+    deadline.release();
   }
 
   let data: Record<string, unknown>;
