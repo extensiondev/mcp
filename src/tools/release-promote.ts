@@ -94,6 +94,14 @@ function fail(
   });
 }
 
+function promoteRefusalHint(platformCode: string): string | undefined {
+  if (platformCode !== "BUILD_ENV_MISMATCH" && platformCode !== "UNSTAMPED_BUILD_BLOCKED") {
+    return undefined;
+  }
+
+  return "Each channel serves builds made for one environment: stable takes production builds and the other channels take staging builds. No tool here starts a production build, so rebuild this commit with environment production in the console (Builds, Rebuild), wait for it to pass, then promote it again. To ship this build as it is, promote it to a preview channel instead.";
+}
+
 export async function handler(args: {
   buildId: string;
   channel: string;
@@ -165,6 +173,8 @@ export async function handler(args: {
     approvalId: args.approvalId,
     token,
     api: args.api,
+    refusedStatus: "promote-failed",
+    refusalHint: promoteRefusalHint,
   };
   const gate = await evaluateApproval({
     ...gateInput,
@@ -230,7 +240,7 @@ export async function handler(args: {
 
     const code = typeof data?.code === "string" ? data.code : undefined;
     const enrich: Record<string, unknown> = {};
-    let hint = "";
+    let hint = (code && promoteRefusalHint(code)) || "";
     const ref = credential.ref;
 
     if (res.status === 404 || code === "UNKNOWN_BUILD") {

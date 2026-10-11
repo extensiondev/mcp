@@ -183,6 +183,65 @@ describe("the approval gate guards irreversible outward actions and cannot self-
       expect(out.status).toBe("submitted");
     });
 
+    const refusedBeforeApproval = (code: string, message: string, status = 409) => () =>
+      jsonResponse({ code, message, refusedBeforeApproval: true }, status);
+
+    it("answers a promote the platform refuses before asking anyone as the promote's own failure", async () => {
+      global.fetch = router(calls, {
+        "POST /api/cli/approvals": refusedBeforeApproval(
+          "BUILD_ENV_MISMATCH",
+          'This build was produced for the "staging" environment, but the stable channel requires a "production" build.',
+        ),
+        "POST /api/cli/release/promote": () => jsonResponse(promoteAnswer()),
+      });
+
+      const out = JSON.parse(
+        await promoteHandler({ buildId: "abc1234", channel: "stable" }),
+      );
+      expect(out.status).toBe("promote-failed");
+      expect(out.error.platformCode).toBe("BUILD_ENV_MISMATCH");
+      expect(out.error.message).toContain("no approval was requested");
+      expect(out.value.approvalId).toBeUndefined();
+      expect(out.hint).toContain("rebuild this commit with environment production");
+      expect(hit("POST /api/cli/release/promote")).toBe(false);
+    });
+
+    it("answers a submission and a revoke the platform refuses before asking as their own failures", async () => {
+      global.fetch = router(calls, {
+        "POST /api/cli/approvals": (call) =>
+          (call.body as { action?: string })?.action === "extension_submit"
+            ? refusedBeforeApproval("OWNER_REQUIRED", "Only the workspace owner may submit.", 403)()
+            : refusedBeforeApproval("ARTIFACT_NOT_FOUND", "Artifact not found.", 404)(),
+      });
+
+      const submitted = JSON.parse(
+        await submitHandler({ browsers: ["chrome"], buildSha: "abc1234", dryRun: false }),
+      );
+      expect(submitted.status).toBe("submit-failed");
+      expect(submitted.error.platformCode).toBe("OWNER_REQUIRED");
+
+      const revoked = JSON.parse(
+        await sharesHandler({ action: "revoke", artifactId: GEN_ID }),
+      );
+      expect(revoked.status).toBe("revoke-failed");
+      expect(revoked.error.platformCode).toBe("ARTIFACT_NOT_FOUND");
+      expect(hit("POST /api/cli/stores/submit")).toBe(false);
+      expect(hit("DELETE /api/artifacts")).toBe(false);
+    });
+
+    it("tells the agent how to get a production build when the platform refuses the environment", async () => {
+      global.fetch = router(calls, {
+        "POST /api/cli/release/promote": () =>
+          jsonResponse({ code: "BUILD_ENV_MISMATCH", message: "wrong environment" }, 409),
+      });
+
+      const out = JSON.parse(
+        await promoteHandler({ buildId: "abc1234", channel: "beta" }),
+      );
+      expect(out.status).toBe("promote-failed");
+      expect(out.hint).toContain("stable takes production builds");
+    });
+
     it("turns the platform's APPROVAL_REQUIRED into an approval request", async () => {
       global.fetch = router(calls, {
         "POST /api/cli/approvals": approvalRoute,

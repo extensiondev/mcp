@@ -99,6 +99,8 @@ export interface ApprovalGateInput {
   fetchImpl?: typeof fetch;
   enabled?: boolean;
   now?: number;
+  refusedStatus?: string;
+  refusalHint?: (platformCode: string) => string | undefined;
 }
 
 export type ApprovalGateResult =
@@ -182,6 +184,25 @@ async function requestApproval(params: {
         body: data,
         api: input.api,
         value: { action: input.action, description: input.description },
+      }),
+    };
+  }
+
+  if (!res.ok && data.refusedBeforeApproval === true) {
+    const platformCode = typeof data.code === "string" ? data.code : "";
+    const hint = platformCode ? input.refusalHint?.(platformCode) : undefined;
+    const reason = typeof data.message === "string" && data.message ? data.message : "no reason given";
+    const message = `The platform refused this action before asking anyone to approve it (${res.status}): ${reason} Nothing was executed and no approval was requested, so fix the cause and call again.`;
+
+    return {
+      blocked: true,
+      envelope: envelope({
+        ok: false,
+        command: input.command,
+        status: input.refusedStatus || "action-refused",
+        value: { action: input.action, description: input.description },
+        error: { code: "E_PLATFORM", name: "ActionRefused", message, ...(platformCode ? { platformCode } : {}) },
+        ...(hint ? { hint } : {}),
       }),
     };
   }

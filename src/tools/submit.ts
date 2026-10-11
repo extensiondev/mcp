@@ -224,6 +224,7 @@ export async function handler(args: SubmitToolArgs): Promise<string> {
     approvalId: args.approvalId,
     token,
     api: args.api,
+    refusedStatus: "submit-failed",
   };
 
   if (!dryRun) {
@@ -306,7 +307,7 @@ export async function handler(args: SubmitToolArgs): Promise<string> {
       !dryRun && res.status >= 500 && !saidNothingDispatched;
     const BEFORE_APPROVAL = new Set(["BUILD_DISPATCH_DISABLED", "OWNER_REQUIRED", "TOKEN_ISSUER_UNKNOWN", "APPROVAL_REQUIRED", "APPROVAL_NOT_FOUND", "APPROVAL_SCOPE_MISMATCH", "APPROVAL_USED", "APPROVAL_EXPIRED"]);
     const platformCode = typeof data?.code === "string" ? data.code : "";
-    const approvalSpent = !dryRun && Boolean(body.approvalId) && res.status < 500 && !BEFORE_APPROVAL.has(platformCode);
+    const approvalSpent = !dryRun && Boolean(body.approvalId) && res.status < 500 && data?.refusedBeforeApproval !== true && !BEFORE_APPROVAL.has(platformCode);
 
     return envelope({
       ok: false,
@@ -334,7 +335,7 @@ export async function handler(args: SubmitToolArgs): Promise<string> {
             }
           : approvalSpent
             ? {
-                hint: `The approval presented with this call was spent by the platform before this refusal (it consumes the grant once the owner, runner-class and dispatch-pause checks pass, and ${platformCode || "this refusal"} came after). Fix the cause, then call again with no approvalId to request a fresh approval.`,
+                hint: `The approval presented with this call was spent by the platform before this refusal (it consumes the grant once the owner, runner-class, dispatch-pause and allowance checks pass, and ${platformCode || "this refusal"} came after). Fix the cause, then call again with no approvalId to request a fresh approval.`,
               }
             : {}),
     });

@@ -433,6 +433,7 @@ async function revokeShare(args: {
     approvalId: args.approvalId,
     token: token || "",
     api: args.api,
+    refusedStatus: "revoke-failed",
   };
 
   if (token) {

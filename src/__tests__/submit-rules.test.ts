@@ -37,8 +37,11 @@ afterEach(() => {
   global.fetch = prevFetch;
 });
 
-async function refusedWith(code: string): Promise<{ hint?: string; warnings?: string[] }> {
-  global.fetch = (async () => jsonResponse({ code, message: `refused: ${code}` }, 422)) as unknown as typeof fetch;
+async function refusedWith(
+  code: string,
+  extra: Record<string, unknown> = {},
+): Promise<{ hint?: string; warnings?: string[] }> {
+  global.fetch = (async () => jsonResponse({ code, message: `refused: ${code}`, ...extra }, 422)) as unknown as typeof fetch;
 
   return JSON.parse(
     await handler({ browsers: ["chrome"], buildSha: "abc1234", dryRun: false, approvalId: "apr_1" }),
@@ -54,6 +57,12 @@ describe("an approval is spent before the quota and channel checks: the platform
 
   it("does not say so when the refusal is one of the checks that run before the approval is consumed", async () => {
     const result = await refusedWith("APPROVAL_REQUIRED");
+
+    expect(JSON.stringify(result)).not.toContain("was spent");
+  });
+
+  it("does not say so when the platform marks the refusal as made before any approval was consumed", async () => {
+    const result = await refusedWith("QUOTA_EXCEEDED", { refusedBeforeApproval: true });
 
     expect(JSON.stringify(result)).not.toContain("was spent");
   });
