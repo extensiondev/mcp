@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { consoleBase, consoleProjectUrl, registryBase } from "../lib/registry";
+import { consoleBase, consoleProjectUrl, registryBase, registryFileUrl } from "../lib/registry";
 
 const ENV_KEYS = [
   "EXTENSION_DEV_API_URL",
@@ -74,5 +74,16 @@ describe("console/registry origin resolution", () => {
   it("keeps the production registry for a production platform base", () => {
     process.env.EXTENSION_DEV_API_URL = "https://www.extension.dev";
     expect(registryBase()).toBe("https://registry.extension.land");
+  });
+
+  it("reads the registry of the server a tool's api names, with no environment set", () => {
+    expect(registryBase("http://localhost:3100")).toBe("http://localhost:3100/api/local-registry");
+    expect(registryFileUrl(ref, "channels.json", "http://localhost:3100")).toBe(
+      "http://localhost:3100/api/local-registry/acme/widget/_extension-dev/channels.json",
+    );
+
+    expect(registryFileUrl(ref, "channels.json")).toBe(
+      "https://registry.extension.land/acme/widget/_extension-dev/channels.json",
+    );
   });
 });

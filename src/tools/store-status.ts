@@ -210,9 +210,9 @@ export async function readStores(args: {
     );
   }
 
-  const healthUrl = registryFileUrl(ref, "stores/health.json");
-  const statusUrl = registryFileUrl(ref, "stores/status.json");
-  const submissionsUrl = registryFileUrl(ref, "stores/submissions.json");
+  const healthUrl = registryFileUrl(ref, "stores/health.json", args.api);
+  const statusUrl = registryFileUrl(ref, "stores/status.json", args.api);
+  const submissionsUrl = registryFileUrl(ref, "stores/submissions.json", args.api);
   const consoleStoresUrl = consoleProjectUrl(
     ref,
     ConsoleProjectPage.submissions,

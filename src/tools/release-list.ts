@@ -58,9 +58,9 @@ export async function readReleases(args: {
     );
   }
 
-  const channelsUrl = registryFileUrl(ref, "channels.json");
-  const metaUrl = registryFileUrl(ref, "meta.json");
-  const buildsUrl = registryFileUrl(ref, "builds/index.json");
+  const channelsUrl = registryFileUrl(ref, "channels.json", args.api);
+  const metaUrl = registryFileUrl(ref, "meta.json", args.api);
+  const buildsUrl = registryFileUrl(ref, "builds/index.json", args.api);
 
   const [channelsRaw, metaRes, buildsRaw] = await Promise.all([
     fetchRegistryJson(channelsUrl, fetch, { ref, api: args.api }),

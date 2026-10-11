@@ -28,8 +28,8 @@ export { mcpOrigins };
 
 export { consoleBase, consoleProjectUrl } from "./console-urls";
 
-export function registryBase(): string {
-  return mcpOrigins().registry;
+export function registryBase(apiHint?: string): string {
+  return mcpOrigins(apiHint).registry;
 }
 
 export interface ProjectRef {
@@ -49,6 +49,7 @@ function splitProjectName(name: string): ProjectRef | null {
 export function resolveProjectRef(overrides?: {
   workspace?: string;
   project?: string;
+  api?: string;
 }): ProjectRef | null {
   let workspace = String(overrides?.workspace || "").trim();
   let project = String(overrides?.project || "").trim();
@@ -68,7 +69,8 @@ export function resolveProjectRef(overrides?: {
   if (workspace && project) return { workspace, project };
 
   const creds =
-    (project ? readCredentials({ project }) : null) ?? readCredentials();
+    (project ? readCredentials({ project, api: overrides?.api }) : null) ??
+    readCredentials({ api: overrides?.api });
   const ws = workspace || String(creds?.workspaceSlug || "").trim();
   const proj = project || String(creds?.projectSlug || "").trim();
   if (!ws || !proj) return null;
@@ -77,8 +79,8 @@ export function resolveProjectRef(overrides?: {
 }
 
 
-export function registryFileUrl(ref: ProjectRef, file: string): string {
-  return `${registryBase()}/${encodeURIComponent(ref.workspace)}/${encodeURIComponent(
+export function registryFileUrl(ref: ProjectRef, file: string, apiHint?: string): string {
+  return `${registryBase(apiHint)}/${encodeURIComponent(ref.workspace)}/${encodeURIComponent(
     ref.project,
   )}/_extension-dev/${file}`;
 }

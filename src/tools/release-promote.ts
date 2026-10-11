@@ -249,7 +249,7 @@ export async function handler(args: {
         "Run extension_release_status to see this project's channels, their promoted shas, and recent builds.";
 
       if (ref) {
-        const channelsUrl = registryFileUrl(ref, "channels.json");
+        const channelsUrl = registryFileUrl(ref, "channels.json", args.api);
         const channelsRes = await fetchRegistryJson(channelsUrl, fetch, {
           ref,
           api: args.api,

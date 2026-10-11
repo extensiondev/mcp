@@ -207,7 +207,7 @@ export async function handler(args: {
   const ref = credential.ref;
 
   if (ref) {
-    const buildsUrl = registryFileUrl(ref, "builds/index.json");
+    const buildsUrl = registryFileUrl(ref, "builds/index.json", args.api);
     const buildsRes = await fetchRegistryJson(buildsUrl, fetch, {
       ref,
       api: args.api,

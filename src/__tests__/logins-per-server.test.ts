@@ -226,3 +226,13 @@ describe("every name of one server reads the same logins", () => {
     expect(status.status).toBe("logged-out");
   });
 });
+
+describe("a read-only project lookup follows the server a tool names", () => {
+  it("names the project of the local login when api is local and no environment is set", async () => {
+    const { resolveProjectRef } = await import("../lib/registry");
+    writeCredentials(login("sandbox-local", LOCAL));
+    writeCredentials(login("sandbox-prod", PROD));
+    expect(resolveProjectRef({ api: LOCAL })).toEqual({ workspace: "open-source-demo", project: "sandbox-local" });
+    expect(resolveProjectRef({ api: PROD })).toEqual({ workspace: "open-source-demo", project: "sandbox-prod" });
+  });
+});

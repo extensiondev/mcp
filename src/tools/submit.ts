@@ -387,11 +387,11 @@ export async function handler(args: SubmitToolArgs): Promise<string> {
 
     if (ref) {
       const [healthRes, channelsRes] = await Promise.all([
-        fetchRegistryJson(registryFileUrl(ref, "stores/health.json"), fetch, {
+        fetchRegistryJson(registryFileUrl(ref, "stores/health.json", args.api), fetch, {
           ref,
           api: args.api,
         }),
-        fetchRegistryJson(registryFileUrl(ref, "channels.json"), fetch, {
+        fetchRegistryJson(registryFileUrl(ref, "channels.json", args.api), fetch, {
           ref,
           api: args.api,
         }),
