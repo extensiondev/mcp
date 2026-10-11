@@ -337,9 +337,10 @@ describe("store-status reader", () => {
     }) as unknown as typeof fetch;
 
     await handler({});
-    expect(seen.length).toBeGreaterThan(0);
+    const registryReads = seen.filter((url) => !url.includes("/api/cli/"));
+    expect(registryReads.length).toBeGreaterThan(0);
 
-    for (const url of seen) {
+    for (const url of registryReads) {
       expect(url).toContain("/stored-ws/stored-proj/_extension-dev/stores/");
     }
   });

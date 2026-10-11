@@ -16,6 +16,11 @@ import {
 } from "../lib/registry";
 import { envelope, type ErrorCode } from "../lib/envelope";
 import { platformHoldEnvelope } from "../lib/platform-hold";
+import {
+  isNewerOrSame,
+  readPlatformSubmissions,
+  type SubmissionRun,
+} from "../lib/platform-submissions";
 
 const KNOWN_STORES = ["chrome", "firefox", "edge", "safari"] as const;
 
@@ -214,10 +219,15 @@ export async function readStores(args: {
     args.api,
   );
 
-  const [healthRes, statusRes, submissionsRes] = await Promise.all([
+  const [healthRes, statusRes, submissionsRes, platform] = await Promise.all([
     fetchRegistryJson(healthUrl, fetch, { ref, api: args.api }),
     fetchRegistryJson(statusUrl, fetch, { ref, api: args.api }),
     fetchRegistryJson(submissionsUrl, fetch, { ref, api: args.api }),
+    readPlatformSubmissions({
+      ref,
+      named: Boolean(args.workspace || args.project),
+      api: args.api,
+    }),
   ]);
 
   const heldRead = [healthRes, statusRes, submissionsRes].find(
@@ -234,7 +244,7 @@ export async function readStores(args: {
     });
   }
 
-  if (!healthRes.ok && !statusRes.ok && !submissionsRes.ok) {
+  if (!healthRes.ok && !statusRes.ok && !submissionsRes.ok && !platform.ok) {
     return fail(
       "StoreStatusNotFound",
       `No store data on the registry for ${ref.workspace}/${ref.project} (${healthRes.message}). The project may have no stores configured yet, be private (private registry data is read with a stored login for this project, which extension_auth mints), or the workspace/project slugs may be wrong. Configure stores at ${consoleStoresUrl}/new; the console Submissions page is the authoritative view: ${consoleStoresUrl}`,
@@ -265,6 +275,16 @@ export async function readStores(args: {
     submissionsByStore[statusLastStore] = submissionView(status.lastSubmission);
   }
 
+  const runsByStore: Record<string, SubmissionRun> = {};
+
+  for (const [store, latest] of Object.entries(platform.ok ? platform.byStore : {})) {
+    if (!isNewerOrSame(latest.submittedAt, submissionsByStore[store]?.submittedAt)) continue;
+
+    const { run, store: _store, id: _id, ...fields } = latest;
+    submissionsByStore[store] = fields;
+    if (Object.keys(run).length > 0) runsByStore[store] = run;
+  }
+
   const stores = [
     ...KNOWN_STORES,
     ...Object.keys({ ...healthStores, ...submissionsByStore, ...status.reviews }).filter(
@@ -292,6 +312,8 @@ export async function readStores(args: {
     if (submission && Object.keys(submission).length > 0) {
       row.lastSubmission = submission;
     }
+
+    if (runsByStore[store]) row.submissionRun = runsByStore[store];
 
     const review = status.reviews[store];
 
@@ -333,6 +355,14 @@ export async function readStores(args: {
       );
 
       if (submission.storeUrl) tail.push(`listing ${submission.storeUrl}`);
+
+      const run = row.submissionRun as SubmissionRun | undefined;
+      const reason = submission.failureReason;
+      const runNote =
+        reason && run?.message?.startsWith(reason)
+          ? run.message.slice(reason.length).trim()
+          : run?.message;
+      if (runNote) tail.push(runNote);
     } else if (row.configured === true) {
       tail.push(
         submissionsRes.ok
@@ -356,6 +386,10 @@ export async function readStores(args: {
   const statusUnavailable = statusRes.ok
     ? null
     : `stores/status.json unreadable: ${statusRes.message}`;
+  const platformUnavailable =
+    !platform.ok && !platform.skipped
+      ? `the platform's submission records could not be read, so a run that ended before recording its outcome is not reflected: ${platform.message}`
+      : null;
   const submissionsUnavailable =
     !submissionsRes.ok && submissionsRes.status !== 404
       ? `stores/submissions.json unreadable: ${submissionsRes.message}`
@@ -380,7 +414,9 @@ export async function readStores(args: {
       },
       consoleStoresUrl,
     },
-    hint: `${summaryParts.join(". ")}. This is the registry's recorded state (submissions and the review poller write it); the store dashboards are authoritative and may be ahead of it.`,
-    warnings: [healthUnavailable, statusUnavailable, submissionsUnavailable],
+    hint: `${summaryParts.join(". ")}. This is the registry's recorded state (submissions and the review poller write it)${
+      platform.ok ? ", with the platform's own submission records and their runs" : ""
+    }; the store dashboards are authoritative and may be ahead of it.`,
+    warnings: [healthUnavailable, statusUnavailable, submissionsUnavailable, platformUnavailable],
   });
 }
