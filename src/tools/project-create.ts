@@ -22,6 +22,15 @@ import {
   MAX_BATCH_PROJECTS,
   PLATFORM_CREATES_PER_HOUR,
 } from "../lib/project-batch";
+import {
+  CREATE_IN_PROGRESS_CODE,
+  grantExpiresAt,
+  heldCreateGrant,
+  heldUntilSentence,
+  holdCreateGrant,
+  releaseCreateGrant,
+  type HeldCreateGrant,
+} from "../lib/held-create-grant";
 import { createProjectBatch } from "../lib/project-create-batch";
 import { buildCreateBody, DEFAULT_BUILD_COMMAND } from "../lib/project-create-body";
 import { consoleBase, consoleProjectUrl } from "../lib/registry";
@@ -44,7 +53,7 @@ const FIRST_CALL_BUDGET_MS = 8_000;
 export const schema = {
   name: "extension_project_create",
   description:
-    `Create an extension.dev project for an extension that does not have one yet, without opening the console. Use it right after extension_create and extension_build, once the extension's source is pushed to a GitHub repository, and BEFORE extension_auth: extension_auth can only log in to a project that already exists, and this tool is what brings that project into existence. Ask for nothing but the project slug and the repo; the platform finds the GitHub App installation on the approving account itself, and if there is none it returns a connect link to open. Two-phase, like login: the first call returns a code and a URL where a signed-in member of the workspace approves creating exactly this project; call again with the returned deviceCode to finish. The approval mints a provisioning grant that lives minutes, can only create the one named project, and is never stored on this machine. On success the platform creates the project and its mirror repository, and dispatches the first build when it can: the answer says in \`firstBuild\` whether one was dispatched and, when none was, why (no commits, no build workflow, a spent build allowance, a paused dispatch). Every build runs the stored build command for each enabled browser exactly as stored, then reads that browser's outputDirectory, so the default command is \`${DEFAULT_BUILD_COMMAND}\` (the browser's name in place of \`<browser>\`) into \`dist/<browser>\`. Then run extension_auth (action: login) against the new project, and extension_publish to share it. To create several projects in one workspace under one approval, pass \`projects\` instead of \`project\` and \`repo\`: the approval page lists every name, each project is created by its own request, and each one's 7-day token is stored as that project's login, so no extension_auth call is needed afterwards. A list takes a few calls to finish: while projects remain the answer is status 'creating' with the same deviceCode to call again, and each call answers within about 45 seconds. Until it expires the list's grant is kept in a file only this user can read, beside the stored logins, so a restarted server resumes the list with no second approval. One approval creates at most ${DEFAULT_CREATE_PROJECTS_PER_APPROVAL} projects, the cap the platform states in its login config, because it creates at most ${PLATFORM_CREATES_PER_HOUR} per hour for one approving account; the next ${DEFAULT_CREATE_PROJECTS_PER_APPROVAL} can start in a new call once that limit allows. A longer list is refused before any approval is asked for, never split silently, and so is any list on a platform that does not advertise batch onboarding.`,
+    `Create an extension.dev project for an extension that does not have one yet, without opening the console. Use it right after extension_create and extension_build, once the extension's source is pushed to a GitHub repository, and BEFORE extension_auth: extension_auth can only log in to a project that already exists, and this tool is what brings that project into existence. Ask for nothing but the project slug and the repo; the platform finds the GitHub App installation on the approving account itself, and if there is none it returns a connect link to open. Two-phase, like login: the first call returns a code and a URL where a signed-in member of the workspace approves creating exactly this project; call again with the returned deviceCode to finish. The approval mints a provisioning grant that lives minutes, can only create the one named project, and is kept on this machine only while a create's outcome is unknown: then it sits in a file only this user can read, beside the stored logins, so calling again with the same deviceCode and arguments reads that outcome (created, still creating, or refused) with no second approval. On success the platform creates the project and its mirror repository, and dispatches the first build when it can: the answer says in \`firstBuild\` whether one was dispatched and, when none was, why (no commits, no build workflow, a spent build allowance, a paused dispatch). Every build runs the stored build command for each enabled browser exactly as stored, then reads that browser's outputDirectory, so the default command is \`${DEFAULT_BUILD_COMMAND}\` (the browser's name in place of \`<browser>\`) into \`dist/<browser>\`. Then run extension_auth (action: login) against the new project, and extension_publish to share it. To create several projects in one workspace under one approval, pass \`projects\` instead of \`project\` and \`repo\`: the approval page lists every name, each project is created by its own request, and each one's 7-day token is stored as that project's login, so no extension_auth call is needed afterwards. A list takes a few calls to finish: while projects remain the answer is status 'creating' with the same deviceCode to call again, and each call answers within about 45 seconds. Until it expires the list's grant is kept in a file only this user can read, beside the stored logins, so a restarted server resumes the list with no second approval. One approval creates at most ${DEFAULT_CREATE_PROJECTS_PER_APPROVAL} projects, the cap the platform states in its login config, because it creates at most ${PLATFORM_CREATES_PER_HOUR} per hour for one approving account; the next ${DEFAULT_CREATE_PROJECTS_PER_APPROVAL} can start in a new call once that limit allows. A longer list is refused before any approval is asked for, never split silently, and so is any list on a platform that does not advertise batch onboarding.`,
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -224,6 +233,20 @@ export async function handler(args: {
   }
 
   const apiBase = apiCheck.base;
+  const resumeDeviceCode = String(args.deviceCode || "").trim();
+  const held = heldCreateGrant(apiBase, resumeDeviceCode, project);
+
+  if (held) {
+    return createWithGrant({
+      apiBase,
+      project,
+      args,
+      deviceCode: resumeDeviceCode,
+      callStartedAt,
+      held,
+      resumed: true,
+    });
+  }
 
   let config;
 
@@ -435,6 +458,67 @@ async function finishFromPoll(
     });
   }
 
+  return createWithGrant({
+    apiBase: ctx.apiBase,
+    project: ctx.project,
+    args: ctx.args,
+    deviceCode: ctx.deviceCode,
+    callStartedAt: ctx.callStartedAt,
+    held: { grant: token, grantExpiresAt: grantExpiresAt(grant as Record<string, unknown>) },
+    resumed: false,
+  });
+}
+
+type CreateArgs = {
+  repo?: string;
+  installationId?: string;
+  displayName?: string;
+  description?: string;
+  installCommand?: string;
+  buildCommand?: string;
+  outputDirectory?: string;
+  browsers?: string[];
+  outputDirectories?: Record<string, unknown>;
+};
+
+async function createWithGrant(ctx: {
+  apiBase: string;
+  project: string;
+  args: CreateArgs;
+  deviceCode: string;
+  callStartedAt: number;
+  held: HeldCreateGrant;
+  resumed: boolean;
+}): Promise<string> {
+  const [wantWorkspace = ""] = ctx.project.split("/");
+  const kept =
+    ctx.resumed ||
+    holdCreateGrant(ctx.apiBase, ctx.deviceCode, { workspace: wantWorkspace, ref: ctx.project }, ctx.held);
+  let keepGrant = false;
+  const answer = await sendCreate(ctx, kept, () => {
+    keepGrant = kept;
+  });
+
+  if (!keepGrant) releaseCreateGrant(ctx.apiBase, ctx.deviceCode);
+
+  return answer;
+}
+
+async function sendCreate(
+  ctx: {
+    apiBase: string;
+    project: string;
+    args: CreateArgs;
+    deviceCode: string;
+    callStartedAt: number;
+    held: HeldCreateGrant;
+    resumed: boolean;
+  },
+  kept: boolean,
+  keepGrant: () => void,
+): Promise<string> {
+  const token = ctx.held.grant;
+  const [wantWorkspace = "", wantProject = ""] = ctx.project.split("/");
   const [owner = "", repoName = ""] = String(ctx.args.repo || "").split("/");
   const body = buildCreateBody({
     workspace: wantWorkspace,
@@ -452,8 +536,11 @@ async function finishFromPoll(
   });
 
   const url = `${ctx.apiBase}/api/cli/projects/create`;
-  const unconfirmed = (what: string, code: ErrorCode): string =>
-    envelope({
+
+  const unconfirmed = (what: string, code: ErrorCode): string => {
+    keepGrant();
+
+    return envelope({
       ok: false,
       command: COMMAND,
       status: "create-unconfirmed",
@@ -462,9 +549,17 @@ async function finishFromPoll(
         name: "CreateUnconfirmed",
         message: `${what}, so whether ${ctx.project} now exists is unknown.`,
       },
-      value: { project: ctx.project, consoleUrl: consoleBase() },
-      hint: `Do not create it again blind: the grant is spent, and a second create racing the first is two builds claiming one name. Look for ${ctx.project} in the console at ${consoleBase()}. If it is there, sign in with extension_auth (action: login, project: '${ctx.project}'); only if it is not, call extension_project_create again.`,
+      value: {
+        project: ctx.project,
+        consoleUrl: consoleBase(),
+        ...(kept ? { deviceCode: ctx.deviceCode } : {}),
+      },
+      hint: kept
+        ? `Call extension_project_create again with this same deviceCode and the same arguments to learn the outcome; do not start a new call, which needs a second approval. The grant is held on this machine, readable only by this user, until ${heldUntilSentence(ctx.held)}, and with it the platform answers with this create's outcome (created, still creating, or refused) and never creates ${ctx.project} twice.`
+        : `Do not create it again blind: the grant could not be kept on this machine, and a second create racing the first is two builds claiming one name. Look for ${ctx.project} in the console at ${consoleBase()}. If it is there, sign in with extension_auth (action: login, project: '${ctx.project}'); only if it is not, call extension_project_create again.`,
     });
+  };
+
   let res: Response;
   const deadline = answerDeadline(ctx.callStartedAt);
 
@@ -507,6 +602,25 @@ async function finishFromPoll(
     data = JSON.parse(text);
   } catch {
     data = { message: text };
+  }
+
+  if (String(data.code || "") === CREATE_IN_PROGRESS_CODE) {
+    keepGrant();
+    const waitSeconds = Number(data.retryAfterSeconds) > 0 ? Number(data.retryAfterSeconds) : 10;
+
+    return envelope({
+      ok: true,
+      command: COMMAND,
+      status: "creating",
+      value: {
+        project: ctx.project,
+        retryAfterSeconds: waitSeconds,
+        ...(kept ? { deviceCode: ctx.deviceCode } : {}),
+      },
+      hint: kept
+        ? `The platform is still creating ${ctx.project} from the earlier request with this grant, and started nothing new. Call extension_project_create again with this same deviceCode and the same arguments in about ${waitSeconds} s to read the outcome; no new approval is needed while the grant lasts (until ${heldUntilSentence(ctx.held)}).`
+        : `The platform is still creating ${ctx.project} from an earlier request with this grant, and started nothing new. The grant could not be kept on this machine, so look for ${ctx.project} in the console at ${consoleBase()} in a minute.`,
+    });
   }
 
   if (!res.ok) {
@@ -644,7 +758,7 @@ async function finishFromPoll(
             ]),
       ],
     },
-    hint: `Project ${finalWorkspace}/${finalProject} exists. ${firstBuildSentence(firstBuild, buildsPageUrl)} The provisioning grant stays valid until it expires and is not stored by this tool; the only file written on this machine is its install id (install.json). Next: extension_auth (action: login, project: '${finalWorkspace}/${finalProject}') to mint the project token${
+    hint: `Project ${finalWorkspace}/${finalProject} exists.${data.replayed === true ? " The platform read this back from its record of the earlier create request with this grant; nothing was created twice." : ""} ${firstBuildSentence(firstBuild, buildsPageUrl)} The provisioning grant stays valid until it expires and is no longer kept on this machine; the only other file this tool leaves is its install id (install.json). Next: extension_auth (action: login, project: '${finalWorkspace}/${finalProject}') to mint the project token${
       firstBuild.state === "dispatched"
         ? ", then extension_publish to share it."
         : "; extension_publish has nothing to share until a build exists."

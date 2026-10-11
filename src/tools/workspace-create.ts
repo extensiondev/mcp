@@ -10,6 +10,15 @@ import { answerDeadline, FIRST_CALL_POLL_MS, RESUME_POLL_MS } from "../lib/call-
 import { API_BASE } from "../lib/common-schema";
 import { pollDeviceGrant, requestDeviceCode } from "../lib/device-flow";
 import { laneClosedByServer } from "../lib/credential-source";
+import {
+  CREATE_IN_PROGRESS_CODE,
+  grantExpiresAt,
+  heldCreateGrant,
+  heldUntilSentence,
+  holdCreateGrant,
+  releaseCreateGrant,
+  type HeldCreateGrant,
+} from "../lib/held-create-grant";
 import { envelope, type ErrorCode } from "../lib/envelope";
 import {
   fetchLoginConfig,
@@ -28,7 +37,7 @@ const SLUG_PATTERN = /^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/i;
 export const schema = {
   name: COMMAND,
   description:
-    "Create an extension.dev workspace that does not exist yet, without opening the console. Use it before extension_project_create when the project's workspace is not there: project creation can only target an existing workspace, and this tool is what brings one into existence. Two-phase, like login: the first call returns a code and a URL where a signed-in GitHub user approves creating exactly this workspace and becomes its owner; call again with the returned deviceCode to finish. Check `ownerGithubLogin` in the answer: whoever approved the code owns the workspace. The approval mints a grant that lives minutes, can only create the one named workspace, names no project, and is never stored on this machine. Then run extension_project_create against '<workspace>/<project>'.",
+    "Create an extension.dev workspace that does not exist yet, without opening the console. Use it before extension_project_create when the project's workspace is not there: project creation can only target an existing workspace, and this tool is what brings one into existence. Two-phase, like login: the first call returns a code and a URL where a signed-in GitHub user approves creating exactly this workspace and becomes its owner; call again with the returned deviceCode to finish. Check `ownerGithubLogin` in the answer: whoever approved the code owns the workspace. The approval mints a grant that lives minutes, can only create the one named workspace, names no project, and is kept on this machine only while a create's outcome is unknown: then it sits in a file only this user can read, beside the stored logins, so calling again with the same deviceCode reads that outcome with no second approval. Then run extension_project_create against '<workspace>/<project>'.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -127,6 +136,21 @@ export async function handler(args: {
   }
 
   const apiBase = apiCheck.base;
+  const resumeDeviceCode = String(args.deviceCode || "").trim();
+  const held = heldCreateGrant(apiBase, resumeDeviceCode, workspace);
+
+  if (held) {
+    return createWithGrant({
+      apiBase,
+      workspace,
+      args,
+      deviceCode: resumeDeviceCode,
+      callStartedAt,
+      held,
+      resumed: true,
+      ownerFallback: "",
+    });
+  }
 
   let config;
 
@@ -307,9 +331,51 @@ async function finishFromPoll(
     });
   }
 
+  return createWithGrant({
+    apiBase: ctx.apiBase,
+    workspace: ctx.workspace,
+    args: ctx.args,
+    deviceCode: ctx.deviceCode,
+    callStartedAt: ctx.callStartedAt,
+    held: { grant: token, grantExpiresAt: grantExpiresAt(grant as Record<string, unknown>) },
+    resumed: false,
+    ownerFallback: String(grant.ownerGithubLogin || ""),
+  });
+}
+
+type CreateContext = {
+  apiBase: string;
+  workspace: string;
+  args: { displayName?: string; description?: string; developerUrl?: string };
+  deviceCode: string;
+  callStartedAt: number;
+  held: HeldCreateGrant;
+  resumed: boolean;
+  ownerFallback: string;
+};
+
+async function createWithGrant(ctx: CreateContext): Promise<string> {
+  const kept =
+    ctx.resumed ||
+    holdCreateGrant(ctx.apiBase, ctx.deviceCode, { workspace: ctx.workspace, ref: ctx.workspace }, ctx.held);
+  let keepGrant = false;
+  const answer = await sendCreate(ctx, kept, () => {
+    keepGrant = kept;
+  });
+
+  if (!keepGrant) releaseCreateGrant(ctx.apiBase, ctx.deviceCode);
+
+  return answer;
+}
+
+async function sendCreate(ctx: CreateContext, kept: boolean, keepGrant: () => void): Promise<string> {
+  const token = ctx.held.grant;
   const url = `${ctx.apiBase}/api/cli/workspaces/create`;
-  const unconfirmed = (what: string, code: ErrorCode): string =>
-    envelope({
+
+  const unconfirmed = (what: string, code: ErrorCode): string => {
+    keepGrant();
+
+    return envelope({
       ok: false,
       command: COMMAND,
       status: "create-unconfirmed",
@@ -318,9 +384,17 @@ async function finishFromPoll(
         name: "CreateUnconfirmed",
         message: `${what}, so whether workspace ${ctx.workspace} now exists is unknown.`,
       },
-      value: { workspace: ctx.workspace, consoleUrl: consoleBase() },
-      hint: `Do not create it again blind: the grant is spent, and the first request may have landed. Look for ${ctx.workspace} in the console at ${consoleBase()}. If it is there, go on to extension_project_create with project '${ctx.workspace}/<project>'; only if it is not, call extension_workspace_create again.`,
+      value: {
+        workspace: ctx.workspace,
+        consoleUrl: consoleBase(),
+        ...(kept ? { deviceCode: ctx.deviceCode } : {}),
+      },
+      hint: kept
+        ? `Call ${COMMAND} again with this same deviceCode and the same arguments to learn the outcome; do not start a new call, which needs a second approval. The grant is held on this machine, readable only by this user, until ${heldUntilSentence(ctx.held)}, and with it the platform answers with this create's outcome (created, still creating, or refused) and never creates workspace ${ctx.workspace} twice.`
+        : `Do not create it again blind: the grant could not be kept on this machine, and the first request may have landed. Look for ${ctx.workspace} in the console at ${consoleBase()}. If it is there, go on to extension_project_create with project '${ctx.workspace}/<project>'; only if it is not, call ${COMMAND} again.`,
     });
+  };
+
   let res: Response;
   const deadline = answerDeadline(ctx.callStartedAt);
 
@@ -367,6 +441,25 @@ async function finishFromPoll(
     data = JSON.parse(text);
   } catch {
     data = { message: text };
+  }
+
+  if (String(data.code || "") === CREATE_IN_PROGRESS_CODE) {
+    keepGrant();
+    const waitSeconds = Number(data.retryAfterSeconds) > 0 ? Number(data.retryAfterSeconds) : 10;
+
+    return envelope({
+      ok: true,
+      command: COMMAND,
+      status: "creating",
+      value: {
+        workspace: ctx.workspace,
+        retryAfterSeconds: waitSeconds,
+        ...(kept ? { deviceCode: ctx.deviceCode } : {}),
+      },
+      hint: kept
+        ? `The platform is still creating workspace ${ctx.workspace} from the earlier request with this grant, and started nothing new. Call ${COMMAND} again with this same deviceCode and the same arguments in about ${waitSeconds} s to read the outcome; no new approval is needed while the grant lasts (until ${heldUntilSentence(ctx.held)}).`
+        : `The platform is still creating workspace ${ctx.workspace} from an earlier request with this grant, and started nothing new. The grant could not be kept on this machine, so look for ${ctx.workspace} in the console at ${consoleBase()} in a minute.`,
+    });
   }
 
   if (!res.ok) {
@@ -434,7 +527,7 @@ async function finishFromPoll(
   }
 
   const finalSlug = createdAnswer.slug;
-  const owner = String(data.ownerGithubLogin || grant.ownerGithubLogin || "");
+  const owner = String(data.ownerGithubLogin || ctx.ownerFallback || "");
 
   return envelope({
     ok: true,
@@ -450,6 +543,6 @@ async function finishFromPoll(
         `extension_project_create (project: '${finalSlug}/<project>', repo: '<owner>/<repo>')`,
       ],
     },
-    hint: `Workspace ${finalSlug} exists${owner ? `, owned by ${owner}` : ""}. The provisioning grant stays valid until it expires and is not stored by this tool; the only file written on this machine is its install id (install.json). If ${owner || "the approver"} is not who you meant to own it, stop here: ownership follows the GitHub account that approved the code. Next: extension_project_create with project '${finalSlug}/<project>'.`,
+    hint: `Workspace ${finalSlug} exists${owner ? `, owned by ${owner}` : ""}.${data.replayed === true ? " The platform read this back from its record of the earlier create request with this grant; nothing was created twice." : ""} The provisioning grant stays valid until it expires and is no longer kept on this machine; the only other file this tool leaves is its install id (install.json). If ${owner || "the approver"} is not who you meant to own it, stop here: ownership follows the GitHub account that approved the code. Next: extension_project_create with project '${finalSlug}/<project>'.`,
   });
 }

@@ -297,7 +297,7 @@ describe("extension_workspace_create", () => {
     expect(out.ok).toBe(false);
     expect(out.status).toBe("create-unconfirmed");
     expect(out.error.message).toContain(words);
-    expect(out.hint).toContain("Do not create it again blind");
+    expect(out.hint).toContain("again with this same deviceCode and the same arguments");
   });
 
   it("reports the slug the platform registered", async () => {

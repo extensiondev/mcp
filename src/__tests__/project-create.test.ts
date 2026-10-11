@@ -670,8 +670,8 @@ describe("extension_project_create", () => {
     expect(out.status).toBe("create-unconfirmed");
     expect(out.error.message).toContain(words);
     expect(out.error.message).toContain("is unknown");
-    expect(out.hint).toContain("Do not create it again blind");
-    expect(out.hint).toContain("extension_auth (action: login, project: 'acme/ghost-app')");
+    expect(out.hint).toContain("again with this same deviceCode and the same arguments");
+    expect(out.hint).toContain("never creates acme/ghost-app twice");
   });
 
   it("keeps a failure the platform named a failure", async () => {
