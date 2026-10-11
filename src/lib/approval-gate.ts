@@ -400,7 +400,7 @@ async function verifyApproval(params: {
       APPROVAL_REJECTED_STATUS,
       "E_APPROVAL_REJECTED",
       "ApprovalConsumed",
-      `Approval ${approvalId} was already used once and approvals are single-use, so nothing was executed. Request a fresh approval by calling this tool with no approvalId.`,
+      `Approval ${approvalId} was already used once and approvals are single-use. This call executed nothing, but the call that used it may already have run the action: ${input.description} Read the current state first (extension_release_status for a promote or submission, extension_shares list for a revoke), and request a fresh approval by calling this tool with no approvalId only if the action did not happen.`,
       { action: input.action, approvalId },
     );
   }

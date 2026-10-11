@@ -582,6 +582,17 @@ describe("the approval gate believes only a complete record", () => {
     expect(ms.blocked).toBe(false);
   });
 
+  it("says a spent approval may already have run the action, and to read its state first", async () => {
+    const fingerprint = actionFingerprint(action, scope);
+    const gate = await verify({ status: "approved", fingerprint, expiresAt: future, used: true });
+    expect(gate.blocked).toBe(true);
+    const envelope = JSON.parse((gate as { envelope: string }).envelope);
+    expect(envelope.error.name).toBe("ApprovalConsumed");
+    expect(envelope.error.message).not.toMatch(/so nothing was executed/);
+    expect(envelope.error.message).toMatch(/This call executed nothing/);
+    expect(envelope.error.message).toMatch(/may already have run/);
+  });
+
   it("does not tell the agent to wait for an approval the platform never created", async () => {
     const gate = await evaluateApproval({
       command: "extension_release_promote",
