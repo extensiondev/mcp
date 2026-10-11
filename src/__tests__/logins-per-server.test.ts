@@ -199,3 +199,30 @@ describe("logout and status act on the server a call targets", () => {
     );
   });
 });
+
+describe("every name of one server reads the same logins", () => {
+  it("finds a localhost:3100 login through www.extension.localhost and 127.0.0.1:3100", async () => {
+    writeCredentials(login("widget", LOCAL, "local-token"));
+
+    for (const api of ["http://www.extension.localhost", "http://extension.localhost/", "http://127.0.0.1:3100"]) {
+      const status = JSON.parse(await auth.handler({ action: "status", api }));
+
+      expect(status.status).toBe("logged-in");
+      expect(status.value.projectSlug).toBe("widget");
+    }
+  });
+
+  it("finds a production login through the apex domain", () => {
+    writeCredentials(login("widget", PROD, "prod-token"));
+
+    expect(resolveCredential({ api: "https://extension.dev" })?.token).toBe("prod-token");
+  });
+
+  it("keeps a different local port apart from the fleet", async () => {
+    writeCredentials(login("widget", LOCAL, "local-token"));
+
+    const status = JSON.parse(await auth.handler({ action: "status", api: "http://localhost:4000" }));
+
+    expect(status.status).toBe("logged-out");
+  });
+});
