@@ -60,10 +60,19 @@ describe("console/registry origin resolution", () => {
     ).toBe("http://console.extension.localhost/acme/widget/submissions");
   });
 
-  it("keeps registry on prod even in dev (no local proxy) unless overridden", () => {
+  it("reads the local server's registry when the platform base is local", () => {
     process.env.EXTENSION_DEV_API_URL = "http://localhost:3100";
-    expect(registryBase()).toBe("https://registry.extension.land");
+    expect(registryBase()).toBe("http://localhost:3100/api/local-registry");
+  });
+
+  it("honors an explicit registry override over the local server", () => {
+    process.env.EXTENSION_DEV_API_URL = "http://localhost:3100";
     process.env.EXTENSION_DEV_REGISTRY_URL = "http://localhost:9000";
     expect(registryBase()).toBe("http://localhost:9000");
+  });
+
+  it("keeps the production registry for a production platform base", () => {
+    process.env.EXTENSION_DEV_API_URL = "https://www.extension.dev";
+    expect(registryBase()).toBe("https://registry.extension.land");
   });
 });
