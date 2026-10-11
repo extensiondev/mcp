@@ -105,7 +105,7 @@ export async function handler(args: {
   api?: string;
   project?: string;
 }): Promise<string> {
-  const credential = resolveCredential({ project: args.project });
+  const credential = resolveCredential({ project: args.project, api: args.api });
   const token = credential.token;
 
   if (!token && args.project) {

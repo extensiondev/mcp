@@ -10,6 +10,9 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
+import { loginKey, serverOf, targetServer } from "./credential-server";
+import { withFileLock, writePrivateJson } from "./private-file";
+
 export interface StoredCredentials {
   version: 1;
   token: string;
@@ -44,10 +47,17 @@ export interface CredentialStore {
 
 export interface CredentialSelector {
   project?: string;
+  api?: string;
 }
 
-export function credentialKey(workspaceSlug: string, projectSlug: string): string {
-  return `${workspaceSlug}/${projectSlug}`.toLowerCase();
+export function credentialKey(workspaceSlug: string, projectSlug: string, api?: string): string {
+  return loginKey(workspaceSlug, projectSlug, api);
+}
+
+function keyOf(entry: StoredCredentials, fallback: string): string {
+  return entry.workspaceSlug && entry.projectSlug
+    ? credentialKey(entry.workspaceSlug, entry.projectSlug, entry.api)
+    : fallback.toLowerCase();
 }
 
 function readEntry(data: unknown): StoredCredentials | null {
@@ -132,7 +142,7 @@ export function inspectCredentialStore(): CredentialStoreRead {
     const only = readEntry(record);
     if (!only) return { state: "absent" };
 
-    const key = credentialKey(only.workspaceSlug, only.projectSlug);
+    const key = keyOf(only, credentialKey(only.workspaceSlug, only.projectSlug));
 
     return {
       state: "ok",
@@ -157,19 +167,22 @@ export function inspectCredentialStore(): CredentialStoreRead {
   }
 
   const entries: Record<string, StoredCredentials> = {};
+  const renamed = new Map<string, string>();
 
   for (const [key, value] of Object.entries(record.entries as Record<string, unknown>)) {
     const entry = readEntry(value);
-    if (entry) entries[key.toLowerCase()] = entry;
+    if (!entry) continue;
+
+    const canonical = keyOf(entry, key);
+    entries[canonical] = entry;
+    renamed.set(key.toLowerCase(), canonical);
   }
 
   const keys = Object.keys(entries);
   if (keys.length === 0) return { state: "absent" };
 
-  const active =
-    typeof record.active === "string" && entries[record.active.toLowerCase()]
-      ? record.active.toLowerCase()
-      : (keys[0] ?? null);
+  const named = typeof record.active === "string" ? renamed.get(record.active.toLowerCase()) : undefined;
+  const active = named && entries[named] ? named : (keys[0] ?? null);
 
   return { state: "ok", store: { version: 2, active, entries } };
 }
@@ -218,14 +231,22 @@ function selectEntry(
   selector: CredentialSelector | undefined,
 ): StoredCredentials | null {
   const wanted = (String(selector?.project ?? "").trim() || pinnedProject()).toLowerCase();
+  const server = targetServer(selector?.api);
+  const onServer = Object.entries(store.entries).filter(([, entry]) => serverOf(entry.api) === server);
 
   if (!wanted) {
-    return (store.active && store.entries[store.active]) || Object.values(store.entries)[0] || null;
+    const active = onServer.find(([key]) => key === store.active);
+
+    return (active ?? onServer[onServer.length - 1])?.[1] ?? null;
   }
 
-  if (wanted.includes("/")) return store.entries[wanted] ?? null;
+  if (wanted.includes("/")) {
+    const [workspace = "", project = ""] = wanted.split("/");
 
-  const bySlug = Object.values(store.entries).filter(
+    return onServer.find(([key]) => key === credentialKey(workspace, project, server))?.[1] ?? null;
+  }
+
+  const bySlug = onServer.map(([, entry]) => entry).filter(
     (entry) => entry.projectSlug.toLowerCase() === wanted,
   );
 
@@ -238,7 +259,7 @@ export function readCredentials(selector?: CredentialSelector): StoredCredential
   return store ? selectEntry(store, selector) : null;
 }
 
-export function listCredentials(): Array<StoredCredentials & { key: string; active: boolean }> {
+export function listCredentials(): Array<StoredCredentials & { key: string; active: boolean; server: string }> {
   const store = readCredentialStore();
   if (!store) return [];
 
@@ -246,101 +267,16 @@ export function listCredentials(): Array<StoredCredentials & { key: string; acti
     ...entry,
     key,
     active: key === store.active,
+    server: serverOf(entry.api),
   }));
 }
 
-function ensureStoreDir(): string {
-  const file = credentialsPath();
-  const dir = path.dirname(file);
-  fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
-
-  try {
-    fs.chmodSync(dir, 0o700);
-  } catch {
-  }
-
-  return file;
-}
-
 function writeStore(store: CredentialStore): string {
-  const file = ensureStoreDir();
-  const tmpFile = `${file}.${process.pid}.${Date.now()}.tmp`;
-
-  try {
-    fs.writeFileSync(tmpFile, `${JSON.stringify(store, null, 2)  }\n`, {
-      mode: 0o600,
-    });
-
-    try {
-      fs.chmodSync(tmpFile, 0o600);
-    } catch {
-    }
-
-    fs.renameSync(tmpFile, file);
-  } catch (err) {
-    fs.rmSync(tmpFile, { force: true });
-
-    throw err;
-  }
-
-  return file;
-}
-
-const LOCK_STALE_MS = 2_000;
-const LOCK_WAIT_MS = 3_000;
-
-function pause(ms: number): void {
-  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
-}
-
-function takeLock(lock: string): boolean {
-  try {
-    fs.closeSync(fs.openSync(lock, "wx", 0o600));
-
-    return true;
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException)?.code !== "EEXIST") throw err;
-
-    return false;
-  }
-}
-
-function lockAgeMs(lock: string): number | null {
-  try {
-    return Date.now() - fs.statSync(lock).mtimeMs;
-  } catch {
-    return null;
-  }
+  return writePrivateJson(credentialsPath(), store);
 }
 
 function withStoreLock<T>(change: () => T): T {
-  const file = ensureStoreDir();
-  const lock = `${file}.lock`;
-  const deadline = Date.now() + LOCK_WAIT_MS;
-
-  while (!takeLock(lock)) {
-    const age = lockAgeMs(lock);
-    if (age === null) continue;
-
-    if (age > LOCK_STALE_MS) {
-      fs.rmSync(lock, { force: true });
-      continue;
-    }
-
-    if (Date.now() >= deadline) {
-      throw new Error(
-        `Another process is writing the login store at ${file} and did not finish in ${LOCK_WAIT_MS} ms; nothing was stored. Try again.`,
-      );
-    }
-
-    pause(25);
-  }
-
-  try {
-    return change();
-  } finally {
-    fs.rmSync(lock, { force: true });
-  }
+  return withFileLock(credentialsPath(), "login store", change);
 }
 
 function storeForWrite(): CredentialStore | null {
@@ -354,11 +290,13 @@ function storeForWrite(): CredentialStore | null {
 }
 
 export function writeCredentials(creds: StoredCredentials): string {
-  const key = credentialKey(creds.workspaceSlug, creds.projectSlug);
+  const key = credentialKey(creds.workspaceSlug, creds.projectSlug, creds.api);
 
   return withStoreLock(() => {
     const existing = storeForWrite();
-    const entries = { ...(existing?.entries ?? {}), [key]: creds };
+    const entries = { ...(existing?.entries ?? {}) };
+    delete entries[key];
+    entries[key] = creds;
 
     return writeStore({ version: 2, active: key, entries });
   });
@@ -372,14 +310,16 @@ export function writeCredentialBatch(batch: StoredCredentials[]): string | null 
     const entries = { ...(existing?.entries ?? {}) };
 
     for (const creds of batch) {
-      entries[credentialKey(creds.workspaceSlug, creds.projectSlug)] = creds;
+      const key = credentialKey(creds.workspaceSlug, creds.projectSlug, creds.api);
+      delete entries[key];
+      entries[key] = creds;
     }
 
     const first = batch[0] as StoredCredentials;
     const active =
       existing?.active && entries[existing.active]
         ? existing.active
-        : credentialKey(first.workspaceSlug, first.projectSlug);
+        : credentialKey(first.workspaceSlug, first.projectSlug, first.api);
 
     return writeStore({ version: 2, active, entries });
   });
@@ -399,8 +339,14 @@ export function clearCredentials(selector?: CredentialSelector): {
   const describe = (err: unknown): string =>
     String((err as NodeJS.ErrnoException)?.code || (err as Error)?.message || err);
   const stillThere = (): string[] => listCredentials().map((entry) => entry.key);
+  const server = targetServer(selector?.api);
+  const serverKeys = store
+    ? Object.entries(store.entries)
+        .filter(([, entry]) => serverOf(entry.api) === server)
+        .map(([key]) => key)
+    : [];
 
-  if (!wanted) {
+  if (!wanted && (!store || serverKeys.length === Object.keys(store.entries).length)) {
     try {
       fs.unlinkSync(file);
     } catch (err) {
@@ -437,19 +383,20 @@ export function clearCredentials(selector?: CredentialSelector): {
 
   if (!store) return { cleared: false, path: file, removed: [], remaining: [] };
 
-  const entry = selectEntry(store, { project: wanted });
+  const entry = wanted ? selectEntry(store, { project: wanted, api: selector?.api }) : null;
+  const keys = entry ? [credentialKey(entry.workspaceSlug, entry.projectSlug, entry.api)] : wanted ? [] : serverKeys;
 
-  if (!entry) {
+  if (keys.length === 0) {
     return { cleared: false, path: file, removed: [], remaining: Object.keys(store.entries) };
   }
 
-  const key = credentialKey(entry.workspaceSlug, entry.projectSlug);
+  const key = keys.join(", ");
 
   try {
     return withStoreLock(() => {
       const current = storeForWrite() ?? store;
       const entries = { ...current.entries };
-      delete entries[key];
+      for (const gone of keys) delete entries[gone];
       const remaining = Object.keys(entries);
 
       if (remaining.length === 0) {
@@ -459,16 +406,16 @@ export function clearCredentials(selector?: CredentialSelector): {
           if ((err as NodeJS.ErrnoException)?.code !== "ENOENT") throw err;
         }
 
-        return { cleared: true, path: file, removed: [key], remaining: [] };
+        return { cleared: true, path: file, removed: keys, remaining: [] };
       }
 
       writeStore({
         version: 2,
-        active: current.active === key ? (remaining[0] ?? null) : current.active,
+        active: current.active && entries[current.active] ? current.active : (remaining[0] ?? null),
         entries,
       });
 
-      return { cleared: true, path: file, removed: [key], remaining };
+      return { cleared: true, path: file, removed: keys, remaining };
     });
   } catch (err) {
     return {

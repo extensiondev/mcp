@@ -89,6 +89,7 @@ export class RegistryAccessTokens {
   private async mint(ref: ProjectRef, apiHint?: string): Promise<AccessGrant> {
     const creds = readValidCredentials(undefined, {
       project: `${ref.workspace}/${ref.project}`,
+      api: apiHint,
     });
     const sameAs = (workspace: string, project: string): boolean =>
       workspace.toLowerCase() === ref.workspace.toLowerCase() &&

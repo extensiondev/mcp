@@ -10,26 +10,27 @@ import { clearCredentials, readCredentials } from "../lib/credentials";
 import { envelope } from "../lib/envelope";
 import { consoleProjectUrl } from "../lib/registry";
 
-export async function clearLocalCredentials(project?: string): Promise<string> {
+export async function clearLocalCredentials(project?: string, api?: string): Promise<string> {
   const wanted = String(project ?? "").trim();
-  const creds = readCredentials(wanted ? { project: wanted } : undefined);
+  const creds = wanted ? readCredentials({ project: wanted, api }) : null;
   const revokeUrl =
     creds?.workspaceSlug && creds?.projectSlug
       ? consoleProjectUrl(
           { workspace: creds.workspaceSlug, project: creds.projectSlug },
           "settings/access-tokens",
+          api,
         )
       : null;
 
   const revokeUrlFor = (key: string): string | null => {
-    const [workspaceSlug, projectSlug] = key.split("/");
+    const [workspaceSlug, projectSlug] = (key.split(" ").pop() ?? "").split("/");
 
     return workspaceSlug && projectSlug
-      ? consoleProjectUrl({ workspace: workspaceSlug, project: projectSlug }, "settings/access-tokens")
+      ? consoleProjectUrl({ workspace: workspaceSlug, project: projectSlug }, "settings/access-tokens", api)
       : null;
   };
 
-  const result = clearCredentials(wanted ? { project: wanted } : undefined);
+  const result = clearCredentials({ ...(wanted ? { project: wanted } : {}), api });
   const scope = wanted
     ? `the login for ${creds ? `${creds.workspaceSlug}/${creds.projectSlug}` : wanted}`
     : result.removed.length > 1

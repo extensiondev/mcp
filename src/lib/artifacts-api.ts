@@ -167,7 +167,7 @@ export async function listArtifacts(options: {
   token?: string;
   fetchImpl?: FetchImpl;
 } = {}): Promise<ArtifactsOutcome<ArtifactListing>> {
-  const token = options.token ?? resolveToken();
+  const token = options.token ?? resolveToken({ api: options.api });
   if (!token) return authError("SharesAuthError");
 
   const apiCheck = safeApiBase(resolveApiBase(options.api), options.api);
@@ -269,7 +269,7 @@ export async function revokeArtifact(options: {
   approvalId?: string;
   fetchImpl?: FetchImpl;
 }): Promise<ArtifactsOutcome<ArtifactRevocation>> {
-  const token = options.token ?? resolveToken();
+  const token = options.token ?? resolveToken({ api: options.api });
   if (!token) return authError("SharesAuthError");
 
   const apiCheck = safeApiBase(resolveApiBase(options.api), options.api);

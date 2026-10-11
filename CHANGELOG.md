@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Logins are stored per server. A login against a local or self-hosted server (through `api` or `EXTENSION_DEV_API_URL`) no longer replaces the production login for the same `<workspace>/<project>`, and a production login no longer replaces the local one. Every token-scoped tool uses the login minted on the server the call targets: `api`, else `EXTENSION_DEV_API_URL`, else production. `extension_auth` status reports the login for that server and lists every stored login with its server; logout removes only that server's logins. Logins stored by earlier versions are read as production logins unless they recorded another server. Signing in to a local copy of a workspace used to overwrite the production logins on the machine, so the next production call sent a local token and failed.
+
 ## 10.11.6
 
 Built on Extension.js 4.1.33.

@@ -13,6 +13,7 @@ import {
 } from "../lib/credentials";
 import { envelope } from "../lib/envelope";
 import { readTokenClaims, resolveCredential } from "../lib/credential-source";
+import { targetServer } from "../lib/credential-server";
 import { resolveApiBase, safeApiBase, tokenTtlNote } from "../lib/login-flow";
 import {
   askServerIdentity,
@@ -64,10 +65,23 @@ function describeServer(check: ServerCheck, api: string) {
   };
 }
 
+function elsewhereNote(server: string): { note: string; logins: Array<{ project: string; server: string }> } | null {
+  const logins = listCredentials()
+    .filter((entry) => entry.server !== server)
+    .map((entry) => ({ project: `${entry.workspaceSlug}/${entry.projectSlug}`, server: entry.server }));
+  if (logins.length === 0) return null;
+
+  return {
+    logins,
+    note: `No stored login for ${server}, the server this call targets. This machine holds logins for other servers: ${logins.map((l) => `${l.project} on ${l.server}`).join(", ")}. Each login is used only against the server it was minted on: pass api (or set EXTENSION_DEV_API_URL) to that server to use one, or run extension_auth (action: login) to sign in to ${server}.`,
+  };
+}
+
 export async function readIdentity(deps?: {
   fetchImpl?: typeof fetch;
-}): Promise<string> {
-  const creds = readCredentials();
+}, api?: string): Promise<string> {
+  const target = targetServer(api);
+  const creds = readCredentials({ api });
   const problem = creds ? null : credentialStoreProblem();
 
   if (problem) {
@@ -82,6 +96,18 @@ export async function readIdentity(deps?: {
       },
       value: { path: problem.path },
       hint: "This is not a logged-out machine: the file is there and may hold logins. Fix or move it and run extension_auth (action: status) again; a new login is refused while it is unreadable, and extension_auth (action: logout) with no project removes it if its logins are not worth recovering.",
+    });
+  }
+
+  const elsewhere = creds ? null : elsewhereNote(target);
+
+  if (!creds && elsewhere && !String(process.env.EXTENSION_DEV_TOKEN || "").trim()) {
+    return envelope({
+      ok: true,
+      command: "extension_auth",
+      status: "logged-out",
+      value: { server: target, logins: elsewhere.logins },
+      hint: elsewhere.note,
     });
   }
 
@@ -115,8 +141,7 @@ export async function readIdentity(deps?: {
   const expired = Boolean(creds.expiresAt && creds.expiresAt <= now);
 
   const recordedApi = String(creds.api || "").trim();
-  const effectiveDefaultApi = resolveApiBase();
-  const apiDiverges = Boolean(recordedApi) && recordedApi !== effectiveDefaultApi;
+  const effectiveDefaultApi = resolveApiBase(api);
   const askApi = recordedApi || effectiveDefaultApi;
 
   const envTokenSet = Boolean(
@@ -146,10 +171,7 @@ export async function readIdentity(deps?: {
   const identityNote = expired
     ? "The stored token has expired. Run extension_auth (action: login) to refresh it."
     : `Logged in as ${creds.workspaceSlug}/${creds.projectSlug}, per the token extension_auth stored on this machine. That token is what scopes the identity: it does not follow the current working directory or project folder.`;
-  const apiDivergesNote = apiDiverges
-    ? `This login was minted via ${recordedApi}: access grants for private registry reads use that recorded base when no api argument is given, while other authenticated tools target ${effectiveDefaultApi} unless given one.`
-    : null;
-  const resolved = resolveCredential();
+  const resolved = resolveCredential({ api });
   const envTokenNote = envTokenSet
     ? `EXTENSION_DEV_TOKEN is set: an unnamed call sends it${resolved.ref ? ` (per its claims it belongs to ${resolved.ref.workspace}/${resolved.ref.project})` : " (its claims could not be read)"}, while a call naming a project, or a server pinned to one, sends that project's stored login first; this report describes only the stored login.`
     : null;
@@ -159,20 +181,20 @@ export async function readIdentity(deps?: {
       : null;
   const logins = listCredentials().map((entry) => ({
     project: `${entry.workspaceSlug}/${entry.projectSlug}`,
-    active: entry.active,
+    server: entry.server,
+    active: entry.active && entry.server === target,
     expiresAt: entry.expiresAt ? new Date(entry.expiresAt * 1000).toISOString() : null,
     expired: Boolean(entry.expiresAt && entry.expiresAt <= now),
   }));
   const loginsNote =
     logins.length > 1
-      ? `${logins.length} logins are stored on this machine (${logins.map((l) => l.project).join(", ")}); the active one above is the default for token-scoped tools, and each of them takes \`project\` to use another.`
+      ? `${logins.length} logins are stored on this machine (${logins.map((l) => (l.server === target ? l.project : `${l.project} on ${l.server}`)).join(", ")}); the one above is the default for token-scoped tools on ${target}, each of them takes \`project\` to use another, and a login minted on another server is used only when a call targets that server.`
       : null;
 
   const message = [
     identityNote,
     server.note,
     server.warning,
-    apiDivergesNote,
     envTokenNote,
     loginsNote,
   ]
@@ -201,7 +223,6 @@ export async function readIdentity(deps?: {
     warnings: [
       tokenTtlNote(creds.workspaceSlug, creds.projectSlug),
       server.warning,
-      apiDivergesNote,
       serverIdentityMismatch,
       envTokenNote,
     ],

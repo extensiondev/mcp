@@ -109,28 +109,21 @@ describe("whoami reports the stored token identity, not the cwd", () => {
       expect(result.value.apiDefault).toBe("https://www.extension.dev");
     });
 
-    it("flags a stale localhost login base instead of presenting it as the api", async () => {
+    it("does not present a localhost login as the production login, and names where it lives", async () => {
       if (process.platform === "win32") return;
 
       writeCredentials(sample({ api: "http://localhost:3100" }));
 
       const result = JSON.parse(await auth.handler({}));
 
-      expect(result.value.api).toBeUndefined();
-      expect(result.value.apiRecordedAtLogin).toBe("http://localhost:3100");
-      expect(result.value.apiDefault).toBe("https://www.extension.dev");
-      expect(result.hint).toContain("minted via http://localhost:3100");
-      expect(result.hint).toContain(
-        "access grants for private registry reads use that recorded base",
-      );
+      expect(result.status).toBe("logged-out");
+      expect(result.value.server).toBe("https://www.extension.dev");
+      expect(result.value.logins).toEqual([
+        { project: "acme/widget", server: "http://localhost:3100" },
+      ]);
 
-      expect(result.hint).not.toContain("do not read that recorded value");
-      expect(result.hint).toContain("https://www.extension.dev");
-      expect(
-        result.warnings.some((w: string) =>
-          w.includes("minted via http://localhost:3100"),
-        ),
-      ).toBe(true);
+      expect(result.hint).toContain("acme/widget on http://localhost:3100");
+      expect(result.hint).toContain("pass api");
     });
 
     it("omits the recorded base entirely when the stored file never had one", async () => {

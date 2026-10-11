@@ -13,7 +13,7 @@ import { platformHoldMessage, sawPlatformHold } from "./platform-hold";
 
 type FetchImpl = typeof fetch;
 
-export function resolveToken(options: { project?: string } = {}): string {
+export function resolveToken(options: { project?: string; api?: string } = {}): string {
   return resolveCredential(options).token;
 }
 
@@ -37,7 +37,7 @@ export type PublishResult =
 export async function publish(
   options: PublishOptions = {},
 ): Promise<PublishResult> {
-  const token = options.token ?? resolveToken();
+  const token = options.token ?? resolveToken({ api: options.api });
 
   if (!token) {
     return {

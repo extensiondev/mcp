@@ -107,7 +107,7 @@ export async function uploadPreview(options: {
   token?: string;
   fetchImpl?: FetchImpl;
 }): Promise<PreviewUploadOutcome> {
-  const token = options.token ?? resolveToken();
+  const token = options.token ?? resolveToken({ api: options.api });
 
   if (!token) {
     return {

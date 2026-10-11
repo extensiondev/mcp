@@ -67,8 +67,9 @@ export interface ResolvedCredential {
   note: string | null;
 }
 
-export function resolveCredential(options: { project?: string } = {}): ResolvedCredential {
+export function resolveCredential(options: { project?: string; api?: string } = {}): ResolvedCredential {
   const named = String(options.project ?? "").trim();
+  const api = String(options.api ?? "").trim() || undefined;
   const pinned = pinnedProject();
   const wanted = named || pinned;
   const env = String(process.env.EXTENSION_DEV_TOKEN || "").trim();
@@ -76,7 +77,7 @@ export function resolveCredential(options: { project?: string } = {}): ResolvedC
   const envRef: CredentialRef | null = envClaims ? { workspace: envClaims.workspace, project: envClaims.project } : null;
 
   if (wanted) {
-    const creds = readValidCredentials(undefined, { project: wanted });
+    const creds = readValidCredentials(undefined, { project: wanted, api });
 
     if (creds?.token) {
       return {
@@ -121,7 +122,7 @@ export function resolveCredential(options: { project?: string } = {}): ResolvedC
   }
 
   if (env) {
-    const active = readValidCredentials();
+    const active = readValidCredentials(undefined, { api });
     const storedRef: CredentialRef | null =
       active?.workspaceSlug && active?.projectSlug
         ? { workspace: active.workspaceSlug, project: active.projectSlug }
@@ -144,7 +145,7 @@ export function resolveCredential(options: { project?: string } = {}): ResolvedC
     };
   }
 
-  const creds = readValidCredentials();
+  const creds = readValidCredentials(undefined, { api });
 
   if (creds?.token) {
     return {

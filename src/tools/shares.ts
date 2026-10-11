@@ -242,7 +242,7 @@ async function listShares(args: {
     liveOnly: liveFiltered,
     ...(args.limit != null ? { limit: args.limit } : {}),
     ...(args.api ? { api: args.api } : {}),
-    ...(args.project ? { token: resolveToken({ project: args.project }) } : {}),
+    ...(args.project ? { token: resolveToken({ project: args.project, api: args.api }) } : {}),
   });
 
   if (!listing.ok) {
@@ -424,7 +424,7 @@ async function revokeShare(args: {
     });
   }
 
-  const token = resolveToken({ project: args.project });
+  const token = resolveToken({ project: args.project, api: args.api });
   const gateInput = {
     command: "extension_shares",
     action: "extension_shares.revoke",

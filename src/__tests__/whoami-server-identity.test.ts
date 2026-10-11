@@ -162,7 +162,7 @@ describe("extension_auth status asks the server who the token is", () => {
     expect(result.hint).toContain("not server-confirmed");
   });
 
-  it("asks the base recorded at login, not the default, when they diverge", async () => {
+  it("asks the server a login was minted on when the call targets that server, and no other", async () => {
     if (process.platform === "win32") return;
 
     writeCredentials(sample({ api: "http://localhost:3100" }));
@@ -176,10 +176,12 @@ describe("extension_auth status asks the server who the token is", () => {
       });
     }) as unknown as typeof fetch;
 
-    const result = JSON.parse(await readIdentity({ fetchImpl: fetchSpy }));
+    const local = JSON.parse(await readIdentity({ fetchImpl: fetchSpy }, "http://localhost:3100"));
+    const production = JSON.parse(await readIdentity({ fetchImpl: fetchSpy }));
 
     expect(seen).toEqual(["http://localhost:3100/api/cli/whoami"]);
-    expect(result.value.server.api).toBe("http://localhost:3100");
+    expect(local.value.server.api).toBe("http://localhost:3100");
+    expect(production.status).toBe("logged-out");
   });
 
   it("does not ask the server for a token the local file already knows is expired", async () => {
