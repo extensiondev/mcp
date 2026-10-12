@@ -10,19 +10,24 @@ import { API_BASE } from "../lib/common-schema";
 import { envelope, envelopeObject } from "../lib/envelope";
 import { readReleases } from "./release-list";
 import { readStores } from "./store-status";
+import { readOneRelease, readReleaseHistory } from "./release-history";
 
 export const schema = {
   name: "extension_release_status",
   description:
-    "Read where a project stands on extension.dev, from the public registry (registry.extension.land). This is read-only: it dispatches nothing and promotes nothing. Pass include:'releases' for the release channels (channel to promoted build sha), recent builds, and a public build-page URL for each, which is how you find a valid sha for extension_release_promote, extension_submit or extension_publish. Pass include:'stores' for the per-store picture after an extension_submit (chrome, firefox, edge, safari): configured or not, the last credential health check, the last recorded submission, and the latest review status, read from stores/health.json, stores/status.json and stores/submissions.json; when your login covers the project it also reads the platform's own submission records and their store runs, so a submission whose run ended before recording anything still shows its run status, conclusion, run URL and whether any store step ran (a run that failed before any store step is recorded as failed, and no store received it). Both are included by default. This defaults to the logged-in project (extension_auth); pass workspace and project to read another. Private projects work when your stored login covers them. Registry state can lag the store dashboards by up to a polling interval.",
+    "Read where a project stands on extension.dev, from the public registry (registry.extension.land). This is read-only: it dispatches nothing and promotes nothing. Pass include:'releases' for the release channels (channel to promoted build sha), recent builds, and a public build-page URL for each, which is how you find a valid sha for extension_release_promote, extension_submit or extension_publish. Pass include:'stores' for the per-store picture after an extension_submit (chrome, firefox, edge, safari): configured or not, the last credential health check, the last recorded submission, and the latest review status, read from stores/health.json, stores/status.json and stores/submissions.json; when your login covers the project it also reads the platform's own submission records and their store runs, so a submission whose run ended before recording anything still shows its run status, conclusion, run URL and whether any store step ran (a run that failed before any store step is recorded as failed, and no store received it). Those two are included by default. Pass include:'history' for the platform's release history: each release (browser and channel) with its build, version, rollout, promotion run and its 5 most recent events, plus whether a build is ready to promote, which only a token minted by a workspace owner may read and is otherwise reported as needing an owner. Pass releaseId (an id from history, such as chrome-stable) for that one release and up to 20 of its events. The stores section also reads each store's configuration from the platform when your login covers the project: whether it is enabled and configured, whether its credentials are set and the names of any missing ones (never a credential value), its listing URL and submission mode, plus up to 5 earlier submissions per store besides the latest. This defaults to the logged-in project (extension_auth); pass workspace and project to read another. Private projects work when your stored login covers them. Registry state can lag the store dashboards by up to a polling interval.",
   inputSchema: {
     type: "object" as const,
     properties: {
       include: {
         type: "array",
-        items: { type: "string", enum: ["releases", "stores"] },
+        items: { type: "string", enum: ["releases", "stores", "history"] },
         default: ["releases", "stores"],
-        description: "Which sections to read. Both by default.",
+        description: "Which sections to read: releases and stores by default; history adds the platform's release history.",
+      },
+      releaseId: {
+        type: "string",
+        description: "Read this one release and its events (an id from include:'history', such as chrome-stable). Alone, it reads only that release.",
       },
       workspace: {
         type: "string",
@@ -53,29 +58,37 @@ function parse(raw: string): Record<string, unknown> {
 
 export async function handler(args: {
   include?: string[];
+  releaseId?: string;
   workspace?: string;
   project?: string;
   api?: string;
 }): Promise<string> {
+  const releaseId = String(args.releaseId ?? "").trim();
   const include =
     Array.isArray(args.include) && args.include.length
       ? args.include
-      : ["releases", "stores"];
+      : releaseId
+        ? []
+        : ["releases", "stores"];
   const scope = {
     workspace: args.workspace,
     project: args.project,
     api: args.api,
   };
 
-  const [releases, stores] = await Promise.all([
+  const [releases, stores, history, release] = await Promise.all([
     include.includes("releases") ? readReleases(scope).then(parse) : null,
     include.includes("stores") ? readStores(scope).then(parse) : null,
+    include.includes("history") ? readReleaseHistory(scope).then(parse) : null,
+    releaseId ? readOneRelease({ ...scope, releaseId }).then(parse) : null,
   ]);
 
   const named = (
     [
       ["releases", releases],
       ["stores", stores],
+      ["history", history],
+      ["release", release],
     ] as Array<[string, Record<string, unknown> | null]>
   ).filter((entry): entry is [string, Record<string, unknown>] => Boolean(entry[1]));
   const sections = named.map(([, section]) => section);
@@ -103,6 +116,8 @@ export async function handler(args: {
     value: {
       ...(releases ? { releases } : {}),
       ...(stores ? { stores } : {}),
+      ...(history ? { history } : {}),
+      ...(release ? { release } : {}),
     },
   });
 }

@@ -21,6 +21,10 @@ import {
   readPlatformSubmissions,
   type SubmissionRun,
 } from "../lib/platform-submissions";
+import {
+  earlierSubmissions,
+  readPlatformStoreRecords,
+} from "../lib/platform-store-records";
 
 const KNOWN_STORES = ["chrome", "firefox", "edge", "safari"] as const;
 
@@ -219,32 +223,32 @@ export async function readStores(args: {
     args.api,
   );
 
-  const [healthRes, statusRes, submissionsRes, platform] = await Promise.all([
+  const named = Boolean(args.workspace || args.project);
+  const [healthRes, statusRes, submissionsRes, platform, records] = await Promise.all([
     fetchRegistryJson(healthUrl, fetch, { ref, api: args.api }),
     fetchRegistryJson(statusUrl, fetch, { ref, api: args.api }),
     fetchRegistryJson(submissionsUrl, fetch, { ref, api: args.api }),
-    readPlatformSubmissions({
-      ref,
-      named: Boolean(args.workspace || args.project),
-      api: args.api,
-    }),
+    readPlatformSubmissions({ ref, named, api: args.api }),
+    readPlatformStoreRecords({ ref, named, api: args.api, stores: KNOWN_STORES }),
   ]);
 
   const heldRead = [healthRes, statusRes, submissionsRes].find(
     (res) => !res.ok && res.held === true,
   );
 
-  if (heldRead && !heldRead.ok) {
+  const heldRecords = !records.ok && !records.skipped && records.held ? records : null;
+
+  if ((heldRead && !heldRead.ok) || heldRecords) {
     return platformHoldEnvelope({
       command: "extension_release_status",
       name: "StoreStatusHeld",
-      body: heldRead.body,
+      body: heldRead && !heldRead.ok ? heldRead.body : heldRecords?.body,
       api: args.api,
       value: { workspace: ref.workspace, project: ref.project },
     });
   }
 
-  if (!healthRes.ok && !statusRes.ok && !submissionsRes.ok && !platform.ok) {
+  if (!healthRes.ok && !statusRes.ok && !submissionsRes.ok && !platform.ok && !records.ok) {
     return fail(
       "StoreStatusNotFound",
       `No store data on the registry for ${ref.workspace}/${ref.project} (${healthRes.message}). The project may have no stores configured yet, be private (private registry data is read with a stored login for this project, which extension_auth mints), or the workspace/project slugs may be wrong. Configure stores at ${consoleStoresUrl}/new; the console Submissions page is the authoritative view: ${consoleStoresUrl}`,
@@ -292,12 +296,19 @@ export async function readStores(args: {
     ),
   ];
 
+  const configs = records.ok ? records.config : null;
+
   const rows = stores.map((store) => {
     const healthRow = healthStores?.[store];
+    const config = configs?.[store];
     const configured: boolean | "unknown" = healthStores
       ? Boolean(healthRow)
-      : "unknown";
+      : config
+        ? config.configured
+        : "unknown";
     const row: Record<string, unknown> = { store, configured };
+
+    if (config) row.config = config;
 
     if (healthRow) {
       row.health = {
@@ -315,6 +326,11 @@ export async function readStores(args: {
 
     if (runsByStore[store]) row.submissionRun = runsByStore[store];
 
+    const earlier = records.ok
+      ? earlierSubmissions(records.history[store] ?? [], submissionsByStore[store])
+      : [];
+    if (earlier.length > 0) row.submissionHistory = earlier;
+
     const review = status.reviews[store];
 
     if (review && Object.values(review).some(Boolean)) {
@@ -329,13 +345,16 @@ export async function readStores(args: {
     const health = row.health as { ok: boolean; message?: string } | undefined;
     const submission = row.lastSubmission as SubmissionView | undefined;
     const review = row.review as ReviewView | undefined;
+    const config = row.config as { credentialsConfigured: boolean; missingCredentials: string[] } | undefined;
     let head: string;
 
     if (row.configured === "unknown") {
       head = `${store}: configuration unknown (stores/health.json is unreadable)`;
     } else if (row.configured === false) {
       head = `${store}: not configured (add it at ${consoleStoresUrl}/new)`;
-    } else if (health && !health.ok) {
+    } else if (!health) {
+      head = `${store}: configured, no credential health check recorded`;
+    } else if (!health.ok) {
       head = `${store}: configured but its credentials FAILED the last health check (${
         health.message || "no reason recorded"
       }) - fix them at ${consoleStoresUrl}/${store}`;
@@ -344,6 +363,10 @@ export async function readStores(args: {
     }
 
     const tail: string[] = [];
+
+    if (row.configured !== false && config && !config.credentialsConfigured && config.missingCredentials.length > 0) {
+      tail.push(`credentials not set: ${config.missingCredentials.join(", ")}`);
+    }
 
     if (submission) {
       tail.push(
@@ -365,7 +388,7 @@ export async function readStores(args: {
       if (runNote) tail.push(runNote);
     } else if (row.configured === true) {
       tail.push(
-        submissionsRes.ok
+        submissionsRes.ok || (records.ok && records.history[store])
           ? "no submissions recorded"
           : "submissions unknown: stores/submissions.json could not be read",
       );
@@ -390,6 +413,16 @@ export async function readStores(args: {
     !platform.ok && !platform.skipped
       ? `the platform's submission records could not be read, so a run that ended before recording its outcome is not reflected: ${platform.message}`
       : null;
+  const recordsUnavailable = records.ok
+    ? [
+        records.configMessage ? `the platform's store configuration could not be read: ${records.configMessage}` : null,
+        records.historyUnread.length
+          ? `earlier submissions could not be read for ${records.historyUnread.join("; ")}`
+          : null,
+      ]
+    : records.skipped
+      ? []
+      : [`the platform's store configuration and submission history could not be read: ${records.message}`];
   const submissionsUnavailable =
     !submissionsRes.ok && submissionsRes.status !== 404
       ? `stores/submissions.json unreadable: ${submissionsRes.message}`
@@ -417,6 +450,12 @@ export async function readStores(args: {
     hint: `${summaryParts.join(". ")}. This is the registry's recorded state (submissions and the review poller write it)${
       platform.ok ? ", with the platform's own submission records and their runs" : ""
     }; the store dashboards are authoritative and may be ahead of it.`,
-    warnings: [healthUnavailable, statusUnavailable, submissionsUnavailable, platformUnavailable],
+    warnings: [
+      healthUnavailable,
+      statusUnavailable,
+      submissionsUnavailable,
+      platformUnavailable,
+      ...recordsUnavailable,
+    ],
   });
 }

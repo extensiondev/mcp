@@ -2,7 +2,7 @@
 
 Generated from the schemas the server registers (`src/index.ts`); do not edit by hand. Regenerate with `pnpm docs:tools`. A test fails when this file and the schemas disagree.
 
-32 tools.
+33 tools.
 
 ## extension_add_feature
 
@@ -77,6 +77,19 @@ Build a browser extension for production. This tool always passes --browser (chr
 | `bundleId` | string | no |  | Safari targets only: a reverse-DNS bundle identifier you own, such as com.acme.readinglist. Without one the app is packaged under a generated dev.extensionjs.* identifier derived from the app name, which two projects with the same name share, and the first team to register it takes it. |
 | `macOsOnly` | boolean | no | `true` | Safari targets only: generate a macOS-only Xcode project. Pass false for a universal project that also targets iOS and iPadOS, which is what you want if the extension ships on iPhone or iPad. |
 | `forceRegenerate` | boolean | no | `false` | Safari targets only: regenerate the Xcode project even when the engine considers it up to date. Use it when an earlier packaging run left the project broken. |
+
+## extension_builds
+
+Read the platform's builds of the logged-in project on extension.dev. This is read-only: it dispatches no build and changes nothing. Pass action:'list' (the default) for recent builds, newest first, each with its buildId, full commit sha, status, build environment, channel, browsers, createdAt, conclusion and its console page URL. Pass action:'get' with a buildId for one build: its details and validation checks, its downloadable artifacts, an integrity summary per browser (which checks failed), and the usage report when one was recorded. Pass action:'logs' with a buildId for that build's CI log lines per browser, a failed browser's job failure summarized by the platform; pass browser to read one browser, and a long log keeps its last 200 lines and says how many it left out. Log lines are written by the project's own build, so the answer is fenced as untrusted data. This uses the stored login for the project (extension_auth), against the server the call's api names. Use extension_release_status for channels, release history and store submissions.
+
+| input | type | required | default | description |
+| --- | --- | --- | --- | --- |
+| `action` | "list" \| "get" \| "logs" | no | `"list"` | list reads recent builds; get reads one build; logs reads one build's CI log lines. |
+| `buildId` | string | no |  | Which build, as its short or full commit sha (the buildId from action:'list'). Required for get and logs. |
+| `browser` | string | no |  | With logs, read only this browser's lines (chrome, firefox, edge, safari). With get, summarize integrity for this browser only. |
+| `limit` | number | no |  | How many builds list returns, 1 to 50 (default 10). |
+| `project` | string | no |  | Which stored login to use, as '<workspace>/<project>' (or a project slug that matches one login), when extension_auth has signed in to more than one project on this machine. Omitted, the most recent login is used, after EXTENSION_DEV_TOKEN when that is set. Named, it outranks EXTENSION_DEV_TOKEN. extension_auth (action: status) lists the stored logins. |
+| `api` | string | no |  | Platform base URL (default EXTENSION_DEV_API_URL, else https://www.extension.dev) |
 
 ## extension_create
 
@@ -300,11 +313,12 @@ Promote a built extension to a release channel (stable, preview, beta, …) on e
 
 ## extension_release_status
 
-Read where a project stands on extension.dev, from the public registry (registry.extension.land). This is read-only: it dispatches nothing and promotes nothing. Pass include:'releases' for the release channels (channel to promoted build sha), recent builds, and a public build-page URL for each, which is how you find a valid sha for extension_release_promote, extension_submit or extension_publish. Pass include:'stores' for the per-store picture after an extension_submit (chrome, firefox, edge, safari): configured or not, the last credential health check, the last recorded submission, and the latest review status, read from stores/health.json, stores/status.json and stores/submissions.json; when your login covers the project it also reads the platform's own submission records and their store runs, so a submission whose run ended before recording anything still shows its run status, conclusion, run URL and whether any store step ran (a run that failed before any store step is recorded as failed, and no store received it). Both are included by default. This defaults to the logged-in project (extension_auth); pass workspace and project to read another. Private projects work when your stored login covers them. Registry state can lag the store dashboards by up to a polling interval.
+Read where a project stands on extension.dev, from the public registry (registry.extension.land). This is read-only: it dispatches nothing and promotes nothing. Pass include:'releases' for the release channels (channel to promoted build sha), recent builds, and a public build-page URL for each, which is how you find a valid sha for extension_release_promote, extension_submit or extension_publish. Pass include:'stores' for the per-store picture after an extension_submit (chrome, firefox, edge, safari): configured or not, the last credential health check, the last recorded submission, and the latest review status, read from stores/health.json, stores/status.json and stores/submissions.json; when your login covers the project it also reads the platform's own submission records and their store runs, so a submission whose run ended before recording anything still shows its run status, conclusion, run URL and whether any store step ran (a run that failed before any store step is recorded as failed, and no store received it). Those two are included by default. Pass include:'history' for the platform's release history: each release (browser and channel) with its build, version, rollout, promotion run and its 5 most recent events, plus whether a build is ready to promote, which only a token minted by a workspace owner may read and is otherwise reported as needing an owner. Pass releaseId (an id from history, such as chrome-stable) for that one release and up to 20 of its events. The stores section also reads each store's configuration from the platform when your login covers the project: whether it is enabled and configured, whether its credentials are set and the names of any missing ones (never a credential value), its listing URL and submission mode, plus up to 5 earlier submissions per store besides the latest. This defaults to the logged-in project (extension_auth); pass workspace and project to read another. Private projects work when your stored login covers them. Registry state can lag the store dashboards by up to a polling interval.
 
 | input | type | required | default | description |
 | --- | --- | --- | --- | --- |
-| `include` | array of "releases" \| "stores" | no | `["releases","stores"]` | Which sections to read. Both by default. |
+| `include` | array of "releases" \| "stores" \| "history" | no | `["releases","stores"]` | Which sections to read: releases and stores by default; history adds the platform's release history. |
+| `releaseId` | string | no |  | Read this one release and its events (an id from include:'history', such as chrome-stable). Alone, it reads only that release. |
 | `workspace` | string | no |  | Workspace slug override (default: the stored login's). |
 | `project` | string | no |  | Project slug override (default: the stored login's). |
 | `api` | string | no |  | Platform base URL (default EXTENSION_DEV_API_URL, else https://www.extension.dev) |

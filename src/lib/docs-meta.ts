@@ -53,5 +53,6 @@ export const TOOL_DOCS: Record<string, ToolDocsMeta> = {
   extension_publish: { tier: "platform", gate: LOGIN, samplePrompt: "Give me the shareable URL of the latest build" },
   extension_release_promote: { tier: "platform", gate: LOGIN, samplePrompt: "Promote build 3f2a1c to the beta channel" },
   extension_submit: { tier: "platform", gate: `${LOGIN}; dryRun: false needs the workspace owner's token`, samplePrompt: "Dry run a Chrome and Firefox store submission of the latest build" },
+  extension_builds: { tier: "platform", gate: LOGIN, samplePrompt: "Why did the last build fail? Show me the Firefox log" },
   extension_release_status: { tier: "platform", gate: LOGIN, samplePrompt: "Was the last Chrome submission approved?" },
 };

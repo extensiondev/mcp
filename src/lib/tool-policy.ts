@@ -145,6 +145,11 @@ export const TOOL_POLICY: Record<string, ToolPolicy> = {
     ships: "always",
   },
   extension_release_status: { group: "platform", annotations: reads(true) },
+  extension_builds: {
+    group: "platform",
+    annotations: reads(true),
+    untrusted: true,
+  },
   extension_release_promote: {
     group: "platform",
     annotations: acts({ destructiveHint: true, openWorldHint: true }),

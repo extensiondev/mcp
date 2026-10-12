@@ -213,13 +213,14 @@ describe("the server fences tools that read a page or an extension", () => {
     expect(JSON.parse(text).untrusted).toBeUndefined();
   });
 
-  it("fences exactly the tools that read runtime page or extension text", () => {
+  it("fences exactly the tools that read runtime page or extension text, or CI output a build wrote", () => {
     const fenced = Object.entries(TOOL_POLICY)
       .filter(([, policy]) => policy.untrusted)
       .map(([name]) => name)
       .sort();
     expect(fenced).toEqual([
       "extension_assert",
+      "extension_builds",
       "extension_doctor",
       "extension_dom_snapshot",
       "extension_eval",
