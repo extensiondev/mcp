@@ -37,6 +37,7 @@ export interface ProjectApiRefusal {
   message: string;
   held: boolean;
   body: unknown;
+  retryAfterSeconds?: number;
 }
 
 export type ProjectApiRead<T> = { ok: true; json: T } | ProjectApiRefusal;
@@ -63,14 +64,17 @@ async function getJson(
   url: string,
   token: string,
   command: string,
+  send?: { method: string; body: unknown },
 ): Promise<{ res: Response | null; body: unknown; error?: string }> {
   let res: Response;
 
   try {
     res = await fetch(url, {
+      ...(send ? { method: send.method, body: JSON.stringify(send.body) } : {}),
       headers: {
         authorization: `Bearer ${token}`,
         accept: "application/json",
+        ...(send ? { "content-type": "application/json" } : {}),
         ...identityHeaders(command),
       },
       signal: AbortSignal.timeout(READ_TIMEOUT_MS),
@@ -174,10 +178,20 @@ export async function openProjectApi(args: {
   };
 }
 
+function retryAfterOf(res: Response, body: unknown): number | undefined {
+  const said = Number((body as { retryAfterSeconds?: unknown } | null)?.retryAfterSeconds);
+  if (Number.isFinite(said) && said > 0) return Math.ceil(said);
+
+  const header = Number(String(res.headers?.get?.("retry-after") ?? "").trim());
+
+  return Number.isFinite(header) && header > 0 ? Math.ceil(header) : undefined;
+}
+
 export async function platformApiGet<T = unknown>(
   api: Pick<ProjectApi, "base" | "token" | "command">,
   path: string,
   query?: Record<string, string | number | undefined>,
+  send?: { method: "POST" | "PUT"; body: unknown },
 ): Promise<ProjectApiRead<T>> {
   const search = new URLSearchParams();
 
@@ -187,7 +201,7 @@ export async function platformApiGet<T = unknown>(
 
   const qs = search.toString();
   const url = `${api.base}${path}${qs ? `?${qs}` : ""}`;
-  const { res, body, error } = await getJson(url, api.token, api.command);
+  const { res, body, error } = await getJson(url, api.token, api.command, send);
 
   if (!res) {
     return { ok: false, status: 0, code: "", message: error ?? `could not reach ${url}`, held: false, body: null };
@@ -197,6 +211,7 @@ export async function platformApiGet<T = unknown>(
 
   const held = sawPlatformHold(res, body);
   const message = readPlatformMessage(body);
+  const retryAfterSeconds = retryAfterOf(res, body);
 
   return {
     ok: false,
@@ -205,6 +220,7 @@ export async function platformApiGet<T = unknown>(
     message: `${url.split("?")[0]} answered ${res.status}${message ? `: ${message}` : res.ok ? " without a JSON body" : ""}`,
     held,
     body,
+    ...(retryAfterSeconds ? { retryAfterSeconds } : {}),
   };
 }
 
@@ -214,6 +230,15 @@ export async function projectApiGet<T = unknown>(
   query?: Record<string, string | number | undefined>,
 ): Promise<ProjectApiRead<T>> {
   return platformApiGet<T>(api, `/api/projects/${encodeURIComponent(api.projectId)}/${route}`, query);
+}
+
+export async function projectApiSend<T = unknown>(
+  api: ProjectApi,
+  method: "POST" | "PUT",
+  route: string,
+  body: unknown,
+): Promise<ProjectApiRead<T>> {
+  return platformApiGet<T>(api, `/api/projects/${encodeURIComponent(api.projectId)}/${route}`, undefined, { method, body });
 }
 
 interface TokenRefusal {

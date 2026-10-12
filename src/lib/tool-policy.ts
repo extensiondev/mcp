@@ -137,7 +137,7 @@ export const TOOL_POLICY: Record<string, ToolPolicy> = {
   extension_shares: {
     group: "platform",
     annotations: acts({ destructiveHint: true, openWorldHint: true }),
-    ships: (args) => args.action === "revoke",
+    ships: (args) => args.action === "revoke" || args.action === "create",
   },
   extension_publish: {
     group: "platform",
@@ -147,7 +147,7 @@ export const TOOL_POLICY: Record<string, ToolPolicy> = {
   extension_release_status: { group: "platform", annotations: reads(true) },
   extension_builds: {
     group: "platform",
-    annotations: reads(true),
+    annotations: acts({ destructiveHint: true, openWorldHint: true }),
     untrusted: true,
   },
   extension_workspace: {

@@ -22,6 +22,7 @@ import {
   type SharedPreviewEntry,
 } from "../lib/share-record";
 import { envelope } from "../lib/envelope";
+import { createShareFromBuild } from "./shares-create";
 import { resolveToken } from "../lib/publish";
 import { PROJECT_TOKEN_INPUT, noStoredLoginHint } from "../lib/credentials";
 import {
@@ -42,17 +43,26 @@ const LOGIN_HINT =
 export const schema = {
   name: "extension_shares",
   description:
-    "List and revoke the public preview links this token has shared, which is what extension_preview_web share:true hands out. Pass action:'list' (the default) for every artifact the logged-in project owns, with its artifactId, name, version, live or dead state, createdAt, expiresAt, revokedAt, size, previewUrl, zipUrl and revokeUrl, so a link whose response you lost is findable again. Each row carries owner and sharedBy as the platform returned them. Read attribution.ownership for who may revoke a share: 'project' means the workspace holds it and any member can pull it back, 'personal' means one person holds it alone, 'unknown' means no owner was disclosed. Read attribution.credit as credit only, never access; it names the publisher, and reads 'CLI token <id>' or 'not recorded' when no person can be named. Pass action:'revoke' with an artifactId, or with any URL of the share, to kill one permanently. Pass projectPath to reconcile against the project's own append-only .extension.dev/shared-previews.json, which is read and never rewritten: a share made on another machine shows as remoteOnly, a record with no live artifact as localOnly. That record is append-only, so localOnly is counted by distinct artifactId and a build re-shared unchanged is one share, not two; server.count and server.matched are share counts, while server.scanned counts records the platform read and is never a share count. This needs the same token as sharing (extension_auth or EXTENSION_DEV_TOKEN); without one, listing still returns the local record with a login hint.",
+    "List, create and revoke the public preview links this token has shared, which is what extension_preview_web share:true hands out. Pass action:'create' with a buildId (and browser, default chrome) to share a build the platform already made, with no local build: the build's package is downloaded from the registry, unpacked in a temporary folder, and uploaded the same way share:true uploads a local build, metered the same way, and the answer carries its previewUrl, zipUrl, revokeUrl and expiresAt. Pass action:'list' (the default) for every artifact the logged-in project owns, with its artifactId, name, version, live or dead state, createdAt, expiresAt, revokedAt, size, previewUrl, zipUrl and revokeUrl, so a link whose response you lost is findable again. Each row carries owner and sharedBy as the platform returned them. Read attribution.ownership for who may revoke a share: 'project' means the workspace holds it and any member can pull it back, 'personal' means one person holds it alone, 'unknown' means no owner was disclosed. Read attribution.credit as credit only, never access; it names the publisher, and reads 'CLI token <id>' or 'not recorded' when no person can be named. Pass action:'revoke' with an artifactId, or with any URL of the share, to kill one permanently. Pass projectPath to reconcile against the project's own append-only .extension.dev/shared-previews.json, which is read and never rewritten: a share made on another machine shows as remoteOnly, a record with no live artifact as localOnly. That record is append-only, so localOnly is counted by distinct artifactId and a build re-shared unchanged is one share, not two; server.count and server.matched are share counts, while server.scanned counts records the platform read and is never a share count. This needs the same token as sharing (extension_auth or EXTENSION_DEV_TOKEN); without one, listing still returns the local record with a login hint.",
   inputSchema: {
     type: "object" as const,
     properties: {
       project: PROJECT_TOKEN_INPUT,
       action: {
         type: "string",
-        enum: ["list", "revoke"],
+        enum: ["list", "create", "revoke"],
         default: "list",
         description:
-          "list reads every share this token owns; revoke permanently kills one and cannot be undone.",
+          "list reads every share this token owns; create shares one of the platform's builds as a public link; revoke permanently kills one and cannot be undone.",
+      },
+      buildId: {
+        type: "string",
+        description:
+          "With create, the platform build to share, as its short or full commit sha (extension_builds lists them).",
+      },
+      browser: {
+        type: "string",
+        description: "With create, which browser's package of the build to share (default chrome).",
       },
       artifactId: {
         type: "string",
@@ -553,6 +563,8 @@ async function revokeShare(args: {
 
 export async function handler(args: {
   action?: string;
+  buildId?: string;
+  browser?: string;
   artifactId?: string;
   url?: string;
   projectPath?: string;
@@ -562,6 +574,10 @@ export async function handler(args: {
   api?: string;
   project?: string;
 }): Promise<string> {
+  if (args.action === "create") {
+    return createShareFromBuild({ buildId: args.buildId, browser: args.browser, project: args.project, api: args.api });
+  }
+
   if (args.action === "revoke") {
     return revokeShare({
       ...(args.artifactId ? { artifactId: args.artifactId } : {}),

@@ -195,11 +195,11 @@ function refusalResult(
   };
 }
 
-export async function fetchRegistryJson<T = unknown>(
+async function fetchRegistry(
   url: string,
-  fetchImpl: typeof fetch = fetch,
+  fetchImpl: typeof fetch,
   options?: { ref?: ProjectRef | null; api?: string; tokens?: RegistryAccessTokens },
-): Promise<RegistryFetchResult<T>> {
+): Promise<{ ok: true; res: Response } | RegistryFetchRefusal> {
   const tokens = options?.tokens ?? defaultRegistryAccessTokens;
   const ref = options?.ref ?? null;
 
@@ -214,7 +214,7 @@ export async function fetchRegistryJson<T = unknown>(
     return { ok: false, message: `Could not reach ${url}: ${err?.message || err}` };
   }
 
-  if (res.ok) return readJson<T>(url, res);
+  if (res.ok) return { ok: true, res };
 
   const refusal = await readRefusal(res);
   const held = sawPlatformHold(res, refusal.body);
@@ -258,7 +258,45 @@ export async function fetchRegistryJson<T = unknown>(
     );
   }
 
-  return readJson<T>(url, retried);
+  return { ok: true, res: retried };
+}
+
+export async function fetchRegistryJson<T = unknown>(
+  url: string,
+  fetchImpl: typeof fetch = fetch,
+  options?: { ref?: ProjectRef | null; api?: string; tokens?: RegistryAccessTokens },
+): Promise<RegistryFetchResult<T>> {
+  const read = await fetchRegistry(url, fetchImpl, options);
+
+  return read.ok ? readJson<T>(url, read.res) : read;
+}
+
+export async function fetchRegistryBytes(
+  url: string,
+  options: { ref: ProjectRef; api?: string; maxBytes: number; fetchImpl?: typeof fetch },
+): Promise<{ ok: true; bytes: Buffer } | RegistryFetchRefusal> {
+  const read = await fetchRegistry(url, options.fetchImpl ?? fetch, options);
+  if (!read.ok) return read;
+
+  const declared = Number(read.res.headers?.get?.("content-length") ?? 0);
+
+  if (declared > options.maxBytes) {
+    return { ok: false, message: `${url} is ${declared} bytes, over the ${options.maxBytes} this tool downloads.` };
+  }
+
+  let bytes: Buffer;
+
+  try {
+    bytes = Buffer.from(await read.res.arrayBuffer());
+  } catch (err: any) {
+    return { ok: false, message: `Could not read ${url}: ${err?.message || err}` };
+  }
+
+  if (bytes.length > options.maxBytes) {
+    return { ok: false, message: `${url} is ${bytes.length} bytes, over the ${options.maxBytes} this tool downloads.` };
+  }
+
+  return { ok: true, bytes };
 }
 
 export interface ChannelEntry {

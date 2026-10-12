@@ -178,12 +178,12 @@ On with `--features=local,platform`, the 11 that reach the extension.dev platfor
 | platform | `extension_workspace_create` | Create an extension.dev workspace, headless, via device approval; the approver becomes its owner |
 | platform | `extension_project_create` | Create the extension.dev project for a built extension, or several under one approval, headless, via device approval |
 | platform | `extension_preview_web` | Render a build in the web emulator, and share it as a link |
-| platform | `extension_shares` | List every link you have shared, and revoke one permanently |
+| platform | `extension_shares` | List every link you have shared, share a platform build as a link, and revoke one permanently |
 | platform | `extension_publish` | Mint a shareable link for a build extension.dev already holds (nothing is uploaded) |
 | platform | `extension_release_promote` | Promote a build to a release channel, headless |
 | platform | `extension_submit` | Submit for store review: Chrome, Firefox, Edge and Safari, through extension.dev |
 | platform | `extension_release_status` | Read release channels, release history, recent builds, and store configuration, submission and review state |
-| platform | `extension_builds` | Read the platform's builds: recent builds, one build's artifacts and integrity, and its CI logs |
+| platform | `extension_builds` | Read the platform's builds (recent builds, one build's artifacts and integrity, its CI logs), start a rebuild, change build settings with an owner's approval, and add a release channel |
 | platform | `extension_workspace` | Read a workspace with any of its project logins: plan and limits, projects and last builds, usage, and a project's settings |
 
 A dev session carries the control channel that `extension_storage`, `extension_reload`, `extension_open` and `extension_dom_snapshot` ride: it is local, same machine, same user, and on unless `extension_dev` is called with `allowControl: false`. `extension_eval` is the one gate that stays off until `allowEval: true` is passed on `extension_dev` (it implies control). A session does not change its gates on a second call: call `extension_dev` again with what you need plus `replace: true`, which stops the first session.

@@ -36,11 +36,11 @@ export interface AccessTokenCacheOptions {
 
 export class RegistryAccessTokens {
   private readonly cache = new Map<string, CacheEntry>();
-  private readonly fetchImpl: typeof fetch;
+  private readonly fetchImpl?: typeof fetch;
   private readonly nowSeconds: () => number;
 
   constructor(options?: AccessTokenCacheOptions) {
-    this.fetchImpl = options?.fetchImpl ?? fetch;
+    this.fetchImpl = options?.fetchImpl;
     this.nowSeconds =
       options?.nowSeconds ?? (() => Math.floor(Date.now() / 1000));
   }
@@ -117,7 +117,7 @@ export class RegistryAccessTokens {
     let res: Response;
 
     try {
-      res = await this.fetchImpl(`${check.base}/api/access-grant`, {
+      res = await (this.fetchImpl ?? fetch)(`${check.base}/api/access-grant`, {
         method: "POST",
         headers: {
           authorization: `Bearer ${token}`,

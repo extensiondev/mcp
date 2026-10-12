@@ -156,12 +156,9 @@ describe("extension_builds reads the platform's builds with the project's own to
     });
   }
 
-  it("is a read-only tool whose answer is fenced as untrusted CI output", () => {
-    expect(TOOL_POLICY.extension_builds).toMatchObject({
-      group: "platform",
-      untrusted: true,
-      annotations: { readOnlyHint: true, destructiveHint: false },
-    });
+  it("fences its answer as untrusted CI output, and its reads ship nothing", () => {
+    expect(TOOL_POLICY.extension_builds).toMatchObject({ group: "platform", untrusted: true });
+    expect(TOOL_POLICY.extension_builds.ships).toBeUndefined();
   });
 
   it("lists recent builds by default, from the server the call's api names", async () => {

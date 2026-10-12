@@ -101,6 +101,9 @@ export interface ApprovalGateInput {
   now?: number;
   refusedStatus?: string;
   refusalHint?: (platformCode: string) => string | undefined;
+  body?: Record<string, unknown>;
+  reason?: string;
+  stateRead?: string;
 }
 
 export type ApprovalGateResult =
@@ -154,6 +157,7 @@ async function requestApproval(params: {
         "content-type": "application/json",
       },
       body: JSON.stringify({
+        ...(input.body ?? {}),
         action: input.action,
         fingerprint,
         scope: input.scope,
@@ -241,7 +245,7 @@ async function requestApproval(params: {
     APPROVAL_REQUIRED_STATUS,
     "E_APPROVAL_REQUIRED",
     "ApprovalRequired",
-    `${input.description} This is irreversible, so a human must approve it first. Open ${
+    `${input.description} ${input.reason ?? "This is irreversible, so a human must approve it first."} Open ${
       approvalUrl || "the approval URL"
     } to review and approve, then call this tool again with approvalId ${
       approvalId || "<from the response>"
@@ -253,6 +257,7 @@ async function requestApproval(params: {
       ...(approvalId ? { approvalId } : {}),
       ...(approvalUrl ? { approvalUrl } : {}),
       ...(data.expiresAt ? { expiresAt: data.expiresAt } : {}),
+      ...(Array.isArray(data.changes) ? { changes: data.changes.filter((line) => typeof line === "string") } : {}),
     },
     approvalUrl
       ? `Approve at ${approvalUrl}, then re-run with approvalId ${approvalId}.`
@@ -400,7 +405,7 @@ async function verifyApproval(params: {
       APPROVAL_REJECTED_STATUS,
       "E_APPROVAL_REJECTED",
       "ApprovalConsumed",
-      `Approval ${approvalId} was already used once and approvals are single-use. This call executed nothing, but the call that used it may already have run the action: ${input.description} Read the current state first (extension_release_status for a promote or submission, extension_shares list for a revoke), and request a fresh approval by calling this tool with no approvalId only if the action did not happen.`,
+      `Approval ${approvalId} was already used once and approvals are single-use. This call executed nothing, but the call that used it may already have run the action: ${input.description} Read the current state first (${input.stateRead ?? "extension_release_status for a promote or submission, extension_shares list for a revoke"}), and request a fresh approval by calling this tool with no approvalId only if the action did not happen.`,
       { action: input.action, approvalId },
     );
   }

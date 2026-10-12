@@ -106,6 +106,7 @@ export async function uploadPreview(options: {
   api?: string;
   token?: string;
   fetchImpl?: FetchImpl;
+  command?: string;
 }): Promise<PreviewUploadOutcome> {
   const token = options.token ?? resolveToken({ api: options.api });
 
@@ -208,7 +209,7 @@ export async function uploadPreview(options: {
         authorization: `Bearer ${token}`,
         "content-type": "application/json",
         "x-extensiondev-origin": "mcp",
-        ...identityHeaders("extension_preview_web"),
+        ...identityHeaders(options.command ?? "extension_preview_web"),
       },
       body: JSON.stringify({
         kind: "dist",
