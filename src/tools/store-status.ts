@@ -35,6 +35,7 @@ interface HealthRow {
 }
 
 interface SubmissionView {
+  id?: string;
   version?: string;
   status?: string;
   storeUrl?: string;
@@ -284,7 +285,7 @@ export async function readStores(args: {
   for (const [store, latest] of Object.entries(platform.ok ? platform.byStore : {})) {
     if (!isNewerOrSame(latest.submittedAt, submissionsByStore[store]?.submittedAt)) continue;
 
-    const { run, store: _store, id: _id, ...fields } = latest;
+    const { run, store: _store, ...fields } = latest;
     submissionsByStore[store] = fields;
     if (Object.keys(run).length > 0) runsByStore[store] = run;
   }

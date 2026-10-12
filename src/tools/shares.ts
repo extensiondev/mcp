@@ -444,6 +444,7 @@ async function revokeShare(args: {
     token: token || "",
     api: args.api,
     refusedStatus: "revoke-failed",
+    irreversible: true,
   };
 
   if (token) {

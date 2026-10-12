@@ -27,7 +27,7 @@ const EVENTS_FOR_ONE_RELEASE = 20;
 
 type Row = Record<string, unknown>;
 
-interface Scope {
+export interface Scope {
   workspace?: string;
   project?: string;
   api?: string;
@@ -57,7 +57,7 @@ function noProject(scope: Scope, name: string): string {
   });
 }
 
-async function openFor(scope: Scope, name: string): Promise<{ ok: true; api: ProjectApi } | { ok: false; out: string }> {
+export async function openFor(scope: Scope, name: string): Promise<{ ok: true; api: ProjectApi } | { ok: false; out: string }> {
   const ref = resolveProjectRef(scope);
   if (!ref) return { ok: false, out: noProject(scope, `${name}InputError`) };
 

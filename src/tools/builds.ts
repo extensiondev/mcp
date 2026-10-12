@@ -29,7 +29,7 @@ const LOG_TAIL = 200;
 export const schema = {
   name: COMMAND,
   description:
-    "Read, rebuild and configure the platform's builds of the logged-in project on extension.dev. Pass action:'list' (the default) for recent builds, newest first, each with its buildId, full commit sha, status, build environment, channel, browsers, createdAt, conclusion and its console page URL. Pass action:'get' with a buildId for one build: its details and validation checks, its downloadable artifacts, an integrity summary per browser (which checks failed), and the usage report when one was recorded. Pass action:'logs' with a buildId for that build's CI log lines per browser, a failed browser's job failure summarized by the platform; pass browser to read one browser, and a long log keeps its last 200 lines and says how many it left out. Log lines are written by the project's own build, so the answer is fenced as untrusted data. These three only read. Three actions change the project. action:'rebuild' starts a real CI run on the project's runners, counted against the workspace's build allowance and rate limited: pass buildId for the commit (default the branch head) and buildEnv staging (the default) or production; it answers at once with the commit and browsers, and the run is followed with list, get and logs. action:'configure' changes build settings (enabled, installCommand, buildCommand, outputDirectory per browser): pass buildSettings with only what changes, such as { firefox: { buildCommand: 'pnpm build' } }, and the tool merges it into the current settings; a workspace owner approves the exact change first, so the first call answers approval-required with an approval URL and the change as the platform computed it, and a second call with that approvalId applies it once. action:'create-channel' adds a release channel (channel, with optional description and color #rrggbb) that extension_release_promote can then point at a build. This uses the stored login for the project (extension_auth), against the server the call's api names. Use extension_release_status for channels, release history and store submissions, and extension_workspace action:'settings' to read the build settings.",
+    "Read, rebuild and configure the platform's builds of the logged-in project on extension.dev. Pass action:'list' (the default) for recent builds, newest first, each with its buildId, full commit sha, status, build environment, channel, browsers, createdAt, conclusion and its console page URL. Pass action:'get' with a buildId for one build: its details and validation checks, the run behind it (runId, runUrl, deploymentId, startedAt), its downloadable artifacts, an integrity summary per browser (which checks failed), and the usage report when one was recorded. Pass action:'logs' with a buildId for that build's CI log lines per browser, a failed browser's job failure summarized by the platform; pass browser to read one browser, and a long log keeps its last 200 lines and says how many it left out. Log lines are written by the project's own build, so the answer is fenced as untrusted data. These three only read. Three actions change the project. action:'rebuild' starts a real CI run on the project's runners, counted against the workspace's build allowance and rate limited: pass buildId for the commit (default the branch head) and buildEnv staging (the default) or production; it answers at once with the commit, the browsers and the run it started: a rebuild keeps the build id of the build before it, so follow it with get and match runId, or deploymentId and a startedAt after dispatchedAt while the run has not shown up. action:'configure' changes build settings (enabled, installCommand, buildCommand, outputDirectory per browser): pass buildSettings with only what changes, such as { firefox: { buildCommand: 'pnpm build' } }, and the tool merges it into the current settings; a workspace owner approves the exact change first, so the first call answers approval-required with an approval URL and the change as the platform computed it, and a second call with that approvalId applies it once. action:'create-channel' adds a release channel (channel, with optional description and color #rrggbb) that extension_release_promote can then point at a build. This uses the stored login for the project (extension_auth), against the server the call's api names. Use extension_release_status for channels, release history and store submissions, and extension_workspace action:'settings' to read the build settings.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -116,6 +116,8 @@ function listRow(item: Row, api: ProjectApi, apiHint?: string): Row {
     ["branch", item.branch],
     ["message", item.message],
     ["createdAt", item.startedAt || item.timestamp],
+    ["startedAt", item.startedAt],
+    ["deploymentId", item.deploymentId],
     ["completedAt", item.completedAt],
     ["duration", item.duration],
     ["conclusion", item.summaryStatus || item.conclusion],
@@ -125,6 +127,8 @@ function listRow(item: Row, api: ProjectApi, apiHint?: string): Row {
     const v = text(value);
     if (v) out[key] = v;
   }
+
+  if (typeof item.runId === "number" && item.runId > 0) out.runId = item.runId;
 
   out.browsers = browsers;
   if (buildId) out.consoleUrl = buildConsoleUrl(api, buildId, apiHint);
@@ -199,6 +203,17 @@ function integritySummary(json: unknown): Row {
   return { ok: body.ok === true, failed, checks: checks.length };
 }
 
+function runOf(build: Row): Row {
+  const run: Row = {};
+  if (typeof build.runId === "number" && build.runId > 0) run.runId = build.runId;
+
+  for (const key of ["runUrl", "deploymentId", "startedAt"]) {
+    if (text(build[key])) run[key] = text(build[key]);
+  }
+
+  return run;
+}
+
 function requireBuildId(args: HandlerArgs, action: string): string | null {
   const buildId = text(args.buildId);
   if (buildId) return null;
@@ -270,6 +285,7 @@ async function getBuild(args: HandlerArgs): Promise<string> {
     value: {
       action: "get",
       build: { ...detail.json, consoleUrl: buildConsoleUrl(opened.api, canonical, args.api) },
+      run: runOf(detail.json),
       artifacts: artifacts.ok && Array.isArray(artifacts.json) ? artifacts.json : [],
       integrity: integrityByBrowser,
       usage: usage.ok

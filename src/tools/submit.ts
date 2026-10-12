@@ -34,6 +34,7 @@ import {
   registryFileUrl,
   channelsShapeProblem,
 } from "../lib/registry";
+import { cancelSubmission, preflight as readPreflight, raiseRollout } from "./store-acts";
 
 export function storeMdWarnings(browsers: string[], cwd: string): string[] {
   const wantsFirefox = browsers.includes("firefox");
@@ -76,9 +77,13 @@ export function storeMdWarnings(browsers: string[], cwd: string): string[] {
 }
 
 export interface SubmitToolArgs {
+  action?: string;
+  store?: string;
+  submissionId?: string;
+  deployPercentage?: unknown;
   project?: string;
-  browsers: string[];
-  buildSha: string;
+  browsers?: string[];
+  buildSha?: string;
   channel?: string;
   version?: string;
   dryRun?: boolean;
@@ -90,10 +95,17 @@ export interface SubmitToolArgs {
 export const schema = {
   name: "extension_submit",
   description:
-    "Submit a built extension for store REVIEW through extension.dev, which holds your store credentials and dispatches from your project's mirror CI: the Chrome Web Store, Firefox AMO, Edge Add-ons and the App Store (Safari). This is store review only. It does not push a build to the extension.dev platform, and it does not make a shareable link: that is extension_publish, which is what \"deploy\" or \"ship\" an extension almost always means. Reach for this only when the ask is explicitly a store submission. It defaults to a dry run that dispatches nothing: the platform verifies the token and project, finds the store workflow, reads the build from its index when that index is readable, reads store health itself and adds a Safari plan verdict; this tool re-reads the per-store health rows beside it. The dry run does not run the owner gate, the approval, the build quota, the dispatch pause or the submission-mode check, which the real run does first. Pass dryRun:false to actually submit, which is irreversible: only the workspace owner who issued the token may, and it dispatches the store workflow; a Chrome or Edge store with no saved submission mode is uploaded as a draft (absent_mode: safe) and does not enter review. A real submission answers 'submitted' only when the platform recorded a submission for every store asked; 'submitted-partially' names the stores it did not record, which are the only ones to submit again; 'submit-unconfirmed' means no usable answer came back, so read extension_release_status before submitting again, because a second call submits a second time. The project comes from your token (extension_auth or EXTENSION_DEV_TOKEN; tokens live at most 7 days, so CI must re-mint from the console's Access tokens page); with several logins stored, `project` picks which one. Store credentials are never arguments, and no local file is uploaded. Call extension_release_status for valid shas, and, after a real submission, for the recorded outcome and review state.",
+    "Submit a built extension for store REVIEW through extension.dev, which holds your store credentials and dispatches from your project's mirror CI: the Chrome Web Store, Firefox AMO, Edge Add-ons and the App Store (Safari). This is store review only. It does not push a build to the extension.dev platform, and it does not make a shareable link: that is extension_publish, which is what \"deploy\" or \"ship\" an extension almost always means. Reach for this only when the ask is explicitly a store submission. It defaults to a dry run that dispatches nothing: the platform verifies the token and project, finds the store workflow, reads the build from its index when that index is readable, reads store health itself and adds a Safari plan verdict; this tool re-reads the per-store health rows beside it. The dry run does not run the owner gate, the approval, the build quota, the dispatch pause or the submission-mode check, which the real run does first. Pass dryRun:false to actually submit, which is irreversible: only the workspace owner who issued the token may, and it dispatches the store workflow; a Chrome or Edge store with no saved submission mode is uploaded as a draft (absent_mode: safe) and does not enter review. A real submission answers 'submitted' only when the platform recorded a submission for every store asked; 'submitted-partially' names the stores it did not record, which are the only ones to submit again; 'submit-unconfirmed' means no usable answer came back, so read extension_release_status before submitting again, because a second call submits a second time. The project comes from your token (extension_auth or EXTENSION_DEV_TOKEN; tokens live at most 7 days, so CI must re-mint from the console's Access tokens page); with several logins stored, `project` picks which one. action:'preflight' reads each store's readiness for browsers (the failing checks with what to fix, the warnings, never a secret value) and writes nothing. action:'cancel' withdraws a submission from review (store, default chrome, and submissionId from extension_release_status), and action:'rollout' raises the Chrome staged rollout to deployPercentage, which Chrome does not let be lowered again; both need a workspace owner's approval of the exact act, so the first call answers approval-required with the approval URL, or refuses with the reason before anyone is asked. Store credentials are never arguments, and no local file is uploaded. Call extension_release_status for valid shas, and, after a real submission, for the recorded outcome and review state.",
   inputSchema: {
     type: "object" as const,
     properties: {
+      action: {
+        type: "string",
+        enum: ["submit", "preflight", "cancel", "rollout"],
+        default: "submit",
+        description:
+          "submit (the default) sends a build for store review; preflight reads each store's readiness and writes nothing; cancel withdraws a submission from review; rollout raises the Chrome staged rollout.",
+      },
       project: PROJECT_TOKEN_INPUT,
       browsers: {
         type: "array",
@@ -133,8 +145,21 @@ export const schema = {
           "The approval handle returned by a prior approval-required response for a real submission. A real submission (dryRun:false) is irreversible and needs a human approval when the platform's approval gate is on: call once without this to get an approval id and URL, have a human approve at extension.dev, then call again with the same id. A dry run never needs it.",
       },
       api: API_BASE,
+      store: {
+        type: "string",
+        enum: ["chrome", "firefox", "edge", "safari"],
+        description: "With cancel or rollout, the store (default chrome, the one store that supports both).",
+      },
+      submissionId: {
+        type: "string",
+        description: "With cancel, the platform's id of the submission to withdraw, from extension_release_status include:['stores'].",
+      },
+      deployPercentage: {
+        type: "number",
+        description: "With rollout, the share of users to raise the staged rollout to: a whole number from 1 to 100, above the current one.",
+      },
     },
-    required: ["browsers", "buildSha"],
+    required: [],
   },
 };
 
@@ -153,6 +178,14 @@ function fail(
 }
 
 export async function handler(args: SubmitToolArgs): Promise<string> {
+  if (args.action === "preflight") return readPreflight(args);
+  if (args.action === "cancel") return cancelSubmission(args);
+  if (args.action === "rollout") return raiseRollout(args);
+
+  if (args.action !== undefined && args.action !== "submit") {
+    return fail("SubmitInputError", `action must be submit, preflight, cancel or rollout; got "${args.action}". Nothing was sent.`, "bad-request", "E_BAD_REQUEST");
+  }
+
   const credential = resolveCredential({ project: args.project, api: args.api });
   const token = credential.token;
 
@@ -225,6 +258,7 @@ export async function handler(args: SubmitToolArgs): Promise<string> {
     token,
     api: args.api,
     refusedStatus: "submit-failed",
+    irreversible: true,
   };
 
   if (!dryRun) {

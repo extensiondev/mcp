@@ -21,10 +21,9 @@ function jsonResponse(body: unknown, ok = true, status = 200): Response {
 }
 
 describe("extension_submit: registration + schema", () => {
-  it("requires browsers + buildSha and exposes no credential/zip/path property", () => {
+  it("leaves browsers + buildSha to the submit action and exposes no credential/zip/path property", () => {
     const req = (schema.inputSchema as { required: string[] }).required;
-    expect(req).toContain("browsers");
-    expect(req).toContain("buildSha");
+    expect(req).toEqual([]);
     const props = Object.keys(
       (schema.inputSchema as { properties: Record<string, unknown> }).properties,
     );

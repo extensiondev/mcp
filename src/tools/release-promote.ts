@@ -34,14 +34,22 @@ import {
   userlandProjectUrl,
   channelsShapeProblem,
 } from "../lib/registry";
+import { cut, rollback, type ReleaseActArgs } from "./release-acts";
 
 export const schema = {
   name: "extension_release_promote",
   description:
-    "Promote a built extension to a release channel (stable, preview, beta, …) on extension.dev, headless. This WRITES: it is the only verb that changes what a channel points at. It is auth-gated by your stored login (extension_auth) or a release token in EXTENSION_DEV_TOKEN, minted and revoked under project settings, Access tokens. Tokens live at most 7 days, so CI must re-mint before expiry. The project comes from the token; with several logins stored, `project` picks which one. Call extension_release_status to find a valid buildId. The status is 'promoted' only when the platform says every asked browser's release was dispatched and the channel pointer moved; 'promoted-partially' lists in its warnings what did not happen (a browser whose dispatch failed, a channel pointer that was not moved) and must not be repeated whole; 'promote-unconfirmed' means the platform's answer did not carry the result, so read extension_release_status before promoting again. Cutting a version-bump PR is not available headlessly, because it writes to your source repo and needs an interactive login.",
+    "Promote a built extension to a release channel (stable, preview, beta, …) on extension.dev, headless. This WRITES: action:'promote' (the default) points channel at buildId, action:'cut' opens a release pull request in the project's source repository that bumps the manifest version (level patch, minor or major, or an exact version; optionally armed to release to channel when merged, with releaseNotes in its body), and action:'rollback' returns channel to the build it served before. cut and rollback need a workspace owner's approval of the exact act: the first call runs the platform's checks and either refuses with the reason and the next step, asking nobody, or answers approval-required with the approval URL and the platform's own description of the act; once approved, the same call with approvalId runs it once. It is auth-gated by your stored login (extension_auth) or a release token in EXTENSION_DEV_TOKEN, minted and revoked under project settings, Access tokens. Tokens live at most 7 days, so CI must re-mint before expiry. The project comes from the token; with several logins stored, `project` picks which one. Call extension_release_status to find a valid buildId. The status is 'promoted' only when the platform says every asked browser's release was dispatched and the channel pointer moved; 'promoted-partially' lists in its warnings what did not happen (a browser whose dispatch failed, a channel pointer that was not moved) and must not be repeated whole; 'promote-unconfirmed' means the platform's answer did not carry the result, so read extension_release_status before promoting again.",
   inputSchema: {
     type: "object" as const,
     properties: {
+      action: {
+        type: "string",
+        enum: ["promote", "cut", "rollback"],
+        default: "promote",
+        description:
+          "promote (the default) points channel at buildId; cut opens a release pull request that bumps the manifest version; rollback returns channel to the build it served before.",
+      },
       project: PROJECT_TOKEN_INPUT,
       buildId: {
         type: "string",
@@ -49,7 +57,13 @@ export const schema = {
       },
       channel: {
         type: "string",
-        description: "Target release channel, e.g. stable, preview, beta",
+        description:
+          "Target release channel, e.g. stable, preview, beta. With cut, the channel the pull request releases to when merged (optional); with rollback, the channel to roll back.",
+      },
+      level: {
+        type: "string",
+        enum: ["patch", "minor", "major"],
+        description: "With cut, how far to bump the manifest version (default patch). A version, when passed, decides the bump instead.",
       },
       sourceChannel: {
         type: "string",
@@ -63,11 +77,11 @@ export const schema = {
       },
       version: {
         type: "string",
-        description: "Version label for the release (optional)",
+        description: "Version label for the release (optional). With cut, the exact manifest version to bump to, above the current one.",
       },
       releaseNotes: {
         type: "string",
-        description: "Release notes markdown (optional)",
+        description: "Release notes markdown (optional). With cut, the notes written into the pull request body.",
       },
       approvalId: {
         type: "string",
@@ -76,7 +90,7 @@ export const schema = {
       },
       api: API_BASE,
     },
-    required: ["buildId", "channel"],
+    required: [],
   },
 };
 
@@ -102,9 +116,9 @@ function promoteRefusalHint(platformCode: string): string | undefined {
   return "Each channel serves builds made for one environment: stable takes production builds and the other channels take staging builds. No tool here starts a production build, so rebuild this commit with environment production in the console (Builds, Rebuild), wait for it to pass, then promote it again. To ship this build as it is, promote it to a preview channel instead.";
 }
 
-export async function handler(args: {
-  buildId: string;
-  channel: string;
+export async function handler(args: ReleaseActArgs & {
+  buildId?: string;
+  channel?: string;
   sourceChannel?: string;
   browsers?: string[];
   version?: string;
@@ -113,6 +127,13 @@ export async function handler(args: {
   api?: string;
   project?: string;
 }): Promise<string> {
+  if (args.action === "cut") return cut(args);
+  if (args.action === "rollback") return rollback(args);
+
+  if (args.action !== undefined && args.action !== "promote") {
+    return fail("ReleaseInputError", `action must be promote, cut or rollback; got "${args.action}". Nothing was sent.`, "bad-request", "E_BAD_REQUEST");
+  }
+
   const credential = resolveCredential({ project: args.project, api: args.api });
   const token = credential.token;
 
@@ -175,6 +196,7 @@ export async function handler(args: {
     api: args.api,
     refusedStatus: "promote-failed",
     refusalHint: promoteRefusalHint,
+    irreversible: true,
   };
   const gate = await evaluateApproval({
     ...gateInput,

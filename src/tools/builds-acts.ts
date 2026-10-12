@@ -88,7 +88,7 @@ function refusalHint(code: string, retryAfterSeconds?: number): string | undefin
     return 'This commit is live on a channel built for another environment, and this rebuild would replace what that channel serves. Pass the environment the channel needs as buildEnv (production for stable, staging for the other channels).';
   }
 
-  if (code === "REBUILD_FORCE_NEEDS_A_PERSON") return "Replacing artifacts a live channel serves is a person's decision; force it from the console's Builds page if it is meant.";
+  if (code === "REBUILD_FORCE_NEEDS_A_PERSON") return "Replacing artifacts a live channel serves is a person's decision: ask a person on the project to replace them from the console, where releasing this commit offers Replace and rebuild.";
   if (code === "TESTING_WORKSPACE_READ_ONLY") return "This is a testing workspace, which reads but does not build or change anything.";
 
   return undefined;
@@ -144,6 +144,41 @@ async function openFor(args: ActArgs, action: string, value: Row = {}): Promise<
   return { api: opened.api };
 }
 
+/* @invariant A REBUILD OF A COMMIT THAT ALREADY BUILT KEEPS ITS BUILD ID, SO
+ * THE RUN IS WHAT TELLS THIS REBUILD FROM THE BUILD BEFORE IT. The platform
+ * names the run when exactly one carries this dispatch's deployment id, and
+ * otherwise hands back the deployment id and the dispatch time to match on.
+ */
+function runHandle(json: Row): { value: Row; match?: Row; sentence: string } {
+  const deploymentId = text(json.deploymentId);
+  const dispatchedAt = text(json.dispatchedAt);
+  const runId = typeof json.runId === "number" && json.runId > 0 ? json.runId : undefined;
+  const runUrl = text(json.runUrl);
+  const value: Row = {};
+
+  if (deploymentId) value.deploymentId = deploymentId;
+  if (dispatchedAt) value.dispatchedAt = dispatchedAt;
+  if (text(json.runCorrelation)) value.runCorrelation = text(json.runCorrelation);
+  if (runId) value.runId = runId;
+  if (runUrl) value.runUrl = runUrl;
+
+  const reused = "A rebuild keeps the same build id as the build before it, so";
+
+  if (runId) {
+    return { value, match: { runId }, sentence: `${reused} this rebuild is the one whose run reads runId ${runId}${runUrl ? ` (${runUrl})` : ""}; a build showing another runId is the earlier run.` };
+  }
+
+  if (deploymentId) {
+    return {
+      value,
+      match: { deploymentId, ...(dispatchedAt ? { startedAfter: dispatchedAt } : {}) },
+      sentence: `${reused} this rebuild is the one whose deploymentId reads ${deploymentId}${dispatchedAt ? `, or whose startedAt is after ${dispatchedAt}` : ""}; its run had not shown up when the platform answered.`,
+    };
+  }
+
+  return { value, sentence: `${reused} a build showing a startedAt from before this call is the earlier run.` };
+}
+
 /* @invariant A REBUILD IS A REAL CI RUN, ASKED FOR AS THE AGENT AND NEVER FORCED.
  * The dispatch spends the workspace's build allowance on real runners, so the
  * request names its origin as mcp for the meter, and never sends force: a
@@ -174,6 +209,7 @@ export async function rebuild(args: ActArgs): Promise<string> {
   const stripped = Array.isArray(sent.json.strippedBrowsers) ? sent.json.strippedBrowsers.map(text).filter(Boolean) : [];
   const project = `${api.ref.workspace}/${api.ref.project}`;
   const scope = args.project ? { project: args.project } : {};
+  const run = runHandle(sent.json);
 
   return envelope({
     ok: true,
@@ -188,14 +224,16 @@ export async function rebuild(args: ActArgs): Promise<string> {
       browsers,
       ...(stripped.length ? { strippedBrowsers: stripped } : {}),
       origin: text(sent.json.origin) || "mcp",
+      ...run.value,
       follow: {
         list: { action: "list", ...scope },
         get: { action: "get", buildId: commit, ...scope },
         logs: { action: "logs", buildId: commit, ...scope },
+        ...(run.match ? { match: run.match } : {}),
       },
       buildsPageUrl: consoleProjectUrl(api.ref, ConsoleProjectPage.builds, args.api),
     },
-    hint: `This started a real CI run for ${project} at ${commit || "the branch head"} (${buildEnv || "staging"}) on ${browsers.join(", ") || "the enabled browsers"}, and it counts against the workspace's build allowance. It takes minutes: follow it with extension_builds action:"list", then action:"get" or action:"logs" with buildId ${commit || "<the new build>"} once it shows up. Do not rebuild again to check on it.`,
+    hint: `This started a real CI run for ${project} at ${commit || "the branch head"} (${buildEnv || "staging"}) on ${browsers.join(", ") || "the enabled browsers"}, and it counts against the workspace's build allowance. It takes minutes: follow it with extension_builds action:"get" or action:"logs" with buildId ${commit || "<the new build>"}. ${run.sentence} Do not rebuild again to check on it.`,
     warnings: [stripped.length ? `The platform left out ${stripped.join(", ")}, which this plan does not build.` : null],
   });
 }

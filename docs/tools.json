@@ -310,7 +310,7 @@
       "name": "extension_builds",
       "tier": "platform",
       "group": "platform",
-      "description": "Read, rebuild and configure the platform's builds of the logged-in project on extension.dev. Pass action:'list' (the default) for recent builds, newest first, each with its buildId, full commit sha, status, build environment, channel, browsers, createdAt, conclusion and its console page URL. Pass action:'get' with a buildId for one build: its details and validation checks, its downloadable artifacts, an integrity summary per browser (which checks failed), and the usage report when one was recorded. Pass action:'logs' with a buildId for that build's CI log lines per browser, a failed browser's job failure summarized by the platform; pass browser to read one browser, and a long log keeps its last 200 lines and says how many it left out. Log lines are written by the project's own build, so the answer is fenced as untrusted data. These three only read. Three actions change the project. action:'rebuild' starts a real CI run on the project's runners, counted against the workspace's build allowance and rate limited: pass buildId for the commit (default the branch head) and buildEnv staging (the default) or production; it answers at once with the commit and browsers, and the run is followed with list, get and logs. action:'configure' changes build settings (enabled, installCommand, buildCommand, outputDirectory per browser): pass buildSettings with only what changes, such as { firefox: { buildCommand: 'pnpm build' } }, and the tool merges it into the current settings; a workspace owner approves the exact change first, so the first call answers approval-required with an approval URL and the change as the platform computed it, and a second call with that approvalId applies it once. action:'create-channel' adds a release channel (channel, with optional description and color #rrggbb) that extension_release_promote can then point at a build. This uses the stored login for the project (extension_auth), against the server the call's api names. Use extension_release_status for channels, release history and store submissions, and extension_workspace action:'settings' to read the build settings.",
+      "description": "Read, rebuild and configure the platform's builds of the logged-in project on extension.dev. Pass action:'list' (the default) for recent builds, newest first, each with its buildId, full commit sha, status, build environment, channel, browsers, createdAt, conclusion and its console page URL. Pass action:'get' with a buildId for one build: its details and validation checks, the run behind it (runId, runUrl, deploymentId, startedAt), its downloadable artifacts, an integrity summary per browser (which checks failed), and the usage report when one was recorded. Pass action:'logs' with a buildId for that build's CI log lines per browser, a failed browser's job failure summarized by the platform; pass browser to read one browser, and a long log keeps its last 200 lines and says how many it left out. Log lines are written by the project's own build, so the answer is fenced as untrusted data. These three only read. Three actions change the project. action:'rebuild' starts a real CI run on the project's runners, counted against the workspace's build allowance and rate limited: pass buildId for the commit (default the branch head) and buildEnv staging (the default) or production; it answers at once with the commit, the browsers and the run it started: a rebuild keeps the build id of the build before it, so follow it with get and match runId, or deploymentId and a startedAt after dispatchedAt while the run has not shown up. action:'configure' changes build settings (enabled, installCommand, buildCommand, outputDirectory per browser): pass buildSettings with only what changes, such as { firefox: { buildCommand: 'pnpm build' } }, and the tool merges it into the current settings; a workspace owner approves the exact change first, so the first call answers approval-required with an approval URL and the change as the platform computed it, and a second call with that approvalId applies it once. action:'create-channel' adds a release channel (channel, with optional description and color #rrggbb) that extension_release_promote can then point at a build. This uses the stored login for the project (extension_auth), against the server the call's api names. Use extension_release_status for channels, release history and store submissions, and extension_workspace action:'settings' to read the build settings.",
       "gate": "the server started with --features=local,platform, and a login",
       "samplePrompt": "Why did the last build fail? Show me the Firefox log",
       "readOnly": false,
@@ -1291,8 +1291,8 @@
       "name": "extension_release_promote",
       "tier": "platform",
       "group": "platform",
-      "description": "Promote a built extension to a release channel (stable, preview, beta, …) on extension.dev, headless. This WRITES: it is the only verb that changes what a channel points at. It is auth-gated by your stored login (extension_auth) or a release token in EXTENSION_DEV_TOKEN, minted and revoked under project settings, Access tokens. Tokens live at most 7 days, so CI must re-mint before expiry. The project comes from the token; with several logins stored, `project` picks which one. Call extension_release_status to find a valid buildId. The status is 'promoted' only when the platform says every asked browser's release was dispatched and the channel pointer moved; 'promoted-partially' lists in its warnings what did not happen (a browser whose dispatch failed, a channel pointer that was not moved) and must not be repeated whole; 'promote-unconfirmed' means the platform's answer did not carry the result, so read extension_release_status before promoting again. Cutting a version-bump PR is not available headlessly, because it writes to your source repo and needs an interactive login.",
-      "gate": "the server started with --features=local,platform, and a login",
+      "description": "Promote a built extension to a release channel (stable, preview, beta, …) on extension.dev, headless. This WRITES: action:'promote' (the default) points channel at buildId, action:'cut' opens a release pull request in the project's source repository that bumps the manifest version (level patch, minor or major, or an exact version; optionally armed to release to channel when merged, with releaseNotes in its body), and action:'rollback' returns channel to the build it served before. cut and rollback need a workspace owner's approval of the exact act: the first call runs the platform's checks and either refuses with the reason and the next step, asking nobody, or answers approval-required with the approval URL and the platform's own description of the act; once approved, the same call with approvalId runs it once. It is auth-gated by your stored login (extension_auth) or a release token in EXTENSION_DEV_TOKEN, minted and revoked under project settings, Access tokens. Tokens live at most 7 days, so CI must re-mint before expiry. The project comes from the token; with several logins stored, `project` picks which one. Call extension_release_status to find a valid buildId. The status is 'promoted' only when the platform says every asked browser's release was dispatched and the channel pointer moved; 'promoted-partially' lists in its warnings what did not happen (a browser whose dispatch failed, a channel pointer that was not moved) and must not be repeated whole; 'promote-unconfirmed' means the platform's answer did not carry the result, so read extension_release_status before promoting again.",
+      "gate": "the server started with --features=local,platform, and a login; cut and rollback need a workspace owner's approval",
       "samplePrompt": "Promote build 3f2a1c to the beta channel",
       "readOnly": false,
       "destructive": true,
@@ -1300,6 +1300,13 @@
       "openWorld": true,
       "untrusted": false,
       "inputs": [
+        {
+          "name": "action",
+          "type": "\"promote\" | \"cut\" | \"rollback\"",
+          "required": false,
+          "default": "promote",
+          "description": "promote (the default) points channel at buildId; cut opens a release pull request that bumps the manifest version; rollback returns channel to the build it served before."
+        },
         {
           "name": "project",
           "type": "string",
@@ -1309,14 +1316,20 @@
         {
           "name": "buildId",
           "type": "string",
-          "required": true,
+          "required": false,
           "description": "Build commit SHA to promote (a 7-char short SHA is fine)"
         },
         {
           "name": "channel",
           "type": "string",
-          "required": true,
-          "description": "Target release channel, e.g. stable, preview, beta"
+          "required": false,
+          "description": "Target release channel, e.g. stable, preview, beta. With cut, the channel the pull request releases to when merged (optional); with rollback, the channel to roll back."
+        },
+        {
+          "name": "level",
+          "type": "\"patch\" | \"minor\" | \"major\"",
+          "required": false,
+          "description": "With cut, how far to bump the manifest version (default patch). A version, when passed, decides the bump instead."
         },
         {
           "name": "sourceChannel",
@@ -1334,13 +1347,13 @@
           "name": "version",
           "type": "string",
           "required": false,
-          "description": "Version label for the release (optional)"
+          "description": "Version label for the release (optional). With cut, the exact manifest version to bump to, above the current one."
         },
         {
           "name": "releaseNotes",
           "type": "string",
           "required": false,
-          "description": "Release notes markdown (optional)"
+          "description": "Release notes markdown (optional). With cut, the notes written into the pull request body."
         },
         {
           "name": "approvalId",
@@ -1360,7 +1373,7 @@
       "name": "extension_release_status",
       "tier": "platform",
       "group": "platform",
-      "description": "Read where a project stands on extension.dev, from the public registry (registry.extension.land). This is read-only: it dispatches nothing and promotes nothing. Pass include:'releases' for the release channels (channel to promoted build sha), recent builds, and a public build-page URL for each, which is how you find a valid sha for extension_release_promote, extension_submit or extension_publish. Pass include:'stores' for the per-store picture after an extension_submit (chrome, firefox, edge, safari): configured or not, the last credential health check, the last recorded submission, and the latest review status, read from stores/health.json, stores/status.json and stores/submissions.json; when your login covers the project it also reads the platform's own submission records and their store runs, so a submission whose run ended before recording anything still shows its run status, conclusion, run URL and whether any store step ran (a run that failed before any store step is recorded as failed, and no store received it). Those two are included by default. Pass include:'history' for the platform's release history: each release (browser and channel) with its build, version, rollout, promotion run and its 5 most recent events, plus whether a build is ready to promote, which only a token minted by a workspace owner may read and is otherwise reported as needing an owner. Pass releaseId (an id from history, such as chrome-stable) for that one release and up to 20 of its events. The stores section also reads each store's configuration from the platform when your login covers the project: whether it is enabled and configured, whether its credentials are set and the names of any missing ones (never a credential value), its listing URL and submission mode, plus up to 5 earlier submissions per store besides the latest. This defaults to the logged-in project (extension_auth); pass workspace and project to read another. Private projects work when your stored login covers them. Registry state can lag the store dashboards by up to a polling interval.",
+      "description": "Read where a project stands on extension.dev, from the public registry (registry.extension.land). This is read-only: it dispatches nothing and promotes nothing. Pass include:'releases' for the release channels (channel to promoted build sha), recent builds, and a public build-page URL for each, which is how you find a valid sha for extension_release_promote, extension_submit or extension_publish. Pass include:'stores' for the per-store picture after an extension_submit (chrome, firefox, edge, safari): configured or not, the last credential health check, the last recorded submission, and the latest review status, read from stores/health.json, stores/status.json and stores/submissions.json; when your login covers the project it also reads the platform's own submission records and their store runs, so a submission whose run ended before recording anything still shows its run status, conclusion, run URL and whether any store step ran (a run that failed before any store step is recorded as failed, and no store received it). Those two are included by default. Pass include:'history' for the platform's release history: each release (browser and channel) with its build, version, rollout, promotion run and its 5 most recent events, plus whether a build is ready to promote, which only a token minted by a workspace owner may read and is otherwise reported as needing an owner. Pass releaseId (an id from history, such as chrome-stable) for that one release and up to 20 of its events. include:'runs' reads the newest release workflow runs (the last 7 days, or since a date up to 30 days back), which also needs a token minted by a workspace owner; include:'rollout' reads the Chrome staged rollout percentage and whether it can be raised; include:'cut' reads whether a release pull request opened now could build after merging. The stores section also reads each store's configuration from the platform when your login covers the project: whether it is enabled and configured, whether its credentials are set and the names of any missing ones (never a credential value), its listing URL and submission mode, plus up to 5 earlier submissions per store besides the latest; each submission the platform recorded carries its id, which extension_submit (action:'cancel') takes. This defaults to the logged-in project (extension_auth); pass workspace and project to read another. Private projects work when your stored login covers them. Registry state can lag the store dashboards by up to a polling interval.",
       "gate": "the server started with --features=local,platform, and a login",
       "samplePrompt": "Was the last Chrome submission approved?",
       "readOnly": true,
@@ -1371,13 +1384,19 @@
       "inputs": [
         {
           "name": "include",
-          "type": "array of \"releases\" | \"stores\" | \"history\"",
+          "type": "array of \"releases\" | \"stores\" | \"history\" | \"runs\" | \"rollout\" | \"cut\"",
           "required": false,
           "default": [
             "releases",
             "stores"
           ],
-          "description": "Which sections to read: releases and stores by default; history adds the platform's release history."
+          "description": "Which sections to read: releases and stores by default; history adds the platform's release history; runs the newest release workflow runs; rollout the Chrome staged rollout; cut whether a release pull request could build after merging."
+        },
+        {
+          "name": "since",
+          "type": "string",
+          "required": false,
+          "description": "With runs, the earliest date to read from (ISO 8601, at most 30 days back; default 7 days)."
         },
         {
           "name": "releaseId",
@@ -1740,8 +1759,8 @@
       "name": "extension_submit",
       "tier": "platform",
       "group": "platform",
-      "description": "Submit a built extension for store REVIEW through extension.dev, which holds your store credentials and dispatches from your project's mirror CI: the Chrome Web Store, Firefox AMO, Edge Add-ons and the App Store (Safari). This is store review only. It does not push a build to the extension.dev platform, and it does not make a shareable link: that is extension_publish, which is what \"deploy\" or \"ship\" an extension almost always means. Reach for this only when the ask is explicitly a store submission. It defaults to a dry run that dispatches nothing: the platform verifies the token and project, finds the store workflow, reads the build from its index when that index is readable, reads store health itself and adds a Safari plan verdict; this tool re-reads the per-store health rows beside it. The dry run does not run the owner gate, the approval, the build quota, the dispatch pause or the submission-mode check, which the real run does first. Pass dryRun:false to actually submit, which is irreversible: only the workspace owner who issued the token may, and it dispatches the store workflow; a Chrome or Edge store with no saved submission mode is uploaded as a draft (absent_mode: safe) and does not enter review. A real submission answers 'submitted' only when the platform recorded a submission for every store asked; 'submitted-partially' names the stores it did not record, which are the only ones to submit again; 'submit-unconfirmed' means no usable answer came back, so read extension_release_status before submitting again, because a second call submits a second time. The project comes from your token (extension_auth or EXTENSION_DEV_TOKEN; tokens live at most 7 days, so CI must re-mint from the console's Access tokens page); with several logins stored, `project` picks which one. Store credentials are never arguments, and no local file is uploaded. Call extension_release_status for valid shas, and, after a real submission, for the recorded outcome and review state.",
-      "gate": "the server started with --features=local,platform, and a login; dryRun: false needs the workspace owner's token",
+      "description": "Submit a built extension for store REVIEW through extension.dev, which holds your store credentials and dispatches from your project's mirror CI: the Chrome Web Store, Firefox AMO, Edge Add-ons and the App Store (Safari). This is store review only. It does not push a build to the extension.dev platform, and it does not make a shareable link: that is extension_publish, which is what \"deploy\" or \"ship\" an extension almost always means. Reach for this only when the ask is explicitly a store submission. It defaults to a dry run that dispatches nothing: the platform verifies the token and project, finds the store workflow, reads the build from its index when that index is readable, reads store health itself and adds a Safari plan verdict; this tool re-reads the per-store health rows beside it. The dry run does not run the owner gate, the approval, the build quota, the dispatch pause or the submission-mode check, which the real run does first. Pass dryRun:false to actually submit, which is irreversible: only the workspace owner who issued the token may, and it dispatches the store workflow; a Chrome or Edge store with no saved submission mode is uploaded as a draft (absent_mode: safe) and does not enter review. A real submission answers 'submitted' only when the platform recorded a submission for every store asked; 'submitted-partially' names the stores it did not record, which are the only ones to submit again; 'submit-unconfirmed' means no usable answer came back, so read extension_release_status before submitting again, because a second call submits a second time. The project comes from your token (extension_auth or EXTENSION_DEV_TOKEN; tokens live at most 7 days, so CI must re-mint from the console's Access tokens page); with several logins stored, `project` picks which one. action:'preflight' reads each store's readiness for browsers (the failing checks with what to fix, the warnings, never a secret value) and writes nothing. action:'cancel' withdraws a submission from review (store, default chrome, and submissionId from extension_release_status), and action:'rollout' raises the Chrome staged rollout to deployPercentage, which Chrome does not let be lowered again; both need a workspace owner's approval of the exact act, so the first call answers approval-required with the approval URL, or refuses with the reason before anyone is asked. Store credentials are never arguments, and no local file is uploaded. Call extension_release_status for valid shas, and, after a real submission, for the recorded outcome and review state.",
+      "gate": "the server started with --features=local,platform, and a login; dryRun: false, cancel and rollout need a workspace owner's approval",
       "samplePrompt": "Dry run a Chrome and Firefox store submission of the latest build",
       "readOnly": false,
       "destructive": true,
@@ -1749,6 +1768,13 @@
       "openWorld": true,
       "untrusted": false,
       "inputs": [
+        {
+          "name": "action",
+          "type": "\"submit\" | \"preflight\" | \"cancel\" | \"rollout\"",
+          "required": false,
+          "default": "submit",
+          "description": "submit (the default) sends a build for store review; preflight reads each store's readiness and writes nothing; cancel withdraws a submission from review; rollout raises the Chrome staged rollout."
+        },
         {
           "name": "project",
           "type": "string",
@@ -1758,13 +1784,13 @@
         {
           "name": "browsers",
           "type": "array of \"chrome\" | \"firefox\" | \"edge\" | \"safari\"",
-          "required": true,
+          "required": false,
           "description": "Stores to submit to."
         },
         {
           "name": "buildSha",
           "type": "string",
-          "required": true,
+          "required": false,
           "description": "The built commit SHA to submit. It needs a completed build in the project's build index; an unknown sha is rejected."
         },
         {
@@ -1803,6 +1829,24 @@
           "type": "string",
           "required": false,
           "description": "Platform base URL (default EXTENSION_DEV_API_URL, else https://www.extension.dev)"
+        },
+        {
+          "name": "store",
+          "type": "\"chrome\" | \"firefox\" | \"edge\" | \"safari\"",
+          "required": false,
+          "description": "With cancel or rollout, the store (default chrome, the one store that supports both)."
+        },
+        {
+          "name": "submissionId",
+          "type": "string",
+          "required": false,
+          "description": "With cancel, the platform's id of the submission to withdraw, from extension_release_status include:['stores']."
+        },
+        {
+          "name": "deployPercentage",
+          "type": "number",
+          "required": false,
+          "description": "With rollout, the share of users to raise the staged rollout to: a whole number from 1 to 100, above the current one."
         }
       ]
     },
