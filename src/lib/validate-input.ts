@@ -58,9 +58,9 @@ function checkPrimitive(
     }
   }
 
-  if (allowed.includes("array")) {
+  if (allowed.includes("array") && (Array.isArray(value) || !allowed.includes(typeOf(value)))) {
     if (!Array.isArray(value)) {
-      issues.push({ path, message: `expected array, got ${typeOf(value)}` });
+      issues.push({ path, message: `expected ${allowed.join(" or ")}, got ${typeOf(value)}` });
 
       return;
     }

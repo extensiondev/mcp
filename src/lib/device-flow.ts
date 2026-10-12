@@ -27,14 +27,15 @@ export async function requestDeviceCode(args: {
   apiBase: string;
   path: string;
   project?: string;
-  projects?: string[];
+  projects?: string[] | "*";
   workspace?: string;
   clientName?: string;
   intent?: DeviceIntent;
   fetchImpl?: FetchImpl;
 }): Promise<DeviceCodeStart> {
   const doFetch = args.fetchImpl ?? fetch;
-  const batch = Array.isArray(args.projects) && args.projects.length > 0;
+  const batch =
+    args.projects === "*" || (Array.isArray(args.projects) && args.projects.length > 0);
   const res = await doFetch(`${args.apiBase}${args.path}`, {
     method: "POST",
     headers: { "content-type": "application/json", accept: "application/json" },
@@ -116,7 +117,7 @@ export async function pollDeviceGrant(args: {
   apiBase: string;
   path: string;
   project?: string;
-  projects?: string[];
+  projects?: string[] | "*";
   workspace?: string;
   deviceCode: string;
   interval: number;
@@ -126,7 +127,8 @@ export async function pollDeviceGrant(args: {
   const doFetch = args.fetchImpl ?? fetch;
   const deadline = Date.now() + args.budgetMs;
   let interval = Math.max(1, args.interval);
-  const batch = Array.isArray(args.projects) && args.projects.length > 0;
+  const batch =
+    args.projects === "*" || (Array.isArray(args.projects) && args.projects.length > 0);
 
   for (;;) {
     const res = await doFetch(`${args.apiBase}${args.path}`, {

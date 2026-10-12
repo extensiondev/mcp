@@ -15,6 +15,7 @@ import {
 import {
   fetchLoginConfig,
   persistBatchTokenResponse,
+  persistWorkspaceTokenResponse,
   resolveApiBase,
   safeApiBase,
   tokenTtlNote,
@@ -22,7 +23,10 @@ import {
 import { envelope, type ErrorCode } from "../lib/envelope";
 import {
   BATCH_UNSUPPORTED_MESSAGE,
+  WILDCARD_UNSUPPORTED_MESSAGE,
+  WORKSPACE_WILDCARD,
   parseProjectBatch,
+  parseWorkspaceSlug,
 } from "../lib/project-batch";
 import { consoleBase } from "../lib/registry";
 import { isProjectRef } from "../lib/credentials";
@@ -312,7 +316,7 @@ function batchPending(args: {
 
 function batchRefusal(
   poll: Extract<DeviceGrantPollResult, { ok: false }>,
-  projects: string[],
+  projects: string[] | typeof WORKSPACE_WILDCARD,
 ): string {
   if (poll.reason === "expired") {
     return fail(
@@ -339,7 +343,7 @@ function batchRefusal(
       {
         value: { code, missingProjects: missing, projects },
         hint: `A batch login is all or nothing and covers only projects that already exist. ${
-          missing.length
+          missing.length && projects !== WORKSPACE_WILDCARD
             ? `Drop or fix ${missing.join(", ")} and run extension_auth (action: login) again with the rest`
             : "Check each name against the console and run extension_auth (action: login) again"
         }; create missing projects with extension_project_create or at ${consoleBase()}.`,
@@ -523,6 +527,176 @@ export async function loginToProjects(args: {
     status: "logged-in",
     value: { workspaceSlug: parsed.batch.workspace, logins },
     hint: `Logged in to ${logins.length} project${logins.length === 1 ? "" : "s"} in ${parsed.batch.workspace}: ${logins.map((login) => login.projectSlug).join(", ")}. Each has its own stored token; token-scoped tools take \`project\` to pick one, and extension_auth (action: status) lists them. The default login was left as it was unless none existed. Every token expires within 7 days, so one batch login renews them together.`,
+    warnings: [tokenTtlNote()],
+  });
+}
+
+function workspacePending(args: {
+  deviceCode: string;
+  workspace: string;
+  verificationUri: string;
+  userCode?: string;
+  verificationUriComplete?: string;
+}): string {
+  const complete = String(args.verificationUriComplete || "").trim();
+  const hasCompleteLink =
+    complete.length > 0 && complete !== args.verificationUri;
+  const again = `then call extension_auth (action: "login", workspace: "${args.workspace}", projects: "*") again with this deviceCode`;
+  const shown = `The page lists every project ${args.workspace} has right now, and approving signs in to each of them (at most 20)`;
+  const hint = !args.userCode
+    ? `Still waiting for authorization. The link and code from the previous response are still valid: approve at ${args.verificationUri}, ${again}.`
+    : hasCompleteLink
+      ? `Open ${complete} and approve (code ${args.userCode} is pre-filled). ${shown}; ${again}. If the page asks for a code, enter ${args.userCode} at ${args.verificationUri}.`
+      : `Open ${args.verificationUri} and enter code ${args.userCode}. ${shown}; ${again}.`;
+
+  return envelope({
+    ok: true,
+    command: "extension_auth",
+    status: "authorization-pending",
+    value: {
+      ...(args.userCode ? { userCode: args.userCode } : {}),
+      verificationUri: args.verificationUri,
+      ...(args.userCode && hasCompleteLink
+        ? { verificationUriComplete: complete }
+        : {}),
+      deviceCode: args.deviceCode,
+      workspace: args.workspace,
+      projects: WORKSPACE_WILDCARD,
+      legacyStatus: "authorization_pending",
+    },
+    hint,
+    warnings: [PENDING_TTL_NOTE, BATCH_FINAL_POLL_NOTE],
+  });
+}
+
+export async function loginToWorkspace(args: {
+  workspace: unknown;
+  deviceCode?: string;
+  api?: string;
+}): Promise<string> {
+  const parsed = parseWorkspaceSlug(args.workspace);
+
+  if (!parsed.ok) {
+    return fail("BadRequest", parsed.message, "bad-request", "E_BAD_REQUEST");
+  }
+
+  const workspace = parsed.workspace;
+  const apiCheck = safeApiBase(resolveApiBase(args.api), args.api);
+
+  if (!apiCheck.ok) {
+    return fail("LoginConfigError", apiCheck.message, "login-failed", "E_AUTH_FAILED");
+  }
+
+  const apiBase = apiCheck.base;
+
+  let config;
+
+  try {
+    config = await fetchLoginConfig(apiBase);
+  } catch (err: any) {
+    return fail(
+      "LoginConfigError",
+      err?.message || "Could not load login config.",
+      "login-failed",
+      "E_AUTH_FAILED",
+    );
+  }
+
+  if (!config.batch?.workspaceWildcard) {
+    return fail(
+      "LoginWildcardUnsupported",
+      WILDCARD_UNSUPPORTED_MESSAGE,
+      "batch-unsupported",
+      "E_PLATFORM",
+      {
+        value: { workspace, projects: WORKSPACE_WILDCARD },
+        hint: config.batch
+          ? `Name the projects instead: extension_auth (action: "login", projects: ["${workspace}/<project>", ...]), up to ${config.batch.loginProjectsPerApproval} per approval.`
+          : "Sign in to each project with its own extension_auth (action: login, project) call.",
+      },
+    );
+  }
+
+  let deviceCode = String(args.deviceCode || "").trim();
+  let interval = 5;
+  let budgetMs = RESUME_BUDGET_MS;
+  let start: Awaited<ReturnType<typeof requestDeviceCode>> | null = null;
+
+  if (!deviceCode) {
+    try {
+      start = await requestDeviceCode({
+        apiBase,
+        path: config.deviceCodeUrl,
+        projects: WORKSPACE_WILDCARD,
+        workspace,
+      });
+    } catch (err: any) {
+      return fail(
+        "LoginStartError",
+        err?.message || "Could not start the device flow.",
+        "login-failed",
+        "E_AUTH_FAILED",
+        { hint: "No device code was issued. Fix what the platform refused and try again, or name the projects in a list." },
+      );
+    }
+
+    deviceCode = start.deviceCode;
+    interval = start.interval;
+    budgetMs = FIRST_CALL_BUDGET_MS;
+  }
+
+  const poll = await pollDeviceGrant({
+    apiBase,
+    path: config.deviceTokenUrl,
+    projects: WORKSPACE_WILDCARD,
+    workspace,
+    deviceCode,
+    interval,
+    budgetMs,
+  });
+
+  if (!poll.ok) {
+    if (poll.reason === "pending") {
+      return workspacePending({
+        deviceCode,
+        workspace,
+        verificationUri: start?.verificationUri ?? config.verificationUri,
+        userCode: start?.userCode,
+        verificationUriComplete: start?.verificationUriComplete,
+      });
+    }
+
+    return batchRefusal(poll, WORKSPACE_WILDCARD);
+  }
+
+  let stored;
+
+  try {
+    stored = persistWorkspaceTokenResponse({ apiBase, workspace, data: poll.data });
+  } catch (err: any) {
+    return fail(
+      "LoginError",
+      err?.message ? String(err.message) : String(err),
+      "login-failed",
+      "E_AUTH_FAILED",
+    );
+  }
+
+  const logins = stored.map((creds) => ({
+    project: `${creds.workspaceSlug}/${creds.projectSlug}`,
+    workspaceSlug: creds.workspaceSlug,
+    projectSlug: creds.projectSlug,
+    expiresAt: creds.expiresAt
+      ? new Date(creds.expiresAt * 1000).toISOString()
+      : null,
+  }));
+
+  return envelope({
+    ok: true,
+    command: "extension_auth",
+    status: "logged-in",
+    value: { workspaceSlug: workspace, projects: WORKSPACE_WILDCARD, logins },
+    hint: `Logged in to all ${logins.length} project${logins.length === 1 ? "" : "s"} of ${workspace} the approver saw: ${logins.map((login) => login.projectSlug).join(", ")}. Each has its own stored token; token-scoped tools take \`project\` to pick one, and extension_workspace reads the workspace with any of them. A project created later is not covered: run this login again to add it. Every token expires within 7 days.`,
     warnings: [tokenTtlNote()],
   });
 }

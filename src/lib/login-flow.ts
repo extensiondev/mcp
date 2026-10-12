@@ -173,12 +173,11 @@ export function persistTokenResponse(args: {
   return creds;
 }
 
-export function persistBatchTokenResponse(args: {
-  apiBase: string;
-  projects: string[];
-  data: Record<string, unknown>;
-}): StoredCredentials[] {
-  const raw = Array.isArray(args.data.tokens) ? args.data.tokens : null;
+function readTokenEntries(
+  apiBase: string,
+  data: Record<string, unknown>,
+): StoredCredentials[] {
+  const raw = Array.isArray(data.tokens) ? data.tokens : null;
 
   if (!raw) {
     throw new Error(
@@ -186,7 +185,7 @@ export function persistBatchTokenResponse(args: {
     );
   }
 
-  const batch: StoredCredentials[] = raw.map((entry) => {
+  return raw.map((entry) => {
     const record = (entry ?? {}) as Record<string, unknown>;
     const token = String(record.token || "").trim();
     const workspaceSlug = String(record.workspaceSlug || "").trim();
@@ -204,20 +203,65 @@ export function persistBatchTokenResponse(args: {
       workspaceSlug,
       projectSlug,
       expiresAt: tokenExpiry(record.expiresAt),
-      api: args.apiBase,
+      api: apiBase,
       provider: "extensiondev",
     };
   });
-  const returned = batch.map(
-    (creds) => `${creds.workspaceSlug}/${creds.projectSlug}`,
-  );
+}
 
-  if (
-    new Set(returned.map((ref) => ref.toLowerCase())).size !== returned.length ||
-    !sameProjectSet(args.projects, returned)
-  ) {
+function refsOf(batch: StoredCredentials[]): string[] {
+  return batch.map((creds) => `${creds.workspaceSlug}/${creds.projectSlug}`);
+}
+
+function hasDuplicate(refs: string[]): boolean {
+  return new Set(refs.map((ref) => ref.toLowerCase())).size !== refs.length;
+}
+
+export function persistBatchTokenResponse(args: {
+  apiBase: string;
+  projects: string[];
+  data: Record<string, unknown>;
+}): StoredCredentials[] {
+  const batch = readTokenEntries(args.apiBase, args.data);
+  const returned = refsOf(batch);
+
+  if (hasDuplicate(returned) || !sameProjectSet(args.projects, returned)) {
     throw new Error(
       `The batch login returned tokens scoped to [${returned.join(", ")}], not the requested [${args.projects.join(", ")}]; nothing was stored. Run extension_auth (action: login) again with the intended projects.`,
+    );
+  }
+
+  writeCredentialBatch(batch);
+
+  return batch;
+}
+
+/* @invariant A WILDCARD LOGIN ACCEPTS THE PLATFORM'S PROJECTS, NEVER ANOTHER WORKSPACE.
+ * The caller named a workspace and no project, so the set of projects is
+ * whatever the approver saw on /device and the server minted; it cannot be
+ * compared with a list this machine never had. What can be checked is held
+ * hard: every token must belong to the requested workspace, none twice, and
+ * at least one, or nothing is stored at all.
+ */
+export function persistWorkspaceTokenResponse(args: {
+  apiBase: string;
+  workspace: string;
+  data: Record<string, unknown>;
+}): StoredCredentials[] {
+  const batch = readTokenEntries(args.apiBase, args.data);
+  const returned = refsOf(batch);
+  const wanted = args.workspace.toLowerCase();
+  const foreign = batch.filter((creds) => creds.workspaceSlug.toLowerCase() !== wanted);
+
+  if (batch.length === 0 || foreign.length > 0 || hasDuplicate(returned)) {
+    throw new Error(
+      `The workspace login for ${args.workspace} returned tokens scoped to [${returned.join(", ")}]${
+        batch.length === 0
+          ? ", which is no project at all"
+          : foreign.length > 0
+            ? `, and ${refsOf(foreign).join(", ")} is outside ${args.workspace}`
+            : ", with a project named twice"
+      }; nothing was stored. Run extension_auth (action: login, workspace, projects: "*") again.`,
     );
   }
 

@@ -19,7 +19,10 @@ export const DEFAULT_CREATE_PROJECTS_PER_APPROVAL = 10;
 export interface BatchCapability {
   createProjectsPerApproval: number;
   loginProjectsPerApproval: number;
+  workspaceWildcard: boolean;
 }
+
+export const WORKSPACE_WILDCARD = "*";
 
 function capFrom(value: unknown, fallback: number): number {
   const count = Number(value);
@@ -43,11 +46,37 @@ export function readBatchCapability(config: unknown): BatchCapability | null {
       record.loginProjectsPerApproval,
       MAX_BATCH_PROJECTS,
     ),
+    workspaceWildcard: record.workspaceWildcard === true,
   };
 }
 
 export const BATCH_UNSUPPORTED_MESSAGE =
   "This platform does not advertise batch onboarding, so a list of projects was not sent and no device code was spent.";
+
+export const WILDCARD_UNSUPPORTED_MESSAGE =
+  "This platform does not offer signing in to every project of a workspace at once, so no device code was spent.";
+
+export function parseWorkspaceSlug(
+  input: unknown,
+): { ok: true; workspace: string } | { ok: false; message: string } {
+  const workspace = typeof input === "string" ? input.trim().toLowerCase() : "";
+
+  if (!workspace) {
+    return {
+      ok: false,
+      message: 'projects: "*" signs in to every project of one workspace, so it needs workspace set to that workspace\'s slug.',
+    };
+  }
+
+  if (workspace.includes("/") || workspace.length > MAX_WORKSPACE_SLUG_LENGTH || /\s/.test(workspace)) {
+    return {
+      ok: false,
+      message: `workspace must be a single workspace slug of at most ${MAX_WORKSPACE_SLUG_LENGTH} characters, with no slash; got ${JSON.stringify(input)}.`,
+    };
+  }
+
+  return { ok: true, workspace };
+}
 
 const PROJECT_SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 

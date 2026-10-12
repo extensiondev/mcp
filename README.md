@@ -7,7 +7,7 @@
 
 # @extension.dev/mcp [![Version][npm-version-image]][npm-version-url] [![Downloads][npm-downloads-image]][npm-downloads-url] [![Discord][discord-image]][discord-url]
 
-> Give your AI agent hands for browser extension development. 33 MCP tools that scaffold, run, inspect, debug, test, and build cross-browser extensions on your machine, plus a platform lane (private alpha) to share and publish them.
+> Give your AI agent hands for browser extension development. 34 MCP tools that scaffold, run, inspect, debug, test, and build cross-browser extensions on your machine, plus a platform lane (private alpha) to share and publish them.
 
 <img alt="Logo" align="right" src="https://media.extension.land/brand/extension-dev/logo-dock.png" width="20.7%" />
 
@@ -121,7 +121,7 @@ Or write it into `~/.codex/config.toml` as a `[mcp_servers.extension-dev]` table
 
 ### Flags
 
-- By default the server exposes the 23 of its 33 tools that work on this machine (the 10 platform tools are off). `--features=local,platform` adds the platform group. Env: `EXTENSION_DEV_FEATURES`.
+- By default the server exposes the 23 of its 34 tools that work on this machine (the 11 platform tools are off). `--features=local,platform` adds the platform group. Env: `EXTENSION_DEV_FEATURES`.
 - `--no-ship` refuses every call that puts something in front of other people (publish, promote, a real submit, a shared preview, a revoke). Env: `EXTENSION_DEV_NO_SHIP=1`.
 - `--project <workspace>/<project>` pins the server to one project. Env: `EXTENSION_DEV_PROJECT`.
 
@@ -170,7 +170,7 @@ On by default, the 23 that work on this machine:
 | act | `extension_open` | Open a surface (popup, options, sidebar, devtools panel, override pages) / trigger `action`, `command` |
 | browsers | `extension_browsers` | Detect, list, install, and uninstall browsers |
 
-On with `--features=local,platform`, the 10 that reach the extension.dev platform (private alpha):
+On with `--features=local,platform`, the 11 that reach the extension.dev platform (private alpha):
 
 | Tier | Tool | Description |
 | ---- | ---- | ----------- |
@@ -184,6 +184,7 @@ On with `--features=local,platform`, the 10 that reach the extension.dev platfor
 | platform | `extension_submit` | Submit for store review: Chrome, Firefox, Edge and Safari, through extension.dev |
 | platform | `extension_release_status` | Read release channels, release history, recent builds, and store configuration, submission and review state |
 | platform | `extension_builds` | Read the platform's builds: recent builds, one build's artifacts and integrity, and its CI logs |
+| platform | `extension_workspace` | Read a workspace with any of its project logins: plan and limits, projects and last builds, usage, and a project's settings |
 
 A dev session carries the control channel that `extension_storage`, `extension_reload`, `extension_open` and `extension_dom_snapshot` ride: it is local, same machine, same user, and on unless `extension_dev` is called with `allowControl: false`. `extension_eval` is the one gate that stays off until `allowEval: true` is passed on `extension_dev` (it implies control). A session does not change its gates on a second call: call `extension_dev` again with what you need plus `replace: true`, which stops the first session.
 
@@ -214,7 +215,7 @@ A Safari dev session runs on the same bridge as every other engine: on Extension
 
 ## Platform (private alpha)
 
-The ten platform tools connect agents to [extension.dev](https://extension.dev). They stay off until the server is started with `--features=local,platform`, and sharing, publishing, promoting and submitting need a login:
+The eleven platform tools connect agents to [extension.dev](https://extension.dev). They stay off until the server is started with `--features=local,platform`, and sharing, publishing, promoting and submitting need a login:
 
 ```bash
 npx @extension.dev/mcp login --project <workspace>/<project>

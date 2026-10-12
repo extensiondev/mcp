@@ -150,6 +150,11 @@ export const TOOL_POLICY: Record<string, ToolPolicy> = {
     annotations: reads(true),
     untrusted: true,
   },
+  extension_workspace: {
+    group: "platform",
+    annotations: reads(true),
+    untrusted: true,
+  },
   extension_release_promote: {
     group: "platform",
     annotations: acts({ destructiveHint: true, openWorldHint: true }),

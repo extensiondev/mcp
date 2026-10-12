@@ -141,13 +141,18 @@ describe("readBatchCapability", () => {
       readBatchCapability({
         batchOnboarding: { createProjectsPerApproval: 10, loginProjectsPerApproval: 20 },
       }),
-    ).toEqual({ createProjectsPerApproval: 10, loginProjectsPerApproval: 20 });
+    ).toEqual({ createProjectsPerApproval: 10, loginProjectsPerApproval: 20, workspaceWildcard: false });
 
     expect(
       readBatchCapability({
         batchOnboarding: { createProjectsPerApproval: 4, loginProjectsPerApproval: 7 },
       }),
-    ).toEqual({ createProjectsPerApproval: 4, loginProjectsPerApproval: 7 });
+    ).toEqual({ createProjectsPerApproval: 4, loginProjectsPerApproval: 7, workspaceWildcard: false });
+  });
+
+  it("reads the workspace wildcard only when the platform says true", () => {
+    expect(readBatchCapability({ batchOnboarding: { workspaceWildcard: true } })?.workspaceWildcard).toBe(true);
+    expect(readBatchCapability({ batchOnboarding: { workspaceWildcard: "yes" } })?.workspaceWildcard).toBe(false);
   });
 
   it.each([
@@ -166,18 +171,19 @@ describe("readBatchCapability", () => {
     expect(readBatchCapability({ batchOnboarding: {} })).toEqual({
       createProjectsPerApproval: 10,
       loginProjectsPerApproval: 20,
+      workspaceWildcard: false,
     });
 
     expect(
       readBatchCapability({
         batchOnboarding: { createProjectsPerApproval: "x", loginProjectsPerApproval: -1 },
       }),
-    ).toEqual({ createProjectsPerApproval: 10, loginProjectsPerApproval: 20 });
+    ).toEqual({ createProjectsPerApproval: 10, loginProjectsPerApproval: 20, workspaceWildcard: false });
 
     expect(
       readBatchCapability({
         batchOnboarding: { createProjectsPerApproval: 999, loginProjectsPerApproval: 999 },
       }),
-    ).toEqual({ createProjectsPerApproval: 20, loginProjectsPerApproval: 20 });
+    ).toEqual({ createProjectsPerApproval: 20, loginProjectsPerApproval: 20, workspaceWildcard: false });
   });
 });

@@ -231,6 +231,7 @@ describe("the server fences tools that read a page or an extension", () => {
       "extension_reload",
       "extension_storage",
       "extension_wait",
+      "extension_workspace",
     ]);
   });
 });

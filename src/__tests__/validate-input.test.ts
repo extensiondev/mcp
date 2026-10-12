@@ -11,6 +11,7 @@ import { schema as devSchema } from "../tools/dev";
 import { schema as logsSchema } from "../tools/logs";
 import { schema as submitSchema } from "../tools/submit";
 import { schema as releasePromoteSchema } from "../tools/release-promote";
+import { schema as authSchema } from "../tools/auth";
 
 describe("validateToolInput", () => {
   it("accepts valid args", () => {
@@ -65,6 +66,19 @@ describe("validateToolInput", () => {
     });
     expect(issues).toHaveLength(1);
     expect(issues[0].path).toBe("browsers[1]");
+  });
+
+  it("takes the string a property also allows in place of its list, and still checks the list's items", () => {
+    expect(validateToolInput(authSchema.inputSchema, { action: "login", workspace: "acme", projects: "*" })).toEqual([]);
+    expect(validateToolInput(authSchema.inputSchema, { action: "login", projects: ["acme/a", "acme/b"] })).toEqual([]);
+
+    const wrongItem = validateToolInput(authSchema.inputSchema, { action: "login", projects: ["acme/a", 7] });
+    expect(wrongItem).toHaveLength(1);
+    expect(wrongItem[0].path).toBe("projects[1]");
+
+    const wrongType = validateToolInput(authSchema.inputSchema, { action: "login", projects: 7 });
+    expect(wrongType).toHaveLength(1);
+    expect(wrongType[0].message).toContain("expected array or string");
   });
 });
 

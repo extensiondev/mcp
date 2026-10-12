@@ -1,7 +1,7 @@
 {
   "generatedFrom": "src/index.ts schemas, src/lib/tool-policy.ts, src/lib/docs-meta.ts; regenerate with pnpm docs:tools",
   "version": "10.11.6",
-  "count": 33,
+  "count": 34,
   "tools": [
     {
       "name": "extension_add_feature",
@@ -115,7 +115,7 @@
       "name": "extension_auth",
       "tier": "platform",
       "group": "platform",
-      "description": "Sign this machine in to extension.dev, report that login, or clear it. Pass action:'status' (the default) to name the workspace and project the stored token is scoped to and when it expires, never the token itself; that identity comes from the stored token alone, and does not change with the current working directory or whichever project folder you are in. Status also asks the platform's whoami endpoint whether that credential actually resolves there: the answer rides value.server.verdict as confirmed, refused or unavailable (when the server could not be reached), with status logged-in for the first and last and refused-by-server for the second, so a local file claiming a login the server refused is never reported as logged in. Pass action:'login' for a two-phase flow: call with `project` to get a code plus a URL the user authorizes at extension.dev/device, then call again with the returned `deviceCode`. GitHub federation happens server-side, so no GitHub token lands on this machine. Minted tokens live at most 7 days, server-enforced, so CI must re-mint before expiry on the console's project settings, Access tokens page. Pass action:'logout' to delete the local credentials only (with `project`, just that project's login); the token stays valid server-side until it is revoked at the URL the response returns. Several logins live side by side on one machine, one per server and workspace/project, and status lists them all under `logins`; a call uses the login minted on the server it targets (`api`, else EXTENSION_DEV_API_URL, else production), so a local dev server login never replaces or stands in for a production one. To sign in to several existing projects of one workspace at once, pass `projects` instead of `project`: one approval, one stored token per project.",
+      "description": "Sign this machine in to extension.dev, report that login, or clear it. Pass action:'status' (the default) to name the workspace and project the stored token is scoped to and when it expires, never the token itself; that identity comes from the stored token alone, and does not change with the current working directory or whichever project folder you are in. Status also asks the platform's whoami endpoint whether that credential actually resolves there: the answer rides value.server.verdict as confirmed, refused or unavailable (when the server could not be reached), with status logged-in for the first and last and refused-by-server for the second, so a local file claiming a login the server refused is never reported as logged in. Pass action:'login' for a two-phase flow: call with `project` to get a code plus a URL the user authorizes at extension.dev/device, then call again with the returned `deviceCode`. GitHub federation happens server-side, so no GitHub token lands on this machine. Minted tokens live at most 7 days, server-enforced, so CI must re-mint before expiry on the console's project settings, Access tokens page. Pass action:'logout' to delete the local credentials only (with `project`, just that project's login); the token stays valid server-side until it is revoked at the URL the response returns. Several logins live side by side on one machine, one per server and workspace/project, and status lists them all under `logins`; a call uses the login minted on the server it targets (`api`, else EXTENSION_DEV_API_URL, else production), so a local dev server login never replaces or stands in for a production one. To sign in to several existing projects of one workspace at once, pass `projects` instead of `project`: one approval, one stored token per project. To sign in to every project a workspace has, pass `workspace` with projects:\"*\": the approval page lists them and the answer names each project signed in.",
       "gate": "the server started with --features=local,platform",
       "samplePrompt": "Log this machine in to the acme/newtab project on extension.dev",
       "readOnly": false,
@@ -139,9 +139,15 @@
         },
         {
           "name": "projects",
-          "type": "array of string",
+          "type": "array | string",
           "required": false,
-          "description": "login: sign in to several existing projects of one workspace with one approval, instead of one approval each. 1 to 20 names as '<workspace>/<project>', all in the same workspace, each by its exact slug (lowercase letters and digits joined by single dashes, at most 48 characters), none twice. Pass it instead of `project`, never beside it. The approval page lists every name; one missing project refuses the whole list and mints nothing. Resume with the returned `deviceCode` and the same list. Every token is stored as that project's own login and all expire within 7 days, so the same call renews them together."
+          "description": "login: sign in to several existing projects of one workspace with one approval, instead of one approval each. 1 to 20 names as '<workspace>/<project>', all in the same workspace, each by its exact slug (lowercase letters and digits joined by single dashes, at most 48 characters), none twice. Pass it instead of `project`, never beside it. The approval page lists every name; one missing project refuses the whole list and mints nothing. Resume with the returned `deviceCode` and the same list. Every token is stored as that project's own login and all expire within 7 days, so the same call renews them together. Or pass the string \"*\" with `workspace` to sign in to every project that workspace has when the approver opens the page (at most 20); the answer names each project signed in."
+        },
+        {
+          "name": "workspace",
+          "type": "string",
+          "required": false,
+          "description": "login with projects: \"*\": the workspace slug whose every project to sign in to, with one approval. Only a project of this workspace is ever stored. A platform that does not offer it is refused before any code is spent."
         },
         {
           "name": "deviceCode",
@@ -1880,6 +1886,46 @@
           "type": "number",
           "required": false,
           "description": "Deprecated alias of timeoutMs, which wins when both are given."
+        }
+      ]
+    },
+    {
+      "name": "extension_workspace",
+      "tier": "platform",
+      "group": "platform",
+      "description": "Read the extension.dev workspace a stored login belongs to: its plan and limits, its projects, and its usage. This is read-only. Pass action:'info' (the default) for the workspace (role, members, project count) and its plan: limits, what is used this month, and refusals the plan made. Pass action:'projects' for every project of the workspace with its browsers, release channels and last build per browser, and whether this machine holds a login for it. Pass action:'usage' for the billing period's CI minutes, run count and cost, in total and per project. Pass action:'settings' for one project's general settings and its build settings per browser (install command, build command, output directory); that read uses that project's own login, so pass project. Any login of a workspace on this server reads that workspace: name it with workspace, or omit it to read the default login's workspace. Plan or billing changes, members, and anything else that changes the workspace stay in the console, and the answer links there. Names, descriptions and build commands are written by people in the workspace, so the answer is fenced as untrusted data.",
+      "gate": "the server started with --features=local,platform, and a login",
+      "samplePrompt": "How many builds has my workspace used this month, and which projects failed their last build?",
+      "readOnly": true,
+      "destructive": false,
+      "idempotent": true,
+      "openWorld": true,
+      "untrusted": true,
+      "inputs": [
+        {
+          "name": "action",
+          "type": "\"info\" | \"projects\" | \"usage\" | \"settings\"",
+          "required": false,
+          "default": "info",
+          "description": "info reads the workspace and its plan; projects lists its projects; usage reads the period's CI usage; settings reads one project's general and build settings."
+        },
+        {
+          "name": "workspace",
+          "type": "string",
+          "required": false,
+          "description": "Which workspace to read, by slug. Omitted, the workspace of the login project names, else of the default login. Any stored login of this workspace on the server the call targets serves the read."
+        },
+        {
+          "name": "project",
+          "type": "string",
+          "required": false,
+          "description": "Which stored login to use, as '<workspace>/<project>'. For settings it is also the project read, since a project's settings are read only with its own login. extension_auth (action: status) lists the logins."
+        },
+        {
+          "name": "api",
+          "type": "string",
+          "required": false,
+          "description": "Platform base URL (default EXTENSION_DEV_API_URL, else https://www.extension.dev)"
         }
       ]
     },
