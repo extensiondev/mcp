@@ -116,7 +116,7 @@ describe("a create the platform finished after the call gave up", () => {
     expect(unconfirmed.status).toBe("create-unconfirmed");
     expect(unconfirmed.value.deviceCode).toBe("dev-code");
     expect(unconfirmed.hint).toContain("same deviceCode");
-    expect(fs.statSync(heldBatchesPath()).mode & 0o777).toBe(0o600);
+    if (process.platform !== "win32") expect(fs.statSync(heldBatchesPath()).mode & 0o777).toBe(0o600);
 
     const restarted = await freshTools();
     const out = JSON.parse(await restarted.projectCreate.handler(args));
