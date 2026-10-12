@@ -340,6 +340,8 @@ describe("extension_workspace reads a workspace with any project login it holds"
     expect(out.value.build.chrome).toEqual(BUILD.buildSettings.chrome);
     expect(out.value.enabledBrowsers).toEqual(["chrome", "firefox"]);
     expect(out.value.consoleUrl).toContain("/acme/alpha/project-settings");
+    expect(out.hint).toContain("extension_builds (action: 'configure')");
+    expect(out.hint).not.toContain("not here");
   });
 
   it("asks for that project's login when settings name a project this machine has none for", async () => {
