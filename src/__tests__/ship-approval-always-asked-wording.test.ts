@@ -13,9 +13,15 @@ describe("a token promote and a real submission always ask a human", () => {
     }
   });
 
-  it("says a promote needs an owner's token and a human approval every time", () => {
-    expect(promote.description).toContain("A promote needs a token minted by a workspace owner and a human approval of that exact promote, every time");
-    expect(approvalIdOf(promote)).toContain("every promote needs a human approval");
+  it("says a promote needs an owner's token and an owner's approval every time", () => {
+    expect(promote.description).toContain("A promote needs a token minted by a workspace owner and a workspace owner's approval of that exact promote, every time");
+    expect(approvalIdOf(promote)).toContain("every promote needs a workspace owner's approval");
+  });
+
+  it("never says a member may approve a promote", () => {
+    for (const said of [promote.description, approvalIdOf(promote)]) {
+      expect(said).not.toMatch(/any member/i);
+    }
   });
 
   it("says a real submission needs an owner's approval every time", () => {

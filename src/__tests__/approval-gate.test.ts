@@ -242,6 +242,21 @@ describe("the approval gate guards irreversible outward actions and cannot self-
       expect(out.hint).toContain("stable takes production builds");
     });
 
+    it("says to ask an owner when a non-owner's approval is refused", async () => {
+      global.fetch = router(calls, {
+        "POST /api/cli/release/promote": () =>
+          jsonResponse({ code: "APPROVER_NOT_OWNER", message: "approver is not an owner" }, 403),
+      });
+
+      const out = JSON.parse(
+        await promoteHandler({ buildId: "abc1234", channel: "beta", approvalId: "apr_member" }),
+      );
+      expect(out.status).toBe("promote-failed");
+      expect(out.error.platformCode).toBe("APPROVER_NOT_OWNER");
+      expect(out.hint).toContain("have a workspace owner approve it");
+      expect(hit("POST /api/cli/approvals")).toBe(false);
+    });
+
     it("turns the platform's APPROVAL_REQUIRED into an approval request", async () => {
       global.fetch = router(calls, {
         "POST /api/cli/approvals": approvalRoute,
