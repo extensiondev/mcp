@@ -8,11 +8,13 @@
 
 import { isLocalOrigin, resolveOrigins, type Origins } from "@extension.dev/urls/origins";
 
+import { requestCredential } from "./credential-scope";
+
 const LOCAL_REGISTRY_ROUTE = "/api/local-registry";
 
 export function mcpOrigins(apiHint?: string): Origins {
   const www =
-    String(apiHint || process.env.EXTENSION_DEV_API_URL || "").trim() || undefined;
+    String(apiHint || requestCredential()?.api || process.env.EXTENSION_DEV_API_URL || "").trim() || undefined;
 
   const registry = String(process.env.EXTENSION_DEV_REGISTRY_URL || "").trim() || undefined;
   const origins = resolveOrigins(

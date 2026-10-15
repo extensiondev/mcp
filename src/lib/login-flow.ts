@@ -8,6 +8,7 @@
 
 import { PROD_ORIGINS } from "@extension.dev/urls/origins";
 
+import { requestCredential } from "./credential-scope";
 import {
   writeCredentialBatch,
   writeCredentials,
@@ -43,7 +44,7 @@ type FetchImpl = typeof fetch;
 
 export function resolveApiBase(api?: string): string {
   return String(
-    api || process.env.EXTENSION_DEV_API_URL || DEFAULT_API,
+    api || requestCredential()?.api || process.env.EXTENSION_DEV_API_URL || DEFAULT_API,
   ).replace(/\/+$/, "");
 }
 

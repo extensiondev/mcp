@@ -30,6 +30,10 @@
     "./clients": {
       "types": "./dist/src/clients/index.d.ts",
       "import": "./dist/clients.js"
+    },
+    "./hosted": {
+      "types": "./dist/src/hosted.d.ts",
+      "import": "./dist/hosted.js"
     }
   },
   "main": "./dist/module.js",

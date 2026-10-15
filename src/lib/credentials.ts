@@ -11,6 +11,7 @@ import os from "node:os";
 import path from "node:path";
 
 import { loginKey, serverOf, targetServer } from "./credential-server";
+import { REQUEST_STORE_REFUSAL, coveredProjects, requestCredential } from "./credential-scope";
 import { withFileLock, writePrivateJson } from "./private-file";
 
 export interface StoredCredentials {
@@ -101,7 +102,33 @@ export class CredentialStoreUnreadableError extends Error {
   }
 }
 
+function requestScopedStore(): CredentialStoreRead | null {
+  const scoped = requestCredential();
+  if (!scoped) return null;
+
+  const entries: Record<string, StoredCredentials> = {};
+
+  for (const ref of scoped.projects) {
+    entries[credentialKey(ref.workspace, ref.project, scoped.api)] = {
+      version: 1,
+      token: scoped.token,
+      workspaceSlug: ref.workspace,
+      projectSlug: ref.project,
+      expiresAt: scoped.expiresAt ?? 0,
+      api: scoped.api,
+    };
+  }
+
+  const keys = Object.keys(entries);
+  if (!scoped.token || keys.length === 0) return { state: "absent" };
+
+  return { state: "ok", store: { version: 2, active: keys[0] ?? null, entries } };
+}
+
 export function inspectCredentialStore(): CredentialStoreRead {
+  const scoped = requestScopedStore();
+  if (scoped) return scoped;
+
   const file = credentialsPath();
   let text: string;
 
@@ -212,6 +239,8 @@ export function tokenExpiry(value: unknown): number {
 export const PROJECT_PIN_ENV = "EXTENSION_DEV_PROJECT";
 
 export function pinnedProject(): string {
+  if (requestCredential()) return "";
+
   return String(process.env[PROJECT_PIN_ENV] || "").trim().toLowerCase();
 }
 
@@ -290,6 +319,8 @@ function storeForWrite(): CredentialStore | null {
 }
 
 export function writeCredentials(creds: StoredCredentials): string {
+  if (requestCredential()) throw new Error(REQUEST_STORE_REFUSAL);
+
   const key = credentialKey(creds.workspaceSlug, creds.projectSlug, creds.api);
 
   return withStoreLock(() => {
@@ -304,6 +335,7 @@ export function writeCredentials(creds: StoredCredentials): string {
 
 export function writeCredentialBatch(batch: StoredCredentials[]): string | null {
   if (batch.length === 0) return null;
+  if (requestCredential()) throw new Error(REQUEST_STORE_REFUSAL);
 
   return withStoreLock(() => {
     const existing = storeForWrite();
@@ -333,6 +365,8 @@ export function clearCredentials(selector?: CredentialSelector): {
   failure?: string;
 } {
   const file = credentialsPath();
+  if (requestCredential()) return { cleared: false, path: file, removed: [], remaining: [], failure: REQUEST_STORE_REFUSAL };
+
   const read = inspectCredentialStore();
   const store = read.state === "ok" ? read.store : null;
   const wanted = String(selector?.project ?? "").trim();
@@ -446,5 +480,11 @@ export const PROJECT_TOKEN_INPUT = {
 } as const;
 
 export function noStoredLoginHint(project: string): string {
+  if (requestCredential()) {
+    const covered = coveredProjects();
+
+    return `This connection's token does not cover ${project}${covered.length ? `; it covers ${covered.join(", ")}` : ""}. Sign in again from the MCP client and approve ${project} to use it.`;
+  }
+
   return `No stored login for ${project}. extension_auth (action: status) lists the logins on this machine; extension_auth (action: login, project: "${project}") adds one. Logging in to another project no longer replaces this one.`;
 }

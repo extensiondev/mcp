@@ -6,6 +6,8 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
+import { createHash } from "node:crypto";
+
 import { resolveCredential, type CredentialRef } from "./credential-source";
 import { envelope, type ErrorCode } from "./envelope";
 import { resolveApiBase, safeApiBase } from "./login-flow";
@@ -55,6 +57,22 @@ export type ProjectApiOpen =
     };
 
 const projectIds = new Map<string, string>();
+const PROJECT_ID_CACHE_LIMIT = 512;
+
+function projectIdCacheKey(base: string, token: string): string {
+  return createHash("sha256").update(`${base}\n${token}`).digest("hex");
+}
+
+function rememberProjectId(key: string, projectId: string): void {
+  projectIds.delete(key);
+  projectIds.set(key, projectId);
+
+  for (const oldest of projectIds.keys()) {
+    if (projectIds.size <= PROJECT_ID_CACHE_LIMIT) break;
+
+    projectIds.delete(oldest);
+  }
+}
 
 function sameRef(a: CredentialRef, b: CredentialRef): boolean {
   return (
@@ -135,7 +153,7 @@ export async function openProjectApi(args: {
   if (!apiCheck.ok) return { ok: false, reason: "bad-api", message: apiCheck.message };
 
   const base = apiCheck.base.replace(/\/+$/, "");
-  const cacheKey = `${base} ${credential.token}`;
+  const cacheKey = projectIdCacheKey(base, credential.token);
   let projectId = projectIds.get(cacheKey) ?? "";
 
   if (!projectId) {
@@ -166,7 +184,7 @@ export async function openProjectApi(args: {
       };
     }
 
-    projectIds.set(cacheKey, projectId);
+    rememberProjectId(cacheKey, projectId);
   }
 
   return {

@@ -6,6 +6,7 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
+import { envToken } from "./credential-scope";
 import { readTokenClaims } from "./credential-source";
 import { readValidCredentials } from "./credentials";
 import { resolveApiBase, safeApiBase } from "./login-flow";
@@ -101,7 +102,7 @@ export class RegistryAccessTokens {
     }
 
     if (!token) {
-      const env = String(process.env.EXTENSION_DEV_TOKEN || "").trim();
+      const env = envToken();
 
       if (env) {
         const claims = readTokenClaims(env);

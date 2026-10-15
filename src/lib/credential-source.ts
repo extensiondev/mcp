@@ -6,6 +6,7 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
+import { envToken } from "./credential-scope";
 import { pinnedProject, readValidCredentials } from "./credentials";
 
 export interface CredentialRef {
@@ -72,7 +73,7 @@ export function resolveCredential(options: { project?: string; api?: string } = 
   const api = String(options.api ?? "").trim() || undefined;
   const pinned = pinnedProject();
   const wanted = named || pinned;
-  const env = String(process.env.EXTENSION_DEV_TOKEN || "").trim();
+  const env = envToken();
   const envClaims = env ? readTokenClaims(env) : null;
   const envRef: CredentialRef | null = envClaims ? { workspace: envClaims.workspace, project: envClaims.project } : null;
 

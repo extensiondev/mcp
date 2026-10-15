@@ -8,6 +8,8 @@
 
 import { DEV_LOCALHOST_ORIGINS, PROD_ORIGINS } from "@extension.dev/urls/origins";
 
+import { requestCredential } from "./credential-scope";
+
 const LOCAL_WWW = new URL(DEV_LOCALHOST_ORIGINS.www);
 const LOCAL_ALIAS_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
 const LOCAL_PROXY_HOSTS = new Set(["extension.localhost", "www.extension.localhost"]);
@@ -56,7 +58,7 @@ export function serverOf(api?: string | null): string {
 }
 
 export function targetServer(api?: string | null): string {
-  return serverOf(String(api ?? "").trim() || process.env.EXTENSION_DEV_API_URL);
+  return serverOf(String(api ?? "").trim() || requestCredential()?.api || process.env.EXTENSION_DEV_API_URL);
 }
 
 export function loginKey(workspaceSlug: string, projectSlug: string, api?: string | null): string {

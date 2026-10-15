@@ -8,10 +8,6 @@
 
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import {
-  CallToolRequestSchema,
-  ListToolsRequestSchema,
-} from "@modelcontextprotocol/sdk/types.js";
 
 import * as create from "./tools/create";
 import * as projectCreate from "./tools/project-create";
@@ -52,20 +48,10 @@ import * as browsers from "./tools/browsers";
 import * as doctor from "./tools/doctor";
 import * as docsSearch from "./tools/docs-search";
 import {
-  inputValidationError,
-  normalizeArgAliases,
-  validateToolInput,
-} from "./lib/validate-input";
-import { envelope, isEnvelope } from "./lib/envelope";
-import { fenceUntrusted } from "./lib/untrusted-fence";
-import {
   DEFAULT_SERVER_OPTIONS,
-  TOOL_POLICY,
-  disabledToolEnvelope,
-  isToolListed,
-  pinProjectArgs,
   type ServerOptions,
 } from "./lib/tool-policy";
+import { installToolHandlers, type ToolModule } from "./lib/tool-dispatch";
 import { isProjectRef } from "./lib/credentials";
 
 import { version } from "../package.json";
@@ -73,14 +59,7 @@ import { version } from "../package.json";
 export { version };
 export { renderToolsDoc } from "./lib/docs-tools";
 
-export interface ToolModule {
-  schema: {
-    name: string;
-    description: string;
-    inputSchema: Record<string, unknown>;
-  };
-  handler: (args: any) => Promise<string>;
-}
+export { toolResultFrame, type ToolModule } from "./lib/tool-dispatch";
 
 export const tools: ToolModule[] = [
   create,
@@ -119,47 +98,6 @@ export const tools: ToolModule[] = [
   docsSearch,
 ];
 
-export function toolResultFrame(
-  result: string,
-  untrusted = false,
-): {
-  content: Array<{ type: "text"; text: string }>;
-  isError?: boolean;
-} {
-  let refused: boolean;
-
-  try {
-    const parsed: unknown = JSON.parse(result);
-    refused = isEnvelope(parsed) && parsed.ok === false;
-  } catch {
-    refused = false;
-  }
-
-  return {
-    content: [
-      {
-        type: "text" as const,
-        text: untrusted ? fenceUntrusted(result) : result,
-      },
-    ],
-    ...(refused || (untrusted && !isEnvelopeText(result)) ? { isError: true } : {}),
-  };
-}
-
-function isEnvelopeText(result: string): boolean {
-  try {
-    return isEnvelope(JSON.parse(result));
-  } catch {
-    return false;
-  }
-}
-
-const toolMap = new Map<string, ToolModule>();
-
-for (const tool of tools) {
-  toolMap.set(tool.schema.name, tool);
-}
-
 export const SERVER_INSTRUCTIONS = [
   "extension-dev runs, inspects, drives, builds and publishes browser extensions (Chrome, Edge, Firefox, Safari and the other Chromium and Gecko browsers) through Extension.js and extension.dev.",
   "When the ask is to run, start, wait for, watch, inspect, drive, test, debug or build a browser extension, search this server first and use its tools: extension_dev runs the dev session and answers once it is ready (its control channel is on unless allowControl: false; allowEval: true is the one gate to pass, for extension_eval), extension_wait resumes waiting for a session started with wait: false, extension_logs streams its console, extension_open opens a surface or a url, extension_dom_snapshot and extension_inspect read a live page, extension_eval runs code in a context, extension_build makes a store-ready bundle, extension_stop ends the session.",
@@ -184,113 +122,7 @@ export function createServer(
     },
   );
 
-  server.setRequestHandler(ListToolsRequestSchema, async () => {
-    return {
-      tools: tools
-        .filter((t) => isToolListed(t.schema.name, options))
-        .map((t) => ({
-          name: t.schema.name,
-          description: t.schema.description,
-          inputSchema: t.schema.inputSchema,
-          annotations: TOOL_POLICY[t.schema.name].annotations,
-        })),
-    };
-  });
-
-  server.setRequestHandler(CallToolRequestSchema, async (request) => {
-    const { name, arguments: args } = request.params;
-    const tool = toolMap.get(name);
-
-    if (!tool) {
-      return {
-        content: [
-          {
-            type: "text" as const,
-            text: envelope({
-              ok: false,
-              command: name,
-              status: "unknown-tool",
-              error: {
-                code: "E_UNKNOWN_TOOL",
-                message: `Unknown tool: ${name}`,
-              },
-              value: {
-                availableTools: tools
-                  .map((t) => t.schema.name)
-                  .filter((toolName) => isToolListed(toolName, options)),
-              },
-            }),
-          },
-        ],
-        isError: true,
-      };
-    }
-
-    const aliasedArgs = normalizeArgAliases(
-      tool.schema.inputSchema,
-      (args ?? {}) as Record<string, unknown>,
-    );
-    const disabled = disabledToolEnvelope(name, aliasedArgs, options);
-
-    if (disabled) {
-      return {
-        content: [{ type: "text" as const, text: disabled }],
-        isError: true,
-      };
-    }
-
-    const pinned = pinProjectArgs(
-      name,
-      aliasedArgs,
-      tool.schema.inputSchema,
-      options,
-    );
-
-    if ("refused" in pinned) {
-      return {
-        content: [{ type: "text" as const, text: pinned.refused }],
-        isError: true,
-      };
-    }
-
-    const normalizedArgs = pinned.args;
-
-    const issues = validateToolInput(tool.schema.inputSchema, normalizedArgs);
-
-    if (issues.length) {
-      return {
-        content: [
-          {
-            type: "text" as const,
-            text: inputValidationError(name, issues, tool.schema.inputSchema),
-          },
-        ],
-        isError: true,
-      };
-    }
-
-    const untrusted = TOOL_POLICY[name]?.untrusted === true;
-
-    try {
-      const result = await tool.handler(normalizedArgs);
-
-      return toolResultFrame(result, untrusted);
-    } catch (err) {
-      return toolResultFrame(
-        envelope({
-          ok: false,
-          command: name,
-          status: "internal-error",
-          error: {
-            code: "E_INTERNAL",
-            name: err instanceof Error ? err.name : "Error",
-            message: err instanceof Error ? err.message : String(err),
-          },
-        }),
-        untrusted,
-      );
-    }
-  });
+  installToolHandlers(server, { tools, options });
 
   return server;
 }

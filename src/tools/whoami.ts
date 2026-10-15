@@ -13,6 +13,7 @@ import {
 } from "../lib/credentials";
 import { envelope } from "../lib/envelope";
 import { readTokenClaims, resolveCredential } from "../lib/credential-source";
+import { envToken } from "../lib/credential-scope";
 import { targetServer } from "../lib/credential-server";
 import { resolveApiBase, safeApiBase, tokenTtlNote } from "../lib/login-flow";
 import {
@@ -101,7 +102,7 @@ export async function readIdentity(deps?: {
 
   const elsewhere = creds ? null : elsewhereNote(target);
 
-  if (!creds && elsewhere && !String(process.env.EXTENSION_DEV_TOKEN || "").trim()) {
+  if (!creds && elsewhere && !envToken()) {
     return envelope({
       ok: true,
       command: "extension_auth",
@@ -116,20 +117,20 @@ export async function readIdentity(deps?: {
       ok: true,
       command: "extension_auth",
       status: "logged-out",
-      ...(String(process.env.EXTENSION_DEV_TOKEN || "").trim()
+      ...(envToken()
         ? {
             value: {
               envToken: (() => {
-                const claims = readTokenClaims(String(process.env.EXTENSION_DEV_TOKEN));
+                const claims = readTokenClaims(envToken());
 
                 return claims ? `${claims.workspace}/${claims.project}` : "unreadable claims";
               })(),
             },
           }
         : { value: {} }),
-      hint: String(process.env.EXTENSION_DEV_TOKEN || "").trim()
+      hint: envToken()
         ? `No stored login, but EXTENSION_DEV_TOKEN is set and is what authenticated tools send${(() => {
-            const claims = readTokenClaims(String(process.env.EXTENSION_DEV_TOKEN));
+            const claims = readTokenClaims(envToken());
 
             return claims ? ` (per its claims it belongs to ${claims.workspace}/${claims.project})` : " (its claims could not be read)";
           })()}. Run extension_auth (action: login) to store a login as well.`
@@ -144,9 +145,7 @@ export async function readIdentity(deps?: {
   const effectiveDefaultApi = resolveApiBase(api);
   const askApi = recordedApi || effectiveDefaultApi;
 
-  const envTokenSet = Boolean(
-    String(process.env.EXTENSION_DEV_TOKEN || "").trim(),
-  );
+  const envTokenSet = Boolean(envToken());
 
   let check: ServerCheck;
 
