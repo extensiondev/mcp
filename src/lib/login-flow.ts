@@ -29,6 +29,15 @@ export function tokenTtlNote(
   workspaceSlug?: string,
   projectSlug?: string,
 ): string {
+  if (requestCredential()) {
+    const connectedApps =
+      workspaceSlug && projectSlug
+        ? consoleProjectUrl({ workspace: workspaceSlug, project: projectSlug }, "settings/connected-apps")
+        : consoleBase();
+
+    return `This connection renews on its own. Revoke it under the project's Settings, Connected apps: ${connectedApps}`;
+  }
+
   const tokensUrl =
     workspaceSlug && projectSlug
       ? consoleProjectUrl(

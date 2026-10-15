@@ -13,7 +13,7 @@ import {
 } from "../lib/credentials";
 import { envelope } from "../lib/envelope";
 import { readTokenClaims, resolveCredential } from "../lib/credential-source";
-import { envToken } from "../lib/credential-scope";
+import { envToken, requestCredential } from "../lib/credential-scope";
 import { targetServer } from "../lib/credential-server";
 import { resolveApiBase, safeApiBase, tokenTtlNote } from "../lib/login-flow";
 import {
@@ -167,9 +167,14 @@ export async function readIdentity(deps?: {
 
   const server = describeServer(check, askApi);
 
-  const identityNote = expired
-    ? "The stored token has expired. Run extension_auth (action: login) to refresh it."
-    : `Logged in as ${creds.workspaceSlug}/${creds.projectSlug}, per the token extension_auth stored on this machine. That token is what scopes the identity: it does not follow the current working directory or project folder.`;
+  const hosted = Boolean(requestCredential());
+  const identityNote = hosted
+    ? expired
+      ? "This connection's token has expired. Sign in again from your MCP client."
+      : `Signed in as ${creds.workspaceSlug}/${creds.projectSlug} through this connection's OAuth token, which scopes every call.`
+    : expired
+      ? "The stored token has expired. Run extension_auth (action: login) to refresh it."
+      : `Logged in as ${creds.workspaceSlug}/${creds.projectSlug}, per the token extension_auth stored on this machine. That token is what scopes the identity: it does not follow the current working directory or project folder.`;
   const resolved = resolveCredential({ api });
   const envTokenNote = envTokenSet
     ? `EXTENSION_DEV_TOKEN is set: an unnamed call sends it${resolved.ref ? ` (per its claims it belongs to ${resolved.ref.workspace}/${resolved.ref.project})` : " (its claims could not be read)"}, while a call naming a project, or a server pinned to one, sends that project's stored login first; this report describes only the stored login.`

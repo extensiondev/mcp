@@ -84,6 +84,12 @@ function comparable(text: string): unknown {
   return JSON.parse(boundary ? body.split(boundary).join("<boundary>") : body);
 }
 
+function withoutWording(envelope: unknown): unknown {
+  const { hint: _hint, warnings: _warnings, ...rest } = envelope as Record<string, unknown>;
+
+  return rest;
+}
+
 async function run(client: Client, seen: SeenRequest[]) {
   const tokens = new Set<string>();
   const answers: Array<{ envelope: unknown; isError: boolean; tokens?: string[]; requests: Array<Omit<SeenRequest, "project">> }> = [];
@@ -124,7 +130,11 @@ describe("credential source parity", () => {
     expect(hosted.answers.length).toBe(CALLS.length);
 
     for (const [index, [name]] of CALLS.entries()) {
-      expect({ name, ...hosted.answers[index] }).toEqual({ name, ...local.answers[index] });
+      const pair = [hosted.answers[index], local.answers[index]].map((answer) =>
+        name === "extension_auth" ? { ...answer, envelope: withoutWording(answer!.envelope) } : answer,
+      );
+
+      expect({ name, ...pair[0] }).toEqual({ name, ...pair[1] });
     }
 
     expect(local.tokens).toEqual([`Bearer ${LOCAL_TOKEN}`]);

@@ -194,6 +194,20 @@ describe("hosted tool surface", () => {
     }
   });
 
+  it("describes the connection, not CLI token lifetimes, in a hosted status", async () => {
+    stubPlatformFetch();
+    const client = await hostedClient();
+    const { result, envelope } = await call(client, "extension_auth", {});
+    const text = (result.content as Array<{ text: string }>)[0]?.text ?? "";
+
+    expect(envelope.ok).toBe(true);
+    expect(text).not.toMatch(/7 days|re-mint|Access tokens page|CLI tokens/i);
+    expect(text).not.toMatch(/stored on this machine/);
+    expect(envelope.warnings).toContain(
+      "This connection renews on its own. Revoke it under the project's Settings, Connected apps: https://console.extension.dev/acme/web/settings/connected-apps",
+    );
+  });
+
   it("stores and removes no login on disk while a request credential is in scope", async () => {
     stubPlatformFetch();
     const client = await hostedClient();
