@@ -41,7 +41,7 @@ export interface ToolHandlerOptions {
   tools: ToolModule[];
   options: ServerOptions;
   refuse?: (name: string, args: Record<string, unknown>) => string | null;
-  run?: (call: () => Promise<string>) => Promise<string>;
+  run?: (call: () => Promise<string>, name: string, args: Record<string, unknown>) => Promise<string>;
 }
 
 type ToolFrame = {
@@ -144,7 +144,7 @@ export function installToolHandlers(server: Server, setup: ToolHandlerOptions): 
     const untrusted = TOOL_POLICY[name]?.untrusted === true;
 
     try {
-      const result = await run(() => tool.handler(normalizedArgs));
+      const result = await run(() => tool.handler(normalizedArgs), name, normalizedArgs);
 
       return toolResultFrame(result, untrusted);
     } catch (err) {

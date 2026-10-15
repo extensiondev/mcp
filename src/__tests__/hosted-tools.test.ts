@@ -29,11 +29,11 @@ const ALLOWED = [
   "extension_project_create",
   "extension_release_promote",
   "extension_release_status",
-  "extension_shares",
   "extension_workspace",
 ];
 
 const NEVER = [
+  "extension_shares",
   "extension_publish",
   "extension_submit",
   "extension_preview_web",
@@ -158,13 +158,40 @@ describe("hosted tool surface", () => {
     const client = await hostedClient();
 
     await call(client, "extension_builds", { action: "list" });
-    await call(client, "extension_shares", { action: "list" });
+    await call(client, "extension_release_status", {});
     await call(client, "extension_auth", {});
 
     const toWww = seen.filter((request) => request.url.startsWith(WWW));
     expect(toWww.length).toBeGreaterThan(2);
     for (const request of toWww) expect(request.authorization).toBe(`Bearer ${REQUEST_TOKEN}`);
     expect(seen.map((request) => request.authorization)).not.toContain("Bearer disk-token");
+  });
+
+  it("names the project on every platform call, so one connected-app token reaches each of its projects", async () => {
+    const seen = stubPlatformFetch();
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    await createHostedServer({
+      credential: { token: "oauth-multi", api: WWW, projects: [PROJECT, { workspace: "acme", project: "docs" }], expiresAt: 4102444800 },
+    }).connect(serverTransport);
+
+    const client = new Client({ name: "hosted-probe", version: "0.0.0" });
+    await client.connect(clientTransport);
+
+    for (const [project, projectId, expected] of [
+      ["acme/docs", "prj_hosted2", "acme/docs"],
+      ["docs", "prj_hosted2", "acme/docs"],
+      [undefined, "prj_hosted1", "acme/web"],
+    ] as const) {
+      seen.length = 0;
+      const { envelope } = await call(client, "extension_builds", { action: "list", ...(project ? { project } : {}) });
+
+      expect(envelope.ok).toBe(true);
+      const toWww = seen.filter((request) => request.url.startsWith(WWW));
+      expect(toWww.length).toBeGreaterThan(0);
+      for (const request of toWww) expect(request.project).toBe(expected);
+      expect(toWww.some((request) => request.url.includes(`/api/projects/${projectId}/builds`))).toBe(true);
+      expect(seen.filter((request) => !request.url.startsWith(WWW)).every((request) => request.project === null)).toBe(true);
+    }
   });
 
   it("stores and removes no login on disk while a request credential is in scope", async () => {

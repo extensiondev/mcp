@@ -59,8 +59,10 @@ export type ProjectApiOpen =
 const projectIds = new Map<string, string>();
 const PROJECT_ID_CACHE_LIMIT = 512;
 
-function projectIdCacheKey(base: string, token: string): string {
-  return createHash("sha256").update(`${base}\n${token}`).digest("hex");
+function projectIdCacheKey(base: string, token: string, ref: CredentialRef | null): string {
+  const named = ref ? `${ref.workspace}/${ref.project}`.toLowerCase() : "";
+
+  return createHash("sha256").update(`${base}\n${token}\n${named}`).digest("hex");
 }
 
 function rememberProjectId(key: string, projectId: string): void {
@@ -153,7 +155,7 @@ export async function openProjectApi(args: {
   if (!apiCheck.ok) return { ok: false, reason: "bad-api", message: apiCheck.message };
 
   const base = apiCheck.base.replace(/\/+$/, "");
-  const cacheKey = projectIdCacheKey(base, credential.token);
+  const cacheKey = projectIdCacheKey(base, credential.token, credential.ref);
   let projectId = projectIds.get(cacheKey) ?? "";
 
   if (!projectId) {

@@ -122,7 +122,10 @@ function requestScopedStore(): CredentialStoreRead | null {
   const keys = Object.keys(entries);
   if (!scoped.token || keys.length === 0) return { state: "absent" };
 
-  return { state: "ok", store: { version: 2, active: keys[0] ?? null, entries } };
+  const [workspace = "", project = ""] = String(scoped.project ?? "").split("/");
+  const selected = credentialKey(workspace, project, scoped.api);
+
+  return { state: "ok", store: { version: 2, active: entries[selected] ? selected : (keys[0] ?? null), entries } };
 }
 
 export function inspectCredentialStore(): CredentialStoreRead {

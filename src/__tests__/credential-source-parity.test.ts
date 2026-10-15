@@ -32,7 +32,6 @@ const CALLS: Array<[string, Record<string, unknown>]> = [
   ["extension_builds", { action: "get", buildId: "0123456789abcdef0123456789abcdef01234567" }],
   ["extension_release_status", {}],
   ["extension_release_status", { include: ["stores", "history"] }],
-  ["extension_shares", { action: "list" }],
   ["extension_workspace", { action: "info" }],
   ["extension_workspace", { action: "projects" }],
   ["extension_workspace", { action: "settings", project: "acme/web" }],
@@ -87,7 +86,7 @@ function comparable(text: string): unknown {
 
 async function run(client: Client, seen: SeenRequest[]) {
   const tokens = new Set<string>();
-  const answers: Array<{ envelope: unknown; isError: boolean; tokens?: string[]; requests: SeenRequest[] }> = [];
+  const answers: Array<{ envelope: unknown; isError: boolean; tokens?: string[]; requests: Array<Omit<SeenRequest, "project">> }> = [];
 
   for (const [name, args] of CALLS) {
     seen.length = 0;
@@ -96,7 +95,7 @@ async function run(client: Client, seen: SeenRequest[]) {
       envelope: comparable((result.content as Array<{ text: string }>)[0]?.text ?? ""),
       isError: result.isError === true,
       tokens: seen.map((request) => request.authorization ?? "").filter(Boolean),
-      requests: seen.map((request) => ({ ...request, authorization: request.authorization?.replace(/^Bearer .+$/, "Bearer <token>") ?? null })),
+      requests: seen.map(({ project: _project, ...request }) => ({ ...request, authorization: request.authorization?.replace(/^Bearer .+$/, "Bearer <token>") ?? null })),
     });
   }
 

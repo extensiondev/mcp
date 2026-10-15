@@ -18,6 +18,8 @@ export interface RequestCredential {
   api: string;
   projects: ScopedProject[];
   expiresAt: number | null;
+  project?: string | null;
+  onUnauthorized?: () => void;
 }
 
 const scope = new AsyncLocalStorage<RequestCredential>();
@@ -41,13 +43,30 @@ export function normalizeRequestCredential(credential: RequestCredential): Reque
   }
 
   const expiresAt = Number(credential.expiresAt);
+  const selected = coveredProject(projects, credential.project) ?? projects[0] ?? null;
 
   return {
     token: String(credential.token ?? "").trim(),
     api: String(credential.api ?? "").trim().replace(/\/+$/, ""),
     projects,
     expiresAt: Number.isFinite(expiresAt) && expiresAt > 0 ? expiresAt : null,
+    project: selected ? `${selected.workspace}/${selected.project}` : null,
+    ...(credential.onUnauthorized ? { onUnauthorized: credential.onUnauthorized } : {}),
   };
+}
+
+export function coveredProject(projects: ScopedProject[], named: unknown): ScopedProject | null {
+  const wanted = slug(named);
+  if (!wanted) return null;
+
+  const [first = "", second, ...rest] = wanted.split("/");
+  if (rest.length) return null;
+
+  const matches = projects.filter((entry) =>
+    second === undefined ? entry.project === first : entry.workspace === first && entry.project === second,
+  );
+
+  return matches.length === 1 ? (matches[0] ?? null) : null;
 }
 
 export function withRequestCredential<T>(credential: RequestCredential, run: () => T): T {
