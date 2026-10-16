@@ -348,7 +348,7 @@
           "name": "approvalId",
           "type": "string",
           "required": false,
-          "description": "With configure, the approval id from a prior approval-required answer, once a workspace owner approved it. Each approval applies its exact change once."
+          "description": "With configure or rebuild, the approval id from a prior approval-required answer, once a workspace owner approved it. Each approval applies its exact change once. A rebuild started through the hosted server needs one; pass buildId as the full commit sha the approval names."
         },
         {
           "name": "channel",

@@ -89,7 +89,7 @@ Read, rebuild and configure the platform's builds of the logged-in project on ex
 | `buildId` | string | no |  | Which build, as its short or full commit sha (the buildId from action:'list'). Required for get and logs. With rebuild, the commit to build; omitted, the head of the project's branch. |
 | `buildEnv` | "staging" \| "production" | no |  | With rebuild, the environment to build for: staging (the default) or production. stable takes production builds; the other channels take staging builds. |
 | `buildSettings` | object | no |  | With configure, only the settings that change, per browser (chrome, edge, firefox, safari), each with any of enabled (boolean), installCommand, buildCommand, outputDirectory (strings). Merged into the current settings before it is sent. |
-| `approvalId` | string | no |  | With configure, the approval id from a prior approval-required answer, once a workspace owner approved it. Each approval applies its exact change once. |
+| `approvalId` | string | no |  | With configure or rebuild, the approval id from a prior approval-required answer, once a workspace owner approved it. Each approval applies its exact change once. A rebuild started through the hosted server needs one; pass buildId as the full commit sha the approval names. |
 | `channel` | string | no |  | With create-channel, the new channel's name (up to 40 characters). |
 | `description` | string | no |  | With create-channel, an optional description of the channel (up to 200 characters). |
 | `color` | string | no |  | With create-channel, an optional color as #rrggbb. |

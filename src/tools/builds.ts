@@ -19,7 +19,8 @@ import {
   projectApiReadFailure,
   type ProjectApi,
 } from "../lib/project-api";
-import { configure, createChannel, rebuild, type ActArgs } from "./builds-acts";
+import { configure, createChannel, type ActArgs } from "./builds-acts";
+import { rebuild } from "./builds-rebuild";
 
 const COMMAND = "extension_builds";
 const DEFAULT_LIMIT = 10;
@@ -58,7 +59,7 @@ export const schema = {
       approvalId: {
         type: "string",
         description:
-          "With configure, the approval id from a prior approval-required answer, once a workspace owner approved it. Each approval applies its exact change once.",
+          "With configure or rebuild, the approval id from a prior approval-required answer, once a workspace owner approved it. Each approval applies its exact change once. A rebuild started through the hosted server needs one; pass buildId as the full commit sha the approval names.",
       },
       channel: {
         type: "string",
