@@ -32,7 +32,7 @@ Run a test stage against a live dev session: state expectations and read one ver
 | --- | --- | --- | --- | --- |
 | `projectPath` | string | yes |  | Extension project root (needs a live dev session) |
 | `expect` | array of object | yes |  | One object per expectation, each { assert: <check id>, ...args }. background-worker-booted: no args. surface-rendered: surface (popup, options, sidebar, newtab, history, bookmarks), optional selector and minNodes. content-script-injected: url. storage-key-present: key, optional area (default local), equals, context. console-errors-empty: optional context (array), since (seq cursor), ignore (substrings). |
-| `browser` | string | no |  | Session browser; defaults to this project's live session |
+| `browser` | string | no |  | Session browser; defaults to this project's live session. Required when the project runs sessions for more than one browser: the call is refused with the list rather than picking one. |
 | `timeout` | number | no |  | Command timeout in ms. When omitted, the default depends on the route: 30000 through the dev session's control channel, 10000 over the Firefox debugger protocol, and 15000 per command over the Chromium debug port. |
 
 ## extension_auth
@@ -128,7 +128,7 @@ Run the extension while you edit it: dev build, hot module replacement, and a br
 | `publicHost` | string | no |  | Host the browser dials for HMR and reload when it differs from the bind host |
 | `extensions` | array of string | no |  | Extra extension paths or store URLs to load alongside the project |
 | `headless` | boolean | no |  | false opens a browser window the person can see, overriding EXTENSION_HEADLESS and any --headless in EXTENSION_BROWSER_FLAGS for this session only; pass it when the person wants to watch or try the extension. true forces headless. Omit to inherit the environment (headless when EXTENSION_HEADLESS=1 or EXTENSION_BROWSER_FLAGS carries --headless). |
-| `replace` | boolean | no | `false` | Stop the live session for this projectPath first, reported as replacedSession. Without it a second call is refused rather than forking: two sessions fight over one profile and the newer browser dies on the lock. |
+| `replace` | boolean | no | `false` | Stop the live session this projectPath runs for the same browser first, reported as replacedSession. Without it a second call for that browser is refused rather than forking: one session per browser owns dist/<browser> and its ready.json and eval token. A session for another browser keeps running either way, since each browser has its own output, profile and port. |
 | `allowControl` | boolean | no | `true` | The agent-bridge control channel that extension_storage/reload/open/dom_snapshot ride (local, same machine). On unless you pass false; eval is the gate that stays off (allowEval). |
 | `wait` | boolean | no | `true` | Wait for the session to be ready before answering (the same contract extension_wait reads, up to 45s) and include the first log lines. false returns as soon as the server is spawned; call extension_wait and extension_logs yourself then. |
 | `allowEval` | boolean | no | `false` | Enable extension_eval (runs code in a context; writes a 0600 session token). Implies allowControl, so you never need to pass both. |
@@ -150,7 +150,7 @@ Diagnose a dev session end to end: ready contract, dev-server process, control-p
 | input | type | required | default | description |
 | --- | --- | --- | --- | --- |
 | `projectPath` | string | no |  | Path to the extension project root. Omit for a pre-flight environment check with no project. |
-| `browser` | string | no |  | Browser session to diagnose. Defaults to the active dev session's browser for this project. |
+| `browser` | string | no |  | Browser session to diagnose. Defaults to the active dev session's browser for this project; required when the project runs sessions for more than one browser. |
 
 ## extension_dom_snapshot
 
@@ -168,7 +168,7 @@ Take a shallow structured DOM snapshot of one chosen surface through the agent b
 | `include` | array of "summary" \| "html" | no | `["summary"]` | What to include; html is byte-capped |
 | `maxBytes` | number | no | `262144` |  |
 | `withConsole` | number \| boolean | no |  | Also include recent console lines. A number is how many; true means 50. |
-| `browser` | string | no |  | Session browser; defaults to this project's live session |
+| `browser` | string | no |  | Session browser; defaults to this project's live session. Required when the project runs sessions for more than one browser: the call is refused with the list rather than picking one. |
 | `timeout` | number | no |  | Command timeout in ms. When omitted, the default depends on the route: 30000 through the dev session's control channel, 10000 over the Firefox debugger protocol, and 15000 per command over the Chromium debug port. |
 
 ## extension_eval
@@ -182,7 +182,7 @@ Evaluate an expression in a running extension context. Start the session with al
 | `context` | "background" \| "popup" \| "options" \| "sidebar" \| "devtools" \| "newtab" \| "history" \| "bookmarks" \| "content" \| "page" | no |  | Where to evaluate. Default background, except Chromium MV3 sessions default to page (the active tab). |
 | `url` | string | no |  | content/page: pick the tab by url (match pattern, then substring). Preferred over `tab`. |
 | `tab` | number | no |  | Numeric chrome.tabs id, only to disambiguate when several tabs match. |
-| `browser` | string | no |  | Session browser; defaults to this project's live session |
+| `browser` | string | no |  | Session browser; defaults to this project's live session. Required when the project runs sessions for more than one browser: the call is refused with the list rather than picking one. |
 | `timeout` | number | no |  | Command timeout in ms. When omitted, the default depends on the route: 30000 through the dev session's control channel, 10000 over the Firefox debugger protocol, and 15000 per command over the Chromium debug port. |
 
 ## extension_inspect
@@ -195,7 +195,7 @@ Inspect a running extension deeply over the browser's debugger protocol: full HT
 | `url` | string | no |  | URL to inspect; the tab is navigated there first |
 | `probe` | array of string | no |  | CSS selectors to query; returns counts and samples for each |
 | `include` | array of "html" \| "summary" \| "meta" \| "dom_snapshot" \| "console" \| "extension_roots" | no | `["summary","meta","console"]` | What to include |
-| `browser` | string | no |  | Session browser; defaults to this project's live session |
+| `browser` | string | no |  | Session browser; defaults to this project's live session. Required when the project runs sessions for more than one browser: the call is refused with the list rather than picking one. |
 | `maxBytes` | number | no | `262144` | Truncate HTML output at this byte count (0 = unlimited) |
 | `deepDom` | boolean | no | `false` | Pierce CLOSED shadow roots (open roots of the extension-root hosts are already inlined in html; other open roots are not read). Chromium: CDP DOM pierce. Firefox: a content-script walk via tabs.executeScript (MV2 only, needs host permissions for the target url); the answer says whether that context could see closed roots at all. |
 
@@ -206,7 +206,7 @@ List the extensions in the running dev browser: id, name, version, and, on Chrom
 | input | type | required | default | description |
 | --- | --- | --- | --- | --- |
 | `projectPath` | string | yes |  | Extension project root (needs a live dev session) |
-| `browser` | string | no |  | Session browser; defaults to this project's live session |
+| `browser` | string | no |  | Session browser; defaults to this project's live session. Required when the project runs sessions for more than one browser: the call is refused with the list rather than picking one. |
 
 ## extension_logs
 
@@ -215,7 +215,7 @@ Read or stream logs from every context of a running dev session (service worker,
 | input | type | required | default | description |
 | --- | --- | --- | --- | --- |
 | `projectPath` | string | yes |  | Extension project root (needs a live dev session) |
-| `browser` | string | no |  | Which dist/extension-js/<browser>/ to read. Defaults to this project's live session, else chrome. |
+| `browser` | string | no |  | Which dist/extension-js/<browser>/ to read. Defaults to this project's live session, else chrome. Required when the project runs sessions for more than one browser. |
 | `level` | "off" \| "error" \| "warn" \| "info" \| "debug" \| "trace" \| "all" | no | `"all"` | Minimum severity; a level includes everything more severe. |
 | `context` | array of "background" \| "content" \| "sidebar" \| "popup" \| "options" \| "devtools" \| "newtab" \| "history" \| "bookmarks" | no |  | Restrict to these contexts. Omit for all. |
 | `signalsOnly` | boolean | no | `false` | Only structured dx.signal diagnostics (code/status/remediation), no plain console lines. |
@@ -252,7 +252,7 @@ Open an extension surface, or replay an event, in a running session. Pass surfac
 | `url` | string | no |  | Navigate a real tab here instead of opening a surface, in a NEW tab unless `tab` names one (a blank or new-tab page is reused). An absolute url opens as given; a path with no scheme, such as pages/options.html, is resolved against the extension's own origin. Use for content-script test pages, or a surface as a page. |
 | `tab` | number | no |  | With `url`: navigate this chrome.tabs id in place instead of opening a new tab (rides the engine's navigate verb over the control channel, which a dev session carries unless started with allowControl: false). Without it an existing page is never taken over. |
 | `asTab` | boolean | no | `false` | popup/options/sidebar: render the surface's document in a real tab instead of a popup window. This is how you inspect a surface HEADLESSLY, and it is applied automatically when a headless session refuses to open one. Same page and APIs, but no popup sizing and window.close() closes the tab. |
-| `browser` | string | no |  | Session browser; defaults to this project's live session |
+| `browser` | string | no |  | Session browser; defaults to this project's live session. Required when the project runs sessions for more than one browser: the call is refused with the list rather than picking one. |
 | `timeout` | number | no |  | Command timeout in ms. When omitted, the default depends on the route: 30000 through the dev session's control channel, 10000 over the Firefox debugger protocol, and 15000 per command over the Chromium debug port. |
 
 ## extension_preview_web
@@ -343,7 +343,7 @@ Reload a running extension's background context, or a tab. Rides the dev session
 | `projectPath` | string | yes |  | Extension project root (needs a live dev session) |
 | `context` | "background" \| "content" \| "page" | no | `"background"` |  |
 | `tab` | number | no |  | For content/page: a specific tab id |
-| `browser` | string | no |  | Session browser; defaults to this project's live session |
+| `browser` | string | no |  | Session browser; defaults to this project's live session. Required when the project runs sessions for more than one browser: the call is refused with the list rather than picking one. |
 | `timeout` | number | no |  | Command timeout in ms. When omitted, the default depends on the route: 30000 through the dev session's control channel, 10000 over the Firefox debugger protocol, and 15000 per command over the Chromium debug port. |
 
 ## extension_shares
@@ -395,7 +395,7 @@ Stop a session that extension_dev or extension_start is running: terminate the s
 | input | type | required | default | description |
 | --- | --- | --- | --- | --- |
 | `projectPath` | string | no |  | Extension project root |
-| `browser` | string | no |  | Browser of the session to stop. Only that browser's server and browser processes are ended; a session the same project runs for another browser keeps running. Defaults to the single live session for this project rather than assuming chrome. |
+| `browser` | string | no |  | Browser of the session to stop. Only that browser's server and browser processes are ended; a session the same project runs for another browser keeps running. Defaults to the single live session for this project rather than assuming chrome; when the project runs sessions for more than one browser, the call is refused with the list instead of stopping one. |
 | `all` | boolean | no | `false` | Stop every known session across projects and browsers, found from this server's registry AND the on-disk markers written by this server or by servers that are no longer running, so it still works after an MCP restart. A marker owned by another MCP server that is still running is left alone and listed under skippedForeign unless includeOtherServers is true. It also takes back every live-preview carrier still recorded on this machine, including one in a project whose session was never stopped. projectPath/browser are then ignored. |
 | `includeOtherServers` | boolean | no | `false` | With all: true, also stop sessions whose markers belong to another MCP server that is still running (the markers sit in a per-user directory every server shares). Off by default, since those sessions are someone else's. |
 
@@ -410,7 +410,7 @@ Read or write chrome.storage in a running extension. Every call runs in the exte
 | `area` | "local" \| "sync" \| "session" \| "managed" | no | `"local"` |  |
 | `key` | string | no |  | Key to get or set |
 | `value` | any | no |  | Value to set (any JSON value); required for action=set |
-| `browser` | string | no |  | Session browser; defaults to this project's live session |
+| `browser` | string | no |  | Session browser; defaults to this project's live session. Required when the project runs sessions for more than one browser: the call is refused with the list rather than picking one. |
 | `timeout` | number | no |  | Command timeout in ms. When omitted, the default depends on the route: 30000 through the dev session's control channel, 10000 over the Firefox debugger protocol, and 15000 per command over the Chromium debug port. |
 
 ## extension_submit
@@ -464,7 +464,7 @@ Wait for a running dev or start session to be ready. Call it for a session start
 | input | type | required | default | description |
 | --- | --- | --- | --- | --- |
 | `projectPath` | string | yes |  | Extension project root |
-| `browser` | string | no |  | Session browser; defaults to this project's live session |
+| `browser` | string | no |  | Session browser; defaults to this project's live session. Required when the project runs sessions for more than one browser: the call is refused with the list rather than picking one. |
 | `timeoutMs` | number | no | `45000` | Wait budget for this call. Default 45000, clamped to 1000-50000 so one call stays under the client's 60s request timeout. On timeout, call again to keep waiting. |
 | `timeout` | number | no |  | Deprecated alias of timeoutMs, which wins when both are given. |
 

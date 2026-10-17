@@ -27,7 +27,10 @@ import {
   removeSession,
   removeSessionMarker,
 } from "../lib/process-manager";
-import { resolveSessionBrowser } from "../lib/session-browser";
+import {
+  ambiguousSessionRefusal,
+  resolveSessionBrowser,
+} from "../lib/session-browser";
 import { browserProfileRootDir, readyContractPath } from "../lib/session-paths";
 import { removeCarrier } from "../lib/carrier";
 import { contractBrowserPid, describeEnded, endedProcesses } from "../lib/stop-ended";
@@ -49,7 +52,7 @@ export const schema = {
       browser: {
         type: "string",
         description:
-          "Browser of the session to stop. Only that browser's server and browser processes are ended; a session the same project runs for another browser keeps running. Defaults to the single live session for this project rather than assuming chrome.",
+          "Browser of the session to stop. Only that browser's server and browser processes are ended; a session the same project runs for another browser keeps running. Defaults to the single live session for this project rather than assuming chrome; when the project runs sessions for more than one browser, the call is refused with the list instead of stopping one.",
       },
       all: {
         type: "boolean",
@@ -531,6 +534,9 @@ export async function handler(args: {
       },
     });
   }
+
+  const ambiguous = ambiguousSessionRefusal(schema.name, args.projectPath, args.browser);
+  if (ambiguous) return ambiguous;
 
   const { browser } = resolveSessionBrowser(args.projectPath, args.browser);
   const outcome = await stopOne(args.projectPath, browser);

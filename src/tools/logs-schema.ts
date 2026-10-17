@@ -25,7 +25,7 @@ export const schema = {
       browser: {
         type: "string",
         description:
-          "Which dist/extension-js/<browser>/ to read. Defaults to this project's live session, else chrome.",
+          "Which dist/extension-js/<browser>/ to read. Defaults to this project's live session, else chrome. Required when the project runs sessions for more than one browser.",
       },
       level: {
         type: "string",

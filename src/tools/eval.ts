@@ -30,7 +30,10 @@ import {
 } from "../lib/act";
 import { envelope } from "../lib/envelope";
 import { parseFrameObject } from "../lib/frame-json";
-import { resolveSessionBrowser } from "../lib/session-browser";
+import {
+  ambiguousSessionRefusal,
+  resolveSessionBrowser,
+} from "../lib/session-browser";
 import { evalTokenPresent } from "../lib/session-paths";
 import {
   isChromiumFamily,
@@ -980,6 +983,9 @@ async function evaluateThroughExecuteScript(
 export async function handler(
   args: ActArgs & { expression: string },
 ): Promise<string> {
+  const ambiguous = ambiguousSessionRefusal(schema.name, args.projectPath, args.browser);
+  if (ambiguous) return ambiguous;
+
   const { browser } = resolveSessionBrowser(args.projectPath, args.browser);
 
   if (WEBKIT_FAMILY.has(browser) && args.context === "page") {

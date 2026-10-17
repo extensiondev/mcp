@@ -9,6 +9,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
+import { envelope } from "./envelope";
 import { listSessionMarkers, listSessions } from "./process-manager";
 import { pidState } from "./process-identity";
 import {
@@ -127,6 +128,36 @@ export function liveProjectSessions(projectPath: string): LiveSession[] {
   }
 
   return [...out.values()];
+}
+
+export function ambiguousSessionRefusal(
+  command: string,
+  projectPath: string | undefined,
+  explicit: string | undefined,
+): string | null {
+  if (explicit || !projectPath) return null;
+
+  const live = liveProjectSessions(projectPath);
+  if (live.length < 2) return null;
+
+  const browsers = live.map((s) => s.browser);
+
+  return envelope({
+    ok: false,
+    command,
+    status: "browser-required",
+    error: {
+      code: "E_SESSION_AMBIGUOUS",
+      message: `This project runs ${live.length} sessions (${live
+        .map((s) => `${s.browser}, pid ${s.pid}`)
+        .join("; ")}), so the session to act on cannot be picked without a browser.`,
+    },
+    value: {
+      projectPath,
+      sessions: live.map((s) => ({ pid: s.pid, browser: s.browser })),
+    },
+    hint: `Call ${command} again with browser set to one of: ${browsers.join(", ")}.`,
+  });
 }
 
 export function deadReadySession(

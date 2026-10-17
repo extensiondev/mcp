@@ -77,7 +77,7 @@ export const schema = {
         type: "boolean",
         default: false,
         description:
-          "Stop the live session for this projectPath first, reported as replacedSession. Without it a second call is refused rather than forking: two sessions fight over one profile and the newer browser dies on the lock.",
+          "Stop the live session this projectPath runs for the same browser first, reported as replacedSession. Without it a second call for that browser is refused rather than forking: one session per browser owns dist/<browser> and its ready.json and eval token. A session for another browser keeps running either way, since each browser has its own output, profile and port.",
       },
       allowControl: {
         type: "boolean",
@@ -117,7 +117,9 @@ export async function handler(
 ): Promise<string> {
   const browser = args.browser ?? "chrome";
 
-  const existing = liveProjectSessions(args.projectPath);
+  const existing = liveProjectSessions(args.projectPath).filter(
+    (s) => s.browser === browser,
+  );
   const replaced: Array<{ pid: number; browser: string }> = [];
 
   if (existing.length > 0) {
@@ -133,14 +135,14 @@ export async function handler(
         error: {
           code: "E_SESSION_EXISTS",
           message:
-            `A dev session is already running for this project (${listed}). ` +
-            "Starting another would run two dev servers on the same project, and the engine's own warning for that is that the last compile wins on dist/<browser>; each run gets a fresh managed profile, so the lock is not the hazard, the shared output is.",
+            `A ${browser} session is already running for this project (${listed}). ` +
+            `It owns dist/${browser} and the ready.json and eval token under dist/extension-js/${browser}/, so a second ${browser} session would overwrite them; the engine refuses one too. A session for another browser can run beside it.`,
         },
         value: {
           projectPath: args.projectPath,
           sessions: existing.map((s) => ({ pid: s.pid, browser: s.browser })),
         },
-        hint: "Call extension_stop with this projectPath first, or pass replace: true to have extension_dev stop the old session before starting the new one.",
+        hint: `Call extension_stop with this projectPath and browser: "${browser}" first, or pass replace: true to have extension_dev stop that session before starting the new one.`,
       });
     }
 
@@ -444,12 +446,7 @@ export async function handler(
       ...portReport,
       ...(readiness ?? {}),
       projectPath: args.projectPath,
-      ...(replaced.length > 0
-        ? {
-            replacedSession: replaced[0],
-            ...(replaced.length > 1 ? { replacedSessions: replaced } : {}),
-          }
-        : {}),
+      ...(replaced.length > 0 ? { replacedSession: replaced[0] } : {}),
       ...(args.noBrowser ? {} : { headless: visibility.headless }),
       capabilities,
       engine: describeExtensionInvocation(args.projectPath),

@@ -101,7 +101,7 @@
           "name": "browser",
           "type": "string",
           "required": false,
-          "description": "Session browser; defaults to this project's live session"
+          "description": "Session browser; defaults to this project's live session. Required when the project runs sessions for more than one browser: the call is refused with the list rather than picking one."
         },
         {
           "name": "timeout",
@@ -534,7 +534,7 @@
           "type": "boolean",
           "required": false,
           "default": false,
-          "description": "Stop the live session for this projectPath first, reported as replacedSession. Without it a second call is refused rather than forking: two sessions fight over one profile and the newer browser dies on the lock."
+          "description": "Stop the live session this projectPath runs for the same browser first, reported as replacedSession. Without it a second call for that browser is refused rather than forking: one session per browser owns dist/<browser> and its ready.json and eval token. A session for another browser keeps running either way, since each browser has its own output, profile and port."
         },
         {
           "name": "allowControl",
@@ -616,7 +616,7 @@
           "name": "browser",
           "type": "string",
           "required": false,
-          "description": "Browser session to diagnose. Defaults to the active dev session's browser for this project."
+          "description": "Browser session to diagnose. Defaults to the active dev session's browser for this project; required when the project runs sessions for more than one browser."
         }
       ]
     },
@@ -704,7 +704,7 @@
           "name": "browser",
           "type": "string",
           "required": false,
-          "description": "Session browser; defaults to this project's live session"
+          "description": "Session browser; defaults to this project's live session. Required when the project runs sessions for more than one browser: the call is refused with the list rather than picking one."
         },
         {
           "name": "timeout",
@@ -761,7 +761,7 @@
           "name": "browser",
           "type": "string",
           "required": false,
-          "description": "Session browser; defaults to this project's live session"
+          "description": "Session browser; defaults to this project's live session. Required when the project runs sessions for more than one browser: the call is refused with the list rather than picking one."
         },
         {
           "name": "timeout",
@@ -817,7 +817,7 @@
           "name": "browser",
           "type": "string",
           "required": false,
-          "description": "Session browser; defaults to this project's live session"
+          "description": "Session browser; defaults to this project's live session. Required when the project runs sessions for more than one browser: the call is refused with the list rather than picking one."
         },
         {
           "name": "maxBytes",
@@ -858,7 +858,7 @@
           "name": "browser",
           "type": "string",
           "required": false,
-          "description": "Session browser; defaults to this project's live session"
+          "description": "Session browser; defaults to this project's live session. Required when the project runs sessions for more than one browser: the call is refused with the list rather than picking one."
         }
       ]
     },
@@ -885,7 +885,7 @@
           "name": "browser",
           "type": "string",
           "required": false,
-          "description": "Which dist/extension-js/<browser>/ to read. Defaults to this project's live session, else chrome."
+          "description": "Which dist/extension-js/<browser>/ to read. Defaults to this project's live session, else chrome. Required when the project runs sessions for more than one browser."
         },
         {
           "name": "level",
@@ -1065,7 +1065,7 @@
           "name": "browser",
           "type": "string",
           "required": false,
-          "description": "Session browser; defaults to this project's live session"
+          "description": "Session browser; defaults to this project's live session. Required when the project runs sessions for more than one browser: the call is refused with the list rather than picking one."
         },
         {
           "name": "timeout",
@@ -1466,7 +1466,7 @@
           "name": "browser",
           "type": "string",
           "required": false,
-          "description": "Session browser; defaults to this project's live session"
+          "description": "Session browser; defaults to this project's live session. Required when the project runs sessions for more than one browser: the call is refused with the list rather than picking one."
         },
         {
           "name": "timeout",
@@ -1705,7 +1705,7 @@
           "name": "browser",
           "type": "string",
           "required": false,
-          "description": "Browser of the session to stop. Only that browser's server and browser processes are ended; a session the same project runs for another browser keeps running. Defaults to the single live session for this project rather than assuming chrome."
+          "description": "Browser of the session to stop. Only that browser's server and browser processes are ended; a session the same project runs for another browser keeps running. Defaults to the single live session for this project rather than assuming chrome; when the project runs sessions for more than one browser, the call is refused with the list instead of stopping one."
         },
         {
           "name": "all",
@@ -1771,7 +1771,7 @@
           "name": "browser",
           "type": "string",
           "required": false,
-          "description": "Session browser; defaults to this project's live session"
+          "description": "Session browser; defaults to this project's live session. Required when the project runs sessions for more than one browser: the call is refused with the list rather than picking one."
         },
         {
           "name": "timeout",
@@ -1990,7 +1990,7 @@
           "name": "browser",
           "type": "string",
           "required": false,
-          "description": "Session browser; defaults to this project's live session"
+          "description": "Session browser; defaults to this project's live session. Required when the project runs sessions for more than one browser: the call is refused with the list rather than picking one."
         },
         {
           "name": "timeoutMs",

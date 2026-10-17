@@ -18,7 +18,10 @@ import {
 } from "../lib/engine-version";
 import { toMcpSpeak } from "../lib/act";
 import { envelope, isEnvelope } from "../lib/envelope";
-import { resolveSessionBrowser } from "../lib/session-browser";
+import {
+  ambiguousSessionRefusal,
+  resolveSessionBrowser,
+} from "../lib/session-browser";
 import { WEBKIT_FAMILY } from "../lib/browser-family";
 import {
   readWebDriverSession,
@@ -94,7 +97,7 @@ export const schema = {
       browser: {
         type: "string",
         description:
-          "Browser session to diagnose. Defaults to the active dev session's browser for this project.",
+          "Browser session to diagnose. Defaults to the active dev session's browser for this project; required when the project runs sessions for more than one browser.",
       },
     },
   },
@@ -316,6 +319,9 @@ export async function handler(args: {
   if (!args.projectPath) {
     return environmentPreflight();
   }
+
+  const ambiguous = ambiguousSessionRefusal(schema.name, args.projectPath, args.browser);
+  if (ambiguous) return ambiguous;
 
   const projectPath = args.projectPath;
   const resolved = resolveSessionBrowser(projectPath, args.browser);

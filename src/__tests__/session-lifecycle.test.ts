@@ -84,7 +84,7 @@ vi.mock("../tools/logs", async (importOriginal) => {
 
 const dev = await import("../tools/dev");
 const stop = await import("../tools/stop");
-const { registerSession, removeSession, listSessionMarkers } = await import(
+const { registerSession, removeSession, removeSessionMarker, listSessionMarkers } = await import(
   "../lib/process-manager"
 );
 
@@ -156,9 +156,12 @@ afterEach(() => {
   }
 
   for (const dir of tmpDirs.splice(0)) {
-    try {
-      removeSession(dir, "chrome");
-    } catch {
+    for (const browser of ["chrome", "firefox"]) {
+      try {
+        removeSession(dir, browser);
+        removeSessionMarker(dir, browser);
+      } catch {
+      }
     }
 
     fs.rmSync(dir, { recursive: true, force: true });
@@ -266,6 +269,58 @@ describe("extension_dev fork guard", () => {
     expect(result.status).toBe("started");
     expect(result.value.replacedSession).toEqual({ pid, browser: "chrome" });
     expect(isAlive(pid)).toBe(false);
+  }, 20_000);
+});
+
+describe("extension_dev keeps one session per browser, not per project", () => {
+  it("starts a session for another browser beside the live one", async () => {
+    const project = tmpProject();
+    const chromePid = spawnVictim();
+    registerSession({ pid: chromePid, browser: "chrome", projectPath: project, command: "dev" });
+
+    const result = JSON.parse(
+      await dev.handler({ wait: false, projectPath: project, browser: "firefox" }),
+    );
+
+    expect(result.status).toBe("started");
+    expect(result.ok).toBe(true);
+    expect(result.value.replacedSession).toBeUndefined();
+    expect(isAlive(chromePid)).toBe(true);
+  });
+
+  it("refuses a same-browser session and lists only the session that owns its output", async () => {
+    const project = tmpProject();
+    const chromePid = spawnVictim();
+    const firefoxPid = spawnVictim();
+    registerSession({ pid: chromePid, browser: "chrome", projectPath: project, command: "dev" });
+    registerSession({ pid: firefoxPid, browser: "firefox", projectPath: project, command: "dev" });
+
+    const result = JSON.parse(
+      await dev.handler({ wait: false, projectPath: project, browser: "chrome" }),
+    );
+
+    expect(result.status).toBe("session-exists");
+    expect(result.error.code).toBe("E_SESSION_EXISTS");
+    expect(result.value.sessions).toEqual([{ pid: chromePid, browser: "chrome" }]);
+    expect(result.error.message).toContain("dist/chrome");
+    expect(result.error.message).not.toContain("firefox");
+  });
+
+  it("replace:true stops only the session of the browser it replaces", async () => {
+    const project = tmpProject();
+    const chromePid = spawnVictim();
+    const firefoxPid = spawnVictim();
+    registerSession({ pid: chromePid, browser: "chrome", projectPath: project, command: "dev" });
+    registerSession({ pid: firefoxPid, browser: "firefox", projectPath: project, command: "dev" });
+
+    const result = JSON.parse(
+      await dev.handler({ wait: false, projectPath: project, browser: "chrome", replace: true }),
+    );
+
+    expect(result.status).toBe("started");
+    expect(result.value.replacedSession).toEqual({ pid: chromePid, browser: "chrome" });
+    expect(isAlive(chromePid)).toBe(false);
+    expect(isAlive(firefoxPid)).toBe(true);
   }, 20_000);
 });
 

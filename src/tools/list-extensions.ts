@@ -23,7 +23,10 @@ import {
   RDP_PORT_MISSING_HINT,
 } from "../lib/cdp-port";
 import { rdpListAddons } from "../lib/rdp";
-import { resolveSessionBrowser } from "../lib/session-browser";
+import {
+  ambiguousSessionRefusal,
+  resolveSessionBrowser,
+} from "../lib/session-browser";
 import { sessionGuestIdentity } from "../lib/extension-identity";
 import { readyContractPath } from "../lib/session-paths";
 
@@ -189,6 +192,9 @@ export async function handler(args: {
   projectPath: string;
   browser?: string;
 }): Promise<string> {
+  const ambiguous = ambiguousSessionRefusal(schema.name, args.projectPath, args.browser);
+  if (ambiguous) return ambiguous;
+
   const { browser } = resolveSessionBrowser(
     args.projectPath,
     args.browser,

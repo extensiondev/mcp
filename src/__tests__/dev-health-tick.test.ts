@@ -211,7 +211,7 @@ describe("extension_dev health tick", () => {
     expect(result.hint).not.toMatch(/Control channel is ON/);
   }, 20_000);
 
-  it("names the shared output, not a profile lock, when a session already runs", async () => {
+  it("names the output that browser's session owns, not a profile lock, when a session already runs", async () => {
     const project = tmpProject();
 
     nextChild = () => {
@@ -225,7 +225,7 @@ describe("extension_dev health tick", () => {
     expect(first.status).toBe("started");
     const second = JSON.parse(await dev.handler({ wait: false, projectPath: project }));
     expect(second.status).toBe("session-exists");
-    expect(second.error.message).toMatch(/last compile wins/);
+    expect(second.error.message).toMatch(/owns dist\/chrome/);
     expect(second.error.message).not.toMatch(/dies on the profile lock/);
   }, 25_000);
 

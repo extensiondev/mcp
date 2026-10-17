@@ -38,6 +38,7 @@ vi.mock("../lib/act", async (importOriginal) => {
 
 const session = vi.hoisted(() => ({ browser: "chrome", asked: [] as Array<string | undefined> }));
 vi.mock("../lib/session-browser", () => ({
+  ambiguousSessionRefusal: () => null,
   resolveSessionBrowser: (_projectPath: string, explicit: string | undefined) => {
     session.asked.push(explicit);
 

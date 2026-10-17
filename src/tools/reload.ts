@@ -13,7 +13,10 @@ import {
 } from "../lib/common-schema";
 import { actFrameJson, runActVerb, commonFlags, type ActArgs } from "../lib/act";
 import { readExecutorStamp, watchExecutorReattach } from "../lib/executor-stamp";
-import { resolveSessionBrowser } from "../lib/session-browser";
+import {
+  ambiguousSessionRefusal,
+  resolveSessionBrowser,
+} from "../lib/session-browser";
 
 export const schema = {
   name: "extension_reload",
@@ -39,6 +42,9 @@ export const schema = {
 const REATTACH_BUDGET_CEILING_MS = 5_000;
 
 export async function handler(args: ActArgs): Promise<string> {
+  const ambiguous = ambiguousSessionRefusal(schema.name, args.projectPath, args.browser);
+  if (ambiguous) return ambiguous;
+
   const { browser } = resolveSessionBrowser(args.projectPath, args.browser);
   const before = readExecutorStamp(args.projectPath, browser);
   const raw = await runActVerb(

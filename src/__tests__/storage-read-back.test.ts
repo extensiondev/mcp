@@ -36,7 +36,10 @@ vi.mock("../lib/act", async (importOriginal) => {
   };
 });
 
-vi.mock("../lib/session-browser", () => ({ resolveSessionBrowser: () => ({ browser: "chrome" }) }));
+vi.mock("../lib/session-browser", () => ({
+  ambiguousSessionRefusal: () => null,
+  resolveSessionBrowser: () => ({ browser: "chrome" }),
+}));
 
 const storage = await import("../tools/storage");
 

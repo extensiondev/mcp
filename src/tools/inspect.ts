@@ -15,7 +15,10 @@ import {
   restoredTabWarning,
   sessionProfileReused,
 } from "../lib/profile-carryover";
-import { resolveSessionBrowser } from "../lib/session-browser";
+import {
+  ambiguousSessionRefusal,
+  resolveSessionBrowser,
+} from "../lib/session-browser";
 import { inspectViaBridge } from "./inspect-gecko";
 import { schema } from "./inspect-schema";
 
@@ -30,6 +33,9 @@ export async function handler(args: {
   maxBytes?: number;
   deepDom?: boolean;
 }): Promise<string> {
+  const ambiguous = ambiguousSessionRefusal(schema.name, args.projectPath, args.browser);
+  if (ambiguous) return ambiguous;
+
   const { browser } = resolveSessionBrowser(
     args.projectPath,
     args.browser,

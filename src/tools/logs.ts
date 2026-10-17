@@ -28,6 +28,7 @@ import { makeFilter, type LogsArgs } from "./logs-filter";
 import { envelope, type ErrorCode } from "../lib/envelope";
 import { WEBKIT_FAMILY } from "../lib/browser-family";
 import {
+  ambiguousSessionRefusal,
   resolveSessionBrowser,
   knownSessionBrowsers,
 } from "../lib/session-browser";
@@ -611,6 +612,9 @@ async function readFromStream(
 }
 
 export async function handler(args: LogsArgs): Promise<string> {
+  const ambiguous = ambiguousSessionRefusal(TOOL, args.projectPath, args.browser);
+  if (ambiguous) return ambiguous;
+
   const { browser } = resolveSessionBrowser(args.projectPath, args.browser);
   const limit = args.limit && args.limit > 0 ? args.limit : DEFAULT_LIMIT;
 

@@ -26,7 +26,10 @@ import { envelope } from "../lib/envelope";
 import { envIsHeadless } from "../lib/launch-flags";
 import { findSessionInfo } from "../lib/process-manager";
 import { parseFrameObject } from "../lib/frame-json";
-import { resolveSessionBrowser } from "../lib/session-browser";
+import {
+  ambiguousSessionRefusal,
+  resolveSessionBrowser,
+} from "../lib/session-browser";
 import { readyContractPath } from "../lib/session-paths";
 import { CDPClient } from "../lib/cdp";
 import { resolveCdpPort, CDP_PORT_MISSING_HINT } from "../lib/cdp-port";
@@ -1037,6 +1040,9 @@ export async function handler(
     asTab?: boolean;
   },
 ): Promise<string> {
+  const ambiguous = ambiguousSessionRefusal(schema.name, args.projectPath, args.browser);
+  if (ambiguous) return ambiguous;
+
   const { browser } = resolveSessionBrowser(args.projectPath, args.browser);
 
   if (args.surface === "devtools") {

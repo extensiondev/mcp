@@ -16,7 +16,10 @@ import {
 } from "../lib/common-schema";
 import { actFrameJson, addWarning, patchValue, runActVerb, type ActArgs } from "../lib/act";
 import { envelope } from "../lib/envelope";
-import { resolveSessionBrowser } from "../lib/session-browser";
+import {
+  ambiguousSessionRefusal,
+  resolveSessionBrowser,
+} from "../lib/session-browser";
 
 export const schema = {
   name: "extension_storage",
@@ -75,6 +78,9 @@ export async function handler(
     value?: unknown;
   },
 ): Promise<string> {
+  const ambiguous = ambiguousSessionRefusal(schema.name, args.projectPath, args.browser);
+  if (ambiguous) return ambiguous;
+
   const { browser } = resolveSessionBrowser(args.projectPath, args.browser);
   const cli = ["storage", args.action, args.projectPath];
   if (args.area) cli.push("--area", args.area);

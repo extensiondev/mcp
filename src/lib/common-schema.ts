@@ -56,7 +56,7 @@ export const SESSION_PROJECT_PATH = {
 
 export const SESSION_BROWSER = {
   type: "string",
-  description: "Session browser; defaults to this project's live session",
+  description: "Session browser; defaults to this project's live session. Required when the project runs sessions for more than one browser: the call is refused with the list rather than picking one.",
 } as const;
 
 export const CALL_TIMEOUT = {

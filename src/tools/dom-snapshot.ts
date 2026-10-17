@@ -19,7 +19,10 @@ import {
   addWarning,
 } from "../lib/act";
 import { envelope } from "../lib/envelope";
-import { resolveSessionBrowser } from "../lib/session-browser";
+import {
+  ambiguousSessionRefusal,
+  resolveSessionBrowser,
+} from "../lib/session-browser";
 import { isChromiumFamily, isGeckoFamily } from "../lib/browser-family";
 import {
   resolveCdpPort,
@@ -234,6 +237,9 @@ export async function handler(
 ): Promise<string> {
   const withConsole =
     args.withConsole === true ? 50 : args.withConsole === false ? undefined : args.withConsole;
+
+  const ambiguous = ambiguousSessionRefusal(schema.name, args.projectPath, args.browser);
+  if (ambiguous) return ambiguous;
 
   if (args.listTargets) {
     const { browser } = resolveSessionBrowser(args.projectPath, args.browser);

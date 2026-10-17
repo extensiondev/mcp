@@ -43,7 +43,10 @@ import {
   isSourceManifest,
 } from "../lib/project-manifest";
 import { logsPath, readyContractPath } from "../lib/session-paths";
-import { resolveSessionBrowser } from "../lib/session-browser";
+import {
+  ambiguousSessionRefusal,
+  resolveSessionBrowser,
+} from "../lib/session-browser";
 import {
   ASSERT_CHECKS,
   assertVerdict,
@@ -1548,6 +1551,9 @@ export async function handler(args: {
       hint: "Each entry is an object whose `assert` names one of the checks above, plus that check's own arguments.",
     });
   }
+
+  const ambiguous = ambiguousSessionRefusal(COMMAND, args.projectPath, args.browser);
+  if (ambiguous) return ambiguous;
 
   const { browser } = resolveSessionBrowser(
     args.projectPath,

@@ -11,7 +11,10 @@ import { setTimeout as sleep } from "node:timers/promises";
 
 import { PROJECT_PATH, SESSION_BROWSER } from "../lib/common-schema";
 import { findSessionInfo, sessionSinceMs } from "../lib/process-manager";
-import { resolveSessionBrowser } from "../lib/session-browser";
+import {
+  ambiguousSessionRefusal,
+  resolveSessionBrowser,
+} from "../lib/session-browser";
 import { readyContractPath } from "../lib/session-paths";
 import { productionLaunchEvidence, readLoadOverDebugPort } from "../lib/production-launch";
 import { sessionPorts } from "../lib/session-ports";
@@ -70,6 +73,9 @@ export async function handler(args: {
   timeoutMs?: number;
   timeout?: number;
 }): Promise<string> {
+  const ambiguous = ambiguousSessionRefusal(schema.name, args.projectPath, args.browser);
+  if (ambiguous) return ambiguous;
+
   const { browser } = resolveSessionBrowser(
     args.projectPath,
     args.browser,
