@@ -74,7 +74,7 @@ import { executeScriptExpression } from "./inspect-gecko";
 export const schema = {
   name: "extension_eval",
   description:
-    "Evaluate an expression in a running extension context. Start the session with allowEval:true (extension_dev), which writes a 0600 session token; without that token every route of this tool, the debug port included, answers eval-disabled. Context defaults to 'background', except on a Chromium MV3 session (the default template) where it defaults to 'page', the active tab; pass context:'background' to evaluate in the service worker, which on Chromium goes over the debug port. Debug-port evaluates run with a user gesture, so gesture-gated APIs (permissions.request, sidePanel.open) can succeed here and still fail when the extension's own code calls them. For content and page, pass `url` to pick the tab, or omit both `url` and `tab` for the active tab; a numeric `tab` only disambiguates. Extension surfaces (popup, options, sidebar, devtools) and override pages (newtab, history, bookmarks) need no tab id but must already be open: open one with extension_open first, because a closed one returns an explicit error. On a Chromium MV3 session those pages, and context:'page' with a chrome-extension:// url, evaluate over CDP, the inspector path the extension page CSP does not govern; elsewhere they evaluate over the in-bundle relay. On Firefox a document whose content security policy forbids eval (the extension's own pages, or a site's) is evaluated over the debugger protocol instead, which takes one expression; a page inside the extension that is no declared surface (pages/*) is reached the same way by context:'page' and its moz-extension:// url once a tab shows it. Call extension_dom_snapshot with listTabs:true to enumerate {tabId, url, title}.",
+    "Evaluate an expression in a running extension context. Start the session with allowEval:true (extension_dev), which writes a 0600 session token; without that token every route of this tool, the debug port included, answers eval-disabled. Context defaults to 'background', except on a Chromium MV3 session (the default template) where it defaults to 'page', the active tab; pass context:'background' to evaluate in the service worker, which on Chromium goes over the debug port. Debug-port evaluates run with a user gesture, so gesture-gated APIs (permissions.request, sidePanel.open) can succeed here and still fail when the extension's own code calls them. For content and page, pass `url` to pick the tab, or omit both `url` and `tab` for the active tab; a numeric `tab` only disambiguates. Extension surfaces (popup, options, sidebar, devtools) and override pages (newtab, history, bookmarks) need no tab id but must already be open: open one with extension_open first, because a closed one returns an explicit error. On a Chromium MV3 session those pages, and context:'page' with a chrome-extension:// url, evaluate over CDP, the inspector path the extension page CSP does not govern; elsewhere they evaluate over the in-bundle relay. On Firefox a document whose content security policy forbids eval (the extension's own pages, or a site's) is evaluated over the debugger protocol instead, which takes one expression; a page inside the extension that is no declared surface (pages/*) is reached the same way by context:'page' and its moz-extension:// url once a tab shows it. A returned promise is awaited: over CDP and the Firefox debugger protocol, in a Firefox background, and in tabs (page or content through the in-tab executor) and relay surfaces, where this tool polls until it settles or timeout passes. The one exception is Firefox MV2 without the scripting API, where the expression runs through tabs.executeScript and must return a synchronous value. A value that cannot be cloned (a DOM node, a function) comes back as its string form, or as a not-cloneable error where the browser itself refuses to copy it. Call extension_dom_snapshot with listTabs:true to enumerate {tabId, url, title}.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -513,15 +513,14 @@ const TRUSTED_TYPES_REFUSAL = /Trusted Type/i;
 const RELAY_POLL_MS = 300;
 const RELAY_DEFAULT_BUDGET_MS = 30_000;
 
-async function evaluateThroughRelay(
+type EngineRun = (expression: string) => Promise<string>;
+
+function engineEvalRun(
   args: ActArgs & { expression: string },
   browser: string,
-  context: string,
-): Promise<string> {
-  const token = crypto.randomUUID();
-  const budgetMs = args.timeout ?? RELAY_DEFAULT_BUDGET_MS;
-  const deadline = Date.now() + budgetMs;
-  const run = (expression: string): Promise<string> =>
+  context: string | undefined,
+): EngineRun {
+  return (expression) =>
     runActVerb(
       [
         "eval",
@@ -534,71 +533,123 @@ async function evaluateThroughRelay(
       args.timeout,
       schema.name,
     );
+}
+
+async function settleThroughEngine(
+  args: ActArgs & { expression: string },
+  where: string,
+  run: EngineRun,
+): Promise<{ settled: boolean; answer: string }> {
+  const token = crypto.randomUUID();
+  const budgetMs = args.timeout ?? RELAY_DEFAULT_BUDGET_MS;
+  const deadline = Date.now() + budgetMs;
   let raw = await run(relaySafeExpression(args.expression, token));
   let parsed = parseFrameObject(raw);
 
-  if (isGeckoFamily(browser) && cspRefusedFrame(parsed)) {
-    return evaluatePastSurfaceCsp(args, context, run);
-  }
-
-  if (!parsed || parsed.ok !== true) return raw;
+  if (!parsed || parsed.ok !== true) return { settled: false, answer: raw };
 
   let frame = readRelayFrame(parsed.value);
-  if (!frame) return raw;
+  if (!frame) return { settled: false, answer: raw };
 
   let polls = 0;
 
   while (!frame.done) {
     if (Date.now() >= deadline) {
-      return envelope({
-        ok: false,
-        command: schema.name,
-        status: "eval-pending",
-        error: {
-          code: "E_WAIT_TIMEOUT",
-          name: "EvalPending",
-          message: `The expression returned a promise that had not settled after ${budgetMs} ms; it is still running in the ${context} page.`,
-        },
-        value: { context, token, polls },
-        hint: `Its outcome lands in globalThis.${RELAY_MARK}[${JSON.stringify(token)}] inside the ${context} page when it settles ({done, ok, value}): read it with extension_eval in the same context, or pass a larger timeout to wait here.`,
-      });
+      return {
+        settled: true,
+        answer: envelope({
+          ok: false,
+          command: schema.name,
+          status: "eval-pending",
+          error: {
+            code: "E_WAIT_TIMEOUT",
+            name: "EvalPending",
+            message: `The expression returned a promise that had not settled after ${budgetMs} ms; it is still running in ${where}.`,
+          },
+          value: { context: args.context ?? null, token, polls },
+          hint: `Its outcome lands in globalThis.${RELAY_MARK}[${JSON.stringify(token)}] inside ${where} when it settles ({done, ok, value}): read it with extension_eval in the same context, or pass a larger timeout to wait here.`,
+        }),
+      };
     }
 
     await sleep(RELAY_POLL_MS);
     polls += 1;
     raw = await run(relayPollExpression(token));
     parsed = parseFrameObject(raw);
-    if (!parsed || parsed.ok !== true) return raw;
+    if (!parsed || parsed.ok !== true) return { settled: true, answer: raw };
 
     const next = readRelayFrame(parsed.value);
-    if (!next) return raw;
+    if (!next) return { settled: true, answer: raw };
 
     frame = next;
   }
 
   if (frame.ok === false) {
-    return envelope({
-      ok: false,
-      command: schema.name,
-      status: "eval-failed",
-      error: {
-        code: "E_EVAL",
-        name: frame.name || "EvalError",
-        message: frame.message || "the expression rejected",
-      },
-      hint: `The expression threw, or the promise it returned rejected, inside the ${context} page.`,
-    });
+    return {
+      settled: true,
+      answer: envelope({
+        ok: false,
+        command: schema.name,
+        status: "eval-failed",
+        error: {
+          code: "E_EVAL",
+          name: frame.name || "EvalError",
+          message: frame.message || "the expression rejected",
+        },
+        hint: `The expression threw, or the promise it returned rejected, inside ${where}.`,
+      }),
+    };
   }
 
   parsed.value = frame.value === undefined ? null : frame.value;
 
   if (polls > 0) {
     parsed.hint =
-      `The expression returned a promise; the ${context} page settled it and this call polled ${polls} time${polls === 1 ? "" : "s"} for the result. ${ 
+      `The expression returned a promise; ${where} settled it and this call polled ${polls} time${polls === 1 ? "" : "s"} for the result. ${
       typeof parsed.hint === "string" ? parsed.hint : ""}`;
   }
 
-  return actFrameJson(parsed);
+  return { settled: true, answer: actFrameJson(parsed) };
+}
+
+async function evaluateThroughRelay(
+  args: ActArgs & { expression: string },
+  browser: string,
+  context: string,
+): Promise<string> {
+  const run = engineEvalRun(args, browser, context);
+  const outcome = await settleThroughEngine(
+    { ...args, context },
+    `the ${context} page`,
+    run,
+  );
+
+  if (!outcome.settled && isGeckoFamily(browser) && cspRefusedFrame(parseFrameObject(outcome.answer))) {
+    return evaluatePastSurfaceCsp(args, context, run);
+  }
+
+  return outcome.answer;
+}
+
+const NOT_CLONEABLE = /non-structured-clon|could not be cloned|DataCloneError/i;
+
+function notCloneableRefusal(raw: string): string | null {
+  const parsed = parseFrameObject(raw);
+  if (!parsed || parsed.ok !== false) return null;
+  if (!NOT_CLONEABLE.test(String(parsed.error?.message ?? ""))) return null;
+
+  return envelope({
+    ok: false,
+    command: schema.name,
+    status: "eval-result-not-cloneable",
+    error: {
+      code: "E_EVAL_NOT_CLONEABLE",
+      name: "ResultNotCloneable",
+      message: String(parsed.error.message),
+      ...(typeof parsed.error?.engine === "string" ? { engine: parsed.error.engine } : {}),
+    },
+    hint: "The tab was found and the expression ran, but the browser could not copy its result back: a promise, a DOM node or a function is not cloneable. Return a synchronous, cloneable value (plain data, or JSON.stringify of it), or use context: \"background\", which awaits a returned promise.",
+  });
 }
 
 const CSP_EVAL_REFUSAL = /blocked by CSP|call to eval|unsafe-eval|Content Security Policy/i;
@@ -1031,42 +1082,45 @@ export async function handler(
     return evaluateThroughRelay(args, browser, context);
   }
 
-  const raw = await runActVerb(
-    [
-      "eval",
-      ...commonFlags({ ...args, context, browser }),
-      "--",
-      args.expression,
-      args.projectPath,
-    ],
-    args.projectPath,
-    args.timeout,
-    schema.name,
-  );
+  const run = engineEvalRun(args, browser, context);
+  const inTab = context === "page" || context === "content";
+  const engine = inTab
+    ? await settleThroughEngine(
+        { ...args, context },
+        context === "page" ? "the tab's page world" : "the tab's content-script world",
+        run,
+      )
+    : { settled: false, answer: await run(args.expression) };
+  const raw = engine.answer;
 
-  const mv2Fallback = await evaluateThroughExecuteScript(args, browser, context, raw);
-  if (mv2Fallback !== null) return mv2Fallback;
+  if (!engine.settled) {
+    const mv2Fallback = await evaluateThroughExecuteScript(args, browser, context, raw);
+    if (mv2Fallback !== null) return mv2Fallback;
 
-  const pastSiteCsp = await evaluatePagePastSiteCsp(args, browser, context, raw);
-  if (pastSiteCsp !== null) return pastSiteCsp;
+    const pastSiteCsp = await evaluatePagePastSiteCsp(args, browser, context, raw);
+    if (pastSiteCsp !== null) return pastSiteCsp;
 
-  if (backgroundRouteRefusedStatements(args, browser, context, raw)) {
-    return notOneExpression();
-  }
+    if (backgroundRouteRefusedStatements(args, browser, context, raw)) {
+      return notOneExpression();
+    }
 
-  const cspRefusal = explainCspRefusal(raw, context);
-  if (cspRefusal !== null) return cspRefusal;
+    const cspRefusal = explainCspRefusal(raw, context);
+    if (cspRefusal !== null) return cspRefusal;
 
-  const trustedTypes = parseFrameObject(raw);
+    const trustedTypes = parseFrameObject(raw);
 
-  if (
-    trustedTypes?.ok === false &&
-    TRUSTED_TYPES_REFUSAL.test(String(trustedTypes.error?.message ?? ""))
-  ) {
-    trustedTypes.hint =
-      "This site enforces Trusted Types, which refuse a string evaluated inside the page. Pass url so the tab is evaluated over CDP (the inspector path the policy does not govern), or use context: \"content\" for a DOM read from the extension's isolated world.";
+    if (
+      trustedTypes?.ok === false &&
+      TRUSTED_TYPES_REFUSAL.test(String(trustedTypes.error?.message ?? ""))
+    ) {
+      trustedTypes.hint =
+        "This site enforces Trusted Types, which refuse a string evaluated inside the page. Pass url so the tab is evaluated over CDP (the inspector path the policy does not govern), or use context: \"content\" for a DOM read from the extension's isolated world.";
 
-    return actFrameJson(trustedTypes);
+      return actFrameJson(trustedTypes);
+    }
+
+    const notCloneable = notCloneableRefusal(raw);
+    if (notCloneable !== null) return notCloneable;
   }
 
   if (args.context === "content") {

@@ -237,7 +237,7 @@ describe("extension_eval on a relay surface never hands the relay a promise", ()
     expect(result.value).toBe("plain");
   });
 
-  it("does not wrap background or page contexts", async () => {
+  it("does not wrap the background context, which awaits on its own", async () => {
     const dir = project(GECKO);
 
     await evalTool.handler({
@@ -247,20 +247,88 @@ describe("extension_eval on a relay surface never hands the relay a promise", ()
       expression: "1 + 1",
     });
 
-    await evalTool.handler({
-      projectPath: dir,
-      browser: "firefox",
-      context: "page",
-      url: "https://example.com/",
-      expression: "1 + 1",
-    });
-
-    expect(calls).toHaveLength(2);
+    expect(calls).toHaveLength(1);
 
     for (const call of calls) {
       expect(call.expression).toBe("1 + 1");
       expect(call.expression).not.toContain(relay.RELAY_MARK);
     }
+  });
+});
+
+const GECKO_MV3 = {
+  manifest_version: 3,
+  name: "F",
+  background: { scripts: ["background.js"] },
+  content_scripts: [{ matches: ["<all_urls>"], js: ["content.js"] }],
+};
+
+describe("extension_eval in a Firefox tab awaits a returned promise", () => {
+  it.each(["page", "content"])(
+    "settles a promise returned in the %s world and answers its value",
+    async (context) => {
+      const dir = project(GECKO_MV3);
+
+      respond = (call, index) => {
+        if (index === 0) {
+          expect(call.expression).toContain(relay.RELAY_MARK);
+
+          return okFrame({ [relay.RELAY_MARK]: 1, done: false, token: tokenOf(call.expression) });
+        }
+
+        return okFrame({ [relay.RELAY_MARK]: 1, done: true, ok: true, value: 1 });
+      };
+
+      const result = JSON.parse(
+        await evalTool.handler({
+          projectPath: dir,
+          browser: "firefox",
+          context,
+          url: "127.0.0.1:8765",
+          expression: "new Promise(r => setTimeout(r, 1000)).then(() => 1)",
+        }),
+      );
+
+      expect(result.ok).toBe(true);
+      expect(result.value).toBe(1);
+      expect(calls).toHaveLength(2);
+
+      for (const call of calls) {
+        expect(call.cli[call.cli.indexOf("--context") + 1]).toBe(context);
+        expect(call.cli[call.cli.indexOf("--url") + 1]).toBe("127.0.0.1:8765");
+      }
+    },
+  );
+
+  it("reports a result the tab cannot clone as a value error, not a missing tab", async () => {
+    const dir = project(GECKO_MV3);
+    respond = () =>
+      actVerbAnswer(
+        evalRefusal({
+          code: "E_TARGET_NOT_FOUND",
+          name: "TargetNotFound",
+          message: "Script '<anonymous code>' result is non-structured-clonable data",
+          engine: "firefox",
+        }),
+        "extension_eval",
+      );
+
+    const result = JSON.parse(
+      await evalTool.handler({
+        projectPath: dir,
+        browser: "firefox",
+        context: "page",
+        url: "127.0.0.1:8765",
+        expression: "Promise.resolve(1)",
+      }),
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.status).toBe("eval-result-not-cloneable");
+    expect(result.error.code).toBe("E_EVAL_NOT_CLONEABLE");
+    expect(result.error.message).toContain("non-structured-clonable");
+    expect(result.hint).toContain("synchronous, cloneable value");
+    expect(result.hint).toContain('context: "background"');
   });
 });
 
