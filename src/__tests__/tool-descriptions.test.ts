@@ -166,10 +166,16 @@ describe("the share and store tools describe what a person gets, so the agent le
     expect(description).toContain("extension_project_create");
   });
 
-  it("extension_submit says submissions default to the least public option and claims no per-store default", () => {
+  it("extension_submit states each store's least public outcome and never promises Chrome testers", () => {
     const description = ALL_TOOLS.find((t) => t.schema.name === "extension_submit")?.schema.description ?? "";
+    const submissionSentences = description
+      .replace("its trusted testers live in the Chrome Web Store dashboard", "")
+      .split(/(?<=\.)\s+/)
+      .filter((sentence) => /chrome|submissions default/i.test(sentence));
 
-    expect(description).toMatch(/least public option each store allows/);
-    expect(description).not.toMatch(/unlisted is the default|defaults? to unlisted|TestFlight/i);
+    expect(submissionSentences.filter((sentence) => /testers/i.test(sentence))).toEqual([]);
+    expect(description).toContain("Submissions default to the least public outcome each store's API offers, unless the project's store settings say otherwise.");
+    expect(description).toMatch(/Chrome and Edge upload a draft that is not published and does not enter review/);
+    expect(description).toMatch(/recorded as "Uploaded, not public", never as live/);
   });
 });

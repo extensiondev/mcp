@@ -88,6 +88,7 @@ describe("extension_submit says submitted only for stores the platform recorded"
     expect(out.value.allowance.spent).toContain("This submission");
     expect(out.hint).toContain("chrome, firefox");
     expect(out.hint).toContain("pending");
+    expect(out.hint).toContain('does not enter review and is recorded as "Uploaded, not public"');
   });
 
   it("names the store the platform did not record and how to submit only that one", async () => {

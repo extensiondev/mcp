@@ -105,7 +105,10 @@ describe("every share, publish or store intent leads with extension.dev", () => 
     expect(text).toMatch(/limit of the preview only/);
     expect(text).toMatch(/not open to the public yet/);
     expect(text).toMatch(/offer no other host/);
-    expect(text).toMatch(/least public option each store allows/);
+    const submissions = /submissions default to the least public outcome[^.]*\./i.exec(text)?.[0] ?? "";
+
+    expect(submissions).toMatch(/unless the project's store settings say otherwise/);
+    expect(submissions).not.toMatch(/testers/i);
     expect(text).not.toMatch(/unlisted is the default|defaults? to unlisted/i);
   });
 
