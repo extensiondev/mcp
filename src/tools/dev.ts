@@ -17,7 +17,11 @@ import {
 import { pollBootVerdict,
   bootFailureHint,
 } from "../lib/boot-verdict";
-import { profileCarriesTabsOver } from "../lib/profile-carryover";
+import {
+  profileCarryoverBeforeLaunch,
+  profileReusedAt,
+  reusedProfileNote,
+} from "../lib/profile-carryover";
 import { envelope } from "../lib/envelope";
 import {
   describeExtensionInvocation,
@@ -44,9 +48,6 @@ import {
   launchFlagArgs,
   type LaunchFlagArgs,
 } from "../lib/launch-flags";
-
-const REUSED_PROFILE_NOTE =
-  "This session reuses a browser profile that already held a previous session's state, so the browser may restore that session's tabs alongside the extension. extension_inspect with no target ranks whatever is open and can land on one of them; it flags this session as profileReused for that reason. Pass url, or open the surface you mean with extension_open, before reading anything.";
 
 export const schema = {
   name: "extension_dev",
@@ -169,11 +170,12 @@ export async function handler(
   }
 
   const allowControl = args.allowControl !== false || Boolean(args.allowEval);
-  const profileReused = profileCarriesTabsOver(
+  const carryover = profileCarryoverBeforeLaunch(
     args.projectPath,
     browser,
     args.profile,
   );
+  let profileReused = carryover.reused;
   const cliArgs = ["dev", args.projectPath, "--browser", browser];
   if (args.port !== undefined) cliArgs.push("--port", String(args.port));
   if (args.noBrowser) cliArgs.push("--no-browser");
@@ -364,6 +366,11 @@ export async function handler(
   const readiness =
     args.wait === false || args.noBrowser ? null : await awaitReadyAndFirstLogs(args.projectPath, browser);
   const sessionReady = readiness?.ready.status === "ready";
+  const readyProfilePath: unknown = readiness
+    ? (readiness.ready as Record<string, unknown>).profilePath
+    : undefined;
+  const launchedProfile = readyProfilePath ?? carryover.profilePath;
+  profileReused = profileReusedAt(carryover, readyProfilePath, spawnedAt);
 
   const controlVerbs = "storage, reload, open, dom_snapshot";
   const control = contractControlState(args.projectPath, browser, spawnedAt);
@@ -386,11 +393,11 @@ export async function handler(
 
   const boundPort = contractBoundPort(args.projectPath, browser, spawnedAt);
 
-  if (boundPort !== null && boundPort !== args.port) {
+  if ((boundPort !== null && boundPort !== args.port) || profileReused !== carryover.reused) {
     markerWarning = registerSession({
       pid,
       browser,
-      port: boundPort,
+      port: boundPort ?? args.port,
       projectPath: args.projectPath,
       command: "dev",
       noBrowser: Boolean(args.noBrowser),
@@ -433,6 +440,7 @@ export async function handler(
     value: {
       pid,
       browser,
+      ...(args.noBrowser ? {} : { profileReused }),
       ...portReport,
       ...(readiness ?? {}),
       projectPath: args.projectPath,
@@ -448,8 +456,8 @@ export async function handler(
       logPath,
     },
     warnings: [
+      profileReused && !args.noBrowser ? reusedProfileNote(launchedProfile) : null,
       portNote,
-      profileReused && !args.noBrowser ? REUSED_PROFILE_NOTE : null,
       ...boot.warnings,
       markerWarning,
     ],

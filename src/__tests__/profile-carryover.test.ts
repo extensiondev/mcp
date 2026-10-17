@@ -8,7 +8,10 @@ import {
   PERSISTED_PROFILE_DIR_NAME,
   browserProfileRootDir,
 } from "../lib/session-paths";
-import { profileCarriesTabsOver } from "../lib/profile-carryover";
+import { profileCarryoverBeforeLaunch } from "../lib/profile-carryover";
+
+const carriesOver = (...args: Parameters<typeof profileCarryoverBeforeLaunch>) =>
+  profileCarryoverBeforeLaunch(...args).reused;
 
 const tmpDirs: string[] = [];
 
@@ -36,25 +39,25 @@ afterEach(() => {
   }
 });
 
-describe("profileCarriesTabsOver", () => {
+describe("profileCarryoverBeforeLaunch", () => {
   it("says no for the throwaway managed profile of a first run", () => {
-    expect(profileCarriesTabsOver(tmpProject(), "chrome")).toBe(false);
+    expect(carriesOver(tmpProject(), "chrome")).toBe(false);
   });
 
   it("says yes once the persisted managed profile holds a previous run", () => {
     const project = tmpProject();
     seedPersistedProfile(project, "chrome");
-    expect(profileCarriesTabsOver(project, "chrome")).toBe(true);
+    expect(carriesOver(project, "chrome")).toBe(true);
   });
 
   it("keeps the answer per browser", () => {
     const project = tmpProject();
     seedPersistedProfile(project, "chrome");
-    expect(profileCarriesTabsOver(project, "edge")).toBe(false);
+    expect(carriesOver(project, "edge")).toBe(false);
   });
 
   it("says yes for the real user profile, which is never this run's own", () => {
-    expect(profileCarriesTabsOver(tmpProject(), "chrome", "false")).toBe(true);
+    expect(carriesOver(tmpProject(), "chrome", "false")).toBe(true);
   });
 
   it("says yes for an explicit profile path that already has state", () => {
@@ -62,17 +65,17 @@ describe("profileCarriesTabsOver", () => {
     const named = path.join(project, "my-profile");
     fs.mkdirSync(named, { recursive: true });
     fs.writeFileSync(path.join(named, "Preferences"), "{}");
-    expect(profileCarriesTabsOver(project, "chrome", named)).toBe(true);
+    expect(carriesOver(project, "chrome", named)).toBe(true);
   });
 
   it("says no for an explicit profile path that does not exist yet", () => {
     const project = tmpProject();
     expect(
-      profileCarriesTabsOver(project, "chrome", path.join(project, "unborn")),
+      carriesOver(project, "chrome", path.join(project, "unborn")),
     ).toBe(false);
   });
 
   it("ignores an empty profile argument", () => {
-    expect(profileCarriesTabsOver(tmpProject(), "chrome", "   ")).toBe(false);
+    expect(carriesOver(tmpProject(), "chrome", "   ")).toBe(false);
   });
 });

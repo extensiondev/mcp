@@ -13,7 +13,11 @@ import { LAUNCH_BROWSER, PROJECT_PATH } from "../lib/common-schema";
 import { pollBootVerdict,
   bootFailureHint,
 } from "../lib/boot-verdict";
-import { profileCarriesTabsOver } from "../lib/profile-carryover";
+import {
+  profileCarryoverBeforeLaunch,
+  profileReusedAt,
+  reusedProfileNote,
+} from "../lib/profile-carryover";
 import { removeCarrier } from "../lib/carrier";
 import { envelope } from "../lib/envelope";
 import { productionLaunchEvidence, readFreshContract, readLoadOverDebugPort } from "../lib/production-launch";
@@ -165,7 +169,7 @@ export async function handler(
 
   const stale = removeCarrier(args.projectPath);
 
-  const profileReused = profileCarriesTabsOver(
+  const carryover = profileCarryoverBeforeLaunch(
     args.projectPath,
     browser,
     args.profile,
@@ -184,12 +188,12 @@ export async function handler(
 
   const pid = child.pid;
 
-  const markerWarning = registerSession({
+  let markerWarning = registerSession({
     pid,
     browser,
     projectPath: args.projectPath,
     command,
-    profileReused,
+    profileReused: carryover.reused,
     headless: visibility.headless,
   });
   child.on("exit", () => {
@@ -324,6 +328,19 @@ export async function handler(
   }
 
   const freshContract = readFreshContract(args.projectPath, browser, spawnedAt);
+  const profileReused = profileReusedAt(carryover, freshContract?.profilePath, spawnedAt);
+
+  if (profileReused !== carryover.reused) {
+    markerWarning = registerSession({
+      pid,
+      browser,
+      projectPath: args.projectPath,
+      command,
+      profileReused,
+      headless: visibility.headless,
+    });
+  }
+
   const launch = await readLoadOverDebugPort(freshContract, productionLaunchEvidence(freshContract));
   const launchSeen =
     launch.browserPid === null
@@ -346,6 +363,7 @@ export async function handler(
       browser,
       projectPath: args.projectPath,
       verb: command,
+      ...(args.noBrowser ? {} : { profileReused }),
       observed: "the engine process was alive 5 s after it was spawned",
       headless: visibility.headless,
       allowControl,
@@ -357,6 +375,9 @@ export async function handler(
       ? `The engine's ${command} process was alive 5 s after spawn and ${launchSeen}, and ${browser} loaded the extension: ${launch.loadEvidence} ${bridgeLine} ${noBrowserOrHint} When you are done, call extension_stop to shut the session down.`
       : `The engine's ${command} process was alive 5 s after spawn and ${launchSeen}. What this answer cannot confirm is that ${browser} loaded the extension: ${launch.loadEvidence} ${bridgeLine} To prove the load, run it with extension_dev, whose answer carries guestLoaded. ${noBrowserOrHint} When you are done, call extension_stop to shut the session down.`,
     warnings: [
+      profileReused && !args.noBrowser
+        ? reusedProfileNote(freshContract?.profilePath ?? carryover.profilePath)
+        : null,
       ...boot.warnings,
       markerWarning,
       stale.removed &&

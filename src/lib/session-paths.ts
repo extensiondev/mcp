@@ -15,7 +15,7 @@ const PROJECT_MANIFEST_FILENAMES = ["package.json", "deno.jsonc", "deno.json"];
 const PACKAGE_MANIFEST = "package.json";
 const DENO_MANIFESTS = ["deno.jsonc", "deno.json"];
 const EXTENSION_DEPENDENCY_NAMES = ["extension", "extension-develop", "extension-create"];
-const EXTENSION_CONFIG_FILENAMES = [
+export const EXTENSION_CONFIG_FILENAMES = [
   "extension.config.js",
   "extension.config.mjs",
   "extension.config.cjs",
