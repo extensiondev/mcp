@@ -682,3 +682,63 @@ export async function rdpEvaluateInTab(
     }
   });
 }
+
+export async function rdpEvaluateInParentProcess(
+  port: number,
+  options: { expression: string; timeoutMs?: number },
+): Promise<RdpSettled> {
+  const timeoutMs = options.timeoutMs ?? 10_000;
+
+  return withSession(port, timeoutMs, async (session) => {
+    const parent = await session.request("root", { type: "getProcess", id: 0 }, timeoutMs);
+    const descriptor = (parent.processDescriptor as { actor?: unknown } | undefined)?.actor;
+
+    if (typeof descriptor !== "string") {
+      return {
+        ok: false,
+        name: "Unsupported",
+        message: "this Firefox build exposes no parent-process descriptor over the debugger protocol",
+      };
+    }
+
+    const target = await session.request(descriptor, { type: "getTarget" }, timeoutMs);
+    const consoleActor = (target.process as { consoleActor?: unknown } | undefined)?.consoleActor;
+
+    if (typeof consoleActor !== "string") {
+      return {
+        ok: false,
+        name: "Unsupported",
+        message: "the parent process announced no console to evaluate in (the profile may have devtools.chrome.enabled off)",
+      };
+    }
+
+    const token = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+    const started = await consoleEvaluate(
+      session,
+      consoleActor,
+      rdpStartExpression(options.expression, token),
+      timeoutMs,
+    );
+
+    if (started.threw) return { ok: false, name: "EvalError", message: started.threw };
+
+    const resultDeadline = Date.now() + timeoutMs;
+
+    for (;;) {
+      const polled = await consoleEvaluate(session, consoleActor, rdpPollExpression(token), timeoutMs);
+      const settled = readRdpEvalSlot(polled.result);
+
+      if (settled === "lost") {
+        return { ok: false, name: "EvalLost", message: "the parent process lost the result before it settled" };
+      }
+
+      if (settled !== "pending") return settled;
+
+      if (Date.now() >= resultDeadline) {
+        return { ok: false, name: "Timeout", message: `the expression did not settle within ${timeoutMs}ms` };
+      }
+
+      await sleep(RDP_RESULT_POLL_MS);
+    }
+  });
+}

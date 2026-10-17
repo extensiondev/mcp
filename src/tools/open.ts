@@ -51,6 +51,7 @@ import { openSidePanelWithSyntheticGesture } from "../lib/cdp-extension-page";
 import { openDevToolsPanel } from "../lib/cdp-devtools";
 import { listPageTargets, matchTargetsByUrl } from "../lib/cdp-targets";
 import { sessionGuestIdentity, unpackedExtensionId } from "../lib/extension-identity";
+import { clickGeckoToolbarButton, declaredToolbarButton } from "../lib/gecko-toolbar-click";
 
 export const OVERRIDE_SURFACES = ["newtab", "history", "bookmarks"];
 
@@ -533,7 +534,7 @@ export function surfaceDocument(
       continue;
     }
 
-    const action = manifest.action ?? manifest.browser_action;
+    const action = manifest.action ?? manifest.browser_action ?? manifest.page_action;
     const ref =
       surface === "popup" || surface === "action"
         ? action?.default_popup
@@ -554,7 +555,8 @@ export function surfaceDocument(
 }
 
 export const SURFACE_MANIFEST_KEYS: Record<string, string> = {
-  popup: "action.default_popup",
+  popup: "action.default_popup (or browser_action.default_popup, page_action.default_popup)",
+  action: "action (or browser_action, page_action)",
   options: "options_ui.page (or options_page)",
   sidebar: "side_panel.default_path (or sidebar_action.default_panel)",
   devtools: "devtools_page",
@@ -579,7 +581,7 @@ export function declaredSurfaces(
   if (!readable) return null;
 
   return Object.keys(SURFACE_MANIFEST_KEYS).filter(
-    (s) => surfaceDocument(projectPath, browser, s) !== null,
+    (s) => s !== "action" && surfaceDocument(projectPath, browser, s) !== null,
   );
 }
 
@@ -981,7 +983,7 @@ async function confirmSurfaceTarget(
 export const schema = {
   name: "extension_open",
   description:
-    "Open an extension surface, or replay an event, in a running session. Pass surface:'popup', 'options' or 'sidebar' to open a UI surface, or 'newtab', 'history' or 'bookmarks' to open the matching chrome_url_overrides page in a tab (always a tab, resolved by the server, never sent to the engine). On Chromium, when Chrome refuses the sidebar for lack of a user gesture, the server opens the real panel through a synthetic click on the extension's own page and says so in warnings; if that fails too it renders the sidebar document as a tab. Pass surface:'devtools' to open the browser's DevTools on a tab (the one `url` matches, else the first web page) and show the extension's panel there, picked by `panel` title when there are several: Chromium only, over CDP Target.openDevTools, headed or headless; the result names the panel document's url, which extension_eval reads with context 'page' and that url (the panel is no tab, so the tab-based readers do not reach it). Pass surface:'action' to trigger the toolbar action, which opens its popup or replays chrome.action.onClicked when there is none. Pass surface:'command' with `name` to replay a chrome.commands.onCommand shortcut. Note that action and command replay invoke your listener without a user gesture, so the gesture-derived activeTab grant does not apply; the engine's own frame is returned as is. Rides the dev session's control channel, on unless extension_dev was called with allowControl:false.",
+    "Open an extension surface, or replay an event, in a running session. Pass surface:'popup', 'options' or 'sidebar' to open a UI surface, or 'newtab', 'history' or 'bookmarks' to open the matching chrome_url_overrides page in a tab (always a tab, resolved by the server, never sent to the engine). On Chromium, when Chrome refuses the sidebar for lack of a user gesture, the server opens the real panel through a synthetic click on the extension's own page and says so in warnings; if that fails too it renders the sidebar document as a tab. Pass surface:'devtools' to open the browser's DevTools on a tab (the one `url` matches, else the first web page) and show the extension's panel there, picked by `panel` title when there are several: Chromium only, over CDP Target.openDevTools, headed or headless; the result names the panel document's url, which extension_eval reads with context 'page' and that url (the panel is no tab, so the tab-based readers do not reach it). Pass surface:'action' to trigger the toolbar action, which opens its popup or replays chrome.action.onClicked when there is none; on Firefox a popup-less browser_action or page_action is clicked through the browser's own toolbar action over the debugger protocol. Pass surface:'command' with `name` to replay a chrome.commands.onCommand shortcut. Note that action and command replay invoke your listener without a user gesture, so the gesture-derived activeTab grant does not apply; the engine's own frame is returned as is. Rides the dev session's control channel, on unless extension_dev was called with allowControl:false.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -1231,8 +1233,26 @@ export async function handler(
       return openGeckoSidebar(args.projectPath, browser, refusal.frame, args.timeout);
     }
 
+    if (args.surface === "action" && isGeckoFamily(browser)) {
+      const button = declaredToolbarButton(args.projectPath, browser);
+
+      if (button && !button.popup) {
+        return clickGeckoToolbarButton(
+          schema.name,
+          args.projectPath,
+          browser,
+          button,
+          refusal.frame,
+          declaredSurfaces(args.projectPath, browser) ?? [],
+          args.timeout,
+        );
+      }
+    }
+
     const fallback = await openSurfaceAsTab(args.projectPath, browser, args.surface);
     const parsedFallback = parseFrameObject(fallback);
+
+    if (parsedFallback?.status === "no-surface" || parsedFallback?.status === "no-manifest") return fallback;
 
     if (parsedFallback?.ok) {
       addWarning(parsedFallback, windowRefusalWarning(refusal, args.surface, browser));

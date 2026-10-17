@@ -10,6 +10,7 @@ export const ENVELOPE_SCHEMA = 1 as const;
 
 
 export type ErrorCode =
+  | "E_ACTION_NOT_REPLAYED"
   | "E_AMBIGUOUS_TARGET"
   | "E_APPROVAL_PENDING"
   | "E_APPROVAL_REJECTED"
@@ -85,6 +86,7 @@ export type ErrorCode =
   | "E_WEBDRIVER_SESSION_ENDED";
 
 export const ERROR_CODES: ErrorCode[] = [
+  "E_ACTION_NOT_REPLAYED",
   "E_AMBIGUOUS_TARGET",
   "E_APPROVAL_PENDING",
   "E_APPROVAL_REJECTED",
