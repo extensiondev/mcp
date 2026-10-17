@@ -59,7 +59,7 @@ export const TOOL_POLICY: Record<string, ToolPolicy> = {
   extension_start: { group: "local", annotations: acts() },
   extension_wait: {
     group: "local",
-    annotations: reads(),
+    annotations: acts({ destructiveHint: true, openWorldHint: true }),
     untrusted: true,
   },
   extension_stop: { group: "local", annotations: acts({ idempotentHint: true, destructiveHint: true }) },

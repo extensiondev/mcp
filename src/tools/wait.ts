@@ -24,6 +24,8 @@ import {
 } from "../lib/envelope";
 import { verifyGuestLoaded } from "../lib/guest-load-oracle";
 import { detachedVerdictFrame, readDetachedVerdict } from "../lib/background-liveness";
+import { WAIT_MODE_PROPERTIES, waitModeFrame, type UntilCondition } from "../lib/wait-modes";
+import { handler as evalHandler } from "./eval";
 import { recentErrorLogs } from "./doctor";
 
 import type { ReadyContract } from "../lib/types";
@@ -46,7 +48,7 @@ function isAlive(pid: number): boolean {
 export const schema = {
   name: "extension_wait",
   description:
-    "Wait for a running dev or start session to be ready. Call it for a session started with wait:false, after an extension_dev answer whose ready.status was not \"ready\", and for a build-only (noBrowser) session; an extension_dev answer with ready.status \"ready\" already carries this result, so there is nothing left to wait for. This polls the ready.json contract and reports compiled (the compiler finished), browserAttached (the runtime executor connected), and guestLoaded (the browser's own target list shows your extension). Read guestLoaded as the trustworthy load signal: it catches a silently rejected --load-extension that leaves ready.json stamped attached with empty logs. It is null when it could not be checked, for example a gecko session with no CDP port. Every result reports budgetMs and elapsedMs; on status 'timeout', call again to keep waiting on the same contract. In a noBrowser session this returns as soon as the compile lands, instead of waiting for a browser that will never attach. Every ready answer carries the ports the session bound, read from the contract: port (the dev server), controlPort (the control channel) and cdpPort (the browser's debug port on Chromium) or rdpPort (on Gecko), or debugPortNote when the session opened no debug port, so a question about ports is answered here without a shell. A browser that is running while the extension's background went idle (Safari and Firefox suspend a non-persistent background after 30 s, Chrome an idle MV3 service worker) answers status \"background-asleep\" with how to wake it, not \"browser-gone\"; a Safari WebDriver session that Safari ended answers \"webdriver-session-ended\" with the restart that opens a new one.",
+    "Wait for a running dev or start session to be ready. Call it for a session started with wait:false, after an extension_dev answer whose ready.status was not \"ready\", and for a build-only (noBrowser) session; an extension_dev answer with ready.status \"ready\" already carries this result, so there is nothing left to wait for. This polls the ready.json contract and reports compiled (the compiler finished), browserAttached (the runtime executor connected), and guestLoaded (the browser's own target list shows your extension). Read guestLoaded as the trustworthy load signal: it catches a silently rejected --load-extension that leaves ready.json stamped attached with empty logs. It is null when it could not be checked, for example a gecko session with no CDP port. Every result reports budgetMs and elapsedMs; on status 'timeout', call again to keep waiting on the same contract. In a noBrowser session this returns as soon as the compile lands, instead of waiting for a browser that will never attach. Every ready answer carries the ports the session bound, read from the contract: port (the dev server), controlPort (the control channel) and cdpPort (the browser's debug port on Chromium) or rdpPort (on Gecko), or debugPortNote when the session opened no debug port, so a question about ports is answered here without a shell. After a source edit, call it with for: \"rebuild\" (and since) to wait for the compile and reload; to wait for a condition (a model loading, an element appearing), pass until: {expression, context, url}. Never sleep or tail the session log in a shell to wait. A browser that is running while the extension's background went idle (Safari and Firefox suspend a non-persistent background after 30 s, Chrome an idle MV3 service worker) answers status \"background-asleep\" with how to wake it, not \"browser-gone\"; a Safari WebDriver session that Safari ended answers \"webdriver-session-ended\" with the restart that opens a new one.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -63,6 +65,7 @@ export const schema = {
         description:
           "Deprecated alias of timeoutMs, which wins when both are given.",
       },
+      ...WAIT_MODE_PROPERTIES,
     },
     required: ["projectPath"],
   },
@@ -73,6 +76,9 @@ export async function handler(args: {
   browser?: string;
   timeoutMs?: number;
   timeout?: number;
+  for?: string;
+  since?: string;
+  until?: UntilCondition;
 }): Promise<string> {
   const ambiguous = ambiguousSessionRefusal(schema.name, args.projectPath, args.browser);
   if (ambiguous) return ambiguous;
@@ -89,6 +95,9 @@ export async function handler(args: {
   );
   const clamped = requested > SAFE_CEILING_MS;
   const readyPath = readyContractPath(args.projectPath, browser);
+
+  const mode = await waitModeFrame(schema.name, evalHandler, args, browser, budgetMs);
+  if (mode !== null) return mode;
 
   const buildOnly = findSessionInfo(args.projectPath, browser)?.noBrowser === true;
   const since = sessionSinceMs(args.projectPath, browser);

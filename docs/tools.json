@@ -1978,13 +1978,13 @@
       "name": "extension_wait",
       "tier": "run",
       "group": "local",
-      "description": "Wait for a running dev or start session to be ready. Call it for a session started with wait:false, after an extension_dev answer whose ready.status was not \"ready\", and for a build-only (noBrowser) session; an extension_dev answer with ready.status \"ready\" already carries this result, so there is nothing left to wait for. This polls the ready.json contract and reports compiled (the compiler finished), browserAttached (the runtime executor connected), and guestLoaded (the browser's own target list shows your extension). Read guestLoaded as the trustworthy load signal: it catches a silently rejected --load-extension that leaves ready.json stamped attached with empty logs. It is null when it could not be checked, for example a gecko session with no CDP port. Every result reports budgetMs and elapsedMs; on status 'timeout', call again to keep waiting on the same contract. In a noBrowser session this returns as soon as the compile lands, instead of waiting for a browser that will never attach. Every ready answer carries the ports the session bound, read from the contract: port (the dev server), controlPort (the control channel) and cdpPort (the browser's debug port on Chromium) or rdpPort (on Gecko), or debugPortNote when the session opened no debug port, so a question about ports is answered here without a shell. A browser that is running while the extension's background went idle (Safari and Firefox suspend a non-persistent background after 30 s, Chrome an idle MV3 service worker) answers status \"background-asleep\" with how to wake it, not \"browser-gone\"; a Safari WebDriver session that Safari ended answers \"webdriver-session-ended\" with the restart that opens a new one.",
+      "description": "Wait for a running dev or start session to be ready. Call it for a session started with wait:false, after an extension_dev answer whose ready.status was not \"ready\", and for a build-only (noBrowser) session; an extension_dev answer with ready.status \"ready\" already carries this result, so there is nothing left to wait for. This polls the ready.json contract and reports compiled (the compiler finished), browserAttached (the runtime executor connected), and guestLoaded (the browser's own target list shows your extension). Read guestLoaded as the trustworthy load signal: it catches a silently rejected --load-extension that leaves ready.json stamped attached with empty logs. It is null when it could not be checked, for example a gecko session with no CDP port. Every result reports budgetMs and elapsedMs; on status 'timeout', call again to keep waiting on the same contract. In a noBrowser session this returns as soon as the compile lands, instead of waiting for a browser that will never attach. Every ready answer carries the ports the session bound, read from the contract: port (the dev server), controlPort (the control channel) and cdpPort (the browser's debug port on Chromium) or rdpPort (on Gecko), or debugPortNote when the session opened no debug port, so a question about ports is answered here without a shell. After a source edit, call it with for: \"rebuild\" (and since) to wait for the compile and reload; to wait for a condition (a model loading, an element appearing), pass until: {expression, context, url}. Never sleep or tail the session log in a shell to wait. A browser that is running while the extension's background went idle (Safari and Firefox suspend a non-persistent background after 30 s, Chrome an idle MV3 service worker) answers status \"background-asleep\" with how to wake it, not \"browser-gone\"; a Safari WebDriver session that Safari ended answers \"webdriver-session-ended\" with the restart that opens a new one.",
       "gate": "a live dev or start session",
       "samplePrompt": "Wait until the dev session is ready, then tell me the ports",
-      "readOnly": true,
-      "destructive": false,
-      "idempotent": true,
-      "openWorld": false,
+      "readOnly": false,
+      "destructive": true,
+      "idempotent": false,
+      "openWorld": true,
       "untrusted": true,
       "inputs": [
         {
@@ -2011,6 +2011,25 @@
           "type": "number",
           "required": false,
           "description": "Deprecated alias of timeoutMs, which wins when both are given."
+        },
+        {
+          "name": "for",
+          "type": "\"ready\" | \"rebuild\"",
+          "required": false,
+          "default": "ready",
+          "description": "What to wait for. \"ready\" (the default) waits for the session to be ready. \"rebuild\" waits for the compile after a source edit: until ready.json's compiledAt moves past its value at call time (or past since), then briefly for the reloaded background to connect again; it answers status \"rebuilt\" with the new compiledAt, errors and reload.outcome (reattached, still-detached, or not-stamped for a content-script, page or Safari app re-sync reload, which ready.json does not stamp), or status \"compile-error\" with the errors."
+        },
+        {
+          "name": "since",
+          "type": "string",
+          "required": false,
+          "description": "for: \"rebuild\" only. An ISO time: a compile stamped after it counts, so pass the compiledAt an earlier answer returned (or a time before your edit) and a rebuild that landed before this call is not missed."
+        },
+        {
+          "name": "until",
+          "type": "object",
+          "required": false,
+          "description": "Wait until a condition holds instead of for readiness: poll extension_eval with this expression (and context and url, read as extension_eval reads them) every 500 ms until it returns a truthy value, within timeoutMs. Answers status \"condition-met\" with result, or status \"timeout\" with lastResult. Needs a session started with allowEval:true. Works on Chromium, Firefox and Safari sessions."
         }
       ]
     },

@@ -318,6 +318,22 @@ describe("Safari sessions over the dev window's WebDriver connection", () => {
     expect(parsed.hint).toContain("extension_stop");
   });
 
+  it("waits until a page expression is truthy over the automation session", async () => {
+    withWindow();
+    const parsed = JSON.parse(
+      await waitTool.handler({
+        projectPath: project,
+        browser: BROWSER,
+        until: { expression: "document.title", context: "page", url: "https://start.test/" },
+        timeoutMs: 3000,
+      }),
+    );
+
+    expect(parsed.ok).toBe(true);
+    expect(parsed.status).toBe("condition-met");
+    expect(parsed.value.result).toEqual({ echoed: "return (document.title);" });
+  });
+
   function writeDetached(extra: Record<string, unknown> = {}): void {
     writeContract(
       safariDevContract(
