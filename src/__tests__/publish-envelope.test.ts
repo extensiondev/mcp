@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { writeCredentials } from "../lib/credentials";
 import { handler } from "../tools/publish";
+import { publishAnswer } from "./fixtures/platform-answers";
 
 describe("extension_publish envelope compatibility", () => {
   let tmp: string;
@@ -127,5 +128,51 @@ describe("extension_publish envelope compatibility", () => {
 
     expect(bearers[0]).toBe(`Bearer ${envToken}`);
     expect(bearers[1]).toBe("Bearer tok_stored");
+  });
+
+  describe("share-link lifetime", () => {
+    async function publishWith(ttlHours: number, expiresAt: string) {
+      process.env.EXTENSION_DEV_TOKEN = "tok_test";
+      const bodies: Array<Record<string, unknown>> = [];
+      const prevFetch = global.fetch;
+      global.fetch = (async (url: string, init?: RequestInit) => {
+        if (String(url).endsWith("/api/cli/publish")) {
+          bodies.push(JSON.parse(String(init?.body ?? "{}")));
+
+          return new Response(JSON.stringify(publishAnswer({ expiresAt })), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          });
+        }
+
+        return new Response("{}", { status: 404, headers: { "content-type": "application/json" } });
+      }) as unknown as typeof fetch;
+
+      try {
+        return { out: JSON.parse(await handler({ api: "https://www.extension.dev", ttlHours })), bodies };
+      } finally {
+        global.fetch = prevFetch;
+      }
+    }
+
+    it.each([
+      ["720 hours, a free plan's 30-day window", 720, "2026-11-04T12:00:00.000Z"],
+      ["8760 hours, a Pro plan's 365-day window", 8760, "2027-10-05T12:00:00.000Z"],
+      ["8760 hours on a free plan, which the platform cuts to 30 days", 8760, "2026-11-04T12:00:00.000Z"],
+    ])("sends %s and reports the expiry the platform answers", async (_name, ttlHours, expiresAt) => {
+      const { out, bodies } = await publishWith(ttlHours, expiresAt);
+
+      expect(out.ok).toBe(true);
+      expect(bodies).toEqual([{ ttlHours }]);
+      expect(JSON.stringify(out)).toContain(expiresAt);
+    });
+
+    it("refuses a lifetime past a year before sending anything", async () => {
+      const { out, bodies } = await publishWith(8761, "2027-10-05T12:00:00.000Z");
+
+      expect(out.error.code).toBe("E_BAD_REQUEST");
+      expect(out.error.message).toContain("8760");
+      expect(bodies).toHaveLength(0);
+    });
   });
 });

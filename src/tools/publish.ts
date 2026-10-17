@@ -24,7 +24,7 @@ import {
 export const schema = {
   name: "extension_publish",
   description:
-    "Publish a build of the project your stored token is scoped to (extension_auth, or EXTENSION_DEV_TOKEN) on extension.dev, and return the link to send testers: the build's public page, with a download and a run command for each browser. Reach for this first whenever the ask is to share, publish, deploy, distribute, release or ship an extension, or to send it to testers; extension_submit is the separate store-review path, and extension_preview_web share:true is a quick emulator link beside this one. An extension with no project on extension.dev yet starts with extension_project_create, which makes one from its GitHub repository, then extension_auth. The target is the token's project: there is no projectPath, and no local file is uploaded. With several logins stored, pass `project` ('<workspace>/<project>') to pick which one; it outranks EXTENSION_DEV_TOKEN. Pass buildSha (extension_builds lists them) for that build's own page, <workspace>.extension.dev/<project>/builds/<sha>; without it the link is the project's page. For a public project the URL is the canonical public page and ttlHours does not apply. For a private one it is a fresh time-limited share link (?share=) whose lifetime is ttlHours.",
+    "Publish a build of the project your stored token is scoped to (extension_auth, or EXTENSION_DEV_TOKEN) on extension.dev, and return the link to send testers: the build's public page, with a download and a run command for each browser. Reach for this first whenever the ask is to share, publish, deploy, distribute, release or ship an extension, or to send it to testers; extension_submit is the separate store-review path, and extension_preview_web share:true is a quick emulator link beside this one. An extension with no project on extension.dev yet starts with extension_project_create, which makes one from its GitHub repository, then extension_auth. The target is the token's project: there is no projectPath, and no local file is uploaded. With several logins stored, pass `project` ('<workspace>/<project>') to pick which one; it outranks EXTENSION_DEV_TOKEN. Pass buildSha (extension_builds lists them) for that build's own page, <workspace>.extension.dev/<project>/builds/<sha>; without it the link is the project's page. For a public project the URL is the canonical public page and ttlHours does not apply. For a private one it is a fresh time-limited share link (?share=) whose lifetime is ttlHours: 7 days by default, and up to the plan's share window (30 days free, 365 Pro) when asked.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -32,7 +32,7 @@ export const schema = {
       ttlHours: {
         type: "number",
         description:
-          "Private-project share-link lifetime in hours, 1-168 (default 24). Ignored for public projects.",
+          "Private-project share-link lifetime in hours. Defaults to 7 days; ask for up to the plan's share window (30 days free, 365 Pro), up to 8760 here, and the platform cuts a longer ask back to the window. Ignored for public projects.",
       },
       buildSha: {
         type: "string",
@@ -98,10 +98,10 @@ export async function handler(args: {
   if (args.ttlHours != null) {
     const t = Number(args.ttlHours);
 
-    if (!Number.isInteger(t) || t < 1 || t > 168) {
+    if (!Number.isInteger(t) || t < 1 || t > 8760) {
       return fail(
         "PublishBadRequest",
-        "ttlHours must be an integer between 1 and 168.",
+        "ttlHours must be an integer between 1 and 8760 (365 days); the platform cuts a longer ask back to the plan's share window.",
         "bad-request",
         "E_BAD_REQUEST",
       );
