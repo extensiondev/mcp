@@ -149,6 +149,7 @@ describe("build consumes the engine's persisted BuildSummary when the frame on s
     expect(result.hint).toMatch(/call extension_analyze with this projectPath and browser "chrome"/);
     expect(result.hint).toMatch(/sizes, the entry points and the store checks/);
     expect(result.hint).toMatch(/no need to list or grep the folder by hand/);
+    expect(result.hint).toMatch(/emitted manifest of every built browser.*manifestByBrowser/);
     expect(result.hint).toContain(result.value.outputPath);
   });
 

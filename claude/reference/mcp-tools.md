@@ -16,7 +16,7 @@ Plan the surface before adding an options page, a popup, a side panel, a content
 
 ## extension_analyze
 
-Analyze a BUILT extension on disk: file sizes, declared entry points, permissions, bundle composition, and store-readiness checks. This is static only: it reads dist/<browser> from the filesystem and never touches a browser, so build first with extension_build. Use extension_inspect for a running extension's live DOM and console.
+Analyze a BUILT extension on disk: file sizes, declared entry points, permissions, bundle composition, store-readiness checks, and manifestByBrowser, the emitted manifest of every browser built under dist with the resolved keys (background, action, sidebar, permissions, host_permissions, chrome_url_overrides, browser_specific_settings) that differ between them. This is static only: it reads dist/<browser> from the filesystem and never touches a browser, so build first with extension_build. Use extension_inspect for a running extension's live DOM and console.
 
 | input | type | required | default | description |
 | --- | --- | --- | --- | --- |

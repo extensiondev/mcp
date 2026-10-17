@@ -23,6 +23,7 @@ import {
 } from "../lib/session-paths";
 import { type Envelope, envelope, isEnvelope } from "../lib/envelope";
 import { platformListed } from "../lib/tool-policy";
+import { manifestDivergence } from "../lib/manifest-by-browser";
 import { engineBrowserName } from "../lib/browser-family";
 import { reviewCoverageNotes, reviewDistReport, reviewRiskWarnings } from "../lib/store-review";
 
@@ -443,61 +444,6 @@ export const schema = {
 const SAFARI_VENDORS = new Set(["safari", "webkit-based"]);
 
 export const BUNDLE_ID_PATTERN = /^[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*$/;
-
-function manifestDivergence(projectPath: string, browser: string): string[] {
-  const read = (p: string): Record<string, any> | null => {
-    try {
-      return JSON.parse(fs.readFileSync(p, "utf8"));
-    } catch {
-      return null;
-    }
-  };
-
-  const built = read(
-    path.resolve(projectPath, "dist", engineBrowserName(browser), "manifest.json"),
-  );
-  const source =
-    read(path.resolve(projectPath, "src", "manifest.json")) ??
-    read(path.resolve(projectPath, "manifest.json"));
-  if (!built || !source) return [];
-
-  const notes: string[] = [];
-  const listOf = (m: Record<string, any>, key: string): string[] =>
-    Array.isArray(m[key])
-      ? m[key].filter((x: unknown) => typeof x === "string")
-      : [];
-
-  for (const key of [
-    "permissions",
-    "host_permissions",
-    "optional_permissions",
-  ]) {
-    const lost = listOf(source, key).filter(
-      (p) => !listOf(built, key).includes(p),
-    );
-
-    if (lost.length) {
-      notes.push(
-        `The built manifest drops ${key}: ${lost.join(", ")}. The production build has narrower access than the source you tested in dev.`,
-      );
-    }
-  }
-
-  const sourceWar = source.web_accessible_resources;
-  const builtWar = built.web_accessible_resources;
-
-  if (
-    Array.isArray(sourceWar) &&
-    sourceWar.length &&
-    !Array.isArray(builtWar)
-  ) {
-    notes.push(
-      "The built manifest has no web_accessible_resources although the source declares them. Anything injected into a page (scripting.insertCSS targets, injected scripts, images) will be blocked at runtime.",
-    );
-  }
-
-  return notes;
-}
 
 const MARKER_FILE_NAME = "managed-by-extension-dev-mcp.json";
 
@@ -970,7 +916,7 @@ export async function handler(args: {
         safariIdentityMissingNote,
         summaryPathNote,
       ],
-      hint: `The build is in ${distDir}. To read what is in it, call extension_analyze with this projectPath and browser "${browser}": it answers the sizes, the entry points and the store checks a reviewer runs, so there is no need to list or grep the folder by hand.${zipPath ? ` The store zip is ${zipPath}.` : ""}${platformListed() ? " To send the extension to someone, extension_publish gives the project's build on extension.dev a page with a download and a run command for each browser (the platform builds from the pushed source)." : ""}`,
+      hint: `The build is in ${distDir}. To read what is in it, call extension_analyze with this projectPath and browser "${browser}": it answers the sizes, the entry points and the store checks a reviewer runs, plus the emitted manifest of every built browser and the resolved keys that differ between them (manifestByBrowser), so there is no need to list or grep the folder by hand or to read dist/<browser>/manifest.json.${zipPath ? ` The store zip is ${zipPath}.` : ""}${platformListed() ? " To send the extension to someone, extension_publish gives the project's build on extension.dev a page with a download and a run command for each browser (the platform builds from the pushed source)." : ""}`,
     });
   }
 
