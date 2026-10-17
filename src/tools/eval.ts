@@ -997,6 +997,75 @@ async function evaluatePagePastSiteCsp(
   );
 }
 
+const INJECTION_REFUSED = /missing host permission|cannot access|cannot be scripted/i;
+
+const MOZ_EXTENSION_TAB = /^moz-extension:\/\/[^/]+\//;
+
+function extensionPageRoutes(projectPath: string, browser: string): string {
+  const declared = declaredSurfaces(projectPath, browser) ?? [];
+
+  return ` If the tab shows a page inside the extension, pass url with that page's path (for example "${surfaceDocument(projectPath, browser, declared[0] ?? "") ?? "pages/panel.html"}"), which is read over the debugger protocol when the session records a debugger port${declared.length ? `, or evaluate the declared surface with context: "${declared[0]}"` : ""}.`;
+}
+
+async function evaluateExtensionTabBeforeInjection(
+  args: ActArgs & { expression: string },
+  browser: string,
+  context: string | undefined,
+  raw: string,
+): Promise<string | null> {
+  if (context !== "page" || !isGeckoFamily(browser) || args.tab != null) return null;
+  if (args.url && !mayNameExtensionTab(args.url)) return null;
+
+  const refused = parseFrameObject(raw);
+  if (!refused || refused.ok !== false) return null;
+
+  const message = String(refused.error?.message ?? "");
+
+  if (
+    !NO_SCRIPTING_API.test(message) &&
+    refused.error?.code !== "E_TARGET_NOT_FOUND" &&
+    !INJECTION_REFUSED.test(message)
+  ) {
+    return null;
+  }
+
+  const resolved = await resolveRdpPort(args.projectPath, browser, { waitMs: 1_000, graceMs: 500 });
+  if (!resolved) return null;
+
+  let tabs: RdpTab[];
+
+  try {
+    tabs = await rdpListTabs(resolved.port);
+  } catch {
+    return null;
+  }
+
+  const url = args.url;
+  const select = url
+    ? (list: RdpTab[]) => geckoExtensionTabByUrl(list, url)
+    : (list: RdpTab[]) =>
+        list.find((tab) => tab.selected === true && MOZ_EXTENSION_TAB.test(String(tab.url ?? "")));
+  const tab = select(tabs);
+  if (!tab) return null;
+
+  if (!isSingleExpression(args.expression)) return notOneExpression();
+
+  const answer = await evaluateInGeckoTab(args, browser, select, `No open tab shows ${url ?? String(tab.url)}.`);
+  if (answer === null || url) return answer;
+
+  const parsed = parseFrameObject(answer);
+  if (!parsed) return answer;
+
+  const document = String(tab.url).replace(MOZ_EXTENSION_TAB, "").replace(/[?#].*$/, "");
+  const surface = surfaceForExtensionUrl(args.projectPath, browser, String(tab.url));
+  addWarning(
+    parsed,
+    `No url was given and the active tab shows the extension's own page ${document}, which script injection cannot reach, so this evaluated in that tab over the debugger protocol. Pass url: "${document}"${surface ? ` or context: "${surface.context}"` : ""} to name it next time.`,
+  );
+
+  return actFrameJson(parsed);
+}
+
 async function evaluateThroughExecuteScript(
   args: ActArgs & { expression: string },
   browser: string,
@@ -1045,7 +1114,7 @@ async function evaluateThroughExecuteScript(
       command: schema.name,
       status: "eval-failed",
       error: { code: "E_EVAL", name: "EvalError", message: value.error },
-      hint: `Because ${why}, the expression went through tabs.executeScript from the background and that call failed. The tab must be a web page the extension holds host permissions for; extension pages cannot be injected into.`,
+      hint: `Because ${why}, the expression went through tabs.executeScript from the background and that call failed. The tab must be a web page the extension holds host permissions for; extension pages cannot be injected into.${INJECTION_REFUSED.test(value.error) ? extensionPageRoutes(args.projectPath, browser) : ""}`,
     });
   }
 
@@ -1231,6 +1300,9 @@ async function evaluateOnce(
   const raw = engine.answer;
 
   if (!engine.settled) {
+    const extensionTab = await evaluateExtensionTabBeforeInjection(args, browser, context, raw);
+    if (extensionTab !== null) return extensionTab;
+
     const mv2Fallback = await evaluateThroughExecuteScript(args, browser, context, raw);
     if (mv2Fallback !== null) return mv2Fallback;
 
