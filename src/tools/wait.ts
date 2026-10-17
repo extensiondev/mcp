@@ -24,7 +24,7 @@ import {
 } from "../lib/envelope";
 import { verifyGuestLoaded } from "../lib/guest-load-oracle";
 import { detachedVerdictFrame, readDetachedVerdict } from "../lib/background-liveness";
-import { WAIT_MODE_PROPERTIES, waitModeFrame } from "../lib/wait-modes";
+import { WAIT_MODE_PROPERTIES, contractErrorList, waitModeFrame } from "../lib/wait-modes";
 import { recentErrorLogs } from "./doctor";
 
 import type { ReadyContract } from "../lib/types";
@@ -357,7 +357,7 @@ export async function handler(args: {
             contractCode: contract.code,
           },
           value: {
-            errors: contract.errors,
+            errors: contractErrorList(contract),
             browser: contract.browser,
             budgetMs,
             elapsedMs: Date.now() - start,

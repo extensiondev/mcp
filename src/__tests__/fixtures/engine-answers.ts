@@ -100,6 +100,7 @@ export function errorContract(
   browser: string,
   code:
     | "compile_error"
+    | "compile_failed"
     | "browser_exited"
     | "browser_launch_failed"
     | "extension_load_refused"
@@ -108,6 +109,7 @@ export function errorContract(
 ): Body {
   const messages: Record<string, string> = {
     compile_error: "Compilation failed",
+    compile_failed: "Error: ENOENT: no such file or directory, open '/tmp/project/missing.wasm'",
     browser_exited: "the browser exited",
     browser_launch_failed: "the browser process could not start",
     extension_load_refused: "the browser refused to load the extension",
@@ -117,7 +119,7 @@ export function errorContract(
     status: "error",
     code,
     message: messages[code],
-    compiledAt: code === "compile_error" ? null : NOW,
+    compiledAt: code === "compile_error" || code === "compile_failed" ? null : NOW,
     errors: code === "compile_error" ? ["Module not found: ./missing"] : [],
     ...overrides,
   });

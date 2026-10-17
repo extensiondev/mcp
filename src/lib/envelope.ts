@@ -209,18 +209,53 @@ const collectWarnings = (
   return kept;
 };
 
+const ESC = String.fromCharCode(0x1b);
+const BEL = String.fromCharCode(0x07);
+const CSI = String.fromCharCode(0x9b);
+
+const TERMINAL_ESCAPE = new RegExp(
+  [
+    `${ESC}\\][^${BEL}${ESC}]*(?:${BEL}|${ESC}\\\\)`,
+    `(?:${ESC}\\[|${CSI})[0-?]*[ -/]*[@-~]`,
+    `${ESC}[()#][0-9A-Za-z]`,
+    `${ESC}[@-Z\\\\-_]`,
+  ].join("|"),
+  "g",
+);
+
+function stripTerminalEscapes(text: string): string {
+  return text.includes(ESC) || text.includes(CSI)
+    ? text.replace(TERMINAL_ESCAPE, "")
+    : text;
+}
+
+function plainText<T>(field: T): T {
+  if (typeof field === "string") return stripTerminalEscapes(field) as T;
+  if (Array.isArray(field)) return field.map(plainText) as T;
+  if (!field || typeof field !== "object") return field;
+
+  const proto: unknown = Object.getPrototypeOf(field);
+  if (proto !== Object.prototype && proto !== null) return field;
+
+  const plain: Record<string, unknown> = {};
+
+  for (const [key, entry] of Object.entries(field)) plain[key] = plainText(entry);
+
+  return plain as T;
+}
+
 export function envelopeObject(init: EnvelopeInit): Envelope {
   const frame: Envelope = {
     schema: ENVELOPE_SCHEMA,
     ok: init.ok,
     command: init.command,
     status: init.status,
-    value: init.value === undefined ? null : init.value,
-    error: init.error ?? null,
-    warnings: collectWarnings(init.warnings),
+    value: init.value === undefined ? null : plainText(init.value),
+    error: init.error ? plainText(init.error) : null,
+    warnings: collectWarnings(init.warnings?.map(plainText)),
   };
   if (init.truncated !== undefined) frame.truncated = init.truncated;
-  if (typeof init.hint === "string" && init.hint) frame.hint = init.hint;
+  if (typeof init.hint === "string" && init.hint) frame.hint = stripTerminalEscapes(init.hint);
 
   return frame;
 }

@@ -34,6 +34,16 @@ const REBUILD_POLL_MS = 200;
 const RELOAD_GRACE_MS = 5_000;
 const WEBKIT_RELOAD_GRACE_MS = 15_000;
 
+export function contractErrorList(
+  contract: Pick<ReadyContract, "errors" | "message">,
+): string[] {
+  if (Array.isArray(contract.errors) && contract.errors.length) return contract.errors;
+
+  return typeof contract.message === "string" && contract.message.trim()
+    ? [contract.message]
+    : [];
+}
+
 const NO_TAILING =
   "Do not sleep or tail the session log in a shell to wait: extension_wait with for: \"rebuild\" waits for the compile after an edit, and extension_eval with until waits for a page or extension condition.";
 
@@ -157,7 +167,7 @@ export async function waitForRebuild(
           command,
           status: "compile-error",
           error: { code: "E_COMPILE", message: contract.message ?? "The rebuild failed.", contractCode: contract.code },
-          value: { errors: contract.errors ?? [], failedAt: contract.ts, since: baseline, budgetMs, elapsedMs: Date.now() - start },
+          value: { errors: contractErrorList(contract), failedAt: contract.ts, since: baseline, budgetMs, elapsedMs: Date.now() - start },
           hint: `Fix the errors, then call extension_wait with for: "rebuild" again. ${NO_TAILING}`,
         });
       }
