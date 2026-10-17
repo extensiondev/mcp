@@ -25,6 +25,8 @@ import {
 } from "../lib/process-manager";
 import {
   LAUNCH_FLAG_SCHEMA,
+  headlessHint,
+  headlessLaunch,
   launchFlagArgs,
   type LaunchFlagArgs,
 } from "../lib/launch-flags";
@@ -149,7 +151,11 @@ export async function handler(
     args.profile,
   );
   const spawnedAt = Date.now();
-  const spawned = spawnExtensionCli(cliArgs, { projectDir: args.projectPath });
+  const visibility = headlessLaunch(args);
+  const spawned = spawnExtensionCli(cliArgs, {
+    projectDir: args.projectPath,
+    ...(visibility.env ? { env: visibility.env } : {}),
+  });
   const { child } = spawned;
 
   if (child.pid === undefined) {
@@ -164,6 +170,7 @@ export async function handler(
     projectPath: args.projectPath,
     command,
     profileReused,
+    headless: visibility.headless,
   });
   child.on("exit", () => {
     removeSession(args.projectPath, browser, pid);
@@ -285,6 +292,8 @@ export async function handler(
       ? "the contract has not recorded a browser launch yet; extension_wait reads it once the build lands (browserPid, browserAlive)"
       : `the contract names the browser it launched (pid ${launch.browserPid}, ${launch.browserAlive ? "alive" : "gone"})`;
 
+  const noBrowserOrHint = args.noBrowser ? "" : headlessHint(visibility.headless);
+
   return envelope({
     ok: true,
     command: schema.name,
@@ -295,11 +304,12 @@ export async function handler(
       projectPath: args.projectPath,
       verb: command,
       observed: "the engine process was alive 5 s after it was spawned",
+      headless: visibility.headless,
       ...launch,
     },
     hint: launch.extensionLoaded === true
-      ? `The engine's ${command} process was alive 5 s after spawn and ${launchSeen}, and ${browser} loaded the extension: ${launch.loadEvidence} A production session carries no dev bridge, so extension_logs has no console stream for it and the control verbs cannot attach. When you are done, call extension_stop to shut the session down.`
-      : `The engine's ${command} process was alive 5 s after spawn and ${launchSeen}. What this answer cannot confirm is that ${browser} loaded the extension: ${launch.loadEvidence} A production session carries no dev bridge, so extension_logs has no console stream to read for it and the control verbs cannot attach. To prove the load, run it with extension_dev, whose answer carries guestLoaded. When you are done, call extension_stop to shut the session down.`,
+      ? `The engine's ${command} process was alive 5 s after spawn and ${launchSeen}, and ${browser} loaded the extension: ${launch.loadEvidence} A production session carries no dev bridge, so extension_logs has no console stream for it and the control verbs cannot attach. ${noBrowserOrHint} When you are done, call extension_stop to shut the session down.`
+      : `The engine's ${command} process was alive 5 s after spawn and ${launchSeen}. What this answer cannot confirm is that ${browser} loaded the extension: ${launch.loadEvidence} A production session carries no dev bridge, so extension_logs has no console stream to read for it and the control verbs cannot attach. To prove the load, run it with extension_dev, whose answer carries guestLoaded. ${noBrowserOrHint} When you are done, call extension_stop to shut the session down.`,
     warnings: [
       ...boot.warnings,
       markerWarning,

@@ -524,6 +524,12 @@
           "description": "Extra extension paths or store URLs to load alongside the project"
         },
         {
+          "name": "headless",
+          "type": "boolean",
+          "required": false,
+          "description": "false opens a browser window the person can see, overriding EXTENSION_HEADLESS and any --headless in EXTENSION_BROWSER_FLAGS for this session only; pass it when the person wants to watch or try the extension. true forces headless. Omit to inherit the environment (headless when EXTENSION_HEADLESS=1 or EXTENSION_BROWSER_FLAGS carries --headless)."
+        },
+        {
           "name": "replace",
           "type": "boolean",
           "required": false,
@@ -1653,6 +1659,12 @@
           "type": "array of string",
           "required": false,
           "description": "Extra extension paths or store URLs to load alongside the project"
+        },
+        {
+          "name": "headless",
+          "type": "boolean",
+          "required": false,
+          "description": "false opens a browser window the person can see, overriding EXTENSION_HEADLESS and any --headless in EXTENSION_BROWSER_FLAGS for this session only; pass it when the person wants to watch or try the extension. true forces headless. Omit to inherit the environment (headless when EXTENSION_HEADLESS=1 or EXTENSION_BROWSER_FLAGS carries --headless)."
         }
       ]
     },

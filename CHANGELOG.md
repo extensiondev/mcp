@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- `extension_dev` and `extension_start` take `headless`. `headless: false` opens a browser window the person can see, overriding `EXTENSION_HEADLESS` and any `--headless` in `EXTENSION_BROWSER_FLAGS` for that session only; `headless: true` forces headless; omitted, the session inherits the environment as before. Every answer that launches a browser reports `headless`, and a headless answer says the person cannot see the browser and how to open one they can. `extension_open` reads the session's own setting, so a visible session opened from a headless environment shows real popup, options and sidebar windows. A person who asked to see their extension used to be told it was open on their screen while it ran headless, and no tool input could change that.
+- Next steps no longer hand the person a shell command. `extension_create` ends with asking "Want me to open it in Chrome so you can try it?" and calling `extension_dev` with `headless: false`, and moves the `npm run dev` line to `manualAlternative`, for use outside an agent. `extension_add_feature` ends the same way, and the server instructions tell every client to open the browser itself and never pass "run `npm run dev`" on as the person's step.
+
 ## 10.13.0
 
 Built on Extension.js 4.1.33.

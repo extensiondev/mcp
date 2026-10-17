@@ -39,6 +39,8 @@ import { handler as waitHandler } from "./wait";
 import { handler as logsHandler } from "./logs";
 import {
   LAUNCH_FLAG_SCHEMA,
+  headlessHint,
+  headlessLaunch,
   launchFlagArgs,
   type LaunchFlagArgs,
 } from "../lib/launch-flags";
@@ -181,8 +183,12 @@ export async function handler(
   if (allowControl) cliArgs.push("--allow-control");
   if (args.allowEval) cliArgs.push("--allow-eval");
 
+  const visibility = headlessLaunch(args);
   const spawnedAt = Date.now();
-  const spawned = spawnExtensionCli(cliArgs, { projectDir: args.projectPath });
+  const spawned = spawnExtensionCli(cliArgs, {
+    projectDir: args.projectPath,
+    ...(visibility.env ? { env: visibility.env } : {}),
+  });
   const { child, logPath } = spawned;
 
   if (child.pid === undefined) {
@@ -199,6 +205,7 @@ export async function handler(
     command: "dev",
     noBrowser: Boolean(args.noBrowser),
     profileReused,
+    headless: visibility.headless,
   });
   child.on("exit", () => {
     removeSession(args.projectPath, browser, pid);
@@ -388,6 +395,7 @@ export async function handler(
       command: "dev",
       noBrowser: Boolean(args.noBrowser),
       profileReused,
+      headless: visibility.headless,
     });
   }
 
@@ -434,6 +442,7 @@ export async function handler(
             ...(replaced.length > 1 ? { replacedSessions: replaced } : {}),
           }
         : {}),
+      ...(args.noBrowser ? {} : { headless: visibility.headless }),
       capabilities,
       engine: describeExtensionInvocation(args.projectPath),
       logPath,
@@ -446,7 +455,7 @@ export async function handler(
     ],
     hint: args.noBrowser
       ? "Build-only session (noBrowser: true): no browser will launch, so no runtime will ever attach. extension_wait returns as soon as the first compile lands (compiled: true, browserAttached: false) instead of waiting out its budget; do not wait for a browser. The control verbs (storage/reload/open/dom_snapshot/eval) need a live browser and will not work against this session. When you are done, call extension_stop to shut down the dev server."
-      : `${nextStep} ${
+      : `${nextStep} ${headlessHint(visibility.headless)} ${
         allowControl
           ? controlBound
             ? `Control channel is ON (port ${control.port} per ready.json): extension_${controlVerbs.split(", ").join("/extension_")}${args.allowEval ? "/extension_eval" : ""} will work against this session.`

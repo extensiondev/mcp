@@ -356,7 +356,7 @@ export async function handler(args: {
         templateSlug
           ? `4. Reference template source: ${EXAMPLES_TREE_BASE}/${templateSlug}/src`
           : "4. No catalog template ships this surface yet: build from the manifest additions and file hints above",
-        "5. Validate the manifest with extension_manifest_validate, then run extension_dev (npm run dev without the server) to test",
+        "5. Validate the manifest with extension_manifest_validate, then ask the person \"Want me to open it in Chrome so you can try it?\" and, on yes, call extension_dev yourself with headless: false; do not hand them a shell command",
       ].filter(Boolean),
     },
     warnings: [

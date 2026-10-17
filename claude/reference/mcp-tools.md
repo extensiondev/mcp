@@ -127,6 +127,7 @@ Run the extension while you edit it: dev build, hot module replacement, and a br
 | `host` | string | no |  | Bind host, default 127.0.0.1. Use 0.0.0.0 in Docker or devcontainers. |
 | `publicHost` | string | no |  | Host the browser dials for HMR and reload when it differs from the bind host |
 | `extensions` | array of string | no |  | Extra extension paths or store URLs to load alongside the project |
+| `headless` | boolean | no |  | false opens a browser window the person can see, overriding EXTENSION_HEADLESS and any --headless in EXTENSION_BROWSER_FLAGS for this session only; pass it when the person wants to watch or try the extension. true forces headless. Omit to inherit the environment (headless when EXTENSION_HEADLESS=1 or EXTENSION_BROWSER_FLAGS carries --headless). |
 | `replace` | boolean | no | `false` | Stop the live session for this projectPath first, reported as replacedSession. Without it a second call is refused rather than forking: two sessions fight over one profile and the newer browser dies on the lock. |
 | `allowControl` | boolean | no | `true` | The agent-bridge control channel that extension_storage/reload/open/dom_snapshot ride (local, same machine). On unless you pass false; eval is the gate that stays off (allowEval). |
 | `wait` | boolean | no | `true` | Wait for the session to be ready before answering (the same contract extension_wait reads, up to 45s) and include the first log lines. false returns as soon as the server is spawned; call extension_wait and extension_logs yourself then. |
@@ -383,6 +384,7 @@ Run the PRODUCTION build in a browser: build the project, serve it, and launch. 
 | `host` | string | no |  | Bind host, default 127.0.0.1. Use 0.0.0.0 in Docker or devcontainers. |
 | `publicHost` | string | no |  | Host the browser dials for HMR and reload when it differs from the bind host |
 | `extensions` | array of string | no |  | Extra extension paths or store URLs to load alongside the project |
+| `headless` | boolean | no |  | false opens a browser window the person can see, overriding EXTENSION_HEADLESS and any --headless in EXTENSION_BROWSER_FLAGS for this session only; pass it when the person wants to watch or try the extension. true forces headless. Omit to inherit the environment (headless when EXTENSION_HEADLESS=1 or EXTENSION_BROWSER_FLAGS carries --headless). |
 
 ## extension_stop
 

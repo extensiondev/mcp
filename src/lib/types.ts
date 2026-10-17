@@ -93,5 +93,6 @@ export interface ProcessInfo {
   noBrowser?: boolean;
   profileReused?: boolean;
   serverPid?: number;
+  headless?: boolean;
 }
 

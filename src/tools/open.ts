@@ -23,6 +23,8 @@ import {
   type ActArgs,
 } from "../lib/act";
 import { envelope } from "../lib/envelope";
+import { envIsHeadless } from "../lib/launch-flags";
+import { findSessionInfo } from "../lib/process-manager";
 import { parseFrameObject } from "../lib/frame-json";
 import { resolveSessionBrowser } from "../lib/session-browser";
 import { readyContractPath } from "../lib/session-paths";
@@ -968,16 +970,17 @@ export const schema = {
   },
 };
 
-export function sessionIsHeadless(): boolean {
-  if (/^(1|true)$/i.test(process.env.EXTENSION_HEADLESS ?? "")) return true;
+export function sessionIsHeadless(projectPath?: string, browser?: string): boolean {
+  if (projectPath && browser) {
+    const recorded = findSessionInfo(projectPath, browser)?.headless;
+    if (typeof recorded === "boolean") return recorded;
+  }
 
-  return /(^|\s|=)-{1,2}headless\b/i.test(
-    process.env.EXTENSION_BROWSER_FLAGS ?? "",
-  );
+  return envIsHeadless(process.env);
 }
 
 const HEADED_RELAUNCH =
-  "a person starts a headed session from a shell where EXTENSION_HEADLESS=0 is set and EXTENSION_BROWSER_FLAGS carries no --headless (extension_stop, then extension_dev from that shell; no tool input sets those variables)";
+  "call extension_dev again with headless: false and replace: true, which stops this session and opens a browser window the person can see";
 
 async function resolveExtensionDocumentUrl(
   projectPath: string,
@@ -1115,7 +1118,7 @@ export async function handler(
 
   if (
     ["popup", "options", "sidebar"].includes(args.surface) &&
-    !sessionIsHeadless() &&
+    !sessionIsHeadless(args.projectPath, browser) &&
     (await browserRunsHeadless(args.projectPath, browser))
   ) {
     const asTab = await openSurfaceAsTab(args.projectPath, browser, args.surface);
@@ -1151,7 +1154,7 @@ export async function handler(
       args.surface === "sidebar" &&
       isChromiumFamily(browser) &&
       refusal.kind === "gesture" &&
-      !sessionIsHeadless() &&
+      !sessionIsHeadless(args.projectPath, browser) &&
       !(await browserRunsHeadless(args.projectPath, browser))
     ) {
       return openSidebarThroughGesture(args.projectPath, browser, refusal.frame);

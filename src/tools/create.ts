@@ -315,13 +315,14 @@ export async function handler(args: {
         gitInit,
       },
       scripts,
+      manualAlternative: `Outside an agent only: cd ${result.projectPath} && ${runDev}`,
       duration: Date.now() - start,
       nextSteps: [
         `The scaffold is complete and verified (manifest read at ${manifestPath}${result.depsInstalled ? ", dependencies installed" : ""}): it needs no build to check, so do not run a build to verify it.`,
         ...(result.depsInstalled
           ? []
           : [`Dependencies were not installed: run \`${packageManager} install\` in ${result.projectPath} first.`]),
-        `Run it with extension_dev (projectPath: ${result.projectPath}); its answer says when the session is ready. Without the MCP server: cd ${result.projectPath} && ${runDev}.`,
+        `Ask the person "Want me to open it in Chrome so you can try it?" and, on yes, call extension_dev yourself (projectPath: ${result.projectPath}, headless: false so they can see the window); its answer says when the session is ready. Do not hand the person a shell command to run it.`,
         `To ship: extension_create scaffolds and runs locally, it does not host. Open ${deployUrl} to deploy this template to the web.`,
       ],
     },

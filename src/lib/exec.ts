@@ -199,7 +199,7 @@ export interface SpawnedCli {
 
 export function spawnExtensionCli(
   args: string[],
-  options?: { cwd?: string; projectDir?: string },
+  options?: { cwd?: string; projectDir?: string; env?: Record<string, string> },
 ): SpawnedCli {
   const { command, prefixArgs } = resolveExtensionInvocation(
     options?.projectDir ?? options?.cwd,
@@ -211,7 +211,7 @@ export function spawnExtensionCli(
     cwd: options?.cwd ?? options?.projectDir,
     detached: true,
     stdio: ["ignore", fd, fd],
-    env: { ...process.env, FORCE_COLOR: "0", NO_COLOR: "1" },
+    env: { ...process.env, ...options?.env, FORCE_COLOR: "0", NO_COLOR: "1" },
   });
   fs.closeSync(fd);
 
