@@ -34,7 +34,7 @@ import {
 export const schema = {
   name: "extension_start",
   description:
-    "Run the PRODUCTION build in a browser: build the project, serve it, and launch. There is no hot module replacement and no control channel, so your edits are not picked up and extension_eval, extension_storage, extension_reload, extension_open and extension_dom_snapshot cannot attach to this session. Use extension_dev while writing code, and this to check what actually ships. Pass build:false to launch an existing dist/<browser> without rebuilding, or outputPath to launch any prebuilt unpacked extension directory, one another toolchain produced included, which implies build:false. The answer says what it confirmed (the engine process, and the browser pid the launcher recorded once the contract lands) and what a production session cannot confirm (that the browser loaded the extension: it opens no debug port and has no console stream), and names extension_dev for a proven load.",
+    "Run the PRODUCTION build in a browser: build the project, serve it, and launch. There is no hot module replacement, so your edits are not picked up; use extension_dev while writing code, and this to check what actually ships. By default there is no control channel either, so extension_eval, extension_storage, extension_reload, extension_open and extension_dom_snapshot cannot attach. Pass allowControl:true (or allowEval:true, which implies it) to drive the production run with them: the browser then loads a copy of the build with the control producer added, dist/<browser> keeps the shipped bytes, and extension_reload reloads the installed extension under open tabs the way a store update does, which is how to test content scripts an update orphans. Pass build:false to launch an existing dist/<browser> without rebuilding, or outputPath to launch any prebuilt unpacked extension directory, one another toolchain produced included, which implies build:false. The answer says what it confirmed (the engine process, and the browser pid the launcher recorded once the contract lands) and what a production session cannot confirm (that the browser loaded the extension: it opens no debug port and has no console stream), and names extension_dev for a proven load.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -60,6 +60,18 @@ export const schema = {
         default: false,
         description: "Build (or, with build:false, check the dist) without launching a browser. A production start serves nothing, so with no browser the engine process ends once the build does; read the result with extension_build rather than a session.",
       },
+      allowControl: {
+        type: "boolean",
+        default: false,
+        description:
+          "Open the agent-bridge control channel on the production run, so extension_storage, extension_reload, extension_open and extension_dom_snapshot reach it. The browser loads a copy of the build with the control producer prepended to the background; dist/<browser> is not changed. Needs an engine whose start verb takes --allow-control (the published 4.1.33 does not).",
+      },
+      allowEval: {
+        type: "boolean",
+        default: false,
+        description:
+          "Also enable extension_eval on the production run (writes a 0600 session token). Implies allowControl. The build's own content_security_policy still governs eval in its extension pages and background.",
+      },
       outputPath: {
         type: "string",
         description:
@@ -80,6 +92,8 @@ export async function handler(
     port?: number;
     noBrowser?: boolean;
     outputPath?: string;
+    allowControl?: boolean;
+    allowEval?: boolean;
   } & LaunchFlagArgs,
 ): Promise<string> {
   const browser = args.browser ?? "chrome";
@@ -141,6 +155,12 @@ export async function handler(
   if (args.port !== undefined) cliArgs.push("--port", String(args.port));
   if (args.noBrowser) cliArgs.push("--no-browser");
 
+  const allowEval = Boolean(args.allowEval);
+  const allowControl = Boolean(args.allowControl) || allowEval;
+
+  if (allowControl) cliArgs.push("--allow-control");
+  if (allowEval) cliArgs.push("--allow-eval");
+
   cliArgs.push(...launchFlagArgs(args));
 
   const stale = removeCarrier(args.projectPath);
@@ -189,6 +209,24 @@ export async function handler(
 
   if (boot.verdict.kind === "exited") {
     const { exitCode: code, signal } = boot.verdict;
+    const refusedFlag = allowControl
+      ? /unknown option '(--allow-(?:control|eval))'/.exec(`${cleanOutput}\n${spawned.readOutput()}`)
+      : null;
+
+    if (refusedFlag) {
+      return envelope({
+        ok: false,
+        command: schema.name,
+        status: "engine-unsupported",
+        error: {
+          code: "E_ENGINE_TOO_OLD",
+          message: `The project's Extension.js engine refused ${refusedFlag[1]}: its ${command} verb has no control channel. The published extension 4.1.33 does not have it; a production run takes --allow-control and --allow-eval from the first engine release after 4.1.33. No session is running.`,
+        },
+        value: { ...session, exitCode: code, signal, allowControl, allowEval },
+        hint: "Upgrade the project's engine (npm i -D extension@latest) once a release with start --allow-control is out, or drive the run with extension_dev, which carries the control channel today. extension_start without allowControl still runs the production build.",
+        warnings: boot.warnings,
+      });
+    }
 
     return envelope({
       ok: false,
@@ -293,6 +331,11 @@ export async function handler(
       : `the contract names the browser it launched (pid ${launch.browserPid}, ${launch.browserAlive ? "alive" : "gone"})`;
 
   const noBrowserOrHint = args.noBrowser ? "" : headlessHint(visibility.headless);
+  const controlPort =
+    typeof freshContract?.controlPort === "number" ? freshContract.controlPort : null;
+  const bridgeLine = allowControl
+    ? `This production session carries the control channel${controlPort !== null ? ` (port ${controlPort})` : ""} on a copy of the build at ${typeof freshContract?.distPath === "string" ? freshContract.distPath : "dist/extension-js/<browser>/controlled"}, so extension_storage, extension_reload (a real reload of the installed extension under open tabs, as a store update does), extension_open and extension_dom_snapshot attach${allowEval ? ", and extension_eval runs where the build's content_security_policy allows it (context:'page' in a tab always does)" : "; extension_eval needs allowEval:true"}. extension_logs has no console stream for it.`
+    : "A production session carries no dev bridge, so extension_logs has no console stream for it and the control verbs cannot attach; pass allowControl:true to drive it.";
 
   return envelope({
     ok: true,
@@ -305,11 +348,14 @@ export async function handler(
       verb: command,
       observed: "the engine process was alive 5 s after it was spawned",
       headless: visibility.headless,
+      allowControl,
+      allowEval,
+      ...(allowControl ? { controlPort } : {}),
       ...launch,
     },
     hint: launch.extensionLoaded === true
-      ? `The engine's ${command} process was alive 5 s after spawn and ${launchSeen}, and ${browser} loaded the extension: ${launch.loadEvidence} A production session carries no dev bridge, so extension_logs has no console stream for it and the control verbs cannot attach. ${noBrowserOrHint} When you are done, call extension_stop to shut the session down.`
-      : `The engine's ${command} process was alive 5 s after spawn and ${launchSeen}. What this answer cannot confirm is that ${browser} loaded the extension: ${launch.loadEvidence} A production session carries no dev bridge, so extension_logs has no console stream to read for it and the control verbs cannot attach. To prove the load, run it with extension_dev, whose answer carries guestLoaded. ${noBrowserOrHint} When you are done, call extension_stop to shut the session down.`,
+      ? `The engine's ${command} process was alive 5 s after spawn and ${launchSeen}, and ${browser} loaded the extension: ${launch.loadEvidence} ${bridgeLine} ${noBrowserOrHint} When you are done, call extension_stop to shut the session down.`
+      : `The engine's ${command} process was alive 5 s after spawn and ${launchSeen}. What this answer cannot confirm is that ${browser} loaded the extension: ${launch.loadEvidence} ${bridgeLine} To prove the load, run it with extension_dev, whose answer carries guestLoaded. ${noBrowserOrHint} When you are done, call extension_stop to shut the session down.`,
     warnings: [
       ...boot.warnings,
       markerWarning,

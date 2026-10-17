@@ -1563,7 +1563,7 @@
       "name": "extension_start",
       "tier": "run",
       "group": "local",
-      "description": "Run the PRODUCTION build in a browser: build the project, serve it, and launch. There is no hot module replacement and no control channel, so your edits are not picked up and extension_eval, extension_storage, extension_reload, extension_open and extension_dom_snapshot cannot attach to this session. Use extension_dev while writing code, and this to check what actually ships. Pass build:false to launch an existing dist/<browser> without rebuilding, or outputPath to launch any prebuilt unpacked extension directory, one another toolchain produced included, which implies build:false. The answer says what it confirmed (the engine process, and the browser pid the launcher recorded once the contract lands) and what a production session cannot confirm (that the browser loaded the extension: it opens no debug port and has no console stream), and names extension_dev for a proven load.",
+      "description": "Run the PRODUCTION build in a browser: build the project, serve it, and launch. There is no hot module replacement, so your edits are not picked up; use extension_dev while writing code, and this to check what actually ships. By default there is no control channel either, so extension_eval, extension_storage, extension_reload, extension_open and extension_dom_snapshot cannot attach. Pass allowControl:true (or allowEval:true, which implies it) to drive the production run with them: the browser then loads a copy of the build with the control producer added, dist/<browser> keeps the shipped bytes, and extension_reload reloads the installed extension under open tabs the way a store update does, which is how to test content scripts an update orphans. Pass build:false to launch an existing dist/<browser> without rebuilding, or outputPath to launch any prebuilt unpacked extension directory, one another toolchain produced included, which implies build:false. The answer says what it confirmed (the engine process, and the browser pid the launcher recorded once the contract lands) and what a production session cannot confirm (that the browser loaded the extension: it opens no debug port and has no console stream), and names extension_dev for a proven load.",
       "gate": "none",
       "samplePrompt": "Launch the production build in Edge",
       "readOnly": false,
@@ -1611,6 +1611,20 @@
           "required": false,
           "default": false,
           "description": "Build (or, with build:false, check the dist) without launching a browser. A production start serves nothing, so with no browser the engine process ends once the build does; read the result with extension_build rather than a session."
+        },
+        {
+          "name": "allowControl",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "Open the agent-bridge control channel on the production run, so extension_storage, extension_reload, extension_open and extension_dom_snapshot reach it. The browser loads a copy of the build with the control producer prepended to the background; dist/<browser> is not changed. Needs an engine whose start verb takes --allow-control (the published 4.1.33 does not)."
+        },
+        {
+          "name": "allowEval",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "Also enable extension_eval on the production run (writes a 0600 session token). Implies allowControl. The build's own content_security_policy still governs eval in its extension pages and background."
         },
         {
           "name": "outputPath",

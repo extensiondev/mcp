@@ -26,6 +26,9 @@ export interface ProductionLaunchEvidence {
 export const PRODUCTION_SESSION_LIMITS =
   "a production launch opens no debug port and carries no dev bridge, so neither the browser's target list nor its console can be read from here; extension_logs has no stream for this session and the control verbs cannot attach";
 
+export const CONTROLLED_SESSION_LIMITS =
+  "a production launch opens no debug port, so the browser's target list cannot be read from here; this session carries the control channel, and its background connecting to it (the contract's executorAttachedAt, which extension_wait reads) is what proves the load";
+
 export function readFreshContract(
   projectPath: string,
   browser: string,
@@ -55,12 +58,29 @@ export function productionLaunchEvidence(
     typeof contract?.extensionId === "string" && contract.extensionId
       ? contract.extensionId
       : undefined;
+  const controlled = typeof contract?.controlPort === "number" && contract.controlPort > 0;
+  const attachedAt =
+    controlled && typeof contract?.executorAttachedAt === "string" && contract.executorAttachedAt
+      ? contract.executorAttachedAt
+      : null;
+  const limits = controlled ? CONTROLLED_SESSION_LIMITS : PRODUCTION_SESSION_LIMITS;
+
+  if (attachedAt && browserAlive !== false) {
+    return {
+      browserPid,
+      browserAlive,
+      ...(extensionId ? { extensionId } : {}),
+      extensionLoaded: true,
+      loadEvidence: `The extension's background connected to this session's control channel at ${attachedAt}, so the browser loaded it and its background runs.`,
+    };
+  }
+
   const loadEvidence =
     browserPid === null
-      ? `The contract records no browser pid yet, so not even the launch is confirmed here; extension_wait reads it once the build and the launch land. Whether the browser loads the extension stays unread either way: ${PRODUCTION_SESSION_LIMITS}.`
+      ? `The contract records no browser pid yet, so not even the launch is confirmed here; extension_wait reads it once the build and the launch land. Whether the browser loads the extension stays unread either way: ${limits}.`
       : browserAlive
-        ? `The engine's launcher recorded the browser it spawned (pid ${browserPid}) and that process is alive, so the browser is up. Whether it loaded the extension is not read: ${PRODUCTION_SESSION_LIMITS}.`
-        : `The engine's launcher recorded the browser it spawned (pid ${browserPid}) and that process is gone, so the browser exited or handed its session to another process; nothing here says the extension loaded (${PRODUCTION_SESSION_LIMITS}).`;
+        ? `The engine's launcher recorded the browser it spawned (pid ${browserPid}) and that process is alive, so the browser is up. Whether it loaded the extension is not read: ${limits}.`
+        : `The engine's launcher recorded the browser it spawned (pid ${browserPid}) and that process is gone, so the browser exited or handed its session to another process; nothing here says the extension loaded (${limits}).`;
 
   return {
     browserPid,
