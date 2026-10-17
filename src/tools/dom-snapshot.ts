@@ -188,7 +188,7 @@ async function snapshotExtensionPageOverProtocol(
   try {
     const refused = JSON.parse(raw);
     if (!refused || refused.ok !== false) return null;
-    if (!(url && GECKO_EXTENSION_URL.test(url)) && refused.error?.code !== "E_TARGET_NOT_FOUND") return null;
+    if (!(url && GECKO_EXTENSION_URL.test(url)) && !["E_TARGET_NOT_FOUND", "E_PAGE_NOT_SCRIPTABLE", "E_EXTENSION_PAGE_UNREACHABLE"].includes(String(refused.error?.code))) return null;
   } catch {
     return null;
   }

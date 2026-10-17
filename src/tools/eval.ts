@@ -909,11 +909,14 @@ async function evaluateInGeckoTab(
 }
 
 /* @invariant
- * The engine answers E_TARGET_NOT_FOUND for an extension page it could not reach: a surface whose page carries no relay (a
+ * The engine answers E_TARGET_NOT_FOUND (or, since it names a refused injection, the E_PAGE_NOT_SCRIPTABLE or
+ * E_EXTENSION_PAGE_UNREACHABLE this server maps it to) for an extension page it could not reach: a surface whose page carries no relay (a
  * production build gets the control producer in its background only) or a moz-extension:// tab that script injection
  * cannot enter. Neither ran the expression, so the tab is evaluated over the debugger protocol only when it exists there,
  * and a missing tab keeps the engine's own answer.
  */
+const UNREACHED_TAB_CODES = new Set(["E_TARGET_NOT_FOUND", "E_PAGE_NOT_SCRIPTABLE", "E_EXTENSION_PAGE_UNREACHABLE"]);
+
 async function evaluateExtensionPageOverProtocol(
   args: ActArgs & { expression: string },
   browser: string,
@@ -925,7 +928,7 @@ async function evaluateExtensionPageOverProtocol(
   if (!isGeckoFamily(browser)) return raw;
 
   const refused = parseFrameObject(raw);
-  if (!refused || refused.ok !== false || refused.error?.code !== "E_TARGET_NOT_FOUND") return raw;
+  if (!refused || refused.ok !== false || !UNREACHED_TAB_CODES.has(String(refused.error?.code))) return raw;
 
   const resolved = await resolveRdpPort(args.projectPath, browser, { waitMs: 1_000, graceMs: 500 });
 
@@ -1373,11 +1376,13 @@ async function evaluateOnce(
 
         const code =
           typeof parsed.error?.code === "string" ? parsed.error.code : "";
+        const named = code === "E_PAGE_NOT_SCRIPTABLE" || code === "E_EXTENSION_PAGE_UNREACHABLE";
         const unreachable =
-          code === "E_TARGET_NOT_FOUND" ||
-          /cannot access|chrome-extension:\/\/|chrome:\/\/|no active tab|missing host permission/i.test(
-            JSON.stringify(parsed.error ?? ""),
-          );
+          !named &&
+          (code === "E_TARGET_NOT_FOUND" ||
+            /cannot access|chrome-extension:\/\/|chrome:\/\/|no active tab|missing host permission/i.test(
+              JSON.stringify(parsed.error ?? ""),
+            ));
 
         if (parsed.ok === false && unreachable) {
           parsed.hint =

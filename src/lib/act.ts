@@ -7,6 +7,7 @@
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
 import { runExtensionCli } from "./exec";
+import { nameRefusedInjection } from "./injection-refusal";
 import {
   outputFlagRefusalMessage,
   refusedTheOutputFlag,
@@ -107,8 +108,18 @@ function browserFlag(args: string[]): string | undefined {
   return at !== -1 && typeof args[at + 1] === "string" ? args[at + 1] : undefined;
 }
 
-function translateFrame(frame: any, projectPath: string, browser?: string): any {
+function flagValue(args: string[], flag: string): string | undefined {
+  const at = args.indexOf(flag);
+
+  return at !== -1 && typeof args[at + 1] === "string" ? args[at + 1] : undefined;
+}
+
+function translateFrame(frame: any, projectPath: string, args: string[]): any {
   if (!frame || frame.ok !== false) return frame;
+
+  const browser = browserFlag(args);
+
+  nameRefusedInjection(frame, { browser, url: flagValue(args, "--url") });
 
   if (frame.error && typeof frame.error.message === "string") {
     frame.error.message = withSessionContext(
@@ -232,7 +243,7 @@ export async function runActVerb(
 
   if (out) {
     try {
-      const frame = translateFrame(JSON.parse(out), projectPath, browserFlag(args));
+      const frame = translateFrame(JSON.parse(out), projectPath, args);
 
       if (isEnvelope(frame)) {
         frame.command = command;
