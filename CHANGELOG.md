@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## 10.13.0
+
+Built on Extension.js 4.1.33.
 
 - The package exports `@extension.dev/mcp/hosted` for running the platform tools on a server. `registerHostedTools` adds them to an MCP server instance, and `createHostedServer` builds one. Both take a request credential: the caller's token, the platform base, and the projects that token covers. The hosted set is `extension_auth` (status only), `extension_workspace` (info, projects and settings), `extension_project_create` (one project per call), `extension_builds`, `extension_release_status` and `extension_release_promote`. Login, logout, publish, submit, share links and every local tool stay out of it. No hosted tool takes `api` or `projectPath`, and a call that passes one is refused before any request is sent.
 - Under a request credential, the platform tools send that token and read no stored login, `EXTENSION_DEV_TOKEN` or `EXTENSION_DEV_PROJECT`. Writing or removing a stored login is refused, and nothing is written to the login store. The local server still reads `auth.json` as before.
