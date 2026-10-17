@@ -27,6 +27,8 @@ import {
   readWebDriverSession,
   readWebDriverUnavailableReason,
   WebDriverClient,
+  webdriverSessionEndedHint,
+  webdriverSessionEndedMessage,
 } from "../lib/webdriver";
 import {
   detectSafariAutomation,
@@ -434,7 +436,9 @@ export async function handler(args: {
 
     if (WEBKIT_FAMILY.has(browser)) {
       const info = readWebDriverSession(projectPath, browser);
-      const alive = info ? await new WebDriverClient(info).alive() : false;
+      const client = info ? new WebDriverClient(info) : null;
+      const alive = client ? await client.alive() : false;
+      const ended = client && !alive ? (await client.liveness()) === "session-ended" : false;
       if (info && !alive) healthy = false;
 
       checks.push({
@@ -443,7 +447,9 @@ export async function handler(args: {
         detail: info
           ? alive
             ? `Safari automation window recorded by the dev session (safaridriver on port ${info.port}, session ${info.sessionId})`
-            : `ready.json records a Safari automation session on port ${info.port}, but it no longer answers: the window or the driver is gone`
+            : ended
+              ? webdriverSessionEndedMessage(info, browser)
+              : `ready.json records a Safari automation session on port ${info.port}, but it no longer answers: the window or the driver is gone`
           : (() => {
               const reason = readWebDriverUnavailableReason(projectPath, browser);
 
@@ -453,8 +459,9 @@ export async function handler(args: {
             })(),
         ...(info && !alive
           ? {
-              remediation:
-                "Stop and restart extension_dev --browser=safari; the session that recorded the window opens it again on the first package.",
+              remediation: ended
+                ? webdriverSessionEndedHint(browser)
+                : "Stop and restart extension_dev --browser=safari; the session that recorded the window opens it again on the first package.",
             }
           : {}),
       });

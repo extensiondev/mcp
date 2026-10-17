@@ -16,6 +16,7 @@ import * as assertTool from "../tools/assert";
 import * as evalTool from "../tools/eval";
 import * as logsTool from "../tools/logs";
 import * as openTool from "../tools/open";
+import * as waitTool from "../tools/wait";
 
 import type * as ActModule from "../lib/act";
 
@@ -40,6 +41,7 @@ interface FakeSafari {
   calls: Array<{ method: string; route: string; body: unknown }>;
   url: string;
   roots: Array<{ owner: string }>;
+  sessionEnded: boolean;
   close(): Promise<void>;
 }
 
@@ -49,6 +51,7 @@ async function startFakeSafari(): Promise<FakeSafari> {
     calls: [],
     url: "https://start.test/",
     roots: [],
+    sessionEnded: false,
     close: async () => {},
   };
   const server = http.createServer((req, res) => {
@@ -68,12 +71,28 @@ async function startFakeSafari(): Promise<FakeSafari> {
         res.end(JSON.stringify({ value }));
       };
 
+      if (state.sessionEnded && route.startsWith("/session/S-9")) {
+        return reply(404, {
+          error: "invalid session id",
+          message: "Session with id S-9 is not active",
+        });
+      }
+
       if (route === "/session/S-9/url" && method === "GET") {
         return reply(200, state.url);
       }
 
       if (route === "/session/S-9/url" && method === "POST") {
-        state.url = String((body as { url: string }).url);
+        const wanted = String((body as { url: string }).url);
+
+        try {
+          state.url = new URL(wanted).href ? wanted : state.url;
+        } catch {
+          return reply(400, {
+            error: "invalid argument",
+            message: "Could not parse requested URL",
+          });
+        }
 
         return reply(200, null);
       }
@@ -232,6 +251,127 @@ describe("Safari sessions over the dev window's WebDriver connection", () => {
           (c.body as { url: string }).url === "https://example.test/page",
       ),
     ).toBe(true);
+  });
+
+  function pageEval(url: string) {
+    return evalTool
+      .handler({
+        projectPath: project,
+        browser: BROWSER,
+        context: "page",
+        expression: "document.title",
+        url,
+      })
+      .then((raw) => JSON.parse(raw));
+  }
+
+  function navigations(): string[] {
+    return safari.calls
+      .filter((c) => c.method === "POST" && c.route === "/session/S-9/url")
+      .map((c) => (c.body as { url: string }).url);
+  }
+
+  it("navigates to a host-and-port url as http, the pattern Chromium and Firefox accept", async () => {
+    withWindow();
+    const parsed = await pageEval("127.0.0.1:8765");
+
+    expect(parsed.ok).toBe(true);
+    expect(parsed.status).toBe("evaluated");
+    expect(navigations()).toEqual(["http://127.0.0.1:8765/"]);
+  });
+
+  it("evaluates in place when the window already shows a page the host-and-port url matches", async () => {
+    withWindow();
+    safari.url = "http://127.0.0.1:8765/demo.html";
+    const parsed = await pageEval("127.0.0.1:8765");
+
+    expect(parsed.ok).toBe(true);
+    expect(parsed.value.url).toBe("http://127.0.0.1:8765/demo.html");
+    expect(navigations()).toEqual([]);
+  });
+
+  it("evaluates in place on a match pattern that covers the page, and refuses one it cannot open", async () => {
+    withWindow();
+    safari.url = "http://127.0.0.1:8765/demo.html";
+    const covered = await pageEval("*://127.0.0.1/*");
+
+    expect(covered.ok).toBe(true);
+    expect(navigations()).toEqual([]);
+
+    const uncovered = await pageEval("*://example.test/*");
+
+    expect(uncovered.ok).toBe(false);
+    expect(uncovered.error.code).toBe("E_NO_MATCHING_TARGET");
+    expect(uncovered.error.message).toContain("http://127.0.0.1:8765/demo.html");
+    expect(navigations()).toEqual([]);
+  });
+
+  it("names an ended WebDriver session on a page eval instead of an internal error", async () => {
+    withWindow();
+    safari.sessionEnded = true;
+    const parsed = await pageEval("127.0.0.1:8765");
+
+    expect(parsed.ok).toBe(false);
+    expect(parsed.status).toBe("webdriver-session-ended");
+    expect(parsed.error.code).toBe("E_WEBDRIVER_SESSION_ENDED");
+    expect(parsed.error.message).toContain("S-9");
+    expect(parsed.hint).toContain("extension_stop");
+  });
+
+  function writeDetached(extra: Record<string, unknown> = {}): void {
+    writeContract(
+      safariDevContract(
+        { port: safari.port, sessionId: "S-9" },
+        {
+          ...sessionFields(),
+          executorAttachedAt: "2026-10-17T16:47:47.372Z",
+          executorDetachedAt: "2026-10-17T16:48:17.376Z",
+          runtime: "detached",
+          ...extra,
+        },
+      ),
+    );
+  }
+
+  function waitOnce() {
+    return waitTool
+      .handler({ projectPath: project, browser: BROWSER, timeoutMs: 1000 })
+      .then((raw) => JSON.parse(raw));
+  }
+
+  it("reads a detached executor beside a live automation session as an asleep background", async () => {
+    writeDetached();
+    const parsed = await waitOnce();
+
+    expect(parsed.ok).toBe(true);
+    expect(parsed.status).toBe("background-asleep");
+    expect(parsed.value.backgroundAsleep).toBe(true);
+    expect(parsed.value.browserAttached).toBe(false);
+    expect(parsed.value.executorDetachedAt).toBe("2026-10-17T16:48:17.376Z");
+    expect(parsed.hint).not.toContain("extension_stop");
+  });
+
+  it("names an ended WebDriver session instead of a gone browser", async () => {
+    writeDetached();
+    safari.sessionEnded = true;
+    const parsed = await waitOnce();
+
+    expect(parsed.ok).toBe(false);
+    expect(parsed.status).toBe("webdriver-session-ended");
+    expect(parsed.error.code).toBe("E_WEBDRIVER_SESSION_ENDED");
+    expect(parsed.error.message).toContain("S-9");
+    expect(parsed.error.message).not.toContain("the browser is gone");
+    expect(parsed.hint).toContain('extension_stop {browser: "safari"}');
+  });
+
+  it("still calls the browser gone when neither the driver nor a recorded pid answers", async () => {
+    writeDetached({ browserPid: 999999 });
+    await safari.close();
+    const parsed = await waitOnce();
+
+    expect(parsed.ok).toBe(false);
+    expect(parsed.status).toBe("browser-gone");
+    expect(parsed.error.code).toBe("E_SESSION_EXITED");
   });
 
   it("sends content and background eval down the bridge, not the window", async () => {

@@ -41,8 +41,13 @@ import {
   WEBKIT_FAMILY,
 } from "../lib/browser-family";
 import {
+  navigableUrl,
+  pageMatchesUrl,
   readWebDriverSession,
   WebDriverClient,
+  webdriverSessionEnded,
+  webdriverSessionEndedHint,
+  webdriverSessionEndedMessage,
   type WebDriverSessionInfo,
 } from "../lib/webdriver";
 import { manifestCandidates } from "../lib/project-manifest";
@@ -405,22 +410,61 @@ async function evaluateOnChromiumExtensionPage(
   });
 }
 
+function webdriverSessionEndedFrame(browser: string, info: WebDriverSessionInfo): string {
+  return envelope({
+    ok: false,
+    command: schema.name,
+    status: "webdriver-session-ended",
+    error: {
+      code: "E_WEBDRIVER_SESSION_ENDED",
+      message: webdriverSessionEndedMessage(info, browser),
+    },
+    value: { browser, webdriverPort: info.port, webdriverSessionId: info.sessionId },
+    hint: webdriverSessionEndedHint(browser),
+  });
+}
+
 async function evaluateOnWebKitPage(
   args: ActArgs & { expression: string },
   browser: string,
   info: WebDriverSessionInfo,
 ): Promise<string> {
   const client = new WebDriverClient(info);
-
-  if (args.url) {
-    const current = await client.currentUrl().catch(() => null);
-
-    if (!current || !current.startsWith(args.url)) {
-      await client.navigate(args.url);
-    }
-  }
+  const warnings: string[] = [];
 
   try {
+    if (args.url) {
+      const current = await client.currentUrl().catch((error: unknown) => {
+        if (webdriverSessionEnded(error)) throw error;
+
+        return null;
+      });
+
+      if (!pageMatchesUrl(current, args.url)) {
+        const destination = navigableUrl(args.url);
+
+        if (!destination) {
+          return envelope({
+            ok: false,
+            command: schema.name,
+            status: "no-matching-target",
+            error: {
+              code: "E_NO_MATCHING_TARGET",
+              message: `The Safari automation window shows ${current ?? "an unreadable url"}, which ${args.url} does not match (as a document, a match pattern or a substring), and ${args.url} is not an address the window can be sent to.`,
+            },
+            value: { browser, url: current },
+            hint: "Pass a full url or a host and port (such as 127.0.0.1:8765) to navigate the window there, or open the page first with extension_open url and retry.",
+          });
+        }
+
+        if (destination !== args.url.trim()) {
+          warnings.push(`${args.url} names no scheme, so the window was sent to ${destination}, the address Chromium and Firefox would match it against.`);
+        }
+
+        await client.navigate(destination);
+      }
+    }
+
     const value = await client.execute(`return (${args.expression});`);
 
     return envelope({
@@ -433,9 +477,12 @@ async function evaluateOnWebKitPage(
         url: await client.currentUrl().catch(() => null),
         result: value,
       },
+      warnings,
       hint: "Evaluated in the Safari automation window's main world over the dev session's WebDriver connection.",
     });
   } catch (error) {
+    if (webdriverSessionEnded(error)) return webdriverSessionEndedFrame(browser, info);
+
     return envelope({
       ok: false,
       command: schema.name,
@@ -445,7 +492,7 @@ async function evaluateOnWebKitPage(
         name: "EvalError",
         message: error instanceof Error ? error.message : String(error),
       },
-      hint: "The expression threw, or the automation window is gone. extension_doctor names which; a session that ended needs extension_dev again.",
+      hint: "The expression threw, the window could not load the url, or the automation window is gone. extension_doctor names which; a session that ended needs extension_dev again.",
     });
   }
 }

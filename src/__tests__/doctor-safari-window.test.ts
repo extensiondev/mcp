@@ -49,10 +49,16 @@ function writeContract(dir: string, contract: unknown): void {
   fs.writeFileSync(ready, JSON.stringify(contract));
 }
 
-async function answeringDriver(): Promise<number> {
+async function answeringDriver(sessionEnded = false): Promise<number> {
   server = http.createServer((_req, res) => {
-    res.writeHead(200, { "content-type": "application/json" });
-    res.end(JSON.stringify({ value: "https://example.test/" }));
+    res.writeHead(sessionEnded ? 404 : 200, { "content-type": "application/json" });
+    res.end(
+      JSON.stringify({
+        value: sessionEnded
+          ? { error: "invalid session id", message: "Session is not active" }
+          : "https://example.test/",
+      }),
+    );
   });
 
   await new Promise<void>((resolve) =>
@@ -106,6 +112,17 @@ describe("extension_doctor's safari-window leg", () => {
     expect(leg?.detail).toContain("no longer answers");
     expect(leg?.remediation).toContain("extension_dev --browser=safari");
     expect(parsed.ok).toBe(false);
+  });
+
+  it("names an ended WebDriver session apart from a driver that is gone", async () => {
+    const dir = tmpProject();
+    const port = await answeringDriver(true);
+    writeContract(dir, safariDevContract({ port, sessionId: "S-1" }));
+    const parsed = JSON.parse(await handler({ projectPath: dir, browser: "safari" }));
+    const leg = legOf(parsed);
+    expect(leg?.status).toBe("fail");
+    expect(leg?.detail).toContain("S-1 is no longer valid");
+    expect(leg?.remediation).toContain('extension_stop {browser: "safari"}');
   });
 
   it("skips, without failing the session, when no window was recorded", async () => {

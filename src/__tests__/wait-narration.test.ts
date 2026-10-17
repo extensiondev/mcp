@@ -252,9 +252,10 @@ describe("extension_wait on a browser that died after ready", () => {
     expect(result.hint).toContain("extension_stop");
   });
 
-  it("reads a detached runtime with no exit stamp the same way", async () => {
+  it("reads a detached runtime with no exit stamp the same way when the recorded browser pid is dead", async () => {
     writeModernContract(dir, "chrome", {
       pid: process.pid,
+      browserPid: 999999,
       runtime: "detached",
       executorDetachedAt: "2026-10-05T12:00:01.000Z",
     });
@@ -266,6 +267,45 @@ describe("extension_wait on a browser that died after ready", () => {
     expect(result.status).toBe("browser-gone");
     expect(result.error.message).toContain("detached at 2026-10-05T12:00:01.000Z");
     expect(result.value.browserAttached).toBe(false);
+  });
+});
+
+describe("extension_wait on a Firefox background that went idle", () => {
+  const detached = {
+    pid: process.pid,
+    browserPid: process.pid,
+    cdpPort: undefined,
+    rdpPort: 6000,
+    runtime: "detached",
+    executorDetachedAt: "2026-10-05T12:00:30.000Z",
+  };
+
+  it("reads a detached executor with the browser pid alive as an asleep background", async () => {
+    writeModernContract(dir, "firefox", detached);
+
+    const result = JSON.parse(
+      await handler({ projectPath: dir, browser: "firefox", timeoutMs: 1500 }),
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.status).toBe("background-asleep");
+    expect(result.value.backgroundAsleep).toBe(true);
+    expect(result.value.browserPid).toBe(process.pid);
+    expect(result.hint).not.toContain("extension_stop");
+  });
+
+  it("keeps a relaunched Firefox alive when the recorded exit was the first process", async () => {
+    writeModernContract(dir, "firefox", {
+      ...detached,
+      browserExitedAt: "2026-10-05T12:00:05.000Z",
+      browserExitCode: 0,
+    });
+
+    const result = JSON.parse(
+      await handler({ projectPath: dir, browser: "firefox", timeoutMs: 1500 }),
+    );
+
+    expect(result.status).toBe("background-asleep");
   });
 });
 

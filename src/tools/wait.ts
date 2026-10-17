@@ -23,6 +23,7 @@ import {
   sessionCommandSinceEnvelopeOwnsCommand,
 } from "../lib/envelope";
 import { verifyGuestLoaded } from "../lib/guest-load-oracle";
+import { detachedVerdictFrame, readDetachedVerdict } from "../lib/background-liveness";
 import { recentErrorLogs } from "./doctor";
 
 import type { ReadyContract } from "../lib/types";
@@ -45,7 +46,7 @@ function isAlive(pid: number): boolean {
 export const schema = {
   name: "extension_wait",
   description:
-    "Wait for a running dev or start session to be ready. Call it for a session started with wait:false, after an extension_dev answer whose ready.status was not \"ready\", and for a build-only (noBrowser) session; an extension_dev answer with ready.status \"ready\" already carries this result, so there is nothing left to wait for. This polls the ready.json contract and reports compiled (the compiler finished), browserAttached (the runtime executor connected), and guestLoaded (the browser's own target list shows your extension). Read guestLoaded as the trustworthy load signal: it catches a silently rejected --load-extension that leaves ready.json stamped attached with empty logs. It is null when it could not be checked, for example a gecko session with no CDP port. Every result reports budgetMs and elapsedMs; on status 'timeout', call again to keep waiting on the same contract. In a noBrowser session this returns as soon as the compile lands, instead of waiting for a browser that will never attach. Every ready answer carries the ports the session bound, read from the contract: port (the dev server), controlPort (the control channel) and cdpPort (the browser's debug port on Chromium) or rdpPort (on Gecko), or debugPortNote when the session opened no debug port, so a question about ports is answered here without a shell.",
+    "Wait for a running dev or start session to be ready. Call it for a session started with wait:false, after an extension_dev answer whose ready.status was not \"ready\", and for a build-only (noBrowser) session; an extension_dev answer with ready.status \"ready\" already carries this result, so there is nothing left to wait for. This polls the ready.json contract and reports compiled (the compiler finished), browserAttached (the runtime executor connected), and guestLoaded (the browser's own target list shows your extension). Read guestLoaded as the trustworthy load signal: it catches a silently rejected --load-extension that leaves ready.json stamped attached with empty logs. It is null when it could not be checked, for example a gecko session with no CDP port. Every result reports budgetMs and elapsedMs; on status 'timeout', call again to keep waiting on the same contract. In a noBrowser session this returns as soon as the compile lands, instead of waiting for a browser that will never attach. Every ready answer carries the ports the session bound, read from the contract: port (the dev server), controlPort (the control channel) and cdpPort (the browser's debug port on Chromium) or rdpPort (on Gecko), or debugPortNote when the session opened no debug port, so a question about ports is answered here without a shell. A browser that is running while the extension's background went idle (Safari and Firefox suspend a non-persistent background after 30 s, Chrome an idle MV3 service worker) answers status \"background-asleep\" with how to wake it, not \"browser-gone\"; a Safari WebDriver session that Safari ended answers \"webdriver-session-ended\" with the restart that opens a new one.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -177,7 +178,18 @@ export async function handler(args: {
           contract.runtime === "detached" ||
           typeof (contract as { browserExitedAt?: unknown }).browserExitedAt === "string";
 
+        const verdict = browserGone ? await readDetachedVerdict(contract) : null;
+
+        if (verdict && verdict.kind !== "gone") {
+          return detachedVerdictFrame(schema.name, contract, verdict, {
+            ...sessionPorts(contract),
+            budgetMs,
+            elapsedMs: Date.now() - start,
+          }, clampNote);
+        }
+
         if (browserGone) {
+          const goneEvidence = verdict?.kind === "gone" ? verdict.evidence : null;
           const exit = contract as {
             browserExitedAt?: string;
             browserExitCode?: number | null;
@@ -197,7 +209,7 @@ export async function handler(args: {
                       exit.browserExitCode != null ? ` with code ${exit.browserExitCode}` : ""
                     }${exit.browserExitSignal ? ` (${exit.browserExitSignal})` : ""}`
                   : `the runtime executor detached${exit.executorDetachedAt ? ` at ${exit.executorDetachedAt}` : ""}`
-              }. The dev server is still up, so a build will still land, but nothing is attached to drive or read.`,
+              }${goneEvidence ? `, and ${goneEvidence}` : ""}. The dev server is still up, so a build will still land, but nothing is attached to drive or read.`,
             },
             value: {
               compiled: true,

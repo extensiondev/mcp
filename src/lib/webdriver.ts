@@ -8,6 +8,7 @@
 
 import fs from "node:fs";
 
+import { matchPatternCovers } from "./match-patterns";
 import { readyContractPath } from "./session-paths";
 
 import type { ReadyContract } from "./types";
@@ -89,6 +90,34 @@ export function readyExtensionId(
 
 type DriverReply = { value?: unknown };
 
+export class WebDriverError extends Error {
+  constructor(
+    message: string,
+    readonly code: string | null,
+    readonly httpStatus: number,
+  ) {
+    super(message);
+    this.name = "WebDriverError";
+  }
+}
+
+export type WebDriverLiveness = "alive" | "session-ended" | "unreachable";
+
+export function webdriverSessionEnded(error: unknown): boolean {
+  return error instanceof WebDriverError && error.code === "invalid session id";
+}
+
+export function webdriverSessionEndedMessage(
+  info: WebDriverSessionInfo,
+  browser: string,
+): string {
+  return `safaridriver on port ${info.port} answered that the dev session's WebDriver session ${info.sessionId} is no longer valid ("invalid session id"). Safari ends an automation session when someone interacts with its automation window (a click or a keystroke there, such as reaching Settings from it), or when that window or Safari closes. The dev server and the extension can still be running, and extension_logs still reads what the extension logs, but every read that goes through that session (extension_eval context "page", extension_open url, extension_dom_snapshot, the content-script assertions) cannot reach the ${browser} window until the session is opened again.`;
+}
+
+export function webdriverSessionEndedHint(browser: string): string {
+  return `The engine opens one WebDriver session per dev run, so call extension_stop {browser: "${browser}"}, then extension_dev {browser: "${browser}"} for a new one. To change Safari settings while a session runs, use a regular Safari window, not the automation window.`;
+}
+
 export class WebDriverClient {
   private readonly base: string;
 
@@ -130,10 +159,12 @@ export class WebDriverClient {
           error?: string;
         };
 
-        throw new Error(
+        throw new WebDriverError(
           String(
             value.message || value.error || `${response.status} on ${route}`,
           ),
+          typeof value.error === "string" ? value.error : null,
+          response.status,
         );
       }
 
@@ -150,6 +181,18 @@ export class WebDriverClient {
       return true;
     } catch {
       return false;
+    }
+  }
+
+  async liveness(timeoutMs = 3_000): Promise<WebDriverLiveness> {
+    try {
+      await this.call("GET", "/url", undefined, timeoutMs);
+
+      return "alive";
+    } catch (error) {
+      if (webdriverSessionEnded(error)) return "session-ended";
+
+      return error instanceof WebDriverError ? "alive" : "unreachable";
     }
   }
 
@@ -216,4 +259,49 @@ export function sameDocument(current: string | null, wanted: string): boolean {
   const strip = (u: string) => u.replace(/[#?].*$/, "").replace(/\/+$/, "");
 
   return strip(current) === strip(wanted);
+}
+
+const ABSOLUTE_URL = /^[a-z][a-z0-9+.-]*:\/\//i;
+const OPAQUE_URL = /^(about|data|blob|javascript):/i;
+const LOOPBACK_OR_ADDRESS = /^(localhost|.+\.localhost|\d{1,3}(\.\d{1,3}){3}|\[[0-9a-f:.]+\])$/i;
+
+export function pageMatchesUrl(current: string | null, wanted: string): boolean {
+  if (!current) return false;
+
+  const needle = wanted.trim();
+  if (!needle) return false;
+
+  return (
+    sameDocument(current, needle) ||
+    matchPatternCovers(needle, current) ||
+    current.toLowerCase().includes(needle.toLowerCase())
+  );
+}
+
+export function navigableUrl(wanted: string): string | null {
+  const trimmed = wanted.trim();
+
+  if (!trimmed || trimmed.includes("*") || /\s/.test(trimmed) || trimmed === "<all_urls>") return null;
+
+  if (ABSOLUTE_URL.test(trimmed) || OPAQUE_URL.test(trimmed)) {
+    try {
+      return new URL(trimmed).href ? trimmed : null;
+    } catch {
+      return null;
+    }
+  }
+
+  const authority = trimmed.split(/[/?#]/)[0];
+  const port = /:(\d+)$/.exec(authority);
+  const hostname = port ? authority.slice(0, -port[0].length) : authority;
+
+  if (!hostname || (!port && !hostname.includes(".") && hostname !== "localhost")) return null;
+
+  const scheme = port || LOOPBACK_OR_ADDRESS.test(hostname) ? "http" : "https";
+
+  try {
+    return new URL(`${scheme}://${trimmed}`).href;
+  } catch {
+    return null;
+  }
 }

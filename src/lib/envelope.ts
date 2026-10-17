@@ -81,7 +81,8 @@ export type ErrorCode =
   | "E_UNKNOWN_COMMAND"
   | "E_UNKNOWN_TOOL"
   | "E_UNSUPPORTED_BROWSER"
-  | "E_WAIT_TIMEOUT";
+  | "E_WAIT_TIMEOUT"
+  | "E_WEBDRIVER_SESSION_ENDED";
 
 export const ERROR_CODES: ErrorCode[] = [
   "E_AMBIGUOUS_TARGET",
@@ -156,6 +157,7 @@ export const ERROR_CODES: ErrorCode[] = [
   "E_UNKNOWN_TOOL",
   "E_UNSUPPORTED_BROWSER",
   "E_WAIT_TIMEOUT",
+  "E_WEBDRIVER_SESSION_ENDED",
 ];
 
 export interface EnvelopeError {
