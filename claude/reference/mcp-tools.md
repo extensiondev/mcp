@@ -395,7 +395,7 @@ Stop a session that extension_dev or extension_start is running: terminate the s
 | input | type | required | default | description |
 | --- | --- | --- | --- | --- |
 | `projectPath` | string | no |  | Extension project root |
-| `browser` | string | no |  | Browser of the session to stop. Defaults to the single live session for this project rather than assuming chrome. |
+| `browser` | string | no |  | Browser of the session to stop. Only that browser's server and browser processes are ended; a session the same project runs for another browser keeps running. Defaults to the single live session for this project rather than assuming chrome. |
 | `all` | boolean | no | `false` | Stop every known session across projects and browsers, found from this server's registry AND the on-disk markers written by this server or by servers that are no longer running, so it still works after an MCP restart. A marker owned by another MCP server that is still running is left alone and listed under skippedForeign unless includeOtherServers is true. It also takes back every live-preview carrier still recorded on this machine, including one in a project whose session was never stopped. projectPath/browser are then ignored. |
 | `includeOtherServers` | boolean | no | `false` | With all: true, also stop sessions whose markers belong to another MCP server that is still running (the markers sit in a per-user directory every server shares). Off by default, since those sessions are someone else's. |
 

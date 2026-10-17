@@ -1705,7 +1705,7 @@
           "name": "browser",
           "type": "string",
           "required": false,
-          "description": "Browser of the session to stop. Defaults to the single live session for this project rather than assuming chrome."
+          "description": "Browser of the session to stop. Only that browser's server and browser processes are ended; a session the same project runs for another browser keeps running. Defaults to the single live session for this project rather than assuming chrome."
         },
         {
           "name": "all",

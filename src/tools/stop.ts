@@ -28,7 +28,7 @@ import {
   removeSessionMarker,
 } from "../lib/process-manager";
 import { resolveSessionBrowser } from "../lib/session-browser";
-import { profilesRootDir, readyContractPath } from "../lib/session-paths";
+import { browserProfileRootDir, readyContractPath } from "../lib/session-paths";
 import { removeCarrier } from "../lib/carrier";
 import { contractBrowserPid, describeEnded, endedProcesses } from "../lib/stop-ended";
 import { sweepCarriers, type CarrierSweepEntry } from "../lib/carrier-exit";
@@ -49,7 +49,7 @@ export const schema = {
       browser: {
         type: "string",
         description:
-          "Browser of the session to stop. Defaults to the single live session for this project rather than assuming chrome.",
+          "Browser of the session to stop. Only that browser's server and browser processes are ended; a session the same project runs for another browser keeps running. Defaults to the single live session for this project rather than assuming chrome.",
       },
       all: {
         type: "boolean",
@@ -167,8 +167,30 @@ export function contractProcessHints(
   }
 }
 
+function commandLineOf(
+  pid: number,
+  windowsTable: () => WindowsProcessRow[] | null,
+): string | null {
+  if (process.platform === "win32") {
+    return windowsTable()?.find((row) => row.pid === pid)?.commandLine ?? null;
+  }
+
+  try {
+    return execFileSync("ps", ["-o", "args=", "-p", String(pid)], { encoding: "utf8" }).trim();
+  } catch {
+    return null;
+  }
+}
+
+function namesAnotherBrowser(commandLine: string | null, browser: string): boolean {
+  const named = commandLine?.match(/--browser[= ]([^\s"']+)/);
+
+  return Boolean(named && named[1] !== browser);
+}
+
 function sessionProcessPids(
   projectPath: string,
+  browser: string,
   hints: ContractProcessHints = { pids: [] },
 ): { pids: number[]; verified: boolean } {
   const pids = new Set<number>();
@@ -204,11 +226,13 @@ function sessionProcessPids(
   for (const form of projectPathForms(projectPath)) {
     const escaped = escapeRegex(form);
     const cliCommandLine = `extension[^ ]* (dev|start|preview) ${escaped}`;
-    const browserArgvNamingTheManagedProfile = `${escapeRegex(profilesRootDir(form))}${escapeRegex(path.sep)}`;
+    const browserArgvNamingTheManagedProfile = `${escapeRegex(browserProfileRootDir(form, browser))}${escapeRegex(path.sep)}`;
 
-    for (const pattern of [cliCommandLine, browserArgvNamingTheManagedProfile]) {
-      for (const pid of found(pattern)) pids.add(pid);
+    for (const pid of found(cliCommandLine)) {
+      if (!namesAnotherBrowser(commandLineOf(pid, windowsTable), browser)) pids.add(pid);
     }
+
+    for (const pid of found(browserArgvNamingTheManagedProfile)) pids.add(pid);
   }
 
   return {
@@ -221,9 +245,10 @@ function sessionProcessPids(
 
 async function reapSessionProcesses(
   projectPath: string,
+  browser: string,
   hints: ContractProcessHints = { pids: [] },
 ): Promise<{ reaped: number[]; unconfirmed: number[] }> {
-  const { pids } = sessionProcessPids(projectPath, hints);
+  const { pids } = sessionProcessPids(projectPath, browser, hints);
   if (pids.length === 0) return { reaped: [], unconfirmed: [] };
 
   for (const pid of pids) {
@@ -302,7 +327,7 @@ export async function stopOne(
   const noBrowser = session?.noBrowser === true;
 
   if (pid == null) {
-    const { reaped, unconfirmed } = await reapSessionProcesses(projectPath, hints);
+    const { reaped, unconfirmed } = await reapSessionProcesses(projectPath, browser, hints);
     removeSessionMarker(projectPath, browser);
     const ended = endedProcesses(null, browserPid);
     let detail: string;
@@ -371,9 +396,9 @@ export async function stopOne(
       : "Terminated.";
   }
 
-  const { reaped } = await reapSessionProcesses(projectPath, hints);
+  const { reaped } = await reapSessionProcesses(projectPath, browser, hints);
 
-  const { pids: survivors, verified } = sessionProcessPids(projectPath, hints);
+  const { pids: survivors, verified } = sessionProcessPids(projectPath, browser, hints);
   const dead = pidState(pid) === "dead";
   const ended = endedProcesses(dead, browserPid);
   const stopped = dead && verified && survivors.length === 0 && ended.browserGone !== false;

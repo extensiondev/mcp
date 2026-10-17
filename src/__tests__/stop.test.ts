@@ -384,3 +384,74 @@ describe("extension_stop says when it could not look for survivors", () => {
     15_000,
   );
 });
+
+describe("extension_stop with a browser ends only that browser's session", () => {
+  const holdForever = ["-e", "setInterval(() => {}, 1000)"];
+
+  async function stopFirefoxBesideChrome(
+    chromeArgv: (projectPath: string) => string[],
+    firefoxArgv: (projectPath: string) => string[],
+  ): Promise<{ chrome: number; firefox: number; result: any }> {
+    const projectPath = tmpProject();
+    const chrome = spawnHolder(process.execPath, [...holdForever, ...chromeArgv(projectPath)]);
+    const firefox = spawnHolder(process.execPath, [...holdForever, ...firefoxArgv(projectPath)]);
+    await new Promise((resolve) => setTimeout(resolve, 200));
+
+    try {
+      const result = JSON.parse(await stop.handler({ projectPath, browser: "firefox" }));
+
+      return { chrome, firefox, result };
+    } catch (error) {
+      for (const pid of [chrome, firefox]) {
+        try {
+          process.kill(pid, "SIGKILL");
+        } catch {
+        }
+      }
+
+      throw error;
+    }
+  }
+
+  async function expectChromeKept(outcome: { chrome: number; firefox: number; result: any }) {
+    try {
+      expect(outcome.result.value.reaped).toContain(outcome.firefox);
+      expect(await waitGone(outcome.firefox)).toBe(true);
+      expect(outcome.result.value.reaped).not.toContain(outcome.chrome);
+      expect(isAlive(outcome.chrome)).toBe(true);
+    } finally {
+      for (const pid of [outcome.chrome, outcome.firefox]) {
+        try {
+          process.kill(pid, "SIGKILL");
+        } catch {
+        }
+      }
+    }
+  }
+
+  posixOnly(
+    "keeps a chrome dev server alive when the project's firefox session is stopped",
+    async () => {
+      await expectChromeKept(
+        await stopFirefoxBesideChrome(
+          (projectPath) => ["extension", "dev", projectPath, "--browser", "chrome", "--allow-control"],
+          (projectPath) => ["extension", "preview", projectPath, "--browser", "firefox", "--allow-control"],
+        ),
+      );
+    },
+    15_000,
+  );
+
+  posixOnly(
+    "keeps a browser on the chrome managed profile alive when firefox is stopped",
+    async () => {
+      await expectChromeKept(
+        await stopFirefoxBesideChrome(
+          (projectPath) => [profileDirAsTheLauncherWritesIt(projectPath, "chrome", "dev")],
+          (projectPath) => [profileDirAsTheLauncherWritesIt(projectPath, "firefox", "dev")],
+        ),
+      );
+    },
+    15_000,
+  );
+});
