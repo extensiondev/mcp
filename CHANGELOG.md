@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## 10.14.0
+
+Built on Extension.js 4.1.33.
 
 - `extension_submit` and the server instructions state each store's least public outcome as the platform now ships it, and no longer say submissions go to testers. Chrome and Edge upload a draft that is not published and does not enter review, even for an item that is already published. Firefox uses the unlisted channel for a new add-on or one with no listed version, keeps the listed channel for an add-on AMO already lists, and stops before uploading when AMO cannot say which. Safari stops at the TestFlight draft unless the call asks for Apple review. No store's API sets listing visibility, and a store that only uploaded is recorded as "Uploaded, not public", never as live, which the `submitted` answer now says too.
 - On a public project, `extension_publish`, `extension_release_status` and `extension_release_promote` answer the link that follows a release channel, `<workspace>.extension.dev/<project>/channels/<channel>` (built with `userlandChannelUrl` from `@extension.dev/urls`), which always resolves to that channel's current build. `extension_publish` puts `value.channelUrl` beside the build page when a channel serves the published build (stable first), and says when none does; `extension_release_status` gives each channel row its `channelUrl`, per browser (`/channels/<browser>/<channel>`) for a channel promoted per browser; `extension_release_promote` answers the moved channel's `channelUrl` in place of `publicChannelUrl`. The descriptions and the server instructions say to send testers the channel link so they always get the newest build, and that the build page link pins one build. A private project, or one whose visibility could not be read, gets no channel link: `value.channelUrlWithheld` says why and names the `extension_publish` share link, and `extension_release_status` no longer lists a channel `publicUrl` for it.
