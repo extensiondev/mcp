@@ -318,14 +318,16 @@ describe("Safari sessions over the dev window's WebDriver connection", () => {
     expect(parsed.hint).toContain("extension_stop");
   });
 
-  it("waits until a page expression is truthy over the automation session", async () => {
+  it("repeats a page eval until it is truthy over the automation session", async () => {
     withWindow();
     const parsed = JSON.parse(
-      await waitTool.handler({
+      await evalTool.handler({
         projectPath: project,
         browser: BROWSER,
-        until: { expression: "document.title", context: "page", url: "https://start.test/" },
-        timeoutMs: 3000,
+        expression: "document.title",
+        context: "page",
+        url: "https://start.test/",
+        until: { timeoutMs: 3000 },
       }),
     );
 

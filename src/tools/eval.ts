@@ -29,6 +29,7 @@ import {
   type ActArgs,
 } from "../lib/act";
 import { envelope } from "../lib/envelope";
+import { EVAL_UNTIL_PROPERTY, evalUntilTruthy, type EvalUntil } from "../lib/eval-until";
 import { parseFrameObject } from "../lib/frame-json";
 import {
   ambiguousSessionRefusal,
@@ -88,7 +89,7 @@ import { executeScriptExpression } from "./inspect-gecko";
 export const schema = {
   name: "extension_eval",
   description:
-    "Evaluate an expression in a running extension context. Start the session with allowEval:true (extension_dev), which writes a 0600 session token; without that token every route of this tool, the debug port included, answers eval-disabled. Context defaults to 'background', except on a Chromium MV3 session (the default template) where it defaults to 'page', the active tab; pass context:'background' to evaluate in the service worker, which on Chromium goes over the debug port. Debug-port evaluates run with a user gesture, so gesture-gated APIs (permissions.request, sidePanel.open) can succeed here and still fail when the extension's own code calls them. For content and page, pass `url` to pick the tab, or omit both `url` and `tab` for the active tab; a numeric `tab` only disambiguates. Extension surfaces (popup, options, sidebar, devtools) and override pages (newtab, history, bookmarks) need no tab id but must already be open: open one with extension_open first, because a closed one returns an explicit error. On a Chromium MV3 session those pages, and context:'page' with a chrome-extension:// url, evaluate over CDP, the inspector path the extension page CSP does not govern; elsewhere they evaluate over the in-bundle relay. On Firefox a document whose content security policy forbids eval (the extension's own pages, or a site's) is evaluated over the debugger protocol instead, which takes one expression; a page inside the extension that is no declared surface (pages/*) is reached the same way by context:'page' and its moz-extension:// url once a tab shows it. An extension_start session's pages carry no relay, so there a surface shown in a tab (options) and an extension page url are evaluated over the debugger protocol too; a surface in its own window (popup) is not reachable on that session, and the answer says so instead of reporting a missing target. A returned promise is awaited: over CDP and the Firefox debugger protocol, in a Firefox background, and in tabs (page or content through the in-tab executor) and relay surfaces, where this tool polls until it settles or timeout passes. The one exception is Firefox MV2 without the scripting API, where the expression runs through tabs.executeScript and must return a synchronous value. A value that cannot be cloned (a DOM node, a function) comes back as its string form, or as a not-cloneable error where the browser itself refuses to copy it. Call extension_dom_snapshot with listTabs:true to enumerate {tabId, url, title}.",
+    "Evaluate an expression in a running extension context. Start the session with allowEval:true (extension_dev), which writes a 0600 session token; without that token every route of this tool, the debug port included, answers eval-disabled. Context defaults to 'background', except on a Chromium MV3 session (the default template) where it defaults to 'page', the active tab; pass context:'background' to evaluate in the service worker, which on Chromium goes over the debug port. Debug-port evaluates run with a user gesture, so gesture-gated APIs (permissions.request, sidePanel.open) can succeed here and still fail when the extension's own code calls them. For content and page, pass `url` to pick the tab, or omit both `url` and `tab` for the active tab; a numeric `tab` only disambiguates. Extension surfaces (popup, options, sidebar, devtools) and override pages (newtab, history, bookmarks) need no tab id but must already be open: open one with extension_open first, because a closed one returns an explicit error. On a Chromium MV3 session those pages, and context:'page' with a chrome-extension:// url, evaluate over CDP, the inspector path the extension page CSP does not govern; elsewhere they evaluate over the in-bundle relay. On Firefox a document whose content security policy forbids eval (the extension's own pages, or a site's) is evaluated over the debugger protocol instead, which takes one expression; a page inside the extension that is no declared surface (pages/*) is reached the same way by context:'page' and its moz-extension:// url once a tab shows it. An extension_start session's pages carry no relay, so there a surface shown in a tab (options) and an extension page url are evaluated over the debugger protocol too; a surface in its own window (popup) is not reachable on that session, and the answer says so instead of reporting a missing target. A returned promise is awaited: over CDP and the Firefox debugger protocol, in a Firefox background, and in tabs (page or content through the in-tab executor) and relay surfaces, where this tool polls until it settles or timeout passes. The one exception is Firefox MV2 without the scripting API, where the expression runs through tabs.executeScript and must return a synchronous value. A value that cannot be cloned (a DOM node, a function) comes back as its string form, or as a not-cloneable error where the browser itself refuses to copy it. To wait for a condition that is still settling (a model loading, an element appearing), pass until: {} (or {timeoutMs, intervalMs}) and the eval repeats until its value is truthy, answering that value, or the last one on timeout. Call extension_dom_snapshot with listTabs:true to enumerate {tabId, url, title}.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -106,6 +107,7 @@ export const schema = {
       tab: { type: "number", description: "Numeric chrome.tabs id, only to disambiguate when several tabs match." },
       browser: SESSION_BROWSER,
       timeout: CALL_TIMEOUT,
+      until: EVAL_UNTIL_PROPERTY,
     },
     required: ["projectPath", "expression"],
   },
@@ -1082,11 +1084,22 @@ async function evaluateThroughExecuteScript(
 }
 
 export async function handler(
-  args: ActArgs & { expression: string },
+  args: ActArgs & { expression: string; until?: EvalUntil },
 ): Promise<string> {
   const ambiguous = ambiguousSessionRefusal(schema.name, args.projectPath, args.browser);
   if (ambiguous) return ambiguous;
 
+  const { until, ...once } = args;
+  if (!until) return evaluateOnce(once);
+
+  const { browser } = resolveSessionBrowser(args.projectPath, args.browser);
+
+  return evalUntilTruthy(schema.name, () => evaluateOnce(once), browser, args.context, until);
+}
+
+async function evaluateOnce(
+  args: ActArgs & { expression: string },
+): Promise<string> {
   const { browser } = resolveSessionBrowser(args.projectPath, args.browser);
 
   if (WEBKIT_FAMILY.has(browser) && args.context === "page") {
