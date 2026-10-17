@@ -116,7 +116,12 @@ describe("extension_start opens the control channel on a production run", () => 
     expect(spawnedArgs[0]).not.toContain("--allow-control");
     expect(spawnedArgs[0]).not.toContain("--allow-eval");
 
-    for (const child of spawned.splice(0)) child.kill("SIGKILL");
+    for (const child of spawned.splice(0)) {
+      const exited = new Promise((resolve) => child.once("exit", resolve));
+      child.kill("SIGKILL");
+      await exited;
+    }
+
     removeSession(project, "chrome");
     spawnedArgs.length = 0;
 
