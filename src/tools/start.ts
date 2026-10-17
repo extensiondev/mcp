@@ -27,6 +27,7 @@ import {
   removeSession,
   removeSessionMarker,
 } from "../lib/process-manager";
+import { guardSameBrowserSession } from "../lib/same-browser-session";
 import {
   LAUNCH_FLAG_SCHEMA,
   headlessHint,
@@ -81,6 +82,12 @@ export const schema = {
         description:
           "An existing unpacked extension directory to launch as it is (a manifest.json at its root), for an artifact built by another toolchain or an exact release candidate. Implies build:false; projectPath still names the project the session belongs to. Relative paths resolve against projectPath.",
       },
+      replace: {
+        type: "boolean",
+        default: false,
+        description:
+          "Stop the live session this projectPath runs for the same browser first (an extension_dev or extension_start session), reported as replacedSession. Without it the call is refused: one session per browser owns dist/<browser> and its ready.json and eval token, and a production start would rebuild them under the running session. A session for another browser keeps running either way.",
+      },
       ...LAUNCH_FLAG_SCHEMA,
     },
     required: ["projectPath"],
@@ -98,6 +105,7 @@ export async function handler(
     outputPath?: string;
     allowControl?: boolean;
     allowEval?: boolean;
+    replace?: boolean;
   } & LaunchFlagArgs,
 ): Promise<string> {
   const browser = args.browser ?? "chrome";
@@ -152,6 +160,18 @@ export async function handler(
       hint: "Drop host and publicHost, or let extension_start build (build: true, no outputPath).",
     });
   }
+
+  const guard = await guardSameBrowserSession({
+    tool: schema.name,
+    projectPath: args.projectPath,
+    browser,
+    replace: args.replace,
+    hazard: `a production ${command} for ${browser} would rebuild or reload them under it; the engine refuses only a second dev session, so this server refuses here.`,
+    replacing: "the production run",
+  });
+  if ("refusal" in guard) return guard.refusal;
+
+  const { replaced } = guard;
 
   const cliArgs = [command, args.projectPath, "--browser", browser];
   if (outputPath) cliArgs.push("--output-path", outputPath);
@@ -374,6 +394,7 @@ export async function handler(
       allowEval,
       ...(allowControl ? { controlPort } : {}),
       ...launch,
+      ...(replaced.length > 0 ? { replacedSession: replaced[0] } : {}),
     },
     hint: launch.extensionLoaded === true
       ? `The engine's ${command} process was alive 5 s after spawn and ${launchSeen}, and ${browser} loaded the extension: ${launch.loadEvidence} ${bridgeLine} ${noBrowserOrHint} When you are done, call extension_stop to shut the session down.`

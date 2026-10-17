@@ -36,9 +36,8 @@ import {
 import {
   contractBoundPort,
   contractControlState,
-  liveProjectSessions,
 } from "../lib/session-browser";
-import { stopOne } from "./stop";
+import { guardSameBrowserSession } from "../lib/same-browser-session";
 import { handler as waitHandler } from "./wait";
 import { handler as logsHandler } from "./logs";
 import {
@@ -117,59 +116,17 @@ export async function handler(
 ): Promise<string> {
   const browser = args.browser ?? "chrome";
 
-  const existing = liveProjectSessions(args.projectPath).filter(
-    (s) => s.browser === browser,
-  );
-  const replaced: Array<{ pid: number; browser: string }> = [];
+  const guard = await guardSameBrowserSession({
+    tool: schema.name,
+    projectPath: args.projectPath,
+    browser,
+    replace: args.replace,
+    hazard: `a second ${browser} session would overwrite them; the engine refuses one too.`,
+    replacing: "the new one",
+  });
+  if ("refusal" in guard) return guard.refusal;
 
-  if (existing.length > 0) {
-    if (!args.replace) {
-      const listed = existing
-        .map((s) => `pid ${s.pid} (${s.browser})`)
-        .join(", ");
-
-      return envelope({
-        ok: false,
-        command: schema.name,
-        status: "session-exists",
-        error: {
-          code: "E_SESSION_EXISTS",
-          message:
-            `A ${browser} session is already running for this project (${listed}). ` +
-            `It owns dist/${browser} and the ready.json and eval token under dist/extension-js/${browser}/, so a second ${browser} session would overwrite them; the engine refuses one too. A session for another browser can run beside it.`,
-        },
-        value: {
-          projectPath: args.projectPath,
-          sessions: existing.map((s) => ({ pid: s.pid, browser: s.browser })),
-        },
-        hint: `Call extension_stop with this projectPath and browser: "${browser}" first, or pass replace: true to have extension_dev stop that session before starting the new one.`,
-      });
-    }
-
-    for (const s of existing) {
-      const outcome = await stopOne(args.projectPath, s.browser);
-
-      if (!outcome.stopped && !outcome.staleRecord) {
-        return envelope({
-          ok: false,
-          command: schema.name,
-          status: "replace-failed",
-          error: {
-            code: "E_SESSION_EXISTS",
-            message: `replace: true could not stop the ${s.browser} session (pid ${s.pid}): ${outcome.detail} No new session was started.`,
-          },
-          value: {
-            projectPath: args.projectPath,
-            session: { pid: s.pid, browser: s.browser },
-            reaped: outcome.reaped,
-          },
-          hint: "Call extension_stop for this projectPath and read its detail; if a browser process survives, end it by pid, then call extension_dev again.",
-        });
-      }
-
-      if (!outcome.staleRecord) replaced.push({ pid: s.pid, browser: s.browser });
-    }
-  }
+  const { replaced } = guard;
 
   const allowControl = args.allowControl !== false || Boolean(args.allowEval);
   const carryover = profileCarryoverBeforeLaunch(
