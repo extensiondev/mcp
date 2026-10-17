@@ -7,7 +7,7 @@
 
 # @extension.dev/mcp [![Version][npm-version-image]][npm-version-url] [![Downloads][npm-downloads-image]][npm-downloads-url] [![Discord][discord-image]][discord-url]
 
-> Give your AI agent hands for browser extension development. 34 MCP tools that scaffold, run, inspect, debug, test, and build cross-browser extensions on your machine, plus a platform lane (private alpha) to share and publish them.
+> Give your AI agent hands for browser extension development. 35 MCP tools that scaffold, run, inspect, debug, test, and build cross-browser extensions on your machine, plus a platform lane (private alpha) to share and publish them.
 
 <img alt="Logo" align="right" src="https://media.extension.land/brand/extension-dev/logo-dock.png" width="20.7%" />
 
@@ -121,7 +121,7 @@ Or write it into `~/.codex/config.toml` as a `[mcp_servers.extension-dev]` table
 
 ### Flags
 
-- By default the server exposes the 23 of its 34 tools that work on this machine (the 11 platform tools are off). `--features=local,platform` adds the platform group. Env: `EXTENSION_DEV_FEATURES`.
+- By default the server exposes the 24 of its 35 tools that work on this machine (the 11 platform tools are off). `--features=local,platform` adds the platform group. Env: `EXTENSION_DEV_FEATURES`.
 - `--no-ship` refuses every call that puts something in front of other people (publish, promote, a real submit, a shared preview, a revoke). Env: `EXTENSION_DEV_NO_SHIP=1`.
 - `--project <workspace>/<project>` pins the server to one project. Env: `EXTENSION_DEV_PROJECT`.
 
@@ -142,7 +142,7 @@ mkdir -p .claude/skills && cp -R node_modules/@extension.dev/skill/skills/extens
 
 ## Tools
 
-On by default, the 23 that work on this machine:
+On by default, the 24 that work on this machine:
 
 | Tier | Tool | Description |
 | ---- | ---- | ----------- |
@@ -159,6 +159,7 @@ On by default, the 23 that work on this machine:
 | see | `extension_analyze` | Static analysis of the built extension on disk |
 | see | `extension_inspect` | Deep live inspection of a running extension (closed shadow roots, probes) |
 | see | `extension_dom_snapshot` | Shallow DOM snapshot of a chosen tab or extension surface over the agent bridge |
+| see | `extension_screenshot` | Screenshot of an open extension surface or page, saved as a .png over the session's debug port |
 | see | `extension_list_extensions` | List loaded extensions (Chromium and Firefox) |
 | see | `extension_logs` | Stream logs from every context |
 | see | `extension_doctor` | Diagnose the dev session leg by leg (ready contract, ports, token, executor, browser) |

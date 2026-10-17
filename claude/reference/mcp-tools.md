@@ -2,7 +2,7 @@
 
 Generated from the schemas the server registers (`src/index.ts`); do not edit by hand. Regenerate with `pnpm docs:tools`. A test fails when this file and the schemas disagree.
 
-34 tools.
+35 tools.
 
 ## extension_add_feature
 
@@ -154,7 +154,7 @@ Diagnose a dev session end to end: ready contract, dev-server process, control-p
 
 ## extension_dom_snapshot
 
-Take a shallow structured DOM snapshot of one chosen surface through the agent bridge (localhost only; the snapshot itself needs no CDP, but listTargets and `tabUrl` resolution ask the browser directly and need the session's debug port: CDP page targets on Chromium, RDP tab descriptors on Firefox): element counts, extension roots, open shadow roots, optional byte-capped HTML, and optional recent console lines. This is the SURFACE PICKER: the only tool that reads an open extension surface by name (`context`: popup, options, sidebar, devtools) or an override page, the only one that takes a numeric chrome.tabs id, and the only one that enumerates what is open (listTargets for CDP targetIds and RDP tab actors, listTabs for numeric tab ids). An ambiguous `tabUrl` returns the candidates instead of guessing. It does not pierce closed shadow roots, run selector probes, or navigate: use extension_inspect for those, and for a deep read of an already-open web page. Rides the dev session's control channel, on unless extension_dev was called with allowControl:false. On Firefox, a surface or extension page the bridge cannot reach (an extension_start session's pages carry no relay) is read over the debugger protocol from the tab showing it.
+Take a shallow structured DOM snapshot of one chosen surface through the agent bridge (localhost only; the snapshot itself needs no CDP, but listTargets and `tabUrl` resolution ask the browser directly and need the session's debug port: CDP page targets on Chromium, RDP tab descriptors on Firefox): element counts, extension roots, open shadow roots, optional byte-capped HTML, and optional recent console lines. This is the SURFACE PICKER: the only tool that reads an open extension surface by name (`context`: popup, options, sidebar, devtools) or an override page, the only one that takes a numeric chrome.tabs id, and the only one that enumerates what is open (listTargets for CDP targetIds and RDP tab actors, listTabs for numeric tab ids). An ambiguous `tabUrl` returns the candidates instead of guessing. It does not pierce closed shadow roots, run selector probes, or navigate: use extension_inspect for those, and for a deep read of an already-open web page. For the pixels of a surface or page, use extension_screenshot. Rides the dev session's control channel, on unless extension_dev was called with allowControl:false. On Firefox, a surface or extension page the bridge cannot reach (an extension_start session's pages carry no relay) is read over the debugger protocol from the tab showing it.
 
 | input | type | required | default | description |
 | --- | --- | --- | --- | --- |
@@ -345,6 +345,22 @@ Reload a running extension's background context, or a tab. Rides the dev session
 | `context` | "background" \| "content" \| "page" | no | `"background"` |  |
 | `tab` | number | no |  | For content/page: a specific tab id |
 | `browser` | string | no |  | Session browser; defaults to this project's live session. Required when the project runs sessions for more than one browser: the call is refused with the list rather than picking one. |
+| `timeout` | number | no |  | Command timeout in ms. When omitted, the default depends on the route: 30000 through the dev session's control channel, 10000 over the Firefox debugger protocol, and 15000 per command over the Chromium debug port. |
+
+## extension_screenshot
+
+Take a screenshot of one open extension surface (popup, options, sidebar, newtab, history, bookmarks) or web page in a live extension_dev or extension_start session and save it as a .png file. It asks the browser for that page's own pixels over the session's debug port: CDP Page.captureScreenshot on Chromium, the debugger protocol's screenshot actor on Firefox, and WebDriver on Safari, where only web pages can be captured. It never captures the screen or another window and never brings a window to the front, so there is no need for screencapture, AppleScript or a Playwright script. The surface must already be open: open it with extension_open first. width and height set the viewport on Chromium and crop from the top left on Firefox; deviceScaleFactor sets the pixel ratio. The file goes under dist/extension-js/<browser>/screenshots unless `path` names one, and the answer gives its path and pixel size. Use extension_dom_snapshot for the page's structure as text.
+
+| input | type | required | default | description |
+| --- | --- | --- | --- | --- |
+| `projectPath` | string | yes |  | Extension project root (needs a live dev session) |
+| `browser` | string | no |  | Session browser; defaults to this project's live session. Required when the project runs sessions for more than one browser: the call is refused with the list rather than picking one. |
+| `context` | "page" \| "popup" \| "options" \| "sidebar" \| "newtab" \| "history" \| "bookmarks" | no | `"page"` | page captures a tab picked by `url` (or the only or selected one); the rest capture that extension surface, which must already be open. |
+| `url` | string | no |  | page: the tab whose url contains this (a web address or the extension's own page url). |
+| `width` | number | no |  | Viewport width in CSS pixels (Chromium renders at it; Firefox crops to it). |
+| `height` | number | no |  | Viewport height in CSS pixels (Chromium renders at it; Firefox crops to it). |
+| `deviceScaleFactor` | number | no |  | Pixel ratio of the image, 0.5 to 4. Defaults to the browser's own on Chromium and 1 on Firefox. |
+| `path` | string | no |  | Where to write the .png, a file or a folder, relative to projectPath. Defaults to dist/extension-js/<browser>/screenshots. |
 | `timeout` | number | no |  | Command timeout in ms. When omitted, the default depends on the route: 30000 through the dev session's control channel, 10000 over the Firefox debugger protocol, and 15000 per command over the Chromium debug port. |
 
 ## extension_shares

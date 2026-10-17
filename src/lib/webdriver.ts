@@ -210,6 +210,12 @@ export class WebDriverClient {
     await this.call("POST", "/refresh", {}, timeoutMs);
   }
 
+  async screenshot(timeoutMs = 30_000): Promise<Buffer | null> {
+    const value = await this.call("GET", "/screenshot", undefined, timeoutMs);
+
+    return typeof value === "string" && value ? Buffer.from(value, "base64") : null;
+  }
+
   async execute(
     script: string,
     args: unknown[] = [],

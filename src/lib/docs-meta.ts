@@ -35,6 +35,7 @@ export const TOOL_DOCS: Record<string, ToolDocsMeta> = {
   extension_analyze: { tier: "see", gate: NONE, samplePrompt: "What is in the built extension and is anything too big for the store?" },
   extension_inspect: { tier: "see", gate: SESSION, samplePrompt: "Read the DOM the content script injected on the cart page, shadow roots included" },
   extension_dom_snapshot: { tier: "see", gate: CONTROL, samplePrompt: "Snapshot the popup and tell me what it rendered" },
+  extension_screenshot: { tier: "see", gate: SESSION, samplePrompt: "Open the popup and take a screenshot of it for the store listing" },
   extension_list_extensions: { tier: "see", gate: SESSION, samplePrompt: "Which extensions are loaded in the dev browser right now?" },
   extension_logs: { tier: "see", gate: SESSION, samplePrompt: "Show me every log line since the session started, in order" },
   extension_doctor: { tier: "see", gate: SESSION, samplePrompt: "The session looks stuck. Diagnose it" },

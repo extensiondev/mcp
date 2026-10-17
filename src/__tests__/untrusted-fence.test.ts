@@ -229,6 +229,7 @@ describe("the server fences tools that read a page or an extension", () => {
       "extension_logs",
       "extension_open",
       "extension_reload",
+      "extension_screenshot",
       "extension_storage",
       "extension_wait",
       "extension_workspace",

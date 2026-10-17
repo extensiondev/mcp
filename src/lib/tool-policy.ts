@@ -81,6 +81,11 @@ export const TOOL_POLICY: Record<string, ToolPolicy> = {
     annotations: reads(),
     untrusted: true,
   },
+  extension_screenshot: {
+    group: "local",
+    annotations: acts({ idempotentHint: true }),
+    untrusted: true,
+  },
   extension_list_extensions: {
     group: "local",
     annotations: reads(),
