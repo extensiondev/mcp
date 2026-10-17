@@ -47,7 +47,7 @@ describe("extension_publish envelope compatibility", () => {
           code: "E_AUTH_REQUIRED",
           name: "PublishAuthError",
           message:
-            "No token. Run extension_auth (action: login), or set EXTENSION_DEV_TOKEN (create one in the extension.dev dashboard).",
+            "No token. Run extension_auth (action: login), or set EXTENSION_DEV_TOKEN (create one in the extension.dev dashboard). An extension with no extension.dev project yet starts with extension_project_create, which makes one from its GitHub repository, then extension_auth.",
         },
         warnings: [],
       }),

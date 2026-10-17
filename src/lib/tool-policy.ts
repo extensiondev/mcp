@@ -256,6 +256,16 @@ export function isToolListed(name: string, options: ServerOptions): boolean {
   return !(options.noShip && policy.ships === "always");
 }
 
+let activeServerOptions: ServerOptions = DEFAULT_SERVER_OPTIONS;
+
+export function setServerOptions(options: ServerOptions): void {
+  activeServerOptions = options;
+}
+
+export function platformListed(): boolean {
+  return isToolListed("extension_publish", activeServerOptions);
+}
+
 export function disabledToolEnvelope(
   name: string,
   args: Args,

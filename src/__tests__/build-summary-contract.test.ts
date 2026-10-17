@@ -4,6 +4,7 @@ import path from "node:path";
 
 import { describe, it, expect, vi, afterEach } from "vitest";
 
+import { DEFAULT_SERVER_OPTIONS, setServerOptions } from "../lib/tool-policy";
 import {
   browserFromCliArgs,
   buildNarration,
@@ -158,5 +159,21 @@ describe("build consumes the engine's persisted BuildSummary when the frame on s
 
     expect(result.ok).toBe(true);
     expect(result.value.outputPath).toBe(path.join(project, "dist", "chrome"));
+  });
+
+  it.each([
+    [["local", "platform"], true],
+    [["local"], false],
+  ] as const)("with features %j, the success hint names extension_publish as the way to send the build: %s", async (features, named) => {
+    setServerOptions({ features: [...features], noShip: false });
+
+    try {
+      const result = JSON.parse(await build.handler({ projectPath: completeProject() }));
+
+      expect(result.ok).toBe(true);
+      expect(result.hint.includes("extension_publish gives the project's build on extension.dev a page with a download and a run command for each browser")).toBe(named);
+    } finally {
+      setServerOptions(DEFAULT_SERVER_OPTIONS);
+    }
   });
 });

@@ -22,6 +22,7 @@ import {
   engineProjectRoot,
 } from "../lib/session-paths";
 import { type Envelope, envelope, isEnvelope } from "../lib/envelope";
+import { platformListed } from "../lib/tool-policy";
 import { engineBrowserName } from "../lib/browser-family";
 import { reviewCoverageNotes, reviewDistReport, reviewRiskWarnings } from "../lib/store-review";
 
@@ -969,7 +970,7 @@ export async function handler(args: {
         safariIdentityMissingNote,
         summaryPathNote,
       ],
-      hint: `The build is in ${distDir}. To read what is in it, call extension_analyze with this projectPath and browser "${browser}": it answers the sizes, the entry points and the store checks a reviewer runs, so there is no need to list or grep the folder by hand.${zipPath ? ` The store zip is ${zipPath}.` : ""}`,
+      hint: `The build is in ${distDir}. To read what is in it, call extension_analyze with this projectPath and browser "${browser}": it answers the sizes, the entry points and the store checks a reviewer runs, so there is no need to list or grep the folder by hand.${zipPath ? ` The store zip is ${zipPath}.` : ""}${platformListed() ? " To send the extension to someone, extension_publish gives the project's build on extension.dev a page with a download and a run command for each browser (the platform builds from the pushed source)." : ""}`,
     });
   }
 

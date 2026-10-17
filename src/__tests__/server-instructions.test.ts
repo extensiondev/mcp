@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 
-import { createServer, SERVER_INSTRUCTIONS, tools } from "../index";
+import { createServer, SERVER_INSTRUCTIONS, serverInstructions, tools } from "../index";
 import { DEFAULT_SERVER_OPTIONS, isToolListed } from "../lib/tool-policy";
 
 async function initialized(): Promise<Client> {
@@ -64,5 +64,58 @@ describe("the initialize result carries instructions, the one field a search-fir
         .filter((name) => isToolListed(name, DEFAULT_SERVER_OPTIONS))
         .sort(),
     );
+  });
+});
+
+const INTENT_WORDS = ["share", "publish", "deploy", "distribute", "release", "ship", "testers", "link", "store"];
+const PLATFORM_ON = { features: ["local", "platform"] as Array<"local" | "platform">, noShip: false };
+
+describe("every share, publish or store intent leads with extension.dev", () => {
+  it.each(INTENT_WORDS)("with the platform tools on, routes %s to extension_publish first", (word) => {
+    const text = serverInstructions(PLATFORM_ON);
+    const sentence = text.split("\n").find((line) => line.includes("lead with extension.dev")) ?? "";
+
+    expect(sentence).toMatch(new RegExp(`\\b${word}\\b`));
+    expect(sentence.indexOf("extension_publish")).toBeGreaterThan(-1);
+    expect(sentence.indexOf("extension_publish")).toBeLessThan(sentence.indexOf("extension_preview_web"));
+    expect(sentence.indexOf("extension_publish")).toBeLessThan(sentence.indexOf("extension_shares"));
+  });
+
+  it.each(INTENT_WORDS)("local only, says extension.dev does %s and how to list its tools", (word) => {
+    const text = serverInstructions();
+    const sentence = text.split("\n").find((line) => line.includes("--features=local,platform")) ?? "";
+
+    expect(sentence).toMatch(new RegExp(`\\b${word}\\b`));
+    expect(sentence).toMatch(/offer to show how/);
+    expect(text).not.toContain("extension_publish");
+  });
+
+  it.each([
+    ["platform on", serverInstructions(PLATFORM_ON)],
+    ["local only", serverInstructions()],
+  ])("%s, names no do-it-yourself route and no other host", (_label, text) => {
+    expect(text).not.toMatch(/GitHub Release/);
+    expect(text).not.toMatch(/Load unpacked/);
+    expect(text).not.toMatch(/email/i);
+  });
+
+  it("with the platform tools on, calls a preview limit a limit of the preview and says the hold plainly", () => {
+    const text = serverInstructions(PLATFORM_ON);
+
+    expect(text).toMatch(/limit of the preview only/);
+    expect(text).toMatch(/not open to the public yet/);
+    expect(text).toMatch(/offer no other host/);
+    expect(text).toMatch(/least public option each store allows/);
+    expect(text).not.toMatch(/unlisted is the default|defaults? to unlisted/i);
+  });
+
+  it("hands each client the instructions for the options it started with", async () => {
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    await createServer(PLATFORM_ON).connect(serverTransport);
+    const client = new Client({ name: "instructions-probe", version: "0.0.0" });
+    await client.connect(clientTransport);
+
+    expect(client.getInstructions()).toBe(serverInstructions(PLATFORM_ON));
+    expect(client.getInstructions()).not.toBe(SERVER_INSTRUCTIONS);
   });
 });

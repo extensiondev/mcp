@@ -11,7 +11,7 @@ import { resolveCredential } from "../lib/credential-source";
 import { envelope, type ErrorCode } from "../lib/envelope";
 import { spendNarration } from "../lib/allowance";
 import { publish } from "../lib/publish";
-import { PROJECT_TOKEN_INPUT, noStoredLoginHint } from "../lib/credentials";
+import { NO_TOKEN_MESSAGE, PROJECT_TOKEN_INPUT, noStoredLoginHint } from "../lib/credentials";
 import { platformHoldEnvelope } from "../lib/platform-hold";
 import {
   fetchRegistryJson,
@@ -24,7 +24,7 @@ import {
 export const schema = {
   name: "extension_publish",
   description:
-    "Publish the project your stored token is scoped to (extension_auth, or EXTENSION_DEV_TOKEN) to extension.dev, and return its shareable URL. This is what \"deploy\" or \"ship\" an extension usually means; extension_submit is the separate store-review path. The target is the token's project: there is no projectPath, and no local file is uploaded. With several logins stored, pass `project` ('<workspace>/<project>') to pick which one; it outranks EXTENSION_DEV_TOKEN. For a public project the URL is the canonical public page and ttlHours does not apply. For a private one it is a fresh time-limited share link (?share=) whose lifetime is ttlHours.",
+    "Publish a build of the project your stored token is scoped to (extension_auth, or EXTENSION_DEV_TOKEN) on extension.dev, and return the link to send testers: the build's public page, with a download and a run command for each browser. Reach for this first whenever the ask is to share, publish, deploy, distribute, release or ship an extension, or to send it to testers; extension_submit is the separate store-review path, and extension_preview_web share:true is a quick emulator link beside this one. An extension with no project on extension.dev yet starts with extension_project_create, which makes one from its GitHub repository, then extension_auth. The target is the token's project: there is no projectPath, and no local file is uploaded. With several logins stored, pass `project` ('<workspace>/<project>') to pick which one; it outranks EXTENSION_DEV_TOKEN. Pass buildSha (extension_builds lists them) for that build's own page, <workspace>.extension.dev/<project>/builds/<sha>; without it the link is the project's page. For a public project the URL is the canonical public page and ttlHours does not apply. For a private one it is a fresh time-limited share link (?share=) whose lifetime is ttlHours.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -89,7 +89,7 @@ export async function handler(args: {
   if (!token) {
     return fail(
       "PublishAuthError",
-      "No token. Run extension_auth (action: login), or set EXTENSION_DEV_TOKEN (create one in the extension.dev dashboard).",
+      NO_TOKEN_MESSAGE,
       "auth-required",
       "E_AUTH_REQUIRED",
     );

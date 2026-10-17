@@ -14,7 +14,7 @@ import * as build from "./build";
 import { navigateToUrl } from "./open";
 import { ZIP_URL_REDIRECT_NOTE } from "../lib/artifacts-api";
 import { resolveToken } from "../lib/publish";
-import { PROJECT_TOKEN_INPUT } from "../lib/credentials";
+import { LOGIN_STEPS, PROJECT_TOKEN_INPUT } from "../lib/credentials";
 import { uploadPreview } from "../lib/preview-upload";
 import { spendNarration, ALLOWANCE_PHRASE  } from "../lib/allowance";
 import { recordSharedPreview } from "../lib/share-record";
@@ -211,8 +211,7 @@ async function buildShare(
         : {}),
       ...(isAuth
         ? {
-            loginHint:
-              "Run extension_auth (action: login), or set EXTENSION_DEV_TOKEN (create one in the extension.dev dashboard).",
+            loginHint: LOGIN_STEPS,
           }
         : {}),
     };
@@ -300,7 +299,7 @@ function detectSurfaces(manifest: Record<string, any>): string[] {
 export const schema = {
   name: "extension_preview_web",
   description:
-    "Preview an in-progress extension in the web emulator, with no real browser. This builds the project (unless build:false) and previews dist/<browser>. Pass share:true unless you are working inside the extension.dev monorepo: it uploads the build and returns a link anyone can open, with no install, sign-in or dev server, and it is the only lane that works from an npm install of this server. Sharing also serves the build as a zip, so it hands over the built code; read the share property before using it. The default lane instead returns a deep link over the dev-only preview://build scheme, which resolves only against a preview.extension.dev dev server on this machine, so it is for people developing extension.dev itself. Call extension_shares to list and revoke every link shared this way, so one never vanishes with this response.",
+    "Preview a build in the web emulator and share it as a quick link anyone can open, with no install, sign-in or dev server. This builds the project (unless build:false) and previews dist/<browser>. Pass share:true unless you are working inside the extension.dev monorepo: it uploads the build and returns that link, and it is the only lane that works from an npm install of this server. Sharing also serves the build as a zip, so it hands over the built code; read the share property before using it. For the link to send testers, the build's own page with a download and a run command for each browser, use extension_publish; this link is the quick emulator view beside it. Popups, options pages and side panels render in the emulator, and content scripts run on the emulator's sample pages (example.com, example.org, example.net and their /fixtures/ pages), not on any site: that is a limit of the preview only, not of the build or of sharing it. The default lane instead returns a deep link over the dev-only preview://build scheme, which resolves only against a preview.extension.dev dev server on this machine, so it is for people developing extension.dev itself. Call extension_shares to list and revoke every link shared this way, so one never vanishes with this response.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -311,7 +310,7 @@ export const schema = {
         enum: REAL_BROWSERS,
         default: "chrome",
         description:
-          "Which dist/<browser> output to preview. The emulator renders it as mocked Chrome either way.",
+          "Which dist/<browser> output to preview. The preview page runs a Chromium build in its emulator and has a Firefox view that opens a build in a real Gecko engine.",
       },
       build: {
         type: "boolean",

@@ -9,6 +9,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
+import { NO_TOKEN_MESSAGE } from "./credentials";
 import { resolveToken } from "./publish";
 import { resolveApiBase, safeApiBase } from "./login-flow";
 import { identityHeaders } from "./session-identity";
@@ -115,8 +116,7 @@ export async function uploadPreview(options: {
       ok: false,
       error: {
         name: "PreviewAuthError",
-        message:
-          "No token. Run extension_auth (action: login), or set EXTENSION_DEV_TOKEN (create one in the extension.dev dashboard).",
+        message: NO_TOKEN_MESSAGE,
       },
     };
   }

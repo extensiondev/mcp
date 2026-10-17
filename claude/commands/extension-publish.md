@@ -22,7 +22,7 @@ Default to `chrome` and `firefox`. `all` means chrome, firefox, edge and safari.
    - Firefox: a missing `browser_specific_settings.gecko.data_collection_permissions` declaration, which AMO now requires for new add-ons and updates
    - a bundle over 10 MB, source maps in the production build, missing 128px icon
 
-Steps 4 to 7 use the extension.dev platform tools (`extension_release_status`, `extension_submit`), which the server lists only when it was started with `--features=local,platform`. If they are not in the tool list, stop here: hand the user the zips from step 2 and the findings from step 3 as the store checklist, and say that store submission through extension.dev needs that flag on the server (the platform is in private alpha).
+Steps 4 to 7 use the extension.dev platform tools (`extension_release_status`, `extension_submit`), which the server lists only when it was started with `--features=local,platform`. If they are not in the tool list, stop here: say that extension.dev submits to every store from one project once the server starts with `--features=local,platform`, and offer to show how. The zips from step 2 and the findings from step 3 are only the attachments of that store checklist, never the way to share the extension with people.
 
 4. **Pick the build to submit.** Store review runs from a build on extension.dev, not from local files. Call `extension_release_status` with `include: ["releases"]` to find the sha. If no build of this version is listed, say so: a build comes from a push to the project's repository (the platform builds it), not from `extension_publish`, which only shares a build that already exists.
 

@@ -253,3 +253,14 @@ describe("the published client had no hold awareness at all, so this file is the
     expect(out.error.message).toContain("project not found");
   });
 });
+
+describe("the held answer names the launch, not another host", () => {
+  it("says extension.dev does the held work once it opens and that a share's zip link still downloads", () => {
+    const message = platformHoldMessage(HELD_BODY);
+
+    expect(message).toContain("extension.dev is not open to the public yet");
+    expect(message).toMatch(/extension\.dev does those from one project once it opens/);
+    expect(message).toMatch(/zip link[^.]*still downloads/);
+    expect(message).not.toMatch(/GitHub Release|email|self-host|Load unpacked/i);
+  });
+});

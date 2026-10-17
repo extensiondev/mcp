@@ -6,6 +6,7 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
+import { NO_TOKEN_MESSAGE } from "./credentials";
 import { resolveToken } from "./publish";
 import { resolveApiBase, safeApiBase } from "./login-flow";
 import { identityHeaders } from "./session-identity";
@@ -144,8 +145,7 @@ function authError(name: string): ArtifactsOutcome<never> {
     ok: false,
     error: {
       name,
-      message:
-        "No token. Run extension_auth (action: login), or set EXTENSION_DEV_TOKEN (create one in the extension.dev dashboard).",
+      message: NO_TOKEN_MESSAGE,
     },
   };
 }

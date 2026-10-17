@@ -103,6 +103,8 @@ The framework extends the standard manifest with browser prefixes:
 
 ## Commands
 
+The CLI under the MCP tools, for a session without the server. You run these yourself; never hand one to the person as their next step. With the server, `extension_dev`, `extension_build` and `extension_logs` do the same in one call each.
+
 ```bash
 # Scaffold a new extension
 npx extension@latest create my-extension --template=react
@@ -124,7 +126,7 @@ npm run dev -- --browser=firefox
 npm run build -- --browser=chrome
 npm run build -- --browser=firefox
 
-# Zip for distribution
+# Zip for store upload (to share a build, use extension_publish)
 npm run build -- --zip
 ```
 
@@ -181,7 +183,7 @@ facts and the engine's own conventions.
 3. If no: start from `manifest.json`, define what the extension needs
 4. Add entry points referenced by the manifest (background, content scripts, UI pages)
 5. Install framework deps if needed (React, Vue, etc.), the framework auto-detects them
-6. Run it: `extension_dev` with the MCP server (one call, it answers when the session is ready; a scaffold needs no build to verify), or `npm run dev` without it
+6. Run it: `extension_dev` with the MCP server (one call, it answers when the session is ready; a scaffold needs no build to verify), or, without it, run `npm run dev` yourself
 
 **Learning from examples:** When building a feature you haven't done before, read the source of a relevant template from the examples repo. The source for any template is at:
 
@@ -230,7 +232,7 @@ The `extension_dom_snapshot` MCP tool wraps this verb one-to-one.
 
 ### Unified logging (`--logs`)
 
-Stream extension logs from all contexts to the terminal:
+With the server, `extension_logs` streams these; without it, run one of these yourself to stream extension logs from all contexts:
 
 ```bash
 # All contexts at info level
@@ -252,7 +254,7 @@ npm run dev -- --logs info --log-url "example.com"
 - **Safari (macOS).** On Extension.js 4.1.21 or newer, `--browser=safari` builds the app, opens it, and after you enable the extension in Safari > Settings > Extensions it reloads on every save through the extension's bridge and streams background and content lines into the session log. Start it with `allowEval: true` and the bridge tools work: `extension_storage`, `extension_reload`, `extension_open` for surfaces, `extension_dom_snapshot` by tab id, `extension_logs`, and the assertions (`surface-rendered` reads the surface through the relay there). `extension_eval` in `content` or `page` needs a tab already open at the url, which you open in Safari by hand: `extension_open` with `url` and `extension_eval` in `background` are blocked by Safari's MV3 background CSP, and the engine says so. Safari has no CDP or RDP, so `extension_inspect` has no Safari path. Apple's Safari MCP server (`claude mcp add safari-mcp -- "/usr/bin/safaridriver" --mcp`, Safari 27+, after enabling Safari > Settings > Developer > "Allow remote automation and external agents") reads a page in its own isolated window with no extension-aware tool, and runs beside a dev session, since this server opens no automation session of its own.
 - Read the build output from the path the build answered with (`extension_build` returns it as `outputPath`, `extension build` prints it) instead of assuming a folder name: a plain `npm run build` passes no `--browser`, so the engine targets chromium and writes `dist/chromium/`, while `--browser=chrome` and `extension_build` (chrome by default) write `dist/chrome/`
 - `extension dev --wait` on the CLI blocks until the ready.json contract is stamped; the `extension_dev` tool already does this, so an answer whose `ready.status` is `ready` needs no `extension_wait` after it
-- Use `npm run start` to test production builds (builds first, then launches)
+- Test a production build with `extension_start` (it builds first, then launches); without the server, run `npm run start` yourself
 
 ### Triggering events without clicking (needs the control channel: `--allow-control` on the CLI, on by default on `extension_dev`)
 

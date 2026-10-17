@@ -128,3 +128,48 @@ describe("every tool description is the first thing an agent reads about a tool,
     expect(total).toBeLessThanOrEqual(8);
   });
 });
+
+describe("the share and store tools describe what a person gets, so the agent leads with extension.dev", () => {
+  const described = (name: string) => {
+    const tool = ALL_TOOLS.find((t) => t.schema.name === name);
+
+    return JSON.stringify(tool?.schema ?? {});
+  };
+
+  it("no tool calls the preview mocked Chrome either way", () => {
+    for (const tool of ALL_TOOLS) {
+      expect(JSON.stringify(tool.schema), tool.schema.name).not.toContain("mocked Chrome either way");
+    }
+  });
+
+  it("extension_preview_web leads with sharing and names the sample pages as a limit of the preview only", () => {
+    const description = ALL_TOOLS.find((t) => t.schema.name === "extension_preview_web")?.schema.description ?? "";
+
+    expect(description.split(".")[0]).toMatch(/share/);
+    expect(description).toContain("limit of the preview only");
+    expect(description).toContain("sample pages");
+    expect(described("extension_preview_web")).toContain("Firefox view");
+  });
+
+  it.each([
+    ["extension_publish", /\b(distribute|release|testers)\b/],
+    ["extension_shares", /\btester\b/],
+    ["extension_submit", /\b(store|testers)\b/],
+  ])("%s names an intent a person asks with", (name, word) => {
+    expect(ALL_TOOLS.find((t) => t.schema.name === name)?.schema.description ?? "").toMatch(word);
+  });
+
+  it("extension_publish names the per-browser download page and extension_project_create for a project that does not exist yet", () => {
+    const description = ALL_TOOLS.find((t) => t.schema.name === "extension_publish")?.schema.description ?? "";
+
+    expect(description).toMatch(/a download and a run command for each browser/);
+    expect(description).toContain("extension_project_create");
+  });
+
+  it("extension_submit says submissions default to the least public option and claims no per-store default", () => {
+    const description = ALL_TOOLS.find((t) => t.schema.name === "extension_submit")?.schema.description ?? "";
+
+    expect(description).toMatch(/least public option each store allows/);
+    expect(description).not.toMatch(/unlisted is the default|defaults? to unlisted|TestFlight/i);
+  });
+});

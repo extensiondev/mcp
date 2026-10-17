@@ -482,6 +482,11 @@ export const PROJECT_TOKEN_INPUT = {
     "Which stored login to use, as '<workspace>/<project>' (or a project slug that matches one login), when extension_auth has signed in to more than one project on this machine. Omitted, the most recent login is used, after EXTENSION_DEV_TOKEN when that is set. Named, it outranks EXTENSION_DEV_TOKEN. extension_auth (action: status) lists the stored logins.",
 } as const;
 
+export const LOGIN_STEPS =
+  "Run extension_auth (action: login), or set EXTENSION_DEV_TOKEN (create one in the extension.dev dashboard). An extension with no extension.dev project yet starts with extension_project_create, which makes one from its GitHub repository, then extension_auth.";
+
+export const NO_TOKEN_MESSAGE = `No token. ${LOGIN_STEPS}`;
+
 export function noStoredLoginHint(project: string): string {
   if (requestCredential()) {
     const covered = coveredProjects();
