@@ -78,6 +78,9 @@ export interface ReadyContract {
   compiledAt?: string | null;
   executorAttachedAt?: string;
   executorDetachedAt?: string;
+  reloadedAt?: string;
+  reloadKind?: string;
+  reloadLabel?: string;
   runtime?: string;
   profilePath?: string;
   browserPid?: number | null;

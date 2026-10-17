@@ -21,7 +21,7 @@ export const WAIT_MODE_PROPERTIES = {
     enum: ["ready", "rebuild"],
     default: "ready",
     description:
-      "What to wait for. \"ready\" (the default) waits for the session to be ready. \"rebuild\" waits for the compile after a source edit: until ready.json's compiledAt moves past its value at call time (or past since), then briefly for the reloaded background to connect again; it answers status \"rebuilt\" with the new compiledAt, errors and reload.outcome (reattached, still-detached, or not-stamped for a content-script, page or Safari app re-sync reload, which ready.json does not stamp), or status \"compile-error\" with the errors.",
+      "What to wait for. \"ready\" (the default) waits for the session to be ready. \"rebuild\" waits for the compile after a source edit: until ready.json's compiledAt moves past its value at call time (or past since), then for the reload: an engine that stamps reloadedAt is waited on until that stamp also moves past its value at call time, answering reload.outcome \"reloaded\" with reloadKind (full, background, content, page or safari-resync) and reloadLabel; an older engine is watched briefly for the background to connect again (reattached, still-detached, or not-stamped for a content-script, page or Safari app re-sync reload, which it does not stamp). It answers status \"rebuilt\" with the new compiledAt, errors and reload, or status \"compile-error\" with the errors.",
   },
   since: {
     type: "string",
@@ -64,10 +64,30 @@ function stampMs(value: unknown): number | null {
 }
 
 interface ReloadReading {
-  outcome: "reattached" | "still-detached" | "not-stamped";
+  outcome: "reloaded" | "reattached" | "still-detached" | "not-stamped";
   waitedMs: number;
   detachedAt?: string;
+  reloadedAt?: string;
+  reloadKind?: string;
+  reloadLabel?: string;
   note: string;
+}
+
+function stampedReload(contract: ReadyContract | null, reloadFloor: number, waitedMs: number): ReloadReading | null {
+  const reloadedMs = stampMs(contract?.reloadedAt);
+  if (!contract || reloadedMs === null || reloadedMs <= reloadFloor) return null;
+
+  const kind = typeof contract.reloadKind === "string" ? contract.reloadKind : "full";
+  const label = typeof contract.reloadLabel === "string" ? contract.reloadLabel : undefined;
+
+  return {
+    outcome: "reloaded",
+    waitedMs,
+    reloadedAt: contract.reloadedAt as string,
+    reloadKind: kind,
+    ...(label ? { reloadLabel: label } : {}),
+    note: `ready.json stamped a ${kind} reload${label ? ` (${label})` : ""} at ${contract.reloadedAt}, after this compile, so the change reached the browser.`,
+  };
 }
 
 async function watchReload(
@@ -75,6 +95,7 @@ async function watchReload(
   browser: string,
   compiledAt: string,
   graceMs: number,
+  reloadFloor: number,
 ): Promise<ReloadReading> {
   const started = Date.now();
   const compiledMs = stampMs(compiledAt) ?? 0;
@@ -84,6 +105,9 @@ async function watchReload(
     const contract = readContract(projectPath, browser);
     const waitedMs = Date.now() - started;
     const tsMs = stampMs(contract?.ts);
+
+    const reloaded = contract?.compiledAt === compiledAt ? stampedReload(contract, reloadFloor, waitedMs) : null;
+    if (reloaded) return reloaded;
 
     if (contract?.runtime === "detached") detachedAt = contract.executorDetachedAt ?? detachedAt;
 
@@ -141,6 +165,8 @@ export async function waitForRebuild(
   const baseline = sinceValid ? (since as string) : previousCompiledAt;
   const compiledFloor = stampMs(baseline) ?? Number.NEGATIVE_INFINITY;
   const errorFloor = sinceValid ? (stampMs(since) as number) : start;
+  const reloadFloor = sinceValid ? (stampMs(since) as number) : (stampMs(atCall.reloadedAt) ?? Number.NEGATIVE_INFINITY);
+  const stampsReloads = typeof atCall.reloadedAt === "string";
   let last: ReadyContract = atCall;
 
   while (Date.now() - start < budgetMs) {
@@ -175,8 +201,13 @@ export async function waitForRebuild(
       if (contract.status === "ready" && compiledMs !== null && compiledMs > compiledFloor) {
         const compiledAt = contract.compiledAt as string;
         const remaining = budgetMs - (Date.now() - start);
-        const grace = Math.max(0, Math.min(remaining, WEBKIT_FAMILY.has(browser) ? WEBKIT_RELOAD_GRACE_MS : RELOAD_GRACE_MS));
-        const reload = await watchReload(projectPath, browser, compiledAt, grace);
+        const graceCap = stampsReloads ? remaining : WEBKIT_FAMILY.has(browser) ? WEBKIT_RELOAD_GRACE_MS : RELOAD_GRACE_MS;
+        const grace = Math.max(0, Math.min(remaining, graceCap));
+        const watched = await watchReload(projectPath, browser, compiledAt, grace, reloadFloor);
+        const reload: ReloadReading =
+          stampsReloads && watched.outcome === "not-stamped"
+            ? { ...watched, note: `This engine stamps every reload it applies (ready.json reloadedAt), and none landed within ${watched.waitedMs} ms of this compile, so the browser has not applied the change yet. extension_doctor reports whether the extension's executor is connected.` }
+            : watched;
 
         return envelope({
           ok: true,
