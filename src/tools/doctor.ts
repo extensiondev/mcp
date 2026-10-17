@@ -314,6 +314,21 @@ function controlOffByChoiceLeg(checks: DoctorCheck[]): DoctorCheck | null {
   );
 }
 
+function compileFailureNextStep(code: string | undefined): string {
+  return code === "compile_failed"
+    ? "The compiler failed outside a module (a plugin hook or extension.config.js threw), which the dev server's watcher does not recover from. Fix the cause, then call extension_dev with replace: true (or extension_stop, then extension_dev)."
+    : 'The build failed. Fix the reported error and save: the dev server recompiles, and extension_wait with for: "rebuild" answers once the compile lands and the browser launches.';
+}
+
+function blockExecutorLeg(checks: DoctorCheck[], code: string | undefined): void {
+  const leg = checks.find((entry) => entry.check === "executor" && entry.status !== "pass");
+  if (!leg) return;
+
+  leg.status = "skip";
+  leg.detail = `blocked by runtime-errors: the session recorded status: error${code ? ` (${code})` : ""}, so no browser runs the extension and no executor will attach until a compile lands.`;
+  leg.remediation = compileFailureNextStep(code);
+}
+
 export async function handler(args: {
   projectPath?: string;
   browser?: string;
@@ -397,8 +412,10 @@ export async function handler(args: {
         detail: toMcpSpeak(detail),
         remediation: browserExited
           ? "Read extension_logs and the session log for the rejection cause, call extension_stop to clean up, then relaunch."
-          : "The build or extension load failed. Fix the reported error, let the dev server recompile, then re-run doctor.",
+          : compileFailureNextStep(contract.code),
       });
+
+      if (!browserExited) blockExecutorLeg(checks, contract.code);
     } else {
       const errs = recentErrorLogs(projectPath, browser);
 

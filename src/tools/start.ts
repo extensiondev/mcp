@@ -12,7 +12,9 @@ import path from "node:path";
 import { LAUNCH_BROWSER, PROJECT_PATH } from "../lib/common-schema";
 import { pollBootVerdict,
   bootFailureHint,
+  bootFailureMessage,
 } from "../lib/boot-verdict";
+import { stopFailedBoot } from "../lib/boot-failed-stop";
 import {
   profileCarryoverBeforeLaunch,
   profileReusedAt,
@@ -278,6 +280,7 @@ export async function handler(
 
   if (boot.verdict.kind === "boot-failed") {
     const { code, message } = boot.verdict;
+    const stop = await stopFailedBoot(args.projectPath, browser);
 
     return envelope({
       ok: false,
@@ -285,15 +288,16 @@ export async function handler(
       status: "boot-failed",
       error: {
         code: "E_CONTRACT_ERROR",
-        message: `The session recorded status: error${code ? ` (${code})` : ""}${message ? `: ${message}` : ""}. The process is running; the extension is not.`,
+        message: bootFailureMessage(code, message, stop.sessionStopped),
       },
       value: {
         ...session,
         ...(code ? { engineCode: code } : {}),
+        ...stop,
         output: cleanOutput.slice(0, 2000),
         ...(cleanOutput.length > 2000 ? { outputTruncated: { shown: 2000, total: cleanOutput.length, kept: "head" } } : {}),
       },
-      hint: bootFailureHint(code),
+      hint: bootFailureHint(code, { sessionStopped: stop.sessionStopped, tool: schema.name }),
       warnings: boot.warnings,
     });
   }

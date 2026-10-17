@@ -162,17 +162,42 @@ function contractVerdict(
   };
 }
 
-export function bootFailureHint(code: string | undefined): string {
+function bootFailureCause(code: string | undefined, tool: string): string {
   switch (code) {
+    case "compile_failed":
+      return `The compiler failed outside a module (a plugin hook or extension.config.js threw), which the dev server's watcher does not recover from: fix the cause the engine names above, then call ${tool} again.`;
     case "browser_launch_failed":
-      return "The browser process could not start. extension_browsers (action: detect) says which binaries are usable; pass chromiumBinary or geckoBinary to extension_dev to pick one, then retry.";
+      return `The browser process could not start. extension_browsers (action: detect) says which binaries are usable; pass chromiumBinary or geckoBinary to ${tool} to pick one, then call ${tool} again.`;
     case "extension_load_refused":
-      return "The browser refused to load the built extension. Run extension_manifest_validate and read extension_logs for the browser's reason, fix it, then call extension_dev again.";
+      return `The browser refused to load the built extension. Run extension_manifest_validate and read extension_logs for the browser's reason, fix it, then call ${tool} again.`;
     case "dev_server_start_failed":
-      return "The dev server could not start, usually a port already in use. Pass another port to extension_dev, or stop what holds it, then retry.";
+      return `The dev server could not start, usually a port already in use. Pass another port, or stop what holds it, then call ${tool} again.`;
     default:
-      return "Read the engine's message above, fix the cause, then call extension_dev again. extension_doctor with this projectPath reports what the last session recorded.";
+      return `Read the engine's message above, fix the cause, then call ${tool} again.`;
   }
+}
+
+export function bootFailureHint(
+  code: string | undefined,
+  stop: { sessionStopped: boolean; tool: string },
+): string {
+  const cause = bootFailureCause(code, stop.tool);
+
+  return stop.sessionStopped
+    ? `This call stopped the session it started, so nothing is left running and the next call starts fresh. ${cause}`
+    : `This call could not stop the session it started (value.stopDetail), so a plain second call is refused: call extension_stop with this projectPath and browser, or pass replace: true. ${cause}`;
+}
+
+export function bootFailureMessage(
+  code: string | undefined,
+  message: string | undefined,
+  sessionStopped: boolean,
+): string {
+  return `The session recorded status: error${code ? ` (${code})` : ""}${message ? `: ${message}` : ""}. ${
+    sessionStopped
+      ? "The extension never ran, and this call stopped the session it started."
+      : "The process is running; the extension is not."
+  }`;
 }
 
 export async function pollBootVerdict(

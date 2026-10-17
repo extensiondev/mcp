@@ -4,7 +4,13 @@ import path from "node:path";
 
 import { describe, it, expect, afterEach, vi } from "vitest";
 
-import { browserFromCliArgs, buildCliAnswer, writeEngineDist } from "./fixtures/engine-answers";
+import {
+  browserFromCliArgs,
+  buildCliAnswer,
+  doctorFrame,
+  errorContract,
+  writeEngineDist,
+} from "./fixtures/engine-answers";
 
 import type * as ExecModule from "../lib/exec";
 
@@ -123,6 +129,46 @@ describe("doctor reports failure when the extension is broken", () => {
     );
     expect(runtime.status).toBe("fail");
     expect(runtime.detail).toContain("missing.js");
+  });
+});
+
+describe("a session whose compile failed is never told its browser is launching", () => {
+  const ENGINE_GRACE_LEG = {
+    check: "executor",
+    status: "warn" as const,
+    detail: "no executor connected yet. The browser is still launching (within 10s of compile); the service worker has not attached",
+    remediation: 'Give it a moment: wait for ready.json to gain `runtime: "attached"` before acting, or re-run doctor shortly',
+  };
+
+  it.each([
+    { code: "compile_error" as const, next: /for: "rebuild"/ },
+    { code: "compile_failed" as const, next: /replace: true/ },
+  ])("doctor names the next call after a $code", async ({ code, next }) => {
+    const project = tmpProject();
+    writeReady(project, "chrome", errorContract("chrome", code));
+    cliResult = { code: 1, stdout: JSON.stringify(doctorFrame([ENGINE_GRACE_LEG])), stderr: "" };
+
+    const result = JSON.parse(await doctor.handler({ projectPath: project, browser: "chrome" }));
+    const executor = result.value.checks.find((leg: { check: string }) => leg.check === "executor");
+    const runtime = result.value.checks.find((leg: { check: string }) => leg.check === "runtime-errors");
+
+    expect(executor.status).toBe("skip");
+    expect(`${executor.detail} ${executor.remediation ?? ""}`).not.toMatch(/launching|give it a moment/i);
+    expect(executor.detail).toMatch(/runtime-errors/);
+    expect(runtime.remediation).toMatch(next);
+  });
+
+  it.each([
+    { code: "compile_error" as const, next: /for: "rebuild"/ },
+    { code: "compile_failed" as const, next: /replace: true/ },
+  ])("wait names the next call after a $code", async ({ code, next }) => {
+    const project = tmpProject();
+    writeReady(project, "chrome", errorContract("chrome", code));
+
+    const result = JSON.parse(await waitTool.handler({ projectPath: project, browser: "chrome" }));
+
+    expect(result.status).toBe("contract-error");
+    expect(result.hint).toMatch(next);
   });
 });
 

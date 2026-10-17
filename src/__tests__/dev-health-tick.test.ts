@@ -180,6 +180,42 @@ describe("extension_dev health tick", () => {
     expect(JSON.stringify(result)).not.toMatch(/recompile/);
   }, 20_000);
 
+  it("stops the session it started when the compiler fails outside a module, so the retry it names starts", async () => {
+    const project = tmpProject();
+    let first: ChildProcess | undefined;
+
+    nextChild = () => {
+      const cli = fakeCli('console.log("building"); setTimeout(()=>{}, 60000);');
+      first = cli.child;
+      setTimeout(() => {
+        writeSchema1ContractError(project, "chrome", {
+          code: "compile_failed",
+          message: "Error: ENOENT: no such file or directory, open '/nonexistent/ort-wasm-simd-threaded.asyncify.wasm'",
+          errors: [],
+          compiledAt: null,
+          pid: cli.child.pid,
+        });
+      }, 300);
+
+      return cli;
+    };
+
+    const failed = JSON.parse(await dev.handler({ wait: false, projectPath: project }));
+
+    expect(failed.status).toBe("boot-failed");
+    expect(failed.value.sessionStopped).toBe(true);
+    expect(failed.hint).toMatch(/call extension_dev again/);
+    expect(failed.error.message).not.toMatch(/The process is running/);
+    expect(first?.exitCode !== null || first?.signalCode !== null).toBe(true);
+
+    nextChild = () => fakeCli('console.log("building"); setTimeout(()=>{}, 60000);');
+
+    const retried = JSON.parse(await dev.handler({ wait: false, projectPath: project }));
+
+    expect(retried.status).not.toBe("session-exists");
+    expect(retried.status).toBe("started");
+  }, 30_000);
+
   it("says when the output it shows was cut, and keeps the head", async () => {
     const project = tmpProject();
     nextChild = () =>
