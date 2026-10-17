@@ -42,6 +42,33 @@ describe("the release rails fail closed", () => {
     expect(yml).toMatch(/if: steps\.published\.outputs\.already != 'true'/);
   });
 
+  it("publishes a canary under the canary tag and leaves main, tags, releases and the listing alone", () => {
+    const yml = read(".github/workflows/release.yml");
+
+    const step = (name: string) => {
+      const start = yml.indexOf(`- name: ${name}\n`);
+      expect(start).toBeGreaterThan(-1);
+      const next = yml.indexOf("\n      - name: ", start + 1);
+
+      return yml.slice(start, next === -1 ? undefined : next);
+    };
+
+    expect(yml).toMatch(/options: \[stable, canary\]/);
+    expect(yml).toContain('echo "dist_tag=canary"');
+    expect(yml).toContain('echo "dist_tag=latest"');
+    expect(step("Publish to npm with provenance")).toContain("--tag ${{ steps.validate.outputs.dist_tag }}");
+
+    for (const name of [
+      "Extract release notes from CHANGELOG.md",
+      "Authenticate the release push as the deploy key",
+      "Commit and tag release",
+      "Create GitHub release",
+      "Publish the listing to the MCP registry",
+    ]) {
+      expect(step(name), name).toContain("if: inputs.channel == 'stable'");
+    }
+  });
+
   it("reads E404 as not published and every other npm view failure as unknown", () => {
     const yml = read(".github/workflows/release.yml");
     expect(yml).toMatch(/grep -q "E404"/);

@@ -3,9 +3,14 @@ name: Release
 on:
   workflow_dispatch:
     inputs:
+      channel:
+        description: "Release channel: stable (latest, tagged, listed) or canary (silent publish)"
+        type: choice
+        default: stable
+        options: [stable, canary]
       version:
-        description: Exact version to publish (for example 0.1.1)
-        required: true
+        description: Exact version. Plain semver for stable (for example 0.1.1); a -canary.* version or empty for an automatic canary version.
+        required: false
         type: string
 
 permissions:
@@ -13,7 +18,7 @@ permissions:
   id-token: write
 
 concurrency:
-  group: release-${{ github.ref_name }}
+  group: release-${{ inputs.channel }}-${{ inputs.version || github.run_id }}
   cancel-in-progress: false
 
 jobs:
@@ -53,8 +58,27 @@ jobs:
       - name: Validate version
         id: validate
         shell: bash
+        env:
+          CHANNEL: ${{ inputs.channel }}
+          RAW_VERSION: ${{ inputs.version }}
         run: |
-          VERSION="$(echo "${{ inputs.version }}" | xargs)"
+          VERSION="$(echo "$RAW_VERSION" | xargs)"
+          if [ "$CHANNEL" = "canary" ]; then
+            if [ -z "$VERSION" ]; then
+              BASE="$(node -p "require('./package.json').version.split('-')[0]")"
+              VERSION="${BASE}-canary.${GITHUB_RUN_NUMBER}.${GITHUB_SHA::7}"
+            fi
+            if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+-canary\.[0-9A-Za-z.-]+$ ]]; then
+              echo "The canary channel takes a -canary.* version, for example 0.1.1-canary.1, or an empty version for an automatic one" >&2
+              exit 1
+            fi
+            {
+              echo "version=$VERSION"
+              echo "dist_tag=canary"
+            } >> "$GITHUB_OUTPUT"
+            echo "Canary $VERSION publishes under the canary tag: no commit, tag, GitHub release or MCP registry listing"
+            exit 0
+          fi
           if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             echo "Version must be plain semver, for example 0.1.1" >&2
             exit 1
@@ -68,10 +92,14 @@ jobs:
             echo "Tag $TAG already exists on origin" >&2
             exit 1
           fi
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          {
+            echo "version=$VERSION"
+            echo "tag=$TAG"
+            echo "dist_tag=latest"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Extract release notes from CHANGELOG.md
+        if: inputs.channel == 'stable'
         id: notes
         shell: bash
         env:
@@ -181,6 +209,7 @@ jobs:
         run: test -f dist/module.d.ts
 
       - name: Configure git identity
+        if: inputs.channel == 'stable'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -190,6 +219,7 @@ jobs:
       # deploy key instead of the runner token. Decided 2026-08-03
       # after run 30851316349 was rejected mid-release.
       - name: Authenticate the release push as the deploy key
+        if: inputs.channel == 'stable'
         env:
           RELEASE_PUSH_KEY: ${{ secrets.RELEASE_PUSH_KEY }}
         run: |
@@ -216,13 +246,32 @@ jobs:
       # (id-token: write above) against the trusted publisher configured on
       # npmjs.com for this repo/workflow. Provenance is generated automatically.
       - name: Publish to npm with provenance
+        id: publish
         if: steps.published.outputs.already != 'true'
-        run: npm publish --provenance --access ${{ steps.meta.outputs.publish_access }} --tag latest --ignore-scripts
+        run: npm publish --provenance --access ${{ steps.meta.outputs.publish_access }} --tag ${{ steps.validate.outputs.dist_tag }} --ignore-scripts
+
+      # extensiondev/mcp was recreated on 2026-10-11, after GitHub started giving
+      # new repositories an immutable OIDC subject, and npm trusted publishing
+      # does not match that subject yet (npm/cli#9969). Until it does, the
+      # exchange answers "package not found" and the publish ends in E404.
+      - name: Explain a refused trusted publish
+        if: failure() && steps.publish.outcome == 'failure'
+        env:
+          CHANNEL: ${{ inputs.channel }}
+          VERSION: ${{ steps.validate.outputs.version }}
+          DIST_TAG: ${{ steps.validate.outputs.dist_tag }}
+        run: |
+          NEXT="nothing else is needed for a canary"
+          if [ "$CHANNEL" = "stable" ]; then
+            NEXT="then run this workflow again with the same inputs: it sees the version on npm, skips the publish, and commits, tags, releases and lists it"
+          fi
+          echo "::error::npm refused the trusted publish. While npm/cli#9969 is open, publish $VERSION from a machine (npm stage publish with --provenance=false --tag $DIST_TAG, then npm stage approve with a one-time code); $NEXT."
 
       # The tag and the bump are pushed only once npm serves the tarball: a
       # publish that fails after the push left vX.Y.Z tagged and main bumped
       # while npm served nothing, and the rerun was refused by the tag check.
       - name: Commit and tag release
+        if: inputs.channel == 'stable'
         env:
           VERSION: ${{ steps.validate.outputs.version }}
           TAG: ${{ steps.validate.outputs.tag }}
@@ -236,6 +285,7 @@ jobs:
           git push origin "$TAG"
 
       - name: Create GitHub release
+        if: inputs.channel == 'stable'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           VERSION: ${{ steps.validate.outputs.version }}
@@ -261,4 +311,5 @@ jobs:
       # io.github.<owner>/* off the OIDC token's repository_owner claim, and
       # this repository is owned by extensiondev.
       - name: Publish the listing to the MCP registry
+        if: inputs.channel == 'stable'
         run: ./scripts/publish-mcp-registry.sh
