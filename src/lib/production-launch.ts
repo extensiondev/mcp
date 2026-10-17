@@ -48,6 +48,7 @@ export function readFreshContract(
 
 export function productionLaunchEvidence(
   contract: ReadyContract | null,
+  controlRequested = false,
 ): ProductionLaunchEvidence {
   const browserPid =
     typeof contract?.browserPid === "number" && contract.browserPid > 0
@@ -58,7 +59,8 @@ export function productionLaunchEvidence(
     typeof contract?.extensionId === "string" && contract.extensionId
       ? contract.extensionId
       : undefined;
-  const controlled = typeof contract?.controlPort === "number" && contract.controlPort > 0;
+  const controlled =
+    controlRequested || (typeof contract?.controlPort === "number" && contract.controlPort > 0);
   const attachedAt =
     controlled && typeof contract?.executorAttachedAt === "string" && contract.executorAttachedAt
       ? contract.executorAttachedAt

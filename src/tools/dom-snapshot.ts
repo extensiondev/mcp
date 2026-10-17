@@ -35,7 +35,17 @@ import {
   matchTargetsByUrl,
   TARGET_ID_NOTE,
 } from "../lib/cdp-targets";
-import { rdpEvaluateInTab, rdpListTabs } from "../lib/rdp";
+import { rdpEvaluateInTab, rdpListTabs, type RdpTab } from "../lib/rdp";
+import {
+  EXTENSION_PAGE_CONTEXTS,
+  extensionPageUnreachable,
+  geckoDocumentTab,
+  geckoExtensionTabByUrl,
+  mayNameExtensionTab,
+  namesExtensionDocument,
+  productionSessionCommand,
+} from "../lib/extension-surfaces";
+import { surfaceDocument } from "./open";
 import { listBridgeTabs, matchTabsByUrl } from "../lib/bridge-tabs";
 
 const RDP_ACTOR_NOTE =
@@ -45,7 +55,7 @@ const RDP_ACTOR_NOTE =
 export const schema = {
   name: "extension_dom_snapshot",
   description:
-    "Take a shallow structured DOM snapshot of one chosen surface through the agent bridge (localhost only; the snapshot itself needs no CDP, but listTargets and `tabUrl` resolution ask the browser directly and need the session's debug port: CDP page targets on Chromium, RDP tab descriptors on Firefox): element counts, extension roots, open shadow roots, optional byte-capped HTML, and optional recent console lines. This is the SURFACE PICKER: the only tool that reads an open extension surface by name (`context`: popup, options, sidebar, devtools) or an override page, the only one that takes a numeric chrome.tabs id, and the only one that enumerates what is open (listTargets for CDP targetIds and RDP tab actors, listTabs for numeric tab ids). An ambiguous `tabUrl` returns the candidates instead of guessing. It does not pierce closed shadow roots, run selector probes, or navigate: use extension_inspect for those, and for a deep read of an already-open web page. Rides the dev session's control channel, on unless extension_dev was called with allowControl:false.",
+    "Take a shallow structured DOM snapshot of one chosen surface through the agent bridge (localhost only; the snapshot itself needs no CDP, but listTargets and `tabUrl` resolution ask the browser directly and need the session's debug port: CDP page targets on Chromium, RDP tab descriptors on Firefox): element counts, extension roots, open shadow roots, optional byte-capped HTML, and optional recent console lines. This is the SURFACE PICKER: the only tool that reads an open extension surface by name (`context`: popup, options, sidebar, devtools) or an override page, the only one that takes a numeric chrome.tabs id, and the only one that enumerates what is open (listTargets for CDP targetIds and RDP tab actors, listTabs for numeric tab ids). An ambiguous `tabUrl` returns the candidates instead of guessing. It does not pierce closed shadow roots, run selector probes, or navigate: use extension_inspect for those, and for a deep read of an already-open web page. Rides the dev session's control channel, on unless extension_dev was called with allowControl:false. On Firefox, a surface or extension page the bridge cannot reach (an extension_start session's pages carry no relay) is read over the debugger protocol from the tab showing it.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -134,6 +144,35 @@ export function protocolSnapshotExpression(
 })()`;
 }
 
+function extensionPageTarget(
+  args: ActArgs,
+  browser: string,
+  url: string | undefined,
+): { label: string; extensionDocument: boolean; select: (tabs: RdpTab[]) => RdpTab | undefined } | null {
+  if (url && GECKO_EXTENSION_URL.test(url)) {
+    return { label: url, extensionDocument: true, select: (tabs) => tabs.find((tab) => sameDocumentUrl(tab.url, url)) };
+  }
+
+  if (url) {
+    if (!mayNameExtensionTab(url)) return null;
+
+    return {
+      label: url,
+      extensionDocument: namesExtensionDocument(args.projectPath, browser, url),
+      select: (tabs) => geckoExtensionTabByUrl(tabs, url),
+    };
+  }
+
+  const context = args.context;
+  if (!context || !EXTENSION_PAGE_CONTEXTS.includes(context)) return null;
+
+  const document = surfaceDocument(args.projectPath, browser, context);
+
+  return document
+    ? { label: `the ${context} document (${document})`, extensionDocument: true, select: (tabs) => geckoDocumentTab(tabs, document) }
+    : null;
+}
+
 async function snapshotExtensionPageOverProtocol(
   args: ActArgs & { include?: string[]; maxBytes?: number },
   browser: string,
@@ -141,30 +180,47 @@ async function snapshotExtensionPageOverProtocol(
   raw: string,
   consoleAsked: boolean,
 ): Promise<string | null> {
-  if (!url || !isGeckoFamily(browser) || !GECKO_EXTENSION_URL.test(url)) return null;
+  if (!isGeckoFamily(browser)) return null;
+
+  const target = extensionPageTarget(args, browser, url);
+  if (!target) return null;
 
   try {
     const refused = JSON.parse(raw);
     if (!refused || refused.ok !== false) return null;
+    if (!(url && GECKO_EXTENSION_URL.test(url)) && refused.error?.code !== "E_TARGET_NOT_FOUND") return null;
   } catch {
     return null;
   }
 
   const resolved = await resolveRdpPort(args.projectPath, browser, {
-    waitMs: 3_000,
-    graceMs: 1_000,
+    waitMs: target.extensionDocument ? 3_000 : 1_000,
+    graceMs: target.extensionDocument ? 1_000 : 500,
   });
-  if (!resolved) return null;
+
+  if (!resolved) {
+    const production = target.extensionDocument ? productionSessionCommand(args.projectPath, browser) : null;
+
+    return production ? extensionPageUnreachable(schema.name, browser, production, target.label) : null;
+  }
 
   const wantHtml = args.include?.includes("html") === true;
 
   try {
     const outcome = await rdpEvaluateInTab(resolved.port, {
-      select: (tabs) => tabs.find((tab) => sameDocumentUrl(tab.url, url)),
+      select: target.select,
       expression: protocolSnapshotExpression(wantHtml, args.maxBytes ?? 262144),
       timeoutMs: args.timeout ?? 10_000,
     });
-    if (!outcome.ok) return null;
+
+    if (!outcome.ok) {
+      const production =
+        outcome.name === "TargetNotFound" && target.extensionDocument
+          ? productionSessionCommand(args.projectPath, browser)
+          : null;
+
+      return production ? extensionPageUnreachable(schema.name, browser, production, target.label, "no-tab") : null;
+    }
 
     return envelope({
       ok: true,
@@ -172,7 +228,7 @@ async function snapshotExtensionPageOverProtocol(
       status: "ok",
       value: outcome.value,
       warnings: [
-        `${url} is a page inside the extension, which Firefox lets no script be injected into, so this snapshot was read over the debugger protocol from the tab showing it.${ 
+        `${url ?? target.label} is a page inside the extension, which Firefox lets no script be injected into, so this snapshot was read over the debugger protocol from the tab showing it.${ 
           consoleAsked
             ? " Console lines are not collected on this path; read them with extension_logs."
             : ""}`,

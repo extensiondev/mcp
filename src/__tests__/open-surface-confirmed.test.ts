@@ -184,7 +184,7 @@ describe("extension_open surface confirmation", () => {
     expect(actCalls).toHaveLength(0);
   });
 
-  it("says the open is unconfirmed on an engine without a CDP target list", async () => {
+  it("says the open is unconfirmed on a Firefox session whose contract records no debugger port", async () => {
     const p = project();
 
     const result = JSON.parse(
@@ -193,7 +193,7 @@ describe("extension_open surface confirmation", () => {
 
     expect(result.ok).toBe(true);
     expect(result.value.confirmed).toBe(false);
-    expect(result.value.confirmation).toMatch(/firefox has none/);
+    expect(result.value.confirmation).toMatch(/no debugger \(RDP\) port/);
     expect(result.warnings.join("\n")).toMatch(/could not confirm a document/);
   });
 

@@ -165,6 +165,28 @@ describe("extension_start opens the control channel on a production run", () => 
     expect(result.hint).toMatch(/extension_reload/);
   });
 
+  it("says the control channel is coming while the contract has not recorded its port yet", async () => {
+    const project = tmpProject();
+    const shipped = path.join(project, "dist", "chrome");
+    writeContract(project, { command: "start", status: "starting", distPath: shipped });
+
+    const contractFile = path.join(project, "dist", "extension-js", "chrome", "ready.json");
+    const later = new Date(Date.now() + 60_000);
+    fs.utimesSync(contractFile, later, later);
+
+    const result = JSON.parse(
+      await start.handler({ projectPath: project, allowEval: true }),
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.value.controlPort).toBeNull();
+    expect(result.value.loadEvidence).not.toMatch(/control verbs cannot attach|carries no dev bridge/);
+    expect(result.hint).not.toMatch(/control verbs cannot attach|carries no dev bridge/);
+    expect(result.hint).not.toContain(`copy of the build at ${shipped}`);
+    expect(result.hint).toMatch(/has not recorded its port yet/);
+    expect(result.hint).toMatch(/extension_wait/);
+  });
+
   it("reads the background attaching to the control channel as the load proof", async () => {
     const { productionLaunchEvidence } = await import("../lib/production-launch");
 

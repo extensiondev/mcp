@@ -341,7 +341,7 @@ export async function handler(
     });
   }
 
-  const launch = await readLoadOverDebugPort(freshContract, productionLaunchEvidence(freshContract));
+  const launch = await readLoadOverDebugPort(freshContract, productionLaunchEvidence(freshContract, allowControl));
   const launchSeen =
     launch.browserPid === null
       ? "the contract has not recorded a browser launch yet; extension_wait reads it once the build lands (browserPid, browserAlive)"
@@ -350,8 +350,12 @@ export async function handler(
   const noBrowserOrHint = args.noBrowser ? "" : headlessHint(visibility.headless);
   const controlPort =
     typeof freshContract?.controlPort === "number" ? freshContract.controlPort : null;
+  const controlledCopy =
+    controlPort !== null && typeof freshContract?.distPath === "string"
+      ? freshContract.distPath
+      : `dist/extension-js/${browser}/controlled`;
   const bridgeLine = allowControl
-    ? `This production session carries the control channel${controlPort !== null ? ` (port ${controlPort})` : ""} on a copy of the build at ${typeof freshContract?.distPath === "string" ? freshContract.distPath : "dist/extension-js/<browser>/controlled"}, so extension_storage, extension_reload (a real reload of the installed extension under open tabs, as a store update does), extension_open and extension_dom_snapshot attach${allowEval ? ", and extension_eval runs where the build's content_security_policy allows it (context:'page' in a tab always does)" : "; extension_eval needs allowEval:true"}. extension_logs has no console stream for it.`
+    ? `${controlPort !== null ? `This production session carries the control channel (port ${controlPort})` : "This production session asked for the control channel, and the contract has not recorded its port yet because the build is still running; extension_wait reads it once the build lands. The channel rides"} on a copy of the build at ${controlledCopy}, so extension_storage, extension_reload (a real reload of the installed extension under open tabs, as a store update does), extension_open and extension_dom_snapshot attach${allowEval ? ", and extension_eval runs where the build's content_security_policy allows it (context:'page' in a tab always does)" : "; extension_eval needs allowEval:true"}. extension_logs has no console stream for it.`
     : "A production session carries no dev bridge, so extension_logs has no console stream for it and the control verbs cannot attach; pass allowControl:true to drive it.";
 
   return envelope({

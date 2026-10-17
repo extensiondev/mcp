@@ -51,7 +51,7 @@ import {
   resolveRdpPort,
   CDP_PORT_MISSING_HINT,
 } from "../lib/cdp-port";
-import { rdpEvaluateInTab, type RdpTab } from "../lib/rdp";
+import { rdpEvaluateInTab, rdpListTabs, type RdpTab } from "../lib/rdp";
 import { matchPatternCovers } from "../lib/match-patterns";
 import {
   evaluateOnExtensionPage,
@@ -69,7 +69,13 @@ import {
 } from "./open";
 import {
   EXTENSION_PAGE_CONTEXTS,
+  extensionPageUnreachable,
+  geckoDocumentTab,
+  geckoExtensionTabByUrl,
   isExtensionUrl,
+  mayNameExtensionTab,
+  namesExtensionDocument,
+  productionSessionCommand,
   surfaceForExtensionUrl,
 } from "../lib/extension-surfaces";
 import { executeScriptExpression } from "./inspect-gecko";
@@ -77,7 +83,7 @@ import { executeScriptExpression } from "./inspect-gecko";
 export const schema = {
   name: "extension_eval",
   description:
-    "Evaluate an expression in a running extension context. Start the session with allowEval:true (extension_dev), which writes a 0600 session token; without that token every route of this tool, the debug port included, answers eval-disabled. Context defaults to 'background', except on a Chromium MV3 session (the default template) where it defaults to 'page', the active tab; pass context:'background' to evaluate in the service worker, which on Chromium goes over the debug port. Debug-port evaluates run with a user gesture, so gesture-gated APIs (permissions.request, sidePanel.open) can succeed here and still fail when the extension's own code calls them. For content and page, pass `url` to pick the tab, or omit both `url` and `tab` for the active tab; a numeric `tab` only disambiguates. Extension surfaces (popup, options, sidebar, devtools) and override pages (newtab, history, bookmarks) need no tab id but must already be open: open one with extension_open first, because a closed one returns an explicit error. On a Chromium MV3 session those pages, and context:'page' with a chrome-extension:// url, evaluate over CDP, the inspector path the extension page CSP does not govern; elsewhere they evaluate over the in-bundle relay. On Firefox a document whose content security policy forbids eval (the extension's own pages, or a site's) is evaluated over the debugger protocol instead, which takes one expression; a page inside the extension that is no declared surface (pages/*) is reached the same way by context:'page' and its moz-extension:// url once a tab shows it. A returned promise is awaited: over CDP and the Firefox debugger protocol, in a Firefox background, and in tabs (page or content through the in-tab executor) and relay surfaces, where this tool polls until it settles or timeout passes. The one exception is Firefox MV2 without the scripting API, where the expression runs through tabs.executeScript and must return a synchronous value. A value that cannot be cloned (a DOM node, a function) comes back as its string form, or as a not-cloneable error where the browser itself refuses to copy it. Call extension_dom_snapshot with listTabs:true to enumerate {tabId, url, title}.",
+    "Evaluate an expression in a running extension context. Start the session with allowEval:true (extension_dev), which writes a 0600 session token; without that token every route of this tool, the debug port included, answers eval-disabled. Context defaults to 'background', except on a Chromium MV3 session (the default template) where it defaults to 'page', the active tab; pass context:'background' to evaluate in the service worker, which on Chromium goes over the debug port. Debug-port evaluates run with a user gesture, so gesture-gated APIs (permissions.request, sidePanel.open) can succeed here and still fail when the extension's own code calls them. For content and page, pass `url` to pick the tab, or omit both `url` and `tab` for the active tab; a numeric `tab` only disambiguates. Extension surfaces (popup, options, sidebar, devtools) and override pages (newtab, history, bookmarks) need no tab id but must already be open: open one with extension_open first, because a closed one returns an explicit error. On a Chromium MV3 session those pages, and context:'page' with a chrome-extension:// url, evaluate over CDP, the inspector path the extension page CSP does not govern; elsewhere they evaluate over the in-bundle relay. On Firefox a document whose content security policy forbids eval (the extension's own pages, or a site's) is evaluated over the debugger protocol instead, which takes one expression; a page inside the extension that is no declared surface (pages/*) is reached the same way by context:'page' and its moz-extension:// url once a tab shows it. An extension_start session's pages carry no relay, so there a surface shown in a tab (options) and an extension page url are evaluated over the debugger protocol too; a surface in its own window (popup) is not reachable on that session, and the answer says so instead of reporting a missing target. A returned promise is awaited: over CDP and the Firefox debugger protocol, in a Firefox background, and in tabs (page or content through the in-tab executor) and relay surfaces, where this tool polls until it settles or timeout passes. The one exception is Firefox MV2 without the scripting API, where the expression runs through tabs.executeScript and must return a synchronous value. A value that cannot be cloned (a DOM node, a function) comes back as its string form, or as a not-cloneable error where the browser itself refuses to copy it. Call extension_dom_snapshot with listTabs:true to enumerate {tabId, url, title}.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -853,6 +859,54 @@ async function evaluateInGeckoTab(
   });
 }
 
+/* @invariant
+ * The engine answers E_TARGET_NOT_FOUND for an extension page it could not reach: a surface whose page carries no relay (a
+ * production build gets the control producer in its background only) or a moz-extension:// tab that script injection
+ * cannot enter. Neither ran the expression, so the tab is evaluated over the debugger protocol only when it exists there,
+ * and a missing tab keeps the engine's own answer.
+ */
+async function evaluateExtensionPageOverProtocol(
+  args: ActArgs & { expression: string },
+  browser: string,
+  select: (tabs: RdpTab[]) => RdpTab | undefined,
+  target: string,
+  raw: string,
+  extensionDocument = true,
+): Promise<string> {
+  if (!isGeckoFamily(browser)) return raw;
+
+  const refused = parseFrameObject(raw);
+  if (!refused || refused.ok !== false || refused.error?.code !== "E_TARGET_NOT_FOUND") return raw;
+
+  const resolved = await resolveRdpPort(args.projectPath, browser, { waitMs: 1_000, graceMs: 500 });
+
+  if (!resolved) {
+    const production = extensionDocument ? productionSessionCommand(args.projectPath, browser) : null;
+
+    return production ? extensionPageUnreachable(schema.name, browser, production, target) : raw;
+  }
+
+  let tabs: RdpTab[];
+
+  try {
+    tabs = await rdpListTabs(resolved.port);
+  } catch {
+    return raw;
+  }
+
+  if (!select(tabs)) {
+    const production = extensionDocument ? productionSessionCommand(args.projectPath, browser) : null;
+
+    return production ? extensionPageUnreachable(schema.name, browser, production, target, "no-tab") : raw;
+  }
+
+  if (!isSingleExpression(args.expression)) return notOneExpression();
+
+  return (
+    (await evaluateInGeckoTab(args, browser, select, `No open tab shows ${target}.`)) ?? raw
+  );
+}
+
 function backgroundRouteRefusedStatements(
   args: ActArgs & { expression: string },
   browser: string,
@@ -1035,10 +1089,16 @@ export async function handler(
     );
 
     if (surface) {
-      const raw = await evaluateThroughRelay(
-        { ...args, url: undefined, tab: undefined },
+      const raw = await evaluateExtensionPageOverProtocol(
+        args,
         browser,
-        surface.context,
+        (tabs) => geckoDocumentTab(tabs, surface.document),
+        args.url as string,
+        await evaluateThroughRelay(
+          { ...args, url: undefined, tab: undefined },
+          browser,
+          surface.context,
+        ),
       );
       const parsed = parseFrameObject(raw);
 
@@ -1085,7 +1145,18 @@ export async function handler(
   }
 
   if (context && EXTENSION_PAGE_CONTEXTS.includes(context)) {
-    return evaluateThroughRelay(args, browser, context);
+    const document = surfaceDocument(args.projectPath, browser, context);
+    const relayed = await evaluateThroughRelay(args, browser, context);
+
+    return document
+      ? evaluateExtensionPageOverProtocol(
+          args,
+          browser,
+          (tabs) => geckoDocumentTab(tabs, document),
+          `the ${context} document (${document})`,
+          relayed,
+        )
+      : relayed;
   }
 
   const run = engineEvalRun(args, browser, context);
@@ -1127,6 +1198,19 @@ export async function handler(
 
     const notCloneable = notCloneableRefusal(raw);
     if (notCloneable !== null) return notCloneable;
+
+    if (context === "page" && args.url && mayNameExtensionTab(args.url)) {
+      const url = args.url;
+      const overProtocol = await evaluateExtensionPageOverProtocol(
+        args,
+        browser,
+        (tabs) => geckoExtensionTabByUrl(tabs, url),
+        url,
+        raw,
+        namesExtensionDocument(args.projectPath, browser, url),
+      );
+      if (overProtocol !== raw) return overProtocol;
+    }
   }
 
   if (args.context === "content") {

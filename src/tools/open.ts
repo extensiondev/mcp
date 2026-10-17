@@ -32,7 +32,8 @@ import {
 } from "../lib/session-browser";
 import { readyContractPath } from "../lib/session-paths";
 import { CDPClient } from "../lib/cdp";
-import { resolveCdpPort, CDP_PORT_MISSING_HINT } from "../lib/cdp-port";
+import { resolveCdpPort, resolveRdpPort, CDP_PORT_MISSING_HINT } from "../lib/cdp-port";
+import { rdpListTabs, type RdpTab } from "../lib/rdp";
 import {
   isChromiumFamily,
   isGeckoFamily,
@@ -836,6 +837,59 @@ async function openSurfaceAsTab(
   return raw;
 }
 
+async function confirmGeckoSurfaceTab(
+  projectPath: string,
+  browser: string,
+  surface: string,
+  doc: string,
+  parsed: Record<string, any>,
+  unconfirmed: (why: string) => string,
+): Promise<string> {
+  const resolved = await resolveRdpPort(projectPath, browser, { waitMs: 1_000, graceMs: 500 });
+  if (!resolved) return unconfirmed("this session's contract records no debugger (RDP) port, which is how a Firefox tab list is read");
+
+  const wanted = doc.replace(/^\.?\//, "");
+
+  const showsDoc = (tab: RdpTab) => {
+    const match = /^moz-extension:\/\/[^/]+\/([^?#]*)/.exec(String(tab.url ?? ""));
+
+    return match !== null && match[1] === wanted;
+  };
+
+  const deadline = Date.now() + (surface === "options" ? 3_000 : 0);
+
+  for (;;) {
+    let tabs: RdpTab[];
+
+    try {
+      tabs = await rdpListTabs(resolved.port);
+    } catch (err) {
+      return unconfirmed(`the debugger (RDP) port ${resolved.port} did not list tabs: ${err instanceof Error ? err.message : String(err)}`);
+    }
+
+    const tab = tabs.find(showsDoc);
+
+    if (tab) {
+      patchValue(parsed, {
+        confirmed: true,
+        surfaceTarget: { url: String(tab.url), ...(tab.title ? { title: String(tab.title) } : {}), transport: "rdp" },
+      });
+
+      return actFrameJson(parsed);
+    }
+
+    if (Date.now() >= deadline) break;
+
+    await sleep(250);
+  }
+
+  return unconfirmed(
+    surface === "options"
+      ? `no tab showed ${wanted} within 3s on the debugger (RDP) tab list`
+      : `no tab shows ${wanted} on the debugger (RDP) tab list, which lists tabs only, so a ${surface} window is not seen there`,
+  );
+}
+
 async function confirmSurfaceTarget(
   projectPath: string,
   browser: string,
@@ -862,11 +916,18 @@ async function confirmSurfaceTarget(
     return actFrameJson(parsed);
   };
 
+  const doc = surfaceDocument(projectPath, browser, surface);
+
+  if (isGeckoFamily(browser)) {
+    if (!doc) return unconfirmed("the manifest declares no document for this surface");
+
+    return confirmGeckoSurfaceTab(projectPath, browser, surface, doc, parsed, unconfirmed);
+  }
+
   if (!isChromiumFamily(browser)) {
     return unconfirmed(`confirmation reads the CDP target list, which ${browser} has none of`);
   }
 
-  const doc = surfaceDocument(projectPath, browser, surface);
   if (!doc) return unconfirmed("the manifest declares no document for this surface");
 
   const resolved = await resolveCdpPort(projectPath, browser);

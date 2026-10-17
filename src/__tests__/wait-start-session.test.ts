@@ -56,6 +56,25 @@ describe("extension_wait on a start session says at once that nothing will attac
     expect(result.warnings.join(" ")).toContain("clamped to 50000ms");
   }, 20_000);
 
+  it("does not call a session with a control port undrivable while its background has not connected", async () => {
+    const project = tmpProject();
+    writeContract(project, "firefox", {
+      command: "preview",
+      pid: process.pid,
+      port: null,
+      controlPort: 61110,
+      compiledAt: new Date().toISOString(),
+    });
+
+    const result = JSON.parse(
+      await wait.handler({ projectPath: project, browser: "firefox", timeoutMs: 1500 }),
+    );
+
+    expect(result.status).toBe("build-ready");
+    expect(result.hint).not.toMatch(/carries no dev bridge|cannot drive it/);
+    expect(result.hint).toMatch(/control channel \(port 61110\)/);
+  }, 10_000);
+
   it("answers launched for a preview session too, which the engine stamps as command preview", async () => {
     const project = tmpProject();
     writeContract(project, "chrome", {
