@@ -8,6 +8,7 @@
 
 import { UserlandProjectPage } from "@extension.dev/urls/userland";
 
+import { CHANNEL_LINK_ADVICE, channelLinkFields, channelUrl } from "../lib/channel-link";
 import {
   consoleProjectUrl,
   fetchRegistryJson,
@@ -113,14 +114,12 @@ export async function readReleases(args: {
   const visibility = metaRes.ok ? String(meta?.visibility || "private").toLowerCase() : "unknown";
   const isPrivate = visibility !== "public";
   const publicProjectUrl = userlandProjectUrl(ref, "", args.api);
-  const channelsWithUrls = channels.map((c) => ({
-    ...c,
-    publicUrl: userlandProjectUrl(
-      ref,
-      UserlandProjectPage.channel(c.channel),
-      args.api,
-    ),
-  }));
+  const channelsWithUrls = channels.map((c) => {
+    const url = isPrivate ? "" : channelUrl(ref, c.channel, args.api, { perBrowser: true });
+
+    return url ? { ...c, channelUrl: url } : { ...c };
+  });
+  const channelWithheld = isPrivate ? channelLinkFields(ref, visibility, null, args.api) : {};
   const buildsWithUrls = recentBuilds.map((b) => ({
     ...b,
     publicUrl: userlandProjectUrl(
@@ -133,7 +132,7 @@ export async function readReleases(args: {
   const publicUrlNote = publicProjectUrl
     ? isPrivate
       ? "publicUrl links open only for workspace members. This project is private, so an outside recipient needs a share link from extension_publish."
-      : "publicUrl links are the public build pages: they open without login once the project is publicly reachable, and they carry the per-browser downloads and the run locally instructions."
+      : `publicUrl links are the public build pages: they open without login once the project is publicly reachable, and they carry the per-browser downloads and the run locally instructions. Each channel's channelUrl follows that channel to its current build. ${CHANNEL_LINK_ADVICE}`
     : null;
   const channelsUnavailable = channelsRes.ok
     ? null
@@ -156,6 +155,7 @@ export async function readReleases(args: {
       registryUrl: channelsUrl,
       buildsPageUrl,
       ...(publicProjectUrl ? { publicProjectUrl } : {}),
+      ...channelWithheld,
     },
     hint:
       promotable.length > 0 || recentBuilds.length > 0
