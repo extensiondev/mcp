@@ -46,10 +46,11 @@ export function matchExtensionPageTargets(
   targets: PageTarget[],
   wantedUrl: string,
 ): PageTarget[] {
-  const wanted = stripHash(wantedUrl);
+  const keepsFragment = wantedUrl.includes("#");
+  const wanted = keepsFragment ? wantedUrl : stripHash(wantedUrl);
 
   return targets.filter((t) => {
-    const url = stripHash(t.url);
+    const url = keepsFragment ? t.url : stripHash(t.url);
 
     return url === wanted || url.startsWith(wanted);
   });

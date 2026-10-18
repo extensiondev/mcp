@@ -262,7 +262,8 @@ export async function readExtensionRoots(
 export function sameDocument(current: string | null, wanted: string): boolean {
   if (!current) return false;
 
-  const strip = (u: string) => u.replace(/[#?].*$/, "").replace(/\/+$/, "");
+  const strip = (u: string) =>
+    (wanted.includes("#") ? u : u.replace(/[#?].*$/, "")).replace(/\/+$/, "");
 
   return strip(current) === strip(wanted);
 }

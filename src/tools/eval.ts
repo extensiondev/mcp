@@ -76,13 +76,16 @@ import {
 import {
   EXTENSION_PAGE_CONTEXTS,
   extensionPageUnreachable,
+  distinctUrls,
   geckoDocumentTab,
   geckoExtensionTabByUrl,
+  geckoExtensionTabsByUrl,
   isExtensionUrl,
   mayNameExtensionTab,
   namesExtensionDocument,
   productionSessionCommand,
   surfaceForExtensionUrl,
+  urlKey,
 } from "../lib/extension-surfaces";
 import { executeScriptExpression } from "./inspect-gecko";
 
@@ -371,6 +374,8 @@ async function evaluateOnChromiumExtensionPage(
   if ("unreadable" in pagesRead) return targetsUnreadable(pagesRead.unreadable);
 
   const targets = pagesRead.targets.filter((t) => !isBrowserErrorPage(t.url));
+  const matchingUrls = context === "page" ? distinctUrls(targets) : [];
+  if (matchingUrls.length > 1) return ambiguousUrl(wanted, matchingUrls);
 
   if (targets.length === 0) {
     return envelope({
@@ -824,8 +829,22 @@ async function evaluatePastSurfaceCsp(
   return direct;
 }
 
-const sameDocumentUrl = (a: unknown, b: string): boolean =>
-  String(a ?? "").replace(/[?#].*$/, "") === b.replace(/[?#].*$/, "");
+const sameDocumentUrl = (a: unknown, b: string): boolean => urlKey(String(a ?? ""), b) === urlKey(b, b);
+
+function ambiguousUrl(url: string, urls: string[]): string {
+  return envelope({
+    ok: false,
+    command: schema.name,
+    status: "ambiguous-target",
+    error: {
+      code: "E_AMBIGUOUS_TARGET",
+      name: "AmbiguousTabUrl",
+      message: `url: ${url} matches ${urls.length} open tabs that show different pages (${urls.join(", ")}); refusing to guess which one you mean, so nothing was evaluated.`,
+    },
+    value: { matchingUrls: urls },
+    hint: "Pass the full url of the one you mean, its #fragment included, as url.",
+  });
+}
 
 function tabByUrl(tabs: RdpTab[], url: string, seen?: { matched: number }): RdpTab | undefined {
   const exact = tabs.filter((tab) => sameDocumentUrl(tab.url, url));
@@ -942,6 +961,7 @@ async function evaluateExtensionPageOverProtocol(
   target: string,
   raw: string,
   extensionDocument = true,
+  candidates?: (tabs: RdpTab[]) => RdpTab[],
 ): Promise<string> {
   if (!isGeckoFamily(browser)) return raw;
 
@@ -963,6 +983,9 @@ async function evaluateExtensionPageOverProtocol(
   } catch {
     return raw;
   }
+
+  const matching = candidates ? distinctUrls(candidates(tabs)) : [];
+  if (matching.length > 1) return ambiguousUrl(target, matching);
 
   if (!select(tabs)) {
     const production = extensionDocument ? productionSessionCommand(args.projectPath, browser) : null;
@@ -1062,6 +1085,9 @@ async function evaluateExtensionTabBeforeInjection(
   }
 
   const url = args.url;
+  const matching = url ? distinctUrls(geckoExtensionTabsByUrl(tabs, url)) : [];
+  if (url && matching.length > 1) return ambiguousUrl(url, matching);
+
   const select = url
     ? (list: RdpTab[]) => geckoExtensionTabByUrl(list, url)
     : (list: RdpTab[]) =>
@@ -1367,6 +1393,7 @@ async function evaluateOnce(
         url,
         raw,
         namesExtensionDocument(args.projectPath, browser, url),
+        (tabs) => geckoExtensionTabsByUrl(tabs, url),
       );
       if (overProtocol !== raw) return overProtocol;
     }

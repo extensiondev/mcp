@@ -184,3 +184,52 @@ describe("extension_eval context background picks the background the manifest de
     expect(result.warnings.filter(Boolean)).toEqual([]);
   });
 });
+
+describe("extension_eval context page on Chromium keeps the url fragment when picking the page", () => {
+  const pdfTab = (id: string, name: string): Target => ({
+    id: name,
+    type: "page",
+    url: `chrome-extension://${id}/pages/pdf.html#http://127.0.0.1:8765/media/${name}.pdf`,
+    title: name,
+  });
+
+  it("evaluates in the page whose fragment matches", async () => {
+    const p = project(MV3);
+    cdpTargets = [pdfTab(p.id, "scan"), pdfTab(p.id, "letter")];
+
+    const result = JSON.parse(
+      await evalTool.handler({
+        projectPath: p.dir,
+        browser: "chrome",
+        context: "page",
+        url: `chrome-extension://${p.id}/pages/pdf.html#http://127.0.0.1:8765/media/letter.pdf`,
+        expression: "1",
+      }),
+    );
+
+    expect(result.ok).toBe(true);
+    expect(evaluations).toHaveLength(1);
+    expect(evaluations[0].sessionId).toBe("session-letter");
+  });
+
+  it("refuses with both urls when the url matches pages that differ only in the fragment", async () => {
+    const p = project(MV3);
+    cdpTargets = [pdfTab(p.id, "scan"), pdfTab(p.id, "letter")];
+
+    const result = JSON.parse(
+      await evalTool.handler({
+        projectPath: p.dir,
+        browser: "chrome",
+        context: "page",
+        url: `chrome-extension://${p.id}/pages/pdf.html`,
+        expression: "1",
+      }),
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.error.code).toBe("E_AMBIGUOUS_TARGET");
+    expect(result.error.message).toContain("scan.pdf");
+    expect(result.error.message).toContain("letter.pdf");
+    expect(evaluations).toHaveLength(0);
+  });
+});

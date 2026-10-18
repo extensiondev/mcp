@@ -69,18 +69,29 @@ export function geckoDocumentTab<T extends { url?: string }>(
   });
 }
 
+export function urlKey(url: string, wanted: string): string {
+  return wanted.includes("#") ? url : url.replace(/[?#].*$/, "");
+}
+
+export function geckoExtensionTabsByUrl<T extends { url?: string }>(tabs: T[], url: string): T[] {
+  const wanted = urlKey(url, url);
+  const own = tabs.filter((tab) => /^moz-extension:\/\//.test(String(tab.url ?? "")));
+  const exact = own.filter((tab) => urlKey(String(tab.url ?? ""), url) === wanted);
+
+  return exact.length ? exact : own.filter((tab) => String(tab.url ?? "").includes(wanted));
+}
+
 export function geckoExtensionTabByUrl<T extends { url?: string; selected?: boolean }>(
   tabs: T[],
   url: string,
 ): T | undefined {
-  const wanted = url.replace(/[?#].*$/, "");
-  const own = tabs.filter((tab) => /^moz-extension:\/\//.test(String(tab.url ?? "")));
-  const exact = own.filter((tab) => String(tab.url ?? "").replace(/[?#].*$/, "") === wanted);
-  const candidates = exact.length
-    ? exact
-    : own.filter((tab) => String(tab.url ?? "").includes(wanted));
+  const candidates = geckoExtensionTabsByUrl(tabs, url);
 
   return candidates.find((tab) => tab.selected === true) ?? candidates[0];
+}
+
+export function distinctUrls(items: Array<{ url?: string }>): string[] {
+  return [...new Set(items.map((item) => String(item.url ?? "")))];
 }
 
 export function productionSessionCommand(
