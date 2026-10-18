@@ -94,11 +94,13 @@ async function watchReload(
   projectPath: string,
   browser: string,
   compiledAt: string,
+  compileWriteTs: unknown,
   graceMs: number,
   reloadFloor: number,
+  stampsReloads: boolean,
 ): Promise<ReloadReading> {
   const started = Date.now();
-  const compiledMs = stampMs(compiledAt) ?? 0;
+  const compileWriteMs = Math.max(stampMs(compileWriteTs) ?? 0, stampMs(compiledAt) ?? 0);
   let detachedAt: string | undefined;
 
   for (;;) {
@@ -111,7 +113,7 @@ async function watchReload(
 
     if (contract?.runtime === "detached") detachedAt = contract.executorDetachedAt ?? detachedAt;
 
-    if (contract?.runtime === "attached" && tsMs !== null && tsMs > compiledMs && contract.compiledAt === compiledAt) {
+    if (!stampsReloads && contract?.runtime === "attached" && tsMs !== null && tsMs > compileWriteMs && contract.compiledAt === compiledAt) {
       return {
         outcome: "reattached",
         waitedMs,
@@ -203,7 +205,7 @@ export async function waitForRebuild(
         const remaining = budgetMs - (Date.now() - start);
         const graceCap = stampsReloads ? remaining : WEBKIT_FAMILY.has(browser) ? WEBKIT_RELOAD_GRACE_MS : RELOAD_GRACE_MS;
         const grace = Math.max(0, Math.min(remaining, graceCap));
-        const watched = await watchReload(projectPath, browser, compiledAt, grace, reloadFloor);
+        const watched = await watchReload(projectPath, browser, compiledAt, contract.ts, grace, reloadFloor, stampsReloads);
         const reload: ReloadReading =
           stampsReloads && watched.outcome === "not-stamped"
             ? { ...watched, note: `This engine stamps every reload it applies (ready.json reloadedAt), and none landed within ${watched.waitedMs} ms of this compile, so the browser has not applied the change yet. extension_doctor reports whether the extension's executor is connected.` }
