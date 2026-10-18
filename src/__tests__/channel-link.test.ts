@@ -127,6 +127,9 @@ describe("a private project's answers withhold the channel link and say why", ()
     expect(said).not.toContain("/channels/");
     expect(out.value.channelUrlWithheld).toMatch(/private/);
     expect(out.value.channelUrlWithheld).toContain("extension_publish");
+    expect(out.value.channelUrlWithheld).toContain("extension.dev project settings");
+    expect(out.value.channelUrlWithheld).toMatch(/console Settings, Visibility section/);
+    expect(out.value.channelUrlWithheld).not.toMatch(/repositor/i);
   });
 });
 

@@ -14,6 +14,7 @@ import { publish } from "../lib/publish";
 import { NO_TOKEN_MESSAGE, PROJECT_TOKEN_INPUT, noStoredLoginHint } from "../lib/credentials";
 import { platformHoldEnvelope } from "../lib/platform-hold";
 import { CHANNEL_LINK_ADVICE, channelLinkFields, channelServing, readChannels } from "../lib/channel-link";
+import { publishLinkFields } from "../lib/publish-link";
 import {
   fetchRegistryJson,
   isSuccessfulBuild,
@@ -25,7 +26,7 @@ import {
 export const schema = {
   name: "extension_publish",
   description:
-    "Publish a build of the project your stored token is scoped to (extension_auth, or EXTENSION_DEV_TOKEN) on extension.dev, and return the link to send testers, which opens a page with a download and a run command for each browser. Reach for this first whenever the ask is to share, publish, deploy, distribute, release or ship an extension, or to send it to testers; extension_submit is the separate store-review path, and extension_preview_web share:true is a quick emulator link beside this one. An extension with no project on extension.dev yet starts with extension_project_create, which makes one from its GitHub repository, then extension_auth. The target is the token's project: there is no projectPath, and no local file is uploaded. With several logins stored, pass `project` ('<workspace>/<project>') to pick which one; it outranks EXTENSION_DEV_TOKEN. There are two links. A build link opens one build, <workspace>.extension.dev/<project>/builds/<sha> (pass buildSha, which extension_builds lists, or the newest successful build is linked); on a private project it carries a share token and expires, its lifetime ttlHours: 7 days by default, and up to the plan's share window (30 days free, 365 Pro) when asked. A channel link, <workspace>.extension.dev/<project>/channels/<channel>, always opens a channel's newest build and never expires; a public project gets one in value.channelUrl when a release channel serves the build, and later a public channel of a private project will too. On a public project, or a public channel, send testers the channel link; otherwise send the build link and tell them the date it stops working. A private project gets no channel link: value.channelUrlWithheld says why. A project's visibility is set in its extension.dev project settings, not its GitHub repository.",
+    "Publish a build of the project your stored token is scoped to (extension_auth, or EXTENSION_DEV_TOKEN) on extension.dev, and return the link to send testers, which opens a page with a download and a run command for each browser. Reach for this first whenever the ask is to share, publish, deploy, distribute, release or ship an extension, or to send it to testers; extension_submit is the separate store-review path, and extension_preview_web share:true is a quick emulator link beside this one. An extension with no project on extension.dev yet starts with extension_project_create, which makes one from its GitHub repository, then extension_auth. The target is the token's project: there is no projectPath, and no local file is uploaded. With several logins stored, pass `project` ('<workspace>/<project>') to pick which one; it outranks EXTENSION_DEV_TOKEN. There are two links. A build link opens one build, <workspace>.extension.dev/<project>/builds/<sha> (pass buildSha, which extension_builds lists, or the newest successful build is linked); on a private project it carries a share token and expires, its lifetime ttlHours: 7 days by default, and up to the plan's share window (30 days free, 365 Pro) when asked. A channel link, <workspace>.extension.dev/<project>/channels/<channel>, always opens a channel's newest build and never expires; a public project gets one in value.channelUrl when a release channel serves the build, and later a public channel of a private project will too. On a public project, or a public channel, send testers the channel link; otherwise send the build link and tell them the date it stops working. A private project gets no channel link: value.channelUrlWithheld says why. A project's visibility is set in its extension.dev project settings, not its GitHub repository. In the answer, value.link is the link to send (kind build or channel, url, expiresAt as an ISO date or null, pointsAt, audience, scope, and renewBy, the call that mints a fresh one, on a private project), value.links lists every link this build has, value.tellThem is the sentence to say with it (the hint carries it too), value.clamped says the platform cut ttlHours back to the plan's window, and value.projectVisibility names where visibility is set and, on a private project, makeEvergreen, the console page that gives a link that never expires.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -138,6 +139,21 @@ export async function handler(args: {
     }
 
     const code = (result.error as { code?: string }).code;
+
+    if (code === "NO_BUILD_TO_SHARE") {
+      return envelope({
+        ok: false,
+        command: "extension_publish",
+        status: "no-build-to-share",
+        error: {
+          code: "E_PLATFORM",
+          name: "PublishError",
+          message: result.error.message,
+          platformCode: code,
+        },
+        hint: "This private project has no completed build yet, so there is no build link to make: a build link opens one build. Push a commit or start one with extension_builds (action: 'rebuild'), then publish again once extension_builds lists it as successful.",
+      });
+    }
 
     if (code === "UNKNOWN_BUILD") {
       return envelope({
@@ -281,10 +297,11 @@ export async function handler(args: {
   }
 
   let channelNote: string | null = null;
+  let serving: string | null = null;
 
   if (ref && data.visibility === "public") {
     const channels = await readChannels(ref, args.api);
-    const serving = channels && typeof data.buildSha === "string" ? channelServing(channels, data.buildSha) : null;
+    serving = channels && typeof data.buildSha === "string" ? channelServing(channels, data.buildSha) : null;
     Object.assign(data, channelLinkFields(ref, data.visibility, serving, args.api));
 
     if (!serving) {
@@ -295,6 +312,16 @@ export async function handler(args: {
   } else if (ref) {
     Object.assign(data, channelLinkFields(ref, data.visibility, null, args.api));
   }
+
+  const { sendUrl, ...linkFields } = publishLinkFields({
+    data,
+    channel: serving,
+    ref,
+    ttlHours: args.ttlHours,
+    project: args.project,
+    api: args.api,
+  });
+  Object.assign(data, linkFields);
 
   data.allowance = spendNarration({
     what: "This publish",
@@ -319,12 +346,15 @@ export async function handler(args: {
     ? "This share serves NO build: the platform minted the link but named no build sha, which means the project has no successful build yet (or its build index could not be read). Anyone opening the link gets nothing to run. Build first (push a commit, or extension_build then a platform build), then publish again."
     : null;
 
+  const tellHint = noBuild || !sendUrl ? null : `Send ${String(sendUrl)} and say: ${String(data.tellThem)}`;
+  const hint = [tellHint, previewHint].filter(Boolean).join(" ");
+
   return envelope({
     ok: true,
     command: "extension_publish",
     status: noBuild ? "published-without-build" : "published",
     value: data,
     warnings: [noBuildNote, note, buildNote, channelNote, credential.note],
-    ...(previewHint ? { hint: previewHint } : {}),
+    ...(hint ? { hint } : {}),
   });
 }

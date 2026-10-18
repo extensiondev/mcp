@@ -47,18 +47,42 @@ export function submitAnswer(
   };
 }
 
+export const PUBLISH_EXPIRES_AT_EPOCH = 1791288000;
+
 export function publishAnswer(overrides: Body = {}): Body {
   return {
-    shareUrl: "https://preview.extension.dev/?preview=gen_0123456789abcdef0123456789abcdef",
+    shareUrl: "https://acme.extension.dev/widget/builds/abc1234?share=tok_share",
     visibility: "private",
     buildSha: "abc1234",
     version: "1.2.0",
     builtAt: "2026-10-05T11:00:00.000Z",
     previewCommands: {
-      chrome: "npx extension preview https://registry.extension.land/acme/widget/_extension-dev/builds/abc1234/chrome.zip?token=t",
+      chrome: "npx -y extension@latest preview https://registry.extension.land/acme/widget/_extension-dev/builds/abc1234/chrome.zip?t=tok_share",
     },
-    expiresAt: "2026-10-06T12:00:00.000Z",
+    token: "tok_share",
+    expiresAt: PUBLISH_EXPIRES_AT_EPOCH,
+    ttlHours: 168,
     ...overrides,
+  };
+}
+
+export function publishAnswerWithLink(overrides: Body = {}): Body {
+  const base = publishAnswer(overrides);
+  const isPublic = base.visibility === "public";
+
+  return {
+    ...base,
+    link: isPublic
+      ? { kind: "build", url: base.shareUrl, expiresAt: null, pointsAt: "this build", audience: "public", scope: null }
+      : {
+          kind: "build",
+          url: base.shareUrl,
+          expiresAt: new Date(Number(base.expiresAt) * 1000).toISOString(),
+          pointsAt: "this build",
+          audience: "anyone with the link",
+          scope: `build:${String(base.buildSha)}`,
+        },
+    projectVisibility: { value: base.visibility, source: "extension.dev project settings" },
   };
 }
 
@@ -76,6 +100,7 @@ export function approvalRecord(fingerprint: string, overrides: Body = {}): Body 
 export const PLATFORM_WRITERS = {
   promoteAnswer: "www src/app/api/projects/[projectId]/releases/releases-route.create.ts via /api/cli/release/promote",
   submitAnswer: "www src/app/api/cli/stores/submit/route.ts, one row per store, dispatched one at a time",
-  publishAnswer: "www src/app/api/cli/publish/route.ts, private project 200; a public project answers the same keys with no expiry",
+  publishAnswer: "www src/app/api/cli/publish/route.ts before link and projectVisibility, private project 200 with expiresAt in epoch seconds; a public project answers no token, expiresAt or ttlHours",
+  publishAnswerWithLink: "www src/app/api/cli/publish/route.ts since 90907689d, the same keys plus link and projectVisibility",
   approvalRecord: "www src/app/api/cli/approvals/[approvalId]/route.ts, the record a verify reads",
 } as const;

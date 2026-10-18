@@ -16,7 +16,7 @@ export const CHANNEL_LINK_ADVICE =
   "On a public project, or a public channel, send testers the channel link: it always opens the channel's newest build and never expires. A build link opens one build, and on a private project it expires.";
 
 export const CHANNEL_LINK_WITHHELD =
-  "This project is private in its extension.dev project settings, so no channel link is offered: a channel link opens the channel's newest build for anyone who has it, and extension.dev shows a private project's builds only to its workspace members. Send testers the build link from extension_publish instead: it opens one build and expires on the date its answer gives.";
+  "This project is private in its extension.dev project settings, so no channel link is offered: a channel link opens the channel's newest build for anyone who has it, and extension.dev shows a private project's builds only to its workspace members. Send testers the build link from extension_publish instead: it opens one build and expires on the date its answer gives. For a channel link that never expires, a workspace owner or admin makes the project public in the console Settings, Visibility section, or, once it ships, makes one channel public with the channel Audience control on the console Releases page.";
 
 const BROWSER_CHANNEL = new RegExp(`^(${REAL_BROWSERS.join("|")})-(.+)$`);
 

@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { writeCredentials } from "../lib/credentials";
 import { handler } from "../tools/publish";
-import { publishAnswer } from "./fixtures/platform-answers";
+import { PUBLISH_EXPIRES_AT_EPOCH, publishAnswer, publishAnswerWithLink } from "./fixtures/platform-answers";
 
 describe("extension_publish envelope compatibility", () => {
   let tmp: string;
@@ -130,8 +130,8 @@ describe("extension_publish envelope compatibility", () => {
     expect(bearers[1]).toBe("Bearer tok_stored");
   });
 
-  describe("share-link lifetime", () => {
-    async function publishWith(ttlHours: number, expiresAt: string) {
+  describe("build link lifetime", () => {
+    async function publishWith(ttlHours: number, expiresAt: number, answeredTtl: number) {
       process.env.EXTENSION_DEV_TOKEN = "tok_test";
       const bodies: Array<Record<string, unknown>> = [];
       const prevFetch = global.fetch;
@@ -139,7 +139,7 @@ describe("extension_publish envelope compatibility", () => {
         if (String(url).endsWith("/api/cli/publish")) {
           bodies.push(JSON.parse(String(init?.body ?? "{}")));
 
-          return new Response(JSON.stringify(publishAnswer({ expiresAt })), {
+          return new Response(JSON.stringify(publishAnswer({ expiresAt, ttlHours: answeredTtl })), {
             status: 200,
             headers: { "content-type": "application/json" },
           });
@@ -156,23 +156,145 @@ describe("extension_publish envelope compatibility", () => {
     }
 
     it.each([
-      ["720 hours, a free plan's 30-day window", 720, "2026-11-04T12:00:00.000Z"],
-      ["8760 hours, a Pro plan's 365-day window", 8760, "2027-10-05T12:00:00.000Z"],
-      ["8760 hours on a free plan, which the platform cuts to 30 days", 8760, "2026-11-04T12:00:00.000Z"],
-    ])("sends %s and reports the expiry the platform answers", async (_name, ttlHours, expiresAt) => {
-      const { out, bodies } = await publishWith(ttlHours, expiresAt);
+      ["720 hours, a free plan's 30-day window", 720, 1793793600, 720, "2026-11-04T12:00:00.000Z", false],
+      ["8760 hours, a Pro plan's 365-day window", 8760, 1822737600, 8760, "2027-10-05T12:00:00.000Z", false],
+      ["8760 hours on a free plan, which the platform cuts to 30 days", 8760, 1793793600, 720, "2026-11-04T12:00:00.000Z", true],
+    ])("sends %s and reports the expiry the platform answers as an ISO date", async (_name, ttlHours, epoch, answeredTtl, iso, clamped) => {
+      const { out, bodies } = await publishWith(ttlHours, epoch, answeredTtl);
 
       expect(out.ok).toBe(true);
       expect(bodies).toEqual([{ ttlHours }]);
-      expect(JSON.stringify(out)).toContain(expiresAt);
+      expect(out.value.expiresAt).toBe(iso);
+      expect(out.value.expiresAtEpoch).toBe(epoch);
+      expect(out.value.link.expiresAt).toBe(iso);
+      expect(out.value.ttlHoursRequested).toBe(ttlHours);
+      expect(out.value.ttlHours).toBe(answeredTtl);
+      expect(out.value.clamped).toBe(clamped);
     });
 
     it("refuses a lifetime past a year before sending anything", async () => {
-      const { out, bodies } = await publishWith(8761, "2027-10-05T12:00:00.000Z");
+      const { out, bodies } = await publishWith(8761, 1822737600, 8760);
 
       expect(out.error.code).toBe("E_BAD_REQUEST");
       expect(out.error.message).toContain("8760");
       expect(bodies).toHaveLength(0);
+    });
+  });
+
+  describe("the link to send and the sentence to say with it", () => {
+    const API = "https://www.extension.dev";
+    const ISO = new Date(PUBLISH_EXPIRES_AT_EPOCH * 1000).toISOString();
+
+    async function publishAgainst(answer: Record<string, unknown>, channels: Record<string, unknown> = {}, args: Record<string, unknown> = {}) {
+      process.env.EXTENSION_DEV_TOKEN = `${Buffer.from(
+        JSON.stringify({ u: "acme", p: "widget", exp: Math.floor(Date.now() / 1000) + 600 }),
+      ).toString("base64url")}.sig`;
+
+      const prevFetch = global.fetch;
+      global.fetch = (async (url: string) => {
+        const href = String(url);
+        const json = (body: unknown) =>
+          new Response(JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
+
+        if (href.endsWith("/api/cli/publish")) return json(answer);
+        if (href.endsWith("/channels.json")) return json(channels);
+        if (href.endsWith("/builds/index.json")) return json({ items: [] });
+
+        return new Response("{}", { status: 404, headers: { "content-type": "application/json" } });
+      }) as unknown as typeof fetch;
+
+      try {
+        return JSON.parse(await handler({ api: API, ...args }));
+      } finally {
+        global.fetch = prevFetch;
+      }
+    }
+
+    it.each([
+      ["an older platform that answers epoch seconds and no link", publishAnswer()],
+      ["a platform that answers link and projectVisibility", publishAnswerWithLink()],
+    ])("a private project from %s gets a build link with an ISO expiry and a way to renew it", async (_name, answer) => {
+      const out = await publishAgainst(answer);
+
+      expect(out.status).toBe("published");
+      expect(out.value.link).toMatchObject({
+        kind: "build",
+        url: "https://acme.extension.dev/widget/builds/abc1234?share=tok_share",
+        expiresAt: ISO,
+        pointsAt: "this build",
+        audience: "anyone with the link",
+        renewBy: { tool: "extension_publish", args: { buildSha: "abc1234", ttlHours: 168 } },
+      });
+
+      expect(out.value.expiresAt).toBe(ISO);
+      expect(out.value.expiresAtEpoch).toBe(PUBLISH_EXPIRES_AT_EPOCH);
+      expect(out.value.links.map((l: { kind: string }) => l.kind)).toEqual(["build"]);
+      expect(out.value.projectVisibility).toMatchObject({ value: "private", source: "extension.dev project settings" });
+      expect(JSON.stringify(out.value.projectVisibility.makeEvergreen)).toMatch(/console/);
+      expect(JSON.stringify(out.value.projectVisibility.makeEvergreen)).toMatch(/settings\/visibility/);
+      expect(JSON.stringify(out.value.projectVisibility.makeEvergreen)).not.toMatch(/repositor/i);
+      expect(out.value.tellThem).toBe(
+        "Here is the build link for version 1.2.0. Anyone who has it can open it until October 6, 2026 at 12:00 UTC, and it always shows this build.",
+      );
+
+      expect(out.value.tellThem).not.toMatch(/repo/i);
+      expect(out.hint).toContain(out.value.tellThem);
+    });
+
+    it("a public project with no channel serving the build gets a build link that never expires", async () => {
+      const answer = publishAnswer({ visibility: "public", shareUrl: "https://acme.extension.dev/widget/builds/abc1234", token: undefined, expiresAt: undefined, ttlHours: undefined });
+      const out = await publishAgainst(answer, { beta: { sha: "bead5ee" } });
+
+      expect(out.value.link).toMatchObject({ kind: "build", expiresAt: null, pointsAt: "this build" });
+      expect(out.value.link.renewBy ?? null).toBeNull();
+      expect(out.value.expiresAt).toBeNull();
+      expect(out.value.projectVisibility).toMatchObject({ value: "public", source: "extension.dev project settings" });
+      expect(out.value.projectVisibility.makeEvergreen ?? null).toBeNull();
+      expect(out.value.tellThem).toBe("Here is the build link for version 1.2.0. Anyone who has it can open it, and it always shows this build.");
+    });
+
+    it.each([
+      ["an older platform", publishAnswer({ visibility: "public", shareUrl: "https://acme.extension.dev/widget/builds/abc1234", token: undefined, expiresAt: undefined, ttlHours: undefined })],
+      ["a platform that answers link", publishAnswerWithLink({ visibility: "public", shareUrl: "https://acme.extension.dev/widget/builds/abc1234", token: undefined, expiresAt: undefined, ttlHours: undefined })],
+    ])("a public project whose build a channel serves gets both kinds from %s and is told to send the channel link", async (_name, answer) => {
+      const out = await publishAgainst(answer, { "chrome-stable": { sha: "abc1234" } });
+
+      expect(out.value.links).toEqual([
+        expect.objectContaining({ kind: "build", url: "https://acme.extension.dev/widget/builds/abc1234", expiresAt: null }),
+        expect.objectContaining({ kind: "channel", url: "https://acme.extension.dev/widget/channels/stable", expiresAt: null, pointsAt: "latest in stable" }),
+      ]);
+
+      expect(out.value.tellThem).toBe("Here is the channel link. It always opens the newest stable build.");
+      expect(out.hint).toContain(out.value.tellThem);
+    });
+
+    it("an older public answer with a serving channel synthesizes a channel link", async () => {
+      const answer = publishAnswer({ visibility: "public", shareUrl: "https://acme.extension.dev/widget/builds/abc1234", token: undefined, expiresAt: undefined, ttlHours: undefined });
+      const out = await publishAgainst(answer, { "chrome-stable": { sha: "abc1234" } });
+
+      expect(out.value.link).toMatchObject({ kind: "channel", url: "https://acme.extension.dev/widget/channels/stable", expiresAt: null, audience: "public" });
+    });
+
+    it("a private project with no build to link answers the platform's refusal with the next step", async () => {
+      process.env.EXTENSION_DEV_TOKEN = "tok_test";
+      const prevFetch = global.fetch;
+      global.fetch = (async () =>
+        new Response(JSON.stringify({ message: "This private project has no completed build to link yet, and a share link opens one build.", code: "NO_BUILD_TO_SHARE" }), {
+          status: 409,
+          headers: { "content-type": "application/json" },
+        })) as unknown as typeof fetch;
+
+      try {
+        const out = JSON.parse(await handler({ api: API }));
+
+        expect(out.ok).toBe(false);
+        expect(out.status).toBe("no-build-to-share");
+        expect(out.error.platformCode).toBe("NO_BUILD_TO_SHARE");
+        expect(out.hint).toMatch(/build link/);
+        expect(out.hint).toMatch(/extension_builds/);
+      } finally {
+        global.fetch = prevFetch;
+      }
     });
   });
 });
