@@ -306,6 +306,7 @@ export interface ChannelEntry {
   version?: string;
   promotedAt?: string;
   description?: string;
+  audience?: "public" | "private";
 }
 
 export function parseChannels(json: unknown): ChannelEntry[] {
@@ -329,6 +330,7 @@ export function parseChannels(json: unknown): ChannelEntry[] {
     };
     if (row.buildId) entry.buildId = String(row.buildId);
     if (row.version) entry.version = String(row.version);
+    if (row.audience === "public" || row.audience === "private") entry.audience = row.audience;
 
     const promotedAt = promotedAtField || fromDescription;
     if (promotedAt) entry.promotedAt = promotedAt;

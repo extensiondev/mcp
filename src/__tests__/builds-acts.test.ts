@@ -389,4 +389,72 @@ describe("extension_builds starts a rebuild, changes build settings with an appr
     expect(out.error.code).toBe("E_BAD_REQUEST");
     expect(calls).toHaveLength(0);
   });
+
+  it("create-channel passes the audience asked for and reports the one the platform gave", async () => {
+    if (process.platform === "win32") return;
+
+    login();
+    routes[`POST ${CHANNELS_ROUTE}`] = () => ({
+      body: { id: "beta", name: "beta", description: "", color: "#22c55e", createdAt: "2026-10-18T18:00:00.000Z", audience: "public" },
+    });
+
+    routes[`GET ${CHANNELS_ROUTE}`] = () => ({ body: [{ id: "beta", name: "beta", audience: "public" }] });
+
+    const out = JSON.parse(await builds({ action: "create-channel", channel: "beta", audience: "public", api: API } as never));
+    const post = calls.find((call) => call.method === "POST");
+
+    expect(post?.body).toEqual({ name: "beta", audience: "public" });
+    expect(out.value.channel.audience).toBe("public");
+    expect(out.warnings).toEqual([]);
+  });
+
+  it("create-channel says so when the platform gave the channel another audience than the one asked for", async () => {
+    if (process.platform === "win32") return;
+
+    login();
+    routes[`POST ${CHANNELS_ROUTE}`] = () => ({
+      body: { id: "beta", name: "beta", description: "", color: "#22c55e", createdAt: "2026-10-18T18:00:00.000Z", audience: "private" },
+    });
+
+    routes[`GET ${CHANNELS_ROUTE}`] = () => ({ body: [{ id: "beta", name: "beta", audience: "private" }] });
+
+    const out = JSON.parse(await builds({ action: "create-channel", channel: "beta", audience: "public", api: API } as never));
+
+    expect(out.ok).toBe(true);
+    expect(out.status).toBe("created");
+    expect(out.warnings.join(" ")).toMatch(/private, not public/);
+    expect(out.warnings.join(" ")).toMatch(/Audience control on the console Releases page/);
+  });
+
+  it("create-channel leaves the audience to the project's visibility when none is asked for", async () => {
+    if (process.platform === "win32") return;
+
+    login();
+    routes[`POST ${CHANNELS_ROUTE}`] = () => ({ body: { id: "beta", name: "beta", audience: "private" } });
+    routes[`GET ${CHANNELS_ROUTE}`] = () => ({ body: [{ id: "beta", name: "beta", audience: "private" }] });
+
+    const out = JSON.parse(await builds({ action: "create-channel", channel: "beta", api: API }));
+    const post = calls.find((call) => call.method === "POST");
+
+    expect(post?.body).toEqual({ name: "beta" });
+    expect(out.warnings).toEqual([]);
+  });
+
+  it("create-channel refuses an audience other than public or private before any request", async () => {
+    login();
+
+    const out = JSON.parse(await builds({ action: "create-channel", channel: "beta", audience: "secret", api: API } as never));
+
+    expect(out.ok).toBe(false);
+    expect(out.error.code).toBe("E_BAD_REQUEST");
+    expect(out.error.message).toMatch(/public or private/);
+    expect(calls).toHaveLength(0);
+  });
+
+  it("names audience in the schema with the two values and the project's visibility as the default", () => {
+    const audience = (schema.inputSchema.properties as Record<string, any>).audience;
+
+    expect(audience.enum).toEqual(["public", "private"]);
+    expect(audience.description).toMatch(/project's visibility/);
+  });
 });

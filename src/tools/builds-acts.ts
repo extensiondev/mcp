@@ -50,6 +50,7 @@ export interface ActArgs {
   channel?: string;
   description?: string;
   color?: string;
+  audience?: string;
   project?: string;
   api?: string;
 }
@@ -329,6 +330,12 @@ export async function createChannel(args: ActArgs): Promise<string> {
   const name = text(args.channel);
   if (!name) return badRequest("create-channel", "ChannelInputError", "create-channel needs channel, the new channel's name. Nothing was created.");
 
+  const audience = text(args.audience).toLowerCase();
+
+  if (audience && audience !== "public" && audience !== "private") {
+    return badRequest("create-channel", "ChannelInputError", `audience must be public or private, not ${text(args.audience)}. Nothing was created.`, { channel: name });
+  }
+
   const opened = await openFor(args, "create-channel", { channel: name });
   if ("refused" in opened) return opened.refused;
 
@@ -336,6 +343,7 @@ export async function createChannel(args: ActArgs): Promise<string> {
   const body: Row = { name };
   if (text(args.description)) body.description = text(args.description);
   if (text(args.color)) body.color = text(args.color);
+  if (audience) body.audience = audience;
 
   const sent = await projectApiSend<Row>(api, "POST", "channels", body);
   const exists = !sent.ok && sent.status === 409;
@@ -344,6 +352,11 @@ export async function createChannel(args: ActArgs): Promise<string> {
   const list = await projectApiGet<unknown[]>(api, "channels");
   const channels = list.ok && Array.isArray(list.json) ? list.json.filter(isRow) : [];
   const promote = `extension_release_promote (channel: "${name}", buildId: <a build>)`;
+  const given = sent.ok && isRow(sent.json) ? text(sent.json.audience).toLowerCase() : "";
+  const audienceNote =
+    audience && !exists && given && given !== audience
+      ? `The platform created ${name} as ${given}, not ${audience}: it sets a new channel's audience from the project's visibility and does not take audience at creation yet. A workspace owner or admin changes it with the channel Audience control on the console Releases page, which this server cannot call.`
+      : null;
 
   return envelope({
     ok: true,
@@ -358,6 +371,6 @@ export async function createChannel(args: ActArgs): Promise<string> {
     hint: exists
       ? `${name} already exists, so nothing was created. Point it at a build with ${promote}.`
       : `${name} is a new release channel with no build yet. Point it at a build with ${promote}.`,
-    warnings: [list.ok ? null : `The channel list could not be read (${list.message}).`],
+    warnings: [list.ok ? null : `The channel list could not be read (${list.message}).`, audienceNote],
   });
 }

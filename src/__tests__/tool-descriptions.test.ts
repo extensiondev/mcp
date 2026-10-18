@@ -43,6 +43,7 @@ const ACRONYMS_ARE_NAMES_NOT_EMPHASIS = new Set([
   "DOM",
   "EXTENSION_DEV_TOKEN",
   "HTML",
+  "ISO",
   "MB",
   "MV2",
   "MV3",
