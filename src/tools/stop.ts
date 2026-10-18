@@ -185,10 +185,14 @@ function commandLineOf(
   }
 }
 
-function namesAnotherBrowser(commandLine: string | null, browser: string): boolean {
-  const named = commandLine?.match(/--browser[= ]([^\s"']+)/);
+const ENGINE_DEFAULT_BROWSER = "chrome";
 
-  return Boolean(named && named[1] !== browser);
+function namesAnotherBrowser(commandLine: string | null, browser: string): boolean {
+  if (commandLine === null) return false;
+
+  const named = commandLine.match(/--browser[= ]([^\s"']+)/);
+
+  return (named ? named[1] : ENGINE_DEFAULT_BROWSER) !== browser;
 }
 
 function sessionProcessPids(
