@@ -26,7 +26,7 @@ const CHANNELS = {
   "firefox-stable": { sha: "abc1234" },
   beta: { sha: "bead5ee" },
 };
-const SENTENCE = "send testers the channel link so they always get the newest build; the build page link pins one build";
+const SENTENCE = "on a public project, or a public channel, send testers the channel link";
 
 const saved: Record<string, string | undefined> = {};
 let tmp: string;

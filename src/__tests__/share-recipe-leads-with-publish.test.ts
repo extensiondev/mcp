@@ -51,4 +51,23 @@ describe("the shipped Claude commands send a share ask to extension.dev first", 
     expect(command).toMatch(/`npm run dev` \(or `npx extension dev`\) yourself/);
     expect(rules).not.toMatch(/`npm run dev` without it/);
   });
+
+  it.each(["claude/commands/extension.md", "claude/commands/extension-publish.md", "claude/CLAUDE.md"])(
+    "%s names the build link and the channel link and never calls a link a public page",
+    (rel) => {
+      const doc = read(rel);
+
+      expect(doc).toContain("build link");
+      expect(doc).toContain("channel link");
+      expect(doc).not.toMatch(/public (build[- ])?page/i);
+    },
+  );
+
+  it("the share action says a private project's build link expires and where visibility is set", () => {
+    const doc = read("claude/commands/extension.md");
+
+    expect(doc).toMatch(/On a public project, or a public channel, send/);
+    expect(doc).toContain("extension.dev project settings");
+    expect(doc).not.toMatch(/visibility[^.]*repositor/i);
+  });
 });

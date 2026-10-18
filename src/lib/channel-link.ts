@@ -13,10 +13,10 @@ import { mcpOrigins } from "./origins";
 import { fetchRegistryJson, parseChannels, registryFileUrl, type ChannelEntry, type ProjectRef } from "./registry";
 
 export const CHANNEL_LINK_ADVICE =
-  "Send testers the channel link so they always get the newest build; the build page link pins one build.";
+  "On a public project, or a public channel, send testers the channel link: it always opens the channel's newest build and never expires. A build link opens one build, and on a private project it expires.";
 
 export const CHANNEL_LINK_WITHHELD =
-  "This project is private, so no channel link is offered: the channel page follows the newest build for anyone who opens it, and extension.dev shows a private project's builds only to its workspace members. Send testers the time-limited share link from extension_publish instead.";
+  "This project is private in its extension.dev project settings, so no channel link is offered: a channel link opens the channel's newest build for anyone who has it, and extension.dev shows a private project's builds only to its workspace members. Send testers the build link from extension_publish instead: it opens one build and expires on the date its answer gives.";
 
 const BROWSER_CHANNEL = new RegExp(`^(${REAL_BROWSERS.join("|")})-(.+)$`);
 
@@ -47,7 +47,7 @@ export function channelUrl(
 }
 
 const VISIBILITY_UNREAD =
-  "The project's visibility could not be read, so no channel link is offered: a channel link is for public projects only, since extension.dev shows a private project's builds only to its workspace members. For a private project, send testers the time-limited share link from extension_publish.";
+  "The project's visibility in its extension.dev project settings could not be read, so no channel link is offered: a channel link opens for anyone only on a public project or a public channel, since extension.dev shows a private project's builds only to its workspace members. Send testers the build link from extension_publish, which opens one build and, on a private project, expires.";
 
 export function channelLinkFields(
   ref: ProjectRef | null,

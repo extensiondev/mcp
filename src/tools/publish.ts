@@ -25,7 +25,7 @@ import {
 export const schema = {
   name: "extension_publish",
   description:
-    "Publish a build of the project your stored token is scoped to (extension_auth, or EXTENSION_DEV_TOKEN) on extension.dev, and return the link to send testers: the build's public page, with a download and a run command for each browser. Reach for this first whenever the ask is to share, publish, deploy, distribute, release or ship an extension, or to send it to testers; extension_submit is the separate store-review path, and extension_preview_web share:true is a quick emulator link beside this one. An extension with no project on extension.dev yet starts with extension_project_create, which makes one from its GitHub repository, then extension_auth. The target is the token's project: there is no projectPath, and no local file is uploaded. With several logins stored, pass `project` ('<workspace>/<project>') to pick which one; it outranks EXTENSION_DEV_TOKEN. Pass buildSha (extension_builds lists them) for that build's own page, <workspace>.extension.dev/<project>/builds/<sha>; without it the link is the project's page. For a public project the URL is the canonical public page and ttlHours does not apply. For a private one it is a fresh time-limited share link (?share=) whose lifetime is ttlHours: 7 days by default, and up to the plan's share window (30 days free, 365 Pro) when asked. For a public project whose build a release channel serves, value.channelUrl is that channel's link (<workspace>.extension.dev/<project>/channels/<channel>), which always resolves to the channel's current build. Send testers the channel link so they always get the newest build; the build page link pins one build. A private project gets no channel link: value.channelUrlWithheld says why.",
+    "Publish a build of the project your stored token is scoped to (extension_auth, or EXTENSION_DEV_TOKEN) on extension.dev, and return the link to send testers, which opens a page with a download and a run command for each browser. Reach for this first whenever the ask is to share, publish, deploy, distribute, release or ship an extension, or to send it to testers; extension_submit is the separate store-review path, and extension_preview_web share:true is a quick emulator link beside this one. An extension with no project on extension.dev yet starts with extension_project_create, which makes one from its GitHub repository, then extension_auth. The target is the token's project: there is no projectPath, and no local file is uploaded. With several logins stored, pass `project` ('<workspace>/<project>') to pick which one; it outranks EXTENSION_DEV_TOKEN. There are two links. A build link opens one build, <workspace>.extension.dev/<project>/builds/<sha> (pass buildSha, which extension_builds lists, or the newest successful build is linked); on a private project it carries a share token and expires, its lifetime ttlHours: 7 days by default, and up to the plan's share window (30 days free, 365 Pro) when asked. A channel link, <workspace>.extension.dev/<project>/channels/<channel>, always opens a channel's newest build and never expires; a public project gets one in value.channelUrl when a release channel serves the build, and later a public channel of a private project will too. On a public project, or a public channel, send testers the channel link; otherwise send the build link and tell them the date it stops working. A private project gets no channel link: value.channelUrlWithheld says why. A project's visibility is set in its extension.dev project settings, not its GitHub repository.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -33,7 +33,7 @@ export const schema = {
       ttlHours: {
         type: "number",
         description:
-          "Private-project share-link lifetime in hours. Defaults to 7 days; ask for up to the plan's share window (30 days free, 365 Pro), up to 8760 here, and the platform cuts a longer ask back to the window. Ignored for public projects.",
+          "Private-project build link lifetime in hours. Defaults to 7 days; ask for up to the plan's share window (30 days free, 365 Pro), up to 8760 here, and the platform cuts a longer ask back to the window. Ignored for public projects.",
       },
       buildSha: {
         type: "string",
@@ -200,7 +200,7 @@ export async function handler(args: {
 
   if (args.ttlHours != null && data.visibility === "public") {
     note =
-      "ttlHours was ignored: this is a public project, whose share URL is its canonical public page.";
+      "ttlHours was ignored: this is a public project, so its build link never expires.";
   }
 
   let buildNote: string | null = null;

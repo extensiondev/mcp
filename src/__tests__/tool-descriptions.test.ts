@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { tools as ALL_TOOLS } from "../index";
+import { serverInstructions, tools as ALL_TOOLS } from "../index";
 
 const IMPERATIVE_VERBS = [
   "Analyze",
@@ -177,5 +177,43 @@ describe("the share and store tools describe what a person gets, so the agent le
     expect(description).toContain("Submissions default to the least public outcome each store's API offers, unless the project's store settings say otherwise.");
     expect(description).toMatch(/Chrome and Edge upload a draft that is not published and does not enter review/);
     expect(description).toMatch(/recorded as "Uploaded, not public", never as live/);
+  });
+});
+
+describe("the link tools speak of a build link and a channel link, so an agent can name what it sends", () => {
+  const description = (name: string) => ALL_TOOLS.find((t) => t.schema.name === name)?.schema.description ?? "";
+  const instructions = serverInstructions({ features: ["local", "platform"], noShip: false });
+
+  it.each([
+    ["extension_publish", description("extension_publish")],
+    ["extension_release_promote", description("extension_release_promote")],
+    ["extension_release_status", description("extension_release_status")],
+    ["extension_shares", description("extension_shares")],
+    ["the server instructions", instructions],
+  ])("%s names both nouns", (_where, text) => {
+    expect(text).toContain("build link");
+    expect(text).toContain("channel link");
+  });
+
+  it.each([
+    ["extension_publish", description("extension_publish")],
+    ["extension_release_promote", description("extension_release_promote")],
+    ["extension_release_status", description("extension_release_status")],
+    ["the server instructions", instructions],
+  ])("%s makes the channel link advice conditional on a public project or channel", (_where, text) => {
+    expect(text).toMatch(/On a public project, or a public channel, send/i);
+    expect(text).not.toMatch(/(^|[.;:] )Send testers the channel link/);
+  });
+
+  it("no description and no server instruction calls a link a public page", () => {
+    const texts = [
+      ...ALL_TOOLS.map((tool) => [tool.schema.name, JSON.stringify(tool.schema)] as const),
+      ["platform instructions", instructions] as const,
+      ["local instructions", serverInstructions({ features: ["local"], noShip: false })] as const,
+    ];
+
+    for (const [where, text] of texts) {
+      expect(text, where).not.toMatch(/public (build[- ])?page/i);
+    }
   });
 });

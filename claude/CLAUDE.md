@@ -139,6 +139,13 @@ else needs calling; `extension_wait` is only for a session started with
 `extension_analyze` (sizes, entry points, store checks) instead of listing
 the output folder by hand.
 
+To share a build with people, `extension_publish` answers a build link or a
+channel link. A build link opens one build and, on a private project, expires
+on the date the answer gives. A channel link always opens a channel's newest
+build and never expires. On a public project, or a public channel, send the
+channel link. A project's visibility is set in its extension.dev project
+settings, not its GitHub repository.
+
 ## extension.config.js
 
 ```javascript
