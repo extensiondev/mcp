@@ -135,6 +135,15 @@ export function chromiumManifestVersion(
   return null;
 }
 
+export function declaredBackgroundTargetType(
+  projectPath: string,
+  browser: string,
+): "service_worker" | "background_page" | null {
+  const version = chromiumManifestVersion(projectPath, browser);
+
+  return version === 3 ? "service_worker" : version === 2 ? "background_page" : null;
+}
+
 export function geckoManifestVersion(
   projectPath: string,
   browser: string,
@@ -231,12 +240,20 @@ async function evaluateOnChromiumExtensionPage(
     const workersRead = await readExtensionWorkerTargets(resolved.port, extensionId);
     if ("unreadable" in workersRead) return targetsUnreadable(workersRead.unreadable);
 
-    let workers = workersRead.targets.filter((t) => BACKGROUND_TARGET_TYPES.has(t.type));
-    const wakeWarnings: string[] = [];
+    const declaredType = declaredBackgroundTargetType(args.projectPath, browser);
+    const backgroundTargets = <T extends { type: string }>(targets: T[]): T[] =>
+      targets.filter((t) => BACKGROUND_TARGET_TYPES.has(t.type) && (declaredType === null || t.type === declaredType));
+    let workers = backgroundTargets(workersRead.targets);
+    const offscreenDocuments =
+      declaredType === "service_worker" ? workersRead.targets.filter((t) => t.type === "background_page") : [];
+    const wakeWarnings: string[] = offscreenDocuments.map(
+      (doc) =>
+        `An offscreen document is also open at ${doc.url}. It is not the background: it lacks chrome.storage and most extension APIs, so it was not evaluated in. To evaluate in it, pass context: "page", url: "${doc.url}".`,
+    );
 
     if (workers.length === 0) {
       const wake = await wakeExtensionWorker(resolved.port, extensionId);
-      const woken = wake.woken ? wake.targets.filter((t) => BACKGROUND_TARGET_TYPES.has(t.type)) : [];
+      const woken = wake.woken ? backgroundTargets(wake.targets) : [];
 
       if (wake.woken && woken.length > 0) {
         workers = woken;
@@ -251,8 +268,9 @@ async function evaluateOnChromiumExtensionPage(
           error: {
             code: "E_NO_TARGET",
             name: "NoTarget",
-            message: `No running background for chrome-extension://${extensionId}/: Chrome stops an idle MV3 service worker and lists no target for it, and starting it through ServiceWorker.startWorker did not bring one back: ${wake.woken ? "only dedicated workers were listed, which are not the background" : wake.reason}.`,
+            message: `No running background for chrome-extension://${extensionId}/: Chrome stops an idle MV3 service worker and lists no target for it, and starting it through ServiceWorker.startWorker did not bring one back: ${wake.woken ? "no service worker was listed, only targets that are not the background" : wake.reason}.`,
           },
+          warnings: wakeWarnings,
           hint: "Check the extension declares a background (extension_manifest_validate), then wake it with an event it listens to (extension_reload, open a surface with extension_open, navigate a matching tab) and retry. extension_logs (context: ['background']) holds what it wrote before it idled.",
         });
       }
