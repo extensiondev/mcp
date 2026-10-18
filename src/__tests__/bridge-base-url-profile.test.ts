@@ -23,6 +23,7 @@ vi.mock("../lib/act", async (importOriginal) => {
 });
 
 const bridge = await import("../lib/bridge-tabs");
+const geckoAddon = await import("../lib/gecko-addon");
 
 const dirs: string[] = [];
 
@@ -71,7 +72,7 @@ describe("the moz-extension base is read off the profile when the background ref
       "moz-extension://a3086c53-36a0-4996-ba4b-4538e5aef853/",
     );
 
-    expect(bridge.geckoAddonId(dir, "firefox")).toBe("redux@example.org");
+    expect(geckoAddon.geckoAddonId(dir, "firefox")).toBe("redux@example.org");
   });
 
   it("prefers the relay's answer when the background does evaluate", async () => {

@@ -6,14 +6,11 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-import fs from "node:fs";
-import path from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 
 import { actFrameJson, runActVerb } from "./act";
 import { envelope } from "./envelope";
-import { readyContractPath } from "./session-paths";
-import { readBuiltManifest } from "./project-manifest";
+import { readGeckoBaseUrlFromProfile } from "./gecko-addon";
 
 export interface BridgeTab {
   tabId: number | null;
@@ -121,13 +118,28 @@ function tabListUnreadable(
   return polled !== null && "unreadable" in polled;
 }
 
+const LOADED_ELSEWHERE = /^(?:https?|moz-extension|chrome-extension|safari-web-extension):\/\//;
+
+function landedElsewhere(tab: BridgeTab, wanted: string): boolean {
+  return tab.url !== wanted && LOADED_ELSEWHERE.test(tab.url);
+}
+
+function carriesRequestedUrl(tab: BridgeTab, wanted: string): boolean {
+  return tab.url.includes(wanted) || tab.url.includes(encodeURIComponent(wanted));
+}
+
 async function pollForBridgeTabById(
   projectPath: string,
   browser: string,
   url: string,
   tabId: number | null,
   budgetMs: number,
-): Promise<{ tab: BridgeTab | null; seen: BridgeTab | null; unreadable?: string }> {
+): Promise<{
+  tab: BridgeTab | null;
+  seen: BridgeTab | null;
+  redirected?: boolean;
+  unreadable?: string;
+}> {
   const deadline = Date.now() + budgetMs;
   const wanted = url.replace(/#.*$/, "");
   let seen: BridgeTab | null = null;
@@ -144,13 +156,23 @@ async function pollForBridgeTabById(
 
       for (const t of candidates) {
         if (t.url === wanted || t.url.startsWith(wanted)) return { tab: t, seen: t };
-        if (tabId != null) seen = t;
+        if (tabId == null) continue;
+
+        seen = t;
+
+        if (landedElsewhere(t, wanted) && carriesRequestedUrl(t, wanted)) {
+          return { tab: t, seen: t, redirected: true };
+        }
       }
     } else {
       lastError = listed.error;
     }
 
     if (Date.now() >= deadline) {
+      if (seen && landedElsewhere(seen, wanted)) {
+        return { tab: seen, seen, redirected: true };
+      }
+
       return {
         tab: null,
         seen,
@@ -221,7 +243,13 @@ export async function navigateToUrlViaBridge(
         ? verbFrame.value
         : {};
     const tabId = typeof value.tabId === "number" ? value.tabId : null;
-    const landed = await pollForBridgeTabById(projectPath, browser, url, tabId, 3000);
+    const landed = await pollForBridgeTabById(
+      projectPath,
+      browser,
+      url,
+      tabId,
+      timeout != null ? Math.min(timeout, 3000) : 3000,
+    );
 
     if (!landed.tab) {
       return envelope({
@@ -246,6 +274,8 @@ export async function navigateToUrlViaBridge(
       });
     }
 
+    const shows = `${landed.tab.url}${landed.tab.title ? ` ("${landed.tab.title}")` : ""}`;
+
     return envelope({
       ok: true,
       command: tool,
@@ -255,9 +285,12 @@ export async function navigateToUrlViaBridge(
         tabId: landed.tab.tabId ?? tabId,
         created: value.created === true,
         via: "navigate",
+        ...(landed.redirected ? { redirected: { from: url, to: landed.tab.url } } : {}),
         tab: landed.tab,
       },
-      hint: `The tab reports ${landed.tab.url}${landed.tab.title ? ` ("${landed.tab.title}")` : ""}. Whether the page loaded or shows the browser's error page is in that title; read it with extension_inspect (url) to be sure. Content scripts that match it run on load; read them with extension_eval (context: 'content', url) or extension_assert content-script-injected.`,
+      hint: landed.redirected
+        ? `The tab landed on ${shows}, not on ${url}: the extension (a declarativeNetRequest redirect rule or a webRequest listener) or the server redirected it there, and that page is what loaded. Read it with extension_inspect (url) or extension_dom_snapshot; content scripts that match the final url run on load.`
+        : `The tab reports ${shows}. Whether the page loaded or shows the browser's error page is in that title; read it with extension_inspect (url) to be sure. Content scripts that match it run on load; read them with extension_eval (context: 'content', url) or extension_assert content-script-injected.`,
     });
   }
 
@@ -359,64 +392,6 @@ async function navigateToUrlViaBackgroundEval(
     },
     hint: "Inspect it with extension_dom_snapshot or extension_eval using url or this numeric tab id (context: 'page'/'content').",
   });
-}
-
-const UUIDS_PREF = /user_pref\("extensions\.webextensions\.uuids",\s*"((?:[^"\\]|\\.)*)"\)/;
-
-export function geckoAddonId(projectPath: string, browser: string): string | null {
-  const read = readBuiltManifest(projectPath, browser);
-  const manifest = read?.manifest as Record<string, any> | undefined;
-  const settings =
-    manifest?.browser_specific_settings ??
-    manifest?.["firefox:browser_specific_settings"] ??
-    manifest?.["gecko:browser_specific_settings"] ??
-    manifest?.applications;
-  const id = settings?.gecko?.id;
-
-  return typeof id === "string" && id ? id : null;
-}
-
-export function sessionProfilePath(projectPath: string, browser: string): string | null {
-  try {
-    const contract = JSON.parse(
-      fs.readFileSync(readyContractPath(projectPath, browser), "utf8"),
-    ) as Record<string, unknown>;
-
-    return typeof contract.profilePath === "string" && contract.profilePath.trim()
-      ? contract.profilePath
-      : null;
-  } catch {
-    return null;
-  }
-}
-
-export function readGeckoBaseUrlFromProfile(
-  projectPath: string,
-  browser: string,
-): string | null {
-  const addonId = geckoAddonId(projectPath, browser);
-  const profile = sessionProfilePath(projectPath, browser);
-  if (!addonId || !profile) return null;
-
-  let prefs: string;
-
-  try {
-    prefs = fs.readFileSync(path.join(profile, "prefs.js"), "utf8");
-  } catch {
-    return null;
-  }
-
-  const match = UUIDS_PREF.exec(prefs);
-  if (!match) return null;
-
-  try {
-    const map = JSON.parse(JSON.parse(`"${match[1]}"`)) as Record<string, unknown>;
-    const uuid = map[addonId];
-
-    return typeof uuid === "string" && uuid ? `moz-extension://${uuid}/` : null;
-  } catch {
-    return null;
-  }
 }
 
 export async function resolveBridgeBaseUrl(

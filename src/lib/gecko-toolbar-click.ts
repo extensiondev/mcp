@@ -8,7 +8,8 @@
 
 import fs from "node:fs";
 
-import { geckoAddonId, resolveBridgeBaseUrl } from "./bridge-tabs";
+import { resolveBridgeBaseUrl } from "./bridge-tabs";
+import { geckoAddonId } from "./gecko-addon";
 import { resolveRdpPort } from "./cdp-port";
 import { envelope } from "./envelope";
 import { manifestCandidates } from "./project-manifest";

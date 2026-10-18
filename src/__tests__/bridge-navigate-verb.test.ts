@@ -58,6 +58,59 @@ describe("navigateToUrlViaBridge asks the engine's navigate verb first", () => {
     expect(parsed.error.message).toContain("about:blank");
   });
 
+  it("calls a tab that landed on the extension's own page, carrying the requested url, navigated by redirect", async () => {
+    const requested = "http://127.0.0.1:8765/media/letter.pdf";
+    const viewer = `moz-extension://6f1c2d3e-aaaa-bbbb-cccc-1234567890ab/pages/pdf.html#${requested}`;
+    reset(
+      { ok: true, command: "navigate", status: "ok", value: { tabId: 7, url: requested, created: false } },
+      actFrame("inspect", tabRows([{ id: 7, url: viewer, title: "PDF viewer" }])),
+    );
+
+    const parsed = JSON.parse(await navigateToUrlViaBridge("/p", "firefox", requested, 600));
+    expect(parsed.ok).toBe(true);
+    expect(parsed.status).toBe("navigated");
+    expect(parsed.value.redirected).toEqual({ from: requested, to: viewer });
+    expect(parsed.value.tab).toMatchObject({ tabId: 7, url: viewer, title: "PDF viewer" });
+    expect(parsed.value.navigated).toBe(requested);
+    expect(parsed.hint).toMatch(/redirect/i);
+    expect(parsed.hint).toContain(viewer);
+  });
+
+  it("calls a tab that landed on another web page navigated by redirect", async () => {
+    const requested = "http://127.0.0.1:8765/old";
+    const landed = "https://docs.test/new";
+    reset(
+      { ok: true, command: "navigate", status: "ok", value: { tabId: 7, url: requested, created: false } },
+      actFrame("inspect", tabRows([{ id: 7, url: landed, title: "New home" }])),
+      actFrame("inspect", tabRows([{ id: 7, url: landed, title: "New home" }])),
+      actFrame("inspect", tabRows([{ id: 7, url: landed, title: "New home" }])),
+    );
+
+    const parsed = JSON.parse(await navigateToUrlViaBridge("/p", "firefox", requested, 600));
+    expect(parsed.ok).toBe(true);
+    expect(parsed.status).toBe("navigated");
+    expect(parsed.value.redirected).toEqual({ from: requested, to: landed });
+    expect(parsed.value.tab.url).toBe(landed);
+    expect(parsed.hint).toMatch(/redirect/i);
+  });
+
+  it("keeps the navigation unconfirmed when the tab shows the browser's error page or no url", async () => {
+    for (const shown of ["about:neterror?e=dnsNotFound&u=http%3A//nothing.test/", ""]) {
+      reset(
+        { ok: true, command: "navigate", status: "ok", value: { tabId: 7, url: "http://nothing.test/", created: false } },
+        actFrame("inspect", tabRows([{ id: 7, url: shown, title: "Server Not Found" }])),
+        actFrame("inspect", tabRows([{ id: 7, url: shown, title: "Server Not Found" }])),
+        actFrame("inspect", tabRows([{ id: 7, url: shown, title: "Server Not Found" }])),
+      );
+
+      const parsed = JSON.parse(await navigateToUrlViaBridge("/p", "firefox", "http://nothing.test/", 600));
+      expect(parsed.ok).toBe(false);
+      expect(parsed.status).toBe("navigation-unconfirmed");
+      expect(parsed.error.code).toBe("E_NAVIGATE_FAILED");
+      expect(parsed.value.redirected).toBeUndefined();
+    }
+  });
+
   it("passes the verb's own refusal through, with a hint", async () => {
     reset({ ok: false, error: { code: "E_SESSION_NOT_FOUND", message: "No active control channel found for safari." } });
     const parsed = JSON.parse(await navigateToUrlViaBridge("/p", "safari", "https://a.test/"));
