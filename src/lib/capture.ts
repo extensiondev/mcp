@@ -153,23 +153,51 @@ export function screenshotsDir(projectPath: string, browser: string): string {
   return path.join(browserArtifactsDir(projectPath, browser), "screenshots");
 }
 
+export type ScreenshotPath = { ok: true; file: string } | { ok: false; message: string; hint: string };
+
+export const SCREENSHOT_PATH_RULES = "path must stay inside projectPath and name a .png file, or a folder with a trailing slash.";
+
+export function resolveScreenshotPath(projectPath: string, browser: string, context: string, wanted?: string): ScreenshotPath {
+  if (!wanted) return { ok: true, file: path.join(screenshotsDir(projectPath, browser), defaultName(context)) };
+
+  const root = path.resolve(projectPath);
+  const resolved = path.resolve(root, wanted);
+  const relative = path.relative(root, resolved);
+
+  if (relative.startsWith("..") || path.isAbsolute(relative)) {
+    return {
+      ok: false,
+      message: `path ${wanted} resolves to ${resolved}, which is not inside the project at ${root}. ${SCREENSHOT_PATH_RULES}`,
+      hint: "Pass a path relative to projectPath, such as shots/home.png or shots/, or omit it to write under dist/extension-js/<browser>/screenshots.",
+    };
+  }
+
+  const isDir = /[\\/]$/.test(wanted) || (fs.existsSync(resolved) && fs.statSync(resolved).isDirectory());
+  if (isDir) return { ok: true, file: path.join(resolved, defaultName(context)) };
+
+  if (path.extname(resolved).toLowerCase() !== ".png") {
+    return {
+      ok: false,
+      message: `path ${wanted} does not end in .png and is not an existing folder, so this tool will not write a .png image there. ${SCREENSHOT_PATH_RULES}`,
+      hint: `To write into a folder named ${wanted}, pass ${wanted.replace(/[\\/]*$/, "")}/ (trailing slash); to write a file, end its name in .png.`,
+    };
+  }
+
+  return { ok: true, file: resolved };
+}
+
 export function writeScreenshot(
   projectPath: string,
   browser: string,
   context: string,
   png: Buffer,
   wanted?: string,
-): string {
-  let file = path.join(screenshotsDir(projectPath, browser), defaultName(context));
+): ScreenshotPath {
+  const target = resolveScreenshotPath(projectPath, browser, context, wanted);
+  if (!target.ok) return target;
 
-  if (wanted) {
-    const resolved = path.resolve(projectPath, wanted);
-    const isDir = /[\\/]$/.test(wanted) || (fs.existsSync(resolved) && fs.statSync(resolved).isDirectory());
-    file = isDir ? path.join(resolved, defaultName(context)) : resolved;
-  }
+  fs.mkdirSync(path.dirname(target.file), { recursive: true });
+  fs.writeFileSync(target.file, png);
 
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.writeFileSync(file, png);
-
-  return file;
+  return target;
 }

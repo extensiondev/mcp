@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- `extension_screenshot` writes its image only inside the project and only as a `.png`. `path` is resolved against `projectPath` and refused with `E_BAD_REQUEST` (status `bad-request`) when it lands outside it, by an absolute path or a `../` escape, or when it names a file that does not end in `.png`, so `path: "src/manifest.json"` no longer overwrites the manifest with image bytes. A folder is named with a trailing slash (`shots/`) or by an existing directory and gets the timestamped default name; a name such as `shots` that is neither a `.png` nor an existing folder is refused with a hint naming `shots/`, where it used to write a file literally called `shots`. The check runs before the browser is asked for pixels, the default location is unchanged, and the `path` description states the rules.
+
 ## 10.14.0
 
 Built on Extension.js 4.1.33.

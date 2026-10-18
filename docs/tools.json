@@ -1542,7 +1542,7 @@
           "name": "path",
           "type": "string",
           "required": false,
-          "description": "Where to write the .png, a file or a folder, relative to projectPath. Defaults to dist/extension-js/<browser>/screenshots."
+          "description": "Where to write the image, relative to projectPath and inside it: a file name ending in .png (shots/home.png), or a folder with a trailing slash (shots/) that gets a timestamped .png. A path outside projectPath, or a file name that does not end in .png, is refused with E_BAD_REQUEST, so no other file is ever overwritten. Defaults to dist/extension-js/<browser>/screenshots."
         },
         {
           "name": "timeout",

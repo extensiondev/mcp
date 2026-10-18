@@ -30,6 +30,7 @@ import {
   captureCdpTarget,
   captureRdpTab,
   pngDimensions,
+  resolveScreenshotPath,
   writeScreenshot,
   type CaptureOutcome,
   type CaptureSize,
@@ -59,7 +60,11 @@ export const schema = {
       width: { type: "number", description: "Viewport width in CSS pixels (Chromium renders at it; Firefox crops to it)." },
       height: { type: "number", description: "Viewport height in CSS pixels (Chromium renders at it; Firefox crops to it)." },
       deviceScaleFactor: { type: "number", description: "Pixel ratio of the image, 0.5 to 4. Defaults to the browser's own on Chromium and 1 on Firefox." },
-      path: { type: "string", description: "Where to write the .png, a file or a folder, relative to projectPath. Defaults to dist/extension-js/<browser>/screenshots." },
+      path: {
+        type: "string",
+        description:
+          "Where to write the image, relative to projectPath and inside it: a file name ending in .png (shots/home.png), or a folder with a trailing slash (shots/) that gets a timestamped .png. A path outside projectPath, or a file name that does not end in .png, is refused with E_BAD_REQUEST, so no other file is ever overwritten. Defaults to dist/extension-js/<browser>/screenshots.",
+      },
       timeout: CALL_TIMEOUT,
     },
     required: ["projectPath"],
@@ -106,7 +111,10 @@ function captured(args: Args, browser: string, context: string, outcome: Capture
   const size = pngDimensions(outcome.png);
   if (!size) return refuse("capture-failed", "E_CAPTURE_FAILED", `The browser answered data for ${url} that is not a .png image.`);
 
-  const file = writeScreenshot(args.projectPath, browser, context, outcome.png, args.path);
+  const written = writeScreenshot(args.projectPath, browser, context, outcome.png, args.path);
+  if (!written.ok) return refuse("bad-request", "E_BAD_REQUEST", written.message, written.hint);
+
+  const file = written.file;
 
   return envelope({
     ok: true,
@@ -293,6 +301,10 @@ export async function handler(args: Args): Promise<string> {
   if (context !== "page" && !SURFACES.includes(context)) return refuse("bad-request", "E_BAD_REQUEST", `context must be page or one of ${SURFACES.join(", ")}.`);
 
   const { browser } = resolveSessionBrowser(args.projectPath, args.browser);
+
+  const target = resolveScreenshotPath(args.projectPath, browser, context, args.path);
+  if (!target.ok) return refuse("bad-request", "E_BAD_REQUEST", target.message, target.hint);
+
   const timeoutMs = args.timeout ?? DEFAULT_TIMEOUT_MS;
 
   if (WEBKIT_FAMILY.has(browser)) return onWebKit(args, browser, context, timeoutMs);

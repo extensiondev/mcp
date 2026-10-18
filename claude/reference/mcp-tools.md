@@ -360,7 +360,7 @@ Take a screenshot of one open extension surface (popup, options, sidebar, newtab
 | `width` | number | no |  | Viewport width in CSS pixels (Chromium renders at it; Firefox crops to it). |
 | `height` | number | no |  | Viewport height in CSS pixels (Chromium renders at it; Firefox crops to it). |
 | `deviceScaleFactor` | number | no |  | Pixel ratio of the image, 0.5 to 4. Defaults to the browser's own on Chromium and 1 on Firefox. |
-| `path` | string | no |  | Where to write the .png, a file or a folder, relative to projectPath. Defaults to dist/extension-js/<browser>/screenshots. |
+| `path` | string | no |  | Where to write the image, relative to projectPath and inside it: a file name ending in .png (shots/home.png), or a folder with a trailing slash (shots/) that gets a timestamped .png. A path outside projectPath, or a file name that does not end in .png, is refused with E_BAD_REQUEST, so no other file is ever overwritten. Defaults to dist/extension-js/<browser>/screenshots. |
 | `timeout` | number | no |  | Command timeout in ms. When omitted, the default depends on the route: 30000 through the dev session's control channel, 10000 over the Firefox debugger protocol, and 15000 per command over the Chromium debug port. |
 
 ## extension_shares
