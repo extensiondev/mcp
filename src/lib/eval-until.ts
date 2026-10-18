@@ -22,6 +22,7 @@ const MAX_TIMEOUT_MS = 50_000;
 const DEFAULT_INTERVAL_MS = 500;
 const MIN_INTERVAL_MS = 100;
 const MAX_INTERVAL_MS = 10_000;
+const MIN_POLL_TIMEOUT_MS = 300;
 
 export const EVAL_UNTIL_PROPERTY = {
   type: "object",
@@ -79,9 +80,15 @@ function resultOf(frame: { value?: unknown }, browser: string, context: string |
   return frame.value ?? null;
 }
 
+export function pollTimeoutWithin(callTimeoutMs: number | undefined, remainingMs: number): number {
+  const bounded = Math.max(MIN_POLL_TIMEOUT_MS, Math.round(remainingMs));
+
+  return typeof callTimeoutMs === "number" && Number.isFinite(callTimeoutMs) ? Math.min(callTimeoutMs, bounded) : bounded;
+}
+
 export async function evalUntilTruthy(
   command: string,
-  evaluate: () => Promise<string>,
+  evaluate: (pollTimeoutMs: number) => Promise<string>,
   browser: string,
   context: string | undefined,
   until: EvalUntil,
@@ -97,7 +104,7 @@ export async function evalUntilTruthy(
 
   while (polls === 0 || Date.now() - start < budgetMs) {
     polls += 1;
-    const raw = await evaluate();
+    const raw = await evaluate(pollTimeoutWithin(undefined, budgetMs - (Date.now() - start)));
     let frame: { ok: boolean; status: string; value?: unknown; error?: unknown; warnings?: string[] };
 
     try {

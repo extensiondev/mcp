@@ -29,7 +29,7 @@ import {
   type ActArgs,
 } from "../lib/act";
 import { envelope } from "../lib/envelope";
-import { EVAL_UNTIL_PROPERTY, evalUntilTruthy, type EvalUntil } from "../lib/eval-until";
+import { EVAL_UNTIL_PROPERTY, evalUntilTruthy, pollTimeoutWithin, type EvalUntil } from "../lib/eval-until";
 import { parseFrameObject } from "../lib/frame-json";
 import {
   ambiguousSessionRefusal,
@@ -1166,7 +1166,13 @@ export async function handler(
 
   const { browser } = resolveSessionBrowser(args.projectPath, args.browser);
 
-  return evalUntilTruthy(schema.name, () => evaluateOnce(once), browser, args.context, until);
+  return evalUntilTruthy(
+    schema.name,
+    (pollTimeoutMs) => evaluateOnce({ ...once, timeout: pollTimeoutWithin(once.timeout, pollTimeoutMs) }),
+    browser,
+    args.context,
+    until,
+  );
 }
 
 async function evaluateOnce(
