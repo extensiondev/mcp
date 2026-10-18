@@ -25,7 +25,7 @@ function tempDir(prefix: string): string {
 }
 
 function project(): string {
-  const dir = tempDir("mcp-screenshot-path-");
+  const dir = path.join(tempDir("mcp-screenshot-path-"), "project");
   fs.mkdirSync(path.join(dir, "src"), { recursive: true });
   fs.writeFileSync(path.join(dir, "src", "manifest.json"), JSON.stringify({ manifest_version: 3, name: "Shot", version: "1.0.0" }));
 
@@ -93,12 +93,11 @@ describe("writeScreenshot keeps the file inside the project as a .png", () => {
   it("refuses a ../ escape out of the project", () => {
     const dir = project();
     const parent = path.dirname(dir);
-    const before = new Set(fs.readdirSync(parent));
 
     const out = expectRefused(dir, "../escaped.png");
 
     expect(out.message).toContain("inside the project");
-    expect(fs.readdirSync(parent).filter((name) => !before.has(name))).toEqual([]);
+    expect(fs.readdirSync(parent)).toEqual(["project"]);
   });
 
   it("refuses a path whose extension is not .png, so a source file is never overwritten", () => {
