@@ -6,7 +6,6 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-
 const REFUSED_INJECTION =
   /missing host permission|cannot access contents|cannot be scripted|cannot access a chrome|extensions gallery/i;
 
