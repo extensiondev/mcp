@@ -223,6 +223,36 @@ const API_PERMISSION: Record<string, string> = {
   sessions: "sessions", proxy: "proxy", tts: "tts", pageCapture: "pageCapture",
   desktopCapture: "desktopCapture", debugger: "debugger", geolocation: "geolocation",
 };
+const API_GRANTS: Record<string, string[]> = {
+  declarativeNetRequest: ["declarativeNetRequest", "declarativeNetRequestWithHostAccess"],
+};
+const API_SUPPLEMENTS: Record<string, { permission: string; unlocks: string }> = {
+  declarativeNetRequest: {
+    permission: "declarativeNetRequestFeedback",
+    unlocks: "getMatchedRules and onRuleMatchedDebug",
+  },
+};
+
+function grantsFor(api: string): string[] {
+  return API_GRANTS[api] ?? [API_PERMISSION[api]];
+}
+
+function isGranted(declared: Set<string>, api: string): boolean {
+  return grantsFor(api).some((p) => declared.has(p));
+}
+
+function grantPhrase(api: string): string {
+  return grantsFor(api).map((p) => `"${p}"`).join(" or ");
+}
+
+function supplementNote(declared: Set<string>, api: string, ns: string): string {
+  const s = API_SUPPLEMENTS[api];
+
+  if (!s || !declared.has(s.permission)) return "";
+
+  return ` "${s.permission}" alone does not expose ${ns}.${api}; it only unlocks ${s.unlocks} next to one of them.`;
+}
+
 const HARD_APIS = new Set([
   "history", "cookies", "bookmarks", "webNavigation", "downloads",
   "webRequest", "topSites", "management", "tabGroups", "sessions", "proxy",
@@ -504,17 +534,18 @@ export async function handler(args: {
 
   for (const api of usedApis) {
     const perm = API_PERMISSION[api];
-    if (declaredPermSet.has(perm)) continue;
+    if (isGranted(declaredPermSet, api)) continue;
 
     const base = `Code calls chrome.${api} but "${perm}" is not in permissions`;
+    const note = supplementNote(declaredPermSet, api, "chrome");
 
     if (HARD_APIS.has(api)) {
       result.warnings.push(
-        `${base}; chrome.${api} is undefined without it and the call crashes its context at runtime. Found by a text search over the project's source files (comments and strings count), so confirm the call is live before adding "${perm}".`,
+        `${base}; chrome.${api} is undefined without it and the call crashes its context at runtime. Found by a text search over the project's source files (comments and strings count), so confirm the call is live before adding ${grantPhrase(api)}.${note}`,
       );
     } else {
       result.warnings.push(
-        `${base}; it may be undefined at runtime, add "${perm}" if you use it.`,
+        `${base}; it may be undefined at runtime, add ${grantPhrase(api)} if you use it.${note}`,
       );
     }
   }
@@ -755,14 +786,13 @@ export async function handler(args: {
     );
 
     for (const api of usedApis) {
-      const perm = API_PERMISSION[api];
-      if (effectivePerms.has(perm)) continue;
+      if (isGranted(effectivePerms, api)) continue;
 
-      if (!declaredPermSet.has(perm)) continue;
+      if (!isGranted(declaredPermSet, api)) continue;
 
       const ns = isFirefox ? "browser" : "chrome";
       issues.push(
-        `Code calls ${ns}.${api} but the ${browser} build's permissions do not include "${perm}" (it is declared only under another target's prefixed key, e.g. chromium:permissions). An unguarded call crashes this target at runtime. If every call sits behind a feature check (typeof ${ns}.${api} !== "undefined"), the build is sound: pass skipValidation: true to extension_build, or grant "${perm}" to this target too.`,
+        `Code calls ${ns}.${api} but the ${browser} build's permissions do not include ${grantPhrase(api)} (it is declared only under another target's prefixed key, e.g. chromium:permissions). An unguarded call crashes this target at runtime. If every call sits behind a feature check (typeof ${ns}.${api} !== "undefined"), the build is sound: pass skipValidation: true to extension_build, or grant ${grantPhrase(api)} to this target too.`,
       );
     }
 
