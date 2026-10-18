@@ -16,6 +16,7 @@ import { platformHoldEnvelope } from "../lib/platform-hold";
 import { CHANNEL_LINK_ADVICE, channelLinkFields, channelServing, readChannels } from "../lib/channel-link";
 import { publishLinkFields } from "../lib/publish-link";
 import {
+  consoleProjectUrl,
   fetchRegistryJson,
   isSuccessfulBuild,
   parseBuildIndex,
@@ -206,11 +207,13 @@ export async function handler(args: {
         message: "The platform answered the publish but named no share URL, so whether a share was minted is unknown.",
       },
       value: { platform: data },
-      hint: `Do not publish again blind: a share that was minted counts against the project's live shares. Run extension_shares (action: list${
-        args.project ? `, project: '${args.project}'` : ""
-      }) to see whether one appeared, then publish again only if it did not.`,
+      hint: `Do not publish again blind: a build link that was minted counts against the project's live shares. The console Settings, Share links section${
+        credential.ref ? ` (${consoleProjectUrl(credential.ref, "settings/share-links", args.api)})` : ""
+      } lists the build links minted for this project with their expiry; check it, then publish again only if none appeared.`,
     });
   }
+
+  delete data.token;
 
   let note: string | null = null;
 

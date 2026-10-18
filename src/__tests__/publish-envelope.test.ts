@@ -241,6 +241,14 @@ describe("extension_publish envelope compatibility", () => {
       expect(out.hint).toContain(out.value.tellThem);
     });
 
+    it("never echoes the raw share token beside the link that already carries it", async () => {
+      const out = await publishAgainst(publishAnswerWithLink());
+
+      expect(out.value).not.toHaveProperty("token");
+      expect(out.value.shareUrl).toContain("share=tok_share");
+      expect(out.value.previewCommands.chrome).toContain("t=tok_share");
+    });
+
     it("a public project with no channel serving the build gets a build link that never expires", async () => {
       const answer = publishAnswer({ visibility: "public", shareUrl: "https://acme.extension.dev/widget/builds/abc1234", token: undefined, expiresAt: undefined, ttlHours: undefined });
       const out = await publishAgainst(answer, { beta: { sha: "bead5ee" } });

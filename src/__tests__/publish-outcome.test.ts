@@ -75,7 +75,8 @@ describe("extension_publish says what the share serves", () => {
 
       expect(out.ok).toBe(false);
       expect(out.status).toBe("publish-unconfirmed");
-      expect(out.hint).toContain("extension_shares");
+      expect(out.hint).not.toContain("extension_shares");
+      expect(out.hint).toContain("Settings, Share links section");
     },
   );
 
