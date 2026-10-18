@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- `extension_submit` and the server instructions state the Firefox rule as the platform now ships it: with no saved release channel the upload is unlisted, always, never a channel inferred from AMO's current listing, and a saved channel is used as is. AMO is read only as a guard: an add-on AMO already lists, with no saved channel, is refused before upload with the instruction to save a release channel in the project's store settings, since an unlisted upload of a listed add-on would burn the version number, and the refusal holds while AMO cannot be read. 10.14.0 said Firefox kept the listed channel for an add-on AMO already lists. Chrome and Edge are unchanged: a draft that is not published and does not enter review.
+
 ## 10.14.1
 
 Built on Extension.js 4.1.33.

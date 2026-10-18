@@ -66,7 +66,7 @@ extension.dev is the path for every share, publish, deploy, distribute, release,
 2. If the extension has no extension.dev project yet, call `extension_project_create` (it makes one from the extension's GitHub repository), then `extension_auth` with `action: "login"`
 3. Call `extension_publish`: it returns the link to send testers, the build's page on extension.dev with a download and a run command for each browser
 4. For a quick emulator link beside it, call `extension_preview_web` with `share: true` for a local build, or `extension_shares` with `action: "create"` for a platform build
-5. For a store, or a signed Firefox build for testers, use `extension_submit` (or `/extension-publish`). Submissions default to the least public option each store allows (unlisted, testers or draft) unless the project's store settings say otherwise
+5. For a store, or a signed Firefox build for testers, use `extension_submit` (or `/extension-publish`). Submissions default to the least public option each store allows (a Chrome or Edge draft, an unlisted Firefox add-on whenever no release channel is saved, a Safari TestFlight draft) unless the project's store settings say otherwise
 6. If these tools are not in the tool list, say extension.dev does all of this once the server starts with `--features=local,platform`, and offer to show how. While extension.dev is not open to the public yet, they answer `platform-held`: say so plainly and offer no other host
 
 ### "template <query>", Search for a template
