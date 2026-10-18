@@ -520,13 +520,6 @@ function truncate(value: unknown, max = 200): string {
   return text.length > max ? `${text.slice(0, max)}…` : text;
 }
 
-const WORKER_TARGET_TYPES = new Set([
-  "service_worker",
-  "worker",
-  "background_page",
-  "shared_worker",
-]);
-
 async function assertBackgroundWorker(
   clause: BackgroundClause,
   stage: Stage,
@@ -632,9 +625,10 @@ async function assertBackgroundWorker(
     }
   }
 
+  const backgroundTargetType = background.kind === "service_worker" ? "service_worker" : "background_page";
   const workers = targets.filter(
     (target) =>
-      WORKER_TARGET_TYPES.has(target.type) &&
+      target.type === backgroundTargetType &&
       guest.guestIds.some((guestId) =>
         String(target.url ?? "").startsWith(`chrome-extension://${guestId}/`),
       ),

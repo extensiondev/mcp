@@ -160,6 +160,29 @@ describe("background-worker-booted", () => {
     expect(frame.value.passed).toBe(true);
   });
 
+  it("does not pass an MV3 service worker on an open offscreen document or a dedicated worker", async () => {
+    writeManifest({ manifest_version: 3, background: { service_worker: "sw.js" } });
+    liveSession();
+    live.targets = [
+      { id: "offscreen", type: "background_page", url: `chrome-extension://${GUEST_ID}/offscreen.html` },
+      { id: "worker", type: "worker", url: `chrome-extension://${GUEST_ID}/decoder.js` },
+    ];
+
+    const { check } = await assertOnce({ assert: "background-worker-booted" });
+    expect(check.outcome).not.toBe("pass");
+  });
+
+  it("passes an MV2 background page on its background_page target", async () => {
+    writeManifest({ manifest_version: 2, background: { page: "background.html" } });
+    liveSession();
+    live.targets = [
+      { id: "bg", type: "background_page", url: `chrome-extension://${GUEST_ID}/background.html` },
+    ];
+
+    const { check } = await assertOnce({ assert: "background-worker-booted" });
+    expect(check.outcome).toBe("pass");
+  });
+
   it("fails when the manifest declares no background at all", async () => {
     writeManifest({ name: "x" });
     liveSession();
