@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## 10.14.1
+
+Built on Extension.js 4.1.33.
 
 - `extension_wait {for: "rebuild"}` no longer takes the compile write itself for a reconnected background. The engine stamps `compiledAt` and `ts` with two clock reads around a synchronous read, so whenever they crossed a millisecond boundary the ready.json write that recorded the compile already satisfied the reattach proof (`runtime: "attached"` with `ts` past `compiledAt`), and the wait answered `reload.outcome: "reattached"` at `waitedMs` 0, before any reload or when none would ever follow (a content-only edit), and on an engine that stamps `reloadedAt` it preempted the wait for that stamp 10.14.0 promised. The two engines now get the proof that fits each: on an engine that writes `reloadedAt`, the reattach answer is never given, the reload stamp alone settles the wait; on an older engine, which has only the write sequence to go by, the reconnect must be a later ready.json write whose `ts` passes the `ts` the compile write itself carried, not merely `compiledAt`, so that write can never be its own proof. `reattached`, `still-detached` and `not-stamped` keep their meaning for the older engine.
 - `extension_eval` with `until` keeps the whole call inside `timeoutMs`. Each poll ran with the call's own `timeout` (30000 by default) inside the engine's promise settle, and `until` checked its budget only between polls, so `until: {timeoutMs: 50000}` on a promise that never settles could run about 80 s, past the 60 s client request timeout the 50000 clamp exists for. Each poll's engine timeout is now the remaining `until` budget, with a 300 ms floor and a caller's smaller `timeout` still honored, so the call ends within `timeoutMs` plus one `intervalMs`.
