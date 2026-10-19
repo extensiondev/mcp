@@ -386,7 +386,7 @@ describe("a web page whose own policy forbids eval, on a Gecko build with no tab
     const result = JSON.parse(
       await evalTool.handler({ projectPath: dir, browser: "firefox", context: "page", url: "http://127.0.0.1:8765/csp.html", expression: "1" }),
     );
-    expect(result.warnings.join("\n")).toMatch(/2 open tabs matched the url/);
+    expect(result.warnings.join("\n")).toMatch(/2 open tabs show http:\/\/127\.0\.0\.1:8765\/csp\.html; this used targetId tab1/);
   });
 
   it("names a document that went away mid-call and one the protocol could not reach", async () => {

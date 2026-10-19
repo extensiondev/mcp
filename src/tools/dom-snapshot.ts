@@ -31,10 +31,23 @@ import {
   RDP_PORT_MISSING_HINT,
 } from "../lib/cdp-port";
 import {
+  listDocumentTargets,
   listPageTargets,
   matchTargetsByUrl,
   TARGET_ID_NOTE,
+  type PageTarget,
 } from "../lib/cdp-targets";
+import { evaluateOnExtensionPage } from "../lib/cdp-extension-page";
+import {
+  AMBIGUOUS_TARGET_HINT,
+  findGeckoTab,
+  geckoTabRef,
+  geckoTargetId,
+  identicalPickWarning,
+  pickTarget,
+  TARGET_ID_PROPERTY,
+  targetNotFound,
+} from "../lib/target-pick";
 import { rdpEvaluateInTab, rdpListTabs, type RdpTab } from "../lib/rdp";
 import {
   EXTENSION_PAGE_CONTEXTS,
@@ -50,12 +63,12 @@ import { listBridgeTabs, matchTabsByUrl } from "../lib/bridge-tabs";
 
 const RDP_ACTOR_NOTE =
   "actor is an RDP tab descriptor actor id, NOT a chrome.tabs id: do not pass it as `tab`. " +
-  "Target a tab with `tabUrl` (URL substring) or `url`; if you need a numeric tab id, call extension_dom_snapshot with listTabs: true.";
+  "Target a tab with `targetId` (its browserId, listed as targetId), `tabUrl` (URL substring) or `url`; if you need a numeric tab id, call extension_dom_snapshot with listTabs: true.";
 
 export const schema = {
   name: "extension_dom_snapshot",
   description:
-    "Take a shallow structured DOM snapshot of one chosen surface through the agent bridge (localhost only; the snapshot itself needs no CDP, but listTargets and `tabUrl` resolution ask the browser directly and need the session's debug port: CDP page targets on Chromium, RDP tab descriptors on Firefox): element counts, extension roots, open shadow roots, optional byte-capped HTML, and optional recent console lines. This is the SURFACE PICKER: the only tool that reads an open extension surface by name (`context`: popup, options, sidebar, devtools) or an override page, the only one that takes a numeric chrome.tabs id, and the only one that enumerates what is open (listTargets for CDP targetIds and RDP tab actors, listTabs for numeric tab ids). An ambiguous `tabUrl` returns the candidates instead of guessing. It does not pierce closed shadow roots, run selector probes, or navigate: use extension_inspect for those, and for a deep read of an already-open web page. For the pixels of a surface or page, use extension_screenshot. Rides the dev session's control channel, on unless extension_dev was called with allowControl:false. On Firefox, a surface or extension page the bridge cannot reach (an extension_start session's pages carry no relay) is read over the debugger protocol from the tab showing it.",
+    "Take a shallow structured DOM snapshot of one chosen surface through the agent bridge (localhost only; the snapshot itself needs no CDP, but listTargets and `tabUrl` resolution ask the browser directly and need the session's debug port: CDP page targets on Chromium, RDP tab descriptors on Firefox): element counts, extension roots, open shadow roots, optional byte-capped HTML, and optional recent console lines. This is the SURFACE PICKER: the only tool that reads an open extension surface by name (`context`: popup, options, sidebar, devtools) or an override page, the only one that takes a numeric chrome.tabs id, and the only one that enumerates what is open (listTargets for CDP targetIds and RDP tab actors, listTabs for numeric tab ids). Pass `targetId` (the target.targetId extension_open answers, or one from listTargets) to read that exact page over the debug port. A `tabUrl` that matches several tabs showing the same page reads the most recently active one and warns; one that matches different pages returns the candidates, with their targetIds, instead of guessing. It does not pierce closed shadow roots, run selector probes, or navigate: use extension_inspect for those, and for a deep read of an already-open web page. For the pixels of a surface or page, use extension_screenshot. Rides the dev session's control channel, on unless extension_dev was called with allowControl:false. On Firefox, a surface or extension page the bridge cannot reach (an extension_start session's pages carry no relay) is read over the debugger protocol from the tab showing it.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -67,11 +80,12 @@ export const schema = {
         description:
           "Target the tab whose URL contains this substring (case-insensitive; titles checked only when no url matches). Resolved against the live browser first: exactly one match proceeds, zero or several return the candidates instead of a guess. Alternative to `url`.",
       },
+      targetId: TARGET_ID_PROPERTY,
       listTargets: {
         type: "boolean",
         default: false,
         description:
-          "Enumerate live page targets and return, ignoring the other args. The discovery path for `tabUrl`. Chromium: {targetId,url,title,type}. Firefox: RDP tab descriptors {actor,url,title,type}. Neither id is a numeric chrome.tabs id; for those use listTabs.",
+          "Enumerate live page targets and return, ignoring the other args. The discovery path for `targetId` and `tabUrl`. Chromium: {targetId,url,title,type}. Firefox: RDP tab descriptors {targetId,actor,url,title,type}. Neither id is a numeric chrome.tabs id; for those use listTabs.",
       },
       listTabs: {
         type: "boolean",
@@ -239,6 +253,92 @@ async function snapshotExtensionPageOverProtocol(
   }
 }
 
+type SnapshotArgs = ActArgs & { include?: string[]; maxBytes?: number; targetId?: string };
+
+function snapshotRead(
+  command: string,
+  value: unknown,
+  target: { targetId: string; url: string },
+  transport: string,
+  warnings: Array<string | null>,
+): string {
+  return envelope({
+    ok: true,
+    command,
+    status: "ok",
+    value: { ...(value && typeof value === "object" ? value : {}), target: { ...target, transport } },
+    warnings,
+  });
+}
+
+function snapshotFailed(message: string): string {
+  return envelope({
+    ok: false,
+    command: schema.name,
+    status: "snapshot-failed",
+    error: { code: "E_EVAL", name: "SnapshotFailed", message },
+    hint: "The target was found but the snapshot could not be read from it; it may have navigated or closed. Retry, or list what is open with listTargets: true.",
+  });
+}
+
+async function snapshotByTargetId(
+  args: SnapshotArgs,
+  browser: string,
+  targetId: string,
+  warnings: Array<string | null>,
+): Promise<string> {
+  const expression = protocolSnapshotExpression(args.include?.includes("html") === true, args.maxBytes ?? 262144);
+
+  if (isGeckoFamily(browser)) {
+    const resolved = await resolveRdpPort(args.projectPath, browser);
+
+    if (!resolved) {
+      return envelope({
+        ok: false,
+        command: schema.name,
+        status: "no-session",
+        error: { code: "E_NO_SESSION", name: "NoSession", message: `No active dev session with a Firefox debugger server (RDP) for ${browser}, so targetId has no browser to ask. ${RDP_PORT_MISSING_HINT}` },
+      });
+    }
+
+    try {
+      const tabs = await rdpListTabs(resolved.port);
+      const tab = findGeckoTab(tabs, targetId);
+      if (!tab) return targetNotFound(schema.name, targetId, tabs.map(geckoTabRef));
+
+      const outcome = await rdpEvaluateInTab(resolved.port, {
+        select: (live) => findGeckoTab(live, targetId),
+        expression,
+        timeoutMs: args.timeout ?? 10_000,
+      });
+      if (!outcome.ok) return snapshotFailed(outcome.message);
+
+      return snapshotRead(schema.name, outcome.value, geckoTabRef(tab), "rdp", warnings);
+    } catch (e) {
+      return snapshotFailed(e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  const cdp = await cdpPortOrError(args.projectPath, browser, "targetId");
+  if ("error" in cdp) return cdp.error;
+
+  let targets: PageTarget[];
+
+  try {
+    targets = await listDocumentTargets(cdp.port);
+  } catch (e) {
+    return snapshotFailed(`Could not list page targets: ${e instanceof Error ? e.message : String(e)}`);
+  }
+
+  const target = targets.find((t) => t.targetId === targetId);
+  if (!target) return targetNotFound(schema.name, targetId, targets.map((t) => ({ targetId: t.targetId, url: t.url })));
+
+  const outcome = await evaluateOnExtensionPage(cdp.port, targetId, expression, args.timeout);
+  if (!outcome.ok) return snapshotFailed(outcome.message);
+
+  return snapshotRead(schema.name, outcome.value, { targetId, url: target.url }, "cdp", warnings);
+}
+
 async function cdpPortOrError(
   projectPath: string,
   browser: string,
@@ -253,7 +353,7 @@ async function cdpPortOrError(
         error: {
           code: "E_UNSUPPORTED_BROWSER",
           name: "Unsupported",
-          message: `${feature} reads the browser's CDP page targets, which ${browser} (Gecko) does not expose. Target the tab with \`url\` or \`tab\` instead, and discover tabs with listTabs: true (agent bridge, works on every browser).`,
+          message: `${feature} reads the browser's CDP page targets, which ${browser} does not expose. Target the tab with \`url\` or \`tab\` instead, and discover tabs with listTabs: true (agent bridge, works on every browser).`,
         },
       }),
     };
@@ -284,6 +384,7 @@ export async function handler(
     tab?: number;
     url?: string;
     tabUrl?: string;
+    targetId?: string;
     listTargets?: boolean;
     listTabs?: boolean;
     include?: string[];
@@ -327,6 +428,7 @@ export async function handler(
             browser,
             transport: "rdp",
             targets: tabs.map((t) => ({
+              targetId: geckoTargetId(t),
               actor: String(t.actor ?? ""),
               type: "tab",
               url: String(t.url ?? ""),
@@ -395,9 +497,18 @@ export async function handler(
     );
   }
 
+  const consoleNote = withConsole != null ? "Console lines are not collected when the page is read by targetId; read them with extension_logs." : null;
+
+  if (args.targetId) {
+    const { browser } = resolveSessionBrowser(args.projectPath, args.browser);
+
+    return snapshotByTargetId(args, browser, args.targetId, [consoleNote]);
+  }
+
   let targetUrl = args.url;
   let targetTab = args.tab;
   let resolvedTarget: Record<string, unknown> | null = null;
+  let tabPickWarning: string | null = null;
 
   if (args.tabUrl) {
     if (args.tab != null || args.url) {
@@ -441,7 +552,13 @@ export async function handler(
         });
       }
 
-      if (matches.length > 1) {
+      const sameTabs = pickTarget(
+        matches,
+        (t) => ({ targetId: String(t.tabId ?? ""), url: t.url }),
+        (a, b) => (b.tabId ?? -1) - (a.tabId ?? -1),
+      );
+
+      if (sameTabs.kind !== "one" || (sameTabs.others.length > 0 && sameTabs.target.tabId == null)) {
         return envelope({
           ok: false,
           command: schema.name,
@@ -452,13 +569,18 @@ export async function handler(
             message: `${matches.length} tabs match "${args.tabUrl}"; refusing to guess which tab you mean.`,
           },
           value: { matchingTabs: matches },
-          hint: "Narrow `tabUrl` to a longer substring that matches exactly one url in matchingTabs, or pass its numeric tabId as `tab`.",
+          hint: "Narrow `tabUrl` to a longer substring that matches exactly one url in matchingTabs, pass its numeric tabId as `tab`, or pass a targetId from listTargets: true as `targetId`.",
         });
       }
 
-      resolvedTarget = { ...matches[0] };
-      if (matches[0].tabId != null) targetTab = matches[0].tabId;
-      else targetUrl = matches[0].url;
+      const picked = sameTabs.target;
+      resolvedTarget = { ...picked };
+      if (picked.tabId != null) targetTab = picked.tabId;
+      else targetUrl = picked.url;
+
+      if (sameTabs.others.length > 0) {
+        tabPickWarning = `${matches.length} open tabs show ${picked.url}; this read tab ${picked.tabId}, the most recently created one. The others: ${sameTabs.others.map((o) => o.tabId).join(", ")}. Pass \`tab\` to pick another.`;
+      }
     } else {
       const cdp = await cdpPortOrError(args.projectPath, browser, "tabUrl");
       if ("error" in cdp) return cdp.error;
@@ -498,7 +620,9 @@ export async function handler(
         });
       }
 
-      if (matches.length > 1) {
+      const pick = pickTarget(matches, (t) => ({ targetId: t.targetId, url: t.url }));
+
+      if (pick.kind === "different") {
         return envelope({
           ok: false,
           command: schema.name,
@@ -506,11 +630,20 @@ export async function handler(
           error: {
             code: "E_AMBIGUOUS_TARGET",
             name: "AmbiguousTabUrl",
-            message: `${matches.length} page targets match "${args.tabUrl}"; refusing to guess which tab you mean.`,
+            message: `${matches.length} page targets that show different pages match "${args.tabUrl}"; refusing to guess which tab you mean.`,
           },
           value: { matchingTargets: matches },
-          hint: `Narrow \`tabUrl\` to a longer substring that matches exactly one url in matchingTargets. ${TARGET_ID_NOTE}`,
+          hint: `${AMBIGUOUS_TARGET_HINT} ${TARGET_ID_NOTE}`,
         });
+      }
+
+      if (pick.kind === "one" && pick.others.length > 0) {
+        const ref = (t: PageTarget) => ({ targetId: t.targetId, url: t.url });
+
+        return snapshotByTargetId(args, browser, pick.target.targetId, [
+          identicalPickWarning(ref(pick.target), pick.others.map(ref), "chromium"),
+          consoleNote,
+        ]);
       }
 
       resolvedTarget = { ...matches[0] };
@@ -543,6 +676,8 @@ export async function handler(
 
   try {
     const parsed = JSON.parse(raw);
+    if (tabPickWarning) addWarning(parsed, tabPickWarning);
+
     patchValue(parsed, {
       resolvedTarget: { ...resolvedTarget, matchedBy: "tabUrl" },
     });

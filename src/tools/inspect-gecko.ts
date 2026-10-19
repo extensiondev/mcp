@@ -21,7 +21,8 @@ import {
   restoredTabWarning,
   sessionProfileReused,
 } from "../lib/profile-carryover";
-import { rdpCollectConsoleMessages } from "../lib/rdp";
+import { rdpCollectConsoleMessages, rdpEvaluateInTab, rdpListTabs } from "../lib/rdp";
+import { findGeckoTab, geckoTabRef, targetNotFound, type TargetRef } from "../lib/target-pick";
 import { summarizeConsoleMessages } from "../lib/console-summary";
 import { schema as inspectSchema } from "./inspect-schema";
 import { declaredSurfaces } from "./open";
@@ -253,10 +254,66 @@ async function collectGeckoConsole(
   }
 }
 
+async function readTabByTargetId(
+  projectPath: string,
+  browser: string,
+  targetId: string,
+  expression: string,
+  timeout?: number,
+): Promise<{ value: unknown; target: TargetRef } | string> {
+  const resolved = await resolveRdpPort(projectPath, browser, { waitMs: 3_000 });
+
+  if (!resolved) {
+    return envelope({
+      ok: false,
+      command: TOOL,
+      status: "no-session",
+      error: {
+        code: "E_NO_SESSION",
+        name: "NoSession",
+        message: `No live ${browser} session with a debugger server (RDP) for this project, so targetId has no browser to ask. Start extension_dev and extension_wait for ready.`,
+      },
+    });
+  }
+
+  try {
+    const tabs = await rdpListTabs(resolved.port);
+    const tab = findGeckoTab(tabs, targetId);
+    if (!tab) return targetNotFound(TOOL, targetId, tabs.map(geckoTabRef));
+
+    const outcome = await rdpEvaluateInTab(resolved.port, {
+      select: (live) => findGeckoTab(live, targetId),
+      expression,
+      timeoutMs: timeout ?? 10_000,
+    });
+
+    if (!outcome.ok) {
+      return envelope({
+        ok: false,
+        command: TOOL,
+        status: "inspect-failed",
+        error: { code: "E_RDP", name: outcome.name, message: outcome.message },
+        hint: "The tab was found but could not be read over the debugger protocol; it may have navigated or closed. Retry, or list what is open with extension_dom_snapshot listTargets: true.",
+      });
+    }
+
+    return { value: outcome.value, target: geckoTabRef(tab) };
+  } catch (error) {
+    return envelope({
+      ok: false,
+      command: TOOL,
+      status: "rdp-failed",
+      error: { code: "E_RDP", name: "RdpFailed", message: `Could not reach the tab over RDP: ${error instanceof Error ? error.message : String(error)}` },
+      hint: "Confirm the session is ready (extension_wait), then retry.",
+    });
+  }
+}
+
 export async function inspectViaBridge(
   args: {
     projectPath: string;
     url?: string;
+    targetId?: string;
     probe?: string[];
     include?: string[];
     timeout?: number;
@@ -327,7 +384,12 @@ export async function inspectViaBridge(
     probes: args.probe ?? [],
     maxBytes,
   });
-  let raw = await runActVerb(
+  const byTargetId = args.targetId
+    ? await readTabByTargetId(args.projectPath, browser, args.targetId, expression, args.timeout)
+    : null;
+  if (typeof byTargetId === "string") return byTargetId;
+
+  let raw = byTargetId ? JSON.stringify({ ok: true, value: byTargetId.value }) : await runActVerb(
     [
       "eval",
       expression,
@@ -406,12 +468,12 @@ export async function inspectViaBridge(
 
   const result: Record<string, unknown> = {
     browser,
-    transport: "bridge",
+    transport: byTargetId ? "rdp" : "bridge",
     ...(surface ? { surface: surface.context, document: surface.document } : {}),
   };
 
   if (value.meta) {
-    result.target = { url: value.meta.url, title: value.meta.title };
+    result.target = { ...(byTargetId ? { targetId: byTargetId.target.targetId } : {}), url: value.meta.url, title: value.meta.title };
     if (include.has("meta")) result.meta = value.meta;
   }
 
@@ -471,7 +533,7 @@ export async function inspectViaBridge(
     args.url ??
     (typeof value.meta?.url === "string" ? value.meta.url : undefined);
 
-  if (!args.url && sessionProfileReused(args.projectPath, browser)) {
+  if (!args.url && !args.targetId && sessionProfileReused(args.projectPath, browser)) {
     result.profileReused = true;
     notes.push(restoredTabWarning(urlFilter ?? "the tab this read landed on"));
   }

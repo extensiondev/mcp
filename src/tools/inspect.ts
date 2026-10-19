@@ -20,6 +20,7 @@ import {
   resolveSessionBrowser,
 } from "../lib/session-browser";
 import { inspectViaBridge } from "./inspect-gecko";
+import { identicalPickWarning, pickTarget, targetNotFound } from "../lib/target-pick";
 import { schema } from "./inspect-schema";
 
 export { schema };
@@ -27,6 +28,7 @@ export { schema };
 export async function handler(args: {
   projectPath: string;
   url?: string;
+  targetId?: string;
   probe?: string[];
   include?: string[];
   browser?: string;
@@ -45,8 +47,10 @@ export async function handler(args: {
   const maxBytes = args.maxBytes ?? 262_144;
 
   if (!isChromiumFamily(browser)) {
-    return inspectViaBridge(args, browser, include, maxBytes);
+    return inspectViaBridge(args.targetId ? { ...args, url: undefined } : args, browser, include, maxBytes);
   }
+
+  const url = args.targetId ? undefined : args.url;
 
   const resolved = await resolveCdpPort(args.projectPath, browser);
 
@@ -76,8 +80,8 @@ export async function handler(args: {
       "chrome://bookmarks/",
       "chrome://history/",
     ];
-    const isOverridePage = (url: string): boolean =>
-      OVERRIDE_PAGES.some((p) => url.startsWith(p));
+    const isOverridePage = (pageUrl: string): boolean =>
+      OVERRIDE_PAGES.some((p) => pageUrl.startsWith(p));
     const pageTargets = allTargets.filter(
       (t) =>
         t.type === "page" &&
@@ -122,13 +126,31 @@ export async function handler(args: {
       return 1;
     };
 
-    const target = args.url
-      ? (pageTargets.find((t) => t.url.includes(args.url!)) ??
+    const ref = (t: { id: string; url: string }) => ({ targetId: String(t.id), url: t.url });
+    let pickWarning: string | null = null;
+
+    const byId = args.targetId ? allTargets.find((t) => String(t.id) === args.targetId && t.type === "page") : undefined;
+    if (args.targetId && !byId) return targetNotFound(schema.name, args.targetId, pageTargets.map(ref));
+
+    const urlMatches = url ? pageTargets.filter((t) => t.url.includes(url)) : [];
+    const pick = pickTarget(urlMatches, ref);
+
+    if (pick.kind === "one") {
+      pickWarning = identicalPickWarning(ref(pick.target), pick.others.map(ref), "chromium");
+    } else if (pick.kind === "different") {
+      pickWarning = `${urlMatches.length} open pages match ${url}; this read targetId ${urlMatches[0].id} (${urlMatches[0].url}). The others: ${urlMatches
+        .slice(1)
+        .map((t) => `${t.id} (${t.url})`)
+        .join(", ")}. Pass targetId to pick another.`;
+    }
+
+    const target = byId ?? (url
+      ? (urlMatches[0] ??
         pageTargets.find((t) => !isExtensionSurface(t.url)) ??
         pageTargets[0])
       : pageTargets
           .map((t, index) => ({ t, index, rank: defaultRank(t.url) }))
-          .sort((a, b) => a.rank - b.rank || a.index - b.index)[0].t;
+          .sort((a, b) => a.rank - b.rank || a.index - b.index)[0].t);
 
     const browserWsUrl = await CDPClient.discoverBrowserWsUrl(cdpPort);
     await cdp.connect(browserWsUrl);
@@ -139,11 +161,11 @@ export async function handler(args: {
     let landed: { url: string; title?: string } | null = null;
     let landingUnread: string | null = null;
 
-    if (args.url && !target.url.includes(args.url)) {
+    if (url && !target.url.includes(url)) {
       cdp.resetConsole();
 
       try {
-        await cdp.navigate(sessionId, args.url);
+        await cdp.navigate(sessionId, url);
       } catch (err) {
         return envelope({
           ok: false,
@@ -154,7 +176,7 @@ export async function handler(args: {
             name: "NavigateFailed",
             message: `${err instanceof Error ? err.message : String(err)}. Nothing was inspected.`,
           },
-          value: { cdpPort, browser, requestedUrl: args.url, target: { id: target.id, url: target.url, title: target.title } },
+          value: { cdpPort, browser, requestedUrl: url, target: { id: target.id, url: target.url, title: target.title } },
           hint: "The browser refused the url before any document rendered. Check the address, or read the tab with extension_dom_snapshot listTargets: true.",
         });
       }
@@ -171,11 +193,11 @@ export async function handler(args: {
 
     const landingWarning =
       landingUnread
-        ? `The target could not be re-read after navigating to ${args.url} (${landingUnread}); target.url is the pre-navigation value.`
+        ? `The target could not be re-read after navigating to ${url} (${landingUnread}); target.url is the pre-navigation value.`
         : landed && landed.url.startsWith("chrome-error://")
-          ? `The browser landed on its own error page (${landed.url}${landed.title ? `, "${landed.title}"` : ""}) instead of ${args.url}; the values below describe that error page.`
-          : landed && args.url && !landed.url.includes(args.url)
-            ? `The tab shows ${landed.url} after navigating, not the requested ${args.url}; the values below describe what it shows.`
+          ? `The browser landed on its own error page (${landed.url}${landed.title ? `, "${landed.title}"` : ""}) instead of ${url}; the values below describe that error page.`
+          : landed && url && !landed.url.includes(url)
+            ? `The tab shows ${landed.url} after navigating, not the requested ${url}; the values below describe what it shows.`
             : null;
 
     const failedSections: Array<{ section: string; reason: string }> = [];
@@ -193,7 +215,7 @@ export async function handler(args: {
     let documentUrl = "";
     let toolchainWarning: string | null = null;
 
-    if (!args.url && defaultRank(target.url) >= 2) {
+    if (!url && !args.targetId && defaultRank(target.url) >= 2) {
       try {
         const href = await cdp.evaluate(sessionId, "location.href");
         documentUrl = typeof href === "string" ? href : "";
@@ -208,7 +230,7 @@ export async function handler(args: {
     }
 
     const profileReused =
-      !args.url && sessionProfileReused(args.projectPath, browser);
+      !url && !args.targetId && sessionProfileReused(args.projectPath, browser);
 
     const result: Record<string, unknown> = {
       cdpPort,
@@ -218,7 +240,7 @@ export async function handler(args: {
         id: target.id,
         url: landed?.url ?? target.url,
         title: landed ? landed.title : target.title,
-        ...(landed && args.url ? { requestedUrl: args.url } : {}),
+        ...(landed && url ? { requestedUrl: url } : {}),
         ...(documentUrl && documentUrl !== target.url ? { documentUrl } : {}),
       },
       targets: pageTargets.map((t) => ({
@@ -324,6 +346,7 @@ export async function handler(args: {
       value: result,
       warnings: [
         typeof probeWarning === "string" ? probeWarning : null,
+        pickWarning,
         landingWarning,
         ...failedSections.map(
           (f) => `${f.section} could not be read: ${f.reason}. Its value is null, not empty.`,

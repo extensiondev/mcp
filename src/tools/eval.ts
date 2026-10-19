@@ -67,6 +67,18 @@ import {
   BACKGROUND_TARGET_TYPES,
 } from "../lib/cdp-extension-page";
 import { listPageTargets, matchTargetsByUrl } from "../lib/cdp-targets";
+import { CDPClient } from "../lib/cdp";
+import {
+  AMBIGUOUS_TARGET_HINT,
+  findGeckoTab,
+  geckoRecency,
+  geckoTabRef,
+  identicalPickWarning,
+  pickTarget,
+  TARGET_ID_PROPERTY,
+  targetNotFound,
+  type TargetRef,
+} from "../lib/target-pick";
 import {
   declaredSurfaces,
   resolveExtensionId,
@@ -89,10 +101,12 @@ import {
 } from "../lib/extension-surfaces";
 import { executeScriptExpression } from "./inspect-gecko";
 
+const pageRef = (t: { targetId: string; url: string }): TargetRef => ({ targetId: t.targetId, url: t.url });
+
 export const schema = {
   name: "extension_eval",
   description:
-    "Evaluate an expression in a running extension context. Start the session with allowEval:true (extension_dev), which writes a 0600 session token; without that token every route of this tool, the debug port included, answers eval-disabled. Context defaults to 'background', except on a Chromium MV3 session (the default template) where it defaults to 'page', the active tab; pass context:'background' to evaluate in the service worker, which on Chromium goes over the debug port. Debug-port evaluates run with a user gesture, so gesture-gated APIs (permissions.request, sidePanel.open) can succeed here and still fail when the extension's own code calls them. For content and page, pass `url` to pick the tab, or omit both `url` and `tab` for the active tab; a numeric `tab` only disambiguates. Extension surfaces (popup, options, sidebar, devtools) and override pages (newtab, history, bookmarks) need no tab id but must already be open: open one with extension_open first, because a closed one returns an explicit error. On a Chromium MV3 session those pages, and context:'page' with a chrome-extension:// url, evaluate over CDP, the inspector path the extension page CSP does not govern; elsewhere they evaluate over the in-bundle relay. On Firefox a document whose content security policy forbids eval (the extension's own pages, or a site's) is evaluated over the debugger protocol instead, which takes one expression; a page inside the extension that is no declared surface (pages/*) is reached the same way by context:'page' and its moz-extension:// url once a tab shows it. An extension_start session's pages carry no relay, so there a surface shown in a tab (options) and an extension page url are evaluated over the debugger protocol too; a surface in its own window (popup) is not reachable on that session, and the answer says so instead of reporting a missing target. Naming a tab the browser refuses to script (page-not-scriptable, extension-page-unreachable) needs Extension.js 4.1.34, not yet released; on 4.1.33 such a refusal still answers as a missing target, with the hint that the tab could not be reached. A returned promise is awaited: over CDP and the Firefox debugger protocol, in a Firefox background, and in tabs (page or content through the in-tab executor) and relay surfaces, where this tool polls until it settles or timeout passes. The one exception is Firefox MV2 without the scripting API, where the expression runs through tabs.executeScript and must return a synchronous value. A value that cannot be cloned (a DOM node, a function) comes back as its string form, or as a not-cloneable error where the browser itself refuses to copy it. To wait for a condition that is still settling (a model loading, an element appearing), pass until: {} (or {timeoutMs, intervalMs}) and the eval repeats until its value is truthy, answering that value, or the last one on timeout. Call extension_dom_snapshot with listTabs:true to enumerate {tabId, url, title}.",
+    "Evaluate an expression in a running extension context. Start the session with allowEval:true (extension_dev), which writes a 0600 session token; without that token every route of this tool, the debug port included, answers eval-disabled. Context defaults to 'background', except on a Chromium MV3 session (the default template) where it defaults to 'page', the active tab; pass context:'background' to evaluate in the service worker, which on Chromium goes over the debug port. Debug-port evaluates run with a user gesture, so gesture-gated APIs (permissions.request, sidePanel.open) can succeed here and still fail when the extension's own code calls them. For content and page, pass `url` to pick the tab, or omit both `url` and `tab` for the active tab; a numeric `tab` only disambiguates. Extension surfaces (popup, options, sidebar, devtools) and override pages (newtab, history, bookmarks) need no tab id but must already be open: open one with extension_open first, because a closed one returns an explicit error. On a Chromium MV3 session those pages, and context:'page' with a chrome-extension:// url, evaluate over CDP, the inspector path the extension page CSP does not govern; elsewhere they evaluate over the in-bundle relay. On Firefox a document whose content security policy forbids eval (the extension's own pages, or a site's) is evaluated over the debugger protocol instead, which takes one expression; a page inside the extension that is no declared surface (pages/*) is reached the same way by context:'page' and its moz-extension:// url once a tab shows it. An extension_start session's pages carry no relay, so there a surface shown in a tab (options) and an extension page url are evaluated over the debugger protocol too; a surface in its own window (popup) is not reachable on that session, and the answer says so instead of reporting a missing target. Naming a tab the browser refuses to script (page-not-scriptable, extension-page-unreachable) needs Extension.js 4.1.34, not yet released; on 4.1.33 such a refusal still answers as a missing target, with the hint that the tab could not be reached. A returned promise is awaited: over CDP and the Firefox debugger protocol, in a Firefox background, and in tabs (page or content through the in-tab executor) and relay surfaces, where this tool polls until it settles or timeout passes. The one exception is Firefox MV2 without the scripting API, where the expression runs through tabs.executeScript and must return a synchronous value. A value that cannot be cloned (a DOM node, a function) comes back as its string form, or as a not-cloneable error where the browser itself refuses to copy it. To wait for a condition that is still settling (a model loading, an element appearing), pass until: {} (or {timeoutMs, intervalMs}) and the eval repeats until its value is truthy, answering that value, or the last one on timeout. Pass `targetId` (the target.targetId extension_open answers, or one from extension_dom_snapshot listTargets:true) to evaluate in that exact page over the debug port, the CDP target on Chromium or the tab on Firefox; context, url and tab are then ignored. A url that matches several tabs showing the same page evaluates in the most recently active one and warns with the others' targetIds. Call extension_dom_snapshot with listTabs:true to enumerate {tabId, url, title}.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -108,6 +122,7 @@ export const schema = {
       },
       url: { type: "string", description: "content/page: pick the tab by url (match pattern, then substring). Preferred over `tab`." },
       tab: { type: "number", description: "Numeric chrome.tabs id, only to disambiguate when several tabs match." },
+      targetId: TARGET_ID_PROPERTY,
       browser: SESSION_BROWSER,
       timeout: CALL_TIMEOUT,
       until: EVAL_UNTIL_PROPERTY,
@@ -374,8 +389,7 @@ async function evaluateOnChromiumExtensionPage(
   if ("unreadable" in pagesRead) return targetsUnreadable(pagesRead.unreadable);
 
   const targets = pagesRead.targets.filter((t) => !isBrowserErrorPage(t.url));
-  const matchingUrls = context === "page" ? distinctUrls(targets) : [];
-  if (matchingUrls.length > 1) return ambiguousUrl(wanted, matchingUrls);
+  if (context === "page" && distinctUrls(targets).length > 1) return ambiguousUrl(wanted, targets.map(pageRef));
 
   if (targets.length === 0) {
     return envelope({
@@ -401,12 +415,7 @@ async function evaluateOnChromiumExtensionPage(
     args.expression,
     args.timeout,
   );
-  const others = targets.slice(1);
-  const warnings = others.length
-    ? [
-        `${targets.length} open pages match ${wanted}; evaluated in target ${target.targetId} (${target.url}). The others: ${others.map((t) => t.targetId).join(", ")}. Close the copies you do not mean, or navigate away from them.`,
-      ]
-    : [];
+  const warnings = [identicalPickWarning(pageRef(target), targets.slice(1).map(pageRef), "chromium")];
 
   if (!outcome.ok) {
     return envelope({
@@ -554,6 +563,14 @@ async function evaluateOnWebTarget(
   }
 
   const target = live[0];
+  const pick = pickTarget(live, pageRef);
+  const pickWarning =
+    pick.kind === "one"
+      ? identicalPickWarning(pageRef(target), pick.others.map(pageRef), "chromium")
+      : `${live.length} tabs match ${url}; evaluated in ${target.url} (targetId ${target.targetId}). The others: ${live
+          .slice(1)
+          .map((t) => `${t.targetId} (${t.url})`)
+          .join(", ")}. Pass targetId to pick another.`;
   const outcome = await evaluateOnExtensionPage(resolved.port, target.targetId, args.expression, args.timeout);
 
   if (!outcome.ok) {
@@ -577,14 +594,7 @@ async function evaluateOnWebTarget(
     command: schema.name,
     status: "evaluated",
     value: outcome.value,
-    warnings: [
-      ...(live.length > 1
-        ? [
-            `${live.length} tabs match ${url}; evaluated in ${target.url} (target ${target.targetId}). Narrow the url to pick another.`,
-          ]
-        : []),
-      outcome.note ?? null,
-    ],
+    warnings: [pickWarning, outcome.note ?? null],
     hint: `Evaluated over CDP in ${target.url} (target ${target.targetId}), the page's main world through the inspector, which the site's CSP and Trusted Types do not govern. Pass context: "content" for the extension's isolated world instead.`,
   });
 }
@@ -831,7 +841,9 @@ async function evaluatePastSurfaceCsp(
 
 const sameDocumentUrl = (a: unknown, b: string): boolean => urlKey(String(a ?? ""), b) === urlKey(b, b);
 
-function ambiguousUrl(url: string, urls: string[]): string {
+function ambiguousUrl(url: string, candidates: TargetRef[]): string {
+  const urls = distinctUrls(candidates);
+
   return envelope({
     ok: false,
     command: schema.name,
@@ -841,12 +853,14 @@ function ambiguousUrl(url: string, urls: string[]): string {
       name: "AmbiguousTabUrl",
       message: `url: ${url} matches ${urls.length} open tabs that show different pages (${urls.join(", ")}); refusing to guess which one you mean, so nothing was evaluated.`,
     },
-    value: { matchingUrls: urls },
-    hint: "Pass the full url of the one you mean, its #fragment included, as url.",
+    value: { matchingUrls: urls, matchingTargets: candidates },
+    hint: AMBIGUOUS_TARGET_HINT,
   });
 }
 
-function tabByUrl(tabs: RdpTab[], url: string, seen?: { matched: number }): RdpTab | undefined {
+type TabsSeen = { matched: number; refs?: TargetRef[] };
+
+function tabByUrl(tabs: RdpTab[], url: string, seen?: TabsSeen): RdpTab | undefined {
   const exact = tabs.filter((tab) => sameDocumentUrl(tab.url, url));
   const covered = exact.length
     ? exact
@@ -854,9 +868,25 @@ function tabByUrl(tabs: RdpTab[], url: string, seen?: { matched: number }): RdpT
   const candidates = covered.length
     ? covered
     : tabs.filter((tab) => String(tab.url ?? "").includes(url));
-  if (seen) seen.matched = candidates.length;
+  const ordered = [...candidates].sort(geckoRecency);
 
-  return candidates.find((tab) => tab.selected === true) ?? candidates[0];
+  if (seen) {
+    seen.matched = ordered.length;
+    seen.refs = ordered.map(geckoTabRef);
+  }
+
+  return ordered[0];
+}
+
+function manyTabsWarning(seen: TabsSeen): string {
+  const [picked, ...others] = seen.refs ?? [];
+  if (picked && distinctUrls([picked, ...others]).length === 1) return identicalPickWarning(picked, others, "gecko") ?? "";
+
+  return `${seen.matched} open tabs matched the url; the selected one, else the most recently created, was used${picked ? ` (targetId ${picked.targetId})` : ""}. Narrow the url or pass targetId to pick another.`;
+}
+
+function sameTabsSeen(matching: RdpTab[]): TabsSeen | undefined {
+  return matching.length > 1 ? { matched: matching.length, refs: [...matching].sort(geckoRecency).map(geckoTabRef) } : undefined;
 }
 
 async function evaluateInGeckoTab(
@@ -864,7 +894,7 @@ async function evaluateInGeckoTab(
   browser: string,
   select: (tabs: RdpTab[]) => RdpTab | null | undefined,
   missing: string,
-  seen?: { matched: number },
+  seen?: TabsSeen,
 ): Promise<string | null> {
   const resolved = await resolveRdpPort(args.projectPath, browser, {
     waitMs: 3_000,
@@ -902,9 +932,7 @@ async function evaluateInGeckoTab(
       value: outcome.value === undefined ? null : outcome.value,
       warnings: [
         `Evaluated in the tab showing ${outcome.tab.url || "an unknown url"}${outcome.tab.title ? ` ("${outcome.tab.title}")` : ""}.`,
-        seen && seen.matched > 1
-          ? `${seen.matched} open tabs matched the url; the selected one (or the first) was used. Narrow the url to pick another.`
-          : null,
+        seen && seen.matched > 1 ? manyTabsWarning(seen) : null,
       ],
     });
   }
@@ -984,8 +1012,8 @@ async function evaluateExtensionPageOverProtocol(
     return raw;
   }
 
-  const matching = candidates ? distinctUrls(candidates(tabs)) : [];
-  if (matching.length > 1) return ambiguousUrl(target, matching);
+  const matching = candidates ? candidates(tabs) : [];
+  if (distinctUrls(matching).length > 1) return ambiguousUrl(target, matching.map(geckoTabRef));
 
   if (!select(tabs)) {
     const production = extensionDocument ? productionSessionCommand(args.projectPath, browser) : null;
@@ -996,7 +1024,7 @@ async function evaluateExtensionPageOverProtocol(
   if (!isSingleExpression(args.expression)) return notOneExpression();
 
   return (
-    (await evaluateInGeckoTab(args, browser, select, `No open tab shows ${target}.`)) ?? raw
+    (await evaluateInGeckoTab(args, browser, select, `No open tab shows ${target}.`, sameTabsSeen(matching))) ?? raw
   );
 }
 
@@ -1028,7 +1056,7 @@ async function evaluatePagePastSiteCsp(
   if (!isSingleExpression(args.expression)) return notOneExpression();
 
   const url = args.url;
-  const seen = { matched: 0 };
+  const seen: TabsSeen = { matched: 0 };
 
   return evaluateInGeckoTab(
     args,
@@ -1085,8 +1113,8 @@ async function evaluateExtensionTabBeforeInjection(
   }
 
   const url = args.url;
-  const matching = url ? distinctUrls(geckoExtensionTabsByUrl(tabs, url)) : [];
-  if (url && matching.length > 1) return ambiguousUrl(url, matching);
+  const matching = url ? geckoExtensionTabsByUrl(tabs, url) : [];
+  if (url && distinctUrls(matching).length > 1) return ambiguousUrl(url, matching.map(geckoTabRef));
 
   const select = url
     ? (list: RdpTab[]) => geckoExtensionTabByUrl(list, url)
@@ -1097,7 +1125,7 @@ async function evaluateExtensionTabBeforeInjection(
 
   if (!isSingleExpression(args.expression)) return notOneExpression();
 
-  const answer = await evaluateInGeckoTab(args, browser, select, `No open tab shows ${url ?? String(tab.url)}.`);
+  const answer = await evaluateInGeckoTab(args, browser, select, `No open tab shows ${url ?? String(tab.url)}.`, sameTabsSeen(matching));
   if (answer === null || url) return answer;
 
   const parsed = parseFrameObject(answer);
@@ -1199,8 +1227,123 @@ async function evaluateThroughExecuteScript(
   });
 }
 
+function evalDisabled(): string {
+  return envelope({
+    ok: false,
+    command: schema.name,
+    status: "eval-disabled",
+    error: {
+      code: "E_EVAL_DISABLED",
+      name: "EvalDisabled",
+      message:
+        "eval is disabled for this session: it was started without allowEval: true, so no session token exists, and this tool evaluates nothing without one, over the debug port or the relay.",
+    },
+    hint: "Call extension_dev again with allowEval: true and replace: true (it stops this session first), then extension_eval again. Reads that need no eval still work: extension_dom_snapshot, extension_inspect, extension_logs, extension_assert.",
+  });
+}
+
+function noDebugPort(browser: string, protocol: string): string {
+  return envelope({
+    ok: false,
+    command: schema.name,
+    status: "no-session",
+    error: {
+      code: "E_NO_SESSION",
+      name: "NoSession",
+      message: `No live ${browser} session with a debug port (${protocol}) for this project, so targetId has no browser to ask. Start extension_dev and extension_wait for ready.`,
+    },
+  });
+}
+
+async function evaluateByTargetId(
+  args: ActArgs & { expression: string },
+  browser: string,
+  targetId: string,
+): Promise<string> {
+  if (!isChromiumFamily(browser) && !isGeckoFamily(browser)) {
+    return envelope({
+      ok: false,
+      command: schema.name,
+      status: "bad-request",
+      error: {
+        code: "E_BAD_REQUEST",
+        name: "BadRequest",
+        message: `${browser} lists no debug-port targets, so targetId cannot pick a page there.`,
+      },
+      hint: "Pass url instead.",
+    });
+  }
+
+  if (!evalTokenPresent(args.projectPath, browser)) return evalDisabled();
+
+  if (isGeckoFamily(browser)) {
+    if (!isSingleExpression(args.expression)) return notOneExpression();
+
+    const resolved = await resolveRdpPort(args.projectPath, browser, { waitMs: 3_000, graceMs: 1_000 });
+    if (!resolved) return noDebugPort(browser, "RDP");
+
+    let tabs: RdpTab[];
+
+    try {
+      tabs = await rdpListTabs(resolved.port);
+    } catch (err) {
+      return targetsUnreadable(err instanceof Error ? err.message : String(err));
+    }
+
+    if (!findGeckoTab(tabs, targetId)) return targetNotFound(schema.name, targetId, tabs.map(geckoTabRef));
+
+    return (
+      (await evaluateInGeckoTab(args, browser, (live) => findGeckoTab(live, targetId), `The tab with targetId ${targetId} closed before the expression ran.`)) ??
+      noDebugPort(browser, "RDP")
+    );
+  }
+
+  const resolved = await resolveCdpPort(args.projectPath, browser);
+  if (!resolved) return noDebugPort(browser, "CDP");
+
+  let live: TargetRef[];
+
+  try {
+    live = (await CDPClient.discoverTargets(resolved.port))
+      .filter((t) => !String(t.url ?? "").startsWith("devtools://"))
+      .map((t) => ({ targetId: String(t.id), url: String(t.url ?? "") }));
+  } catch (err) {
+    return targetsUnreadable(err instanceof Error ? err.message : String(err));
+  }
+
+  const target = live.find((t) => t.targetId === targetId);
+  if (!target) return targetNotFound(schema.name, targetId, live);
+
+  const outcome = await evaluateOnExtensionPage(resolved.port, targetId, args.expression, args.timeout);
+
+  if (!outcome.ok) {
+    return envelope({
+      ok: false,
+      command: schema.name,
+      status: outcome.thrown ? "eval-failed" : outcome.timedOut ? "eval-timeout" : "cdp-failed",
+      error: {
+        code: outcome.thrown ? "E_EVAL" : "E_CDP",
+        name: outcome.thrown ? "EvalError" : "CdpError",
+        message: outcome.message,
+      },
+      hint: outcome.thrown
+        ? `The expression threw inside ${target.url} (targetId ${targetId}); it ran over CDP in that target's main world.`
+        : "The session's debug port refused the call or the target went away. extension_doctor names which.",
+    });
+  }
+
+  return envelope({
+    ok: true,
+    command: schema.name,
+    status: "evaluated",
+    value: outcome.value,
+    warnings: [outcome.note ?? null],
+    hint: `Evaluated over CDP in ${target.url} (targetId ${targetId}), the target's main world through the inspector, which neither the page's CSP nor the extension's governs; a promise is awaited before returning.`,
+  });
+}
+
 export async function handler(
-  args: ActArgs & { expression: string; until?: EvalUntil },
+  args: ActArgs & { expression: string; until?: EvalUntil; targetId?: string },
 ): Promise<string> {
   const ambiguous = ambiguousSessionRefusal(schema.name, args.projectPath, args.browser);
   if (ambiguous) return ambiguous;
@@ -1220,9 +1363,11 @@ export async function handler(
 }
 
 async function evaluateOnce(
-  args: ActArgs & { expression: string },
+  args: ActArgs & { expression: string; targetId?: string },
 ): Promise<string> {
   const { browser } = resolveSessionBrowser(args.projectPath, args.browser);
+
+  if (args.targetId) return evaluateByTargetId(args, browser, args.targetId);
 
   if (WEBKIT_FAMILY.has(browser) && args.context === "page") {
     const info = readWebDriverSession(args.projectPath, browser);
@@ -1235,20 +1380,7 @@ async function evaluateOnce(
   const context = defaulted ? "page" : args.context;
 
   if (wantsExtensionPageOverCdp(args.projectPath, browser, context, args.url)) {
-    if (!evalTokenPresent(args.projectPath, browser)) {
-      return envelope({
-        ok: false,
-        command: schema.name,
-        status: "eval-disabled",
-        error: {
-          code: "E_EVAL_DISABLED",
-          name: "EvalDisabled",
-          message:
-            "eval is disabled for this session: it was started without allowEval: true, so no session token exists, and this tool evaluates nothing without one, over the debug port or the relay.",
-        },
-        hint: "Call extension_dev again with allowEval: true and replace: true (it stops this session first), then extension_eval again. Reads that need no eval still work: extension_dom_snapshot, extension_inspect, extension_logs, extension_assert.",
-      });
-    }
+    if (!evalTokenPresent(args.projectPath, browser)) return evalDisabled();
 
     const resolved = await resolveCdpPort(args.projectPath, browser);
 

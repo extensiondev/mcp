@@ -197,7 +197,7 @@ describe("dom_snapshot tabUrl targeting", () => {
       "EEE5",
     ]);
 
-    expect(result.hint).toContain("Narrow");
+    expect(result.hint).toContain("targetId");
     expect(calls).toHaveLength(0);
   });
 

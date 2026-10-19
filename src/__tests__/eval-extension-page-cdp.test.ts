@@ -310,7 +310,7 @@ describe("extension_eval reaches an MV3 extension page over CDP, which the page 
 
     expect(result.ok).toBe(true);
     expect(evaluations[0].sessionId).toBe("session-first");
-    expect(result.warnings[0]).toContain("2 open pages match");
+    expect(result.warnings[0]).toContain("2 open tabs show");
     expect(result.warnings[0]).toContain("second");
   });
 

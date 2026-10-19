@@ -11,10 +11,22 @@ import { envelope } from "../lib/envelope";
 import { ambiguousSessionRefusal, resolveSessionBrowser } from "../lib/session-browser";
 import { isChromiumFamily, isGeckoFamily, WEBKIT_FAMILY } from "../lib/browser-family";
 import { CDP_PORT_MISSING_HINT, RDP_PORT_MISSING_HINT, resolveCdpPort, resolveRdpPort } from "../lib/cdp-port";
-import { listPageTargets, matchTargetsByUrl, type PageTarget } from "../lib/cdp-targets";
+import { listDocumentTargets, listPageTargets, matchTargetsByUrl, type PageTarget } from "../lib/cdp-targets";
 import { readExtensionPageTargets } from "../lib/cdp-extension-page";
 import { rdpListTabs, type RdpTab } from "../lib/rdp";
-import { geckoDocumentTab, geckoExtensionTabByUrl, isExtensionUrl } from "../lib/extension-surfaces";
+import { geckoDocumentTab, geckoExtensionTabsByUrl, isExtensionUrl } from "../lib/extension-surfaces";
+import {
+  AMBIGUOUS_TARGET_HINT,
+  findGeckoTab,
+  geckoRecency,
+  geckoTabRef,
+  identicalPickWarning,
+  pickTarget,
+  TARGET_ID_PROPERTY,
+  targetNotFound,
+  type TargetFamily,
+  type TargetRef,
+} from "../lib/target-pick";
 import {
   navigableUrl,
   pageMatchesUrl,
@@ -44,7 +56,7 @@ const DEFAULT_TIMEOUT_MS = 15_000;
 export const schema = {
   name: COMMAND,
   description:
-    "Take a screenshot of one open extension surface (popup, options, sidebar, newtab, history, bookmarks) or web page in a live extension_dev or extension_start session and save it as a .png file. It asks the browser for that page's own pixels over the session's debug port: CDP Page.captureScreenshot on Chromium, the debugger protocol's screenshot actor on Firefox, and WebDriver on Safari, where only web pages can be captured. It never captures the screen or another window and never brings a window to the front, so there is no need for screencapture, AppleScript or a Playwright script. The surface must already be open: open it with extension_open first. width and height set the viewport on Chromium and crop from the top left on Firefox; deviceScaleFactor sets the pixel ratio. The file goes under dist/extension-js/<browser>/screenshots unless `path` names one, and the answer gives its path and pixel size. Use extension_dom_snapshot for the page's structure as text.",
+    "Take a screenshot of one open extension surface (popup, options, sidebar, newtab, history, bookmarks) or web page in a live extension_dev or extension_start session and save it as a .png file. It asks the browser for that page's own pixels over the session's debug port: CDP Page.captureScreenshot on Chromium, the debugger protocol's screenshot actor on Firefox, and WebDriver on Safari, where only web pages can be captured. It never captures the screen or another window and never brings a window to the front, so there is no need for screencapture, AppleScript or a Playwright script. The surface must already be open: open it with extension_open first. Pass `targetId` (the target.targetId extension_open answers, or one from extension_dom_snapshot listTargets) to capture that exact page; when a url matches several tabs that show the same page, the most recently active one is captured and a warning names the others. width and height set the viewport on Chromium and crop from the top left on Firefox; deviceScaleFactor sets the pixel ratio. The file goes under dist/extension-js/<browser>/screenshots unless `path` names one, and the answer gives its path and pixel size. Use extension_dom_snapshot for the page's structure as text.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -57,6 +69,7 @@ export const schema = {
         description: "page captures a tab picked by `url` (or the only or selected one); the rest capture that extension surface, which must already be open.",
       },
       url: { type: "string", description: "page: the tab whose url contains this (a web address or the extension's own page url)." },
+      targetId: TARGET_ID_PROPERTY,
       width: { type: "number", description: "Viewport width in CSS pixels (Chromium renders at it; Firefox crops to it)." },
       height: { type: "number", description: "Viewport height in CSS pixels (Chromium renders at it; Firefox crops to it)." },
       deviceScaleFactor: { type: "number", description: "Pixel ratio of the image, 0.5 to 4. Defaults to the browser's own on Chromium and 1 on Firefox." },
@@ -76,6 +89,7 @@ interface Args extends CaptureSize {
   browser?: string;
   context?: string;
   url?: string;
+  targetId?: string;
   path?: string;
   timeout?: number;
 }
@@ -96,7 +110,16 @@ function badSize(args: Args): string | null {
   return null;
 }
 
-function captured(args: Args, browser: string, context: string, outcome: CaptureOutcome, url: string, transport: string, warnings: string[] = []): string {
+function captured(
+  args: Args,
+  browser: string,
+  context: string,
+  outcome: CaptureOutcome,
+  url: string,
+  transport: string,
+  warnings: Array<string | null> = [],
+  targetId?: string,
+): string {
   if (!outcome.ok) {
     return refuse(
       outcome.timedOut ? "capture-timeout" : "capture-failed",
@@ -120,7 +143,7 @@ function captured(args: Args, browser: string, context: string, outcome: Capture
     ok: true,
     command: COMMAND,
     status: "captured",
-    value: { browser, context, url, path: file, width: size.width, height: size.height, bytes: outcome.png.length, transport },
+    value: { browser, context, url, ...(targetId ? { targetId } : {}), path: file, width: size.width, height: size.height, bytes: outcome.png.length, transport },
     warnings,
     hint: `The image is ${file} (${size.width} x ${size.height} pixels). Open it with your image reader to look at it.`,
   });
@@ -142,34 +165,59 @@ function surfaceDocumentOrRefusal(args: Args, browser: string, context: string):
   };
 }
 
-function pickOne<T extends { url?: string }>(matches: T[], wanted: string, selected?: (t: T) => boolean): T | string {
-  if (matches.length === 1) return matches[0];
+type Chosen<T> = { target: T; warning: string | null };
 
-  const chosen = selected ? matches.filter(selected) : [];
-  if (chosen.length === 1) return chosen[0];
+function chooseTarget<T>(
+  matches: T[],
+  wanted: string,
+  ref: (t: T) => TargetRef,
+  family: TargetFamily,
+  options: { rank?: (a: T, b: T) => number; prefer?: (t: T) => boolean } = {},
+): Chosen<T> | string {
+  const pick = pickTarget(matches, ref, options.rank);
 
-  if (matches.length === 0) {
+  if (pick.kind === "none") {
     return refuse("no-target", "E_NO_TARGET", `No open page matches ${wanted}, so there is nothing to capture.`, "Open it first with extension_open (url: this address), then retry. extension_dom_snapshot with listTargets: true lists what is open.");
   }
+
+  if (pick.kind === "one") return { target: pick.target, warning: identicalPickWarning(ref(pick.target), pick.others.map(ref), family) };
+
+  const preferred = options.prefer ? pick.candidates.filter(options.prefer) : [];
+  if (preferred.length === 1) return { target: preferred[0], warning: null };
 
   return refuse(
     "ambiguous-target",
     "E_AMBIGUOUS_TARGET",
-    `${matches.length} open pages match ${wanted}; refusing to guess which one to capture.`,
-    "Pass a `url` that matches exactly one of matchingTargets.",
-    { matchingTargets: matches.map((m) => ({ url: String(m.url ?? "") })) },
+    `${pick.candidates.length} open pages that show different documents match ${wanted}; refusing to guess which one to capture.`,
+    AMBIGUOUS_TARGET_HINT,
+    { matchingTargets: pick.candidates.map(ref) },
   );
 }
+
+const pageRef = (t: PageTarget): TargetRef => ({ targetId: t.targetId, url: t.url });
 
 async function onChromium(args: Args, browser: string, context: string, timeoutMs: number): Promise<string> {
   const resolved = await resolveCdpPort(args.projectPath, browser, { waitMs: Math.min(timeoutMs, 5_000), graceMs: 1_000 });
   if (!resolved) return refuse("no-session", "E_NO_SESSION", `No live ${browser} session with a debug port for this project, so there is no browser to ask for pixels. Start extension_dev and extension_wait for ready.`, CDP_PORT_MISSING_HINT);
 
-  let target: PageTarget | string;
+  let chosen: Chosen<PageTarget> | string;
 
-  if (context === "page" && !isExtensionUrl(args.url)) {
+  if (args.targetId) {
+    let all: PageTarget[];
+
+    try {
+      all = await listDocumentTargets(resolved.port);
+    } catch (error) {
+      return refuse("cdp-failed", "E_CDP", `Could not list the session's page targets: ${error instanceof Error ? error.message : String(error)}`);
+    }
+
+    const found = all.find((t) => t.targetId === args.targetId);
+    if (!found) return targetNotFound(COMMAND, args.targetId, all.map(pageRef));
+
+    chosen = { target: found, warning: null };
+  } else if (context === "page" && !isExtensionUrl(args.url)) {
     const pages = await listPageTargets(resolved.port).catch(() => [] as PageTarget[]);
-    target = pickOne(args.url ? matchTargetsByUrl(pages, args.url) : pages.filter((t) => !isExtensionUrl(t.url)), args.url ?? "any open tab");
+    chosen = chooseTarget(args.url ? matchTargetsByUrl(pages, args.url) : pages.filter((t) => !isExtensionUrl(t.url)), args.url ?? "any open tab", pageRef, "chromium");
   } else {
     let wanted = args.url as string;
 
@@ -195,14 +243,15 @@ async function onChromium(args: Args, browser: string, context: string, timeoutM
       );
     }
 
-    target = read.targets[0];
+    chosen = chooseTarget(read.targets, wanted, pageRef, "chromium");
   }
 
-  if (typeof target === "string") return target;
+  if (typeof chosen === "string") return chosen;
 
+  const { target, warning } = chosen;
   const outcome = await captureCdpTarget(resolved.port, target.targetId, args, timeoutMs);
 
-  return captured(args, browser, context, outcome, target.url, "cdp");
+  return captured(args, browser, context, outcome, target.url, "cdp", [warning], target.targetId);
 }
 
 async function onGecko(args: Args, browser: string, context: string, timeoutMs: number): Promise<string> {
@@ -218,8 +267,20 @@ async function onGecko(args: Args, browser: string, context: string, timeoutMs: 
   }
 
   let tab: RdpTab | string;
+  let pickWarning: string | null = null;
 
-  if (context !== "page") {
+  const choose = (matches: RdpTab[], wanted: string, prefer?: (t: RdpTab) => boolean): RdpTab | string => {
+    const chosen = chooseTarget(matches, wanted, geckoTabRef, "gecko", { rank: geckoRecency, prefer });
+    if (typeof chosen === "string") return chosen;
+
+    pickWarning = chosen.warning;
+
+    return chosen.target;
+  };
+
+  if (args.targetId) {
+    tab = findGeckoTab(tabs, args.targetId) ?? targetNotFound(COMMAND, args.targetId, tabs.map(geckoTabRef));
+  } else if (context !== "page") {
     const doc = surfaceDocumentOrRefusal(args, browser, context);
     if ("refusal" in doc) return doc.refusal;
 
@@ -232,11 +293,11 @@ async function onGecko(args: Args, browser: string, context: string, timeoutMs: 
         `Open the page in a tab with extension_open (url: "${doc.document}"), then retry.`,
       );
   } else if (args.url && /^moz-extension:\/\//.test(args.url)) {
-    tab = geckoExtensionTabByUrl(tabs, args.url) ?? pickOne([], args.url);
+    tab = choose(geckoExtensionTabsByUrl(tabs, args.url), args.url);
   } else {
     const wanted = args.url?.toLowerCase();
     const matches = wanted ? tabs.filter((t) => String(t.url ?? "").toLowerCase().includes(wanted)) : tabs;
-    tab = pickOne(matches, args.url ?? "any open tab", (t) => t.selected === true);
+    tab = choose(matches, args.url ?? "any open tab", (t) => t.selected === true);
   }
 
   if (typeof tab === "string") return tab;
@@ -245,13 +306,19 @@ async function onGecko(args: Args, browser: string, context: string, timeoutMs: 
   if (typeof contextId !== "number") return refuse("capture-failed", "E_CAPTURE_FAILED", `Firefox listed ${String(tab.url ?? "the tab")} without a browsing context id, so its screenshot actor has nothing to capture.`);
 
   const outcome = await captureRdpTab(resolved.port, contextId, args, timeoutMs);
-  const warnings =
-    args.width || args.height ? ["Firefox's debugger protocol has no viewport override, so width and height crop the page as it is laid out, from the top left."] : [];
+  const warnings = [
+    pickWarning,
+    args.width || args.height ? "Firefox's debugger protocol has no viewport override, so width and height crop the page as it is laid out, from the top left." : null,
+  ];
 
-  return captured(args, browser, context, outcome, String(tab.url ?? ""), "rdp", warnings);
+  return captured(args, browser, context, outcome, String(tab.url ?? ""), "rdp", warnings, geckoTabRef(tab).targetId);
 }
 
 async function onWebKit(args: Args, browser: string, context: string, timeoutMs: number): Promise<string> {
+  if (args.targetId) {
+    return refuse("bad-request", "E_BAD_REQUEST", "Safari's WebDriver session drives one automation window and lists no targets, so targetId cannot pick a page there.", "Pass url instead, or capture on a Chromium or Firefox session.");
+  }
+
   if (context !== "page" || isExtensionUrl(args.url)) {
     return refuse(
       "surface-not-capturable",

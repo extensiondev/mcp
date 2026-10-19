@@ -83,6 +83,7 @@ describe("extension_dom_snapshot listTargets on Gecko (RDP root listTabs)", () =
     expect(result.value.transport).toBe("rdp");
     expect(result.value.targets).toEqual([
       {
+        targetId: "1",
         actor: "server1.conn0.tabDescriptor4",
         type: "tab",
         url: "https://example.com/",
@@ -90,6 +91,7 @@ describe("extension_dom_snapshot listTargets on Gecko (RDP root listTabs)", () =
         selected: true,
       },
       {
+        targetId: "server1.conn0.tabDescriptor7",
         actor: "server1.conn0.tabDescriptor7",
         type: "tab",
         url: "about:blank",

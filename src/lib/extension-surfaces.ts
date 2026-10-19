@@ -11,6 +11,7 @@ import fs from "node:fs";
 import { surfaceDocument } from "../tools/open";
 import { envelope } from "./envelope";
 import { readyContractPath } from "./session-paths";
+import { geckoRecency } from "./target-pick";
 
 export const EXTENSION_PAGE_CONTEXTS = [
   "popup",
@@ -81,13 +82,13 @@ export function geckoExtensionTabsByUrl<T extends { url?: string }>(tabs: T[], u
   return exact.length ? exact : own.filter((tab) => String(tab.url ?? "").includes(wanted));
 }
 
-export function geckoExtensionTabByUrl<T extends { url?: string; selected?: boolean }>(
+export function geckoExtensionTabByUrl<T extends { url?: string; selected?: boolean; browserId?: number }>(
   tabs: T[],
   url: string,
 ): T | undefined {
   const candidates = geckoExtensionTabsByUrl(tabs, url);
 
-  return candidates.find((tab) => tab.selected === true) ?? candidates[0];
+  return [...candidates].sort(geckoRecency)[0];
 }
 
 export function distinctUrls(items: Array<{ url?: string }>): string[] {
