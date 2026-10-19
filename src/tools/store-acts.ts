@@ -13,11 +13,12 @@ import { consoleProjectUrl } from "../lib/registry";
 import { projectApiReadFailure, projectApiSend } from "../lib/project-api";
 import { badShipRequest, isRow, openShipApi, runShipAct, text } from "../lib/ship-act";
 import {
-  ITEM_ON_FIRST_SUBMISSION,
   connectSentences,
   connectionOf,
   failedCheckSentence,
   fallbackConnectUrl,
+  itemLinkUrls,
+  linkItemSentences,
   storeSettingsUrl,
 } from "../lib/store-connection";
 import { readLocalListing, storeMdAdvisory } from "./store-listing";
@@ -253,17 +254,29 @@ export async function preflight(args: StoreActArgs): Promise<string> {
     });
   }
 
-  const itemUrl = chrome && connection && text(connection.itemId) ? text(connection.itemUrl) : "";
-  const itemLine = chrome && connection && !text(connection.itemId) ? ` ${ITEM_ON_FIRST_SUBMISSION}` : "";
+  if (chrome && connection && connection.healthy === true && connection.itemLinked === false) {
+    const settingsUrl = storeSettingsUrl(api.ref, args.api);
+    const urls = itemLinkUrls([connection], settingsUrl);
+    const say = linkItemSentences(urls);
 
-  if (chrome && itemLine) chrome.itemCreatedOnFirstSubmission = true;
+    return envelope({
+      ok: true,
+      command: COMMAND,
+      status: "store-item-not-linked",
+      value: { action: "preflight", stores, storesPageUrl, ...urls, trackUrl: settingsUrl, sayToPerson: say },
+      hint: say,
+      warnings: [unreadLine, "This read wrote nothing."],
+    });
+  }
+
+  const itemUrl = chrome && connection && text(connection.itemId) ? text(connection.itemUrl) : "";
 
   return envelope({
     ok: true,
     command: COMMAND,
     status: "preflight-read",
     value: { action: "preflight", stores, storesPageUrl, ...(itemUrl ? { itemUrl } : {}) },
-    hint: `${readinessHint}${itemLine}${itemUrl ? ` The Chrome Web Store item is at ${itemUrl}.` : ""}`,
+    hint: `${readinessHint}${itemUrl ? ` The Chrome Web Store item is at ${itemUrl}.` : ""}`,
     warnings: [unreadLine],
   });
 }

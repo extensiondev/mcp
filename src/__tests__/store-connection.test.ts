@@ -14,6 +14,11 @@ const SECRET_NAMES = /STORE_(CHROME|EDGE|FIREFOX|SAFARI)_|CHROME_CLIENT|CLIENT_S
 const SENTENCES = (url: string) =>
   `Connect your Chrome Web Store account once at ${url}; Google asks for one click. Then I submit it as an unlisted draft, and nothing goes to review until you publish.`;
 
+const NEW_ITEM = "https://chrome.google.com/webstore/devconsole";
+const PACKAGE = "http://localhost:3100/api/projects/prj_probe/builds/b418732/chrome.zip";
+const LINK_ITEM = `${SETTINGS}?connect=chrome&link=item`;
+const LINK_SENTENCES = `One step is yours, once: create the item in the Chrome Web Store dashboard at ${NEW_ITEM} with this package ${PACKAGE}, and fill its Store listing and Privacy tabs there; your synced listing text is on the extension.dev store settings page to copy. Then paste the item's dashboard address at ${LINK_ITEM}. After that I submit every build as an unlisted draft, and nothing goes to review until you publish.`;
+
 function readiness(connection: Record<string, unknown> | null, extra: Record<string, unknown> = {}) {
   return {
     store: "chrome",
@@ -86,7 +91,26 @@ describe("extension_submit points a person at the Chrome Web Store connection in
     expect(out.value.stores.chrome.connection).toMatchObject({ kind: "oauth", healthy: false, connectedAs: "cezar@example.com" });
   });
 
-  it("a healthy connection with no store item says the first submission creates it", async () => {
+  it("a healthy connection whose store item is not linked answers the three steps the person takes once", async () => {
+    if (process.platform === "win32") return;
+
+    platform.login();
+    platform.routes[`POST ${PREFLIGHT}`] = () => ({
+      body: readiness({ kind: "oauth", connectedAs: "cezar@example.com", healthy: true, itemId: null, itemLinked: false, newItemUrl: NEW_ITEM, packageUrl: PACKAGE, linkItemUrl: LINK_ITEM }),
+    });
+
+    const out = JSON.parse(await submit({ action: "preflight", browsers: ["chrome"], api: API }));
+
+    expect(out.status).toBe("store-item-not-linked");
+    expect(out.value).toMatchObject({ trackUrl: SETTINGS, newItemUrl: NEW_ITEM, packageUrl: PACKAGE, linkItemUrl: LINK_ITEM });
+    expect(out.hint).toBe(LINK_SENTENCES);
+    expect(sentenceCount(out.hint)).toBe(3);
+    expect(JSON.stringify(out)).not.toContain("created on the first submission");
+    expect(JSON.stringify(out)).not.toMatch(SECRET_NAMES);
+    expect(trackFields("extension_submit", { args: { action: "preflight", browsers: ["chrome"], api: API }, status: out.status, value: out.value })?.trackUrl).toBe(SETTINGS);
+  });
+
+  it("a healthy connection with no item id and no word on linking says nothing about creating the item", async () => {
     if (process.platform === "win32") return;
 
     platform.login();
@@ -95,9 +119,28 @@ describe("extension_submit points a person at the Chrome Web Store connection in
     const out = JSON.parse(await submit({ action: "preflight", browsers: ["chrome"], api: API }));
 
     expect(out.status).toBe("preflight-read");
-    expect(out.hint).toContain("The Chrome Web Store item is created on the first submission.");
-    expect(out.value.stores.chrome.itemCreatedOnFirstSubmission).toBe(true);
+    expect(out.hint).not.toContain("created on the first submission");
     expect(out.value.itemUrl).toBeUndefined();
+  });
+
+  it("a submission the platform refuses because no store item is linked answers the same three steps", async () => {
+    if (process.platform === "win32") return;
+
+    process.env.EXTENSION_DEV_APPROVAL_GATE = "0";
+    platform.login();
+    platform.routes[`POST ${SUBMIT}`] = () => ({
+      status: 409,
+      body: { code: "STORE_ITEM_NOT_LINKED", message: "STORE_CHROME_REFRESH_TOKEN works but no item is linked.", newItemUrl: NEW_ITEM, packageUrl: PACKAGE, linkItemUrl: LINK_ITEM },
+    });
+
+    const out = JSON.parse(await submit({ browsers: ["chrome"], buildSha: "b418732", dryRun: false, api: API }));
+
+    expect(out.ok).toBe(false);
+    expect(out.status).toBe("store-item-not-linked");
+    expect(out.error.platformCode).toBe("STORE_ITEM_NOT_LINKED");
+    expect(out.value).toMatchObject({ trackUrl: SETTINGS, newItemUrl: NEW_ITEM, packageUrl: PACKAGE, linkItemUrl: LINK_ITEM });
+    expect(out.hint).toBe(LINK_SENTENCES);
+    expect(JSON.stringify(out)).not.toMatch(SECRET_NAMES);
   });
 
   it("a healthy connection with a store item answers its dashboard link beside the track page", async () => {

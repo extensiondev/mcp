@@ -18,8 +18,8 @@ import type { ProjectRef } from "./registry";
 type Row = Record<string, unknown>;
 
 export const REVIEW_PROMISE = "Nothing goes to review until you publish.";
-export const ITEM_ON_FIRST_SUBMISSION = "The Chrome Web Store item is created on the first submission.";
 export const NOT_CONNECTED_CODES = new Set(["STORE_NOT_CONNECTED", "STORE_CONNECTION_UNHEALTHY"]);
+export const ITEM_NOT_LINKED_CODE = "STORE_ITEM_NOT_LINKED";
 
 const CHROME_DASHBOARD = "https://chrome.google.com/webstore/devconsole";
 
@@ -28,8 +28,29 @@ export interface StoreConnection {
   connectedAs: string | null;
   healthy: boolean | null;
   itemId: string | null;
+  itemLinked?: boolean;
   reason?: string;
   itemUrl?: string;
+}
+
+export interface ItemLinkUrls {
+  newItemUrl: string;
+  packageUrl: string;
+  linkItemUrl: string;
+}
+
+export function linkItemSentences(urls: ItemLinkUrls): string {
+  return `One step is yours, once: create the item in the Chrome Web Store dashboard at ${urls.newItemUrl} with this package ${urls.packageUrl}, and fill its Store listing and Privacy tabs there; your synced listing text is on the extension.dev store settings page to copy. Then paste the item's dashboard address at ${urls.linkItemUrl}. After that I submit every build as an unlisted draft, and nothing goes to review until you publish.`;
+}
+
+export function itemLinkUrls(rows: unknown[], settingsUrl: string): ItemLinkUrls {
+  const pick = (key: string) => rows.map((row) => (isRow(row) ? text(row[key]) : "")).find(Boolean) ?? "";
+
+  return {
+    newItemUrl: pick("newItemUrl") || CHROME_DASHBOARD,
+    packageUrl: pick("packageUrl") || settingsUrl,
+    linkItemUrl: pick("linkItemUrl") || `${settingsUrl}?connect=chrome`,
+  };
 }
 
 export function connectSentences(connectUrl: string): string {
@@ -64,7 +85,7 @@ export function chromeItemUrl(row: Row): string {
     : CHROME_DASHBOARD;
 }
 
-export function connectionOf(json: Row): (StoreConnection & { connectUrl?: string }) | null {
+export function connectionOf(json: Row): (StoreConnection & Partial<ItemLinkUrls> & { connectUrl?: string }) | null {
   if (!isRow(json.connection)) return null;
 
   const row = json.connection;
@@ -72,12 +93,17 @@ export function connectionOf(json: Row): (StoreConnection & { connectUrl?: strin
   const reason = text(row.reason) || text(row.message) || text(row.lastCheckMessage);
   const itemUrl = chromeItemUrl(row);
   const connectUrl = text(json.connectUrl) || text(row.connectUrl);
+  const links = ["newItemUrl", "packageUrl", "linkItemUrl"]
+    .map((key) => [key, text(row[key]) || text(json[key])] as const)
+    .filter(([, url]) => url);
 
   return {
     kind,
     connectedAs: text(row.connectedAs) || null,
     healthy: typeof row.healthy === "boolean" ? row.healthy : null,
     itemId: text(row.itemId) || null,
+    ...(typeof row.itemLinked === "boolean" ? { itemLinked: row.itemLinked } : {}),
+    ...Object.fromEntries(links),
     ...(reason ? { reason } : {}),
     ...(itemUrl ? { itemUrl } : {}),
     ...(connectUrl ? { connectUrl } : {}),

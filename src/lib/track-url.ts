@@ -96,7 +96,7 @@ export interface TrackCall {
   value: Row;
 }
 
-const STORE_CONNECT_STATUSES = new Set(["store-not-connected", "store-connection-failed"]);
+const STORE_CONNECT_STATUSES = new Set(["store-not-connected", "store-connection-failed", "store-item-not-linked"]);
 const APPROVAL_STATUSES = new Set(["approval-required", "approval-pending", "authorization-pending"]);
 
 function text(value: unknown): string {
