@@ -6,7 +6,6 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-
 import { browserHealthOf, describeBrowserHealth, type BrowserHealth } from "../lib/build-health";
 import { envelope } from "../lib/envelope";
 import { projectApiSend, type ProjectApi } from "../lib/project-api";
