@@ -113,7 +113,7 @@ export interface World {
   missed: string[];
   routes: Array<[RegExp, WorldRoute]>;
   login: () => void;
-  call: (name: string, args: Row) => Promise<any>;
+  call: (name: string, args: Row, server?: { noShip?: boolean; openApprovals?: boolean }) => Promise<any>;
 }
 
 function jsonResponse({ body, status = 200 }: WorldReply): Response {
@@ -134,9 +134,9 @@ export function usePlatformWorld(prefix: string): World {
         expiresAt: Math.floor(Date.now() / 1000) + 3600,
         api: WORLD_API,
       }),
-    call: async (name, args) => {
+    call: async (name, args, server = {}) => {
       const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
-      await createServer({ features: ["local", "platform"], noShip: false }).connect(serverTransport);
+      await createServer({ features: ["local", "platform"], noShip: server.noShip === true }, { openApprovals: server.openApprovals === true }).connect(serverTransport);
       const client = new Client({ name: "world-probe", version: "0.0.0" });
       await client.connect(clientTransport);
       const result = await client.callTool({ name, arguments: args });

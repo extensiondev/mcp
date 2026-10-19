@@ -124,6 +124,7 @@ Or write it into `~/.codex/config.toml` as a `[mcp_servers.extension-dev]` table
 - By default the server exposes the 24 of its 35 tools that work on this machine (the 11 platform tools are off). `--features=local,platform` adds the platform group. Env: `EXTENSION_DEV_FEATURES`.
 - `--no-ship` refuses every call that puts something in front of other people (publish, promote, a real submit, a shared preview, a revoke). Env: `EXTENSION_DEV_NO_SHIP=1`.
 - `--project <workspace>/<project>` pins the server to one project. Env: `EXTENSION_DEV_PROJECT`.
+- When a platform act answers `approval-required` on a desktop (not headless, not CI, and on Linux with a display), the server opens the approval page once in the default browser. `--no-ship` or `EXTENSION_DEV_NO_AUTO_OPEN=1` turns that off.
 
 A refused call answers `E_TOOL_DISABLED` with the flag to change. Human approval for store submissions and stable promotions, the MCP annotations every tool carries, and the `<untrusted-data-ID>` fence around page-written text are described under [Server flags](https://docs.extension.dev/tools/mcp/flags).
 

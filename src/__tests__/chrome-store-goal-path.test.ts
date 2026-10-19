@@ -74,7 +74,7 @@ describe("the Chrome Web Store goal walks from not connected to submitted with a
     const out = await world.call("extension_submit", PREFLIGHT_ARGS);
 
     walked(out, "store-not-connected", "connect");
-    expect(out.value.nextStep).toEqual({ kind: "connect", say: out.hint, url: CONNECT });
+    expect(out.value.nextStep).toEqual({ kind: "connect", say: out.hint, url: CONNECT, thenCall: { tool: "extension_submit", args: { action: "preflight", browsers: ["chrome"] } } });
     expect(out.value.trackUrl).toBe(SETTINGS);
   });
 
@@ -100,7 +100,7 @@ describe("the Chrome Web Store goal walks from not connected to submitted with a
     const out = await world.call("extension_submit", PREFLIGHT_ARGS);
 
     walked(out, "store-item-not-linked", "link-item");
-    expect(out.value.nextStep).toEqual({ kind: "link-item", say: out.hint, url: LINK_ITEM });
+    expect(out.value.nextStep).toEqual({ kind: "link-item", say: out.hint, url: LINK_ITEM, thenCall: { tool: "extension_submit", args: { action: "preflight", browsers: ["chrome"] } } });
   });
 
   it("4. linked and green: preflight answers preflight-read and nextStep submit", async () => {

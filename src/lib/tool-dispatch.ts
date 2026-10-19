@@ -11,6 +11,7 @@ import {
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 
+import { openApprovalOnce } from "./approval-open";
 import { envelope, isEnvelope } from "./envelope";
 import {
   TOOL_POLICY,
@@ -21,6 +22,7 @@ import {
 } from "./tool-policy";
 import { withCallApi } from "./origins";
 import { scrubRunAnswer } from "./run-privacy";
+import { shapeStoreAnswer } from "./store-answer";
 import { attachTrack } from "./track-url";
 import { fenceUntrusted } from "./untrusted-fence";
 import {
@@ -45,6 +47,7 @@ export interface ToolHandlerOptions {
   options: ServerOptions;
   refuse?: (name: string, args: Record<string, unknown>) => string | null;
   run?: (call: () => Promise<string>, name: string, args: Record<string, unknown>) => Promise<string>;
+  openApprovals?: boolean;
 }
 
 type ToolFrame = {
@@ -153,7 +156,11 @@ export function installToolHandlers(server: Server, setup: ToolHandlerOptions): 
           async () => {
             const answer = await tool.handler(normalizedArgs);
 
-            return platform ? scrubRunAnswer(attachTrack(name, normalizedArgs, answer)) : answer;
+            if (!platform) return answer;
+
+            const shaped = scrubRunAnswer(attachTrack(name, normalizedArgs, shapeStoreAnswer(name, normalizedArgs, answer)));
+
+            return setup.openApprovals ? openApprovalOnce(shaped, options) : shaped;
           },
           name,
           normalizedArgs,
