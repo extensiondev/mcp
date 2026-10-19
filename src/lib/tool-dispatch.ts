@@ -20,6 +20,7 @@ import {
   type ServerOptions,
 } from "./tool-policy";
 import { withCallApi } from "./origins";
+import { attachTrack } from "./track-url";
 import { fenceUntrusted } from "./untrusted-fence";
 import {
   inputValidationError,
@@ -145,8 +146,17 @@ export function installToolHandlers(server: Server, setup: ToolHandlerOptions): 
     const untrusted = TOOL_POLICY[name]?.untrusted === true;
 
     try {
+      const platform = TOOL_POLICY[name]?.group === "platform";
       const result = await withCallApi(normalizedArgs.api, () =>
-        run(() => tool.handler(normalizedArgs), name, normalizedArgs),
+        run(
+          async () => {
+            const answer = await tool.handler(normalizedArgs);
+
+            return platform ? attachTrack(name, normalizedArgs, answer) : answer;
+          },
+          name,
+          normalizedArgs,
+        ),
       );
 
       return toolResultFrame(result, untrusted);
