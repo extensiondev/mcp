@@ -172,7 +172,7 @@ describe("the six legs that terminate at www, their header names spelled as www 
   it("leg 5: submit POSTs /api/cli/stores/submit as extension_submit", async () => {
     let captured: any = null;
     globalThis.fetch = (async (url: any, init: any) => {
-      captured = { url: String(url), init };
+      if (String(url).endsWith("/api/cli/stores/submit")) captured = { url: String(url), init };
 
       return jsonResponse({ ok: true, dryRun: true, message: "Preflight OK" });
     }) as unknown as typeof fetch;

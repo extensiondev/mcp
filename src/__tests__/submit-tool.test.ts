@@ -109,7 +109,7 @@ describe("extension_submit: platform submit handler", () => {
     process.env.EXTENSION_DEV_TOKEN = "tok-123";
     let captured: { url: string; init: any } | null = null;
     global.fetch = (async (url: string, init: any) => {
-      captured = { url, init };
+      if (String(url).endsWith("/api/cli/stores/submit")) captured = { url, init };
 
       return jsonResponse({ ok: true, dryRun: true, message: "Preflight OK" });
     }) as unknown as typeof fetch;
@@ -138,11 +138,13 @@ describe("extension_submit: platform submit handler", () => {
 
     for (const row of out.value.preflight) {
       expect(row.ok).toBe(false);
-      expect(row.configured).toBe("unknown");
+      expect(row.configured).toBe("not checked");
     }
 
-    expect(out.hint).toContain("cannot be verified");
-    expect(out.hint).toContain("advisory only");
+    expect(out.value.verdict).toBe("not-checked");
+    expect(out.value.nextStep.kind).toBe("submit");
+    expect(out.hint).toContain("not checked here");
+    expect(JSON.stringify(out)).not.toContain("unknown");
   });
 
   it("keeps a platform-reported failure primary when no local ref exists", async () => {
@@ -158,7 +160,8 @@ describe("extension_submit: platform submit handler", () => {
       await handler({ browsers: ["chrome"], buildSha: "abc1234" }),
     );
     expect(out.ok).toBe(false);
-    expect(out.hint).toContain("FAILED");
+    expect(out.value.verdict).toBe("platform-refused");
+    expect(out.hint).toContain("the platform refused this dry run");
     expect(out.hint).toContain("Build abc1234 has no completed build");
     expect(out.hint).not.toContain("the platform verified");
   });
@@ -197,7 +200,7 @@ describe("extension_submit: platform submit handler", () => {
     );
     expect(out.value.preflight[0].ok).toBe(true);
     expect(out.ok).toBe(false);
-    expect(out.hint).toContain("FAILED");
+    expect(out.value.verdict).toBe("platform-refused");
     expect(out.hint).not.toContain("the platform verified");
   });
 
@@ -235,7 +238,9 @@ describe("extension_submit: platform submit handler", () => {
     );
     expect(out.ok).toBe(false);
     expect(out.value.preflight[0].configured).toBe(false);
-    expect(out.hint).toContain("NOT actionable");
+    expect(out.value.verdict).toBe("store-not-configured");
+    expect(out.value.nextStep.kind).toBe("connect");
+    expect(out.hint).toContain("Not ready for chrome");
   });
 
   it("reads STORE.md from projectPath instead of the server's cwd", async () => {
