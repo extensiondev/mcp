@@ -145,7 +145,7 @@ describe("extension_publish reads the build's artifact health before handing out
     expect(out.status).toBe("published");
     expect(Object.keys(out.value.previewCommands)).toEqual(["chrome", "edge"]);
     expect(out.hint).not.toContain("firefox.zip");
-    expect(out.hint).toContain("chrome: ");
+    expect(out.value.notes.join(" ")).toContain("replace chrome with its name");
     expect(out.value.tellThem).toContain("Use it for Chrome and Edge only: the Firefox download did not pass the platform's checks.");
     expect(out.warnings.join(" ")).toContain("Published, but the platform's checks reject the Firefox artifact");
     expect(out.value.artifacts).toMatchObject({ checked: true, good: ["chrome", "edge"], failed: ["firefox"] });

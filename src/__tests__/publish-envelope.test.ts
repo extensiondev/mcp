@@ -234,11 +234,12 @@ describe("extension_publish envelope compatibility", () => {
       expect(JSON.stringify(out.value.projectVisibility.makeEvergreen)).toMatch(/settings\/visibility/);
       expect(JSON.stringify(out.value.projectVisibility.makeEvergreen)).not.toMatch(/repositor/i);
       expect(out.value.tellThem).toBe(
-        "Here is the build link for version 1.2.0. Anyone who has it can open it until October 6, 2026 at 12:00 UTC, and it always shows this build.",
+        "Here is widget to try: https://acme.extension.dev/widget/builds/abc1234?share=tok_share. It works until October 6, 2026 at 12:00 UTC.",
       );
 
       expect(out.value.tellThem).not.toMatch(/repo/i);
-      expect(out.hint).toContain(out.value.tellThem);
+      expect(out.value.link.id).toBeNull();
+      expect(out.hint).toContain("Send value.tellThem to the person as written");
     });
 
     it("never echoes the raw share token beside the link that already carries it", async () => {
@@ -258,7 +259,7 @@ describe("extension_publish envelope compatibility", () => {
       expect(out.value.expiresAt).toBeNull();
       expect(out.value.projectVisibility).toMatchObject({ value: "public", source: "extension.dev project settings" });
       expect(out.value.projectVisibility.makeEvergreen ?? null).toBeNull();
-      expect(out.value.tellThem).toBe("Here is the build link for version 1.2.0. Anyone who has it can open it, and it always shows this build.");
+      expect(out.value.tellThem).toBe("Here is widget to try: https://acme.extension.dev/widget/builds/abc1234.");
     });
 
     it.each([
@@ -272,8 +273,8 @@ describe("extension_publish envelope compatibility", () => {
         expect.objectContaining({ kind: "channel", url: "https://acme.extension.dev/widget/channels/stable", expiresAt: null, pointsAt: "latest in stable" }),
       ]);
 
-      expect(out.value.tellThem).toBe("Here is the channel link. It always opens the newest stable build.");
-      expect(out.hint).toContain(out.value.tellThem);
+      expect(out.value.tellThem).toBe("Here is widget to try: https://acme.extension.dev/widget/channels/stable. It always opens the newest stable build.");
+      expect(out.hint).toContain("Send value.tellThem to the person as written");
     });
 
     it("an older public answer with a serving channel synthesizes a channel link", async () => {

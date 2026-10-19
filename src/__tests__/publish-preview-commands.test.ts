@@ -73,9 +73,8 @@ describe("extension_publish surfaces the platform's preview commands", () => {
     const out = JSON.parse(await handler({}));
     expect(out.ok).toBe(true);
     expect(out.value.previewCommands).toEqual({ chrome: CHROME, firefox: FIREFOX });
-    expect(out.hint).toContain("without opening the share page");
-    expect(out.hint).toContain(`chrome: ${CHROME}`);
-    expect(out.hint).toContain(`firefox: ${FIREFOX}`);
+    expect(out.hint).not.toContain(CHROME);
+    expect(out.value.notes).toContain("Each run command carries the same share token as the link and stops working when the link expires.");
   });
 
   it("does not claim a share token on a public project's commands that carry none", async () => {
@@ -90,8 +89,8 @@ describe("extension_publish surfaces the platform's preview commands", () => {
     };
 
     const out = JSON.parse(await handler({}));
-    expect(out.hint).toMatch(/carry no share token/);
-    expect(out.hint).not.toMatch(/same share token as the URL/);
+    expect(out.value.notes).toContain("The run commands need no token: the project is public.");
+    expect(out.value.notes.join(" ")).not.toMatch(/same share token/);
   });
 
   it("drops a command the platform did not shape as a preview, and says nothing when there are none", async () => {
@@ -106,7 +105,8 @@ describe("extension_publish surfaces the platform's preview commands", () => {
 
     const out = JSON.parse(await handler({}));
     expect(out.ok).toBe(true);
-    expect(out.hint).toBeUndefined();
+    expect(out.hint).not.toContain("evil.example");
+    expect(out.value.notes.join(" ")).not.toMatch(/run command/);
 
     platform.result = {
       ok: true,
@@ -115,6 +115,6 @@ describe("extension_publish surfaces the platform's preview commands", () => {
 
     const bare = JSON.parse(await handler({}));
     expect(bare.ok).toBe(true);
-    expect(bare.hint).toBeUndefined();
+    expect(bare.hint).toMatch(/^Do not send this link: it serves no build yet\./);
   });
 });
