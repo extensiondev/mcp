@@ -15,7 +15,7 @@ import { pollDeviceGrant, requestDeviceCode } from "./device-flow";
 import { dropHeldBatch, loadHeldBatch, saveHeldBatch } from "./held-batches";
 import { envelope, type ErrorCode } from "./envelope";
 import { fetchLoginConfig, resolveApiBase, safeApiBase } from "./login-flow";
-import { platformHoldEnvelope, sawPlatformHold } from "./platform-hold";
+import { laneClosedFacts, laneClosedHint, platformHoldEnvelope, sawPlatformHold } from "./platform-hold";
 import {
   BATCH_UNSUPPORTED_MESSAGE,
   createCapNote,
@@ -169,9 +169,6 @@ function fail(
   });
 }
 
-function laneClosedHint(): string {
-  return `Create the projects in the console at ${consoleBase()} (workspace page, New project), then run extension_auth (action: login) against them. While the public hold is on, headless creation is open only to workspaces on the platform's allowlist (WWW_MCP_ACTION_ALLOWED_WORKSPACES), the same list that already lets publish, submit and promote run headlessly; this workspace is not on it, so the console is the route.`;
-}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -391,7 +388,7 @@ function persist(session: Session, deviceCode: string, inFlight?: BatchEntry): v
       project: inFlight.ref,
       status: "unconfirmed",
       message: `The call that sent the create request for ${inFlight.ref} ended before its answer was read.`,
-      hint: `Whether ${inFlight.ref} now exists is unknown, so it is not sent again. Check the console at ${consoleBase()}; if it exists, sign in with extension_auth (action: login).`,
+      hint: `Whether ${inFlight.ref} now exists is unknown, so it is not sent again. Check the console at ${consoleBase(session.apiBase)}; if it exists, sign in with extension_auth (action: login).`,
     });
   }
 
@@ -447,7 +444,7 @@ async function createOne(session: Session, entry: BatchEntry, installationId: st
         project: entry.ref,
         status: "unconfirmed",
         message,
-        hint: `The request for ${entry.ref} left this machine and no answer came back, so the project may or may not exist. It is not retried, because a second create racing the first would be two builds claiming one name. Check the console at ${consoleBase()}; if it exists, sign in with extension_auth (action: login).`,
+        hint: `The request for ${entry.ref} left this machine and no answer came back, so the project may or may not exist. It is not retried, because a second create racing the first would be two builds claiming one name. Check the console at ${consoleBase(session.apiBase)}; if it exists, sign in with extension_auth (action: login).`,
       },
       halt: true,
       ...(session.unanswered >= 2
@@ -464,7 +461,7 @@ async function createOne(session: Session, entry: BatchEntry, installationId: st
         project: entry.ref,
         status: "unconfirmed",
         message,
-        hint: `Whether ${entry.ref} now exists is unknown. It is not retried, because a second create racing the first would be two builds claiming one name. Check the console at ${consoleBase()}; if it exists, sign in with extension_auth (action: login).`,
+        hint: `Whether ${entry.ref} now exists is unknown. It is not retried, because a second create racing the first would be two builds claiming one name. Check the console at ${consoleBase(session.apiBase)}; if it exists, sign in with extension_auth (action: login).`,
       },
       halt: true,
       ...(session.unanswered >= 2
@@ -544,6 +541,7 @@ async function createOne(session: Session, entry: BatchEntry, installationId: st
   const consoleUrl = consoleProjectUrl(
     { workspace: finalWorkspace, project: finalProject },
     "",
+    session.apiBase,
   );
   const firstBuild = firstBuildValue(readFirstBuild(data));
   const token = String(data.token || "").trim();
@@ -686,14 +684,15 @@ function finalEnvelope(session: Session): string {
       command: COMMAND,
       name: "CreateHeld",
       body: stop.body,
+      api: session.apiBase,
       value: { workspace: session.workspace, projects: session.refs, results: rows },
     });
   }
 
   if (created.length === 0 && stop?.code === "CLI_PROJECT_CREATE_DISABLED") {
     return fail("CreateClosed", stop.message, "lane-closed", "E_PLATFORM", {
-      hint: laneClosedHint(),
-      value: { workspaceSlug: session.workspace, results: rows },
+      hint: laneClosedHint({ api: session.apiBase, message: stop.message, subject: "projects" }),
+      value: { workspaceSlug: session.workspace, results: rows, ...laneClosedFacts({ api: session.apiBase, message: stop.message }) },
     });
   }
 
@@ -707,7 +706,7 @@ function finalEnvelope(session: Session): string {
         ]
       : []),
     ...(unconfirmed.length
-      ? [`check ${quoteList(unconfirmed)} in the console at ${consoleBase()} before creating them again`]
+      ? [`check ${quoteList(unconfirmed)} in the console at ${consoleBase(session.apiBase)} before creating them again`]
       : []),
     ...(loggedIn.length ? ["extension_publish (project: one of the logged-in projects)"] : []),
   ];
@@ -1002,7 +1001,7 @@ export async function createProjectBatch(args: BatchCreateArgs): Promise<string>
           serverMessage || "Headless project creation is not open on this host yet.",
           "lane-closed",
           "E_PLATFORM",
-          { hint: laneClosedHint() },
+          { hint: laneClosedHint({ api: apiBase, message: serverMessage, subject: "projects" }), value: { ...laneClosedFacts({ api: apiBase, message: serverMessage }) } },
         );
       }
 
@@ -1050,7 +1049,7 @@ export async function createProjectBatch(args: BatchCreateArgs): Promise<string>
         poll.message || "Headless project creation is not open yet.",
         "lane-closed",
         "E_PLATFORM",
-        { hint: laneClosedHint() },
+        { hint: laneClosedHint({ api: apiBase, message: poll.message, subject: "projects" }), value: { ...laneClosedFacts({ api: apiBase, message: poll.message }) } },
       );
     }
 
@@ -1070,7 +1069,7 @@ export async function createProjectBatch(args: BatchCreateArgs): Promise<string>
         "create-expired",
         "E_AUTH_EXPIRED",
         {
-          hint: `Check which of ${quoteList(refs)} exist in the console at ${consoleBase()}. Sign in to those with extension_auth (action: login, projects), and start a new extension_project_create call naming only the ones that do not exist yet.`,
+          hint: `Check which of ${quoteList(refs)} exist in the console at ${consoleBase(apiBase)}. Sign in to those with extension_auth (action: login, projects), and start a new extension_project_create call naming only the ones that do not exist yet.`,
         },
       );
     }

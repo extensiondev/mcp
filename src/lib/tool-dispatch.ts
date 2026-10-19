@@ -19,6 +19,7 @@ import {
   pinProjectArgs,
   type ServerOptions,
 } from "./tool-policy";
+import { withCallApi } from "./origins";
 import { fenceUntrusted } from "./untrusted-fence";
 import {
   inputValidationError,
@@ -144,7 +145,9 @@ export function installToolHandlers(server: Server, setup: ToolHandlerOptions): 
     const untrusted = TOOL_POLICY[name]?.untrusted === true;
 
     try {
-      const result = await run(() => tool.handler(normalizedArgs), name, normalizedArgs);
+      const result = await withCallApi(normalizedArgs.api, () =>
+        run(() => tool.handler(normalizedArgs), name, normalizedArgs),
+      );
 
       return toolResultFrame(result, untrusted);
     } catch (err) {

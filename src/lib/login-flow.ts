@@ -28,12 +28,13 @@ const DEFAULT_API = PROD_ORIGINS.www;
 export function tokenTtlNote(
   workspaceSlug?: string,
   projectSlug?: string,
+  api?: string,
 ): string {
   if (requestCredential()) {
     const connectedApps =
       workspaceSlug && projectSlug
-        ? consoleProjectUrl({ workspace: workspaceSlug, project: projectSlug }, "settings/connected-apps")
-        : consoleBase();
+        ? consoleProjectUrl({ workspace: workspaceSlug, project: projectSlug }, "settings/connected-apps", api)
+        : consoleBase(api);
 
     return `This connection renews on its own. Revoke it under the project's Settings, Connected apps: ${connectedApps}`;
   }
@@ -43,8 +44,9 @@ export function tokenTtlNote(
       ? consoleProjectUrl(
           { workspace: workspaceSlug, project: projectSlug },
           "settings/access-tokens",
+          api,
         )
-      : consoleBase();
+      : consoleBase(api);
 
   return `extension.dev CLI tokens live at most 7 days (server-enforced). CI pipelines must re-mint before expiry on the console's Access tokens page: ${tokensUrl}`;
 }

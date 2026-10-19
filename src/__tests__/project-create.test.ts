@@ -199,10 +199,9 @@ describe("extension_project_create", () => {
     expect(out.status).toBe("lane-closed");
     expect(out.error.message).toBe(serverSentence);
     expect(out.error.message.toLowerCase()).not.toContain("console");
-    expect(out.hint).toContain("Create the project in the console");
-    expect(out.hint).toContain("extension_auth");
-    expect(out.hint).toContain("its own message above says which case this is");
+    expect(out.hint).toContain("public hold");
     expect(out.hint).toContain("console answers its gate page");
+    expect(out.hint).not.toContain("Create the project in the console");
     expect(out.hint).not.toContain("every workspace");
   });
 
@@ -221,9 +220,9 @@ describe("extension_project_create", () => {
     const out = JSON.parse(await handler(baseArgs));
     expect(out.ok).toBe(false);
     expect(out.status).toBe("lane-closed");
-    expect(out.error.message).toContain(
-      "Create the project in the console instead",
-    );
+    expect(out.error.message).toContain("Headless project creation is not open on");
+    expect(out.hint).toContain("Create the project in the console");
+    expect(out.hint).toContain("extension_auth");
   });
 
   it("creates the project with the provisioning grant and stores nothing locally", async () => {

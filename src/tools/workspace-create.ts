@@ -27,7 +27,7 @@ import {
 } from "../lib/login-flow";
 import { consoleBase } from "../lib/registry";
 import { CREATE_CEILING_SENTENCE, CREATE_STUCK_AFTER_SECONDS, creatingAge, creatingForWords } from "../lib/create-ceiling";
-import { platformHoldEnvelope, sawPlatformHold } from "../lib/platform-hold";
+import { laneClosedFacts, laneClosedHint, platformHoldEnvelope, sawPlatformHold } from "../lib/platform-hold";
 import { identityHeaders } from "../lib/session-identity";
 import { answerIsUnknownOutcome, readCreatedWorkspace } from "../lib/create-answer";
 
@@ -80,8 +80,15 @@ function fail(name: string, message: string, status: string, code: ErrorCode, hi
   });
 }
 
-function laneClosedHint(): string {
-  return `Create the workspace in the console at ${consoleBase()} (workspace switcher, New workspace), then run extension_project_create against it. Headless workspace creation opens with the platform; during the public hold only an allowlisted workspace slug can be created this way.`;
+function closedLane(name: string, message: string, api: string, workspace: string): string {
+  return envelope({
+    ok: false,
+    command: COMMAND,
+    status: "lane-closed",
+    error: { code: "E_PLATFORM", name, message },
+    value: { workspace, ...laneClosedFacts({ api, message }) },
+    hint: laneClosedHint({ api, message, subject: "workspace" }),
+  });
 }
 
 function pendingEnvelope(start: {
@@ -186,16 +193,16 @@ export async function handler(args: {
       const serverMessage =
         typeof err?.serverMessage === "string" ? err.serverMessage.trim() : "";
 
-      return fail(
-        "CreateStartError",
-        laneClosed
-          ? serverMessage ||
-              `Headless workspace creation is not open on this host yet. Create the workspace in the console instead. (${message})`
-          : String(message),
-        laneClosed ? "lane-closed" : "create-failed",
-        "E_PLATFORM",
-        laneClosed ? laneClosedHint() : undefined,
-      );
+      if (laneClosed) {
+        return closedLane(
+          "CreateStartError",
+          serverMessage || `Headless workspace creation is not open on ${apiBase} yet. (${message})`,
+          apiBase,
+          workspace,
+        );
+      }
+
+      return fail("CreateStartError", String(message), "create-failed", "E_PLATFORM");
     }
 
     deviceCode = start.deviceCode;
@@ -269,6 +276,15 @@ async function finishFromPoll(
     }
 
     if (poll.reason === "denied") {
+      if (poll.code === "CLI_WORKSPACE_CREATE_DISABLED") {
+        return closedLane(
+          "CreateClosed",
+          poll.message || `Headless workspace creation is not open on ${ctx.apiBase}.`,
+          ctx.apiBase,
+          ctx.workspace,
+        );
+      }
+
       if (poll.code === "WORKSPACE_EXISTS") {
         return envelope({
           ok: false,
@@ -387,12 +403,12 @@ async function sendCreate(ctx: CreateContext, kept: boolean, keepGrant: () => vo
       },
       value: {
         workspace: ctx.workspace,
-        consoleUrl: consoleBase(),
+        consoleUrl: consoleBase(ctx.apiBase),
         ...(kept ? { deviceCode: ctx.deviceCode } : {}),
       },
       hint: kept
         ? `The platform may still be finishing workspace ${ctx.workspace}. Call ${COMMAND} again with this same deviceCode and the same arguments to learn the outcome; that call resumes without a second approval, and a new call would need one. The grant is held on this machine, readable only by this user, until ${heldUntilSentence(ctx.held)}, and with it the platform answers with this create's outcome (created, still creating, or refused) and never creates workspace ${ctx.workspace} twice. ${CREATE_CEILING_SENTENCE}`
-        : `Do not create it again blind: the grant could not be kept on this machine, and the first request may have landed. Look for ${ctx.workspace} in the console at ${consoleBase()}. If it is there, go on to extension_project_create with project '${ctx.workspace}/<project>'; only if it is not, call ${COMMAND} again.`,
+        : `Do not create it again blind: the grant could not be kept on this machine, and the first request may have landed. Look for ${ctx.workspace} in the console at ${consoleBase(ctx.apiBase)}. If it is there, go on to extension_project_create with project '${ctx.workspace}/<project>'; only if it is not, call ${COMMAND} again.`,
     });
   };
 
@@ -450,7 +466,7 @@ async function sendCreate(ctx: CreateContext, kept: boolean, keepGrant: () => vo
     const age = creatingAge({ apiBase: ctx.apiBase, deviceCode: ctx.deviceCode, kept, data });
 
     if (age.stuck) {
-      const workspaceUrl = `${consoleBase()}/${encodeURIComponent(ctx.workspace)}`;
+      const workspaceUrl = `${consoleBase(ctx.apiBase)}/${encodeURIComponent(ctx.workspace)}`;
 
       return envelope({
         ok: false,
@@ -487,7 +503,7 @@ async function sendCreate(ctx: CreateContext, kept: boolean, keepGrant: () => vo
       },
       hint: kept
         ? `The platform has been creating workspace ${ctx.workspace} for ${creatingForWords(age.seconds)} (since ${age.startedAtIso}) from the earlier request with this grant, and started nothing new. Call ${COMMAND} again with this same deviceCode and the same arguments in about ${waitSeconds} s to read the outcome; no new approval is needed while the grant lasts (until ${heldUntilSentence(ctx.held)}).`
-        : `The platform is still creating workspace ${ctx.workspace} from an earlier request with this grant, and started nothing new. The grant could not be kept on this machine, so look for ${ctx.workspace} in the console at ${consoleBase()} in a minute.`,
+        : `The platform is still creating workspace ${ctx.workspace} from an earlier request with this grant, and started nothing new. The grant could not be kept on this machine, so look for ${ctx.workspace} in the console at ${consoleBase(ctx.apiBase)} in a minute.`,
     });
   }
 
@@ -499,17 +515,17 @@ async function sendCreate(ctx: CreateContext, kept: boolean, keepGrant: () => vo
         command: COMMAND,
         name: "CreateHeld",
         body: data,
+        api: ctx.apiBase,
         value: { workspace: ctx.workspace },
       });
     }
 
     if (code === "CLI_WORKSPACE_CREATE_DISABLED") {
-      return fail(
+      return closedLane(
         "CreateClosed",
-        String(data.message || "Headless workspace creation is not open yet."),
-        "lane-closed",
-        "E_PLATFORM",
-        laneClosedHint(),
+        String(data.message || `Headless workspace creation is not open on ${ctx.apiBase} yet.`),
+        ctx.apiBase,
+        ctx.workspace,
       );
     }
 
@@ -567,7 +583,7 @@ async function sendCreate(ctx: CreateContext, kept: boolean, keepGrant: () => vo
       workspaceId: createdAnswer.id,
       displayName: data.displayName ?? finalSlug,
       ownerGithubLogin: owner || null,
-      consoleUrl: `${consoleBase()}/${encodeURIComponent(finalSlug)}`,
+      consoleUrl: `${consoleBase(ctx.apiBase)}/${encodeURIComponent(finalSlug)}`,
       nextSteps: [
         `extension_project_create (project: '${finalSlug}/<project>', repo: '<owner>/<repo>')`,
       ],

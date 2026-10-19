@@ -2,9 +2,9 @@
 import { describe, it, expect } from "vitest";
 
 import { schema as authSchema } from "../tools/auth";
-import { schema as createSchema, laneClosedHint } from "../tools/project-create";
+import { schema as createSchema } from "../tools/project-create";
 import { createRateLimitNote } from "../lib/project-batch";
-import { platformHoldMessage } from "../lib/platform-hold";
+import { laneClosedHint, platformHoldMessage } from "../lib/platform-hold";
 import { pollDeviceGrant } from "../lib/device-flow";
 
 describe("the auth and create tools describe what the platform does", () => {
@@ -22,10 +22,13 @@ describe("the auth and create tools describe what the platform does", () => {
   });
 
   it("the lane hint defers to the platform's message and names the hold's console state", () => {
-    const hint = laneClosedHint();
-    expect(hint).toMatch(/its own message above says which case this is/);
-    expect(hint).not.toMatch(/this workspace is not on it, so the console is the route/);
-    expect(hint).toMatch(/console answers its gate page/);
+    const open = laneClosedHint({ subject: "project", message: "Headless project creation is not open on this host yet." });
+    expect(open).toMatch(/its own message above says why/);
+    expect(open).toMatch(/Create the project in the console/);
+
+    const held = laneClosedHint({ subject: "project", message: "extension.dev is not open to the public yet." });
+    expect(held).not.toMatch(/this workspace is not on it, so the console is the route/);
+    expect(held).toMatch(/console answers its gate page/);
   });
 
   it("the rate note says what the platform counts", () => {

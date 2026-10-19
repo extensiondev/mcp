@@ -225,7 +225,7 @@ export async function readIdentity(deps?: {
     },
     hint: message,
     warnings: [
-      tokenTtlNote(creds.workspaceSlug, creds.projectSlug),
+      tokenTtlNote(creds.workspaceSlug, creds.projectSlug, creds.api),
       server.warning,
       serverIdentityMismatch,
       envTokenNote,

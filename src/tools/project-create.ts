@@ -34,7 +34,7 @@ import {
 import { createProjectBatch } from "../lib/project-create-batch";
 import { buildCreateBody, DEFAULT_BUILD_COMMAND } from "../lib/project-create-body";
 import { consoleBase, consoleProjectUrl } from "../lib/registry";
-import { platformHoldEnvelope, sawPlatformHold } from "../lib/platform-hold";
+import { laneClosedFacts, laneClosedHint, platformHoldEnvelope, sawPlatformHold } from "../lib/platform-hold";
 import { identityHeaders } from "../lib/session-identity";
 import { spendNarration } from "../lib/allowance";
 import { answerIsUnknownOutcome, readCreatedProject } from "../lib/create-answer";
@@ -146,8 +146,17 @@ function fail(
   });
 }
 
-export function laneClosedHint(): string {
-  return `The platform closed headless creation for this call; its own message above says which case this is (the public hold, an allowlist this workspace is not on, or a host that is not ready). Create the project in the console at ${consoleBase()} (workspace page, New project), then run extension_auth (action: login) against it; while the public hold is on, the console answers its gate page until the platform opens.`;
+function closedLane(name: string, message: string, api: string, workspace: string): string {
+  const facts = laneClosedFacts({ api, message });
+
+  return envelope({
+    ok: false,
+    command: COMMAND,
+    status: "lane-closed",
+    error: { code: "E_PLATFORM", name, message },
+    value: { workspace, ...facts },
+    hint: laneClosedHint({ api, message, subject: "project" }),
+  });
 }
 
 function pendingEnvelope(start: {
@@ -285,16 +294,16 @@ export async function handler(args: {
       const serverMessage =
         typeof err?.serverMessage === "string" ? err.serverMessage.trim() : "";
 
-      return fail(
-        "CreateStartError",
-        laneClosed
-          ? serverMessage ||
-              `Headless project creation is not open on this host yet. Create the project in the console instead, then run extension_auth (action: login) against it. (${message})`
-          : String(message),
-        laneClosed ? "lane-closed" : "create-failed",
-        "E_PLATFORM",
-        laneClosed ? laneClosedHint() : undefined,
-      );
+      if (laneClosed) {
+        return closedLane(
+          "CreateStartError",
+          serverMessage || `Headless project creation is not open on ${apiBase} yet. (${message})`,
+          apiBase,
+          project.split("/")[0] ?? "",
+        );
+      }
+
+      return fail("CreateStartError", String(message), "create-failed", "E_PLATFORM");
     }
 
     deviceCode = start.deviceCode;
@@ -379,7 +388,7 @@ async function finishFromPoll(
 
     if (poll.reason === "denied") {
       if (poll.code === "CLI_PROJECT_CREATE_DISABLED") {
-        return fail("CreateClosed", poll.message || "Headless project creation is not open on this host.", "lane-closed", "E_PLATFORM", laneClosedHint());
+        return closedLane("CreateClosed", poll.message || `Headless project creation is not open on ${ctx.apiBase}.`, ctx.apiBase, ctx.project.split("/")[0] ?? "");
       }
 
       return fail(
@@ -555,12 +564,12 @@ async function sendCreate(
       },
       value: {
         project: ctx.project,
-        consoleUrl: consoleBase(),
+        consoleUrl: consoleBase(ctx.apiBase),
         ...(kept ? { deviceCode: ctx.deviceCode } : {}),
       },
       hint: kept
         ? `The platform may still be finishing ${ctx.project}. Call extension_project_create again with this same deviceCode and the same arguments to learn the outcome; that call resumes without a second approval, and a new call would need one. The grant is held on this machine, readable only by this user, until ${heldUntilSentence(ctx.held)}, and with it the platform answers with this create's outcome (created, still creating, or refused) and never creates ${ctx.project} twice. ${CREATE_CEILING_SENTENCE}`
-        : `Do not create it again blind: the grant could not be kept on this machine, and a second create racing the first is two builds claiming one name. Look for ${ctx.project} in the console at ${consoleBase()}. If it is there, sign in with extension_auth (action: login, project: '${ctx.project}'); only if it is not, call extension_project_create again.`,
+        : `Do not create it again blind: the grant could not be kept on this machine, and a second create racing the first is two builds claiming one name. Look for ${ctx.project} in the console at ${consoleBase(ctx.apiBase)}. If it is there, sign in with extension_auth (action: login, project: '${ctx.project}'); only if it is not, call extension_project_create again.`,
     });
   };
 
@@ -611,14 +620,14 @@ async function sendCreate(
   if (String(data.code || "") === CREATE_IN_PROGRESS_CODE) {
     const found = await findProjectByStoredLogin({ apiBase: ctx.apiBase, project: ctx.project, command: COMMAND });
 
-    if (found) return createdByRead(found, ctx.args.repo);
+    if (found) return createdByRead(found, ctx.args.repo, ctx.apiBase);
 
     keepGrant();
     const waitSeconds = Number(data.retryAfterSeconds) > 0 ? Number(data.retryAfterSeconds) : 10;
     const age = creatingAge({ apiBase: ctx.apiBase, deviceCode: ctx.deviceCode, kept, data });
 
     if (age.stuck) {
-      const projectUrl = consoleProjectUrl({ workspace: wantWorkspace, project: wantProject }, "");
+      const projectUrl = consoleProjectUrl({ workspace: wantWorkspace, project: wantProject }, "", ctx.apiBase);
 
       return envelope({
         ok: false,
@@ -655,7 +664,7 @@ async function sendCreate(
       },
       hint: kept
         ? `The platform has been creating ${ctx.project} for ${creatingForWords(age.seconds)} (since ${age.startedAtIso}) from the earlier request with this grant, and started nothing new. Call extension_project_create again with this same deviceCode and the same arguments in about ${waitSeconds} s to read the outcome; no new approval is needed while the grant lasts (until ${heldUntilSentence(ctx.held)}).`
-        : `The platform is still creating ${ctx.project} from an earlier request with this grant, and started nothing new. The grant could not be kept on this machine, so look for ${ctx.project} in the console at ${consoleBase()} in a minute.`,
+        : `The platform is still creating ${ctx.project} from an earlier request with this grant, and started nothing new. The grant could not be kept on this machine, so look for ${ctx.project} in the console at ${consoleBase(ctx.apiBase)} in a minute.`,
     });
   }
 
@@ -667,17 +676,17 @@ async function sendCreate(
         command: COMMAND,
         name: "CreateHeld",
         body: data,
+        api: ctx.apiBase,
         value: { workspace: wantWorkspace, project: wantProject },
       });
     }
 
     if (code === "CLI_PROJECT_CREATE_DISABLED") {
-      return fail(
+      return closedLane(
         "CreateClosed",
-        String(data.message || "Headless project creation is not open yet."),
-        "lane-closed",
-        "E_PLATFORM",
-        laneClosedHint(),
+        String(data.message || `Headless project creation is not open on ${ctx.apiBase} yet.`),
+        ctx.apiBase,
+        wantWorkspace,
       );
     }
 
@@ -757,11 +766,13 @@ async function sendCreate(
   const consoleUrl = consoleProjectUrl(
     { workspace: finalWorkspace, project: finalProject },
     "",
+    ctx.apiBase,
   );
   const firstBuild = readFirstBuild(data);
   const buildsPageUrl = consoleProjectUrl(
     { workspace: finalWorkspace, project: finalProject },
     "builds",
+    ctx.apiBase,
   );
 
   return envelope({
@@ -816,9 +827,9 @@ async function sendCreate(
   });
 }
 
-function createdByRead(found: ProjectFoundByRead, repo: string | undefined): string {
+function createdByRead(found: ProjectFoundByRead, repo: string | undefined, apiBase: string): string {
   const ref = `${found.workspaceSlug}/${found.projectSlug}`;
-  const consoleUrl = consoleProjectUrl({ workspace: found.workspaceSlug, project: found.projectSlug }, "");
+  const consoleUrl = consoleProjectUrl({ workspace: found.workspaceSlug, project: found.projectSlug }, "", apiBase);
 
   return envelope({
     ok: true,

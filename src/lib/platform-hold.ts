@@ -7,7 +7,7 @@
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
 import { envelope } from "./envelope";
-import { mcpOrigins } from "./origins";
+import { effectiveApiBase, mcpOrigins } from "./origins";
 
 export const PLATFORM_HOLD_CODE = "PLATFORM_NOT_OPEN";
 
@@ -119,4 +119,43 @@ export function platformHoldEnvelope(options: {
     },
     hint: holdWayBack(options.api),
   });
+}
+
+const HOLD_MARKER_TEXT = "is not open to the public yet";
+
+export type LaneSubject = "project" | "projects" | "workspace";
+
+export interface LaneClosedFacts {
+  server: string;
+  publicHold: boolean;
+  allowlistNamed: false;
+  consoleUrl?: string;
+}
+
+export function laneClosedFacts(options: { api?: string; message?: string }): LaneClosedFacts {
+  const origins = mcpOrigins(options.api);
+  const publicHold = String(options.message ?? "").includes(HOLD_MARKER_TEXT);
+
+  return {
+    server: effectiveApiBase(options.api) || origins.www,
+    publicHold,
+    allowlistNamed: false,
+    ...(publicHold ? {} : { consoleUrl: origins.console }),
+  };
+}
+
+export function laneClosedHint(options: { api?: string; message?: string; subject: LaneSubject }): string {
+  const facts = laneClosedFacts(options);
+  const noun = options.subject === "workspace" ? "workspace" : "project";
+
+  if (facts.publicHold) {
+    return `This is the platform's public hold on ${facts.server}: headless ${noun} creation there is open only to workspaces on the platform's allowlist, and it refused this one. Its answer names no allowlisted workspace and no opening date, so nothing on this machine opens it, and the console answers its gate page during the hold, so creating it there is no route either. Building, running and packaging still work with no account: extension_create, extension_dev and extension_build.`;
+  }
+
+  const target =
+    options.subject === "workspace"
+      ? `Create the workspace in the console at ${facts.consoleUrl} (workspace switcher, New workspace), then run extension_project_create against it.`
+      : `Create the ${options.subject === "projects" ? "projects" : "project"} in the console at ${facts.consoleUrl} (workspace page, New project), then run extension_auth (action: login) against ${options.subject === "projects" ? "them" : "it"}.`;
+
+  return `The platform at ${facts.server} closed headless ${noun} creation for this call; its own message above says why. ${target}`;
 }
