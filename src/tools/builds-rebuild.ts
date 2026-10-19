@@ -10,9 +10,8 @@ import { ConsoleProjectPage } from "@extension.dev/urls/paths";
 
 import { consoleProjectUrl } from "../lib/registry";
 import { envelope } from "../lib/envelope";
+import { approvalRoundTrip } from "../lib/approval-outcome";
 import {
-  APPROVAL_PENDING_STATUS,
-  APPROVAL_REJECTED_STATUS,
   actionFingerprint,
   evaluateApproval,
   requestApprovalAfterRefusal,
@@ -20,7 +19,6 @@ import {
 } from "../lib/approval-gate";
 import { projectApiSend } from "../lib/project-api";
 import {
-  APPROVAL_CODES,
   BUILD_ENVS,
   COMMAND,
   actRefusal,
@@ -35,14 +33,7 @@ import {
 const REBUILD_ACTION = "extension_builds.rebuild";
 const FULL_SHA = /^[a-f0-9]{40}$/;
 
-const REBUILD_APPROVAL_CODES: Record<string, { status: string; name: string; next: string }> = {
-  ...APPROVAL_CODES,
-  APPROVAL_CONSUMED: {
-    status: APPROVAL_REJECTED_STATUS,
-    name: "ApprovalConsumed",
-    next: 'The call that used it may already have started the run: read extension_builds (action: "list") first, and request a fresh approval only if no run for that commit is there.',
-  },
-};
+const REBUILD_CONSUMED_NEXT = 'The call that used it may already have started the run: read extension_builds (action: "list") first, and request a fresh approval only if no run for that commit is there.';
 
 /* @invariant A REBUILD OF A COMMIT THAT ALREADY BUILT KEEPS ITS BUILD ID, SO
  * THE RUN IS WHAT TELLS THIS REBUILD FROM THE BUILD BEFORE IT. The platform
@@ -165,23 +156,21 @@ export async function rebuild(args: ActArgs): Promise<string> {
       return requestApprovalAfterRefusal(gateFor(wanted));
     }
 
-    const known = REBUILD_APPROVAL_CODES[sent.code];
-
-    if (approvalId && known) {
-      return envelope({
-        ok: false,
-        command: COMMAND,
-        status: known.status,
-        value: { action: "rebuild", approvalId },
-        error: {
-          code: known.status === APPROVAL_PENDING_STATUS ? "E_APPROVAL_PENDING" : "E_APPROVAL_REJECTED",
-          name: known.name,
+    const answered = approvalId
+      ? approvalRoundTrip({
+          command: COMMAND,
           platformCode: sent.code,
-          message: `${sent.message}. Nothing was dispatched by this call.`,
-        },
-        hint: known.next,
-      });
-    }
+          message: sent.message,
+          approvalId,
+          undone: "Nothing was dispatched by this call.",
+          api: args.api,
+          value: { action: "rebuild" },
+          next: { used: REBUILD_CONSUMED_NEXT },
+          retryAfterSeconds: sent.retryAfterSeconds,
+        })
+      : undefined;
+
+    if (answered) return answered;
 
     return actRefusal(sent, "rebuild", api, args, commitSha ? { buildId: commitSha } : {});
   }

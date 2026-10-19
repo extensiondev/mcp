@@ -21,6 +21,7 @@ import {
   requestApprovalAfterRefusal,
 } from "../lib/approval-gate";
 import { spendNarration } from "../lib/allowance";
+import { approvalRoundTrip } from "../lib/approval-outcome";
 import {
   notarizationNotes,
   partialPromoteWarnings,
@@ -266,6 +267,21 @@ export async function handler(args: ReleaseActArgs & {
     }
 
     const code = typeof data?.code === "string" ? data.code : undefined;
+    const answered = approvalId
+      ? approvalRoundTrip({
+          command: "extension_release_promote",
+          platformCode: code ?? "",
+          message: typeof data?.message === "string" ? data.message : "",
+          approvalId,
+          undone: "Nothing was promoted by this call.",
+          api: args.api,
+          value: { channel, buildId },
+          stateRead: "extension_release_status",
+        })
+      : undefined;
+
+    if (answered) return answered;
+
     const enrich: Record<string, unknown> = {};
     let hint = (code && promoteRefusalHint(code)) || "";
     const ref = credential.ref;

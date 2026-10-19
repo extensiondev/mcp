@@ -26,6 +26,7 @@ import {
   requestApprovalAfterRefusal,
 } from "../lib/approval-gate";
 import { spendNarration } from "../lib/allowance";
+import { approvalRoundTrip } from "../lib/approval-outcome";
 import { readSubmitOutcome } from "../lib/submit-outcome";
 import {
   consoleProjectUrl,
@@ -343,6 +344,21 @@ export async function handler(args: SubmitToolArgs): Promise<string> {
     if (!dryRun && !args.approvalId && platformRequiresApproval(res, data)) {
       return requestApprovalAfterRefusal(gateInput);
     }
+
+    const answered = !dryRun && body.approvalId
+      ? approvalRoundTrip({
+          command: "extension_submit",
+          platformCode: typeof data?.code === "string" ? data.code : "",
+          message: typeof data?.message === "string" ? data.message : "",
+          approvalId: String(body.approvalId),
+          undone: "Nothing was submitted by this call.",
+          api: args.api,
+          value: { browsers, buildSha, channel },
+          stateRead: statusRead,
+        })
+      : undefined;
+
+    if (answered) return answered;
 
     const saidNothingDispatched = data?.retryable === true;
     const maybeDispatched =

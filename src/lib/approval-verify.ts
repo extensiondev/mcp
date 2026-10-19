@@ -6,13 +6,23 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
+import {
+  APPROVAL_DECLINED_STATUS,
+  APPROVAL_EXPIRED_STATUS,
+  APPROVAL_REJECTED_STATUS,
+  pendingApproval,
+} from "./approval-outcome";
 import { envelope } from "./envelope";
 import { parseJsonObject } from "./json-object";
 import { platformHoldEnvelope, sawPlatformHold } from "./platform-hold";
 
-export const APPROVAL_REQUIRED_STATUS = "approval-required";
-export const APPROVAL_PENDING_STATUS = "approval-pending";
-export const APPROVAL_REJECTED_STATUS = "approval-rejected";
+export {
+  APPROVAL_DECLINED_STATUS,
+  APPROVAL_EXPIRED_STATUS,
+  APPROVAL_PENDING_STATUS,
+  APPROVAL_REJECTED_STATUS,
+  APPROVAL_REQUIRED_STATUS,
+} from "./approval-outcome";
 
 export type ApprovalScope = Record<string, string | string[]>;
 
@@ -191,18 +201,19 @@ export async function verifyApproval(params: {
   if (status === "denied") {
     return block(
       input.command,
-      APPROVAL_REJECTED_STATUS,
+      APPROVAL_DECLINED_STATUS,
       "E_APPROVAL_REJECTED",
-      "ApprovalDenied",
-      `Approval ${approvalId} was denied by the human reviewer, so nothing was executed.`,
+      "ApprovalDeclined",
+      `Approval ${approvalId} was declined by a workspace owner, so nothing was executed.`,
       { action: input.action, approvalId },
+      "Ask the person whether they still want it before requesting a fresh approval by calling this tool with no approvalId.",
     );
   }
 
   if (expired) {
     return block(
       input.command,
-      APPROVAL_REJECTED_STATUS,
+      APPROVAL_EXPIRED_STATUS,
       "E_APPROVAL_REJECTED",
       "ApprovalExpired",
       `Approval ${approvalId} has expired, so nothing was executed. Request a fresh approval by calling this tool with no approvalId.`,
@@ -222,14 +233,18 @@ export async function verifyApproval(params: {
   }
 
   if (status !== "approved") {
-    return block(
-      input.command,
-      APPROVAL_PENDING_STATUS,
-      "E_APPROVAL_PENDING",
-      "ApprovalPending",
-      `Approval ${approvalId} has not been granted yet: ${input.description} Open the approval URL and approve it, then call this tool again with the same approvalId. Nothing was executed.`,
-      { action: input.action, approvalId, status: status || "pending" },
-    );
+    return {
+      blocked: true,
+      envelope: pendingApproval({
+        command: input.command,
+        approvalId,
+        message: `Approval ${approvalId} has not been granted yet: ${input.description}`,
+        undone: "Nothing was executed.",
+        api: input.api,
+        approvalUrl: typeof data.approvalUrl === "string" ? data.approvalUrl.trim() : undefined,
+        value: { action: input.action, status: status || "pending" },
+      }),
+    };
   }
 
   return { blocked: false, approvalId };

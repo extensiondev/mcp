@@ -15,6 +15,7 @@ import { envelope } from "../lib/envelope";
 import { consoleProjectUrl } from "../lib/registry";
 import { projectApiReadFailure, projectApiSend, tokenRefusal, type ProjectApi } from "../lib/project-api";
 import { actionFingerprint, requestApprovalAfterRefusal } from "../lib/approval-gate";
+import { approvalRoundTrip } from "../lib/approval-outcome";
 import { badShipRequest, isRow, openShipApi, text } from "../lib/ship-act";
 import { STORE_MD_FILENAME } from "../lib/store-md";
 import { LISTING_STORES, listingForStore, parseStoreMdListing, type ListingStore } from "../lib/store-md-listing";
@@ -128,13 +129,10 @@ async function stillBlocking(api: ProjectApi, store: string): Promise<string[] |
     .map((check) => `${text(check.id)}${text(check.status) === "warn" ? " (warning)" : ""}`);
 }
 
-const APPROVAL_NEXT: Record<string, string> = {
-  APPROVAL_PENDING: "Approve it at its URL, then call again with the same arguments and approvalId.",
-  APPROVAL_DENIED: "It was denied, so the listing was not changed.",
-  APPROVAL_EXPIRED: "Request a fresh approval by calling again with no approvalId.",
-  APPROVAL_NOT_FOUND: "Request a fresh approval by calling again with no approvalId.",
-  APPROVAL_SCOPE_MISMATCH: "STORE.md, the built icon or the screenshots changed since it was approved, or it is another store's approval; call again with no approvalId for a fresh one.",
-  APPROVAL_CONSUMED: "The call that used it may already have written the listing; run preflight first, and request a fresh approval only if the listing is not there.",
+const LISTING_NEXT = {
+  declined: "A workspace owner declined it, so the listing was not changed. Ask the person whether they still want it before requesting a fresh approval by calling again with no approvalId.",
+  mismatch: "STORE.md, the built icon or the screenshots changed since it was approved, or it is another store's approval; call again with no approvalId for a fresh one.",
+  used: "The call that used it may already have written the listing; run preflight first, and request a fresh approval only if the listing is not there.",
 };
 
 async function syncOne(api: ProjectApi, args: ListingArgs, store: ListingStore, patch: ListingPatch): Promise<Row | { out: string }> {
@@ -181,7 +179,19 @@ async function syncOne(api: ProjectApi, args: ListingArgs, store: ListingStore, 
       : { store, status: "refused", code: text(error.platformCode) || text(error.name), message: text(error.message) };
   }
 
-  if (APPROVAL_NEXT[sent.code]) return { store, status: "approval-rejected", code: sent.code, message: sent.message, next: APPROVAL_NEXT[sent.code] };
+  const answered = approvalRoundTrip({
+    command: COMMAND,
+    platformCode: sent.code,
+    message: sent.message,
+    approvalId,
+    undone: "Nothing was written to the listing by this call.",
+    api: args.api,
+    value: { action: ACT, store, project: context.project },
+    next: LISTING_NEXT,
+    retryAfterSeconds: sent.retryAfterSeconds,
+  });
+
+  if (answered) return { out: answered };
 
   return { store, status: sent.code === "OWNER_REQUIRED" ? "needs-owner" : "refused", code: sent.code, message: sent.message };
 }

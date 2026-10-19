@@ -118,9 +118,11 @@ describe("extension_release_promote cuts a release pull request and rolls a chan
 
     const out = JSON.parse(await promote({ action: "cut", approvalId: "apr_cut", api: API }));
 
+    expect(out.ok).toBe(true);
     expect(out.status).toBe("approval-pending");
-    expect(out.error.platformCode).toBe("APPROVAL_PENDING");
-    expect(out.error.message).toContain("granted yet. Nothing was done by this call.");
+    expect(out.value).toMatchObject({ platformCode: "APPROVAL_PENDING", approvalId: "apr_cut", approvalUrl: `${API}/device/approve/apr_cut` });
+    expect(out.hint).toContain("granted yet. A person approves at the link");
+    expect(out.hint).toContain("Nothing was done by this call.");
   });
 
   it("cut whose minter is not an owner is refused at the approval request with that reason", async () => {

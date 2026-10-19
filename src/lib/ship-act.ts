@@ -6,10 +6,9 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
+import { approvalRoundTrip } from "./approval-outcome";
 import { envelope, type ErrorCode } from "./envelope";
 import {
-  APPROVAL_PENDING_STATUS,
-  APPROVAL_REJECTED_STATUS,
   actionFingerprint,
   requestApprovalAfterRefusal,
   type ApprovalScope,
@@ -55,25 +54,6 @@ export interface ShipAct {
   apiHint?: string;
   value?: Row;
 }
-
-const STATE_READ = "{stateRead}";
-
-const APPROVAL_CODES: Record<string, { status: string; name: string; next: string }> = {
-  APPROVAL_PENDING: { status: APPROVAL_PENDING_STATUS, name: "ApprovalPending", next: "Approve it at its URL, then call again with the same arguments and approvalId." },
-  APPROVAL_DENIED: { status: APPROVAL_REJECTED_STATUS, name: "ApprovalDenied", next: "It was denied, so nothing happened." },
-  APPROVAL_EXPIRED: { status: APPROVAL_REJECTED_STATUS, name: "ApprovalExpired", next: "Request a fresh approval by calling again with no approvalId." },
-  APPROVAL_NOT_FOUND: { status: APPROVAL_REJECTED_STATUS, name: "ApprovalUnverifiable", next: "Request a fresh approval by calling again with no approvalId." },
-  APPROVAL_SCOPE_MISMATCH: {
-    status: APPROVAL_REJECTED_STATUS,
-    name: "ApprovalScopeMismatch",
-    next: "That approval covers a different act, or what this act would do changed since it was approved; request a fresh one by calling again with no approvalId.",
-  },
-  APPROVAL_CONSUMED: {
-    status: APPROVAL_REJECTED_STATUS,
-    name: "ApprovalConsumed",
-    next: `The call that used it may already have done this: read ${STATE_READ} first, and request a fresh approval only if it did not happen.`,
-  },
-};
 
 const ALLOWANCE = new Set(["burst_cap", "monthly_cap", "RATE_LIMITED"]);
 const UNSURE = new Set(["counter_unavailable", "entitlement_unavailable", "kill_switch", "unattributed"]);
@@ -242,26 +222,19 @@ export async function runShipAct(act: ShipAct, api: ProjectApi): Promise<{ ok: t
 
   if (!approvalId && sent.code === "APPROVAL_REQUIRED") return { ok: false, out: await askForApproval(act, sent, api) };
 
-  const known = APPROVAL_CODES[sent.code];
+  const answered = approvalRoundTrip({
+    command: act.command,
+    platformCode: sent.code,
+    message: sent.message,
+    approvalId,
+    undone: "Nothing was done by this call.",
+    api: act.apiHint,
+    value,
+    stateRead: act.stateRead,
+    retryAfterSeconds: sent.retryAfterSeconds,
+  });
 
-  if (known) {
-    return {
-      ok: false,
-      out: envelope({
-        ok: false,
-        command: act.command,
-        status: known.status,
-        value: { ...value, approvalId },
-        error: {
-          code: known.status === APPROVAL_PENDING_STATUS ? "E_APPROVAL_PENDING" : "E_APPROVAL_REJECTED",
-          name: known.name,
-          platformCode: sent.code,
-          message: `${closed(sent.message)} Nothing was done by this call.`,
-        },
-        hint: known.next.replace(STATE_READ, act.stateRead),
-      }),
-    };
-  }
+  if (answered) return { ok: false, out: answered };
 
   return { ok: false, out: refusal(act, sent, api) };
 }

@@ -12,9 +12,8 @@ import { ConsoleProjectPage } from "@extension.dev/urls/paths";
 
 import { consoleProjectUrl } from "../lib/registry";
 import { envelope } from "../lib/envelope";
+import { approvalRoundTrip } from "../lib/approval-outcome";
 import {
-  APPROVAL_PENDING_STATUS,
-  APPROVAL_REJECTED_STATUS,
   actionFingerprint,
   evaluateApproval,
   requestApprovalAfterRefusal,
@@ -220,18 +219,7 @@ export function settingsDigest(settings: Record<string, BrowserConfig>): string 
   return crypto.createHash("sha256").update(JSON.stringify(canonical)).digest("hex");
 }
 
-export const APPROVAL_CODES: Record<string, { status: string; name: string; next: string }> = {
-  APPROVAL_PENDING: { status: APPROVAL_PENDING_STATUS, name: "ApprovalPending", next: "Approve it at its URL, then call again with the same approvalId." },
-  APPROVAL_DENIED: { status: APPROVAL_REJECTED_STATUS, name: "ApprovalDenied", next: "It was denied, so nothing changed." },
-  APPROVAL_EXPIRED: { status: APPROVAL_REJECTED_STATUS, name: "ApprovalExpired", next: "Request a fresh approval by calling again with no approvalId." },
-  APPROVAL_NOT_FOUND: { status: APPROVAL_REJECTED_STATUS, name: "ApprovalUnverifiable", next: "Request a fresh approval by calling again with no approvalId." },
-  APPROVAL_SCOPE_MISMATCH: { status: APPROVAL_REJECTED_STATUS, name: "ApprovalScopeMismatch", next: "That approval is for a different change; request a fresh one by calling again with no approvalId." },
-  APPROVAL_CONSUMED: {
-    status: APPROVAL_REJECTED_STATUS,
-    name: "ApprovalConsumed",
-    next: "The call that used it may already have changed the settings: read them with extension_workspace (action: \"settings\") first, and request a fresh approval only if the change is not there.",
-  },
-};
+const SETTINGS_CONSUMED_NEXT = 'The call that used it may already have changed the settings: read them with extension_workspace (action: "settings") first, and request a fresh approval only if the change is not there.';
 
 export async function configure(args: ActArgs): Promise<string> {
   const read = readChange(args.buildSettings);
@@ -291,23 +279,19 @@ export async function configure(args: ActArgs): Promise<string> {
       return requestApprovalAfterRefusal(gateInput);
     }
 
-    const known = APPROVAL_CODES[sent.code];
+    const answered = approvalRoundTrip({
+      command: COMMAND,
+      platformCode: sent.code,
+      message: sent.message,
+      approvalId,
+      undone: "Nothing was changed by this call.",
+      api: args.api,
+      value: { action: "configure" },
+      next: { used: SETTINGS_CONSUMED_NEXT },
+      retryAfterSeconds: sent.retryAfterSeconds,
+    });
 
-    if (known) {
-      return envelope({
-        ok: false,
-        command: COMMAND,
-        status: known.status,
-        value: { action: "configure", approvalId },
-        error: {
-          code: known.status === APPROVAL_PENDING_STATUS ? "E_APPROVAL_PENDING" : "E_APPROVAL_REJECTED",
-          name: known.name,
-          platformCode: sent.code,
-          message: `${sent.message}. Nothing was changed by this call.`,
-        },
-        hint: known.next,
-      });
-    }
+    if (answered) return answered;
 
     return actRefusal(sent, "configure", api, args);
   }
