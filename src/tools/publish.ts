@@ -15,6 +15,8 @@ import { NO_TOKEN_MESSAGE, PROJECT_TOKEN_INPUT, noStoredLoginHint } from "../lib
 import { platformHoldEnvelope } from "../lib/platform-hold";
 import { CHANNEL_LINK_ADVICE, channelLinkFields, channelServing, readChannels } from "../lib/channel-link";
 import { publishLinkFields } from "../lib/publish-link";
+import { everyArtifactFailed, readBuildHealth, type BuildHealth } from "../lib/build-health";
+import { applyArtifactHealth, refuseUnverified } from "../lib/publish-artifacts";
 import {
   consoleProjectUrl,
   fetchRegistryJson,
@@ -27,7 +29,7 @@ import {
 export const schema = {
   name: "extension_publish",
   description:
-    "Publish a build of the project your stored token is scoped to (extension_auth, or EXTENSION_DEV_TOKEN) on extension.dev, and return the link to send testers, which opens a page with a download and a run command for each browser. Reach for this first whenever the ask is to share, publish, deploy, distribute, release or ship an extension, or to send it to testers; extension_submit is the separate store-review path, and extension_preview_web share:true is a quick emulator link beside this one. An extension with no project on extension.dev yet starts with extension_project_create, which makes one from its GitHub repository, then extension_auth. The target is the token's project: there is no projectPath, and no local file is uploaded. With several logins stored, pass `project` ('<workspace>/<project>') to pick which one; it outranks EXTENSION_DEV_TOKEN. There are two links. A build link opens one build, <workspace>.extension.dev/<project>/builds/<sha> (pass buildSha, which extension_builds lists, or the newest successful build is linked); on a private project it carries a share token and expires, its lifetime ttlHours: 7 days by default, and up to the plan's share window (30 days free, 365 Pro) when asked. A channel link, <workspace>.extension.dev/<project>/channels/<channel>, always opens a channel's newest build and never expires; a public project gets one in value.channelUrl when a release channel serves the build, and later a public channel of a private project will too. On a public project, or a public channel, send testers the channel link; otherwise send the build link and tell them the date it stops working. A private project gets no channel link: value.channelUrlWithheld says why. A project's visibility is set in its extension.dev project settings, not its GitHub repository. In the answer, value.link is the link to send (kind build or channel, url, expiresAt as an ISO date or null, pointsAt, audience, scope, and renewBy, the call that mints a fresh one, on a private project), value.links lists every link this build has, value.tellThem is the sentence to say with it (the hint carries it too), value.clamped says the platform cut ttlHours back to the plan's window, and value.projectVisibility names where visibility is set and, on a private project, makeEvergreen, the console page that gives a link that never expires.",
+    "Publish a build of the project your stored token is scoped to (extension_auth, or EXTENSION_DEV_TOKEN) on extension.dev, and return the link to send testers, which opens a page with a download and a run command for each browser. Reach for this first whenever the ask is to share, publish, deploy, distribute, release or ship an extension, or to send it to testers; extension_submit is the separate store-review path, and extension_preview_web share:true is a quick emulator link beside this one. An extension with no project on extension.dev yet starts with extension_project_create, which makes one from its GitHub repository, then extension_auth. The target is the token's project: there is no projectPath, and no local file is uploaded. With several logins stored, pass `project` ('<workspace>/<project>') to pick which one; it outranks EXTENSION_DEV_TOKEN. There are two links. A build link opens one build, <workspace>.extension.dev/<project>/builds/<sha> (pass buildSha, which extension_builds lists, or the newest successful build is linked); on a private project it carries a share token and expires, its lifetime ttlHours: 7 days by default, and up to the plan's share window (30 days free, 365 Pro) when asked. A channel link, <workspace>.extension.dev/<project>/channels/<channel>, always opens a channel's newest build and never expires; a public project gets one in value.channelUrl when a release channel serves the build, and later a public channel of a private project will too. On a public project, or a public channel, send testers the channel link; otherwise send the build link and tell them the date it stops working. A private project gets no channel link: value.channelUrlWithheld says why. A project's visibility is set in its extension.dev project settings, not its GitHub repository. In the answer, value.link is the link to send (kind build or channel, url, expiresAt as an ISO date or null, pointsAt, audience, scope, and renewBy, the call that mints a fresh one, on a private project), value.links lists every link this build has, value.tellThem is the sentence to say with it (the hint carries it too), value.clamped says the platform cut ttlHours back to the plan's window, and value.projectVisibility names where visibility is set and, on a private project, makeEvergreen, the console page that gives a link that never expires. Before handing out a link it reads the build's per-browser status and integrity, as extension_builds get does, into value.artifacts: a build whose every browser artifact failed is refused with status publish-refused, naming each browser's verdict and extension_builds rebuild, unless force is true; when only some failed, it publishes with a warning naming them, leaves them out of previewCommands, and tellThem says which browsers the link is good for; a platform that reports no integrity gets a warning that it was not checked.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -41,6 +43,11 @@ export const schema = {
         type: "string",
         description:
           "Pin the URL to a build sha (7-40 hex chars). The platform rejects a sha missing from a readable build index; when its index cannot be read it echoes the sha back and a pin on a failed build is accepted, so value.buildSha is the platform's claim, not a verified build. extension_release_status lists the builds it knows.",
+      },
+      force: {
+        type: "boolean",
+        description:
+          "Publish even when the platform's checks reject every browser's artifact of the build (integrity failed or the browser build failed). Without it such a build is refused with E_ARTIFACTS_UNVERIFIED; with it the link is minted and the answer still warns and names the failed browsers.",
       },
       api: API_BASE,
     },
@@ -80,6 +87,7 @@ export async function handler(args: {
   project?: string;
   ttlHours?: number;
   buildSha?: string;
+  force?: boolean;
   api?: string;
 }): Promise<string> {
   const credential = resolveCredential({ project: args.project, api: args.api });
@@ -119,6 +127,22 @@ export async function handler(args: {
         "bad-request",
         "E_BAD_REQUEST",
       );
+    }
+  }
+
+  const force = args.force === true;
+  let health: BuildHealth | null = null;
+
+  if (args.buildSha) {
+    health = await readBuildHealth({
+      command: "extension_publish",
+      buildId: args.buildSha,
+      project: args.project,
+      api: args.api,
+    });
+
+    if (health.checked && everyArtifactFailed(health) && !force) {
+      return refuseUnverified(health, args, null);
     }
   }
 
@@ -214,6 +238,21 @@ export async function handler(args: {
   }
 
   delete data.token;
+
+  if (!health && typeof data.buildSha === "string" && data.buildSha.trim()) {
+    health = await readBuildHealth({
+      command: "extension_publish",
+      buildId: data.buildSha.trim(),
+      project: args.project,
+      api: args.api,
+    });
+
+    if (health.checked && everyArtifactFailed(health) && !force) {
+      return refuseUnverified(health, args, {
+        settingsUrl: credential.ref ? consoleProjectUrl(credential.ref, "settings/share-links", args.api) : null,
+      });
+    }
+  }
 
   let note: string | null = null;
 
@@ -332,7 +371,8 @@ export async function handler(args: {
     api: args.api,
   });
 
-  const previewCommands = previewCommandsOf(data.previewCommands);
+  const { note: artifactNote, failed } = applyArtifactHealth(data, health);
+  const previewCommands = previewCommandsOf(data.previewCommands).filter(([browser]) => !failed.has(browser.toLowerCase()));
   const tokenCarried = previewCommands.every(([, command]) => /[?&]t=/.test(command));
   const previewHint =
     previewCommands.length > 0
@@ -357,7 +397,7 @@ export async function handler(args: {
     command: "extension_publish",
     status: noBuild ? "published-without-build" : "published",
     value: data,
-    warnings: [noBuildNote, note, buildNote, channelNote, credential.note],
+    warnings: [noBuildNote, artifactNote, note, buildNote, channelNote, credential.note],
     ...(hint ? { hint } : {}),
   });
 }

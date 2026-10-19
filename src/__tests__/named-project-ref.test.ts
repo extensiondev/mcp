@@ -180,7 +180,7 @@ describe("extension_publish with project", () => {
     );
 
     expect(JSON.stringify(out)).not.toContain(ACTIVE_SLUG);
-    expect(bearers).toEqual(["Bearer token-for-refined-github"]);
+    expect([...new Set(bearers)]).toEqual(["Bearer token-for-refined-github"]);
   });
 
   it("fills a missing build sha and version from the named project's index, never the active one's", async () => {
