@@ -155,7 +155,8 @@ describe("extension_submit withdraws a submission, raises a staged rollout and c
     expect(platform.sent("POST", APPROVALS)).toHaveLength(0);
     expect(out.ok).toBe(true);
     expect(out.status).toBe("preflight-read");
-    expect(out.value.stores.chrome).toMatchObject({ canSubmit: false, failing: [{ id: "credentials", message: "CHROME_CLIENT_SECRET is missing." }] });
+    expect(out.value.stores.chrome).toMatchObject({ canSubmit: false, failing: [{ id: "credentials", message: "A store credential is missing." }] });
+    expect(JSON.stringify(out)).not.toContain("CHROME_CLIENT_SECRET");
     expect(out.value.stores.chrome.warnings).toEqual([{ id: "privacy", label: "Privacy policy URL", severity: "advisory", message: "No privacy policy URL." }]);
     expect(out.value.stores.firefox.canSubmit).toBe(true);
     expect(JSON.stringify(out)).not.toContain("A long user-written text");

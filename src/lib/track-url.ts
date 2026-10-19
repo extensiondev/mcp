@@ -31,6 +31,7 @@ export type TrackPage =
   | "store"
   | "submission"
   | "build-settings"
+  | "store-settings"
   | "channels"
   | "share-links"
   | "access-tokens";
@@ -62,6 +63,7 @@ const PROJECT_PAGES: Record<Exclude<TrackPage, "console" | "workspace">, (t: Tra
         ? ConsoleProjectPage.storeSubmissions(t.store)
         : ConsoleProjectPage.submissions,
   "build-settings": () => ConsoleProjectPage.projectSettingsSection("build"),
+  "store-settings": () => ConsoleProjectPage.projectSettingsSection("stores"),
   channels: () => ConsoleProjectPage.projectSettingsSection("channels"),
   "share-links": () => ConsoleProjectPage.projectSettingsSection("share-links"),
   "access-tokens": () => ConsoleProjectPage.projectSettingsSection("access-tokens"),
@@ -94,6 +96,7 @@ export interface TrackCall {
   value: Row;
 }
 
+const STORE_CONNECT_STATUSES = new Set(["store-not-connected", "store-connection-failed"]);
 const APPROVAL_STATUSES = new Set(["approval-required", "approval-pending", "authorization-pending"]);
 
 function text(value: unknown): string {
@@ -131,6 +134,8 @@ function submitPlan(call: TrackCall): TrackPlan {
   }
 
   if (action === "rollout") return { track: { page: "store", target: { store: "chrome" } } };
+
+  if (action === "preflight" && STORE_CONNECT_STATUSES.has(call.status)) return { track: { page: "store-settings" } };
 
   if (action === "preflight" || action === "sync-listing") {
     const store = firstBrowser(call.args);

@@ -12,6 +12,14 @@ import { envelope } from "../lib/envelope";
 import { consoleProjectUrl } from "../lib/registry";
 import { projectApiReadFailure, projectApiSend } from "../lib/project-api";
 import { badShipRequest, isRow, openShipApi, runShipAct, text } from "../lib/ship-act";
+import {
+  ITEM_ON_FIRST_SUBMISSION,
+  connectSentences,
+  connectionOf,
+  failedCheckSentence,
+  fallbackConnectUrl,
+  storeSettingsUrl,
+} from "../lib/store-connection";
 import { readLocalListing, storeMdAdvisory } from "./store-listing";
 
 import type { ListingStore } from "../lib/store-md-listing";
@@ -157,9 +165,11 @@ function readinessView(json: Row, store: string, projectPath: string): Row {
   const checks = (Array.isArray(json.checks) ? json.checks : []).filter(isRow);
   const open = checks.filter((c) => text(c.status) === "fail" || text(c.status) === "warn");
   const local = projectPath ? readLocalListing(projectPath, store as ListingStore) : null;
+  const connection = connectionOf(json);
 
   return {
     canSubmit: summary.canSubmit === true,
+    ...(connection ? { connection } : {}),
     summary,
     failing: checks.filter((c) => text(c.status) === "fail").map((c) => checkView(c, true)),
     warnings: checks.filter((c) => text(c.status) === "warn").map((c) => checkView(c, true)),
@@ -212,15 +222,48 @@ export async function preflight(args: StoreActArgs): Promise<string> {
   const syncLine = coverable.length
     ? ` STORE.md and the build already cover part of the ${coverable.join(", ")} listing: extension_submit action:"sync-listing" with browsers:[${coverable.map((s) => `"${s}"`).join(", ")}] and projectPath fills it after a workspace owner approves.`
     : "";
+  const unreadLine = unread.length ? `Readiness could not be read for ${unread.join("; ")}.` : null;
+  const storesPageUrl = consoleProjectUrl(api.ref, ConsoleProjectPage.stores, args.api);
+  const readinessHint = blocked.length
+    ? `${blocked.join(", ")} cannot be submitted yet; each failing check says what to fix.${syncLine} This read wrote nothing.`
+    : "Every store read here is ready to submit. This read wrote nothing; extension_submit with dryRun:false submits.";
+  const chrome = isRow(stores.chrome) ? stores.chrome : null;
+  const connection = chrome && isRow(chrome.connection) ? chrome.connection : null;
+
+  if (chrome && connection && (!text(connection.kind) || connection.healthy === false)) {
+    const connected = Boolean(text(connection.kind));
+    const settingsUrl = storeSettingsUrl(api.ref, args.api);
+    const connectUrl = text(connection.connectUrl) || fallbackConnectUrl(api.ref, "chrome", args.api);
+    const say = connected
+      ? `${failedCheckSentence(text(connection.reason))} ${connectSentences(connectUrl)}`
+      : connectSentences(connectUrl);
+    const others = blocked.filter((store) => store !== "chrome");
+
+    return envelope({
+      ok: true,
+      command: COMMAND,
+      status: connected ? "store-connection-failed" : "store-not-connected",
+      value: { action: "preflight", stores, storesPageUrl, connectUrl, trackUrl: settingsUrl, sayToPerson: say },
+      hint: say,
+      warnings: [
+        others.length ? `${others.join(", ")} cannot be submitted yet either; each failing check says what to fix.` : null,
+        unreadLine,
+        "This read wrote nothing.",
+      ],
+    });
+  }
+
+  const itemUrl = chrome && connection && text(connection.itemId) ? text(connection.itemUrl) : "";
+  const itemLine = chrome && connection && !text(connection.itemId) ? ` ${ITEM_ON_FIRST_SUBMISSION}` : "";
+
+  if (chrome && itemLine) chrome.itemCreatedOnFirstSubmission = true;
 
   return envelope({
     ok: true,
     command: COMMAND,
     status: "preflight-read",
-    value: { action: "preflight", stores, storesPageUrl: consoleProjectUrl(api.ref, ConsoleProjectPage.stores, args.api) },
-    hint: blocked.length
-      ? `${blocked.join(", ")} cannot be submitted yet; each failing check says what to fix.${syncLine} This read wrote nothing.`
-      : "Every store read here is ready to submit. This read wrote nothing; extension_submit with dryRun:false submits.",
-    warnings: [unread.length ? `Readiness could not be read for ${unread.join("; ")}.` : null],
+    value: { action: "preflight", stores, storesPageUrl, ...(itemUrl ? { itemUrl } : {}) },
+    hint: `${readinessHint}${itemLine}${itemUrl ? ` The Chrome Web Store item is at ${itemUrl}.` : ""}`,
+    warnings: [unreadLine],
   });
 }

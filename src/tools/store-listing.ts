@@ -175,7 +175,7 @@ async function syncOne(api: ProjectApi, args: ListingArgs, store: ListingStore, 
     const error = isRow(asking.error) ? asking.error : {};
 
     return text(value.approvalId)
-      ? { store, status: "approval-required", approvalId: text(value.approvalId), approvalUrl: text(value.approvalUrl), changes: Array.isArray(value.changes) ? value.changes : [] }
+      ? { store, status: "approval-required", approvalId: text(value.approvalId), approvalUrl: text(value.approvalUrl), ...(text(value.expiresAt) ? { expiresAt: text(value.expiresAt) } : {}), changes: Array.isArray(value.changes) ? value.changes : [] }
       : { store, status: "refused", code: text(error.platformCode) || text(error.name), message: text(error.message) };
   }
 
@@ -268,7 +268,7 @@ export async function syncListing(args: ListingArgs): Promise<string> {
       ok: false,
       command: COMMAND,
       status: "approval-required",
-      value: { ...value, ...(only ? { approvalId: only.approvalId, approvalUrl: only.approvalUrl } : {}) },
+      value: { ...value, ...(only ? { approvalId: only.approvalId, approvalUrl: only.approvalUrl, ...(only.expiresAt ? { expiresAt: only.expiresAt } : {}) } : {}) },
       error: { code: "E_APPROVAL_REQUIRED", name: "ApprovalRequired", message: `A workspace owner approves each store listing change before it is written. Nothing was written for ${approvals.map((row) => text(row.store)).join(", ")}.` },
       hint: `Approve at ${approvals.map((row) => `${text(row.approvalUrl)} (${text(row.store)})`).join(", ")}, then call extension_submit action:"sync-listing" again once per store with browsers:[<store>], the same projectPath and screenshots, and that store's approvalId.`,
     });
