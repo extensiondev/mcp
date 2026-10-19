@@ -26,6 +26,7 @@ import {
   safeApiBase,
 } from "../lib/login-flow";
 import { consoleBase } from "../lib/registry";
+import { CREATE_CEILING_SENTENCE, CREATE_STUCK_AFTER_SECONDS, creatingAge, creatingForWords } from "../lib/create-ceiling";
 import { platformHoldEnvelope, sawPlatformHold } from "../lib/platform-hold";
 import { identityHeaders } from "../lib/session-identity";
 import { answerIsUnknownOutcome, readCreatedWorkspace } from "../lib/create-answer";
@@ -390,7 +391,7 @@ async function sendCreate(ctx: CreateContext, kept: boolean, keepGrant: () => vo
         ...(kept ? { deviceCode: ctx.deviceCode } : {}),
       },
       hint: kept
-        ? `Call ${COMMAND} again with this same deviceCode and the same arguments to learn the outcome; do not start a new call, which needs a second approval. The grant is held on this machine, readable only by this user, until ${heldUntilSentence(ctx.held)}, and with it the platform answers with this create's outcome (created, still creating, or refused) and never creates workspace ${ctx.workspace} twice.`
+        ? `The platform may still be finishing workspace ${ctx.workspace}. Call ${COMMAND} again with this same deviceCode and the same arguments to learn the outcome; that call resumes without a second approval, and a new call would need one. The grant is held on this machine, readable only by this user, until ${heldUntilSentence(ctx.held)}, and with it the platform answers with this create's outcome (created, still creating, or refused) and never creates workspace ${ctx.workspace} twice. ${CREATE_CEILING_SENTENCE}`
         : `Do not create it again blind: the grant could not be kept on this machine, and the first request may have landed. Look for ${ctx.workspace} in the console at ${consoleBase()}. If it is there, go on to extension_project_create with project '${ctx.workspace}/<project>'; only if it is not, call ${COMMAND} again.`,
     });
   };
@@ -446,6 +447,32 @@ async function sendCreate(ctx: CreateContext, kept: boolean, keepGrant: () => vo
   if (String(data.code || "") === CREATE_IN_PROGRESS_CODE) {
     keepGrant();
     const waitSeconds = Number(data.retryAfterSeconds) > 0 ? Number(data.retryAfterSeconds) : 10;
+    const age = creatingAge({ apiBase: ctx.apiBase, deviceCode: ctx.deviceCode, kept, data });
+
+    if (age.stuck) {
+      const workspaceUrl = `${consoleBase()}/${encodeURIComponent(ctx.workspace)}`;
+
+      return envelope({
+        ok: false,
+        command: COMMAND,
+        status: "create-stuck",
+        error: {
+          code: "E_CREATE_STUCK",
+          name: "CreateStuck",
+          message: `The platform has reported workspace ${ctx.workspace} as still creating for ${creatingForWords(age.seconds)} (since ${age.startedAtIso}), past the ${CREATE_STUCK_AFTER_SECONDS / 60}-minute ceiling, so this create looks stuck. Workspace ${ctx.workspace} may already exist: the platform took the request and only its outcome is missing.`,
+        },
+        value: {
+          workspace: ctx.workspace,
+          retryAfterSeconds: waitSeconds,
+          creatingForSeconds: age.seconds,
+          startedAt: age.startedAtIso,
+          consoleUrl: workspaceUrl,
+          ...(kept ? { deviceCode: ctx.deviceCode } : {}),
+          nextSteps: [workspaceUrl, `extension_project_create (project: '${ctx.workspace}/<project>', repo: '<owner>/<repo>')`],
+        },
+        hint: `Open ${workspaceUrl} to see whether the workspace is there; if it is, go on to extension_project_create with project '${ctx.workspace}/<project>'. To keep waiting instead, call ${COMMAND} again with this same deviceCode in about ${waitSeconds} s${kept ? `; the grant stays held until ${heldUntilSentence(ctx.held)}` : ""}.`,
+      });
+    }
 
     return envelope({
       ok: true,
@@ -454,10 +481,12 @@ async function sendCreate(ctx: CreateContext, kept: boolean, keepGrant: () => vo
       value: {
         workspace: ctx.workspace,
         retryAfterSeconds: waitSeconds,
+        creatingForSeconds: age.seconds,
+        startedAt: age.startedAtIso,
         ...(kept ? { deviceCode: ctx.deviceCode } : {}),
       },
       hint: kept
-        ? `The platform is still creating workspace ${ctx.workspace} from the earlier request with this grant, and started nothing new. Call ${COMMAND} again with this same deviceCode and the same arguments in about ${waitSeconds} s to read the outcome; no new approval is needed while the grant lasts (until ${heldUntilSentence(ctx.held)}).`
+        ? `The platform has been creating workspace ${ctx.workspace} for ${creatingForWords(age.seconds)} (since ${age.startedAtIso}) from the earlier request with this grant, and started nothing new. Call ${COMMAND} again with this same deviceCode and the same arguments in about ${waitSeconds} s to read the outcome; no new approval is needed while the grant lasts (until ${heldUntilSentence(ctx.held)}).`
         : `The platform is still creating workspace ${ctx.workspace} from an earlier request with this grant, and started nothing new. The grant could not be kept on this machine, so look for ${ctx.workspace} in the console at ${consoleBase()} in a minute.`,
     });
   }

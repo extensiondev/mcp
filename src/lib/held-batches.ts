@@ -19,6 +19,7 @@ export interface HeldBatch<Row> {
   grant: string;
   grantExpiresAt: number;
   rows: Row[];
+  creatingSince?: number;
 }
 
 type HeldFile = Record<string, HeldBatch<unknown>>;

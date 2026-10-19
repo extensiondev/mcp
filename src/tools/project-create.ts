@@ -38,6 +38,8 @@ import { platformHoldEnvelope, sawPlatformHold } from "../lib/platform-hold";
 import { identityHeaders } from "../lib/session-identity";
 import { spendNarration } from "../lib/allowance";
 import { answerIsUnknownOutcome, readCreatedProject } from "../lib/create-answer";
+import { CREATE_CEILING_SENTENCE, CREATE_STUCK_AFTER_SECONDS, creatingAge, creatingForWords } from "../lib/create-ceiling";
+import { findProjectByStoredLogin, type ProjectFoundByRead } from "../lib/created-project-read";
 import { isProjectRef } from "../lib/credentials";
 import {
   firstBuildSentence,
@@ -49,6 +51,8 @@ import {
 const COMMAND = "extension_project_create";
 
 const FIRST_CALL_BUDGET_MS = 8_000;
+
+const CREATE_STUCK_MINUTES = CREATE_STUCK_AFTER_SECONDS / 60;
 
 export const schema = {
   name: "extension_project_create",
@@ -555,7 +559,7 @@ async function sendCreate(
         ...(kept ? { deviceCode: ctx.deviceCode } : {}),
       },
       hint: kept
-        ? `Call extension_project_create again with this same deviceCode and the same arguments to learn the outcome; do not start a new call, which needs a second approval. The grant is held on this machine, readable only by this user, until ${heldUntilSentence(ctx.held)}, and with it the platform answers with this create's outcome (created, still creating, or refused) and never creates ${ctx.project} twice.`
+        ? `The platform may still be finishing ${ctx.project}. Call extension_project_create again with this same deviceCode and the same arguments to learn the outcome; that call resumes without a second approval, and a new call would need one. The grant is held on this machine, readable only by this user, until ${heldUntilSentence(ctx.held)}, and with it the platform answers with this create's outcome (created, still creating, or refused) and never creates ${ctx.project} twice. ${CREATE_CEILING_SENTENCE}`
         : `Do not create it again blind: the grant could not be kept on this machine, and a second create racing the first is two builds claiming one name. Look for ${ctx.project} in the console at ${consoleBase()}. If it is there, sign in with extension_auth (action: login, project: '${ctx.project}'); only if it is not, call extension_project_create again.`,
     });
   };
@@ -605,8 +609,38 @@ async function sendCreate(
   }
 
   if (String(data.code || "") === CREATE_IN_PROGRESS_CODE) {
+    const found = await findProjectByStoredLogin({ apiBase: ctx.apiBase, project: ctx.project, command: COMMAND });
+
+    if (found) return createdByRead(found, ctx.args.repo);
+
     keepGrant();
     const waitSeconds = Number(data.retryAfterSeconds) > 0 ? Number(data.retryAfterSeconds) : 10;
+    const age = creatingAge({ apiBase: ctx.apiBase, deviceCode: ctx.deviceCode, kept, data });
+
+    if (age.stuck) {
+      const projectUrl = consoleProjectUrl({ workspace: wantWorkspace, project: wantProject }, "");
+
+      return envelope({
+        ok: false,
+        command: COMMAND,
+        status: "create-stuck",
+        error: {
+          code: "E_CREATE_STUCK",
+          name: "CreateStuck",
+          message: `The platform has reported ${ctx.project} as still creating for ${creatingForWords(age.seconds)} (since ${age.startedAtIso}), past the ${CREATE_STUCK_MINUTES}-minute ceiling, so this create looks stuck. ${ctx.project} may already exist: the platform took the request and only its outcome is missing.`,
+        },
+        value: {
+          project: ctx.project,
+          retryAfterSeconds: waitSeconds,
+          creatingForSeconds: age.seconds,
+          startedAt: age.startedAtIso,
+          consoleUrl: projectUrl,
+          ...(kept ? { deviceCode: ctx.deviceCode } : {}),
+          nextSteps: [`extension_auth (action: login, project: '${ctx.project}')`, projectUrl],
+        },
+        hint: `Run extension_auth (action: login, project: '${ctx.project}'): it succeeds when the project exists, and then the project is ready. Or open ${projectUrl} to see whether it is there. To keep waiting instead, call extension_project_create again with this same deviceCode in about ${waitSeconds} s${kept ? `; the grant stays held until ${heldUntilSentence(ctx.held)}` : ""}.`,
+      });
+    }
 
     return envelope({
       ok: true,
@@ -615,10 +649,12 @@ async function sendCreate(
       value: {
         project: ctx.project,
         retryAfterSeconds: waitSeconds,
+        creatingForSeconds: age.seconds,
+        startedAt: age.startedAtIso,
         ...(kept ? { deviceCode: ctx.deviceCode } : {}),
       },
       hint: kept
-        ? `The platform is still creating ${ctx.project} from the earlier request with this grant, and started nothing new. Call extension_project_create again with this same deviceCode and the same arguments in about ${waitSeconds} s to read the outcome; no new approval is needed while the grant lasts (until ${heldUntilSentence(ctx.held)}).`
+        ? `The platform has been creating ${ctx.project} for ${creatingForWords(age.seconds)} (since ${age.startedAtIso}) from the earlier request with this grant, and started nothing new. Call extension_project_create again with this same deviceCode and the same arguments in about ${waitSeconds} s to read the outcome; no new approval is needed while the grant lasts (until ${heldUntilSentence(ctx.held)}).`
         : `The platform is still creating ${ctx.project} from an earlier request with this grant, and started nothing new. The grant could not be kept on this machine, so look for ${ctx.project} in the console at ${consoleBase()} in a minute.`,
     });
   }
@@ -777,5 +813,31 @@ async function sendCreate(
               : `The platform did not say whether a first build was dispatched for ${finalWorkspace}/${finalProject}.`,
           ]),
     ],
+  });
+}
+
+function createdByRead(found: ProjectFoundByRead, repo: string | undefined): string {
+  const ref = `${found.workspaceSlug}/${found.projectSlug}`;
+  const consoleUrl = consoleProjectUrl({ workspace: found.workspaceSlug, project: found.projectSlug }, "");
+
+  return envelope({
+    ok: true,
+    command: COMMAND,
+    status: "created",
+    value: {
+      workspaceSlug: found.workspaceSlug,
+      projectSlug: found.projectSlug,
+      projectId: found.projectId,
+      consoleUrl,
+      sourceRepo: repo,
+      confirmedBy: "project-read",
+      firstBuild: firstBuildValue({ state: "unsaid" }),
+      nextSteps: [
+        `extension_auth (action: login, project: '${ref}')`,
+        `extension_release_status (include: ['releases'], project: '${ref}') until a build is listed, then extension_publish`,
+      ],
+    },
+    hint: `Project ${ref} exists: the platform still answers this grant's request as creating, but a read with the stored login for ${found.readWith} finds the project, so the create landed and nothing was sent again. The provisioning grant is no longer kept on this machine. Next: extension_auth (action: login, project: '${ref}') to mint the project token.`,
+    warnings: [`The platform did not say whether a first build was dispatched for ${ref}; its Builds page in the console shows it.`],
   });
 }
