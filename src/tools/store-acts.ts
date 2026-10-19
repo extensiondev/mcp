@@ -19,7 +19,9 @@ import {
   fallbackConnectUrl,
   itemLinkUrls,
   linkItemSentences,
+  nextStep,
   storeSettingsUrl,
+  submitStep,
 } from "../lib/store-connection";
 import { readLocalListing, storeMdAdvisory } from "./store-listing";
 
@@ -244,7 +246,7 @@ export async function preflight(args: StoreActArgs): Promise<string> {
       ok: true,
       command: COMMAND,
       status: connected ? "store-connection-failed" : "store-not-connected",
-      value: { action: "preflight", stores, storesPageUrl, connectUrl, trackUrl: settingsUrl, sayToPerson: say },
+      value: { action: "preflight", stores, storesPageUrl, connectUrl, trackUrl: settingsUrl, sayToPerson: say, nextStep: nextStep("connect", say, connectUrl) },
       hint: say,
       warnings: [
         others.length ? `${others.join(", ")} cannot be submitted yet either; each failing check says what to fix.` : null,
@@ -263,19 +265,20 @@ export async function preflight(args: StoreActArgs): Promise<string> {
       ok: true,
       command: COMMAND,
       status: "store-item-not-linked",
-      value: { action: "preflight", stores, storesPageUrl, ...urls, trackUrl: settingsUrl, sayToPerson: say },
+      value: { action: "preflight", stores, storesPageUrl, ...urls, trackUrl: settingsUrl, sayToPerson: say, nextStep: nextStep("link-item", say, urls.linkItemUrl) },
       hint: say,
       warnings: [unreadLine, "This read wrote nothing."],
     });
   }
 
   const itemUrl = chrome && connection && text(connection.itemId) ? text(connection.itemUrl) : "";
+  const green = blocked.length === 0 && unread.length === 0;
 
   return envelope({
     ok: true,
     command: COMMAND,
     status: "preflight-read",
-    value: { action: "preflight", stores, storesPageUrl, ...(itemUrl ? { itemUrl } : {}) },
+    value: { action: "preflight", stores, storesPageUrl, ...(itemUrl ? { itemUrl } : {}), nextStep: green ? submitStep(asked) : null },
     hint: `${readinessHint}${itemUrl ? ` The Chrome Web Store item is at ${itemUrl}.` : ""}`,
     warnings: [unreadLine],
   });

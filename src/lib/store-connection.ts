@@ -39,6 +39,86 @@ export interface ItemLinkUrls {
   linkItemUrl: string;
 }
 
+export type NextStepKind = "connect" | "link-item" | "submit" | "approve" | "done";
+
+export interface NextStep {
+  kind: NextStepKind;
+  say: string;
+  url: string | null;
+}
+
+const DRAFT_STORES = new Set(["chrome", "edge"]);
+
+export function nextStep(kind: NextStepKind, say: string, url?: string): NextStep {
+  return { kind, say, url: url || null };
+}
+
+const STORE_NAMES: Record<string, string> = {
+  chrome: "the Chrome Web Store",
+  edge: "Edge Add-ons",
+  firefox: "Firefox AMO",
+  safari: "the App Store",
+};
+
+function storeNames(stores: string[]): string {
+  const names = stores.map((store) => STORE_NAMES[store] ?? store);
+
+  return names.length > 1 ? `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}` : names[0] ?? "the store";
+}
+
+export function submitStep(stores: string[]): NextStep {
+  const drafts = stores.length > 0 && stores.every((store) => DRAFT_STORES.has(store));
+
+  return nextStep(
+    "submit",
+    drafts
+      ? `Every check for ${storeNames(stores)} is green. I submit it as an unlisted draft after one owner approval, and nothing goes to review until you publish.`
+      : `Every check for ${storeNames(stores)} is green. I submit it after one owner approval.`,
+  );
+}
+
+export function doneStep(stores: string[], itemUrl: string): NextStep {
+  const drafts = stores.length > 0 && stores.every((store) => DRAFT_STORES.has(store));
+
+  return nextStep(
+    "done",
+    drafts
+      ? `The build is uploaded to ${storeNames(stores)} as a draft, recorded as uploaded and not public${itemUrl ? `, at ${itemUrl}` : ""}. Sending it to review is one more approval.`
+      : `The platform recorded the submission for ${storeNames(stores)}; each store's own review comes after this.`,
+    itemUrl,
+  );
+}
+
+export function withApproveStep(out: string, promisesNoReview: boolean): string {
+  let parsed: unknown;
+
+  try {
+    parsed = JSON.parse(out);
+  } catch {
+    return out;
+  }
+
+  if (!isEnvelope(parsed) || parsed.status !== "approval-required") return out;
+
+  const value = isRow(parsed.value) ? parsed.value : {};
+  const approvalUrl = text(value.approvalUrl);
+  if (!approvalUrl) return out;
+
+  const expiresAt = text(value.expiresAt);
+  const say = [`Approve the submission at ${approvalUrl}${expiresAt ? ` before ${expiresAt}` : ""}.`, promisesNoReview ? REVIEW_PROMISE : ""].filter(Boolean).join(" ");
+
+  return envelope({
+    ok: parsed.ok,
+    command: parsed.command,
+    status: parsed.status,
+    value: { ...value, nextStep: nextStep("approve", say, approvalUrl) },
+    error: parsed.error,
+    warnings: parsed.warnings,
+    ...(parsed.truncated !== undefined ? { truncated: parsed.truncated } : {}),
+    ...(parsed.hint ? { hint: parsed.hint } : {}),
+  });
+}
+
 export function linkItemSentences(urls: ItemLinkUrls): string {
   return `One step is yours, once: create the item in the Chrome Web Store dashboard at ${urls.newItemUrl} with this package ${urls.packageUrl}, and fill its Store listing and Privacy tabs there; your synced listing text is on the extension.dev store settings page to copy. Then paste the item's dashboard address at ${urls.linkItemUrl}. After that I submit every build as an unlisted draft, and nothing goes to review until you publish.`;
 }
