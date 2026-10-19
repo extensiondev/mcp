@@ -160,7 +160,8 @@ describe("the Chrome Web Store goal walks from not connected to submitted with a
     expect(out.value.nextStep.url).toBe(ITEM_URL);
     expect(out.value.itemUrl).toBe(ITEM_URL);
     expect(out.value.trackUrl).toMatch(/\/acme\/widget\/submissions\/chrome\/sub_1$/);
-    expect(out.value.nextStep.say).toContain("Sending it to review is one more approval.");
+    expect(out.value.nextStep.say).toContain(`To send it to review, open its dashboard page at ${ITEM_URL} and use Submit for review; a platform action for that is not available yet.`);
+    expect(out.value.nextStep.say).not.toMatch(/one more approval/);
   });
 });
 
@@ -175,7 +176,7 @@ describe("the server instructions carry the Chrome Web Store goal playbook in or
       "2. On store-not-connected or store-connection-failed",
       "3. On store-item-not-linked",
       "4. On preflight-read with every check green, call extension_submit {action:'submit', browsers:['chrome']",
-      "5. On submitted, report the status line, value.trackUrl and value.itemUrl",
+      "5. On submitted, report the status line, value.trackUrl and value.itemUrl, and say value.nextStep.say: to send it to review the person opens the item's dashboard page and uses Submit for review",
       "6. Never recommend a release on a code host, an unlisted AMO version, a TestFlight upload or any other do-it-yourself route first, and never name a secret.",
     ];
 
@@ -192,6 +193,7 @@ describe("the server instructions carry the Chrome Web Store goal playbook in or
     }
 
     expect(playbook.join("\n")).toContain("value.nextStep");
+    expect(playbook.join("\n")).not.toMatch(/one more approval/);
     expect(playbook[4]).toMatch(/approval-required.*value\.approvalUrl.*value\.expiresAt.*approvalId/);
     expect(text).toMatch(/extension\.dev comes first: never offer a release on a code host/);
     expect(playbook.join("\n")).not.toMatch(SECRET_NAMES);

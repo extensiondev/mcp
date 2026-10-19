@@ -77,15 +77,22 @@ export function submitStep(stores: string[]): NextStep {
   );
 }
 
+export function reviewByHandSentence(itemUrl: string): string {
+  return `To send it to review, open its dashboard page at ${itemUrl || CHROME_DASHBOARD} and use Submit for review; a platform action for that is not available yet.`;
+}
+
 export function doneStep(stores: string[], itemUrl: string): NextStep {
   const drafts = stores.length > 0 && stores.every((store) => DRAFT_STORES.has(store));
+  const uploaded = `The build is uploaded to ${storeNames(stores)} as a draft, recorded as uploaded and not public.`;
 
   return nextStep(
     "done",
-    drafts
-      ? `The build is uploaded to ${storeNames(stores)} as a draft, recorded as uploaded and not public${itemUrl ? `, at ${itemUrl}` : ""}. Sending it to review is one more approval.`
-      : `The platform recorded the submission for ${storeNames(stores)}; each store's own review comes after this.`,
-    itemUrl,
+    drafts && stores.includes("chrome")
+      ? `${uploaded} ${reviewByHandSentence(itemUrl)}`
+      : drafts
+        ? `${uploaded} To send it to review, publish it from the store's dashboard; a platform action for that is not available yet.`
+        : `The platform recorded the submission for ${storeNames(stores)}; each store's own review comes after this.`,
+    itemUrl || (stores.includes("chrome") ? CHROME_DASHBOARD : ""),
   );
 }
 

@@ -114,7 +114,7 @@ export const CHROME_STORE_GOAL = [
   "2. On store-not-connected or store-connection-failed, say the hint's sentences as they are, stop, and wait until the person says they are back.",
   "3. On store-item-not-linked, say the hint's three sentences as they are, stop, and wait until the person says they are back.",
   "4. On preflight-read with every check green, call extension_submit {action:'submit', browsers:['chrome'], buildSha, dryRun:false} with the sha extension_builds lists; on approval-required give value.approvalUrl, value.expiresAt and value.checkUrl, the track page, and wait; when the person says approved, call it again with that approvalId.",
-  "5. On submitted, report the status line, value.trackUrl and value.itemUrl, and say that sending it to review is one more approval.",
+  "5. On submitted, report the status line, value.trackUrl and value.itemUrl, and say value.nextStep.say: to send it to review the person opens the item's dashboard page and uses Submit for review, because no platform action does that yet.",
   "6. Never recommend a release on a code host, an unlisted AMO version, a TestFlight upload or any other do-it-yourself route first, and never name a secret.",
 ];
 
