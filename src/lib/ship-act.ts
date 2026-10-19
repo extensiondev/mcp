@@ -80,6 +80,10 @@ const HINTS: Record<string, string> = {
   ROLLOUT_PERCENTAGE_OUT_OF_RANGE: "Pass deployPercentage as a whole number from 1 to 100; stopping a rollout is done in the Chrome Web Store dashboard.",
   CANCEL_WORKFLOW_UNSUPPORTED: "Saving the project settings in the console brings the project's platform setup up to date; then call again.",
   ROLLOUT_WORKFLOW_UNSUPPORTED: "Saving the project settings in the console brings the project's platform setup up to date; then call again.",
+  PUBLISH_WORKFLOW_UNSUPPORTED: "Saving the project settings in the console brings the project's platform setup up to date; then call again.",
+  NO_CHROME_DRAFT: "There is no Chrome draft to send yet. Submit a build with extension_submit (browsers: [\"chrome\"], dryRun: false); it lands as a draft, and publish sends that draft to review.",
+  SUBMISSION_NOT_DRAFT: `Only a Chrome draft can be sent to review. Read each submission's state with ${STORES_READ}, or call publish with no submissionId to send the newest draft.`,
+  PUBLISH_STORE_NOT_SUPPORTED: "Sending a draft to review is a Chrome Web Store act here; the other stores enter review when they are submitted.",
   VERSION_NOT_AHEAD: "Pass a version above the current one, or a level instead of a version.",
   TESTING_WORKSPACE_READ_ONLY: "This is a testing workspace, which reads but does not change anything.",
 };

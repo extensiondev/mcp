@@ -135,6 +135,12 @@ function submitPlan(call: TrackCall): TrackPlan {
 
   if (action === "rollout") return { track: { page: "store", target: { store: "chrome" } } };
 
+  if (action === "publish" || action === "review") {
+    const submissionId = text(call.value.submissionId) || text(call.args.submissionId);
+
+    return { track: { page: submissionId ? "submission" : "store", target: { store: "chrome", submissionId } } };
+  }
+
   if (action === "preflight" && STORE_CONNECT_STATUSES.has(call.status)) return { track: { page: "store-settings" } };
 
   if (action === "preflight" || action === "sync-listing") {

@@ -133,7 +133,7 @@ describe("the Chrome Web Store goal walks from not connected to submitted with a
     expect(world.calls.some((call) => SUBMIT.test(`${call.method} ${call.path}`))).toBe(false);
   });
 
-  it("6. resume: the approved submission answers submitted and nextStep done at the item", async () => {
+  it("6. resume: the approved submission answers submitted and nextStep publish at the item", async () => {
     if (process.platform === "win32") return;
 
     world.login();
@@ -156,12 +156,12 @@ describe("the Chrome Web Store goal walks from not connected to submitted with a
 
     const out = await world.call("extension_submit", { ...SUBMIT_ARGS, approvalId: "apr_goal" });
 
-    walked(out, "submitted", "done");
+    walked(out, "submitted", "publish");
     expect(out.value.nextStep.url).toBe(ITEM_URL);
     expect(out.value.itemUrl).toBe(ITEM_URL);
     expect(out.value.trackUrl).toMatch(/\/acme\/widget\/submissions\/chrome\/sub_1$/);
-    expect(out.value.nextStep.say).toContain(`To send it to review, open its dashboard page at ${ITEM_URL} and use Submit for review; a platform action for that is not available yet.`);
-    expect(out.value.nextStep.say).not.toMatch(/one more approval/);
+    expect(out.value.nextStep.say).toContain("To send it to review, say publish; that is one more approval.");
+    expect(out.value.nextStep.say).not.toMatch(/not available yet/);
   });
 });
 
@@ -176,7 +176,7 @@ describe("the server instructions carry the Chrome Web Store goal playbook in or
       "2. On store-not-connected or store-connection-failed",
       "3. On store-item-not-linked",
       "4. On preflight-read with every check green, call extension_submit {action:'submit', browsers:['chrome']",
-      "5. On submitted, report the status line, value.trackUrl and value.itemUrl, and say value.nextStep.say: to send it to review the person opens the item's dashboard page and uses Submit for review",
+      "5. On submitted, report the status line, value.trackUrl and value.itemUrl, and say value.nextStep.say: To send it to review, say publish; that is one more approval. When the person says publish or send it to review, call extension_submit {action:'publish', browsers:['chrome']}",
       "6. Never recommend a release on a code host, an unlisted AMO version, a TestFlight upload or any other do-it-yourself route first, and never name a secret.",
     ];
 
@@ -193,7 +193,8 @@ describe("the server instructions carry the Chrome Web Store goal playbook in or
     }
 
     expect(playbook.join("\n")).toContain("value.nextStep");
-    expect(playbook.join("\n")).not.toMatch(/one more approval/);
+    expect(playbook[5]).toContain("To send it to review, say publish; that is one more approval.");
+    expect(playbook[5]).toMatch(/action:'publish'.*approvalId.*in-review.*value\.trackUrl.*value\.itemUrl/);
     expect(playbook[4]).toMatch(/approval-required.*value\.approvalUrl.*value\.expiresAt.*approvalId/);
     expect(text).toMatch(/extension\.dev comes first: never offer a release on a code host/);
     expect(playbook.join("\n")).not.toMatch(SECRET_NAMES);

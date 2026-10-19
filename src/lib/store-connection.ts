@@ -39,7 +39,7 @@ export interface ItemLinkUrls {
   linkItemUrl: string;
 }
 
-export type NextStepKind = "connect" | "link-item" | "submit" | "approve" | "done";
+export type NextStepKind = "connect" | "link-item" | "submit" | "approve" | "publish" | "done";
 
 export interface NextStep {
   kind: NextStepKind;
@@ -77,22 +77,24 @@ export function submitStep(stores: string[]): NextStep {
   );
 }
 
-export function reviewByHandSentence(itemUrl: string): string {
-  return `To send it to review, open its dashboard page at ${itemUrl || CHROME_DASHBOARD} and use Submit for review; a platform action for that is not available yet.`;
-}
+export const PUBLISH_SENTENCE = "To send it to review, say publish; that is one more approval.";
+
+export const PUBLISH_APPROVAL_SENTENCE = "This sends the item to Chrome's review.";
 
 export function doneStep(stores: string[], itemUrl: string): NextStep {
   const drafts = stores.length > 0 && stores.every((store) => DRAFT_STORES.has(store));
   const uploaded = `The build is uploaded to ${storeNames(stores)} as a draft, recorded as uploaded and not public.`;
 
+  if (drafts && stores.includes("chrome")) {
+    return nextStep("publish", `${uploaded} ${PUBLISH_SENTENCE}`, itemUrl || CHROME_DASHBOARD);
+  }
+
   return nextStep(
     "done",
-    drafts && stores.includes("chrome")
-      ? `${uploaded} ${reviewByHandSentence(itemUrl)}`
-      : drafts
-        ? `${uploaded} To send it to review, publish it from the store's dashboard; a platform action for that is not available yet.`
-        : `The platform recorded the submission for ${storeNames(stores)}; each store's own review comes after this.`,
-    itemUrl || (stores.includes("chrome") ? CHROME_DASHBOARD : ""),
+    drafts
+      ? `${uploaded} To send it to review, publish it from the store's dashboard; a platform action for that is not available yet.`
+      : `The platform recorded the submission for ${storeNames(stores)}; each store's own review comes after this.`,
+    itemUrl,
   );
 }
 

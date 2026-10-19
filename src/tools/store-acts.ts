@@ -8,11 +8,14 @@
 
 import { ConsoleProjectPage } from "@extension.dev/urls/paths";
 
-import { envelope } from "../lib/envelope";
+import { envelope, isEnvelope } from "../lib/envelope";
 import { consoleProjectUrl } from "../lib/registry";
 import { projectApiReadFailure, projectApiSend } from "../lib/project-api";
 import { badShipRequest, isRow, openShipApi, runShipAct, text } from "../lib/ship-act";
 import {
+  ITEM_NOT_LINKED_CODE,
+  NOT_CONNECTED_CODES,
+  PUBLISH_APPROVAL_SENTENCE,
   connectSentences,
   connectionOf,
   failedCheckSentence,
@@ -147,6 +150,127 @@ export async function raiseRollout(args: StoreActArgs): Promise<string> {
     status: "rollout-dispatched",
     value: { action: "rollout", ...ran.json },
     hint: `The store run that raises the rollout to ${percentage}% was dispatched. extension_release_status (include: ["rollout"]) reads the percentage once the run saves it.`,
+  });
+}
+
+export const PUBLISH_ACTIONS = new Set(["publish", "review"]);
+
+function reworded(out: string, api: { ref: { workspace: string; project: string } }, apiHint?: string): string {
+  let parsed: unknown;
+
+  try {
+    parsed = JSON.parse(out);
+  } catch {
+    return out;
+  }
+
+  if (!isEnvelope(parsed)) return out;
+
+  const value = isRow(parsed.value) ? parsed.value : {};
+
+  if (parsed.status === "approval-required") {
+    const approvalUrl = text(value.approvalUrl);
+    const expiresAt = text(value.expiresAt);
+    const say = [approvalUrl ? `Approve it at ${approvalUrl}${expiresAt ? ` before ${expiresAt}` : ""}.` : "", PUBLISH_APPROVAL_SENTENCE].filter(Boolean).join(" ");
+
+    return envelope({
+      ok: parsed.ok,
+      command: parsed.command,
+      status: parsed.status,
+      value: { ...value, ...(expiresAt ? { expiresAt } : {}), sayToPerson: say, nextStep: nextStep("approve", say, approvalUrl) },
+      error: parsed.error,
+      warnings: parsed.warnings,
+      hint: `${say}${text(value.approvalId) ? ` When the person says approved, call extension_submit again with action "publish" and approvalId ${text(value.approvalId)}.` : ""}`,
+    });
+  }
+
+  const code = text(parsed.error?.platformCode);
+  const settingsUrl = storeSettingsUrl(api.ref, apiHint);
+
+  if (code === ITEM_NOT_LINKED_CODE) {
+    const urls = itemLinkUrls([], settingsUrl);
+    const say = linkItemSentences(urls);
+
+    return envelope({
+      ok: false,
+      command: COMMAND,
+      status: "store-item-not-linked",
+      error: { code: "E_PLATFORM", name: "StoreItemNotLinked", platformCode: code, message: "No Chrome Web Store item is linked to this project yet, so there is no draft to send to review. Nothing was sent." },
+      value: { action: "publish", store: "chrome", ...urls, trackUrl: settingsUrl, sayToPerson: say, nextStep: nextStep("link-item", say, urls.linkItemUrl) },
+      hint: say,
+    });
+  }
+
+  if (NOT_CONNECTED_CODES.has(code)) {
+    const connectUrl = fallbackConnectUrl(api.ref, "chrome", apiHint);
+    const say = connectSentences(connectUrl);
+
+    return envelope({
+      ok: false,
+      command: COMMAND,
+      status: code === "STORE_CONNECTION_UNHEALTHY" ? "store-connection-failed" : "store-not-connected",
+      error: { code: "E_PLATFORM", name: "StoreNotConnected", platformCode: code, message: "The Chrome Web Store is not connected to this project, so nothing was sent to review." },
+      value: { action: "publish", store: "chrome", connectUrl, trackUrl: settingsUrl, sayToPerson: say, nextStep: nextStep("connect", say, connectUrl) },
+      hint: say,
+    });
+  }
+
+  return out;
+}
+
+export async function publishDraft(args: StoreActArgs): Promise<string> {
+  const asked = (Array.isArray(args.browsers) && args.browsers.length ? args.browsers : [text(args.store) || "chrome"]).map((b) => text(b).toLowerCase());
+
+  if (asked.length !== 1 || asked[0] !== "chrome") {
+    return badShipRequest(COMMAND, "publish", "PublishInputError", `publish sends a Chrome Web Store draft to review, so browsers must be ["chrome"]; got ${JSON.stringify(args.browsers ?? args.store ?? null)}. The other stores enter review when they are submitted. Nothing was sent.`);
+  }
+
+  const submissionId = text(args.submissionId);
+  const opened = await openShipApi(COMMAND, args, { action: "publish", store: "chrome" });
+  if ("refused" in opened) return opened.refused;
+
+  const ran = await runShipAct(
+    {
+      command: COMMAND,
+      act: "publish",
+      action: "extension_store.publish",
+      route: "stores/chrome/publish",
+      body: submissionId ? { submissionId } : {},
+      approvalId: args.approvalId,
+      description: "Send the Chrome Web Store draft to review.",
+      reason: `${PUBLISH_APPROVAL_SENTENCE} Nothing changes for current users until Chrome approves it, so a workspace owner approves this exact draft first.`,
+      stateRead: storesRead(args),
+      scopeFits: (scope) => text(scope.store) === "chrome" && Boolean(text(scope.submissionId)) && (!submissionId || text(scope.submissionId) === submissionId),
+      project: args.project,
+      apiHint: args.api,
+      value: { store: "chrome", ...(submissionId ? { submissionId } : {}) },
+    },
+    opened.api,
+  );
+
+  if (!ran.ok) return reworded(ran.out, opened.api, args.api);
+
+  const json = ran.json;
+  const itemUrl = text(json.itemUrl);
+  const trackUrl = text(json.trackUrl);
+  const say = `It is on its way to Chrome's review; follow it at ${trackUrl || "the submission page"}. Nothing changes for current users until Chrome approves it.`;
+
+  return envelope({
+    ok: true,
+    command: COMMAND,
+    status: "in-review",
+    value: {
+      action: "publish",
+      store: "chrome",
+      submissionId: text(json.submissionId),
+      ...(text(json.version) ? { version: text(json.version) } : {}),
+      ...(text(json.buildId) ? { buildId: text(json.buildId) } : {}),
+      ...(itemUrl ? { itemUrl } : {}),
+      ...(trackUrl ? { trackUrl } : {}),
+      sayToPerson: say,
+      nextStep: nextStep("done", say, trackUrl),
+    },
+    hint: `The platform dispatched the run that sends the Chrome draft to review; the submission page records Chrome's answer, and ${storesRead(args)} reads the review state. ${say}`,
   });
 }
 
