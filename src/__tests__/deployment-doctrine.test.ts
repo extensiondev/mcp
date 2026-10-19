@@ -192,6 +192,45 @@ describe("an approval page opens itself once in the person's browser", () => {
     expect(second.hint ?? "").not.toContain(APPROVAL_OPENED_SENTENCE);
   });
 
+  it("renews an approval the platform reports expired with the same fingerprint, and opens the fresh page once", async () => {
+    if (process.platform === "win32") return;
+
+    const fingerprint = actionFingerprint("extension_submit", { browsers: ["chrome"], buildSha: "603fc8a", channel: "stable" });
+    const expiredAt = "2026-10-19T22:51:00.000Z";
+    const freshUrl = `${WORLD_API}/device/approve/apr_fresh`;
+
+    world.login();
+    world.routes.push([
+      /^GET \/api\/cli\/approvals\/apr_old$/,
+      () => ({ status: 410, body: { code: "APPROVAL_EXPIRED", message: `This approval expired at ${expiredAt}`, expiresAt: expiredAt, kind: "extension_submit", fingerprint } }),
+    ]);
+
+    world.routes.push([/^POST \/api\/cli\/approvals$/, () => ({ body: { approvalId: "apr_fresh", approvalUrl: freshUrl, expiresAt: "2026-10-19T23:30:00.000Z" } })]);
+
+    const out = await world.call("extension_submit", { ...SUBMIT_ARGS, approvalId: "apr_old" }, { openApprovals: true });
+    const minted = world.calls.filter((call) => call.method === "POST" && call.path === "/api/cli/approvals");
+
+    expect(out.status).toBe("approval-required");
+    expect(minted).toHaveLength(1);
+    expect((minted[0].body as { fingerprint?: string }).fingerprint).toBe(fingerprint);
+    expect(out.value).toMatchObject({
+      approvalId: "apr_fresh",
+      approvalUrl: freshUrl,
+      expiresAt: "2026-10-19T23:30:00.000Z",
+      fingerprint,
+      expiredApproval: { approvalId: "apr_old", status: "approval-expired", expiresAt: expiredAt },
+      nextStep: { kind: "approve", url: freshUrl },
+      approvalOpened: true,
+    });
+
+    expect(typeof out.value.trackUrl).toBe("string");
+    expect(out.value.trackUrl).toMatch(/^https?:\/\//);
+    expect(out.hint).toContain(`That approval expired at ${expiredAt}; here is a fresh one: ${freshUrl}. Click Approve, then tell me.`);
+    expect(out.hint.match(/click approve, then tell me/gi)).toHaveLength(1);
+    expect(opened).toEqual([freshUrl]);
+    expect(world.calls.some((call) => SUBMIT.test(`${call.method} ${call.path}`))).toBe(false);
+  });
+
   it("never opens from a server built without the local opener, such as the hosted one or a spec", async () => {
     if (process.platform === "win32") return;
 

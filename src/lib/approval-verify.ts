@@ -49,6 +49,13 @@ export type ApprovalGateResult =
   | { blocked: false; approvalId?: string }
   | { blocked: true; envelope: string };
 
+export interface ExpiredApproval {
+  approvalId: string;
+  expiresAt: string;
+}
+
+export type ApprovalRenewer = (expired: ExpiredApproval) => Promise<ApprovalGateResult>;
+
 export function block(
   command: string,
   status: string,
@@ -86,13 +93,61 @@ export function sentenceCase(text: string): string {
   return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
+export function withoutClosingStop(text: string): string {
+  return text.trim().replace(/[.!?\s]+$/, "");
+}
+
+function scopeMismatch(input: ApprovalGateInput, approvalId: string, fingerprint: string, approvedFingerprint: string): { blocked: true; envelope: string } {
+  return block(
+    input.command,
+    APPROVAL_REJECTED_STATUS,
+    "E_APPROVAL_REJECTED",
+    "ApprovalScopeMismatch",
+    `Approval ${approvalId} was granted for a different action and cannot authorize ${input.action}: ${input.description} Request a fresh approval for this exact action by calling this tool with no approvalId.`,
+    {
+      action: input.action,
+      approvalId,
+      expectedFingerprint: fingerprint,
+      approvedFingerprint,
+    },
+  );
+}
+
+function expiredBlock(input: ApprovalGateInput, approvalId: string, expiresAt?: string, reason?: string): { blocked: true; envelope: string } {
+  const when = expiresAt ? ` at ${expiresAt}` : "";
+  const cause = reason ? ` A fresh approval could not be requested: ${withoutClosingStop(reason)}.` : "";
+
+  return block(
+    input.command,
+    APPROVAL_EXPIRED_STATUS,
+    "E_APPROVAL_REJECTED",
+    "ApprovalExpired",
+    `Approval ${approvalId} expired${when}, so nothing was executed.${cause} Request a fresh approval by calling this tool with no approvalId.`,
+    { action: input.action, approvalId, ...(expiresAt ? { expiresAt } : {}) },
+  );
+}
+
+function renewedUrl(result: ApprovalGateResult): { url: string; reason: string } {
+  if (!result.blocked) return { url: "", reason: "" };
+
+  try {
+    const parsed = JSON.parse(result.envelope) as { status?: unknown; value?: { approvalUrl?: unknown }; error?: { message?: unknown } };
+    const url = parsed.status === "approval-required" && typeof parsed.value?.approvalUrl === "string" ? parsed.value.approvalUrl : "";
+
+    return { url, reason: typeof parsed.error?.message === "string" ? parsed.error.message : "" };
+  } catch {
+    return { url: "", reason: "" };
+  }
+}
+
 export async function verifyApproval(params: {
   base: string;
   fingerprint: string;
   input: ApprovalGateInput;
   doFetch: typeof fetch;
+  renew?: ApprovalRenewer;
 }): Promise<ApprovalGateResult> {
-  const { base, fingerprint, input, doFetch } = params;
+  const { base, fingerprint, input, doFetch, renew } = params;
   const approvalId = String(input.approvalId || "").trim();
   const url = `${base}/api/cli/approvals/${encodeURIComponent(approvalId)}`;
   let res: Response;
@@ -133,17 +188,44 @@ export async function verifyApproval(params: {
     };
   }
 
+  const platformCode = typeof data.code === "string" ? data.code : "";
+
+  if (res.status === 410 && platformCode === "APPROVAL_EXPIRED") {
+    const expiresAt = typeof data.expiresAt === "string" ? data.expiresAt.trim() : "";
+    const expiredFingerprint = typeof data.fingerprint === "string" ? data.fingerprint.trim() : "";
+
+    if (expiredFingerprint && expiredFingerprint !== fingerprint) {
+      return scopeMismatch(input, approvalId, fingerprint, expiredFingerprint);
+    }
+
+    if (!renew) return expiredBlock(input, approvalId, expiresAt);
+
+    const renewed = await renew({ approvalId, expiresAt });
+    const fresh = renewedUrl(renewed);
+
+    return fresh.url ? renewed : expiredBlock(input, approvalId, expiresAt, fresh.reason);
+  }
+
+  if (res.status === 404 && (platformCode === "APPROVAL_UNKNOWN" || platformCode === "APPROVAL_NOT_FOUND")) {
+    return block(
+      input.command,
+      APPROVAL_REJECTED_STATUS,
+      "E_APPROVAL_REJECTED",
+      "ApprovalUnknown",
+      `The platform does not know approval ${approvalId}; it may have been minted for another server or project. ${sentenceCase(actionPhrase(input))} was refused and nothing was executed. Request a fresh approval by calling this tool with no approvalId.`,
+      { action: input.action, approvalId, fingerprint, platformCode },
+    );
+  }
+
   if (!res.ok) {
+    const reason = typeof data.message === "string" ? withoutClosingStop(data.message) : "";
+
     return block(
       input.command,
       APPROVAL_REJECTED_STATUS,
       "E_APPROVAL_REJECTED",
       "ApprovalUnverifiable",
-      `The platform did not confirm approval ${approvalId} (${res.status}): ${
-        typeof data.message === "string" && data.message
-          ? data.message
-          : "unknown approval"
-      }. ${sentenceCase(actionPhrase(input))} was refused. Request a fresh approval by calling this tool with no approvalId.`,
+      `The platform did not confirm approval ${approvalId} (${res.status}): ${reason || "no reason given"}. ${sentenceCase(actionPhrase(input))} was refused. Request a fresh approval by calling this tool with no approvalId.`,
       { action: input.action, approvalId, fingerprint },
     );
   }
@@ -166,19 +248,7 @@ export async function verifyApproval(params: {
     status === "expired" || (Number.isFinite(expiresAt) && expiresAt <= now);
 
   if (storedFingerprint && storedFingerprint !== fingerprint) {
-    return block(
-      input.command,
-      APPROVAL_REJECTED_STATUS,
-      "E_APPROVAL_REJECTED",
-      "ApprovalScopeMismatch",
-      `Approval ${approvalId} was granted for a different action and cannot authorize ${input.action}: ${input.description} Request a fresh approval for this exact action by calling this tool with no approvalId.`,
-      {
-        action: input.action,
-        approvalId,
-        expectedFingerprint: fingerprint,
-        approvedFingerprint: storedFingerprint,
-      },
-    );
+    return scopeMismatch(input, approvalId, fingerprint, storedFingerprint);
   }
 
   if (status === "approved" && (!storedFingerprint || !Number.isFinite(expiresAt) || typeof data.used !== "boolean")) {

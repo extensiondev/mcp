@@ -19,6 +19,8 @@ export const NO_AUTO_OPEN_ENV = "EXTENSION_DEV_NO_AUTO_OPEN";
 
 export const APPROVAL_OPENED_SENTENCE = "The approval page is open in your browser; click Approve, then tell me.";
 
+export const APPROVAL_OPENED_SHORT = "The approval page is open in your browser.";
+
 export type UrlOpener = (url: string) => boolean;
 
 const truthy = (raw: string | undefined): boolean => {
@@ -106,6 +108,6 @@ export function openApprovalOnce(result: string, options: { noShip: boolean }, e
     error: parsed.error,
     warnings: parsed.warnings,
     ...(parsed.truncated !== undefined ? { truncated: parsed.truncated } : {}),
-    hint: [APPROVAL_OPENED_SENTENCE, hint].filter(Boolean).join(" "),
+    hint: [/click approve, then tell me/i.test(hint) ? APPROVAL_OPENED_SHORT : APPROVAL_OPENED_SENTENCE, hint].filter(Boolean).join(" "),
   });
 }

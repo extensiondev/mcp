@@ -389,6 +389,52 @@ describe("the approval gate guards irreversible outward actions and cannot self-
       expect(hit("POST /api/cli/stores/submit")).toBe(false);
     });
 
+    it("names an unknown approval as unknown, never rejected, and submits nothing", async () => {
+      global.fetch = router(calls, {
+        "GET /api/cli/approvals": () =>
+          jsonResponse({ message: "Unknown approval", code: "APPROVAL_UNKNOWN" }, 404),
+        "POST /api/cli/stores/submit": () => jsonResponse(submitAnswer()),
+      });
+
+      const out = JSON.parse(
+        await submitHandler({
+          browsers: ["chrome"],
+          buildSha: "abc1234",
+          dryRun: false,
+          approvalId: "apr_elsewhere",
+        }),
+      );
+      expect(out.ok).toBe(false);
+      expect(out.error.name).toBe("ApprovalUnknown");
+      expect(out.error.message).toContain(
+        "The platform does not know approval apr_elsewhere; it may have been minted for another server or project.",
+      );
+
+      expect(`${out.error.message} ${out.hint ?? ""}`).not.toMatch(/reject/i);
+      expect(hit("POST /api/cli/stores/submit")).toBe(false);
+    });
+
+    it("never doubles the period after a platform message that ends with one", async () => {
+      global.fetch = router(calls, {
+        "GET /api/cli/approvals": () =>
+          jsonResponse({ message: "Approval store unavailable." }, 503),
+        "POST /api/cli/stores/submit": () => jsonResponse(submitAnswer()),
+      });
+
+      const out = JSON.parse(
+        await submitHandler({
+          browsers: ["chrome"],
+          buildSha: "abc1234",
+          dryRun: false,
+          approvalId: "apr_flaky",
+        }),
+      );
+      expect(out.status).toBe("approval-rejected");
+      expect(out.error.message).toContain("(503): Approval store unavailable. This irreversible action was refused.");
+      expect(out.error.message).not.toContain("..");
+      expect(hit("POST /api/cli/stores/submit")).toBe(false);
+    });
+
     it("submits when a matching approval is granted, carrying the id to the server", async () => {
       const fingerprint = actionFingerprint("extension_submit", {
         browsers: ["chrome"],

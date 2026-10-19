@@ -12,6 +12,7 @@ import { envelope } from "./envelope";
 import { resolveApiBase, safeApiBase } from "./login-flow";
 import { platformHoldEnvelope, sawPlatformHold } from "./platform-hold";
 import {
+  APPROVAL_EXPIRED_STATUS,
   APPROVAL_REJECTED_STATUS,
   APPROVAL_REQUIRED_STATUS,
   actionPhrase,
@@ -19,6 +20,7 @@ import {
   readJson,
   verifyApproval,
   type ApprovalGateInput,
+  type ExpiredApproval,
   type ApprovalGateResult,
   type ApprovalScope,
 } from "./approval-verify";
@@ -106,8 +108,9 @@ async function requestApproval(params: {
   fingerprint: string;
   input: ApprovalGateInput;
   doFetch: typeof fetch;
+  renewing?: ExpiredApproval;
 }): Promise<{ blocked: true; envelope: string }> {
-  const { base, fingerprint, input, doFetch } = params;
+  const { base, fingerprint, input, doFetch, renewing } = params;
   const url = `${base}/api/cli/approvals`;
   let res: Response;
 
@@ -203,6 +206,31 @@ async function requestApproval(params: {
     );
   }
 
+  if (renewing) {
+    const expiredAt = renewing.expiresAt || "its expiry";
+    const say = `That approval expired at ${expiredAt}; here is a fresh one: ${approvalUrl}. Click Approve, then tell me.`;
+
+    return block(
+      input.command,
+      APPROVAL_REQUIRED_STATUS,
+      "E_APPROVAL_REQUIRED",
+      "ApprovalRenewed",
+      `Approval ${renewing.approvalId} expired at ${expiredAt}, so nothing was executed. A fresh approval for the same act was requested: ${described} Open ${approvalUrl} to review and approve, then call this tool again with the same arguments and approvalId ${approvalId}.`,
+      {
+        action: input.action,
+        fingerprint,
+        description: described,
+        approvalId,
+        approvalUrl,
+        ...(data.expiresAt ? { expiresAt: data.expiresAt } : {}),
+        ...(Array.isArray(data.changes) ? { changes: data.changes.filter((line) => typeof line === "string") } : {}),
+        expiredApproval: { approvalId: renewing.approvalId, status: APPROVAL_EXPIRED_STATUS, ...(renewing.expiresAt ? { expiresAt: renewing.expiresAt } : {}) },
+        nextStep: { kind: "approve", say, url: approvalUrl },
+      },
+      say,
+    );
+  }
+
   return block(
     input.command,
     APPROVAL_REQUIRED_STATUS,
@@ -254,5 +282,11 @@ export async function evaluateApproval(
     return requestApproval({ base: apiCheck.base, fingerprint, input, doFetch });
   }
 
-  return verifyApproval({ base: apiCheck.base, fingerprint, input, doFetch });
+  return verifyApproval({
+    base: apiCheck.base,
+    fingerprint,
+    input,
+    doFetch,
+    renew: (expired) => requestApproval({ base: apiCheck.base, fingerprint, input, doFetch, renewing: expired }),
+  });
 }
