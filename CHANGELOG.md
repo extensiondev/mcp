@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 10.15.0
 
 - `extension_publish` no longer sends the person into a rebuild loop when the integrity verdict is older than the build's newest run. Each browser's verdict now carries `checkedAt`, `checkedRun` and `freshness` (the build answer's own per-browser `integrity.checkedAt` and `integrity.runId` first, else the report's `generatedAt` and `runId`, compared with the build's `runId` and `startedAt`; a missing time is unknown, never stale). When every failing verdict is from an earlier run, the refusal says so and offers a recheck instead of a rebuild. Every refusal carries `value.status`, one line on the build's state, what blocks and who unblocks, and `value.trackUrl` to the build page.
 - `extension_builds {action: "recheck", buildId, browser?}` asks the platform to rerun the integrity checks on a build's stored artifacts without building anything. It answers the per-browser verdict, says when publish is now possible, and refuses a build or browser with no artifact, a build with a run in progress, and a second recheck within 60 seconds, each with the build page in `trackUrl`.
