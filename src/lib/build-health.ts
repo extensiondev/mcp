@@ -42,6 +42,7 @@ export interface BuildRun {
 export interface IntegrityProvenance {
   checkedAt?: unknown;
   runId?: unknown;
+  fromEarlierRun?: boolean;
 }
 
 export type BuildHealth =
@@ -97,18 +98,23 @@ function timeOf(value: string | null): number | null {
 export function provenanceOf(
   explicit: IntegrityProvenance | undefined,
   report: unknown,
-): { checkedAt: string | null; checkedRun: string | null } {
+): { checkedAt: string | null; checkedRun: string | null; fromEarlierRun?: boolean } {
   const body = isRow(report) ? report : {};
   const checkedAt = text(explicit?.checkedAt) || text(body.checkedAt) || text(body.generatedAt);
   const checkedRun = runText(explicit?.runId) || runText(body.runId) || runText(body.run);
 
-  return { checkedAt: checkedAt || null, checkedRun: checkedRun || null };
+  return {
+    checkedAt: checkedAt || null,
+    checkedRun: checkedRun || null,
+    ...(typeof explicit?.fromEarlierRun === "boolean" ? { fromEarlierRun: explicit.fromEarlierRun } : {}),
+  };
 }
 
 export function freshnessOf(
-  checked: { checkedAt: string | null; checkedRun: string | null },
+  checked: { checkedAt: string | null; checkedRun: string | null; fromEarlierRun?: boolean },
   run: Pick<BuildRun, "runId" | "startedAt"> | undefined,
 ): Freshness {
+  if (checked.fromEarlierRun === true) return "stale";
   if (checked.checkedRun && run?.runId) return checked.checkedRun === run.runId ? "current" : "stale";
 
   const at = timeOf(checked.checkedAt);
@@ -221,8 +227,9 @@ function explicitProvenance(row: Row): IntegrityProvenance | undefined {
   const integrity = isRow(row.integrity) ? row.integrity : {};
   const checkedAt = text(integrity.checkedAt) || text(row.integrityCheckedAt);
   const runId = runText(integrity.runId) || runText(integrity.run) || runText(row.integrityRunId);
+  const fromEarlierRun = typeof integrity.fromEarlierRun === "boolean" ? integrity.fromEarlierRun : undefined;
 
-  return checkedAt || runId ? { checkedAt, runId } : undefined;
+  return checkedAt || runId || fromEarlierRun !== undefined ? { checkedAt, runId, fromEarlierRun } : undefined;
 }
 
 export function runOf(detail: Row): BuildRun {

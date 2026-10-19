@@ -286,6 +286,20 @@ describe("extension_publish reads the build's artifact health before handing out
       expect(out.value.artifacts.browsers.chrome).toMatchObject({ integrity: "failed", freshness: "current", checkedAt: "2026-10-19T16:27:00Z" });
     });
 
+    it("reads the production shape, no run id anywhere and fromEarlierRun true, as stale", async () => {
+      threeBrowsers({ ok: false, verification: "upload-receipt", fromEarlierRun: true });
+      platform.detailExtra = { status: "success", startedAt: RUN.startedAt, completedAt: RUN.completedAt };
+      platform.integrity = { chrome: TRUNCATED, edge: TRUNCATED, firefox: TRUNCATED };
+
+      const out = JSON.parse(await handler({ buildSha: SHA }));
+
+      expect(JSON.stringify(out)).not.toContain("runId");
+      expect(out.error.message).toContain("the integrity check is from an earlier run and was not re-run");
+      expect(out.hint).not.toContain("action: 'rebuild'");
+      expect(out.hint).toContain(`extension_builds (action: 'recheck', buildId: '${SHA}')`);
+      expect(out.value.artifacts.browsers.chrome).toMatchObject({ integrity: "stale", staleVerdict: "failed", freshness: "stale" });
+    });
+
     it("calls a verdict from another run stale even when its time looks current", async () => {
       threeBrowsers({ ok: false, runId: 39280400000 });
       platform.detailExtra = RUN;
