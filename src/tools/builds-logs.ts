@@ -91,7 +91,7 @@ function validationSentence(validation: Row | null | undefined): string {
   return ` The manifest validator reported ${errors} error${errors === 1 ? "" : "s"} and ${warnings} warning${warnings === 1 ? "" : "s"} (strict ${strict}); run.validation.diagnostics lists them per browser.`;
 }
 
-export function failedBrowsersHint(failedItems: Row[], validation: Row | null | undefined, runUrl: string): string {
+export function failedBrowsersHint(failedItems: Row[], validation: Row | null | undefined, buildPage: string): string {
   const summarized = failedItems.filter(hasFailureSummary);
   const unsummarized = failedItems.filter((item) => !hasFailureSummary(item));
   const parts: string[] = [];
@@ -104,15 +104,15 @@ export function failedBrowsersHint(failedItems: Row[], validation: Row | null | 
   if (unsummarized.length) {
     const subject = unsummarized.map((item) => text(item.browser)).join(", ");
     const reason = text(unsummarized[0].reason);
-    const where = runUrl ? ` The CI run is at ${runUrl}.` : "";
+    const where = buildPage ? ` The build page is ${buildPage}.` : "";
 
     parts.push(
       reason
         ? `${subject} failed with no failure line in ${unsummarized.length === 1 ? "its" : "their"} logs. ${reason}${where}`
-        : `${subject} failed, but the platform sent no failure summary for ${unsummarized.length === 1 ? "it" : "them"}; the cause is only in the CI run${runUrl ? ` at ${runUrl}` : ""}.`,
+        : `${subject} failed, but the platform sent no failure summary for ${unsummarized.length === 1 ? "it" : "them"}; the build page${buildPage ? ` at ${buildPage}` : ""} will show the cause once the platform relays it.`,
     );
-  } else if (runUrl) {
-    parts.push(`The full CI run is at ${runUrl}.`);
+  } else if (buildPage) {
+    parts.push(`The build page is ${buildPage}.`);
   }
 
   return parts.join(" ") + validationSentence(validation);
@@ -157,37 +157,35 @@ export async function readLogs(read: LogsRead): Promise<string> {
   const legacy = !hasRunField && allPending ? await legacyBuildFailed(read) : { failed: false, cause: null };
   const all = raw.map((item) => settled(item, run, legacy.failed));
   const items = all.filter((item) => !wanted || text(item.browser).toLowerCase() === wanted).map(tailOf);
-  const runUrl = text(answer.json.runUrl);
   const failed = items.filter((item) => text(item.status) === "failed").map((item) => text(item.browser));
   const skipped = items.filter((item) => text(item.status) === "skipped").map((item) => text(item.browser));
   const beforeBrowsers = all.length === 0 || all.every((item) => text(item.status) === "skipped");
-  const runAt = runUrl ? ` The full CI run is at ${runUrl}.` : "";
 
   let hint: string;
 
   if (run?.failedJob) {
     const lines = (run.failedJob.lines as string[]) ?? [];
     hint = [failedJobSentence(run.failedJob, beforeBrowsers), ...lines].join("\n");
-    hint += `\n${skipped.length ? `${skipped.join(", ")} did not run.` : ""}${runAt} The build page is ${read.consoleUrl}.`;
+    hint += `\n${skipped.length ? `${skipped.join(", ")} did not run. ` : ""}The build page is ${read.consoleUrl}.`;
   } else if (legacy.failed) {
     const job = text(legacy.cause?.jobName);
     const step = text(legacy.cause?.stepName);
     const where = step ? ` in ${job || "the build job"} at step ${step}` : "";
-    hint = `The run failed${where} before the browser steps, so no browser built and none has lines. The build page is ${read.consoleUrl}.${runAt}`;
+    hint = `The run failed${where} before the browser steps, so no browser built and none has lines. The build page is ${read.consoleUrl}.`;
   } else if (items.length === 0) {
     hint = wanted
       ? `No ${wanted} logs for build ${buildId}; the build may not target ${wanted}. Browsers with logs: ${all.map((i) => text(i.browser)).join(", ") || "none"}.`
-      : `No log lines are recorded for build ${buildId} yet${runUrl ? `; the CI run is at ${runUrl}` : ""}.`;
+      : `No log lines are recorded for build ${buildId} yet; the build page is ${read.consoleUrl}.`;
   } else if (failed.length) {
     hint = failedBrowsersHint(
       items.filter((item) => text(item.status) === "failed"),
       run?.validation,
-      runUrl,
+      read.consoleUrl,
     );
   } else if (skipped.length === items.length) {
-    hint = `The run ended before ${skipped.join(", ")} ran, so there are no lines.${runAt} The build page is ${read.consoleUrl}.`;
+    hint = `The run ended before ${skipped.join(", ")} ran, so there are no lines. The build page is ${read.consoleUrl}.`;
   } else {
-    hint = `Log lines for ${items.map((i) => text(i.browser)).join(", ")}.${runAt}`;
+    hint = `Log lines for ${items.map((i) => text(i.browser)).join(", ")}. The build page is ${read.consoleUrl}.`;
   }
 
   return envelope({
@@ -198,15 +196,14 @@ export async function readLogs(read: LogsRead): Promise<string> {
       action: "logs",
       buildId: text(answer.json.buildId) || buildId,
       ...(run ? { run } : {}),
-      ...(runUrl ? { runUrl } : {}),
       items,
     },
     hint,
     warnings: [
       items.some((item) => item.omittedLines)
-        ? `Long logs keep their last ${LOG_TAIL} lines; omittedLines says how many earlier lines were left out, and the CI run has them all.`
+        ? `Long logs keep their last ${LOG_TAIL} lines; omittedLines says how many earlier lines were left out, and the build page has them all.`
         : null,
-      legacy.failed ? "This platform does not report the run's failed step; the build page and CI run name it." : null,
+      legacy.failed ? `This platform does not report the run's failed step; the build page names it: ${read.consoleUrl}.` : null,
     ],
   });
 }

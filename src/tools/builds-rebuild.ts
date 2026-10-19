@@ -44,19 +44,20 @@ function runHandle(json: Row): { value: Row; match?: Row; sentence: string } {
   const deploymentId = text(json.deploymentId);
   const dispatchedAt = text(json.dispatchedAt);
   const runId = typeof json.runId === "number" && json.runId > 0 ? json.runId : undefined;
-  const runUrl = text(json.runUrl);
   const value: Row = {};
 
   if (deploymentId) value.deploymentId = deploymentId;
   if (dispatchedAt) value.dispatchedAt = dispatchedAt;
-  if (text(json.runCorrelation)) value.runCorrelation = text(json.runCorrelation);
-  if (runId) value.runId = runId;
-  if (runUrl) value.runUrl = runUrl;
+  if (runId) value.internal = { runId };
 
   const reused = "A rebuild keeps the same build id as the build before it, so";
 
   if (runId) {
-    return { value, match: { runId }, sentence: `${reused} this rebuild is the one whose run reads runId ${runId}${runUrl ? ` (${runUrl})` : ""}; a build showing another runId is the earlier run.` };
+    return {
+      value,
+      match: { internal: { runId } },
+      sentence: `${reused} this rebuild is the one whose run.internal.runId in extension_builds get equals this answer's internal.runId; a build showing another one is the earlier run.`,
+    };
   }
 
   if (deploymentId) {
@@ -70,7 +71,7 @@ function runHandle(json: Row): { value: Row; match?: Row; sentence: string } {
   return { value, sentence: `${reused} a build showing a startedAt from before this call is the earlier run.` };
 }
 
-/* @invariant A REBUILD IS A REAL CI RUN, ASKED FOR AS THE AGENT AND NEVER FORCED.
+/* @invariant A REBUILD IS A REAL BUILD, ASKED FOR AS THE AGENT AND NEVER FORCED.
  * The dispatch spends the workspace's build allowance on real runners, so the
  * request names its origin as mcp for the meter, and never sends force: a
  * rebuild that would replace what a live channel serves is refused by the
@@ -204,7 +205,7 @@ export async function rebuild(args: ActArgs): Promise<string> {
       },
       buildsPageUrl: consoleProjectUrl(api.ref, ConsoleProjectPage.builds, args.api),
     },
-    hint: `This started a real CI run for ${project} at ${commit || "the branch head"} (${buildEnv || "staging"}) on ${browsers.join(", ") || "the enabled browsers"}, and it counts against the workspace's build allowance. It takes minutes: follow it with extension_builds action:"get" or action:"logs" with buildId ${commit || "<the new build>"}. ${run.sentence} Do not rebuild again to check on it.`,
+    hint: `This started a real build for ${project} at ${commit || "the branch head"} (${buildEnv || "staging"}) on ${browsers.join(", ") || "the enabled browsers"}, and it counts against the workspace's build allowance. It takes minutes: follow it with extension_builds action:"get" or action:"logs" with buildId ${commit || "<the new build>"}. ${run.sentence} Do not rebuild again to check on it.`,
     warnings: [stripped.length ? `The platform left out ${stripped.join(", ")}, which this plan does not build.` : null],
   });
 }

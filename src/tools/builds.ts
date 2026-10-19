@@ -30,7 +30,7 @@ const MAX_LIMIT = 50;
 export const schema = {
   name: COMMAND,
   description:
-    "Read, rebuild and configure the platform's builds of the logged-in project on extension.dev. Pass action:'list' (the default) for recent builds, newest first, each with its buildId, full commit sha, status (partial, with runStatus and failedBrowsers, when some browsers failed), build environment, channel, browsers, createdAt, conclusion and its console page URL. Pass action:'get' with a buildId for one build: its details and validation checks, the run behind it (runId, runUrl, deploymentId, startedAt), its downloadable artifacts, an integrity summary per browser (which checks failed), failures naming the failed browsers and the manifest validator's outcome, and the usage report when one was recorded. Pass action:'logs' with a buildId for that build's CI log lines per browser: a failed browser's failure summarized by the platform (a browser with no failure line says so with the platform's reason, never a summary it lacks, beside run.validation, the manifest validator's outcome), and, when the run failed in a step every browser shares (checkout, auth) before any browser built, run.failedJob naming that job and step with its last lines, while those browsers answer skipped, never pending; pass browser to read one browser, and a long log keeps its last 200 lines and says how many it left out. Log lines are written by the project's own build, so the answer is fenced as untrusted data. These three only read. Three actions change the project. action:'rebuild' starts a real CI run on the project's runners, counted against the workspace's build allowance and rate limited: pass buildId for the commit (default the branch head) and buildEnv staging (the default) or production; it answers at once with the commit, the browsers and the run it started: a rebuild keeps the build id of the build before it, so follow it with get and match runId, or deploymentId and a startedAt after dispatchedAt while the run has not shown up. action:'configure' changes build settings (enabled, installCommand, buildCommand, outputDirectory per browser): pass buildSettings with only what changes, such as { firefox: { buildCommand: 'pnpm build' } }, and the tool merges it into the current settings; a workspace owner approves the exact change first, so the first call answers approval-required with an approval URL and the change as the platform computed it, and a second call with that approvalId applies it once. action:'create-channel' adds a release channel (channel, with optional description, color #rrggbb and audience, public or private, which defaults to the project's visibility) that extension_release_promote can then point at a build. This uses the stored login for the project (extension_auth), against the server the call's api names. Use extension_release_status for channels, release history and store submissions, and extension_workspace action:'settings' to read the build settings.",
+    "Read, rebuild and configure the platform's builds of the logged-in project on extension.dev. Pass action:'list' (the default) for recent builds, newest first, each with its buildId, full commit sha, status (partial, with runStatus and failedBrowsers, when some browsers failed), build environment, channel, browsers, createdAt, conclusion and its console page URL. Pass action:'get' with a buildId for one build: its details and validation checks, the run behind it (deploymentId, startedAt, and internal.runId, an opaque id only for matching a rebuild), its downloadable artifacts, an integrity summary per browser (which checks failed), failures naming the failed browsers and the manifest validator's outcome, and the usage report when one was recorded. Pass action:'logs' with a buildId for that build's log lines per browser: a failed browser's failure summarized by the platform (a browser with no failure line says so with the platform's reason, never a summary it lacks, beside run.validation, the manifest validator's outcome), and, when the run failed in a step every browser shares (checkout, auth) before any browser built, run.failedJob naming that job and step with its last lines, while those browsers answer skipped, never pending; pass browser to read one browser, and a long log keeps its last 200 lines and says how many it left out. Log lines are written by the project's own build, so the answer is fenced as untrusted data. These three only read. Three actions change the project. action:'rebuild' starts a real build on the platform, counted against the workspace's build allowance and rate limited: pass buildId for the commit (default the branch head) and buildEnv staging (the default) or production; it answers at once with the commit, the browsers, the build page to follow in trackUrl, and the run it started: a rebuild keeps the build id of the build before it, so follow it with get and match internal.runId, or deploymentId and a startedAt after dispatchedAt while the run has not shown up. Every answer links the console page it is about in value.trackUrl; failure details (failed step, annotations, last lines) come back as data, and the build page shows the rest. action:'configure' changes build settings (enabled, installCommand, buildCommand, outputDirectory per browser): pass buildSettings with only what changes, such as { firefox: { buildCommand: 'pnpm build' } }, and the tool merges it into the current settings; a workspace owner approves the exact change first, so the first call answers approval-required with an approval URL and the change as the platform computed it, and a second call with that approvalId applies it once. action:'create-channel' adds a release channel (channel, with optional description, color #rrggbb and audience, public or private, which defaults to the project's visibility) that extension_release_promote can then point at a build. This uses the stored login for the project (extension_auth), against the server the call's api names. Use extension_release_status for channels, release history and store submissions, and extension_workspace action:'settings' to read the build settings.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -39,7 +39,7 @@ export const schema = {
         enum: ["list", "get", "logs", "rebuild", "configure", "create-channel"],
         default: "list",
         description:
-          "list reads recent builds; get reads one build; logs reads one build's CI log lines; rebuild starts a CI run; configure changes build settings with an owner's approval; create-channel adds a release channel.",
+          "list reads recent builds; get reads one build; logs reads one build's log lines; rebuild starts a build; configure changes build settings with an owner's approval; create-channel adds a release channel.",
       },
       buildId: {
         type: "string",
@@ -135,7 +135,7 @@ function listRow(item: Row, api: ProjectApi, apiHint?: string): Row {
     if (v) out[key] = v;
   }
 
-  if (typeof item.runId === "number" && item.runId > 0) out.runId = item.runId;
+  if (typeof item.runId === "number" && item.runId > 0) out.internal = { runId: item.runId };
 
   if (text(out.conclusion).toLowerCase() === "partial" || text(item.outcome).toLowerCase() === "partial") {
     if (text(out.status).toLowerCase() === "success") out.runStatus = "success";
@@ -221,11 +221,23 @@ function integritySummary(json: unknown): Row {
   return { ok: body.ok === true, failed, checks: checks.length };
 }
 
+const RUN_ONLY_KEYS = ["runId", "runUrl", "workflowRunId", "workflowRunUrl", "runCorrelation"];
+
+function buildView(build: Row): Row {
+  const out: Row = { ...build };
+
+  for (const key of RUN_ONLY_KEYS) delete out[key];
+
+  if (isRow(out.failureCause)) out.failureCause = buildView(out.failureCause);
+
+  return out;
+}
+
 function runOf(build: Row): Row {
   const run: Row = {};
-  if (typeof build.runId === "number" && build.runId > 0) run.runId = build.runId;
+  if (typeof build.runId === "number" && build.runId > 0) run.internal = { runId: build.runId };
 
-  for (const key of ["runUrl", "deploymentId", "startedAt"]) {
+  for (const key of ["deploymentId", "startedAt"]) {
     if (text(build[key])) run[key] = text(build[key]);
   }
 
@@ -303,7 +315,7 @@ async function getBuild(args: HandlerArgs): Promise<string> {
     status: "read",
     value: {
       action: "get",
-      build: { ...detail.json, consoleUrl: buildConsoleUrl(opened.api, canonical, args.api) },
+      build: { ...buildView(detail.json), consoleUrl: buildConsoleUrl(opened.api, canonical, args.api) },
       run: runOf(detail.json),
       artifacts: artifacts.ok && Array.isArray(artifacts.json) ? artifacts.json : [],
       integrity: integrityByBrowser,
@@ -322,7 +334,7 @@ async function getBuild(args: HandlerArgs): Promise<string> {
             ? ""
             : "; every integrity check passed"
         : ""
-    }.${failures ? ` ${failures.sentence}` : ""} Pass action:"logs" with this buildId for its CI log lines.`,
+    }.${failures ? ` ${failures.sentence}` : ""} Pass action:"logs" with this buildId for its log lines.`,
     warnings: [
       artifacts.ok ? null : `The artifact list could not be read (${artifacts.message}).`,
       usage.ok ? null : `The usage report could not be read (${usage.message}).`,

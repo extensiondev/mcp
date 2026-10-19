@@ -34,7 +34,6 @@ export interface StoreHistoryEntry {
   submittedAt?: string;
   failureReason?: string;
   storeUrl?: string;
-  runUrl?: string;
 }
 
 export type PlatformStoreRecords =
@@ -101,7 +100,6 @@ function historyEntry(raw: Row): StoreHistoryEntry {
     ["submittedAt", raw.submittedAt],
     ["failureReason", raw.failureReason],
     ["storeUrl", raw.storeUrl],
-    ["runUrl", raw.workflowRunUrl],
   ];
 
   for (const [key, value] of fields) {

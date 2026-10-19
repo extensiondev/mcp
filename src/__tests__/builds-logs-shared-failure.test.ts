@@ -359,7 +359,8 @@ describe("extension_builds never claims a failure summary that is not there", ()
 
     expect(out.hint).not.toContain("summary of the");
     expect(out.hint).toContain("the platform sent no failure summary for it");
-    expect(out.hint).toContain(RUN_URL);
+    expect(out.hint).not.toContain(RUN_URL);
+    expect(out.hint).toContain("/acme/widget/builds/b418732");
   });
 
   it("lists a partial build as partial with its failed browsers, not a bare success", async () => {

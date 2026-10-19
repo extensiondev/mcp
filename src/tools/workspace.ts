@@ -431,7 +431,7 @@ async function readSettings(args: HandlerArgs): Promise<string> {
       enabledBrowsers: on,
       consoleUrl: consoleProjectUrl(api.ref, ConsoleProjectPage.projectSettings, args.api),
     },
-    hint: `${project} builds for ${on.length ? on.join(", ") : "no browser"}. The build commands are what the project's CI runs; change them with extension_builds (action: 'configure'), which a workspace owner approves first.`,
+    hint: `${project} builds for ${on.length ? on.join(", ") : "no browser"}. The build commands are what every platform build of the project runs; change them with extension_builds (action: 'configure'), which a workspace owner approves first.`,
   });
 }
 

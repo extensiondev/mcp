@@ -245,7 +245,7 @@ export async function configure(args: ActArgs): Promise<string> {
     api: args.api,
     refusedStatus: "configure-refused",
     body: { buildSettings: merged },
-    reason: "A build command runs on the project's CI runners, so a workspace owner must approve this exact change first; the approval page shows the change as the platform computed it.",
+    reason: "A build command runs on every platform build of the project, so a workspace owner must approve this exact change first; the approval page shows the change as the platform computed it.",
     stateRead: 'extension_workspace (action: "settings") for build settings',
     refusalHint: (code) => (code === "NO_CHANGE" ? "The settings already read this way; nothing needs changing." : undefined),
   };

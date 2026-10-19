@@ -196,7 +196,8 @@ describe("extension_builds reads the platform's builds with the project's own to
 
     expect(out.ok).toBe(true);
     expect(out.status).toBe("read");
-    expect(out.value.build).toMatchObject({ buildId: "603fc8a", status: "success", runUrl: RUN_URL });
+    expect(out.value.build).toMatchObject({ buildId: "603fc8a", status: "success" });
+    expect(out.value.build.runUrl).toBeUndefined();
     expect(out.value.artifacts[0]).toMatchObject({ browser: "chrome", type: "Extension package" });
     expect(out.value.integrity.chrome).toEqual({
       ok: false,
@@ -224,7 +225,8 @@ describe("extension_builds reads the platform's builds with the project's own to
     expect(out.value.items[0].logs).toHaveLength(200);
     expect(out.value.items[0].logs.at(-1).message).toBe("line 299");
     expect(out.value.items[0].omittedLines).toBe(100);
-    expect(out.value.runUrl).toBe(RUN_URL);
+    expect(out.value.runUrl).toBeUndefined();
+    expect(JSON.stringify(out)).not.toContain(RUN_URL);
   });
 
   it("refuses get and logs without a buildId before asking the platform", async () => {

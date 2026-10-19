@@ -156,7 +156,8 @@ describe("extension_release_status reads release history and store records from 
     const stable = history.value.releases.find((r: { id: string }) => r.id === "chrome-stable");
     expect(stable).toMatchObject({ browser: "chrome", channel: "stable", build: "603fc8a" });
     expect(stable.events).toHaveLength(3);
-    expect(stable.events[0]).toMatchObject({ event: "Promoted chrome to stable (1)", runUrl: RUN_URL });
+    expect(stable.events[0]).toMatchObject({ event: "Promoted chrome to stable (1)" });
+    expect(stable.events[0].runUrl).toBeUndefined();
     expect(calls.some((url) => url.includes("/events?limit=5"))).toBe(true);
   });
 

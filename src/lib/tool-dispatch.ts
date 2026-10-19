@@ -20,6 +20,7 @@ import {
   type ServerOptions,
 } from "./tool-policy";
 import { withCallApi } from "./origins";
+import { scrubRunAnswer } from "./run-privacy";
 import { attachTrack } from "./track-url";
 import { fenceUntrusted } from "./untrusted-fence";
 import {
@@ -152,7 +153,7 @@ export function installToolHandlers(server: Server, setup: ToolHandlerOptions): 
           async () => {
             const answer = await tool.handler(normalizedArgs);
 
-            return platform ? attachTrack(name, normalizedArgs, answer) : answer;
+            return platform ? scrubRunAnswer(attachTrack(name, normalizedArgs, answer)) : answer;
           },
           name,
           normalizedArgs,

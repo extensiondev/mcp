@@ -144,7 +144,7 @@ describe("extension_builds starts a rebuild, changes build settings with an appr
     expect(out.ok).toBe(true);
     expect(out.status).toBe("dispatched");
     expect(out.value).toMatchObject({ action: "rebuild", commit: "603fc8a", branch: "main", browsers: ["chrome", "firefox"], buildEnv: "production" });
-    expect(out.hint).toContain("real CI run");
+    expect(out.hint).toContain("real build");
     expect(out.hint).toContain('action:"get"');
     expect(out.value.follow).toMatchObject({ list: { action: "list" }, get: { action: "get", buildId: "603fc8a" } });
   });

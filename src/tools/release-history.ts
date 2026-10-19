@@ -86,7 +86,7 @@ export async function openFor(scope: Scope, name: string): Promise<{ ok: true; a
 function eventView(raw: Row): Row {
   const out: Row = {};
 
-  for (const key of ["timestamp", "event", "type", "status", "actor", "browser", "channel", "build", "version", "rollback", "runUrl"]) {
+  for (const key of ["timestamp", "event", "type", "status", "actor", "browser", "channel", "build", "version", "rollback"]) {
     const value = raw[key];
     if (typeof value === "boolean") out[key] = value;
     else if (text(value)) out[key] = text(value);
