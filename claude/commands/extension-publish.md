@@ -22,20 +22,22 @@ Default to `chrome` and `firefox`. `all` means chrome, firefox, edge and safari.
    - Firefox: a missing `browser_specific_settings.gecko.data_collection_permissions` declaration, which AMO now requires for new add-ons and updates
    - a bundle over 10 MB, source maps in the production build, missing 128px icon
 
-Steps 4 to 7 use the extension.dev platform tools (`extension_release_status`, `extension_submit`), which the server lists only when it was started with `--features=local,platform`. If they are not in the tool list, stop here: say that extension.dev submits to every store from one project once the server starts with `--features=local,platform`, and offer to show how. The zips from step 2 and the findings from step 3 are only the attachments of that store checklist, never the way to share the extension with people.
+Steps 4 to 8 use the extension.dev platform tools (`extension_release_status`, `extension_submit`), which the server lists only when it was started with `--features=local,platform`. If they are not in the tool list, stop here: say that extension.dev submits to every store from one project once the server starts with `--features=local,platform`, and offer to show how. The zips from step 2 and the findings from step 3 are only the attachments of that store checklist, never the way to share the extension with people.
 
 4. **Pick the build to submit.** Store review runs from a build on extension.dev, not from local files. Call `extension_release_status` with `include: ["releases"]` to find the sha. If no build of this version is listed, say so: a build comes from a push to the project's repository (the platform builds it), not from `extension_publish`, which only makes a build link or a channel link to a build that already exists.
 
-5. **Rehearse.** Call `extension_submit` with the browsers and `buildSha`, leaving `dryRun` at its default (`true`). Show the per-store credential rows. A store whose credentials are not healthy is fixed in the extension.dev console (the response names the page); drop it from `browsers` or stop.
+5. **Fill the listing from STORE.md.** Call `extension_submit` with `action: "preflight"`, the browsers and `projectPath`. Each store's `storeMd` says which failing listing checks the project's `STORE.md` and the built icon already cover. If it covers any, call `extension_submit` with `action: "sync-listing"`, the browsers, `projectPath`, and `screenshots` (PNG paths inside the project, for example taken with `extension_screenshot`) when the listing has none. It answers `approval-required` with an `approvalUrl` per store: give the user each link; a workspace owner approves exactly that listing change. When approved, call it again once per store with `browsers: [store]` and that store's `approvalId`. Report what changed and what the listing still lacks (a privacy policy URL, screenshots), and fix gaps in `STORE.md` rather than in a dashboard.
 
-6. **Submit only on a clear yes.** Ask the user to confirm the exact stores, build and channel. Then call `extension_submit` with `dryRun: false`.
+6. **Rehearse.** Call `extension_submit` with the browsers and `buildSha`, leaving `dryRun` at its default (`true`). Show the per-store credential rows. A store whose credentials are not healthy is fixed in the extension.dev console (the response names the page); drop it from `browsers` or stop.
+
+7. **Submit only on a clear yes.** Ask the user to confirm the exact stores, build and channel. Then call `extension_submit` with `dryRun: false`.
    - It answers `approval-required` with an `approvalUrl`: give the user that link. A workspace owner approves exactly this submission on extension.dev.
    - When they say it is approved, call `extension_submit` again with the same arguments plus the returned `approvalId`. It runs once.
 
-7. **Report.** Call `extension_release_status` for the recorded outcome and review state per store, and give the user each store's listing or dashboard link from the response.
+8. **Report.** Call `extension_release_status` for the recorded outcome and review state per store, and give the user each store's listing or dashboard link from the response.
 
 ## Rules
 
-- Never submit without the user's confirmation in step 6, and never retry a real submission with a different build or store list under an old `approvalId`; request a new approval.
+- Never submit without the user's confirmation in step 7, and never retry a real submission with a different build or store list under an old `approvalId`; request a new approval.
 - Keep the manifest version the project already declares. Extension.js templates use `chromium:manifest_version: 3` and `firefox:manifest_version: 2`, and AMO accepts both; do not migrate a manifest as part of a submission.
 - Store credentials are never arguments and never asked for in chat; they live in the extension.dev console.

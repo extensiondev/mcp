@@ -12,6 +12,10 @@ import { envelope } from "../lib/envelope";
 import { consoleProjectUrl } from "../lib/registry";
 import { projectApiReadFailure, projectApiSend } from "../lib/project-api";
 import { badShipRequest, isRow, openShipApi, runShipAct, text } from "../lib/ship-act";
+import { readLocalListing, storeMdAdvisory } from "./store-listing";
+
+import type { ListingStore } from "../lib/store-md-listing";
+
 
 const COMMAND = "extension_submit";
 const STORES = ["chrome", "firefox", "edge", "safari"] as const;
@@ -28,6 +32,7 @@ export interface StoreActArgs {
   channel?: string;
   approvalId?: string;
   project?: string;
+  projectPath?: string;
   api?: string;
 }
 
@@ -147,15 +152,18 @@ function checkView(check: Row, withLabel: boolean): Row {
   return out;
 }
 
-function readinessView(json: Row): Row {
+function readinessView(json: Row, store: string, projectPath: string): Row {
   const summary = isRow(json.summary) ? json.summary : {};
   const checks = (Array.isArray(json.checks) ? json.checks : []).filter(isRow);
+  const open = checks.filter((c) => text(c.status) === "fail" || text(c.status) === "warn");
+  const local = projectPath ? readLocalListing(projectPath, store as ListingStore) : null;
 
   return {
     canSubmit: summary.canSubmit === true,
     summary,
     failing: checks.filter((c) => text(c.status) === "fail").map((c) => checkView(c, true)),
     warnings: checks.filter((c) => text(c.status) === "warn").map((c) => checkView(c, true)),
+    ...(local ? { storeMd: "problem" in local ? { missing: local.problem } : storeMdAdvisory(local, open) } : {}),
   };
 }
 
@@ -193,11 +201,17 @@ export async function preflight(args: StoreActArgs): Promise<string> {
 
   asked.forEach((store, i) => {
     const read = reads[i];
-    if (read.ok) stores[store] = readinessView(read.json);
+    if (read.ok) stores[store] = readinessView(read.json, store, text(args.projectPath));
     else unread.push(`${store}: ${read.message}`);
   });
 
   const blocked = Object.entries(stores).filter(([, view]) => (view as Row).canSubmit !== true).map(([store]) => store);
+  const coverable = Object.entries(stores)
+    .filter(([, view]) => isRow((view as Row).storeMd) && Array.isArray(((view as Row).storeMd as Row).covers) && (((view as Row).storeMd as Row).covers as unknown[]).length)
+    .map(([store]) => store);
+  const syncLine = coverable.length
+    ? ` STORE.md and the build already cover part of the ${coverable.join(", ")} listing: extension_submit action:"sync-listing" with browsers:[${coverable.map((s) => `"${s}"`).join(", ")}] and projectPath fills it after a workspace owner approves.`
+    : "";
 
   return envelope({
     ok: true,
@@ -205,7 +219,7 @@ export async function preflight(args: StoreActArgs): Promise<string> {
     status: "preflight-read",
     value: { action: "preflight", stores, storesPageUrl: consoleProjectUrl(api.ref, ConsoleProjectPage.stores, args.api) },
     hint: blocked.length
-      ? `${blocked.join(", ")} cannot be submitted yet; each failing check says what to fix. This read wrote nothing.`
+      ? `${blocked.join(", ")} cannot be submitted yet; each failing check says what to fix.${syncLine} This read wrote nothing.`
       : "Every store read here is ready to submit. This read wrote nothing; extension_submit with dryRun:false submits.",
     warnings: [unread.length ? `Readiness could not be read for ${unread.join("; ")}.` : null],
   });
