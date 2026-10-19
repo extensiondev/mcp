@@ -20,17 +20,17 @@ import {
   type ProjectApi,
 } from "../lib/project-api";
 import { configure, createChannel, type ActArgs } from "./builds-acts";
+import { buildFailures, readLogs } from "./builds-logs";
 import { rebuild } from "./builds-rebuild";
 
 const COMMAND = "extension_builds";
 const DEFAULT_LIMIT = 10;
 const MAX_LIMIT = 50;
-const LOG_TAIL = 200;
 
 export const schema = {
   name: COMMAND,
   description:
-    "Read, rebuild and configure the platform's builds of the logged-in project on extension.dev. Pass action:'list' (the default) for recent builds, newest first, each with its buildId, full commit sha, status, build environment, channel, browsers, createdAt, conclusion and its console page URL. Pass action:'get' with a buildId for one build: its details and validation checks, the run behind it (runId, runUrl, deploymentId, startedAt), its downloadable artifacts, an integrity summary per browser (which checks failed), and the usage report when one was recorded. Pass action:'logs' with a buildId for that build's CI log lines per browser, a failed browser's job failure summarized by the platform; pass browser to read one browser, and a long log keeps its last 200 lines and says how many it left out. Log lines are written by the project's own build, so the answer is fenced as untrusted data. These three only read. Three actions change the project. action:'rebuild' starts a real CI run on the project's runners, counted against the workspace's build allowance and rate limited: pass buildId for the commit (default the branch head) and buildEnv staging (the default) or production; it answers at once with the commit, the browsers and the run it started: a rebuild keeps the build id of the build before it, so follow it with get and match runId, or deploymentId and a startedAt after dispatchedAt while the run has not shown up. action:'configure' changes build settings (enabled, installCommand, buildCommand, outputDirectory per browser): pass buildSettings with only what changes, such as { firefox: { buildCommand: 'pnpm build' } }, and the tool merges it into the current settings; a workspace owner approves the exact change first, so the first call answers approval-required with an approval URL and the change as the platform computed it, and a second call with that approvalId applies it once. action:'create-channel' adds a release channel (channel, with optional description, color #rrggbb and audience, public or private, which defaults to the project's visibility) that extension_release_promote can then point at a build. This uses the stored login for the project (extension_auth), against the server the call's api names. Use extension_release_status for channels, release history and store submissions, and extension_workspace action:'settings' to read the build settings.",
+    "Read, rebuild and configure the platform's builds of the logged-in project on extension.dev. Pass action:'list' (the default) for recent builds, newest first, each with its buildId, full commit sha, status (partial, with runStatus and failedBrowsers, when some browsers failed), build environment, channel, browsers, createdAt, conclusion and its console page URL. Pass action:'get' with a buildId for one build: its details and validation checks, the run behind it (runId, runUrl, deploymentId, startedAt), its downloadable artifacts, an integrity summary per browser (which checks failed), failures naming the failed browsers and the manifest validator's outcome, and the usage report when one was recorded. Pass action:'logs' with a buildId for that build's CI log lines per browser: a failed browser's failure summarized by the platform (a browser with no failure line says so with the platform's reason, never a summary it lacks, beside run.validation, the manifest validator's outcome), and, when the run failed in a step every browser shares (checkout, auth) before any browser built, run.failedJob naming that job and step with its last lines, while those browsers answer skipped, never pending; pass browser to read one browser, and a long log keeps its last 200 lines and says how many it left out. Log lines are written by the project's own build, so the answer is fenced as untrusted data. These three only read. Three actions change the project. action:'rebuild' starts a real CI run on the project's runners, counted against the workspace's build allowance and rate limited: pass buildId for the commit (default the branch head) and buildEnv staging (the default) or production; it answers at once with the commit, the browsers and the run it started: a rebuild keeps the build id of the build before it, so follow it with get and match runId, or deploymentId and a startedAt after dispatchedAt while the run has not shown up. action:'configure' changes build settings (enabled, installCommand, buildCommand, outputDirectory per browser): pass buildSettings with only what changes, such as { firefox: { buildCommand: 'pnpm build' } }, and the tool merges it into the current settings; a workspace owner approves the exact change first, so the first call answers approval-required with an approval URL and the change as the platform computed it, and a second call with that approvalId applies it once. action:'create-channel' adds a release channel (channel, with optional description, color #rrggbb and audience, public or private, which defaults to the project's visibility) that extension_release_promote can then point at a build. This uses the stored login for the project (extension_auth), against the server the call's api names. Use extension_release_status for channels, release history and store submissions, and extension_workspace action:'settings' to read the build settings.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -137,6 +137,15 @@ function listRow(item: Row, api: ProjectApi, apiHint?: string): Row {
 
   if (typeof item.runId === "number" && item.runId > 0) out.runId = item.runId;
 
+  if (text(out.conclusion).toLowerCase() === "partial" || text(item.outcome).toLowerCase() === "partial") {
+    if (text(out.status).toLowerCase() === "success") out.runStatus = "success";
+
+    out.status = "partial";
+    out.conclusion = "partial";
+    const failedBrowsers = Array.isArray(item.failedBrowsers) ? item.failedBrowsers.map(text).filter(Boolean) : [];
+    if (failedBrowsers.length) out.failedBrowsers = failedBrowsers;
+  }
+
   out.browsers = browsers;
   if (buildId) out.consoleUrl = buildConsoleUrl(api, buildId, apiHint);
 
@@ -181,7 +190,9 @@ async function listBuilds(args: HandlerArgs): Promise<string> {
     },
     hint:
       rows.length > 0
-        ? `${rows.length} recent build${rows.length === 1 ? "" : "s"} of ${project}, newest first; the latest is ${rows[0].buildId} (${rows[0].status ?? "status unknown"}). Pass action:"get" or action:"logs" with a buildId to read one.`
+        ? `${rows.length} recent build${rows.length === 1 ? "" : "s"} of ${project}, newest first; the latest is ${rows[0].buildId} (${rows[0].status ?? "status unknown"}). Pass action:"get" or action:"logs" with a buildId to read one.${
+            rows.some((row) => row.status === "partial") ? " A partial build finished with at least one browser failed; failedBrowsers names them." : ""
+          }`
         : `No builds are recorded for ${project} yet. Push a commit to produce one, then check ${buildsPageUrl}.`,
     warnings: [
       rows.length === limit
@@ -284,6 +295,7 @@ async function getBuild(args: HandlerArgs): Promise<string> {
   const usageMarkdown = usage.ok ? text(usage.json?.markdown) : "";
   const canonical = text(detail.json.buildId) || buildId;
   const failing = Object.entries(integrityByBrowser).filter(([, v]) => (v as Row).ok !== true).map(([k]) => k);
+  const failures = buildFailures(detail.json);
 
   return envelope({
     ok: true,
@@ -295,6 +307,7 @@ async function getBuild(args: HandlerArgs): Promise<string> {
       run: runOf(detail.json),
       artifacts: artifacts.ok && Array.isArray(artifacts.json) ? artifacts.json : [],
       integrity: integrityByBrowser,
+      ...(failures ? { failures: failures.value } : {}),
       usage: usage.ok
         ? usageMarkdown
           ? { recorded: true, markdown: usageMarkdown, updatedAt: text(usage.json?.updatedAt) || null }
@@ -309,7 +322,7 @@ async function getBuild(args: HandlerArgs): Promise<string> {
             ? ""
             : "; every integrity check passed"
         : ""
-    }. Pass action:"logs" with this buildId for its CI log lines.`,
+    }.${failures ? ` ${failures.sentence}` : ""} Pass action:"logs" with this buildId for its CI log lines.`,
     warnings: [
       artifacts.ok ? null : `The artifact list could not be read (${artifacts.message}).`,
       usage.ok ? null : `The usage report could not be read (${usage.message}).`,
@@ -318,7 +331,7 @@ async function getBuild(args: HandlerArgs): Promise<string> {
   });
 }
 
-async function readLogs(args: HandlerArgs): Promise<string> {
+async function logs(args: HandlerArgs): Promise<string> {
   const refused = requireBuildId(args, "logs");
   if (refused) return refused;
 
@@ -329,57 +342,12 @@ async function readLogs(args: HandlerArgs): Promise<string> {
     return projectApiOpenFailure(COMMAND, opened, { api: args.api, name: "Builds", value: { action: "logs", buildId } });
   }
 
-  const read = await projectApiGet<Row>(opened.api, `builds/${encodeURIComponent(buildId)}/logs`);
-
-  if (!read.ok) {
-    return projectApiReadFailure(COMMAND, read, {
-      api: args.api,
-      name: "Builds",
-      value: { action: "logs", buildId },
-      notFound: "build",
-    });
-  }
-
-  const wanted = text(args.browser).toLowerCase();
-  const all = (Array.isArray(read.json.items) ? read.json.items : []).filter(isRow);
-  const items = all
-    .filter((item) => !wanted || text(item.browser).toLowerCase() === wanted)
-    .map((item): Row => {
-      const logs = Array.isArray(item.logs) ? item.logs : [];
-      const omitted = Math.max(0, logs.length - LOG_TAIL);
-
-      return {
-        ...item,
-        logs: omitted ? logs.slice(-LOG_TAIL) : logs,
-        ...(omitted ? { omittedLines: omitted } : {}),
-      };
-    });
-  const runUrl = text(read.json.runUrl);
-  const failed = items.filter((item) => text(item.status) === "failed").map((item) => text(item.browser));
-
-  return envelope({
-    ok: true,
-    command: COMMAND,
-    status: "read",
-    value: {
-      action: "logs",
-      buildId: text(read.json.buildId) || buildId,
-      ...(runUrl ? { runUrl } : {}),
-      items,
-    },
-    hint:
-      items.length === 0
-        ? wanted
-          ? `No ${wanted} logs for build ${buildId}; the build may not target ${wanted}. Browsers with logs: ${all.map((i) => text(i.browser)).join(", ") || "none"}.`
-          : `No log lines are recorded for build ${buildId} yet${runUrl ? `; the CI run is at ${runUrl}` : ""}.`
-        : failed.length
-          ? `${failed.join(", ")} failed; its lines lead with the platform's summary of the job failure.${runUrl ? ` The full CI run is at ${runUrl}.` : ""}`
-          : `Log lines for ${items.map((i) => text(i.browser)).join(", ")}.${runUrl ? ` The full CI run is at ${runUrl}.` : ""}`,
-    warnings: [
-      items.some((item) => (item as Row).omittedLines)
-        ? `Long logs keep their last ${LOG_TAIL} lines; omittedLines says how many earlier lines were left out, and the CI run has them all.`
-        : null,
-    ],
+  return readLogs({
+    api: opened.api,
+    apiHint: args.api,
+    buildId,
+    browser: args.browser,
+    consoleUrl: buildConsoleUrl(opened.api, buildId, args.api),
   });
 }
 
@@ -390,7 +358,7 @@ interface HandlerArgs extends ActArgs {
 
 export async function handler(args: HandlerArgs): Promise<string> {
   if (args.action === "get") return getBuild(args);
-  if (args.action === "logs") return readLogs(args);
+  if (args.action === "logs") return logs(args);
   if (args.action === "rebuild") return rebuild(args);
   if (args.action === "configure") return configure(args);
   if (args.action === "create-channel") return createChannel(args);
