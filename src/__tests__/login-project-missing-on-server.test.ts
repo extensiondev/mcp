@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { writeCredentials } from "../lib/credentials";
 import { loginToProject } from "../tools/login";
+import { handler as createProject } from "../tools/project-create";
 
 const LOCAL = "http://localhost:3100";
 const PROD = "https://www.extension.dev";
@@ -111,6 +112,93 @@ describe("extension_auth login for a project the target server may not hold", ()
     expect(out.warnings[0]).toContain(`not a public project on ${PROD}`);
     expect(out.warnings[0]).toContain(`login for ${PROJECT} on ${LOCAL}`);
     expect(out.warnings[0]).toContain(`extension_project_create with api: '${PROD}'`);
+  });
+
+  it("trusts a project this machine just created on the same server and skips the warning", async () => {
+    let tokenCalls = 0;
+    const resolveCalls: string[] = [];
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: unknown) => {
+        const href = String(url);
+        const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status });
+
+        if (href.endsWith("/api/cli/login/config")) {
+          return json({
+            deviceCodeUrl: "/api/cli/device/code",
+            deviceTokenUrl: "/api/cli/device/token",
+            verificationUri: `${PROD}/device`,
+          });
+        }
+
+        if (href.endsWith("/api/cli/device/code")) {
+          return json({
+            device_code: "login-code",
+            user_code: "BR11-KXYA",
+            verification_uri: `${PROD}/device`,
+            verification_uri_complete: `${PROD}/device?code=BR11-KXYA`,
+            interval: 30,
+            expires_in: 900,
+          });
+        }
+
+        if (href.endsWith("/api/cli/device/token")) {
+          tokenCalls += 1;
+
+          return tokenCalls === 1
+            ? json({
+                token: "provision-token",
+                expiresAt: Math.floor(Date.now() / 1000) + 900,
+                workspaceSlug: "cezaraugusto",
+                projectSlug: "pii-shield",
+                tokenKind: "provisioning",
+              })
+            : json({ error: "authorization_pending" }, 400);
+        }
+
+        if (href.endsWith("/api/cli/projects/create")) {
+          return json({
+            success: true,
+            projectId: "prj_pii",
+            workspaceSlug: "cezaraugusto",
+            projectSlug: "pii-shield",
+            initialBuild: { dispatched: true },
+          });
+        }
+
+        if (href.includes("/api/projects/resolve?")) {
+          resolveCalls.push(href);
+
+          return json({ code: "NO_PUBLIC_PROJECT" }, 404);
+        }
+
+        throw new Error(`Unexpected fetch: ${href}`);
+      }),
+    );
+
+    const created = JSON.parse(
+      await createProject({ project: PROJECT, repo: "cezaraugusto/pii-shield", api: PROD, deviceCode: "create-code" }),
+    );
+    expect(created.status).toBe("created");
+
+    const out = JSON.parse(await loginToProject({ project: PROJECT, api: PROD }));
+
+    expect(out.status).toBe("authorization-pending");
+    expect(out.value.projectCheck).toBeUndefined();
+    expect(JSON.stringify(out.warnings ?? [])).not.toContain("may be for a project that is not there");
+    expect(resolveCalls).toEqual([]);
+  });
+
+  it("still warns for a project created on a different server", async () => {
+    const { rememberCreatedProject } = await import("../lib/created-projects");
+    rememberCreatedProject(LOCAL, PROJECT);
+    platform({ token: PENDING });
+
+    const out = JSON.parse(await loginToProject({ project: PROJECT, api: PROD }));
+
+    expect(out.value.projectCheck).toMatchObject({ server: PROD, publicProject: false });
+    expect(out.warnings[0]).toContain(`not a public project on ${PROD}`);
   });
 
   it("adds nothing when the project is public on the target server", async () => {

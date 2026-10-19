@@ -41,18 +41,38 @@ function leaks(value: string): boolean {
   return PRIVATE_RUN_PATTERNS.some((pattern) => pattern.test(value));
 }
 
-function scrubValue(value: unknown, buildPage: string | undefined, inInternal: boolean): unknown {
+const RUN_RECORD_KEYS = new Set(["run", "workflowRun", "workflow_run"]);
+const RUN_RECORD_ID_KEYS = new Set(["id", "number", "runNumber", "run_number"]);
+const BUILD_PAGE = /\/builds\/[^/?#\s]+/;
+
+function ownBuildPage(row: Row): string | undefined {
+  return [row.trackUrl, row.consoleUrl].find(
+    (url): url is string => typeof url === "string" && BUILD_PAGE.test(url) && !leaks(url),
+  );
+}
+
+function scrubValue(value: unknown, buildPage: string | undefined, inInternal: boolean, inRun = false): unknown {
   if (typeof value === "string") return leaks(value) ? scrubRunText(value, buildPage) : value;
   if (Array.isArray(value)) return value.map((item) => scrubValue(item, buildPage, inInternal));
   if (!value || typeof value !== "object") return value;
 
+  const row = value as Row;
+  const page = ownBuildPage(row) ?? buildPage;
   const out: Row = {};
 
-  for (const [key, item] of Object.entries(value as Row)) {
+  for (const [key, item] of Object.entries(row)) {
     if (!inInternal && INTERNAL_KEYS.has(key)) continue;
-    if (typeof item === "string" && leaks(item) && (URLISH_KEY.test(key) || wholly(item))) continue;
+    if (!inInternal && inRun && RUN_RECORD_ID_KEYS.has(key)) continue;
 
-    out[key] = scrubValue(item, buildPage, inInternal || key === "internal");
+    if (typeof item === "string" && leaks(item) && URLISH_KEY.test(key)) {
+      if (page) out[key] = page;
+
+      continue;
+    }
+
+    if (typeof item === "string" && leaks(item) && wholly(item)) continue;
+
+    out[key] = scrubValue(item, page, inInternal || key === "internal", RUN_RECORD_KEYS.has(key));
   }
 
   return out;
@@ -65,7 +85,7 @@ function buildPageOf(value: unknown): string | undefined {
   const links = Array.isArray(row.trackLinks) ? row.trackLinks : [];
   const candidates = [row.trackUrl, ...links, row.consoleUrl, (row.build as Row | undefined)?.consoleUrl];
 
-  return candidates.find((url): url is string => typeof url === "string" && /\/builds\/[^/?#]+/.test(url));
+  return candidates.find((url): url is string => typeof url === "string" && BUILD_PAGE.test(url));
 }
 
 export function scrubRunAnswer(result: string): string {

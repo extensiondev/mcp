@@ -8,12 +8,16 @@
 
 import { describe, expect, it } from "vitest";
 
+import { envelope } from "../lib/envelope";
+import { scrubRunAnswer } from "../lib/run-privacy";
 import { TOOL_POLICY } from "../lib/tool-policy";
 import { FULL_SHA, MIRROR_REPO, MIRROR_RUN_URL, WORLD_API, usePlatformWorld } from "./fixtures/platform-world";
 import { WORLD_CASES, type WorldCase } from "./fixtures/platform-world-cases";
 
 const FORBIDDEN = [/extension-user-land(-dev)?\//, /actions\/runs\//, /\bmirror\b/i, /\b\d+--prj_/];
 const P = "/api/projects/prj_world";
+const CONSOLE_BUILD_PAGE = /^https?:\/\/console\.[^/]+\/[^/]+\/[^/]+\/builds\/[^/?#]+$/;
+const PROD_PII_RUN_URL = "https://github.com/extension-user-land/4672033--prj_a017a32f-5b6c-4d7e-8f90-a1b2c3d4e5f6/actions/runs/39292347354";
 
 const MIRROR_HEAVY: Record<string, WorldCase[]> = {
   extension_builds: [
@@ -46,7 +50,8 @@ function runIdsOutsideInternal(value: unknown, at = "value"): string[] {
 
   return Object.entries(value).flatMap(([key, item]) => {
     if (key === "internal") return [];
-    if (["runId", "workflowRunId", "runUrl", "workflowRunUrl"].includes(key)) return [`${at}.${key}`];
+    if (["runId", "workflowRunId"].includes(key)) return [`${at}.${key}`];
+    if (["runUrl", "workflowRunUrl", "htmlUrl"].includes(key) && !CONSOLE_BUILD_PAGE.test(String(item))) return [`${at}.${key}`];
 
     return runIdsOutsideInternal(item, `${at}.${key}`);
   });
@@ -105,6 +110,47 @@ describe("no platform answer tells a person where or how the platform runs build
     expect(out.hint).toContain("http://console.extension.localhost/acme/widget/builds/603fc8a");
   });
 
+  it("answers the console build page for every run link in the production builds get shape, and no run id", async () => {
+    if (process.platform === "win32") return;
+
+    world.login();
+    world.routes.push([
+      new RegExp(`^GET ${P}/builds/b418732$`),
+      () => ({
+        body: {
+          buildId: "b418732",
+          commit: "b41873282f0c5d1e9a7b6c4d3e2f1a0b9c8d7e6f",
+          status: "success",
+          buildEnv: "production",
+          browsers: [{ name: "chrome" }, { name: "edge" }, { name: "firefox" }],
+          startedAt: "2026-10-19T17:05:00.000Z",
+          deploymentId: "dep_pii",
+          runId: 39292347354,
+          runUrl: PROD_PII_RUN_URL,
+          htmlUrl: PROD_PII_RUN_URL,
+          workflowRunUrl: PROD_PII_RUN_URL,
+          run: { id: 39292347354, runId: 39292347354, runUrl: PROD_PII_RUN_URL, status: "completed", conclusion: "success" },
+          jobs: [{ name: "chrome", status: "completed", htmlUrl: `${PROD_PII_RUN_URL}/job/1`, runUrl: PROD_PII_RUN_URL }],
+        },
+      }),
+    ]);
+
+    const out = await world.call("extension_builds", { action: "get", buildId: "b418732", api: WORLD_API });
+    const page = "http://console.extension.localhost/acme/widget/builds/b418732";
+    const leaks = answerText(out).filter(([, text]) => FORBIDDEN.some((pattern) => pattern.test(text)));
+
+    expect(leaks, JSON.stringify(out).slice(0, 2000)).toEqual([]);
+    expect(runIdsOutsideInternal(out.value)).toEqual([]);
+    expect(out.value.build.runUrl).toBe(page);
+    expect(out.value.build.workflowRunUrl).toBe(page);
+    expect(out.value.build.run.runUrl).toBe(page);
+    expect(out.value.build.run.id).toBeUndefined();
+    expect(out.value.build.jobs[0].htmlUrl).toBe(page);
+    expect(out.value.run.runUrl).toBe(page);
+    expect(out.value.run.internal).toEqual({ runId: 39292347354 });
+    expect(out.value.trackUrl).toBe(page);
+  });
+
   it("keeps the run id a rebuild needs to be matched under internal only", async () => {
     if (process.platform === "win32") return;
 
@@ -115,5 +161,34 @@ describe("no platform answer tells a person where or how the platform runs build
     expect(out.value.internal).toEqual({ runId: 18234567999 });
     expect(out.value.runId).toBeUndefined();
     expect(out.hint).not.toContain("18234567999");
+  });
+});
+
+describe("the shared answer guard", () => {
+  it("replaces a nested run link with the build page of the record that holds it and drops its run ids", () => {
+    const rowPage = "https://console.extension.dev/cezaraugusto/pii-shield/builds/b418732";
+    const answer = envelope({
+      ok: true,
+      command: "extension_release_status",
+      status: "read",
+      value: {
+        trackUrl: "https://console.extension.dev/cezaraugusto/pii-shield/releases",
+        rows: [
+          {
+            consoleUrl: rowPage,
+            runUrl: PROD_PII_RUN_URL,
+            workflowRun: { id: 39292347354, number: 12, htmlUrl: PROD_PII_RUN_URL, status: "completed" },
+          },
+        ],
+        other: { workflowRunUrl: PROD_PII_RUN_URL },
+      },
+    });
+
+    const out = JSON.parse(scrubRunAnswer(answer));
+
+    expect(out.value.rows[0].runUrl).toBe(rowPage);
+    expect(out.value.rows[0].workflowRun).toEqual({ htmlUrl: rowPage, status: "completed" });
+    expect(out.value.other).toEqual({});
+    expect(JSON.stringify(out)).not.toMatch(/extension-user-land|actions\/runs|39292347354/);
   });
 });

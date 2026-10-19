@@ -40,6 +40,7 @@ import { spendNarration } from "../lib/allowance";
 import { answerIsUnknownOutcome, readCreatedProject } from "../lib/create-answer";
 import { CREATE_CEILING_SENTENCE, CREATE_STUCK_AFTER_SECONDS, creatingAge, creatingForWords } from "../lib/create-ceiling";
 import { findProjectByStoredLogin, type ProjectFoundByRead } from "../lib/created-project-read";
+import { rememberCreatedProject } from "../lib/created-projects";
 import { isProjectRef } from "../lib/credentials";
 import {
   firstBuildSentence,
@@ -720,6 +721,8 @@ async function sendCreate(
     }
 
     if (code === "PROJECT_EXISTS") {
+      rememberCreatedProject(ctx.apiBase, ctx.project);
+
       return envelope({
         ok: false,
         command: COMMAND,
@@ -769,6 +772,7 @@ async function sendCreate(
     ctx.apiBase,
   );
   const firstBuild = readFirstBuild(data);
+  rememberCreatedProject(ctx.apiBase, `${finalWorkspace}/${finalProject}`);
   const buildsPageUrl = consoleProjectUrl(
     { workspace: finalWorkspace, project: finalProject },
     "builds",
@@ -805,7 +809,7 @@ async function sendCreate(
             ]),
       ],
     },
-    hint: `Project ${finalWorkspace}/${finalProject} exists.${data.replayed === true ? " The platform read this back from its record of the earlier create request with this grant; nothing was created twice." : ""} ${firstBuildSentence(firstBuild, buildsPageUrl)} The provisioning grant stays valid until it expires and is no longer kept on this machine; the only other file this tool leaves is its install id (install.json). Next: extension_auth (action: login, project: '${finalWorkspace}/${finalProject}') to mint the project token${
+    hint: `Project ${finalWorkspace}/${finalProject} exists.${data.replayed === true ? " The platform read this back from its record of the earlier create request with this grant; nothing was created twice." : ""} ${firstBuildSentence(firstBuild, buildsPageUrl)} The provisioning grant stays valid until it expires and is no longer kept on this machine; the only other files this tool leaves are its install id (install.json) and a note that ${finalWorkspace}/${finalProject} exists on this server (created-projects.json), so extension_auth does not doubt it. Next: extension_auth (action: login, project: '${finalWorkspace}/${finalProject}') to mint the project token${
       firstBuild.state === "dispatched"
         ? ", then extension_publish to share it."
         : "; extension_publish has nothing to share until a build exists."
@@ -829,6 +833,7 @@ async function sendCreate(
 
 function createdByRead(found: ProjectFoundByRead, repo: string | undefined, apiBase: string): string {
   const ref = `${found.workspaceSlug}/${found.projectSlug}`;
+  rememberCreatedProject(apiBase, ref);
   const consoleUrl = consoleProjectUrl({ workspace: found.workspaceSlug, project: found.projectSlug }, "", apiBase);
 
   return envelope({

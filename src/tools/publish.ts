@@ -12,9 +12,10 @@ import { envelope, type ErrorCode } from "../lib/envelope";
 import { spendNarration } from "../lib/allowance";
 import { publish } from "../lib/publish";
 import { NO_TOKEN_MESSAGE, PROJECT_TOKEN_INPUT, noStoredLoginHint } from "../lib/credentials";
-import { platformHoldEnvelope } from "../lib/platform-hold";
+import { PLATFORM_HOLD_STATUS, platformHoldEnvelope } from "../lib/platform-hold";
 import { CHANNEL_LINK_ADVICE, channelLinkFields, channelServing, readChannels } from "../lib/channel-link";
-import { publishLinkFields } from "../lib/publish-link";
+import { publishLinkFields, spokenDate } from "../lib/publish-link";
+import { probeSharePage, type SharePageVerdict } from "../lib/share-page-probe";
 import { everyArtifactFailed, readBuildHealth, type BuildHealth } from "../lib/build-health";
 import { applyArtifactHealth, refuseUnverified } from "../lib/publish-artifacts";
 import {
@@ -29,7 +30,7 @@ import {
 export const schema = {
   name: "extension_publish",
   description:
-    "Publish a build of the project your stored token is scoped to (extension_auth, or EXTENSION_DEV_TOKEN) on extension.dev, and return the link to send testers, which opens a page with a download and a run command for each browser. Reach for this first whenever the ask is to share, publish, deploy, distribute, release or ship an extension, or to send it to testers; extension_submit is the separate store-review path, and extension_preview_web share:true is a quick emulator link beside this one. An extension with no project on extension.dev yet starts with extension_project_create, which makes one from its GitHub repository, then extension_auth. The target is the token's project: there is no projectPath, and no local file is uploaded. With several logins stored, pass `project` ('<workspace>/<project>') to pick which one; it outranks EXTENSION_DEV_TOKEN. There are two links. A build link opens one build, <workspace>.extension.dev/<project>/builds/<sha> (pass buildSha, which extension_builds lists, or the newest successful build is linked); on a private project it carries a share token and expires, its lifetime ttlHours: 7 days by default, and up to the plan's share window (30 days free, 365 Pro) when asked. A channel link, <workspace>.extension.dev/<project>/channels/<channel>, always opens a channel's newest build and never expires; a public project gets one in value.channelUrl when a release channel serves the build, and later a public channel of a private project will too. On a public project, or a public channel, send testers the channel link; otherwise send the build link and tell them the date it stops working. A private project gets no channel link: value.channelUrlWithheld says why. A project's visibility is set in its extension.dev project settings, not its GitHub repository. In the answer, value.link is the link to send (kind build or channel, url, expiresAt as an ISO date or null, pointsAt, audience, scope, and renewBy, the call that mints a fresh one, on a private project), value.links lists every link this build has, value.tellThem is the sentence to say with it (the hint carries it too), value.clamped says the platform cut ttlHours back to the plan's window, and value.projectVisibility names where visibility is set and, on a private project, makeEvergreen, the console page that gives a link that never expires. Before handing out a link it reads the build's per-browser status and integrity, as extension_builds get does, into value.artifacts: a build whose every browser artifact failed is refused with status publish-refused, naming each browser's verdict and extension_builds rebuild, unless force is true; when only some failed, it publishes with a warning naming them, leaves them out of previewCommands, and tellThem says which browsers the link is good for; a platform that reports no integrity gets a warning that it was not checked.",
+    "Publish a build of the project your stored token is scoped to (extension_auth, or EXTENSION_DEV_TOKEN) on extension.dev, and return the link to send testers, which opens a page with a download and a run command for each browser. Reach for this first whenever the ask is to share, publish, deploy, distribute, release or ship an extension, or to send it to testers; extension_submit is the separate store-review path, and extension_preview_web share:true is a quick emulator link beside this one. An extension with no project on extension.dev yet starts with extension_project_create, which makes one from its GitHub repository, then extension_auth. The target is the token's project: there is no projectPath, and no local file is uploaded. With several logins stored, pass `project` ('<workspace>/<project>') to pick which one; it outranks EXTENSION_DEV_TOKEN. There are two links. A build link opens one build, <workspace>.extension.dev/<project>/builds/<sha> (pass buildSha, which extension_builds lists, or the newest successful build is linked); on a private project it carries a share token and expires, its lifetime ttlHours: 7 days by default, and up to the plan's share window (30 days free, 365 Pro) when asked. A channel link, <workspace>.extension.dev/<project>/channels/<channel>, always opens a channel's newest build and never expires; a public project gets one in value.channelUrl when a release channel serves the build, and later a public channel of a private project will too. On a public project, or a public channel, send testers the channel link; otherwise send the build link and tell them the date it stops working. A private project gets no channel link: value.channelUrlWithheld says why. A project's visibility is set in its extension.dev project settings, not its GitHub repository. In the answer, value.link is the link to send (kind build or channel, url, expiresAt as an ISO date or null, pointsAt, audience, scope, and renewBy, the call that mints a fresh one, on a private project), value.links lists every link this build has, value.tellThem is the sentence to say with it (the hint carries it too), value.clamped says the platform cut ttlHours back to the plan's window, and value.projectVisibility names where visibility is set and, on a private project, makeEvergreen, the console page that gives a link that never expires. Before handing out a link it reads the build's per-browser status and integrity, as extension_builds get does, into value.artifacts: a build whose every browser artifact failed is refused with status publish-refused, naming each browser's verdict and extension_builds rebuild, unless force is true; when only some failed, it publishes with a warning naming them, leaves them out of previewCommands, and tellThem says which browsers the link is good for; a platform that reports no integrity gets a warning that it was not checked. Before telling anyone to open the link it checks that the page answers: while extension.dev is not open to the public the page answers the platform's hold page, and then the status is platform-held, value.sharePage says the page is not open yet, and tellThem names the run commands, which work now, instead of the page.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -389,6 +390,21 @@ export async function handler(args: {
     ? "This share serves NO build: the platform minted the link but named no build sha, which means the project has no successful build yet (or its build index could not be read). Anyone opening the link gets nothing to run. Build first (push a commit, or extension_build then a platform build), then publish again."
     : null;
 
+  const sharePage = noBuild || !sendUrl ? null : await probeSharePage(String(sendUrl));
+
+  if (sharePage?.held) {
+    const heldNote = heldSharePage(data, sharePage, previewCommands);
+
+    return envelope({
+      ok: true,
+      command: "extension_publish",
+      status: PLATFORM_HOLD_STATUS,
+      value: data,
+      warnings: [heldNote.warning, artifactNote, note, buildNote, channelNote, credential.note],
+      hint: heldNote.hint,
+    });
+  }
+
   const tellHint = noBuild || !sendUrl ? null : `Send ${String(sendUrl)} and say: ${String(data.tellThem)}`;
   const hint = [tellHint, previewHint].filter(Boolean).join(" ");
 
@@ -400,4 +416,38 @@ export async function handler(args: {
     warnings: [noBuildNote, artifactNote, note, buildNote, channelNote, credential.note],
     ...(hint ? { hint } : {}),
   });
+}
+
+function registryHostOf(commands: Array<[string, string]>): string {
+  for (const [, command] of commands) {
+    const match = command.match(/https?:\/\/([^/\s]+)\//);
+    if (match) return match[1];
+  }
+
+  return "the registry";
+}
+
+function heldSharePage(
+  data: Record<string, unknown>,
+  page: SharePageVerdict,
+  commands: Array<[string, string]>,
+): { warning: string; hint: string } {
+  const expiresAt = typeof data.expiresAt === "string" && data.expiresAt ? data.expiresAt : null;
+  const until = expiresAt ? ` until ${spokenDate(expiresAt)}` : "";
+  const answer = `${page.status}${page.retryAfter ? `, retry-after ${page.retryAfter}` : ""}`;
+  const registry = registryHostOf(commands);
+  const run = commands.map(([browser, command]) => `${browser}: ${command}`).join(" | ");
+  const tellThem = commands.length
+    ? `The extension.dev page for this build is not open yet, because extension.dev is not open to the public. Until it opens, run the extension with the command for your browser, which downloads this build from ${registry} and works${until}: ${run}`
+    : "The extension.dev page for this build is not open yet, because extension.dev is not open to the public, and this build has no run command to send instead. Nothing here can be opened until the platform opens.";
+
+  data.tellThem = tellThem;
+  data.sharePage = { url: page.url, status: page.status, retryAfter: page.retryAfter, opensNow: false };
+
+  return {
+    warning: `The share page ${page.url} answers the platform's hold page (${answer}) while extension.dev is not open to the public, so do not tell anyone to open it yet. What works now: ${
+      commands.length ? `the run commands in value.previewCommands, which download this build from ${registry}` : "nothing this link serves; the build has no run command"
+    }. What does not: the share page, until the platform opens. The link is minted${until ? ` and stays valid${until}` : ""}, and the same page opens once the platform does.`,
+    hint: `extension.dev is holding the public, so the share page ${page.url} is not open yet. Say: ${tellThem}`,
+  };
 }

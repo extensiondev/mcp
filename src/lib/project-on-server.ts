@@ -7,6 +7,7 @@
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
 import { serverOf } from "./credential-server";
+import { createdOnServer } from "./created-projects";
 import { listCredentials } from "./credentials";
 
 export type ProjectPresence = "public" | "not-public" | "unknown";
@@ -35,7 +36,7 @@ export async function projectPresence(
   project: string,
   fetchImpl: typeof fetch = fetch,
 ): Promise<ProjectPresence> {
-  if (storedHere(apiBase, project)) return "public";
+  if (storedHere(apiBase, project) || createdOnServer(apiBase, project)) return "public";
 
   const [workspace = "", projectSlug = ""] = project.split("/");
   const url = `${apiBase}/api/projects/resolve?workspace=${encodeURIComponent(workspace)}&projectSlug=${encodeURIComponent(projectSlug)}`;

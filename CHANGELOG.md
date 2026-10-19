@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- `extension_publish` checks that the share page answers before telling anyone to open it. During the public hold the page answers the platform's 503 hold page, and the publish answered `published` with a `tellThem` that promised it. A page that answers 503, or a hold answer with `retry-after`, now gives status `platform-held` (`ok: true`, the link is minted), `value.sharePage` with the page's status, a `tellThem` that names the run commands (they download the build from the registry and work now), and a warning that names what works now and what waits for the platform to open. `trackUrl` stays.
+- `extension_builds get` and every platform answer replace a run link (`runUrl`, `htmlUrl`, `workflowRunUrl`) that points at the internal build repository or an Actions run with the console build page, in `build.*`, `run.*` and nested records alike, and drop the run's own id inside a `run` record. Production still sent the GitHub run URL in `build.runUrl` and `run.runUrl`.
+- `extension_auth login` no longer warns that a project "may not be there" right after `extension_project_create` created it on the same server. The create now records the project and server in `created-projects.json` beside the stored logins, and the login's project check reads that record as proof the project exists.
+
 ## 10.15.0
 
 - `extension_publish` no longer sends the person into a rebuild loop when the integrity verdict is older than the build's newest run. Each browser's verdict now carries `checkedAt`, `checkedRun` and `freshness` (the build answer's own per-browser `integrity.checkedAt` and `integrity.runId` first, else the report's `generatedAt` and `runId`, compared with the build's `runId` and `startedAt`; a missing time is unknown, never stale). When every failing verdict is from an earlier run, the refusal says so and offers a recheck instead of a rebuild. Every refusal carries `value.status`, one line on the build's state, what blocks and who unblocks, and `value.trackUrl` to the build page.

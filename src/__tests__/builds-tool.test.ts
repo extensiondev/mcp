@@ -197,7 +197,7 @@ describe("extension_builds reads the platform's builds with the project's own to
     expect(out.ok).toBe(true);
     expect(out.status).toBe("read");
     expect(out.value.build).toMatchObject({ buildId: "603fc8a", status: "success" });
-    expect(out.value.build.runUrl).toBeUndefined();
+    expect(out.value.build.runUrl).toBe(out.value.build.consoleUrl);
     expect(out.value.artifacts[0]).toMatchObject({ browser: "chrome", type: "Extension package" });
     expect(out.value.integrity.chrome).toEqual({
       ok: false,

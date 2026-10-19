@@ -100,8 +100,10 @@ describe("extension_builds hands an agent this rebuild's run as an internal id, 
 
     const out = JSON.parse(await builds({ action: "get", buildId: "603fc8a", api: API }));
 
-    expect(out.value.run).toEqual({ internal: { runId: 38194405984 }, deploymentId: DEPLOYMENT, startedAt: "2026-10-12T02:05:09Z" });
-    expect(out.value.build.runUrl).toBeUndefined();
+    const page = "http://console.extension.localhost/acme/widget/builds/603fc8a";
+
+    expect(out.value.run).toEqual({ internal: { runId: 38194405984 }, deploymentId: DEPLOYMENT, startedAt: "2026-10-12T02:05:09Z", runUrl: page });
+    expect(out.value.build.runUrl).toBe(page);
     expect(out.value.build.runId).toBeUndefined();
   });
 
