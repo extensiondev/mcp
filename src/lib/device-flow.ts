@@ -101,7 +101,13 @@ export async function requestDeviceCode(args: {
 
 export type DevicePollResult =
   | { ok: true; creds: StoredCredentials }
-  | { ok: false; reason: "pending" | "denied" | "expired" | "error"; message?: string };
+  | {
+      ok: false;
+      reason: "pending" | "denied" | "expired" | "error";
+      message?: string;
+      code?: string;
+      body?: Record<string, unknown>;
+    };
 
 export type DeviceGrantPollResult =
   | { ok: true; data: Record<string, unknown> }

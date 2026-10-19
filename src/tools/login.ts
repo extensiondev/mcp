@@ -11,6 +11,7 @@ import {
   pollDeviceGrant,
   pollDeviceToken,
   type DeviceGrantPollResult,
+  type DevicePollResult,
 } from "../lib/device-flow";
 import {
   fetchLoginConfig,
@@ -30,6 +31,7 @@ import {
 } from "../lib/project-batch";
 import { consoleBase } from "../lib/registry";
 import { isProjectRef } from "../lib/credentials";
+import { projectPresence, sameSlugElsewhere, type ProjectPresence } from "../lib/project-on-server";
 
 const FIRST_CALL_BUDGET_MS = 8_000;
 const RESUME_BUDGET_MS = 22_000;
@@ -58,6 +60,7 @@ function success(creds: {
   workspaceSlug: string;
   projectSlug: string;
   expiresAt: number;
+  api?: string;
 }): string {
   const expiresAt = creds.expiresAt
     ? new Date(creds.expiresAt * 1000).toISOString()
@@ -79,16 +82,19 @@ function success(creds: {
     } The token expires ${
       expiresAt ?? "within 7 days"
     }: extension.dev CLI tokens live at most 7 days, so CI must re-mint before then (console: project settings -> Access tokens).`,
-    warnings: [tokenTtlNote(creds.workspaceSlug, creds.projectSlug)],
+    warnings: [tokenTtlNote(creds.workspaceSlug, creds.projectSlug, creds.api)],
   });
 }
 
-function pending(start: {
-  deviceCode: string;
-  userCode: string;
-  verificationUri: string;
-  verificationUriComplete?: string;
-}): string {
+function pending(
+  start: {
+    deviceCode: string;
+    userCode: string;
+    verificationUri: string;
+    verificationUriComplete?: string;
+  },
+  presence: { warning: string | null; value: Record<string, unknown> | null } = { warning: null, value: null },
+): string {
   const complete = String(start.verificationUriComplete || "").trim();
   const hasCompleteLink =
     complete.length > 0 && complete !== start.verificationUri;
@@ -106,9 +112,10 @@ function pending(start: {
       ...(hasCompleteLink ? { verificationUriComplete: complete } : {}),
       deviceCode: start.deviceCode,
       legacyStatus: "authorization_pending",
+      ...(presence.value ? { projectCheck: presence.value } : {}),
     },
     hint: message,
-    warnings: [PENDING_TTL_NOTE],
+    warnings: presence.warning ? [presence.warning, PENDING_TTL_NOTE] : [PENDING_TTL_NOTE],
   });
 }
 
@@ -127,6 +134,98 @@ function resumePending(deviceCode: string, verificationUri: string): string {
     hint: message,
     warnings: [PENDING_TTL_NOTE],
   });
+}
+
+const MISSING_PROJECT_CODES = new Set(["PROJECT_NOT_FOUND", "WORKSPACE_NOT_FOUND"]);
+
+function elsewhereSentence(project: string, servers: string[]): string {
+  return servers.length
+    ? ` This machine holds a login for ${project} on ${servers.join(", ")}; if the project lives only there, call again with api: '${servers[0]}'.`
+    : "";
+}
+
+function missingProjectRefusal(
+  poll: Extract<DevicePollResult, { ok: false }>,
+  ctx: { apiBase: string; project: string },
+): string | null {
+  const code = String(poll.code || "");
+  if (!MISSING_PROJECT_CODES.has(code)) return null;
+
+  const atApproval = poll.reason === "denied" || poll.body?.refusedAt === "approval";
+  const elsewhere = sameSlugElsewhere(ctx.apiBase, ctx.project);
+  const message =
+    poll.message || `${ctx.project} does not exist on ${ctx.apiBase}, so this device authorization was closed.`;
+
+  return fail(
+    atApproval ? "LoginApprovalRefused" : "LoginProjectNotFound",
+    message,
+    atApproval ? "approval-refused" : "project-not-found",
+    atApproval ? "E_AUTH_DENIED" : "E_AUTH_FAILED",
+    {
+      value: {
+        project: ctx.project,
+        server: ctx.apiBase,
+        platformCode: code,
+        reason: "project-not-found",
+        loginsForThisSlugElsewhere: elsewhere,
+      },
+      hint: `${ctx.project} does not exist on ${ctx.apiBase}, the server this call targets, so no login can be approved for it there.${elsewhereSentence(ctx.project, elsewhere)} To create it on ${ctx.apiBase}, run extension_project_create with project: '${ctx.project}' and api: '${ctx.apiBase}', then log in again.`,
+    },
+  );
+}
+
+function pollRefusal(
+  poll: Extract<DevicePollResult, { ok: false }>,
+  ctx: { apiBase: string; project: string },
+): string | null {
+  const missing = missingProjectRefusal(poll, ctx);
+  if (missing) return missing;
+
+  if (poll.reason === "expired") {
+    return fail(
+      "LoginExpired",
+      "The device code expired. Run extension_auth (action: login) again to restart.",
+      "login-expired",
+      "E_AUTH_EXPIRED",
+    );
+  }
+
+  if (poll.reason === "denied") {
+    return fail(
+      "LoginDenied",
+      poll.message
+        ? `Authorization was refused at ${ctx.apiBase}/device: ${poll.message}`
+        : "Authorization was denied at extension.dev/device.",
+      "login-denied",
+      "E_AUTH_DENIED",
+      poll.code ? { value: { platformCode: poll.code } } : undefined,
+    );
+  }
+
+  if (poll.reason === "error") {
+    return fail(
+      "LoginError",
+      poll.message || "Device login failed.",
+      "login-failed",
+      "E_AUTH_FAILED",
+    );
+  }
+
+  return null;
+}
+
+function presenceWarning(presence: ProjectPresence, ctx: { apiBase: string; project: string }): {
+  warning: string | null;
+  value: Record<string, unknown> | null;
+} {
+  if (presence !== "not-public") return { warning: null, value: null };
+
+  const elsewhere = sameSlugElsewhere(ctx.apiBase, ctx.project);
+
+  return {
+    value: { server: ctx.apiBase, publicProject: false, loginsForThisSlugElsewhere: elsewhere },
+    warning: `${ctx.project} is not a public project on ${ctx.apiBase}, and the platform does not say whether a private project exists before someone approves (ruling 2026-08-02), so this code may be for a project that is not there.${elsewhereSentence(ctx.project, elsewhere)} If the approval page says the project does not exist, press "Cancel this request" there and call again with this deviceCode: the answer will name the refusal. To create the project on ${ctx.apiBase}, run extension_project_create with api: '${ctx.apiBase}'.`,
+  };
 }
 
 export async function loginToProject(args: {
@@ -182,36 +281,13 @@ export async function loginToProject(args: {
     });
     if (poll.ok) return success(poll.creds);
 
-    if (poll.reason === "expired") {
-      return fail(
-        "LoginExpired",
-        "The device code expired. Run extension_auth (action: login) again to restart.",
-        "login-expired",
-        "E_AUTH_EXPIRED",
-      );
-    }
-
-    if (poll.reason === "denied") {
-      return fail(
-        "LoginDenied",
-        "Authorization was denied at extension.dev/device.",
-        "login-denied",
-        "E_AUTH_DENIED",
-      );
-    }
-
-    if (poll.reason === "error") {
-      return fail(
-        "LoginError",
-        poll.message || "Device login failed.",
-        "login-failed",
-        "E_AUTH_FAILED",
-      );
-    }
+    const refused = pollRefusal(poll, { apiBase, project });
+    if (refused) return refused;
 
     return resumePending(String(args.deviceCode), config.verificationUri);
   }
 
+  const presence = await projectPresence(apiBase, project);
   let start;
 
   try {
@@ -239,39 +315,18 @@ export async function loginToProject(args: {
   });
   if (poll.ok) return success(poll.creds);
 
-  if (poll.reason === "expired") {
-    return fail(
-      "LoginExpired",
-      "The device code expired. Run extension_auth (action: login) again to restart.",
-      "login-expired",
-      "E_AUTH_EXPIRED",
-    );
-  }
+  const refused = pollRefusal(poll, { apiBase, project });
+  if (refused) return refused;
 
-  if (poll.reason === "denied") {
-    return fail(
-      "LoginDenied",
-      "Authorization was denied at extension.dev/device.",
-      "login-denied",
-      "E_AUTH_DENIED",
-    );
-  }
-
-  if (poll.reason === "error") {
-    return fail(
-      "LoginError",
-      poll.message || "Device login failed.",
-      "login-failed",
-      "E_AUTH_FAILED",
-    );
-  }
-
-  return pending({
-    deviceCode: start.deviceCode,
-    userCode: start.userCode,
-    verificationUri: start.verificationUri,
-    verificationUriComplete: start.verificationUriComplete,
-  });
+  return pending(
+    {
+      deviceCode: start.deviceCode,
+      userCode: start.userCode,
+      verificationUri: start.verificationUri,
+      verificationUriComplete: start.verificationUriComplete,
+    },
+    presenceWarning(presence, { apiBase, project }),
+  );
 }
 
 const BATCH_FINAL_POLL_NOTE =
@@ -317,6 +372,7 @@ function batchPending(args: {
 function batchRefusal(
   poll: Extract<DeviceGrantPollResult, { ok: false }>,
   projects: string[] | typeof WORKSPACE_WILDCARD,
+  apiBase: string,
 ): string {
   if (poll.reason === "expired") {
     return fail(
@@ -346,7 +402,7 @@ function batchRefusal(
           missing.length && projects !== WORKSPACE_WILDCARD
             ? `Drop or fix ${missing.join(", ")} and run extension_auth (action: login) again with the rest`
             : "Check each name against the console and run extension_auth (action: login) again"
-        }; create missing projects with extension_project_create or at ${consoleBase()}.`,
+        }; create missing projects with extension_project_create (same api) or at ${consoleBase(apiBase)}.`,
       },
     );
   }
@@ -496,7 +552,7 @@ export async function loginToProjects(args: {
       });
     }
 
-    return batchRefusal(poll, projects);
+    return batchRefusal(poll, projects, apiBase);
   }
 
   let stored;
@@ -527,7 +583,7 @@ export async function loginToProjects(args: {
     status: "logged-in",
     value: { workspaceSlug: parsed.batch.workspace, logins },
     hint: `Logged in to ${logins.length} project${logins.length === 1 ? "" : "s"} in ${parsed.batch.workspace}: ${logins.map((login) => login.projectSlug).join(", ")}. Each has its own stored token; token-scoped tools take \`project\` to pick one, and extension_auth (action: status) lists them. The default login was left as it was unless none existed. Every token expires within 7 days, so one batch login renews them together.`,
-    warnings: [tokenTtlNote()],
+    warnings: [tokenTtlNote(undefined, undefined, apiBase)],
   });
 }
 
@@ -666,7 +722,7 @@ export async function loginToWorkspace(args: {
       });
     }
 
-    return batchRefusal(poll, WORKSPACE_WILDCARD);
+    return batchRefusal(poll, WORKSPACE_WILDCARD, apiBase);
   }
 
   let stored;
@@ -697,6 +753,6 @@ export async function loginToWorkspace(args: {
     status: "logged-in",
     value: { workspaceSlug: workspace, projects: WORKSPACE_WILDCARD, logins },
     hint: `Logged in to all ${logins.length} project${logins.length === 1 ? "" : "s"} of ${workspace} the approver saw: ${logins.map((login) => login.projectSlug).join(", ")}. Each has its own stored token; token-scoped tools take \`project\` to pick one, and extension_workspace reads the workspace with any of them. A project created later is not covered: run this login again to add it. Every token expires within 7 days.`,
-    warnings: [tokenTtlNote()],
+    warnings: [tokenTtlNote(undefined, undefined, apiBase)],
   });
 }
