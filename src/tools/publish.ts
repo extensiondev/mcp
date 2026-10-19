@@ -142,7 +142,7 @@ export async function handler(args: {
     });
 
     if (health.checked && everyArtifactFailed(health) && !force) {
-      return refuseUnverified(health, args, null);
+      return refuseUnverified(health, args, null, credential.ref);
     }
   }
 
@@ -250,7 +250,7 @@ export async function handler(args: {
     if (health.checked && everyArtifactFailed(health) && !force) {
       return refuseUnverified(health, args, {
         settingsUrl: credential.ref ? consoleProjectUrl(credential.ref, "settings/share-links", args.api) : null,
-      });
+      }, credential.ref);
     }
   }
 

@@ -175,7 +175,7 @@ export const TRACK_ACTS: Record<string, (call: TrackCall) => TrackPlan | null> =
 
     if (action === "get") return { track: { page: "build", target: { buildId } } };
     if (action === "logs") return { track: { page: "build", target: { buildId, browser: text(call.args.browser).toLowerCase() } } };
-    if (action === "rebuild") return { track: { page: "build", target: { buildId } } };
+    if (action === "rebuild" || action === "recheck") return { track: { page: "build", target: { buildId } } };
     if (action === "configure") return { track: { page: "build-settings" } };
     if (action === "create-channel") return { track: { page: "channels" } };
 

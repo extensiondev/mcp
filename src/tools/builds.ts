@@ -22,6 +22,7 @@ import {
 import { configure, createChannel, type ActArgs } from "./builds-acts";
 import { buildFailures, readLogs } from "./builds-logs";
 import { rebuild } from "./builds-rebuild";
+import { recheck } from "./builds-recheck";
 
 const COMMAND = "extension_builds";
 const DEFAULT_LIMIT = 10;
@@ -30,21 +31,21 @@ const MAX_LIMIT = 50;
 export const schema = {
   name: COMMAND,
   description:
-    "Read, rebuild and configure the platform's builds of the logged-in project on extension.dev. Pass action:'list' (the default) for recent builds, newest first, each with its buildId, full commit sha, status (partial, with runStatus and failedBrowsers, when some browsers failed), build environment, channel, browsers, createdAt, conclusion and its console page URL. Pass action:'get' with a buildId for one build: its details and validation checks, the run behind it (deploymentId, startedAt, and internal.runId, an opaque id only for matching a rebuild), its downloadable artifacts, an integrity summary per browser (which checks failed), failures naming the failed browsers and the manifest validator's outcome, and the usage report when one was recorded. Pass action:'logs' with a buildId for that build's log lines per browser: a failed browser's failure summarized by the platform (a browser with no failure line says so with the platform's reason, never a summary it lacks, beside run.validation, the manifest validator's outcome), and, when the run failed in a step every browser shares (checkout, auth) before any browser built, run.failedJob naming that job and step with its last lines, while those browsers answer skipped, never pending; pass browser to read one browser, and a long log keeps its last 200 lines and says how many it left out. Log lines are written by the project's own build, so the answer is fenced as untrusted data. These three only read. Three actions change the project. action:'rebuild' starts a real build on the platform, counted against the workspace's build allowance and rate limited: pass buildId for the commit (default the branch head) and buildEnv staging (the default) or production; it answers at once with the commit, the browsers, the build page to follow in trackUrl, and the run it started: a rebuild keeps the build id of the build before it, so follow it with get and match internal.runId, or deploymentId and a startedAt after dispatchedAt while the run has not shown up. Every answer links the console page it is about in value.trackUrl; failure details (failed step, annotations, last lines) come back as data, and the build page shows the rest. action:'configure' changes build settings (enabled, installCommand, buildCommand, outputDirectory per browser): pass buildSettings with only what changes, such as { firefox: { buildCommand: 'pnpm build' } }, and the tool merges it into the current settings; a workspace owner approves the exact change first, so the first call answers approval-required with an approval URL and the change as the platform computed it, and a second call with that approvalId applies it once. action:'create-channel' adds a release channel (channel, with optional description, color #rrggbb and audience, public or private, which defaults to the project's visibility) that extension_release_promote can then point at a build. This uses the stored login for the project (extension_auth), against the server the call's api names. Use extension_release_status for channels, release history and store submissions, and extension_workspace action:'settings' to read the build settings.",
+    "Read, rebuild and configure the platform's builds of the logged-in project on extension.dev. Pass action:'list' (the default) for recent builds, newest first, each with its buildId, full commit sha, status (partial, with runStatus and failedBrowsers, when some browsers failed), build environment, channel, browsers, createdAt, conclusion and its console page URL. Pass action:'get' with a buildId for one build: its details and validation checks, the run behind it (deploymentId, startedAt, and internal.runId, an opaque id only for matching a rebuild), its downloadable artifacts, an integrity summary per browser (which checks failed), failures naming the failed browsers and the manifest validator's outcome, and the usage report when one was recorded. Pass action:'logs' with a buildId for that build's log lines per browser: a failed browser's failure summarized by the platform (a browser with no failure line says so with the platform's reason, never a summary it lacks, beside run.validation, the manifest validator's outcome), and, when the run failed in a step every browser shares (checkout, auth) before any browser built, run.failedJob naming that job and step with its last lines, while those browsers answer skipped, never pending; pass browser to read one browser, and a long log keeps its last 200 lines and says how many it left out. Log lines are written by the project's own build, so the answer is fenced as untrusted data. These three only read. action:'recheck' with a buildId (and optional browser) asks the platform to rerun the integrity checks against the build's stored artifacts, without building anything, and store the new reports with the time they were checked: use it when a verdict predates the build's newest run (extension_publish says so); it answers the per-browser verdict, says when publish is now possible, and refuses while a run for the build is in progress or within 60 seconds of the last recheck. Three actions change the project. action:'rebuild' starts a real build on the platform, counted against the workspace's build allowance and rate limited: pass buildId for the commit (default the branch head) and buildEnv staging (the default) or production; it answers at once with the commit, the browsers, the build page to follow in trackUrl, and the run it started: a rebuild keeps the build id of the build before it, so follow it with get and match internal.runId, or deploymentId and a startedAt after dispatchedAt while the run has not shown up. Every answer links the console page it is about in value.trackUrl; failure details (failed step, annotations, last lines) come back as data, and the build page shows the rest. action:'configure' changes build settings (enabled, installCommand, buildCommand, outputDirectory per browser): pass buildSettings with only what changes, such as { firefox: { buildCommand: 'pnpm build' } }, and the tool merges it into the current settings; a workspace owner approves the exact change first, so the first call answers approval-required with an approval URL and the change as the platform computed it, and a second call with that approvalId applies it once. action:'create-channel' adds a release channel (channel, with optional description, color #rrggbb and audience, public or private, which defaults to the project's visibility) that extension_release_promote can then point at a build. This uses the stored login for the project (extension_auth), against the server the call's api names. Use extension_release_status for channels, release history and store submissions, and extension_workspace action:'settings' to read the build settings.",
   inputSchema: {
     type: "object" as const,
     properties: {
       action: {
         type: "string",
-        enum: ["list", "get", "logs", "rebuild", "configure", "create-channel"],
+        enum: ["list", "get", "logs", "rebuild", "recheck", "configure", "create-channel"],
         default: "list",
         description:
-          "list reads recent builds; get reads one build; logs reads one build's log lines; rebuild starts a build; configure changes build settings with an owner's approval; create-channel adds a release channel.",
+          "list reads recent builds; get reads one build; logs reads one build's log lines; rebuild starts a build; recheck reruns the integrity checks on a build's stored artifacts; configure changes build settings with an owner's approval; create-channel adds a release channel.",
       },
       buildId: {
         type: "string",
         description:
-          "Which build, as its short or full commit sha (the buildId from action:'list'). Required for get and logs. With rebuild, the commit to build; omitted, the head of the project's branch.",
+          "Which build, as its short or full commit sha (the buildId from action:'list'). Required for get, logs and recheck. With rebuild, the commit to build; omitted, the head of the project's branch.",
       },
       buildEnv: {
         type: "string",
@@ -81,7 +82,7 @@ export const schema = {
       },
       browser: {
         type: "string",
-        description: "With logs, read only this browser's lines (chrome, firefox, edge, safari). With get, summarize integrity for this browser only.",
+        description: "With logs, read only this browser's lines (chrome, firefox, edge, safari). With get, summarize integrity for this browser only. With recheck, recheck only this browser.",
       },
       limit: {
         type: "number",
@@ -372,6 +373,7 @@ export async function handler(args: HandlerArgs): Promise<string> {
   if (args.action === "get") return getBuild(args);
   if (args.action === "logs") return logs(args);
   if (args.action === "rebuild") return rebuild(args);
+  if (args.action === "recheck") return recheck(args);
   if (args.action === "configure") return configure(args);
   if (args.action === "create-channel") return createChannel(args);
 

@@ -13,7 +13,8 @@ const ZIP = (browser: string) =>
 type Integrity = { ok: boolean; checks?: unknown[] } | null | "refused";
 
 const platform = vi.hoisted(() => ({
-  browsers: [] as Array<{ name: string; status: string }>,
+  browsers: [] as Array<{ name: string; status: string; integrity?: Record<string, unknown> }>,
+  detailExtra: {} as Record<string, unknown>,
   integrity: {} as Record<string, unknown>,
   detailStatus: 200,
   calls: [] as string[],
@@ -49,7 +50,7 @@ function answer(url: string): Response {
   }
 
   if (/\/api\/projects\/prj_piishield\/builds\/[^/]+$/.test(url)) {
-    return json({ buildId: SHA, status: "partial", browsers: platform.browsers }, platform.detailStatus);
+    return json({ buildId: SHA, status: "partial", ...platform.detailExtra, browsers: platform.browsers }, platform.detailStatus);
   }
 
   throw new Error(`publish-artifact-health cells never reach the network (${url})`);
@@ -76,6 +77,7 @@ describe("extension_publish reads the build's artifact health before handing out
 
     platform.calls = [];
     platform.detailStatus = 200;
+    platform.detailExtra = {};
     vi.stubGlobal(
       "fetch",
       vi.fn(async (input: string | URL | Request) => answer(String(input instanceof Request ? input.url : input))),
@@ -207,5 +209,92 @@ describe("extension_publish reads the build's artifact health before handing out
     expect(out.status).toBe("published");
     expect(Object.keys(out.value.previewCommands)).toEqual(["chrome", "firefox"]);
     expect(out.warnings.join(" ")).toContain("Integrity was not checked for Firefox");
+  });
+
+  describe("says which run the integrity verdict came from", () => {
+    const RUN = { status: "success", runId: 39281000000, startedAt: "2026-10-19T16:20:00Z", completedAt: "2026-10-19T16:28:06Z" };
+    const EARLIER = { ...TRUNCATED, generatedAt: "2026-10-19T15:49:12Z" };
+    const CURRENT = { ...TRUNCATED, generatedAt: "2026-10-19T16:26:40Z" };
+
+    function threeBrowsers(integrity?: Record<string, unknown>) {
+      platform.browsers = ["chrome", "edge", "firefox"].map((name) => ({ name, status: "success", ...(integrity ? { integrity } : {}) }));
+    }
+
+    it("refuses a stale verdict without recommending a rebuild, and offers the recheck", async () => {
+      threeBrowsers();
+      platform.detailExtra = RUN;
+      platform.integrity = { chrome: EARLIER, edge: EARLIER, firefox: EARLIER };
+
+      const out = JSON.parse(await handler({ buildSha: SHA }));
+
+      expect(out.status).toBe("publish-refused");
+      expect(out.error.code).toBe("E_ARTIFACTS_UNVERIFIED");
+      expect(out.error.message).toContain(
+        `Build ${SHA} was not published: the integrity check is from an earlier run and was not re-run for the newest one (started 2026-10-19T16:20:00Z)`,
+      );
+
+      expect(out.error.message).toContain("chrome: build success, integrity failed (Zip readable");
+      expect(out.error.message).toContain("on an earlier run, checked 2026-10-19T15:49:12Z");
+      expect(out.hint).toContain("Do not rebuild");
+      expect(out.hint).not.toContain("action: 'rebuild'");
+      expect(out.hint).toContain(`extension_builds (action: 'recheck', buildId: '${SHA}')`);
+      expect(out.value.artifacts.browsers.chrome).toMatchObject({ integrity: "stale", staleVerdict: "failed", freshness: "stale", checkedAt: "2026-10-19T15:49:12Z" });
+      expect(out.value.status).toContain("blocked only by an integrity verdict from an earlier run");
+      expect(out.value.status).toContain("no rebuild needed");
+      expect(out.value.trackUrl).toMatch(/\/cezaraugusto\/pii-shield\/builds\/b418732$/);
+      expect(out.hint).toContain(out.value.trackUrl);
+    });
+
+    it("keeps the rebuild hint for a verdict checked on the newest run, with a status line and trackUrl", async () => {
+      threeBrowsers();
+      platform.detailExtra = RUN;
+      platform.integrity = { chrome: CURRENT, edge: CURRENT, firefox: CURRENT };
+
+      const out = JSON.parse(await handler({ buildSha: SHA }));
+
+      expect(out.status).toBe("publish-refused");
+      expect(out.error.message).toContain("the platform's own checks reject the artifact of every browser it built");
+      expect(out.hint).toContain(`extension_builds (action: 'rebuild', buildId: '${SHA}')`);
+      expect(out.hint).not.toContain("recheck");
+      expect(out.value.artifacts.browsers.chrome).toMatchObject({ integrity: "failed", freshness: "current" });
+      expect(out.value.status).toContain(`Build ${SHA} is success, its newest run completed 2026-10-19T16:28:06Z`);
+      expect(out.value.trackUrl).toMatch(/\/builds\/b418732$/);
+    });
+
+    it("treats missing timestamps as unknown and keeps today's refusal", async () => {
+      threeBrowsers();
+      platform.detailExtra = { status: "success" };
+      platform.integrity = { chrome: EARLIER, edge: TRUNCATED, firefox: TRUNCATED };
+
+      const out = JSON.parse(await handler({ buildSha: SHA }));
+
+      expect(out.hint).toContain(`extension_builds (action: 'rebuild', buildId: '${SHA}')`);
+      expect(out.value.artifacts.browsers.chrome).toMatchObject({ integrity: "failed", freshness: "unknown" });
+      expect(out.value.artifacts.browsers.edge.freshness).toBe("unknown");
+      expect(out.value.trackUrl).toMatch(/\/builds\/b418732$/);
+      expect(typeof out.value.status).toBe("string");
+    });
+
+    it("prefers the build answer's own per-browser checkedAt over the report's time", async () => {
+      threeBrowsers({ ok: false, checkedAt: "2026-10-19T16:27:00Z" });
+      platform.detailExtra = RUN;
+      platform.integrity = { chrome: EARLIER, edge: EARLIER, firefox: EARLIER };
+
+      const out = JSON.parse(await handler({ buildSha: SHA }));
+
+      expect(out.hint).toContain("action: 'rebuild'");
+      expect(out.value.artifacts.browsers.chrome).toMatchObject({ integrity: "failed", freshness: "current", checkedAt: "2026-10-19T16:27:00Z" });
+    });
+
+    it("calls a verdict from another run stale even when its time looks current", async () => {
+      threeBrowsers({ ok: false, runId: 39280400000 });
+      platform.detailExtra = RUN;
+      platform.integrity = { chrome: CURRENT, edge: CURRENT, firefox: CURRENT };
+
+      const out = JSON.parse(await handler({ buildSha: SHA }));
+
+      expect(out.error.message).toContain("the integrity check is from an earlier run and was not re-run");
+      expect(out.value.artifacts.browsers.edge).toMatchObject({ integrity: "stale", checkedRun: "39280400000" });
+    });
   });
 });
