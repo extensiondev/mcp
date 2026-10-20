@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- `extension_shares`'s description is cut from 2,153 to about 1,200 characters; each action's answer shape and the reconciliation counts moved into the `action` input description.
 - `extension_project_create`'s description is cut from 2,968 to about 1,900 characters; the grant's life, the resume file and the batch pacing moved into the `deviceCode` input description.
 - `extension_release_status`'s description is cut from 3,290 to about 1,600 characters, with each include's detail in the `include` input description, and `extension_release_promote`'s from 2,675 to about 2,050 on the same shape.
 - `extension_builds`'s description is cut from 4,371 to about 1,350 characters: the verb, the act contract, the two siblings and the two costs; each action's detail is in the `action` input description.
