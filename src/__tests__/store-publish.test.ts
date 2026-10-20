@@ -215,6 +215,29 @@ describe("extension_submit publish sends a Chrome draft to review after one appr
     expect(out.value.outcome.readProblem).toContain("answered 404");
   });
 
+  it("says a publish already on its way was not sent again, and never asks for an approval", async () => {
+    if (process.platform === "win32") return;
+
+    platform.login();
+    platform.routes[`POST ${PUBLISH}`] = () => ({
+      status: 409,
+      body: {
+        code: "PUBLISH_IN_FLIGHT",
+        message: "A publish of this draft was dispatched at 2026-10-20T12:30:00.000Z and the record has not confirmed the store's answer yet, so it was not dispatched again. Read the submission page before trying again.",
+        refusedBeforeApproval: true,
+      },
+    });
+
+    const out = JSON.parse(await submit({ action: "publish", browsers: ["chrome"], api: API }));
+
+    expect(out.ok).toBe(false);
+    expect(out.status).toBe("publish-refused");
+    expect(out.error.platformCode).toBe("PUBLISH_IN_FLIGHT");
+    expect(out.error.message).toContain("Nothing ran and no approval was requested.");
+    expect(out.hint).toContain("already on its way");
+    expect(platform.sent("POST", APPROVALS)).toHaveLength(0);
+  });
+
   it("refuses an item that is not linked before anyone is asked, and says how to link it", async () => {
     if (process.platform === "win32") return;
 

@@ -95,6 +95,8 @@ const HINTS: Record<string, string> = {
   NO_CHROME_DRAFT: "There is no Chrome draft to send yet. Submit a build with extension_submit (browsers: [\"chrome\"], dryRun: false); it lands as a draft, and publish sends that draft to review.",
   SUBMISSION_NOT_DRAFT: `Only a Chrome draft can be sent to review. Read each submission's state with ${STORES_READ}, or call publish with no submissionId to send the newest draft.`,
   PUBLISH_STORE_NOT_SUPPORTED: "Sending a draft to review is a Chrome Web Store act here; the other stores enter review when they are submitted.",
+  PUBLISH_IN_FLIGHT: `The publish you asked for is already on its way and nothing was dispatched again. Read the record with ${STORES_READ}, or call extension_submit {action: "status"} when it exists, and never send the draft again while it is on its way.`,
+  CANCEL_IN_FLIGHT: `The withdrawal you asked for is already on its way and nothing was dispatched again. Read the record with ${STORES_READ} before asking again.`,
   VERSION_NOT_AHEAD: "Pass a version above the current one, or a level instead of a version.",
   TESTING_WORKSPACE_READ_ONLY: "This is a testing workspace, which reads but does not change anything.",
 };
