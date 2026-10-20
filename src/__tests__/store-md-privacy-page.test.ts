@@ -10,7 +10,7 @@ import { API, PROJECT_ROUTE, useProjectRoutes } from "./fixtures/project-routes"
 
 const PREFLIGHT = (store: string) => `${PROJECT_ROUTE}/stores/${store}/submissions/preflight`;
 const LISTING = (store: string) => `${PROJECT_ROUTE}/stores/${store}/listing`;
-const HOSTED = "https://acme.extension.land/widget/privacy";
+const HOSTED = "https://privacy.extension.land/acme/widget";
 const SOURCE = "STORE.md Privacy and data use section";
 const SENTENCE = `privacy policy: published at ${HOSTED} from STORE.md's Privacy section; edit that section to change it`;
 const SECTION_LINE = 'privacy policy URL: not in STORE.md; add a "## Privacy and data use" section saying what the extension collects and, under it, the line "- Privacy policy attested: yes", and the platform publishes that section as a public privacy policy URL the stores can link';

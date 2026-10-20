@@ -78,7 +78,7 @@ export function privacyMissingLine(privacy: StoreMdPrivacy): string {
 export function hostedPrivacyPage(ref: { workspace: string; project: string }, platform?: Row | null): { url: string; derived: boolean } {
   const given = platform ? text(platform.privacyPageUrl) : "";
 
-  return given ? { url: given, derived: false } : { url: `https://${ref.workspace}.extension.land/${ref.project}/privacy`, derived: true };
+  return given ? { url: given, derived: false } : { url: `https://privacy.extension.land/${ref.workspace}/${ref.project}`, derived: true };
 }
 
 export const wantsHostedPrivacy = (local: LocalListing): boolean =>

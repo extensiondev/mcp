@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- The hosted privacy page's address is `https://privacy.extension.land/<workspace>/<project>`. `extension_submit` `action: "preflight"` and `action: "sync-listing"` derive that address when the platform's preflight read carries no `privacyPageUrl`, and the platform's own `privacyPageUrl` still wins when present; the `extension_submit` description names the same host. The earlier `https://<workspace>.extension.land/<project>/privacy` shape is gone because Cloudflare refuses a route with a wildcard inside the hostname.
+
 ## 10.15.1
 
 - `extension_release_status` store rows carry the platform stamp the mirror recorded: `lastSubmission` and each `submissionHistory` row answer `storeVersion: {packaged, displayed, source, buildNumber}` and `storeCrxVersion` (the version the store reported for the package) when the record holds them, so "which version did Chrome receive" is answered from the record instead of guessed from the manifest.
