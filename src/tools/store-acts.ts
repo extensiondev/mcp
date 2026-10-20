@@ -9,6 +9,7 @@
 import { ConsoleProjectPage } from "@extension.dev/urls/paths";
 
 import { awaitRecordedOutcome, dispatchedHint, linksOf, madeSentence, stampNow } from "../lib/act-outcome";
+import { approvalSubjectPhrase, subjectOf } from "../lib/approval-subject";
 import { envelope, isEnvelope } from "../lib/envelope";
 import { readSubmissionRecord, type PlatformSubmission } from "../lib/platform-submissions";
 import { consoleProjectUrl } from "../lib/registry";
@@ -85,7 +86,13 @@ function reworded(out: string, api: { ref: { workspace: string; project: string 
   if (parsed.status === "approval-required") {
     const approvalUrl = text(value.approvalUrl);
     const expiresAt = text(value.expiresAt);
-    const say = [approvalUrl ? `Approve it at ${approvalUrl}${expiresAt ? ` before ${expiresAt}` : ""}.` : "", PUBLISH_APPROVAL_SENTENCE].filter(Boolean).join(" ");
+    const phrase = approvalSubjectPhrase(subjectOf(value));
+    const say = [
+      approvalUrl ? `Approve ${phrase ? `sending ${phrase} to Chrome's review` : "it"} at ${approvalUrl}${expiresAt ? ` before ${expiresAt}` : ""}.` : "",
+      PUBLISH_APPROVAL_SENTENCE,
+    ]
+      .filter(Boolean)
+      .join(" ");
 
     return envelope({
       ok: parsed.ok,

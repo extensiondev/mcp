@@ -17,6 +17,7 @@ import { envelope, type ErrorCode } from "../lib/envelope";
 import { PROJECT_TOKEN_INPUT, noStoredLoginHint } from "../lib/credentials";
 import { resolveApiBase, safeApiBase } from "../lib/login-flow";
 import { identityHeaders } from "../lib/session-identity";
+import { REFUNDED_SAY, REFUNDED_STEP } from "../lib/ship-act";
 import { STORE_MD_FILENAME, parseStoreMd } from "../lib/store-md";
 import { platformHoldEnvelope, sawPlatformHold } from "../lib/platform-hold";
 import {
@@ -532,19 +533,25 @@ async function answer(args: SubmitToolArgs): Promise<string> {
       !dryRun && res.status >= 500 && !saidNothingDispatched;
     const BEFORE_APPROVAL = new Set(["BUILD_DISPATCH_DISABLED", "OWNER_REQUIRED", "TOKEN_ISSUER_UNKNOWN", "APPROVAL_REQUIRED", "APPROVAL_NOT_FOUND", "APPROVAL_SCOPE_MISMATCH", "APPROVAL_USED", "APPROVAL_EXPIRED"]);
     const platformCode = typeof data?.code === "string" ? data.code : "";
-    const approvalSpent = !dryRun && Boolean(body.approvalId) && res.status < 500 && data?.refusedBeforeApproval !== true && !BEFORE_APPROVAL.has(platformCode);
+    const approvalRefunded = !dryRun && Boolean(body.approvalId) && data?.approvalRefunded === true;
+    const approvalSpent = !dryRun && Boolean(body.approvalId) && res.status < 500 && data?.refusedBeforeApproval !== true && !BEFORE_APPROVAL.has(platformCode) && !approvalRefunded;
 
     return envelope({
       ok: false,
       command: "extension_submit",
       status: "submit-failed",
+      ...(approvalRefunded
+        ? { value: { browsers, buildSha, channel, approvalId: String(body.approvalId), approvalRefunded: true, sayToPerson: REFUNDED_SAY, nextStep: REFUNDED_STEP } }
+        : {}),
       error: {
         code: "E_PLATFORM",
         name: "SubmitError",
         message: `${dryRun ? "preflight" : "submit"} failed (${res.status}): ${data?.message || text || "unknown error"}`,
         ...(typeof data?.code === "string" ? { platformCode: data.code } : {}),
       },
-      ...(maybeDispatched
+      ...(approvalRefunded
+        ? { hint: `The platform could not start the store run and says nothing was dispatched, so the approval was not spent: call again with the same arguments and approvalId ${String(body.approvalId)}.` }
+        : maybeDispatched
         ? {
             hint: `The platform failed after the request was accepted, and it dispatches each store before it records it, so ${
               browsers.length === 1 ? browsers[0] : `one or more of ${  browsers.join(", ")}`

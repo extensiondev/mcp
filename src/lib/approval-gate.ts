@@ -8,6 +8,7 @@
 
 import crypto from "node:crypto";
 
+import { readApprovalSubject } from "./approval-subject";
 import { envelope } from "./envelope";
 import { resolveApiBase, safeApiBase } from "./login-flow";
 import { platformHoldEnvelope, sawPlatformHold } from "./platform-hold";
@@ -194,6 +195,7 @@ async function requestApproval(params: {
   const approvalId = String(data.approvalId || "").trim();
   const approvalUrl = String(data.approvalUrl || "").trim();
   const described = typeof data.description === "string" && data.description.trim() ? data.description.trim() : input.description;
+  const subject = readApprovalSubject(data.subject);
 
   if (!approvalId) {
     return block(
@@ -223,6 +225,7 @@ async function requestApproval(params: {
         approvalId,
         approvalUrl,
         ...(data.expiresAt ? { expiresAt: data.expiresAt } : {}),
+        ...(subject ? { subject } : {}),
         ...(Array.isArray(data.changes) ? { changes: data.changes.filter((line) => typeof line === "string") } : {}),
         expiredApproval: { approvalId: renewing.approvalId, status: APPROVAL_EXPIRED_STATUS, ...(renewing.expiresAt ? { expiresAt: renewing.expiresAt } : {}) },
         nextStep: { kind: "approve", say, url: approvalUrl },
@@ -248,6 +251,7 @@ async function requestApproval(params: {
       ...(approvalId ? { approvalId } : {}),
       ...(approvalUrl ? { approvalUrl } : {}),
       ...(data.expiresAt ? { expiresAt: data.expiresAt } : {}),
+      ...(subject ? { subject } : {}),
       ...(Array.isArray(data.changes) ? { changes: data.changes.filter((line) => typeof line === "string") } : {}),
     },
     approvalUrl

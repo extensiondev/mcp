@@ -55,6 +55,17 @@ export interface ShipAct {
   value?: Row;
 }
 
+/* @invariant A REFUSED DISPATCH THAT GAVE THE GRANT BACK IS A RETRY, NOT A
+ * FRESH ASK. The platform answers approvalRefunded true only when it proved
+ * nothing ran and deleted the grant's used marker, so the same approvalId
+ * spends once more; asking the owner again would be the second click day two
+ * paid for. The next step says so to the person and the hint to the agent.
+ */
+export const REFUNDED_SAY =
+  "The platform could not start it, so nothing ran and your approval still stands. Say try again and I run it again with the same approval.";
+
+export const REFUNDED_STEP = { kind: "retry", say: REFUNDED_SAY, url: null } as const;
+
 const ALLOWANCE = new Set(["burst_cap", "monthly_cap", "RATE_LIMITED"]);
 const UNSURE = new Set(["counter_unavailable", "entitlement_unavailable", "kill_switch", "unattributed"]);
 const STORES_READ = "extension_release_status (include: [\"stores\"])";
@@ -118,7 +129,8 @@ function refusal(act: ShipAct, read: ProjectApiRefusal, api: ProjectApi): string
           : "rate-limited"
         : refusedStatus(act.act);
   const code: ErrorCode = status === "bad-request" ? "E_BAD_REQUEST" : read.status === 403 ? "E_AUTH_DENIED" : "E_PLATFORM";
-  const spent = act.approvalId && !before;
+  const refunded = Boolean(act.approvalId) && body.approvalRefunded === true;
+  const spent = act.approvalId && !before && !refunded;
 
   return envelope({
     ok: false,
@@ -130,6 +142,7 @@ function refusal(act: ShipAct, read: ProjectApiRefusal, api: ProjectApi): string
       ...(act.value ?? {}),
       ...(before ? { refusedBeforeApproval: true } : {}),
       ...(read.retryAfterSeconds ? { retryAfterSeconds: read.retryAfterSeconds } : {}),
+      ...(refunded ? { approvalId: act.approvalId, approvalRefunded: true, sayToPerson: REFUNDED_SAY, nextStep: REFUNDED_STEP } : {}),
     },
     error: {
       code,
@@ -139,9 +152,11 @@ function refusal(act: ShipAct, read: ProjectApiRefusal, api: ProjectApi): string
     },
     ...(ownerOnly
       ? { hint: "Only a login approved by a workspace owner may do this. Ask an owner to sign in with extension_auth and run it, or to do it in the console." }
-      : hint
-        ? { hint }
-        : {}),
+      : refunded
+        ? { hint: `${hint ? `${hint} ` : ""}Nothing ran and the approval was not spent: call again with the same arguments and approvalId ${act.approvalId}.` }
+        : hint
+          ? { hint }
+          : {}),
     warnings: [spent ? `This call carried approvalId ${act.approvalId}, which the platform may have spent; read ${act.stateRead} before asking for a fresh one.` : null],
   });
 }

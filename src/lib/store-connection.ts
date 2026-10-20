@@ -8,6 +8,7 @@
 
 import { ConsoleProjectPage } from "@extension.dev/urls/paths";
 
+import { approvalSubjectPhrase, subjectOf } from "./approval-subject";
 import { consoleProjectUrl } from "./console-urls";
 import { envelope, isEnvelope } from "./envelope";
 import { isRow, text } from "./ship-act";
@@ -113,7 +114,13 @@ export function withApproveStep(out: string, promisesNoReview: boolean): string 
   if (!approvalUrl) return out;
 
   const expiresAt = text(value.expiresAt);
-  const say = [`Approve the submission at ${approvalUrl}${expiresAt ? ` before ${expiresAt}` : ""}.`, promisesNoReview ? REVIEW_PROMISE : ""].filter(Boolean).join(" ");
+  const phrase = approvalSubjectPhrase(subjectOf(value));
+  const say = [
+    `Approve ${phrase ? `submitting ${phrase}` : "the submission"} at ${approvalUrl}${expiresAt ? ` before ${expiresAt}` : ""}.`,
+    promisesNoReview ? REVIEW_PROMISE : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
 
   return envelope({
     ok: parsed.ok,

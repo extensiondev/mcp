@@ -51,6 +51,71 @@ describe("extension_submit publish sends a Chrome draft to review after one appr
     expect(out.hint).toContain("approvalId apr_p");
   });
 
+  it("names the extension, version and build in the approval step when the platform minted a subject", async () => {
+    if (process.platform === "win32") return;
+
+    platform.login();
+    platform.routes[`POST ${PUBLISH}`] = () => approvalRequired();
+    platform.routes[`POST ${APPROVALS}`] = () => ({
+      status: 201,
+      body: {
+        approvalId: "apr_p",
+        approvalUrl: `${API}/approve/apr_p`,
+        expiresAt: "2026-10-21T06:15:00.000Z",
+        subject: { extension: "PII Shield", version: "0.1.0", storeVersion: "0.1.0.3", buildSha: "111d167", store: "chrome" },
+      },
+    });
+
+    const out = JSON.parse(await submit({ action: "publish", browsers: ["chrome"], api: API }));
+
+    expect(out.status).toBe("approval-required");
+    expect(out.value.subject).toEqual({ extension: "PII Shield", version: "0.1.0", storeVersion: "0.1.0.3", buildSha: "111d167", store: "chrome" });
+    expect(out.value.nextStep.say).toBe(
+      `Approve sending PII Shield 0.1.0, build 111d167 to Chrome's review at ${API}/approve/apr_p before 2026-10-21T06:15:00.000Z. This sends the item to Chrome's review.`,
+    );
+  });
+
+  it("keeps the approval and says try again when the platform refused the dispatch and gave the grant back", async () => {
+    if (process.platform === "win32") return;
+
+    platform.login();
+    platform.routes[`POST ${PUBLISH}`] = () => ({
+      status: 502,
+      body: {
+        code: "PUBLISH_DISPATCH_FAILED",
+        message: "The platform could not start the Chrome review run, so nothing was sent to review: API rate limit exceeded. Nothing ran and your approval still stands; call again with the same approvalId.",
+        approvalRefunded: true,
+      },
+    });
+
+    const out = JSON.parse(await submit({ action: "publish", browsers: ["chrome"], approvalId: "apr_p", api: API }));
+
+    expect(out.ok).toBe(false);
+    expect(out.status).toBe("publish-refused");
+    expect(out.value).toMatchObject({ approvalId: "apr_p", approvalRefunded: true, nextStep: { kind: "retry", url: null } });
+    expect(out.value.nextStep.say).toContain("your approval still stands");
+    expect(out.hint).toContain("call again with the same arguments and approvalId apr_p");
+    expect(JSON.stringify(out.warnings ?? [])).not.toContain("may have spent");
+    expect(platform.sent("POST", APPROVALS)).toHaveLength(0);
+  });
+
+  it("still warns that the grant may be spent when the platform could not prove nothing ran", async () => {
+    if (process.platform === "win32") return;
+
+    platform.login();
+    platform.routes[`POST ${PUBLISH}`] = () => ({
+      status: 502,
+      body: { code: "PUBLISH_DISPATCH_FAILED", message: "The platform could not start the Chrome review run: socket hang up.", approvalRefunded: false },
+    });
+
+    const out = JSON.parse(await submit({ action: "publish", browsers: ["chrome"], approvalId: "apr_p", api: API }));
+
+    expect(out.status).toBe("publish-refused");
+    expect(out.value.approvalRefunded).toBeUndefined();
+    expect(out.value.nextStep).toBeUndefined();
+    expect(String(out.warnings?.[0] ?? "")).toContain("may have spent");
+  });
+
   const dispatched = () => ({
     body: { ok: true, dispatched: true, status: "in-review", store: "chrome", submissionId: "sub_2", version: "1.0.1", buildId: "b418732", itemUrl: ITEM_URL, trackUrl: TRACK_URL, dispatchedAt: "2026-10-20T12:37:00.000Z" },
   });
