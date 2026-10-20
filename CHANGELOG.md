@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 10.18.0
 
 - `extension_submit` `action: "preflight"` names the privacy policy URL STORE.md carries on the covers line and appends "STORE.md carries <url>; sync-listing writes it to the listing" to the platform's privacy warning, so the warning and the coverage never contradict each other.
 - The hosted privacy page is gone; the privacy policy URL is the developer's own address in STORE.md (`- Privacy policy URL: <address>` under `## Privacy and data use`), and `extension_submit` `action: "preflight"` names that line when it is missing. `storeMd.privacyPolicy`, `privacyPageUrl` and the privacy link kind are no longer answered.
