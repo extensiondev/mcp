@@ -68,7 +68,7 @@ const RDP_ACTOR_NOTE =
 export const schema = {
   name: "extension_dom_snapshot",
   description:
-    "Take a shallow structured DOM snapshot of one chosen surface through the agent bridge (localhost only; the snapshot itself needs no CDP, but listTargets and `tabUrl` resolution ask the browser directly and need the session's debug port: CDP page targets on Chromium, RDP tab descriptors on Firefox): element counts, extension roots, open shadow roots, optional byte-capped HTML, and optional recent console lines. This is the SURFACE PICKER: the only tool that reads an open extension surface by name (`context`: popup, options, sidebar, devtools) or an override page, the only one that takes a numeric chrome.tabs id, and the only one that enumerates what is open (listTargets for CDP targetIds and RDP tab actors, listTabs for numeric tab ids). Pass `targetId` (the target.targetId extension_open answers, or one from listTargets) to read that exact page over the debug port. A `tabUrl` that matches several tabs showing the same page reads the most recently active one and warns; one that matches different pages returns the candidates, with their targetIds, instead of guessing. It does not pierce closed shadow roots, run selector probes, or navigate: use extension_inspect for those, and for a deep read of an already-open web page. For the pixels of a surface or page, use extension_screenshot. Rides the dev session's control channel, on unless extension_dev was called with allowControl:false. On Firefox, a surface or extension page the bridge cannot reach (an extension_start session's pages carry no relay) is read over the debugger protocol from the tab showing it.",
+    "Take a shallow structured DOM snapshot of one chosen surface: element counts, extension roots, open shadow roots, optional byte-capped HTML, and optional recent console lines. This is the SURFACE PICKER: the only tool that reads an open extension surface by name (`context`: popup, options, sidebar, devtools) or an override page, the only one that takes a numeric chrome.tabs id, and the only one that enumerates what is open (listTargets for targetIds, listTabs for numeric tab ids). Pass `targetId` (the target.targetId extension_open answers, or one from listTargets) to read that exact page over the debug port. Not for closed shadow roots, selector probes, navigation or a deep read of an open web page: that is extension_inspect. Not for the pixels: that is extension_screenshot. The snapshot rides the agent bridge (localhost only, on unless extension_dev was called with allowControl:false) and needs no CDP; listTargets and `tabUrl` resolution ask the browser directly and need the session's debug port.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -78,7 +78,7 @@ export const schema = {
       tabUrl: {
         type: "string",
         description:
-          "Target the tab whose URL contains this substring (case-insensitive; titles checked only when no url matches). Resolved against the live browser first: exactly one match proceeds, zero or several return the candidates instead of a guess. Alternative to `url`.",
+          "Pick the tab by url through the browser's own target list (needs the session's debug port: CDP page targets on Chromium, RDP tab descriptors on Firefox). One that matches several tabs showing the same page reads the most recently active one and warns; one that matches different pages returns the candidates, with their targetIds, instead of guessing.",
       },
       targetId: TARGET_ID_PROPERTY,
       listTargets: {
@@ -98,7 +98,7 @@ export const schema = {
         enum: ["content", "page", "popup", "options", "sidebar", "devtools", "newtab", "history", "bookmarks"],
         default: "content",
         description:
-          "content/page targets `url`, else the active tab; the rest must already be OPEN",
+          "content/page targets `url`, else the active tab; the rest (popup, options, sidebar, devtools, newtab, history, bookmarks) must already be OPEN, by extension_open. On Firefox, a surface or extension page the bridge cannot reach (an extension_start session's pages carry no relay) is read over the debugger protocol from the tab showing it.",
       },
       include: {
         type: "array",

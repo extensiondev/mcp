@@ -15,7 +15,7 @@ import { TARGET_ID_PROPERTY } from "../lib/target-pick";
 export const schema = {
   name: "extension_inspect",
   description:
-    "Inspect a running extension deeply over the browser's debugger protocol: full HTML (open shadow roots of #extension-root and [data-extension-root] hosts inlined; other shadow roots are not crossed by html, dom_snapshot or probe), DOM structure, content-script injection, console messages, and CSS selector queries through `probe`. This is the ONLY tool that pierces closed shadow roots (deepDom), runs selector probes, and navigates a tab to `url` before reading it. It reads a web or override page and picks the first inspectable target, or the first whose url contains `url`; pass `targetId` (the target.targetId extension_open answers, or one from extension_dom_snapshot listTargets) to read that exact page without navigating, which is the way to pick one of several tabs showing the same url (a url match reads the most recently active one and warns). It cannot address an extension surface by name and takes no chrome.tabs id. Use extension_dom_snapshot to choose which tab or which open surface (popup, options, sidebar, devtools) to read, or to enumerate what is open. Use extension_analyze for a built extension's files and sizes on disk. Chromium rides the Chrome DevTools Protocol and needs the session's debug port, not allowControl. Firefox is fully paired: summary, meta, html, dom_snapshot, extension_roots and probes ride the agent bridge and need allowEval:true, console rides the RDP watcher replay on engine 4.0.15 and later, and deepDom needs an MV2 session with host permissions for the target url, because the Firefox MV3 background CSP blocks bridge evals. This requires an active dev or start session.",
+    "Inspect a running extension deeply over the browser's debugger protocol: full HTML (open shadow roots of the extension-root hosts inlined; other shadow roots are not crossed by html, dom_snapshot or probe), DOM structure, content-script injection, console messages, and CSS selector queries through `probe`. This is the ONLY tool that pierces closed shadow roots (deepDom), runs selector probes, and navigates a tab to `url` before reading it. It reads a web or override page: the first inspectable target, the first whose url contains `url`, or the exact page `targetId` names (the target.targetId extension_open answers, or one from extension_dom_snapshot listTargets) without navigating. Not for an extension surface by name (popup, options, sidebar, devtools) or a chrome.tabs id, and not for enumerating what is open: that is extension_dom_snapshot. Not for a built extension's files on disk: that is extension_analyze. Chromium rides the Chrome DevTools Protocol and needs the session's debug port, not allowControl; on Firefox the reads ride the agent bridge and need allowEval:true (console rides the RDP watcher replay on engine 4.0.15 and later). This requires an active dev or start session.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -23,7 +23,7 @@ export const schema = {
       url: {
         type: "string",
         description:
-          "URL to inspect; the tab is navigated there first",
+          "Navigate the picked tab here before reading, or, with no navigation wanted, the substring the target's url must contain; a url that matches several tabs showing the same page reads the most recently active one and warns with the others' targetIds, so pass `targetId` to pick one exactly.",
       },
       targetId: TARGET_ID_PROPERTY,
       probe: {

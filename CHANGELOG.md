@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- `extension_inspect` (1,625 to about 1,300), `extension_dom_snapshot` (1,578 to about 1,200), `extension_start` (1,433 to about 1,250) and `extension_create` (1,414 to about 1,350) are cut on the same shape, with the picking rules in the `url`, `tabUrl`, `context` and `allowControl` input descriptions.
 - `extension_auth` (1,946 to about 1,700), `extension_eval` (3,370 to about 1,600), `extension_wait` (2,248 to about 1,900) and `extension_open` (1,939 to about 1,000) are cut on the same shape; the per-context routes, the per-action answers and the per-surface behavior moved into the `context`, `action` and `surface` input descriptions.
 - `extension_shares`'s description is cut from 2,153 to about 1,200 characters; each action's answer shape and the reconciliation counts moved into the `action` input description.
 - `extension_project_create`'s description is cut from 2,968 to about 1,900 characters; the grant's life, the resume file and the batch pacing moved into the `deviceCode` input description.
