@@ -74,6 +74,9 @@ export interface LocalListing {
   privacy: StoreMdPrivacy;
 }
 
+export const privacyCoveredLine = (url: string): string =>
+  `privacy policy URL found in ${STORE_MD_FILENAME} (${url}), not yet in the console listing; sync-listing writes it`;
+
 export const privacyMissingLine = (): string =>
   `privacy policy URL: not in ${STORE_MD_FILENAME}; add \`- Privacy policy URL: <address>\` under \`## Privacy and data use\``;
 
@@ -147,9 +150,7 @@ export function storeMdAdvisory(local: LocalListing, checks: Row[]): Row {
 
     if (/privacy_policy_present$/.test(id)) {
       if (listing.privacyPolicyUrl !== undefined) {
-        covers.push(
-          `privacy policy URL found in ${STORE_MD_FILENAME}, not yet in the console listing`,
-        );
+        covers.push(privacyCoveredLine(text(listing.privacyPolicyUrl)));
       } else notCovered.push(privacyMissingLine());
 
       continue;

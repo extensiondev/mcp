@@ -445,6 +445,28 @@ function summaryWithout(summary: Row, deferred: Row[], checks: Row[]): Row {
   };
 }
 
+function privacyReconciled(
+  check: Row,
+  local: ReturnType<typeof readLocalListing> | null,
+): Row {
+  if (
+    !local ||
+    "problem" in local ||
+    !/privacy_policy_present$/.test(text(check.id))
+  ) {
+    return check;
+  }
+
+  const url = text(local.patch.listing.privacyPolicyUrl);
+  if (!url) return check;
+
+  return {
+    ...check,
+    message:
+      `${text(check.message)} STORE.md carries ${url}; sync-listing writes it to the listing.`.trim(),
+  };
+}
+
 function readinessView(
   json: Row,
   store: string,
@@ -472,7 +494,7 @@ function readinessView(
   const connection = connectionOf(json);
   const failing = checks
     .filter((c) => text(c.status) === "fail")
-    .map((c) => checkView(c, true));
+    .map((c) => checkView(privacyReconciled(c, local), true));
 
   return {
     canSubmit:
@@ -484,7 +506,7 @@ function readinessView(
     failing,
     warnings: checks
       .filter((c) => text(c.status) === "warn")
-      .map((c) => checkView(c, true)),
+      .map((c) => checkView(privacyReconciled(c, local), true)),
     ...(local
       ? {
           storeMd:

@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- `extension_submit` `action: "preflight"` names the privacy policy URL STORE.md carries on the covers line and appends "STORE.md carries <url>; sync-listing writes it to the listing" to the platform's privacy warning, so the warning and the coverage never contradict each other.
 - The hosted privacy page is gone; the privacy policy URL is the developer's own address in STORE.md (`- Privacy policy URL: <address>` under `## Privacy and data use`), and `extension_submit` `action: "preflight"` names that line when it is missing. `storeMd.privacyPolicy`, `privacyPageUrl` and the privacy link kind are no longer answered.
 - `extension_inspect` (1,625 to about 1,300), `extension_dom_snapshot` (1,578 to about 1,200), `extension_start` (1,433 to about 1,250) and `extension_create` (1,414 to about 1,350) are cut on the same shape, with the picking rules in the `url`, `tabUrl`, `context` and `allowControl` input descriptions.
 - `extension_auth` (1,946 to about 1,700), `extension_eval` (3,370 to about 1,600), `extension_wait` (2,248 to about 1,900) and `extension_open` (1,939 to about 1,000) are cut on the same shape; the per-context routes, the per-action answers and the per-surface behavior moved into the `context`, `action` and `surface` input descriptions.

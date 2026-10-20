@@ -405,6 +405,61 @@ describe("extension_submit sync-listing and the preflight advisory", () => {
 
     expect(out.hint).toContain('action:"sync-listing"');
   });
+
+  it("names the policy URL STORE.md carries on the covers line and on the platform's privacy warning", async () => {
+    if (process.platform === "win32") return;
+
+    const root = project();
+    fs.writeFileSync(
+      path.join(root, "STORE.md"),
+      STORE_MD.replace(
+        "- Privacy policy URL: TODO. Not strictly required.",
+        "- Privacy policy URL: https://example.com/privacy",
+      ),
+    );
+
+    platform.login();
+    platform.routes[`POST ${PREFLIGHT("chrome")}`] = () => ({
+      body: {
+        summary: { canSubmit: true },
+        checks: [
+          {
+            id: "listing.privacy_policy_present",
+            status: "warn",
+            message:
+              "privacy policy URL: not set; add `- Privacy policy URL: <address>` under `## Privacy and data use` in STORE.md.",
+          },
+          { id: "listing.title_present", status: "pass" },
+        ],
+      },
+    });
+
+    const out = JSON.parse(
+      await submit({
+        action: "preflight",
+        browsers: ["chrome"],
+        projectPath: root,
+        api: API,
+      }),
+    );
+    const chrome = out.value.stores.chrome;
+
+    expect(chrome.storeMd.covers).toContain(
+      "privacy policy URL found in STORE.md (https://example.com/privacy), not yet in the console listing; sync-listing writes it",
+    );
+
+    expect(
+      chrome.storeMd.notCovered.some((line: string) =>
+        line.startsWith("privacy policy URL"),
+      ),
+    ).toBe(false);
+
+    expect(chrome.warnings[0].message).toBe(
+      "privacy policy URL: not set; add `- Privacy policy URL: <address>` under `## Privacy and data use` in STORE.md. STORE.md carries https://example.com/privacy; sync-listing writes it to the listing.",
+    );
+
+    expect(JSON.stringify(out)).not.toMatch(/attested|hosted|PRIVACY\.md/);
+  });
 });
 
 function digestOf(body: {
