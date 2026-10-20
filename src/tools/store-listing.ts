@@ -11,6 +11,7 @@ import path from "node:path";
 
 import { ConsoleProjectPage } from "@extension.dev/urls/paths";
 
+import { linksOf, madeSentence, recordedOutcome, trackLinks, unrecordedOutcome } from "../lib/act-outcome";
 import { envelope } from "../lib/envelope";
 import { consoleProjectUrl } from "../lib/registry";
 import { projectApiReadFailure, projectApiSend, tokenRefusal, type ProjectApi } from "../lib/project-api";
@@ -279,6 +280,7 @@ export async function syncListing(args: ListingArgs): Promise<string> {
   const api = opened.api;
   const stores: Row = {};
   const hostedByStore = new Map<ListingStore, HostedPrivacy>();
+  const unreadBack: string[] = [];
 
   for (const [store, local] of locals) {
     if (!wantsHostedPrivacy(local)) continue;
@@ -299,6 +301,7 @@ export async function syncListing(args: ListingArgs): Promise<string> {
 
     const done = result.status === "synced" || result.status === "unchanged";
     const blocking = done ? await stillBlocking(api, store) : null;
+    if (done && blocking === null) unreadBack.push(store);
 
     const hosted = hostedByStore.get(store);
 
@@ -347,11 +350,32 @@ export async function syncListing(args: ListingArgs): Promise<string> {
     });
   }
 
+  const synced = rows.filter((row) => row.status === "synced").map((row) => text(row.store));
+  const links = linksOf([
+    ...trackLinks(COMMAND, { ...args, action: ACT } as Row, "listing-synced", value),
+    ...[...new Set([...hostedByStore.values()].map((hosted) => hosted.url))].map((url) => ({ kind: "privacy" as const, url })),
+  ]);
+  const recorded = unreadBack.length === 0;
+  const outcome = recorded
+    ? recordedOutcome(synced.length ? "synced" : "unchanged")
+    : unrecordedOutcome(`the listing of ${unreadBack.join(", ")} could not be read back after the write`);
+  const made = madeSentence(links);
+
+  if (!recorded) {
+    return envelope({
+      ok: true,
+      command: COMMAND,
+      status: `${ACT}-dispatched`,
+      value: { ...value, outcome, links },
+      hint: `${privacyLine}The platform accepted the listing change for ${synced.join(", ") || asked.join(", ")}, and its record could not be read back yet (${outcome.readProblem}); extension_submit action:"preflight" reads what each store carries and still needs. ${made}`,
+    });
+  }
+
   return envelope({
     ok: true,
     command: COMMAND,
     status: "listing-synced",
-    value,
-    hint: `${privacyLine}${blockingLine ? `${blockingLine}. ` : ""}The listing on extension.dev now carries what ${STORE_MD_FILENAME} and the build cover; extension_submit action:"preflight" reads what each store still needs, and a submission sends it.`,
+    value: { ...value, outcome, links },
+    hint: `${privacyLine}${blockingLine ? `${blockingLine}. ` : ""}The listing on extension.dev now carries what ${STORE_MD_FILENAME} and the build cover, read back from the platform's record; extension_submit action:"preflight" reads what each store still needs, and a submission sends it. ${made}`,
   });
 }

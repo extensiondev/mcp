@@ -6,8 +6,10 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
+import { WAIT_SECONDS_INPUT, dispatchedHint, linksOf, madeSentence, stampNow } from "../lib/act-outcome";
 import { API_BASE } from "../lib/common-schema";
 import { resolveCredential } from "../lib/credential-source";
+import { shareLinks, shareOutcome } from "../lib/share-outcome";
 import { envelope, type ErrorCode } from "../lib/envelope";
 import { spendNarration } from "../lib/allowance";
 import { publish } from "../lib/publish";
@@ -27,19 +29,13 @@ import { probeSharePage } from "../lib/share-page-probe";
 import { trackFields } from "../lib/track-url";
 import { everyArtifactFailed, readBuildHealth, type BuildHealth } from "../lib/build-health";
 import { applyArtifactHealth, refuseUnverified } from "../lib/publish-artifacts";
-import {
-  consoleProjectUrl,
-  fetchRegistryJson,
-  isSuccessfulBuild,
-  parseBuildIndex,
-  registryFileUrl,
-  buildIndexShapeProblem,
-} from "../lib/registry";
+import { fillFromBuildIndex } from "../lib/publish-build-index";
+import { consoleProjectUrl } from "../lib/registry";
 
 export const schema = {
   name: "extension_publish",
   description:
-    "Publish a build of the project your stored token is scoped to (extension_auth, or EXTENSION_DEV_TOKEN) on extension.dev, and return the link to send testers, which opens a page with a download and a run command for each browser. Reach for this first whenever the ask is to share, publish, deploy, distribute, release or ship an extension, or to send it to testers; extension_submit is the separate store-review path, and extension_preview_web share:true is a quick emulator link beside this one. An extension with no project on extension.dev yet starts with extension_project_create, which makes one from its GitHub repository, then extension_auth. The target is the token's project: there is no projectPath, and no local file is uploaded. With several logins stored, pass `project` ('<workspace>/<project>') to pick which one; it outranks EXTENSION_DEV_TOKEN. There are two links. A build link opens one build, <workspace>.extension.dev/<project>/builds/<sha> (pass buildSha, which extension_builds lists, or the newest successful build is linked); on a private project it carries a share token and expires, its lifetime ttlHours: 7 days by default, and up to the plan's share window (30 days free, 365 Pro) when asked. A channel link, <workspace>.extension.dev/<project>/channels/<channel>, always opens a channel's newest build and never expires; a public project gets one in value.channelUrl when a release channel serves the build, and later a public channel of a private project will too. On a public project, or a public channel, send testers the channel link; otherwise send the build link and tell them the date it stops working. A private project gets no channel link: value.channelUrlWithheld says why. A project's visibility is set in its extension.dev project settings, not its GitHub repository. In the answer, value.link is the link to send (kind build or channel, url, id, the share id or null when the platform minted no short link, expiresAt as an ISO date or null, pointsAt, audience, scope, and renewBy, the call that mints a fresh one, on a private project), value.links lists every link this build has, value.tellThem is the message to send as written, at most three lines and never a share token once the platform mints short links, value.notes holds short answers for follow-up questions (other browsers, quoting, where share links are listed, a link that never expires), value.trackUrl is the console Share links page, value.clamped says the platform cut ttlHours back to the plan's window, and value.projectVisibility names where visibility is set and, on a private project, makeEvergreen, the console page that gives a link that never expires. Before handing out a link it reads the build's per-browser status and integrity, as extension_builds get does, into value.artifacts: a build whose every browser artifact failed is refused with status publish-refused, naming each browser's verdict and extension_builds rebuild, unless force is true; when only some failed, it publishes with a warning naming them, leaves them out of previewCommands, and tellThem says which browsers the link is good for; a platform that reports no integrity gets a warning that it was not checked. Before telling anyone to open the link it checks that the page answers: while extension.dev is not open to the public the page answers the platform's hold page, and then the status is platform-held, value.sharePage says the page is not open yet, and tellThem adds the Chrome run command, which works now.",
+    "Publish a build of the project your stored token is scoped to (extension_auth, or EXTENSION_DEV_TOKEN) on extension.dev, and return the link to send testers, which opens a page with a download and a run command for each browser. Reach for this first whenever the ask is to share, publish, deploy, distribute, release or ship an extension, or to send it to testers; extension_submit is the separate store-review path, and extension_preview_web share:true is a quick emulator link beside this one. An extension with no project on extension.dev yet starts with extension_project_create, which makes one from its GitHub repository, then extension_auth. The target is the token's project: there is no projectPath, and no local file is uploaded. With several logins stored, pass `project` ('<workspace>/<project>') to pick which one; it outranks EXTENSION_DEV_TOKEN. There are two links. A build link opens one build, <workspace>.extension.dev/<project>/builds/<sha> (pass buildSha, which extension_builds lists, or the newest successful build is linked); on a private project it carries a share token and expires, its lifetime ttlHours: 7 days by default, and up to the plan's share window (30 days free, 365 Pro) when asked. A channel link, <workspace>.extension.dev/<project>/channels/<channel>, always opens a channel's newest build and never expires; a public project gets one in value.channelUrl when a release channel serves the build, and later a public channel of a private project will too. On a public project, or a public channel, send testers the channel link; otherwise send the build link and tell them the date it stops working. A private project gets no channel link: value.channelUrlWithheld says why. A project's visibility is set in its extension.dev project settings, not its GitHub repository. In the answer, value.link is the link to send (kind build or channel, url, id, the share id or null when the platform minted no short link, expiresAt as an ISO date or null, pointsAt, audience, scope, and renewBy, the call that mints a fresh one, on a private project), value.links lists every link this build has, value.tellThem is the message to send as written, at most three lines and never a share token once the platform mints short links, value.notes holds short answers for follow-up questions (other browsers, quoting, where share links are listed, a link that never expires), value.trackUrl is the console Share links page, value.clamped says the platform cut ttlHours back to the plan's window, and value.projectVisibility names where visibility is set and, on a private project, makeEvergreen, the console page that gives a link that never expires. Before handing out a link it reads the build's per-browser status and integrity, as extension_builds get does, into value.artifacts: a build whose every browser artifact failed is refused with status publish-refused, naming each browser's verdict and extension_builds rebuild, unless force is true; when only some failed, it publishes with a warning naming them, leaves them out of previewCommands, and tellThem says which browsers the link is good for; a platform that reports no integrity gets a warning that it was not checked. Before telling anyone to open the link it checks that the page answers: while extension.dev is not open to the public the page answers the platform's hold page, and then the status is platform-held, value.sharePage says the page is not open yet, and tellThem adds the Chrome run command, which works now. The answer reports what the platform recorded in value.outcome {recorded, status, storeState, checkedAt, source: 'platform-record'}: the share record is read back by the link's short id for up to waitSeconds (default 180, 0 to 600), the status is published only when that record confirms the link, and publish-dispatched with outcome.recorded false when it has not yet (or when the platform minted no short id to read). value.links lists every link the call made or touched as {kind, url, audience, expiresAt, made}, the tester link with made true, and the hint names the made links in one Made sentence.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -59,6 +55,7 @@ export const schema = {
         description:
           "Publish even when the platform's checks reject every browser's artifact of the build (integrity failed or the browser build failed). Without it such a build is refused with E_ARTIFACTS_UNVERIFIED; with it the link is minted and the answer still warns and names the failed browsers.",
       },
+      waitSeconds: WAIT_SECONDS_INPUT,
       api: API_BASE,
     },
     required: [],
@@ -98,6 +95,7 @@ export async function handler(args: {
   ttlHours?: number;
   buildSha?: string;
   force?: boolean;
+  waitSeconds?: unknown;
   api?: string;
 }): Promise<string> {
   const credential = resolveCredential({ project: args.project, api: args.api });
@@ -271,82 +269,8 @@ export async function handler(args: {
       "ttlHours was ignored: this is a public project, so its build link never expires.";
   }
 
-  let buildNote: string | null = null;
-
   const ref = credential.ref;
-
-  if (ref) {
-    const buildsUrl = registryFileUrl(ref, "builds/index.json", args.api);
-    const buildsRes = await fetchRegistryJson(buildsUrl, fetch, {
-      ref,
-      api: args.api,
-    });
-
-    if (buildsRes.ok && buildIndexShapeProblem(buildsRes.json)) {
-      buildNote = `The project's build index at ${buildsUrl} answered but ${buildIndexShapeProblem(buildsRes.json)}, so buildSha, version and builtAt were not filled in from it.`;
-    } else if (buildsRes.ok) {
-      const items = parseBuildIndex(buildsRes.json);
-
-      if (args.buildSha) {
-        const pin = String(args.buildSha).toLowerCase();
-        const pinned = items.find((item) => {
-          const sha = item.sha.toLowerCase();
-          const commit = String(item.commit ?? "").toLowerCase();
-
-          return (
-            sha.startsWith(pin) ||
-            pin.startsWith(sha) ||
-            (commit !== "" && (commit.startsWith(pin) || pin.startsWith(commit)))
-          );
-        });
-
-        if (pinned) {
-          if (data.buildSha == null) data.buildSha = pinned.sha;
-
-          if (data.builtAt == null && pinned.timestamp)
-            {data.builtAt = pinned.timestamp;}
-
-          if (data.version == null && pinned.version)
-            {data.version = pinned.version;}
-
-          if (data.channel == null && pinned.channel)
-            {data.channel = pinned.channel;}
-
-          data.registryUrl = buildsUrl;
-        } else {
-          if (data.buildSha == null) data.buildSha = args.buildSha;
-
-          data.registryUrl = buildsUrl;
-          buildNote = `buildSha ${args.buildSha} is pinned but was not found in the project's registry build index, so builtAt/version/channel are not filled in from another build. The platform accepted the pin without reading its own index (it echoes the sha when the index is unreadable), so whether a build with that sha exists was not verified here.`;
-        }
-      } else {
-        const newestSuccess = items
-          .filter(isSuccessfulBuild)
-          .sort((a, b) =>
-            String(b.timestamp ?? "").localeCompare(String(a.timestamp ?? "")),
-          )[0];
-        const platformSha = typeof data.buildSha === "string" && data.buildSha ? String(data.buildSha).toLowerCase() : null;
-        const served = platformSha
-          ? items.find((item) => item.sha.toLowerCase().startsWith(platformSha) || platformSha.startsWith(item.sha.toLowerCase()))
-          : newestSuccess;
-
-        if (served) {
-          if (data.buildSha == null) data.buildSha = served.sha;
-          if (data.builtAt == null && served.timestamp) data.builtAt = served.timestamp;
-          if (data.version == null && served.version) data.version = served.version;
-          if (data.channel == null && served.channel) data.channel = served.channel;
-
-          data.registryUrl = buildsUrl;
-          buildNote = platformSha
-            ? `builtAt/version are read from the index row of build ${served.sha}, the build the platform says the link serves.`
-            : "The platform named no build for this link; buildSha/builtAt/version describe the newest successful build in the project's registry index, which is what an unpinned link is expected to serve. Pin buildSha to serve a specific build.";
-        } else if (platformSha) {
-          data.registryUrl = buildsUrl;
-          buildNote = `The platform says the link serves build ${data.buildSha}, which the project's registry index does not list, so builtAt and version were not filled in from another build.`;
-        }
-      }
-    }
-  }
+  const buildNote = await fillFromBuildIndex(data, args.buildSha, ref, args.api);
 
   let channelNote: string | null = null;
   let serving: string | null = null;
@@ -408,6 +332,20 @@ export async function handler(args: {
 
   if (track) Object.assign(data, track);
 
+  const acceptedAt = stampNow();
+  const isPublic = data.visibility === "public";
+  const shareId = send.kind === "build" && send.id ? String(send.id) : typeof data.shareId === "string" ? data.shareId : "";
+  const { outcome, expiresAt: recordedExpiry } = await shareOutcome({ data, ref, shareId, noBuild, waitSeconds: args.waitSeconds, api: args.api });
+  if (recordedExpiry && data.expiresAt == null) data.expiresAt = recordedExpiry;
+
+  const links = linksOf(shareLinks(data, track, !isPublic && !noBuild));
+  data.outcome = outcome;
+  data.links = links;
+
+  const made = madeSentence(links);
+  const unconfirmed = !outcome.recorded && !noBuild
+    ? dispatchedHint({ acceptedAt, trackUrl: track?.trackUrl ?? String(sendUrl ?? ""), readHow: "the link itself reads it: a page that opens is a recorded share, and not found means the record is not there" })
+    : null;
   const watch = track
     ? `Watch it at ${track.trackUrl}${track.trackLinks?.[1] ? `, and the build at ${track.trackLinks[1]}` : ""}.`
     : null;
@@ -420,7 +358,7 @@ export async function handler(args: {
       : short
         ? "Send value.tellThem to the person as written."
         : "Send value.tellThem to the person as written; its link is long because the platform has not minted a short one yet.";
-  const hint = [what, watch].filter(Boolean).join(" ");
+  const hint = [unconfirmed, what, watch, made].filter(Boolean).join(" ");
 
   if (held && sharePage) {
     const answer = `${sharePage.status}${sharePage.retryAfter ? `, retry-after ${sharePage.retryAfter}` : ""}`;
@@ -449,7 +387,7 @@ export async function handler(args: {
   return envelope({
     ok: true,
     command: "extension_publish",
-    status: noBuild ? "published-without-build" : "published",
+    status: noBuild ? "published-without-build" : outcome.recorded ? "published" : "publish-dispatched",
     value: data,
     warnings: [noBuildNote, artifactNote, note, buildNote, channelNote, credential.note],
     hint,

@@ -142,7 +142,7 @@ describe("extension_publish reads the build's artifact health before handing out
     const out = JSON.parse(await handler({ buildSha: SHA }));
 
     expect(out.ok).toBe(true);
-    expect(out.status).toBe("published");
+    expect(out.status).toBe("publish-dispatched");
     expect(Object.keys(out.value.previewCommands)).toEqual(["chrome", "edge"]);
     expect(out.hint).not.toContain("firefox.zip");
     expect(out.value.notes.join(" ")).toContain("replace chrome with its name");
@@ -162,7 +162,7 @@ describe("extension_publish reads the build's artifact health before handing out
     const out = JSON.parse(await handler({ buildSha: SHA, force: true }));
 
     expect(out.ok).toBe(true);
-    expect(out.status).toBe("published");
+    expect(out.status).toBe("publish-dispatched");
     expect(out.value.previewCommands).toEqual({});
     expect(out.hint).not.toContain("without opening the share page");
     expect(out.warnings.join(" ")).toContain("Published with force: true although the platform's checks reject the Chrome and Edge artifacts");
@@ -180,7 +180,7 @@ describe("extension_publish reads the build's artifact health before handing out
     const out = JSON.parse(await handler({ buildSha: SHA }));
 
     expect(out.ok).toBe(true);
-    expect(out.status).toBe("published");
+    expect(out.status).toBe("publish-dispatched");
     expect(Object.keys(out.value.previewCommands)).toEqual(["chrome", "firefox"]);
     expect(out.warnings.join(" ")).toContain("Integrity was not checked");
     expect(out.value.artifacts.checked).toBe(false);
@@ -206,7 +206,7 @@ describe("extension_publish reads the build's artifact health before handing out
 
     const out = JSON.parse(await handler({ buildSha: SHA }));
 
-    expect(out.status).toBe("published");
+    expect(out.status).toBe("publish-dispatched");
     expect(Object.keys(out.value.previewCommands)).toEqual(["chrome", "firefox"]);
     expect(out.warnings.join(" ")).toContain("Integrity was not checked for Firefox");
   });

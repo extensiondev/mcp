@@ -8,7 +8,9 @@
 
 import { UserlandProjectPage } from "@extension.dev/urls/userland";
 
+import { WAIT_SECONDS_INPUT, dispatchedHint, madeSentence, stampNow, text as plain } from "../lib/act-outcome";
 import { API_BASE } from "../lib/common-schema";
+import { awaitPromoteRecord, promoteLinks, releasesPage, unknownBuildEnrichment } from "../lib/promote-record";
 import { resolveCredential } from "../lib/credential-source";
 import { envelope, type ErrorCode } from "../lib/envelope";
 import { PROJECT_TOKEN_INPUT, noStoredLoginHint } from "../lib/credentials";
@@ -27,21 +29,14 @@ import {
   partialPromoteWarnings,
   readPromoteOutcome,
 } from "../lib/promote-outcome";
-import {
-  consoleProjectUrl,
-  fetchRegistryJson,
-  parseChannels,
-  registryFileUrl,
-  userlandProjectUrl,
-  channelsShapeProblem,
-} from "../lib/registry";
+import { userlandProjectUrl } from "../lib/registry";
 import { cut, rollback, type ReleaseActArgs } from "./release-acts";
 import { channelLinkFields, readVisibility } from "../lib/channel-link";
 
 export const schema = {
   name: "extension_release_promote",
   description:
-    "Promote a built extension to a release channel (stable, preview, beta, …) on extension.dev, headless. This WRITES: action:'promote' (the default) points channel at buildId, action:'cut' opens a release pull request in the project's source repository that bumps the manifest version (level patch, minor or major, or an exact version; optionally armed to release to channel when merged, with releaseNotes in its body), and action:'rollback' returns channel to the build it served before. A promote needs a token minted by a workspace owner and a workspace owner's approval of that exact promote, every time; cut and rollback need a workspace owner's approval of the exact act too. For all three the first call runs the platform's checks and either refuses with the reason and the next step, asking nobody, or answers approval-required with the approval URL and the platform's own description of the act; once approved, the same call with approvalId runs it once. It is auth-gated by your stored login (extension_auth) or a release token in EXTENSION_DEV_TOKEN, minted and revoked under project settings, Access tokens. Tokens live at most 7 days, so CI must re-mint before expiry. The project comes from the token; with several logins stored, `project` picks which one. Call extension_release_status to find a valid buildId. The status is 'promoted' only when the platform says every asked browser's release was dispatched and the channel pointer moved; 'promoted-partially' lists in its warnings what did not happen (a browser whose dispatch failed, a channel pointer that was not moved) and must not be repeated whole; 'promote-unconfirmed' means the platform's answer did not carry the result, so read extension_release_status before promoting again. On a public project a promote answers value.channelUrl, the channel link, which always opens the channel's newest build and never expires. On a public project, or a public channel, send testers the channel link; a build link from extension_publish opens one build and, on a private project, expires. A private project gets value.channelUrlWithheld instead.",
+    "Promote a built extension to a release channel (stable, preview, beta, …) on extension.dev, headless. This WRITES: action:'promote' (the default) points channel at buildId, action:'cut' opens a release pull request in the project's source repository that bumps the manifest version (level patch, minor or major, or an exact version; optionally armed to release to channel when merged, with releaseNotes in its body), and action:'rollback' returns channel to the build it served before. A promote needs a token minted by a workspace owner and a workspace owner's approval of that exact promote, every time; cut and rollback need a workspace owner's approval of the exact act too. For all three the first call runs the platform's checks and either refuses with the reason and the next step, asking nobody, or answers approval-required with the approval URL and the platform's own description of the act; once approved, the same call with approvalId runs it once. It is auth-gated by your stored login (extension_auth) or a release token in EXTENSION_DEV_TOKEN, minted and revoked under project settings, Access tokens. Tokens live at most 7 days, so CI must re-mint before expiry. The project comes from the token; with several logins stored, `project` picks which one. Call extension_release_status to find a valid buildId. The status is 'promoted' only when the platform's release record, read back for up to waitSeconds (default 180, 0 to 600), confirms the channel at that build (value.outcome {recorded: true, status, checkedAt, source: 'platform-record'}); 'promote-dispatched' means the platform accepted the promote and its record has not confirmed it yet (outcome.recorded false, with the time it was accepted and the page to watch in the hint); 'promote-failed' means the record reads failed; 'promoted-partially' lists in its warnings what did not happen (a browser whose dispatch failed, a channel pointer that was not moved) and must not be repeated whole; 'promote-unconfirmed' means the platform's answer did not carry the result, so read extension_release_status before promoting again. Every promote answer lists the links it made or touched in value.links [{kind, url, audience, expiresAt, made}] (the release page, the channel link, the build page) and names the made ones in the hint's Made sentence. On a public project a promote answers value.channelUrl, the channel link, which always opens the channel's newest build and never expires. On a public project, or a public channel, send testers the channel link; a build link from extension_publish opens one build and, on a private project, expires. A private project gets value.channelUrlWithheld instead.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -90,6 +85,7 @@ export const schema = {
         description:
           "The approval handle returned by a prior approval-required response. Promoting changes what a public channel serves and is not reversible in place, so every promote needs a workspace owner's approval: call once without this to get an approval id and URL, have a human approve at extension.dev, then call again with the same id.",
       },
+      waitSeconds: WAIT_SECONDS_INPUT,
       api: API_BASE,
     },
     required: [],
@@ -130,6 +126,7 @@ export async function handler(args: ReleaseActArgs & {
   version?: string;
   releaseNotes?: string;
   approvalId?: string;
+  waitSeconds?: unknown;
   api?: string;
   project?: string;
 }): Promise<string> {
@@ -282,32 +279,11 @@ export async function handler(args: ReleaseActArgs & {
 
     if (answered) return answered;
 
-    const enrich: Record<string, unknown> = {};
-    let hint = (code && promoteRefusalHint(code)) || "";
-    const ref = credential.ref;
-
-    if (res.status === 404 || code === "UNKNOWN_BUILD") {
-      enrich.buildsPageUrl = consoleProjectUrl(ref, "builds", args.api);
-      hint =
-        "Run extension_release_status to see this project's channels, their promoted shas, and recent builds.";
-
-      if (ref) {
-        const channelsUrl = registryFileUrl(ref, "channels.json", args.api);
-        const channelsRes = await fetchRegistryJson(channelsUrl, fetch, {
-          ref,
-          api: args.api,
-        });
-
-        if (channelsRes.ok) {
-          const rows = channelsShapeProblem(channelsRes.json) ? [] : parseChannels(channelsRes.json).filter((c) => c.sha);
-          enrich.validChannelShas = Object.fromEntries(
-            rows.map((c) => [c.channel, c.sha]),
-          );
-
-          enrich.registryChannelsUrl = channelsUrl;
-        }
-      }
-    }
+    const unknownBuild = res.status === 404 || code === "UNKNOWN_BUILD";
+    const enrich = unknownBuild ? await unknownBuildEnrichment(credential.ref, args.api) : {};
+    const hint = unknownBuild
+      ? "Run extension_release_status to see this project's channels, their promoted shas, and recent builds."
+      : (code && promoteRefusalHint(code)) || "";
 
     return envelope({
       ok: false,
@@ -367,13 +343,48 @@ export async function handler(args: ReleaseActArgs & {
     });
   }
 
+  const acceptedAt = plain(data?.dispatchedAt) || stampNow();
+  const waited = await awaitPromoteRecord({
+    command: "extension_release_promote",
+    project: args.project,
+    api: args.api,
+    channel,
+    buildId,
+    acceptedAt,
+    waitSeconds: args.waitSeconds,
+  });
+  const releaseId = plain(waited.record?.id);
+  const links = promoteLinks({
+    command: "extension_release_promote",
+    callArgs: { ...args, action: "promote" } as Record<string, unknown>,
+    value: enriched,
+    releaseId,
+    channelUrl: enriched.channelUrl,
+    publicBuildUrl,
+  });
+  const made = madeSentence(links);
+  const trackPage = links.find((link) => link.kind === "release")?.url ?? releasesPage(promotedRef, args.api);
+  const value = { ...enriched, ...(releaseId ? { releaseId } : {}), outcome: waited.outcome, links };
+
+  if (waited.failed) {
+    return envelope({
+      ok: false,
+      command: "extension_release_promote",
+      status: "promote-failed",
+      value,
+      error: { code: "E_PLATFORM", name: "PromoteFailed", message: `The platform's release record for ${channel} at build ${buildId} reads ${waited.outcome.status}, so the channel does not serve it.` },
+      hint: `Read the release page for the failed step, fix the cause and promote again; ${statusRead} reads the record. ${made}`,
+      warnings: [credential.note],
+    });
+  }
+
   if (outcome.state === "partial") {
     return envelope({
       ok: true,
       command: "extension_release_promote",
-      status: "promoted-partially",
+      status: waited.outcome.recorded ? "promoted-partially" : "promote-dispatched",
       value: {
-        ...enriched,
+        ...value,
         incomplete: {
           failedBrowsers: outcome.failedBrowsers,
           pendingMirrors: outcome.pendingMirrors,
@@ -381,8 +392,23 @@ export async function handler(args: ReleaseActArgs & {
           githubReleaseAssetErrors: outcome.githubReleaseAssetErrors,
         },
       },
-      hint: `The release workflow was dispatched for ${outcome.queuedBrowsers.join(", ")}, and part of this promote did not happen: read the warnings. Do not repeat the whole promote; confirm what ${channel} serves with ${statusRead}.`,
+      hint: `${
+        waited.outcome.recorded
+          ? `The platform's release record for ${channel} reads ${waited.outcome.status} for ${outcome.queuedBrowsers.join(", ")}, and part of this promote did not happen: read the warnings.`
+          : `${dispatchedHint({ acceptedAt, trackUrl: trackPage, readCall: statusRead })} Part of this promote did not happen: read the warnings.`
+      } Do not repeat the whole promote; confirm what ${channel} serves with ${statusRead}. ${made}`,
       warnings: [...partialPromoteWarnings(outcome, channel), credential.note],
+    });
+  }
+
+  if (!waited.outcome.recorded) {
+    return envelope({
+      ok: true,
+      command: "extension_release_promote",
+      status: "promote-dispatched",
+      value,
+      hint: `${dispatchedHint({ acceptedAt, trackUrl: trackPage, readCall: statusRead })} The release workflow was dispatched for ${outcome.queuedBrowsers.join(", ")} toward the ${channel} channel at build ${buildId}. ${made}`,
+      warnings: [...notarizationNotes(outcome.notarization), credential.note],
     });
   }
 
@@ -390,8 +416,8 @@ export async function handler(args: ReleaseActArgs & {
     ok: true,
     command: "extension_release_promote",
     status: "promoted",
-    value: enriched,
-    hint: `The platform dispatched the release workflow for ${outcome.queuedBrowsers.join(", ")} and moved the ${channel} channel pointer to build ${buildId}. The artifacts land when that workflow finishes; ${statusRead} reads what the channel serves.`,
+    value,
+    hint: `The platform's release record confirms the ${channel} channel at build ${buildId} (${waited.outcome.status}) for ${outcome.queuedBrowsers.join(", ")}. ${statusRead} reads what the channel serves. ${made}`,
     warnings: [...notarizationNotes(outcome.notarization), credential.note],
   });
 }

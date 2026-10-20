@@ -54,7 +54,8 @@ describe("extension_publish says what the share serves", () => {
     const out = JSON.parse(await handler({}));
 
     expect(out.ok).toBe(true);
-    expect(out.status).toBe("published");
+    expect(out.status).toBe("publish-dispatched");
+    expect(out.value.outcome).toMatchObject({ recorded: false, source: "platform-record" });
     expect(out.warnings.join(" ")).not.toContain("serves NO build");
   });
 

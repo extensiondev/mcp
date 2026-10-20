@@ -221,7 +221,7 @@ describe("extension_builds rebuild through the hosted connection asks an owner f
     expect(dispatches).toHaveLength(1);
     expect(dispatches[0].body).toEqual({ origin: "mcp", buildEnv: "production", commitSha: FULL_SHA, approvalId: "apr_r1" });
     expect(out.ok).toBe(true);
-    expect(out.status).toBe("dispatched");
+    expect(out.status).toBe("rebuild-dispatched");
   });
 
   it("rebuild with a used approval says the run may already exist and dispatches nothing", async () => {

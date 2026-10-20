@@ -295,7 +295,7 @@ describe("submit and publish answers carry the platform's store version, and a v
 
     const out = await world.call("extension_submit", { ...SUBMIT_ARGS, approvalId: "apr_ver" });
 
-    expect(out.status).toBe("submitted");
+    expect(out.status).toBe("submit-dispatched");
     expect(out.value.storeVersion).toEqual(storeVersion);
   });
 

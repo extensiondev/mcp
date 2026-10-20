@@ -167,9 +167,17 @@ describe("extension_submit points a person at the Chrome Web Store connection in
       body: { ok: true, submissions: [{ id: "sub_1", store: "chrome", status: "pending", itemId: "itemchrome", itemUrl: "https://chrome.google.com/webstore/devconsole/pub-1/itemchrome/edit" }] },
     });
 
+    platform.routes["GET /api/cli/stores/submissions"] = () => ({
+      body: { submissions: [{ id: "sub_1", store: "chrome", status: "submitted", storeUpload: { state: "SUCCEEDED", crxVersion: "1.0.0.3" } }] },
+    });
+
     const out = JSON.parse(await submit({ browsers: ["chrome"], buildSha: "b418732", dryRun: false, api: API }));
 
     expect(out.status).toBe("submitted");
+    expect(out.value.outcome).toMatchObject({ recorded: true, status: "submitted", storeState: "SUCCEEDED", source: "platform-record" });
+    expect(out.value.links).toContainEqual({ kind: "item", url: "https://chrome.google.com/webstore/devconsole/pub-1/itemchrome/edit", audience: "you", expiresAt: null, made: false });
+    expect(out.value.links.find((link: { kind: string }) => link.kind === "submission")).toMatchObject({ made: true, url: expect.stringMatching(/\/acme\/widget\/submissions\/chrome\/sub_1$/) });
+    expect(out.hint).toContain("Made: the submission page.");
     expect(out.value.itemUrl).toBe("https://chrome.google.com/webstore/devconsole/pub-1/itemchrome/edit");
   });
 

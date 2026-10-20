@@ -104,7 +104,7 @@ describe("submit says what the platform checks and answers", () => {
     }) as unknown as typeof fetch;
 
     const out = JSON.parse(await submit({ browsers: ["chrome"], buildSha: "abc1234", dryRun: false }));
-    expect(out.status).toBe("submitted");
+    expect(out.status).toBe("submit-dispatched");
     expect(out.hint).toMatch(/uploaded as a draft \(absent_mode: safe\) and does not enter review/);
     expect(out.warnings.join("\n")).toMatch(/appears in the registry's stores\/submissions\.json when the store workflow reports/);
     expect(out.warnings.join("\n")).not.toMatch(/reads the recorded outcome, per-store credential health, and review state/);

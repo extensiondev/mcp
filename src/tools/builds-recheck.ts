@@ -6,7 +6,8 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-import { browserHealthOf, describeBrowserHealth, type BrowserHealth } from "../lib/build-health";
+import { after, awaitRecordedOutcome, dispatchedHint, linksOf, madeSentence, stampNow, type Verdict } from "../lib/act-outcome";
+import { browserHealthOf, describeBrowserHealth, readBuildHealth, type BrowserHealth } from "../lib/build-health";
 import { envelope } from "../lib/envelope";
 import { projectApiSend, type ProjectApi } from "../lib/project-api";
 import { trackUrl } from "../lib/track-url";
@@ -44,6 +45,29 @@ function healthOf(row: Row): BrowserHealth | null {
     { ok: true, json: { ok: row.ok === true, checks: row.checks } },
     { explicit: { checkedAt: row.checkedAt, runId: row.run } },
   );
+}
+
+const SETTLED_INTEGRITY = new Set(["passed", "failed", "stale"]);
+
+function browserRow(health: BrowserHealth): Row {
+  return {
+    integrity: health.integrity,
+    ...(health.checkedAt ? { checkedAt: health.checkedAt } : {}),
+    ...(health.checkedRun ? { checkedRun: health.checkedRun } : {}),
+    ...(health.failedChecks.length ? { failedChecks: health.failedChecks } : {}),
+  };
+}
+
+function judgeRecheck(health: BrowserHealth[], wanted: string[], sinceIso: string): Verdict {
+  const rows = wanted.length ? health.filter((row) => wanted.includes(row.browser)) : health;
+  if (!rows.length || (wanted.length && rows.length < wanted.length)) return { kind: "waiting", status: "no verdict yet" };
+
+  const settled = rows.every((row) => SETTLED_INTEGRITY.has(row.integrity) && (!row.checkedAt || after(row.checkedAt, sinceIso)));
+  if (!settled) return { kind: "waiting", status: "checking" };
+
+  const failed = rows.filter((row) => row.integrity !== "passed");
+
+  return { kind: "recorded", status: failed.length ? `failed: ${failed.map((row) => row.browser).join(", ")}` : "passed" };
 }
 
 function resultHint(buildId: string, done: BrowserHealth[], checking: string[], buildPage: string, project?: string): string {
@@ -116,10 +140,12 @@ export async function recheck(args: ActArgs & { browser?: string }): Promise<str
     });
   }
 
+  const acceptedAt = stampNow();
   const json = isRow(sent.json) ? sent.json : {};
+  const sinceIso = text(json.checkedAt) && Number.isFinite(Date.parse(text(json.checkedAt))) ? text(json.checkedAt) : new Date(Date.parse(acceptedAt) - 60_000).toISOString();
   const rows = checkedRows(json);
-  const done: BrowserHealth[] = [];
-  const checking: string[] = [];
+  let done: BrowserHealth[] = [];
+  let checking: string[] = [];
   const browsers: Row = {};
 
   for (const row of rows) {
@@ -133,39 +159,69 @@ export async function recheck(args: ActArgs & { browser?: string }): Promise<str
     }
 
     done.push(health);
-    browsers[name] = {
-      integrity: health.integrity,
-      ...(health.checkedAt ? { checkedAt: health.checkedAt } : {}),
-      ...(health.checkedRun ? { checkedRun: health.checkedRun } : {}),
-      ...(health.failedChecks.length ? { failedChecks: health.failedChecks } : {}),
-    };
+    browsers[name] = browserRow(health);
   }
 
   const canonical = text(json.buildId) || buildId;
+  const wanted = rows.map((row) => text(row.browser) || text(row.name)).filter(Boolean);
+  const waited = await awaitRecordedOutcome<BrowserHealth[]>({
+    waitSeconds: args.waitSeconds,
+    read: async () => {
+      const health = await readBuildHealth({ command: COMMAND, buildId: canonical, project: args.project, api: args.api });
+      if (!health.checked) return { ok: false, message: health.reason };
+
+      return { ok: true, record: health.browsers };
+    },
+    judge: (health) => judgeRecheck(health, browser ? [browser] : wanted, sinceIso),
+  });
+
+  if (waited.outcome.recorded && waited.record) {
+    const fresh = waited.record.filter((row) => (browser ? row.browser === browser : wanted.length === 0 || wanted.includes(row.browser)));
+    done = fresh;
+    checking = [];
+    for (const row of fresh) browsers[row.browser] = browserRow(row);
+  }
+
   const good = done.filter((b) => b.integrity === "passed").map((b) => b.browser);
   const failed = done.filter((b) => b.integrity !== "passed").map((b) => b.browser);
-  const publishable = rows.length > 0 && checking.length === 0 && failed.length === 0;
+  const publishable = rows.length > 0 && checking.length === 0 && failed.length === 0 && waited.outcome.recorded;
+  const links = linksOf([{ kind: "build", url: buildPage }]);
+  const made = madeSentence(links);
+  const readCall = `extension_builds (action: "get", buildId: "${canonical}")`;
+  const value = {
+    action: "recheck",
+    buildId: canonical,
+    ...(text(json.checkedAt) ? { checkedAt: text(json.checkedAt) } : {}),
+    browsers,
+    good,
+    failed,
+    checking,
+    publishable,
+    status: !waited.outcome.recorded
+      ? `Build ${canonical} is being rechecked; the platform's record has not confirmed the verdict for ${checking.join(", ") || wanted.join(", ") || "its browsers"} yet.`
+      : publishable
+        ? `Build ${canonical} passed the recheck for ${good.join(", ")}; nothing blocks publishing it.`
+        : `Build ${canonical} failed the recheck for ${failed.join(", ") || "every browser"}; a new build unblocks it.`,
+    trackUrl: buildPage,
+    outcome: waited.outcome,
+    links,
+  };
+
+  if (!waited.outcome.recorded) {
+    return envelope({
+      ok: true,
+      command: COMMAND,
+      status: "recheck-dispatched",
+      value,
+      hint: `${dispatchedHint({ acceptedAt, trackUrl: buildPage, readCall })} ${made}`,
+    });
+  }
 
   return envelope({
     ok: true,
     command: COMMAND,
-    status: checking.length ? "checking" : "rechecked",
-    value: {
-      action: "recheck",
-      buildId: canonical,
-      ...(text(json.checkedAt) ? { checkedAt: text(json.checkedAt) } : {}),
-      browsers,
-      good,
-      failed,
-      checking,
-      publishable,
-      status: checking.length
-        ? `Build ${canonical} is being rechecked; ${checking.join(", ")} still running.`
-        : publishable
-          ? `Build ${canonical} passed the recheck for ${good.join(", ")}; nothing blocks publishing it.`
-          : `Build ${canonical} failed the recheck for ${failed.join(", ") || "every browser"}; a new build unblocks it.`,
-      trackUrl: buildPage,
-    },
-    hint: resultHint(canonical, done, checking, buildPage, args.project),
+    status: "rechecked",
+    value,
+    hint: `${resultHint(canonical, done, checking, buildPage, args.project)} ${made}`,
   });
 }

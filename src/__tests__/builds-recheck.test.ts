@@ -69,6 +69,21 @@ describe("extension_builds recheck reruns a build's integrity checks on its stor
           return json(platform.reply);
         }
 
+        const recorded = platform.reply.body as { browsers?: Array<Record<string, unknown>> } | null;
+        const rows = Array.isArray(recorded?.browsers) ? recorded.browsers : [];
+
+        if (url.pathname === `/api/projects/${PROJECT_ID}/builds/${SHA}`) {
+          return json({ body: { buildId: SHA, browsers: rows.map((row) => ({ name: row.browser })) } });
+        }
+
+        const integrity = /\/integrity\/([^/]+)$/.exec(url.pathname);
+
+        if (integrity) {
+          const row = rows.find((candidate) => candidate.browser === integrity[1]);
+
+          return row && Array.isArray(row.checks) ? json({ body: { ok: row.ok, checks: row.checks, checkedAt: row.checkedAt, run: row.run } }) : json({ body: { message: "no report" }, status: 404 });
+        }
+
         throw new Error(`builds-recheck cells never reach the network (${url.pathname})`);
       }),
     );
@@ -95,6 +110,9 @@ describe("extension_builds recheck reruns a build's integrity checks on its stor
 
     expect(out.ok).toBe(true);
     expect(out.status).toBe("rechecked");
+    expect(out.value.outcome).toMatchObject({ recorded: true, status: "passed", source: "platform-record" });
+    expect(out.value.links).toEqual([{ kind: "build", url: out.value.trackUrl, audience: "workspace members", expiresAt: null, made: false }]);
+    expect(out.hint).toContain("Made: no new links.");
     expect(platform.posts).toEqual([{ path: RECHECK_ROUTE, body: {} }]);
     expect(out.value).toMatchObject({ action: "recheck", buildId: SHA, good: ["chrome", "edge", "firefox"], failed: [], publishable: true });
     expect(out.value.browsers.chrome).toMatchObject({ integrity: "passed", checkedAt: "2026-10-19T16:40:00Z", checkedRun: "39281000000" });
@@ -110,6 +128,7 @@ describe("extension_builds recheck reruns a build's integrity checks on its stor
     platform.reply = {
       body: {
         buildId: SHA,
+        checkedAt: "2026-10-19T16:40:00Z",
         browsers: [{ browser: "firefox", ok: false, checkedAt: "2026-10-19T16:40:00Z", checks: [{ id: "zip-structure", ok: false, title: "Zip readable" }] }],
       },
     };
@@ -130,10 +149,12 @@ describe("extension_builds recheck reruns a build's integrity checks on its stor
 
     const out = JSON.parse(await builds({ action: "recheck", buildId: SHA, api: API }));
 
-    expect(out.status).toBe("checking");
+    expect(out.status).toBe("recheck-dispatched");
     expect(out.value).toMatchObject({ checking: ["chrome"], publishable: false });
+    expect(out.value.outcome.recorded).toBe(false);
     expect(out.value.browsers.chrome.integrity).toBe("checking");
-    expect(out.hint).toContain("still checking chrome");
+    expect(out.hint).toContain("its record has not confirmed the result yet");
+    expect(out.hint).toContain(`extension_builds (action: "get", buildId: "${SHA}")`);
   });
 
   it.each([

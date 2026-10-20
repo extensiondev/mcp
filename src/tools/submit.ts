@@ -27,6 +27,19 @@ import {
 } from "../lib/approval-gate";
 import { spendNarration } from "../lib/allowance";
 import { approvalRoundTrip } from "../lib/approval-outcome";
+import {
+  FAILED_STATUSES,
+  WAIT_SECONDS_INPUT,
+  awaitRecordedOutcome,
+  dispatchedHint,
+  linksOf,
+  madeSentence,
+  stampNow,
+  type ActLink,
+  type Verdict,
+} from "../lib/act-outcome";
+import { readSubmissionRecords, type PlatformSubmission } from "../lib/platform-submissions";
+import { trackUrl as consoleTrackUrl } from "../lib/track-url";
 import { readSubmitOutcome } from "../lib/submit-outcome";
 import {
   consoleProjectUrl,
@@ -36,7 +49,8 @@ import {
   channelsShapeProblem,
   type ProjectRef,
 } from "../lib/registry";
-import { PUBLISH_ACTIONS, cancelSubmission, preflight as readPreflight, publishDraft, raiseRollout } from "./store-acts";
+import { PUBLISH_ACTIONS, preflight as readPreflight, publishDraft } from "./store-acts";
+import { cancelSubmission, raiseRollout } from "./store-rollout";
 import {
   ITEM_NOT_LINKED_CODE,
   NOT_CONNECTED_CODES,
@@ -110,13 +124,14 @@ export interface SubmitToolArgs {
   projectPath?: string;
   screenshots?: unknown;
   approvalId?: string;
+  waitSeconds?: unknown;
   api?: string;
 }
 
 export const schema = {
   name: "extension_submit",
   description:
-    "Submit a built extension for store REVIEW through extension.dev, which holds your store credentials and runs the store upload on the platform: the Chrome Web Store, Firefox AMO, Edge Add-ons and the App Store (Safari). This is the store path only. It does not push a build to the extension.dev platform, and it does not make a shareable link: that is extension_publish, which is what \"deploy\", \"ship\" or \"share\" an extension almost always means. Reach for this when the ask is a store, or a signed Firefox build for testers. Submissions default to the least public outcome each store's API offers, unless the project's store settings say otherwise. Through this tool, Chrome and Edge upload a draft that is not published and does not enter review, even for an item that is already published; action:'publish' then sends the Chrome draft to review, and an Edge draft is published from Partner Center or by saving a publishing mode in the console. Firefox uploads to the unlisted channel whenever the project has no saved release channel, never a channel inferred from AMO's current listing, and a saved channel is used as is. AMO is read only as a guard: an add-on AMO already lists, with no saved channel, is refused before upload with the instruction to save a release channel in the project's store settings, because an unlisted upload of a listed add-on burns the version number, and the refusal holds while AMO cannot be read. Safari uploads to App Store Connect and stops at the TestFlight draft unless this call asks for Apple review. AMO signs an unlisted version for self distribution with no public listing. No store's API sets listing visibility: Chrome's Public, Unlisted or Private setting and its trusted testers live in the Chrome Web Store dashboard, and Edge's Public or Hidden setting lives in Partner Center. A store that only uploaded is recorded as \"Uploaded, not public\", never as live. It defaults to a dry run that dispatches nothing: the platform verifies the token and project, finds the store workflow, reads the build from its index when that index is readable, reads store health itself and adds a Safari plan verdict; this tool reads each store's connection record, the same one action:'preflight' reads, and falls back to the older per-store health record only when no connection record exists, saying \"not checked\" when neither can be read. A dry run answers one value.verdict (ready, not-checked, platform-refused, or the blocking state: store-not-connected, store-connection-failed, store-item-not-linked, store-not-configured or store-unhealthy) with value.nextStep and value.trackUrl. The dry run does not run the owner gate, the approval, the build quota, the dispatch pause or the submission-mode check, which the real run does first. Pass dryRun:false to actually submit, which is irreversible; before asking for any approval it reads the same connection record and answers store-not-connected, store-connection-failed or store-item-not-linked with value.nextStep when the store is not ready, and otherwise needs a token issued by a workspace owner and a workspace owner's approval of that exact submission, every time, and it dispatches the store workflow; a Chrome or Edge store with no saved submission mode is uploaded as a draft (absent_mode: safe) and does not enter review. A real submission answers 'submitted' only when the platform recorded a submission for every store asked; 'submitted-partially' names the stores it did not record, which are the only ones to submit again; 'submit-unconfirmed' means no usable answer came back, so read extension_release_status before submitting again, because a second call submits a second time. The project comes from your token (extension_auth or EXTENSION_DEV_TOKEN; tokens live at most 7 days, so CI must re-mint from the console's Access tokens page); with several logins stored, `project` picks which one. action:'preflight' reads each store's readiness for browsers (the failing checks with what to fix, the warnings, never a secret value or a secret's name) and writes nothing; with projectPath it also says, per store, which failing listing checks the local STORE.md and the built icons already cover; when STORE.md has no privacy policy URL but a Privacy and data use section and the line Privacy policy attested: yes, the privacy policy counts as covered, published by the platform at privacy.extension.land/<workspace>/<project> from that section (value.stores.<store>.storeMd.privacyPolicy {url, derived, source}, and the hint says privacy policy: published at <url> from STORE.md's Privacy section; edit that section to change it), and when the section or the attestation is missing the advisory names the exact line to add; that page is a public privacy policy URL the stores can link, never one a store accepted. For Chrome it also reads the store connection: with no Chrome Web Store account connected it answers status 'store-not-connected' with value.connectUrl, value.trackUrl (the console store settings page) and, in hint, the two sentences to say to the person; a connection that failed its last check answers 'store-connection-failed' with the reason; a healthy connection whose store item is not linked yet answers 'store-item-not-linked' with value.newItemUrl, value.packageUrl and value.linkItemUrl and, in hint, the three sentences to say (the person creates the item once in the Chrome Web Store dashboard and pastes its address; a real submission refuses with the same answer until then), and one with an item answers value.itemUrl, the item's dashboard link. Each preflight answer, and a real submission's connect, link, approval and submitted answers, carry value.nextStep {kind, say, url}: kind is connect, link-item, submit, approve, publish or done, say is the sentence for the person and url its link or null; a preflight that still has failing checks answers nextStep null. A real submission's approval-required answer carries value.expiresAt and says that nothing goes to review until the person publishes; a Chrome draft's submitted answer carries nextStep kind publish. action:'publish' (alias 'review') with browsers:['chrome'] sends the newest Chrome draft, or the submissionId named, to Chrome's review through the Chrome Web Store API: the first call answers approval-required with value.approvalUrl and value.expiresAt and the sentence \"This sends the item to Chrome's review.\", a second call with that approvalId answers in-review with value.trackUrl (the submission page) and value.itemUrl (the item's dashboard page); with no Chrome account connected or no item linked it answers store-not-connected or store-item-not-linked before anyone is asked. action:'sync-listing' fills the extension.dev store listing for browsers from the project's STORE.md (title, summary, description, category, support email, privacy policy URL, or with no URL the platform's privacy page for an attested Privacy and data use section, single purpose, permission justifications, reviewer, release and certification notes), the 128 px icon in the built dist/<browser>, and optional screenshots (PNG paths inside projectPath, for example from extension_screenshot); it needs projectPath, a workspace owner approves each store's exact change first (the first call answers approval-required with the approval URL and the change as the platform computed it, a second call with browsers:[store] and that approvalId writes it once), and it answers what changed and what the listing still lacks. action:'cancel' withdraws a submission from review (store, default chrome, and submissionId from extension_release_status), and action:'rollout' raises the Chrome staged rollout to deployPercentage, which Chrome does not let be lowered again; both need a workspace owner's approval of the exact act, so the first call answers approval-required with the approval URL, or refuses with the reason before anyone is asked. Store credentials are never arguments, and no local file is uploaded. Call extension_release_status for valid shas, and, after a real submission, for the recorded outcome and review state.",
+    "Submit a built extension for store REVIEW through extension.dev, which holds your store credentials and runs the store upload on the platform: the Chrome Web Store, Firefox AMO, Edge Add-ons and the App Store (Safari). This is the store path only. It does not push a build to the extension.dev platform, and it does not make a shareable link: that is extension_publish, which is what \"deploy\", \"ship\" or \"share\" an extension almost always means. Reach for this when the ask is a store, or a signed Firefox build for testers. Submissions default to the least public outcome each store's API offers, unless the project's store settings say otherwise. Through this tool, Chrome and Edge upload a draft that is not published and does not enter review, even for an item that is already published; action:'publish' then sends the Chrome draft to review, and an Edge draft is published from Partner Center or by saving a publishing mode in the console. Firefox uploads to the unlisted channel whenever the project has no saved release channel, never a channel inferred from AMO's current listing, and a saved channel is used as is. AMO is read only as a guard: an add-on AMO already lists, with no saved channel, is refused before upload with the instruction to save a release channel in the project's store settings, because an unlisted upload of a listed add-on burns the version number, and the refusal holds while AMO cannot be read. Safari uploads to App Store Connect and stops at the TestFlight draft unless this call asks for Apple review. AMO signs an unlisted version for self distribution with no public listing. No store's API sets listing visibility: Chrome's Public, Unlisted or Private setting and its trusted testers live in the Chrome Web Store dashboard, and Edge's Public or Hidden setting lives in Partner Center. A store that only uploaded is recorded as \"Uploaded, not public\", never as live. It defaults to a dry run that dispatches nothing: the platform verifies the token and project, finds the store workflow, reads the build from its index when that index is readable, reads store health itself and adds a Safari plan verdict; this tool reads each store's connection record, the same one action:'preflight' reads, and falls back to the older per-store health record only when no connection record exists, saying \"not checked\" when neither can be read. A dry run answers one value.verdict (ready, not-checked, platform-refused, or the blocking state: store-not-connected, store-connection-failed, store-item-not-linked, store-not-configured or store-unhealthy) with value.nextStep and value.trackUrl. The dry run does not run the owner gate, the approval, the build quota, the dispatch pause or the submission-mode check, which the real run does first. Pass dryRun:false to actually submit, which is irreversible; before asking for any approval it reads the same connection record and answers store-not-connected, store-connection-failed or store-item-not-linked with value.nextStep when the store is not ready, and otherwise needs a token issued by a workspace owner and a workspace owner's approval of that exact submission, every time, and it dispatches the store workflow; a Chrome or Edge store with no saved submission mode is uploaded as a draft (absent_mode: safe) and does not enter review. A real submission answers 'submitted' only when the platform recorded a submission for every store asked; 'submitted-partially' names the stores it did not record, which are the only ones to submit again; 'submit-unconfirmed' means no usable answer came back, so read extension_release_status before submitting again, because a second call submits a second time. The project comes from your token (extension_auth or EXTENSION_DEV_TOKEN; tokens live at most 7 days, so CI must re-mint from the console's Access tokens page); with several logins stored, `project` picks which one. action:'preflight' reads each store's readiness for browsers (the failing checks with what to fix, the warnings, never a secret value or a secret's name) and writes nothing; with projectPath it also says, per store, which failing listing checks the local STORE.md and the built icons already cover; when STORE.md has no privacy policy URL but a Privacy and data use section and the line Privacy policy attested: yes, the privacy policy counts as covered, published by the platform at privacy.extension.land/<workspace>/<project> from that section (value.stores.<store>.storeMd.privacyPolicy {url, derived, source}, and the hint says privacy policy: published at <url> from STORE.md's Privacy section; edit that section to change it), and when the section or the attestation is missing the advisory names the exact line to add; that page is a public privacy policy URL the stores can link, never one a store accepted. For Chrome it also reads the store connection: with no Chrome Web Store account connected it answers status 'store-not-connected' with value.connectUrl, value.trackUrl (the console store settings page) and, in hint, the two sentences to say to the person; a connection that failed its last check answers 'store-connection-failed' with the reason; a healthy connection whose store item is not linked yet answers 'store-item-not-linked' with value.newItemUrl, value.packageUrl and value.linkItemUrl and, in hint, the three sentences to say (the person creates the item once in the Chrome Web Store dashboard and pastes its address; a real submission refuses with the same answer until then), and one with an item answers value.itemUrl, the item's dashboard link. Each preflight answer, and a real submission's connect, link, approval and submitted answers, carry value.nextStep {kind, say, url}: kind is connect, link-item, submit, approve, publish or done, say is the sentence for the person and url its link or null; a preflight that still has failing checks answers nextStep null. A real submission's approval-required answer carries value.expiresAt and says that nothing goes to review until the person publishes; a Chrome draft's submitted answer carries nextStep kind publish. action:'publish' (alias 'review') with browsers:['chrome'] sends the newest Chrome draft, or the submissionId named, to Chrome's review through the Chrome Web Store API: the first call answers approval-required with value.approvalUrl and value.expiresAt and the sentence \"This sends the item to Chrome's review.\", a second call with that approvalId answers in-review with value.trackUrl (the submission page) and value.itemUrl (the item's dashboard page) once the platform's record carries Chrome's own state, and publish-dispatched until then; with no Chrome account connected or no item linked it answers store-not-connected or store-item-not-linked before anyone is asked. action:'sync-listing' fills the extension.dev store listing for browsers from the project's STORE.md (title, summary, description, category, support email, privacy policy URL, or with no URL the platform's privacy page for an attested Privacy and data use section, single purpose, permission justifications, reviewer, release and certification notes), the 128 px icon in the built dist/<browser>, and optional screenshots (PNG paths inside projectPath, for example from extension_screenshot); it needs projectPath, a workspace owner approves each store's exact change first (the first call answers approval-required with the approval URL and the change as the platform computed it, a second call with browsers:[store] and that approvalId writes it once), and it answers what changed and what the listing still lacks. action:'cancel' withdraws a submission from review (store, default chrome, and submissionId from extension_release_status), and action:'rollout' raises the Chrome staged rollout to deployPercentage, which Chrome does not let be lowered again; both need a workspace owner's approval of the exact act, so the first call answers approval-required with the approval URL, or refuses with the reason before anyone is asked. Store credentials are never arguments, and no local file is uploaded. Every act answer (a real submit, publish, sync-listing, cancel and rollout) reports what the platform recorded after the act, read back from the platform's own record for up to waitSeconds (default 180, 0 to 600), in value.outcome {recorded, status, storeState, checkedAt, source: 'platform-record'}, and every link the act made or touched in value.links [{kind, url, audience, expiresAt, made}], with the made links named in the hint's one Made sentence. When the record has not confirmed the result by the bound, the status is the act's dispatched form (submit-dispatched, publish-dispatched, cancel-dispatched, rollout-dispatched, sync-listing-dispatched) with outcome.recorded false and a hint saying the platform accepted the act, when, and where to watch; submitted, in-review, canceled, rolled-out and listing-synced are answered only with outcome.recorded true, and a record that reads failed answers submit-failed or publish-failed. A Chrome publish answers in-review only when the record carries Chrome's own state in outcome.storeState, and publish-dispatched until then even when the run finished. Call extension_release_status for valid shas, and, after a real submission, for the recorded outcome and review state.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -184,6 +199,7 @@ export const schema = {
         type: "number",
         description: "With rollout, the share of users to raise the staged rollout to: a whole number from 1 to 100, above the current one.",
       },
+      waitSeconds: WAIT_SECONDS_INPUT,
     },
     required: [],
   },
@@ -208,6 +224,34 @@ export async function handler(args: SubmitToolArgs): Promise<string> {
 }
 
 const DRAFT_STORES = new Set(["chrome", "edge"]);
+const SUBMIT_PENDING = new Set(["pending", "queued", "dispatched"]);
+
+function judgeSubmit(byStore: Record<string, PlatformSubmission>, stores: string[], ids: Record<string, string>): Verdict {
+  const settled: Array<{ store: string; status: string; state: string | null; failed: boolean }> = [];
+  const waiting: string[] = [];
+
+  for (const store of stores) {
+    const record = byStore[store];
+    const status = record ? String(record.status ?? "").trim().toLowerCase() : "";
+
+    if (!record || (ids[store] && record.id !== ids[store]) || !status || SUBMIT_PENDING.has(status)) {
+      waiting.push(`${store}: ${status || "no record yet"}`);
+      continue;
+    }
+
+    settled.push({ store, status, state: record.storeUpload?.state ?? record.storeReview?.state ?? null, failed: FAILED_STATUSES.has(status) });
+  }
+
+  const summary = [...settled.map((row) => `${row.store}: ${row.status}`), ...waiting].join("; ");
+  if (waiting.length) return { kind: "waiting", status: summary };
+
+  return {
+    kind: "recorded",
+    status: settled.length === 1 ? settled[0].status : summary,
+    storeState: settled.length === 1 ? settled[0].state : null,
+    failed: settled.every((row) => row.failed),
+  };
+}
 
 function chromeItemOf(data: any): string {
   const rows = [
@@ -644,17 +688,76 @@ async function answer(args: SubmitToolArgs): Promise<string> {
       api: args.api,
     });
 
-    if (outcome.state === "partial") {
-      result.missingStores = outcome.missing;
+    const acceptedAt = typeof data?.dispatchedAt === "string" && data.dispatchedAt ? data.dispatchedAt : stampNow();
+    const rows = (Array.isArray(data?.submissions) ? data.submissions : []).filter((row: unknown) => row && typeof row === "object") as Array<Record<string, unknown>>;
+    const ids: Record<string, string> = {};
+
+    for (const row of rows) {
+      const store = String(row.store ?? "").trim().toLowerCase();
+      const id = String(row.id ?? row.submissionId ?? "").trim();
+      if (store && id) ids[store] = id;
+    }
+
+    const refTarget = credential.ref ? { workspace: credential.ref.workspace, project: credential.ref.project } : {};
+    const links: ActLink[] = linksOf([
+      ...outcome.stores.map((store) => ({
+        kind: "submission" as const,
+        url: consoleTrackUrl("submission", { ...refTarget, store, submissionId: ids[store] }, args.api),
+        made: Boolean(ids[store]),
+      })),
+      ...(itemUrl ? [{ kind: "item" as const, url: itemUrl, audience: "you" as const }] : []),
+    ]);
+    const firstPage = links.find((link) => link.kind === "submission")?.url ?? consoleProjectUrl(credential.ref, ConsoleProjectPage.submissions, args.api);
+    const waited = await awaitRecordedOutcome<Record<string, PlatformSubmission>>({
+      waitSeconds: args.waitSeconds,
+      read: () => readSubmissionRecords({ base: apiCheck.base, token, command: "extension_submit" }),
+      judge: (byStore) => judgeSubmit(byStore, outcome.stores, ids),
+    });
+    const made = madeSentence(links);
+    const failedStores = waited.outcome.recorded
+      ? outcome.stores.filter((store) => FAILED_STATUSES.has(String(waited.record?.[store]?.status ?? "").toLowerCase()))
+      : [];
+    const failureLines = failedStores.map((store) => `${store}: ${String(waited.record?.[store]?.failureReason ?? "").trim() || "the store run failed"}`);
+
+    result.outcome = waited.outcome;
+    result.links = links;
+    result.nextStep = doneStep(outcome.stores, itemUrl);
+
+    if (waited.failed) {
+      return envelope({
+        ok: false,
+        command: "extension_submit",
+        status: "submit-failed",
+        error: {
+          code: "E_PLATFORM",
+          name: "SubmitFailed",
+          message: `The platform's record says the submission did not reach ${failedStores.join(", ")}: ${failureLines.join("; ")}.`,
+        },
+        value: result,
+        hint: `Fix the cause and submit again; ${statusRead} reads the record. ${made}`,
+        warnings: [...warnings, channelNote, credential.note],
+      });
+    }
+
+    if (outcome.state === "partial" || failedStores.length) {
+      const missing = [...new Set([...(outcome.state === "partial" ? outcome.missing : []), ...failedStores])];
+      result.missingStores = missing;
 
       return envelope({
         ok: true,
         command: "extension_submit",
-        status: "submitted-partially",
+        status: waited.outcome.recorded ? "submitted-partially" : "submit-dispatched",
         value: result,
-        hint: `The platform recorded a submission for ${outcome.stores.join(", ")} and none for ${outcome.missing.join(", ")}. Submit again with browsers limited to ${outcome.missing.join(", ")}; do not repeat ${outcome.stores.join(", ")}.`,
+        hint: `${
+          waited.outcome.recorded
+            ? `The platform's record confirms ${outcome.stores.filter((store) => !failedStores.includes(store)).join(", ") || "no store"} and not ${missing.join(", ")}.`
+            : dispatchedHint({ acceptedAt, trackUrl: firstPage, readCall: statusRead })
+        } Submit again with browsers limited to ${missing.join(", ")}; do not repeat ${outcome.stores.filter((store) => !failedStores.includes(store)).join(", ") || "the others"}. ${made}`,
         warnings: [
-          `NOT submitted: ${outcome.missing.join(", ")}. The platform's answer has no submission row for ${outcome.missing.length === 1 ? "it" : "them"}.`,
+          outcome.state === "partial"
+            ? `NOT submitted: ${outcome.missing.join(", ")}. The platform's answer has no submission row for ${outcome.missing.length === 1 ? "it" : "them"}.`
+            : null,
+          ...failureLines.map((line) => `NOT reached: ${line}.`),
           ...warnings,
           channelNote,
           statusNote,
@@ -662,16 +765,26 @@ async function answer(args: SubmitToolArgs): Promise<string> {
       });
     }
 
-    result.nextStep = doneStep(outcome.stores, itemUrl);
+    if (!waited.outcome.recorded) {
+      return envelope({
+        ok: true,
+        command: "extension_submit",
+        status: "submit-dispatched",
+        value: result,
+        hint: `${dispatchedHint({ acceptedAt, trackUrl: firstPage, readCall: statusRead })} A Chrome or Edge store with no saved submission mode is uploaded as a draft (absent_mode: safe) and does not enter review. ${made}`,
+        warnings: [...warnings, channelNote, statusNote, credential.note],
+      });
+    }
 
     return envelope({
       ok: true,
       command: "extension_submit",
       status: "submitted",
       value: result,
-      hint:
+      hint: `${
         message ||
-        `The platform dispatched the store workflow for ${outcome.stores.join(", ")} and recorded each submission as pending. A Chrome or Edge store with no saved submission mode is uploaded as a draft (absent_mode: safe) and does not enter review and is recorded as "Uploaded, not public"; a store's own review, where it happens, comes after this answer.`,
+        `The platform's record confirms the submission for ${outcome.stores.join(", ")} (${waited.outcome.status}${waited.outcome.storeState ? `, store state ${waited.outcome.storeState}` : ""}). A Chrome or Edge store with no saved submission mode is uploaded as a draft (absent_mode: safe) and does not enter review and is recorded as "Uploaded, not public"; a store's own review, where it happens, comes after this answer.`
+      } ${made}`,
       warnings: [...warnings, channelNote, statusNote, credential.note],
     });
   }

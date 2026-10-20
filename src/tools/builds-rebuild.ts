@@ -8,6 +8,18 @@
 
 import { ConsoleProjectPage } from "@extension.dev/urls/paths";
 
+import {
+  FAILED_STATUSES,
+  PENDING_STATUSES,
+  after,
+  awaitRecordedOutcome,
+  dispatchedHint,
+  linksOf,
+  madeSentence,
+  stampNow,
+  trackLinks,
+  type Verdict,
+} from "../lib/act-outcome";
 import { consoleProjectUrl } from "../lib/registry";
 import { envelope } from "../lib/envelope";
 import { approvalRoundTrip } from "../lib/approval-outcome";
@@ -17,7 +29,7 @@ import {
   requestApprovalAfterRefusal,
   type ApprovalGateInput,
 } from "../lib/approval-gate";
-import { projectApiSend } from "../lib/project-api";
+import { projectApiGet, projectApiSend } from "../lib/project-api";
 import {
   BUILD_ENVS,
   COMMAND,
@@ -69,6 +81,30 @@ function runHandle(json: Row): { value: Row; match?: Row; sentence: string } {
   }
 
   return { value, sentence: `${reused} a build showing a startedAt from before this call is the earlier run.` };
+}
+
+function judgeRebuild(detail: Row, match: Row | undefined, acceptedAt: string): Verdict {
+  const run = isRow(detail.run) ? detail.run : {};
+  const internal = isRow(run.internal) ? run.internal : isRow(detail.internal) ? detail.internal : {};
+  const runId = typeof detail.runId === "number" ? detail.runId : typeof internal.runId === "number" ? internal.runId : null;
+  const deploymentId = text(detail.deploymentId) || text(run.deploymentId);
+  const startedAt = text(detail.startedAt) || text(run.startedAt) || text(detail.createdAt);
+  const wantedRun = match && isRow(match.internal) && typeof match.internal.runId === "number" ? match.internal.runId : null;
+  const wantedDeployment = match ? text(match.deploymentId) : "";
+  const startedAfter = match ? text(match.startedAfter) : "";
+  const matched = wantedRun !== null
+    ? runId === wantedRun
+    : wantedDeployment
+      ? deploymentId === wantedDeployment || (Boolean(startedAt) && Boolean(startedAfter) && after(startedAt, startedAfter))
+      : !startedAt || after(startedAt, acceptedAt);
+
+  if (!matched) return { kind: "waiting", status: "earlier run" };
+
+  const status = text(detail.status).toLowerCase();
+  if (!status || PENDING_STATUSES.has(status)) return { kind: "waiting", status: status || null };
+  if (FAILED_STATUSES.has(status)) return { kind: "recorded", status, failed: true };
+
+  return { kind: "recorded", status };
 }
 
 /* @invariant A REBUILD IS A REAL BUILD, ASKED FOR AS THE AGENT AND NEVER FORCED.
@@ -182,30 +218,74 @@ export async function rebuild(args: ActArgs): Promise<string> {
   const project = `${api.ref.workspace}/${api.ref.project}`;
   const scope = args.project ? { project: args.project } : {};
   const run = runHandle(sent.json);
+  const acceptedAt = text(sent.json.dispatchedAt) || stampNow();
+  const base: Row = {
+    action: "rebuild",
+    project,
+    commit,
+    branch: text(sent.json.branch) || null,
+    buildEnv: buildEnv || "staging",
+    browsers,
+    ...(stripped.length ? { strippedBrowsers: stripped } : {}),
+    origin: text(sent.json.origin) || "mcp",
+    ...run.value,
+    follow: {
+      list: { action: "list", ...scope },
+      get: { action: "get", buildId: commit, ...scope },
+      logs: { action: "logs", buildId: commit, ...scope },
+      ...(run.match ? { match: run.match } : {}),
+    },
+    buildsPageUrl: consoleProjectUrl(api.ref, ConsoleProjectPage.builds, args.api),
+  };
+  const links = linksOf(trackLinks(COMMAND, { ...args, action: "rebuild", buildId: commit } as Row, "rebuild-dispatched", base).map((row) => (row.kind === "track" ? { ...row, kind: "build" as const } : row)));
+  const buildPage = links.find((link) => link.kind === "build")?.url ?? String(base.buildsPageUrl);
+  const readCall = `extension_builds (action: "get", buildId: "${commit || "<the new build>"}")`;
+  const waited = await awaitRecordedOutcome<Row>({
+    waitSeconds: args.waitSeconds,
+    read: async () => {
+      if (!commit) return { ok: false, message: "the platform named no commit for this rebuild, so its record cannot be read by build id" };
+
+      const read = await projectApiGet<Row>(api, `builds/${encodeURIComponent(commit)}`);
+      if (!read.ok) return { ok: false, message: read.message };
+
+      return { ok: true, record: isRow(read.json) ? read.json : {} };
+    },
+    judge: (detail) => judgeRebuild(detail, run.match, acceptedAt),
+  });
+  const made = madeSentence(links);
+  const value = { ...base, outcome: waited.outcome, links };
+  const started = `This started a real build for ${project} at ${commit || "the branch head"} (${buildEnv || "staging"}) on ${browsers.join(", ") || "the enabled browsers"}, and it counts against the workspace's build allowance.`;
+  const stripWarning = stripped.length ? `The platform left out ${stripped.join(", ")}, which this plan does not build.` : null;
+
+  if (waited.failed) {
+    return envelope({
+      ok: false,
+      command: COMMAND,
+      status: "build-failed",
+      value,
+      error: { code: "E_PLATFORM", name: "BuildFailed", message: `The platform's record of build ${commit} reads ${waited.outcome.status} after this rebuild.` },
+      hint: `${started} The rebuild finished and failed: read extension_builds action:"logs" with buildId ${commit} for the failed browser and step, and the build page ${buildPage}. ${made}`,
+      warnings: [stripWarning],
+    });
+  }
+
+  if (waited.outcome.recorded) {
+    return envelope({
+      ok: true,
+      command: COMMAND,
+      status: "built",
+      value,
+      hint: `${started} The platform's record of build ${commit} now reads ${waited.outcome.status}; ${readCall} reads its artifacts and checks, and the build page is ${buildPage}. ${made}`,
+      warnings: [stripWarning],
+    });
+  }
 
   return envelope({
     ok: true,
     command: COMMAND,
-    status: "dispatched",
-    value: {
-      action: "rebuild",
-      project,
-      commit,
-      branch: text(sent.json.branch) || null,
-      buildEnv: buildEnv || "staging",
-      browsers,
-      ...(stripped.length ? { strippedBrowsers: stripped } : {}),
-      origin: text(sent.json.origin) || "mcp",
-      ...run.value,
-      follow: {
-        list: { action: "list", ...scope },
-        get: { action: "get", buildId: commit, ...scope },
-        logs: { action: "logs", buildId: commit, ...scope },
-        ...(run.match ? { match: run.match } : {}),
-      },
-      buildsPageUrl: consoleProjectUrl(api.ref, ConsoleProjectPage.builds, args.api),
-    },
-    hint: `This started a real build for ${project} at ${commit || "the branch head"} (${buildEnv || "staging"}) on ${browsers.join(", ") || "the enabled browsers"}, and it counts against the workspace's build allowance. It takes minutes: follow it with extension_builds action:"get" or action:"logs" with buildId ${commit || "<the new build>"}. ${run.sentence} Do not rebuild again to check on it.`,
-    warnings: [stripped.length ? `The platform left out ${stripped.join(", ")}, which this plan does not build.` : null],
+    status: "rebuild-dispatched",
+    value,
+    hint: `${dispatchedHint({ acceptedAt, trackUrl: buildPage, readCall })} ${started} It takes minutes: follow it with extension_builds action:"get" or action:"logs" with buildId ${commit || "<the new build>"}. ${run.sentence} Do not rebuild again to check on it. ${made}`,
+    warnings: [stripWarning],
   });
 }

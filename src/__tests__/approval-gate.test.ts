@@ -180,7 +180,8 @@ describe("the approval gate guards irreversible outward actions and cannot self-
         await submitHandler({ browsers: ["chrome"], buildSha: "abc1234", dryRun: false }),
       );
       expect(hit("POST /api/cli/approvals")).toBe(false);
-      expect(out.status).toBe("submitted");
+      expect(out.status).toBe("submit-dispatched");
+      expect(out.value.outcome.recorded).toBe(false);
     });
 
     const refusedBeforeApproval = (code: string, message: string, status = 409) => () =>
@@ -459,7 +460,7 @@ describe("the approval gate guards irreversible outward actions and cannot self-
         calls.some((c) => c.key.startsWith("GET /api/cli/approvals/")),
       ).toBe(true);
 
-      expect(out.status).toBe("submitted");
+      expect(out.status).toBe("submit-dispatched");
       const submitCall = calls.find(
         (c) => c.key === "POST /api/cli/stores/submit",
       );
@@ -527,7 +528,8 @@ describe("the approval gate guards irreversible outward actions and cannot self-
           approvalId: "apr_ok",
         }),
       );
-      expect(out.status).toBe("promoted");
+      expect(out.status).toBe("promote-dispatched");
+      expect(out.value.outcome.recorded).toBe(false);
       expect(hit("POST /api/cli/release/promote")).toBe(true);
     });
 

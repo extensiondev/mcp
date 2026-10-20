@@ -8,9 +8,12 @@
 
 import { ConsoleProjectPage } from "@extension.dev/urls/paths";
 
+import { awaitRecordedOutcome, dispatchedHint, linksOf, madeSentence, stampNow } from "../lib/act-outcome";
 import { envelope, isEnvelope } from "../lib/envelope";
+import { readSubmissionRecord, type PlatformSubmission } from "../lib/platform-submissions";
 import { consoleProjectUrl } from "../lib/registry";
 import { projectApiReadFailure, projectApiSend } from "../lib/project-api";
+import { actLinks, judgePublish, trackOf } from "../lib/store-act-outcome";
 import { badShipRequest, isRow, openShipApi, runShipAct, text } from "../lib/ship-act";
 import {
   ITEM_NOT_LINKED_CODE,
@@ -31,10 +34,10 @@ import { hostedPrivacy, hostedPrivacyPage, privacyPublishedSentence, readLocalLi
 import type { ListingStore } from "../lib/store-md-listing";
 
 
-const COMMAND = "extension_submit";
-const STORES = ["chrome", "firefox", "edge", "safari"] as const;
+export const COMMAND = "extension_submit";
+export const STORES = ["chrome", "firefox", "edge", "safari"] as const;
 
-type Row = Record<string, unknown>;
+export type Row = Record<string, unknown>;
 
 export interface StoreActArgs {
   action?: string;
@@ -45,15 +48,16 @@ export interface StoreActArgs {
   buildSha?: string;
   channel?: string;
   approvalId?: string;
+  waitSeconds?: unknown;
   project?: string;
   projectPath?: string;
   api?: string;
 }
 
-const storesRead = (args: StoreActArgs) =>
+export const storesRead = (args: StoreActArgs) =>
   `extension_release_status (include: ["stores"]${args.project ? `, project: "${args.project}"` : ""})`;
 
-function storeOf(args: StoreActArgs, act: string): { store: string } | { refused: string } {
+export function storeOf(args: StoreActArgs, act: string): { store: string } | { refused: string } {
   const store = text(args.store).toLowerCase() || "chrome";
 
   if (!(STORES as readonly string[]).includes(store)) {
@@ -61,96 +65,6 @@ function storeOf(args: StoreActArgs, act: string): { store: string } | { refused
   }
 
   return { store };
-}
-
-export async function cancelSubmission(args: StoreActArgs): Promise<string> {
-  const picked = storeOf(args, "cancel");
-  if ("refused" in picked) return picked.refused;
-
-  const submissionId = text(args.submissionId);
-
-  if (!submissionId) {
-    return badShipRequest(COMMAND, "cancel", "CancelInputError", `cancel needs submissionId, the platform's id of the submission to withdraw from review; ${storesRead(args)} lists them. Nothing was sent.`);
-  }
-
-  const { store } = picked;
-  const opened = await openShipApi(COMMAND, args, { action: "cancel", store, submissionId });
-  if ("refused" in opened) return opened.refused;
-
-  const ran = await runShipAct(
-    {
-      command: COMMAND,
-      act: "cancel",
-      action: "extension_store.cancel",
-      route: `stores/${store}/submissions/${encodeURIComponent(submissionId)}/cancel`,
-      body: {},
-      approvalId: args.approvalId,
-      description: `Withdraw ${store} store submission ${submissionId} from review.`,
-      reason: "The store stops reviewing it and it goes back to a draft, so a workspace owner approves withdrawing this exact submission first.",
-      stateRead: storesRead(args),
-      scopeFits: (asked) => text(asked.store) === store && Boolean(text(asked.submissionId)),
-      project: args.project,
-      apiHint: args.api,
-      value: { store, submissionId },
-    },
-    opened.api,
-  );
-
-  if (!ran.ok) return ran.out;
-
-  return envelope({
-    ok: true,
-    command: COMMAND,
-    status: "cancel-dispatched",
-    value: { action: "cancel", ...ran.json },
-    hint: `The store run that withdraws submission ${submissionId} was dispatched; the store acts when it runs. ${storesRead(args)} reads the submission's state once the run records it.`,
-  });
-}
-
-export async function raiseRollout(args: StoreActArgs): Promise<string> {
-  const picked = storeOf(args, "rollout");
-  if ("refused" in picked) return picked.refused;
-
-  const raw = args.deployPercentage;
-  const percentage = typeof raw === "string" && raw.trim() !== "" ? Number(raw) : raw;
-
-  if (typeof percentage !== "number" || !Number.isInteger(percentage) || percentage < 1 || percentage > 100) {
-    return badShipRequest(COMMAND, "rollout", "RolloutInputError", `rollout needs deployPercentage, a whole number from 1 to 100 above the current rollout; got ${JSON.stringify(raw ?? null)}. Nothing was sent.`);
-  }
-
-  const { store } = picked;
-  const opened = await openShipApi(COMMAND, args, { action: "rollout", store, deployPercentage: percentage });
-  if ("refused" in opened) return opened.refused;
-
-  const ran = await runShipAct(
-    {
-      command: COMMAND,
-      act: "rollout",
-      action: "extension_store.rollout",
-      route: `stores/${store}/rollout`,
-      body: { deployPercentage: percentage },
-      approvalId: args.approvalId,
-      description: `Raise the ${store} store's staged rollout to ${percentage}% of users.`,
-      reason: "This is irreversible: the store does not let a rollout be lowered again from here, so a workspace owner approves this exact percentage first.",
-      stateRead: 'extension_release_status (include: ["rollout"])',
-      irreversible: true,
-      scopeFits: (asked) => text(asked.store) === store && text(asked.deployPercentage) === String(percentage),
-      project: args.project,
-      apiHint: args.api,
-      value: { store, deployPercentage: percentage },
-    },
-    opened.api,
-  );
-
-  if (!ran.ok) return ran.out;
-
-  return envelope({
-    ok: true,
-    command: COMMAND,
-    status: "rollout-dispatched",
-    value: { action: "rollout", ...ran.json },
-    hint: `The store run that raises the rollout to ${percentage}% was dispatched. extension_release_status (include: ["rollout"]) reads the percentage once the run saves it.`,
-  });
 }
 
 export const PUBLISH_ACTIONS = new Set(["publish", "review"]);
@@ -252,25 +166,64 @@ export async function publishDraft(args: StoreActArgs): Promise<string> {
 
   const json = ran.json;
   const itemUrl = text(json.itemUrl);
-  const trackUrl = text(json.trackUrl);
+  const sentId = text(json.submissionId) || submissionId;
+  const acceptedAt = text(json.dispatchedAt) || stampNow();
+  const base: Row = {
+    action: "publish",
+    store: "chrome",
+    submissionId: sentId,
+    ...(text(json.version) ? { version: text(json.version) } : {}),
+    ...(text(json.buildId) ? { buildId: text(json.buildId) } : {}),
+    ...(itemUrl ? { itemUrl } : {}),
+  };
+  const itemLink = itemUrl ? [{ kind: "item" as const, url: itemUrl, audience: "you" as const }] : [];
+  const links = text(json.trackUrl)
+    ? linksOf([{ kind: "submission", url: text(json.trackUrl) }, ...itemLink])
+    : actLinks(COMMAND, { ...args, action: "publish" } as Row, "in-review", base, itemLink, "submission");
+  const trackUrl = text(json.trackUrl) || trackOf(links);
   const say = `It is on its way to Chrome's review; follow it at ${trackUrl || "the submission page"}. Nothing changes for current users until Chrome approves it.`;
+  const waited = await awaitRecordedOutcome<PlatformSubmission>({
+    waitSeconds: args.waitSeconds,
+    read: () => readSubmissionRecord(opened.api, { submissionId: sentId, store: "chrome" }),
+    judge: judgePublish,
+  });
+  const made = madeSentence(links);
+  const value: Row = {
+    ...base,
+    ...(trackUrl ? { trackUrl } : {}),
+    outcome: waited.outcome,
+    links,
+  };
+
+  if (waited.failed) {
+    const reason = text(waited.record?.failureReason) || `the platform's record of submission ${sentId} reads ${waited.outcome.status}`;
+
+    return envelope({
+      ok: false,
+      command: COMMAND,
+      status: "publish-failed",
+      value,
+      error: { code: "E_PLATFORM", name: "PublishFailed", message: `The publish did not reach Chrome's review: ${reason}.` },
+      hint: `Fix the cause and call extension_submit action "publish" again; ${storesRead(args)} reads the record. ${made}`,
+    });
+  }
+
+  if (waited.outcome.recorded) {
+    return envelope({
+      ok: true,
+      command: COMMAND,
+      status: "in-review",
+      value: { ...value, sayToPerson: say, nextStep: nextStep("done", say, trackUrl) },
+      hint: `The platform's record of submission ${sentId} carries Chrome's own state, ${waited.outcome.storeState}, so the draft is in Chrome's review. ${say} ${made}`,
+    });
+  }
 
   return envelope({
     ok: true,
     command: COMMAND,
-    status: "in-review",
-    value: {
-      action: "publish",
-      store: "chrome",
-      submissionId: text(json.submissionId),
-      ...(text(json.version) ? { version: text(json.version) } : {}),
-      ...(text(json.buildId) ? { buildId: text(json.buildId) } : {}),
-      ...(itemUrl ? { itemUrl } : {}),
-      ...(trackUrl ? { trackUrl } : {}),
-      sayToPerson: say,
-      nextStep: nextStep("done", say, trackUrl),
-    },
-    hint: `The platform dispatched the run that sends the Chrome draft to review; the submission page records Chrome's answer, and ${storesRead(args)} reads the review state. ${say}`,
+    status: "publish-dispatched",
+    value: { ...value, sayToPerson: say, nextStep: nextStep("done", say, trackUrl) },
+    hint: `${dispatchedHint({ acceptedAt, trackUrl, readCall: storesRead(args) })} ${made}`,
   });
 }
 

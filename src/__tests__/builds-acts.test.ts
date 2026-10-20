@@ -142,7 +142,9 @@ describe("extension_builds starts a rebuild, changes build settings with an appr
     expect(dispatch?.body).toEqual({ origin: "mcp", buildEnv: "production", commitSha: "603fc8a" });
     expect(dispatch?.auth).toBe("Bearer claims.sig");
     expect(out.ok).toBe(true);
-    expect(out.status).toBe("dispatched");
+    expect(out.status).toBe("rebuild-dispatched");
+    expect(out.value.outcome).toMatchObject({ recorded: false, source: "platform-record" });
+    expect(out.value.links.map((link: { kind: string }) => link.kind)).toEqual(["build"]);
     expect(out.value).toMatchObject({ action: "rebuild", commit: "603fc8a", branch: "main", browsers: ["chrome", "firefox"], buildEnv: "production" });
     expect(out.hint).toContain("real build");
     expect(out.hint).toContain('action:"get"');

@@ -24,7 +24,7 @@ describe("extension_builds hands an agent this rebuild's run as an internal id, 
 
     const out = JSON.parse(await builds({ action: "rebuild", buildId: "603fc8a", api: API }));
 
-    expect(out.status).toBe("dispatched");
+    expect(out.status).toBe("rebuild-dispatched");
     expect(out.value).toMatchObject({
       deploymentId: DEPLOYMENT,
       dispatchedAt: DISPATCHED_AT,

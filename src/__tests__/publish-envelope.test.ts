@@ -216,7 +216,8 @@ describe("extension_publish envelope compatibility", () => {
     ])("a private project from %s gets a build link with an ISO expiry and a way to renew it", async (_name, answer) => {
       const out = await publishAgainst(answer);
 
-      expect(out.status).toBe("published");
+      expect(out.status).toBe("publish-dispatched");
+      expect(out.value.outcome.recorded).toBe(false);
       expect(out.value.link).toMatchObject({
         kind: "build",
         url: "https://acme.extension.dev/widget/builds/abc1234?share=tok_share",
@@ -228,7 +229,8 @@ describe("extension_publish envelope compatibility", () => {
 
       expect(out.value.expiresAt).toBe(ISO);
       expect(out.value.expiresAtEpoch).toBe(PUBLISH_EXPIRES_AT_EPOCH);
-      expect(out.value.links.map((l: { kind: string }) => l.kind)).toEqual(["build"]);
+      expect(out.value.links.map((l: { kind: string }) => l.kind)).toEqual(["share", "track", "build"]);
+      expect(out.value.links[0]).toMatchObject({ url: "https://acme.extension.dev/widget/builds/abc1234?share=tok_share", audience: "anyone with the link", expiresAt: ISO, made: true });
       expect(out.value.projectVisibility).toMatchObject({ value: "private", source: "extension.dev project settings" });
       expect(JSON.stringify(out.value.projectVisibility.makeEvergreen)).toMatch(/console/);
       expect(JSON.stringify(out.value.projectVisibility.makeEvergreen)).toMatch(/settings\/visibility/);
@@ -268,9 +270,9 @@ describe("extension_publish envelope compatibility", () => {
     ])("a public project whose build a channel serves gets both kinds from %s and is told to send the channel link", async (_name, answer) => {
       const out = await publishAgainst(answer, { "chrome-stable": { sha: "abc1234" } });
 
-      expect(out.value.links).toEqual([
-        expect.objectContaining({ kind: "build", url: "https://acme.extension.dev/widget/builds/abc1234", expiresAt: null }),
-        expect.objectContaining({ kind: "channel", url: "https://acme.extension.dev/widget/channels/stable", expiresAt: null, pointsAt: "latest in stable" }),
+      expect(out.value.links.slice(0, 2)).toEqual([
+        expect.objectContaining({ kind: "build", url: "https://acme.extension.dev/widget/builds/abc1234", expiresAt: null, made: false }),
+        expect.objectContaining({ kind: "channel", url: "https://acme.extension.dev/widget/channels/stable", expiresAt: null, pointsAt: "latest in stable", made: false }),
       ]);
 
       expect(out.value.tellThem).toBe("Here is widget to try: https://acme.extension.dev/widget/channels/stable. It always opens the newest stable build.");

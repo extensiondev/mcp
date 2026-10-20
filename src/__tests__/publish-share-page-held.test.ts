@@ -84,6 +84,10 @@ function production(url: string, init?: RequestInit): Response {
     return new Response(null, { status: page.status, headers: page.headers });
   }
 
+  if (url.includes("/api/public/share/k3x9q?")) {
+    return new Response(JSON.stringify({ token: "never-answered", expiresAt: 1792000020, scope: "build:b4187328" }), { status: 200, headers: { "content-type": "application/json" } });
+  }
+
   return new Response(JSON.stringify({ message: "not found" }), { status: 404 });
 }
 
@@ -152,7 +156,7 @@ describe("extension_publish while the platform holds the public", () => {
     const out = JSON.parse(await handler({}));
 
     expect(pageProbes).toEqual(["HEAD", "GET"]);
-    expect(out.status).toBe("published");
+    expect(out.status).toBe("publish-dispatched");
   });
 
   it("keeps published and the page sentence when the share page opens", async () => {
@@ -160,7 +164,8 @@ describe("extension_publish while the platform holds the public", () => {
 
     const out = JSON.parse(await handler({}));
 
-    expect(out.status).toBe("published");
+    expect(out.status).toBe("publish-dispatched");
+    expect(out.value.outcome.readProblem).toContain("minted no short link");
     expect(out.value.sharePage).toBeUndefined();
     expect(out.value.tellThem).toBe(`Here is pii-shield to try: ${SHARE}. It works until October 26, 2026 at 17:27 UTC.`);
   });
@@ -176,6 +181,10 @@ describe("extension_publish while the platform holds the public", () => {
       const out = JSON.parse(await handler({}));
 
       expect(out.status).toBe("published");
+      expect(out.value.outcome).toMatchObject({ recorded: true, status: "live", source: "platform-record" });
+      expect(out.value.links[0]).toMatchObject({ kind: "share", url: SHORT_PAGE, made: true, audience: "anyone with the link", expiresAt: "2026-10-26T17:27:00.000Z" });
+      expect(out.hint).toContain("Made: the tester link (expires October 26).");
+      expect(JSON.stringify(out.value)).not.toContain("never-answered");
       expect(out.value.tellThem).toBe(`Here is PII Shield to try: ${SHORT_PAGE}. It works until October 26, 2026 at 17:27 UTC.`);
       expect(out.value.tellThem).not.toContain("eyJ");
       expect(out.value.tellThem).not.toContain("registry.extension.land");
@@ -203,12 +212,13 @@ describe("extension_publish while the platform holds the public", () => {
       expect(out.value.link.id).toBe("k3x9q");
     });
 
-    it("gives the agent a hint of two sentences: what to send and where to watch", async () => {
+    it("gives the agent a hint of three sentences: what to send, where to watch and what was made", async () => {
       page = { status: 503, headers: { "retry-after": "86400" } };
 
       const out = JSON.parse(await handler({}));
 
-      expect(sentences(out.hint)).toHaveLength(2);
+      expect(sentences(out.hint)).toHaveLength(3);
+      expect(sentences(out.hint)[2]).toBe("Made: the tester link (expires October 26).");
       expect(out.hint).toContain(out.value.trackUrl);
       expect(out.hint).not.toContain("eyJ");
       expect(out.value.notes.length).toBeGreaterThan(0);
@@ -233,7 +243,10 @@ describe("extension_publish while the platform holds the public", () => {
 
       expect(out.value.tellThem).not.toContain("firefox.zip");
       expect(out.value.link.id).toBeNull();
-      expect(sentences(out.hint)).toHaveLength(2);
+      expect(sentences(out.hint)).toHaveLength(5);
+      expect(sentences(out.hint)[0]).toMatch(/^The platform accepted the act at /);
+      expect(sentences(out.hint)[4]).toBe("Made: the tester link (expires October 26).");
+      expect(out.value.outcome).toMatchObject({ recorded: false, readProblem: "the platform minted no short link, so there is no share record to read back" });
       expect(out.hint).toContain("the platform has not minted a short");
       expect(out.value.trackUrl).toContain("/project-settings/share-links");
     });

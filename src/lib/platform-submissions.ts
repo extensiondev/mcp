@@ -8,6 +8,7 @@
 
 import { resolveCredential } from "./credential-source";
 import { resolveApiBase, safeApiBase } from "./login-flow";
+import { platformApiGet, type ProjectApi } from "./project-api";
 import { identityHeaders } from "./session-identity";
 
 const READ_TIMEOUT_MS = 20_000;
@@ -23,6 +24,18 @@ export interface SubmissionRun {
   settled?: boolean;
 }
 
+export interface StoreReview {
+  state: string;
+  checkedAt?: string;
+  source?: string;
+}
+
+export interface StoreUpload {
+  state: string;
+  crxVersion?: string;
+  checkedAt?: string;
+}
+
 export interface PlatformSubmission {
   id?: string;
   store: string;
@@ -33,6 +46,8 @@ export interface PlatformSubmission {
   submittedAt?: string;
   failureReason?: string;
   storeUrl?: string;
+  storeReview?: StoreReview;
+  storeUpload?: StoreUpload;
   run: SubmissionRun;
 }
 
@@ -51,7 +66,39 @@ function sameProject(a: { workspace: string; project: string }, b: { workspace: 
   return a.workspace.toLowerCase() === b.workspace.toLowerCase() && a.project.toLowerCase() === b.project.toLowerCase();
 }
 
-function toSubmission(raw: Record<string, unknown>): PlatformSubmission | null {
+function storeReviewOf(raw: unknown): StoreReview | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+
+  const row = raw as Record<string, unknown>;
+  const state = str(row.state);
+  if (!state) return undefined;
+
+  const out: StoreReview = { state };
+  const checkedAt = str(row.checkedAt);
+  const source = str(row.source);
+  if (checkedAt) out.checkedAt = checkedAt;
+  if (source) out.source = source;
+
+  return out;
+}
+
+function storeUploadOf(raw: unknown): StoreUpload | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+
+  const row = raw as Record<string, unknown>;
+  const state = str(row.state);
+  if (!state) return undefined;
+
+  const out: StoreUpload = { state };
+  const crxVersion = str(row.crxVersion);
+  const checkedAt = str(row.checkedAt);
+  if (crxVersion) out.crxVersion = crxVersion;
+  if (checkedAt) out.checkedAt = checkedAt;
+
+  return out;
+}
+
+export function toSubmission(raw: Record<string, unknown>): PlatformSubmission | null {
   const store = str(raw.store);
   if (!store) return null;
 
@@ -73,6 +120,11 @@ function toSubmission(raw: Record<string, unknown>): PlatformSubmission | null {
   if (raw.settled === true) run.settled = true;
 
   const out: PlatformSubmission = { store, run };
+  const storeReview = storeReviewOf(raw.storeReview);
+  const storeUpload = storeUploadOf(raw.storeUpload);
+  if (storeReview) out.storeReview = storeReview;
+  if (storeUpload) out.storeUpload = storeUpload;
+
   const fields: Array<[keyof PlatformSubmission, unknown]> = [
     ["id", raw.id],
     ["status", raw.status],
@@ -158,6 +210,61 @@ export async function readPlatformSubmissions(args: {
   }
 
   return { ok: true, byStore };
+}
+
+export type SubmissionRecordRead =
+  | { ok: true; record: PlatformSubmission | null }
+  | { ok: false; message: string };
+
+export async function readSubmissionRecord(
+  api: Pick<ProjectApi, "base" | "token" | "command">,
+  query: { submissionId?: string; store?: string },
+): Promise<SubmissionRecordRead> {
+  const submissionId = str(query.submissionId);
+  const read = await platformApiGet<{ submissions?: unknown }>(api, "/api/cli/stores/submissions", submissionId ? { submissionId } : undefined);
+
+  if (!read.ok) {
+    if (read.status === 404 && read.code === "SUBMISSION_NOT_FOUND") return { ok: true, record: null };
+
+    return { ok: false, message: read.message };
+  }
+
+  const rows = Array.isArray(read.json.submissions) ? read.json.submissions : null;
+  if (!rows) return { ok: false, message: `${api.base}/api/cli/stores/submissions answered without a list of submissions` };
+
+  const parsed = rows
+    .filter((raw): raw is Record<string, unknown> => Boolean(raw) && typeof raw === "object")
+    .map(toSubmission)
+    .filter((row): row is PlatformSubmission => row !== null);
+  const store = str(query.store);
+  const found = submissionId
+    ? parsed.find((row) => row.id === submissionId)
+    : store
+      ? parsed.find((row) => row.store === store)
+      : parsed[0];
+
+  return { ok: true, record: found ?? null };
+}
+
+export async function readSubmissionRecords(
+  api: Pick<ProjectApi, "base" | "token" | "command">,
+): Promise<{ ok: true; record: Record<string, PlatformSubmission> } | { ok: false; message: string }> {
+  const read = await platformApiGet<{ submissions?: unknown }>(api, "/api/cli/stores/submissions");
+  if (!read.ok) return { ok: false, message: read.message };
+
+  const rows = Array.isArray(read.json.submissions) ? read.json.submissions : null;
+  if (!rows) return { ok: false, message: `${api.base}/api/cli/stores/submissions answered without a list of submissions` };
+
+  const byStore: Record<string, PlatformSubmission> = {};
+
+  for (const raw of rows) {
+    if (!raw || typeof raw !== "object") continue;
+
+    const submission = toSubmission(raw as Record<string, unknown>);
+    if (submission) byStore[submission.store] = submission;
+  }
+
+  return { ok: true, record: byStore };
 }
 
 export function isNewerOrSame(platformAt: string | undefined, registryAt: string | undefined): boolean {

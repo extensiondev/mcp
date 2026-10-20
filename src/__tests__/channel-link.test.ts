@@ -41,6 +41,8 @@ function registry(visibility: "public" | "private") {
 
       if (href.endsWith("/api/cli/publish")) return json(publishAnswer({ visibility, buildSha: "abc1234" }));
       if (href.endsWith("/api/cli/release/promote")) return json(promoteAnswer({ queuedBrowsers: ["chrome", "firefox"] }));
+      if (href.endsWith("/api/cli/whoami")) return json({ login: "acme/widget", projectId: "prj_1", workspaceSlug: "acme", projectSlug: "widget" });
+      if (href.endsWith("/api/projects/prj_1/releases")) return json({ items: [{ id: "rel_1", channel: "stable", buildId: "abc1234", status: "completed" }] });
       if (href.endsWith("/channels.json")) return json(CHANNELS);
       if (href.endsWith("/meta.json")) return json({ name: "Widget", visibility });
       if (href.endsWith("/builds/index.json")) return json({ items: [] });
@@ -106,7 +108,9 @@ describe("a public project's answers carry the link that follows a release chann
     );
 
     expect(out.status).toBe("promoted");
+    expect(out.value.outcome).toMatchObject({ recorded: true, status: "completed" });
     expect(out.value.channelUrl).toBe(`${PROJECT}/channels/stable`);
+    expect(out.value.links).toContainEqual({ kind: "channel", url: `${PROJECT}/channels/stable`, audience: "anyone with the link", expiresAt: null, made: false });
   });
 });
 

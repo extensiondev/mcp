@@ -29,6 +29,12 @@ function stubSubmit(answer: unknown | (() => never), status = 200) {
         );
       }
 
+      if (href.includes("/api/cli/stores/submissions")) {
+        const rows = answer && typeof answer === "object" && Array.isArray((answer as { submissions?: unknown[] }).submissions) ? (answer as { submissions: Array<Record<string, unknown>> }).submissions : [];
+
+        return new Response(JSON.stringify({ submissions: rows.map((row) => ({ ...row, status: "submitted" })) }), { status: 200 });
+      }
+
       throw new Error(`Unexpected fetch: ${href}`);
     }),
   );
@@ -83,11 +89,12 @@ describe("extension_submit says submitted only for stores the platform recorded"
 
     expect(out.ok).toBe(true);
     expect(out.status).toBe("submitted");
+    expect(out.value.outcome).toMatchObject({ recorded: true, status: "chrome: submitted; firefox: submitted" });
+    expect(out.hint).toContain("Made: the submission page.");
     expect(out.value.submittedStores).toEqual(["chrome", "firefox"]);
     expect(out.value.missingStores).toBeUndefined();
     expect(out.value.allowance.spent).toContain("This submission");
     expect(out.hint).toContain("chrome, firefox");
-    expect(out.hint).toContain("pending");
     expect(out.hint).toContain('does not enter review and is recorded as "Uploaded, not public"');
   });
 

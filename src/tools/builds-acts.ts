@@ -50,6 +50,7 @@ export interface ActArgs {
   description?: string;
   color?: string;
   audience?: string;
+  waitSeconds?: unknown;
   project?: string;
   api?: string;
 }

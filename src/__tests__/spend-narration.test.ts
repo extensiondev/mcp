@@ -174,7 +174,7 @@ describe("every spending lane counts the allowance out loud in its result", () =
     const real = JSON.parse(
       await submit({ browsers: ["chrome"], buildSha: "a1b2c3d", dryRun: false }),
     );
-    expect(real.status).toBe("submitted");
+    expect(real.status).toBe("submit-dispatched");
     expectNarrated(real.value.allowance, "This submission");
 
     global.fetch = (async () =>

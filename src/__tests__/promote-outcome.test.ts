@@ -28,6 +28,14 @@ function stubPromote(body: unknown, status = 200) {
         );
       }
 
+      if (href.endsWith("/api/cli/whoami")) {
+        return new Response(JSON.stringify({ login: "acme/widget", projectId: "prj_1", workspaceSlug: "acme", projectSlug: "widget" }), { status: 200 });
+      }
+
+      if (href.endsWith("/api/projects/prj_1/releases")) {
+        return new Response(JSON.stringify({ items: [{ id: "rel_1", channel: "beta", buildId: "abc1234", status: "completed" }] }), { status: 200 });
+      }
+
       throw new Error(`Unexpected fetch: ${href}`);
     }),
   );

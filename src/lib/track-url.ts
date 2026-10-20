@@ -310,12 +310,15 @@ export function attachTrack(command: string, args: Row, result: string): string 
   if (!fields) return result;
 
   const hint = typeof frame.hint === "string" ? frame.hint.trim() : "";
+  const links = Array.isArray(value.links) && !fields.checkUrl && !value.links.some((row) => isRow(row) && row.url === fields.trackUrl)
+    ? { links: [{ kind: "track", url: fields.trackUrl, audience: "workspace members", expiresAt: null, made: false }, ...value.links] }
+    : {};
 
   return envelope({
     ok: frame.ok,
     command: frame.command,
     status: frame.status,
-    value: { ...value, ...fields },
+    value: { ...value, ...fields, ...links },
     error: frame.error ?? undefined,
     warnings: frame.warnings,
     ...(frame.truncated !== undefined ? { truncated: frame.truncated } : {}),
