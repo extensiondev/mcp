@@ -10,7 +10,7 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 
-import { catalogCommitProblem, templateMetaUrls } from "./template-artifact-source";
+import { catalogCommitProblem, isPinnedCatalog, templateMetaUrls } from "./template-artifact-source";
 
 import bundledSnapshot from "./templates-meta.snapshot.json";
 
@@ -43,7 +43,7 @@ function readCachedMeta(): TemplatesCatalog | null {
   try {
     const cached = JSON.parse(fs.readFileSync(CACHE_FILE, "utf8"));
 
-    return isUsableMeta(cached) ? cached : null;
+    return isUsableMeta(cached) && isPinnedCatalog(cached) ? cached : null;
   } catch {
     return null;
   }

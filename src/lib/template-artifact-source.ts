@@ -50,6 +50,13 @@ function catalogDocumentUrl(pointerUrl: string, catalogPath: string): string {
  * falls back to raw GitHub at the pin. The document's reason is returned as a
  * sentence so the tool's fallback note can carry both shas to the agent.
  */
+export function isPinnedCatalog(payload: unknown): boolean {
+  const document = payload as { schema?: unknown; source?: { commit?: unknown } } | null;
+  if (document?.schema !== CATALOG_SCHEMA) return false;
+
+  return String(document.source?.commit ?? "").trim() === pinnedTemplateCommit();
+}
+
 export function catalogCommitProblem(payload: unknown): string | null {
   const document = payload as {
     schema?: unknown;

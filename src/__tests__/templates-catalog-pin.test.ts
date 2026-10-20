@@ -133,6 +133,48 @@ describe("the registry catalog behind extension_templates", () => {
     ]);
   });
 
+  it("ignores a cached catalog that is not the pinned document and serves the snapshot offline", async () => {
+    const { listTemplatesWithSource } = await load();
+    fs.mkdirSync(cacheDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(cacheDir, "templates-meta.json"),
+      JSON.stringify({ templates: [{ ...ROW, surfaces: ["action"] }] }),
+    );
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        throw new Error("offline");
+      }),
+    );
+
+    const read = await listTemplatesWithSource({ surface: "devtools" });
+
+    expect(read.source).toBe("bundled-snapshot");
+    expect(read.templates.length).toBeGreaterThan(0);
+  });
+
+  it("ignores a cached catalog cut at another commit", async () => {
+    const { listTemplatesWithSource } = await load();
+    fs.mkdirSync(cacheDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(cacheDir, "templates-meta.json"),
+      JSON.stringify(documentAt(OTHER_COMMIT, [{ ...ROW, surfaces: ["devtools"] }])),
+    );
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        throw new Error("offline");
+      }),
+    );
+
+    const read = await listTemplatesWithSource({});
+
+    expect(read.source).toBe("bundled-snapshot");
+    expect(read.templates.some((t) => t.slug === "action")).toBe(true);
+  });
+
   it("drops a document cut at another commit and names both shas in the fallback note", async () => {
     const { PINNED_COMMIT, fetchTemplatesMetaWithSource } = await load();
     serve({

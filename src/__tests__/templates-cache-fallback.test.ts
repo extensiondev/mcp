@@ -22,6 +22,7 @@ vi.mock("node:os", async (importOriginal) => {
 vi.mock("../lib/template-artifact-source", () => ({
   templateMetaUrls: async () => ["https://example.invalid/templates-meta.json"],
   catalogCommitProblem: () => null,
+  isPinnedCatalog: () => true,
 }));
 
 const fakeHome = os.homedir();
