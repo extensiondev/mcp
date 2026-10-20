@@ -1,6 +1,6 @@
 {
   "generatedFrom": "src/clients/index.ts; regenerate with pnpm docs:tools",
-  "version": "10.15.0",
+  "version": "10.15.1",
   "clients": [
     {
       "id": "claude-code",

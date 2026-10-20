@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 10.15.1
 
 - `extension_release_status` store rows carry the platform stamp the mirror recorded: `lastSubmission` and each `submissionHistory` row answer `storeVersion: {packaged, displayed, source, buildNumber}` and `storeCrxVersion` (the version the store reported for the package) when the record holds them, so "which version did Chrome receive" is answered from the record instead of guessed from the manifest.
 - A Chrome draft's `submitted` answer carries `value.nextStep` kind `publish` with `url: null`: the next act is `extension_submit {action: "publish"}`, a tool call, never the Chrome Web Store dashboard; the item's dashboard page stays in `value.itemUrl` as information only.
