@@ -44,6 +44,21 @@ interface SubmissionView {
   buildSha?: string;
   storeSubmissionId?: string;
   failureReason?: string;
+  storeVersion?: { packaged: string; displayed: string; source: string; buildNumber?: number };
+  storeCrxVersion?: string;
+}
+
+function storeVersionOf(raw: unknown): SubmissionView["storeVersion"] | undefined {
+  if (!isPlainObject(raw)) return undefined;
+
+  const packaged = str(raw.packaged);
+  const displayed = str(raw.displayed);
+  const source = str(raw.source);
+  if (!packaged || !displayed || !source) return undefined;
+
+  const buildNumber = typeof raw.buildNumber === "number" && Number.isInteger(raw.buildNumber) && raw.buildNumber > 0 ? raw.buildNumber : undefined;
+
+  return { packaged, displayed, source, ...(buildNumber ? { buildNumber } : {}) };
 }
 
 interface ReviewView {
@@ -73,6 +88,8 @@ function submissionView(row: Record<string, unknown>): SubmissionView {
   const buildSha = str(row.buildSha) || str(row.buildId);
   const storeSubmissionId = str(row.storeSubmissionId);
   const failureReason = str(row.failureReason);
+  const storeVersion = storeVersionOf(row.storeVersion);
+  const storeCrxVersion = typeof row.storeCrxVersion === "string" ? row.storeCrxVersion.trim() : "";
   if (version) view.version = version;
   if (status) view.status = status;
   if (storeUrl) view.storeUrl = storeUrl;
@@ -81,6 +98,8 @@ function submissionView(row: Record<string, unknown>): SubmissionView {
   if (buildSha) view.buildSha = buildSha;
   if (storeSubmissionId) view.storeSubmissionId = storeSubmissionId;
   if (failureReason) view.failureReason = failureReason;
+  if (storeVersion) view.storeVersion = storeVersion;
+  if (storeCrxVersion) view.storeCrxVersion = storeCrxVersion;
 
   return view;
 }
