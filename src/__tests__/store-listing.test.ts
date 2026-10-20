@@ -183,14 +183,15 @@ describe("extension_submit sync-listing and the preflight advisory", () => {
     platform.login();
 
     platform.routes[`PUT ${LISTING("chrome")}`] = (call) => {
-      if (call.body.approvalId)
-        {return {
+      if (call.body.approvalId) {
+        return {
           body: {
             ok: true,
             store: "chrome",
             changes: ['title: "" -> "PII Shield"'],
           },
-        };}
+        };
+      }
 
       const scope = { store: "chrome", listingDigest: "0".repeat(64) };
       const ours = actionFingerprint("extension_store.listing", scope);
@@ -223,14 +224,15 @@ describe("extension_submit sync-listing and the preflight advisory", () => {
     expect(platform.sent("POST", APPROVALS)).toHaveLength(0);
 
     platform.routes[`PUT ${LISTING("chrome")}`] = (call) => {
-      if (call.body.approvalId)
-        {return {
+      if (call.body.approvalId) {
+        return {
           body: {
             ok: true,
             store: "chrome",
             changes: ['title: "" -> "PII Shield"'],
           },
-        };}
+        };
+      }
 
       const parsedScope = {
         store: "chrome",
@@ -397,8 +399,8 @@ describe("extension_submit sync-listing and the preflight advisory", () => {
       advisory.notCovered.find((line: string) =>
         line.startsWith("privacy policy URL"),
       ),
-    ).toMatch(
-      /^privacy policy URL: not set; add a PRIVACY\.md at the project root saying what the extension collects, why, and where it goes, and the platform publishes it at https:\/\/[a-z0-9-]+\.extension\.dev\/[a-z0-9-]+\/privacy on the next push$/,
+    ).toBe(
+      "privacy policy URL: not in STORE.md; add `- Privacy policy URL: <address>` under `## Privacy and data use`",
     );
 
     expect(out.hint).toContain('action:"sync-listing"');

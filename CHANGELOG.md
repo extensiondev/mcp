@@ -2,8 +2,7 @@
 
 ## Unreleased
 
-- The hosted privacy policy is `PRIVACY.md` at the project root, published at `https://<workspace>.extension.dev/<project>/privacy`: `extension_submit` `action: "preflight"` and `action: "sync-listing"` count the policy as covered when that file exists and STORE.md names no own URL (`storeMd.privacyPolicy.source` is `PRIVACY.md`), say "published at <url> from PRIVACY.md; edit that file to change it" once the platform serves it, "will be published at <url> from PRIVACY.md once it is pushed ... answers 404 until then" before, and "add a PRIVACY.md at the project root ..." when the file is missing; the `Privacy policy attested` row and the STORE.md section no longer feed the page, a platform `missing-section` or `missing-attestation` state reads as `missing-file`, and the derived address comes from `@extension.dev/urls` instead of privacy.extension.land.
-- `extension_submit` `action: "preflight"` and `action: "sync-listing"` say the hosted privacy policy is "published at <url>" only when the platform's page state is `published`; until then the sentence is "will be published at <url> ... by sync-listing once the STORE.md carrying the attestation is pushed; that address answers 404 until then" (`storeMd.privacyPolicy` carries `state` and `serves`), a taken-down page says so, and the platform's privacy-policy warning is reconciled with the attestation on disk. When the preflight defers the build check to the submit call, `summary` is recomputed without it, so `canSubmit`, `blockingFailures` and `integration.canQueue` agree with the top-level verdict and `summary.namedBySubmit` names the deferred check. A synced Chrome listing answer says that Chrome's own listing fields, the privacy policy URL included, cannot be written through Google's API and are pasted once in the item's dashboard, instead of "a submission sends it".
+- The hosted privacy page is gone; the privacy policy URL is the developer's own address in STORE.md (`- Privacy policy URL: <address>` under `## Privacy and data use`), and `extension_submit` `action: "preflight"` names that line when it is missing. `storeMd.privacyPolicy`, `privacyPageUrl` and the privacy link kind are no longer answered.
 - `extension_inspect` (1,625 to about 1,300), `extension_dom_snapshot` (1,578 to about 1,200), `extension_start` (1,433 to about 1,250) and `extension_create` (1,414 to about 1,350) are cut on the same shape, with the picking rules in the `url`, `tabUrl`, `context` and `allowControl` input descriptions.
 - `extension_auth` (1,946 to about 1,700), `extension_eval` (3,370 to about 1,600), `extension_wait` (2,248 to about 1,900) and `extension_open` (1,939 to about 1,000) are cut on the same shape; the per-context routes, the per-action answers and the per-surface behavior moved into the `context`, `action` and `surface` input descriptions.
 - `extension_shares`'s description is cut from 2,153 to about 1,200 characters; each action's answer shape and the reconciliation counts moved into the `action` input description.
@@ -1079,7 +1078,7 @@ Four defects agents met while driving the server on real extension work close in
   sidebar page in a tab, dispatches a synthetic click on it over CDP, calls
   `chrome.sidePanel.open` from inside that click and closes the tab. The
   panel that opens is the real one; the result reports `gesture:
-  "synthetic-click"` and a warning that the toolbar wiring was not
+"synthetic-click"` and a warning that the toolbar wiring was not
   exercised. If the click does not open it either, the sidebar document is
   rendered as a tab with the reason in a warning, and if even that fails
   the refusal gains a hint naming the url to read instead of ending the
@@ -1539,19 +1538,19 @@ users than spacing them out.
 
 ### Migration
 
-| Old tool | New call |
-| --- | --- |
-| `extension_detect_browsers({ browsers })` | `extension_browsers({ action: "detect", browsers })` |
-| `extension_list_browsers()` | `extension_browsers({ action: "list" })` |
-| `extension_install_browser({ browser })` | `extension_browsers({ action: "install", browser })` |
-| `extension_uninstall_browser({ browser, all })` | `extension_browsers({ action: "uninstall", browser, all })` |
-| `extension_login({ project, deviceCode, api })` | `extension_auth({ action: "login", project, deviceCode, api })` |
-| `extension_whoami()` | `extension_auth({ action: "status" })` |
-| `extension_logout()` | `extension_auth({ action: "logout" })` |
-| `extension_list_templates({ surface, framework, tags, featured, query })` | `extension_templates({ action: "list", surface, framework, tags, featured, query })` |
-| `extension_get_template_source({ slug, files })` | `extension_templates({ action: "source", slug, files })` |
-| `extension_release_list({ workspace, project, api })` | `extension_release_status({ include: ["releases"], workspace, project, api })` |
-| `extension_store_status({ workspace, project, api })` | `extension_release_status({ include: ["stores"], workspace, project, api })` |
+| Old tool                                                                  | New call                                                                              |
+| ------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| `extension_detect_browsers({ browsers })`                                 | `extension_browsers({ action: "detect", browsers })`                                  |
+| `extension_list_browsers()`                                               | `extension_browsers({ action: "list" })`                                              |
+| `extension_install_browser({ browser })`                                  | `extension_browsers({ action: "install", browser })`                                  |
+| `extension_uninstall_browser({ browser, all })`                           | `extension_browsers({ action: "uninstall", browser, all })`                           |
+| `extension_login({ project, deviceCode, api })`                           | `extension_auth({ action: "login", project, deviceCode, api })`                       |
+| `extension_whoami()`                                                      | `extension_auth({ action: "status" })`                                                |
+| `extension_logout()`                                                      | `extension_auth({ action: "logout" })`                                                |
+| `extension_list_templates({ surface, framework, tags, featured, query })` | `extension_templates({ action: "list", surface, framework, tags, featured, query })`  |
+| `extension_get_template_source({ slug, files })`                          | `extension_templates({ action: "source", slug, files })`                              |
+| `extension_release_list({ workspace, project, api })`                     | `extension_release_status({ include: ["releases"], workspace, project, api })`        |
+| `extension_store_status({ workspace, project, api })`                     | `extension_release_status({ include: ["stores"], workspace, project, api })`          |
 | `extension_preview({ projectPath, browser, port, noBrowser, ...launch })` | `extension_start({ projectPath, build: false, browser, port, noBrowser, ...launch })` |
 
 Every argument keeps its name and its meaning. `action` defaults to the most
@@ -1573,24 +1572,24 @@ Most installs are still on 7.0.0 and two majors have landed on top of it. Do
 both in one pass: apply the 8.0.0 renames, then the 9.0.0 merges above. 7.0.0
 advertised 36 tools; 9.0.0 advertises 28, and every capability survived.
 
-| 7.0.0 call | 9.0.0 call | Landed in |
-| --- | --- | --- |
-| `extension_deploy(...)` | `extension_submit(...)` | 8.0.0 |
-| `extension_inspect({ projectPath })` | `extension_analyze({ projectPath })` | 8.0.0 |
-| `extension_source_inspect(...)` | `extension_inspect(...)` | 8.0.0 |
-| `extension_dom_inspect(...)` | `extension_dom_snapshot(...)` | 8.0.0 |
-| `extension_detect_browsers({ browsers })` | `extension_browsers({ action: "detect", browsers })` | 9.0.0 |
-| `extension_list_browsers()` | `extension_browsers({ action: "list" })` | 9.0.0 |
-| `extension_install_browser({ browser })` | `extension_browsers({ action: "install", browser })` | 9.0.0 |
-| `extension_uninstall_browser({ browser, all })` | `extension_browsers({ action: "uninstall", browser, all })` | 9.0.0 |
-| `extension_login({ project, deviceCode, api })` | `extension_auth({ action: "login", project, deviceCode, api })` | 9.0.0 |
-| `extension_whoami()` | `extension_auth({ action: "status" })` | 9.0.0 |
-| `extension_logout()` | `extension_auth({ action: "logout" })` | 9.0.0 |
-| `extension_list_templates({ surface, framework, tags, featured, query })` | `extension_templates({ action: "list", surface, framework, tags, featured, query })` | 9.0.0 |
-| `extension_get_template_source({ slug, files })` | `extension_templates({ action: "source", slug, files })` | 9.0.0 |
-| `extension_release_list({ workspace, project, api })` | `extension_release_status({ include: ["releases"], workspace, project, api })` | 9.0.0 |
-| `extension_store_status({ workspace, project, api })` | `extension_release_status({ include: ["stores"], workspace, project, api })` | 9.0.0 |
-| `extension_preview({ projectPath, browser, port, noBrowser, ...launch })` | `extension_start({ projectPath, build: false, browser, port, noBrowser, ...launch })` | 9.0.0 |
+| 7.0.0 call                                                                | 9.0.0 call                                                                            | Landed in |
+| ------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- | --------- |
+| `extension_deploy(...)`                                                   | `extension_submit(...)`                                                               | 8.0.0     |
+| `extension_inspect({ projectPath })`                                      | `extension_analyze({ projectPath })`                                                  | 8.0.0     |
+| `extension_source_inspect(...)`                                           | `extension_inspect(...)`                                                              | 8.0.0     |
+| `extension_dom_inspect(...)`                                              | `extension_dom_snapshot(...)`                                                         | 8.0.0     |
+| `extension_detect_browsers({ browsers })`                                 | `extension_browsers({ action: "detect", browsers })`                                  | 9.0.0     |
+| `extension_list_browsers()`                                               | `extension_browsers({ action: "list" })`                                              | 9.0.0     |
+| `extension_install_browser({ browser })`                                  | `extension_browsers({ action: "install", browser })`                                  | 9.0.0     |
+| `extension_uninstall_browser({ browser, all })`                           | `extension_browsers({ action: "uninstall", browser, all })`                           | 9.0.0     |
+| `extension_login({ project, deviceCode, api })`                           | `extension_auth({ action: "login", project, deviceCode, api })`                       | 9.0.0     |
+| `extension_whoami()`                                                      | `extension_auth({ action: "status" })`                                                | 9.0.0     |
+| `extension_logout()`                                                      | `extension_auth({ action: "logout" })`                                                | 9.0.0     |
+| `extension_list_templates({ surface, framework, tags, featured, query })` | `extension_templates({ action: "list", surface, framework, tags, featured, query })`  | 9.0.0     |
+| `extension_get_template_source({ slug, files })`                          | `extension_templates({ action: "source", slug, files })`                              | 9.0.0     |
+| `extension_release_list({ workspace, project, api })`                     | `extension_release_status({ include: ["releases"], workspace, project, api })`        | 9.0.0     |
+| `extension_store_status({ workspace, project, api })`                     | `extension_release_status({ include: ["stores"], workspace, project, api })`          | 9.0.0     |
+| `extension_preview({ projectPath, browser, port, noBrowser, ...launch })` | `extension_start({ projectPath, build: false, browser, port, noBrowser, ...launch })` | 9.0.0     |
 
 Read the `extension_inspect` row before any of the others. That name exists in
 both versions and does not mean the same thing in each. In 7.0.0 it read a
@@ -1705,12 +1704,12 @@ for. No behavior changes, no argument changes.
 
 ### Migration
 
-| Old name | New name |
-| --- | --- |
-| `extension_deploy` | `extension_submit` |
-| `extension_inspect` | `extension_analyze` |
-| `extension_source_inspect` | `extension_inspect` |
-| `extension_dom_inspect` | `extension_dom_snapshot` |
+| Old name                   | New name                 |
+| -------------------------- | ------------------------ |
+| `extension_deploy`         | `extension_submit`       |
+| `extension_inspect`        | `extension_analyze`      |
+| `extension_source_inspect` | `extension_inspect`      |
+| `extension_dom_inspect`    | `extension_dom_snapshot` |
 
 `extension_publish` is unchanged.
 
@@ -2487,7 +2486,7 @@ published to npm; installing 5.1.0 picks up both.
 
 - **Structured bundler warnings on `extension_build`.** The engine now
   persists its build summary to `dist/extension-js/<browser>/
-  build-summary.json` (the transport half of engine bug 73), and the tool
+build-summary.json` (the transport half of engine bug 73), and the tool
   returns it as `buildWarnings` (with `buildWarningsTruncated` naming the
   true count when the engine capped the list). Older engines simply omit the
   field; nothing is scraped from stdout.
@@ -2726,7 +2725,7 @@ versions users actually run.
   a clean CliError with a hint instead of a crash.
 - Browser-family classification now has ONE copy
   (`src/lib/browser-family.ts`). Fixes real drift: `browsers:
-  ["chromium"]` ran ZERO family checks in `extension_manifest_validate`
+["chromium"]` ran ZERO family checks in `extension_manifest_validate`
   (an MV2 manifest validated "fine"), and `chromium` was still missing
   from the `extension_build` / `extension_dev` / `extension_preview` /
   `extension_start` schema enums.
@@ -2759,8 +2758,8 @@ that removed nearly all friction a real MCP client hit.
   just works instead of erroring about a missing chromium channel.
 - Error hints speak the MCP tool surface, not the CLI. Act-verb error
   prose is rewritten before returning: `` `extension dev
-  --browser=chromium --allow-control` `` becomes `extension_dev with
-  { browser: "chromium", allowControl: true }`, and stray
+--browser=chromium --allow-control` `` becomes `extension_dev with
+{ browser: "chromium", allowControl: true }`, and stray
   `--allow-control` / `--allow-eval` / `--browser=<x>` mentions become
   their tool-argument names. Result data is never touched, only
   error/hint prose. Tool descriptions now name `allowControl` /

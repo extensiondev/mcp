@@ -10,7 +10,6 @@ import fs from "node:fs";
 import path from "node:path";
 
 import { ConsoleProjectPage } from "@extension.dev/urls/paths";
-import { userlandUrl } from "@extension.dev/urls/userland";
 
 import {
   linksOf,
@@ -73,119 +72,10 @@ export interface LocalListing {
   iconMissing?: string;
   skipped: string[];
   privacy: StoreMdPrivacy;
-  privacyFile: { path: string; present: boolean };
 }
 
-export type PrivacyPageState =
-  | "published"
-  | "unrendered"
-  | "missing-file"
-  | "taken-down"
-  | "unknown";
-
-export interface HostedPrivacyPage {
-  url: string;
-  derived: boolean;
-  state: PrivacyPageState;
-}
-
-export interface HostedPrivacy extends HostedPrivacyPage {
-  source: string;
-  serves: boolean;
-}
-
-const PRIVACY_PAGE_STATES: readonly PrivacyPageState[] = [
-  "published",
-  "unrendered",
-  "missing-file",
-  "taken-down",
-];
-const LEGACY_MISSING_STATES = new Set(["missing-section", "missing-attestation"]);
-
-export const PRIVACY_FILENAME = "PRIVACY.md";
-const PRIVACY_SOURCE = PRIVACY_FILENAME;
-
-export const privacyPublishedSentence = (url: string): string =>
-  `privacy policy: published at ${url} from ${PRIVACY_FILENAME}; edit that file to change it`;
-
-export const privacyPendingSentence = (url: string): string =>
-  `privacy policy: will be published at ${url} from ${PRIVACY_FILENAME} once it is pushed (the platform publishes it on the push, on a listing sync or on a store settings save); that address answers 404 until then`;
-
-export const privacyTakenDownSentence = (url: string): string =>
-  `privacy policy: taken down at ${url}; an operator removed the page, so the stores cannot link it until it is restored`;
-
-export function privacySentence(hosted: HostedPrivacy): string {
-  if (hosted.serves) return privacyPublishedSentence(hosted.url);
-
-  if (hosted.state === "taken-down") {
-    return privacyTakenDownSentence(hosted.url);
-  }
-
-  return privacyPendingSentence(hosted.url);
-}
-
-export const privacyMissingLine = (url: string): string =>
-  `privacy policy URL: not set; add a ${PRIVACY_FILENAME} at the project root saying what the extension collects, why, and where it goes, and the platform publishes it at ${url} on the next push`;
-
-export function privacyPageState(platform?: Row | null): PrivacyPageState {
-  const page =
-    platform && isRow(platform.privacyPage) ? platform.privacyPage : null;
-  const state = page ? text(page.state) : "";
-
-  if (LEGACY_MISSING_STATES.has(state)) return "missing-file";
-
-  return (PRIVACY_PAGE_STATES as readonly string[]).includes(state)
-    ? (state as PrivacyPageState)
-    : "unknown";
-}
-
-export function hostedPrivacyPage(
-  ref: { workspace: string; project: string },
-  platform?: Row | null,
-): HostedPrivacyPage {
-  const page =
-    platform && isRow(platform.privacyPage) ? platform.privacyPage : null;
-  const given = platform
-    ? text(platform.privacyPageUrl) || (page ? text(page.url) : "")
-    : "";
-  const state = privacyPageState(platform);
-
-  return given
-    ? { url: given, derived: false, state }
-    : { url: userlandUrl(ref, "privacy"), derived: true, state };
-}
-
-export const wantsHostedPrivacy = (local: LocalListing): boolean =>
-  local.patch.listing.privacyPolicyUrl === undefined &&
-  local.privacyFile.present;
-
-export function hostedPrivacy(
-  local: LocalListing,
-  page: HostedPrivacyPage,
-): HostedPrivacy | null {
-  if (!wantsHostedPrivacy(local)) return null;
-
-  local.patch.listing.privacyPolicyUrl = page.url;
-
-  return {
-    url: page.url,
-    derived: page.derived,
-    state: page.state,
-    serves: page.state === "published",
-    source: PRIVACY_SOURCE,
-  };
-}
-
-export const withPrivacyPageState = (
-  hosted: HostedPrivacy,
-  platform: Row | null | undefined,
-): HostedPrivacy => {
-  const state = privacyPageState(platform);
-
-  return state === "unknown"
-    ? hosted
-    : { ...hosted, state, serves: state === "published" };
-};
+export const privacyMissingLine = (): string =>
+  `privacy policy URL: not in ${STORE_MD_FILENAME}; add \`- Privacy policy URL: <address>\` under \`## Privacy and data use\``;
 
 export function readLocalListing(
   projectPath: string,
@@ -211,14 +101,11 @@ export function readLocalListing(
   if ("icon" in icon) patch.icons = [icon.icon];
   if (screenshots?.length) patch.screenshots = screenshots;
 
-  const privacyPath = path.join(projectPath, PRIVACY_FILENAME);
-
   return {
     file,
     patch,
     skipped,
     privacy: parsed.privacy,
-    privacyFile: { path: privacyPath, present: fs.existsSync(privacyPath) },
     ...("missing" in icon ? { iconMissing: icon.missing } : {}),
   };
 }
@@ -250,12 +137,7 @@ const CHECK_COVERAGE: Array<{ test: RegExp; fields: string[]; label: string }> =
     },
   ];
 
-export function storeMdAdvisory(
-  local: LocalListing,
-  checks: Row[],
-  hosted: HostedPrivacy | null = null,
-  page?: HostedPrivacyPage,
-): Row {
+export function storeMdAdvisory(local: LocalListing, checks: Row[]): Row {
   const covers: string[] = [];
   const notCovered: string[] = [];
   const listing = local.patch.listing as Row;
@@ -264,12 +146,11 @@ export function storeMdAdvisory(
     const id = text(check.id);
 
     if (/privacy_policy_present$/.test(id)) {
-      if (hosted) covers.push(privacySentence(hosted));
-      else if (listing.privacyPolicyUrl !== undefined) {
+      if (listing.privacyPolicyUrl !== undefined) {
         covers.push(
           `privacy policy URL found in ${STORE_MD_FILENAME}, not yet in the console listing`,
         );
-      } else notCovered.push(privacyMissingLine(page?.url || ""));
+      } else notCovered.push(privacyMissingLine());
 
       continue;
     }
@@ -312,7 +193,6 @@ export function storeMdAdvisory(
     file: local.file,
     covers,
     notCovered,
-    ...(hosted ? { privacyPolicy: hosted } : {}),
     ...(local.skipped.length ? { skipped: local.skipped } : {}),
   };
 }
@@ -385,9 +265,6 @@ async function syncOne(
       store,
       status: "synced",
       changes: Array.isArray(sent.json.changes) ? sent.json.changes : [],
-      ...(isRow(sent.json.privacyPage)
-        ? { privacyPage: sent.json.privacyPage }
-        : {}),
     };
   }
 
@@ -568,24 +445,7 @@ export async function syncListing(args: ListingArgs): Promise<string> {
 
   const api = opened.api;
   const stores: Row = {};
-  const hostedByStore = new Map<ListingStore, HostedPrivacy>();
   const unreadBack: string[] = [];
-
-  for (const [store, local] of locals) {
-    if (!wantsHostedPrivacy(local)) continue;
-
-    const read = await projectApiSend<Row>(
-      api,
-      "POST",
-      `stores/${store}/submissions/preflight`,
-      {},
-    );
-    const hosted = hostedPrivacy(
-      local,
-      hostedPrivacyPage(api.ref, read.ok ? read.json : null),
-    );
-    if (hosted) hostedByStore.set(store, hosted);
-  }
 
   for (const [store, local] of locals) {
     if (!filledFields(local.patch).length) {
@@ -600,23 +460,11 @@ export async function syncListing(args: ListingArgs): Promise<string> {
     const blocking = done ? await stillBlocking(api, store) : null;
     if (done && blocking === null) unreadBack.push(store);
 
-    const synced = hostedByStore.get(store);
-    const hosted = synced
-      ? withPrivacyPageState(
-          synced,
-          isRow(result.privacyPage)
-            ? { privacyPage: result.privacyPage }
-            : null,
-        )
-      : undefined;
-    if (hosted) hostedByStore.set(store, hosted);
-
     delete result.privacyPage;
 
     stores[store] = {
       ...result,
       filled: filledFields(local.patch),
-      ...(hosted ? { privacyPolicy: hosted } : {}),
       ...(local.iconMissing ? { iconMissing: local.iconMissing } : {}),
       ...(local.skipped.length ? { skipped: local.skipped } : {}),
       ...(blocking ? { stillBlocking: blocking } : {}),
@@ -653,13 +501,6 @@ export async function syncListing(args: ListingArgs): Promise<string> {
         `${text(row.store)} still lacks ${(row.stillBlocking as string[]).join(", ")}`,
     )
     .join("; ");
-  const privacyLine = [
-    ...new Map(
-      [...hostedByStore.values()].map((hosted) => [hosted.url, hosted]),
-    ).values(),
-  ]
-    .map((hosted) => `${privacySentence(hosted)}. `)
-    .join("");
 
   if (approvals.length) {
     const only = approvals.length === 1 ? approvals[0]! : null;
@@ -721,9 +562,6 @@ export async function syncListing(args: ListingArgs): Promise<string> {
       "listing-synced",
       value,
     ),
-    ...[
-      ...new Set([...hostedByStore.values()].map((hosted) => hosted.url)),
-    ].map((url) => ({ kind: "privacy" as const, url })),
   ]);
   const recorded = unreadBack.length === 0;
   const outcome = recorded
@@ -739,7 +577,7 @@ export async function syncListing(args: ListingArgs): Promise<string> {
       command: COMMAND,
       status: `${ACT}-dispatched`,
       value: { ...value, outcome, links },
-      hint: `${privacyLine}The platform accepted the listing change for ${synced.join(", ") || asked.join(", ")}, and its record could not be read back yet (${outcome.readProblem}); extension_submit action:"preflight" reads what each store carries and still needs. ${made}`,
+      hint: `The platform accepted the listing change for ${synced.join(", ") || asked.join(", ")}, and its record could not be read back yet (${outcome.readProblem}); extension_submit action:"preflight" reads what each store carries and still needs. ${made}`,
     });
   }
 
@@ -748,6 +586,6 @@ export async function syncListing(args: ListingArgs): Promise<string> {
     command: COMMAND,
     status: "listing-synced",
     value: { ...value, outcome, links },
-    hint: `${privacyLine}${blockingLine ? `${blockingLine}. ` : ""}The listing on extension.dev now carries what ${STORE_MD_FILENAME} and the build cover, read back from the platform's record; extension_submit action:"preflight" reads what each store still needs.${chromeListingLine(synced)} ${made}`,
+    hint: `${blockingLine ? `${blockingLine}. ` : ""}The listing on extension.dev now carries what ${STORE_MD_FILENAME} and the build cover, read back from the platform's record; extension_submit action:"preflight" reads what each store still needs.${chromeListingLine(synced)} ${made}`,
   });
 }

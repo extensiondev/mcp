@@ -45,16 +45,7 @@ import {
   storeSettingsUrl,
   submitStep,
 } from "../lib/store-connection";
-import {
-  PRIVACY_FILENAME,
-  hostedPrivacy,
-  hostedPrivacyPage,
-  privacySentence,
-  readLocalListing,
-  storeMdAdvisory,
-  type HostedPrivacy,
-  type HostedPrivacyPage,
-} from "./store-listing";
+import { readLocalListing, storeMdAdvisory } from "./store-listing";
 
 import type { ListingStore } from "../lib/store-md-listing";
 
@@ -454,26 +445,11 @@ function summaryWithout(summary: Row, deferred: Row[], checks: Row[]): Row {
   };
 }
 
-function privacyWarning(check: Row, hosted: HostedPrivacy | null): Row {
-  if (!hosted || !/privacy_policy_present$/.test(text(check.id))) return check;
-
-  const local = `${PRIVACY_FILENAME} is on disk`;
-  const next = hosted.serves
-    ? "the console listing does not link the page yet; sync-listing fills it"
-    : "the platform publishes it once that file is pushed, and sync-listing links it";
-
-  return {
-    ...check,
-    message: `${text(check.message)} ${local}; ${next}.`.trim(),
-  };
-}
-
 function readinessView(
   json: Row,
   store: string,
   projectPath: string,
   buildNamed: boolean,
-  ref: { workspace: string; project: string },
 ): Row {
   const all = (Array.isArray(json.checks) ? json.checks : []).filter(isRow);
   const deferred = buildNamed
@@ -493,11 +469,6 @@ function readinessView(
   const local = projectPath
     ? readLocalListing(projectPath, store as ListingStore)
     : null;
-  let page: HostedPrivacyPage | undefined;
-  const hosted =
-    local && !("problem" in local)
-      ? hostedPrivacy(local, (page = hostedPrivacyPage(ref, json)))
-      : null;
   const connection = connectionOf(json);
   const failing = checks
     .filter((c) => text(c.status) === "fail")
@@ -513,13 +484,13 @@ function readinessView(
     failing,
     warnings: checks
       .filter((c) => text(c.status) === "warn")
-      .map((c) => checkView(privacyWarning(c, hosted), true)),
+      .map((c) => checkView(c, true)),
     ...(local
       ? {
           storeMd:
             "problem" in local
               ? { missing: local.problem }
-              : storeMdAdvisory(local, open, hosted, page),
+              : storeMdAdvisory(local, open),
         }
       : {}),
   };
@@ -588,7 +559,6 @@ export async function preflight(args: StoreActArgs): Promise<string> {
         store,
         text(args.projectPath),
         Boolean(text(args.buildSha)),
-        api.ref,
       );
     } else unread.push(`${store}: ${read.message}`);
   });
@@ -621,23 +591,9 @@ export async function preflight(args: StoreActArgs): Promise<string> {
   const buildLine = buildNamedLater
     ? " The submit call names the build; extension_builds lists the shas."
     : "";
-  const privacyPages = Object.values(stores)
-    .map((view) =>
-      isRow((view as Row).storeMd) &&
-      isRow(((view as Row).storeMd as Row).privacyPolicy)
-        ? (((view as Row).storeMd as Row)
-            .privacyPolicy as unknown as HostedPrivacy)
-        : null,
-    )
-    .filter((page): page is HostedPrivacy => page !== null);
-  const privacyLine = [
-    ...new Map(privacyPages.map((page) => [page.url, page])).values(),
-  ]
-    .map((page) => ` ${privacySentence(page)}.`)
-    .join("");
   const readinessHint = blocked.length
-    ? `${blocked.join(", ")} cannot be submitted yet; each failing check says what to fix.${syncLine}${privacyLine} This read wrote nothing.`
-    : `Every store read here is ready to submit.${buildLine}${privacyLine} This read wrote nothing; extension_submit with dryRun:false submits.`;
+    ? `${blocked.join(", ")} cannot be submitted yet; each failing check says what to fix.${syncLine} This read wrote nothing.`
+    : `Every store read here is ready to submit.${buildLine} This read wrote nothing; extension_submit with dryRun:false submits.`;
   const chrome = isRow(stores.chrome) ? stores.chrome : null;
   const connection =
     chrome && isRow(chrome.connection) ? chrome.connection : null;

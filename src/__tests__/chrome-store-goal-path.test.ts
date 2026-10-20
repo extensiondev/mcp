@@ -392,7 +392,7 @@ describe("the server instructions carry the Chrome Web Store goal playbook in or
       "1. Call extension_submit {action:'preflight', browsers:['chrome']} first, every time, even on a retry.",
       "2. On store-not-connected or store-connection-failed",
       "3. On store-item-not-linked",
-      "4. On preflight-read whose value.stores.chrome.storeMd names the privacy policy: when it says privacy policy: published at <url> or will be published at <url> from PRIVACY.md, call extension_submit {action:'sync-listing', browsers:['chrome'], projectPath}",
+      "4. On preflight-read whose value.stores.chrome.storeMd says the privacy policy URL is not in STORE.md, say that line as it is and stop",
       "5. On preflight-read with every check green, call extension_submit {action:'submit', browsers:['chrome']",
       "6. On submitted, or submit-dispatched while the record has not confirmed the upload yet, report the status line and value.trackUrl (value.itemUrl, the store's own page, is information, never a next step), and say value.nextStep.say: To send it to review, say publish; that is one more approval. When the person says publish or send it to review, call extension_submit {action:'publish', browsers:['chrome']}",
       "7. Never recommend a release on a code host, an unlisted AMO version, a TestFlight upload or any other do-it-yourself route first, and never name a secret.",
@@ -441,12 +441,10 @@ describe("the server instructions carry the Chrome Web Store goal playbook in or
     );
 
     expect(playbook[4]).toContain(
-      "when it says to add a PRIVACY.md at the project root, say that line as it is and stop",
+      "the privacy policy URL is the developer's own public address, written in STORE.md as - Privacy policy URL: <address>",
     );
 
-    expect(playbook[4]).toContain(
-      "a public privacy policy URL the stores can link; never say a store accepts it",
-    );
+    expect(playbook[4]).toContain("never say a store accepts it");
 
     expect(playbook[4]).not.toMatch(/accepted/);
     expect(text).toMatch(
