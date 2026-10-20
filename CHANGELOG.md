@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 10.16.0
 
 - The template catalog is read from the registry at the pinned commit (`registry.extension.land/extension-dev/catalog/latest.json`, then the pinned document, with template files from GitHub at that pin); the bundled snapshot is refreshed to the live catalog and the pin contract reads the templates app's pinned catalog file instead of the media submodule.
 - The hosted privacy page's address is `https://privacy.extension.land/<workspace>/<project>`. `extension_submit` `action: "preflight"` and `action: "sync-listing"` derive that address when the platform's preflight read carries no `privacyPageUrl`, and the platform's own `privacyPageUrl` still wins when present; the `extension_submit` description names the same host. The earlier `https://<workspace>.extension.land/<project>/privacy` shape is gone because Cloudflare refuses a route with a wildcard inside the hostname.
