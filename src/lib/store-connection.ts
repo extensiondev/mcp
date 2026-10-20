@@ -6,7 +6,6 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-
 import { ConsoleProjectPage } from "@extension.dev/urls/paths";
 
 import { consoleProjectUrl } from "./console-urls";
