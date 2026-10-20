@@ -22,6 +22,7 @@ import {
 } from "./tool-policy";
 import { withCallApi } from "./origins";
 import { scrubRunAnswer } from "./run-privacy";
+import { serverStamp } from "./server-stamp";
 import { shapeStoreAnswer } from "./store-answer";
 import { attachTrack } from "./track-url";
 import { fenceUntrusted } from "./untrusted-fence";
@@ -158,7 +159,7 @@ export function installToolHandlers(server: Server, setup: ToolHandlerOptions): 
 
             if (!platform) return answer;
 
-            const shaped = scrubRunAnswer(attachTrack(name, normalizedArgs, shapeStoreAnswer(name, normalizedArgs, answer)));
+            const shaped = serverStamp.apply(scrubRunAnswer(attachTrack(name, normalizedArgs, shapeStoreAnswer(name, normalizedArgs, answer))));
 
             return setup.openApprovals ? openApprovalOnce(shaped, options) : shaped;
           },

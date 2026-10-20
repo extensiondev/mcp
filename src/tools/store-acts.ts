@@ -375,7 +375,7 @@ export async function preflight(args: StoreActArgs): Promise<string> {
     command: COMMAND,
     status: "preflight-read",
     value: { action: "preflight", stores, storesPageUrl, ...(itemUrl ? { itemUrl } : {}), nextStep: green ? submitStep(asked) : null },
-    hint: `${readinessHint}${itemUrl ? ` The Chrome Web Store item is at ${itemUrl}.` : ""}`,
+    hint: readinessHint,
     warnings: [unreadLine],
   });
 }

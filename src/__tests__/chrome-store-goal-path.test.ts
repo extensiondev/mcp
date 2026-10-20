@@ -215,7 +215,7 @@ describe("the server instructions carry the Chrome Web Store goal playbook in or
       "3. On store-item-not-linked",
       "4. On preflight-read whose value.stores.chrome.storeMd names the privacy policy: when it says privacy policy: published at <url> from STORE.md's Privacy section, call extension_submit {action:'sync-listing', browsers:['chrome'], projectPath}",
       "5. On preflight-read with every check green, call extension_submit {action:'submit', browsers:['chrome']",
-      "6. On submitted, or submit-dispatched while the record has not confirmed the upload yet, report the status line, value.trackUrl and value.itemUrl, and say value.nextStep.say: To send it to review, say publish; that is one more approval. When the person says publish or send it to review, call extension_submit {action:'publish', browsers:['chrome']}",
+      "6. On submitted, or submit-dispatched while the record has not confirmed the upload yet, report the status line and value.trackUrl (value.itemUrl, the store's own page, is information, never a next step), and say value.nextStep.say: To send it to review, say publish; that is one more approval. When the person says publish or send it to review, call extension_submit {action:'publish', browsers:['chrome']}",
       "7. Never recommend a release on a code host, an unlisted AMO version, a TestFlight upload or any other do-it-yourself route first, and never name a secret.",
     ];
 
@@ -233,7 +233,9 @@ describe("the server instructions carry the Chrome Web Store goal playbook in or
 
     expect(playbook.join("\n")).toContain("value.nextStep");
     expect(playbook[6]).toContain("To send it to review, say publish; that is one more approval.");
-    expect(playbook[6]).toMatch(/action:'publish'.*approvalId.*in-review.*value\.trackUrl.*value\.itemUrl/);
+    expect(playbook[6]).toMatch(/action:'publish'.*approvalId.*in-review.*value\.trackUrl/);
+    expect(playbook[6]).toContain("value.itemUrl, the store's own page, is information, never a next step");
+    expect(playbook[6]).not.toMatch(/report value\.trackUrl, value\.itemUrl/);
     expect(playbook[6]).toContain("value.outcome {recorded, status, storeState, checkedAt, source}");
     expect(playbook[6]).toContain("value.links [{kind, url, audience, expiresAt, made}]");
     expect(playbook[6]).toContain("on publish-dispatched (recorded false) say the platform accepted the publish and its record has not confirmed Chrome's answer yet");

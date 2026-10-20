@@ -92,9 +92,9 @@ export function doneStep(stores: string[], itemUrl: string): NextStep {
   return nextStep(
     "done",
     drafts
-      ? `${uploaded} To send it to review, publish it from the store's dashboard; a platform action for that is not available yet.`
+      ? `${uploaded} To send it to review, save a publishing mode in the project's store settings on extension.dev; a chat act for that store is not available yet.`
       : `The platform recorded the submission for ${storeNames(stores)}; each store's own review comes after this.`,
-    itemUrl,
+    drafts ? undefined : itemUrl || undefined,
   );
 }
 
