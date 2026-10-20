@@ -43,9 +43,11 @@ describe("submit says what the platform checks and answers", () => {
     fs.rmSync(tmp, { recursive: true, force: true });
   });
 
-  it("names the owner gate, the draft upload and what a dry run skips in its description", () => {
-    expect(submitSchema.description).toMatch(/does not run the owner gate, the approval, the build quota/);
-    expect(submitSchema.description).toMatch(/absent_mode: safe/);
+  it("names the owner gate, the draft upload and what a dry run skips in the words the model reads", () => {
+    const dryRun = String((submitSchema.inputSchema as { properties?: Record<string, { description?: string }> }).properties?.dryRun?.description ?? "");
+
+    expect(dryRun).toMatch(/does not run the owner gate, the approval, the build quota/);
+    expect(dryRun).toMatch(/absent_mode: safe/);
     expect(submitSchema.description).toMatch(/workspace owner/);
   });
 

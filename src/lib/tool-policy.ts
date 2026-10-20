@@ -49,6 +49,53 @@ const acts = (
   ...over,
 });
 
+/* @invariant EVERY TOOL CARRIES A TITLE, THE VERB PHRASE A CLIENT SHOWS IN A
+ * CONSENT PROMPT. Without one the person approving a call reads the raw tool
+ * name; with one they read what the call does, the same words the approval
+ * page uses for the act. Two to five words, a capital verb first.
+ */
+export const TOOL_TITLES: Record<string, string> = {
+  extension_create: "Create an extension",
+  extension_templates: "List the templates",
+  extension_docs_search: "Search the docs",
+  extension_add_feature: "Plan a feature",
+  extension_build: "Build the extension locally",
+  extension_dev: "Run the dev session",
+  extension_start: "Start a browser",
+  extension_wait: "Wait for the session",
+  extension_stop: "Stop the session",
+  extension_manifest_validate: "Validate the manifest",
+  extension_theme_verify: "Verify a theme",
+  extension_analyze: "Analyze the extension",
+  extension_assert: "Assert on a page",
+  extension_inspect: "Inspect a live page",
+  extension_dom_snapshot: "Snapshot the page",
+  extension_screenshot: "Take a screenshot",
+  extension_list_extensions: "List the loaded extensions",
+  extension_logs: "Read the console",
+  extension_doctor: "Diagnose the session",
+  extension_eval: "Evaluate code in a context",
+  extension_storage: "Read extension storage",
+  extension_reload: "Reload the extension",
+  extension_open: "Open a surface",
+  extension_browsers: "List the browsers",
+  extension_auth: "Log in to extension.dev",
+  extension_workspace_create: "Create a workspace",
+  extension_project_create: "Create a project",
+  extension_preview_web: "Preview on the web",
+  extension_shares: "Manage share links",
+  extension_publish: "Publish a build link",
+  extension_release_status: "Read the release status",
+  extension_builds: "Read and rebuild builds",
+  extension_workspace: "Read the workspace",
+  extension_release_promote: "Promote a release",
+  extension_submit: "Submit to a store",
+};
+
+export function toolTitle(name: string): string {
+  return TOOL_TITLES[name] ?? name;
+}
+
 export const TOOL_POLICY: Record<string, ToolPolicy> = {
   extension_create: { group: "local", annotations: acts({ openWorldHint: true }) },
   extension_templates: { group: "local", annotations: reads(true) },

@@ -18,6 +18,7 @@ import {
   disabledToolEnvelope,
   resolveServerOptions,
   type ServerOptions,
+  toolTitle,
 } from "../lib/tool-policy";
 
 async function connected(options?: ServerOptions): Promise<Client> {
@@ -131,7 +132,8 @@ describe("the server honours the options", () => {
     expect(listed.map((t) => t.name).sort()).toEqual(registered);
 
     for (const tool of listed) {
-      expect(tool.annotations, tool.name).toEqual(TOOL_POLICY[tool.name].annotations);
+      expect(tool.annotations, tool.name).toEqual({ title: toolTitle(tool.name), ...TOOL_POLICY[tool.name].annotations });
+      expect(String(tool.annotations?.title), tool.name).toMatch(/^[A-Z]/);
     }
   });
 

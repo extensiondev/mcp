@@ -19,6 +19,7 @@ import {
   isToolListed,
   pinProjectArgs,
   type ServerOptions,
+  toolTitle,
 } from "./tool-policy";
 import { withCallApi } from "./origins";
 import { scrubRunAnswer } from "./run-privacy";
@@ -101,7 +102,7 @@ export function installToolHandlers(server: Server, setup: ToolHandlerOptions): 
         name: t.schema.name,
         description: t.schema.description,
         inputSchema: t.schema.inputSchema,
-        annotations: TOOL_POLICY[t.schema.name].annotations,
+        annotations: { title: toolTitle(t.schema.name), ...TOOL_POLICY[t.schema.name].annotations },
       })),
   }));
 
