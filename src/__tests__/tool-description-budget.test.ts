@@ -21,7 +21,7 @@ const CEILINGS: Record<string, number> = {
   extension_auth: 2000,
   extension_browsers: 800,
   extension_build: 1300,
-  extension_builds: 4400,
+  extension_builds: 1500,
   extension_create: 1500,
   extension_dev: 1100,
   extension_docs_search: 400,
