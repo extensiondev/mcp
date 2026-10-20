@@ -10,10 +10,15 @@ import { listingDigest } from "../lib/store-listing-media";
 import { listingForStore, parseStoreMdListing } from "../lib/store-md-listing";
 import { TOOL_POLICY } from "../lib/tool-policy";
 import { handler as submit, schema } from "../tools/submit";
-import { API, PROJECT_ROUTE, useProjectRoutes } from "./fixtures/project-routes";
+import {
+  API,
+  PROJECT_ROUTE,
+  useProjectRoutes,
+} from "./fixtures/project-routes";
 
 const LISTING = (store: string) => `${PROJECT_ROUTE}/stores/${store}/listing`;
-const PREFLIGHT = (store: string) => `${PROJECT_ROUTE}/stores/${store}/submissions/preflight`;
+const PREFLIGHT = (store: string) =>
+  `${PROJECT_ROUTE}/stores/${store}/submissions/preflight`;
 const APPROVALS = "/api/cli/approvals";
 
 const STORE_MD = `# Store metadata
@@ -75,8 +80,16 @@ function project(): string {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "extdev-listing-"));
   fs.writeFileSync(path.join(root, "STORE.md"), STORE_MD);
   fs.mkdirSync(path.join(root, "dist", "chrome", "icons"), { recursive: true });
-  fs.writeFileSync(path.join(root, "dist", "chrome", "manifest.json"), JSON.stringify({ icons: { "16": "icons/16.png", "128": "icons/128.png" } }));
-  fs.writeFileSync(path.join(root, "dist", "chrome", "icons", "128.png"), png(128, 128));
+  fs.writeFileSync(
+    path.join(root, "dist", "chrome", "manifest.json"),
+    JSON.stringify({ icons: { "16": "icons/16.png", "128": "icons/128.png" } }),
+  );
+
+  fs.writeFileSync(
+    path.join(root, "dist", "chrome", "icons", "128.png"),
+    png(128, 128),
+  );
+
   fs.mkdirSync(path.join(root, "shots"));
   fs.writeFileSync(path.join(root, "shots", "popup.png"), png(1280, 800));
 
@@ -91,24 +104,44 @@ describe("STORE.md fills the store listing", () => {
 
     expect(chrome).toMatchObject({
       title: "PII Shield",
-      shortDescription: "Hide personal information on every open tab with one click.",
-      fullDescription: "Sharing your screen? Click PII Shield and names are blurred on every open tab.\n\nDetection happens on your computer.",
+      shortDescription:
+        "Hide personal information on every open tab with one click.",
+      fullDescription:
+        "Sharing your screen? Click PII Shield and names are blurred on every open tab.\n\nDetection happens on your computer.",
       categories: ["Productivity"],
-      singlePurpose: "Hide personal information on the pages the user has open, on demand.",
+      singlePurpose:
+        "Hide personal information on the pages the user has open, on demand.",
     });
 
     expect(chrome.permissionJustifications).toEqual([
-      { permission: "storage", justification: "Remembers whether the shield is on." },
-      { permission: "scripting", justification: "Adds the hiding script to tabs that were already open before install." },
+      {
+        permission: "storage",
+        justification: "Remembers whether the shield is on.",
+      },
+      {
+        permission: "scripting",
+        justification:
+          "Adds the hiding script to tabs that were already open before install.",
+      },
     ]);
 
     expect(chrome.privacyPolicyUrl).toBeUndefined();
-    expect(firefox).toMatchObject({ categories: ["Privacy & Security"], reviewerNotes: "To test: click the toolbar button." });
+    expect(firefox).toMatchObject({
+      categories: ["Privacy & Security"],
+      reviewerNotes: "To test: click the toolbar button.",
+    });
+
     expect(firefox.releaseNotes).toBeUndefined();
   });
 
   it("hashes the vector the platform pins to the same digest", () => {
-    const icon = { sha256: "a".repeat(64), width: 128, height: 128, bytes: Buffer.alloc(0), source: "x" };
+    const icon = {
+      sha256: "a".repeat(64),
+      width: 128,
+      height: 128,
+      bytes: Buffer.alloc(0),
+      source: "x",
+    };
 
     expect(
       listingDigest({
@@ -116,7 +149,9 @@ describe("STORE.md fills the store listing", () => {
           title: "PII Shield",
           shortDescription: "Hide it.",
           categories: ["Productivity"],
-          permissionJustifications: [{ permission: "storage", justification: "Settings." }],
+          permissionJustifications: [
+            { permission: "storage", justification: "Settings." },
+          ],
         },
         icons: [icon],
       }),
@@ -126,7 +161,9 @@ describe("STORE.md fills the store listing", () => {
   it("is an action of extension_submit that counts as shipping", () => {
     expect(schema.inputSchema.properties.action.enum).toContain("sync-listing");
 
-    const ships = TOOL_POLICY.extension_submit.ships as (args: Record<string, unknown>) => boolean;
+    const ships = TOOL_POLICY.extension_submit.ships as (
+      args: Record<string, unknown>,
+    ) => boolean;
 
     expect(ships({ action: "sync-listing" })).toBe(true);
   });
@@ -146,61 +183,147 @@ describe("extension_submit sync-listing and the preflight advisory", () => {
     platform.login();
 
     platform.routes[`PUT ${LISTING("chrome")}`] = (call) => {
-      if (call.body.approvalId) return { body: { ok: true, store: "chrome", changes: ['title: "" -> "PII Shield"'] } };
+      if (call.body.approvalId)
+        {return {
+          body: {
+            ok: true,
+            store: "chrome",
+            changes: ['title: "" -> "PII Shield"'],
+          },
+        };}
 
       const scope = { store: "chrome", listingDigest: "0".repeat(64) };
       const ours = actionFingerprint("extension_store.listing", scope);
 
-      return { status: 403, body: { code: "APPROVAL_REQUIRED", message: "Needs approval.", approvalRequest: { action: "extension_store.listing", scope, fingerprint: ours } } };
+      return {
+        status: 403,
+        body: {
+          code: "APPROVAL_REQUIRED",
+          message: "Needs approval.",
+          approvalRequest: {
+            action: "extension_store.listing",
+            scope,
+            fingerprint: ours,
+          },
+        },
+      };
     };
 
-    const mismatch = JSON.parse(await submit({ action: "sync-listing", browsers: ["chrome"], projectPath: root, api: API }));
+    const mismatch = JSON.parse(
+      await submit({
+        action: "sync-listing",
+        browsers: ["chrome"],
+        projectPath: root,
+        api: API,
+      }),
+    );
 
     expect(mismatch.status).toBe("sync-listing-refused");
     expect(mismatch.error.message).toContain("hashes this listing differently");
     expect(platform.sent("POST", APPROVALS)).toHaveLength(0);
 
     platform.routes[`PUT ${LISTING("chrome")}`] = (call) => {
-      if (call.body.approvalId) return { body: { ok: true, store: "chrome", changes: ['title: "" -> "PII Shield"'] } };
+      if (call.body.approvalId)
+        {return {
+          body: {
+            ok: true,
+            store: "chrome",
+            changes: ['title: "" -> "PII Shield"'],
+          },
+        };}
 
-      const parsedScope = { store: "chrome", listingDigest: digestOf(call.body) };
+      const parsedScope = {
+        store: "chrome",
+        listingDigest: digestOf(call.body),
+      };
 
       return {
         status: 403,
-        body: { code: "APPROVAL_REQUIRED", message: "Needs approval.", approvalRequest: { action: "extension_store.listing", scope: parsedScope, fingerprint: actionFingerprint("extension_store.listing", parsedScope) } },
+        body: {
+          code: "APPROVAL_REQUIRED",
+          message: "Needs approval.",
+          approvalRequest: {
+            action: "extension_store.listing",
+            scope: parsedScope,
+            fingerprint: actionFingerprint(
+              "extension_store.listing",
+              parsedScope,
+            ),
+          },
+        },
       };
     };
 
     platform.routes[`POST ${APPROVALS}`] = () => ({
       status: 201,
-      body: { approvalId: "apr_l", approvalUrl: `${API}/device/approve/apr_l`, description: "Change the Chrome Web Store listing of widget.", changes: ['title: "" -> "PII Shield"'] },
+      body: {
+        approvalId: "apr_l",
+        approvalUrl: `${API}/device/approve/apr_l`,
+        description: "Change the Chrome Web Store listing of widget.",
+        changes: ['title: "" -> "PII Shield"'],
+      },
     });
 
     platform.routes[`POST ${PREFLIGHT("chrome")}`] = () => ({
-      body: { checks: [{ id: "listing.chrome_screenshots_present", status: "fail" }, { id: "listing.privacy_policy_present", status: "warn" }, { id: "listing.title_present", status: "pass" }] },
+      body: {
+        checks: [
+          { id: "listing.chrome_screenshots_present", status: "fail" },
+          { id: "listing.privacy_policy_present", status: "warn" },
+          { id: "listing.title_present", status: "pass" },
+        ],
+      },
     });
 
-    const asked = JSON.parse(await submit({ action: "sync-listing", browsers: ["chrome"], projectPath: root, screenshots: ["shots/popup.png"], api: API }));
+    const asked = JSON.parse(
+      await submit({
+        action: "sync-listing",
+        browsers: ["chrome"],
+        projectPath: root,
+        screenshots: ["shots/popup.png"],
+        api: API,
+      }),
+    );
 
     expect(asked.status).toBe("approval-required");
     expect(asked.value.approvalUrl).toBe(`${API}/device/approve/apr_l`);
-    expect(asked.value.stores.chrome.changes).toEqual(['title: "" -> "PII Shield"']);
+    expect(asked.value.stores.chrome.changes).toEqual([
+      'title: "" -> "PII Shield"',
+    ]);
 
     const request = platform.sent("POST", APPROVALS)[0]!.body;
     expect(request.action).toBe("extension_store.listing");
     expect(request.store).toBe("chrome");
     expect(request.media.icons[0]).toMatchObject({ width: 128, height: 128 });
     expect(request.media.icons[0].dataBase64).toBeUndefined();
-    expect(request.media.screenshots[0]).toMatchObject({ width: 1280, height: 800 });
+    expect(request.media.screenshots[0]).toMatchObject({
+      width: 1280,
+      height: 800,
+    });
 
-    const written = JSON.parse(await submit({ action: "sync-listing", browsers: ["chrome"], projectPath: root, screenshots: ["shots/popup.png"], approvalId: "apr_l", api: API }));
+    const written = JSON.parse(
+      await submit({
+        action: "sync-listing",
+        browsers: ["chrome"],
+        projectPath: root,
+        screenshots: ["shots/popup.png"],
+        approvalId: "apr_l",
+        api: API,
+      }),
+    );
     const put = platform.sent("PUT", LISTING("chrome")).slice(-1)[0]!.body;
 
     expect(put.approvalId).toBe("apr_l");
     expect(put.listing.title).toBe("PII Shield");
-    expect(Buffer.from(put.media.icons[0].dataBase64, "base64").readUInt32BE(16)).toBe(128);
+    expect(
+      Buffer.from(put.media.icons[0].dataBase64, "base64").readUInt32BE(16),
+    ).toBe(128);
+
     expect(written.status).toBe("listing-synced");
-    expect(written.value.stores.chrome.stillBlocking).toEqual(["listing.chrome_screenshots_present", "listing.privacy_policy_present (warning)"]);
+    expect(written.value.stores.chrome.stillBlocking).toEqual([
+      "listing.chrome_screenshots_present",
+      "listing.privacy_policy_present (warning)",
+    ]);
+
     expect(written.hint).toContain("chrome still lacks");
   });
 
@@ -208,9 +331,27 @@ describe("extension_submit sync-listing and the preflight advisory", () => {
     const outside = path.join(os.tmpdir(), `extdev-outside-${Date.now()}.png`);
     fs.writeFileSync(outside, png(1280, 800));
 
-    const escaped = JSON.parse(await submit({ action: "sync-listing", browsers: ["chrome"], projectPath: root, screenshots: [outside], api: API }));
-    const two = JSON.parse(await submit({ action: "sync-listing", browsers: ["chrome", "firefox"], projectPath: root, approvalId: "apr_x", api: API }));
-    const noPath = JSON.parse(await submit({ action: "sync-listing", browsers: ["chrome"], api: API }));
+    const escaped = JSON.parse(
+      await submit({
+        action: "sync-listing",
+        browsers: ["chrome"],
+        projectPath: root,
+        screenshots: [outside],
+        api: API,
+      }),
+    );
+    const two = JSON.parse(
+      await submit({
+        action: "sync-listing",
+        browsers: ["chrome", "firefox"],
+        projectPath: root,
+        approvalId: "apr_x",
+        api: API,
+      }),
+    );
+    const noPath = JSON.parse(
+      await submit({ action: "sync-listing", browsers: ["chrome"], api: API }),
+    );
 
     expect(escaped.status).toBe("bad-request");
     expect(two.status).toBe("bad-request");
@@ -235,7 +376,14 @@ describe("extension_submit sync-listing and the preflight advisory", () => {
       },
     });
 
-    const out = JSON.parse(await submit({ action: "preflight", browsers: ["chrome"], projectPath: root, api: API }));
+    const out = JSON.parse(
+      await submit({
+        action: "preflight",
+        browsers: ["chrome"],
+        projectPath: root,
+        api: API,
+      }),
+    );
     const advisory = out.value.stores.chrome.storeMd;
 
     expect(advisory.covers).toEqual([
@@ -245,21 +393,42 @@ describe("extension_submit sync-listing and the preflight advisory", () => {
     ]);
 
     expect(advisory.notCovered.join("\n")).toContain("screenshots");
-    expect(advisory.notCovered).toContain('privacy policy URL: not in STORE.md; add a "## Privacy and data use" section saying what the extension collects and, under it, the line "- Privacy policy attested: yes", and the platform publishes that section as a public privacy policy URL the stores can link');
+    expect(
+      advisory.notCovered.find((line: string) =>
+        line.startsWith("privacy policy URL"),
+      ),
+    ).toMatch(
+      /^privacy policy URL: not set; add a PRIVACY\.md at the project root saying what the extension collects, why, and where it goes, and the platform publishes it at https:\/\/[a-z0-9-]+\.extension\.dev\/[a-z0-9-]+\/privacy on the next push$/,
+    );
+
     expect(out.hint).toContain('action:"sync-listing"');
   });
 });
 
-function digestOf(body: { listing: Record<string, unknown>; media?: { icons?: Array<{ dataBase64: string }>; screenshots?: Array<{ dataBase64: string }> } }): string {
+function digestOf(body: {
+  listing: Record<string, unknown>;
+  media?: {
+    icons?: Array<{ dataBase64: string }>;
+    screenshots?: Array<{ dataBase64: string }>;
+  };
+}): string {
   const image = (item: { dataBase64: string }) => {
     const bytes = Buffer.from(item.dataBase64, "base64");
 
-    return { sha256: crypto.createHash("sha256").update(bytes).digest("hex"), width: bytes.readUInt32BE(16), height: bytes.readUInt32BE(20), bytes, source: "" };
+    return {
+      sha256: crypto.createHash("sha256").update(bytes).digest("hex"),
+      width: bytes.readUInt32BE(16),
+      height: bytes.readUInt32BE(20),
+      bytes,
+      source: "",
+    };
   };
 
   return listingDigest({
     listing: body.listing,
     ...(body.media?.icons ? { icons: body.media.icons.map(image) } : {}),
-    ...(body.media?.screenshots ? { screenshots: body.media.screenshots.map(image) } : {}),
+    ...(body.media?.screenshots
+      ? { screenshots: body.media.screenshots.map(image) }
+      : {}),
   });
 }

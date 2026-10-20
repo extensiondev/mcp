@@ -10,6 +10,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 import { ConsoleProjectPage } from "@extension.dev/urls/paths";
+import { userlandUrl } from "@extension.dev/urls/userland";
 
 import {
   linksOf,
@@ -72,13 +73,13 @@ export interface LocalListing {
   iconMissing?: string;
   skipped: string[];
   privacy: StoreMdPrivacy;
+  privacyFile: { path: string; present: boolean };
 }
 
 export type PrivacyPageState =
   | "published"
   | "unrendered"
-  | "missing-section"
-  | "missing-attestation"
+  | "missing-file"
   | "taken-down"
   | "unknown";
 
@@ -96,20 +97,19 @@ export interface HostedPrivacy extends HostedPrivacyPage {
 const PRIVACY_PAGE_STATES: readonly PrivacyPageState[] = [
   "published",
   "unrendered",
-  "missing-section",
-  "missing-attestation",
+  "missing-file",
   "taken-down",
 ];
+const LEGACY_MISSING_STATES = new Set(["missing-section", "missing-attestation"]);
 
-export const PRIVACY_SECTION_HEADING = "## Privacy and data use";
-export const PRIVACY_ATTESTED_LINE = "- Privacy policy attested: yes";
-const PRIVACY_SOURCE = `${STORE_MD_FILENAME} Privacy and data use section`;
+export const PRIVACY_FILENAME = "PRIVACY.md";
+const PRIVACY_SOURCE = PRIVACY_FILENAME;
 
 export const privacyPublishedSentence = (url: string): string =>
-  `privacy policy: published at ${url} from ${STORE_MD_FILENAME}'s Privacy section; edit that section to change it`;
+  `privacy policy: published at ${url} from ${PRIVACY_FILENAME}; edit that file to change it`;
 
 export const privacyPendingSentence = (url: string): string =>
-  `privacy policy: will be published at ${url} from ${STORE_MD_FILENAME}'s Privacy section by extension_submit action:"sync-listing" once the ${STORE_MD_FILENAME} carrying "${PRIVACY_ATTESTED_LINE}" is pushed; that address answers 404 until then`;
+  `privacy policy: will be published at ${url} from ${PRIVACY_FILENAME} once it is pushed (the platform publishes it on the push, on a listing sync or on a store settings save); that address answers 404 until then`;
 
 export const privacyTakenDownSentence = (url: string): string =>
   `privacy policy: taken down at ${url}; an operator removed the page, so the stores cannot link it until it is restored`;
@@ -124,21 +124,15 @@ export function privacySentence(hosted: HostedPrivacy): string {
   return privacyPendingSentence(hosted.url);
 }
 
-export function privacyMissingLine(privacy: StoreMdPrivacy): string {
-  const outcome =
-    "the platform publishes that section as a public privacy policy URL the stores can link";
-
-  if (!privacy.section) {
-    return `privacy policy URL: not in ${STORE_MD_FILENAME}; add a "${PRIVACY_SECTION_HEADING}" section saying what the extension collects and, under it, the line "${PRIVACY_ATTESTED_LINE}", and ${outcome}`;
-  }
-
-  return `privacy policy URL: not in ${STORE_MD_FILENAME}; add the line "${PRIVACY_ATTESTED_LINE}" under "${PRIVACY_SECTION_HEADING}" and ${outcome}`;
-}
+export const privacyMissingLine = (url: string): string =>
+  `privacy policy URL: not set; add a ${PRIVACY_FILENAME} at the project root saying what the extension collects, why, and where it goes, and the platform publishes it at ${url} on the next push`;
 
 export function privacyPageState(platform?: Row | null): PrivacyPageState {
   const page =
     platform && isRow(platform.privacyPage) ? platform.privacyPage : null;
   const state = page ? text(page.state) : "";
+
+  if (LEGACY_MISSING_STATES.has(state)) return "missing-file";
 
   return (PRIVACY_PAGE_STATES as readonly string[]).includes(state)
     ? (state as PrivacyPageState)
@@ -158,17 +152,12 @@ export function hostedPrivacyPage(
 
   return given
     ? { url: given, derived: false, state }
-    : {
-        url: `https://privacy.extension.land/${ref.workspace}/${ref.project}`,
-        derived: true,
-        state,
-      };
+    : { url: userlandUrl(ref, "privacy"), derived: true, state };
 }
 
 export const wantsHostedPrivacy = (local: LocalListing): boolean =>
   local.patch.listing.privacyPolicyUrl === undefined &&
-  local.privacy.section !== "" &&
-  local.privacy.attested === true;
+  local.privacyFile.present;
 
 export function hostedPrivacy(
   local: LocalListing,
@@ -222,11 +211,14 @@ export function readLocalListing(
   if ("icon" in icon) patch.icons = [icon.icon];
   if (screenshots?.length) patch.screenshots = screenshots;
 
+  const privacyPath = path.join(projectPath, PRIVACY_FILENAME);
+
   return {
     file,
     patch,
     skipped,
     privacy: parsed.privacy,
+    privacyFile: { path: privacyPath, present: fs.existsSync(privacyPath) },
     ...("missing" in icon ? { iconMissing: icon.missing } : {}),
   };
 }
@@ -262,6 +254,7 @@ export function storeMdAdvisory(
   local: LocalListing,
   checks: Row[],
   hosted: HostedPrivacy | null = null,
+  page?: HostedPrivacyPage,
 ): Row {
   const covers: string[] = [];
   const notCovered: string[] = [];
@@ -276,7 +269,7 @@ export function storeMdAdvisory(
         covers.push(
           `privacy policy URL found in ${STORE_MD_FILENAME}, not yet in the console listing`,
         );
-      } else notCovered.push(privacyMissingLine(local.privacy));
+      } else notCovered.push(privacyMissingLine(page?.url || ""));
 
       continue;
     }

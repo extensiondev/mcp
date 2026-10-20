@@ -46,13 +46,14 @@ import {
   submitStep,
 } from "../lib/store-connection";
 import {
-  PRIVACY_ATTESTED_LINE,
+  PRIVACY_FILENAME,
   hostedPrivacy,
   hostedPrivacyPage,
   privacySentence,
   readLocalListing,
   storeMdAdvisory,
   type HostedPrivacy,
+  type HostedPrivacyPage,
 } from "./store-listing";
 
 import type { ListingStore } from "../lib/store-md-listing";
@@ -456,10 +457,10 @@ function summaryWithout(summary: Row, deferred: Row[], checks: Row[]): Row {
 function privacyWarning(check: Row, hosted: HostedPrivacy | null): Row {
   if (!hosted || !/privacy_policy_present$/.test(text(check.id))) return check;
 
-  const local = `STORE.md on disk carries "${PRIVACY_ATTESTED_LINE}"`;
+  const local = `${PRIVACY_FILENAME} is on disk`;
   const next = hosted.serves
     ? "the console listing does not link the page yet; sync-listing fills it"
-    : "sync-listing publishes the page once that STORE.md is pushed";
+    : "the platform publishes it once that file is pushed, and sync-listing links it";
 
   return {
     ...check,
@@ -492,9 +493,10 @@ function readinessView(
   const local = projectPath
     ? readLocalListing(projectPath, store as ListingStore)
     : null;
+  let page: HostedPrivacyPage | undefined;
   const hosted =
     local && !("problem" in local)
-      ? hostedPrivacy(local, hostedPrivacyPage(ref, json))
+      ? hostedPrivacy(local, (page = hostedPrivacyPage(ref, json)))
       : null;
   const connection = connectionOf(json);
   const failing = checks
@@ -517,7 +519,7 @@ function readinessView(
           storeMd:
             "problem" in local
               ? { missing: local.problem }
-              : storeMdAdvisory(local, open, hosted),
+              : storeMdAdvisory(local, open, hosted, page),
         }
       : {}),
   };

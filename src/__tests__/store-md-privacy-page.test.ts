@@ -15,17 +15,19 @@ import {
 const PREFLIGHT = (store: string) =>
   `${PROJECT_ROUTE}/stores/${store}/submissions/preflight`;
 const LISTING = (store: string) => `${PROJECT_ROUTE}/stores/${store}/listing`;
-const HOSTED = "https://privacy.extension.land/acme/widget";
-const SOURCE = "STORE.md Privacy and data use section";
-const SENTENCE = `privacy policy: published at ${HOSTED} from STORE.md's Privacy section; edit that section to change it`;
-const PENDING = `privacy policy: will be published at ${HOSTED} from STORE.md's Privacy section by extension_submit action:"sync-listing" once the STORE.md carrying "- Privacy policy attested: yes" is pushed; that address answers 404 until then`;
+const HOSTED = "https://acme.extension.dev/widget/privacy";
+const SOURCE = "PRIVACY.md";
+const SENTENCE = `privacy policy: published at ${HOSTED} from PRIVACY.md; edit that file to change it`;
+const PENDING = `privacy policy: will be published at ${HOSTED} from PRIVACY.md once it is pushed (the platform publishes it on the push, on a listing sync or on a store settings save); that address answers 404 until then`;
 const PUBLISHED_PAGE = {
   privacyPage: { url: HOSTED, state: "published", missing: [] },
 };
-const SECTION_LINE =
-  'privacy policy URL: not in STORE.md; add a "## Privacy and data use" section saying what the extension collects and, under it, the line "- Privacy policy attested: yes", and the platform publishes that section as a public privacy policy URL the stores can link';
-const ATTESTED_LINE =
-  'privacy policy URL: not in STORE.md; add the line "- Privacy policy attested: yes" under "## Privacy and data use" and the platform publishes that section as a public privacy policy URL the stores can link';
+const MISSING_LINE = (url: string) =>
+  `privacy policy URL: not set; add a PRIVACY.md at the project root saying what the extension collects, why, and where it goes, and the platform publishes it at ${url} on the next push`;
+const PRIVACY_MD = `# Widget privacy policy
+
+Widget collects nothing. Nothing leaves the browser.
+`;
 
 const ATTESTED = `# Store metadata
 
@@ -63,9 +65,16 @@ const OWN_URL = ATTESTED.replace(
   "- Privacy policy URL: https://example.com/privacy",
 );
 
-function project(storeMd: string): string {
+function project(
+  storeMd: string,
+  privacyMd: string | null = PRIVACY_MD,
+): string {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "extdev-privacy-page-"));
   fs.writeFileSync(path.join(root, "STORE.md"), storeMd);
+
+  if (privacyMd !== null) {
+    fs.writeFileSync(path.join(root, "PRIVACY.md"), privacyMd);
+  }
 
   return root;
 }
@@ -81,7 +90,7 @@ const checks = (extra: Record<string, unknown> = {}) => ({
   },
 });
 
-describe("STORE.md's Privacy and data use section is the project's privacy policy once attested", () => {
+describe("PRIVACY.md at the project root is the project's hosted privacy policy", () => {
   const platform = useProjectRoutes("extdev-privacy-page-");
 
   it("parses the section's prose and the attestation line, and an empty URL line stays empty", () => {
@@ -171,7 +180,7 @@ describe("STORE.md's Privacy and data use section is the project's privacy polic
     });
 
     expect(out.hint).toContain(
-      "privacy policy: published at https://registry.example.test/acme/widget/privacy from STORE.md's Privacy section; edit that section to change it",
+      "privacy policy: published at https://registry.example.test/acme/widget/privacy from PRIVACY.md; edit that file to change it",
     );
   });
 
@@ -215,7 +224,7 @@ describe("STORE.md's Privacy and data use section is the project's privacy polic
     expect(out.hint).toContain(PENDING);
     expect(out.hint).not.toContain("privacy policy: published at");
     expect(out.value.stores.chrome.warnings[0].message).toBe(
-      'Privacy policy URL is not in STORE.md. STORE.md on disk carries "- Privacy policy attested: yes"; sync-listing publishes the page once that STORE.md is pushed.',
+      "Privacy policy URL is not in STORE.md. PRIVACY.md is on disk; the platform publishes it once that file is pushed, and sync-listing links it.",
     );
 
     platform.routes[`POST ${PREFLIGHT("chrome")}`] = () => checks();
@@ -236,48 +245,62 @@ describe("STORE.md's Privacy and data use section is the project's privacy polic
     });
 
     expect(derived.hint).toContain(PENDING);
+    expect(derived.hint).not.toContain("privacy.extension.land");
   });
 
-  it("names the exact STORE.md line to add when the attestation or the whole section is missing", async () => {
+  it("says to add a PRIVACY.md when the file is missing, whatever STORE.md attests", async () => {
     if (process.platform === "win32") return;
 
     platform.login();
     platform.routes[`POST ${PREFLIGHT("chrome")}`] = () => checks();
 
-    const unattested = JSON.parse(
+    const attestedButNoFile = JSON.parse(
       await submit({
         action: "preflight",
         browsers: ["chrome"],
-        projectPath: project(NOT_ATTESTED),
-        api: API,
-      }),
-    );
-    const sectionless = JSON.parse(
-      await submit({
-        action: "preflight",
-        browsers: ["chrome"],
-        projectPath: project(NO_SECTION),
+        projectPath: project(ATTESTED, null),
         api: API,
       }),
     );
 
-    expect(unattested.value.stores.chrome.storeMd.notCovered).toEqual([
-      ATTESTED_LINE,
+    platform.routes[`POST ${PREFLIGHT("chrome")}`] = () =>
+      checks({
+        privacyPageUrl: HOSTED,
+        privacyPage: { url: HOSTED, state: "missing-file", missing: ["file"] },
+      });
+
+    const platformNamed = JSON.parse(
+      await submit({
+        action: "preflight",
+        browsers: ["chrome"],
+        projectPath: project(NO_SECTION, null),
+        api: API,
+      }),
+    );
+
+    expect(attestedButNoFile.value.stores.chrome.storeMd.notCovered).toEqual([
+      MISSING_LINE(HOSTED),
     ]);
 
     expect(
-      unattested.value.stores.chrome.storeMd.privacyPolicy,
+      attestedButNoFile.value.stores.chrome.storeMd.privacyPolicy,
     ).toBeUndefined();
 
-    expect(unattested.value.stores.chrome.storeMd.covers).not.toContain(
+    expect(attestedButNoFile.value.stores.chrome.storeMd.covers).not.toContain(
       SENTENCE,
     );
 
-    expect(sectionless.value.stores.chrome.storeMd.notCovered).toEqual([
-      SECTION_LINE,
+    expect(platformNamed.value.stores.chrome.storeMd.notCovered).toEqual([
+      MISSING_LINE(HOSTED),
     ]);
 
-    expect(JSON.stringify([unattested, sectionless])).not.toMatch(/accept/i);
+    expect(JSON.stringify([attestedButNoFile, platformNamed])).not.toMatch(
+      /accept/i,
+    );
+
+    expect(JSON.stringify([attestedButNoFile, platformNamed])).not.toContain(
+      "attested",
+    );
   });
 
   it("sync-listing writes the hosted page as the listing's privacy policy URL and says so", async () => {
@@ -326,7 +349,7 @@ describe("STORE.md's Privacy and data use section is the project's privacy polic
     expect(JSON.stringify(out)).not.toMatch(/accept/i);
   });
 
-  it("sync-listing leaves the privacy policy URL alone when STORE.md names its own or is not attested", async () => {
+  it("sync-listing leaves the privacy policy URL alone when STORE.md names its own or there is no PRIVACY.md", async () => {
     if (process.platform === "win32") return;
 
     platform.login();
@@ -352,7 +375,7 @@ describe("STORE.md's Privacy and data use section is the project's privacy polic
       await submit({
         action: "sync-listing",
         browsers: ["chrome"],
-        projectPath: project(NOT_ATTESTED),
+        projectPath: project(ATTESTED, null),
         api: API,
       }),
     );
