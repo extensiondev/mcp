@@ -36,10 +36,16 @@ export type ListingText = Partial<Record<ListingTextField, string>> & {
   permissionJustifications?: PermissionJustification[];
 };
 
+export interface StoreMdPrivacy {
+  section: string;
+  attested: boolean | null;
+}
+
 export interface StoreMdListing {
   shared: ListingText;
   categoriesByStore: Partial<Record<ListingStore, string[]>>;
   stores: Partial<Record<ListingStore, ListingText>>;
+  privacy: StoreMdPrivacy;
 }
 
 const STORE_FIELDS: Record<ListingStore, Array<keyof ListingText>> = {
@@ -169,6 +175,27 @@ function fieldText(body: string, prefix: string): string {
   return "";
 }
 
+const POLICY_ROW = /^- +privacy policy( url| attested)?:/i;
+
+function privacyProse(body: string): string {
+  const kept: string[] = [];
+  let skipping = false;
+
+  for (const line of body.replace(/<!--[\s\S]*?-->/g, "").split("\n")) {
+    if (POLICY_ROW.test(line)) {
+      skipping = true;
+      continue;
+    }
+
+    if (skipping && /^\s+\S/.test(line)) continue;
+
+    skipping = false;
+    kept.push(line);
+  }
+
+  return usable(kept.join("\n").trim());
+}
+
 function justifications(body: string): PermissionJustification[] {
   for (const sub of splitSections(body, 3)) {
     if (!sub.heading.toLowerCase().startsWith("permission")) continue;
@@ -182,7 +209,7 @@ function justifications(body: string): PermissionJustification[] {
 }
 
 export function parseStoreMdListing(content: string): StoreMdListing {
-  const result: StoreMdListing = { shared: {}, categoriesByStore: {}, stores: {} };
+  const result: StoreMdListing = { shared: {}, categoriesByStore: {}, stores: {}, privacy: { section: "", attested: null } };
 
   for (const section of splitSections(content, 2)) {
     const heading = section.heading.toLowerCase();
@@ -205,9 +232,13 @@ export function parseStoreMdListing(content: string): StoreMdListing {
         }
       }
     } else if (heading.startsWith("privacy")) {
-      const policy = bullets(section.body).find(({ key }) => /privacy policy/i.test(key));
+      const rows = bullets(section.body);
+      const policy = rows.find(({ key }) => /privacy policy/i.test(key) && !/attested/i.test(key));
+      const attested = rows.find(({ key }) => /^privacy policy attested$/i.test(key));
       const url = policy ? /https?:\/\/[^\s)>"]+/.exec(policy.value)?.[0] : undefined;
       if (url) result.shared.privacyPolicyUrl = url.replace(/[.,;]$/, "");
+
+      result.privacy = { section: privacyProse(section.body), attested: attested ? /^yes\b/i.test(attested.value.trim()) : null };
     } else {
       const [store] = classifyStore(section.heading);
       if (!store || result.stores[store]) continue;

@@ -245,7 +245,7 @@ describe("extension_submit sync-listing and the preflight advisory", () => {
     ]);
 
     expect(advisory.notCovered.join("\n")).toContain("screenshots");
-    expect(advisory.notCovered).toContain("privacy policy URL: not in STORE.md");
+    expect(advisory.notCovered).toContain('privacy policy URL: not in STORE.md; add a "## Privacy and data use" section saying what the extension collects and, under it, the line "- Privacy policy attested: yes", and the platform publishes that section as a public privacy policy URL the stores can link');
     expect(out.hint).toContain('action:"sync-listing"');
   });
 });

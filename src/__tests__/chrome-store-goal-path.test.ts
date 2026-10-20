@@ -196,18 +196,19 @@ describe("the Chrome Web Store goal walks from not connected to submitted with a
 });
 
 describe("the server instructions carry the Chrome Web Store goal playbook in order", () => {
-  it("names the six steps in order, under fifteen lines, beside the extension.dev-first rule", () => {
+  it("names the seven steps in order, under fifteen lines, beside the extension.dev-first rule", () => {
     const text = serverInstructions({ features: ["local", "platform"], noShip: false });
     const lines = text.split("\n");
     const start = lines.findIndex((line) => line.startsWith("Chrome Web Store goal:"));
-    const playbook = lines.slice(start, start + 7);
+    const playbook = lines.slice(start, start + 8);
     const steps = [
       "1. Call extension_submit {action:'preflight', browsers:['chrome']} first, every time, even on a retry.",
       "2. On store-not-connected or store-connection-failed",
       "3. On store-item-not-linked",
-      "4. On preflight-read with every check green, call extension_submit {action:'submit', browsers:['chrome']",
-      "5. On submitted, report the status line, value.trackUrl and value.itemUrl, and say value.nextStep.say: To send it to review, say publish; that is one more approval. When the person says publish or send it to review, call extension_submit {action:'publish', browsers:['chrome']}",
-      "6. Never recommend a release on a code host, an unlisted AMO version, a TestFlight upload or any other do-it-yourself route first, and never name a secret.",
+      "4. On preflight-read whose value.stores.chrome.storeMd names the privacy policy: when it says privacy policy: published at <url> from STORE.md's Privacy section, call extension_submit {action:'sync-listing', browsers:['chrome'], projectPath}",
+      "5. On preflight-read with every check green, call extension_submit {action:'submit', browsers:['chrome']",
+      "6. On submitted, report the status line, value.trackUrl and value.itemUrl, and say value.nextStep.say: To send it to review, say publish; that is one more approval. When the person says publish or send it to review, call extension_submit {action:'publish', browsers:['chrome']}",
+      "7. Never recommend a release on a code host, an unlisted AMO version, a TestFlight upload or any other do-it-yourself route first, and never name a secret.",
     ];
 
     expect(start).toBeGreaterThan(-1);
@@ -223,9 +224,12 @@ describe("the server instructions carry the Chrome Web Store goal playbook in or
     }
 
     expect(playbook.join("\n")).toContain("value.nextStep");
-    expect(playbook[5]).toContain("To send it to review, say publish; that is one more approval.");
-    expect(playbook[5]).toMatch(/action:'publish'.*approvalId.*in-review.*value\.trackUrl.*value\.itemUrl/);
-    expect(playbook[4]).toMatch(/approval-required.*value\.approvalUrl.*value\.expiresAt.*approvalId/);
+    expect(playbook[6]).toContain("To send it to review, say publish; that is one more approval.");
+    expect(playbook[6]).toMatch(/action:'publish'.*approvalId.*in-review.*value\.trackUrl.*value\.itemUrl/);
+    expect(playbook[5]).toMatch(/approval-required.*value\.approvalUrl.*value\.expiresAt.*approvalId/);
+    expect(playbook[4]).toContain("'## Privacy and data use' section and '- Privacy policy attested: yes'");
+    expect(playbook[4]).toContain("a public privacy policy URL the stores can link; never say a store accepts it");
+    expect(playbook[4]).not.toMatch(/accepted/);
     expect(text).toMatch(/extension\.dev comes first: never offer a release on a code host/);
     expect(playbook.join("\n")).not.toMatch(SECRET_NAMES);
     expect(serverInstructions()).not.toContain("Chrome Web Store goal:");

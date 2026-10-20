@@ -26,7 +26,7 @@ import {
   storeSettingsUrl,
   submitStep,
 } from "../lib/store-connection";
-import { readLocalListing, storeMdAdvisory } from "./store-listing";
+import { hostedPrivacy, hostedPrivacyPage, privacyPublishedSentence, readLocalListing, storeMdAdvisory } from "./store-listing";
 
 import type { ListingStore } from "../lib/store-md-listing";
 
@@ -289,13 +289,14 @@ function checkView(check: Row, withLabel: boolean): Row {
 
 const NAMED_BY_SUBMIT = new Set(["submission.build_selected"]);
 
-function readinessView(json: Row, store: string, projectPath: string, buildNamed: boolean): Row {
+function readinessView(json: Row, store: string, projectPath: string, buildNamed: boolean, ref: { workspace: string; project: string }): Row {
   const summary = isRow(json.summary) ? json.summary : {};
   const all = (Array.isArray(json.checks) ? json.checks : []).filter(isRow);
   const deferred = buildNamed ? [] : all.filter((c) => NAMED_BY_SUBMIT.has(text(c.id)) && text(c.status) === "fail");
   const checks = all.filter((c) => !deferred.includes(c));
   const open = checks.filter((c) => text(c.status) === "fail" || text(c.status) === "warn");
   const local = projectPath ? readLocalListing(projectPath, store as ListingStore) : null;
+  const hosted = local && !("problem" in local) ? hostedPrivacy(local, hostedPrivacyPage(ref, json)) : null;
   const connection = connectionOf(json);
   const failing = checks.filter((c) => text(c.status) === "fail").map((c) => checkView(c, true));
 
@@ -306,7 +307,7 @@ function readinessView(json: Row, store: string, projectPath: string, buildNamed
     ...(deferred.length ? { namedBySubmit: ["build"] } : {}),
     failing,
     warnings: checks.filter((c) => text(c.status) === "warn").map((c) => checkView(c, true)),
-    ...(local ? { storeMd: "problem" in local ? { missing: local.problem } : storeMdAdvisory(local, open) } : {}),
+    ...(local ? { storeMd: "problem" in local ? { missing: local.problem } : storeMdAdvisory(local, open, hosted) } : {}),
   };
 }
 
@@ -343,7 +344,7 @@ export async function preflight(args: StoreActArgs): Promise<string> {
 
   asked.forEach((store, i) => {
     const read = reads[i];
-    if (read.ok) stores[store] = readinessView(read.json, store, text(args.projectPath), Boolean(text(args.buildSha)));
+    if (read.ok) stores[store] = readinessView(read.json, store, text(args.projectPath), Boolean(text(args.buildSha)), api.ref);
     else unread.push(`${store}: ${read.message}`);
   });
 
@@ -358,9 +359,13 @@ export async function preflight(args: StoreActArgs): Promise<string> {
   const storesPageUrl = consoleProjectUrl(api.ref, ConsoleProjectPage.stores, args.api);
   const buildNamedLater = Object.values(stores).some((view) => Array.isArray((view as Row).namedBySubmit));
   const buildLine = buildNamedLater ? " The submit call names the build; extension_builds lists the shas." : "";
+  const privacyUrls = Object.values(stores)
+    .map((view) => (isRow((view as Row).storeMd) && isRow(((view as Row).storeMd as Row).privacyPolicy) ? text((((view as Row).storeMd as Row).privacyPolicy as Row).url) : ""))
+    .filter(Boolean);
+  const privacyLine = [...new Set(privacyUrls)].map((url) => ` ${privacyPublishedSentence(url)}.`).join("");
   const readinessHint = blocked.length
-    ? `${blocked.join(", ")} cannot be submitted yet; each failing check says what to fix.${syncLine} This read wrote nothing.`
-    : `Every store read here is ready to submit.${buildLine} This read wrote nothing; extension_submit with dryRun:false submits.`;
+    ? `${blocked.join(", ")} cannot be submitted yet; each failing check says what to fix.${syncLine}${privacyLine} This read wrote nothing.`
+    : `Every store read here is ready to submit.${buildLine}${privacyLine} This read wrote nothing; extension_submit with dryRun:false submits.`;
   const chrome = isRow(stores.chrome) ? stores.chrome : null;
   const connection = chrome && isRow(chrome.connection) ? chrome.connection : null;
 
