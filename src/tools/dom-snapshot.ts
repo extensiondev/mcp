@@ -331,7 +331,7 @@ async function snapshotByTargetId(
   }
 
   const target = targets.find((t) => t.targetId === targetId);
-  if (!target) return targetNotFound(schema.name, targetId, targets.map((t) => ({ targetId: t.targetId, url: t.url })));
+  if (!target) return targetNotFound(schema.name, targetId, targets.map((t) => ({ targetId: t.targetId, url: t.url })), { projectPath: args.projectPath, browser });
 
   const outcome = await evaluateOnExtensionPage(cdp.port, targetId, expression, args.timeout);
   if (!outcome.ok) return snapshotFailed(outcome.message);

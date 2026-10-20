@@ -130,7 +130,7 @@ export async function handler(args: {
     let pickWarning: string | null = null;
 
     const byId = args.targetId ? allTargets.find((t) => String(t.id) === args.targetId && t.type === "page") : undefined;
-    if (args.targetId && !byId) return targetNotFound(schema.name, args.targetId, pageTargets.map(ref));
+    if (args.targetId && !byId) return targetNotFound(schema.name, args.targetId, pageTargets.map(ref), { projectPath: args.projectPath, browser });
 
     const urlMatches = url ? pageTargets.filter((t) => t.url.includes(url)) : [];
     const pick = pickTarget(urlMatches, ref);

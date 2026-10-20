@@ -52,6 +52,14 @@ import { openDevToolsPanel } from "../lib/cdp-devtools";
 import { listPageTargets, matchTargetsByUrl } from "../lib/cdp-targets";
 import { sessionGuestIdentity, unpackedExtensionId } from "../lib/extension-identity";
 import { clickGeckoToolbarButton, declaredToolbarButton } from "../lib/gecko-toolbar-click";
+import {
+  extensionIdOf,
+  extensionTargetsListed,
+  readReloadEvidence,
+  rememberExtensionTarget,
+  waitForExtensionBack,
+  RELOAD_RETURN_WAIT_MS,
+} from "../lib/extension-reload";
 
 export const OVERRIDE_SURFACES = ["newtab", "history", "bookmarks"];
 
@@ -191,6 +199,13 @@ export interface NavigateOptions {
   reuse?: "blank" | "surface";
   tab?: number;
   avoidUrls?: string[];
+  reloadRetried?: boolean;
+}
+
+const SETTLE_POLL_MS = 6000;
+
+function boundedBudget(ms: number, timeout?: number): number {
+  return typeof timeout === "number" && timeout > 0 ? Math.min(ms, timeout) : ms;
 }
 
 async function navigateToUrlViaWebDriver(
@@ -326,7 +341,7 @@ export async function navigateToUrl(
     const polled = await pollForTarget(
       resolved.port,
       url,
-      6000,
+      boundedBudget(SETTLE_POLL_MS, timeout),
       navigatedTargetId,
       previousUrl,
     );
@@ -373,6 +388,62 @@ export async function navigateToUrl(
 
     if (!settled) {
       const isExtensionPage = url.startsWith("chrome-extension://");
+      const extensionId = extensionIdOf(url);
+      let absentNote: string | null = null;
+
+      if (extensionId && !options.reloadRetried) {
+        const evidence = readReloadEvidence(projectPath, browser);
+        const listedNow = evidence ? true : await extensionTargetsListed(resolved.port, extensionId);
+
+        if (evidence || listedNow === false) {
+          const came = await waitForExtensionBack(
+            resolved.port,
+            extensionId,
+            { projectPath, browser },
+            boundedBudget(RELOAD_RETURN_WAIT_MS, timeout),
+          );
+
+          if (came.outcome === "back") {
+            const retried = await navigateToUrl(projectPath, browser, url, timeout, {
+              ...options,
+              reloadRetried: true,
+            });
+
+            try {
+              const frame = JSON.parse(retried);
+              addWarning(
+                frame,
+                `The first navigation to ${url} landed while the extension was reloading${evidence ? ` (${evidence.sentence})` : " (the browser listed no target of the extension)"}, so its tab closed; it was retried once after the extension came back ${came.waitedMs} ms later.`,
+              );
+
+              if (frame?.ok) patchValue(frame, { retriedAfterReload: true });
+
+              return actFrameJson(frame);
+            } catch {
+              return retried;
+            }
+          }
+
+          if (!evidence) {
+            absentNote = `The browser listed no target of the extension (${extensionId}) for ${came.waitedMs} ms after the navigation, so the extension is not loaded in it right now; extension_doctor says whether its load was refused.`;
+          }
+
+          if (evidence) {
+            return envelope({
+              ok: false,
+              command: schema.name,
+              status: "extension-reloading",
+              error: {
+                code: "E_EXTENSION_RELOADING",
+                name: "ExtensionReloading",
+                message: `The extension is reloading (${evidence.sentence}), so ${url} could not be opened: Chrome closes an extension's pages while it reloads, and the extension was not back within ${came.waitedMs} ms. The file is not implicated.`,
+              },
+              value: { navigated: url, reload: { kind: evidence.kind, at: evidence.at }, waitedMs: came.waitedMs },
+              hint: "Try again in a moment. extension_wait with for: \"rebuild\" answers when the compile and its reload have landed; then call extension_open again with the same url.",
+            });
+          }
+        }
+      }
 
       return envelope({
         ok: false,
@@ -390,8 +461,11 @@ export async function navigateToUrl(
         hint: isExtensionPage
           ? "Confirm the path exists in the built dist (extension_build / extension_analyze list entrypoints). For an extension page, the path must match the BUILT manifest, which may differ from your source layout."
           : "Confirm the URL loads in a normal browser and that the dev session's browser has network access. The extension under test is implicated only if it blocks the request itself (declarativeNetRequest rules or a webRequest listener); otherwise nothing about the bundle is.",
+        warnings: [absentNote],
       });
     }
+
+    rememberExtensionTarget(settled.id, settled.url);
 
     return envelope({
       ok: true,

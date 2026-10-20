@@ -7,6 +7,7 @@
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
 import { envelope } from "./envelope";
+import { readReloadEvidence, rememberedExtensionTargetUrl, type SessionRef } from "./extension-reload";
 
 export interface TargetRef {
   targetId: string;
@@ -78,7 +79,16 @@ export function identicalPickWarning(picked: TargetRef, others: TargetRef[], fam
   return `${others.length + 1} open tabs show ${picked.url}; this used targetId ${picked.targetId}, ${rule}. The others: ${others.map((o) => o.targetId).join(", ")}. Pass targetId to pick another.`;
 }
 
-export function targetNotFound(command: string, targetId: string, live: TargetRef[]): string {
+export function targetNotFound(command: string, targetId: string, live: TargetRef[], session?: SessionRef): string {
+  const liveList = live.length ? live.map((t) => `${t.targetId} (${t.url})`).join(", ") : "none";
+  const reload = session ? readReloadEvidence(session.projectPath, session.browser) : null;
+  const openedUrl = reload ? rememberedExtensionTargetUrl(targetId) : null;
+  const message = openedUrl
+    ? `No open target has targetId ${targetId}: it showed ${openedUrl}, one of the extension's own pages, and the extension reloaded (${reload!.sentence}). Chrome closes an extension's pages when it reloads, so that tab is gone. Live targets: ${liveList}.`
+    : reload
+      ? `No open target has targetId ${targetId}; it was closed or never belonged to this session. The extension reloaded (${reload.sentence}), and Chrome closes an extension's pages when it reloads, so if that tab showed one of them it is gone. Live targets: ${liveList}.`
+      : `No open target has targetId ${targetId}; it was closed or never belonged to this session. Live targets: ${liveList}.`;
+
   return envelope({
     ok: false,
     command,
@@ -86,11 +96,11 @@ export function targetNotFound(command: string, targetId: string, live: TargetRe
     error: {
       code: "E_TARGET_NOT_FOUND",
       name: "TargetNotFound",
-      message: `No open target has targetId ${targetId}; it was closed or never belonged to this session. Live targets: ${
-        live.length ? live.map((t) => `${t.targetId} (${t.url})`).join(", ") : "none"
-      }.`,
+      message,
     },
-    value: { liveTargets: live },
-    hint: "Pass one of liveTargets as targetId, or pass url instead. extension_dom_snapshot with listTargets: true lists what is open.",
+    value: { liveTargets: live, ...(reload ? { extensionReloaded: { kind: reload.kind, at: reload.at } } : {}) },
+    hint: reload
+      ? "Open the page again with extension_open (the same url or surface) and use the targetId it answers; that id is new after every reload. extension_dom_snapshot with listTargets: true lists what is open."
+      : "Pass one of liveTargets as targetId, or pass url instead. extension_dom_snapshot with listTargets: true lists what is open.",
   });
 }

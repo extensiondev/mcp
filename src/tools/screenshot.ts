@@ -212,7 +212,7 @@ async function onChromium(args: Args, browser: string, context: string, timeoutM
     }
 
     const found = all.find((t) => t.targetId === args.targetId);
-    if (!found) return targetNotFound(COMMAND, args.targetId, all.map(pageRef));
+    if (!found) return targetNotFound(COMMAND, args.targetId, all.map(pageRef), { projectPath: args.projectPath, browser });
 
     chosen = { target: found, warning: null };
   } else if (context === "page" && !isExtensionUrl(args.url)) {

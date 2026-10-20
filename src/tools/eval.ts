@@ -1312,7 +1312,7 @@ async function evaluateByTargetId(
   }
 
   const target = live.find((t) => t.targetId === targetId);
-  if (!target) return targetNotFound(schema.name, targetId, live);
+  if (!target) return targetNotFound(schema.name, targetId, live, { projectPath: args.projectPath, browser });
 
   const outcome = await evaluateOnExtensionPage(resolved.port, targetId, args.expression, args.timeout);
 
