@@ -318,6 +318,11 @@ describe("STORE.md's Privacy and data use section is the project's privacy polic
 
     expect(out.value.stores.chrome.privacyPage).toBeUndefined();
     expect(out.hint).toContain(SENTENCE);
+    expect(out.hint).toContain(
+      "cannot be written through Google's API: paste them once in the item's dashboard",
+    );
+
+    expect(out.hint).not.toContain("a submission sends it");
     expect(JSON.stringify(out)).not.toMatch(/accept/i);
   });
 

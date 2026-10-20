@@ -368,6 +368,11 @@ const LISTING_NEXT = {
   used: "The call that used it may already have written the listing; run preflight first, and request a fresh approval only if the listing is not there.",
 };
 
+const chromeListingLine = (synced: string[]): string =>
+  synced.includes("chrome")
+    ? " Chrome's own listing fields, the privacy policy URL included, cannot be written through Google's API: paste them once in the item's dashboard, and extension.dev keeps this copy as the record."
+    : "";
+
 async function syncOne(
   api: ProjectApi,
   args: ListingArgs,
@@ -750,6 +755,6 @@ export async function syncListing(args: ListingArgs): Promise<string> {
     command: COMMAND,
     status: "listing-synced",
     value: { ...value, outcome, links },
-    hint: `${privacyLine}${blockingLine ? `${blockingLine}. ` : ""}The listing on extension.dev now carries what ${STORE_MD_FILENAME} and the build cover, read back from the platform's record; extension_submit action:"preflight" reads what each store still needs, and a submission sends it. ${made}`,
+    hint: `${privacyLine}${blockingLine ? `${blockingLine}. ` : ""}The listing on extension.dev now carries what ${STORE_MD_FILENAME} and the build cover, read back from the platform's record; extension_submit action:"preflight" reads what each store still needs.${chromeListingLine(synced)} ${made}`,
   });
 }
