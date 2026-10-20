@@ -10,7 +10,6 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const packageRoot = path.resolve(here, "..", "..");
 
 const THIS_SUBMODULE = "packages/public-extensiondev-mcp";
-const MEDIA_SUBMODULE = "apps/workers/media.extension.land";
 
 const SHA_PATTERN = /\b[0-9a-f]{40}\b/g;
 const SOURCE_EXTENSIONS = [".ts", ".tsx", ".mjs", ".js"];
@@ -18,7 +17,6 @@ const SOURCE_EXTENSIONS = [".ts", ".tsx", ".mjs", ".js"];
 const SCANNED_ROOTS = [
   "apps/web/code.extension.dev/src",
   "apps/web/templates.extension.dev/build-scripts",
-  "apps/workers/media.extension.land/scripts",
   "packages/public-extensiondev-mcp/src/lib",
 ];
 
@@ -26,7 +24,6 @@ const DECLARED_SOURCES = [
   "apps/web/code.extension.dev/src/generate/template-artifact-source.ts",
   "apps/web/templates.extension.dev/build-scripts/assert-template-fidelity.mjs",
   "apps/web/templates.extension.dev/build-scripts/fetch-examples-data.mjs",
-  "apps/workers/media.extension.land/scripts/build-templates-artifact.mjs",
   "packages/public-extensiondev-mcp/src/lib/template-artifact-source.ts",
 ].sort();
 
@@ -35,14 +32,13 @@ const DECLARED_JSON: Array<{ file: string; field: string }> = [
     file: "apps/web/templates.extension.dev/build-scripts/public-corpus-manifest.json",
     field: "ref",
   },
-  {
-    file: "apps/workers/media.extension.land/public/templates/latest.json",
-    field: "commit",
-  },
 ];
 
-const CHANNEL_POINTER =
-  "apps/workers/media.extension.land/public/templates/latest.json";
+const CATALOG_POINTER_FILE =
+  "apps/web/templates.extension.dev/build-scripts/templates-catalog.pinned.json";
+
+const LIVE_CATALOG_POINTER =
+  "https://registry.extension.land/extension-dev/catalog/latest.json";
 
 const declaresSubmodule = (dir: string, submodule: string): boolean => {
   const modules = path.join(dir, ".gitmodules");
@@ -62,27 +58,8 @@ const findDeclaringRoot = (): string | null => {
 
 const monorepoRoot = findDeclaringRoot();
 
-const submoduleIsCheckedOut = (root: string, submodule: string): boolean => {
-  const dir = path.join(root, submodule);
-
-  return fs.existsSync(dir) && fs.readdirSync(dir).length > 0;
-};
-
-const mediaCheckedOut = monorepoRoot
-  ? submoduleIsCheckedOut(monorepoRoot, MEDIA_SUBMODULE)
-  : false;
-
-const inUninitialisedSubmodule = (relative: string): boolean =>
-  !mediaCheckedOut && relative.startsWith(`${MEDIA_SUBMODULE}/`);
-
-const REACHABLE_SOURCES = DECLARED_SOURCES.filter(
-  (relative) => !inUninitialisedSubmodule(relative),
-);
-
-const SOURCES_OUTSIDE_ANY_SUBMODULE = DECLARED_SOURCES.filter(
-  (relative) =>
-    !relative.startsWith(`${MEDIA_SUBMODULE}/`) &&
-    !relative.startsWith(`${THIS_SUBMODULE}/`),
+const SOURCES_OUTSIDE_THIS_SUBMODULE = DECLARED_SOURCES.filter(
+  (relative) => !relative.startsWith(`${THIS_SUBMODULE}/`),
 ).length;
 
 const isSourceFile = (name: string): boolean =>
@@ -132,44 +109,35 @@ const sweepDeclarations = (root: string): Map<string, string[]> => {
   return carriers;
 };
 
-describe("the corpus pin floor is non-degenerate, and every copy of it agrees with the channel pointer", () => {
+describe("the corpus pin floor is non-degenerate, and every copy of it agrees with the catalog pointer", () => {
   it("reads as a full commit sha, never a branch name or a stub", () => {
     expect(PINNED_COMMIT).toMatch(/^[0-9a-f]{40}$/);
   });
 });
 
 describe("the corpus pin agrees across every declaration", () => {
-  it("resolves a monorepo checkout or names itself standalone", () => {
+  it("compares enough sites that a partial checkout cannot hollow it out", () => {
     if (!monorepoRoot) {
       expect(DECLARED_SOURCES.length).toBeGreaterThan(1);
 
       return;
     }
 
+    expect(SOURCES_OUTSIDE_THIS_SUBMODULE).toBeGreaterThanOrEqual(3);
     expect(
-      declaresSubmodule(monorepoRoot, MEDIA_SUBMODULE),
-      `${monorepoRoot}/.gitmodules stopped declaring ${MEDIA_SUBMODULE}, so the channel pointer this contract compares against can no longer be located. Re-point CHANNEL_POINTER before trusting a green here.`,
-    ).toBe(true);
-  });
-
-  it("compares enough sites that a partial checkout cannot hollow it out", () => {
-    if (!monorepoRoot) return;
-
-    expect(SOURCES_OUTSIDE_ANY_SUBMODULE).toBeGreaterThanOrEqual(3);
-    expect(
-      REACHABLE_SOURCES.length,
-      "Every declared source outside an uninitialised submodule has to be compared, plus this package's own.",
-    ).toBeGreaterThanOrEqual(SOURCES_OUTSIDE_ANY_SUBMODULE + 1);
+      DECLARED_SOURCES.length,
+      "Every declared source has to be compared, plus this package's own.",
+    ).toBeGreaterThanOrEqual(SOURCES_OUTSIDE_THIS_SUBMODULE + 1);
   });
 
   it("finds every declared source the checkout contains", () => {
     if (!monorepoRoot) return;
 
-    for (const relative of REACHABLE_SOURCES) {
+    for (const relative of DECLARED_SOURCES) {
       const file = path.join(monorepoRoot, relative);
       expect(
         fs.existsSync(file),
-        `${relative} is declared as a corpus pin site and is missing from a tree that IS checked out. If it moved, move this declaration with it.`,
+        `${relative} is declared as a corpus pin site and is missing from the tree. If it moved, move this declaration with it.`,
       ).toBe(true);
     }
   });
@@ -181,14 +149,14 @@ describe("the corpus pin agrees across every declaration", () => {
     expect(
       swept,
       "A file under the scanned roots carries a 40-character commit sha and is not a declared pin site. Advancing the corpus has to move every one of these together, so declare it here or stop hardcoding the sha there.",
-    ).toEqual(REACHABLE_SOURCES);
+    ).toEqual(DECLARED_SOURCES);
   });
 
   it("reads exactly one sha, and the same one, from every source", () => {
     if (!monorepoRoot) return;
 
     const swept = sweepDeclarations(monorepoRoot);
-    expect(swept.size).toBe(REACHABLE_SOURCES.length);
+    expect(swept.size).toBe(DECLARED_SOURCES.length);
 
     for (const [relative, shas] of swept) {
       expect(
@@ -206,11 +174,7 @@ describe("the corpus pin agrees across every declaration", () => {
   it("reads the same sha from every declared json field", () => {
     if (!monorepoRoot) return;
 
-    let compared = 0;
-
     for (const { file, field } of DECLARED_JSON) {
-      if (inUninitialisedSubmodule(file)) continue;
-
       const full = path.join(monorepoRoot, file);
       expect(fs.existsSync(full), `${file} is missing`).toBe(true);
       const value = JSON.parse(fs.readFileSync(full, "utf8"))[field];
@@ -219,36 +183,65 @@ describe("the corpus pin agrees across every declaration", () => {
         value,
         `${file} pins ${value} at .${field} while this package pins ${PINNED_COMMIT}.`,
       ).toBe(PINNED_COMMIT);
-
-      compared += 1;
     }
-
-    expect(compared).toBeGreaterThanOrEqual(1);
   });
 
-  it("agrees with the channel pointer that owns the pin at runtime", () => {
+  /* @invariant
+   * THE POINTER THE TEMPLATES APP COMMITS IS THE CHANNEL AT RUNTIME.
+   *
+   * Both runtime readers, the code app and this server, resolve the registry
+   * channel pointer first and refuse any commit but the pin, so a pin that
+   * disagrees with the published pointer is the value users get only when the
+   * registry is unreachable. The templates app commits the pointer it
+   * publishes; until that file lands, the live channel is read instead, and a
+   * checkout with no network skips rather than passing on nothing.
+   */
+  it("agrees with the catalog pointer the templates app publishes", async (ctx) => {
     if (!monorepoRoot) return;
 
-    if (!mediaCheckedOut) {
+    const committed = path.join(monorepoRoot, CATALOG_POINTER_FILE);
+
+    if (fs.existsSync(committed)) {
+      const pinned = JSON.parse(fs.readFileSync(committed, "utf8")) as {
+        commit?: string;
+        catalog?: string;
+        source?: { commit?: string };
+      };
       expect(
-        inUninitialisedSubmodule(CHANNEL_POINTER),
-        `${CHANNEL_POINTER} is unreachable for a reason other than an uninitialised ${MEDIA_SUBMODULE}.`,
-      ).toBe(true);
+        pinned.source?.commit ?? pinned.commit,
+        `${CATALOG_POINTER_FILE} is the catalog both runtime readers resolve first, so a floor that disagrees with it is the value users get only when the registry is unreachable.`,
+      ).toBe(PINNED_COMMIT);
+
+      if (pinned.catalog) {
+        expect(pinned.catalog, `${CATALOG_POINTER_FILE}.catalog`).toContain(PINNED_COMMIT);
+      }
 
       return;
     }
 
-    const pointer = JSON.parse(
-      fs.readFileSync(path.join(monorepoRoot, CHANNEL_POINTER), "utf8"),
-    ) as { commit?: string; manifest?: string; meta?: string; files?: string };
+    let pointer: { commit?: string; catalog?: string };
+
+    try {
+      const response = await fetch(LIVE_CATALOG_POINTER, {
+        headers: { Accept: "application/json" },
+        signal: AbortSignal.timeout(8000),
+      });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+      pointer = (await response.json()) as { commit?: string; catalog?: string };
+    } catch (error) {
+      ctx.skip(
+        `${CATALOG_POINTER_FILE} is not committed yet and ${LIVE_CATALOG_POINTER} could not be read (${error instanceof Error ? error.message : String(error)}).`,
+      );
+
+      return;
+    }
 
     expect(
       pointer.commit,
-      `${CHANNEL_POINTER} is what both runtime readers resolve first, so a floor that disagrees with it is the value users get only when media is unreachable.`,
+      `${LIVE_CATALOG_POINTER} publishes ${pointer.commit} while this package pins ${PINNED_COMMIT}.`,
     ).toBe(PINNED_COMMIT);
 
-    for (const key of ["manifest", "meta", "files"] as const) {
-      expect(pointer[key], `${CHANNEL_POINTER}.${key}`).toContain(PINNED_COMMIT);
-    }
+    expect(pointer.catalog, `${LIVE_CATALOG_POINTER}.catalog`).toContain(PINNED_COMMIT);
   });
 });

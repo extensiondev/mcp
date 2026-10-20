@@ -41,7 +41,7 @@ The extension.dev platform ships 50+ templates in the [examples](https://github.
 
 ```bash
 # The full catalog with metadata (framework, surfaces, permissions, etc.)
-curl -sL https://media.extension.land/templates/latest.json | jq '.templates[] | {slug, description, uiFramework, surfaces}'
+curl -sL "https://registry.extension.land$(curl -sL https://registry.extension.land/extension-dev/catalog/latest.json | jq -r .catalog)" | jq '.templates[] | {slug, description, uiFramework, surfaces, downloads}'
 ```
 
 **Pre-built distributions** are available for every template:

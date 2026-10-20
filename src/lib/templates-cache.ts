@@ -10,22 +10,22 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 
-import { templateMetaUrls } from "./template-artifact-source";
+import { catalogCommitProblem, templateMetaUrls } from "./template-artifact-source";
 
 import bundledSnapshot from "./templates-meta.snapshot.json";
 
-import type { TemplatesMetaV2, TemplateMeta } from "./types";
+import type { TemplatesCatalog, TemplateMeta } from "./types";
 
 const CACHE_DIR = path.join(os.homedir(), ".cache", "extension-js");
 const CACHE_FILE = path.join(CACHE_DIR, "templates-meta.json");
 const CACHE_TTL_MS = 60 * 60 * 1000;
 
-function isUsableMeta(data: unknown): data is TemplatesMetaV2 {
+function isUsableMeta(data: unknown): data is TemplatesCatalog {
   return (
     typeof data === "object" &&
     data !== null &&
-    Array.isArray((data as TemplatesMetaV2).templates) &&
-    (data as TemplatesMetaV2).templates.length > 0
+    Array.isArray((data as TemplatesCatalog).templates) &&
+    (data as TemplatesCatalog).templates.length > 0
   );
 }
 
@@ -39,7 +39,7 @@ function isCacheValid(): boolean {
   }
 }
 
-function readCachedMeta(): TemplatesMetaV2 | null {
+function readCachedMeta(): TemplatesCatalog | null {
   try {
     const cached = JSON.parse(fs.readFileSync(CACHE_FILE, "utf8"));
 
@@ -52,7 +52,7 @@ function readCachedMeta(): TemplatesMetaV2 | null {
 export type TemplatesSource = "live" | "cache" | "stale-cache" | "bundled-snapshot";
 
 export interface TemplatesMetaRead {
-  meta: TemplatesMetaV2;
+  meta: TemplatesCatalog;
   source: TemplatesSource;
   cacheAgeMs?: number;
   note?: string;
@@ -96,6 +96,13 @@ export async function fetchTemplatesMetaWithSource(): Promise<TemplatesMetaRead>
       continue;
     }
 
+    const commitProblem = catalogCommitProblem(data);
+
+    if (commitProblem) {
+      failures.push(`${url}: ${commitProblem}`);
+      continue;
+    }
+
     let note: string | undefined;
 
     try {
@@ -135,7 +142,7 @@ export async function fetchTemplatesMetaWithSource(): Promise<TemplatesMetaRead>
   throw new Error(`Failed to fetch templates-meta.json (${why}).`);
 }
 
-export async function fetchTemplatesMeta(): Promise<TemplatesMetaV2> {
+export async function fetchTemplatesMeta(): Promise<TemplatesCatalog> {
   return (await fetchTemplatesMetaWithSource()).meta;
 }
 

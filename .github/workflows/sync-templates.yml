@@ -7,11 +7,13 @@ name: Sync template catalog
 # the main ruleset lists as its bypass actor, the way the release lane does.
 # The push still triggers the CI matrix on main. Decided 2026-10-08.
 #
-# The snapshot is read at the commit PINNED_COMMIT names in
-# src/lib/template-artifact-source.ts, never from the floating nightly
-# release: the bundled fallback has to describe the same corpus the resolver
+# The snapshot is the registry catalog document at the commit PINNED_COMMIT
+# names in src/lib/template-artifact-source.ts, never the floating channel
+# pointer: the bundled fallback has to describe the same corpus the resolver
 # pins, and on 2026-10-19 the nightly snapshot sat at ba1bab33 while the pin
-# was 8e23368. Moving the pin is the only way to move this file.
+# was 8e23368. Moving the pin is the only way to move this file. The document
+# carries the per-browser download URLs the registry serves, which the raw
+# upstream templates-meta.json never had (switched 2026-10-20).
 
 on:
   schedule:
@@ -39,11 +41,16 @@ jobs:
           echo "commit=$PIN" >> "$GITHUB_OUTPUT"
           echo "Pinned examples commit: $PIN"
 
-      - name: Fetch templates-meta.json at the pinned commit
+      - name: Fetch the registry catalog document at the pinned commit
         run: |
           curl -fsSL \
-            "https://raw.githubusercontent.com/extension-js/examples/${{ steps.pin.outputs.commit }}/templates-meta.json" \
+            "https://registry.extension.land/extension-dev/catalog/${{ steps.pin.outputs.commit }}.json" \
             -o /tmp/templates-meta-latest.json
+          node -e "
+            const doc = require('/tmp/templates-meta-latest.json');
+            if (doc.schema !== 'templates-catalog/v1') throw new Error('not a templates-catalog/v1 document: ' + doc.schema);
+            if (doc.source.commit !== '${{ steps.pin.outputs.commit }}') throw new Error('the document describes ' + doc.source.commit + ', not the pin');
+          "
 
       - name: Check for changes
         id: diff
@@ -70,7 +77,8 @@ jobs:
           node -e "
             const meta = require('/tmp/templates-meta-latest.json');
             const templates = meta.templates || [];
-            console.log('Pinned commit: ${{ steps.pin.outputs.commit }} (catalog says ' + meta.commit + ', generated ' + meta.generatedAt + ')');
+            console.log('Pinned commit: ${{ steps.pin.outputs.commit }} (catalog says ' + meta.source.commit + ', generated ' + meta.generatedAt + ')');
+            console.log('With registry downloads: ' + templates.filter(t => t.downloads).length);
             console.log('Total templates: ' + templates.length);
             console.log('Featured: ' + templates.filter(t => t.featured).length);
             console.log('Surfaces: ' + [...new Set(templates.flatMap(t => t.surfaces || []))].sort().join(', '));

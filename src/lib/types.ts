@@ -37,6 +37,9 @@ export interface TemplateMeta {
   icon: string | null;
   downloads?: Record<string, string>;
   repositoryUrl?: string;
+  project?: { workspace: string; slug: string; buildId: string | null };
+  sources?: { base: string; files: Record<string, unknown> };
+  integrity?: Record<string, unknown>;
   aiPromptExamples?: string[];
   aiRecommendFor?: string[];
   patternExplanation?: string;
@@ -51,6 +54,16 @@ export interface TemplatesMetaV2 {
   generatedAt: string;
   templates: TemplateMeta[];
 }
+
+export interface TemplatesCatalogV1 {
+  schema: "templates-catalog/v1";
+  source: { repo: string; commit: string };
+  generatedAt: string;
+  workspace: string;
+  templates: TemplateMeta[];
+}
+
+export type TemplatesCatalog = TemplatesMetaV2 | TemplatesCatalogV1;
 
 export interface ReadyContract {
   status: "starting" | "ready" | "error" | "stopped";

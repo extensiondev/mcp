@@ -60,7 +60,7 @@ Claude Code will automatically pick up the instructions and know how to:
 
 ## How it connects to the examples repo
 
-The template catalog (`templates-meta.json`) is read from `media.extension.land/templates/latest.json` first and from a pinned commit of the [examples repo](https://github.com/extension-js/examples) as the fallback, with a bundled snapshot when neither answers. It is the single source of truth for:
+The template catalog is read from the registry at `registry.extension.land/extension-dev/catalog/latest.json` first, refusing any catalog cut at a commit other than the pin, and from the pinned commit of the [examples repo](https://github.com/extension-js/examples) as the fallback, with a bundled snapshot when neither answers. It is the single source of truth for:
 
 - **CLAUDE.md**, references it so Claude knows all available templates
 - **MCP tools**, `extension_templates` fetches and queries it at runtime

@@ -12,7 +12,7 @@ Parse the user's intent from `$ARGUMENTS` and execute the matching action:
 ### "create <name>" or "new <name>", Scaffold a new extension
 
 1. If MCP tool `extension_templates` is available, use it to find the best template matching the user's description (check for surface type, framework, and keywords)
-2. If not, check the template catalog: `curl -sL https://media.extension.land/templates/latest.json | jq '.templates[] | {slug, description, uiFramework, surfaces}'`
+2. If not, check the template catalog: `curl -sL "https://registry.extension.land$(curl -sL https://registry.extension.land/extension-dev/catalog/latest.json | jq -r .catalog)" | jq '.templates[] | {slug, description, uiFramework, surfaces, downloads}'`
 3. If MCP tool `extension_create` is available, use it (its answer's `nextSteps` is the next step); otherwise run `npx extension@latest create <name> --template=<best-match>`
 4. Report what was created. A scaffold needs no build to verify it: do not run `npm run build` to check it; the next step is running it (below)
 
