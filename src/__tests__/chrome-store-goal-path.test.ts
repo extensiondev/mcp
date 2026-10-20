@@ -187,7 +187,7 @@ describe("the Chrome Web Store goal walks from not connected to submitted with a
     const out = await world.call("extension_submit", { ...SUBMIT_ARGS, approvalId: "apr_goal" });
 
     walked(out, "submitted", "publish");
-    expect(out.value.nextStep.url).toBe(ITEM_URL);
+    expect(out.value.nextStep.url).toBeNull();
     expect(out.value.itemUrl).toBe(ITEM_URL);
     expect(out.value.trackUrl).toMatch(/\/acme\/widget\/submissions\/chrome\/sub_1$/);
     expect(out.value.nextStep.say).toContain("To send it to review, say publish; that is one more approval.");

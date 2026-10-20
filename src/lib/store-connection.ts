@@ -85,7 +85,7 @@ export function doneStep(stores: string[], itemUrl: string): NextStep {
   const uploaded = `The build is uploaded to ${storeNames(stores)} as a draft, recorded as uploaded and not public.`;
 
   if (drafts && stores.includes("chrome")) {
-    return nextStep("publish", `${uploaded} ${PUBLISH_SENTENCE}`, itemUrl || CHROME_DASHBOARD);
+    return nextStep("publish", `${uploaded} ${PUBLISH_SENTENCE}`);
   }
 
   return nextStep(
