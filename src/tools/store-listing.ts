@@ -11,15 +11,35 @@ import path from "node:path";
 
 import { ConsoleProjectPage } from "@extension.dev/urls/paths";
 
-import { linksOf, madeSentence, recordedOutcome, trackLinks, unrecordedOutcome } from "../lib/act-outcome";
+import {
+  linksOf,
+  madeSentence,
+  recordedOutcome,
+  trackLinks,
+  unrecordedOutcome,
+} from "../lib/act-outcome";
 import { envelope } from "../lib/envelope";
 import { consoleProjectUrl } from "../lib/registry";
-import { projectApiReadFailure, projectApiSend, tokenRefusal, type ProjectApi } from "../lib/project-api";
-import { actionFingerprint, requestApprovalAfterRefusal } from "../lib/approval-gate";
+import {
+  projectApiReadFailure,
+  projectApiSend,
+  tokenRefusal,
+  type ProjectApi,
+} from "../lib/project-api";
+import {
+  actionFingerprint,
+  requestApprovalAfterRefusal,
+} from "../lib/approval-gate";
 import { approvalRoundTrip } from "../lib/approval-outcome";
 import { badShipRequest, isRow, openShipApi, text } from "../lib/ship-act";
 import { STORE_MD_FILENAME } from "../lib/store-md";
-import { LISTING_STORES, listingForStore, parseStoreMdListing, type ListingStore, type StoreMdPrivacy } from "../lib/store-md-listing";
+import {
+  LISTING_STORES,
+  listingForStore,
+  parseStoreMdListing,
+  type ListingStore,
+  type StoreMdPrivacy,
+} from "../lib/store-md-listing";
 import {
   STORE_LISTING_ACTION,
   approvalBody,
@@ -54,20 +74,59 @@ export interface LocalListing {
   privacy: StoreMdPrivacy;
 }
 
-export interface HostedPrivacy {
+export type PrivacyPageState =
+  | "published"
+  | "unrendered"
+  | "missing-section"
+  | "missing-attestation"
+  | "taken-down"
+  | "unknown";
+
+export interface HostedPrivacyPage {
   url: string;
   derived: boolean;
-  source: string;
+  state: PrivacyPageState;
 }
+
+export interface HostedPrivacy extends HostedPrivacyPage {
+  source: string;
+  serves: boolean;
+}
+
+const PRIVACY_PAGE_STATES: readonly PrivacyPageState[] = [
+  "published",
+  "unrendered",
+  "missing-section",
+  "missing-attestation",
+  "taken-down",
+];
 
 export const PRIVACY_SECTION_HEADING = "## Privacy and data use";
 export const PRIVACY_ATTESTED_LINE = "- Privacy policy attested: yes";
 const PRIVACY_SOURCE = `${STORE_MD_FILENAME} Privacy and data use section`;
 
-export const privacyPublishedSentence = (url: string): string => `privacy policy: published at ${url} from ${STORE_MD_FILENAME}'s Privacy section; edit that section to change it`;
+export const privacyPublishedSentence = (url: string): string =>
+  `privacy policy: published at ${url} from ${STORE_MD_FILENAME}'s Privacy section; edit that section to change it`;
+
+export const privacyPendingSentence = (url: string): string =>
+  `privacy policy: will be published at ${url} from ${STORE_MD_FILENAME}'s Privacy section by extension_submit action:"sync-listing" once the ${STORE_MD_FILENAME} carrying "${PRIVACY_ATTESTED_LINE}" is pushed; that address answers 404 until then`;
+
+export const privacyTakenDownSentence = (url: string): string =>
+  `privacy policy: taken down at ${url}; an operator removed the page, so the stores cannot link it until it is restored`;
+
+export function privacySentence(hosted: HostedPrivacy): string {
+  if (hosted.serves) return privacyPublishedSentence(hosted.url);
+
+  if (hosted.state === "taken-down") {
+    return privacyTakenDownSentence(hosted.url);
+  }
+
+  return privacyPendingSentence(hosted.url);
+}
 
 export function privacyMissingLine(privacy: StoreMdPrivacy): string {
-  const outcome = "the platform publishes that section as a public privacy policy URL the stores can link";
+  const outcome =
+    "the platform publishes that section as a public privacy policy URL the stores can link";
 
   if (!privacy.section) {
     return `privacy policy URL: not in ${STORE_MD_FILENAME}; add a "${PRIVACY_SECTION_HEADING}" section saying what the extension collects and, under it, the line "${PRIVACY_ATTESTED_LINE}", and ${outcome}`;
@@ -76,31 +135,83 @@ export function privacyMissingLine(privacy: StoreMdPrivacy): string {
   return `privacy policy URL: not in ${STORE_MD_FILENAME}; add the line "${PRIVACY_ATTESTED_LINE}" under "${PRIVACY_SECTION_HEADING}" and ${outcome}`;
 }
 
-export function hostedPrivacyPage(ref: { workspace: string; project: string }, platform?: Row | null): { url: string; derived: boolean } {
-  const given = platform ? text(platform.privacyPageUrl) : "";
+export function privacyPageState(platform?: Row | null): PrivacyPageState {
+  const page =
+    platform && isRow(platform.privacyPage) ? platform.privacyPage : null;
+  const state = page ? text(page.state) : "";
 
-  return given ? { url: given, derived: false } : { url: `https://privacy.extension.land/${ref.workspace}/${ref.project}`, derived: true };
+  return (PRIVACY_PAGE_STATES as readonly string[]).includes(state)
+    ? (state as PrivacyPageState)
+    : "unknown";
+}
+
+export function hostedPrivacyPage(
+  ref: { workspace: string; project: string },
+  platform?: Row | null,
+): HostedPrivacyPage {
+  const page =
+    platform && isRow(platform.privacyPage) ? platform.privacyPage : null;
+  const given = platform
+    ? text(platform.privacyPageUrl) || (page ? text(page.url) : "")
+    : "";
+  const state = privacyPageState(platform);
+
+  return given
+    ? { url: given, derived: false, state }
+    : {
+        url: `https://privacy.extension.land/${ref.workspace}/${ref.project}`,
+        derived: true,
+        state,
+      };
 }
 
 export const wantsHostedPrivacy = (local: LocalListing): boolean =>
-  local.patch.listing.privacyPolicyUrl === undefined && local.privacy.section !== "" && local.privacy.attested === true;
+  local.patch.listing.privacyPolicyUrl === undefined &&
+  local.privacy.section !== "" &&
+  local.privacy.attested === true;
 
-export function hostedPrivacy(local: LocalListing, page: { url: string; derived: boolean }): HostedPrivacy | null {
+export function hostedPrivacy(
+  local: LocalListing,
+  page: HostedPrivacyPage,
+): HostedPrivacy | null {
   if (!wantsHostedPrivacy(local)) return null;
 
   local.patch.listing.privacyPolicyUrl = page.url;
 
-  return { url: page.url, derived: page.derived, source: PRIVACY_SOURCE };
+  return {
+    url: page.url,
+    derived: page.derived,
+    state: page.state,
+    serves: page.state === "published",
+    source: PRIVACY_SOURCE,
+  };
 }
 
-export function readLocalListing(projectPath: string, store: ListingStore, screenshots?: ListingImage[]): LocalListing | { problem: string } {
+export const withPrivacyPageState = (
+  hosted: HostedPrivacy,
+  platform: Row | null | undefined,
+): HostedPrivacy => {
+  const state = privacyPageState(platform);
+
+  return state === "unknown"
+    ? hosted
+    : { ...hosted, state, serves: state === "published" };
+};
+
+export function readLocalListing(
+  projectPath: string,
+  store: ListingStore,
+  screenshots?: ListingImage[],
+): LocalListing | { problem: string } {
   const file = path.join(projectPath, STORE_MD_FILENAME);
   let content: string;
 
   try {
     content = fs.readFileSync(file, "utf8");
   } catch {
-    return { problem: `No ${STORE_MD_FILENAME} at ${file}. Create it with the listing copy first (the extension-dev skill's store-md reference has the shape).` };
+    return {
+      problem: `No ${STORE_MD_FILENAME} at ${file}. Create it with the listing copy first (the extension-dev skill's store-md reference has the shape).`,
+    };
   }
 
   const parsed = parseStoreMdListing(content);
@@ -111,20 +222,47 @@ export function readLocalListing(projectPath: string, store: ListingStore, scree
   if ("icon" in icon) patch.icons = [icon.icon];
   if (screenshots?.length) patch.screenshots = screenshots;
 
-  return { file, patch, skipped, privacy: parsed.privacy, ...("missing" in icon ? { iconMissing: icon.missing } : {}) };
+  return {
+    file,
+    patch,
+    skipped,
+    privacy: parsed.privacy,
+    ...("missing" in icon ? { iconMissing: icon.missing } : {}),
+  };
 }
 
-const CHECK_COVERAGE: Array<{ test: RegExp; fields: string[]; label: string }> = [
-  { test: /^listing\.title_present$/, fields: ["title"], label: "title" },
-  { test: /description_present$|summary_present$/, fields: ["shortDescription", "fullDescription"], label: "description" },
-  { test: /license_present$/, fields: ["license"], label: "license" },
-  { test: /categories_present$/, fields: ["categories"], label: "category" },
-  { test: /support_email_present$/, fields: ["supportEmail"], label: "support email" },
-  { test: /search_terms_present$/, fields: ["searchTerms"], label: "search terms" },
-  { test: /privacy_policy_present$/, fields: ["privacyPolicyUrl"], label: "privacy policy URL" },
-];
+const CHECK_COVERAGE: Array<{ test: RegExp; fields: string[]; label: string }> =
+  [
+    { test: /^listing\.title_present$/, fields: ["title"], label: "title" },
+    {
+      test: /description_present$|summary_present$/,
+      fields: ["shortDescription", "fullDescription"],
+      label: "description",
+    },
+    { test: /license_present$/, fields: ["license"], label: "license" },
+    { test: /categories_present$/, fields: ["categories"], label: "category" },
+    {
+      test: /support_email_present$/,
+      fields: ["supportEmail"],
+      label: "support email",
+    },
+    {
+      test: /search_terms_present$/,
+      fields: ["searchTerms"],
+      label: "search terms",
+    },
+    {
+      test: /privacy_policy_present$/,
+      fields: ["privacyPolicyUrl"],
+      label: "privacy policy URL",
+    },
+  ];
 
-export function storeMdAdvisory(local: LocalListing, checks: Row[], hosted: HostedPrivacy | null = null): Row {
+export function storeMdAdvisory(
+  local: LocalListing,
+  checks: Row[],
+  hosted: HostedPrivacy | null = null,
+): Row {
   const covers: string[] = [];
   const notCovered: string[] = [];
   const listing = local.patch.listing as Row;
@@ -133,9 +271,12 @@ export function storeMdAdvisory(local: LocalListing, checks: Row[], hosted: Host
     const id = text(check.id);
 
     if (/privacy_policy_present$/.test(id)) {
-      if (hosted) covers.push(privacyPublishedSentence(hosted.url));
-      else if (listing.privacyPolicyUrl !== undefined) covers.push(`privacy policy URL found in ${STORE_MD_FILENAME}, not yet in the console listing`);
-      else notCovered.push(privacyMissingLine(local.privacy));
+      if (hosted) covers.push(privacySentence(hosted));
+      else if (listing.privacyPolicyUrl !== undefined) {
+        covers.push(
+          `privacy policy URL found in ${STORE_MD_FILENAME}, not yet in the console listing`,
+        );
+      } else notCovered.push(privacyMissingLine(local.privacy));
 
       continue;
     }
@@ -143,68 +284,150 @@ export function storeMdAdvisory(local: LocalListing, checks: Row[], hosted: Host
     if (/icon_present$/.test(id)) {
       const icon = local.patch.icons?.[0];
 
-      if (icon) covers.push(`icon 128 px found in ${icon.source}, not yet in the listing`);
-      else notCovered.push(`icon: ${local.iconMissing ?? "no 128 px icon in the built dist"}`);
+      if (icon) {
+        covers.push(
+          `icon 128 px found in ${icon.source}, not yet in the listing`,
+        );
+      } else {
+        notCovered.push(
+          `icon: ${local.iconMissing ?? "no 128 px icon in the built dist"}`,
+        );
+      }
 
       continue;
     }
 
     if (/screenshots_present$/.test(id)) {
-      notCovered.push("screenshots: STORE.md does not carry them; pass screenshots (PNG paths inside projectPath, for example from extension_screenshot) to sync-listing");
+      notCovered.push(
+        "screenshots: STORE.md does not carry them; pass screenshots (PNG paths inside projectPath, for example from extension_screenshot) to sync-listing",
+      );
+
       continue;
     }
 
     const rule = CHECK_COVERAGE.find((entry) => entry.test.test(id));
     if (!rule) continue;
 
-    if (rule.fields.some((field) => listing[field] !== undefined)) covers.push(`${rule.label} found in ${STORE_MD_FILENAME}, not yet in the console listing`);
-    else notCovered.push(`${rule.label}: not in ${STORE_MD_FILENAME}`);
+    if (rule.fields.some((field) => listing[field] !== undefined)) {
+      covers.push(
+        `${rule.label} found in ${STORE_MD_FILENAME}, not yet in the console listing`,
+      );
+    } else notCovered.push(`${rule.label}: not in ${STORE_MD_FILENAME}`);
   }
 
-  return { file: local.file, covers, notCovered, ...(hosted ? { privacyPolicy: hosted } : {}), ...(local.skipped.length ? { skipped: local.skipped } : {}) };
+  return {
+    file: local.file,
+    covers,
+    notCovered,
+    ...(hosted ? { privacyPolicy: hosted } : {}),
+    ...(local.skipped.length ? { skipped: local.skipped } : {}),
+  };
 }
 
 function filledFields(patch: ListingPatch): string[] {
-  return [...Object.keys(patch.listing), ...(patch.icons ? ["icons"] : []), ...(patch.screenshots ? ["screenshots"] : [])];
+  return [
+    ...Object.keys(patch.listing),
+    ...(patch.icons ? ["icons"] : []),
+    ...(patch.screenshots ? ["screenshots"] : []),
+  ];
 }
 
-async function stillBlocking(api: ProjectApi, store: string): Promise<string[] | null> {
-  const read = await projectApiSend<Row>(api, "POST", `stores/${store}/submissions/preflight`, {});
+async function stillBlocking(
+  api: ProjectApi,
+  store: string,
+): Promise<string[] | null> {
+  const read = await projectApiSend<Row>(
+    api,
+    "POST",
+    `stores/${store}/submissions/preflight`,
+    {},
+  );
   if (!read.ok) return null;
 
-  const checks = (Array.isArray(read.json.checks) ? read.json.checks : []).filter(isRow);
+  const checks = (
+    Array.isArray(read.json.checks) ? read.json.checks : []
+  ).filter(isRow);
 
   return checks
-    .filter((check) => text(check.id).startsWith("listing.") && (text(check.status) === "fail" || text(check.status) === "warn"))
-    .map((check) => `${text(check.id)}${text(check.status) === "warn" ? " (warning)" : ""}`);
+    .filter(
+      (check) =>
+        text(check.id).startsWith("listing.") &&
+        (text(check.status) === "fail" || text(check.status) === "warn"),
+    )
+    .map(
+      (check) =>
+        `${text(check.id)}${text(check.status) === "warn" ? " (warning)" : ""}`,
+    );
 }
 
 const LISTING_NEXT = {
-  declined: "A workspace owner declined it, so the listing was not changed. Ask the person whether they still want it before requesting a fresh approval by calling again with no approvalId.",
-  mismatch: "STORE.md, the built icon or the screenshots changed since it was approved, or it is another store's approval; call again with no approvalId for a fresh one.",
+  declined:
+    "A workspace owner declined it, so the listing was not changed. Ask the person whether they still want it before requesting a fresh approval by calling again with no approvalId.",
+  mismatch:
+    "STORE.md, the built icon or the screenshots changed since it was approved, or it is another store's approval; call again with no approvalId for a fresh one.",
   used: "The call that used it may already have written the listing; run preflight first, and request a fresh approval only if the listing is not there.",
 };
 
-async function syncOne(api: ProjectApi, args: ListingArgs, store: ListingStore, patch: ListingPatch): Promise<Row | { out: string }> {
+async function syncOne(
+  api: ProjectApi,
+  args: ListingArgs,
+  store: ListingStore,
+  patch: ListingPatch,
+): Promise<Row | { out: string }> {
   const approvalId = text(args.approvalId);
-  const sent = await projectApiSend<Row>(api, "PUT", `stores/${store}/listing`, { ...writeBody(patch), ...(approvalId ? { approvalId } : {}) });
+  const sent = await projectApiSend<Row>(
+    api,
+    "PUT",
+    `stores/${store}/listing`,
+    { ...writeBody(patch), ...(approvalId ? { approvalId } : {}) },
+  );
 
-  if (sent.ok) return { store, status: "synced", changes: Array.isArray(sent.json.changes) ? sent.json.changes : [] };
+  if (sent.ok) {
+    return {
+      store,
+      status: "synced",
+      changes: Array.isArray(sent.json.changes) ? sent.json.changes : [],
+      ...(isRow(sent.json.privacyPage)
+        ? { privacyPage: sent.json.privacyPage }
+        : {}),
+    };
+  }
 
-  const context = { workspace: api.ref.workspace, project: `${api.ref.workspace}/${api.ref.project}` };
+  const context = {
+    workspace: api.ref.workspace,
+    project: `${api.ref.workspace}/${api.ref.project}`,
+  };
 
   if (sent.held || sent.status === 0 || tokenRefusal(sent.code, context)) {
-    return { out: projectApiReadFailure(COMMAND, sent, { api: args.api, name: "Listing", value: { action: ACT, store }, context }) };
+    return {
+      out: projectApiReadFailure(COMMAND, sent, {
+        api: args.api,
+        name: "Listing",
+        value: { action: ACT, store },
+        context,
+      }),
+    };
   }
 
   if (sent.code === "NO_CHANGE") return { store, status: "unchanged" };
 
   if (!approvalId && sent.code === "APPROVAL_REQUIRED") {
     const scope = { store, listingDigest: listingDigest(patch) };
-    const asked = isRow(sent.body) && isRow((sent.body as Row).approvalRequest) ? ((sent.body as Row).approvalRequest as Row) : {};
+    const asked =
+      isRow(sent.body) && isRow((sent.body as Row).approvalRequest)
+        ? ((sent.body as Row).approvalRequest as Row)
+        : {};
 
-    if (text(asked.fingerprint) !== actionFingerprint(STORE_LISTING_ACTION, scope)) {
-      return { store, status: "refused", code: "LISTING_DIGEST_MISMATCH", message: "The platform hashes this listing differently from this server, so an approval of it could never be used. No approval was requested." };
+    if (
+      text(asked.fingerprint) !== actionFingerprint(STORE_LISTING_ACTION, scope)
+    ) {
+      return {
+        store,
+        status: "refused",
+        code: "LISTING_DIGEST_MISMATCH",
+        message:
+          "The platform hashes this listing differently from this server, so an approval of it could never be used. No approval was requested.",
+      };
     }
 
     const asking = JSON.parse(
@@ -217,7 +440,8 @@ async function syncOne(api: ProjectApi, args: ListingArgs, store: ListingStore, 
         api: args.api,
         refusedStatus: `${ACT}-refused`,
         body: approvalBody(store, patch),
-        reason: "A store listing is what reviewers and users read, so a workspace owner approves this exact change first; the approval page shows it as the platform computed it.",
+        reason:
+          "A store listing is what reviewers and users read, so a workspace owner approves this exact change first; the approval page shows it as the platform computed it.",
         stateRead: 'extension_submit (action: "preflight")',
       }),
     ) as Row;
@@ -225,8 +449,22 @@ async function syncOne(api: ProjectApi, args: ListingArgs, store: ListingStore, 
     const error = isRow(asking.error) ? asking.error : {};
 
     return text(value.approvalId)
-      ? { store, status: "approval-required", approvalId: text(value.approvalId), approvalUrl: text(value.approvalUrl), ...(text(value.expiresAt) ? { expiresAt: text(value.expiresAt) } : {}), changes: Array.isArray(value.changes) ? value.changes : [] }
-      : { store, status: "refused", code: text(error.platformCode) || text(error.name), message: text(error.message) };
+      ? {
+          store,
+          status: "approval-required",
+          approvalId: text(value.approvalId),
+          approvalUrl: text(value.approvalUrl),
+          ...(text(value.expiresAt)
+            ? { expiresAt: text(value.expiresAt) }
+            : {}),
+          changes: Array.isArray(value.changes) ? value.changes : [],
+        }
+      : {
+          store,
+          status: "refused",
+          code: text(error.platformCode) || text(error.name),
+          message: text(error.message),
+        };
   }
 
   const answered = approvalRoundTrip({
@@ -243,24 +481,66 @@ async function syncOne(api: ProjectApi, args: ListingArgs, store: ListingStore, 
 
   if (answered) return { out: answered };
 
-  return { store, status: sent.code === "OWNER_REQUIRED" ? "needs-owner" : "refused", code: sent.code, message: sent.message };
+  return {
+    store,
+    status: sent.code === "OWNER_REQUIRED" ? "needs-owner" : "refused",
+    code: sent.code,
+    message: sent.message,
+  };
 }
 
 export async function syncListing(args: ListingArgs): Promise<string> {
-  const asked = (Array.isArray(args.browsers) && args.browsers.length ? args.browsers : [text(args.store) || "chrome"]).map((b) => text(b).toLowerCase());
-  const unknown = asked.filter((b) => !(LISTING_STORES as readonly string[]).includes(b));
+  const asked = (
+    Array.isArray(args.browsers) && args.browsers.length
+      ? args.browsers
+      : [text(args.store) || "chrome"]
+  ).map((b) => text(b).toLowerCase());
+  const unknown = asked.filter(
+    (b) => !(LISTING_STORES as readonly string[]).includes(b),
+  );
 
-  if (unknown.length) return badShipRequest(COMMAND, ACT, "ListingInputError", `${unknown.join(", ")} is not a store; use ${LISTING_STORES.join(", ")}. Nothing was sent.`);
-  if (text(args.approvalId) && asked.length > 1) return badShipRequest(COMMAND, ACT, "ListingInputError", "Each store's listing has its own approval, so pass one browser with its approvalId. Nothing was sent.");
+  if (unknown.length) {
+    return badShipRequest(
+      COMMAND,
+      ACT,
+      "ListingInputError",
+      `${unknown.join(", ")} is not a store; use ${LISTING_STORES.join(", ")}. Nothing was sent.`,
+    );
+  }
+
+  if (text(args.approvalId) && asked.length > 1) {
+    return badShipRequest(
+      COMMAND,
+      ACT,
+      "ListingInputError",
+      "Each store's listing has its own approval, so pass one browser with its approvalId. Nothing was sent.",
+    );
+  }
 
   const projectPath = text(args.projectPath);
-  if (!projectPath || !fs.existsSync(projectPath)) return badShipRequest(COMMAND, ACT, "ListingInputError", `sync-listing needs projectPath, the extension project root that holds ${STORE_MD_FILENAME} and the built dist. Nothing was sent.`);
+
+  if (!projectPath || !fs.existsSync(projectPath)) {
+    return badShipRequest(
+      COMMAND,
+      ACT,
+      "ListingInputError",
+      `sync-listing needs projectPath, the extension project root that holds ${STORE_MD_FILENAME} and the built dist. Nothing was sent.`,
+    );
+  }
 
   let screenshots: ListingImage[] | undefined;
 
   if (args.screenshots !== undefined) {
     const read = readScreenshots(projectPath, args.screenshots);
-    if ("problem" in read) return badShipRequest(COMMAND, ACT, "ListingInputError", `${read.problem}. Nothing was sent.`);
+
+    if ("problem" in read) {
+      return badShipRequest(
+        COMMAND,
+        ACT,
+        "ListingInputError",
+        `${read.problem}. Nothing was sent.`,
+      );
+    }
 
     screenshots = read.screenshots;
   }
@@ -269,12 +549,23 @@ export async function syncListing(args: ListingArgs): Promise<string> {
 
   for (const store of asked as ListingStore[]) {
     const local = readLocalListing(projectPath, store, screenshots);
-    if ("problem" in local) return badShipRequest(COMMAND, ACT, "StoreMdMissing", `${local.problem} Nothing was sent.`);
+
+    if ("problem" in local) {
+      return badShipRequest(
+        COMMAND,
+        ACT,
+        "StoreMdMissing",
+        `${local.problem} Nothing was sent.`,
+      );
+    }
 
     locals.set(store, local);
   }
 
-  const opened = await openShipApi(COMMAND, args, { action: ACT, stores: asked });
+  const opened = await openShipApi(COMMAND, args, {
+    action: ACT,
+    stores: asked,
+  });
   if ("refused" in opened) return opened.refused;
 
   const api = opened.api;
@@ -285,8 +576,16 @@ export async function syncListing(args: ListingArgs): Promise<string> {
   for (const [store, local] of locals) {
     if (!wantsHostedPrivacy(local)) continue;
 
-    const read = await projectApiSend<Row>(api, "POST", `stores/${store}/submissions/preflight`, {});
-    const hosted = hostedPrivacy(local, hostedPrivacyPage(api.ref, read.ok ? read.json : null));
+    const read = await projectApiSend<Row>(
+      api,
+      "POST",
+      `stores/${store}/submissions/preflight`,
+      {},
+    );
+    const hosted = hostedPrivacy(
+      local,
+      hostedPrivacyPage(api.ref, read.ok ? read.json : null),
+    );
     if (hosted) hostedByStore.set(store, hosted);
   }
 
@@ -303,7 +602,18 @@ export async function syncListing(args: ListingArgs): Promise<string> {
     const blocking = done ? await stillBlocking(api, store) : null;
     if (done && blocking === null) unreadBack.push(store);
 
-    const hosted = hostedByStore.get(store);
+    const synced = hostedByStore.get(store);
+    const hosted = synced
+      ? withPrivacyPageState(
+          synced,
+          isRow(result.privacyPage)
+            ? { privacyPage: result.privacyPage }
+            : null,
+        )
+      : undefined;
+    if (hosted) hostedByStore.set(store, hosted);
+
+    delete result.privacyPage;
 
     stores[store] = {
       ...result,
@@ -317,14 +627,41 @@ export async function syncListing(args: ListingArgs): Promise<string> {
 
   const rows = Object.values(stores) as Row[];
   const approvals = rows.filter((row) => row.status === "approval-required");
-  const failed = rows.filter((row) => !["synced", "unchanged", "nothing-to-sync", "approval-required"].includes(text(row.status)));
+  const failed = rows.filter(
+    (row) =>
+      !["synced", "unchanged", "nothing-to-sync", "approval-required"].includes(
+        text(row.status),
+      ),
+  );
   const project = `${api.ref.workspace}/${api.ref.project}`;
-  const value: Row = { action: ACT, project, stores, storesPageUrl: consoleProjectUrl(api.ref, ConsoleProjectPage.stores, args.api) };
+  const value: Row = {
+    action: ACT,
+    project,
+    stores,
+    storesPageUrl: consoleProjectUrl(
+      api.ref,
+      ConsoleProjectPage.stores,
+      args.api,
+    ),
+  };
   const blockingLine = rows
-    .filter((row) => Array.isArray(row.stillBlocking) && (row.stillBlocking as unknown[]).length)
-    .map((row) => `${text(row.store)} still lacks ${(row.stillBlocking as string[]).join(", ")}`)
+    .filter(
+      (row) =>
+        Array.isArray(row.stillBlocking) &&
+        (row.stillBlocking as unknown[]).length,
+    )
+    .map(
+      (row) =>
+        `${text(row.store)} still lacks ${(row.stillBlocking as string[]).join(", ")}`,
+    )
     .join("; ");
-  const privacyLine = [...new Set([...hostedByStore.values()].map((hosted) => hosted.url))].map((url) => `${privacyPublishedSentence(url)}. `).join("");
+  const privacyLine = [
+    ...new Map(
+      [...hostedByStore.values()].map((hosted) => [hosted.url, hosted]),
+    ).values(),
+  ]
+    .map((hosted) => `${privacySentence(hosted)}. `)
+    .join("");
 
   if (approvals.length) {
     const only = approvals.length === 1 ? approvals[0]! : null;
@@ -333,8 +670,21 @@ export async function syncListing(args: ListingArgs): Promise<string> {
       ok: false,
       command: COMMAND,
       status: "approval-required",
-      value: { ...value, ...(only ? { approvalId: only.approvalId, approvalUrl: only.approvalUrl, ...(only.expiresAt ? { expiresAt: only.expiresAt } : {}) } : {}) },
-      error: { code: "E_APPROVAL_REQUIRED", name: "ApprovalRequired", message: `A workspace owner approves each store listing change before it is written. Nothing was written for ${approvals.map((row) => text(row.store)).join(", ")}.` },
+      value: {
+        ...value,
+        ...(only
+          ? {
+              approvalId: only.approvalId,
+              approvalUrl: only.approvalUrl,
+              ...(only.expiresAt ? { expiresAt: only.expiresAt } : {}),
+            }
+          : {}),
+      },
+      error: {
+        code: "E_APPROVAL_REQUIRED",
+        name: "ApprovalRequired",
+        message: `A workspace owner approves each store listing change before it is written. Nothing was written for ${approvals.map((row) => text(row.store)).join(", ")}.`,
+      },
       hint: `Approve at ${approvals.map((row) => `${text(row.approvalUrl)} (${text(row.store)})`).join(", ")}, then call extension_submit action:"sync-listing" again once per store with browsers:[<store>], the same projectPath and screenshots, and that store's approvalId.`,
     });
   }
@@ -345,20 +695,44 @@ export async function syncListing(args: ListingArgs): Promise<string> {
       command: COMMAND,
       status: `${ACT}-refused`,
       value,
-      error: { code: "E_PLATFORM", name: "ListingRefused", message: failed.map((row) => `${text(row.store)}: ${text(row.message) || text(row.code)}`).join(" ") },
-      hint: failed.map((row) => text(row.next)).filter(Boolean).join(" ") || undefined,
+      error: {
+        code: "E_PLATFORM",
+        name: "ListingRefused",
+        message: failed
+          .map(
+            (row) =>
+              `${text(row.store)}: ${text(row.message) || text(row.code)}`,
+          )
+          .join(" "),
+      },
+      hint:
+        failed
+          .map((row) => text(row.next))
+          .filter(Boolean)
+          .join(" ") || undefined,
     });
   }
 
-  const synced = rows.filter((row) => row.status === "synced").map((row) => text(row.store));
+  const synced = rows
+    .filter((row) => row.status === "synced")
+    .map((row) => text(row.store));
   const links = linksOf([
-    ...trackLinks(COMMAND, { ...args, action: ACT } as Row, "listing-synced", value),
-    ...[...new Set([...hostedByStore.values()].map((hosted) => hosted.url))].map((url) => ({ kind: "privacy" as const, url })),
+    ...trackLinks(
+      COMMAND,
+      { ...args, action: ACT } as Row,
+      "listing-synced",
+      value,
+    ),
+    ...[
+      ...new Set([...hostedByStore.values()].map((hosted) => hosted.url)),
+    ].map((url) => ({ kind: "privacy" as const, url })),
   ]);
   const recorded = unreadBack.length === 0;
   const outcome = recorded
     ? recordedOutcome(synced.length ? "synced" : "unchanged")
-    : unrecordedOutcome(`the listing of ${unreadBack.join(", ")} could not be read back after the write`);
+    : unrecordedOutcome(
+        `the listing of ${unreadBack.join(", ")} could not be read back after the write`,
+      );
   const made = madeSentence(links);
 
   if (!recorded) {
