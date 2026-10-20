@@ -117,6 +117,36 @@ describe("the Chrome Web Store goal walks from not connected to submitted with a
     expect(out.value.nextStep.say).toContain("nothing goes to review until you publish");
   });
 
+  it("4b. linked, with only the build and release checks open: preflight defers them to the submit call and still answers nextStep submit", async () => {
+    if (process.platform === "win32") return;
+
+    world.login();
+    world.routes.push([
+      PREFLIGHT,
+      () => ({
+        body: {
+          store: "chrome",
+          summary: { pass: 10, warn: 0, fail: 1, blockingFailures: 1, canSubmit: false },
+          checks: [
+            { id: "submission.build_selected", label: "Build selected", status: "fail", severity: "blocking", message: "Choose a build before queueing this submission." },
+            { id: "submission.release_selected", label: "Release selected", status: "pass", severity: "blocking", message: "Release context detected." },
+          ],
+          connection: { kind: "oauth", connectedAs: "cezar@example.com", healthy: true, itemId: "abcdefghijklmnopabcdefghijklmnop", itemLinked: true, publisherId: "pub-1" },
+        },
+      }),
+    ]);
+
+    const out = await world.call("extension_submit", PREFLIGHT_ARGS);
+
+    walked(out, "preflight-read", "submit");
+    expect(out.value.stores.chrome.canSubmit).toBe(true);
+    expect(out.value.stores.chrome.failing).toEqual([]);
+    expect(out.value.stores.chrome.namedBySubmit).toEqual(["build"]);
+    expect(out.hint).toContain("The submit call names the build");
+    const sent = world.calls.find((call) => PREFLIGHT.test(`${call.method} ${call.path}`));
+    expect(sent?.body).toMatchObject({ channel: "stable" });
+  });
+
   it("5. submit: the real submission answers approval-required and nextStep approve at the approval page with its expiry", async () => {
     if (process.platform === "win32") return;
 

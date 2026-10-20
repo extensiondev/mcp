@@ -287,18 +287,24 @@ function checkView(check: Row, withLabel: boolean): Row {
   return out;
 }
 
-function readinessView(json: Row, store: string, projectPath: string): Row {
+const NAMED_BY_SUBMIT = new Set(["submission.build_selected"]);
+
+function readinessView(json: Row, store: string, projectPath: string, buildNamed: boolean): Row {
   const summary = isRow(json.summary) ? json.summary : {};
-  const checks = (Array.isArray(json.checks) ? json.checks : []).filter(isRow);
+  const all = (Array.isArray(json.checks) ? json.checks : []).filter(isRow);
+  const deferred = buildNamed ? [] : all.filter((c) => NAMED_BY_SUBMIT.has(text(c.id)) && text(c.status) === "fail");
+  const checks = all.filter((c) => !deferred.includes(c));
   const open = checks.filter((c) => text(c.status) === "fail" || text(c.status) === "warn");
   const local = projectPath ? readLocalListing(projectPath, store as ListingStore) : null;
   const connection = connectionOf(json);
+  const failing = checks.filter((c) => text(c.status) === "fail").map((c) => checkView(c, true));
 
   return {
-    canSubmit: summary.canSubmit === true,
+    canSubmit: summary.canSubmit === true || (deferred.length > 0 && failing.length === 0),
     ...(connection ? { connection } : {}),
     summary,
-    failing: checks.filter((c) => text(c.status) === "fail").map((c) => checkView(c, true)),
+    ...(deferred.length ? { namedBySubmit: ["build"] } : {}),
+    failing,
     warnings: checks.filter((c) => text(c.status) === "warn").map((c) => checkView(c, true)),
     ...(local ? { storeMd: "problem" in local ? { missing: local.problem } : storeMdAdvisory(local, open) } : {}),
   };
@@ -322,9 +328,8 @@ export async function preflight(args: StoreActArgs): Promise<string> {
   if ("refused" in opened) return opened.refused;
 
   const api = opened.api;
-  const body: Row = {};
+  const body: Row = { channel: text(args.channel) || "stable" };
   if (text(args.buildSha)) body.buildId = text(args.buildSha);
-  if (text(args.channel)) body.channel = text(args.channel);
 
   const reads = await Promise.all(asked.map((store) => projectApiSend<Row>(api, "POST", `stores/${store}/submissions/preflight`, body)));
   const firstRefusal = reads.find((read) => !read.ok);
@@ -338,7 +343,7 @@ export async function preflight(args: StoreActArgs): Promise<string> {
 
   asked.forEach((store, i) => {
     const read = reads[i];
-    if (read.ok) stores[store] = readinessView(read.json, store, text(args.projectPath));
+    if (read.ok) stores[store] = readinessView(read.json, store, text(args.projectPath), Boolean(text(args.buildSha)));
     else unread.push(`${store}: ${read.message}`);
   });
 
@@ -351,9 +356,11 @@ export async function preflight(args: StoreActArgs): Promise<string> {
     : "";
   const unreadLine = unread.length ? `Readiness could not be read for ${unread.join("; ")}.` : null;
   const storesPageUrl = consoleProjectUrl(api.ref, ConsoleProjectPage.stores, args.api);
+  const buildNamedLater = Object.values(stores).some((view) => Array.isArray((view as Row).namedBySubmit));
+  const buildLine = buildNamedLater ? " The submit call names the build; extension_builds lists the shas." : "";
   const readinessHint = blocked.length
     ? `${blocked.join(", ")} cannot be submitted yet; each failing check says what to fix.${syncLine} This read wrote nothing.`
-    : "Every store read here is ready to submit. This read wrote nothing; extension_submit with dryRun:false submits.";
+    : `Every store read here is ready to submit.${buildLine} This read wrote nothing; extension_submit with dryRun:false submits.`;
   const chrome = isRow(stores.chrome) ? stores.chrome : null;
   const connection = chrome && isRow(chrome.connection) ? chrome.connection : null;
 
