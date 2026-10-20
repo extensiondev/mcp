@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- `extension_release_status`'s description is cut from 3,290 to about 1,600 characters, with each include's detail in the `include` input description, and `extension_release_promote`'s from 2,675 to about 1,950 on the same shape.
+- `extension_release_status`'s description is cut from 3,290 to about 1,600 characters, with each include's detail in the `include` input description, and `extension_release_promote`'s from 2,675 to about 2,050 on the same shape.
 - `extension_builds`'s description is cut from 4,371 to about 1,350 characters: the verb, the act contract, the two siblings and the two costs; each action's detail is in the `action` input description.
 - `extension_publish`'s description is cut from 4,111 to about 1,950 characters on the same shape; the two-link rule, the withheld channel link and the artifact refusal stay, and the answer field catalog is named rather than narrated.
 - Every tool carries an annotation `title`, the verb phrase a client shows in a consent prompt ("Submit to a store", "Publish a build link", "Promote a release"), and a shrink-only budget spec pins each tool's description length so descriptions can only get shorter. `extension_submit`'s description is cut from 9,570 to about 1,500 characters: the verb, what it records and which links it makes, what it is not for (extension_publish, extension_build), its surprising defaults (a dry run, least public) and where the project comes from; the per-action detail moved into the `action`, `browsers` and `dryRun` input descriptions, and the act answer contract (value.outcome, value.links, -dispatched) moved into the server instructions, where it now covers every platform act.

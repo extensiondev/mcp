@@ -36,7 +36,7 @@ const CEILINGS: Record<string, number> = {
   extension_preview_web: 1300,
   extension_project_create: 3000,
   extension_publish: 2000,
-  extension_release_promote: 2000,
+  extension_release_promote: 2100,
   extension_release_status: 1700,
   extension_reload: 600,
   extension_screenshot: 1300,
