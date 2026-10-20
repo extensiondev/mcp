@@ -70,7 +70,7 @@ export function storeOf(args: StoreActArgs, act: string): { store: string } | { 
 
 export const PUBLISH_ACTIONS = new Set(["publish", "review"]);
 
-function reworded(out: string, api: { ref: { workspace: string; project: string } }, apiHint?: string): string {
+function reworded(out: string, api: { ref: { workspace: string; project: string } }, apiHint: string | undefined, store: PublishStore = "chrome"): string {
   let parsed: unknown;
 
   try {
@@ -87,9 +87,10 @@ function reworded(out: string, api: { ref: { workspace: string; project: string 
     const approvalUrl = text(value.approvalUrl);
     const expiresAt = text(value.expiresAt);
     const phrase = approvalSubjectPhrase(subjectOf(value));
+    const words = storeWords(store);
     const say = [
-      approvalUrl ? `Approve ${phrase ? `sending ${phrase} to Chrome's review` : "it"} at ${approvalUrl}${expiresAt ? ` before ${expiresAt}` : ""}.` : "",
-      PUBLISH_APPROVAL_SENTENCE,
+      approvalUrl ? `Approve ${phrase ? `sending ${phrase} to ${words.reviewer}'s ${words.reviewWord}` : "it"} at ${approvalUrl}${expiresAt ? ` before ${expiresAt}` : ""}.` : "",
+      publishApprovalSentence(store),
     ]
       .filter(Boolean)
       .join(" ");
@@ -109,29 +110,37 @@ function reworded(out: string, api: { ref: { workspace: string; project: string 
   const settingsUrl = storeSettingsUrl(api.ref, apiHint);
 
   if (code === ITEM_NOT_LINKED_CODE) {
-    const urls = itemLinkUrls([], settingsUrl);
-    const say = linkItemSentences(urls);
+    const words = storeWords(store);
+    const urls = store === "edge" ? { linkItemUrl: `${settingsUrl}?link=edge` } : itemLinkUrls([], settingsUrl);
+    const say =
+      store === "edge"
+        ? `No Edge Add-ons product is linked to this project yet. Create it once in Partner Center with this build's package, then paste its product ID in the store settings at ${urls.linkItemUrl}; after that, say publish again.`
+        : linkItemSentences(urls as ReturnType<typeof itemLinkUrls>);
 
     return envelope({
       ok: false,
       command: COMMAND,
       status: "store-item-not-linked",
-      error: { code: "E_PLATFORM", name: "StoreItemNotLinked", platformCode: code, message: "No Chrome Web Store item is linked to this project yet, so there is no draft to send to review. Nothing was sent." },
-      value: { action: "publish", store: "chrome", ...urls, trackUrl: settingsUrl, sayToPerson: say, nextStep: nextStep("link-item", say, urls.linkItemUrl) },
+      error: { code: "E_PLATFORM", name: "StoreItemNotLinked", platformCode: code, message: `No ${words.name.replace(/^the /, "")} ${words.noun} is linked to this project yet, so there is no draft to send to review. Nothing was sent.` },
+      value: { action: "publish", store, ...urls, trackUrl: settingsUrl, sayToPerson: say, nextStep: nextStep("link-item", say, urls.linkItemUrl) },
       hint: say,
     });
   }
 
   if (NOT_CONNECTED_CODES.has(code)) {
-    const connectUrl = fallbackConnectUrl(api.ref, "chrome", apiHint);
-    const say = connectSentences(connectUrl);
+    const words = storeWords(store);
+    const connectUrl = fallbackConnectUrl(api.ref, store, apiHint);
+    const say =
+      store === "edge"
+        ? `Edge Add-ons is not connected to this project yet. Paste the Partner Center client ID and API key once in the store settings at ${connectUrl}; after that, say publish again.`
+        : connectSentences(connectUrl);
 
     return envelope({
       ok: false,
       command: COMMAND,
       status: code === "STORE_CONNECTION_UNHEALTHY" ? "store-connection-failed" : "store-not-connected",
-      error: { code: "E_PLATFORM", name: "StoreNotConnected", platformCode: code, message: "The Chrome Web Store is not connected to this project, so nothing was sent to review." },
-      value: { action: "publish", store: "chrome", connectUrl, trackUrl: settingsUrl, sayToPerson: say, nextStep: nextStep("connect", say, connectUrl) },
+      error: { code: "E_PLATFORM", name: "StoreNotConnected", platformCode: code, message: `${words.name.charAt(0).toUpperCase()}${words.name.slice(1)} is not connected to this project, so nothing was sent to review.` },
+      value: { action: "publish", store, connectUrl, trackUrl: settingsUrl, sayToPerson: say, nextStep: nextStep("connect", say, connectUrl) },
       hint: say,
     });
   }
@@ -139,15 +148,31 @@ function reworded(out: string, api: { ref: { workspace: string; project: string 
   return out;
 }
 
+type PublishStore = "chrome" | "edge";
+
+const PUBLISH_STORES: readonly PublishStore[] = ["chrome", "edge"];
+
+function storeWords(store: PublishStore): { name: string; reviewer: string; noun: string; reviewWord: string } {
+  return store === "edge"
+    ? { name: "Edge Add-ons", reviewer: "Edge", noun: "product", reviewWord: "certification review" }
+    : { name: "the Chrome Web Store", reviewer: "Chrome", noun: "item", reviewWord: "review" };
+}
+
+function publishApprovalSentence(store: PublishStore): string {
+  return store === "edge" ? "This sends the product to Edge's certification review." : PUBLISH_APPROVAL_SENTENCE;
+}
+
 export async function publishDraft(args: StoreActArgs): Promise<string> {
   const asked = (Array.isArray(args.browsers) && args.browsers.length ? args.browsers : [text(args.store) || "chrome"]).map((b) => text(b).toLowerCase());
+  const store = asked[0] as PublishStore;
 
-  if (asked.length !== 1 || asked[0] !== "chrome") {
-    return badShipRequest(COMMAND, "publish", "PublishInputError", `publish sends a Chrome Web Store draft to review, so browsers must be ["chrome"]; got ${JSON.stringify(args.browsers ?? args.store ?? null)}. The other stores enter review when they are submitted. Nothing was sent.`);
+  if (asked.length !== 1 || !PUBLISH_STORES.includes(store)) {
+    return badShipRequest(COMMAND, "publish", "PublishInputError", `publish sends one store's draft to review, so browsers must be ["chrome"] or ["edge"]; got ${JSON.stringify(args.browsers ?? args.store ?? null)}. Firefox and Safari enter review when they are submitted. Nothing was sent.`);
   }
 
+  const words = storeWords(store);
   const submissionId = text(args.submissionId);
-  const opened = await openShipApi(COMMAND, args, { action: "publish", store: "chrome" });
+  const opened = await openShipApi(COMMAND, args, { action: "publish", store });
   if ("refused" in opened) return opened.refused;
 
   const ran = await runShipAct(
@@ -155,21 +180,21 @@ export async function publishDraft(args: StoreActArgs): Promise<string> {
       command: COMMAND,
       act: "publish",
       action: "extension_store.publish",
-      route: "stores/chrome/publish",
+      route: `stores/${store}/publish`,
       body: submissionId ? { submissionId } : {},
       approvalId: args.approvalId,
-      description: "Send the Chrome Web Store draft to review.",
-      reason: `${PUBLISH_APPROVAL_SENTENCE} Nothing changes for current users until Chrome approves it, so a workspace owner approves this exact draft first.`,
+      description: `Send the ${words.name.replace(/^the /, "")} draft to review.`,
+      reason: `${publishApprovalSentence(store)} Nothing changes for current users until ${words.reviewer} approves it, so a workspace owner approves this exact draft first.`,
       stateRead: storesRead(args),
-      scopeFits: (scope) => text(scope.store) === "chrome" && Boolean(text(scope.submissionId)) && (!submissionId || text(scope.submissionId) === submissionId),
+      scopeFits: (scope) => text(scope.store) === store && Boolean(text(scope.submissionId)) && (!submissionId || text(scope.submissionId) === submissionId),
       project: args.project,
       apiHint: args.api,
-      value: { store: "chrome", ...(submissionId ? { submissionId } : {}) },
+      value: { store, ...(submissionId ? { submissionId } : {}) },
     },
     opened.api,
   );
 
-  if (!ran.ok) return reworded(ran.out, opened.api, args.api);
+  if (!ran.ok) return reworded(ran.out, opened.api, args.api, store);
 
   const json = ran.json;
   const itemUrl = text(json.itemUrl);
@@ -177,7 +202,7 @@ export async function publishDraft(args: StoreActArgs): Promise<string> {
   const acceptedAt = text(json.dispatchedAt) || stampNow();
   const base: Row = {
     action: "publish",
-    store: "chrome",
+    store,
     submissionId: sentId,
     ...(text(json.version) ? { version: text(json.version) } : {}),
     ...(text(json.buildId) ? { buildId: text(json.buildId) } : {}),
@@ -188,10 +213,10 @@ export async function publishDraft(args: StoreActArgs): Promise<string> {
     ? linksOf([{ kind: "submission", url: text(json.trackUrl) }, ...itemLink])
     : actLinks(COMMAND, { ...args, action: "publish" } as Row, "in-review", base, itemLink, "submission");
   const trackUrl = text(json.trackUrl) || trackOf(links);
-  const say = `It is on its way to Chrome's review; follow it at ${trackUrl || "the submission page"}. Nothing changes for current users until Chrome approves it.`;
+  const say = `It is on its way to ${words.reviewer}'s ${words.reviewWord}; follow it at ${trackUrl || "the submission page"}. Nothing changes for current users until ${words.reviewer} approves it.`;
   const waited = await awaitRecordedOutcome<PlatformSubmission>({
     waitSeconds: args.waitSeconds,
-    read: () => readSubmissionRecord(opened.api, { submissionId: sentId, store: "chrome" }),
+    read: () => readSubmissionRecord(opened.api, { submissionId: sentId, store }),
     judge: judgePublish,
   });
   const made = madeSentence(links);
@@ -210,7 +235,7 @@ export async function publishDraft(args: StoreActArgs): Promise<string> {
       command: COMMAND,
       status: "publish-failed",
       value,
-      error: { code: "E_PLATFORM", name: "PublishFailed", message: `The publish did not reach Chrome's review: ${reason}.` },
+      error: { code: "E_PLATFORM", name: "PublishFailed", message: `The publish did not reach ${words.reviewer}'s ${words.reviewWord}: ${reason}.` },
       hint: `Fix the cause and call extension_submit action "publish" again; ${storesRead(args)} reads the record. ${made}`,
     });
   }
@@ -221,7 +246,7 @@ export async function publishDraft(args: StoreActArgs): Promise<string> {
       command: COMMAND,
       status: "in-review",
       value: { ...value, sayToPerson: say, nextStep: nextStep("done", say, trackUrl) },
-      hint: `The platform's record of submission ${sentId} carries Chrome's own state, ${waited.outcome.storeState}, so the draft is in Chrome's review. ${say} ${made}`,
+      hint: `The platform's record of submission ${sentId} carries ${words.reviewer}'s own state, ${waited.outcome.storeState}, so the draft is in ${words.reviewer}'s ${words.reviewWord}. ${say} ${made}`,
     });
   }
 

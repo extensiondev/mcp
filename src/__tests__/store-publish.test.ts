@@ -289,7 +289,50 @@ describe("extension_submit publish sends a Chrome draft to review after one appr
     expect(out.hint).toContain("lands as a draft");
   });
 
-  it("refuses any store but chrome without calling the platform", async () => {
+  it("sends an Edge draft to certification review on the edge lane with Edge's words", async () => {
+    if (process.platform === "win32") return;
+
+    platform.login();
+    const EDGE_PUBLISH = `${PROJECT_ROUTE}/stores/edge/publish`;
+    platform.routes[`POST ${EDGE_PUBLISH}`] = () => ({
+      body: { ok: true, dispatched: true, status: "in-review", store: "edge", submissionId: "sub_e1", version: "1.0.1", buildId: "b418732", itemUrl: "https://microsoftedge.microsoft.com/addons/detail/66666666-7777-8888-9999-000000000000", trackUrl: `${TRACK_URL.replace("chrome", "edge").replace("sub_2", "sub_e1")}`, dispatchedAt: "2026-10-20T18:00:00.000Z" },
+    });
+
+    platform.routes["GET /api/cli/stores/submissions"] = () => ({
+      body: { submissions: [{ id: "sub_e1", store: "edge", status: "submitted", storeReview: { state: "INPROGRESS", checkedAt: "2026-10-20T18:00:05.000Z", source: "publish-answer" } }] },
+    });
+
+    const out = JSON.parse(await submit({ action: "publish", browsers: ["edge"], approvalId: "apr_e", waitSeconds: 0, api: API }));
+
+    expect(platform.sent("POST", EDGE_PUBLISH)[0].body).toEqual({ approvalId: "apr_e" });
+    expect(out.status).toBe("in-review");
+    expect(out.value.store).toBe("edge");
+    expect(out.value.outcome).toMatchObject({ recorded: true, storeState: "INPROGRESS" });
+    expect(out.value.sayToPerson).toContain("Edge's certification review");
+    expect(out.hint).not.toContain("Chrome");
+  });
+
+  it("asks for an Edge approval in Edge's words", async () => {
+    if (process.platform === "win32") return;
+
+    platform.login();
+    const EDGE_PUBLISH = `${PROJECT_ROUTE}/stores/edge/publish`;
+    const EDGE_SCOPE = { store: "edge", submissionId: "sub_e1" };
+    platform.routes[`POST ${EDGE_PUBLISH}`] = () => ({
+      status: 403,
+      body: { code: "APPROVAL_REQUIRED", message: "Needs an owner's approval.", approvalRequest: { action: "extension_store.publish", scope: EDGE_SCOPE, fingerprint: actionFingerprint("extension_store.publish", EDGE_SCOPE) } },
+    });
+
+    platform.routes[`POST ${APPROVALS}`] = () => ({ status: 201, body: { approvalId: "apr_e", approvalUrl: `${API}/approve/apr_e`, expiresAt: "2026-10-21T06:15:00.000Z" } });
+
+    const out = JSON.parse(await submit({ action: "publish", browsers: ["edge"], submissionId: "sub_e1", api: API }));
+
+    expect(out.status).toBe("approval-required");
+    expect(out.value.nextStep.say).toBe(`Approve it at ${API}/approve/apr_e before 2026-10-21T06:15:00.000Z. This sends the product to Edge's certification review.`);
+    expect(platform.sent("POST", APPROVALS)[0].body).toMatchObject({ action: "extension_store.publish", scope: EDGE_SCOPE });
+  });
+
+  it("refuses any store but chrome and edge without calling the platform", async () => {
     const out = JSON.parse(await submit({ action: "publish", browsers: ["firefox"], api: API }));
 
     expect(out.status).toBe("bad-request");
