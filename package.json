@@ -89,7 +89,7 @@
     "extension.js"
   ],
   "dependencies": {
-    "@extension.dev/urls": "^0.8.2",
+    "@extension.dev/urls": "^0.8.3",
     "@modelcontextprotocol/sdk": "^1.32.1",
     "cross-spawn": "^7.0.6",
     "extension-create": "4.1.33",
