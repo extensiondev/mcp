@@ -6,6 +6,12 @@ name: Sync template catalog
 # new snapshot itself and pushes to main when it is green, over the deploy key
 # the main ruleset lists as its bypass actor, the way the release lane does.
 # The push still triggers the CI matrix on main. Decided 2026-10-08.
+#
+# The snapshot is read at the commit PINNED_COMMIT names in
+# src/lib/template-artifact-source.ts, never from the floating nightly
+# release: the bundled fallback has to describe the same corpus the resolver
+# pins, and on 2026-10-19 the nightly snapshot sat at ba1bab33 while the pin
+# was 8e23368. Moving the pin is the only way to move this file.
 
 on:
   schedule:
@@ -22,10 +28,21 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
 
-      - name: Fetch latest templates-meta.json
+      - name: Read the pinned examples commit
+        id: pin
+        run: |
+          PIN="$(sed -n 's/^export const PINNED_COMMIT = "\([0-9a-f]\{40\}\)";$/\1/p' src/lib/template-artifact-source.ts)"
+          if [ -z "$PIN" ]; then
+            echo "PINNED_COMMIT was not found in src/lib/template-artifact-source.ts" >&2
+            exit 1
+          fi
+          echo "commit=$PIN" >> "$GITHUB_OUTPUT"
+          echo "Pinned examples commit: $PIN"
+
+      - name: Fetch templates-meta.json at the pinned commit
         run: |
           curl -fsSL \
-            https://github.com/extension-js/examples/releases/download/nightly/templates-meta.json \
+            "https://raw.githubusercontent.com/extension-js/examples/${{ steps.pin.outputs.commit }}/templates-meta.json" \
             -o /tmp/templates-meta-latest.json
 
       - name: Check for changes
@@ -53,7 +70,7 @@ jobs:
           node -e "
             const meta = require('/tmp/templates-meta-latest.json');
             const templates = meta.templates || [];
-            console.log('Catalog commit: ' + meta.commit + ' generated ' + meta.generatedAt);
+            console.log('Pinned commit: ${{ steps.pin.outputs.commit }} (catalog says ' + meta.commit + ', generated ' + meta.generatedAt + ')');
             console.log('Total templates: ' + templates.length);
             console.log('Featured: ' + templates.filter(t => t.featured).length);
             console.log('Surfaces: ' + [...new Set(templates.flatMap(t => t.surfaces || []))].sort().join(', '));
@@ -122,5 +139,5 @@ jobs:
             echo "Nothing to commit."
             exit 0
           fi
-          git commit -m "Sync the template catalog from the examples nightly"
+          git commit -m "Sync the template catalog to the pinned examples commit"
           git push origin HEAD:main
