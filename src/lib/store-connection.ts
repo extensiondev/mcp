@@ -132,9 +132,11 @@ export const PUBLISH_APPROVAL_SENTENCE = "This sends the item to Chrome's review
 export function doneStep(stores: string[], itemUrl: string): NextStep {
   const drafts = stores.length > 0 && stores.every((store) => DRAFT_STORES.has(store));
   const uploaded = `The build is uploaded to ${storeNames(stores)} as a draft, recorded as uploaded and not public.`;
+  const testers =
+    "A store draft cannot be installed from the store, but testers can already install this same build from its extension.dev build link (extension_publish shares it) while the store review has not run.";
 
   if (drafts && stores.includes("chrome")) {
-    return nextStep("publish", `${uploaded} ${PUBLISH_SENTENCE}`);
+    return nextStep("publish", `${uploaded} ${testers} ${PUBLISH_SENTENCE}`);
   }
 
   return nextStep(
