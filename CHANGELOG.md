@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- `extension_publish` names the extension by the build's manifest name (`extensionName`, carried on every build index item and answered by the platform) in `tellThem`, and warns when the project's display name on extension.dev differs, naming the console project settings page where it is changed; the MCP still reads general settings only.
+
 ## 10.18.0
 
 - `extension_submit` `action: "preflight"` names the privacy policy URL STORE.md carries on the covers line and appends "STORE.md carries <url>; sync-listing writes it to the listing" to the platform's privacy warning, so the warning and the coverage never contradict each other.

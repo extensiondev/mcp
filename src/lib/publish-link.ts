@@ -32,7 +32,10 @@ export interface LinkInput {
   api?: string;
 }
 
-export function expiryOf(value: unknown): { iso: string | null; epoch: number | null } {
+export function expiryOf(value: unknown): {
+  iso: string | null;
+  epoch: number | null;
+} {
   const ms =
     typeof value === "number" && Number.isFinite(value)
       ? value > 1e12
@@ -49,7 +52,12 @@ export function expiryOf(value: unknown): { iso: string | null; epoch: number | 
 
 export function spokenDate(iso: string): string {
   const at = new Date(iso);
-  const day = new Intl.DateTimeFormat("en-US", { timeZone: "UTC", month: "long", day: "numeric", year: "numeric" }).format(at);
+  const day = new Intl.DateTimeFormat("en-US", {
+    timeZone: "UTC",
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+  }).format(at);
   const time = `${String(at.getUTCHours()).padStart(2, "0")}:${String(at.getUTCMinutes()).padStart(2, "0")}`;
 
   return `${day} at ${time} UTC`;
@@ -64,7 +72,8 @@ function platformLink(value: unknown): PublishLink | null {
 
   const row = value as Record<string, unknown>;
 
-  if ((row.kind !== "build" && row.kind !== "channel") || !text(row.url)) return null;
+  if ((row.kind !== "build" && row.kind !== "channel") || !text(row.url))
+    {return null;}
 
   return {
     ...(row as unknown as PublishLink),
@@ -78,16 +87,46 @@ function channelOf(link: PublishLink, fallback: string | null): string {
   return /^latest in (.+)$/.exec(link.pointsAt)?.[1] ?? fallback ?? "release";
 }
 
-export function nameOf(data: Record<string, unknown>, ref: ProjectRef | null): string {
-  return text(data.projectName) || text(data.displayName) || text(data.name) || ref?.project || "the extension";
+export function nameOf(
+  data: Record<string, unknown>,
+  ref: ProjectRef | null,
+): string {
+  return (
+    text(data.extensionName) ||
+    text(data.projectName) ||
+    text(data.displayName) ||
+    text(data.name) ||
+    ref?.project ||
+    "the extension"
+  );
 }
 
-export function pageLine(link: PublishLink, name: string, fallbackChannel: string | null): string {
+export function nameMismatchNote(
+  data: Record<string, unknown>,
+  settingsUrl: string | null,
+): string | null {
+  const extensionName = text(data.extensionName);
+  const projectName = text(data.projectName);
+
+  if (!extensionName || !projectName || extensionName === projectName)
+    {return null;}
+
+  return `The build's manifest names the extension "${extensionName}" while the project's display name on extension.dev is "${projectName}"; the tester message uses the manifest name. Change the display name in the console's project settings${settingsUrl ? ` (${settingsUrl})` : ""}; the MCP reads those settings but does not write them.`;
+}
+
+export function pageLine(
+  link: PublishLink,
+  name: string,
+  fallbackChannel: string | null,
+): string {
   const lead = `Here is ${name} to try: ${link.url}.`;
 
-  if (link.kind === "channel") return `${lead} It always opens the newest ${channelOf(link, fallbackChannel)} build.`;
+  if (link.kind === "channel")
+    {return `${lead} It always opens the newest ${channelOf(link, fallbackChannel)} build.`;}
 
-  return link.expiresAt ? `${lead} It works until ${spokenDate(link.expiresAt)}.` : lead;
+  return link.expiresAt
+    ? `${lead} It works until ${spokenDate(link.expiresAt)}.`
+    : lead;
 }
 
 const SHELL_SPECIAL = /[\s&;|<>()$`'"\\*?[\]{}!]/;
@@ -104,7 +143,8 @@ export interface RunCommand {
 export function runCommandsOf(commands: Array<[string, string]>): RunCommand[] {
   return commands
     .map(([browser, command]) => {
-      const raw = /^npx -y extension@latest preview\s+(\S+)/.exec(command)?.[1] ?? "";
+      const raw =
+        /^npx -y extension@latest preview\s+(\S+)/.exec(command)?.[1] ?? "";
 
       return { browser, url: raw.replace(/^["']|["']$/g, "") };
     })
@@ -120,15 +160,26 @@ function titled(browser: string): string {
 }
 
 function joined(names: string[]): string {
-  return names.length <= 1 ? names.join("") : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+  return names.length <= 1
+    ? names.join("")
+    : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
 }
 
-export function firstRun(commands: RunCommand[]): { run: RunCommand; others: string[] } | null {
-  const run = commands.find((row) => row.browser.toLowerCase() === "chrome") ?? commands[0];
+export function firstRun(
+  commands: RunCommand[],
+): { run: RunCommand; others: string[] } | null {
+  const run =
+    commands.find((row) => row.browser.toLowerCase() === "chrome") ??
+    commands[0];
 
   if (!run) return null;
 
-  return { run, others: commands.filter((row) => row !== run).map((row) => titled(row.browser)) };
+  return {
+    run,
+    others: commands
+      .filter((row) => row !== run)
+      .map((row) => titled(row.browser)),
+  };
 }
 
 export function runText(run: RunCommand): string {
@@ -138,25 +189,41 @@ export function runText(run: RunCommand): string {
 export function heldRunLine(commands: RunCommand[]): string {
   const first = firstRun(commands);
 
-  if (!first) return "The page opens once extension.dev opens; this build has no run command to use until then.";
+  if (!first)
+    {return "The page opens once extension.dev opens; this build has no run command to use until then.";}
 
-  const swap = first.others.length ? ` (${joined(first.others)}: swap the browser name twice)` : "";
+  const swap = first.others.length
+    ? ` (${joined(first.others)}: swap the browser name twice)`
+    : "";
 
   return `The page opens once extension.dev opens; until then run ${runText(first.run)}${swap}.`;
 }
 
-export function longHeldLines(name: string, link: PublishLink, commands: RunCommand[]): string | null {
+export function longHeldLines(
+  name: string,
+  link: PublishLink,
+  commands: RunCommand[],
+): string | null {
   const first = firstRun(commands);
 
   if (!first) return null;
 
-  const until = link.expiresAt ? ` It works until ${spokenDate(link.expiresAt)}.` : "";
-  const ask = first.others.length ? `\nAsk me for ${first.others.join(" or ")}.` : "";
+  const until = link.expiresAt
+    ? ` It works until ${spokenDate(link.expiresAt)}.`
+    : "";
+  const ask = first.others.length
+    ? `\nAsk me for ${first.others.join(" or ")}.`
+    : "";
 
   return `Here is ${name} to try: run ${runText(first.run)}.${until}${ask}`;
 }
 
-export type LinkFields = Record<string, unknown> & { sendUrl: string; pageLine: string; name: string; send: PublishLink };
+export type LinkFields = Record<string, unknown> & {
+  sendUrl: string;
+  pageLine: string;
+  name: string;
+  send: PublishLink;
+};
 
 export function publishLinkFields(input: LinkInput): LinkFields {
   const { data, channel, ref } = input;
@@ -164,7 +231,9 @@ export function publishLinkFields(input: LinkInput): LinkFields {
   const sha = text(data.buildSha);
   const shareUrl = text(data.shareUrl);
   const channelUrl = text(data.channelUrl);
-  const expiry = isPublic ? { iso: null, epoch: null } : expiryOf(data.expiresAt);
+  const expiry = isPublic
+    ? { iso: null, epoch: null }
+    : expiryOf(data.expiresAt);
   const answeredTtl = typeof data.ttlHours === "number" ? data.ttlHours : null;
   const requestedTtl = input.ttlHours ?? null;
   const renewBy = isPublic
@@ -189,21 +258,37 @@ export function publishLinkFields(input: LinkInput): LinkFields {
   };
   const channelLink: PublishLink | null =
     isPublic && channelUrl
-      ? { kind: "channel", url: channelUrl, id: null, expiresAt: null, pointsAt: `latest in ${channel ?? "release"}`, audience: "public", scope: null }
+      ? {
+          kind: "channel",
+          url: channelUrl,
+          id: null,
+          expiresAt: null,
+          pointsAt: `latest in ${channel ?? "release"}`,
+          audience: "public",
+          scope: null,
+        }
       : null;
   const fromPlatform = platformLink(data.link);
   const link: PublishLink = fromPlatform
-    ? { ...fromPlatform, ...(renewBy && fromPlatform.kind === "build" && !fromPlatform.renewBy ? { renewBy } : {}) }
+    ? {
+        ...fromPlatform,
+        ...(renewBy && fromPlatform.kind === "build" && !fromPlatform.renewBy
+          ? { renewBy }
+          : {}),
+      }
     : (channelLink ?? buildLink);
   const name = nameOf(data, ref);
   const links = isPublic
-    ? [link.kind === "build" ? link : buildLink, link.kind === "channel" ? link : channelLink].filter(
-        (row): row is PublishLink => Boolean(row && row.url),
-      )
+    ? [
+        link.kind === "build" ? link : buildLink,
+        link.kind === "channel" ? link : channelLink,
+      ].filter((row): row is PublishLink => Boolean(row && row.url))
     : [link];
   const send = links.find((row) => row.kind === "channel") ?? link;
   const platformVisibility =
-    data.projectVisibility && typeof data.projectVisibility === "object" && !Array.isArray(data.projectVisibility)
+    data.projectVisibility &&
+    typeof data.projectVisibility === "object" &&
+    !Array.isArray(data.projectVisibility)
       ? (data.projectVisibility as Record<string, unknown>)
       : {};
   const makeEvergreen = isPublic
@@ -228,11 +313,15 @@ export function publishLinkFields(input: LinkInput): LinkFields {
       ? {}
       : {
           ttlHoursRequested: requestedTtl,
-          clamped: requestedTtl != null && answeredTtl != null && answeredTtl < requestedTtl,
+          clamped:
+            requestedTtl != null &&
+            answeredTtl != null &&
+            answeredTtl < requestedTtl,
         }),
     projectVisibility: {
       ...platformVisibility,
-      value: text(platformVisibility.value) || text(data.visibility) || "unknown",
+      value:
+        text(platformVisibility.value) || text(data.visibility) || "unknown",
       source: VISIBILITY_SOURCE,
       notFrom: "the GitHub repository",
       ...(makeEvergreen ? { makeEvergreen } : {}),
@@ -249,10 +338,13 @@ export function publishNotes(input: {
 }): string[] {
   const { data, runs, short, held, shareLinksUrl } = input;
   const isPublic = String(data.visibility ?? "").toLowerCase() === "public";
-  const visibility = data.projectVisibility as { makeEvergreen?: { say?: string; settingsUrl?: string } } | undefined;
+  const visibility = data.projectVisibility as
+    { makeEvergreen?: { say?: string; settingsUrl?: string } } | undefined;
   const evergreen = visibility?.makeEvergreen;
   const notes = [
-    held ? "extension.dev is not open to the public yet, so the page answers a hold page; it opens at the same address once extension.dev does, and the run command works now." : null,
+    held
+      ? "extension.dev is not open to the public yet, so the page answers a hold page; it opens at the same address once extension.dev does, and the run command works now."
+      : null,
     runs.length
       ? isPublic
         ? "The run commands need no token: the project is public."
@@ -260,10 +352,18 @@ export function publishNotes(input: {
           ? "Each run command's URL is a short extension.dev link that redirects to the download, and it stops working when the link expires."
           : "Each run command carries the same share token as the link and stops working when the link expires."
       : null,
-    runs.length > 1 ? "For another browser, replace chrome with its name in both the URL and --browser; value.previewCommands holds each one." : null,
-    runs.length ? "A URL with ?, & or another shell character is wrapped in double quotes so zsh, bash, PowerShell and cmd pass it whole." : null,
-    shareLinksUrl ? `Every share link of this project is listed, and can be revoked, on the console Share links page: ${shareLinksUrl}.` : null,
-    evergreen?.say ? `${evergreen.say}${evergreen.settingsUrl ? ` ${evergreen.settingsUrl}` : ""}` : null,
+    runs.length > 1
+      ? "For another browser, replace chrome with its name in both the URL and --browser; value.previewCommands holds each one."
+      : null,
+    runs.length
+      ? "A URL with ?, & or another shell character is wrapped in double quotes so zsh, bash, PowerShell and cmd pass it whole."
+      : null,
+    shareLinksUrl
+      ? `Every share link of this project is listed, and can be revoked, on the console Share links page: ${shareLinksUrl}.`
+      : null,
+    evergreen?.say
+      ? `${evergreen.say}${evergreen.settingsUrl ? ` ${evergreen.settingsUrl}` : ""}`
+      : null,
   ];
 
   return notes.filter((row): row is string => Boolean(row));

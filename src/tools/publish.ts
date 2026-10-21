@@ -6,16 +6,34 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-import { WAIT_SECONDS_INPUT, dispatchedHint, linksOf, madeSentence, stampNow } from "../lib/act-outcome";
+import {
+  WAIT_SECONDS_INPUT,
+  dispatchedHint,
+  linksOf,
+  madeSentence,
+  stampNow,
+} from "../lib/act-outcome";
 import { API_BASE } from "../lib/common-schema";
 import { resolveCredential } from "../lib/credential-source";
 import { shareLinks, shareOutcome } from "../lib/share-outcome";
 import { envelope, type ErrorCode } from "../lib/envelope";
 import { spendNarration } from "../lib/allowance";
 import { publish } from "../lib/publish";
-import { NO_TOKEN_MESSAGE, PROJECT_TOKEN_INPUT, noStoredLoginHint } from "../lib/credentials";
-import { PLATFORM_HOLD_STATUS, platformHoldEnvelope } from "../lib/platform-hold";
-import { CHANNEL_LINK_ADVICE, channelLinkFields, channelServing, readChannels } from "../lib/channel-link";
+import {
+  NO_TOKEN_MESSAGE,
+  PROJECT_TOKEN_INPUT,
+  noStoredLoginHint,
+} from "../lib/credentials";
+import {
+  PLATFORM_HOLD_STATUS,
+  platformHoldEnvelope,
+} from "../lib/platform-hold";
+import {
+  CHANNEL_LINK_ADVICE,
+  channelLinkFields,
+  channelServing,
+  readChannels,
+} from "../lib/channel-link";
 import {
   carriesShareToken,
   heldRunLine,
@@ -24,11 +42,19 @@ import {
   publishNotes,
   runCommandsOf,
   spokenDate,
+  nameMismatchNote,
 } from "../lib/publish-link";
 import { probeSharePage } from "../lib/share-page-probe";
 import { trackFields } from "../lib/track-url";
-import { everyArtifactFailed, readBuildHealth, type BuildHealth } from "../lib/build-health";
-import { applyArtifactHealth, refuseUnverified } from "../lib/publish-artifacts";
+import {
+  everyArtifactFailed,
+  readBuildHealth,
+  type BuildHealth,
+} from "../lib/build-health";
+import {
+  applyArtifactHealth,
+  refuseUnverified,
+} from "../lib/publish-artifacts";
 import { fillFromBuildIndex } from "../lib/publish-build-index";
 import { consoleProjectUrl } from "../lib/registry";
 
@@ -98,11 +124,19 @@ export async function handler(args: {
   waitSeconds?: unknown;
   api?: string;
 }): Promise<string> {
-  const credential = resolveCredential({ project: args.project, api: args.api });
+  const credential = resolveCredential({
+    project: args.project,
+    api: args.api,
+  });
   const token = credential.token;
 
   if (!token && args.project) {
-    return fail("PublishAuthError", noStoredLoginHint(args.project), "auth-required", "E_AUTH_REQUIRED");
+    return fail(
+      "PublishAuthError",
+      noStoredLoginHint(args.project),
+      "auth-required",
+      "E_AUTH_REQUIRED",
+    );
   }
 
   if (!token) {
@@ -206,7 +240,8 @@ export async function handler(args: {
     }
 
     const projectMissing =
-      code === "PROJECT_NOT_FOUND" || (code === undefined && /\(404\)/.test(result.error.message));
+      code === "PROJECT_NOT_FOUND" ||
+      (code === undefined && /\(404\)/.test(result.error.message));
 
     return envelope({
       ok: false,
@@ -219,8 +254,7 @@ export async function handler(args: {
       },
       ...(projectMissing
         ? {
-            hint:
-              "The token's project does not exist on the host this call targeted. Run extension_auth (action: status) to see which workspace/project the token is scoped to, create that project first (import a repo or a template at extension.dev/new), or run extension_auth (action: login) against a project that exists there.",
+            hint: "The token's project does not exist on the host this call targeted. Run extension_auth (action: status) to see which workspace/project the token is scoped to, create that project first (import a repo or a template at extension.dev/new), or run extension_auth (action: login) against a project that exists there.",
           }
         : {}),
     });
@@ -236,11 +270,14 @@ export async function handler(args: {
       error: {
         code: "E_PLATFORM",
         name: "PublishUnconfirmed",
-        message: "The platform answered the publish but named no share URL, so whether a share was minted is unknown.",
+        message:
+          "The platform answered the publish but named no share URL, so whether a share was minted is unknown.",
       },
       value: { platform: data },
       hint: `Do not publish again blind: a build link that was minted counts against the project's live shares. The console Settings, Share links section${
-        credential.ref ? ` (${consoleProjectUrl(credential.ref, "settings/share-links", args.api)})` : ""
+        credential.ref
+          ? ` (${consoleProjectUrl(credential.ref, "settings/share-links", args.api)})`
+          : ""
       } lists the build links minted for this project with their expiry; check it, then publish again only if none appeared.`,
     });
   }
@@ -256,9 +293,20 @@ export async function handler(args: {
     });
 
     if (health.checked && everyArtifactFailed(health) && !force) {
-      return refuseUnverified(health, args, {
-        settingsUrl: credential.ref ? consoleProjectUrl(credential.ref, "settings/share-links", args.api) : null,
-      }, credential.ref);
+      return refuseUnverified(
+        health,
+        args,
+        {
+          settingsUrl: credential.ref
+            ? consoleProjectUrl(
+                credential.ref,
+                "settings/share-links",
+                args.api,
+              )
+            : null,
+        },
+        credential.ref,
+      );
     }
   }
 
@@ -270,15 +318,33 @@ export async function handler(args: {
   }
 
   const ref = credential.ref;
-  const buildNote = await fillFromBuildIndex(data, args.buildSha, ref, args.api);
+  const buildNote = await fillFromBuildIndex(
+    data,
+    args.buildSha,
+    ref,
+    args.api,
+  );
+  const nameNote = nameMismatchNote(
+    data,
+    credential.ref
+      ? consoleProjectUrl(credential.ref, "project-settings", args.api)
+      : null,
+  );
 
   let channelNote: string | null = null;
   let serving: string | null = null;
 
   if (ref && data.visibility === "public") {
     const channels = await readChannels(ref, args.api);
-    serving = channels && typeof data.buildSha === "string" ? channelServing(channels, data.buildSha) : null;
-    Object.assign(data, channelLinkFields(ref, data.visibility, serving, args.api));
+    serving =
+      channels && typeof data.buildSha === "string"
+        ? channelServing(channels, data.buildSha)
+        : null;
+
+    Object.assign(
+      data,
+      channelLinkFields(ref, data.visibility, serving, args.api),
+    );
 
     if (!serving) {
       channelNote = channels
@@ -286,10 +352,19 @@ export async function handler(args: {
         : "The project's channels.json could not be read, so whether a release channel serves this build is unknown and no channelUrl is offered.";
     }
   } else if (ref) {
-    Object.assign(data, channelLinkFields(ref, data.visibility, null, args.api));
+    Object.assign(
+      data,
+      channelLinkFields(ref, data.visibility, null, args.api),
+    );
   }
 
-  const { sendUrl, pageLine: page, name, send, ...linkFields } = publishLinkFields({
+  const {
+    sendUrl,
+    pageLine: page,
+    name,
+    send,
+    ...linkFields
+  } = publishLinkFields({
     data,
     channel: serving,
     ref,
@@ -306,7 +381,9 @@ export async function handler(args: {
   });
 
   const { note: artifactNote, failed } = applyArtifactHealth(data, health);
-  const previewCommands = previewCommandsOf(data.previewCommands).filter(([browser]) => !failed.has(browser.toLowerCase()));
+  const previewCommands = previewCommandsOf(data.previewCommands).filter(
+    ([browser]) => !failed.has(browser.toLowerCase()),
+  );
   const runs = runCommandsOf(previewCommands);
   const short = Boolean(send.id) && !carriesShareToken(runs);
   const noBuild = data.buildSha == null;
@@ -314,18 +391,31 @@ export async function handler(args: {
     ? "This share serves NO build: the platform minted the link but named no build sha, which means the project has no successful build yet (or its build index could not be read). Anyone opening the link gets nothing to run. Build first (push a commit, or extension_build then a platform build), then publish again."
     : null;
 
-  const sharePage = noBuild || !sendUrl ? null : await probeSharePage(String(sendUrl));
+  const sharePage =
+    noBuild || !sendUrl ? null : await probeSharePage(String(sendUrl));
   const held = Boolean(sharePage?.held);
   const told = String(data.tellThem);
 
   if (held && sharePage) {
     const longLines = short ? null : longHeldLines(name, send, runs);
 
-    data.tellThem = longLines ? told.replace(page, longLines) : `${told}\n${heldRunLine(runs)}`;
-    data.sharePage = { url: sharePage.url, status: sharePage.status, retryAfter: sharePage.retryAfter, opensNow: false };
+    data.tellThem = longLines
+      ? told.replace(page, longLines)
+      : `${told}\n${heldRunLine(runs)}`;
+
+    data.sharePage = {
+      url: sharePage.url,
+      status: sharePage.status,
+      retryAfter: sharePage.retryAfter,
+      opensNow: false,
+    };
   }
 
-  const track = trackFields("extension_publish", { args: { ...args }, status: held ? PLATFORM_HOLD_STATUS : "published", value: data });
+  const track = trackFields("extension_publish", {
+    args: { ...args },
+    status: held ? PLATFORM_HOLD_STATUS : "published",
+    value: data,
+  });
   const shareLinksUrl = track?.trackUrl ?? null;
 
   data.notes = publishNotes({ data, runs, short, held, shareLinksUrl });
@@ -334,8 +424,20 @@ export async function handler(args: {
 
   const acceptedAt = stampNow();
   const isPublic = data.visibility === "public";
-  const shareId = send.kind === "build" && send.id ? String(send.id) : typeof data.shareId === "string" ? data.shareId : "";
-  const { outcome, expiresAt: recordedExpiry } = await shareOutcome({ data, ref, shareId, noBuild, waitSeconds: args.waitSeconds, api: args.api });
+  const shareId =
+    send.kind === "build" && send.id
+      ? String(send.id)
+      : typeof data.shareId === "string"
+        ? data.shareId
+        : "";
+  const { outcome, expiresAt: recordedExpiry } = await shareOutcome({
+    data,
+    ref,
+    shareId,
+    noBuild,
+    waitSeconds: args.waitSeconds,
+    api: args.api,
+  });
   if (recordedExpiry && data.expiresAt == null) data.expiresAt = recordedExpiry;
 
   const links = linksOf(shareLinks(data, track, !isPublic && !noBuild));
@@ -343,26 +445,36 @@ export async function handler(args: {
   data.links = links;
 
   const made = madeSentence(links);
-  const unconfirmed = !outcome.recorded && !noBuild
-    ? dispatchedHint({ acceptedAt, trackUrl: track?.trackUrl ?? String(sendUrl ?? ""), readHow: "the link itself reads it: a page that opens is a recorded share, and not found means the record is not there" })
-    : null;
+  const unconfirmed =
+    !outcome.recorded && !noBuild
+      ? dispatchedHint({
+          acceptedAt,
+          trackUrl: track?.trackUrl ?? String(sendUrl ?? ""),
+          readHow:
+            "the link itself reads it: a page that opens is a recorded share, and not found means the record is not there",
+        })
+      : null;
   const watch = track
     ? `Watch it at ${track.trackUrl}${track.trackLinks?.[1] ? `, and the build at ${track.trackLinks[1]}` : ""}.`
     : null;
-  const what = noBuild || !sendUrl
-    ? "Do not send this link: it serves no build yet."
-    : held
-      ? short
-        ? "Send value.tellThem to the person as written; the page is on hold until extension.dev opens, so it carries the Chrome run command."
-        : "Send value.tellThem to the person as written; the page is on hold, so it carries the Chrome run command, which is long because the platform has not minted a short link yet."
-      : short
-        ? "Send value.tellThem to the person as written."
-        : "Send value.tellThem to the person as written; its link is long because the platform has not minted a short one yet.";
+  const what =
+    noBuild || !sendUrl
+      ? "Do not send this link: it serves no build yet."
+      : held
+        ? short
+          ? "Send value.tellThem to the person as written; the page is on hold until extension.dev opens, so it carries the Chrome run command."
+          : "Send value.tellThem to the person as written; the page is on hold, so it carries the Chrome run command, which is long because the platform has not minted a short link yet."
+        : short
+          ? "Send value.tellThem to the person as written."
+          : "Send value.tellThem to the person as written; its link is long because the platform has not minted a short one yet.";
   const hint = [unconfirmed, what, watch, made].filter(Boolean).join(" ");
 
   if (held && sharePage) {
     const answer = `${sharePage.status}${sharePage.retryAfter ? `, retry-after ${sharePage.retryAfter}` : ""}`;
-    const expiresAt = typeof data.expiresAt === "string" && data.expiresAt ? data.expiresAt : null;
+    const expiresAt =
+      typeof data.expiresAt === "string" && data.expiresAt
+        ? data.expiresAt
+        : null;
     const until = expiresAt ? ` until ${spokenDate(expiresAt)}` : "";
 
     return envelope({
@@ -372,11 +484,14 @@ export async function handler(args: {
       value: data,
       warnings: [
         `The share page ${sharePage.url} answers the platform's hold page (${answer}) while extension.dev is not open to the public, so do not tell anyone to open it yet. What works now: ${
-          runs.length ? "the run commands in value.previewCommands" : "nothing this link serves; the build has no run command"
+          runs.length
+            ? "the run commands in value.previewCommands"
+            : "nothing this link serves; the build has no run command"
         }. What does not: the share page, until the platform opens. The link is minted${until ? ` and stays valid${until}` : ""}, and the same page opens once the platform does.`,
         artifactNote,
         note,
         buildNote,
+        nameNote,
         channelNote,
         credential.note,
       ],
@@ -387,9 +502,21 @@ export async function handler(args: {
   return envelope({
     ok: true,
     command: "extension_publish",
-    status: noBuild ? "published-without-build" : outcome.recorded ? "published" : "publish-dispatched",
+    status: noBuild
+      ? "published-without-build"
+      : outcome.recorded
+        ? "published"
+        : "publish-dispatched",
     value: data,
-    warnings: [noBuildNote, artifactNote, note, buildNote, channelNote, credential.note],
+    warnings: [
+      noBuildNote,
+      artifactNote,
+      note,
+      buildNote,
+      nameNote,
+      channelNote,
+      credential.note,
+    ],
     hint,
   });
 }
