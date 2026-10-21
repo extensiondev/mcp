@@ -24,6 +24,7 @@ import { removeCarrier } from "../lib/carrier";
 import { envelope } from "../lib/envelope";
 import { productionLaunchEvidence, readFreshContract, readLoadOverDebugPort } from "../lib/production-launch";
 import { unpackedExtensionId } from "../lib/extension-identity";
+import { sessionStateDir } from "../lib/session-paths";
 import { spawnExtensionCli, spawnFailedEnvelope } from "../lib/exec";
 import {
   registerSession,
@@ -71,7 +72,7 @@ function controlledIdentity(args: {
     return { plainId, copyId: null, startingUrl: args.startingUrl, rewroteStartingUrl: false };
   }
 
-  const copyId = unpackedExtensionId(path.join(args.projectPath, "dist", "extension-js", args.browser, "controlled"));
+  const copyId = unpackedExtensionId(path.join(sessionStateDir(args.projectPath), args.browser, "controlled"));
   const startingUrl = args.startingUrl;
 
   if (startingUrl && startingUrl.includes(plainId)) {

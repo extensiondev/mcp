@@ -6,6 +6,7 @@ import { spawn } from "node:child_process";
 import { describe, it, expect, vi, afterEach } from "vitest";
 
 import { unpackedExtensionId } from "../lib/extension-identity";
+import { sessionStateDir } from "../lib/session-paths";
 
 import type { ChildProcess } from "node:child_process";
 import type * as ExecModule from "../lib/exec";
@@ -175,7 +176,7 @@ describe("extension_start opens the control channel on a production run", () => 
   it("names the controlled copy's own id beside the plain build's, rewrites a startingUrl that used the plain id, and says what the copy does not inherit", async () => {
     const project = tmpProject();
     const plainId = unpackedExtensionId(path.join(project, "dist", "chrome"));
-    const copyPath = path.join(project, "dist", "extension-js", "chrome", "controlled");
+    const copyPath = path.join(sessionStateDir(project), "chrome", "controlled");
     const copyId = unpackedExtensionId(copyPath);
     writeContract(project, {
       command: "start",
