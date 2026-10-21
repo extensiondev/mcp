@@ -5,6 +5,8 @@ import { spawn } from "node:child_process";
 
 import { describe, it, expect, vi, afterEach } from "vitest";
 
+import { unpackedExtensionId } from "../lib/extension-identity";
+
 import type { ChildProcess } from "node:child_process";
 import type * as ExecModule from "../lib/exec";
 import type { SpawnedCli } from "../lib/exec";
@@ -168,6 +170,55 @@ describe("extension_start opens the control channel on a production run", () => 
     expect(result.hint).not.toMatch(/control verbs cannot attach/);
     expect(result.hint).toMatch(/extension_eval/);
     expect(result.hint).toMatch(/extension_reload/);
+  });
+
+  it("names the controlled copy's own id beside the plain build's, rewrites a startingUrl that used the plain id, and says what the copy does not inherit", async () => {
+    const project = tmpProject();
+    const plainId = unpackedExtensionId(path.join(project, "dist", "chrome"));
+    const copyPath = path.join(project, "dist", "extension-js", "chrome", "controlled");
+    const copyId = unpackedExtensionId(copyPath);
+    writeContract(project, {
+      command: "start",
+      status: "ready",
+      controlPort: 61234,
+      instanceId: "inst-1",
+      distPath: copyPath,
+      extensionId: copyId,
+    });
+
+    const before = Date.now();
+    const contractFile = path.join(project, "dist", "extension-js", "chrome", "ready.json");
+    fs.utimesSync(contractFile, new Date(before + 60_000), new Date(before + 60_000));
+
+    const result = JSON.parse(
+      await start.handler({ projectPath: project, allowEval: true, build: false, startingUrl: `chrome://extensions/?options=${plainId}` }),
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.value.buildExtensionId).toBe(plainId);
+    expect(result.value.controlledCopyId).toBe(copyId);
+    expect(copyId).not.toBe(plainId);
+
+    const warnings = result.warnings.join("\n");
+    expect(warnings).toContain(`this session's extension id is ${copyId}, not the ${plainId} that dist/<browser> gets`);
+    expect(warnings).toContain("shares no chrome.storage and no grants with the plain build's runs");
+    expect(warnings).toContain(`startingUrl named the plain build's id ${plainId}; it was rewritten to ${copyId}`);
+
+    const cli = spawnedArgs[spawnedArgs.length - 1]!;
+    const urlIndex = cli.indexOf("--starting-url");
+    expect(urlIndex).toBeGreaterThan(-1);
+    expect(cli[urlIndex + 1]).toBe(`chrome://extensions/?options=${copyId}`);
+  });
+
+  it("says nothing about ids on a plain production run", async () => {
+    const project = tmpProject();
+    writeContract(project, { command: "start", status: "ready", instanceId: "inst-2", distPath: path.join(project, "dist", "chrome") });
+
+    const result = JSON.parse(await start.handler({ projectPath: project, build: false }));
+
+    expect(result.value.buildExtensionId).toBeUndefined();
+    expect(result.value.controlledCopyId).toBeUndefined();
+    expect(JSON.stringify(result.warnings)).not.toContain("allowControl runs a copy");
   });
 
   it("says the control channel is coming while the contract has not recorded its port yet", async () => {
