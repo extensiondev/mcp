@@ -47,7 +47,7 @@ describe("submit says what the platform checks and answers", () => {
     const dryRun = String((submitSchema.inputSchema as { properties?: Record<string, { description?: string }> }).properties?.dryRun?.description ?? "");
 
     expect(dryRun).toMatch(/does not run the owner gate, the approval, the build quota/);
-    expect(dryRun).toMatch(/absent_mode: safe/);
+    expect(dryRun).toMatch(/always stops at the draft, whatever the project's saved submission mode/);
     expect(submitSchema.description).toMatch(/workspace owner/);
   });
 
@@ -107,7 +107,7 @@ describe("submit says what the platform checks and answers", () => {
 
     const out = JSON.parse(await submit({ browsers: ["chrome"], buildSha: "abc1234", dryRun: false }));
     expect(out.status).toBe("submit-dispatched");
-    expect(out.hint).toMatch(/uploaded as a draft \(absent_mode: safe\) and does not enter review/);
+    expect(out.hint).toMatch(/stops at the draft whatever the saved submission mode, and does not enter review/);
     expect(out.warnings.join("\n")).toMatch(/appears in the registry's stores\/submissions\.json when the store workflow reports/);
     expect(out.warnings.join("\n")).not.toMatch(/reads the recorded outcome, per-store credential health, and review state/);
   });

@@ -192,7 +192,7 @@ export const schema = {
         type: "boolean",
         default: true,
         description:
-          "true (the default) rehearses and dispatches nothing: the platform verifies the token and project, finds the store workflow, reads the build from its index and each store's connection record, and answers one value.verdict (ready, not-checked, platform-refused, or the blocking state store-not-connected, store-connection-failed, store-item-not-linked, store-not-configured or store-unhealthy) with value.nextStep and value.trackUrl; it does not run the owner gate, the approval, the build quota, the dispatch pause or the submission-mode check, which the real run does first. false submits: it reads the store connection and refuses before any approval when the store is not ready, needs a token issued by a workspace owner and that owner's approval of this exact submission, dispatches the store workflow, and a Chrome or Edge store with no saved submission mode uploads a draft (absent_mode: safe) that does not enter review. Store credentials are never arguments, and no local file is uploaded.",
+          "true (the default) rehearses and dispatches nothing: the platform verifies the token and project, finds the store workflow, reads the build from its index and each store's connection record, and answers one value.verdict (ready, not-checked, platform-refused, or the blocking state store-not-connected, store-connection-failed, store-item-not-linked, store-not-configured or store-unhealthy) with value.nextStep and value.trackUrl; it does not run the owner gate, the approval, the build quota, the dispatch pause or the submission-mode check, which the real run does first. false submits: it reads the store connection and refuses before any approval when the store is not ready, needs a token issued by a workspace owner and that owner's approval of this exact submission, dispatches the store workflow, and a Chrome or Edge upload from here always stops at the draft, whatever the project's saved submission mode (Chrome: draft-until-public, the default, public or staged; Edge: draft or review; those modes govern console submissions and are answered by preflight under value.stores.<store>.submissionMode and by extension_release_status under config.submissionMode). Store credentials are never arguments, and no local file is uploaded.",
       },
       projectPath: {
         type: "string",
@@ -469,6 +469,9 @@ async function answer(args: SubmitToolArgs): Promise<string> {
   if (args.channel) body.channel = String(args.channel).trim();
   if (args.version) body.version = String(args.version).trim();
 
+  const promisesNoReview = browsers.every((browser) =>
+    DRAFT_STORES.has(browser),
+  );
   const gateInput = {
     command: "extension_submit",
     action: "extension_submit",
@@ -477,17 +480,15 @@ async function answer(args: SubmitToolArgs): Promise<string> {
       buildSha: buildSha.toLowerCase(),
       channel,
     },
-    description: `Submit build ${buildSha} to ${browsers.join(", ")} for store review.`,
+    description: promisesNoReview
+      ? `Upload build ${buildSha} to ${browsers.join(", ")} as a store draft: not published and not sent to review, whatever the saved submission mode. The store keeps the uploaded package, so the upload itself cannot be undone.`
+      : `Submit build ${buildSha} to ${browsers.join(", ")} for store review.`,
     approvalId: args.approvalId,
     token,
     api: args.api,
     refusedStatus: "submit-failed",
     irreversible: true,
   };
-
-  const promisesNoReview = browsers.every((browser) =>
-    DRAFT_STORES.has(browser),
-  );
   const asked = (out: string) =>
     withApproveStep(
       promisesNoReview ? withReviewPromise(out) : out,
@@ -1047,7 +1048,7 @@ async function answer(args: SubmitToolArgs): Promise<string> {
         command: "extension_submit",
         status: "submit-dispatched",
         value: result,
-        hint: `${dispatchedHint({ acceptedAt, trackUrl: firstPage, readCall: statusRead })} A Chrome or Edge store with no saved submission mode is uploaded as a draft (absent_mode: safe) and does not enter review. ${made}`,
+        hint: `${dispatchedHint({ acceptedAt, trackUrl: firstPage, readCall: statusRead })} A Chrome or Edge upload from here stops at the draft whatever the saved submission mode, and does not enter review. ${made}`,
         warnings: [...warnings, channelNote, statusNote, credential.note],
       });
     }
@@ -1059,7 +1060,7 @@ async function answer(args: SubmitToolArgs): Promise<string> {
       value: result,
       hint: `${
         message ||
-        `The platform's record confirms the submission for ${outcome.stores.join(", ")} (${waited.outcome.status}${waited.outcome.storeState ? `, store state ${waited.outcome.storeState}` : ""}). A Chrome or Edge store with no saved submission mode is uploaded as a draft (absent_mode: safe) and does not enter review and is recorded as "Uploaded, not public"; a store's own review, where it happens, comes after this answer.`
+        `The platform's record confirms the submission for ${outcome.stores.join(", ")} (${waited.outcome.status}${waited.outcome.storeState ? `, store state ${waited.outcome.storeState}` : ""}). A Chrome or Edge upload from here stops at the draft whatever the saved submission mode, does not enter review and is recorded as "Uploaded, not public"; a store's own review, where it happens, comes after this answer.`
       } ${made}`,
       warnings: [...warnings, channelNote, statusNote, credential.note],
     });

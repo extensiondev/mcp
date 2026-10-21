@@ -467,6 +467,8 @@ function privacyReconciled(
   };
 }
 
+const DRAFT_ONLY_STORES = new Set(["chrome", "edge"]);
+
 function readinessView(
   json: Row,
   store: string,
@@ -493,6 +495,21 @@ function readinessView(
     ? readLocalListing(projectPath, store as ListingStore)
     : null;
   const connection = connectionOf(json);
+  const mode = isRow(json.submissionMode) ? json.submissionMode : null;
+  const submissionMode =
+    mode && text(mode.id)
+      ? {
+          id: text(mode.id),
+          label: text(mode.label),
+          description: text(mode.description),
+          ...(DRAFT_ONLY_STORES.has(store)
+            ? {
+                fromHere:
+                  "An upload from here stops at the draft whatever this mode says; the mode governs console submissions.",
+              }
+            : {}),
+        }
+      : null;
   const failing = checks
     .filter((c) => text(c.status) === "fail")
     .map((c) => checkView(privacyReconciled(c, local), true));
@@ -502,6 +519,7 @@ function readinessView(
       summary.canSubmit === true ||
       (deferred.length > 0 && failing.length === 0),
     ...(connection ? { connection } : {}),
+    ...(submissionMode ? { submissionMode } : {}),
     summary,
     ...(deferred.length ? { namedBySubmit: ["build"] } : {}),
     failing,
@@ -614,9 +632,20 @@ export async function preflight(args: StoreActArgs): Promise<string> {
   const buildLine = buildNamedLater
     ? " The submit call names the build; extension_builds lists the shas."
     : "";
+  const modeLine = Object.entries(stores)
+    .map(([store, view]) => {
+      const mode = isRow((view as Row).submissionMode)
+        ? ((view as Row).submissionMode as Row)
+        : null;
+
+      return mode && text(mode.label)
+        ? ` ${store} submission mode: ${text(mode.label)} (${text(mode.id)}): ${text(mode.description)}${text(mode.fromHere) ? ` ${text(mode.fromHere)}` : ""}`
+        : "";
+    })
+    .join("");
   const readinessHint = blocked.length
     ? `${blocked.join(", ")} cannot be submitted yet; each failing check says what to fix.${syncLine} This read wrote nothing.`
-    : `Every store read here is ready to submit.${buildLine} This read wrote nothing; extension_submit with dryRun:false submits.`;
+    : `Every store read here is ready to submit.${buildLine}${modeLine} This read wrote nothing; extension_submit with dryRun:false submits.`;
   const chrome = isRow(stores.chrome) ? stores.chrome : null;
   const connection =
     chrome && isRow(chrome.connection) ? chrome.connection : null;

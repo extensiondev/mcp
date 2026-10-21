@@ -23,6 +23,7 @@ function report(store: string, canSubmit: boolean) {
   return {
     store,
     summary: { pass: 9, warn: 1, fail: canSubmit ? 0 : 1, blockingFailures: canSubmit ? 0 : 1, canSubmit },
+    submissionMode: store === "chrome" ? { id: "draft-until-public", label: "Draft until published", description: "New versions upload as a draft and are not published, until the Chrome Web Store reports this item as published.", rollout: "safe" } : undefined,
     checks: [
       { id: "credentials", label: "Store credentials", status: canSubmit ? "pass" : "fail", severity: "blocking", stage: "integration", ownership: "user", message: canSubmit ? "" : "CHROME_CLIENT_SECRET is missing." },
       { id: "privacy", label: "Privacy policy URL", status: "warn", severity: "advisory", stage: "review", ownership: "user", message: "No privacy policy URL." },
@@ -163,6 +164,20 @@ describe("extension_submit withdraws a submission, raises a staged rollout and c
     expect(out.value.stores.firefox.canSubmit).toBe(true);
     expect(JSON.stringify(out)).not.toContain("A long user-written text");
     expect(out.hint).toContain("chrome");
+    expect(out.value.stores.chrome.submissionMode).toMatchObject({ id: "draft-until-public", label: "Draft until published" });
+    expect(out.value.stores.chrome.submissionMode.fromHere).toContain("stops at the draft");
+  });
+
+  it("preflight names the saved submission mode in the hint once every check is green", async () => {
+    if (process.platform === "win32") return;
+
+    platform.login();
+    platform.routes[`POST ${PREFLIGHT("chrome")}`] = () => ({ body: report("chrome", true) });
+
+    const out = JSON.parse(await submit({ action: "preflight", browsers: ["chrome"], buildSha: "603fc8a", api: API }));
+
+    expect(out.hint).toContain("chrome submission mode: Draft until published (draft-until-public)");
+    expect(out.hint).toContain("An upload from here stops at the draft");
   });
 
   it("preflight answers done, not submit, while the platform records a Chrome review in progress", async () => {
