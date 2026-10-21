@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- `extension_submit` `action: "preflight"` reads the platform's own Chrome submission record and, while it carries a pending review, answers `nextStep` `done` with the submission page, `value.chromeReview` (submission id, store state, build, version, since) and a sentence that a new submit would upload another draft beside the review; it offers the submit step only when no review is pending. `storeMd.onListing` names what STORE.md carries that the listing already has, apart from `covers` (what a sync would fill).
+
 ## 10.18.1
 
 - `extension_publish` names the extension by the build's manifest name (`extensionName`, carried on every build index item and answered by the platform) in `tellThem`, and warns when the project's display name on extension.dev differs, naming the console project settings page where it is changed; the MCP still reads general settings only.

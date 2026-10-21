@@ -165,6 +165,47 @@ describe("extension_submit withdraws a submission, raises a staged rollout and c
     expect(out.hint).toContain("chrome");
   });
 
+  it("preflight answers done, not submit, while the platform records a Chrome review in progress", async () => {
+    if (process.platform === "win32") return;
+
+    platform.login();
+    platform.routes[`POST ${PREFLIGHT("chrome")}`] = () => ({ body: report("chrome", true) });
+    platform.routes["GET /api/cli/stores/submissions"] = () => ({
+      body: {
+        submissions: [
+          { id: SUBMISSION, store: "chrome", status: "submitted", buildId: "111d167", version: "0.1.0", submittedAt: "2026-10-20T12:36:16.000Z", storeReview: { state: "PENDING_REVIEW", checkedAt: "2026-10-21T18:00:27.000Z", source: "poll" } },
+        ],
+      },
+    });
+
+    const out = JSON.parse(await submit({ action: "preflight", browsers: ["chrome"], buildSha: "603fc8a", api: API }));
+
+    expect(out.status).toBe("preflight-read");
+    expect(out.value.stores.chrome.canSubmit).toBe(true);
+    expect(out.value.chromeReview).toMatchObject({ submissionId: SUBMISSION, storeState: "PENDING_REVIEW", version: "0.1.0", since: "2026-10-20T12:36:16.000Z" });
+    expect(out.value.nextStep.kind).toBe("done");
+    expect(out.value.nextStep.say).toContain("already reviewing");
+    expect(out.value.nextStep.say).toContain("sync-listing");
+    expect(out.value.nextStep.url).toContain("/submissions/chrome");
+    expect(out.hint).toContain("already reviewing");
+    expect(platform.sent("POST", APPROVALS)).toHaveLength(0);
+  });
+
+  it("preflight offers the submit step again once the recorded review is over", async () => {
+    if (process.platform === "win32") return;
+
+    platform.login();
+    platform.routes[`POST ${PREFLIGHT("chrome")}`] = () => ({ body: report("chrome", true) });
+    platform.routes["GET /api/cli/stores/submissions"] = () => ({
+      body: { submissions: [{ id: SUBMISSION, store: "chrome", status: "submitted", buildId: "111d167", storeReview: { state: "PUBLISHED" } }] },
+    });
+
+    const out = JSON.parse(await submit({ action: "preflight", browsers: ["chrome"], buildSha: "603fc8a", api: API }));
+
+    expect(out.value.chromeReview).toBeUndefined();
+    expect(out.value.nextStep.kind).toBe("submit");
+  });
+
   it("the stores read keeps the platform's id of the latest submission, which cancel takes", async () => {
     if (process.platform === "win32") return;
 

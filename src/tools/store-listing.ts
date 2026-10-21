@@ -140,10 +140,44 @@ const CHECK_COVERAGE: Array<{ test: RegExp; fields: string[]; label: string }> =
     },
   ];
 
-export function storeMdAdvisory(local: LocalListing, checks: Row[]): Row {
+function onListingLines(listing: Row, settled: Row[]): string[] {
+  const lines: string[] = [];
+
+  for (const check of settled) {
+    const id = text(check.id);
+
+    if (/privacy_policy_present$/.test(id)) {
+      if (listing.privacyPolicyUrl !== undefined) {
+        lines.push(
+          `privacy policy URL: ${STORE_MD_FILENAME} carries ${text(listing.privacyPolicyUrl)}, already on the listing`,
+        );
+      }
+
+      continue;
+    }
+
+    const rule = CHECK_COVERAGE.find((entry) => entry.test.test(id));
+    if (!rule) continue;
+
+    if (rule.fields.some((field) => listing[field] !== undefined)) {
+      lines.push(
+        `${rule.label}: ${STORE_MD_FILENAME} carries it, already on the listing`,
+      );
+    }
+  }
+
+  return lines;
+}
+
+export function storeMdAdvisory(
+  local: LocalListing,
+  checks: Row[],
+  settled: Row[] = [],
+): Row {
   const covers: string[] = [];
   const notCovered: string[] = [];
   const listing = local.patch.listing as Row;
+  const onListing = onListingLines(listing, settled);
 
   for (const check of checks) {
     const id = text(check.id);
@@ -194,6 +228,7 @@ export function storeMdAdvisory(local: LocalListing, checks: Row[]): Row {
     file: local.file,
     covers,
     notCovered,
+    ...(onListing.length ? { onListing } : {}),
     ...(local.skipped.length ? { skipped: local.skipped } : {}),
   };
 }

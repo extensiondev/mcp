@@ -460,6 +460,57 @@ describe("extension_submit sync-listing and the preflight advisory", () => {
 
     expect(JSON.stringify(out)).not.toMatch(/attested|hosted|PRIVACY\.md/);
   });
+
+  it("names what STORE.md carries that the listing already has, apart from what still needs a sync", async () => {
+    if (process.platform === "win32") return;
+
+    const root = project();
+    fs.writeFileSync(
+      path.join(root, "STORE.md"),
+      [
+        "# Store metadata",
+        "",
+        "## Listing",
+        "",
+        "- Title: Rebeccat",
+        "",
+        "## Privacy and data use",
+        "",
+        "- Privacy policy URL: https://example.com/privacy",
+        "",
+      ].join("\n"),
+    );
+
+    platform.login();
+    platform.routes[`POST ${PREFLIGHT("chrome")}`] = () => ({
+      body: {
+        summary: { canSubmit: true },
+        checks: [
+          { id: "listing.privacy_policy_present", status: "pass" },
+          { id: "listing.title_present", status: "pass" },
+          { id: "listing.chrome_description_present", status: "fail" },
+        ],
+      },
+    });
+
+    const out = JSON.parse(
+      await submit({
+        action: "preflight",
+        browsers: ["chrome"],
+        projectPath: root,
+        api: API,
+      }),
+    );
+    const advisory = out.value.stores.chrome.storeMd;
+
+    expect(advisory.onListing).toEqual([
+      "privacy policy URL: STORE.md carries https://example.com/privacy, already on the listing",
+      "title: STORE.md carries it, already on the listing",
+    ]);
+
+    expect(advisory.covers).toEqual([]);
+    expect(advisory.notCovered).toEqual(["description: not in STORE.md"]);
+  });
 });
 
 function digestOf(body: {
@@ -487,5 +538,5 @@ function digestOf(body: {
     ...(body.media?.screenshots
       ? { screenshots: body.media.screenshots.map(image) }
       : {}),
-  });
+});
 }

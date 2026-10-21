@@ -488,6 +488,7 @@ function readinessView(
   const open = checks.filter(
     (c) => text(c.status) === "fail" || text(c.status) === "warn",
   );
+  const settled = checks.filter((c) => text(c.status) === "pass");
   const local = projectPath
     ? readLocalListing(projectPath, store as ListingStore)
     : null;
@@ -512,7 +513,7 @@ function readinessView(
           storeMd:
             "problem" in local
               ? { missing: local.problem }
-              : storeMdAdvisory(local, open),
+              : storeMdAdvisory(local, open, settled),
         }
       : {}),
   };
@@ -692,6 +693,13 @@ export async function preflight(args: StoreActArgs): Promise<string> {
       ? text(connection.itemUrl)
       : "";
   const green = blocked.length === 0 && unread.length === 0;
+  const reviewing = chrome ? await chromeReviewInProgress(api) : null;
+  const reviewUrl = consoleProjectUrl(
+    api.ref,
+    ConsoleProjectPage.submissionsStore("chrome"),
+    args.api,
+  );
+  const reviewSay = reviewing ? reviewSentence(reviewing) : "";
 
   return envelope({
     ok: true,
@@ -702,9 +710,54 @@ export async function preflight(args: StoreActArgs): Promise<string> {
       stores,
       storesPageUrl,
       ...(itemUrl ? { itemUrl } : {}),
-      nextStep: green ? submitStep(asked) : null,
+      ...(reviewing ? { chromeReview: reviewing, trackUrl: reviewUrl } : {}),
+      nextStep: reviewing
+        ? nextStep("done", reviewSay, reviewUrl)
+        : green
+          ? submitStep(asked)
+          : null,
     },
-    hint: readinessHint,
+    hint: reviewing ? `${reviewSay} ${readinessHint}` : readinessHint,
     warnings: [unreadLine],
   });
+}
+
+/* @invariant A PREFLIGHT NAMES THE REVIEW THAT IS ALREADY RUNNING. The
+ * readiness report says whether a build could be submitted, not whether one
+ * already was, and on 2026-10-21 the answer offered a draft while Chrome was
+ * reviewing the same project. The platform's own submission record is the
+ * only reader of that fact, so the preflight reads it and, when the store's
+ * recorded state is a pending review, answers done instead of submit.
+ */
+async function chromeReviewInProgress(
+  api: Parameters<typeof readSubmissionRecord>[0],
+): Promise<Row | null> {
+  const read = await readSubmissionRecord(api, { store: "chrome" }).catch(
+    () => null,
+  );
+  if (!read || !read.ok || !read.record) return null;
+
+  const record = read.record;
+  const state = text(record.storeReview?.state);
+  const pending = state
+    ? /pending|review/i.test(state) && !/published|rejected|taken/i.test(state)
+    : text(record.status).toLowerCase() === "submitted";
+  if (!pending) return null;
+
+  return {
+    submissionId: record.id ?? null,
+    storeState: state || null,
+    buildSha: record.buildSha ?? null,
+    version: record.version ?? null,
+    since: record.submittedAt ?? null,
+  };
+}
+
+function reviewSentence(review: Row): string {
+  const build = text(review.buildSha);
+  const version = text(review.version);
+  const since = text(review.since);
+  const what = `${build ? `build ${build}` : "a build"}${version ? ` (version ${version})` : ""}`;
+
+  return `Chrome is already reviewing ${what}${since ? ` since ${since.slice(0, 10)}` : ""}, so there is nothing to submit. A new submit would upload another draft beside that review, not replace it; a listing fix goes through extension_submit action:"sync-listing", and the review's outcome lands on the submission page.`;
 }
