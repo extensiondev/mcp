@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 10.18.1
 
 - `extension_publish` names the extension by the build's manifest name (`extensionName`, carried on every build index item and answered by the platform) in `tellThem`, and warns when the project's display name on extension.dev differs, naming the console project settings page where it is changed; the MCP still reads general settings only.
 
