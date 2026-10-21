@@ -196,14 +196,14 @@ describe("extension_submit withdraws a submission, raises a staged rollout and c
     const pre = JSON.parse(await submit({ action: "preflight", browsers: ["chrome"], buildSha: "603fc8a", api: API }));
 
     expect(pre.value.stores.chrome.submissionMode.fromHere).toContain("goes on to review under this mode");
-    expect(pre.value.nextStep.say).toContain('Under the Chrome Web Store's saved mode "public" this upload goes on to review');
+    expect(pre.value.nextStep.say).toContain(`Under the Chrome Web Store's saved mode "public" this upload goes on to review`);
     expect(pre.value.nextStep.say).not.toContain("as a store draft");
 
     const out = JSON.parse(await submit({ browsers: ["chrome"], buildSha: "603fc8a", dryRun: false, api: API }));
 
     expect(out.status).toBe("approval-required");
     expect(platform.sent("POST", APPROVALS)[0].body.description).toContain('for store review: the saved chrome mode "public" sends the upload on to review');
-    expect(out.hint).toContain('Under the Chrome Web Store's saved mode "public" this upload goes on to review');
+    expect(out.hint).toContain(`Under the Chrome Web Store's saved mode "public" this upload goes on to review`);
     expect(out.hint).not.toContain("Nothing goes to review until you publish.");
     expect(out.value.reviewPromise).toContain("goes on to review");
   });
