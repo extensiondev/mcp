@@ -123,6 +123,7 @@ function project(): { dir: string; id: string } {
 }
 
 afterEach(() => {
+  vi.unstubAllEnvs();
   actResult = openedFrame();
   cdpTargets = [];
   actCalls.length = 0;
@@ -147,6 +148,41 @@ describe("extension_open surface confirmation", () => {
     expect(result.value.renderedAsTab).toMatchObject({ surface: "options", document: "options.html" });
     expect(result.warnings.join("\n")).toMatch(/no document for it appeared within 3s.*rendered in a tab instead/);
     expect(result.value.engineResult.value.opened).toBe("options");
+  }, 15_000);
+
+  it("in a headed session the fallback names the embedded options dialog and never prescribes a headed relaunch", async () => {
+    vi.stubEnv("EXTENSION_HEADLESS", "");
+    vi.stubEnv("EXTENSION_BROWSER_FLAGS", "");
+    const p = project();
+    actResult = openedFrame();
+    cdpTargets = [];
+
+    const result = JSON.parse(
+      await open.handler({ projectPath: p.dir, surface: "options" }),
+    );
+    const warning = result.warnings.join("\n");
+
+    expect(warning).toContain("This session is headed");
+    expect(warning).toContain(`chrome://extensions/?options=${p.id}`);
+    expect(warning).toContain("rendered in a tab instead");
+    expect(warning).not.toContain("a headless browser never shows");
+    expect(warning).not.toContain("headless: false and replace: true");
+  }, 15_000);
+
+  it("in a headless session the fallback says the browser never shows the window and how to relaunch", async () => {
+    vi.stubEnv("EXTENSION_HEADLESS", "1");
+    const p = project();
+    actResult = openedFrame();
+    cdpTargets = [];
+
+    const result = JSON.parse(
+      await open.handler({ projectPath: p.dir, surface: "options" }),
+    );
+    const warning = result.warnings.join("\n");
+
+    expect(warning).toContain("a headless browser never shows an options or popup window");
+    expect(warning).toContain("headless: false and replace: true");
+    expect(warning).not.toContain("This session is headed");
   }, 15_000);
 
   it("confirms and names the target when the surface really opened", async () => {

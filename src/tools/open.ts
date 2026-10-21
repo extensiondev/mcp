@@ -1124,6 +1124,25 @@ export function sessionIsHeadless(projectPath?: string, browser?: string): boole
 const HEADED_RELAUNCH =
   "call extension_dev again with headless: false and replace: true, which stops this session and opens a browser window the person can see";
 
+/* @invariant A HEADED SESSION IS NEVER TOLD TO GO HEADED. On 2026-10-21 a
+ * headed dev session opened an options page declared open_in_tab: false, no
+ * page target for it appeared, and the fallback blamed a headless browser and
+ * told the agent to relaunch headed, which it already was. Chrome hosts such
+ * an options page inside chrome://extensions, a guest view the target list
+ * does not show, and a popup closes when focus moves; the warning says which
+ * of those happened and never prescribes the relaunch to a session that is
+ * already headed.
+ */
+function headedFallbackWarning(surface: string, extensionId: string | null): string {
+  const rendered = `so the ${surface} document was rendered in a tab instead (the same document and APIs)`;
+
+  if (surface === "options") {
+    return `The engine reported the options as opened, but no document for it appeared within 3s. This session is headed: with options_ui.open_in_tab false Chrome hosts the options page inside chrome://extensions${extensionId ? ` (chrome://extensions/?options=${extensionId})` : ""}, a view this server cannot list, ${rendered}; the embedded dialog may be open on screen as well.`;
+  }
+
+  return `The engine reported the ${surface} as opened, but no document for it appeared within 3s. This session is headed, so the ${surface} window may have opened and closed before this server looked (a popup closes when focus moves), ${rendered}.`;
+}
+
 async function resolveExtensionDocumentUrl(
   projectPath: string,
   browser: string,
@@ -1361,9 +1380,16 @@ export async function handler(
   const parsedFallback = parseFrameObject(fallback);
 
   if (parsedFallback?.ok) {
+    const headed =
+      !sessionIsHeadless(args.projectPath, browser) &&
+      !(await browserRunsHeadless(args.projectPath, browser));
+    const extensionId = headed ? await resolveExtensionId(args.projectPath, browser).catch(() => null) : null;
+
     addWarning(
       parsedFallback,
-      `The engine reported the ${args.surface} as opened, but no document for it appeared within 3s (a headless browser never shows an options or popup window), so the ${args.surface} document was rendered in a tab instead (the same document and APIs). For the real window, ${HEADED_RELAUNCH}.`,
+      headed
+        ? headedFallbackWarning(args.surface, extensionId)
+        : `The engine reported the ${args.surface} as opened, but no document for it appeared within 3s (a headless browser never shows an options or popup window), so the ${args.surface} document was rendered in a tab instead (the same document and APIs). For the real window, ${HEADED_RELAUNCH}.`,
     );
 
     patchValue(parsedFallback, { engineResult: parsedConfirmed.value?.engineResult ?? null });
