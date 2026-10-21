@@ -4,7 +4,7 @@
     "repo": "extension-js/examples",
     "commit": "8e2336852b51c0fb71fd03abeca1f5e93a44700e"
   },
-  "generatedAt": "2026-10-20T12:55:07.279Z",
+  "generatedAt": "2026-10-20T20:00:58.333Z",
   "workspace": "extension-dev",
   "templates": [
     {
@@ -94,7 +94,76 @@
       "sources": {
         "base": "https://raw.githubusercontent.com/extension-js/examples/8e2336852b51c0fb71fd03abeca1f5e93a44700e/examples/action/",
         "files": {}
-      }
+      },
+      "downloads": {
+        "chrome": "https://registry.extension.land/extension-dev/action/builds/8e23368/chrome.zip",
+        "edge": "https://registry.extension.land/extension-dev/action/builds/8e23368/edge.zip",
+        "firefox": "https://registry.extension.land/extension-dev/action/builds/8e23368/firefox.zip"
+      },
+      "integrity": {
+        "chrome": {
+          "sha256": "7da3e62ea8bce4b57fe678b6b5f8992c24ba418c68c39cfa57336c083141eaad",
+          "size": 46044
+        },
+        "edge": {
+          "sha256": "85aa137323c8134c5bb6c9c972b205c54e0de7b1c08df63c58f1c93ba241fa66",
+          "size": 46044
+        },
+        "firefox": {
+          "sha256": "63f6b0acacf1ad041f49bad870c3fee39a91d16cdd99c2a91e3ca6f78ad8b574",
+          "size": 46104
+        }
+      },
+      "executables": [
+        {
+          "browser": "chrome",
+          "files": [
+            {
+              "name": "chrome-extension-linux.tar.gz",
+              "bytes": 1592010,
+              "sha256": "948f3585ac6602496324562525bcc8de0f3deebe504861c0819c980981c95c4a"
+            },
+            {
+              "name": "chrome-extension-windows.exe",
+              "bytes": 3284200,
+              "sha256": "711dd95924df208ea27abe12e7813761b231b4199b0be2dfdbeb12837f86717c"
+            }
+          ],
+          "macosNotarizationPending": true
+        },
+        {
+          "browser": "edge",
+          "files": [
+            {
+              "name": "edge-extension-linux.tar.gz",
+              "bytes": 1592654,
+              "sha256": "fe83cf62a92b8db9a1f9839295bf3574b99223f40e19f96e85bcca7b23d7e6cb"
+            },
+            {
+              "name": "edge-extension-windows.exe",
+              "bytes": 3284178,
+              "sha256": "71b44f31a99b1c666cf93354c7cd74ea58c125277bfdd723a325076b75053008"
+            }
+          ],
+          "macosNotarizationPending": true
+        },
+        {
+          "browser": "firefox",
+          "files": [
+            {
+              "name": "firefox-extension-linux.tar.gz",
+              "bytes": 1596865,
+              "sha256": "6b4d7fdbcde3038c3a6940ad69addf42efc132b5e2c95d290c11c6be1a9d7a70"
+            },
+            {
+              "name": "firefox-extension-windows.exe",
+              "bytes": 3276356,
+              "sha256": "802e6391c874d3aae9afabf0c05f7ff3a3d784e12a35f192d986fea68d8c97cb"
+            }
+          ],
+          "macosNotarizationPending": true
+        }
+      ]
     },
     {
       "slug": "action-locales",
@@ -186,7 +255,76 @@
       "sources": {
         "base": "https://raw.githubusercontent.com/extension-js/examples/8e2336852b51c0fb71fd03abeca1f5e93a44700e/examples/action-locales/",
         "files": {}
-      }
+      },
+      "downloads": {
+        "chrome": "https://registry.extension.land/extension-dev/action-locales/builds/8e23368/chrome.zip",
+        "edge": "https://registry.extension.land/extension-dev/action-locales/builds/8e23368/edge.zip",
+        "firefox": "https://registry.extension.land/extension-dev/action-locales/builds/8e23368/firefox.zip"
+      },
+      "integrity": {
+        "chrome": {
+          "sha256": "ac2741380471764abe8e8bc2e20f9e5b4a569ea641c27067bee4104f8456be18",
+          "size": 47491
+        },
+        "edge": {
+          "sha256": "ded1dbebfc7ebd9fc4e0df85fe995050fca4e055cd4c5fb52e66f21ce13f37e1",
+          "size": 47491
+        },
+        "firefox": {
+          "sha256": "f8e91646f6d50ca329d20228a93adc352cbc1287915b7904418a598c01238f28",
+          "size": 47559
+        }
+      },
+      "executables": [
+        {
+          "browser": "chrome",
+          "files": [
+            {
+              "name": "chrome-extension-linux.tar.gz",
+              "bytes": 1593531,
+              "sha256": "a239634902c11ca1674d2610bbaa939703ed9cbc26ada6a2a33fb82273a38524"
+            },
+            {
+              "name": "chrome-extension-windows.exe",
+              "bytes": 3287711,
+              "sha256": "95f15bd986a5b9668240bc80b2ce8ccf71db8395d4434607faa18cf05e216e40"
+            }
+          ],
+          "macosNotarizationPending": true
+        },
+        {
+          "browser": "edge",
+          "files": [
+            {
+              "name": "edge-extension-linux.tar.gz",
+              "bytes": 1594005,
+              "sha256": "5bc37def75bfe37ad51c568f8a5c5b3d6209d5acc7089fbef7388ca9c8019453"
+            },
+            {
+              "name": "edge-extension-windows.exe",
+              "bytes": 3287689,
+              "sha256": "34ffdf66ff25860a386713f7227c0cd9f642766ecc80ec450113fab6a39812a6"
+            }
+          ],
+          "macosNotarizationPending": true
+        },
+        {
+          "browser": "firefox",
+          "files": [
+            {
+              "name": "firefox-extension-linux.tar.gz",
+              "bytes": 1598848,
+              "sha256": "e83cc41dc86deba5a9d5c06c6f8ede6ee3a2d55ca4ab54419c9bf0ef0e7710fc"
+            },
+            {
+              "name": "firefox-extension-windows.exe",
+              "bytes": 3279451,
+              "sha256": "a6a5b10c055af308dbd9a1fd0155d5e0f08f8e64ff76daa74c160679f8603f3d"
+            }
+          ],
+          "macosNotarizationPending": true
+        }
+      ]
     },
     {
       "slug": "ai-chatgpt",
@@ -316,18 +454,68 @@
       },
       "integrity": {
         "chrome": {
-          "sha256": "7e0342a1f214433697bd32f05cb7ec21b248bf1c47fe21d445d57ddc1203bf92",
+          "sha256": "e2a41d4c9bbc2fcf0e8e5baf742a0450a3265204b6a7e8cde6cfa3da638f798a",
           "size": 203569
         },
         "edge": {
-          "sha256": "6be726ee903c484cbea32a8f1cc91e1d19c07c4bd069878b6a1ce43cafa0ee47",
+          "sha256": "ba8bdd3ff815c2ebc253e766652aef1a61a9cf401c77461b528111b7f6d452d7",
           "size": 203569
         },
         "firefox": {
-          "sha256": "cc71fbc9f2d70b6101d58b4a77d927700514dbd148e8c9cc5ea28a42bc8a5862",
+          "sha256": "cb3382719c65717f47f9ef80116d1dd9b963de63d8974706e8a0b42c826b0717",
           "size": 203547
         }
-      }
+      },
+      "executables": [
+        {
+          "browser": "chrome",
+          "files": [
+            {
+              "name": "chrome-extension-linux.tar.gz",
+              "bytes": 1918921,
+              "sha256": "8bcf75c406aa61e50bfa099829cab24672cb50bd7169a69919f7a94c3ac7c380"
+            },
+            {
+              "name": "chrome-extension-windows.exe",
+              "bytes": 4006827,
+              "sha256": "790e58428f24fc9061ac4b1089f50da83e90f5f37e170c6d530ee08440ae902d"
+            }
+          ],
+          "macosNotarizationPending": true
+        },
+        {
+          "browser": "edge",
+          "files": [
+            {
+              "name": "edge-extension-linux.tar.gz",
+              "bytes": 1919455,
+              "sha256": "fcdf8dc951ce9112e534fdaa9df8f9e9a8b51a5dd4a779c293c1e46756d71b7b"
+            },
+            {
+              "name": "edge-extension-windows.exe",
+              "bytes": 4006805,
+              "sha256": "7cbb7856cd709a3c31c57d38b768b41cc716d89126a74954194fc458fa6f39ac"
+            }
+          ],
+          "macosNotarizationPending": true
+        },
+        {
+          "browser": "firefox",
+          "files": [
+            {
+              "name": "firefox-extension-linux.tar.gz",
+              "bytes": 1949981,
+              "sha256": "80472aee8ef6890b594e93b490f6346958c8a1d43a03c81efe18ae8e4c221de2"
+            },
+            {
+              "name": "firefox-extension-windows.exe",
+              "bytes": 3727085,
+              "sha256": "46c4fc90be7451e48c5db9e8a98a2d87c13dfdab665cbb91a9762605c536b4ff"
+            }
+          ],
+          "macosNotarizationPending": true
+        }
+      ]
     },
     {
       "slug": "ai-claude",
@@ -456,18 +644,68 @@
       },
       "integrity": {
         "chrome": {
-          "sha256": "b2a8f68fd7f1264a6c9e7ff077ef617db13886264e80498d89b7a5b92287dcac",
+          "sha256": "317a8a45746036a0fed779ced5b51b515e2a3a36bbe54012317fd94be205f2ba",
           "size": 191788
         },
         "edge": {
-          "sha256": "01a29a55f9e70518eeac1435f25b94a1a8a975913f0d72963cd0f76bb3067919",
+          "sha256": "1cc10196d5491f9f8941d7112d633b6cffd191aede5638a55eed9c7314dd2140",
           "size": 191788
         },
         "firefox": {
-          "sha256": "f33acdeb674db4eb9587512bfe70d1ea787a61a38d17c077f1fc88b5179be4d4",
+          "sha256": "792db05b384f22f25cfe586c5798fe008ab86ab47ce0136a5cf2ba753a465e2d",
           "size": 191766
         }
-      }
+      },
+      "executables": [
+        {
+          "browser": "chrome",
+          "files": [
+            {
+              "name": "chrome-extension-linux.tar.gz",
+              "bytes": 1927668,
+              "sha256": "0e78e7e866d2e1145b1eed037f6f04af9f45ca0c0ce20f621c61f2151026e753"
+            },
+            {
+              "name": "chrome-extension-windows.exe",
+              "bytes": 3925087,
+              "sha256": "665b1bd43efefbef85b97ce54f14898a4eb606271c90eb59054ab74c48376782"
+            }
+          ],
+          "macosNotarizationPending": true
+        },
+        {
+          "browser": "edge",
+          "files": [
+            {
+              "name": "edge-extension-linux.tar.gz",
+              "bytes": 1928793,
+              "sha256": "1dd46baeaa73b570ccad69056dbd6115bdbd6027d32ecbc4e61aa679a5d44d39"
+            },
+            {
+              "name": "edge-extension-windows.exe",
+              "bytes": 3925065,
+              "sha256": "573aa086f71bcf02a51704f9073a84a6e8dc7ade4af0594f5bb71668b03b234e"
+            }
+          ],
+          "macosNotarizationPending": true
+        },
+        {
+          "browser": "firefox",
+          "files": [
+            {
+              "name": "firefox-extension-linux.tar.gz",
+              "bytes": 1957930,
+              "sha256": "6303c7bc7ea1b24c2c3098ebdcf167b919471ec206186e6665d875ecaa50af69"
+            },
+            {
+              "name": "firefox-extension-windows.exe",
+              "bytes": 3713969,
+              "sha256": "30dc86a6fea43d5815f86ebb103e07b381977cf9095f3893a9ce613d1bb1cabe"
+            }
+          ],
+          "macosNotarizationPending": true
+        }
+      ]
     },
     {
       "slug": "ai-gemini",
@@ -596,18 +834,68 @@
       },
       "integrity": {
         "chrome": {
-          "sha256": "a6d187b450af9dd381b0b907db550cb3fb84a02143ee41cb07d4e3628f8c5399",
+          "sha256": "a99fb2aae17ae863e3527f032704785115c7f30848b9de9eca88fa7124672be0",
           "size": 273663
         },
         "edge": {
-          "sha256": "b8827b0ed524beb30f7e9fe7ea5ef4bb2a72e42b92834bd2cc4044e924670dc2",
+          "sha256": "8704dba3154dfb290e09ec18c8ac70b23f853a79d4623510b65f9ff95f95c994",
           "size": 273663
         },
         "firefox": {
-          "sha256": "f37d6f6f563acfdbe8f7e9bc64360baaf8505e1055960cb331f32923ef11fcaf",
+          "sha256": "841b7c7fdd945f08d51a72ead7ae6f1f703069d003a5acf22d05e91cea04edad",
           "size": 273641
         }
-      }
+      },
+      "executables": [
+        {
+          "browser": "chrome",
+          "files": [
+            {
+              "name": "chrome-extension-linux.tar.gz",
+              "bytes": 2130056,
+              "sha256": "5cdcb0fa937298e41fca66f2f25abbfa5cf44b23c2c8fe6e410d66ab59cc7767"
+            },
+            {
+              "name": "chrome-extension-windows.exe",
+              "bytes": 4167862,
+              "sha256": "e0110e1db31c84713ca8faae064c1be81cd8631a53ac1297bb34c09167dcdac0"
+            }
+          ],
+          "macosNotarizationPending": true
+        },
+        {
+          "browser": "edge",
+          "files": [
+            {
+              "name": "edge-extension-linux.tar.gz",
+              "bytes": 2130072,
+              "sha256": "de434027ac85803d6b8fc45938be9e0e05f7793b51cd43b7b9fcbfab3a143fcf"
+            },
+            {
+              "name": "edge-extension-windows.exe",
+              "bytes": 4167840,
+              "sha256": "c4da7994f3c6f9de2ee2c9c5ce1bbc812799c40c2bb1cfe59ca98e50be7d4554"
+            }
+          ],
+          "macosNotarizationPending": true
+        },
+        {
+          "browser": "firefox",
+          "files": [
+            {
+              "name": "firefox-extension-linux.tar.gz",
+              "bytes": 2158828,
+              "sha256": "13fc72e404467e25a4a7e8d1894e1db155c43256558a823f8e4f3ed380056dc1"
+            },
+            {
+              "name": "firefox-extension-windows.exe",
+              "bytes": 3957956,
+              "sha256": "6938793203c9b2bf7a6c541ad92b994c1a86a0564697de97c38eecdaaa30fb33"
+            }
+          ],
+          "macosNotarizationPending": true
+        }
+      ]
     },
     {
       "slug": "ai-perplexity",
@@ -736,18 +1024,68 @@
       },
       "integrity": {
         "chrome": {
-          "sha256": "4dceeedc13834d6e27d555c8ba03857dd337705c3be8bf3abfd7f2c12fa0dfd8",
+          "sha256": "3fba224d2536d88c49c51b9d42d603fef457e39070b035a69d9ffde56555c22e",
           "size": 186129
         },
         "edge": {
-          "sha256": "d91cfa0f9a49142d42661054e95036ba8ece9cb0002141e36e93a1a133d9d571",
+          "sha256": "1db44245eee3b2df3975d2973ee7f21cc74e276a3e32c26d7a74448c0b58a9c5",
           "size": 186129
         },
         "firefox": {
-          "sha256": "319c061fef341033b81fb05737c8ec350f7b43754e878b2604c00d013ae72149",
+          "sha256": "1436401b79b25f0b278574fc663eda29adbd6198c4d2306f9fe1e2ccd3ba2ba0",
           "size": 186106
         }
-      }
+      },
+      "executables": [
+        {
+          "browser": "chrome",
+          "files": [
+            {
+              "name": "chrome-extension-linux.tar.gz",
+              "bytes": 1903434,
+              "sha256": "ab6dc9631e683f6ea065f42d957564b6a79b2b484558a310c24b6b5ec23ae545"
+            },
+            {
+              "name": "chrome-extension-windows.exe",
+              "bytes": 3975163,
+              "sha256": "5d92760f0b54bee954b53e59f6f95d74c424e612bbe684ddfcbc6b3eb91933a5"
+            }
+          ],
+          "macosNotarizationPending": true
+        },
+        {
+          "browser": "edge",
+          "files": [
+            {
+              "name": "edge-extension-linux.tar.gz",
+              "bytes": 1903825,
+              "sha256": "69e0f51cc8d69ba70db77e6bcd5ba41293d7872a5b8290872570310a5f7e0ddb"
+            },
+            {
+              "name": "edge-extension-windows.exe",
+              "bytes": 3975141,
+              "sha256": "063317e38a7067a5814d99fb2f1a159ec403d6e5391bb0c5a0b9e9fe5b50325f"
+            }
+          ],
+          "macosNotarizationPending": true
+        },
+        {
+          "browser": "firefox",
+          "files": [
+            {
+              "name": "firefox-extension-linux.tar.gz",
+              "bytes": 1938355,
+              "sha256": "4839ef8b0053cb16636a7b314cd14f533ed5a57e9ffd9ac0c987db71b0f18cd5"
+            },
+            {
+              "name": "firefox-extension-windows.exe",
+              "bytes": 3695683,
+              "sha256": "784975d9b686bc17c2d5d0a7ee9b6b0b5f6e998ab69cee5fddb1c1e61dd5d56e"
+            }
+          ],
+          "macosNotarizationPending": true
+        }
+      ]
     },
     {
       "slug": "content",
@@ -847,7 +1185,76 @@
       "sources": {
         "base": "https://raw.githubusercontent.com/extension-js/examples/8e2336852b51c0fb71fd03abeca1f5e93a44700e/examples/content/",
         "files": {}
-      }
+      },
+      "downloads": {
+        "chrome": "https://registry.extension.land/extension-dev/content/builds/8e23368/chrome.zip",
+        "edge": "https://registry.extension.land/extension-dev/content/builds/8e23368/edge.zip",
+        "firefox": "https://registry.extension.land/extension-dev/content/builds/8e23368/firefox.zip"
+      },
+      "integrity": {
+        "chrome": {
+          "sha256": "48c52b5ceaa70a5d853e50c1bf724205d01764560f632685be1a72587a92f805",
+          "size": 84076
+        },
+        "edge": {
+          "sha256": "82ab651a2c2da4ea989b8e09b1020310f08d1fdacf9730fd71db8bb36053192c",
+          "size": 84076
+        },
+        "firefox": {
+          "sha256": "74ea61ac65f6521c38bfc64eb153664371234f2d0b86fbd2016db116d22638bd",
+          "size": 84121
+        }
+      },
+      "executables": [
+        {
+          "browser": "chrome",
+          "files": [
+            {
+              "name": "chrome-extension-linux.tar.gz",
+              "bytes": 1682330,
+              "sha256": "96ecf53c57452a29efb42c957fdeb6cdcd06f9f29693b0da30399a25d76e47cb"
+            },
+            {
+              "name": "chrome-extension-windows.exe",
+              "bytes": 3410507,
+              "sha256": "a3ec73fc458cd7b362804f28649f1793e87e92ffca994fc87ca83a92e2b592cb"
+            }
+          ],
+          "macosNotarizationPending": true
+        },
+        {
+          "browser": "edge",
+          "files": [
+            {
+              "name": "edge-extension-linux.tar.gz",
+              "bytes": 1682818,
+              "sha256": "9da81eb383f4b13a118ef8246a3c3b723b4dde24f3f2b34287aeafe26d3a443e"
+            },
+            {
+              "name": "edge-extension-windows.exe",
+              "bytes": 3410485,
+              "sha256": "4d2ecaf941b4e8a9aa63c59588f2f012730203ebbbe10c8444f891894489107e"
+            }
+          ],
+          "macosNotarizationPending": true
+        },
+        {
+          "browser": "firefox",
+          "files": [
+            {
+              "name": "firefox-extension-linux.tar.gz",
+              "bytes": 1688576,
+              "sha256": "7fc3cbf2352c44d78eb264cc72ed6bd2218eeb8e85d687e659efcb46d2c254db"
+            },
+            {
+              "name": "firefox-extension-windows.exe",
+              "bytes": 3389895,
+              "sha256": "789a75c1ddbe97a8ffd6f80b2bab16c6f54a3c3efb15b2d5b30d9ec3dd5e800e"
+            }
+          ],
+          "macosNotarizationPending": true
+        }
+      ]
     },
     {
       "slug": "content-css-modules",
@@ -937,7 +1344,76 @@
       "sources": {
         "base": "https://raw.githubusercontent.com/extension-js/examples/8e2336852b51c0fb71fd03abeca1f5e93a44700e/examples/content-css-modules/",
         "files": {}
-      }
+      },
+      "downloads": {
+        "chrome": "https://registry.extension.land/extension-dev/content-css-modules/builds/8e23368/chrome.zip",
+        "edge": "https://registry.extension.land/extension-dev/content-css-modules/builds/8e23368/edge.zip",
+        "firefox": "https://registry.extension.land/extension-dev/content-css-modules/builds/8e23368/firefox.zip"
+      },
+      "integrity": {
+        "chrome": {
+          "sha256": "a69bbd6628ecab820c5079fc7463442e3173a2e10b469be4f96260916468a3c2",
+          "size": 38830
+        },
+        "edge": {
+          "sha256": "5ab42736621ed5f95903527758089cfc446102611bfdaf982fd8554caad3f975",
+          "size": 38830
+        },
+        "firefox": {
+          "sha256": "053f6ac95f9b8248c91e014526e6da355fa2bf8eaee01b1b7dd9671588090a64",
+          "size": 38883
+        }
+      },
+      "executables": [
+        {
+          "browser": "chrome",
+          "files": [
+            {
+              "name": "chrome-extension-linux.tar.gz",
+              "bytes": 1570848,
+              "sha256": "2e36af22e55b83a3ff0cfb002923d4107b6c44ae629e9d8e8927588453b30242"
+            },
+            {
+              "name": "chrome-extension-windows.exe",
+              "bytes": 3271115,
+              "sha256": "eba7c4a8adea2c1e2dc568f3fbd2f506c73238ce3cb9156f2c37157be2025505"
+            }
+          ],
+          "macosNotarizationPending": true
+        },
+        {
+          "browser": "edge",
+          "files": [
+            {
+              "name": "edge-extension-linux.tar.gz",
+              "bytes": 1572036,
+              "sha256": "54c4bc58caf3dba5223ae11a6a7bbf293b52a8b7e6b7bce5c7b245fdf38f8c8b"
+            },
+            {
+              "name": "edge-extension-windows.exe",
+              "bytes": 3271093,
+              "sha256": "1b4b3f9b1e1dc37d6fb4cd19ff9d18661313cc1db7838b72132c20c668894233"
+            }
+          ],
+          "macosNotarizationPending": true
+        },
+        {
+          "browser": "firefox",
+          "files": [
+            {
+              "name": "firefox-extension-linux.tar.gz",
+              "bytes": 1577859,
+              "sha256": "b8fd01dc66a3015d91b8e8e1ff905b11e25d91aac4b365903695e06454dbf800"
+            },
+            {
+              "name": "firefox-extension-windows.exe",
+              "bytes": 3254059,
+              "sha256": "0886fe2d35229d75da840fb489f0233e2e2f149ab3cb5b16c1cadd7e370bc595"
+            }
+          ],
+          "macosNotarizationPending": true
+        }
+      ]
     },
     {
       "slug": "content-custom-font",
@@ -1049,18 +1525,68 @@
       },
       "integrity": {
         "chrome": {
-          "sha256": "36736af364241899f482e8a5275b76416d6fc2e4d1a459a9fee2b1d924a0a15e",
+          "sha256": "eccbfa222670dcafe2daf65983fcd88cc7facba64c6f7e068e465be6335f8a4e",
           "size": 578833
         },
         "edge": {
-          "sha256": "6afcec042cbb8d675bf29c1905cf0930130b3617d0d977fbbee265479a6a3fc6",
+          "sha256": "53d312fef861e51f8b30e4d46dc744e8568fcbf15eff1e8d45a414b7bf423eca",
           "size": 578833
         },
         "firefox": {
-          "sha256": "e9ba420c49aed458fe2768374ff9b59d338b3a4e1add7348dd8ce58344c205e1",
+          "sha256": "430104fbea452c9aee53824dc5fb486406f0efb518d15fedf863fb9c61700f9e",
           "size": 578885
         }
-      }
+      },
+      "executables": [
+        {
+          "browser": "chrome",
+          "files": [
+            {
+              "name": "chrome-extension-linux.tar.gz",
+              "bytes": 2827348,
+              "sha256": "2a8e75ed134120bb57470eadaf91e1339db4bba5c3cafddbd93ba5646a46075b"
+            },
+            {
+              "name": "chrome-extension-windows.exe",
+              "bytes": 5362997,
+              "sha256": "2168e83726f388b2aacb01d26860ec63f9445c2dae72bb425851df4a57f5fc97"
+            }
+          ],
+          "macosNotarizationPending": true
+        },
+        {
+          "browser": "edge",
+          "files": [
+            {
+              "name": "edge-extension-linux.tar.gz",
+              "bytes": 2827924,
+              "sha256": "8b79670bca1f513b068c12c66956b30540b4a1e2cd1d4e017d2326f081ea5160"
+            },
+            {
+              "name": "edge-extension-windows.exe",
+              "bytes": 5362975,
+              "sha256": "4bf41e021d75e37c63016ed7f4bc540bb2af84402525aa8569028bea9ff4c985"
+            }
+          ],
+          "macosNotarizationPending": true
+        },
+        {
+          "browser": "firefox",
+          "files": [
+            {
+              "name": "firefox-extension-linux.tar.gz",
+              "bytes": 2877158,
+              "sha256": "b1b6547b022b356d88cdac64f68c0f8f07debf804468f92a2ceacbc34f602d8b"
+            },
+            {
+              "name": "firefox-extension-windows.exe",
+              "bytes": 4876666,
+              "sha256": "93bde7f6f289ac682a27561c08c277d5315bfad67f599196357505a25e1ecd78"
+            }
+          ],
+          "macosNotarizationPending": true
+        }
+      ]
     },
     {
       "slug": "content-env",
@@ -1160,18 +1686,68 @@
       },
       "integrity": {
         "chrome": {
-          "sha256": "38499be963176a6eea0d6dcaea8c7eaf48ced3cdb2901c0a5654971050cc08b1",
+          "sha256": "475bc83275eb72707c712c0d223bc707251dfd91f889459a7a61f22a9e364a8e",
           "size": 14657
         },
         "edge": {
-          "sha256": "eac3e0dda4b5e972f0c5cd75aaf36ead5672808c4307f562c8daf979c77f2a55",
+          "sha256": "047b31f54467ea37cfb2b70a8993248d19c646fe36abc24268515e20ef527e89",
           "size": 14655
         },
         "firefox": {
-          "sha256": "924061eb93b89d5649b0e5eff7eaee0b01a76ad1e00cfd9b7f1ce7ad59b2ed3d",
+          "sha256": "299947e4e27962d2840dacc622cab2b87f6ed5b641e40055cad2b6c2f83c3166",
           "size": 14714
         }
-      }
+      },
+      "executables": [
+        {
+          "browser": "chrome",
+          "files": [
+            {
+              "name": "chrome-extension-linux.tar.gz",
+              "bytes": 1513066,
+              "sha256": "2b3d7b7b50d06936d1f9ffe538f416fc66267bc5724fbf23c86aa72e035015b4"
+            },
+            {
+              "name": "chrome-extension-windows.exe",
+              "bytes": 3190399,
+              "sha256": "b37374757cfd8eef44c331d50c972f8cf8abbc81ce8ef5b84d5716f148ab52c8"
+            }
+          ],
+          "macosNotarizationPending": true
+        },
+        {
+          "browser": "edge",
+          "files": [
+            {
+              "name": "edge-extension-linux.tar.gz",
+              "bytes": 1513646,
+              "sha256": "de0cccacab59b66b68e277a34eaa812b08fba4a2768082ba81735806021e68ad"
+            },
+            {
+              "name": "edge-extension-windows.exe",
+              "bytes": 3190375,
+              "sha256": "adeaed88af15d6280c58daaf7e719efd2d856c4f057ddb0f9335b21b7811cceb"
+            }
+          ],
+          "macosNotarizationPending": true
+        },
+        {
+          "browser": "firefox",
+          "files": [
+            {
+              "name": "firefox-extension-linux.tar.gz",
+              "bytes": 1518419,
+              "sha256": "2b3f84105bd2c1468fadba8f1b227cf3932af66c81946289aeb40b096e087fb8"
+            },
+            {
+              "name": "firefox-extension-windows.exe",
+              "bytes": 3182095,
+              "sha256": "502e7952c246d409a6619f25af91c1aa9349d31fff027060a322c5df9bc7c5b5"
+            }
+          ],
+          "macosNotarizationPending": true
+        }
+      ]
     },
     {
       "slug": "content-less",
@@ -1278,18 +1854,68 @@
       },
       "integrity": {
         "chrome": {
-          "sha256": "c3dc001be4708e7aa2986c584052757519aaa1f244baf3e2640394bff393c744",
+          "sha256": "39ff0b8d0d6bab9067861c627e3787b7152dab7c91bda6591ddba77febdf04be",
           "size": 82746
         },
         "edge": {
-          "sha256": "04cf939771d78bbe72039cebd0fcfcc5cf1c9115593421b8614183abde98ea1e",
+          "sha256": "039435fcf23a0933169490fec57835df2ab67afa61c17da885d572435f837e30",
           "size": 82746
         },
         "firefox": {
-          "sha256": "e7540433a08dfe62d6e7a2af6f056a4c82498ec350f44ad1226e65a49f68cd7e",
+          "sha256": "256f815958b23ea4ede4749b591df548d07c32fab38e59e50f714a5b0dfb2176",
           "size": 82795
         }
-      }
+      },
+      "executables": [
+        {
+          "browser": "chrome",
+          "files": [
+            {
+              "name": "chrome-extension-linux.tar.gz",
+              "bytes": 1685019,
+              "sha256": "2e35864298d2bc97eff9fb273c5c8b1fd126c0cbb80452104d7973511f310d45"
+            },
+            {
+              "name": "chrome-extension-windows.exe",
+              "bytes": 3398077,
+              "sha256": "16dd3a7398b8c53dd3d17ef5c7bdf393854feb6a4c02c254c871c8c065effa10"
+            }
+          ],
+          "macosNotarizationPending": true
+        },
+        {
+          "browser": "edge",
+          "files": [
+            {
+              "name": "edge-extension-linux.tar.gz",
+              "bytes": 1685382,
+              "sha256": "845ddb0b92e7b771ddefe61cdd1c650a8ce8646eae9b12efa2185d1ec729d99b"
+            },
+            {
+              "name": "edge-extension-windows.exe",
+              "bytes": 3398055,
+              "sha256": "f84c9881b00164276b4fbe1ae88e5de2492ebb6e12af98a5585f7b65bffa2f57"
+            }
+          ],
+          "macosNotarizationPending": true
+        },
+        {
+          "browser": "firefox",
+          "files": [
+            {
+              "name": "firefox-extension-linux.tar.gz",
+              "bytes": 1689563,
+              "sha256": "fc5de3c802eaf0f6e3f6251d6b2b4d0741c8d6b5401564ed3f82968f0c4c17f4"
+            },
+            {
+              "name": "firefox-extension-windows.exe",
+              "bytes": 3385820,
+              "sha256": "68b3760ef0437f1b7557366c1d9be2061a4c8dc14ed4006ba52047c66e6158f4"
+            }
+          ],
+          "macosNotarizationPending": true
+        }
+      ]
     },
     {
       "slug": "content-less-modules",
@@ -1396,18 +2022,68 @@
       },
       "integrity": {
         "chrome": {
-          "sha256": "f6a8fee016015d012f914610487086e296ceca2dcc9f7fb9dd55af0ec97436f5",
+          "sha256": "9f9b129369ce6afd382d671342b65945931d3f00f6f705ca202d39456645dd40",
           "size": 82718
         },
         "edge": {
-          "sha256": "69be9343b13ae7b90c5e26713dd82f616387fccc5ab05445a3faf82d94792ea0",
+          "sha256": "4015c8d2374f8b68fee61e84398c42c5cf02917464a0b542084ee5f84126f01d",
           "size": 82718
         },
         "firefox": {
-          "sha256": "fdc2d44552d6ed8f32f0a40af8904e9d18529295966daeb0fe84f16a4124f4ee",
+          "sha256": "a02e3af293cf084bc144290c450d764b643fa998d4e618b36374eafd3705997f",
           "size": 82772
         }
-      }
+      },
+      "executables": [
+        {
+          "browser": "chrome",
+          "files": [
+            {
+              "name": "chrome-extension-linux.tar.gz",
+              "bytes": 1684267,
+              "sha256": "bab607c6a3c7fdf3d7e3fafe8ff9e9e5b80d0d2d5f330f716d34700986d3b599"
+            },
+            {
+              "name": "chrome-extension-windows.exe",
+              "bytes": 3397882,
+              "sha256": "4ec1e675f53f25b9ea724fbbd86737183f6b8e06103d57bc1098c6c848ad9732"
+            }
+          ],
+          "macosNotarizationPending": true
+        },
+        {
+          "browser": "edge",
+          "files": [
+            {
+              "name": "edge-extension-linux.tar.gz",
+              "bytes": 1684612,
+              "sha256": "128c9fe080f2b347dae5902048c38859dbad99742f36bd008be14a59bd988b88"
+            },
+            {
+              "name": "edge-extension-windows.exe",
+              "bytes": 3397860,
+              "sha256": "6c94b236fe634597e6f555dc67425d11f53a4a5d514cf60693c47f4d01c63f09"
+            }
+          ],
+          "macosNotarizationPending": true
+        },
+        {
+          "browser": "firefox",
+          "files": [
+            {
+              "name": "firefox-extension-linux.tar.gz",
+              "bytes": 1689044,
+              "sha256": "cc1be9b406bcdd10ceb14a30e4dc0b2ba1c9ad083ec35ab26d6f5d31d8abb5cc"
+            },
+            {
+              "name": "firefox-extension-windows.exe",
+              "bytes": 3385041,
+              "sha256": "38d8c042450f57a821617c1525e89468ce841c6d82c226d1541e65746ba7c0b7"
+            }
+          ],
+          "macosNotarizationPending": true
+        }
+      ]
     },
     {
       "slug": "content-main-world",
@@ -1517,7 +2193,76 @@
       "sources": {
         "base": "https://raw.githubusercontent.com/extension-js/examples/8e2336852b51c0fb71fd03abeca1f5e93a44700e/examples/content-main-world/",
         "files": {}
-      }
+      },
+      "downloads": {
+        "chrome": "https://registry.extension.land/extension-dev/content-main-world/builds/8e23368/chrome.zip",
+        "edge": "https://registry.extension.land/extension-dev/content-main-world/builds/8e23368/edge.zip",
+        "firefox": "https://registry.extension.land/extension-dev/content-main-world/builds/8e23368/firefox.zip"
+      },
+      "integrity": {
+        "chrome": {
+          "sha256": "4f66a1bf76d2db0edce269a53958c3a1662a067b2a6a72fb1d12c43f279ebc52",
+          "size": 91272
+        },
+        "edge": {
+          "sha256": "c5fbd8f7983d7454332d0a852867f11f2ba7b284269e9de42538592b7d517e28",
+          "size": 91272
+        },
+        "firefox": {
+          "sha256": "87a72992ce57c1f09abf1e98feee702b1db22cd695a75f1054f722d781e5c915",
+          "size": 91322
+        }
+      },
+      "executables": [
+        {
+          "browser": "chrome",
+          "files": [
+            {
+              "name": "chrome-extension-linux.tar.gz",
+              "bytes": 1690325,
+              "sha256": "0c2e4e0669ec1f009ea020e3b6e00365511ea2731cae792ec42f613d26513e99"
+            },
+            {
+              "name": "chrome-extension-windows.exe",
+              "bytes": 3445411,
+              "sha256": "a8f4828b01c09159395777937ee2657172f6639eb005686a333f59a1f454adfe"
+            }
+          ],
+          "macosNotarizationPending": true
+        },
+        {
+          "browser": "edge",
+          "files": [
+            {
+              "name": "edge-extension-linux.tar.gz",
+              "bytes": 1691374,
+              "sha256": "eb3628f54b94975e14ec2c46d319e80691aadfe9b1893baf6048fdd9638b44fd"
+            },
+            {
+              "name": "edge-extension-windows.exe",
+              "bytes": 3445389,
+              "sha256": "5f09b4c34e5c9cdc8c8edbe0b260e61c7762d9e8cc86c3b9c1672ea305598895"
+            }
+          ],
+          "macosNotarizationPending": true
+        },
+        {
+          "browser": "firefox",
+          "files": [
+            {
+              "name": "firefox-extension-linux.tar.gz",
+              "bytes": 1705113,
+              "sha256": "3b711b3c96115e91e6bc75b5c6a39d0011cfc78eeba8e9a1769e7d12cbd305e9"
+            },
+            {
+              "name": "firefox-extension-windows.exe",
+              "bytes": 3410832,
+              "sha256": "5441fb65bcd821287d6978df4e7064fcae62200e0ee6b4decc5e72ffbf75ae2c"
+            }
+          ],
+          "macosNotarizationPending": true
+        }
+      ]
     },
     {
       "slug": "content-multi-one-entry",
@@ -1615,7 +2360,76 @@
       "sources": {
         "base": "https://raw.githubusercontent.com/extension-js/examples/8e2336852b51c0fb71fd03abeca1f5e93a44700e/examples/content-multi-one-entry/",
         "files": {}
-      }
+      },
+      "downloads": {
+        "chrome": "https://registry.extension.land/extension-dev/content-multi-one-entry/builds/8e23368/chrome.zip",
+        "edge": "https://registry.extension.land/extension-dev/content-multi-one-entry/builds/8e23368/edge.zip",
+        "firefox": "https://registry.extension.land/extension-dev/content-multi-one-entry/builds/8e23368/firefox.zip"
+      },
+      "integrity": {
+        "chrome": {
+          "sha256": "3ca747ef51468e84f41dc1c1ec49f3fba0f36654882886e82b4bf8843f00751d",
+          "size": 50701
+        },
+        "edge": {
+          "sha256": "afa781f8a3eac6048c994f5350e43e12ccc9b013686563a178640a2d48afa3e2",
+          "size": 50701
+        },
+        "firefox": {
+          "sha256": "cba3479d0d8b993c8d36c96d621acc4231af05f8edec1d804e6e77b35bd2ace4",
+          "size": 50758
+        }
+      },
+      "executables": [
+        {
+          "browser": "chrome",
+          "files": [
+            {
+              "name": "chrome-extension-linux.tar.gz",
+              "bytes": 1602714,
+              "sha256": "fb1934168caec71d9035571a337e7eab6e6d55f4bc01fbedd62ec1fd801fec05"
+            },
+            {
+              "name": "chrome-extension-windows.exe",
+              "bytes": 3330450,
+              "sha256": "721195488ef1e53128ba6dfaf10730f0f662d7113ecb74b94cddde8621905731"
+            }
+          ],
+          "macosNotarizationPending": true
+        },
+        {
+          "browser": "edge",
+          "files": [
+            {
+              "name": "edge-extension-linux.tar.gz",
+              "bytes": 1603471,
+              "sha256": "d67a66fe594acae287d836d591f18b8671f9c21666c4bff817cd26e63666d10c"
+            },
+            {
+              "name": "edge-extension-windows.exe",
+              "bytes": 3330428,
+              "sha256": "926bb18f80a77e3dfbac9eb549d98e69452cceaab2e4b3cfca3c954b1c0c2bed"
+            }
+          ],
+          "macosNotarizationPending": true
+        },
+        {
+          "browser": "firefox",
+          "files": [
+            {
+              "name": "firefox-extension-linux.tar.gz",
+              "bytes": 1608662,
+              "sha256": "b4f9e6f69ba43c2cc9ae65e5fc4ecb2a01b9cb8057c27a993e527034bbe4799c"
+            },
+            {
+              "name": "firefox-extension-windows.exe",
+              "bytes": 3290931,
+              "sha256": "64c22a4dbcd5a7a7d473f066a4ebacf3dcea1da1d18de3f110eb69b1d8b6ca97"
+            }
+          ],
+          "macosNotarizationPending": true
+        }
+      ]
     },
     {
       "slug": "content-multi-three-entries",
@@ -1713,7 +2527,76 @@
       "sources": {
         "base": "https://raw.githubusercontent.com/extension-js/examples/8e2336852b51c0fb71fd03abeca1f5e93a44700e/examples/content-multi-three-entries/",
         "files": {}
-      }
+      },
+      "downloads": {
+        "chrome": "https://registry.extension.land/extension-dev/content-multi-three-entries/builds/8e23368/chrome.zip",
+        "edge": "https://registry.extension.land/extension-dev/content-multi-three-entries/builds/8e23368/edge.zip",
+        "firefox": "https://registry.extension.land/extension-dev/content-multi-three-entries/builds/8e23368/firefox.zip"
+      },
+      "integrity": {
+        "chrome": {
+          "sha256": "ecaf83ceb12964ca69d841c0066fe92d07b284ffc4987b0954f1013f6be713c1",
+          "size": 58056
+        },
+        "edge": {
+          "sha256": "7300c26300a550dd63feb11502041aff599ac02e3d2278aa9e8dc88780ea064c",
+          "size": 58056
+        },
+        "firefox": {
+          "sha256": "f81990e808010f0ea66cf624429873e86e802ab23a1a361410f7fc1bfd0be79c",
+          "size": 58117
+        }
+      },
+      "executables": [
+        {
+          "browser": "chrome",
+          "files": [
+            {
+              "name": "chrome-extension-linux.tar.gz",
+              "bytes": 1612192,
+              "sha256": "f6f111d9894554478fd184e207101d5d6bb84d50fcba2f6ed0d660322552ae19"
+            },
+            {
+              "name": "chrome-extension-windows.exe",
+              "bytes": 3347380,
+              "sha256": "61febfd0cd3655998462ff13603ebf881c5095279b5e73db2146f17b94d78305"
+            }
+          ],
+          "macosNotarizationPending": true
+        },
+        {
+          "browser": "edge",
+          "files": [
+            {
+              "name": "edge-extension-linux.tar.gz",
+              "bytes": 1612495,
+              "sha256": "29ed595627b126a67a7bd23833b0b3147c75554ae1627929b7eb43a6d2e44c4c"
+            },
+            {
+              "name": "edge-extension-windows.exe",
+              "bytes": 3347358,
+              "sha256": "ab50ac8a242b053d72a3393c43101fc5550b01ece059d0c4ac8175b8741ecffb"
+            }
+          ],
+          "macosNotarizationPending": true
+        },
+        {
+          "browser": "firefox",
+          "files": [
+            {
+              "name": "firefox-extension-linux.tar.gz",
+              "bytes": 1625743,
+              "sha256": "58c3c1e1dbc079e4924e8e09d817853b303309538bd1636b13ac74f657c93cfe"
+            },
+            {
+              "name": "firefox-extension-windows.exe",
+              "bytes": 3312166,
+              "sha256": "07db40ff96138cf5c8cb96a288bd8a2b583757718b9ff68403bcbb09c8af44a5"
+            }
+          ],
+          "macosNotarizationPending": true
+        }
+      ]
     },
     {
       "slug": "content-preact",
@@ -1829,18 +2712,68 @@
       },
       "integrity": {
         "chrome": {
-          "sha256": "0b7376ecfdbabbafc14fbfd2982e797af4e0989893f4db71ab5cde557ff3d61e",
+          "sha256": "b671bd9b511e74047d47a5eeb7b65dd634300fd54f5237be66863d9377588b41",
           "size": 567539
         },
         "edge": {
-          "sha256": "17dfeeabf1f59af2b15d2be2f6cd4c0d287bb45aff41dd426e7958bee900a22d",
+          "sha256": "d28be305e844b5f9ae609f994d280bdb0ac899232c478926b9ffdb5c477371a5",
           "size": 567539
         },
         "firefox": {
-          "sha256": "9dc4d554a42644dcaa006d64b544abf00151081a21a164e65f8648dba6e6b07f",
+          "sha256": "99446492161228be9a7325b898970bbf6468e2bb56f04b199916f8da76351b8b",
           "size": 567586
         }
-      }
+      },
+      "executables": [
+        {
+          "browser": "chrome",
+          "files": [
+            {
+              "name": "chrome-extension-linux.tar.gz",
+              "bytes": 2847421,
+              "sha256": "97350637f88d491122216c08eafec961e804665bbd9beb27133e6379cee9fe25"
+            },
+            {
+              "name": "chrome-extension-windows.exe",
+              "bytes": 4967608,
+              "sha256": "2fa8f82d3b333c2a3961c8fb6a331c52595aa0a40e96a6d3c75ac603b2ddc45d"
+            }
+          ],
+          "macosNotarizationPending": true
+        },
+        {
+          "browser": "edge",
+          "files": [
+            {
+              "name": "edge-extension-linux.tar.gz",
+              "bytes": 2848409,
+              "sha256": "36b9d31e28aa5839fdf804950cdd5430e0a3a4dfce0af314e36b9d6e1853e852"
+            },
+            {
+              "name": "edge-extension-windows.exe",
+              "bytes": 4967586,
+              "sha256": "19738198133e80e63836b77b7111fcfb838ba33abe2bff1c1d6a64acc0c0ddba"
+            }
+          ],
+          "macosNotarizationPending": true
+        },
+        {
+          "browser": "firefox",
+          "files": [
+            {
+              "name": "firefox-extension-linux.tar.gz",
+              "bytes": 2871049,
+              "sha256": "5e5b9d683f4c84d443ec70751f0e7b564eaf6c816644cb0b26103bb3a8df9c8a"
+            },
+            {
+              "name": "firefox-extension-windows.exe",
+              "bytes": 4845306,
+              "sha256": "2d45f31c2311e137a1207744ac95297fd17c24fb1787bdb996e68c217e083cd0"
+            }
+          ],
+          "macosNotarizationPending": true
+        }
+      ]
     },
     {
       "slug": "content-react",
@@ -1956,18 +2889,68 @@
       },
       "integrity": {
         "chrome": {
-          "sha256": "905d7093faad958ade7e1990e4c8baa13a92e6746db7e7db4bd8ce79a46692af",
+          "sha256": "cbe503a34c4f5646b6c81c1ae2361a7862e8152dd9ff722558daca3250f41193",
           "size": 747644
         },
         "edge": {
-          "sha256": "645467e8d8aa3b86af7a4584a4b249c7e63d313d870e1f6f7c7b60eeb113e94e",
+          "sha256": "a2ec60b1f1f1bbdcaa0af1bf789e5e0f83405d480435830911725af5ffb1d4d6",
           "size": 747644
         },
         "firefox": {
-          "sha256": "3ae5ef1dafbe3dd3e03562aaf2a07a74713990f69515cf7db56d742988664ec4",
+          "sha256": "2a692d19752b05258a78756037b4b92f0855434b6c06346bbe3e924a33a9021c",
           "size": 747680
         }
-      }
+      },
+      "executables": [
+        {
+          "browser": "chrome",
+          "files": [
+            {
+              "name": "chrome-extension-linux.tar.gz",
+              "bytes": 3268356,
+              "sha256": "cabc18d32ff0ed660e3b81a3d991ab9e19b52adc1c4db9036ac42e080d6bab50"
+            },
+            {
+              "name": "chrome-extension-windows.exe",
+              "bytes": 5642737,
+              "sha256": "d5dbd1d305c3681f094322f0443b043a8c13d882d12de8af6bacb7603f09cba2"
+            }
+          ],
+          "macosNotarizationPending": true
+        },
+        {
+          "browser": "edge",
+          "files": [
+            {
+              "name": "edge-extension-linux.tar.gz",
+              "bytes": 3269361,
+              "sha256": "2c94e73ba08b88d1455571563dfd4c739d90286aa2c4c01833425b8fe60c4569"
+            },
+            {
+              "name": "edge-extension-windows.exe",
+              "bytes": 5642715,
+              "sha256": "b80beafbcf232ba0a44e41dbacf67af47d319939f7c312e269814ec07fdf8672"
+            }
+          ],
+          "macosNotarizationPending": true
+        },
+        {
+          "browser": "firefox",
+          "files": [
+            {
+              "name": "firefox-extension-linux.tar.gz",
+              "bytes": 3314353,
+              "sha256": "0c35858e44e7ebea1e798a5cc2955287b22f20bcc4527bcebda668f834a355b3"
+            },
+            {
+              "name": "firefox-extension-windows.exe",
+              "bytes": 5387149,
+              "sha256": "17a0df8aa3e4dcb0fd9d5cf641cda4f6b3d59d793395a16c1f06a766029e4f2d"
+            }
+          ],
+          "macosNotarizationPending": true
+        }
+      ]
     },
     {
       "slug": "content-sass",
@@ -2074,18 +3057,68 @@
       },
       "integrity": {
         "chrome": {
-          "sha256": "64b059721d9278758ae791d6944fdc94ebf2d63559caa79ac56770006d83e4ed",
+          "sha256": "9853d07fb992803a8a6fadb4deaf3c9037ca7743799b5da16d1c1e2fa68f1deb",
           "size": 45068
         },
         "edge": {
-          "sha256": "0114892af53895bed7fa77472476b2f9b21185fa32b132c801ef5543aa22969d",
+          "sha256": "c36914bc5c30577fc4d81df3562ff3c4f522d7d1644d58883cc31518e67ded03",
           "size": 45068
         },
         "firefox": {
-          "sha256": "09bf705d699d243145476df5b8f7d3c25f1fa4ece4082cdd9c690fe76bacedcd",
+          "sha256": "848be6429050cd13c99848289c74c90220794aa463067fde21867f4a6a0f9b0d",
           "size": 45115
         }
-      }
+      },
+      "executables": [
+        {
+          "browser": "chrome",
+          "files": [
+            {
+              "name": "chrome-extension-linux.tar.gz",
+              "bytes": 1576900,
+              "sha256": "b0906d7d98f3c67f9876c829db70368b4c482809ee367616dc9be8fbbc374502"
+            },
+            {
+              "name": "chrome-extension-windows.exe",
+              "bytes": 3281831,
+              "sha256": "da47a151a90578d55b5d93eb8761381489da88b4948b6d71aafb938b024d24db"
+            }
+          ],
+          "macosNotarizationPending": true
+        },
+        {
+          "browser": "edge",
+          "files": [
+            {
+              "name": "edge-extension-linux.tar.gz",
+              "bytes": 1586521,
+              "sha256": "87d4eda75d8806f924d92e68545f55a7f101f915aea0e25a99f5a52476387a38"
+            },
+            {
+              "name": "edge-extension-windows.exe",
+              "bytes": 3281809,
+              "sha256": "c0b39ebf5953c880dda6d348b45d285de185076255253594bf8d2418ec811c9d"
+            }
+          ],
+          "macosNotarizationPending": true
+        },
+        {
+          "browser": "firefox",
+          "files": [
+            {
+              "name": "firefox-extension-linux.tar.gz",
+              "bytes": 1583505,
+              "sha256": "b118a154fa5cde1ffcd6c72a83ff3628df0c5470af973a749b37442623121ca3"
+            },
+            {
+              "name": "firefox-extension-windows.exe",
+              "bytes": 3261028,
+              "sha256": "0783e971a41b293844b08daba376b4a84362f3e08a89b014bde0047f9cc05e46"
+            }
+          ],
+          "macosNotarizationPending": true
+        }
+      ]
     },
     {
       "slug": "content-sass-modules",
@@ -2195,18 +3228,68 @@
       },
       "integrity": {
         "chrome": {
-          "sha256": "7be8973f6dcee1b1b2e74b8b7416dbcbb29d63e0cab02c446efb471b3c7ea69d",
+          "sha256": "4762aaa459e0b084130b744ede93d2b9e4658239bb04e93bad56dfb347fc5b6f",
           "size": 45082
         },
         "edge": {
-          "sha256": "9004610b20a7754e88ec30af5627080316bcebc0e0638679188174b2e80870c8",
+          "sha256": "b28e8c2989f8a9aa12992a295ea5c416e8a743fd0994f541b0ffd8559a5dc371",
           "size": 45082
         },
         "firefox": {
-          "sha256": "1a075515b0dea4fcc88dcf6f62998217d829f7b522aeabd98f0995927311d0b2",
+          "sha256": "ae68c57e5160bdc994fa863ce47aadfbac69f13bf05378903eec2a655556bb8b",
           "size": 45135
         }
-      }
+      },
+      "executables": [
+        {
+          "browser": "chrome",
+          "files": [
+            {
+              "name": "chrome-extension-linux.tar.gz",
+              "bytes": 1576430,
+              "sha256": "ac71932b0cc36334fae1dd25af4b333417bd7858e5a602b0b10046d09f9bec5e"
+            },
+            {
+              "name": "chrome-extension-windows.exe",
+              "bytes": 3281836,
+              "sha256": "5173a05065137dcd6b20417634921e25d8fe334df8c11546db139a1500d7cfbb"
+            }
+          ],
+          "macosNotarizationPending": true
+        },
+        {
+          "browser": "edge",
+          "files": [
+            {
+              "name": "edge-extension-linux.tar.gz",
+              "bytes": 1586077,
+              "sha256": "4b5f3e27a92cbddd1fc34be3feed9cd1bf2f7b6996f201d90eab2ea5f38dbe9f"
+            },
+            {
+              "name": "edge-extension-windows.exe",
+              "bytes": 3281814,
+              "sha256": "0138cfadae3b521324a68d85b32c9fb4a5777e7aa575d960b4a20bf46c4b11cc"
+            }
+          ],
+          "macosNotarizationPending": true
+        },
+        {
+          "browser": "firefox",
+          "files": [
+            {
+              "name": "firefox-extension-linux.tar.gz",
+              "bytes": 1583238,
+              "sha256": "164ed286340081550692bdbbde98c24515be25056c8b9433ce9956441acd5373"
+            },
+            {
+              "name": "firefox-extension-windows.exe",
+              "bytes": 3260962,
+              "sha256": "ef136a582bb10d9182c784c11f718aa051a663d2de720f7ae1d5e561f4a0690d"
+            }
+          ],
+          "macosNotarizationPending": true
+        }
+      ]
     },
     {
       "slug": "content-svelte",
@@ -2323,18 +3406,68 @@
       },
       "integrity": {
         "chrome": {
-          "sha256": "5c8f2b9221d5a9b04c1974c5073d70072a767c50098330617e6a04d99edaa304",
+          "sha256": "7894451f0d5d9cef11670d90974d38f59a23fe9b085ffde023a7274ed4b000a9",
           "size": 671225
         },
         "edge": {
-          "sha256": "71165030b73ad8661a31964850be4bbf9fb6f04460b50d27e07acc7a83bda76e",
+          "sha256": "d5b7dac232f27f426a4ed5dfda542935654c86650362fe4510b0fae2fa103a16",
           "size": 671225
         },
         "firefox": {
-          "sha256": "0fb69468fead45d427d9f9f5e7c108990ac4dc7c978240c7c51087a3c1fb513a",
+          "sha256": "4060dc5f687a3f252f4cf5268d3a378289e0cda4fbd5ec344d9f1f8fa5a4be96",
           "size": 671262
         }
-      }
+      },
+      "executables": [
+        {
+          "browser": "chrome",
+          "files": [
+            {
+              "name": "chrome-extension-linux.tar.gz",
+              "bytes": 3088002,
+              "sha256": "424fb37ce61ed7c54b08aabb2fbd598aa821d53f728be9fd0aec7686746110b0"
+            },
+            {
+              "name": "chrome-extension-windows.exe",
+              "bytes": 5310926,
+              "sha256": "32abd145340717d3c3277383fbaa754c90189eed7838c58834b1e2bed2740b8e"
+            }
+          ],
+          "macosNotarizationPending": true
+        },
+        {
+          "browser": "edge",
+          "files": [
+            {
+              "name": "edge-extension-linux.tar.gz",
+              "bytes": 3088845,
+              "sha256": "99e104a3c716aeb3833448c409cbe956f932cd617e3080e55be1316729964801"
+            },
+            {
+              "name": "edge-extension-windows.exe",
+              "bytes": 5310904,
+              "sha256": "9fd748abe2f7163dfd53b82d2bda2f3d0bebc2772989d58acc0f37c1323c4e15"
+            }
+          ],
+          "macosNotarizationPending": true
+        },
+        {
+          "browser": "firefox",
+          "files": [
+            {
+              "name": "firefox-extension-linux.tar.gz",
+              "bytes": 3122118,
+              "sha256": "07186d05e54b760d4a689fae27ca0b342e1b4329172f0077094b2b18b89e551a"
+            },
+            {
+              "name": "firefox-extension-windows.exe",
+              "bytes": 5157161,
+              "sha256": "aca377566be041b308c86410a7fa7674113842ba19f5ec90a0bfa7649644ca57"
+            }
+          ],
+          "macosNotarizationPending": true
+        }
+      ]
     },
     {
       "slug": "content-typescript",
@@ -2443,18 +3576,68 @@
       },
       "integrity": {
         "chrome": {
-          "sha256": "ec9b2c515a4944c2543f01f339b05b33c4fad3d64e4a17013eec5abe09f9791d",
+          "sha256": "3b121691b1f474f1d290f95a32e927329540c735061b4f6767a8c8511d57e02a",
           "size": 53795
         },
         "edge": {
-          "sha256": "820ee4eedb3e30774ca35698b1882918ed82cf7c6cd6e28748f8834c82c523cb",
+          "sha256": "8c30329cfb9f21517a333e8e3dff07478aa8339605d4a7e5618d7f7b151f4e08",
           "size": 53795
         },
         "firefox": {
-          "sha256": "9673a1e6cb15cd6149367c0942e36f6aeff824fdce2359eb2b81f88dec73341f",
+          "sha256": "9c91c10197153e9bae0e96e50ffeee05f50bc43191633688360dcbd26d7726f7",
           "size": 53845
         }
-      }
+      },
+      "executables": [
+        {
+          "browser": "chrome",
+          "files": [
+            {
+              "name": "chrome-extension-linux.tar.gz",
+              "bytes": 1608522,
+              "sha256": "975742eb34fe7cce6d9dc96aeee87db0f1403ce4a26c06bdf35e5ae50c2adbc2"
+            },
+            {
+              "name": "chrome-extension-windows.exe",
+              "bytes": 3327694,
+              "sha256": "f52cde50a3773e7f7f02df42cd08180f18fcede85b624157a8e937e69b138a2d"
+            }
+          ],
+          "macosNotarizationPending": true
+        },
+        {
+          "browser": "edge",
+          "files": [
+            {
+              "name": "edge-extension-linux.tar.gz",
+              "bytes": 1609491,
+              "sha256": "d0bbcb99a6072b7dea37a205dbea6c243a8bad4cd9e7b2e8c453d3906938a7cb"
+            },
+            {
+              "name": "edge-extension-windows.exe",
+              "bytes": 3327672,
+              "sha256": "e76eb11be0e433f61e7b8cb859310d3a9ad3501368fb9c2d903a17153cdd7a24"
+            }
+          ],
+          "macosNotarizationPending": true
+        },
+        {
+          "browser": "firefox",
+          "files": [
+            {
+              "name": "firefox-extension-linux.tar.gz",
+              "bytes": 1592589,
+              "sha256": "caf49e49c3a06da47b2883c315250b1adc57bd0bdcb38fbe7e4240613811c31f"
+            },
+            {
+              "name": "firefox-extension-windows.exe",
+              "bytes": 3272193,
+              "sha256": "9a5de721cb6e6d050b301ed3d485b4c435ff2f7150c86d53122ef4bb1e6d4e3b"
+            }
+          ],
+          "macosNotarizationPending": true
+        }
+      ]
     },
     {
       "slug": "content-vue",
@@ -2572,18 +3755,68 @@
       },
       "integrity": {
         "chrome": {
-          "sha256": "e03e5da4bc150a1831f8325c0acb011c54ccbddf80844fdfa691cc59e80ae89a",
+          "sha256": "ca142be027f81b9ddc954f93f355c1831caa312ac8f0b00313df1bb317d2ef85",
           "size": 648384
         },
         "edge": {
-          "sha256": "4f389d055ff221c300e434001e2dd825d6f4b639d6e575f232b400de5049f300",
+          "sha256": "7fbe96c8085b0d31160de2de572645ac633b6e2beb38d0b55bbc45c748adf69d",
           "size": 648384
         },
         "firefox": {
-          "sha256": "238a1107b420c9c369d80fb4a4c7f62f71561cedc3d28d2dc674c32f7001754d",
+          "sha256": "5b75815f683e3a17c9d2ea92bd173a692407366438742b3a980298684babc336",
           "size": 648420
         }
-      }
+      },
+      "executables": [
+        {
+          "browser": "chrome",
+          "files": [
+            {
+              "name": "chrome-extension-linux.tar.gz",
+              "bytes": 3008634,
+              "sha256": "a9c26e43ccf874a42f93a8e0fc9bf1ae702a6c4b8de8c309426eb3af252dcaea"
+            },
+            {
+              "name": "chrome-extension-windows.exe",
+              "bytes": 5393381,
+              "sha256": "056535ade6c63334a969f9e165ca89be84f1f2f839184476aaec10cdba6701e0"
+            }
+          ],
+          "macosNotarizationPending": true
+        },
+        {
+          "browser": "edge",
+          "files": [
+            {
+              "name": "edge-extension-linux.tar.gz",
+              "bytes": 3009025,
+              "sha256": "999c279c2bcf309a09a54134dd9f276fc4dc73bdee9e9336f29aa2f3fc493d21"
+            },
+            {
+              "name": "edge-extension-windows.exe",
+              "bytes": 5393359,
+              "sha256": "e152742ab48a77e1fed670c1d4a02f99451b386ba3fb6ad5445ea684436901c9"
+            }
+          ],
+          "macosNotarizationPending": true
+        },
+        {
+          "browser": "firefox",
+          "files": [
+            {
+              "name": "firefox-extension-linux.tar.gz",
+              "bytes": 3062765,
+              "sha256": "ecf01529e338bcb771e3bd35fbfdbc05712abff48092ed882d9b143cdfca616f"
+            },
+            {
+              "name": "firefox-extension-windows.exe",
+              "bytes": 5090654,
+              "sha256": "eb359f13e5e82ac8bb1405ba998b23fbc0b376ebe149280340a27c82bc639c2f"
+            }
+          ],
+          "macosNotarizationPending": true
+        }
+      ]
     },
     {
       "slug": "devtools",
@@ -2670,7 +3903,76 @@
       "sources": {
         "base": "https://raw.githubusercontent.com/extension-js/examples/8e2336852b51c0fb71fd03abeca1f5e93a44700e/examples/devtools/",
         "files": {}
-      }
+      },
+      "downloads": {
+        "chrome": "https://registry.extension.land/extension-dev/devtools/builds/8e23368/chrome.zip",
+        "edge": "https://registry.extension.land/extension-dev/devtools/builds/8e23368/edge.zip",
+        "firefox": "https://registry.extension.land/extension-dev/devtools/builds/8e23368/firefox.zip"
+      },
+      "integrity": {
+        "chrome": {
+          "sha256": "5e500e2dfb4260a72de7b4d8fb58bd5440766b0145127fc2a3dc933e5891428d",
+          "size": 13328
+        },
+        "edge": {
+          "sha256": "0bb88189bded3e71c7e8ce33319e351e49e91e023b903ac2b25a5e3be758cb03",
+          "size": 13328
+        },
+        "firefox": {
+          "sha256": "864cff51ef5b0f30c55ff1d801b5a0f8e7238e1aa238de5985c52fc363864a61",
+          "size": 13410
+        }
+      },
+      "executables": [
+        {
+          "browser": "chrome",
+          "files": [
+            {
+              "name": "chrome-extension-linux.tar.gz",
+              "bytes": 1514381,
+              "sha256": "6c21241729b69625941faa99b2d0f344dca5537d8501ee14cf6fca8e6dd230a8"
+            },
+            {
+              "name": "chrome-extension-windows.exe",
+              "bytes": 3181319,
+              "sha256": "5a2e71bb4d615606252eba98801cb33e4ebe9074a999d89fbc2b5ceba4cd2531"
+            }
+          ],
+          "macosNotarizationPending": true
+        },
+        {
+          "browser": "edge",
+          "files": [
+            {
+              "name": "edge-extension-linux.tar.gz",
+              "bytes": 1514392,
+              "sha256": "b73c1b3e1368539e053a5ac2348d63c61722a96f7dc2100317bd72c8b2bec7b2"
+            },
+            {
+              "name": "edge-extension-windows.exe",
+              "bytes": 3181297,
+              "sha256": "1179636d48f2d39ac5cd269b475ab0f89914d828e24b171292a99f33e01a69be"
+            }
+          ],
+          "macosNotarizationPending": true
+        },
+        {
+          "browser": "firefox",
+          "files": [
+            {
+              "name": "firefox-extension-linux.tar.gz",
+              "bytes": 1517976,
+              "sha256": "847af0505e1e9fc3c93bade30abe70ec30378fde413f2fcd6dddc6aebb14ade7"
+            },
+            {
+              "name": "firefox-extension-windows.exe",
+              "bytes": 3178747,
+              "sha256": "e794cc897a6d5877ba4668bda5bae3cc8c2a42450a1cce72358c9ce5a02ca7c6"
+            }
+          ],
+          "macosNotarizationPending": true
+        }
+      ]
     },
     {
       "slug": "devtools-preact",
@@ -2769,18 +4071,68 @@
       },
       "integrity": {
         "chrome": {
-          "sha256": "5e922c93ce0a9c801ae8205461af4b1e8d16ca69c5294dcdb316a876711fb90d",
+          "sha256": "5432e640042590277c118bca20bac34a0d012398f691c7e4970fd94b94c56b6d",
           "size": 13321
         },
         "edge": {
-          "sha256": "28a64f64c7400637a3f58737fd4e29dd43d7b6e9d7aec51fc3ba781d4d7ceb50",
+          "sha256": "f98b7ea5c64094537f455c7ae9c385e92e18347fe1b7a1bec2ba214e65ab034b",
           "size": 13321
         },
         "firefox": {
-          "sha256": "c1ebfc0e3a2c72eb91dfeb66753803954067bb7f4b8d38973ebfb16e76edc40b",
+          "sha256": "59c28a5b70d48d1bce19615102df74ce57dd79c0fd9dca78faf6d9afc970f9d2",
           "size": 13413
         }
-      }
+      },
+      "executables": [
+        {
+          "browser": "chrome",
+          "files": [
+            {
+              "name": "chrome-extension-linux.tar.gz",
+              "bytes": 1515012,
+              "sha256": "0391e71410cd26f68c2c1ff33b8f2c8735b6e74f0459baee6f38e40952bb511b"
+            },
+            {
+              "name": "chrome-extension-windows.exe",
+              "bytes": 3181322,
+              "sha256": "2d5c1cbbb2d039e0430b95ffbda43481434801961af871a23c4648c6c1546ab4"
+            }
+          ],
+          "macosNotarizationPending": true
+        },
+        {
+          "browser": "edge",
+          "files": [
+            {
+              "name": "edge-extension-linux.tar.gz",
+              "bytes": 1515014,
+              "sha256": "38499e10d625fb5cdc2c40d8194dcf042485549a3bb0d2dbc21d27d13dd3db8a"
+            },
+            {
+              "name": "edge-extension-windows.exe",
+              "bytes": 3181300,
+              "sha256": "86f2dddb45c54faf80e87e1d9a0081eaba72f6c14f26533201ad17b4e6c87bdc"
+            }
+          ],
+          "macosNotarizationPending": true
+        },
+        {
+          "browser": "firefox",
+          "files": [
+            {
+              "name": "firefox-extension-linux.tar.gz",
+              "bytes": 1517942,
+              "sha256": "b53b01ba6cc267505d749d3f843140056b327b4675b7acb0fbf99f2bc4eca1b8"
+            },
+            {
+              "name": "firefox-extension-windows.exe",
+              "bytes": 3178753,
+              "sha256": "4e0d9b3a395216bd5e92a13688f7b63a034b8453cb2fa6651c06fa318e3965a2"
+            }
+          ],
+          "macosNotarizationPending": true
+        }
+      ]
     },
     {
       "slug": "devtools-react",
@@ -2879,18 +4231,68 @@
       },
       "integrity": {
         "chrome": {
-          "sha256": "a519edf98f4f94dfcdd9d833be6c84c4a4260508657e7f367c8e6c1954e3655e",
+          "sha256": "cf23598bceb6124ffd90dbda1016d143f391c9f095b9bd47871992d5d98a3a13",
           "size": 13327
         },
         "edge": {
-          "sha256": "80d36402a69e1fb56ac1d4f8e0f58640c7559de58cc29baa5a00c3a539bd8123",
+          "sha256": "80218239771b6252bc54f24d9135cdd7fe2fb23b9d926e5137728b6c54e5e1ab",
           "size": 13327
         },
         "firefox": {
-          "sha256": "36761726951fd669a65064a0e8abdcd9a38c2e8d10dd6844c824353bc1a21cf5",
+          "sha256": "f5c3dfba7031ef83fb8a58e89e0538c65cb8c36a200ee6bef621c6de6b71f5a0",
           "size": 13412
         }
-      }
+      },
+      "executables": [
+        {
+          "browser": "chrome",
+          "files": [
+            {
+              "name": "chrome-extension-linux.tar.gz",
+              "bytes": 1514391,
+              "sha256": "b99a0057bd43268ba955cff789cdc6617d53978fe0f00bc6dd0779d46dec8f9f"
+            },
+            {
+              "name": "chrome-extension-windows.exe",
+              "bytes": 3181321,
+              "sha256": "2f2b330ffc3f5e2009371f091cb255b4bcc7b646333cdb011060160e7ecb4b98"
+            }
+          ],
+          "macosNotarizationPending": true
+        },
+        {
+          "browser": "edge",
+          "files": [
+            {
+              "name": "edge-extension-linux.tar.gz",
+              "bytes": 1514402,
+              "sha256": "901fb93be67ff8f46b5a6934a1b1a53e068b5ed5cfb22575850ea80a67bc6b48"
+            },
+            {
+              "name": "edge-extension-windows.exe",
+              "bytes": 3181299,
+              "sha256": "c9aa4f8cc0c157c9b4914bbb8bb049d8f2d73fe3913a00eb722b43144dc9b7e1"
+            }
+          ],
+          "macosNotarizationPending": true
+        },
+        {
+          "browser": "firefox",
+          "files": [
+            {
+              "name": "firefox-extension-linux.tar.gz",
+              "bytes": 1518017,
+              "sha256": "b1910b754c195d1edb4e992ba958b3ff7a94e9a021bbcc1e2b09a0393a4da65b"
+            },
+            {
+              "name": "firefox-extension-windows.exe",
+              "bytes": 3178793,
+              "sha256": "75b17a9243bb14be7ddc68718aba272a8c1503f5a003b8e194cd2c69790b12da"
+            }
+          ],
+          "macosNotarizationPending": true
+        }
+      ]
     },
     {
       "slug": "devtools-svelte",
@@ -2990,18 +4392,68 @@
       },
       "integrity": {
         "chrome": {
-          "sha256": "579e9a15e2de050afaaf63e8445cd36729677cf9ed63e3e90d62450046a2ba1c",
+          "sha256": "1de3714edab6a3a8ef4e15edccb03fcd745c9c4e8fd38b6180531e387202bff3",
           "size": 13359
         },
         "edge": {
-          "sha256": "dae36ad4dc5b3fdebacff12eb1b5a42dea6a9f925e630d2fa4cb92b8cdaa220f",
+          "sha256": "dfdab164cd886d2b38bc42c2613b7f8978ec2a9c60465d22a4a9e280ab59f9e9",
           "size": 13359
         },
         "firefox": {
-          "sha256": "fb6b09fdd1ef67a3ba347ccfb86c12e43e1abdb96783072e42e9e858266fe538",
+          "sha256": "892af2f98a2ad3b1079f36a92b40a439b7dd3a63a76581c6eb007c58aad25e0b",
           "size": 13445
         }
-      }
+      },
+      "executables": [
+        {
+          "browser": "chrome",
+          "files": [
+            {
+              "name": "chrome-extension-linux.tar.gz",
+              "bytes": 1515076,
+              "sha256": "e2fce84f086c9326792f33a2483accd92824c9b1c87a2bb01ecdbf4b9c72611a"
+            },
+            {
+              "name": "chrome-extension-windows.exe",
+              "bytes": 3181430,
+              "sha256": "e378fd44cc9d774637fb320b9c0bde0539ccc0d6bcd896afcc7c77f722380fc0"
+            }
+          ],
+          "macosNotarizationPending": true
+        },
+        {
+          "browser": "edge",
+          "files": [
+            {
+              "name": "edge-extension-linux.tar.gz",
+              "bytes": 1515092,
+              "sha256": "d07fc6ead5c481975bf0216e6a083d8b82988ef2bf8b1149d9c72731d2759899"
+            },
+            {
+              "name": "edge-extension-windows.exe",
+              "bytes": 3181408,
+              "sha256": "15ca492276ef8d5158a8afb897bc4468a8402d3c01bf1e90b099499710d792ec"
+            }
+          ],
+          "macosNotarizationPending": true
+        },
+        {
+          "browser": "firefox",
+          "files": [
+            {
+              "name": "firefox-extension-linux.tar.gz",
+              "bytes": 1518049,
+              "sha256": "39a734e000ebbfc64c101e0441e14ccd053efd335e28156fcaac79fd9d3c65fa"
+            },
+            {
+              "name": "firefox-extension-windows.exe",
+              "bytes": 3178921,
+              "sha256": "2a85014c0bde5ed8389e88bea4d45300ba4f42839e2dfce87af11e116d3b801b"
+            }
+          ],
+          "macosNotarizationPending": true
+        }
+      ]
     },
     {
       "slug": "devtools-typescript",
@@ -3098,18 +4550,68 @@
       },
       "integrity": {
         "chrome": {
-          "sha256": "96184c52b63f250695b7ecf734373903c304300b049948f23ab439901bbb7c83",
+          "sha256": "e2785bdea0c1d0187b37472d1b4e092b6582b38558037a097fa44aa3e12c3bfe",
           "size": 13325
         },
         "edge": {
-          "sha256": "3149073eb8bf9a17ea8368b2aa6437af188a3c0a9dc6a6794899958a5649ef43",
+          "sha256": "219c97bbe7500d025e9cc13097d6946dd32619b6212ced2a5803588bbd22dbf4",
           "size": 13325
         },
         "firefox": {
-          "sha256": "b0c3fa399bb8e628ed7ce1093e7080d495910044b5ecacc42d34cf1536e9c4d7",
+          "sha256": "c357c0fd3b14acee5a7491262a42d3616cf389f3745f4a8f1f7b852371dd145f",
           "size": 13415
         }
-      }
+      },
+      "executables": [
+        {
+          "browser": "chrome",
+          "files": [
+            {
+              "name": "chrome-extension-linux.tar.gz",
+              "bytes": 1514381,
+              "sha256": "c39de878e83c8f21654177027f53bb82d949cf9bc8b3021e9ae5b7b86c8f557a"
+            },
+            {
+              "name": "chrome-extension-windows.exe",
+              "bytes": 3181353,
+              "sha256": "8891ff961ed6b6728b59a18b789adaf093dac7c08b05b72013afdc8c63f3452b"
+            }
+          ],
+          "macosNotarizationPending": true
+        },
+        {
+          "browser": "edge",
+          "files": [
+            {
+              "name": "edge-extension-linux.tar.gz",
+              "bytes": 1514396,
+              "sha256": "515ba5f9350557e5d83e0ef3573c9f1c87347fde8b05061e1acce34397366e3b"
+            },
+            {
+              "name": "edge-extension-windows.exe",
+              "bytes": 3181331,
+              "sha256": "e8788a2fc29a56f02dd3d85120cd536a5587012b651be9f6e66ffdb0ad47644f"
+            }
+          ],
+          "macosNotarizationPending": true
+        },
+        {
+          "browser": "firefox",
+          "files": [
+            {
+              "name": "firefox-extension-linux.tar.gz",
+              "bytes": 1518016,
+              "sha256": "bd5e3a992907cc78211b19165f12dbeb42e5ace4a5c6ef53da55a65f8f0098b5"
+            },
+            {
+              "name": "firefox-extension-windows.exe",
+              "bytes": 3178814,
+              "sha256": "277fce905d92e9c7165feb0a1d195623fa1bdfef01fd7496703fa2bbc889a723"
+            }
+          ],
+          "macosNotarizationPending": true
+        }
+      ]
     },
     {
       "slug": "devtools-vue",
@@ -3209,18 +4711,68 @@
       },
       "integrity": {
         "chrome": {
-          "sha256": "2998939b647a47c32b3967e52633c7d2cf2d578d231f5d105b5bd27b93d7c720",
+          "sha256": "9040ff0fbc8891c408a6bcc9d0933527795f4e3741dbd919277c867430633d60",
           "size": 13378
         },
         "edge": {
-          "sha256": "26276452bcbcde59bf2ea501b481bdfd9baf819492c21923ab74115d22c69d19",
+          "sha256": "3752eb938eb8b8aa0d9dde6b911b985b4a7faf1692cd2d30b97d14b477da5288",
           "size": 13378
         },
         "firefox": {
-          "sha256": "b858429ac032c7144cb071bca034ec0ca1c1e812aa81588f16d7758746081be6",
+          "sha256": "c350e86fa0c9d62f7b5c7ded5b9a6127d5f103ec9a6eb1a50e1bcd9210dd73d1",
           "size": 13467
         }
-      }
+      },
+      "executables": [
+        {
+          "browser": "chrome",
+          "files": [
+            {
+              "name": "chrome-extension-linux.tar.gz",
+              "bytes": 1515111,
+              "sha256": "9f07fe509a3c7a81b5e309c0cf7ea2ff111e165f3f074c9f6def7e803f7f1ce9"
+            },
+            {
+              "name": "chrome-extension-windows.exe",
+              "bytes": 3181465,
+              "sha256": "a60ba44d80ea60b4c4b5554f8807c506a3e4aa30712e10c3d7be9f40a27d14f8"
+            }
+          ],
+          "macosNotarizationPending": true
+        },
+        {
+          "browser": "edge",
+          "files": [
+            {
+              "name": "edge-extension-linux.tar.gz",
+              "bytes": 1515165,
+              "sha256": "f42c8391c94c9f94f3cd7a5d583fcf69bd8563ea0e13709d051ade9e5eb77c82"
+            },
+            {
+              "name": "edge-extension-windows.exe",
+              "bytes": 3181443,
+              "sha256": "00488c1e8cd452815be3dda39a35e4cb6a4d3e28c32987d034b410ca5cf25311"
+            }
+          ],
+          "macosNotarizationPending": true
+        },
+        {
+          "browser": "firefox",
+          "files": [
+            {
+              "name": "firefox-extension-linux.tar.gz",
+              "bytes": 1518103,
+              "sha256": "0a076d7063184a9efac7b1151a5b91d69525d5475c4f2aa291b65cfc804e225e"
+            },
+            {
+              "name": "firefox-extension-windows.exe",
+              "bytes": 3179027,
+              "sha256": "a9adfd0535124c09f9c363e8fb6dd4f1121cdde149274975b19ef75ab780cd36"
+            }
+          ],
+          "macosNotarizationPending": true
+        }
+      ]
     },
     {
       "slug": "init",
@@ -3296,7 +4848,76 @@
       "sources": {
         "base": "https://raw.githubusercontent.com/extension-js/examples/8e2336852b51c0fb71fd03abeca1f5e93a44700e/examples/init/",
         "files": {}
-      }
+      },
+      "downloads": {
+        "chrome": "https://registry.extension.land/extension-dev/init/builds/8e23368/chrome.zip",
+        "edge": "https://registry.extension.land/extension-dev/init/builds/8e23368/edge.zip",
+        "firefox": "https://registry.extension.land/extension-dev/init/builds/8e23368/firefox.zip"
+      },
+      "integrity": {
+        "chrome": {
+          "sha256": "f60fe8fba6522fcf01a8059492b83debdad1202c92150d766d70bb14426e30ac",
+          "size": 35505
+        },
+        "edge": {
+          "sha256": "f9940c2d8099c7076a1745292fec165dd37d0ee73b362f9b9c75fbaed98da71a",
+          "size": 35505
+        },
+        "firefox": {
+          "sha256": "e6e9878ba9f3fef4d680c65595ca41ba3c143079a6712ed17e03c7e3a0cc3d80",
+          "size": 35589
+        }
+      },
+      "executables": [
+        {
+          "browser": "chrome",
+          "files": [
+            {
+              "name": "chrome-extension-linux.tar.gz",
+              "bytes": 1581286,
+              "sha256": "7b9c8bfab6024207fda5b79c00218694a2a84248f5a30692e183dc2b078f623f"
+            },
+            {
+              "name": "chrome-extension-windows.exe",
+              "bytes": 3247649,
+              "sha256": "c4d30383ca9e89fae90d6ef931bb17b9a1839cdad6d299720d00d0fe3013e56e"
+            }
+          ],
+          "macosNotarizationPending": true
+        },
+        {
+          "browser": "edge",
+          "files": [
+            {
+              "name": "edge-extension-linux.tar.gz",
+              "bytes": 1581993,
+              "sha256": "ebbb164e76d9f3ae929bf2673bb04a72605cdbe456cfb38935fdbb5f8eb9d515"
+            },
+            {
+              "name": "edge-extension-windows.exe",
+              "bytes": 3247627,
+              "sha256": "63c291b27ea8458a3374790fb5f8ab1080d7e8f3ab28afe833663220ce39ce3d"
+            }
+          ],
+          "macosNotarizationPending": true
+        },
+        {
+          "browser": "firefox",
+          "files": [
+            {
+              "name": "firefox-extension-linux.tar.gz",
+              "bytes": 1583642,
+              "sha256": "aaaadfcc32eb8651d03293e0af40644a5c478860583d2824d22fa7d15bcbd405"
+            },
+            {
+              "name": "firefox-extension-windows.exe",
+              "bytes": 3245288,
+              "sha256": "15ac83896fa4d5b43ad8a9603fceb75ae4d4082029df97a0c5b951a0387b4e9f"
+            }
+          ],
+          "macosNotarizationPending": true
+        }
+      ]
     },
     {
       "slug": "javascript",
@@ -3396,7 +5017,76 @@
       "sources": {
         "base": "https://raw.githubusercontent.com/extension-js/examples/8e2336852b51c0fb71fd03abeca1f5e93a44700e/examples/javascript/",
         "files": {}
-      }
+      },
+      "downloads": {
+        "chrome": "https://registry.extension.land/extension-dev/javascript/builds/8e23368/chrome.zip",
+        "edge": "https://registry.extension.land/extension-dev/javascript/builds/8e23368/edge.zip",
+        "firefox": "https://registry.extension.land/extension-dev/javascript/builds/8e23368/firefox.zip"
+      },
+      "integrity": {
+        "chrome": {
+          "sha256": "3cfd2a725510324ca6206556f7c0bef56940feec7aee1b2eeae439991a0d0603",
+          "size": 26956
+        },
+        "edge": {
+          "sha256": "3f643f5e5f42a8a7ca360f7f2735c05f570566c05d72333cdaa3ecbaffe4e2d9",
+          "size": 26956
+        },
+        "firefox": {
+          "sha256": "d71c5ff090b7c38aa23d41f6cb1607a8023ac0f798a9f555861292479350c358",
+          "size": 26845
+        }
+      },
+      "executables": [
+        {
+          "browser": "chrome",
+          "files": [
+            {
+              "name": "chrome-extension-linux.tar.gz",
+              "bytes": 1543969,
+              "sha256": "74eb44a9a39b74f5e898b6a9ad3346fe81d4e2fd470a7ff3ec03cd18cb969f1d"
+            },
+            {
+              "name": "chrome-extension-windows.exe",
+              "bytes": 3229356,
+              "sha256": "62215ba046194eb814e1d32a7fdfc4820f1d725c7ecb98654eb2d279d3222146"
+            }
+          ],
+          "macosNotarizationPending": true
+        },
+        {
+          "browser": "edge",
+          "files": [
+            {
+              "name": "edge-extension-linux.tar.gz",
+              "bytes": 1538960,
+              "sha256": "454cdffecfa86208fe349dd5ded6d9f5f08893f583ed44e7eb56e8e9b804dfd2"
+            },
+            {
+              "name": "edge-extension-windows.exe",
+              "bytes": 3229334,
+              "sha256": "5e7f02ac9a1a9c77e117ad86cd168438752846f65df688dd95443f25d28aaceb"
+            }
+          ],
+          "macosNotarizationPending": true
+        },
+        {
+          "browser": "firefox",
+          "files": [
+            {
+              "name": "firefox-extension-linux.tar.gz",
+              "bytes": 1547407,
+              "sha256": "9f18ed276354ee86487684a209266ee2aecdf757cff8383055c2b6c07367afb5"
+            },
+            {
+              "name": "firefox-extension-windows.exe",
+              "bytes": 3216665,
+              "sha256": "2d52705905531f75f735f7c47113608c5b10c1f64d89c2c5005ea37d697fa5fc"
+            }
+          ],
+          "macosNotarizationPending": true
+        }
+      ]
     },
     {
       "slug": "newtab",
@@ -3484,7 +5174,76 @@
       "sources": {
         "base": "https://raw.githubusercontent.com/extension-js/examples/8e2336852b51c0fb71fd03abeca1f5e93a44700e/examples/newtab/",
         "files": {}
-      }
+      },
+      "downloads": {
+        "chrome": "https://registry.extension.land/extension-dev/newtab/builds/8e23368/chrome.zip",
+        "edge": "https://registry.extension.land/extension-dev/newtab/builds/8e23368/edge.zip",
+        "firefox": "https://registry.extension.land/extension-dev/newtab/builds/8e23368/firefox.zip"
+      },
+      "integrity": {
+        "chrome": {
+          "sha256": "ad466c5daec36aeac999f7869f2d4b529bf22e157c82dbfb09f9e12ccf291842",
+          "size": 46493
+        },
+        "edge": {
+          "sha256": "c200b42965e43bd390e4329b3972fafafcb7f42051532652319c081f3fc885f5",
+          "size": 46493
+        },
+        "firefox": {
+          "sha256": "bd4de4eb28d53588f2f1c82eacb3b5030a9e623f8333811ef413b7daad3bb3e6",
+          "size": 46566
+        }
+      },
+      "executables": [
+        {
+          "browser": "chrome",
+          "files": [
+            {
+              "name": "chrome-extension-linux.tar.gz",
+              "bytes": 1593800,
+              "sha256": "cea0c93c40c8fab45c9ef8739a4f6d7c9ecceec2e5a27389adf6e6077ce2cabe"
+            },
+            {
+              "name": "chrome-extension-windows.exe",
+              "bytes": 3285580,
+              "sha256": "cedaf08039b483b1c5de63b1ea8d445d5af55b4adc48fb377d37a9d49dad15da"
+            }
+          ],
+          "macosNotarizationPending": true
+        },
+        {
+          "browser": "edge",
+          "files": [
+            {
+              "name": "edge-extension-linux.tar.gz",
+              "bytes": 1594253,
+              "sha256": "0b7ef1baa507ca82f41d944fa005e3bd3ece9948df419b81908d4bbaa035b04a"
+            },
+            {
+              "name": "edge-extension-windows.exe",
+              "bytes": 3285558,
+              "sha256": "6497d5de7c740746389fef5ce750234e84bef65363b21a97da11d2cb3f770475"
+            }
+          ],
+          "macosNotarizationPending": true
+        },
+        {
+          "browser": "firefox",
+          "files": [
+            {
+              "name": "firefox-extension-linux.tar.gz",
+              "bytes": 1597884,
+              "sha256": "7c423a3109842169d8da2561473374ac86df812d530c0a44babdc847251bef77"
+            },
+            {
+              "name": "firefox-extension-windows.exe",
+              "bytes": 3277794,
+              "sha256": "f3af792e287423fb7bf3f31529da6142e56e34b4179526b6c298c9b890a68745"
+            }
+          ],
+          "macosNotarizationPending": true
+        }
+      ]
     },
     {
       "slug": "newtab-browser-flags",
@@ -3588,7 +5347,76 @@
       "sources": {
         "base": "https://raw.githubusercontent.com/extension-js/examples/8e2336852b51c0fb71fd03abeca1f5e93a44700e/examples/newtab-browser-flags/",
         "files": {}
-      }
+      },
+      "downloads": {
+        "chrome": "https://registry.extension.land/extension-dev/newtab-browser-flags/builds/8e23368/chrome.zip",
+        "edge": "https://registry.extension.land/extension-dev/newtab-browser-flags/builds/8e23368/edge.zip",
+        "firefox": "https://registry.extension.land/extension-dev/newtab-browser-flags/builds/8e23368/firefox.zip"
+      },
+      "integrity": {
+        "chrome": {
+          "sha256": "343e2eceac4f4766372fb7e76ca937d42a79c64d9e2a9c27a42a23a9fc122c0f",
+          "size": 51277
+        },
+        "edge": {
+          "sha256": "1d473af2fea587f4f358d3b1a1ff6b6a30cb9ec2926e08b5aeebcbdcb7e7a945",
+          "size": 51277
+        },
+        "firefox": {
+          "sha256": "51ee3c89a9403d05846da9e9b46efc3daf1bb2967e080801ff49450deaf8a771",
+          "size": 51170
+        }
+      },
+      "executables": [
+        {
+          "browser": "chrome",
+          "files": [
+            {
+              "name": "chrome-extension-linux.tar.gz",
+              "bytes": 1603266,
+              "sha256": "5a90aeb0e4cf4892fd496fe3453990ef0d893bf0370becb72b699d8c99263b48"
+            },
+            {
+              "name": "chrome-extension-windows.exe",
+              "bytes": 3305226,
+              "sha256": "08db76bd58c664ed42c9817068c8f8bdd91d5fcff95b086a0c1afdc3a997671e"
+            }
+          ],
+          "macosNotarizationPending": true
+        },
+        {
+          "browser": "edge",
+          "files": [
+            {
+              "name": "edge-extension-linux.tar.gz",
+              "bytes": 1603550,
+              "sha256": "3ab3df52bdf210a47ac6e6306c56d24a5ad560054369b5fada0b981b79535121"
+            },
+            {
+              "name": "edge-extension-windows.exe",
+              "bytes": 3305204,
+              "sha256": "7e44c691ce9d2a1fad6ae522b95fddc8093ff834223b43f4891db6ed446ce41f"
+            }
+          ],
+          "macosNotarizationPending": true
+        },
+        {
+          "browser": "firefox",
+          "files": [
+            {
+              "name": "firefox-extension-linux.tar.gz",
+              "bytes": 1607866,
+              "sha256": "a6978f61d3104d63509d557dbb3deae8863ae10a4bfd1ae1383b457b042cd0ff"
+            },
+            {
+              "name": "firefox-extension-windows.exe",
+              "bytes": 3290363,
+              "sha256": "dfbdad21994a6d5b4a3e9306dc0d0fce2d7156b54809076cfde401431585bf76"
+            }
+          ],
+          "macosNotarizationPending": true
+        }
+      ]
     },
     {
       "slug": "newtab-config-eslint",
@@ -3687,18 +5515,68 @@
       },
       "integrity": {
         "chrome": {
-          "sha256": "65165d5ae8b1209b29d4ef5a3e53a70367472ceb64ca2656639b78c9857434be",
+          "sha256": "7429e69e3cfa62e5d16f280abfd507f3b82eece036b42b42fd14bb217e19513f",
           "size": 60125
         },
         "edge": {
-          "sha256": "11506e6e9ffe3cdd52ec16e9a2e33eb2d02a532238be38a5a24d830a198e356d",
+          "sha256": "2f825c37e292f18e93a19f1be6f329beb7eb6bf8e3815982bc023090d211e124",
           "size": 60125
         },
         "firefox": {
-          "sha256": "1127006f00043acf5cfc2949a660f5d54233f09f26229aa7fc3d99e019b81b45",
+          "sha256": "7006a96ace11f1a6d5802635c51e568f0f337afeed9154c505c87a902d6d97b9",
           "size": 60205
         }
-      }
+      },
+      "executables": [
+        {
+          "browser": "chrome",
+          "files": [
+            {
+              "name": "chrome-extension-linux.tar.gz",
+              "bytes": 1628137,
+              "sha256": "6d9eec514a2d4a4c25e86feb0f645e615d28c04a64ea03dbe6c808f87a9c5084"
+            },
+            {
+              "name": "chrome-extension-windows.exe",
+              "bytes": 3326198,
+              "sha256": "7219503c704ccd33d049156f4cb54a6f36488e5f2fbb73fb8816461ea2b6cb2c"
+            }
+          ],
+          "macosNotarizationPending": true
+        },
+        {
+          "browser": "edge",
+          "files": [
+            {
+              "name": "edge-extension-linux.tar.gz",
+              "bytes": 1628645,
+              "sha256": "be3d0931812d438e0fc03bf6023e1c25c2c65f2fca41ec223aec9e32969e4823"
+            },
+            {
+              "name": "edge-extension-windows.exe",
+              "bytes": 3326176,
+              "sha256": "2881ace59a3c1004a967d56dd799033d3bab4c0784bc6963a13d5ce344701f88"
+            }
+          ],
+          "macosNotarizationPending": true
+        },
+        {
+          "browser": "firefox",
+          "files": [
+            {
+              "name": "firefox-extension-linux.tar.gz",
+              "bytes": 1632719,
+              "sha256": "cd4fc4ebd5fbc77a64a8636ad2d794485055670c22f16b3a251cb1339fcdbd3f"
+            },
+            {
+              "name": "firefox-extension-windows.exe",
+              "bytes": 3318283,
+              "sha256": "2e4d50a847e81c50d5180cae9ee98d9e511beb1fe7f8ef53b22663a79361acd4"
+            }
+          ],
+          "macosNotarizationPending": true
+        }
+      ]
     },
     {
       "slug": "newtab-config-prettier",
@@ -3797,18 +5675,68 @@
       },
       "integrity": {
         "chrome": {
-          "sha256": "f8e6fd173cabe9c6534acb1350b2775a6bb92a74dd98bec3367c6a3213062c50",
+          "sha256": "39b12a0a68feb0d6c8cc4531f13cfdb1d59e1fd08945a50172ddee1a646d57f6",
           "size": 62753
         },
         "edge": {
-          "sha256": "4868b7471957e7ab614bf3d22c3a04f35bb926ff8d8da5da7d65f851d856758c",
+          "sha256": "626c271fc69409e283611043c715b906d523372c1a5eab3c64898b896f3887b6",
           "size": 62753
         },
         "firefox": {
-          "sha256": "004052acf67080b3397479683b77f034d15547e74c740080ec219c54f8a9639c",
+          "sha256": "f46f6e39598adff65c1ff2eb16602a47d90156a087030438a539c642a214d3e6",
           "size": 62831
         }
-      }
+      },
+      "executables": [
+        {
+          "browser": "chrome",
+          "files": [
+            {
+              "name": "chrome-extension-linux.tar.gz",
+              "bytes": 1637363,
+              "sha256": "8c4066b3e686f0f0e20a87a485e5301c7368e5a026926cc1ad36e794fc535795"
+            },
+            {
+              "name": "chrome-extension-windows.exe",
+              "bytes": 3333512,
+              "sha256": "37cd4e3143dca84391f13777d63eb3d73ef27ec437c5fc7a9fb36c4a2960971e"
+            }
+          ],
+          "macosNotarizationPending": true
+        },
+        {
+          "browser": "edge",
+          "files": [
+            {
+              "name": "edge-extension-linux.tar.gz",
+              "bytes": 1637814,
+              "sha256": "977894dfc72705bbf63bb4ef76b724348e2e5716720ff8c39b5ad2d509978cc8"
+            },
+            {
+              "name": "edge-extension-windows.exe",
+              "bytes": 3333490,
+              "sha256": "21499e6250170bbfbcbf1f3f5ef96e5e06947f6612084cf3bfa7038617c4f5a2"
+            }
+          ],
+          "macosNotarizationPending": true
+        },
+        {
+          "browser": "firefox",
+          "files": [
+            {
+              "name": "firefox-extension-linux.tar.gz",
+              "bytes": 1641213,
+              "sha256": "c1954b59bade3260ca89fd15523504502c51a883227c7abdf3fcddcf18b93176"
+            },
+            {
+              "name": "firefox-extension-windows.exe",
+              "bytes": 3326494,
+              "sha256": "f8c6067b9394fcf3567478b4b06522eb4c7dc67e2c5a8eb493d5fea0881d0f15"
+            }
+          ],
+          "macosNotarizationPending": true
+        }
+      ]
     },
     {
       "slug": "newtab-config-stylelint",
@@ -3906,18 +5834,68 @@
       },
       "integrity": {
         "chrome": {
-          "sha256": "ac6f66ff8ef4a3b2de7bf2553976f762aa653ff21129e119996118fdd4b3ba29",
+          "sha256": "7f9b1f77f8962e5d197694e484f40f2e1dd4aac3364927183283827b34b2fe15",
           "size": 23878
         },
         "edge": {
-          "sha256": "3f95d4ad9564edee788224dd4f4f1ecf7ba63043559344d36bfbdc32f44ccb2b",
+          "sha256": "8700b9622b0894f448d4172f0d375c910573fcc8c98101ee57342f39447bb769",
           "size": 23878
         },
         "firefox": {
-          "sha256": "858eb0d9374a5484ae334425e73ed4d8b0becccd3886ef8ff83fe8e96f67fb9f",
+          "sha256": "5e02d12a2bcea249ce30987cd04314683a36811db4ec39bdfcfd722dc75f3a95",
           "size": 23958
         }
-      }
+      },
+      "executables": [
+        {
+          "browser": "chrome",
+          "files": [
+            {
+              "name": "chrome-extension-linux.tar.gz",
+              "bytes": 1536222,
+              "sha256": "032798ac41b88358b2627c37496963ed3c67a8fa71b91be3c3b4f484cf00b910"
+            },
+            {
+              "name": "chrome-extension-windows.exe",
+              "bytes": 3212807,
+              "sha256": "36f5f6ffaebf247914375a28914e4a731202a16dba9e3bbe990efcd06c1a5649"
+            }
+          ],
+          "macosNotarizationPending": true
+        },
+        {
+          "browser": "edge",
+          "files": [
+            {
+              "name": "edge-extension-linux.tar.gz",
+              "bytes": 1536985,
+              "sha256": "814e052853c2220c06e7fc582058e8b204431e9297b1acb2694243127957fb18"
+            },
+            {
+              "name": "edge-extension-windows.exe",
+              "bytes": 3212827,
+              "sha256": "8c9fb1790b5f55d9bb5dfa98db7da49b8d39effa93814dd6de1529625b69e34a"
+            }
+          ],
+          "macosNotarizationPending": true
+        },
+        {
+          "browser": "firefox",
+          "files": [
+            {
+              "name": "firefox-extension-linux.tar.gz",
+              "bytes": 1542485,
+              "sha256": "70d8cd1dcd6885096a55d5c8e92873938a0e647f998be92ddf624b1dd782d4ee"
+            },
+            {
+              "name": "firefox-extension-windows.exe",
+              "bytes": 3209282,
+              "sha256": "e4a051c1c53364180629b53b869decf76cb87df3175e6be15c0b21efb250af96"
+            }
+          ],
+          "macosNotarizationPending": true
+        }
+      ]
     },
     {
       "slug": "newtab-crypto",
@@ -4015,18 +5993,68 @@
       },
       "integrity": {
         "chrome": {
-          "sha256": "347835832b2f51c41e67f06a573c8f8bcb91ead056673ba51a9fd41aa242ac7d",
+          "sha256": "48d74d68e27337996bc92a86c94e096b7b117f4558951dce7dde6c7a2d542b05",
           "size": 47253
         },
         "edge": {
-          "sha256": "05df96eddc5f9e732dfc5e4fd720310d54368a2f81a67db1ee34d2b4bcc0b475",
+          "sha256": "3753b8584045e9818bceac15995d5628efe561bdb519fa20f82cd317514be334",
           "size": 47253
         },
         "firefox": {
-          "sha256": "2f136d359b2adb72c77bee4142eaf5e0984af8e1db814d474a7afa79ce75612d",
+          "sha256": "fe84db732f08bc5a8c0ab164049eada155f9664435d9f1ee77984c9daf6e7fa5",
           "size": 47327
         }
-      }
+      },
+      "executables": [
+        {
+          "browser": "chrome",
+          "files": [
+            {
+              "name": "chrome-extension-linux.tar.gz",
+              "bytes": 1595578,
+              "sha256": "109b78c82fa76020beffd210ce06b918228a588fbc1ee4e4de8b94e3f5c86cb8"
+            },
+            {
+              "name": "chrome-extension-windows.exe",
+              "bytes": 3288723,
+              "sha256": "5d3110b8647720c299e06c55d1adae36a416b39fab6b8ad7ee9e0fd456de54c6"
+            }
+          ],
+          "macosNotarizationPending": true
+        },
+        {
+          "browser": "edge",
+          "files": [
+            {
+              "name": "edge-extension-linux.tar.gz",
+              "bytes": 1596002,
+              "sha256": "9a6f42b8543f9009ffbbfcc31af28913304f4ffb3ac76247e6504046d2609f39"
+            },
+            {
+              "name": "edge-extension-windows.exe",
+              "bytes": 3288701,
+              "sha256": "8c2be3daffa807c85d90c1f8dfd08b23766a1a6e0ef5fe9da7df00bbeaff88f7"
+            }
+          ],
+          "macosNotarizationPending": true
+        },
+        {
+          "browser": "firefox",
+          "files": [
+            {
+              "name": "firefox-extension-linux.tar.gz",
+              "bytes": 1599642,
+              "sha256": "f4cd905fcbad6271ac762214b1dd4dd83bafd5239d283f65e312da2855371113"
+            },
+            {
+              "name": "firefox-extension-windows.exe",
+              "bytes": 3280076,
+              "sha256": "11a2af1672b6ba57ef5508abd3a8797f4adef0e485c158d03720cdaad3c0f9ba"
+            }
+          ],
+          "macosNotarizationPending": true
+        }
+      ]
     },
     {
       "slug": "newtab-env",
@@ -4117,7 +6145,76 @@
       "sources": {
         "base": "https://raw.githubusercontent.com/extension-js/examples/8e2336852b51c0fb71fd03abeca1f5e93a44700e/examples/newtab-env/",
         "files": {}
-      }
+      },
+      "downloads": {
+        "chrome": "https://registry.extension.land/extension-dev/newtab-env/builds/8e23368/chrome.zip",
+        "edge": "https://registry.extension.land/extension-dev/newtab-env/builds/8e23368/edge.zip",
+        "firefox": "https://registry.extension.land/extension-dev/newtab-env/builds/8e23368/firefox.zip"
+      },
+      "integrity": {
+        "chrome": {
+          "sha256": "0538b9cfa400ce1129cf24e0aedb532a68fab9f7ff830483c5d48070559dd4b5",
+          "size": 12921
+        },
+        "edge": {
+          "sha256": "4c65df5b43862dbf680b98e62d6acadce2c407a14d1ebda79674cb8cc53ecd5e",
+          "size": 12920
+        },
+        "firefox": {
+          "sha256": "238559f3ce254605a581ceb6f80df0b5542626a2f8d877403f9b92e0a0b69f15",
+          "size": 12992
+        }
+      },
+      "executables": [
+        {
+          "browser": "chrome",
+          "files": [
+            {
+              "name": "chrome-extension-linux.tar.gz",
+              "bytes": 1507284,
+              "sha256": "17701d34522d83c5f488c479ed942e8cc16c7da82f01f32626359de8304fe5c2"
+            },
+            {
+              "name": "chrome-extension-windows.exe",
+              "bytes": 3179725,
+              "sha256": "fcbb63359d97ea2bc10f0fc591c1ebbbd1cff5e4b728ab95e8e3e06623dbc3fa"
+            }
+          ],
+          "macosNotarizationPending": true
+        },
+        {
+          "browser": "edge",
+          "files": [
+            {
+              "name": "edge-extension-linux.tar.gz",
+              "bytes": 1507255,
+              "sha256": "72b6fbd8d19470b052fb5d8fd811514b3ba00b0fdaf113d0d38b11246fdc0b97"
+            },
+            {
+              "name": "edge-extension-windows.exe",
+              "bytes": 3179670,
+              "sha256": "0b8c30e9bbe87496dc3897299cdeb11e80394deb115453852c84134fa3dfec7f"
+            }
+          ],
+          "macosNotarizationPending": true
+        },
+        {
+          "browser": "firefox",
+          "files": [
+            {
+              "name": "firefox-extension-linux.tar.gz",
+              "bytes": 1513184,
+              "sha256": "2df4e75248e49a06b82e1e3bcaf876a9d768b3b903200f3db1295a3fa66ad7d1"
+            },
+            {
+              "name": "firefox-extension-windows.exe",
+              "bytes": 3175793,
+              "sha256": "58032dea52535eac10c1ebd8a871eff50fc3940d60652df40ac612d210dacb6e"
+            }
+          ],
+          "macosNotarizationPending": true
+        }
+      ]
     },
     {
       "slug": "newtab-less",
@@ -4214,18 +6311,68 @@
       },
       "integrity": {
         "chrome": {
-          "sha256": "14b0693e603b7778cacf63d19775a8aa8e1e9aa79497a6cb8baaad19a836dbe4",
+          "sha256": "efff06018f3d894f050ef2c8bc47aaff9d6272ef6843b480f022ac6f5c46bf14",
           "size": 125479
         },
         "edge": {
-          "sha256": "e7c93cbdaa41ac455b96f5c935d8050f4013df0a125751a9d24ee78016f41f34",
+          "sha256": "3b18245a955ffcd9b6f225803eef3076237e0303230561a4e3b9b3b9670ecfaf",
           "size": 125479
         },
         "firefox": {
-          "sha256": "24567193f19f2ccb7f45f20551bbbcb45c6f6e14fc5b1cecac27dca200fd3973",
+          "sha256": "0e7ae7aaf094949b00751d1ac742461665ecac18203b38f9fd76f9d4483272c7",
           "size": 125555
         }
-      }
+      },
+      "executables": [
+        {
+          "browser": "chrome",
+          "files": [
+            {
+              "name": "chrome-extension-linux.tar.gz",
+              "bytes": 1789713,
+              "sha256": "506bf7cd2f2f5eafd72ff09fe7c112f7d62143e31a3e98ab28b401eb0c5f9adb"
+            },
+            {
+              "name": "chrome-extension-windows.exe",
+              "bytes": 3522157,
+              "sha256": "2c856b336d31c1006bb8a091f03f68d260b48e5691d142cf3aa42d247470aa15"
+            }
+          ],
+          "macosNotarizationPending": true
+        },
+        {
+          "browser": "edge",
+          "files": [
+            {
+              "name": "edge-extension-linux.tar.gz",
+              "bytes": 1790181,
+              "sha256": "d16a936655d297eacd49510b74b6d110e3d87ac1aabe37c3cb8eab764ac3e3a9"
+            },
+            {
+              "name": "edge-extension-windows.exe",
+              "bytes": 3522135,
+              "sha256": "7b560e44455a8c02515781d5ec4d760a32c1b422cd3b7778509af533f50fa37f"
+            }
+          ],
+          "macosNotarizationPending": true
+        },
+        {
+          "browser": "firefox",
+          "files": [
+            {
+              "name": "firefox-extension-linux.tar.gz",
+              "bytes": 1794289,
+              "sha256": "5dffe4be0d710f715342272928bf436fce1017b20906e42bfe723d19bd6d30b5"
+            },
+            {
+              "name": "firefox-extension-windows.exe",
+              "bytes": 3515446,
+              "sha256": "91aa35778befe4c976a7f85d44d395facbc7d0a348fbba902ac341109685655f"
+            }
+          ],
+          "macosNotarizationPending": true
+        }
+      ]
     },
     {
       "slug": "newtab-preact",
@@ -4324,18 +6471,68 @@
       },
       "integrity": {
         "chrome": {
-          "sha256": "9411691fd8d570b1f204f0c4668c42080b366071233d88b7be169b6d6bd2f726",
+          "sha256": "601acea3f2c3ebf7442a1b622516a031f124ec707c49055e52ff92144d2a291d",
           "size": 79014
         },
         "edge": {
-          "sha256": "b31a7309f62ea6eb3ce7a50481c6d064d56591e0e8c9f9e0e7420cf586a23848",
+          "sha256": "ad1d9d375fbd8eda0d9ff73e8776ac6456d3e89a9a18c0f30a59674ddc1de480",
           "size": 79014
         },
         "firefox": {
-          "sha256": "f7f1875b6afd00945b5178265aa4eea52bbe5d56fcb67ee9eac86b5769969882",
+          "sha256": "112f8c65540f237ecb3ffe7f1b0cdd2f1c7fd520931ff542bd314ac583f89829",
           "size": 79090
         }
-      }
+      },
+      "executables": [
+        {
+          "browser": "chrome",
+          "files": [
+            {
+              "name": "chrome-extension-linux.tar.gz",
+              "bytes": 1678940,
+              "sha256": "a057fb2ece7ee57242db65acf49b2bd874711a82ac78cae35728dfb0744ca73a"
+            },
+            {
+              "name": "chrome-extension-windows.exe",
+              "bytes": 3383307,
+              "sha256": "c712d91251afa6c646f933296fa1c59632661bb23eb7e638095942b699f0845c"
+            }
+          ],
+          "macosNotarizationPending": true
+        },
+        {
+          "browser": "edge",
+          "files": [
+            {
+              "name": "edge-extension-linux.tar.gz",
+              "bytes": 1679779,
+              "sha256": "7989fc65102128bf1aac7a8cbf03fd2c30650781a14acdad53b9b448010ad49a"
+            },
+            {
+              "name": "edge-extension-windows.exe",
+              "bytes": 3383285,
+              "sha256": "4638a75efa936ba56b44fce40a63f0715ee238ce23f83415e8a27dca68f80e42"
+            }
+          ],
+          "macosNotarizationPending": true
+        },
+        {
+          "browser": "firefox",
+          "files": [
+            {
+              "name": "firefox-extension-linux.tar.gz",
+              "bytes": 1680697,
+              "sha256": "e68a874c67c3b6b38a00afd43ee40d7ff49a1bdb7c0a98b64d4d4f44aee5d5aa"
+            },
+            {
+              "name": "firefox-extension-windows.exe",
+              "bytes": 3373222,
+              "sha256": "e8307fdfb750ef903fa72243befa1effdbb204be05e6b449606f6e31ac37e598"
+            }
+          ],
+          "macosNotarizationPending": true
+        }
+      ]
     },
     {
       "slug": "newtab-react",
@@ -4434,18 +6631,68 @@
       },
       "integrity": {
         "chrome": {
-          "sha256": "40ff0454d7c0c60a23cf2900660d62b43f7850d4458098f65199947b190904d9",
+          "sha256": "a27220fc9a9b875d66bfb9b80b9e74fe72303c147a978d25e6e9f57c85259186",
           "size": 148935
         },
         "edge": {
-          "sha256": "97d7519d7df1ba84d147008093fc19cede28585b9349ccf7ec79d25737c74e89",
+          "sha256": "2d26a0e3529a4c4fd22cb8ab2945490a51718f23494372020fc1f8d6aeb5c2cd",
           "size": 148935
         },
         "firefox": {
-          "sha256": "0607c40ca695755a9c99f5c9785be2e84ec2a96db70f96ba323f3618503e7d1b",
+          "sha256": "2c9544abd2ddcbbb34f60b499021d247d85a353f104cf833957d9812f4e39036",
           "size": 149011
         }
-      }
+      },
+      "executables": [
+        {
+          "browser": "chrome",
+          "files": [
+            {
+              "name": "chrome-extension-linux.tar.gz",
+              "bytes": 1842891,
+              "sha256": "903dd0967e7b5ec1c5df3b407a756a3748d0df0a2f243c908140bfe0d950dae8"
+            },
+            {
+              "name": "chrome-extension-windows.exe",
+              "bytes": 3663017,
+              "sha256": "a89c844ff4b6797f74b240ac51f2c76e0a8c4057ae037e54c463d9680db9138e"
+            }
+          ],
+          "macosNotarizationPending": true
+        },
+        {
+          "browser": "edge",
+          "files": [
+            {
+              "name": "edge-extension-linux.tar.gz",
+              "bytes": 1843383,
+              "sha256": "a4e71ad784e771bb364561a687ef2fd581e639bc23aec4c007bc4e7021e9eed1"
+            },
+            {
+              "name": "edge-extension-windows.exe",
+              "bytes": 3662995,
+              "sha256": "fd3a9a44d67091220bcc9e9dae950e61b2c302fef1d5d76e971b3c527a54bf37"
+            }
+          ],
+          "macosNotarizationPending": true
+        },
+        {
+          "browser": "firefox",
+          "files": [
+            {
+              "name": "firefox-extension-linux.tar.gz",
+              "bytes": 1855722,
+              "sha256": "e5bd714da9c76fd7da07bd5de171c2504988d74c6773f199fbc5a09706ebc9cd"
+            },
+            {
+              "name": "firefox-extension-windows.exe",
+              "bytes": 3584515,
+              "sha256": "39e9f2de53626e82fc109d66391f164d8a50e079530fcf7efa5b332a4346aa5e"
+            }
+          ],
+          "macosNotarizationPending": true
+        }
+      ]
     },
     {
       "slug": "newtab-react-router",
@@ -4545,18 +6792,68 @@
       },
       "integrity": {
         "chrome": {
-          "sha256": "0ce20b16fa2f61a9a855b5b56da064492ede764166a5a50d7504572ec9aecb53",
+          "sha256": "c7773ea856d4429410e67655f57f42a921bd0c935b6989d6e046188109ab4bd5",
           "size": 156690
         },
         "edge": {
-          "sha256": "843e4c9c8485e02515aacf90aafb891642a96b1edf1e77a635809af0348f78da",
+          "sha256": "812fad2354ce902d823dfc493602ee74fabb0986c9d2a067430545483f59ba52",
           "size": 156690
         },
         "firefox": {
-          "sha256": "155f71ddfd9faece5a75a0996d61d09dbca6f4cfd84e9fef15f2fbb9fe31da0d",
+          "sha256": "c7afacf083979e3f9d2f2f96f15e592805a1bceede3bb507059b7b210a0298b3",
           "size": 156769
         }
-      }
+      },
+      "executables": [
+        {
+          "browser": "chrome",
+          "files": [
+            {
+              "name": "chrome-extension-linux.tar.gz",
+              "bytes": 1858157,
+              "sha256": "9125d59b64abfe3f50a2f83590ba33cee9342b851b57fe96d5ba947423af20c4"
+            },
+            {
+              "name": "chrome-extension-windows.exe",
+              "bytes": 3699732,
+              "sha256": "f561ff1a100283fa28cc632bb1daaa3ec7a17a0c0f2ef823d81b7b3b1ffa7fcc"
+            }
+          ],
+          "macosNotarizationPending": true
+        },
+        {
+          "browser": "edge",
+          "files": [
+            {
+              "name": "edge-extension-linux.tar.gz",
+              "bytes": 1858242,
+              "sha256": "afad3ed76f86e8cd4e1b66e3694f15bb700e651f4adf9bc5ba63713c9e39a4e8"
+            },
+            {
+              "name": "edge-extension-windows.exe",
+              "bytes": 3699710,
+              "sha256": "941aeea4d1aa004596f5a68364fbafd7f08e122ba84639fe04ffdfa6144d8f22"
+            }
+          ],
+          "macosNotarizationPending": true
+        },
+        {
+          "browser": "firefox",
+          "files": [
+            {
+              "name": "firefox-extension-linux.tar.gz",
+              "bytes": 1874089,
+              "sha256": "4a548a98e6afbbb66c1c33cfcac935a5ced97fe1fd273862f4125e106d681763"
+            },
+            {
+              "name": "firefox-extension-windows.exe",
+              "bytes": 3607748,
+              "sha256": "59761c4b486dd54cf88a3eeab3e039d18d801896707c38fc22db28d9e1669927"
+            }
+          ],
+          "macosNotarizationPending": true
+        }
+      ]
     },
     {
       "slug": "newtab-sass",
@@ -4653,18 +6950,68 @@
       },
       "integrity": {
         "chrome": {
-          "sha256": "e2bbab98f152b14fcf3f817b807f69be7e9c5aefef57d0113be868d6b094dac7",
+          "sha256": "8bc28f79d491473fc1497ff655de89d96537c7479ce06e4f418b5f50560019ed",
           "size": 160506
         },
         "edge": {
-          "sha256": "4fbdfc32952c588cd459158811caed61406db45e75c3dd57541df736f6e0ec9f",
+          "sha256": "f82bcb79547213fe48252f32639c3798809eda4225b08793e5d128346bc721b7",
           "size": 160506
         },
         "firefox": {
-          "sha256": "a7c6abcef3f097d63ccd5de3d6b0a468ed5c74867fddb18a74517c9fd9b40da0",
+          "sha256": "47126ed24df15c7fdbcf8c8f1a2747309b021c0f4467f365657821c68198bdc0",
           "size": 160581
         }
-      }
+      },
+      "executables": [
+        {
+          "browser": "chrome",
+          "files": [
+            {
+              "name": "chrome-extension-linux.tar.gz",
+              "bytes": 1875133,
+              "sha256": "78fe744f4caec243703f950bfca2ad0093b5771fb82d7ef42de943dc01d345e6"
+            },
+            {
+              "name": "chrome-extension-windows.exe",
+              "bytes": 3627854,
+              "sha256": "85c181881087a520a3a266a06e82f97f9aae4c45e64a12da80da079b1b89f2a5"
+            }
+          ],
+          "macosNotarizationPending": true
+        },
+        {
+          "browser": "edge",
+          "files": [
+            {
+              "name": "edge-extension-linux.tar.gz",
+              "bytes": 1875577,
+              "sha256": "bdd9c9ba6126d2cc293bb5aea3534e825cf799fc6e1afc382373e421ca91eb74"
+            },
+            {
+              "name": "edge-extension-windows.exe",
+              "bytes": 3627832,
+              "sha256": "8631426e36a9b15428f639a50964eb71de46c6d560933f2808fd10699848d95e"
+            }
+          ],
+          "macosNotarizationPending": true
+        },
+        {
+          "browser": "firefox",
+          "files": [
+            {
+              "name": "firefox-extension-linux.tar.gz",
+              "bytes": 1881577,
+              "sha256": "2ed727fdff4d1ae8976a7d9df92a7fbf8e576cfe344acd0b5ec0ac737056ae1d"
+            },
+            {
+              "name": "firefox-extension-windows.exe",
+              "bytes": 3620355,
+              "sha256": "329f4fb3a34473824d8faaf1660241b2b427be1e79e3a690d796e34a0e4a6581"
+            }
+          ],
+          "macosNotarizationPending": true
+        }
+      ]
     },
     {
       "slug": "newtab-svelte",
@@ -4763,18 +7110,68 @@
       },
       "integrity": {
         "chrome": {
-          "sha256": "68895e9669bbbfe81b221470b0d8d86195037f3eb4d4c6ee0d2ead46a43ceb66",
+          "sha256": "a42f7ca1f866dd60d1952e6c8cb2818267735dc216c3631e6f66ee4cdc9b0d67",
           "size": 107482
         },
         "edge": {
-          "sha256": "40520df1dc65f83e77f14ce28cad0f34e50dbdd0220677aa03e59f961cf615d8",
+          "sha256": "088594cf2331dbe8858a8bf2efd094a0e4d64a3f649f424086a3f09d40208562",
           "size": 107482
         },
         "firefox": {
-          "sha256": "5fff27df66dbcf9d9b9acc2cb852d3c9983685e569bc6f3d6ea6ad31e22c6de6",
+          "sha256": "4c593d74f17ea54f1b3fc33d10a5caa3af75363f0912ef2a93a6ae355ee82a26",
           "size": 107558
         }
-      }
+      },
+      "executables": [
+        {
+          "browser": "chrome",
+          "files": [
+            {
+              "name": "chrome-extension-linux.tar.gz",
+              "bytes": 1739745,
+              "sha256": "ee67f03ca05d58dcf48cac5ae2bcf0106a4df1894b5579f1cd3aaa95790457fe"
+            },
+            {
+              "name": "chrome-extension-windows.exe",
+              "bytes": 3486602,
+              "sha256": "91363a2cc4626eb394046e79b886f14d74361e0a51c34d1e955de5fce73a5c61"
+            }
+          ],
+          "macosNotarizationPending": true
+        },
+        {
+          "browser": "edge",
+          "files": [
+            {
+              "name": "edge-extension-linux.tar.gz",
+              "bytes": 1740256,
+              "sha256": "39870fac8bc464641b4a0288dd655c1c150a6cffb48e6e7ae3030cb4f8889154"
+            },
+            {
+              "name": "edge-extension-windows.exe",
+              "bytes": 3486580,
+              "sha256": "40537e82e74c1064d35bdcc452b08afc8c02780f83235bb739f2c697caf12e9b"
+            }
+          ],
+          "macosNotarizationPending": true
+        },
+        {
+          "browser": "firefox",
+          "files": [
+            {
+              "name": "firefox-extension-linux.tar.gz",
+              "bytes": 1748481,
+              "sha256": "dd95f89d51344c376368a0ac49524f04cf82ecde6bb9e7444e27f13cdbe605e9"
+            },
+            {
+              "name": "firefox-extension-windows.exe",
+              "bytes": 3458996,
+              "sha256": "2e83f88c0397009e2543613395ce8423b031a1e190098e7d354e64f537a1eba6"
+            }
+          ],
+          "macosNotarizationPending": true
+        }
+      ]
     },
     {
       "slug": "newtab-typescript",
@@ -4871,18 +7268,68 @@
       },
       "integrity": {
         "chrome": {
-          "sha256": "c697e292baf6a0b9c7bd0dcefe0c7c9ba154267e7d5aa0482a0ab7af7626a323",
+          "sha256": "c70bb075b846288402972a5b215d77a302c936183bb672b991ec7ad50f086b61",
           "size": 30059
         },
         "edge": {
-          "sha256": "db639732ee679a602cc30cdb54c235b8e2fec14fb37b6b55011b5a62f0657e4f",
+          "sha256": "832762b2f9cb05fce6fafb8a0c9465873be2f8b71c503ca13b1374bbd21cac6c",
           "size": 30059
         },
         "firefox": {
-          "sha256": "b7029a50c44687f18cffa7b30e332e152159c99e94fc8843d74b781aa1c2c4ea",
+          "sha256": "d9f83198ac32cc2be72cbe1232ce23dc4cac43c3e71fdc4b90959aadb3d6aa36",
           "size": 30136
         }
-      }
+      },
+      "executables": [
+        {
+          "browser": "chrome",
+          "files": [
+            {
+              "name": "chrome-extension-linux.tar.gz",
+              "bytes": 1552290,
+              "sha256": "b14d69d46b18bc1baf28be16d0b6fbffb25c0323fc520bd0dc1221fa9eb595bc"
+            },
+            {
+              "name": "chrome-extension-windows.exe",
+              "bytes": 3235920,
+              "sha256": "e84dfdfc2e3e2ed3becad9b63430ba7a1528b17a4682888bd02093b862151818"
+            }
+          ],
+          "macosNotarizationPending": true
+        },
+        {
+          "browser": "edge",
+          "files": [
+            {
+              "name": "edge-extension-linux.tar.gz",
+              "bytes": 1552970,
+              "sha256": "21daba85d8900b775eadcf82bd77289e99a94da90423799f922f1226b0e72d6a"
+            },
+            {
+              "name": "edge-extension-windows.exe",
+              "bytes": 3235898,
+              "sha256": "66695b208e6a70aa7cd55058f402e82cbb010888862062aa5439eb37048f01a1"
+            }
+          ],
+          "macosNotarizationPending": true
+        },
+        {
+          "browser": "firefox",
+          "files": [
+            {
+              "name": "firefox-extension-linux.tar.gz",
+              "bytes": 1556791,
+              "sha256": "36c476a8061e3d9600162037680c5b1719bff56e020cf3e79fbc8cffc9a91124"
+            },
+            {
+              "name": "firefox-extension-windows.exe",
+              "bytes": 3227958,
+              "sha256": "ce9ed9f2b3d125a83a45015de0dcbebd2276c6ffe461373523449d614b8b2a21"
+            }
+          ],
+          "macosNotarizationPending": true
+        }
+      ]
     },
     {
       "slug": "newtab-vue",
@@ -4982,18 +7429,68 @@
       },
       "integrity": {
         "chrome": {
-          "sha256": "a41b2516e7608ede92d190132ed0a1d09c4cb45a564825d85269850fa4b16802",
+          "sha256": "13bce0261d2c908dbb46e466e021e566c08f7cc192d678492424dc7376cb1eee",
           "size": 121794
         },
         "edge": {
-          "sha256": "48d292906d17d5fa07664fc98f28ceeb235fda178e1774b5c8eaccb9ebc9d5d8",
+          "sha256": "f78b0971f7b2db002f3474279b1ae06f4a70eeedf03b795a28a878d882b3b2f4",
           "size": 121794
         },
         "firefox": {
-          "sha256": "ecc38e592e98718f6fd04a5536b3df22336785c0da0695373a7f5030097039d5",
+          "sha256": "4b3c8b0d77d02037c901c99fdf71d5a91b97b50b4e8c96c48ea047ef2f08c362",
           "size": 121869
         }
-      }
+      },
+      "executables": [
+        {
+          "browser": "chrome",
+          "files": [
+            {
+              "name": "chrome-extension-linux.tar.gz",
+              "bytes": 1760452,
+              "sha256": "d521fe0522a7a2b1779ed3e3cf1ea4d2adffd97eebcf88b29a47fb7575b17c72"
+            },
+            {
+              "name": "chrome-extension-windows.exe",
+              "bytes": 3610212,
+              "sha256": "5498a4706951ae948ae23f3879047d91509145ab3200dd8b45fe2f6962333db7"
+            }
+          ],
+          "macosNotarizationPending": true
+        },
+        {
+          "browser": "edge",
+          "files": [
+            {
+              "name": "edge-extension-linux.tar.gz",
+              "bytes": 1761515,
+              "sha256": "8278015ee05a9a9a5f8fd6b3a723a5f1872bbfa4af3f7f02a0e910aad37b849d"
+            },
+            {
+              "name": "edge-extension-windows.exe",
+              "bytes": 3610190,
+              "sha256": "7eca4abbbdf8e3f27e1474e55668b144586f54b972f6f8f92b07c2115073f551"
+            }
+          ],
+          "macosNotarizationPending": true
+        },
+        {
+          "browser": "firefox",
+          "files": [
+            {
+              "name": "firefox-extension-linux.tar.gz",
+              "bytes": 1782506,
+              "sha256": "b3a36e21cb7226342313a8e5a7c175b9f6b6fc6c3dec4f4bb5924ff1cf581d70"
+            },
+            {
+              "name": "firefox-extension-windows.exe",
+              "bytes": 3504557,
+              "sha256": "fb3d53e3fef48311b11b49d15a4f3f1ced6ef37a097644a4de5630cfa269a72e"
+            }
+          ],
+          "macosNotarizationPending": true
+        }
+      ]
     },
     {
       "slug": "playwright",
@@ -5106,18 +7603,68 @@
       },
       "integrity": {
         "chrome": {
-          "sha256": "9f458600042439fd19d13c2a1722225c4b9290ddc9edaaa36ec122a628d0c49e",
+          "sha256": "e76cf7d07ee819320ebe43c7d365ffd492e3d19904cb4c57e2f0e244abee90ca",
           "size": 182759
         },
         "edge": {
-          "sha256": "ca0acd775976041ba6ea6ff5a60be9e94bf9f411134d0e9edee7c3eebbf885bf",
+          "sha256": "fcff021d998558c19fc82c27bc30ef24a00ee8acfab31cb6f6f0412158fbc1dc",
           "size": 182759
         },
         "firefox": {
-          "sha256": "32d0ef558441955198b83a907f35f818b813b0cf4c932aa13d85a2c0d34ee537",
+          "sha256": "64132674f03cb77ece425414c196af6e181690bf0dbf59d6793c4ad2e72bded1",
           "size": 182653
         }
-      }
+      },
+      "executables": [
+        {
+          "browser": "chrome",
+          "files": [
+            {
+              "name": "chrome-extension-linux.tar.gz",
+              "bytes": 1927266,
+              "sha256": "ff88ce27eaa1249a35428e236a3094956a69945dc46a669ac56e4acf0b718958"
+            },
+            {
+              "name": "chrome-extension-windows.exe",
+              "bytes": 3699966,
+              "sha256": "991393c1a22a2d416cabcc6b684d8d3498bd5c759de5b7b534f7e0ae759a97a4"
+            }
+          ],
+          "macosNotarizationPending": true
+        },
+        {
+          "browser": "edge",
+          "files": [
+            {
+              "name": "edge-extension-linux.tar.gz",
+              "bytes": 1926945,
+              "sha256": "8ef2b03f0928bff34727a0ec72510ee5d1cc7af81732baa9bc320f6da9a14b05"
+            },
+            {
+              "name": "edge-extension-windows.exe",
+              "bytes": 3699944,
+              "sha256": "1cfaa49fe3dc0a897303c6b52d0055843a4f29f0af16ceba4d58c9650d1490a8"
+            }
+          ],
+          "macosNotarizationPending": true
+        },
+        {
+          "browser": "firefox",
+          "files": [
+            {
+              "name": "firefox-extension-linux.tar.gz",
+              "bytes": 1933601,
+              "sha256": "4bbcce793a712154ff0e11dc82cc2acf44bf0a83e1866fa5068fd6a482a387cd"
+            },
+            {
+              "name": "firefox-extension-windows.exe",
+              "bytes": 3685872,
+              "sha256": "90bd23dd7f2984b63fb04b5af1b874f9ed54684511ab2c20627231d9d3f521cc"
+            }
+          ],
+          "macosNotarizationPending": true
+        }
+      ]
     },
     {
       "slug": "preact",
@@ -5228,18 +7775,68 @@
       },
       "integrity": {
         "chrome": {
-          "sha256": "634348919c5605975370503121d3ba307b45e3f803e6750fb39e9a88974d1a43",
+          "sha256": "89c4bde462e776c707964e7dc5d076b8da8870cae2fb1cea28827fa1624b8e54",
           "size": 97861
         },
         "edge": {
-          "sha256": "7c1b734357914b05b495fa251d5c1979ccaaadce4b2365090ae215f97222d5b8",
+          "sha256": "bb05cea3016135a79d760ae9f1e845862e482f0c2f504ddf0941bae9652294ea",
           "size": 97861
         },
         "firefox": {
-          "sha256": "1aebb1efeef4fdedc5d92a958dbc4907e9271f4b312e2b7f8c565be7a7eaa4fe",
+          "sha256": "809f745de8d9e1f6c966e0b654ad8cdda40271d99259a73b66f57ae6c8becaee",
           "size": 97765
         }
-      }
+      },
+      "executables": [
+        {
+          "browser": "chrome",
+          "files": [
+            {
+              "name": "chrome-extension-linux.tar.gz",
+              "bytes": 1721200,
+              "sha256": "6a132fd8d73251743958fca75bd86be3c28634b242c3415b0dd6fdc2ec8ef200"
+            },
+            {
+              "name": "chrome-extension-windows.exe",
+              "bytes": 3455365,
+              "sha256": "1b9a9d4aa189f18f639678411f1e74bf32c4e794d96d4c730a12c2e1036d05d1"
+            }
+          ],
+          "macosNotarizationPending": true
+        },
+        {
+          "browser": "edge",
+          "files": [
+            {
+              "name": "edge-extension-linux.tar.gz",
+              "bytes": 1721300,
+              "sha256": "f7a695a7d997f209f17fee13fb74f9c9c03e7e6503bf0622ab02a0a14cddbb23"
+            },
+            {
+              "name": "edge-extension-windows.exe",
+              "bytes": 3455343,
+              "sha256": "3b020ac012993e97f09c532abb8b7bb4c686e9776b42ce71f18186faecd0cb39"
+            }
+          ],
+          "macosNotarizationPending": true
+        },
+        {
+          "browser": "firefox",
+          "files": [
+            {
+              "name": "firefox-extension-linux.tar.gz",
+              "bytes": 1720739,
+              "sha256": "8d04add33a2ebd23722a9a65dc41ac9516a78271b1fc6e9ec76ac93af46cc2c6"
+            },
+            {
+              "name": "firefox-extension-windows.exe",
+              "bytes": 3421290,
+              "sha256": "d2a12c2342ab724bbc26e7d0fba4766493adec27d5f78b45074c4a7bb833ca94"
+            }
+          ],
+          "macosNotarizationPending": true
+        }
+      ]
     },
     {
       "slug": "react",
@@ -5348,18 +7945,80 @@
       },
       "integrity": {
         "chrome": {
-          "sha256": "581a38824b38b8911a91ba1b458ac2056d9ac969035b1e6e266dd9797e2bb4f8",
+          "sha256": "0b095227e5ff6498096d65a76e01d9fa9305fe5ecb365280c6f86d0b352c95a9",
           "size": 197851
         },
         "edge": {
-          "sha256": "1f8e806c6e11f85ad80779619d6be0020cc9cdba56aaf9a54a1db419ae48e43e",
+          "sha256": "e2265e6fba49f06c86a812a5daa7967fb348b3b3bff15f65b9c15751d04500c1",
           "size": 197851
         },
         "firefox": {
-          "sha256": "aeb7587f86253c365d32fc1fc7e1507c7102985e30d15a1eada45546957d42c8",
+          "sha256": "4088630bf46e20b4e96f76492133990771aacf3dd4e7d240ccb93e2a426b0123",
           "size": 197756
         }
-      }
+      },
+      "executables": [
+        {
+          "browser": "chrome",
+          "files": [
+            {
+              "name": "chrome-extension-linux.tar.gz",
+              "bytes": 1950034,
+              "sha256": "7ab8e569a3a21476e17576de09a8957b62e41d40dc3ceddf145d7798861938cb"
+            },
+            {
+              "name": "chrome-extension-macos.app.tar.gz",
+              "bytes": 2261293,
+              "sha256": "c4ad64a19572d72c8a7d186c5d5db3bea1712d357457816979d3570dc32f8715"
+            },
+            {
+              "name": "chrome-extension-windows.exe",
+              "bytes": 3889007,
+              "sha256": "24b529f0f2f04576888f22e67033122b0de5f751c5e8401dae6e2e11b40a4ed2"
+            }
+          ]
+        },
+        {
+          "browser": "edge",
+          "files": [
+            {
+              "name": "edge-extension-linux.tar.gz",
+              "bytes": 1949587,
+              "sha256": "8703f388656c55b2fd6703967e71cd0b7b96f69aa35c9782a6ec1e96ac82997f"
+            },
+            {
+              "name": "edge-extension-macos.app.tar.gz",
+              "bytes": 2261289,
+              "sha256": "e8623f7c8f132a3ba266fa1c1f572827c3a36da11fccca9b006b995d29380c18"
+            },
+            {
+              "name": "edge-extension-windows.exe",
+              "bytes": 3888985,
+              "sha256": "c587ab2f07a2e8277f72817bfc13710e0d14e9c2ab248676053ab5422930466d"
+            }
+          ]
+        },
+        {
+          "browser": "firefox",
+          "files": [
+            {
+              "name": "firefox-extension-linux.tar.gz",
+              "bytes": 1974143,
+              "sha256": "35a98dce63e8243d31d97e29678cbef99d0bdaad39b158ff3ea73295c08f3ef5"
+            },
+            {
+              "name": "firefox-extension-macos.app.tar.gz",
+              "bytes": 2741736,
+              "sha256": "c308fa31aac3a03d1031d32f28ff735d68862c5412bb79392e5d437e28da030d"
+            },
+            {
+              "name": "firefox-extension-windows.exe",
+              "bytes": 3730239,
+              "sha256": "65a4091f23c4f7db2dd56fb35d5f8278eda54c4c36cb2d348d24ac29cb716448"
+            }
+          ]
+        }
+      ]
     },
     {
       "slug": "sidebar",
@@ -5456,7 +8115,76 @@
       "sources": {
         "base": "https://raw.githubusercontent.com/extension-js/examples/8e2336852b51c0fb71fd03abeca1f5e93a44700e/examples/sidebar/",
         "files": {}
-      }
+      },
+      "downloads": {
+        "chrome": "https://registry.extension.land/extension-dev/sidebar/builds/8e23368/chrome.zip",
+        "edge": "https://registry.extension.land/extension-dev/sidebar/builds/8e23368/edge.zip",
+        "firefox": "https://registry.extension.land/extension-dev/sidebar/builds/8e23368/firefox.zip"
+      },
+      "integrity": {
+        "chrome": {
+          "sha256": "d7fd237439b4450416bc9337ffad5210f1ab458038f97927856ad3f7f6e3cba3",
+          "size": 82680
+        },
+        "edge": {
+          "sha256": "8284cd211bb1102eec5f19b97dccc08bce06462469435a66dca87fa3a470e9e5",
+          "size": 82680
+        },
+        "firefox": {
+          "sha256": "ba7143fe918795acd1d76c2b382f72c223941291002b3bc24554c56a9ec061ff",
+          "size": 82570
+        }
+      },
+      "executables": [
+        {
+          "browser": "chrome",
+          "files": [
+            {
+              "name": "chrome-extension-linux.tar.gz",
+              "bytes": 1678032,
+              "sha256": "a6d7f25af90eb525a21fb284008d8a949c1c6036b282ece1f5a4bb862f76bbe1"
+            },
+            {
+              "name": "chrome-extension-windows.exe",
+              "bytes": 3405514,
+              "sha256": "7e372d94d2a9828c07723f2d1c66f9a7a367b3cf1cc833a5401eb91bd44af39b"
+            }
+          ],
+          "macosNotarizationPending": true
+        },
+        {
+          "browser": "edge",
+          "files": [
+            {
+              "name": "edge-extension-linux.tar.gz",
+              "bytes": 1679272,
+              "sha256": "648f2dde12e4c1644a0430703a7f7ec8785ef6338d83989a2b7cb3bad1228836"
+            },
+            {
+              "name": "edge-extension-windows.exe",
+              "bytes": 3405492,
+              "sha256": "e918a9a4cb9d29636680bf8ca11f9322fa4394df1595180e6fc0c8c1a87e547f"
+            }
+          ],
+          "macosNotarizationPending": true
+        },
+        {
+          "browser": "firefox",
+          "files": [
+            {
+              "name": "firefox-extension-linux.tar.gz",
+              "bytes": 1684961,
+              "sha256": "26805d3035afd1e4612cbe6103e9e49e56279de1e04effc9403429c2c37f65cf"
+            },
+            {
+              "name": "firefox-extension-windows.exe",
+              "bytes": 3385486,
+              "sha256": "6cf35ccc2aadbb0bad267b62aed93f375985937d9461358f8cab1b306275b355"
+            }
+          ],
+          "macosNotarizationPending": true
+        }
+      ]
     },
     {
       "slug": "sidebar-antd",
@@ -5564,18 +8292,68 @@
       },
       "integrity": {
         "chrome": {
-          "sha256": "664ea989dab40bb00beaee6a951418a6717b2f4594996b6791ebe8422f838c3d",
+          "sha256": "9593547234cd116a3917a7b0ab49ada4e677fd830188ef8c5a664956eb6bde6e",
           "size": 308061
         },
         "edge": {
-          "sha256": "1bfd0c53b94582e4d46bbd1054f58a2cdf9f944befe10c39e603889dba4f37c3",
+          "sha256": "b19305def9b739cef012d88bcd5f07c75d68881b2ec7220583d4a60e2dcb32a3",
           "size": 308061
         },
         "firefox": {
-          "sha256": "053011d616279f30ad0db307bf84c2c5f4844c1c81f9b7e4fdaec788c48a3e2b",
+          "sha256": "3b7e7f4f8e3b5293e955719b2ef52ab7391a2e1ca837dd1b2bc53e4503a2876d",
           "size": 307971
         }
-      }
+      },
+      "executables": [
+        {
+          "browser": "chrome",
+          "files": [
+            {
+              "name": "chrome-extension-linux.tar.gz",
+              "bytes": 2182171,
+              "sha256": "7cf728d2e2ffa52b1a534d9ccf3f8035a4e3a9bdc1684246a29a5b5aee1abf2a"
+            },
+            {
+              "name": "chrome-extension-windows.exe",
+              "bytes": 4465245,
+              "sha256": "58e1c22d5e4e2c35567dbb50a155c4a10679ce793496245afb51e661ce25bf64"
+            }
+          ],
+          "macosNotarizationPending": true
+        },
+        {
+          "browser": "edge",
+          "files": [
+            {
+              "name": "edge-extension-linux.tar.gz",
+              "bytes": 2182521,
+              "sha256": "f60addb8918385a270c39df653688ba4823c64d0049b8c25ecebb20db93a4b94"
+            },
+            {
+              "name": "edge-extension-windows.exe",
+              "bytes": 4465172,
+              "sha256": "e294e8df727e99d285fdf51b2a0acb9835da2ba8eb0402e147f1587a00535ff3"
+            }
+          ],
+          "macosNotarizationPending": true
+        },
+        {
+          "browser": "firefox",
+          "files": [
+            {
+              "name": "firefox-extension-linux.tar.gz",
+              "bytes": 2239558,
+              "sha256": "52a5bd2617992d8cd53540dda40e344f5373ffef77903dc4e17ffef5d23e6d9a"
+            },
+            {
+              "name": "firefox-extension-windows.exe",
+              "bytes": 4062745,
+              "sha256": "e33872c4b43ca88c97ca88ce793139fe816796e4691d23864eda0fdd817b2af4"
+            }
+          ],
+          "macosNotarizationPending": true
+        }
+      ]
     },
     {
       "slug": "sidebar-monorepo-nx",
@@ -5685,18 +8463,68 @@
       },
       "integrity": {
         "chrome": {
-          "sha256": "55b6ffe0016d7c7c6a15eac10a8fe0449e92a670dcb2730de15eb3cab3cffda7",
+          "sha256": "7b6b5a8976a7dab44daa12c4f49109adc4256317b4f4a6bb1be68c292ed24543",
           "size": 47065
         },
         "edge": {
-          "sha256": "2e40e18021a0dca5e7e8fa71c6f8ee3b19e67a5bc79e7f8b32a519573c7b45c0",
+          "sha256": "f6de2ddab7ac3905015ece32ff79c887316ff95b41e289853be5054f48cccd15",
           "size": 47065
         },
         "firefox": {
-          "sha256": "e9641320ff622f4b8b5644d4066feecb0d1ebe95d8cc562f7ea30f38b801e1c3",
+          "sha256": "5e6384b5ade43030e78c0ad2d2d1edf968ff8dcf4d373db4964d3d0a25d94038",
           "size": 46984
         }
-      }
+      },
+      "executables": [
+        {
+          "browser": "chrome",
+          "files": [
+            {
+              "name": "chrome-extension-linux.tar.gz",
+              "bytes": 1593529,
+              "sha256": "b129bc2eea7d7c6794177aed591b31dbcbc9f15aeb538e0c40d85f575ff3096a"
+            },
+            {
+              "name": "chrome-extension-windows.exe",
+              "bytes": 3294022,
+              "sha256": "0e562b813d4517d7931a4348f751e88beaf4d284552e5bf9ce875b695516dd94"
+            }
+          ],
+          "macosNotarizationPending": true
+        },
+        {
+          "browser": "edge",
+          "files": [
+            {
+              "name": "edge-extension-linux.tar.gz",
+              "bytes": 1594631,
+              "sha256": "42d24b8f03ef577a1e2df81bd33dc2e49a6c1183cb5aef87048ce44ba2ce8f31"
+            },
+            {
+              "name": "edge-extension-windows.exe",
+              "bytes": 3294000,
+              "sha256": "bdb53c8c429730b62ae94b4cb4206ccf3e9cba2e5cd01dcbabe5c696a2b0c1ec"
+            }
+          ],
+          "macosNotarizationPending": true
+        },
+        {
+          "browser": "firefox",
+          "files": [
+            {
+              "name": "firefox-extension-linux.tar.gz",
+              "bytes": 1598906,
+              "sha256": "0806dcda1a6a92e408b2606c36952b81601d9d346036641c0a8a8d9c55ae470a"
+            },
+            {
+              "name": "firefox-extension-windows.exe",
+              "bytes": 3279235,
+              "sha256": "3da96ac05eca093f153e1d989226f67af9fc2ee8cbaecf2114046794dafe2943"
+            }
+          ],
+          "macosNotarizationPending": true
+        }
+      ]
     },
     {
       "slug": "sidebar-monorepo-turborepo",
@@ -5806,18 +8634,68 @@
       },
       "integrity": {
         "chrome": {
-          "sha256": "bcae7b4ec1ae1e039c5e3a34d6b397596c2abca307821d1a81e1e6f49a3bbc25",
+          "sha256": "6aa50e82ac970b4e143e877f3ccc99c79155023085d42671b7c23d7d1c6b4d72",
           "size": 47077
         },
         "edge": {
-          "sha256": "ebcc0d497f98e729574d49186532ea093a188ae1dd0b792f5500082eaec42696",
+          "sha256": "4e2f2460fce91b003d2ed60d717c0579103f63f9ed0a83b1d1f140c04e16a3a0",
           "size": 47077
         },
         "firefox": {
-          "sha256": "be2145de6ecb0dc044e5f2a9ec820fc728ae638dd6d5d88c17b64a5b854b09e0",
+          "sha256": "8acb5ab7604078aadd44991483de2f9b656eff99016b1a1f8af5626f6aa97234",
           "size": 46999
         }
-      }
+      },
+      "executables": [
+        {
+          "browser": "chrome",
+          "files": [
+            {
+              "name": "chrome-extension-linux.tar.gz",
+              "bytes": 1595296,
+              "sha256": "736dc1db9ef897e787437a16ac4fe9aea872235df3182ef87d480eae77aa60b4"
+            },
+            {
+              "name": "chrome-extension-windows.exe",
+              "bytes": 3294249,
+              "sha256": "a8c07a70e6e4fc598158a01faf902dcc8f6aa9139ff1ce92aeb8cd5ba659bc6f"
+            }
+          ],
+          "macosNotarizationPending": true
+        },
+        {
+          "browser": "edge",
+          "files": [
+            {
+              "name": "edge-extension-linux.tar.gz",
+              "bytes": 1595492,
+              "sha256": "8df0c8e261a878d72c5c91295c507aec818984c3d1f4e056e09336049eb5942b"
+            },
+            {
+              "name": "edge-extension-windows.exe",
+              "bytes": 3294227,
+              "sha256": "16cd599129f561fe5a699b237419e29d86a6c126f8d4a7c57307041259869c13"
+            }
+          ],
+          "macosNotarizationPending": true
+        },
+        {
+          "browser": "firefox",
+          "files": [
+            {
+              "name": "firefox-extension-linux.tar.gz",
+              "bytes": 1598903,
+              "sha256": "f9c9e11a259eecc8ebc84f57266390aaaa3db5247ff8e58626d8888e64b10576"
+            },
+            {
+              "name": "firefox-extension-windows.exe",
+              "bytes": 3279284,
+              "sha256": "4e2f778ce396e14c55d46668cfe106ef788b21a854f8cc45a92fbf7c0530d005"
+            }
+          ],
+          "macosNotarizationPending": true
+        }
+      ]
     },
     {
       "slug": "sidebar-shadcn",
@@ -5933,18 +8811,68 @@
       },
       "integrity": {
         "chrome": {
-          "sha256": "90130581b6724a5c15b385f1b0e9486400c3ee7dae258d9c4bc6d4d7e8be019d",
+          "sha256": "60627a8f5f972605cc5882b1660a89528a72717d21cbb1b34572dbc50da41b97",
           "size": 137284
         },
         "edge": {
-          "sha256": "533d9c3ca80e2d1e4de6618b0e36bfd9ae3f2b949582f4fbbf641259273a2eef",
+          "sha256": "29671b4fae3455d80f695d9afd7162ad585b7767090fb079f4ac02745c7cbc3a",
           "size": 137284
         },
         "firefox": {
-          "sha256": "46449af452ddb6eff18d7a56a3ca64997fbbf25e4ae03d0e9011556e70513c7c",
+          "sha256": "fefd7dcb12e566711e2a4572f967fbce6bdca6ac8c7eba3f5b17b6f5f3ef664d",
           "size": 137188
         }
-      }
+      },
+      "executables": [
+        {
+          "browser": "chrome",
+          "files": [
+            {
+              "name": "chrome-extension-linux.tar.gz",
+              "bytes": 1760308,
+              "sha256": "9ecc305407154da9b3be8354475402d6cfafb85c229e32e977bb6ea666737a32"
+            },
+            {
+              "name": "chrome-extension-windows.exe",
+              "bytes": 3745114,
+              "sha256": "5d75641c385881a23b7f999e1443ba7ea6ab11caae239d4feca194ed3d713934"
+            }
+          ],
+          "macosNotarizationPending": true
+        },
+        {
+          "browser": "edge",
+          "files": [
+            {
+              "name": "edge-extension-linux.tar.gz",
+              "bytes": 1755045,
+              "sha256": "5629d8845583da4aae5784c1bc42091879f58ba145cf80895c5cbcce0fbfb35f"
+            },
+            {
+              "name": "edge-extension-windows.exe",
+              "bytes": 3745092,
+              "sha256": "67ab07a6df70fe4f9bcadbf2b081aa48698437b40d08301f43439f82145078cf"
+            }
+          ],
+          "macosNotarizationPending": true
+        },
+        {
+          "browser": "firefox",
+          "files": [
+            {
+              "name": "firefox-extension-linux.tar.gz",
+              "bytes": 1784620,
+              "sha256": "d74481710541b1eaa1b5a47082e656fcf8cea9482252a96d61ecd12369aee8f8"
+            },
+            {
+              "name": "firefox-extension-windows.exe",
+              "bytes": 3528343,
+              "sha256": "f9137f49a2fdd7c5831efe02f04210a8fcbfd024023b15cc7aacbb6d5ab40098"
+            }
+          ],
+          "macosNotarizationPending": true
+        }
+      ]
     },
     {
       "slug": "special-folders-pages",
@@ -6039,7 +8967,76 @@
       "sources": {
         "base": "https://raw.githubusercontent.com/extension-js/examples/8e2336852b51c0fb71fd03abeca1f5e93a44700e/examples/special-folders-pages/",
         "files": {}
-      }
+      },
+      "downloads": {
+        "chrome": "https://registry.extension.land/extension-dev/special-folders-pages/builds/8e23368/chrome.zip",
+        "edge": "https://registry.extension.land/extension-dev/special-folders-pages/builds/8e23368/edge.zip",
+        "firefox": "https://registry.extension.land/extension-dev/special-folders-pages/builds/8e23368/firefox.zip"
+      },
+      "integrity": {
+        "chrome": {
+          "sha256": "10323e8a25c9a13e3d72af21a22a8fe712c5fa153812517dc995f2781fc42d05",
+          "size": 17943
+        },
+        "edge": {
+          "sha256": "b2abe1ea9993596358655a97391fbc12b8a9ba3dc7dedb0d5846f7f5ce83d688",
+          "size": 17943
+        },
+        "firefox": {
+          "sha256": "510e26c502dd685e0ae0edc73e90bb6af6900fd046a62d90850baddc03fa8f59",
+          "size": 18013
+        }
+      },
+      "executables": [
+        {
+          "browser": "chrome",
+          "files": [
+            {
+              "name": "chrome-extension-linux.tar.gz",
+              "bytes": 1519410,
+              "sha256": "688af52e1e6dce87e072a477f95d52e0fa9c2bb18cbeea34337de30b6dff8b70"
+            },
+            {
+              "name": "chrome-extension-windows.exe",
+              "bytes": 3192173,
+              "sha256": "30bd50cbff35af066385e67be4f520575ecac80a2b21d1dc0fb5f4c86e5ae0b1"
+            }
+          ],
+          "macosNotarizationPending": true
+        },
+        {
+          "browser": "edge",
+          "files": [
+            {
+              "name": "edge-extension-linux.tar.gz",
+              "bytes": 1519121,
+              "sha256": "869aab1d1ca16fab39f3cb85677f3d6dc3c7cb1e8e2f9509bf16aee5e04b97ce"
+            },
+            {
+              "name": "edge-extension-windows.exe",
+              "bytes": 3192151,
+              "sha256": "02d638374a80c84df5740aec882f87cc21f80f9abb482cd24ea6dc562de8ab88"
+            }
+          ],
+          "macosNotarizationPending": true
+        },
+        {
+          "browser": "firefox",
+          "files": [
+            {
+              "name": "firefox-extension-linux.tar.gz",
+              "bytes": 1524408,
+              "sha256": "aac2d39affbb36830fef30c8542f7eb713a28200c9092f94906eb98f7b37fe4a"
+            },
+            {
+              "name": "firefox-extension-windows.exe",
+              "bytes": 3187982,
+              "sha256": "c57eedc9d815fd94c411c2f91c796d6da52f3354b17a1fb9b9053b314fbd028e"
+            }
+          ],
+          "macosNotarizationPending": true
+        }
+      ]
     },
     {
       "slug": "special-folders-scripts",
@@ -6138,7 +9135,76 @@
       "sources": {
         "base": "https://raw.githubusercontent.com/extension-js/examples/8e2336852b51c0fb71fd03abeca1f5e93a44700e/examples/special-folders-scripts/",
         "files": {}
-      }
+      },
+      "downloads": {
+        "chrome": "https://registry.extension.land/extension-dev/special-folders-scripts/builds/8e23368/chrome.zip",
+        "edge": "https://registry.extension.land/extension-dev/special-folders-scripts/builds/8e23368/edge.zip",
+        "firefox": "https://registry.extension.land/extension-dev/special-folders-scripts/builds/8e23368/firefox.zip"
+      },
+      "integrity": {
+        "chrome": {
+          "sha256": "8acffd2f6695e1fcb5e1dd16e2762d7a587d24c8115e086bb65904ceca8d16da",
+          "size": 58295
+        },
+        "edge": {
+          "sha256": "e4827a89948019779d940e30a082312c1674cf566f393859c6daa0d9b116c4d4",
+          "size": 58295
+        },
+        "firefox": {
+          "sha256": "7cb1301e4d67be7eabb01bbb52f111a552705767addad96b350b38d44512aafa",
+          "size": 58352
+        }
+      },
+      "executables": [
+        {
+          "browser": "chrome",
+          "files": [
+            {
+              "name": "chrome-extension-linux.tar.gz",
+              "bytes": 1613070,
+              "sha256": "15bbccf55fd8465f04ffe5b09375aba985cda190104110107810d3dbb31c5273"
+            },
+            {
+              "name": "chrome-extension-windows.exe",
+              "bytes": 3342559,
+              "sha256": "714125433230cff915f416c3ba498db3cb76a26a046ca7411109eebb260575d1"
+            }
+          ],
+          "macosNotarizationPending": true
+        },
+        {
+          "browser": "edge",
+          "files": [
+            {
+              "name": "edge-extension-linux.tar.gz",
+              "bytes": 1614188,
+              "sha256": "3b3fb0cbd7b07b44e16af2ef178f7fb8b492f39c24abbc9506112f00d3dd71ee"
+            },
+            {
+              "name": "edge-extension-windows.exe",
+              "bytes": 3342537,
+              "sha256": "29e7bf112349bb50a0647e027808bfeb28322db1ec7470c445cd33acfc939786"
+            }
+          ],
+          "macosNotarizationPending": true
+        },
+        {
+          "browser": "firefox",
+          "files": [
+            {
+              "name": "firefox-extension-linux.tar.gz",
+              "bytes": 1625426,
+              "sha256": "fba42d730c70f4b1f4f1eba708213cc95d32ed652f83fc69db9c6a5f64dd3d02"
+            },
+            {
+              "name": "firefox-extension-windows.exe",
+              "bytes": 3312290,
+              "sha256": "99576e604b547cba47b2efc770295243fe94bdc419faf2374b0c48e4f53d6726"
+            }
+          ],
+          "macosNotarizationPending": true
+        }
+      ]
     },
     {
       "slug": "svelte",
@@ -6248,18 +9314,68 @@
       },
       "integrity": {
         "chrome": {
-          "sha256": "00ae1538035d12b0c2e26abb88449d4878cedab187b8a4b236e8c1691bd973bb",
+          "sha256": "a1671d47a7ad557adcfa3ae1d5a38884837b4251bfe5a9a4d9fb3a7a55ad992b",
           "size": 132790
         },
         "edge": {
-          "sha256": "c9b81e53c301f1c9d78bfd1521e153796f761ccc75185b5ff9603f5a7fa82ac5",
+          "sha256": "92bae7a480ff43523e40ede4f122e050091f3988b8bf159676e65f22f41f3985",
           "size": 132790
         },
         "firefox": {
-          "sha256": "4ef8b0d66c69d59c57cdc1072e6efa5df5cf924682eb082c3a978410c1950246",
+          "sha256": "e37af4cacc507953e5688a59f382a2f9ce873835d4ac3a9292c601c5fd96e4b4",
           "size": 132531
         }
-      }
+      },
+      "executables": [
+        {
+          "browser": "chrome",
+          "files": [
+            {
+              "name": "chrome-extension-linux.tar.gz",
+              "bytes": 1795079,
+              "sha256": "b0c896990c6f0c2608ee7fab03828dc07923a7d5b9b7a21da32a45b7f3d817cf"
+            },
+            {
+              "name": "chrome-extension-windows.exe",
+              "bytes": 3590392,
+              "sha256": "9e1501f49d3ccbb9d7cf2f59dcd196f4b0c05b48306d1f8f04b9430f49e4e7cb"
+            }
+          ],
+          "macosNotarizationPending": true
+        },
+        {
+          "browser": "edge",
+          "files": [
+            {
+              "name": "edge-extension-linux.tar.gz",
+              "bytes": 1796385,
+              "sha256": "ef5063f45baa67cdcf78ab62f759c6583d15fb9466555808345037e1f90bc2ce"
+            },
+            {
+              "name": "edge-extension-windows.exe",
+              "bytes": 3590370,
+              "sha256": "10e8483ed40bbcea72ac06ae59e3eca38fd411fc00542006865f1f9e87d5d59c"
+            }
+          ],
+          "macosNotarizationPending": true
+        },
+        {
+          "browser": "firefox",
+          "files": [
+            {
+              "name": "firefox-extension-linux.tar.gz",
+              "bytes": 1807908,
+              "sha256": "2425850ad5e1ed1b02d13cf19ecdd55502d04f8d6762c751324e27c923bc5cc9"
+            },
+            {
+              "name": "firefox-extension-windows.exe",
+              "bytes": 3534098,
+              "sha256": "2b0e18e70a95472bbb6fc04acbb445214524f3d30c9e82a9d0c2ca655731115e"
+            }
+          ],
+          "macosNotarizationPending": true
+        }
+      ]
     },
     {
       "slug": "transformers-js",
@@ -6373,18 +9489,68 @@
       },
       "integrity": {
         "chrome": {
-          "sha256": "3df9a8d4f1714d99a5a01ccb8f22195fac3cc9e10cecd62eb4b6945498d2e913",
+          "sha256": "338edd2d56f3a8172811f51103bb134db9b718045ab9ed739600f5730c882a55",
           "size": 5432869
         },
         "edge": {
-          "sha256": "a81e29193c0c471196596138c9bf662bb54e11629b6785243ede573acf261d81",
+          "sha256": "090b7df13ffb04e4f53855e833b43abc32f3339472b58a13235e8e337dba1c12",
           "size": 5432869
         },
         "firefox": {
-          "sha256": "cbe3e3d6a1ca1c34228b7d693cba18b88390e64ce710d8fa35fb65698e47f0b7",
+          "sha256": "eaf9af15fad094910ae396166455bdffbd6371f1d4b7de4a9608408cda00e456",
           "size": 5432911
         }
-      }
+      },
+      "executables": [
+        {
+          "browser": "chrome",
+          "files": [
+            {
+              "name": "chrome-extension-linux.tar.gz",
+              "bytes": 13613362,
+              "sha256": "b9388e4504f03dcd9e5121c50b4a3290d22a0328cabfbd844eb4ad867b02464b"
+            },
+            {
+              "name": "chrome-extension-windows.exe",
+              "bytes": 35443240,
+              "sha256": "cf60bb324a40c160cdb63f23f3e176b1cdc8cdf76d1f8a4a5f8c20b8f5d0f04c"
+            }
+          ],
+          "macosNotarizationPending": true
+        },
+        {
+          "browser": "edge",
+          "files": [
+            {
+              "name": "edge-extension-linux.tar.gz",
+              "bytes": 13613802,
+              "sha256": "5a9a7abd27208eb1e63881433f759806fb4a0b2e13690b79c075a4e122735b79"
+            },
+            {
+              "name": "edge-extension-windows.exe",
+              "bytes": 35443218,
+              "sha256": "5250a238e026f738d194b63de802e163410dc075db42608784f47feb36764793"
+            }
+          ],
+          "macosNotarizationPending": true
+        },
+        {
+          "browser": "firefox",
+          "files": [
+            {
+              "name": "firefox-extension-linux.tar.gz",
+              "bytes": 14608088,
+              "sha256": "d67a43f3b294d443331ec8bba58afecb49917434bec0ad29cdef0bb9a270fa61"
+            },
+            {
+              "name": "firefox-extension-windows.exe",
+              "bytes": 19414690,
+              "sha256": "483e1202c313af2d23c69e0bb25d0726cca975eae7cdcafda47abee3cc5e792a"
+            }
+          ],
+          "macosNotarizationPending": true
+        }
+      ]
     },
     {
       "slug": "typescript",
@@ -6493,18 +9659,68 @@
       },
       "integrity": {
         "chrome": {
-          "sha256": "f73ead3b05f2909d6d19a81385d3439c603cf3c3543cb9a3bd4df18b4b6a7001",
+          "sha256": "9bd8b9095e995af2250a14412afd61e381ee16f11400788a15ca15cf8de0882e",
           "size": 36327
         },
         "edge": {
-          "sha256": "a817c5d38ad2a82433d3fcae603007cf5b6af61ac3aa7fd196b6d19ecb61c971",
+          "sha256": "678d399424d74673d2d56ce051391987c3d3d3775e15c422ed52d6b1ad6fb01a",
           "size": 36327
         },
         "firefox": {
-          "sha256": "69d5d91c07dadf049542b6d760b1f00bbe3a74f3c10c4b85141aca19cbca7098",
+          "sha256": "7ddd61e6439741cbd2a9ba767efc2a1d000655cf89458bacb9e0e18c29263ec4",
           "size": 36224
         }
-      }
+      },
+      "executables": [
+        {
+          "browser": "chrome",
+          "files": [
+            {
+              "name": "chrome-extension-linux.tar.gz",
+              "bytes": 1565818,
+              "sha256": "a64d687d870b22df054a48b7efcd665cb7ca8c74efa65852a5b2b5ce0d981a49"
+            },
+            {
+              "name": "chrome-extension-windows.exe",
+              "bytes": 3265761,
+              "sha256": "b3aa28ec6fc71c609e80f47104583adbbf20095884668511843d83787bdf45ea"
+            }
+          ],
+          "macosNotarizationPending": true
+        },
+        {
+          "browser": "edge",
+          "files": [
+            {
+              "name": "edge-extension-linux.tar.gz",
+              "bytes": 1566991,
+              "sha256": "ae5eabbe41b86391229a7fcbfd7d6bb9b5e900ab882ffe11dd8b7416d8bf3d28"
+            },
+            {
+              "name": "edge-extension-windows.exe",
+              "bytes": 3265739,
+              "sha256": "5a874768ee8e5e32b3699ff70b5b646b59fd30bbd5a86deb0c278cd52c167d6a"
+            }
+          ],
+          "macosNotarizationPending": true
+        },
+        {
+          "browser": "firefox",
+          "files": [
+            {
+              "name": "firefox-extension-linux.tar.gz",
+              "bytes": 1571231,
+              "sha256": "aee3742745c4e787bfb124405d7df826a000aab97ef49701fe61e5f5b869cf0e"
+            },
+            {
+              "name": "firefox-extension-windows.exe",
+              "bytes": 3245721,
+              "sha256": "8235470e569834ef9c1d866c4eb9536a06d404fd5b6d79e39525413adfa6ca34"
+            }
+          ],
+          "macosNotarizationPending": true
+        }
+      ]
     },
     {
       "slug": "vue",
@@ -6615,18 +9831,68 @@
       },
       "integrity": {
         "chrome": {
-          "sha256": "f3be45822d6f8ec71f431f044f85d7ec9a34a33ededc3a9cfcb646901cd628f3",
+          "sha256": "d0d8cf01d250a111c965c6041a18871ef44e29f7be61acdd442fb29c28dbd7b9",
           "size": 172536
         },
         "edge": {
-          "sha256": "c6664e3ba6ea94f7517285a3d51ed613438a1a318929af4f65058deb68491c53",
+          "sha256": "d93178e70c56bd2f11700b6becc49fa7f23273ad77f751e895c44cbc4069962d",
           "size": 172536
         },
         "firefox": {
-          "sha256": "4e57ba3c333032be47728d2cae13d134b12482588a5ebc035469919b740b7e77",
+          "sha256": "0c0eeca56f46b7ef0eee6a3cbbef48e95261a35de27dc893d10c6821d75cc1c5",
           "size": 172464
         }
-      }
+      },
+      "executables": [
+        {
+          "browser": "chrome",
+          "files": [
+            {
+              "name": "chrome-extension-linux.tar.gz",
+              "bytes": 1867245,
+              "sha256": "66d9c91b2fd0f1b1c0197d580b2dc6c38ee171c11a2b96358704e058a75b9106"
+            },
+            {
+              "name": "chrome-extension-windows.exe",
+              "bytes": 3863440,
+              "sha256": "dcf34629b2f3688a401054682d4b1575d4aee52e8b134e0d3c943743b02ebb81"
+            }
+          ],
+          "macosNotarizationPending": true
+        },
+        {
+          "browser": "edge",
+          "files": [
+            {
+              "name": "edge-extension-linux.tar.gz",
+              "bytes": 1866433,
+              "sha256": "8ffdb830280ade6979e2e7d0e505797676eb73f8eeb92990dff009a772152054"
+            },
+            {
+              "name": "edge-extension-windows.exe",
+              "bytes": 3863418,
+              "sha256": "f8b4f2585cb34f7d7ab3c1a65bf6b1e3bfb7b9858a23e0605c01f1ca4745123d"
+            }
+          ],
+          "macosNotarizationPending": true
+        },
+        {
+          "browser": "firefox",
+          "files": [
+            {
+              "name": "firefox-extension-linux.tar.gz",
+              "bytes": 1902407,
+              "sha256": "fb5e7640c73f3438160d704cc3a1155cb3eb497a60f177435ba38d67d4b77fa7"
+            },
+            {
+              "name": "firefox-extension-windows.exe",
+              "bytes": 3656226,
+              "sha256": "bc1c9d377d05cd229b5915f8af43cfb7cc840f4b8f4dbfce03b955259f56509c"
+            }
+          ],
+          "macosNotarizationPending": true
+        }
+      ]
     }
   ]
 }
