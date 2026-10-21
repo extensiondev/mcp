@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- `extension_project_create` names the device code's deadline: the pending answer carries `expiresAt` and `expiresInSeconds` (fifteen minutes from the first call) and says to call again right after approving, the waiting answer repeats it, and `create-expired` says that an approval given near the end of the window still reads as expired, that no project was created, and to restart without the old `deviceCode`.
 - `extension_submit` `action: "preflight"` reads the platform's own Chrome submission record and, while it carries a pending review, answers `nextStep` `done` with the submission page, `value.chromeReview` (submission id, store state, build, version, since) and a sentence that a new submit would upload another draft beside the review; it offers the submit step only when no review is pending. `storeMd.onListing` names what STORE.md carries that the listing already has, apart from `covers` (what a sync would fill).
 
 ## 10.18.1

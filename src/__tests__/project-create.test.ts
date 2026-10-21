@@ -177,6 +177,23 @@ describe("extension_project_create", () => {
     expect(out.error).toBeNull();
     expect(out.value.deviceCode).toBe("dev-code");
     expect(out.value.verificationUriComplete).toContain("ABCD-1234");
+    expect(out.value.expiresInSeconds).toBe(900);
+    expect(Date.parse(out.value.expiresAt) - Date.now()).toBeGreaterThan(890_000);
+    expect(out.hint).toContain("The code expires at");
+    expect(out.hint).toContain("call again right after approving");
+  });
+
+  it("says why an approved code can still read as expired and how to restart", async () => {
+    const { fn } = createFetch({
+      token: [{ status: 400, body: { error: "expired_token", message: "The device code has expired." } }],
+    });
+    vi.stubGlobal("fetch", fn);
+    const out = JSON.parse(await handler({ ...baseArgs, deviceCode: "dev-code" }));
+    expect(out.status).toBe("create-expired");
+    expect(out.error.code).toBe("E_AUTH_EXPIRED");
+    expect(out.error.message).toContain("fifteen minutes");
+    expect(out.error.message).toContain("no project was created");
+    expect(out.error.message).toContain("without the old deviceCode");
   });
 
   it("relays the server's closed-lane message verbatim", async () => {

@@ -161,18 +161,32 @@ function closedLane(name: string, message: string, api: string, workspace: strin
   });
 }
 
+/* @invariant THE CODE'S DEADLINE IS PART OF THE ASK. The device code lives
+ * fifteen minutes from the first call and the grant it carries dies with it,
+ * so an approval given in the last minute reads as expired on the next
+ * resume. On 2026-10-21 the person approved sixteen minutes in and the create
+ * answered E_AUTH_EXPIRED with no project; nothing had told either side when
+ * the code would die. Every pending answer names the deadline and says to
+ * resume right after approving.
+ */
+function deadlineSentence(expiresAt: string): string {
+  return `The code expires at ${expiresAt.slice(11, 16)} UTC; approve before then and call again right after approving, since the approval dies with the code.`;
+}
+
 function pendingEnvelope(start: {
   deviceCode: string;
   userCode: string;
   verificationUri: string;
   verificationUriComplete?: string;
+  expiresIn: number;
 }): string {
   const complete = String(start.verificationUriComplete || "").trim();
   const hasCompleteLink =
     complete.length > 0 && complete !== start.verificationUri;
+  const expiresAt = new Date(Date.now() + start.expiresIn * 1000).toISOString();
   const message = hasCompleteLink
-    ? `Open ${complete} and approve creating the project (code ${start.userCode} is pre-filled), then call extension_project_create again with this deviceCode and the same arguments. If the page asks for a code, enter ${start.userCode} at ${start.verificationUri}.`
-    : `Open ${start.verificationUri}, enter code ${start.userCode}, approve creating the project, then call extension_project_create again with this deviceCode and the same arguments.`;
+    ? `Open ${complete} and approve creating the project (code ${start.userCode} is pre-filled), then call extension_project_create again with this deviceCode and the same arguments. If the page asks for a code, enter ${start.userCode} at ${start.verificationUri}. ${deadlineSentence(expiresAt)}`
+    : `Open ${start.verificationUri}, enter code ${start.userCode}, approve creating the project, then call extension_project_create again with this deviceCode and the same arguments. ${deadlineSentence(expiresAt)}`;
 
   return envelope({
     ok: true,
@@ -183,6 +197,8 @@ function pendingEnvelope(start: {
       verificationUri: start.verificationUri,
       ...(hasCompleteLink ? { verificationUriComplete: complete } : {}),
       deviceCode: start.deviceCode,
+      expiresAt,
+      expiresInSeconds: start.expiresIn,
     },
     hint: message,
   });
@@ -384,7 +400,7 @@ async function finishFromPoll(
           verificationUri: ctx.verificationUri,
           deviceCode: ctx.deviceCode,
         },
-        hint: `Still waiting for approval at ${ctx.verificationUri}. Approve there, then call extension_project_create again with this same deviceCode.`,
+        hint: `Still waiting for approval at ${ctx.verificationUri}. Approve there, then call extension_project_create again with this same deviceCode right away: the code lives fifteen minutes from the first call and the approval dies with it.`,
       });
     }
 
@@ -404,7 +420,7 @@ async function finishFromPoll(
     if (poll.reason === "expired") {
       return fail(
         "CreateExpired",
-        `${poll.message || "The device code has expired or is unknown."} Run extension_project_create again to restart.`,
+        `${poll.message || "The device code has expired or is unknown."} The code lives fifteen minutes from the first call, and an approval given near the end of that window still reads as expired here, so no project was created. Run extension_project_create again (without the old deviceCode) and call it back right after the person approves.`,
         "create-expired",
         "E_AUTH_EXPIRED",
       );
