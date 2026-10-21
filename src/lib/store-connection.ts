@@ -72,7 +72,7 @@ export function submitStep(stores: string[]): NextStep {
   return nextStep(
     "submit",
     drafts
-      ? `Every check for ${storeNames(stores)} is green. I submit it as an unlisted draft after one owner approval, and nothing goes to review until you publish.`
+      ? `Every check for ${storeNames(stores)} is green. I upload it as a store draft after one owner approval; a draft is not published and nothing goes to review until you publish. Whether the item is public or unlisted is set once in the store's own dashboard (a new Chrome item defaults to public), not by this upload.`
       : `Every check for ${storeNames(stores)} is green. I submit it after one owner approval.`,
   );
 }
@@ -135,7 +135,7 @@ export function withApproveStep(out: string, promisesNoReview: boolean): string 
 }
 
 export function linkItemSentences(urls: ItemLinkUrls): string {
-  return `One step is yours, once: create the item in the Chrome Web Store dashboard at ${urls.newItemUrl} with this package ${urls.packageUrl}, and fill its Store listing and Privacy tabs there; your synced listing text is on the extension.dev store settings page to copy. Then paste the item's dashboard address at ${urls.linkItemUrl}. After that I submit every build as an unlisted draft, and nothing goes to review until you publish.`;
+  return `One step is yours, once: create the item in the Chrome Web Store dashboard at ${urls.newItemUrl} with this package ${urls.packageUrl}, and fill its Store listing and Privacy tabs there; your synced listing text is on the extension.dev store settings page to copy. Then paste the item's dashboard address at ${urls.linkItemUrl}. After that I upload every build as a draft that is not published, and nothing goes to review until you publish; set the item's visibility (public or unlisted) once in that dashboard, since no store API sets it.`;
 }
 
 export function itemLinkUrls(rows: unknown[], settingsUrl: string): ItemLinkUrls {
@@ -149,7 +149,7 @@ export function itemLinkUrls(rows: unknown[], settingsUrl: string): ItemLinkUrls
 }
 
 export function connectSentences(connectUrl: string): string {
-  return `Connect your Chrome Web Store account once at ${connectUrl}; Google asks for one click. Then I submit it as an unlisted draft, and nothing goes to review until you publish.`;
+  return `Connect your Chrome Web Store account once at ${connectUrl}; Google asks for one click. Then I upload it as a draft that is not published, and nothing goes to review until you publish; the item's visibility (public or unlisted) is set once in the Chrome Web Store dashboard, since no store API sets it.`;
 }
 
 export function failedCheckSentence(reason: string): string {

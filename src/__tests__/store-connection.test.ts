@@ -12,12 +12,12 @@ const SETTINGS = "http://console.extension.localhost/acme/widget/project-setting
 const CONNECT = `${SETTINGS}?connect=chrome`;
 const SECRET_NAMES = /STORE_(CHROME|EDGE|FIREFOX|SAFARI)_|CHROME_CLIENT|CLIENT_SECRET|CLIENT_ID|REFRESH_TOKEN|SERVICE_ACCOUNT|API_SECRET/;
 const SENTENCES = (url: string) =>
-  `Connect your Chrome Web Store account once at ${url}; Google asks for one click. Then I submit it as an unlisted draft, and nothing goes to review until you publish.`;
+  `Connect your Chrome Web Store account once at ${url}; Google asks for one click. Then I upload it as a draft that is not published, and nothing goes to review until you publish; the item's visibility (public or unlisted) is set once in the Chrome Web Store dashboard, since no store API sets it.`;
 
 const NEW_ITEM = "https://chrome.google.com/webstore/devconsole";
 const PACKAGE = "http://localhost:3100/api/projects/prj_probe/builds/b418732/chrome.zip";
 const LINK_ITEM = `${SETTINGS}?connect=chrome&link=item`;
-const LINK_SENTENCES = `One step is yours, once: create the item in the Chrome Web Store dashboard at ${NEW_ITEM} with this package ${PACKAGE}, and fill its Store listing and Privacy tabs there; your synced listing text is on the extension.dev store settings page to copy. Then paste the item's dashboard address at ${LINK_ITEM}. After that I submit every build as an unlisted draft, and nothing goes to review until you publish.`;
+const LINK_SENTENCES = `One step is yours, once: create the item in the Chrome Web Store dashboard at ${NEW_ITEM} with this package ${PACKAGE}, and fill its Store listing and Privacy tabs there; your synced listing text is on the extension.dev store settings page to copy. Then paste the item's dashboard address at ${LINK_ITEM}. After that I upload every build as a draft that is not published, and nothing goes to review until you publish; set the item's visibility (public or unlisted) once in that dashboard, since no store API sets it.`;
 
 function readiness(connection: Record<string, unknown> | null, extra: Record<string, unknown> = {}) {
   return {
