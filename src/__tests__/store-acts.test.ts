@@ -165,7 +165,7 @@ describe("extension_submit withdraws a submission, raises a staged rollout and c
     expect(JSON.stringify(out)).not.toContain("A long user-written text");
     expect(out.hint).toContain("chrome");
     expect(out.value.stores.chrome.submissionMode).toMatchObject({ id: "draft-until-public", label: "Draft until published" });
-    expect(out.value.stores.chrome.submissionMode.fromHere).toContain("stops at the draft");
+    expect(out.value.stores.chrome.submissionMode.fromHere).toBe("An upload from here stops at the draft under this mode.");
   });
 
   it("preflight names the saved submission mode in the hint once every check is green", async () => {
@@ -177,7 +177,54 @@ describe("extension_submit withdraws a submission, raises a staged rollout and c
     const out = JSON.parse(await submit({ action: "preflight", browsers: ["chrome"], buildSha: "603fc8a", api: API }));
 
     expect(out.hint).toContain("chrome submission mode: Draft until published (draft-until-public)");
-    expect(out.hint).toContain("An upload from here stops at the draft");
+    expect(out.hint).toContain("An upload from here stops at the draft under this mode.");
+    expect(out.value.nextStep.say).toContain("I upload it as a store draft");
+  });
+
+  it("preflight and the approval say the upload goes on to review when the saved Chrome mode publishes", async () => {
+    if (process.platform === "win32") return;
+
+    platform.login();
+    const broad = report("chrome", true);
+    broad.submissionMode = { id: "public", label: "Public publish", description: "Chrome submissions will use the default publish target and can go public after approval.", rollout: "broad" };
+    platform.routes[`POST ${PREFLIGHT("chrome")}`] = () => ({ body: broad });
+    platform.routes[`POST ${APPROVALS}`] = () => ({
+      status: 201,
+      body: { approvalId: "apr_broad", approvalUrl: `${API}/approve/apr_broad`, expiresAt: "2026-10-22T10:00:00.000Z" },
+    });
+
+    const pre = JSON.parse(await submit({ action: "preflight", browsers: ["chrome"], buildSha: "603fc8a", api: API }));
+
+    expect(pre.value.stores.chrome.submissionMode.fromHere).toContain("goes on to review under this mode");
+    expect(pre.value.nextStep.say).toContain('Under the Chrome Web Store's saved mode "public" this upload goes on to review');
+    expect(pre.value.nextStep.say).not.toContain("as a store draft");
+
+    const out = JSON.parse(await submit({ browsers: ["chrome"], buildSha: "603fc8a", dryRun: false, api: API }));
+
+    expect(out.status).toBe("approval-required");
+    expect(platform.sent("POST", APPROVALS)[0].body.description).toContain('for store review: the saved chrome mode "public" sends the upload on to review');
+    expect(out.hint).toContain('Under the Chrome Web Store's saved mode "public" this upload goes on to review');
+    expect(out.hint).not.toContain("Nothing goes to review until you publish.");
+    expect(out.value.reviewPromise).toContain("goes on to review");
+  });
+
+  it("the approval for a draft upload names the draft, never store review", async () => {
+    if (process.platform === "win32") return;
+
+    platform.login();
+    platform.routes[`POST ${PREFLIGHT("chrome")}`] = () => ({ body: report("chrome", true) });
+    platform.routes[`POST ${APPROVALS}`] = () => ({
+      status: 201,
+      body: { approvalId: "apr_draft", approvalUrl: `${API}/approve/apr_draft`, expiresAt: "2026-10-22T10:00:00.000Z" },
+    });
+
+    const out = JSON.parse(await submit({ browsers: ["chrome"], buildSha: "603fc8a", dryRun: false, api: API }));
+
+    expect(out.status).toBe("approval-required");
+    const description = platform.sent("POST", APPROVALS)[0].body.description;
+    expect(description).toContain("as a store draft: not published and not sent to review under the saved submission mode");
+    expect(description).not.toContain("for store review");
+    expect(out.hint).toContain("Nothing goes to review until you publish.");
   });
 
   it("preflight answers done, not submit, while the platform records a Chrome review in progress", async () => {

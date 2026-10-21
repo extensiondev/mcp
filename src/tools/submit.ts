@@ -70,16 +70,19 @@ import {
   itemLinkUrls,
   linkItemSentences,
   nextStep,
+  reviewSentenceFor,
   storeSettingsUrl,
+  uploadStopsAtDraft,
   withApproveStep,
   withReviewPromise,
   withoutSecretNames,
+  type ModeIds,
 } from "../lib/store-connection";
 import {
   connectionStep,
   dryRunVerdict,
   isConnectionState,
-  readConnections,
+  readConnectionsAndModes,
   readStoreRows,
   rowFromConnection,
 } from "../lib/store-readiness";
@@ -192,7 +195,7 @@ export const schema = {
         type: "boolean",
         default: true,
         description:
-          "true (the default) rehearses and dispatches nothing: the platform verifies the token and project, finds the store workflow, reads the build from its index and each store's connection record, and answers one value.verdict (ready, not-checked, platform-refused, or the blocking state store-not-connected, store-connection-failed, store-item-not-linked, store-not-configured or store-unhealthy) with value.nextStep and value.trackUrl; it does not run the owner gate, the approval, the build quota, the dispatch pause or the submission-mode check, which the real run does first. false submits: it reads the store connection and refuses before any approval when the store is not ready, needs a token issued by a workspace owner and that owner's approval of this exact submission, dispatches the store workflow, and a Chrome or Edge upload from here always stops at the draft, whatever the project's saved submission mode (Chrome: draft-until-public, the default, public or staged; Edge: draft or review; those modes govern console submissions and are answered by preflight under value.stores.<store>.submissionMode and by extension_release_status under config.submissionMode). Store credentials are never arguments, and no local file is uploaded.",
+          "true (the default) rehearses and dispatches nothing: the platform verifies the token and project, finds the store workflow, reads the build from its index and each store's connection record, and answers one value.verdict (ready, not-checked, platform-refused, or the blocking state store-not-connected, store-connection-failed, store-item-not-linked, store-not-configured or store-unhealthy) with value.nextStep and value.trackUrl; it does not run the owner gate, the approval, the build quota, the dispatch pause or the submission-mode check, which the real run does first. false submits: it reads the store connection and refuses before any approval when the store is not ready, needs a token issued by a workspace owner and that owner's approval of this exact submission, dispatches the store workflow, and a Chrome or Edge upload from here stops at the draft under the default modes (Chrome draft-until-public, Edge draft), while a mode saved in the console store settings is honored whoever saved it: Chrome public or staged and Edge review send the upload on to review, and the approval says so (preflight answers the saved mode under value.stores.<store>.submissionMode, extension_release_status under config.submissionMode). Store credentials are never arguments, and no local file is uploaded.",
       },
       projectPath: {
         type: "string",
@@ -331,8 +334,8 @@ async function connectionPrecheck(
   browsers: string[],
   ref: ProjectRef | null,
   scope: { buildSha: string; channel: string },
-): Promise<string | null> {
-  const connections = await readConnections(
+): Promise<{ refused: string | null; modes: ModeIds }> {
+  const read = await readConnectionsAndModes(
     {
       project: args.project,
       api: args.api,
@@ -341,6 +344,10 @@ async function connectionPrecheck(
     },
     browsers,
   );
+  const connections = read.connections;
+  const modes: ModeIds = Object.fromEntries(
+    Object.entries(read.modes).map(([store, mode]) => [store, mode.id]),
+  );
   const blocked = browsers
     .map(
       (browser) =>
@@ -348,14 +355,14 @@ async function connectionPrecheck(
         rowFromConnection(browser, connections[browser]),
     )
     .find((row) => row && isConnectionState(row.state));
-  if (!blocked) return null;
+  if (!blocked) return { refused: null, modes };
 
   const ctx = { ref, api: args.api };
   const step = connectionStep(blocked, connections[blocked.browser], ctx);
   const settingsUrl = storeSettingsUrl(ref, args.api);
   const linked = blocked.state === "store-item-not-linked";
 
-  return envelope({
+  const refused = envelope({
     ok: false,
     command: "extension_submit",
     status: blocked.state,
@@ -378,6 +385,8 @@ async function connectionPrecheck(
     },
     hint: step.say,
   });
+
+  return { refused, modes };
 }
 
 async function answer(args: SubmitToolArgs): Promise<string> {
@@ -469,41 +478,50 @@ async function answer(args: SubmitToolArgs): Promise<string> {
   if (args.channel) body.channel = String(args.channel).trim();
   if (args.version) body.version = String(args.version).trim();
 
-  const promisesNoReview = browsers.every((browser) =>
-    DRAFT_STORES.has(browser),
-  );
-  const gateInput = {
-    command: "extension_submit",
-    action: "extension_submit",
-    scope: {
-      browsers: [...browsers].sort(),
-      buildSha: buildSha.toLowerCase(),
-      channel,
-    },
-    description: promisesNoReview
-      ? `Upload build ${buildSha} to ${browsers.join(", ")} as a store draft: not published and not sent to review, whatever the saved submission mode. The store keeps the uploaded package, so the upload itself cannot be undone.`
-      : `Submit build ${buildSha} to ${browsers.join(", ")} for store review.`,
-    approvalId: args.approvalId,
-    token,
-    api: args.api,
-    refusedStatus: "submit-failed",
-    irreversible: true,
+  let modes: ModeIds = {};
+
+  const gateInputFor = (known: ModeIds) => {
+    const drafts = browsers.every((browser) => uploadStopsAtDraft(browser, known[browser]));
+    const broad = browsers.filter((browser) => DRAFT_STORES.has(browser) && !uploadStopsAtDraft(browser, known[browser]));
+
+    return {
+      command: "extension_submit",
+      action: "extension_submit",
+      scope: {
+        browsers: [...browsers].sort(),
+        buildSha: buildSha.toLowerCase(),
+        channel,
+      },
+      description: drafts
+        ? `Upload build ${buildSha} to ${browsers.join(", ")} as a store draft: not published and not sent to review under the saved submission mode. The store keeps the uploaded package, so the upload itself cannot be undone.`
+        : broad.length > 0
+          ? `Submit build ${buildSha} to ${browsers.join(", ")} for store review: the saved ${broad.map((store) => `${store} mode "${known[store]}"`).join(" and ")} sends the upload on to review.`
+          : `Submit build ${buildSha} to ${browsers.join(", ")} for store review.`,
+      approvalId: args.approvalId,
+      token,
+      api: args.api,
+      refusedStatus: "submit-failed",
+      irreversible: true,
+    };
   };
-  const asked = (out: string) =>
-    withApproveStep(
-      promisesNoReview ? withReviewPromise(out) : out,
-      promisesNoReview,
-    );
+
+  const asked = (out: string) => {
+    const sentence = reviewSentenceFor(browsers, modes);
+
+    return withApproveStep(sentence ? withReviewPromise(out, sentence) : out, sentence);
+  };
 
   if (!dryRun) {
-    const refused = await connectionPrecheck(args, browsers, credential.ref, {
+    const precheck = await connectionPrecheck(args, browsers, credential.ref, {
       buildSha,
       channel,
     });
-    if (refused) return refused;
+    if (precheck.refused) return precheck.refused;
+
+    modes = precheck.modes;
 
     const gate = await evaluateApproval({
-      ...gateInput,
+      ...gateInputFor(modes),
       enabled: approvalGateEnabled(true),
     });
     if (gate.blocked) return asked(gate.envelope);
@@ -644,7 +662,7 @@ async function answer(args: SubmitToolArgs): Promise<string> {
     }
 
     if (!dryRun && !args.approvalId && platformRequiresApproval(res, data)) {
-      return asked(await requestApprovalAfterRefusal(gateInput));
+      return asked(await requestApprovalAfterRefusal(gateInputFor(modes)));
     }
 
     const answered =
@@ -1048,7 +1066,7 @@ async function answer(args: SubmitToolArgs): Promise<string> {
         command: "extension_submit",
         status: "submit-dispatched",
         value: result,
-        hint: `${dispatchedHint({ acceptedAt, trackUrl: firstPage, readCall: statusRead })} A Chrome or Edge upload from here stops at the draft whatever the saved submission mode, and does not enter review. ${made}`,
+        hint: `${dispatchedHint({ acceptedAt, trackUrl: firstPage, readCall: statusRead })} A Chrome or Edge upload under the default modes (Chrome draft-until-public, Edge draft) stops at the draft and does not enter review; a saved public, staged or review mode sends it on. ${made}`,
         warnings: [...warnings, channelNote, statusNote, credential.note],
       });
     }
@@ -1060,7 +1078,7 @@ async function answer(args: SubmitToolArgs): Promise<string> {
       value: result,
       hint: `${
         message ||
-        `The platform's record confirms the submission for ${outcome.stores.join(", ")} (${waited.outcome.status}${waited.outcome.storeState ? `, store state ${waited.outcome.storeState}` : ""}). A Chrome or Edge upload from here stops at the draft whatever the saved submission mode, does not enter review and is recorded as "Uploaded, not public"; a store's own review, where it happens, comes after this answer.`
+        `The platform's record confirms the submission for ${outcome.stores.join(", ")} (${waited.outcome.status}${waited.outcome.storeState ? `, store state ${waited.outcome.storeState}` : ""}). A Chrome or Edge upload under the default modes (Chrome draft-until-public, Edge draft) stops at the draft, does not enter review and is recorded as "Uploaded, not public"; a saved public, staged or review mode sends it on, and a store's own review, where it happens, comes after this answer.`
       } ${made}`,
       warnings: [...warnings, channelNote, statusNote, credential.note],
     });

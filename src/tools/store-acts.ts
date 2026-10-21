@@ -44,6 +44,8 @@ import {
   nextStep,
   storeSettingsUrl,
   submitStep,
+  uploadStopsAtDraft,
+  type ModeIds,
 } from "../lib/store-connection";
 import { readLocalListing, storeMdAdvisory } from "./store-listing";
 
@@ -504,8 +506,9 @@ function readinessView(
           description: text(mode.description),
           ...(DRAFT_ONLY_STORES.has(store)
             ? {
-                fromHere:
-                  "An upload from here stops at the draft whatever this mode says; the mode governs console submissions.",
+                fromHere: uploadStopsAtDraft(store, text(mode.id))
+                  ? "An upload from here stops at the draft under this mode."
+                  : "An upload from here goes on to review under this mode; set the mode to its draft option in the console store settings to stop at a draft.",
               }
             : {}),
         }
@@ -729,6 +732,14 @@ export async function preflight(args: StoreActArgs): Promise<string> {
     args.api,
   );
   const reviewSay = reviewing ? reviewSentence(reviewing) : "";
+  const modeIds: ModeIds = Object.fromEntries(
+    Object.entries(stores).map(([store, view]) => [
+      store,
+      isRow((view as Row).submissionMode)
+        ? text(((view as Row).submissionMode as Row).id)
+        : undefined,
+    ]),
+  );
 
   return envelope({
     ok: true,
@@ -743,7 +754,7 @@ export async function preflight(args: StoreActArgs): Promise<string> {
       nextStep: reviewing
         ? nextStep("done", reviewSay, reviewUrl)
         : green
-          ? submitStep(asked)
+          ? submitStep(asked, modeIds)
           : null,
     },
     hint: reviewing ? `${reviewSay} ${readinessHint}` : readinessHint,

@@ -65,12 +65,21 @@ export function isConnectionState(state: string): boolean {
   return CONNECTION_STATES.has(state as StoreState);
 }
 
-export async function readConnections(
+export type StoreSubmissionMode = { id: string; label: string; description: string };
+
+export function submissionModeOf(json: Row): StoreSubmissionMode | null {
+  const mode = isRow(json.submissionMode) ? json.submissionMode : null;
+  if (!mode || !text(mode.id)) return null;
+
+  return { id: text(mode.id), label: text(mode.label), description: text(mode.description) };
+}
+
+export async function readConnectionsAndModes(
   args: { project?: string; api?: string; buildSha?: string; channel?: string },
   browsers: string[],
-): Promise<Record<string, ConnectionRecord>> {
+): Promise<{ connections: Record<string, ConnectionRecord>; modes: Record<string, StoreSubmissionMode> }> {
   const opened = await openShipApi("extension_submit", args, { action: "submit" }).catch(() => null);
-  if (!opened || "refused" in opened) return {};
+  if (!opened || "refused" in opened) return { connections: {}, modes: {} };
 
   const body: Row = {};
   if (text(args.buildSha)) body.buildId = text(args.buildSha);
@@ -79,17 +88,28 @@ export async function readConnections(
   const reads = await Promise.all(
     browsers.map((browser) => projectApiSend<Row>(opened.api, "POST", `stores/${browser}/submissions/preflight`, body).catch(() => null)),
   );
-  const out: Record<string, ConnectionRecord> = {};
+  const connections: Record<string, ConnectionRecord> = {};
+  const modes: Record<string, StoreSubmissionMode> = {};
 
   browsers.forEach((browser, i) => {
     const read = reads[i];
     if (!read || !read.ok || !isRow(read.json)) return;
 
     const connection = connectionOf(read.json);
-    if (connection) out[browser] = connection;
+    if (connection) connections[browser] = connection;
+
+    const mode = submissionModeOf(read.json);
+    if (mode) modes[browser] = mode;
   });
 
-  return out;
+  return { connections, modes };
+}
+
+export async function readConnections(
+  args: { project?: string; api?: string; buildSha?: string; channel?: string },
+  browsers: string[],
+): Promise<Record<string, ConnectionRecord>> {
+  return (await readConnectionsAndModes(args, browsers)).connections;
 }
 
 export type HealthRead = { stores: Record<string, { ok?: boolean; message?: string }> } | { missing: string };

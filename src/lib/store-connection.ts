@@ -66,14 +66,62 @@ function storeNames(stores: string[]): string {
   return names.length > 1 ? `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}` : names[0] ?? "the store";
 }
 
-export function submitStep(stores: string[]): NextStep {
-  const drafts = stores.length > 0 && stores.every((store) => DRAFT_STORES.has(store));
+/* @invariant THE SAVED MODE DECIDES, AND THE WORDS FOLLOW IT. Cezar ruled on
+ * 2026-08-05 that a machine-lane upload stops at the safe outcome only where
+ * the store config never stated a mode, and that an explicit mode is honored
+ * whoever saved it. Chrome's draft-until-public and Edge's draft are the
+ * unstated defaults, so an upload under them stays a draft; Chrome public or
+ * staged and Edge review send the upload on to review. On 2026-10-21 the
+ * approval said "for store review" beside "nothing goes to review", so every
+ * sentence here now reads the mode first and says which of the two is true.
+ */
+const DRAFT_MODE_IDS: Record<string, ReadonlySet<string>> = {
+  chrome: new Set(["draft-until-public"]),
+  edge: new Set(["draft"]),
+};
+
+const DRAFT_MODE_LABELS: Record<string, string> = {
+  chrome: "Draft until published",
+  edge: "Draft only",
+};
+
+export type ModeIds = Record<string, string | undefined>;
+
+export function uploadStopsAtDraft(store: string, modeId?: string | null): boolean {
+  if (!DRAFT_STORES.has(store)) return false;
+
+  const id = String(modeId || "").trim();
+
+  return !id || (DRAFT_MODE_IDS[store]?.has(id) ?? false);
+}
+
+export function broadModeSentence(store: string, modeId: string): string {
+  const name = STORE_NAMES[store] ?? store;
+
+  return `Under ${name}'s saved mode "${modeId}" this upload goes on to review after it lands; to stop at a draft instead, set that mode to "${DRAFT_MODE_LABELS[store] ?? "draft"}" in the console store settings before approving.`;
+}
+
+export function reviewSentenceFor(stores: string[], modes: ModeIds = {}): string {
+  const draftStores = stores.filter((store) => DRAFT_STORES.has(store));
+  if (draftStores.length === 0) return "";
+
+  const broad = draftStores.filter((store) => !uploadStopsAtDraft(store, modes[store]));
+  if (broad.length === 0) return REVIEW_PROMISE;
+
+  return broad.map((store) => broadModeSentence(store, String(modes[store]))).join(" ");
+}
+
+export function submitStep(stores: string[], modes: ModeIds = {}): NextStep {
+  const drafts = stores.length > 0 && stores.every((store) => uploadStopsAtDraft(store, modes[store]));
+  const broad = stores.filter((store) => DRAFT_STORES.has(store) && !uploadStopsAtDraft(store, modes[store]));
 
   return nextStep(
     "submit",
     drafts
       ? `Every check for ${storeNames(stores)} is green. I upload it as a store draft after one owner approval; a draft is not published and nothing goes to review until you publish. Whether the item is public or unlisted is set once in the store's own dashboard (a new Chrome item defaults to public), not by this upload.`
-      : `Every check for ${storeNames(stores)} is green. I submit it after one owner approval.`,
+      : broad.length > 0
+        ? `Every check for ${storeNames(stores)} is green. ${broad.map((store) => broadModeSentence(store, String(modes[store]))).join(" ")} I submit it after one owner approval.`
+        : `Every check for ${storeNames(stores)} is green. I submit it after one owner approval.`,
   );
 }
 
@@ -98,7 +146,8 @@ export function doneStep(stores: string[], itemUrl: string): NextStep {
   );
 }
 
-export function withApproveStep(out: string, promisesNoReview: boolean): string {
+export function withApproveStep(out: string, reviewSentence: boolean | string): string {
+  const closing = reviewSentence === true ? REVIEW_PROMISE : reviewSentence === false ? "" : reviewSentence;
   let parsed: unknown;
 
   try {
@@ -117,7 +166,7 @@ export function withApproveStep(out: string, promisesNoReview: boolean): string 
   const phrase = approvalSubjectPhrase(subjectOf(value));
   const say = [
     `Approve ${phrase ? `submitting ${phrase}` : "the submission"} at ${approvalUrl}${expiresAt ? ` before ${expiresAt}` : ""}.`,
-    promisesNoReview ? REVIEW_PROMISE : "",
+    closing,
   ]
     .filter(Boolean)
     .join(" ");
@@ -222,7 +271,7 @@ export function withoutSecretNames(value: string): string {
     .replace(SECRET_NAME, (_name, offset: number, whole: string) => (opensSentence(offset, whole) ? "A store credential" : "a store credential"));
 }
 
-export function withReviewPromise(out: string): string {
+export function withReviewPromise(out: string, reviewSentence: string = REVIEW_PROMISE): string {
   let parsed: unknown;
 
   try {
@@ -235,14 +284,14 @@ export function withReviewPromise(out: string): string {
 
   const value = isRow(parsed.value) ? parsed.value : {};
   const expiresAt = text(value.expiresAt);
-  const closing = [expiresAt ? `The approval expires at ${expiresAt}.` : "", REVIEW_PROMISE].filter(Boolean).join(" ");
+  const closing = [expiresAt ? `The approval expires at ${expiresAt}.` : "", reviewSentence].filter(Boolean).join(" ");
   const hint = text(parsed.hint);
 
   return envelope({
     ok: parsed.ok,
     command: parsed.command,
     status: parsed.status,
-    value: { ...value, ...(expiresAt ? { expiresAt } : {}), reviewPromise: REVIEW_PROMISE },
+    value: { ...value, ...(expiresAt ? { expiresAt } : {}), reviewPromise: reviewSentence },
     error: parsed.error ? { ...parsed.error, message: `${parsed.error.message} ${closing}` } : null,
     warnings: parsed.warnings,
     ...(parsed.truncated !== undefined ? { truncated: parsed.truncated } : {}),
