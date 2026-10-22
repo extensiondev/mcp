@@ -122,7 +122,7 @@ describe("extension_doctor's safari-window leg", () => {
     const leg = legOf(parsed);
     expect(leg?.status).toBe("fail");
     expect(leg?.detail).toContain("S-1 is no longer valid");
-    expect(leg?.remediation).toContain('extension_stop {browser: "safari"}');
+    expect(leg?.remediation).toContain('browser: "safari", replace: true and enableExtension: true');
   });
 
   it("skips, without failing the session, when no window was recorded", async () => {

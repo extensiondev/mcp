@@ -315,7 +315,9 @@ describe("Safari sessions over the dev window's WebDriver connection", () => {
     expect(parsed.status).toBe("webdriver-session-ended");
     expect(parsed.error.code).toBe("E_WEBDRIVER_SESSION_ENDED");
     expect(parsed.error.message).toContain("S-9");
-    expect(parsed.hint).toContain("extension_stop");
+    expect(parsed.hint).toContain("enableExtension: true");
+    expect(parsed.hint).toContain("no Settings trip");
+    expect(parsed.hint).not.toContain("extension_stop");
   });
 
   it("repeats a page eval until it is truthy over the automation session", async () => {
@@ -379,7 +381,7 @@ describe("Safari sessions over the dev window's WebDriver connection", () => {
     expect(parsed.error.code).toBe("E_WEBDRIVER_SESSION_ENDED");
     expect(parsed.error.message).toContain("S-9");
     expect(parsed.error.message).not.toContain("the browser is gone");
-    expect(parsed.hint).toContain('extension_stop {browser: "safari"}');
+    expect(parsed.hint).toContain('browser: "safari", replace: true and enableExtension: true');
   });
 
   it("still calls the browser gone when neither the driver nor a recorded pid answers", async () => {

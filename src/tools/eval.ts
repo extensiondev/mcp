@@ -100,13 +100,14 @@ import {
   urlKey,
 } from "../lib/extension-surfaces";
 import { executeScriptExpression } from "./inspect-gecko";
+import { SAFARI_EVAL_LIMIT, safariContextRefusal } from "../lib/safari-eval";
 
 const pageRef = (t: { targetId: string; url: string }): TargetRef => ({ targetId: t.targetId, url: t.url });
 
 export const schema = {
   name: "extension_eval",
   description:
-    "Evaluate an expression in a running extension context: the background, an extension surface (popup, options, sidebar, devtools, newtab, history, bookmarks), a content script or a page, picked by context, url, tab or targetId. Start the session with allowEval:true (extension_dev), which writes a 0600 session token; without that token every route of this tool, the debug port included, answers eval-disabled. A returned promise is awaited; a value that cannot be cloned (a DOM node, a function) comes back as its string form. To wait for a condition that is still settling (a model loading, an element appearing), pass until: {} (or {timeoutMs, intervalMs}) and the eval repeats until its value is truthy, answering that value, or the last one on timeout. Debug-port evaluates run with a user gesture, so gesture-gated APIs (permissions.request, sidePanel.open) can succeed here and still fail when the extension's own code calls them. Naming a tab the browser refuses to script (page-not-scriptable, extension-page-unreachable) needs Extension.js 4.1.34, not yet released; on 4.1.33 such a refusal still answers as a missing target. Not for reading a page's structure: that is extension_dom_snapshot, which also lists tabs and targets. Pass `targetId` (the target.targetId extension_open answers, or one from extension_dom_snapshot listTargets:true) to evaluate in that exact page over the debug port; context, url and tab are then ignored.",
+    `Evaluate an expression in a running extension context: the background, an extension surface (popup, options, sidebar, devtools, newtab, history, bookmarks), a content script or a page, picked by context, url, tab or targetId. Start the session with allowEval:true (extension_dev), which writes a 0600 session token; without that token every route of this tool, the debug port included, answers eval-disabled. A returned promise is awaited; a value that cannot be cloned (a DOM node, a function) comes back as its string form. To wait for a condition that is still settling (a model loading, an element appearing), pass until: {} (or {timeoutMs, intervalMs}) and the eval repeats until its value is truthy, answering that value, or the last one on timeout. Debug-port evaluates run with a user gesture, so gesture-gated APIs (permissions.request, sidePanel.open) can succeed here and still fail when the extension's own code calls them. Naming a tab the browser refuses to script (page-not-scriptable, extension-page-unreachable) needs Extension.js 4.1.34, not yet released; on 4.1.33 such a refusal still answers as a missing target. ${SAFARI_EVAL_LIMIT} Not for reading a page's structure: that is extension_dom_snapshot, which also lists tabs and targets. Pass \`targetId\` (the target.targetId extension_open answers, or one from extension_dom_snapshot listTargets:true) to evaluate in that exact page over the debug port; context, url and tab are then ignored.`,
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -1367,7 +1368,15 @@ async function evaluateOnce(
   args: ActArgs & { expression: string; targetId?: string },
 ): Promise<string> {
   const { browser } = resolveSessionBrowser(args.projectPath, args.browser);
+  const raw = await evaluateRouted(args, browser);
 
+  return safariContextRefusal(schema.name, raw, browser, args.context) ?? raw;
+}
+
+async function evaluateRouted(
+  args: ActArgs & { expression: string; targetId?: string },
+  browser: string,
+): Promise<string> {
   if (args.targetId) return evaluateByTargetId(args, browser, args.targetId);
 
   if (WEBKIT_FAMILY.has(browser) && args.context === "page") {

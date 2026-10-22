@@ -115,7 +115,7 @@ export function webdriverSessionEndedMessage(
 }
 
 export function webdriverSessionEndedHint(browser: string): string {
-  return `The engine opens one WebDriver session per dev run, so call extension_stop {browser: "${browser}"}, then extension_dev {browser: "${browser}"} for a new one. To change Safari settings while a session runs, use a regular Safari window, not the automation window.`;
+  return `The session ended; the dev server did not, and the engine opens one WebDriver session per dev run. Call extension_dev again with browser: "${browser}", replace: true and enableExtension: true (plus allowEval: true for extension_eval): replace stops this run first, and enableExtension lets Extension.js turn the extension on through Safari Settings itself (one-time macOS Accessibility grant for the terminal app that runs this server), so the new automation window needs no Settings trip and stays driveable. To change Safari settings while a session runs, use a regular Safari window, not the automation window; a page opened in a regular window is outside the session and cannot be read from here.`;
 }
 
 export class WebDriverClient {

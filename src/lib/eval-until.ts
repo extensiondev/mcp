@@ -48,6 +48,7 @@ const TERMINAL_EVAL_STATUSES = new Set([
   "no-extension-id",
   "no-surface",
   "webdriver-session-ended",
+  "safari-context-unreachable",
   "input-invalid",
   "browser-required",
 ]);
