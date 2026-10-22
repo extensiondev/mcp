@@ -8,7 +8,9 @@
 
 import {
   credentialStoreProblem,
+  defaultLoginDrift,
   listCredentials,
+  loginDriftSentence,
   readCredentials,
 } from "../lib/credentials";
 import { envelope } from "../lib/envelope";
@@ -194,6 +196,8 @@ export async function readIdentity(deps?: {
     logins.length > 1
       ? `${logins.length} logins are stored on this machine (${logins.map((l) => (l.server === target ? l.project : `${l.project} on ${l.server}`)).join(", ")}); the one above is the default for token-scoped tools on ${target}, each of them takes \`project\` to use another, and a login minted on another server is used only when a call targets that server.`
       : null;
+  const drift = hosted ? null : defaultLoginDrift(api);
+  const driftNote = drift ? loginDriftSentence(drift) : null;
 
   const message = [
     identityNote,
@@ -201,6 +205,7 @@ export async function readIdentity(deps?: {
     server.warning,
     envTokenNote,
     loginsNote,
+    driftNote,
   ]
     .filter(Boolean)
     .join(" ");
@@ -229,6 +234,7 @@ export async function readIdentity(deps?: {
       server.warning,
       serverIdentityMismatch,
       envTokenNote,
+      driftNote,
     ],
   });
 }

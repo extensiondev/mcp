@@ -13,6 +13,7 @@ import path from "node:path";
 import { loginKey, serverOf, targetServer } from "./credential-server";
 import { REQUEST_STORE_REFUSAL, coveredProjects, requestCredential } from "./credential-scope";
 import { withFileLock, writePrivateJson } from "./private-file";
+import { keepLogin, keptLogin, moveKeptLogin, releaseLogin, releaseStore } from "./session-login";
 
 /* @invariant A LOGIN IS KEYED BY THE SLUGS IT WAS MINTED UNDER AND BOUND TO
  * THE PROJECT ID THE PLATFORM ANSWERS FOR IT. The platform mints a token for a
@@ -309,9 +310,14 @@ function selectEntry(
 
   if (!wanted) {
     const live = onServer.filter(([, entry]) => !entry.movedTo);
-    const active = live.find(([key]) => key === store.active);
+    const file = requestCredential() ? "" : credentialsPath();
+    const held = file ? keptLogin(file, server) : null;
+    const session = held ? live.find(([key]) => key === held) : undefined;
+    const chosen = session ?? live.find(([key]) => key === store.active) ?? live[live.length - 1];
 
-    return (active ?? live[live.length - 1])?.[1] ?? null;
+    if (chosen && file && !session) keepLogin(file, server, chosen[0]);
+
+    return chosen?.[1] ?? null;
   }
 
   if (wanted.includes("/")) {
@@ -337,14 +343,45 @@ export function listCredentials(): Array<StoredCredentials & { key: string; acti
   const store = readCredentialStore();
   if (!store) return [];
 
+  const file = requestCredential() ? "" : credentialsPath();
+
   return Object.entries(store.entries)
     .filter(([, entry]) => !entry.movedTo)
-    .map(([key, entry]) => ({
-      ...entry,
-      key,
-      active: key === store.active,
-      server: serverOf(entry.api),
-    }));
+    .map(([key, entry]) => {
+      const server = serverOf(entry.api);
+      const held = file ? keptLogin(file, server) : null;
+
+      return {
+        ...entry,
+        key,
+        active: key === (held && store.entries[held] ? held : store.active),
+        server,
+      };
+    });
+}
+
+export function defaultLoginDrift(api?: string): { kept: string; newest: string } | null {
+  if (requestCredential()) return null;
+
+  const store = readCredentialStore();
+  if (!store?.active) return null;
+
+  const server = targetServer(api);
+  const held = keptLogin(credentialsPath(), server);
+  const newest = store.entries[store.active];
+  if (!held || held === store.active || !newest || newest.movedTo || serverOf(newest.api) !== server) return null;
+
+  const current = store.entries[held];
+  if (!current || current.movedTo) return null;
+
+  return {
+    kept: `${current.workspaceSlug}/${current.projectSlug}`.toLowerCase(),
+    newest: `${newest.workspaceSlug}/${newest.projectSlug}`.toLowerCase(),
+  };
+}
+
+export function loginDriftSentence(drift: { kept: string; newest: string }): string {
+  return `This server keeps using ${drift.kept}, the login it resolved first; ${drift.newest} was signed in later by another process that shares this machine's login store, and a call here with no project does not follow it. Pass project: '${drift.newest}' to act on it, or run extension_auth (action: login, project: '${drift.newest}') in this server.`;
 }
 
 export function moveLogin(args: {
@@ -380,6 +417,8 @@ export function moveLogin(args: {
       active: existing.active === from ? to : existing.active,
       entries,
     });
+
+    moveKeptLogin(credentialsPath(), from, to);
 
     return {
       from: `${entry.workspaceSlug}/${entry.projectSlug}`.toLowerCase(),
@@ -455,6 +494,7 @@ export function writeCredentials(creds: StoredCredentials): string {
     const entries = { ...(existing?.entries ?? {}) };
     delete entries[key];
     entries[key] = storable(creds);
+    keepLogin(credentialsPath(), serverOf(creds.api), key);
 
     return writeStore({ version: 2, active: key, entries });
   });
@@ -479,6 +519,8 @@ export function writeCredentialBatch(batch: StoredCredentials[]): string | null 
       existing?.active && entries[existing.active]
         ? existing.active
         : credentialKey(first.workspaceSlug, first.projectSlug, first.api);
+    const chosen = entries[active];
+    if (chosen) keepLogin(credentialsPath(), serverOf(chosen.api), active);
 
     return writeStore({ version: 2, active, entries });
   });
@@ -510,6 +552,7 @@ export function clearCredentials(selector?: CredentialSelector): {
   if (!wanted && (!store || serverKeys.length === Object.keys(store.entries).length)) {
     try {
       fs.unlinkSync(file);
+      releaseStore(file);
     } catch (err) {
       if ((err as NodeJS.ErrnoException)?.code === "ENOENT") {
         return { cleared: false, path: file, removed: [], remaining: [] };
@@ -567,8 +610,12 @@ export function clearCredentials(selector?: CredentialSelector): {
           if ((err as NodeJS.ErrnoException)?.code !== "ENOENT") throw err;
         }
 
+        releaseStore(file);
+
         return { cleared: true, path: file, removed: keys, remaining: [] };
       }
+
+      for (const gone of keys) releaseLogin(file, gone);
 
       writeStore({
         version: 2,
@@ -603,7 +650,7 @@ export function readValidCredentials(
 export const PROJECT_TOKEN_INPUT = {
   type: "string",
   description:
-    "Which stored login to use, as '<workspace>/<project>' (or a project slug that matches one login), when extension_auth has signed in to more than one project on this machine. Omitted, the most recent login is used, after EXTENSION_DEV_TOKEN when that is set. Named, it outranks EXTENSION_DEV_TOKEN. extension_auth (action: status) lists the stored logins.",
+    "Which stored login to use, as '<workspace>/<project>' (or a project slug that matches one login), when extension_auth has signed in to more than one project on this machine. Omitted, the login this server resolved first is used, after EXTENSION_DEV_TOKEN when that is set, and a login made elsewhere on this machine does not move it. Named, it outranks EXTENSION_DEV_TOKEN. extension_auth (action: status) lists the stored logins.",
 } as const;
 
 export const LOGIN_STEPS =
