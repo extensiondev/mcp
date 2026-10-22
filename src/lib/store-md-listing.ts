@@ -41,14 +41,30 @@ export interface StoreMdPrivacy {
   attested: boolean | null;
 }
 
+export type ListingField = keyof ListingText;
+
 export interface StoreMdListing {
   shared: ListingText;
   categoriesByStore: Partial<Record<ListingStore, string[]>>;
   stores: Partial<Record<ListingStore, ListingText>>;
   privacy: StoreMdPrivacy;
+  lines: Partial<Record<ListingField, string>>;
 }
 
-const STORE_FIELDS: Record<ListingStore, Array<keyof ListingText>> = {
+export interface UnreadLine {
+  line: string;
+  reason: string;
+}
+
+export interface StoreListingRead {
+  listing: ListingText;
+  skipped: string[];
+  unread: Partial<Record<ListingField, UnreadLine>>;
+}
+
+const NOTED_FIELDS: ListingField[] = ["license", "supportEmail", "homepageUrl"];
+
+const STORE_FIELDS: Record<ListingStore, ListingField[]> = {
   chrome: ["title", "shortDescription", "fullDescription", "categories", "supportEmail", "privacyPolicyUrl", "homepageUrl", "singlePurpose", "permissionJustifications"],
   firefox: ["title", "shortDescription", "fullDescription", "categories", "supportEmail", "privacyPolicyUrl", "homepageUrl", "license", "reviewerNotes", "releaseNotes"],
   edge: ["title", "shortDescription", "fullDescription", "categories", "searchTerms", "supportEmail", "privacyPolicyUrl", "homepageUrl", "certificationNotes"],
@@ -149,22 +165,64 @@ const unwrap = (value: string): string =>
     .filter(Boolean)
     .join("\n\n");
 
-function parseCategories(raw: string): { all: string[]; byStore: Partial<Record<ListingStore, string[]>> } {
-  const text = unwrap(raw).replace(/\.$/, "");
-  const byStore: Partial<Record<ListingStore, string[]>> = {};
-  const pairs = [...text.matchAll(/([^,()]+?)\s*\(([^)]*)\)/g)];
+const TRAILING_NOTE = /^(.*?)\s*\(([^()]*)\)$/;
 
-  if (pairs.length) {
-    for (const [, name, where] of pairs) {
-      const category = name!.replace(/^[\s,]*(and\s+)?/i, "").trim();
+const withoutNote = (value: string): string => {
+  const noted = TRAILING_NOTE.exec(value);
 
-      for (const store of classifyStore(where!)) byStore[store] = [...(byStore[store] ?? []), category];
-    }
+  return noted && noted[1]!.trim() ? noted[1]!.trim() : value;
+};
 
-    return { all: [], byStore };
+function splitOutsideNotes(text: string): string[] {
+  const items: string[] = [];
+  let depth = 0;
+  let current = "";
+
+  for (const char of text) {
+    if (char === "(") depth += 1;
+    if (char === ")") depth = Math.max(0, depth - 1);
+
+    if (char === "," && depth === 0) {
+      items.push(current);
+      current = "";
+    } else current += char;
   }
 
-  return { all: text.split(",").map((item) => item.trim()).filter(Boolean), byStore };
+  items.push(current);
+
+  return items.map((item) => item.replace(/^\s*(and\s+)?/i, "").trim()).filter(Boolean);
+}
+
+/* @invariant A STORE NOTE ON ONE CATEGORY IS A REMARK. A single category
+ * applies to every store whatever its parenthetical says, since the
+ * template's wording invites a note like "(Chrome Web Store)" beside the
+ * one category the author chose. Only a line that lists several categories
+ * reads a parenthetical naming stores as the stores that category is for;
+ * a category without a store note on such a line applies to every store,
+ * and a store that none of the notes name is answered with the line shape
+ * the reader takes, never guessed.
+ */
+function parseCategories(raw: string): { all: string[]; byStore: Partial<Record<ListingStore, string[]>> } {
+  const items = splitOutsideNotes(unwrap(raw).replace(/\.$/, "")).map((item) => {
+    const noted = TRAILING_NOTE.exec(item);
+
+    return noted ? { name: noted[1]!.trim(), stores: classifyStore(noted[2]!) } : { name: item, stores: [] as ListingStore[] };
+  });
+  const all: string[] = [];
+  const byStore: Partial<Record<ListingStore, string[]>> = {};
+
+  for (const { name, stores } of items) {
+    if (!name) continue;
+
+    if (items.length === 1 || !stores.length) {
+      all.push(name);
+      continue;
+    }
+
+    for (const store of stores) byStore[store] = [...(byStore[store] ?? []), name];
+  }
+
+  return { all, byStore };
 }
 
 function fieldText(body: string, prefix: string): string {
@@ -209,7 +267,7 @@ function justifications(body: string): PermissionJustification[] {
 }
 
 export function parseStoreMdListing(content: string): StoreMdListing {
-  const result: StoreMdListing = { shared: {}, categoriesByStore: {}, stores: {}, privacy: { section: "", attested: null } };
+  const result: StoreMdListing = { shared: {}, categoriesByStore: {}, stores: {}, privacy: { section: "", attested: null }, lines: {} };
 
   for (const section of splitSections(content, 2)) {
     const heading = section.heading.toLowerCase();
@@ -220,6 +278,8 @@ export function parseStoreMdListing(content: string): StoreMdListing {
         const text = usable(value);
         if (!field || !text) continue;
 
+        result.lines[field] = key;
+
         if (field === "categories") {
           const parsed = parseCategories(text);
           if (parsed.all.length) result.shared.categories = parsed.all;
@@ -227,6 +287,8 @@ export function parseStoreMdListing(content: string): StoreMdListing {
           result.categoriesByStore = parsed.byStore;
         } else if (field === "searchTerms") {
           result.shared.searchTerms = unwrap(text).split(",").map((item) => item.trim()).filter(Boolean);
+        } else if (NOTED_FIELDS.includes(field)) {
+          result.shared[field] = withoutNote(unwrap(text));
         } else {
           result.shared[field] = unwrap(text);
         }
@@ -271,15 +333,15 @@ const kept = (char: string): boolean => {
 
 const clean = (value: string): string => Array.from(value).filter(kept).join("").trim();
 
-function bounded(field: string, value: unknown, skipped: string[]): unknown {
+type Bounded = { value: unknown } | { reason: string };
+
+function bounded(field: string, value: unknown, skipped: string[]): Bounded {
   if (typeof value === "string") {
     const text = clean(value);
     const limit = (LISTING_TEXT_LIMITS as Record<string, number>)[field];
 
     if (limit && text.length > limit) {
-      skipped.push(`${field} is ${text.length} characters in STORE.md, over the ${limit} the listing takes, so it was left out`);
-
-      return undefined;
+      return { reason: `is ${text.length} characters, over the ${limit} the listing takes` };
     }
 
     const shapeless =
@@ -287,12 +349,10 @@ function bounded(field: string, value: unknown, skipped: string[]): unknown {
       (field === "supportEmail" && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(text));
 
     if (text && shapeless) {
-      skipped.push(`${field} in STORE.md is not ${field === "supportEmail" ? "an email address" : "an http or https URL"}, so it was left out`);
-
-      return undefined;
+      return { reason: `is not ${field === "supportEmail" ? "an email address" : "an http or https URL"}` };
     }
 
-    return text || undefined;
+    return { value: text || undefined };
   }
 
   if (field === "permissionJustifications") {
@@ -302,29 +362,48 @@ function bounded(field: string, value: unknown, skipped: string[]): unknown {
 
     if (entries.length < (value as unknown[]).length) skipped.push("a permission justification over 1000 characters was left out");
 
-    return entries.length ? entries.slice(0, 50) : undefined;
+    return { value: entries.length ? entries.slice(0, 50) : undefined };
   }
 
   const items = (value as string[]).map(clean).filter((item) => item && item.length <= 100);
 
-  return items.length ? items.slice(0, field === "categories" ? 5 : 16) : undefined;
+  return { value: items.length ? items.slice(0, field === "categories" ? 5 : 16) : undefined };
 }
 
-export function listingForStore(parsed: StoreMdListing, store: ListingStore): { listing: ListingText; skipped: string[] } {
+const storeList = (stores: string[]): string =>
+  stores.length > 1 ? `${stores.slice(0, -1).join(", ")} and ${stores[stores.length - 1]}` : stores[0] ?? "";
+
+export function listingForStore(parsed: StoreMdListing, store: ListingStore): StoreListingRead {
   const merged: ListingText = { ...parsed.shared, ...(parsed.stores[store] ?? {}) };
-  const categories = parsed.categoriesByStore[store] ?? parsed.shared.categories;
-  if (categories?.length) merged.categories = categories;
+  const categories = [...(parsed.shared.categories ?? []), ...(parsed.categoriesByStore[store] ?? [])];
+  if (categories.length) merged.categories = categories;
   else delete merged.categories;
 
   const listing: ListingText = {};
   const skipped: string[] = [];
+  const unread: Partial<Record<ListingField, UnreadLine>> = {};
 
   for (const field of STORE_FIELDS[store]) {
     if (merged[field] === undefined) continue;
 
-    const value = bounded(field, merged[field], skipped);
-    if (value !== undefined) (listing as Record<string, unknown>)[field] = value;
+    const read = bounded(field, merged[field], skipped);
+
+    if ("reason" in read) {
+      skipped.push(`${field} in STORE.md ${read.reason}, so it was left out`);
+      unread[field] = { line: `- ${parsed.lines[field] ?? field}:`, reason: read.reason };
+    } else if (read.value !== undefined) {
+      (listing as Record<string, unknown>)[field] = read.value;
+    }
   }
 
-  return { listing, skipped };
+  if (listing.categories === undefined && parsed.lines.categories) {
+    const named = Object.keys(parsed.categoriesByStore);
+
+    unread.categories = {
+      line: `- ${parsed.lines.categories}:`,
+      reason: named.length ? `names ${storeList(named)} only` : "carries no category the reader takes",
+    };
+  }
+
+  return { listing, skipped, unread };
 }

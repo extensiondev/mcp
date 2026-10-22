@@ -37,8 +37,10 @@ import {
   LISTING_STORES,
   listingForStore,
   parseStoreMdListing,
+  type ListingField,
   type ListingStore,
   type StoreMdPrivacy,
+  type UnreadLine,
 } from "../lib/store-md-listing";
 import {
   STORE_LISTING_ACTION,
@@ -71,6 +73,7 @@ export interface LocalListing {
   patch: ListingPatch;
   iconMissing?: string;
   skipped: string[];
+  unread: Partial<Record<ListingField, UnreadLine>>;
   privacy: StoreMdPrivacy;
 }
 
@@ -97,7 +100,7 @@ export function readLocalListing(
   }
 
   const parsed = parseStoreMdListing(content);
-  const { listing, skipped } = listingForStore(parsed, store);
+  const { listing, skipped, unread } = listingForStore(parsed, store);
   const icon = iconFromDist(projectPath, store);
   const patch: ListingPatch = { listing };
 
@@ -108,37 +111,76 @@ export function readLocalListing(
     file,
     patch,
     skipped,
+    unread,
     privacy: parsed.privacy,
     ...("missing" in icon ? { iconMissing: icon.missing } : {}),
   };
 }
 
-const CHECK_COVERAGE: Array<{ test: RegExp; fields: string[]; label: string }> =
-  [
-    { test: /^listing\.title_present$/, fields: ["title"], label: "title" },
-    {
-      test: /description_present$|summary_present$/,
-      fields: ["shortDescription", "fullDescription"],
-      label: "description",
-    },
-    { test: /license_present$/, fields: ["license"], label: "license" },
-    { test: /categories_present$/, fields: ["categories"], label: "category" },
-    {
-      test: /support_email_present$/,
-      fields: ["supportEmail"],
-      label: "support email",
-    },
-    {
-      test: /search_terms_present$/,
-      fields: ["searchTerms"],
-      label: "search terms",
-    },
-    {
-      test: /privacy_policy_present$/,
-      fields: ["privacyPolicyUrl"],
-      label: "privacy policy URL",
-    },
-  ];
+interface CheckCoverage {
+  test: RegExp;
+  fields: ListingField[];
+  label: string;
+  shape: string;
+}
+
+const CHECK_COVERAGE: CheckCoverage[] = [
+  {
+    test: /^listing\.title_present$/,
+    fields: ["title"],
+    label: "title",
+    shape: "`- Name: <name>`",
+  },
+  {
+    test: /description_present$|summary_present$/,
+    fields: ["shortDescription", "fullDescription"],
+    label: "description",
+    shape:
+      "`- Summary: <one sentence>` and `- Description:` with its paragraphs indented below it",
+  },
+  {
+    test: /license_present$/,
+    fields: ["license"],
+    label: "license",
+    shape: "`- License: <SPDX identifier or license name>`",
+  },
+  {
+    test: /categories_present$/,
+    fields: ["categories"],
+    label: "category",
+    shape:
+      "`- Category: <name>` for every store, or `- Category: <name> (Chrome), <name> (Firefox)` per store",
+  },
+  {
+    test: /support_email_present$/,
+    fields: ["supportEmail"],
+    label: "support email",
+    shape: "`- Support email: <address>`",
+  },
+  {
+    test: /search_terms_present$/,
+    fields: ["searchTerms"],
+    label: "search terms",
+    shape: "`- Search terms: <term>, <term>`",
+  },
+  {
+    test: /privacy_policy_present$/,
+    fields: ["privacyPolicyUrl"],
+    label: "privacy policy URL",
+    shape: "`- Privacy policy URL: <address>` under `## Privacy and data use`",
+  },
+];
+
+function unreadLine(local: LocalListing, rule: CheckCoverage): string | null {
+  for (const field of rule.fields) {
+    const unread = local.unread[field];
+    if (!unread) continue;
+
+    return `${rule.label}: the \`${unread.line}\` line in ${STORE_MD_FILENAME} ${unread.reason}; the reader takes ${rule.shape}`;
+  }
+
+  return null;
+}
 
 function onListingLines(listing: Row, settled: Row[]): string[] {
   const lines: string[] = [];
@@ -169,7 +211,11 @@ function onListingLines(listing: Row, settled: Row[]): string[] {
   return lines;
 }
 
-type Coverage = { covered: string } | { missing: string } | null;
+type Coverage =
+  | { covered: string }
+  | { missing: string }
+  | { unread: string }
+  | null;
 
 function coverageOf(local: LocalListing, id: string): Coverage {
   const listing = local.patch.listing as Row;
@@ -202,10 +248,16 @@ function coverageOf(local: LocalListing, id: string): Coverage {
   const rule = CHECK_COVERAGE.find((entry) => entry.test.test(id));
   if (!rule) return null;
 
-  return rule.fields.some((field) => listing[field] !== undefined)
-    ? {
-        covered: `${rule.label} found in ${STORE_MD_FILENAME}, not yet in the console listing`,
-      }
+  if (rule.fields.some((field) => listing[field] !== undefined)) {
+    return {
+      covered: `${rule.label} found in ${STORE_MD_FILENAME}, not yet in the console listing`,
+    };
+  }
+
+  const unread = unreadLine(local, rule);
+
+  return unread
+    ? { unread }
     : { missing: `${rule.label}: not in ${STORE_MD_FILENAME}` };
 }
 
@@ -214,7 +266,10 @@ function coverageOf(local: LocalListing, id: string): Coverage {
  * (or the built dist, for the icon) already carries that value, the only
  * thing left to do is sync-listing, so the check's message becomes the
  * coverage fact and the platform's "add it to STORE.md" sentence is dropped;
- * the two never appear together. A check STORE.md does not cover keeps the
+ * the two never appear together. When STORE.md has the line and the reader
+ * could not take it, "add it to STORE.md" would send the author to a line
+ * that is already there, so the check's message becomes the line shape the
+ * reader takes instead. A check STORE.md does not cover at all keeps the
  * platform's words untouched.
  */
 export function reconciledWithStoreMd(
@@ -224,9 +279,11 @@ export function reconciledWithStoreMd(
   if (!local || "problem" in local) return check;
 
   const coverage = coverageOf(local, text(check.id));
-  if (!coverage || !("covered" in coverage)) return check;
+  if (!coverage || "missing" in coverage) return check;
 
-  return { ...check, message: `${coverage.covered}; sync-listing writes it.` };
+  return "unread" in coverage
+    ? { ...check, message: `${coverage.unread}.` }
+    : { ...check, message: `${coverage.covered}; sync-listing writes it.` };
 }
 
 export function storeMdAdvisory(
@@ -246,6 +303,8 @@ export function storeMdAdvisory(
 
     if ("missing" in coverage) {
       notCovered.push(coverage.missing);
+    } else if ("unread" in coverage) {
+      notCovered.push(coverage.unread);
     } else if (/privacy_policy_present$/.test(id)) {
       covers.push(`${coverage.covered}; sync-listing writes it`);
     } else covers.push(coverage.covered);

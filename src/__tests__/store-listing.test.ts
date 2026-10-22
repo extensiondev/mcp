@@ -134,6 +134,93 @@ describe("STORE.md fills the store listing", () => {
     expect(firefox.releaseNotes).toBeUndefined();
   });
 
+  it("takes one category up to its store note for every store and keeps the note out", () => {
+    const parsed = parseStoreMdListing(
+      STORE_MD.replace(
+        "- Category: Productivity (Chrome Web Store), Privacy & Security (Firefox and\n  Edge).",
+        "- Category: Privacy & Security (Chrome Web Store)",
+      ),
+    );
+
+    expect(listingForStore(parsed, "chrome").listing.categories).toEqual([
+      "Privacy & Security",
+    ]);
+
+    expect(listingForStore(parsed, "firefox").listing.categories).toEqual([
+      "Privacy & Security",
+    ]);
+
+    expect(listingForStore(parsed, "firefox").unread).toEqual({});
+  });
+
+  it("reads a bare category for every store", () => {
+    const parsed = parseStoreMdListing(
+      STORE_MD.replace(
+        "- Category: Productivity (Chrome Web Store), Privacy & Security (Firefox and\n  Edge).",
+        "- Category: Productivity",
+      ),
+    );
+
+    expect(listingForStore(parsed, "chrome").listing.categories).toEqual([
+      "Productivity",
+    ]);
+
+    expect(listingForStore(parsed, "edge").listing.categories).toEqual([
+      "Productivity",
+    ]);
+  });
+
+  it("keeps a trailing note out of the license, support email and homepage", () => {
+    const parsed = parseStoreMdListing(
+      STORE_MD.replace(
+        "- Screenshots:",
+        [
+          "- License: MIT (see LICENSE)",
+          "- Support email: help@example.com (answered within a week)",
+          "- Homepage: https://example.com (the landing page)",
+          "- Screenshots:",
+        ].join("\n"),
+      ),
+    );
+    const firefox = listingForStore(parsed, "firefox");
+
+    expect(firefox.listing).toMatchObject({
+      license: "MIT",
+      supportEmail: "help@example.com",
+      homepageUrl: "https://example.com",
+    });
+
+    expect(firefox.skipped).toEqual([]);
+    expect(firefox.unread).toEqual({});
+  });
+
+  it("names the line it could not take and the shape it reads", () => {
+    const parsed = parseStoreMdListing(
+      STORE_MD.replace(
+        "- Category: Productivity (Chrome Web Store), Privacy & Security (Firefox and\n  Edge).",
+        [
+          "- Category: Productivity (Chrome Web Store), Tools (Edge)",
+          "- Support email: help at example dot com",
+        ].join("\n"),
+      ),
+    );
+    const firefox = listingForStore(parsed, "firefox");
+
+    expect(firefox.listing.categories).toBeUndefined();
+    expect(firefox.listing.supportEmail).toBeUndefined();
+    expect(firefox.unread).toEqual({
+      categories: { line: "- Category:", reason: "names chrome and edge only" },
+      supportEmail: {
+        line: "- Support email:",
+        reason: "is not an email address",
+      },
+    });
+
+    expect(listingForStore(parsed, "edge").listing.categories).toEqual([
+      "Tools",
+    ]);
+  });
+
   it("hashes the vector the platform pins to the same digest", () => {
     const icon = {
       sha256: "a".repeat(64),
@@ -499,6 +586,76 @@ describe("extension_submit sync-listing and the preflight advisory", () => {
 
     expect(chrome.warnings[0].message).not.toContain("STORE.md carries");
     expect(chrome.storeMd.covers).toEqual([]);
+  });
+
+  it("names the line shape it takes when STORE.md has the line and the reader could not take it", async () => {
+    if (process.platform === "win32") return;
+
+    const root = project();
+    fs.writeFileSync(
+      path.join(root, "STORE.md"),
+      STORE_MD.replace(
+        "- Category: Productivity (Chrome Web Store), Privacy & Security (Firefox and\n  Edge).",
+        [
+          "- Category: Productivity (Chrome Web Store), Tools (Edge)",
+          "- Support email: help at example dot com",
+        ].join("\n"),
+      ),
+    );
+
+    platform.login();
+    platform.routes[`POST ${PREFLIGHT("firefox")}`] = () => ({
+      body: {
+        summary: { canSubmit: false },
+        checks: [
+          {
+            id: "listing.firefox_categories_present",
+            status: "fail",
+            message: "Add a category to STORE.md.",
+          },
+          {
+            id: "listing.firefox_support_email_present",
+            status: "warn",
+            message: "Add a support email to STORE.md.",
+          },
+          {
+            id: "listing.firefox_license_present",
+            status: "fail",
+            message: "Add a license to STORE.md.",
+          },
+        ],
+      },
+    });
+
+    const out = JSON.parse(
+      await submit({
+        action: "preflight",
+        browsers: ["firefox"],
+        projectPath: root,
+        api: API,
+      }),
+    );
+    const firefox = out.value.stores.firefox;
+    const category =
+      "category: the `- Category:` line in STORE.md names chrome and edge only; the reader takes `- Category: <name>` for every store, or `- Category: <name> (Chrome), <name> (Firefox)` per store";
+    const email =
+      "support email: the `- Support email:` line in STORE.md is not an email address; the reader takes `- Support email: <address>`";
+
+    expect(firefox.storeMd.notCovered).toEqual([
+      category,
+      email,
+      "license: not in STORE.md",
+    ]);
+
+    expect(firefox.failing.map((check: { message?: string }) => check.message)).toEqual([
+      `${category}.`,
+      "Add a license to STORE.md.",
+    ]);
+
+    expect(firefox.warnings[0].message).toBe(`${email}.`);
+    expect(firefox.storeMd.skipped).toEqual([
+      "supportEmail in STORE.md is not an email address, so it was left out",
+    ]);
   });
 
   it("replaces a failing check's fix text with the coverage fact when STORE.md or the built icon carries the value", async () => {
