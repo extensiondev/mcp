@@ -143,4 +143,45 @@ describe("navigateToUrlViaBridge asks the engine's navigate verb first", () => {
     expect(parsed.ok).toBe(false);
     expect(parsed.hint).toContain("extension navigate");
   });
+
+  it("carries the tab's active flag from the engine's tab row and says a hidden tab is not observed", async () => {
+    reset(
+      { ok: true, command: "navigate", status: "ok", value: { tabId: 7, url: "https://a.test/", created: true } },
+      actFrame("inspect", tabRows([{ id: 1, url: "https://front.test/", title: "Front", active: true }, { id: 7, url: "https://a.test/", title: "A", active: false }])),
+    );
+
+    const parsed = JSON.parse(await navigateToUrlViaBridge("/p", "firefox", "https://a.test/"));
+    expect(parsed.ok).toBe(true);
+    expect(parsed.value.tab).toEqual({ tabId: 7, url: "https://a.test/", title: "A", active: false });
+    expect(parsed.value).not.toHaveProperty("viewport");
+    expect(parsed.hint).toContain("The tab is hidden (not the active tab)");
+  });
+
+  it("answers the tab's active flag and viewport from the fallback eval when the engine's tab carries them", async () => {
+    reset(
+      { ok: false, error: { code: "E_CLI", message: "error: unknown command 'navigate'" } },
+      actFrame("eval", { tabId: 3, active: true, width: 1200, height: 700 }),
+      actFrame("inspect", tabRows([{ id: 3, url: "https://b.test/", title: "B" }])),
+    );
+
+    const parsed = JSON.parse(await navigateToUrlViaBridge("/p", "firefox", "https://b.test/"));
+    expect(parsed.ok).toBe(true);
+    expect(act.calls[1][1]).toContain("tab.width");
+    expect(parsed.value.tab).toEqual({ tabId: 3, url: "https://b.test/", title: "B", active: true });
+    expect(parsed.value.viewport).toEqual({ width: 1200, height: 700 });
+    expect(parsed.hint).toContain("The viewport is 1200x700");
+  });
+
+  it("omits active and viewport from the fallback eval answer when the engine's tab carries neither", async () => {
+    reset(
+      { ok: false, error: { code: "E_CLI", message: "error: unknown command 'navigate'" } },
+      actFrame("eval", { tabId: 3 }),
+      actFrame("inspect", tabRows([{ id: 3, url: "https://b.test/", title: "B" }])),
+    );
+
+    const parsed = JSON.parse(await navigateToUrlViaBridge("/p", "firefox", "https://b.test/"));
+    expect(parsed.ok).toBe(true);
+    expect(parsed.value.tab).toEqual({ tabId: 3, url: "https://b.test/", title: "B" });
+    expect(parsed.value).not.toHaveProperty("viewport");
+  });
 });

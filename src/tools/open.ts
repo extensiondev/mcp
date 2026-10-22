@@ -31,6 +31,7 @@ import {
   resolveSessionBrowser,
 } from "../lib/session-browser";
 import { readyContractPath } from "../lib/session-paths";
+import { readTabView, tabViewSentence } from "../lib/tab-view";
 import { CDPClient } from "../lib/cdp";
 import { resolveCdpPort, resolveRdpPort, CDP_PORT_MISSING_HINT } from "../lib/cdp-port";
 import { rdpListTabs, type RdpTab } from "../lib/rdp";
@@ -253,9 +254,13 @@ export async function navigateToUrl(
   const reuse = options.reuse ?? "blank";
 
   if (options.tab != null) {
-    return navigateToUrlViaBridge(projectPath, browser, url, timeout, schema.name, {
-      tab: options.tab,
-    });
+    return withSessionHeadless(
+      await navigateToUrlViaBridge(projectPath, browser, url, timeout, schema.name, {
+        tab: options.tab,
+      }),
+      projectPath,
+      browser,
+    );
   }
 
   if (WEBKIT_FAMILY.has(browser) && readWebDriverSession(projectPath, browser)) {
@@ -263,9 +268,13 @@ export async function navigateToUrl(
   }
 
   if (!isChromiumFamily(browser)) {
-    return navigateToUrlViaBridge(projectPath, browser, url, timeout, schema.name, {
-      newTab: true,
-    });
+    return withSessionHeadless(
+      await navigateToUrlViaBridge(projectPath, browser, url, timeout, schema.name, {
+        newTab: true,
+      }),
+      projectPath,
+      browser,
+    );
   }
 
   const resolved = await resolveCdpPort(projectPath, browser);
@@ -466,6 +475,8 @@ export async function navigateToUrl(
     }
 
     rememberExtensionTarget(settled.id, settled.url);
+    const view = await readTabView(cdp, settled.id);
+    const viewSentence = tabViewSentence(view);
 
     return envelope({
       ok: true,
@@ -484,11 +495,14 @@ export async function navigateToUrl(
           title: settled.title,
           url: settled.url,
         },
+        ...view,
+        headless: sessionIsHeadless(projectPath, browser),
       },
       hint:
         "Inspect it with extension_dom_snapshot or extension_inspect using url (context: 'page'), they resolve the tab themselves. " +
         "Pass `target.targetId` as `targetId` to extension_screenshot, extension_dom_snapshot, extension_inspect or extension_eval to pick this exact tab, which matters when another tab shows the same url. " +
-        "It is a CDP target id, NOT a chrome.tabs id: do not pass it as `tab`. If you need a numeric tab id, call extension_dom_snapshot with listTabs: true.",
+        "It is a CDP target id, NOT a chrome.tabs id: do not pass it as `tab`. If you need a numeric tab id, call extension_dom_snapshot with listTabs: true." +
+        (viewSentence ? ` ${viewSentence}` : ""),
       warnings: [unreadableNote],
     });
   } catch (e) {
@@ -1058,7 +1072,7 @@ async function confirmSurfaceTarget(
 export const schema = {
   name: "extension_open",
   description:
-    "Open an extension surface (popup, options, sidebar, the newtab, history or bookmarks override page, or the extension's DevTools panel), navigate a tab to a url, or replay an event (the toolbar action, a chrome.commands shortcut) in a running session, over the dev session's control channel (on unless extension_dev was called with allowControl:false). Opening a url on Chromium answers target.targetId, the CDP target id of the tab it opened: pass it as `targetId` to extension_screenshot, extension_dom_snapshot, extension_inspect or extension_eval to address that exact tab even when another shows the same url (extension_dom_snapshot listTargets: true lists every targetId, on Firefox too). Not for evaluating in the page once it is open: that is extension_eval. An action or command replay invokes your listener without a user gesture, so the gesture-derived activeTab grant does not apply.",
+    "Open an extension surface (popup, options, sidebar, the newtab, history or bookmarks override page, or the extension's DevTools panel), navigate a tab to a url, or replay an event (the toolbar action, a chrome.commands shortcut) in a running session, over the dev session's control channel (on unless extension_dev was called with allowControl:false). Opening a url on Chromium answers target.targetId, the CDP target id of the tab it opened: pass it as `targetId` to extension_screenshot, extension_dom_snapshot, extension_inspect or extension_eval to address that exact tab even when another shows the same url (extension_dom_snapshot listTargets: true lists every targetId, on Firefox too). A url answer also carries tab {active, visibilityState}, viewport {width, height} and headless: an element below the viewport is not observed until it is scrolled into view. Not for evaluating in the page once it is open: that is extension_eval. An action or command replay invokes your listener without a user gesture, so the gesture-derived activeTab grant does not apply.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -1119,6 +1133,15 @@ export function sessionIsHeadless(projectPath?: string, browser?: string): boole
   }
 
   return envIsHeadless(process.env);
+}
+
+function withSessionHeadless(raw: string, projectPath: string, browser: string): string {
+  const frame = parseFrameObject(raw);
+  if (!frame?.ok) return raw;
+
+  patchValue(frame, { headless: sessionIsHeadless(projectPath, browser) });
+
+  return actFrameJson(frame);
 }
 
 const HEADED_RELAUNCH =

@@ -243,6 +243,7 @@ describe("dom_snapshot tabUrl targeting", () => {
       tabId: 7,
       url: "https://example.com/",
       title: "Example Domain",
+      active: true,
       matchedBy: "tabUrl",
     });
   });
@@ -266,7 +267,7 @@ describe("dom_snapshot tabUrl targeting", () => {
     expect(result.ok).toBe(false);
     expect(result.error.name).toBe("NoMatchingTarget");
     expect(result.value.availableTabs).toEqual([
-      { tabId: 7, url: "https://example.com/", title: "Example" },
+      { tabId: 7, url: "https://example.com/", title: "Example", active: true },
     ]);
 
     expect(calls).toHaveLength(1);

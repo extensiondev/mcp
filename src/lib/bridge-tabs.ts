@@ -11,11 +11,15 @@ import { setTimeout as sleep } from "node:timers/promises";
 import { actFrameJson, runActVerb } from "./act";
 import { envelope } from "./envelope";
 import { readGeckoBaseUrlFromProfile } from "./gecko-addon";
+import { tabViewFields, tabViewSentence } from "./tab-view";
+
+import type { TabViewFields } from "./tab-view";
 
 export interface BridgeTab {
   tabId: number | null;
   url: string;
   title: string;
+  active?: boolean;
 }
 
 export async function listBridgeTabs(
@@ -67,6 +71,7 @@ export async function listBridgeTabs(
             : null,
       url: String(t?.url ?? ""),
       title: String(t?.title ?? ""),
+      ...(typeof t?.active === "boolean" ? { active: t.active } : {}),
     })),
   };
 }
@@ -275,6 +280,7 @@ export async function navigateToUrlViaBridge(
     }
 
     const shows = `${landed.tab.url}${landed.tab.title ? ` ("${landed.tab.title}")` : ""}`;
+    const hiddenNote = tabViewSentence({ tab: tabViewFields(landed.tab).tab });
 
     return envelope({
       ok: true,
@@ -290,7 +296,7 @@ export async function navigateToUrlViaBridge(
       },
       hint: landed.redirected
         ? `The tab landed on ${shows}, not on ${url}: the extension (a declarativeNetRequest redirect rule or a webRequest listener) or the server redirected it there, and that page is what loaded. Read it with extension_inspect (url) or extension_dom_snapshot; content scripts that match the final url run on load.`
-        : `The tab reports ${shows}. Whether the page loaded or shows the browser's error page is in that title; read it with extension_inspect (url) to be sure. Content scripts that match it run on load; read them with extension_eval (context: 'content', url) or extension_assert content-script-injected.`,
+        : `The tab reports ${shows}. Whether the page loaded or shows the browser's error page is in that title; read it with extension_inspect (url) to be sure. Content scripts that match it run on load; read them with extension_eval (context: 'content', url) or extension_assert content-script-injected.${hiddenNote && !landed.tab.active ? ` ${hiddenNote}` : ""}`,
     });
   }
 
@@ -312,7 +318,7 @@ async function navigateToUrlViaBackgroundEval(
     ` const tab = active && active.id != null` +
     ` ? await api.tabs.update(active.id, { url: ${JSON.stringify(url)} })` +
     ` : await api.tabs.create({ url: ${JSON.stringify(url)} });` +
-    ` return { tabId: tab && tab.id != null ? tab.id : null };` +
+    ` return { tabId: tab && tab.id != null ? tab.id : null, active: tab ? tab.active : undefined, width: tab ? tab.width : undefined, height: tab ? tab.height : undefined };` +
     ` })()`;
   const raw = await runActVerb(
     [
@@ -330,6 +336,8 @@ async function navigateToUrlViaBackgroundEval(
     tool,
   );
 
+  let view: TabViewFields = {};
+
   try {
     const parsed = JSON.parse(raw);
 
@@ -343,6 +351,8 @@ async function navigateToUrlViaBackgroundEval(
             },
       );
     }
+
+    view = tabViewFields(parsed?.value);
   } catch {
     return raw;
   }
@@ -388,9 +398,12 @@ async function navigateToUrlViaBackgroundEval(
     status: "navigated",
     value: {
       navigated: url,
-      tab: { tabId: settled.tabId, url: settled.url, title: settled.title },
+      tab: { tabId: settled.tabId, url: settled.url, title: settled.title, ...view.tab },
+      ...(view.viewport ? { viewport: view.viewport } : {}),
     },
-    hint: "Inspect it with extension_dom_snapshot or extension_eval using url or this numeric tab id (context: 'page'/'content').",
+    hint: `Inspect it with extension_dom_snapshot or extension_eval using url or this numeric tab id (context: 'page'/'content').${
+      tabViewSentence(view) ? ` ${tabViewSentence(view)}` : ""
+    }`,
   });
 }
 
