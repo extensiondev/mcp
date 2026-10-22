@@ -300,8 +300,8 @@ describe("store-status reader", () => {
     expect(firefox.configured).toBe("unknown");
     expect(firefox.lastSubmission.version).toBe("1.0.2");
     expect(
-      out.warnings.find((w: string) => w.includes("health.json")),
-    ).toContain("health.json");
+      out.warnings.find((w: string) => w.includes("store health record")),
+    ).toContain("no store health record yet");
   });
 
   it("fails with a console pointer when the registry has no store data at all", async () => {

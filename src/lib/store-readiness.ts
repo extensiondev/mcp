@@ -7,7 +7,7 @@
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
 import { projectApiSend } from "./project-api";
-import { fetchRegistryJson, registryFileUrl, type ProjectRef } from "./registry";
+import { fetchRegistryJson, registryFileUrl, type ProjectRef, type RegistryFetchRefusal } from "./registry";
 import { isRow, openShipApi, text } from "./ship-act";
 import {
   connectSentences,
@@ -114,12 +114,23 @@ export async function readConnections(
 
 export type HealthRead = { stores: Record<string, { ok?: boolean; message?: string }> } | { missing: string };
 
+export const STORE_RECORD_ABSENT = {
+  health: "the project has no store health record yet; the platform writes it on the first store health probe (a store connect or a credential recheck triggers one)",
+  status: "the project has no store status record yet; it is written at the end of the first submission",
+} as const;
+
+export function storeRecordUnread(file: keyof typeof STORE_RECORD_ABSENT, read: RegistryFetchRefusal, next?: string): string {
+  if (read.status !== 404) return `stores/${file}.json unreadable: ${read.message}`;
+
+  return next ? `${STORE_RECORD_ABSENT[file]}; ${next}` : STORE_RECORD_ABSENT[file];
+}
+
 export async function readLegacyHealth(ctx: Context): Promise<HealthRead> {
   if (!ctx.ref) return { missing: "no stored login names the project (run extension_auth)" };
 
   const read = await fetchRegistryJson(registryFileUrl(ctx.ref, "stores/health.json", ctx.api), fetch, { ref: ctx.ref, api: ctx.api });
 
-  if (!read.ok) return { missing: read.status === 404 ? "the project has no store health record yet" : "the store health record could not be read" };
+  if (!read.ok) return { missing: read.status === 404 ? STORE_RECORD_ABSENT.health : "the store health record could not be read" };
 
   const stores = isRow(read.json) ? read.json.stores : undefined;
 

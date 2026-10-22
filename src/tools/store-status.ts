@@ -25,6 +25,7 @@ import {
   earlierSubmissions,
   readPlatformStoreRecords,
 } from "../lib/platform-store-records";
+import { storeRecordUnread } from "../lib/store-readiness";
 
 const KNOWN_STORES = ["chrome", "firefox", "edge", "safari"] as const;
 
@@ -360,6 +361,9 @@ export async function readStores(args: {
     return row;
   });
 
+  const healthAbsent = !healthRes.ok && healthRes.status === 404;
+  const submissionsKnown = submissionsRes.ok || submissionsRes.status === 404;
+
   const summaryParts = rows.map((row) => {
     const store = String(row.store);
     const health = row.health as { ok: boolean; message?: string } | undefined;
@@ -369,7 +373,7 @@ export async function readStores(args: {
     let head: string;
 
     if (row.configured === "unknown") {
-      head = `${store}: configuration unknown (stores/health.json is unreadable)`;
+      head = `${store}: configuration unknown (${healthAbsent ? "no store health record yet" : "stores/health.json is unreadable"})`;
     } else if (row.configured === false) {
       head = `${store}: not configured (add it at ${consoleStoresUrl}/new)`;
     } else if (!health) {
@@ -408,7 +412,7 @@ export async function readStores(args: {
       if (runNote) tail.push(runNote);
     } else if (row.configured === true) {
       tail.push(
-        submissionsRes.ok || (records.ok && records.history[store])
+        submissionsKnown || (records.ok && records.history[store])
           ? "no submissions recorded"
           : "submissions unknown: stores/submissions.json could not be read",
       );
@@ -423,12 +427,8 @@ export async function readStores(args: {
     return tail.length > 0 ? `${head}; ${tail.join("; ")}` : head;
   });
 
-  const healthUnavailable = healthRes.ok
-    ? null
-    : `stores/health.json unreadable: ${healthRes.message}`;
-  const statusUnavailable = statusRes.ok
-    ? null
-    : `stores/status.json unreadable: ${statusRes.message}`;
+  const healthUnavailable = healthRes.ok ? null : storeRecordUnread("health", healthRes, `both start from the console Submissions page: ${consoleStoresUrl}`);
+  const statusUnavailable = statusRes.ok ? null : storeRecordUnread("status", statusRes, "extension_submit runs one");
   const platformUnavailable =
     !platform.ok && !platform.skipped
       ? `the platform's submission records could not be read, so a run that ended before recording its outcome is not reflected: ${platform.message}`
