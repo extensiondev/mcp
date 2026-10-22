@@ -165,4 +165,35 @@ describe("the shared answer guard strips registry and workflow internals", () =>
     expect(out.value.downloadUrl).toBe("https://registry.extension.land/acme/widget/builds/b4187328/firefox.xpi");
     expect(out.hint).toBe(`Run ${command}. The index is at https://console.extension.dev/acme/widget/builds.`);
   });
+
+  it("keeps a build's metadata and integrity file links and sends its run record to the build page", () => {
+    const build = "https://registry.extension.land/acme/widget/builds/b4187328";
+    const answer = envelope({
+      ok: true,
+      command: "extension_builds",
+      status: "read",
+      value: {
+        build: { buildId: "b4187328", runUrl: `${build}/deployment.json` },
+        browsers: [{ name: "chrome", integrityUrl: `${build}/artifact-integrity/chrome.json` }],
+        artifacts: [
+          { name: "chrome.json", downloadUrl: `${build}/chrome.json` },
+          { name: "chrome.integrity.json", downloadUrl: `${build}/artifact-integrity/chrome.json` },
+          { name: "chrome.manifest.json", downloadUrl: `${build}/artifact-manifest/chrome.json` },
+        ],
+      },
+      hint: `The log is at ${build}/build-logs.json.`,
+    });
+
+    const out = JSON.parse(scrubRunAnswer(answer));
+
+    expect(out.value.artifacts.map((row: { downloadUrl: string }) => row.downloadUrl)).toEqual([
+      `${build}/chrome.json`,
+      `${build}/artifact-integrity/chrome.json`,
+      `${build}/artifact-manifest/chrome.json`,
+    ]);
+
+    expect(out.value.browsers[0].integrityUrl).toBe(`${build}/artifact-integrity/chrome.json`);
+    expect(out.value.build.runUrl).toBe("https://console.extension.dev/acme/widget/builds/b4187328");
+    expect(out.hint).toBe("The log is at https://console.extension.dev/acme/widget/builds/b4187328.");
+  });
 });

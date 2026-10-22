@@ -64,6 +64,8 @@ function registryPage(rest: string[]): string {
     return ConsoleProjectPage.overview;
   }
 
+  if (/^builds$/i.test(first)) return SHA.test(second) ? ConsoleProjectPage.build(second) : ConsoleProjectPage.builds;
+
   return SHA.test(first) ? ConsoleProjectPage.build(first) : ConsoleProjectPage.overview;
 }
 
@@ -101,11 +103,13 @@ function storeRun(found: string): string {
 }
 
 const DOWNLOAD = /\.(?:zip|xpi|crx)$/i;
+const BROWSER_FILE = /\/builds\/[0-9a-f]{7,40}\/(?:artifact-(?:integrity|manifest)\/)?(?:chrome|chromium|edge|firefox|safari)\.json$/i;
 
-function isDownload(link: string): boolean {
+function isBuildArtifact(link: string): boolean {
   const pathname = link.split(/[?#]/)[0] ?? "";
+  if (/\/_extension-dev(?:-system)?\//i.test(pathname)) return false;
 
-  return DOWNLOAD.test(pathname) && !/\/_extension-dev(?:-system)?\//i.test(pathname);
+  return DOWNLOAD.test(pathname) || BROWSER_FILE.test(pathname);
 }
 
 export function scrubInfraText(input: string): string {
@@ -114,7 +118,7 @@ export function scrubInfraText(input: string): string {
     const tail = /[.,;:!?]+$/.exec(link)?.[0] ?? "";
     const bare = link.slice(0, link.length - tail.length);
 
-    if (isDownload(bare)) {
+    if (isBuildArtifact(bare)) {
       kept.push(bare);
 
       return `\u2063${kept.length - 1}\u2063${tail}`;
@@ -134,7 +138,7 @@ export function scrubInfraText(input: string): string {
 function isRegistryLink(value: string): boolean {
   const link = value.trim();
 
-  return new RegExp(`^${REGISTRY_URL.source}$`, "i").test(link) && !isDownload(link);
+  return new RegExp(`^${REGISTRY_URL.source}$`, "i").test(link) && !isBuildArtifact(link);
 }
 
 export function scrubRunText(input: string, buildPage?: string): string {
