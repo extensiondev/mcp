@@ -18,6 +18,11 @@ import {
 import { approvalSubjectPhrase, subjectOf } from "../lib/approval-subject";
 import { envelope, isEnvelope } from "../lib/envelope";
 import {
+  firefoxConnectSentences,
+  firefoxConnectUrl,
+  firefoxNotConnected,
+} from "../lib/firefox-store";
+import {
   readSubmissionRecord,
   type PlatformSubmission,
 } from "../lib/platform-submissions";
@@ -575,11 +580,13 @@ export async function preflight(args: StoreActArgs): Promise<string> {
   }
 
   const stores: Row = {};
+  const reports: Record<string, Row> = {};
   const unread: string[] = [];
 
   asked.forEach((store, i) => {
     const read = reads[i];
     if (read.ok) {
+      reports[store] = read.json;
       stores[store] = readinessView(
         read.json,
         store,
@@ -699,6 +706,35 @@ export async function preflight(args: StoreActArgs): Promise<string> {
       },
       hint: say,
       warnings: [unreadLine, "This read wrote nothing."],
+    });
+  }
+
+  if (reports.firefox && firefoxNotConnected(reports.firefox)) {
+    const connectUrl = firefoxConnectUrl(api.ref, args.api);
+    const say = firefoxConnectSentences(connectUrl);
+    const others = blocked.filter((store) => store !== "firefox");
+
+    return envelope({
+      ok: true,
+      command: COMMAND,
+      status: "store-not-connected",
+      value: {
+        action: "preflight",
+        stores,
+        storesPageUrl,
+        connectUrl,
+        trackUrl: storeSettingsUrl(api.ref, args.api),
+        sayToPerson: say,
+        nextStep: nextStep("connect", say, connectUrl),
+      },
+      hint: say,
+      warnings: [
+        others.length
+          ? `${others.join(", ")} cannot be submitted yet either; each failing check says what to fix.`
+          : null,
+        unreadLine,
+        "This read wrote nothing.",
+      ],
     });
   }
 
