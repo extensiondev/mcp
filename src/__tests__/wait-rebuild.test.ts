@@ -91,6 +91,49 @@ describe("extension_wait for: rebuild", () => {
     expect(result.hint).not.toMatch(/leaves no stamp/);
   });
 
+  it("never takes a Safari re-sync stamped before this compile for its reload, even past since", async () => {
+    const previousCompiledAt = later(-120_000);
+    const staleReloadedAt = later(-115_000);
+    const stale = { reloadedAt: staleReloadedAt, reloadKind: "safari-resync", reloadLabel: "Safari app re-sync" };
+    stamp("safari", attachedDevContract("safari", { compiledAt: previousCompiledAt, ts: staleReloadedAt, ...stale }));
+    const waiting = handler({ projectPath: dir, browser: "safari", for: "rebuild", since: previousCompiledAt, timeoutMs: 6000 });
+
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    const compiledAt = later(0);
+    stamp("safari", attachedDevContract("safari", { compiledAt, ts: compiledAt, ...stale }));
+    await new Promise((resolve) => setTimeout(resolve, 600));
+    const reloadedAt = later(0);
+    stamp("safari", attachedDevContract("safari", { compiledAt, ts: reloadedAt, ...stale, reloadedAt }));
+
+    const result = JSON.parse(await waiting);
+
+    expect(result.status).toBe("rebuilt");
+    expect(result.value.compiledAt).toBe(compiledAt);
+    expect(result.value.reload).toMatchObject({ outcome: "reloaded", reloadedAt, reloadKind: "safari-resync" });
+    expect(result.value.reload.reloadedAt).not.toBe(staleReloadedAt);
+    expect(Date.parse(result.value.reload.reloadedAt)).toBeGreaterThan(Date.parse(compiledAt));
+    expect(result.value.reload.waitedMs).toBeGreaterThan(0);
+  });
+
+  it("keeps waiting on Chromium when the stamp at call time is newer than since but older than the compile", async () => {
+    const previousCompiledAt = later(-120_000);
+    const staleReloadedAt = later(-115_000);
+    const stale = { reloadedAt: staleReloadedAt, reloadKind: "background", reloadLabel: "background" };
+    stamp("chrome", attachedDevContract("chrome", { compiledAt: previousCompiledAt, ts: staleReloadedAt, ...stale }));
+    const waiting = handler({ projectPath: dir, browser: "chrome", for: "rebuild", since: previousCompiledAt, timeoutMs: 1500 });
+
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    const compiledAt = later(0);
+    stamp("chrome", attachedDevContract("chrome", { compiledAt, ts: compiledAt, ...stale }));
+
+    const result = JSON.parse(await waiting);
+
+    expect(result.status).toBe("rebuilt");
+    expect(result.value.reload.outcome).toBe("not-stamped");
+    expect(result.value.reload.reloadedAt).toBeUndefined();
+    expect(result.value.reload.note).toMatch(/none landed/);
+  });
+
   it("does not take the compile write for the background reconnecting when its ts lands a millisecond after compiledAt", async () => {
     stamp("chrome", attachedDevContract("chrome", { compiledAt: EARLIER, ts: EARLIER }));
     const waiting = handler({ projectPath: dir, browser: "chrome", for: "rebuild", timeoutMs: 8000 });

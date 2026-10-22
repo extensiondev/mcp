@@ -21,7 +21,7 @@ export const WAIT_MODE_PROPERTIES = {
     enum: ["ready", "rebuild"],
     default: "ready",
     description:
-      "What to wait for. \"ready\" (the default) waits for the session to be ready. \"rebuild\" waits for the compile after a source edit: until ready.json's compiledAt moves past its value at call time (or past since), then for the reload: an engine that stamps reloadedAt is waited on until that stamp also moves past its value at call time, answering reload.outcome \"reloaded\" with reloadKind (full, background, content, page or safari-resync) and reloadLabel; an older engine is watched briefly for the background to connect again (reattached, still-detached, or not-stamped for a content-script, page or Safari app re-sync reload, which it does not stamp). It answers status \"rebuilt\" with the new compiledAt, errors and reload, or status \"compile-error\" with the errors.",
+      "What to wait for. \"ready\" (the default) waits for the session to be ready. \"rebuild\" waits for the compile after a source edit: until ready.json's compiledAt moves past its value at call time (or past since), then for the reload: an engine that stamps reloadedAt is waited on until that stamp lands after the new compiledAt and after its value at call time (a stamp older than the compile, such as the previous Safari re-sync, never counts), answering reload.outcome \"reloaded\" with reloadKind (full, background, content, page or safari-resync) and reloadLabel; an older engine is watched briefly for the background to connect again (reattached, still-detached, or not-stamped for a content-script, page or Safari app re-sync reload, which it does not stamp). It answers status \"rebuilt\" with the new compiledAt, errors and reload, or status \"compile-error\" with the errors.",
   },
   since: {
     type: "string",
@@ -73,9 +73,10 @@ interface ReloadReading {
   note: string;
 }
 
-function stampedReload(contract: ReadyContract | null, reloadFloor: number, waitedMs: number): ReloadReading | null {
+function stampedReload(contract: ReadyContract | null, compiledAt: string, reloadFloor: number, waitedMs: number): ReloadReading | null {
   const reloadedMs = stampMs(contract?.reloadedAt);
-  if (!contract || reloadedMs === null || reloadedMs <= reloadFloor) return null;
+  const floor = Math.max(reloadFloor, stampMs(compiledAt) ?? Number.NEGATIVE_INFINITY);
+  if (!contract || reloadedMs === null || reloadedMs <= floor) return null;
 
   const kind = typeof contract.reloadKind === "string" ? contract.reloadKind : "full";
   const label = typeof contract.reloadLabel === "string" ? contract.reloadLabel : undefined;
@@ -108,7 +109,7 @@ async function watchReload(
     const waitedMs = Date.now() - started;
     const tsMs = stampMs(contract?.ts);
 
-    const reloaded = contract?.compiledAt === compiledAt ? stampedReload(contract, reloadFloor, waitedMs) : null;
+    const reloaded = contract?.compiledAt === compiledAt ? stampedReload(contract, compiledAt, reloadFloor, waitedMs) : null;
     if (reloaded) return reloaded;
 
     if (contract?.runtime === "detached") detachedAt = contract.executorDetachedAt ?? detachedAt;
@@ -167,7 +168,7 @@ export async function waitForRebuild(
   const baseline = sinceValid ? (since as string) : previousCompiledAt;
   const compiledFloor = stampMs(baseline) ?? Number.NEGATIVE_INFINITY;
   const errorFloor = sinceValid ? (stampMs(since) as number) : start;
-  const reloadFloor = sinceValid ? (stampMs(since) as number) : (stampMs(atCall.reloadedAt) ?? Number.NEGATIVE_INFINITY);
+  const reloadFloor = Math.max(sinceValid ? (stampMs(since) as number) : Number.NEGATIVE_INFINITY, stampMs(atCall.reloadedAt) ?? Number.NEGATIVE_INFINITY);
   const stampsReloads = typeof atCall.reloadedAt === "string";
   let last: ReadyContract = atCall;
 
