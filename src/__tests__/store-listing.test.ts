@@ -455,10 +455,103 @@ describe("extension_submit sync-listing and the preflight advisory", () => {
     ).toBe(false);
 
     expect(chrome.warnings[0].message).toBe(
-      "privacy policy URL: not set; add `- Privacy policy URL: <address>` under `## Privacy and data use` in STORE.md. STORE.md carries https://example.com/privacy; sync-listing writes it to the listing.",
+      "privacy policy URL found in STORE.md (https://example.com/privacy), not yet in the console listing; sync-listing writes it.",
+    );
+
+    expect(chrome.warnings[0].message).not.toContain(
+      "add `- Privacy policy URL",
     );
 
     expect(JSON.stringify(out)).not.toMatch(/attested|hosted|PRIVACY\.md/);
+  });
+
+  it("keeps the platform's privacy instruction as it is when STORE.md does not carry the URL", async () => {
+    if (process.platform === "win32") return;
+
+    platform.login();
+    platform.routes[`POST ${PREFLIGHT("chrome")}`] = () => ({
+      body: {
+        summary: { canSubmit: true },
+        checks: [
+          {
+            id: "listing.privacy_policy_present",
+            status: "warn",
+            message:
+              "privacy policy URL: not set; add `- Privacy policy URL: <address>` under `## Privacy and data use` in STORE.md.",
+          },
+        ],
+      },
+    });
+
+    const out = JSON.parse(
+      await submit({
+        action: "preflight",
+        browsers: ["chrome"],
+        projectPath: root,
+        api: API,
+      }),
+    );
+    const chrome = out.value.stores.chrome;
+
+    expect(chrome.warnings[0].message).toBe(
+      "privacy policy URL: not set; add `- Privacy policy URL: <address>` under `## Privacy and data use` in STORE.md.",
+    );
+
+    expect(chrome.warnings[0].message).not.toContain("STORE.md carries");
+    expect(chrome.storeMd.covers).toEqual([]);
+  });
+
+  it("replaces a failing check's fix text with the coverage fact when STORE.md or the built icon carries the value", async () => {
+    if (process.platform === "win32") return;
+
+    platform.login();
+    platform.routes[`POST ${PREFLIGHT("chrome")}`] = () => ({
+      body: {
+        summary: { canSubmit: false },
+        checks: [
+          {
+            id: "listing.title_present",
+            status: "fail",
+            message: "Set a title for the store listing.",
+          },
+          {
+            id: "listing.chrome_icon_present",
+            status: "fail",
+            expected: "At least 1 icon",
+            actual: "0 icons",
+          },
+          {
+            id: "listing.chrome_screenshots_present",
+            status: "fail",
+            expected: "At least 1 screenshot",
+            actual: "0 screenshots",
+          },
+        ],
+      },
+    });
+
+    const out = JSON.parse(
+      await submit({
+        action: "preflight",
+        browsers: ["chrome"],
+        projectPath: root,
+        api: API,
+      }),
+    );
+    const failing = out.value.stores.chrome.failing;
+
+    expect(failing.map((check: { message?: string }) => check.message)).toEqual(
+      [
+        "title found in STORE.md, not yet in the console listing; sync-listing writes it.",
+        "icon 128 px found in dist/chrome/icons/128.png, not yet in the listing; sync-listing writes it.",
+        undefined,
+      ],
+    );
+
+    expect(failing[1]).toMatchObject({
+      expected: "At least 1 icon",
+      actual: "0 icons",
+    });
   });
 
   it("names what STORE.md carries that the listing already has, apart from what still needs a sync", async () => {

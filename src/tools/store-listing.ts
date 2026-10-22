@@ -74,8 +74,8 @@ export interface LocalListing {
   privacy: StoreMdPrivacy;
 }
 
-export const privacyCoveredLine = (url: string): string =>
-  `privacy policy URL found in ${STORE_MD_FILENAME} (${url}), not yet in the console listing; sync-listing writes it`;
+const privacyCoveredFact = (url: string): string =>
+  `privacy policy URL found in ${STORE_MD_FILENAME} (${url}), not yet in the console listing`;
 
 export const privacyMissingLine = (): string =>
   `privacy policy URL: not in ${STORE_MD_FILENAME}; add \`- Privacy policy URL: <address>\` under \`## Privacy and data use\``;
@@ -169,6 +169,66 @@ function onListingLines(listing: Row, settled: Row[]): string[] {
   return lines;
 }
 
+type Coverage = { covered: string } | { missing: string } | null;
+
+function coverageOf(local: LocalListing, id: string): Coverage {
+  const listing = local.patch.listing as Row;
+
+  if (/privacy_policy_present$/.test(id)) {
+    return listing.privacyPolicyUrl !== undefined
+      ? { covered: privacyCoveredFact(text(listing.privacyPolicyUrl)) }
+      : { missing: privacyMissingLine() };
+  }
+
+  if (/icon_present$/.test(id)) {
+    const icon = local.patch.icons?.[0];
+
+    return icon
+      ? {
+          covered: `icon 128 px found in ${icon.source}, not yet in the listing`,
+        }
+      : {
+          missing: `icon: ${local.iconMissing ?? "no 128 px icon in the built dist"}`,
+        };
+  }
+
+  if (/screenshots_present$/.test(id)) {
+    return {
+      missing:
+        "screenshots: STORE.md does not carry them; pass screenshots (PNG paths inside projectPath, for example from extension_screenshot) to sync-listing",
+    };
+  }
+
+  const rule = CHECK_COVERAGE.find((entry) => entry.test.test(id));
+  if (!rule) return null;
+
+  return rule.fields.some((field) => listing[field] !== undefined)
+    ? {
+        covered: `${rule.label} found in ${STORE_MD_FILENAME}, not yet in the console listing`,
+      }
+    : { missing: `${rule.label}: not in ${STORE_MD_FILENAME}` };
+}
+
+/* @invariant ONE INSTRUCTION PER CHECK. The platform's fix text for a
+ * listing check tells the author what to write in STORE.md. When STORE.md
+ * (or the built dist, for the icon) already carries that value, the only
+ * thing left to do is sync-listing, so the check's message becomes the
+ * coverage fact and the platform's "add it to STORE.md" sentence is dropped;
+ * the two never appear together. A check STORE.md does not cover keeps the
+ * platform's words untouched.
+ */
+export function reconciledWithStoreMd(
+  check: Row,
+  local: LocalListing | { problem: string } | null,
+): Row {
+  if (!local || "problem" in local) return check;
+
+  const coverage = coverageOf(local, text(check.id));
+  if (!coverage || !("covered" in coverage)) return check;
+
+  return { ...check, message: `${coverage.covered}; sync-listing writes it.` };
+}
+
 export function storeMdAdvisory(
   local: LocalListing,
   checks: Row[],
@@ -181,47 +241,14 @@ export function storeMdAdvisory(
 
   for (const check of checks) {
     const id = text(check.id);
+    const coverage = coverageOf(local, id);
+    if (!coverage) continue;
 
-    if (/privacy_policy_present$/.test(id)) {
-      if (listing.privacyPolicyUrl !== undefined) {
-        covers.push(privacyCoveredLine(text(listing.privacyPolicyUrl)));
-      } else notCovered.push(privacyMissingLine());
-
-      continue;
-    }
-
-    if (/icon_present$/.test(id)) {
-      const icon = local.patch.icons?.[0];
-
-      if (icon) {
-        covers.push(
-          `icon 128 px found in ${icon.source}, not yet in the listing`,
-        );
-      } else {
-        notCovered.push(
-          `icon: ${local.iconMissing ?? "no 128 px icon in the built dist"}`,
-        );
-      }
-
-      continue;
-    }
-
-    if (/screenshots_present$/.test(id)) {
-      notCovered.push(
-        "screenshots: STORE.md does not carry them; pass screenshots (PNG paths inside projectPath, for example from extension_screenshot) to sync-listing",
-      );
-
-      continue;
-    }
-
-    const rule = CHECK_COVERAGE.find((entry) => entry.test.test(id));
-    if (!rule) continue;
-
-    if (rule.fields.some((field) => listing[field] !== undefined)) {
-      covers.push(
-        `${rule.label} found in ${STORE_MD_FILENAME}, not yet in the console listing`,
-      );
-    } else notCovered.push(`${rule.label}: not in ${STORE_MD_FILENAME}`);
+    if ("missing" in coverage) {
+      notCovered.push(coverage.missing);
+    } else if (/privacy_policy_present$/.test(id)) {
+      covers.push(`${coverage.covered}; sync-listing writes it`);
+    } else covers.push(coverage.covered);
   }
 
   return {
