@@ -57,6 +57,7 @@ import {
   safariDevOptionRefusal,
   type SafariDevOptionArgs,
 } from "../lib/safari-dev-options";
+import { safariSigningFrame } from "../lib/safari-signing";
 
 export const schema = {
   name: "extension_dev",
@@ -174,6 +175,12 @@ export async function handler(
 
   const pid = child.pid;
 
+  const safariRecord = {
+    ...(args.enableExtension ? { enableExtension: true } : {}),
+    ...(args.developmentTeam ? { developmentTeam: args.developmentTeam } : {}),
+    ...(args.appName ? { appName: args.appName } : {}),
+  };
+
   let markerWarning = registerSession({
     pid,
     browser,
@@ -183,7 +190,8 @@ export async function handler(
     noBrowser: Boolean(args.noBrowser),
     profileReused,
     headless: visibility.headless,
-    ...(args.enableExtension ? { enableExtension: true } : {}),
+    logPath,
+    ...safariRecord,
   });
   child.on("exit", () => {
     removeSession(args.projectPath, browser, pid);
@@ -381,9 +389,20 @@ export async function handler(
       noBrowser: Boolean(args.noBrowser),
       profileReused,
       headless: visibility.headless,
-      ...(args.enableExtension ? { enableExtension: true } : {}),
+      logPath,
+      ...safariRecord,
     });
   }
+
+  const signingFrame =
+    readiness && (sessionReady || readiness.ready.status === "compiled-not-attached")
+      ? await safariSigningFrame(args.projectPath, browser, {
+          requested: args.developmentTeam,
+          appName: args.appName,
+          logPath,
+          sessionPid: pid,
+        })
+      : null;
 
   const portReport =
     boundPort !== null
@@ -429,6 +448,7 @@ export async function handler(
       projectPath: args.projectPath,
       ...(replaced.length > 0 ? { replacedSession: replaced[0] } : {}),
       ...(args.noBrowser ? {} : { headless: visibility.headless }),
+      ...(signingFrame ? { signing: signingFrame.signing } : {}),
       capabilities,
       engine: describeExtensionInvocation(args.projectPath),
       logPath,
@@ -437,11 +457,12 @@ export async function handler(
       profileReused && !args.noBrowser ? reusedProfileNote(launchedProfile) : null,
       portNote,
       ...boot.warnings,
+      ...(signingFrame?.warnings ?? []),
       markerWarning,
     ],
     hint: args.noBrowser
       ? "Build-only session (noBrowser: true): no browser will launch, so no runtime will ever attach. extension_wait returns as soon as the first compile lands (compiled: true, browserAttached: false) instead of waiting out its budget; do not wait for a browser. The control verbs (storage/reload/open/dom_snapshot/eval) need a live browser and will not work against this session. When you are done, call extension_stop to shut down the dev server."
-      : `${nextStep} ${headlessHint(visibility.headless)} ${
+      : `${nextStep} ${signingFrame?.hints.length ? `${signingFrame.hints.join(" ")} ` : ""}${headlessHint(visibility.headless)} ${
         allowControl
           ? controlBound
             ? `Control channel is ON (port ${control.port} per ready.json): extension_${controlVerbs.split(", ").join("/extension_")}${args.allowEval ? "/extension_eval" : ""} will work against this session.`
@@ -464,8 +485,11 @@ async function awaitReadyAndFirstLogs(projectPath: string, browser: string) {
     value?: Record<string, unknown>;
   };
 
+  const readyValue: Record<string, unknown> = { ...(ready.value ?? {}) };
+  delete readyValue.signing;
+
   return {
-    ready: { status: ready.status, ...(ready.value ?? {}) },
+    ready: { status: ready.status, ...readyValue },
     firstLogs: logs.ok ? (logs.value ?? {}) : { status: logs.status },
   };
 }

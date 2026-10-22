@@ -26,6 +26,7 @@ import { verifyGuestLoaded } from "../lib/guest-load-oracle";
 import { detachedVerdictFrame, readDetachedVerdict } from "../lib/background-liveness";
 import { WAIT_MODE_PROPERTIES, contractErrorList, waitModeFrame } from "../lib/wait-modes";
 import { notAttachedHint } from "../lib/safari-dev-options";
+import { safariSigningFrame } from "../lib/safari-signing";
 import { recentErrorLogs } from "./doctor";
 
 import type { ReadyContract } from "../lib/types";
@@ -296,7 +297,8 @@ export async function handler(args: {
 
         const runtimeErrors = recentErrorLogs(args.projectPath, browser, 3);
         const guestCheck = await verifyGuestLoaded(args.projectPath, browser);
-        const warnings: string[] = [];
+        const signingFrame = await safariSigningFrame(args.projectPath, browser);
+        const warnings: string[] = [...(signingFrame?.warnings ?? [])];
 
         if (runtimeErrors.length) {
           warnings.push(
@@ -318,9 +320,7 @@ export async function handler(args: {
             compiled: true,
             browserAttached: true,
             guestLoaded: guestCheck.checked ? guestCheck.loaded : null,
-            ...(guestCheck.checked
-              ? { guestIds: guestCheck.guestIds }
-              : { guestLoadNote: guestCheck.reason }),
+            ...(guestCheck.checked ? { guestIds: guestCheck.guestIds } : { guestLoadNote: guestCheck.reason }),
             ...sessionCommandSinceEnvelopeOwnsCommand(contract),
             browser: contract.browser,
             ...sessionPorts(contract),
@@ -338,8 +338,10 @@ export async function handler(args: {
             budgetMs,
             elapsedMs: Date.now() - start,
             ...(runtimeErrors.length ? { runtimeErrors } : {}),
+            ...(signingFrame ? { signing: signingFrame.signing } : {}),
           },
           warnings,
+          ...(signingFrame?.hints.length ? { hint: signingFrame.hints.join(" ") } : {}),
         });
       }
 
@@ -379,6 +381,8 @@ export async function handler(args: {
   }
 
   if (sawCompiledButUnattached) {
+    const signingFrame = await safariSigningFrame(args.projectPath, browser);
+
     return envelope({
       ok: false,
       command: schema.name,
@@ -393,9 +397,10 @@ export async function handler(args: {
         readyPath,
         budgetMs,
         elapsedMs: Date.now() - start,
+        ...(signingFrame ? { signing: signingFrame.signing } : {}),
       },
-      warnings: [clampNote, staleContractNote],
-      hint: notAttachedHint(browser, findSessionInfo(args.projectPath, browser)?.enableExtension === true),
+      warnings: [clampNote, staleContractNote, ...(signingFrame?.warnings ?? [])],
+      hint: [notAttachedHint(browser, findSessionInfo(args.projectPath, browser)?.enableExtension === true), ...(signingFrame?.hints ?? [])].join(" "),
     });
   }
 

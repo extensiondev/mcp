@@ -25,7 +25,7 @@ export const SAFARI_DEV_OPTION_SCHEMA = {
   developmentTeam: {
     type: "string",
     description:
-      "Safari targets only: an Apple Developer team id to sign the app with. Without it the app is ad-hoc signed, which Safari loads locally once unsigned extensions are allowed, and Safari resets the extension's storage on every rebuild.",
+      "Safari targets only: an Apple Developer team id to sign the app with. Without it the app is ad-hoc signed, which Safari loads locally once unsigned extensions are allowed; an ad-hoc rebuild keeps the extension's storage.local (Safari keys the store on the extension's identifier). The answer's signing field reports what codesign reads from the built app (requested, identity team:<id> or ad-hoc, appPath), warns when the requested team was not honored (Xcode has no account for it), and says when the identity changed since the previous run, which makes Safari treat the app as a new extension that must be enabled again.",
   },
   macOsOnly: {
     type: "boolean",

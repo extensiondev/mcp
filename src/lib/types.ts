@@ -112,5 +112,8 @@ export interface ProcessInfo {
   serverPid?: number;
   headless?: boolean;
   enableExtension?: boolean;
+  developmentTeam?: string;
+  appName?: string;
+  logPath?: string;
 }
 

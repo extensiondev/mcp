@@ -46,14 +46,20 @@ function markerDir(): string {
   return sessionStateDir();
 }
 
-function markerPath(projectPath: string, browser: string): string {
-  const digest = crypto
+function markerDigest(projectPath: string, browser: string): string {
+  return crypto
     .createHash("sha1")
     .update(sessionKey(projectPath, browser))
     .digest("hex")
     .slice(0, 16);
+}
 
-  return path.join(markerDir(), `${digest}.json`);
+function markerPath(projectPath: string, browser: string): string {
+  return path.join(markerDir(), `${markerDigest(projectPath, browser)}.json`);
+}
+
+export function sessionSidecarPath(projectPath: string, browser: string, name: string): string {
+  return path.join(markerDir(), `${markerDigest(projectPath, browser)}.${name}.json`);
 }
 
 export function removeSessionMarker(
