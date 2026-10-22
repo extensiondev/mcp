@@ -6,6 +6,8 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
+import { takeDeferredWarnings } from "./deferred-warnings";
+
 export const ENVELOPE_SCHEMA = 1 as const;
 
 
@@ -264,7 +266,7 @@ export function envelopeObject(init: EnvelopeInit): Envelope {
     status: init.status,
     value: init.value === undefined ? null : plainText(init.value),
     error: init.error ? plainText(init.error) : null,
-    warnings: collectWarnings(init.warnings?.map(plainText)),
+    warnings: collectWarnings([...(init.warnings ?? []), ...takeDeferredWarnings()].map(plainText)),
   };
   if (init.truncated !== undefined) frame.truncated = init.truncated;
   if (typeof init.hint === "string" && init.hint) frame.hint = stripTerminalEscapes(init.hint);

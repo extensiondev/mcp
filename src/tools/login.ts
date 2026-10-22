@@ -138,6 +138,37 @@ function resumePending(deviceCode: string, verificationUri: string): string {
 
 const MISSING_PROJECT_CODES = new Set(["PROJECT_NOT_FOUND", "WORKSPACE_NOT_FOUND"]);
 
+function movedProjectRefusal(
+  poll: Extract<DevicePollResult, { ok: false }>,
+  ctx: { apiBase: string; project: string },
+): string | null {
+  if (String(poll.code || "") !== "PROJECT_MOVED") return null;
+
+  const body = poll.body ?? {};
+  const workspace = String(body.workspaceSlug ?? "").trim().toLowerCase();
+  const project = String(body.projectSlug ?? "").trim().toLowerCase();
+  if (!workspace || !project) return null;
+
+  const now = `${workspace}/${project}`;
+
+  return fail(
+    "LoginProjectMoved",
+    poll.message || `The project ${ctx.project} is now ${now}, so this device authorization was closed.`,
+    "project-moved",
+    "E_AUTH_FAILED",
+    {
+      value: {
+        project: ctx.project,
+        server: ctx.apiBase,
+        platformCode: "PROJECT_MOVED",
+        projectId: String(body.projectId ?? "") || null,
+        movedTo: now,
+      },
+      hint: `The project ${ctx.project} is now ${now}; every login already minted for it keeps working. Run extension_auth (action: "login", project: "${now}") and pass project: '${now}' from now on.`,
+    },
+  );
+}
+
 function elsewhereSentence(project: string, servers: string[]): string {
   return servers.length
     ? ` This machine holds a login for ${project} on ${servers.join(", ")}; if the project lives only there, call again with api: '${servers[0]}'.`
@@ -178,6 +209,9 @@ function pollRefusal(
   poll: Extract<DevicePollResult, { ok: false }>,
   ctx: { apiBase: string; project: string },
 ): string | null {
+  const moved = movedProjectRefusal(poll, ctx);
+  if (moved) return moved;
+
   const missing = missingProjectRefusal(poll, ctx);
   if (missing) return missing;
 

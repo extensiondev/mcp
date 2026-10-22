@@ -171,6 +171,7 @@ export function persistTokenResponse(args: {
     );
   }
 
+  const projectId = String(args.data.projectId || "").trim();
   const creds: StoredCredentials = {
     version: 1,
     token,
@@ -179,6 +180,7 @@ export function persistTokenResponse(args: {
     expiresAt: tokenExpiry(args.data.expiresAt),
     api: args.apiBase,
     provider: "extensiondev",
+    ...(projectId.startsWith("prj_") ? { projectId } : {}),
   };
   writeCredentials(creds);
 
@@ -209,6 +211,8 @@ function readTokenEntries(
       );
     }
 
+    const projectId = String(record.projectId || "").trim();
+
     return {
       version: 1,
       token,
@@ -217,6 +221,7 @@ function readTokenEntries(
       expiresAt: tokenExpiry(record.expiresAt),
       api: apiBase,
       provider: "extensiondev",
+      ...(projectId.startsWith("prj_") ? { projectId } : {}),
     };
   });
 }

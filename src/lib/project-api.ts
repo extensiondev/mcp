@@ -11,7 +11,8 @@ import { createHash } from "node:crypto";
 import { resolveCredential, type CredentialRef } from "./credential-source";
 import { envelope, type ErrorCode } from "./envelope";
 import { resolveApiBase, safeApiBase } from "./login-flow";
-import { noStoredLoginHint } from "./credentials";
+import { loginMoveSentence, moveLogin, noStoredLoginHint, rememberLoginProjectId } from "./credentials";
+import { deferWarning } from "./deferred-warnings";
 import {
   platformHoldEnvelope,
   readPlatformCode,
@@ -187,6 +188,10 @@ export async function openProjectApi(args: {
     }
 
     rememberProjectId(cacheKey, projectId);
+
+    if (credential.source === "stored" && credential.ref) {
+      followRenamedProject({ ref: credential.ref, api: args.api, projectId, answer: body });
+    }
   }
 
   return {
@@ -199,6 +204,96 @@ export async function openProjectApi(args: {
       command: args.command,
     },
   };
+}
+
+/* @invariant WHOAMI IS WHERE A RENAME IS NOTICED. The platform resolves the
+ * login by the project id the token was minted for and answers the project's
+ * current slugs, so a stored login whose key names a slug the project left is
+ * rewritten under the slug the platform answers, in the same workspace, and
+ * the answer this call produces says so once. A login that only lacked its
+ * project id gets it recorded.
+ */
+function followRenamedProject(args: {
+  ref: CredentialRef;
+  api?: string;
+  projectId: string;
+  answer: unknown;
+}): void {
+  const body = (args.answer ?? {}) as { workspaceSlug?: unknown; projectSlug?: unknown };
+  const workspace = String(body.workspaceSlug ?? "").trim().toLowerCase();
+  const project = String(body.projectSlug ?? "").trim().toLowerCase();
+
+  if (!workspace || !project || workspace !== args.ref.workspace.toLowerCase()) return;
+
+  try {
+    if (project === args.ref.project.toLowerCase()) {
+      rememberLoginProjectId({
+        workspaceSlug: args.ref.workspace,
+        projectSlug: args.ref.project,
+        api: args.api,
+        projectId: args.projectId,
+      });
+
+      return;
+    }
+
+    const moved = moveLogin({
+      workspaceSlug: args.ref.workspace,
+      fromProjectSlug: args.ref.project,
+      toProjectSlug: project,
+      api: args.api,
+      projectId: args.projectId,
+    });
+
+    if (moved) deferWarning(loginMoveSentence(moved.from, moved.to));
+  } catch (error) {
+    void error;
+  }
+}
+
+export const PROJECT_MOVED_CODE = "PROJECT_MOVED";
+
+function projectMovedHint(
+  read: ProjectApiRefusal,
+  context: { workspace?: string; project?: string; api?: string } | undefined,
+): string | null {
+  const body = (read.body ?? {}) as {
+    workspaceSlug?: unknown;
+    projectSlug?: unknown;
+    projectId?: unknown;
+    previousProjectSlug?: unknown;
+  };
+  const workspace = String(body.workspaceSlug ?? "").trim().toLowerCase();
+  const project = String(body.projectSlug ?? "").trim().toLowerCase();
+  if (!workspace || !project) return null;
+
+  const named = String(context?.project ?? "").trim().toLowerCase();
+  const previous = String(body.previousProjectSlug ?? "").trim().toLowerCase();
+  const from = named.includes("/") ? named : previous ? `${workspace}/${previous}` : "";
+  const to = `${workspace}/${project}`;
+  if (!from || from === to) return `The project is now ${to}; pass project: '${to}' from now on.`;
+
+  const [fromWorkspace = "", fromProject = ""] = from.split("/");
+
+  try {
+    moveLogin({
+      workspaceSlug: fromWorkspace,
+      fromProjectSlug: fromProject,
+      toProjectSlug: project,
+      api: context?.api,
+      projectId: String(body.projectId ?? "").trim(),
+    });
+  } catch {
+    return loginMoveSentence(from, to);
+  }
+
+  return loginMoveSentence(from, to);
+}
+
+function projectNotFoundHint(context: { workspace?: string; project?: string } | undefined): string {
+  const workspace = context?.workspace || String(context?.project ?? "").split("/")[0] || "<workspace>";
+
+  return `A project that answers PROJECT_NOT_FOUND to its own login was most likely renamed in the console, which moved its slug; this platform cannot say where. List the workspace with extension_workspace (action: "projects", workspace: "${workspace}") through another login of that workspace to find the new slug, then log in to it with extension_auth (action: "login", project: "${workspace}/<new-slug>").`;
 }
 
 function retryAfterOf(res: Response, body: unknown): number | undefined {
@@ -312,6 +407,26 @@ export function projectApiReadFailure(
     });
   }
 
+  if (read.code === PROJECT_MOVED_CODE) {
+    const hint = projectMovedHint(read, { ...options.context, api: options.api });
+
+    if (hint) {
+      return envelope({
+        ok: false,
+        command,
+        status: "moved",
+        value: options.value ?? {},
+        error: {
+          code: "E_PLATFORM",
+          name: `${options.name}ProjectMoved`,
+          platformCode: read.code,
+          message: read.message,
+        },
+        hint,
+      });
+    }
+  }
+
   const known = tokenRefusal(read.code, options.context);
 
   if (known) {
@@ -358,5 +473,8 @@ export function projectApiReadFailure(
         ? `${read.message}. This read needs a token minted by a workspace owner.`
         : read.message,
     },
+    ...(notFound && read.code === "PROJECT_NOT_FOUND"
+      ? { hint: projectNotFoundHint(options.context) }
+      : {}),
   });
 }

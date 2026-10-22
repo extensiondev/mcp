@@ -14,6 +14,17 @@ import { loginKey, serverOf, targetServer } from "./credential-server";
 import { REQUEST_STORE_REFUSAL, coveredProjects, requestCredential } from "./credential-scope";
 import { withFileLock, writePrivateJson } from "./private-file";
 
+/* @invariant A LOGIN IS KEYED BY THE SLUGS IT WAS MINTED UNDER AND BOUND TO
+ * THE PROJECT ID THE PLATFORM ANSWERS FOR IT. The platform mints a token for a
+ * project id; the slugs are the address the token was asked for. A project
+ * renamed in the console keeps its id and its tokens, so the login follows it:
+ * the entry is rewritten under the new `<workspace>/<project>` key and the old
+ * key stays behind as an alias (`movedTo`) that resolves to the new entry for
+ * one answer, so the call that still names the old slug completes and is told
+ * the new one. `projectId` is recorded when the platform answers it (the token
+ * response or whoami) and is how a move is recognized as the same project.
+ * `movedFrom` is never stored; it marks a selection that followed an alias.
+ */
 export interface StoredCredentials {
   version: 1;
   token: string;
@@ -22,6 +33,9 @@ export interface StoredCredentials {
   expiresAt: number;
   api: string;
   provider?: "extensiondev";
+  projectId?: string;
+  movedTo?: string;
+  movedFrom?: string;
 }
 
 export function credentialsPath(): string {
@@ -71,6 +85,8 @@ function readEntry(data: unknown): StoredCredentials | null {
   if (!token) return null;
 
   const provider = entry.provider === "extensiondev" ? entry.provider : undefined;
+  const projectId = String(entry.projectId || "").trim();
+  const movedTo = String(entry.movedTo || "").trim();
 
   return {
     version: 1,
@@ -80,7 +96,32 @@ function readEntry(data: unknown): StoredCredentials | null {
     expiresAt: Number(entry.expiresAt || 0),
     api: String(entry.api || ""),
     ...(provider ? { provider } : {}),
+    ...(projectId.startsWith("prj_") ? { projectId } : {}),
+    ...(movedTo ? { movedTo } : {}),
   };
+}
+
+function storable(entry: StoredCredentials): StoredCredentials {
+  const { movedFrom: _movedFrom, ...rest } = entry;
+
+  return rest;
+}
+
+function followAlias(
+  store: CredentialStore,
+  key: string,
+  entry: StoredCredentials | null,
+): StoredCredentials | null {
+  if (!entry?.movedTo) return entry;
+
+  const target = store.entries[entry.movedTo];
+  if (!target || target.movedTo) return null;
+
+  return { ...target, movedFrom: `${entry.workspaceSlug}/${entry.projectSlug}`.toLowerCase() };
+}
+
+export function loginMoveSentence(from: string, to: string): string {
+  return `The project ${from} is now ${to}; its login moved with it, pass project: '${to}' from now on.`;
 }
 
 export type CredentialStoreRead =
@@ -267,22 +308,23 @@ function selectEntry(
   const onServer = Object.entries(store.entries).filter(([, entry]) => serverOf(entry.api) === server);
 
   if (!wanted) {
-    const active = onServer.find(([key]) => key === store.active);
+    const live = onServer.filter(([, entry]) => !entry.movedTo);
+    const active = live.find(([key]) => key === store.active);
 
-    return (active ?? onServer[onServer.length - 1])?.[1] ?? null;
+    return (active ?? live[live.length - 1])?.[1] ?? null;
   }
 
   if (wanted.includes("/")) {
     const [workspace = "", project = ""] = wanted.split("/");
+    const key = credentialKey(workspace, project, server);
 
-    return onServer.find(([key]) => key === credentialKey(workspace, project, server))?.[1] ?? null;
+    return followAlias(store, key, onServer.find(([name]) => name === key)?.[1] ?? null);
   }
 
-  const bySlug = onServer.map(([, entry]) => entry).filter(
-    (entry) => entry.projectSlug.toLowerCase() === wanted,
-  );
+  const bySlug = onServer.filter(([, entry]) => entry.projectSlug.toLowerCase() === wanted);
+  const [found] = bySlug;
 
-  return bySlug.length === 1 ? (bySlug[0] ?? null) : null;
+  return bySlug.length === 1 && found ? followAlias(store, found[0], found[1]) : null;
 }
 
 export function readCredentials(selector?: CredentialSelector): StoredCredentials | null {
@@ -295,12 +337,94 @@ export function listCredentials(): Array<StoredCredentials & { key: string; acti
   const store = readCredentialStore();
   if (!store) return [];
 
-  return Object.entries(store.entries).map(([key, entry]) => ({
-    ...entry,
-    key,
-    active: key === store.active,
-    server: serverOf(entry.api),
-  }));
+  return Object.entries(store.entries)
+    .filter(([, entry]) => !entry.movedTo)
+    .map(([key, entry]) => ({
+      ...entry,
+      key,
+      active: key === store.active,
+      server: serverOf(entry.api),
+    }));
+}
+
+export function moveLogin(args: {
+  workspaceSlug: string;
+  fromProjectSlug: string;
+  toProjectSlug: string;
+  api?: string;
+  projectId?: string;
+}): { from: string; to: string } | null {
+  if (requestCredential()) return null;
+
+  const from = credentialKey(args.workspaceSlug, args.fromProjectSlug, args.api);
+  const to = credentialKey(args.workspaceSlug, args.toProjectSlug, args.api);
+  if (from === to) return null;
+
+  return withStoreLock(() => {
+    const existing = storeForWrite();
+    const entry = existing?.entries[from];
+    if (!existing || !entry || entry.movedTo) return null;
+
+    const projectId = String(args.projectId || entry.projectId || "").trim();
+    const entries = { ...existing.entries };
+    entries[to] = storable({
+      ...entry,
+      projectSlug: args.toProjectSlug,
+      ...(projectId ? { projectId } : {}),
+    });
+
+    entries[from] = storable({ ...entry, movedTo: to });
+
+    writeStore({
+      version: 2,
+      active: existing.active === from ? to : existing.active,
+      entries,
+    });
+
+    return {
+      from: `${entry.workspaceSlug}/${entry.projectSlug}`.toLowerCase(),
+      to: `${entry.workspaceSlug}/${args.toProjectSlug}`.toLowerCase(),
+    };
+  });
+}
+
+export function dropLoginAlias(args: { workspaceSlug: string; projectSlug: string; api?: string }): boolean {
+  if (requestCredential()) return false;
+
+  const key = credentialKey(args.workspaceSlug, args.projectSlug, args.api);
+
+  return withStoreLock(() => {
+    const existing = storeForWrite();
+    if (!existing?.entries[key]?.movedTo) return false;
+
+    const entries = { ...existing.entries };
+    delete entries[key];
+    writeStore({ ...existing, entries });
+
+    return true;
+  });
+}
+
+export function rememberLoginProjectId(args: {
+  workspaceSlug: string;
+  projectSlug: string;
+  api?: string;
+  projectId: string;
+}): boolean {
+  const projectId = String(args.projectId || "").trim();
+  if (!projectId.startsWith("prj_") || requestCredential()) return false;
+
+  const key = credentialKey(args.workspaceSlug, args.projectSlug, args.api);
+
+  return withStoreLock(() => {
+    const existing = storeForWrite();
+    const entry = existing?.entries[key];
+    if (!existing || !entry || entry.movedTo || entry.projectId === projectId) return false;
+
+    writeStore({ ...existing, entries: { ...existing.entries, [key]: { ...entry, projectId } } });
+
+    return true;
+  });
 }
 
 function writeStore(store: CredentialStore): string {
@@ -330,7 +454,7 @@ export function writeCredentials(creds: StoredCredentials): string {
     const existing = storeForWrite();
     const entries = { ...(existing?.entries ?? {}) };
     delete entries[key];
-    entries[key] = creds;
+    entries[key] = storable(creds);
 
     return writeStore({ version: 2, active: key, entries });
   });
@@ -347,7 +471,7 @@ export function writeCredentialBatch(batch: StoredCredentials[]): string | null 
     for (const creds of batch) {
       const key = credentialKey(creds.workspaceSlug, creds.projectSlug, creds.api);
       delete entries[key];
-      entries[key] = creds;
+      entries[key] = storable(creds);
     }
 
     const first = batch[0] as StoredCredentials;

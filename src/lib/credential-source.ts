@@ -7,7 +7,8 @@
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
 import { envToken } from "./credential-scope";
-import { pinnedProject, readValidCredentials } from "./credentials";
+import { dropLoginAlias, loginMoveSentence, pinnedProject, readValidCredentials } from "./credentials";
+import { deferWarning } from "./deferred-warnings";
 
 export interface CredentialRef {
   workspace: string;
@@ -81,13 +82,23 @@ export function resolveCredential(options: { project?: string; api?: string } = 
     const creds = readValidCredentials(undefined, { project: wanted, api });
 
     if (creds?.token) {
+      const moved = creds.movedFrom
+        ? loginMoveSentence(creds.movedFrom, `${creds.workspaceSlug}/${creds.projectSlug}`.toLowerCase())
+        : null;
+
+      if (moved && creds.movedFrom) {
+        const [workspace = "", project = ""] = creds.movedFrom.split("/");
+        deferWarning(moved);
+        dropLoginAlias({ workspaceSlug: workspace, projectSlug: project, api });
+      }
+
       return {
         token: String(creds.token).trim(),
         source: "stored",
         ref: { workspace: creds.workspaceSlug, project: creds.projectSlug },
         refSource: "stored",
         mismatch: null,
-        note: null,
+        note: moved,
       };
     }
 
