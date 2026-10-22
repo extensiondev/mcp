@@ -8,6 +8,8 @@
 
 import crypto from "node:crypto";
 
+import { approvalUrlFor } from "./approval-outcome";
+import { mintedApproval, rememberMintedApproval } from "./approval-record";
 import { readApprovalSubject } from "./approval-subject";
 import { envelope } from "./envelope";
 import { resolveApiBase, safeApiBase } from "./login-flow";
@@ -208,6 +210,17 @@ async function requestApproval(params: {
     );
   }
 
+  const remembered = rememberMintedApproval({
+    api: input.api,
+    token: input.token,
+    approvalId,
+    action: input.action,
+    fingerprint,
+    approvalUrl,
+    expiresAt: typeof data.expiresAt === "string" ? data.expiresAt : undefined,
+  });
+  const replaces = remembered?.replaces?.length ? { replaces: remembered.replaces } : {};
+
   if (renewing) {
     const expiredAt = renewing.expiresAt || "its expiry";
     const say = `That approval expired at ${expiredAt}; here is a fresh one: ${approvalUrl}. Click Approve, then tell me.`;
@@ -227,6 +240,7 @@ async function requestApproval(params: {
         ...(data.expiresAt ? { expiresAt: data.expiresAt } : {}),
         ...(subject ? { subject } : {}),
         ...(Array.isArray(data.changes) ? { changes: data.changes.filter((line) => typeof line === "string") } : {}),
+        ...replaces,
         expiredApproval: { approvalId: renewing.approvalId, status: APPROVAL_EXPIRED_STATUS, ...(renewing.expiresAt ? { expiresAt: renewing.expiresAt } : {}) },
         nextStep: { kind: "approve", say, url: approvalUrl },
       },
@@ -253,6 +267,7 @@ async function requestApproval(params: {
       ...(data.expiresAt ? { expiresAt: data.expiresAt } : {}),
       ...(subject ? { subject } : {}),
       ...(Array.isArray(data.changes) ? { changes: data.changes.filter((line) => typeof line === "string") } : {}),
+      ...replaces,
     },
     approvalUrl
       ? `Approve at ${approvalUrl}, then re-run with the same arguments and approvalId ${approvalId}.`
@@ -286,11 +301,30 @@ export async function evaluateApproval(
     return requestApproval({ base: apiCheck.base, fingerprint, input, doFetch });
   }
 
+  const minted = mintedApproval(input.api, String(input.approvalId));
+
+  if (minted?.replacedBy) {
+    const current = mintedApproval(input.api, minted.replacedBy);
+    const ref = `${minted.workspace}/${minted.project}`;
+    const url = current?.approvalUrl || approvalUrlFor(minted.replacedBy, input.api);
+
+    return block(
+      input.command,
+      APPROVAL_REJECTED_STATUS,
+      "E_APPROVAL_REJECTED",
+      "ApprovalReplaced",
+      `Approval ${minted.approvalId} was replaced by ${minted.replacedBy}, a fresh approval of the same act for ${ref} requested${current ? ` at ${current.mintedAt}` : ""}, so it was not presented to the platform and nothing was executed. A person approves the current one at ${url}; then call again with the same arguments and approvalId ${minted.replacedBy}.`,
+      { action: input.action, approvalId: minted.approvalId, replacedBy: minted.replacedBy, approvalUrl: url },
+      `Call again with approvalId ${minted.replacedBy} once ${url} is approved; do not request another approval while it waits.`,
+    );
+  }
+
   return verifyApproval({
     base: apiCheck.base,
     fingerprint,
     input,
     doFetch,
+    minted,
     renew: (expired) => requestApproval({ base: apiCheck.base, fingerprint, input, doFetch, renewing: expired }),
   });
 }

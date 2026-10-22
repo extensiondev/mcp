@@ -12,6 +12,7 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 
 import { openApprovalOnce } from "./approval-open";
+import { bindApprovalProject } from "./approval-record";
 import { envelope, isEnvelope } from "./envelope";
 import {
   TOOL_POLICY,
@@ -142,7 +143,11 @@ export function installToolHandlers(server: Server, setup: ToolHandlerOptions): 
 
     if ("refused" in pinned) return refusedFrame(pinned.refused);
 
-    const normalizedArgs = pinned.args;
+    const bound = bindApprovalProject(name, pinned.args);
+
+    if ("refused" in bound) return refusedFrame(bound.refused);
+
+    const normalizedArgs = bound.args;
     const issues = validateToolInput(tool.schema.inputSchema, normalizedArgs);
 
     if (issues.length) {

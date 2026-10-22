@@ -12,9 +12,12 @@ import {
   APPROVAL_REJECTED_STATUS,
   pendingApproval,
 } from "./approval-outcome";
+import { readTokenClaims } from "./credential-source";
 import { envelope } from "./envelope";
 import { parseJsonObject } from "./json-object";
 import { platformHoldEnvelope, sawPlatformHold } from "./platform-hold";
+
+import type { MintedApproval } from "./approval-record";
 
 export {
   APPROVAL_DECLINED_STATUS,
@@ -146,8 +149,9 @@ export async function verifyApproval(params: {
   input: ApprovalGateInput;
   doFetch: typeof fetch;
   renew?: ApprovalRenewer;
+  minted?: MintedApproval | null;
 }): Promise<ApprovalGateResult> {
-  const { base, fingerprint, input, doFetch, renew } = params;
+  const { base, fingerprint, input, doFetch, renew, minted } = params;
   const approvalId = String(input.approvalId || "").trim();
   const url = `${base}/api/cli/approvals/${encodeURIComponent(approvalId)}`;
   let res: Response;
@@ -207,13 +211,22 @@ export async function verifyApproval(params: {
   }
 
   if (res.status === 404 && (platformCode === "APPROVAL_UNKNOWN" || platformCode === "APPROVAL_NOT_FOUND")) {
+    const mintedFor = minted ? `${minted.workspace}/${minted.project}` : "";
+    const claims = readTokenClaims(input.token);
+    const resolved = claims ? `${claims.workspace}/${claims.project}` : "";
+    const known = !mintedFor
+      ? `The platform does not know approval ${approvalId}; it may have been minted for another server or project.`
+      : resolved && resolved !== mintedFor
+        ? `Approval ${approvalId} was minted for ${mintedFor} and this call resolved ${resolved}, so the platform does not know it for this project.`
+        : `The platform does not know approval ${approvalId} for ${mintedFor}, the project this machine minted it for at ${minted!.mintedAt}.`;
+
     return block(
       input.command,
       APPROVAL_REJECTED_STATUS,
       "E_APPROVAL_REJECTED",
       "ApprovalUnknown",
-      `The platform does not know approval ${approvalId}; it may have been minted for another server or project. ${sentenceCase(actionPhrase(input))} was refused and nothing was executed. Request a fresh approval by calling this tool with no approvalId.`,
-      { action: input.action, approvalId, fingerprint, platformCode },
+      `${known} ${sentenceCase(actionPhrase(input))} was refused and nothing was executed. Request a fresh approval by calling this tool with no approvalId.`,
+      { action: input.action, approvalId, fingerprint, platformCode, ...(mintedFor ? { mintedFor } : {}), ...(mintedFor && resolved ? { resolved } : {}) },
     );
   }
 
@@ -311,7 +324,7 @@ export async function verifyApproval(params: {
         message: `Approval ${approvalId} has not been granted yet: ${input.description}`,
         undone: "Nothing was executed.",
         api: input.api,
-        approvalUrl: typeof data.approvalUrl === "string" ? data.approvalUrl.trim() : undefined,
+        approvalUrl: (typeof data.approvalUrl === "string" ? data.approvalUrl.trim() : "") || minted?.approvalUrl || undefined,
         value: { action: input.action, status: status || "pending" },
       }),
     };
