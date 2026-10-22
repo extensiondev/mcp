@@ -21,7 +21,7 @@ export function webdriverSessionMissingHint(reason: string | null): string {
     return `The dev session opened no safaridriver session: ${reason}. Fix that, then restart extension_dev --browser=safari so it opens one. ${SAFARI_LOG_FALLBACK}`;
   }
 
-  return `ready.json records no safaridriver session (webdriverPort and webdriverSessionId) and no reason for its absence. Extension.js 4.1.32 and later open one under extension_dev --browser=safari and say why when they cannot, so an older engine in the project, or a session that is not a dev session, is the likely cause. ${SAFARI_LOG_FALLBACK}`;
+  return `ready.json records no safaridriver session (webdriverPort and webdriverSessionId) and no reason for its absence. The engine's Safari launcher stamps the session, or why it opened none, only once it reaches its WebDriver step: after the app opens and the extension is enabled, and the session request alone waits up to 30 s. A contract with neither means that step has not concluded yet, or the launcher never reached it (an enable step that is still waiting, a session that is not a dev session, or an engine older than Extension.js 4.1.32). extension_logs shows the launcher's last line; call again in 30 s, and a run that stays without either needs extension_dev again with replace: true. ${SAFARI_LOG_FALLBACK}`;
 }
 
 export function readWebDriverUnavailableReason(

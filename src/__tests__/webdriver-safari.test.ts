@@ -233,6 +233,24 @@ describe("Safari sessions over the dev window's WebDriver connection", () => {
     expect(parsed.value.result).toEqual({ echoed: "return (1 + 1);" });
   });
 
+  it("evaluates in the page over the recorded session when no context is given, and says so, without riding the background", async () => {
+    withWindow();
+    const parsed = JSON.parse(
+      await evalTool.handler({
+        projectPath: project,
+        browser: BROWSER,
+        expression: "1 + 1",
+      }),
+    );
+    expect(parsed.ok).toBe(true);
+    expect(parsed.status).toBe("evaluated");
+    expect(parsed.value.context).toBe("page");
+    expect(parsed.value.result).toEqual({ echoed: "return (1 + 1);" });
+    expect(parsed.warnings.join("\n")).toContain("No context given: on Safari this tool reaches page contexts only");
+    expect(parsed.warnings.join("\n")).toContain("not in the background");
+    expect(act.calls.filter((c) => c[0] === "eval")).toHaveLength(0);
+  });
+
   it("navigates first when eval names a url the window is not on", async () => {
     withWindow();
     await evalTool.handler({
@@ -398,19 +416,19 @@ describe("Safari sessions over the dev window's WebDriver connection", () => {
     withWindow();
     act.calls.length = 0;
 
-    for (const context of ["content", "background", undefined]) {
+    for (const context of ["content", "background"]) {
       const parsed = JSON.parse(
         await evalTool.handler({
           projectPath: project,
           browser: BROWSER,
           expression: "1",
-          ...(context ? { context } : {}),
+          context,
         }),
       );
       expect(parsed.value.via).toBe("bridge");
     }
 
-    expect(act.calls).toHaveLength(3);
+    expect(act.calls).toHaveLength(2);
     expect(safari.calls).toHaveLength(0);
   });
 

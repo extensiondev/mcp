@@ -6,188 +6,25 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-import { setTimeout as sleep } from "node:timers/promises";
-
 import { actFrameJson, runActVerb } from "./act";
+import {
+  listBridgeTabs,
+  matchTabsByUrl,
+  navigationConfirmPolicy,
+  pollForBridgeTab,
+  pollForBridgeTabById,
+  tabListUnreadable,
+  type BridgeTab,
+} from "./bridge-tab-list";
+import { WEBKIT_FAMILY } from "./browser-family";
 import { envelope } from "./envelope";
 import { readGeckoBaseUrlFromProfile } from "./gecko-addon";
 import { tabViewFields, tabViewSentence } from "./tab-view";
 
 import type { TabViewFields } from "./tab-view";
 
-export interface BridgeTab {
-  tabId: number | null;
-  url: string;
-  title: string;
-  active?: boolean;
-}
-
-export async function listBridgeTabs(
-  projectPath: string,
-  browser: string,
-  timeout?: number,
-  tool = "extension_dom_snapshot",
-): Promise<{ tabs: BridgeTab[] } | { error: string }> {
-  const raw = await runActVerb(
-    [
-      "inspect",
-      projectPath,
-      "--list-tabs",
-      "--browser",
-      browser,
-      ...(timeout != null ? ["--timeout", String(timeout)] : []),
-    ],
-    projectPath,
-    timeout,
-    tool,
-  );
-  let parsed: any;
-
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    return { error: raw };
-  }
-
-  if (parsed?.ok === false) return { error: raw };
-
-  const list = Array.isArray(parsed?.tabs)
-    ? parsed.tabs
-    : Array.isArray(parsed?.value)
-      ? parsed.value
-      : Array.isArray(parsed?.value?.tabs)
-        ? parsed.value.tabs
-        : null;
-
-  if (!list) return { error: raw };
-
-  return {
-    tabs: list.map((t: any) => ({
-      tabId:
-        typeof t?.tabId === "number"
-          ? t.tabId
-          : typeof t?.id === "number"
-            ? t.id
-            : null,
-      url: String(t?.url ?? ""),
-      title: String(t?.title ?? ""),
-      ...(typeof t?.active === "boolean" ? { active: t.active } : {}),
-    })),
-  };
-}
-
-export function matchTabsByUrl(tabs: BridgeTab[], needle: string): BridgeTab[] {
-  const wanted = needle.toLowerCase();
-  const byUrl = tabs.filter((t) => t.url.toLowerCase().includes(wanted));
-
-  if (byUrl.length > 0) return byUrl;
-
-  return tabs.filter((t) => t.title.toLowerCase().includes(wanted));
-}
-
-export async function pollForBridgeTab(
-  projectPath: string,
-  browser: string,
-  url: string,
-  budgetMs: number,
-): Promise<BridgeTab | null | { unreadable: string }> {
-  const deadline = Date.now() + budgetMs;
-  const wanted = url.replace(/#.*$/, "");
-  let listedOnce = false;
-  let lastError: string | null = null;
-
-  for (;;) {
-    const listed = await listBridgeTabs(projectPath, browser);
-
-    if ("tabs" in listed) {
-      listedOnce = true;
-
-      for (const t of listed.tabs) {
-        if (t.url === wanted || t.url.startsWith(wanted)) return t;
-      }
-    } else {
-      lastError = listed.error;
-    }
-
-    if (Date.now() >= deadline) {
-      return !listedOnce && lastError !== null ? { unreadable: lastError } : null;
-    }
-
-    await sleep(250);
-  }
-}
-
-function tabListUnreadable(
-  polled: BridgeTab | null | { unreadable: string },
-): polled is { unreadable: string } {
-  return polled !== null && "unreadable" in polled;
-}
-
-const LOADED_ELSEWHERE = /^(?:https?|moz-extension|chrome-extension|safari-web-extension):\/\//;
-
-function landedElsewhere(tab: BridgeTab, wanted: string): boolean {
-  return tab.url !== wanted && LOADED_ELSEWHERE.test(tab.url);
-}
-
-function carriesRequestedUrl(tab: BridgeTab, wanted: string): boolean {
-  return tab.url.includes(wanted) || tab.url.includes(encodeURIComponent(wanted));
-}
-
-async function pollForBridgeTabById(
-  projectPath: string,
-  browser: string,
-  url: string,
-  tabId: number | null,
-  budgetMs: number,
-): Promise<{
-  tab: BridgeTab | null;
-  seen: BridgeTab | null;
-  redirected?: boolean;
-  unreadable?: string;
-}> {
-  const deadline = Date.now() + budgetMs;
-  const wanted = url.replace(/#.*$/, "");
-  let seen: BridgeTab | null = null;
-  let listedOnce = false;
-  let lastError: string | null = null;
-
-  for (;;) {
-    const listed = await listBridgeTabs(projectPath, browser);
-
-    if ("tabs" in listed) {
-      listedOnce = true;
-      const candidates =
-        tabId != null ? listed.tabs.filter((t) => t.tabId === tabId) : listed.tabs;
-
-      for (const t of candidates) {
-        if (t.url === wanted || t.url.startsWith(wanted)) return { tab: t, seen: t };
-        if (tabId == null) continue;
-
-        seen = t;
-
-        if (landedElsewhere(t, wanted) && carriesRequestedUrl(t, wanted)) {
-          return { tab: t, seen: t, redirected: true };
-        }
-      }
-    } else {
-      lastError = listed.error;
-    }
-
-    if (Date.now() >= deadline) {
-      if (seen && landedElsewhere(seen, wanted)) {
-        return { tab: seen, seen, redirected: true };
-      }
-
-      return {
-        tab: null,
-        seen,
-        ...(!listedOnce && lastError !== null ? { unreadable: lastError } : {}),
-      };
-    }
-
-    await sleep(250);
-  }
-}
+export { listBridgeTabs, matchTabsByUrl, pollForBridgeTab };
+export type { BridgeTab };
 
 const UNKNOWN_VERB = /unknown command/i;
 
@@ -253,7 +90,7 @@ export async function navigateToUrlViaBridge(
       browser,
       url,
       tabId,
-      timeout != null ? Math.min(timeout, 3000) : 3000,
+      navigationConfirmPolicy(browser, timeout),
     );
 
     if (!landed.tab) {
@@ -267,7 +104,9 @@ export async function navigateToUrlViaBridge(
           message: landed.unreadable
             ? `The engine accepted the navigation to ${url}${
                 tabId != null ? ` in tab ${tabId}` : ""
-              }, but the tab list could not be read afterwards (${landed.unreadable.slice(0, 300)}), so where it landed is unknown.`
+              }, but the tab list could not be read afterwards (${landed.unreadable.slice(0, 300)}), so where it landed is unknown.${
+                WEBKIT_FAMILY.has(browser) ? " On Safari that list rides the extension's background, which answers slowly right after it wakes, so the read was given 10 s and two tries." : ""
+              }`
             : `The engine accepted the navigation to ${url}${
                 tabId != null ? ` in tab ${tabId}` : ""
               }, but no tab reported that url afterwards${

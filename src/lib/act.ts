@@ -14,6 +14,11 @@ import {
 } from "./engine-version";
 import { knownSessionBrowsers, deadReadySession } from "./session-browser";
 import {
+  answerAfterSafariWake,
+  SAFARI_WAKE_WAIT_MS,
+  safariExecutorUnavailable,
+} from "./safari-background";
+import {
   envelope,
   envelopeObject,
   isEnvelope,
@@ -210,6 +215,7 @@ export async function runActVerb(
   projectPath: string,
   timeoutMs?: number,
   tool?: string,
+  options: { wake?: boolean } = {},
 ): Promise<string> {
   const command = commandNamePerD6(args[0], tool);
   const separatorAt = args.indexOf("--");
@@ -243,7 +249,18 @@ export async function runActVerb(
 
   if (out) {
     try {
-      const frame = translateFrame(JSON.parse(out), projectPath, args);
+      let frame = translateFrame(JSON.parse(out), projectPath, args);
+      const browser = browserFlag(args);
+
+      if (options.wake !== false && browser && safariExecutorUnavailable(frame, browser)) {
+        frame = await answerAfterSafariWake(
+          frame,
+          projectPath,
+          browser,
+          async () => JSON.parse(await runActVerb(args, projectPath, timeoutMs, tool, { wake: false })),
+          SAFARI_WAKE_WAIT_MS,
+        );
+      }
 
       if (isEnvelope(frame)) {
         frame.command = command;

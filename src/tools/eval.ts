@@ -460,13 +460,17 @@ function webdriverSessionEndedFrame(browser: string, info: WebDriverSessionInfo)
   });
 }
 
+const SAFARI_PAGE_DEFAULT_NOTE =
+  'No context given: on Safari this tool reaches page contexts only, so it evaluated in the automation window\'s page over the dev session\'s WebDriver session, not in the background. Pass context: "page" with a url to pick the page.';
+
 async function evaluateOnWebKitPage(
   args: ActArgs & { expression: string },
   browser: string,
   info: WebDriverSessionInfo,
+  defaulted = false,
 ): Promise<string> {
   const client = new WebDriverClient(info);
-  const warnings: string[] = [];
+  const warnings: string[] = defaulted ? [SAFARI_PAGE_DEFAULT_NOTE] : [];
 
   try {
     if (args.url) {
@@ -1379,9 +1383,9 @@ async function evaluateRouted(
 ): Promise<string> {
   if (args.targetId) return evaluateByTargetId(args, browser, args.targetId);
 
-  if (WEBKIT_FAMILY.has(browser) && args.context === "page") {
+  if (WEBKIT_FAMILY.has(browser) && (args.context === "page" || !args.context)) {
     const info = readWebDriverSession(args.projectPath, browser);
-    if (info) return evaluateOnWebKitPage(args, browser, info);
+    if (info) return evaluateOnWebKitPage(args, browser, info, !args.context);
   }
 
   const defaulted =

@@ -46,7 +46,11 @@ describe("Extension.js 4.1.32 stamps the Safari session into ready.json", () => 
     expect(withReason).toContain("Allow Remote Automation is off");
     expect(withReason).toContain("extension_dev --browser=safari");
     const without = webdriverSessionMissingHint(null);
-    expect(without).toContain("4.1.32");
+    expect(without).toContain("only once it reaches its WebDriver step");
+    expect(without).toContain("the session request alone waits up to 30 s");
+    expect(without).toContain("call again in 30 s");
+    expect(without).toContain("replace: true");
+    expect(without).not.toMatch(/an older engine in the project, or a session that is not a dev session, is the likely cause/);
 
     for (const hint of [withReason, without]) {
       expect(hint).not.toMatch(/no Extension\.js release opens one/i);

@@ -7,7 +7,7 @@ import type * as ActModule from "../lib/act";
 
 const act = vi.hoisted(() => ({
   calls: [] as string[][],
-  replies: [] as string[],
+  replies: [] as Array<{ body: string; afterMs: number }>,
 }));
 
 vi.mock("../lib/act", async (importOriginal) => {
@@ -17,8 +17,11 @@ vi.mock("../lib/act", async (importOriginal) => {
     ...actual,
     runActVerb: async (cli: string[]) => {
       act.calls.push(cli);
+      const next = act.replies.shift();
 
-      return act.replies.shift() ?? JSON.stringify({ ok: true, value: {} });
+      if (next && next.afterMs > 0) await new Promise((resolve) => setTimeout(resolve, next.afterMs));
+
+      return next?.body ?? JSON.stringify({ ok: true, value: {} });
     },
   };
 });
@@ -26,7 +29,11 @@ vi.mock("../lib/act", async (importOriginal) => {
 function reset(...replies: unknown[]) {
   act.calls.length = 0;
   act.replies.length = 0;
-  for (const r of replies) act.replies.push(JSON.stringify(r));
+  for (const r of replies) act.replies.push({ body: JSON.stringify(r), afterMs: 0 });
+}
+
+function slow(reply: unknown, afterMs: number) {
+  act.replies.push({ body: JSON.stringify(reply), afterMs });
 }
 
 describe("navigateToUrlViaBridge asks the engine's navigate verb first", () => {
@@ -109,6 +116,33 @@ describe("navigateToUrlViaBridge asks the engine's navigate verb first", () => {
       expect(parsed.error.code).toBe("E_NAVIGATE_FAILED");
       expect(parsed.value.redirected).toBeUndefined();
     }
+  });
+
+  it("on Safari reads the tab list a second time when the first read outlives the budget, instead of calling the navigation unconfirmed", async () => {
+    reset({ ok: true, command: "navigate", status: "ok", value: { tabId: 7, url: "https://a.test/", created: false } });
+    slow(actFailure("inspect", { name: "CliTimeout", code: "E_CLI", message: "the control channel answered nothing within the budget" }), 700);
+    slow(actFrame("inspect", tabRows([{ id: 7, url: "https://a.test/", title: "A" }])), 0);
+
+    const parsed = JSON.parse(await navigateToUrlViaBridge("/p", "safari", "https://a.test/", 600));
+    expect(parsed.ok).toBe(true);
+    expect(parsed.status).toBe("navigated");
+    expect(parsed.value.tab).toMatchObject({ tabId: 7, url: "https://a.test/" });
+    expect(act.calls.filter((c) => c[0] === "inspect")).toHaveLength(2);
+  });
+
+  it("on Safari says the unconfirmed read had its longer budget when both reads fail", async () => {
+    reset(
+      { ok: true, command: "navigate", status: "ok", value: { tabId: 7, url: "https://a.test/", created: false } },
+      actFailure("inspect", { name: "CliTimeout", code: "E_CLI", message: "nothing within the budget" }),
+    );
+
+    slow(actFailure("inspect", { name: "CliTimeout", code: "E_CLI", message: "nothing within the budget" }), 650);
+
+    const parsed = JSON.parse(await navigateToUrlViaBridge("/p", "safari", "https://a.test/", 600));
+    expect(parsed.ok).toBe(false);
+    expect(parsed.status).toBe("navigation-unconfirmed");
+    expect(parsed.error.message).toContain("rides the extension's background, which answers slowly right after it wakes");
+    expect(act.calls.filter((c) => c[0] === "inspect")).toHaveLength(2);
   });
 
   it("passes the verb's own refusal through, with a hint", async () => {
