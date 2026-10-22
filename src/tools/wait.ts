@@ -25,6 +25,7 @@ import {
 import { verifyGuestLoaded } from "../lib/guest-load-oracle";
 import { detachedVerdictFrame, readDetachedVerdict } from "../lib/background-liveness";
 import { WAIT_MODE_PROPERTIES, contractErrorList, waitModeFrame } from "../lib/wait-modes";
+import { notAttachedHint } from "../lib/safari-dev-options";
 import { recentErrorLogs } from "./doctor";
 
 import type { ReadyContract } from "../lib/types";
@@ -394,7 +395,7 @@ export async function handler(args: {
         elapsedMs: Date.now() - start,
       },
       warnings: [clampNote, staleContractNote],
-      hint: "This is usually transient: call extension_wait again. If it persists, stop and restart the session with extension_dev (a restart reliably reattaches); extension_doctor reports the executor leg.",
+      hint: notAttachedHint(browser, findSessionInfo(args.projectPath, browser)?.enableExtension === true),
     });
   }
 

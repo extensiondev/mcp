@@ -49,6 +49,14 @@ import {
   launchFlagArgs,
   type LaunchFlagArgs,
 } from "../lib/launch-flags";
+import {
+  SAFARI_DEV_OPTION_SCHEMA,
+  isSafariTarget,
+  notAttachedHint,
+  safariDevOptionArgs,
+  safariDevOptionRefusal,
+  type SafariDevOptionArgs,
+} from "../lib/safari-dev-options";
 
 export const schema = {
   name: "extension_dev",
@@ -74,6 +82,7 @@ export const schema = {
         description: "Apply cross-browser polyfill",
       },
       ...LAUNCH_FLAG_SCHEMA,
+      ...SAFARI_DEV_OPTION_SCHEMA,
       replace: {
         type: "boolean",
         default: false,
@@ -114,9 +123,13 @@ export async function handler(
     allowControl?: boolean;
     allowEval?: boolean;
     wait?: boolean;
-  } & LaunchFlagArgs,
+  } & LaunchFlagArgs &
+    SafariDevOptionArgs,
 ): Promise<string> {
   const browser = args.browser ?? "chrome";
+
+  const safariRefusal = safariDevOptionRefusal(schema.name, browser, args);
+  if (safariRefusal) return safariRefusal;
 
   const guard = await guardSameBrowserSession({
     tool: schema.name,
@@ -143,6 +156,7 @@ export async function handler(
   if (args.polyfill === false) cliArgs.push("--polyfill", "false");
 
   cliArgs.push(...launchFlagArgs(args));
+  cliArgs.push(...safariDevOptionArgs(args));
   if (allowControl) cliArgs.push("--allow-control");
   if (args.allowEval) cliArgs.push("--allow-eval");
 
@@ -169,6 +183,7 @@ export async function handler(
     noBrowser: Boolean(args.noBrowser),
     profileReused,
     headless: visibility.headless,
+    ...(args.enableExtension ? { enableExtension: true } : {}),
   });
   child.on("exit", () => {
     removeSession(args.projectPath, browser, pid);
@@ -366,6 +381,7 @@ export async function handler(
       noBrowser: Boolean(args.noBrowser),
       profileReused,
       headless: visibility.headless,
+      ...(args.enableExtension ? { enableExtension: true } : {}),
     });
   }
 
@@ -393,7 +409,11 @@ export async function handler(
   const nextStep = sessionReady
     ? "The session is ready (ready.status: ready) and the first log lines are in firstLogs, so no extension_wait is needed: extension_inspect reads the live state and extension_logs the console."
     : readiness
-      ? `ready.status is ${readiness.ready.status}, not ready: call extension_wait to keep waiting on the same contract, then extension_inspect to inspect the live state.`
+      ? `ready.status is ${readiness.ready.status}, not ready: ${
+          readiness.ready.status === "compiled-not-attached" && isSafariTarget(browser)
+            ? notAttachedHint(browser, Boolean(args.enableExtension))
+            : "call extension_wait to keep waiting on the same contract, then extension_inspect to inspect the live state."
+        }`
       : "Use extension_wait to check when the extension is fully loaded, then extension_inspect to inspect the live state.";
 
   return envelope({

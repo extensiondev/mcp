@@ -542,6 +542,45 @@
           "description": "false opens a browser window the person can see, overriding EXTENSION_HEADLESS and any --headless in EXTENSION_BROWSER_FLAGS for this session only; pass it when the person wants to watch or try the extension. true forces headless. Omit to inherit the environment (headless when EXTENSION_HEADLESS=1 or EXTENSION_BROWSER_FLAGS carries --headless)."
         },
         {
+          "name": "appName",
+          "type": "string",
+          "required": false,
+          "description": "Safari targets only: name of the generated macOS app, which also names the Xcode scheme and the .app on disk. Defaults to the manifest name."
+        },
+        {
+          "name": "bundleId",
+          "type": "string",
+          "required": false,
+          "description": "Safari targets only: a reverse-DNS bundle identifier you own, such as com.acme.readinglist. Without one the app is packaged under a generated dev.extensionjs.* identifier derived from the app name, which two projects with the same name share."
+        },
+        {
+          "name": "developmentTeam",
+          "type": "string",
+          "required": false,
+          "description": "Safari targets only: an Apple Developer team id to sign the app with. Without it the app is ad-hoc signed, which Safari loads locally once unsigned extensions are allowed, and Safari resets the extension's storage on every rebuild."
+        },
+        {
+          "name": "macOsOnly",
+          "type": "boolean",
+          "required": false,
+          "default": true,
+          "description": "Safari targets only: generate a macOS-only Xcode project. Pass false for a universal project that also targets iOS and iPadOS."
+        },
+        {
+          "name": "forceRegenerate",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "Safari targets only: regenerate the Xcode project even when the engine considers it up to date."
+        },
+        {
+          "name": "enableExtension",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "Safari targets only: let Extension.js turn the extension on in Safari Settings and allow it on other websites after the app opens, instead of printing the one-time setup steps for the person to click through. It drives Safari through macOS Accessibility, which needs a one-time grant for the terminal app that runs this server (System Settings > Privacy & Security > Accessibility); without the grant the engine falls back to the manual steps and the session stays compiled-not-attached until they are done."
+        },
+        {
           "name": "replace",
           "type": "boolean",
           "required": false,

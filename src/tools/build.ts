@@ -25,6 +25,7 @@ import { type Envelope, envelope, isEnvelope } from "../lib/envelope";
 import { platformListed } from "../lib/tool-policy";
 import { manifestDivergence } from "../lib/manifest-by-browser";
 import { engineBrowserName } from "../lib/browser-family";
+import { BUNDLE_ID_PATTERN } from "../lib/safari-dev-options";
 import { reviewCoverageNotes, reviewDistReport, reviewRiskWarnings } from "../lib/store-review";
 
 const COMMAND = "extension_build";
@@ -443,7 +444,7 @@ export const schema = {
 
 const SAFARI_VENDORS = new Set(["safari", "webkit-based"]);
 
-export const BUNDLE_ID_PATTERN = /^[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*$/;
+export { BUNDLE_ID_PATTERN };
 
 const MARKER_FILE_NAME = "managed-by-extension-dev-mcp.json";
 

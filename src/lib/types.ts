@@ -111,5 +111,6 @@ export interface ProcessInfo {
   profileReused?: boolean;
   serverPid?: number;
   headless?: boolean;
+  enableExtension?: boolean;
 }
 
