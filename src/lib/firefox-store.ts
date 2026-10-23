@@ -69,6 +69,22 @@ export function sourceArchiveSentence(read: SourceArchiveRead, connectUrl: strin
     : `Firefox source archive: no source archive is configured; Mozilla requires matching sources for a bundled build, and every platform build is bundled; turn on Source archive in the console's Firefox store settings at ${connectUrl}.`;
 }
 
+const SOURCE_ARCHIVE_SWITCH_SENTENCE =
+  "The Firefox store settings also hold the Source archive switch, which Mozilla's review needs for a bundled build; every platform build is bundled.";
+
+/* @invariant THE SOURCE ARCHIVE IS NAMED BEFORE THE STORE IS CONNECTED. The
+ * platform's store.firefox_source_archive check appears only once the
+ * Firefox store is connected, so on 2026-10-23 the owner met the setting
+ * after the credentials and the switch, as a third trip to the same page.
+ * A not-connected answer reads the check when www sends it and otherwise
+ * names the switch in one sentence, so the trip to the settings page is one.
+ */
+export function firefoxSourceArchiveLine(json: Row, connectUrl: string): string {
+  const read = sourceArchiveOf(json);
+
+  return read ? sourceArchiveSentence(read, connectUrl) : SOURCE_ARCHIVE_SWITCH_SENTENCE;
+}
+
 export function firefoxSourceArchiveView(json: Row, connectUrl: string): Row {
   const read = sourceArchiveOf(json);
 

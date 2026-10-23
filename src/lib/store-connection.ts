@@ -203,6 +203,35 @@ export function connectSentences(connectUrl: string): string {
   return `Connect your Chrome Web Store account once at ${connectUrl}; Google asks for one click. Then I upload it as a draft that is not published, and nothing goes to review until you publish; the item's visibility (public or unlisted) is set once in the Chrome Web Store dashboard, since no store API sets it.`;
 }
 
+const ENABLED_CHECK = "store.enabled";
+const CREDENTIALS_CHECK = "store.credentials_present";
+
+function checkStatus(json: Row, id: string): string {
+  const checks = Array.isArray(json.checks) ? json.checks : [];
+  const check = checks.filter(isRow).find((row) => text(row.id) === id);
+
+  return check ? text(check.status) : "";
+}
+
+/* @invariant A STORE WITH SAVED CREDENTIALS AND ITS SWITCH OFF IS "NOT
+ * CONNECTED", NOT A FAILED CHECK. The console saves a store's credentials
+ * and turns store publishing on with two separate controls, so on
+ * 2026-10-23 a preflight run a minute after the AMO secrets were pasted
+ * failed on store.enabled alone, with no link to the switch. A failing
+ * store.enabled with the credentials check not failing is the connection
+ * state, for every store, and the answer names the switch and its page;
+ * with the credentials missing too, the missing-credentials answer wins.
+ */
+export function storeSwitchOff(json: Row): boolean {
+  return checkStatus(json, ENABLED_CHECK) === "fail" && checkStatus(json, CREDENTIALS_CHECK) !== "fail";
+}
+
+export function storeSwitchSentences(store: string, connectUrl: string): string {
+  const name = (STORE_NAMES[store] ?? store).replace(/^the /, "");
+
+  return `The ${name} credentials are saved for this project and only the "Store publishing" switch for that store is off, so nothing can be submitted yet; turn it on in the store settings at ${connectUrl}, then say preflight again. The console's Connect flow will save the credentials and turn the switch on in one step soon.`;
+}
+
 export function failedCheckSentence(reason: string): string {
   const said = reason.replace(/[.\s]+$/, "") || "no reason was recorded";
 

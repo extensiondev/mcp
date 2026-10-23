@@ -21,6 +21,7 @@ import {
   firefoxConnectSentences,
   firefoxConnectUrl,
   firefoxNotConnected,
+  firefoxSourceArchiveLine,
   firefoxSourceArchiveView,
 } from "../lib/firefox-store";
 import {
@@ -49,6 +50,8 @@ import {
   linkItemSentences,
   nextStep,
   storeSettingsUrl,
+  storeSwitchOff,
+  storeSwitchSentences,
   submitStep,
   uploadStopsAtDraft,
   type ModeIds,
@@ -725,10 +728,13 @@ export async function preflight(args: StoreActArgs): Promise<string> {
     });
   }
 
-  if (reports.firefox && firefoxNotConnected(reports.firefox)) {
-    const connectUrl = firefoxConnectUrl(api.ref, args.api);
-    const say = firefoxConnectSentences(connectUrl);
-    const others = blocked.filter((store) => store !== "firefox");
+  const notConnected = (store: string, say: string): string => {
+    const connectUrl = fallbackConnectUrl(api.ref, store, args.api);
+    const full =
+      store === "firefox"
+        ? `${say} ${firefoxSourceArchiveLine(reports.firefox, connectUrl)}`
+        : say;
+    const others = blocked.filter((name) => name !== store);
 
     return envelope({
       ok: true,
@@ -740,10 +746,10 @@ export async function preflight(args: StoreActArgs): Promise<string> {
         storesPageUrl,
         connectUrl,
         trackUrl: storeSettingsUrl(api.ref, args.api),
-        sayToPerson: say,
-        nextStep: nextStep("connect", say, connectUrl),
+        sayToPerson: full,
+        nextStep: nextStep("connect", full, connectUrl),
       },
-      hint: say,
+      hint: full,
       warnings: [
         others.length
           ? `${others.join(", ")} cannot be submitted yet either; each failing check says what to fix.`
@@ -752,6 +758,27 @@ export async function preflight(args: StoreActArgs): Promise<string> {
         "This read wrote nothing.",
       ],
     });
+  };
+
+  if (reports.firefox && firefoxNotConnected(reports.firefox)) {
+    return notConnected(
+      "firefox",
+      firefoxConnectSentences(firefoxConnectUrl(api.ref, args.api)),
+    );
+  }
+
+  const switchedOff = asked.find(
+    (store) => reports[store] && storeSwitchOff(reports[store]),
+  );
+
+  if (switchedOff) {
+    return notConnected(
+      switchedOff,
+      storeSwitchSentences(
+        switchedOff,
+        fallbackConnectUrl(api.ref, switchedOff, args.api),
+      ),
+    );
   }
 
   const itemUrl =
