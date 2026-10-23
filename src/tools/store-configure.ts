@@ -20,6 +20,7 @@ import { approvalVerdict, type PolicyWrite } from "../lib/approval-policy";
 import { approvedSettingsWrite } from "../lib/settings-write";
 import { badShipRequest, openShipApi, text } from "../lib/ship-act";
 import { fallbackConnectUrl, nextStep, storeSettingsUrl } from "../lib/store-connection";
+import { configuredRequirementsNote } from "../lib/store-requirements";
 import {
   CREDENTIAL_LABELS,
   STORE_SETTINGS_ACTION,
@@ -181,7 +182,7 @@ export async function configureStore(args: ConfigureStoreArgs): Promise<string> 
   if (!written.ok) return written.out ?? refusal(written.sent, api, args, store, settingsPage);
 
   const changes = Array.isArray(written.json.changes) ? written.json.changes.filter((line): line is string => typeof line === "string") : lines;
-  const say = `The ${store} store settings are saved: ${changes.join("; ")}. Say preflight and I read the store's readiness now.`;
+  const say = `The ${store} store settings are saved: ${changes.join("; ")}. Say preflight and I read the store's readiness now.${configuredRequirementsNote(written.json, store)}`;
   const gateLine = written.verdict === "plain" && !text(args.approvalId) ? " This was a plain setting under your own token; no approval page was involved." : "";
 
   return envelope({

@@ -57,6 +57,10 @@ import {
   type ModeIds,
 } from "../lib/store-connection";
 import {
+  missingRequirementsSentences,
+  requirementsView,
+} from "../lib/store-requirements";
+import {
   readLocalListing,
   reconciledWithStoreMd,
   storeMdAdvisory,
@@ -507,6 +511,7 @@ function readinessView(
   const failing = checks
     .filter((c) => text(c.status) === "fail")
     .map((c) => checkView(reconciledWithStoreMd(c, local), true));
+  const requirements = requirementsView(json.requirements);
 
   return {
     canSubmit:
@@ -514,6 +519,7 @@ function readinessView(
       (deferred.length > 0 && failing.length === 0),
     ...(connection ? { connection } : {}),
     ...(submissionMode ? { submissionMode } : {}),
+    ...(requirements ? { requirements } : {}),
     summary,
     ...(deferred.length ? { namedBySubmit: ["build"] } : {}),
     failing,
@@ -654,6 +660,7 @@ export async function preflight(args: StoreActArgs): Promise<string> {
     firefoxView && isRow(firefoxView.sourceArchive)
       ? ` ${text(firefoxView.sourceArchive.say)}`
       : "";
+  const inputsSay = missingRequirementsSentences(stores);
   const readinessHint = blocked.length
     ? `${blocked.join(", ")} cannot be submitted yet; each failing check says what to fix.${syncLine}${sourceLine} This read wrote nothing.`
     : `Every store read here is ready to submit.${buildLine}${modeLine}${sourceLine} This read wrote nothing; extension_submit with dryRun:false submits.`;
@@ -819,13 +826,18 @@ export async function preflight(args: StoreActArgs): Promise<string> {
       storesPageUrl,
       ...(itemUrl ? { itemUrl } : {}),
       ...(reviewing ? { chromeReview: reviewing, trackUrl: reviewUrl } : {}),
+      sayToPerson: [inputsSay, reviewing ? reviewSay : "", readinessHint]
+        .filter(Boolean)
+        .join(" "),
       nextStep: reviewing
         ? nextStep("done", reviewSay, reviewUrl)
         : green
           ? submitStep(asked, modeIds)
           : null,
     },
-    hint: reviewing ? `${reviewSay} ${readinessHint}` : readinessHint,
+    hint: [inputsSay, reviewing ? reviewSay : "", readinessHint]
+      .filter(Boolean)
+      .join(" "),
     warnings: [unreadLine],
   });
 }
