@@ -238,6 +238,57 @@ describe("extension_submit publish sends a Chrome draft to review after one appr
     expect(platform.sent("POST", APPROVALS)).toHaveLength(0);
   });
 
+  it("answers upload-running with the build and the submissions page while the draft's upload run is still going", async () => {
+    if (process.platform === "win32") return;
+
+    platform.login();
+    platform.routes[`POST ${PUBLISH}`] = () => ({
+      status: 409,
+      body: {
+        code: "SUBMISSION_NOT_JOINABLE",
+        message: "This Chrome Web Store draft (build 2bda5b2) has no store submission id yet because the upload is still running; publish when it lands. Nothing was sent to review.",
+        uploadRunState: "running",
+        submissionId: "sub_fresh",
+        buildId: "2bda5b2",
+        refusedBeforeApproval: true,
+      },
+    });
+
+    const out = JSON.parse(await submit({ action: "publish", browsers: ["chrome"], api: API }));
+
+    expect(out.ok).toBe(false);
+    expect(out.status).toBe("upload-running");
+    expect(out.error.platformCode).toBe("SUBMISSION_NOT_JOINABLE");
+    expect(out.value.uploadRunState).toBe("running");
+    expect(out.value.buildId).toBe("2bda5b2");
+    expect(out.value.submissionId).toBe("sub_fresh");
+    expect(out.value.sayToPerson).toBe("The upload for build 2bda5b2 is still running; say publish again when the status reads landed.");
+    expect(out.value.trackUrl).toContain("/acme/widget/submissions/chrome");
+    expect(out.value.nextStep.kind).toBe("publish");
+    expect(out.hint).toContain("no approval was requested");
+    expect(platform.sent("POST", APPROVALS)).toHaveLength(0);
+  });
+
+  it("keeps publish-refused for a draft the platform cannot join when no upload run is named", async () => {
+    if (process.platform === "win32") return;
+
+    platform.login();
+    platform.routes[`POST ${PROJECT_ROUTE}/stores/edge/publish`] = () => ({
+      status: 409,
+      body: {
+        code: "SUBMISSION_NOT_JOINABLE",
+        message: "This Edge Add-ons draft carries no store submission id, so the result of sending it to review could not be recorded against it.",
+        refusedBeforeApproval: true,
+      },
+    });
+
+    const out = JSON.parse(await submit({ action: "publish", browsers: ["edge"], api: API }));
+
+    expect(out.status).toBe("publish-refused");
+    expect(out.value.uploadRunState).toBeUndefined();
+    expect(out.hint).toContain("cannot tie this submission");
+  });
+
   it("refuses an item that is not linked before anyone is asked, and says how to link it", async () => {
     if (process.platform === "win32") return;
 

@@ -180,6 +180,13 @@ function refusal(act: ShipAct, read: ProjectApiRefusal, api: ProjectApi): string
       ...(act.value ?? {}),
       ...(before ? { refusedBeforeApproval: true } : {}),
       ...storeStateFields(read.code, body),
+      ...(text(body.uploadRunState)
+        ? {
+            uploadRunState: text(body.uploadRunState),
+            ...(text(body.submissionId) ? { submissionId: text(body.submissionId) } : {}),
+            ...(text(body.buildId) ? { buildId: text(body.buildId) } : {}),
+          }
+        : {}),
       ...(read.retryAfterSeconds ? { retryAfterSeconds: read.retryAfterSeconds } : {}),
       ...(refunded ? { approvalId: act.approvalId, approvalRefunded: true, sayToPerson: REFUNDED_SAY, nextStep: REFUNDED_STEP } : {}),
     },

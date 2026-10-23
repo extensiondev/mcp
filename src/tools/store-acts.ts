@@ -167,6 +167,31 @@ function reworded(
   const code = text(parsed.error?.platformCode);
   const settingsUrl = storeSettingsUrl(api.ref, apiHint);
 
+  if (code === "SUBMISSION_NOT_JOINABLE" && text(value.uploadRunState)) {
+    const sha = text(value.buildId);
+    const trackUrl = consoleProjectUrl(api.ref, ConsoleProjectPage.submissionsStore(store), apiHint);
+    const say = `The upload for build ${sha || "this draft"} is still running; say publish again when the status reads landed.`;
+
+    return envelope({
+      ok: false,
+      command: COMMAND,
+      status: "upload-running",
+      error: {
+        code: "E_PLATFORM",
+        name: "UploadRunning",
+        platformCode: code,
+        message: text(parsed.error?.message) || say,
+      },
+      value: {
+        ...value,
+        trackUrl,
+        sayToPerson: say,
+        nextStep: nextStep("publish", say, trackUrl),
+      },
+      hint: `The platform holds the publish while the submit run carrying the package is ${text(value.uploadRunState)}; nothing ran and no approval was requested. Read the record with extension_release_status (include: ["stores"]) and call publish again once the upload has landed.`,
+    });
+  }
+
   if (code === ITEM_NOT_LINKED_CODE) {
     const words = storeWords(store);
     const urls =
