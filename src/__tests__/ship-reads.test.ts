@@ -8,7 +8,7 @@ describe("extension_release_status reads the latest release runs, the Chrome rol
   const platform = useProjectRoutes("extdev-ship-reads-");
 
   it("offers runs, rollout and cut as sections", () => {
-    expect(schema.inputSchema.properties.include.items.enum).toEqual(["releases", "stores", "history", "runs", "rollout", "cut"]);
+    expect(schema.inputSchema.properties.include.items.enum).toEqual(["releases", "stores", "history", "runs", "rollout", "cut", "listing"]);
   });
 
   it("runs reads the newest release runs since a date, as the owner's read", async () => {

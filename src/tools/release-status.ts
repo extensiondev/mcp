@@ -12,24 +12,30 @@ import { readReleases } from "./release-list";
 import { readStores } from "./store-status";
 import { readOneRelease, readReleaseHistory } from "./release-history";
 import { readCutReadiness, readPromotionRuns, readRollout } from "./release-ship-reads";
+import { readListing } from "./store-listing-read";
 
 export const schema = {
   name: "extension_release_status",
   description:
-    "Read where a project stands on extension.dev from the public registry (registry.extension.land): its release channels with each channel's audience and recent builds (include:'releases'), the per-store picture after an extension_submit (include:'stores', read from stores/health.json, stores/status.json and stores/submissions.json), the platform's release history (include:'history'), one release and its events (releaseId), the newest release workflow runs (include:'runs'), the Chrome staged rollout (include:'rollout') and whether a release pull request could build (include:'cut'). This is read-only: it dispatches nothing and promotes nothing, and it is how you find a valid sha for extension_release_promote, extension_submit or extension_publish. Not for acting on a build or a submission: those are extension_release_promote and extension_submit. Not for whether a build link someone holds still opens: the console Settings, Share links section lists each link with its expiry and revokes it. Each channel on a public project carries channelUrl, the channel link that always opens that channel's newest build and never expires; on a public project, or a public channel, send testers the channel link; a build link from extension_publish opens one build and, on a private project, expires, and a private project gets value.channelUrlWithheld instead. It defaults to the logged-in project (extension_auth); pass workspace and project to read another, which works for a private project when your stored login covers it. Registry state can lag the store dashboards by up to a polling interval.",
+    "Read where a project stands on extension.dev from the public registry (registry.extension.land): its release channels with each channel's audience and recent builds (include:'releases'), the per-store picture after an extension_submit (include:'stores', read from stores/health.json, stores/status.json and stores/submissions.json), the platform's release history (include:'history'), one release and its events (releaseId), the newest release workflow runs (include:'runs'), the Chrome staged rollout (include:'rollout'), whether a release pull request could build (include:'cut') and each store's saved extension.dev listing with what it lacks (include:'listing', one store with store). This is read-only: it dispatches and promotes nothing, and it is how you find a valid sha for extension_release_promote, extension_submit or extension_publish. Not for acting on a build or a submission: those are extension_release_promote and extension_submit. Not for whether a build link still opens: extension_shares (kind:'build-link') lists each link with its expiry, as the console Settings, Share links section does. Each channel on a public project carries channelUrl, the channel link that always opens that channel's newest build and never expires; on a public project, or a public channel, send testers the channel link; a build link from extension_publish opens one build and, on a private project, expires, and a private project gets value.channelUrlWithheld instead. It defaults to the logged-in project (extension_auth); pass workspace and project to read another, which works for a private project your stored login covers. Registry state can lag the store dashboards by a polling interval.",
   inputSchema: {
     type: "object" as const,
     properties: {
       include: {
         type: "array",
-        items: { type: "string", enum: ["releases", "stores", "history", "runs", "rollout", "cut"] },
+        items: { type: "string", enum: ["releases", "stores", "history", "runs", "rollout", "cut", "listing"] },
         default: ["releases", "stores"],
         description:
-          "What to read. releases: the channel to promoted build sha, each channel's audience (public or private) when the platform records it, recent builds, and a build page URL for each, which opens for anyone on a public project and only for workspace members on a private one; on a public project each channel also carries channelUrl per browser, <workspace>.extension.dev/<project>/channels/<browser>/<channel>. stores: for chrome, firefox, edge and safari, configured or not, the last credential health check, the last recorded submission and the latest review status; when your login covers the project it also reads the platform's own submission records and their store runs (a run that failed before any store step is recorded as failed, and no store received it), each store's configuration (enabled, credentials set and the names of any missing ones, never a value, listing URL, submission mode) and up to 5 earlier submissions per store, each with the id extension_submit (action:'cancel') takes. history: each release (browser and channel) with its build, version, rollout, promotion run and its 5 most recent events, plus whether a build is ready to promote; only a token minted by a workspace owner may read it. runs: the newest release workflow runs (the last 7 days, or since a date within the last 30 days), also owner-minted only. rollout: the Chrome staged rollout percentage and whether it can be raised. cut: whether a release pull request opened now could build after merging. releases and stores are included by default.",
+          "What to read. releases: the channel to promoted build sha, each channel's audience (public or private) when the platform records it, recent builds, and a build page URL for each, which opens for anyone on a public project and only for workspace members on a private one; on a public project each channel also carries channelUrl per browser, <workspace>.extension.dev/<project>/channels/<browser>/<channel>. stores: for chrome, firefox, edge and safari, configured or not, the last credential health check, the last recorded submission and the latest review status; when your login covers the project it also reads the platform's own submission records and their store runs (a run that failed before any store step is recorded as failed, and no store received it), each store's configuration (enabled, credentials set and the names of any missing ones, never a value, listing URL, submission mode) and up to 5 earlier submissions per store, each with the id extension_submit (action:'cancel') takes. history: each release (browser and channel) with its build, version, rollout, promotion run and its 5 most recent events, plus whether a build is ready to promote; only a token minted by a workspace owner may read it. runs: the newest release workflow runs (the last 7 days, or since a date within the last 30 days), also owner-minted only. rollout: the Chrome staged rollout percentage and whether it can be raised. cut: whether a release pull request opened now could build after merging. listing: each store's saved listing (title, summary, description, categories, license, support email, homepage, privacy policy URL, per-store notes, icon and screenshot counts) and what it lacks; the four stores unless store names one. releases and stores are included by default.",
       },
       since: {
         type: "string",
         description: "With runs, the earliest date to read from (ISO 8601, within the last 30 days; default 7 days).",
+      },
+      store: {
+        type: "string",
+        enum: ["chrome", "firefox", "edge", "safari"],
+        description: "With listing, read this one store's listing instead of all four.",
       },
       releaseId: {
         type: "string",
@@ -65,6 +71,7 @@ function parse(raw: string): Record<string, unknown> {
 export async function handler(args: {
   include?: string[];
   since?: string;
+  store?: string;
   releaseId?: string;
   workspace?: string;
   project?: string;
@@ -83,7 +90,7 @@ export async function handler(args: {
     api: args.api,
   };
 
-  const [releases, stores, history, release, runs, rollout, cut] = await Promise.all([
+  const [releases, stores, history, release, runs, rollout, cut, listing] = await Promise.all([
     include.includes("releases") ? readReleases(scope).then(parse) : null,
     include.includes("stores") ? readStores(scope).then(parse) : null,
     include.includes("history") ? readReleaseHistory(scope).then(parse) : null,
@@ -91,6 +98,7 @@ export async function handler(args: {
     include.includes("runs") ? readPromotionRuns({ ...scope, since: args.since }).then(parse) : null,
     include.includes("rollout") ? readRollout(scope).then(parse) : null,
     include.includes("cut") ? readCutReadiness(scope).then(parse) : null,
+    include.includes("listing") ? readListing({ ...scope, store: args.store }).then(parse) : null,
   ]);
 
   const named = (
@@ -102,6 +110,7 @@ export async function handler(args: {
       ["runs", runs],
       ["rollout", rollout],
       ["cut", cut],
+      ["listing", listing],
     ] as Array<[string, Record<string, unknown> | null]>
   ).filter((entry): entry is [string, Record<string, unknown>] => Boolean(entry[1]));
   const sections = named.map(([, section]) => section);
@@ -134,6 +143,7 @@ export async function handler(args: {
       ...(runs ? { runs } : {}),
       ...(rollout ? { rollout } : {}),
       ...(cut ? { cut } : {}),
+      ...(listing ? { listing } : {}),
     },
   });
 }

@@ -171,6 +171,14 @@ function releaseStatusPlan(call: TrackCall): TrackPlan {
   if (releaseId) return { track: { page: "release", target: { releaseId } } };
 
   const include = Array.isArray(call.args.include) ? call.args.include.map(text) : [];
+  const listingOnly = include.length > 0 && include.every((section) => section === "listing");
+
+  if (listingOnly) {
+    const store = text(call.args.store);
+
+    return { track: store ? { page: "store", target: { store } } : { page: "submissions" } };
+  }
+
   const storeOnly = include.length > 0 && include.every((section) => section === "stores" || section === "rollout");
 
   if (storeOnly) return { track: include.includes("stores") ? { page: "submissions" } : { page: "store", target: { store: "chrome" } } };
