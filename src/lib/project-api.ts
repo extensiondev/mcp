@@ -20,12 +20,11 @@ import {
   sawPlatformHold,
 } from "./platform-hold";
 import { PROJECT_MOVED_STATUS, readProjectMove, type ProjectMove } from "./project-move";
+import { platformFetch } from "./platform-fetch";
 import { identityHeaders } from "./session-identity";
 import { tokenRefusal } from "./token-refusal";
 
 export { tokenRefusal } from "./token-refusal";
-
-const READ_TIMEOUT_MS = 20_000;
 
 export const OWNER_REQUIRED_CODE = "OWNER_REQUIRED";
 
@@ -91,10 +90,9 @@ async function getJson(
   command: string,
   send?: { method: string; body: unknown },
 ): Promise<{ res: Response | null; body: unknown; error?: string }> {
-  let res: Response;
-
-  try {
-    res = await fetch(url, {
+  const sent = await platformFetch(
+    url,
+    {
       ...(send ? { method: send.method, body: JSON.stringify(send.body) } : {}),
       headers: {
         authorization: `Bearer ${token}`,
@@ -102,12 +100,13 @@ async function getJson(
         ...(send ? { "content-type": "application/json" } : {}),
         ...identityHeaders(command),
       },
-      signal: AbortSignal.timeout(READ_TIMEOUT_MS),
-    });
-  } catch (err: any) {
-    return { res: null, body: null, error: `could not reach ${url}: ${err?.message || err}` };
-  }
+    },
+    { kind: send ? "dispatch" : "read" },
+  );
 
+  if (!sent.ok) return { res: null, body: null, error: sent.unreached.message };
+
+  const res = sent.res;
   let body: unknown = null;
 
   try {

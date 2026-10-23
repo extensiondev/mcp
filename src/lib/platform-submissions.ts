@@ -8,10 +8,9 @@
 
 import { resolveCredential } from "./credential-source";
 import { resolveApiBase, safeApiBase } from "./login-flow";
+import { platformFetch } from "./platform-fetch";
 import { platformApiGet, type ProjectApi } from "./project-api";
 import { identityHeaders } from "./session-identity";
-
-const READ_TIMEOUT_MS = 20_000;
 
 export interface SubmissionRun {
   status?: string;
@@ -239,19 +238,16 @@ export async function readPlatformSubmissions(args: {
   if (!apiCheck.ok) return { ok: false, skipped: false, message: apiCheck.message };
 
   const url = `${apiCheck.base}/api/cli/stores/submissions`;
-  let res: Response;
+  const sent = await platformFetch(url, {
+    headers: {
+      authorization: `Bearer ${credential.token}`,
+      ...identityHeaders("extension_release_status"),
+    },
+  });
 
-  try {
-    res = await fetch(url, {
-      headers: {
-        authorization: `Bearer ${credential.token}`,
-        ...identityHeaders("extension_release_status"),
-      },
-      signal: AbortSignal.timeout(READ_TIMEOUT_MS),
-    });
-  } catch (err: any) {
-    return { ok: false, skipped: false, message: `could not reach ${url}: ${err?.message || err}` };
-  }
+  if (!sent.ok) return { ok: false, skipped: false, message: sent.unreached.message };
+
+  const res = sent.res;
 
   let data: any = null;
 

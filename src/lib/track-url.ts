@@ -121,6 +121,7 @@ export interface TrackCall {
 
 const STORE_CONNECT_STATUSES = new Set(["store-not-connected", "store-connection-failed", "store-connection-unverified", "store-item-not-linked"]);
 const APPROVAL_STATUSES = new Set(["approval-required", "approval-pending", "authorization-pending"]);
+const UNREACHED_CODES = new Set(["E_NETWORK"]);
 
 function text(value: unknown): string {
   return typeof value === "string" ? value.trim() : typeof value === "number" ? String(value) : "";
@@ -316,9 +317,10 @@ export function trackFields(command: string, call: TrackCall): TrackFields | nul
   return also.length ? { trackUrl: primary, trackLinks: [primary, ...also] } : { trackUrl: primary };
 }
 
-function trackSentences(fields: TrackFields, hint: string): string[] {
+function trackSentences(fields: TrackFields, hint: string, unreached = false): string[] {
   const out: string[] = [];
 
+  if (unreached) return hint.includes(fields.trackUrl) ? out : [`The console page is ${fields.trackUrl}.`];
   if (!hint.includes(fields.trackUrl)) out.push(fields.checkUrl ? `Approve it at ${fields.trackUrl}.` : `Track it at ${fields.trackUrl}.`);
   if (fields.checkUrl && !hint.includes(fields.checkUrl)) out.push(`Once it is approved and done, check ${fields.checkUrl}.`);
 
@@ -340,7 +342,8 @@ export function attachTrack(command: string, args: Row, result: string): string 
   if (!isEnvelope(parsed)) return result;
 
   const frame = parsed as Envelope & { hint?: string };
-  const tracked = frame.ok === true || APPROVAL_STATUSES.has(String(frame.status));
+  const unreached = frame.ok === false && UNREACHED_CODES.has(String(frame.error?.code ?? ""));
+  const tracked = frame.ok === true || APPROVAL_STATUSES.has(String(frame.status)) || unreached;
   if (!tracked) return result;
 
   const value = isRow(frame.value) ? frame.value : {};
@@ -360,6 +363,6 @@ export function attachTrack(command: string, args: Row, result: string): string 
     error: frame.error ?? undefined,
     warnings: frame.warnings,
     ...(frame.truncated !== undefined ? { truncated: frame.truncated } : {}),
-    hint: [hint, ...trackSentences(fields, hint)].filter(Boolean).join(" "),
+    hint: [hint, ...trackSentences(fields, hint, unreached)].filter(Boolean).join(" "),
   });
 }

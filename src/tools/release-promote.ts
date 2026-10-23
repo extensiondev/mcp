@@ -15,6 +15,7 @@ import { resolveCredential } from "../lib/credential-source";
 import { envelope, type ErrorCode } from "../lib/envelope";
 import { PROJECT_TOKEN_INPUT, noStoredLoginHint } from "../lib/credentials";
 import { resolveApiBase, safeApiBase } from "../lib/login-flow";
+import { platformFetch } from "../lib/platform-fetch";
 import { platformHoldEnvelope, sawPlatformHold } from "../lib/platform-hold";
 import {
   approvalGateEnabled,
@@ -219,25 +220,22 @@ export async function handler(args: ReleaseActArgs & {
   if (args.version) body.version = String(args.version).trim();
   if (args.releaseNotes) body.releaseNotes = String(args.releaseNotes);
 
-  let res: Response;
-
-  try {
-    res = await fetch(url, {
+  const sent = await platformFetch(
+    url,
+    {
       method: "POST",
       headers: {
         authorization: `Bearer ${token}`,
         "content-type": "application/json",
       },
       body: JSON.stringify(body),
-    });
-  } catch (err: any) {
-    return fail(
-      "ReleaseNetworkError",
-      `Could not reach ${url}: ${err?.message || err}`,
-      "network-failed",
-      "E_NETWORK",
-    );
-  }
+    },
+    { kind: "dispatch" },
+  );
+
+  if (!sent.ok) return fail("ReleaseNetworkError", sent.unreached.message, "network-failed", "E_NETWORK");
+
+  const res = sent.res;
 
   const text = await res.text();
   let data: any;

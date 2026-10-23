@@ -6,11 +6,10 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
+import { platformFetch } from "./platform-fetch";
 import { identityHeaders } from "./session-identity";
 
 import type { RecordRead } from "./act-outcome";
-
-const READ_TIMEOUT_MS = 20_000;
 
 export interface ShareRecord {
   id: string;
@@ -28,16 +27,13 @@ export async function readShareRecord(args: {
   url.searchParams.set("project", args.ref.project);
   if (args.buildSha) url.searchParams.set("build", args.buildSha);
 
-  let res: Response;
+  const sent = await platformFetch(url.toString(), {
+    headers: { accept: "application/json", ...identityHeaders("extension_publish") },
+  });
 
-  try {
-    res = await fetch(url.toString(), {
-      headers: { accept: "application/json", ...identityHeaders("extension_publish") },
-      signal: AbortSignal.timeout(READ_TIMEOUT_MS),
-    });
-  } catch (err: any) {
-    return { ok: false, message: `could not reach ${url.origin}${url.pathname}: ${err?.message || err}` };
-  }
+  if (!sent.ok) return { ok: false, message: sent.unreached.message };
+
+  const res = sent.res;
 
   if (res.status === 404) return { ok: true, record: null };
 

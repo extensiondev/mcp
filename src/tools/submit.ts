@@ -21,6 +21,7 @@ import {
   sourceArchiveOf,
 } from "../lib/firefox-store";
 import { resolveApiBase, safeApiBase } from "../lib/login-flow";
+import { platformFetch } from "../lib/platform-fetch";
 import { identityHeaders } from "../lib/session-identity";
 import { REFUNDED_SAY, REFUNDED_STEP } from "../lib/ship-act";
 import { STORE_MD_FILENAME, parseStoreMd } from "../lib/store-md";
@@ -561,10 +562,9 @@ async function answer(args: SubmitToolArgs): Promise<string> {
     args.project ? `, project: '${args.project}'` : ""
   })`;
 
-  let res: Response;
-
-  try {
-    res = await fetch(url, {
+  const sent = await platformFetch(
+    url,
+    {
       method: "POST",
       headers: {
         authorization: `Bearer ${token}`,
@@ -572,8 +572,13 @@ async function answer(args: SubmitToolArgs): Promise<string> {
         ...identityHeaders("extension_submit"),
       },
       body: JSON.stringify(body),
-    });
-  } catch (err: any) {
+    },
+    { kind: "dispatch" },
+  );
+
+  if (!sent.ok) {
+    const unreached = sent.unreached.message;
+
     if (!dryRun) {
       return envelope({
         ok: false,
@@ -582,21 +587,17 @@ async function answer(args: SubmitToolArgs): Promise<string> {
         error: {
           code: "E_NETWORK",
           name: "SubmitUnconfirmed",
-          message: `The submission request for ${browsers.join(", ")} left this machine and no answer came back (${err?.message || err}), so whether any store was submitted is unknown.`,
+          message: `The submission request for ${browsers.join(", ")} left this machine and no answer came back (${unreached}), so whether any store was submitted is unknown.`,
         },
         value: { browsers, buildSha, channel },
         hint: `Do not submit again blind: a store that was dispatched would be submitted twice. Read ${statusRead} first and submit only the stores with no new submission.`,
       });
     }
 
-    return fail(
-      "SubmitNetworkError",
-      `Could not reach ${url}: ${err?.message || err}`,
-      "network-failed",
-      "E_NETWORK",
-    );
+    return fail("SubmitNetworkError", unreached, "network-failed", "E_NETWORK");
   }
 
+  const res = sent.res;
   const text = await res.text();
   let data: any;
 

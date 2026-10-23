@@ -6,12 +6,12 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
+import { platformFetch } from "./platform-fetch";
 import { readPlatformCode, readPlatformMessage, sawPlatformHold } from "./platform-hold";
 import { projectApiGet, type ProjectApi, type ProjectApiRead } from "./project-api";
 import { identityHeaders } from "./session-identity";
 import { isRow, text } from "./ship-act";
 
-const READ_TIMEOUT_MS = 20_000;
 const LINK_ID = /^[A-Za-z0-9_-]{8,128}$/;
 const BUILD_SCOPE = /^build:([0-9a-f]{7,40})$/i;
 
@@ -119,10 +119,9 @@ export async function revokeBuildLink(
   approvalId?: string,
 ): Promise<ProjectApiRead<{ revoked: boolean; alreadyRevoked: boolean }>> {
   const url = `${api.base}/api/projects/${encodeURIComponent(api.projectId)}/access-tokens/${encodeURIComponent(tokenId)}`;
-  let res: Response;
-
-  try {
-    res = await fetch(url, {
+  const sent = await platformFetch(
+    url,
+    {
       method: "DELETE",
       headers: {
         authorization: `Bearer ${api.token}`,
@@ -130,12 +129,13 @@ export async function revokeBuildLink(
         ...(approvalId ? { "x-extensiondev-approval": approvalId } : {}),
         ...identityHeaders(api.command),
       },
-      signal: AbortSignal.timeout(READ_TIMEOUT_MS),
-    });
-  } catch (err: any) {
-    return { ok: false, status: 0, code: "", message: `could not reach ${url}: ${err?.message || err}`, held: false, body: null };
-  }
+    },
+    { kind: "dispatch" },
+  );
 
+  if (!sent.ok) return { ok: false, status: 0, code: "", message: sent.unreached.message, held: false, body: null };
+
+  const res = sent.res;
   let body: unknown = null;
 
   try {
