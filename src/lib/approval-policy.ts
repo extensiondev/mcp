@@ -24,7 +24,8 @@ export type ApprovalVerdict = "plain" | "approval" | "console";
  * all keep the page; a channel delete is a person's act in the console, like
  * a project delete; a live channel whose recorded audience is public
  * resolves to the channel-audience row, since it changes what the
- * project's live link serves. The platform holds the same table in
+ * project's live link serves; a secret environment variable is a console
+ * act under its own row. The platform holds the same table in
  * www src/services/registry/approval-policy.ts; a row changed on one side is
  * changed on both.
  */
@@ -38,6 +39,7 @@ export const APPROVAL_POLICY = {
   "extension_builds.configure-channel": "plain",
   "extension_project.visibility": "plain",
   "extension_settings.project": "plain",
+  "extension_settings.environment": "plain",
   extension_submit: "approval",
   "extension_store.publish": "approval",
   "extension_store.cancel": "approval",
@@ -54,6 +56,7 @@ export const APPROVAL_POLICY = {
   "extension_builds.delete-channel": "console",
   "extension_project.delete": "console",
   "extension_store.credentials": "console",
+  "extension_settings.environment-secret": "console",
 } as const satisfies Record<string, ApprovalVerdict>;
 
 export type PolicyAct = keyof typeof APPROVAL_POLICY;

@@ -12,13 +12,14 @@ import { consoleBase, consoleProjectUrl } from "../lib/console-urls";
 import { envelope, isEnvelope, type Envelope } from "../lib/envelope";
 import { platformApiGet, projectApiGet, type ProjectApi, type ProjectApiRead } from "../lib/project-api";
 import { isRow, text } from "../lib/ship-act";
+import { readEnvironment } from "./workspace-environment";
 
-export const WORKSPACE_INCLUDES = ["team", "members", "tokens", "apps", "activity"] as const;
+export const WORKSPACE_INCLUDES = ["team", "members", "tokens", "apps", "activity", "environment"] as const;
 
 export type WorkspaceInclude = (typeof WORKSPACE_INCLUDES)[number];
 
 const ACTIVITY_LIMIT = 50;
-const PROJECT_SECTIONS: ReadonlySet<WorkspaceInclude> = new Set(["team", "tokens", "apps", "activity"]);
+const PROJECT_SECTIONS: ReadonlySet<WorkspaceInclude> = new Set(["team", "tokens", "apps", "activity", "environment"]);
 
 type Row = Record<string, unknown>;
 
@@ -245,6 +246,7 @@ function readSection(section: WorkspaceInclude, api: ProjectApi, workspace: stri
   if (section === "members") return readMembers(api, workspace, apiHint);
   if (section === "tokens") return readTokens(api, apiHint);
   if (section === "apps") return readApps(api, apiHint);
+  if (section === "environment") return readEnvironment(api, apiHint);
 
   return readActivity(api, apiHint);
 }

@@ -162,9 +162,9 @@ describe("extension_workspace include reads the team, members, tokens, apps and 
   it("offers include with the five sections and keeps the action enum", () => {
     const props = schema.inputSchema.properties as unknown as Record<string, { enum?: string[]; items?: { enum: string[] } }>;
 
-    expect(props.include.items?.enum).toEqual(["team", "members", "tokens", "apps", "activity"]);
-    expect(props.action.enum).toEqual(["info", "projects", "usage", "settings", "set-visibility", "configure-project"]);
-    expect(schema.description).toContain("include: ['team','members','tokens','apps','activity']");
+    expect(props.include.items?.enum).toEqual(["team", "members", "tokens", "apps", "activity", "environment"]);
+    expect(props.action.enum).toEqual(["info", "projects", "usage", "settings", "set-visibility", "configure-project", "set-environment"]);
+    expect(schema.description).toContain("include also takes team, members, tokens, apps, activity, read-only");
     expect(includesOf(["team", "team", "nope", 3])).toEqual({ sections: ["team"], bad: ["nope", "3"] });
   });
 

@@ -204,7 +204,7 @@ describe("extension_workspace reads a workspace with any project login it holds"
       annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
     });
 
-    expect(schema.inputSchema.properties.action.enum).toEqual(["info", "projects", "usage", "settings", "set-visibility", "configure-project"]);
+    expect(schema.inputSchema.properties.action.enum).toEqual(["info", "projects", "usage", "settings", "set-visibility", "configure-project", "set-environment"]);
   });
 
   it("reads the workspace and its plan by default, from the stored login's workspace", async () => {

@@ -13,6 +13,7 @@ const RULED_TABLE: Array<[keyof typeof APPROVAL_POLICY, "plain" | "approval" | "
   ["extension_builds.configure-channel", "plain"],
   ["extension_project.visibility", "plain"],
   ["extension_settings.project", "plain"],
+  ["extension_settings.environment", "plain"],
   ["extension_submit", "approval"],
   ["extension_store.publish", "approval"],
   ["extension_store.cancel", "approval"],
@@ -29,6 +30,7 @@ const RULED_TABLE: Array<[keyof typeof APPROVAL_POLICY, "plain" | "approval" | "
   ["extension_builds.delete-channel", "console"],
   ["extension_project.delete", "console"],
   ["extension_store.credentials", "console"],
+  ["extension_settings.environment-secret", "console"],
 ];
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -78,6 +80,8 @@ describe("the approval policy table holds Cezar's ruling of 2026-10-23 (ledger 1
     expect(approvalVerdict("extension_settings.project")).toBe("plain");
     expect(approvalVerdict("extension_settings.project", { audience: "private" })).toBe("plain");
     expect(approvalVerdict("extension_settings.project", { audience: "public" })).toBe("approval");
+    expect(approvalVerdict("extension_settings.environment")).toBe("plain");
+    expect(approvalVerdict("extension_settings.environment-secret")).toBe("console");
   });
 
   it("treats an act the table does not name as one that needs an approval", () => {

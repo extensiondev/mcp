@@ -32,6 +32,7 @@ export type TrackPage =
   | "submission"
   | "build-settings"
   | "project-settings"
+  | "environment"
   | "store-settings"
   | "channels"
   | "visibility"
@@ -70,6 +71,7 @@ const PROJECT_PAGES: Record<Exclude<TrackPage, "console" | "workspace" | "member
         : ConsoleProjectPage.submissions,
   "build-settings": () => ConsoleProjectPage.projectSettingsSection("build"),
   "project-settings": () => ConsoleProjectPage.projectSettingsSection("general"),
+  environment: () => ConsoleProjectPage.projectSettingsSection("environment"),
   "store-settings": () => ConsoleProjectPage.projectSettingsSection("stores"),
   channels: () => ConsoleProjectPage.projectSettingsSection("channels"),
   visibility: () => ConsoleProjectPage.projectSettingsSection("visibility"),
@@ -86,6 +88,7 @@ const WORKSPACE_INCLUDE_PAGES: Record<string, TrackPage> = {
   apps: "connected-apps",
   activity: "activity",
   members: "members",
+  environment: "environment",
 };
 
 export function trackUrl(page: TrackPage, target: TrackTarget, api?: string): string {
@@ -245,6 +248,7 @@ export const TRACK_ACTS: Record<string, (call: TrackCall) => TrackPlan | null> =
 
     if (included) return { track: { page: included } };
     if (action === "configure-project") return { track: { page: "project-settings" } };
+    if (action === "set-environment") return { track: { page: "environment" } };
 
     return action === "settings" ? { track: { page: "build-settings" } } : { track: { page: "workspace" } };
   },

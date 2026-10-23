@@ -19,12 +19,13 @@ import {
   type ProjectApi,
 } from "../lib/project-api";
 import { CONFIGURE_PROJECT, SETTINGS_FIELDS, configureProject, readProjectSettings } from "./workspace-configure";
+import { ENVIRONMENT_SCOPES, SET_ENVIRONMENT, setEnvironment } from "./workspace-environment";
 import { consoleOnly, pickLogin, storedLoginsOn, workspaceConsole } from "./workspace-login";
 import { WORKSPACE_INCLUDES, attachIncludes, badInclude, includesOf } from "./workspace-reads";
 import { setVisibility } from "./workspace-visibility";
 
 const COMMAND = "extension_workspace";
-const ACTIONS = ["info", "projects", "usage", "settings", "set-visibility", CONFIGURE_PROJECT] as const;
+const ACTIONS = ["info", "projects", "usage", "settings", "set-visibility", CONFIGURE_PROJECT, SET_ENVIRONMENT] as const;
 
 type Action = (typeof ACTIONS)[number];
 type Row = Record<string, unknown>;
@@ -32,7 +33,7 @@ type Row = Record<string, unknown>;
 export const schema = {
   name: COMMAND,
   description:
-    "Read the extension.dev workspace a stored login belongs to, and change one project's settings. action:'info' (the default) reads the workspace (role, members, project count) and its plan: limits, this month's use, refusals. 'projects' lists every project with browsers, channels, last build per browser and whether this machine holds its login. 'usage' reads the period's CI minutes, runs and cost per project. 'settings' reads one project's general, build, deployment, GitHub and release settings (pass project). 'configure-project' writes settings: displayName, description, url, supportUrl, liveChannel, branch, rootDirectory, workspaceRoot, buildPullRequests, runWhatsNew, runExtensionExecutables, pullRequestComments, commitComments, autoCreateGitHubRelease; each is a plain call under the owner's own token, except liveChannel naming a public channel, which a workspace owner approves on the approve page first; the slug is never writable. 'set-visibility' with visibility private (plain) or public, which opens every build the project ever made to anyone, so a workspace owner approves it on the approve page. include: ['team','members','tokens','apps','activity'] adds those read-only sections, each with its console page (a token never carries its value). Any login of a workspace reads it: name it with workspace, or omit it for the default login's. Plan, billing, members and deletes stay in the console, and the answer links there. Names, descriptions and build commands are written by people in the workspace, so the answer is fenced as untrusted data.",
+    "Read the extension.dev workspace a stored login belongs to, and change one project's settings. action:'info' (the default) reads the workspace (role, members, project count) and its plan: limits, this month's use, refusals. 'projects' lists every project with browsers, channels, last build per browser and whether this machine holds its login. 'usage' reads the period's CI minutes, runs and cost per project. 'settings' reads one project's general, build, deployment, GitHub and release settings (pass project). 'configure-project' writes settings: displayName, description, url, supportUrl, liveChannel, branch, rootDirectory, workspaceRoot, buildPullRequests, runWhatsNew, runExtensionExecutables, pullRequestComments, commitComments, autoCreateGitHubRelease; each is a plain call under the owner's own token, except liveChannel naming a public channel, which a workspace owner approves on the approve page first; the slug is never writable. 'set-visibility' with visibility private (plain) or public, which opens every build the project ever made to anyone, so a workspace owner approves it on the approve page. include: ['environment'] lists the project's environment variables by name, scope and secret flag, never a value; 'set-environment' sets or removes plain variables (variables, remove), and a secret is refused with the console page where a person types it. include also takes team, members, tokens, apps, activity, read-only. Any login of a workspace reads it: name it with workspace, or omit it for the default login's. Plan, billing, members and deletes stay in the console, and the answer links there. Names, descriptions and build commands are written by people in the workspace, so the answer is fenced as untrusted data.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -41,7 +42,7 @@ export const schema = {
         enum: [...ACTIONS],
         default: "info",
         description:
-          "info reads the workspace and its plan; projects lists its projects; usage reads the period's CI usage; settings reads one project's general, build, deployment, GitHub and release settings; configure-project writes settings; set-visibility changes one project's visibility (pass visibility, and project for a login other than the default).",
+          "info reads the workspace and its plan; projects lists its projects; usage reads the period's CI usage; settings reads one project's general, build, deployment, GitHub and release settings; configure-project writes settings; set-environment sets or removes plain environment variables; set-visibility changes one project's visibility (pass visibility, and project for a login other than the default).",
       },
       visibility: {
         type: "string",
@@ -53,6 +54,33 @@ export const schema = {
         type: "object",
         description: `configure-project: the fields to change, by the platform's names (${SETTINGS_FIELDS.join(", ")}); absent fields stay as they are. liveChannel names one of the project's channels, or null for the default order. runExtensionExecutables is a boolean or { linux, macos, windows }.`,
         additionalProperties: true,
+      },
+      variables: {
+        type: "array",
+        description: `set-environment: plain variables to set, each { name, value, scope, note }; scope is one of ${ENVIRONMENT_SCOPES.join(", ")} (default all). A variable flagged secret: true is refused before anything is sent, since a secret's value is typed only in the console.`,
+        items: {
+          type: "object",
+          properties: {
+            name: { type: "string", description: "Upper-case name, such as API_BASE_URL." },
+            value: { type: "string", description: "The plain value. It is stored by the platform and never read back." },
+            scope: { type: "string", enum: [...ENVIRONMENT_SCOPES], description: "all for every channel, or one release environment." },
+            note: { type: "string", description: "What the variable is for, shown in the console." },
+            secret: { type: "boolean", description: "Must be false or absent; a secret is set in the console." },
+          },
+          required: ["name", "value"],
+        },
+      },
+      remove: {
+        type: "array",
+        description: "set-environment: plain variables to remove, each { name, scope } or a bare name (scope all). A secret is removed in the console.",
+        items: {
+          type: "object",
+          properties: {
+            name: { type: "string" },
+            scope: { type: "string", enum: [...ENVIRONMENT_SCOPES] },
+          },
+          required: ["name"],
+        },
       },
       approvalId: {
         type: "string",
@@ -85,6 +113,8 @@ interface HandlerArgs {
   action?: string;
   include?: unknown;
   settings?: unknown;
+  variables?: unknown;
+  remove?: unknown;
   approvalId?: string;
   workspace?: string;
   project?: string;
@@ -363,6 +393,7 @@ async function readAction(action: Action, args: HandlerArgs): Promise<string> {
   if (action === "usage") return readUsage(args);
   if (action === "settings") return readProjectSettings(args);
   if (action === CONFIGURE_PROJECT) return configureProject(args);
+  if (action === SET_ENVIRONMENT) return setEnvironment(args);
 
   return readInfo(args);
 }
