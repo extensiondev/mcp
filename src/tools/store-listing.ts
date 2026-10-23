@@ -368,6 +368,32 @@ const chromeListingLine = (synced: string[]): string =>
     ? " Chrome's own listing fields, the privacy policy URL included, cannot be written through Google's API: paste them once in the item's dashboard, and extension.dev keeps this copy as the record."
     : "";
 
+/* @invariant THE PUSH TO APPLE IS ANSWERED AS A STATE, NEVER AS A RUN. The
+ * platform dispatches the Safari listing push on the project's mirror and may
+ * answer with the run it found; this tool passes on whether the push started
+ * and why not, and nothing that names a mirror or an Actions run. Its result
+ * is read back through preflight, where the record the run writes passes the
+ * Safari listing checks.
+ */
+function appStoreConnectPush(raw: unknown): Row {
+  if (!isRow(raw)) return {};
+
+  return {
+    appStoreConnect:
+      raw.dispatched === true
+        ? {
+            status: "dispatched",
+            message:
+              'The listing is being pushed to App Store Connect from the project\'s own App Store Connect key; extension_submit (action: "preflight") reports each field once the push lands.',
+          }
+        : {
+            status: "not-dispatched",
+            reason: text(raw.reason),
+            message: text(raw.message),
+          },
+  };
+}
+
 async function syncOne(
   api: ProjectApi,
   args: ListingArgs,
@@ -387,6 +413,7 @@ async function syncOne(
       store,
       status: "synced",
       changes: Array.isArray(sent.json.changes) ? sent.json.changes : [],
+      ...appStoreConnectPush(sent.json.appStoreConnect),
     };
   }
 

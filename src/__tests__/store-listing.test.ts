@@ -416,6 +416,82 @@ describe("extension_submit sync-listing and the preflight advisory", () => {
     expect(written.hint).toContain("chrome still lacks");
   });
 
+  it("answers the App Store Connect push as a state and never names the run it started", async () => {
+    if (process.platform === "win32") return;
+
+    platform.login();
+    platform.routes[`PUT ${LISTING("safari")}`] = () => ({
+      body: {
+        ok: true,
+        store: "safari",
+        changes: ['title: "" -> "PII Shield"'],
+        appStoreConnect: {
+          dispatched: true,
+          dispatchId: "d-1",
+          workflowRunId: 77,
+          workflowRunUrl:
+            "https://github.com/extensiondev/1--prj_app/actions/runs/77",
+          runCorrelation: "run-name",
+        },
+        trackUrl: `${API}/acme/widget/project-settings/stores`,
+      },
+    });
+
+    platform.routes[`POST ${PREFLIGHT("safari")}`] = () => ({
+      body: { checks: [] },
+    });
+
+    const written = JSON.parse(
+      await submit({
+        action: "sync-listing",
+        browsers: ["safari"],
+        projectPath: root,
+        approvalId: "apr_s",
+        api: API,
+      }),
+    );
+
+    expect(written.status).toBe("listing-synced");
+    expect(written.value.stores.safari.appStoreConnect).toEqual({
+      status: "dispatched",
+      message: expect.stringContaining("App Store Connect"),
+    });
+
+    const answer = JSON.stringify(written);
+    expect(answer).not.toContain("actions/runs");
+    expect(answer).not.toContain("1--prj_app");
+    expect(answer).not.toContain("workflowRunUrl");
+
+    platform.routes[`PUT ${LISTING("safari")}`] = () => ({
+      body: {
+        ok: true,
+        store: "safari",
+        changes: ['title: "" -> "PII Shield"'],
+        appStoreConnect: {
+          dispatched: false,
+          reason: "workflow-stale",
+          message: "This project's store workflow does not know the listing push yet.",
+        },
+      },
+    });
+
+    const held = JSON.parse(
+      await submit({
+        action: "sync-listing",
+        browsers: ["safari"],
+        projectPath: root,
+        approvalId: "apr_s",
+        api: API,
+      }),
+    );
+
+    expect(held.value.stores.safari.appStoreConnect).toEqual({
+      status: "not-dispatched",
+      reason: "workflow-stale",
+      message: "This project's store workflow does not know the listing push yet.",
+    });
+  });
+
   it("refuses a screenshot outside projectPath and one approval for two stores before sending anything", async () => {
     const outside = path.join(os.tmpdir(), `extdev-outside-${Date.now()}.png`);
     fs.writeFileSync(outside, png(1280, 800));
