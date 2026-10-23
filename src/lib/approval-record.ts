@@ -25,6 +25,7 @@ export interface MintedApproval {
   approvalUrl: string;
   mintedAt: string;
   expiresAt: string;
+  description?: string;
   replaces?: string[];
   replacedBy?: string;
 }
@@ -86,6 +87,11 @@ function prune(file: ApprovalFile, now: number): ApprovalFile {
  * mint for the same act (same project, action and fingerprint) marks every
  * older live record of it replaced: the owner approved three approvals for
  * one configure on 2026-10-22 because nothing said the first two were stale.
+ * The record also keeps the platform's own description of the act, so a
+ * later call that finds the approval pending or spent repeats the words the
+ * approval page shows (on 2026-10-23 a Safari upload the page called a
+ * TestFlight draft was still "for store review" in the pending answer,
+ * because that answer read this server's own sentence).
  */
 export function rememberMintedApproval(args: {
   api?: string;
@@ -95,6 +101,7 @@ export function rememberMintedApproval(args: {
   fingerprint: string;
   approvalUrl: string;
   expiresAt?: string;
+  description?: string;
   now?: number;
 }): MintedApproval | null {
   const claims = readTokenClaims(args.token);
@@ -114,6 +121,7 @@ export function rememberMintedApproval(args: {
     approvalUrl: trimmed(args.approvalUrl),
     mintedAt: new Date(now).toISOString(),
     expiresAt,
+    ...(trimmed(args.description) ? { description: trimmed(args.description) } : {}),
   };
   const server = targetServer(args.api);
   const file = approvalRecordPath();

@@ -1,4 +1,8 @@
-import { describe, expect, it } from "vitest";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { evaluateApproval, type ApprovalGateInput } from "../lib/approval-gate";
 
@@ -86,5 +90,74 @@ describe("the approval gate describes an action by what it is, not as irreversib
     expect(out.value.description).toBe("Open a release pull request in acme/widget that bumps the extension's manifest by one patch version.");
     expect(out.error.message).toContain("Open a release pull request in acme/widget");
     expect(out.error.message).not.toContain("Change the build settings");
+  });
+});
+
+describe("a submit approval repeats the platform's outcome sentence on every later call", () => {
+  const PLATFORM_SAID = "Upload Rebeccat, build 1f948f5 to App Store Connect as a TestFlight draft (no App Review).";
+  const AGENT_SAID = "Submit build 1f948f5 to safari for store review.";
+  const token = `${Buffer.from(JSON.stringify({ u: "acme", p: "rebeccat" })).toString("base64url")}.sig`;
+  const submit = (over: Partial<ApprovalGateInput>) =>
+    input({
+      command: "extension_submit",
+      action: "extension_submit",
+      scope: { browsers: ["safari"], buildSha: "1f948f5", channel: "stable" },
+      description: AGENT_SAID,
+      token,
+      ...over,
+    });
+  let previousXdg: string | undefined;
+  let isolated = "";
+
+  beforeEach(() => {
+    previousXdg = process.env.XDG_CONFIG_HOME;
+    isolated = fs.mkdtempSync(path.join(os.tmpdir(), "extdev-gate-words-"));
+    process.env.XDG_CONFIG_HOME = isolated;
+  });
+
+  afterEach(() => {
+    if (previousXdg === undefined) delete process.env.XDG_CONFIG_HOME;
+    else process.env.XDG_CONFIG_HOME = previousXdg;
+
+    fs.rmSync(isolated, { recursive: true, force: true });
+  });
+
+  it("asks with the platform's sentence and answers a pending or spent re-call with it, never this server's", async () => {
+    const minted = await evaluateApproval(
+      submit({
+        fetchImpl: answering(201, { approvalId: "apr_safari", approvalUrl: `${API}/device/approve/apr_safari`, description: PLATFORM_SAID }),
+      }),
+    );
+    const asked = JSON.parse((minted as { envelope: string }).envelope);
+
+    expect(asked.error.message).toContain(PLATFORM_SAID);
+    expect(asked.error.message).not.toContain("for store review");
+    expect(asked.value.description).toBe(PLATFORM_SAID);
+
+    const waiting = await evaluateApproval(
+      submit({ approvalId: "apr_safari", fetchImpl: answering(200, { status: "pending", used: false }) }),
+    );
+    const pending = JSON.parse((waiting as { envelope: string }).envelope);
+
+    expect(pending.status).toBe("approval-pending");
+    expect(pending.hint).toContain(`Approval apr_safari has not been granted yet: ${PLATFORM_SAID}`);
+    expect(pending.hint).not.toContain("for store review");
+
+    const spent = await evaluateApproval(
+      submit({ approvalId: "apr_safari", fetchImpl: answering(200, { status: "approved", used: true, fingerprint: asked.value.fingerprint, expiresAt: "2099-01-01T00:00:00.000Z" }) }),
+    );
+    const consumed = JSON.parse((spent as { envelope: string }).envelope);
+
+    expect(consumed.error.name).toBe("ApprovalConsumed");
+    expect(consumed.error.message).toContain(PLATFORM_SAID);
+    expect(consumed.error.message).not.toContain("for store review");
+  });
+
+  it("keeps this server's sentence for an approval this machine did not mint", async () => {
+    const waiting = await evaluateApproval(
+      submit({ approvalId: "apr_elsewhere", fetchImpl: answering(200, { status: "pending", used: false }) }),
+    );
+
+    expect(JSON.parse((waiting as { envelope: string }).envelope).hint).toContain(`has not been granted yet: ${AGENT_SAID}`);
   });
 });

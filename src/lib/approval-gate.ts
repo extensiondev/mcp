@@ -220,6 +220,7 @@ async function requestApproval(params: {
     fingerprint,
     approvalUrl,
     expiresAt: typeof data.expiresAt === "string" ? data.expiresAt : undefined,
+    description: described,
   });
   const replaces = remembered?.replaces?.length ? { replaces: remembered.replaces } : {};
 

@@ -103,6 +103,10 @@ export function withoutClosingStop(text: string): string {
   return text.trim().replace(/[.!?\s]+$/, "");
 }
 
+function describedBy(input: ApprovalGateInput, minted?: MintedApproval | null): string {
+  return minted?.description || input.description;
+}
+
 function scopeMismatch(input: ApprovalGateInput, approvalId: string, fingerprint: string, approvedFingerprint: string): { blocked: true; envelope: string } {
   return block(
     input.command,
@@ -313,7 +317,7 @@ export async function verifyApproval(params: {
       APPROVAL_REJECTED_STATUS,
       "E_APPROVAL_REJECTED",
       "ApprovalConsumed",
-      `Approval ${approvalId} was already used once and approvals are single-use. This call executed nothing, but the call that used it may already have run the action: ${input.description} Read the current state first (${input.stateRead ?? "extension_release_status for a promote or submission, extension_shares list for a revoke"}), and request a fresh approval by calling this tool with no approvalId only if the action did not happen.`,
+      `Approval ${approvalId} was already used once and approvals are single-use. This call executed nothing, but the call that used it may already have run the action: ${describedBy(input, minted)} Read the current state first (${input.stateRead ?? "extension_release_status for a promote or submission, extension_shares list for a revoke"}), and request a fresh approval by calling this tool with no approvalId only if the action did not happen.`,
       { action: input.action, approvalId },
     );
   }
@@ -324,7 +328,7 @@ export async function verifyApproval(params: {
       envelope: pendingApproval({
         command: input.command,
         approvalId,
-        message: `Approval ${approvalId} has not been granted yet: ${input.description}`,
+        message: `Approval ${approvalId} has not been granted yet: ${describedBy(input, minted)}`,
         undone: "Nothing was executed.",
         api: input.api,
         approvalUrl: (typeof data.approvalUrl === "string" ? data.approvalUrl.trim() : "") || minted?.approvalUrl || undefined,
