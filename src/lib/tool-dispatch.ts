@@ -26,7 +26,7 @@ import {
 import { withCallApi } from "./origins";
 import { followProjectMove, followSentence, movedAnswer } from "./project-move";
 import { scrubRunAnswer } from "./run-privacy";
-import { serverStamp } from "./server-stamp";
+import { serverStamp, staleEnvelope, type ServerStampReader } from "./server-stamp";
 import { shapeStoreAnswer } from "./store-answer";
 import { attachTrack } from "./track-url";
 import { fenceUntrusted } from "./untrusted-fence";
@@ -53,6 +53,7 @@ export interface ToolHandlerOptions {
   refuse?: (name: string, args: Record<string, unknown>) => string | null;
   run?: (call: () => Promise<string>, name: string, args: Record<string, unknown>) => Promise<string>;
   openApprovals?: boolean;
+  stamp?: ServerStampReader;
 }
 
 type ToolFrame = {
@@ -146,6 +147,7 @@ export function installToolHandlers(server: Server, setup: ToolHandlerOptions): 
   const { tools, options } = setup;
   const toolMap = new Map(tools.map((tool) => [tool.schema.name, tool]));
   const run = setup.run ?? ((call: () => Promise<string>) => call());
+  const stamp = setup.stamp ?? serverStamp;
 
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
     tools: tools
@@ -206,9 +208,25 @@ export function installToolHandlers(server: Server, setup: ToolHandlerOptions): 
     }
 
     const untrusted = TOOL_POLICY[name]?.untrusted === true;
+    const platform = TOOL_POLICY[name]?.group === "platform";
+
+    /* @invariant A SERVER THAT KNOWS IT IS STALE SAYS SO BEFORE IT ASKS THE
+     * PLATFORM. The stamp's own signal (the entry file on disk newer than the
+     * one this process loaded) is read before a platform tool's handler runs,
+     * and a stale server answers E_SERVER_STALE with the reconnect sentence
+     * and no fetch, so the person learns in one call, not after the platform
+     * read has finished or failed. The rebuilt warning used to ride along only
+     * with the answer, which on ledger 148 meant after a 385 s hang. Local
+     * tools are not gated: the code they loaded still runs the sessions it
+     * started, and a forced reconnect would end them.
+     */
+    const rebuilt = platform ? stamp.rebuiltSince() : null;
+
+    if (rebuilt) {
+      return toolResultFrame(attachTrack(name, normalizedArgs, staleEnvelope(name, rebuilt, stamp.stamp(), normalizedArgs)), untrusted);
+    }
 
     try {
-      const platform = TOOL_POLICY[name]?.group === "platform";
       const result = await withCallApi(normalizedArgs.api, () =>
         run(
           async () => {
@@ -217,7 +235,7 @@ export function installToolHandlers(server: Server, setup: ToolHandlerOptions): 
 
             if (!platform) return answer;
 
-            const shaped = serverStamp.apply(scrubRunAnswer(attachTrack(name, normalizedArgs, shapeStoreAnswer(name, normalizedArgs, answer))));
+            const shaped = stamp.apply(scrubRunAnswer(attachTrack(name, normalizedArgs, shapeStoreAnswer(name, normalizedArgs, answer))));
 
             return setup.openApprovals ? openApprovalOnce(shaped, options) : shaped;
           },

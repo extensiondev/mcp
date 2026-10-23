@@ -58,6 +58,7 @@ import {
   setServerOptions,
   type ServerOptions,
 } from "./lib/tool-policy";
+import { type ServerStampReader } from "./lib/server-stamp";
 import { installToolHandlers, type ToolModule } from "./lib/tool-dispatch";
 import { isProjectRef } from "./lib/credentials";
 
@@ -114,7 +115,7 @@ export const DEPLOYMENT_DOCTRINE = [
   "extension_build is for the person's own machine only: never offer its output, a zip or a dist folder, as a way to share, send, test with someone or submit; those words route to the platform, a link from extension_publish or a store act from extension_submit.",
   "A store's version refusal is the platform's to absorb: never tell the person to edit the manifest and rebuild locally; build again on the platform and resubmit, as value.nextStep says.",
   "After any stop that asked the person for one action (connect, link, approve), the next message re-runs extension_submit action:'preflight' without being told, then follows its value.nextStep, passing the approvalId when the stop was an approval.",
-  "Try again is idempotent: after an answer whose status ends in -dispatched, read the record (extension_release_status, or the tool's status action) and never dispatch the act again; after a refusal whose value.approvalRefunded is true, call the same act again with the same arguments and approvalId, never a fresh approval; after a refusal that warns the approval may have been spent, read the record before asking for a fresh one. Every platform answer carries value.server {version, builtAt}; a warning that the server was rebuilt means reconnect once, and only then.",
+  "Try again is idempotent: after an answer whose status ends in -dispatched, read the record (extension_release_status, or the tool's status action) and never dispatch the act again; after a refusal whose value.approvalRefunded is true, call the same act again with the same arguments and approvalId, never a fresh approval; after a refusal that warns the approval may have been spent, read the record before asking for a fresh one. Every platform answer carries value.server {version, builtAt}; once this server knows it was rebuilt, every platform tool answers E_SERVER_STALE (status server-stale) before asking the platform: run /mcp, pick extension-dev, then call again.",
 ];
 
 const PLATFORM_STORE =
@@ -166,7 +167,7 @@ export const SERVER_INSTRUCTIONS = serverInstructions(DEFAULT_SERVER_OPTIONS);
 
 export function createServer(
   options: ServerOptions = DEFAULT_SERVER_OPTIONS,
-  setup: { openApprovals?: boolean } = {},
+  setup: { openApprovals?: boolean; stamp?: ServerStampReader } = {},
 ): Server {
   setServerOptions(options);
 
@@ -187,6 +188,7 @@ export function createServer(
     tools,
     options,
     openApprovals: setup.openApprovals === true,
+    ...(setup.stamp ? { stamp: setup.stamp } : {}),
   });
 
   return server;

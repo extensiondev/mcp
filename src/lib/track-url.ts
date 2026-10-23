@@ -121,7 +121,7 @@ export interface TrackCall {
 
 const STORE_CONNECT_STATUSES = new Set(["store-not-connected", "store-connection-failed", "store-connection-unverified", "store-item-not-linked"]);
 const APPROVAL_STATUSES = new Set(["approval-required", "approval-pending", "authorization-pending"]);
-const UNREACHED_CODES = new Set(["E_NETWORK"]);
+const UNREACHED_CODES = new Set(["E_NETWORK", "E_SERVER_STALE"]);
 
 function text(value: unknown): string {
   return typeof value === "string" ? value.trim() : typeof value === "number" ? String(value) : "";

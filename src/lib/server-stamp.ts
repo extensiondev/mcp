@@ -24,6 +24,22 @@ export function rebuiltWarning(at: string): string {
   return `The server you are running was rebuilt at ${at}; reconnect once to use it.`;
 }
 
+export const SERVER_STALE_STATUS = "server-stale";
+
+export function staleSentence(at: string): string {
+  return `This server was rebuilt at ${at}; run /mcp and pick extension-dev, then call again.`;
+}
+
+export function staleEnvelope(command: string, at: string, stamp: ServerStamp, args: Row = {}): string {
+  return envelope({
+    ok: false,
+    command,
+    status: SERVER_STALE_STATUS,
+    value: { ...(typeof args.action === "string" ? { action: args.action } : {}), server: stamp },
+    error: { code: "E_SERVER_STALE", name: "ServerStale", message: staleSentence(at) },
+  });
+}
+
 function mtimeOf(file: string): string | null {
   if (!file) return null;
 
@@ -86,6 +102,8 @@ export function createServerStamp(entry: string): {
 
   return { stamp, rebuiltSince, apply };
 }
+
+export type ServerStampReader = ReturnType<typeof createServerStamp>;
 
 function runningEntry(): string {
   try {
