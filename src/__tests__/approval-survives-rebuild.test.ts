@@ -132,13 +132,15 @@ function platform(url: string, init?: RequestInit): Response {
   const pathname = new URL(url).pathname;
 
   if (!who) return json({ message: "unknown token" }, 401);
+
   if (pathname === "/api/cli/whoami")
-    return json({ login: "ok", live: true, projectId: who.projectId });
+    {return json({ login: "ok", live: true, projectId: who.projectId });}
+
   if (
     pathname === `/api/projects/${who.projectId}/settings/build` &&
     method === "GET"
   )
-    return json({ buildSettings: CURRENT });
+    {return json({ buildSettings: CURRENT });}
 
   if (
     pathname === `/api/projects/${who.projectId}/settings/build` &&
@@ -199,6 +201,7 @@ async function freshServer(): Promise<Client> {
     features: ["local", "platform"],
     noShip: false,
   }).connect(serverTransport);
+
   const client = new Client({
     name: "approval-rebuild-probe",
     version: "0.0.0",
@@ -276,6 +279,7 @@ describe("an approval this machine minted is presented as the project that minte
     expect(approvalRecordPath()).toBe(
       path.join(tmp, "extension-dev", "approvals.json"),
     );
+
     expect(mintedApproval(undefined, APPROVAL_ID)).toMatchObject({
       approvalId: APPROVAL_ID,
       workspace: "acme",
@@ -311,6 +315,7 @@ describe("an approval this machine minted is presented as the project that minte
       approvalUrl: APPROVAL_URL,
       status: "pending",
     });
+
     expect(retried.error).toBeNull();
     expect(retried.hint).toContain(APPROVAL_URL);
 
@@ -322,6 +327,7 @@ describe("an approval this machine minted is presented as the project that minte
     expect(
       calls.every((entry) => entry.auth === `Bearer ${PROJECTS.leon.token}`),
     ).toBe(true);
+
     expect(calls.some((entry) => entry.method === "PUT")).toBe(false);
   });
 
@@ -335,6 +341,7 @@ describe("an approval this machine minted is presented as the project that minte
       buildSettings: { firefox: { enabled: true } },
       project: "acme/leon",
     });
+
     calls = [];
 
     const other = await call(await freshServer(), "extension_builds", {
@@ -355,6 +362,7 @@ describe("an approval this machine minted is presented as the project that minte
       mintedFor: "acme/leon",
       named: "acme/rebeccat",
     });
+
     expect(calls).toEqual([]);
 
     const bySlug = await call(await freshServer(), "extension_builds", {
@@ -393,6 +401,7 @@ describe("an approval this machine minted is presented as the project that minte
     expect(stranger.error.message).toContain(
       "may have been minted for another server or project",
     );
+
     expect(stranger.value.mintedFor).toBeUndefined();
 
     expect(
@@ -419,6 +428,7 @@ describe("an approval this machine minted is presented as the project that minte
     expect(ours.error.message).toContain(
       "for acme/leon, the project this machine minted it for at 2026-10-22T23:04:44.000Z",
     );
+
     expect(ours.value).toMatchObject({
       mintedFor: "acme/leon",
       resolved: "acme/leon",
@@ -437,6 +447,7 @@ describe("an approval this machine minted is presented as the project that minte
     expect(other.error.message).toContain(
       "was minted for acme/leon and this call resolved acme/rebeccat",
     );
+
     expect(other.error.message).not.toContain("another server");
     expect(other.value).toMatchObject({
       mintedFor: "acme/leon",
@@ -468,6 +479,7 @@ describe("an approval this machine minted is presented as the project that minte
     expect(mintedApproval(undefined, SECOND_ID)).toMatchObject({
       replaces: [APPROVAL_ID],
     });
+
     expect(mintedApproval(undefined, SECOND_ID)?.replacedBy).toBeUndefined();
 
     calls = [];
@@ -487,10 +499,12 @@ describe("an approval this machine minted is presented as the project that minte
       replacedBy: SECOND_ID,
       approvalUrl: SECOND_URL,
     });
+
     expect(stale.hint).toContain(`approvalId ${SECOND_ID}`);
     expect(
       calls.some((entry) => entry.url.includes("/api/cli/approvals/")),
     ).toBe(false);
+
     expect(calls.some((entry) => entry.method === "PUT")).toBe(false);
 
     const current = await call(await freshServer(), "extension_builds", {
@@ -530,9 +544,11 @@ describe("an approval this machine minted is presented as the project that minte
     expect(mintedApproval(undefined, APPROVAL_ID, expired)?.approvalId).toBe(
       APPROVAL_ID,
     );
+
     expect(
       mintedApproval(undefined, APPROVAL_ID, retentionEnd - 1)?.approvalId,
     ).toBe(APPROVAL_ID);
+
     expect(mintedApproval(undefined, APPROVAL_ID, retentionEnd)).toBeNull();
     expect(mintedApproval("https://www.extension.dev", APPROVAL_ID)).toBeNull();
 
