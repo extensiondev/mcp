@@ -7,7 +7,7 @@
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
 import { isRow, text } from "./ship-act";
-import { STORE_FIELDS, type ListingField, type ListingStore } from "./store-md-listing";
+import { STORE_FIELDS, type ListingStore } from "./store-md-listing";
 
 import type { ListingPatch } from "./store-listing-media";
 
@@ -18,29 +18,11 @@ export interface ListingDigestView {
 }
 
 export interface DigestMismatch {
-  digest: ListingDigestView;
+  digest?: ListingDigestView;
   deferred: string[];
 }
 
-/* @invariant THE LEGACY FIELD SET STANDS IN FOR A PLATFORM THAT CANNOT NAME
- * ITS OWN. Commit 62eb188 added subtitle, searchTerms and reviewContactPhone
- * to the safari set, so this server hashes ten fields where the platform's
- * production build still hashes the seven the previous release declared, and
- * every safari sync-listing was refused with LISTING_DIGEST_MISMATCH before
- * an approval was asked for. A platform that answers digest.platform on the
- * refusal names the fields it hashes itself; a platform built before that
- * answer names nothing, and the set the previous release declared is the
- * only way to find the fields it cannot know. Delete this constant and the
- * fallback that reads it once production www answers digest.platform on
- * every LISTING_DIGEST_MISMATCH refusal (the listing lane in
- * UI_BUGS_TO_FIX.md).
- */
-export const LEGACY_LISTING_FIELDS: Record<ListingStore, ListingField[]> = {
-  chrome: STORE_FIELDS.chrome,
-  firefox: STORE_FIELDS.firefox,
-  edge: STORE_FIELDS.edge,
-  safari: ["title", "shortDescription", "fullDescription", "categories", "supportEmail", "privacyPolicyUrl", "homepageUrl"],
-};
+const UNNAMED_DIGEST_SENTENCE = "The platform did not name the fields it hashes; update the platform or this server.";
 
 function platformFieldsOf(body: unknown): string[] | null {
   const digest = isRow(body) && isRow(body.digest) ? body.digest : null;
@@ -52,8 +34,10 @@ function platformFieldsOf(body: unknown): string[] | null {
 }
 
 export function digestMismatchOf(store: ListingStore, body: unknown): DigestMismatch {
+  const platform = platformFieldsOf(body);
+  if (!platform) return { deferred: [] };
+
   const client: string[] = STORE_FIELDS[store];
-  const platform = platformFieldsOf(body) ?? LEGACY_LISTING_FIELDS[store];
   const clientOnly = client.filter((field) => !platform.includes(field));
   const platformOnly = platform.filter((field) => !client.includes(field));
 
@@ -82,6 +66,8 @@ export function deferredSentence(deferred: string[], synced: number, awaiting: b
 
 export function behindSentence(mismatch: DigestMismatch, afterRetry: boolean): string {
   const { digest, deferred } = mismatch;
+  if (!digest) return UNNAMED_DIGEST_SENTENCE;
+
   const platformOnly = digest.differ.filter((field) => !deferred.includes(field));
   const still = afterRetry ? ` even after leaving out ${joined(deferred)}` : "";
 

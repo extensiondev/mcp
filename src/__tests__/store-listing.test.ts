@@ -7,7 +7,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import { actionFingerprint } from "../lib/approval-gate";
 import { listingDigest } from "../lib/store-listing-media";
-import { listingForStore, parseStoreMdListing } from "../lib/store-md-listing";
+import { STORE_FIELDS, listingForStore, parseStoreMdListing } from "../lib/store-md-listing";
 import { TOOL_POLICY } from "../lib/tool-policy";
 import { handler as submit, schema } from "../tools/submit";
 import {
@@ -356,6 +356,7 @@ describe("extension_submit sync-listing and the preflight advisory", () => {
             scope,
             fingerprint: ours,
           },
+          digest: { platform: STORE_FIELDS.chrome, client: STORE_FIELDS.chrome, differ: [] },
         },
       };
     };
@@ -1125,68 +1126,36 @@ describe("extension_submit sync-listing sends the fields the platform hashes whe
   const sync = (extra: Record<string, unknown> = {}) =>
     submit({ action: "sync-listing", browsers: ["safari"], projectPath: root, api: API, ...extra });
 
-  it("retries once with the set the previous release declared when an older platform names no digest", async () => {
+  it("refuses without a retry when the platform names no digest", async () => {
     if (process.platform === "win32") return;
 
     platform.login();
     platformHashing([...LEGACY_SAFARI, "searchTerms"]);
 
-    const asked = JSON.parse(await sync());
-    const puts = platform.sent("PUT", LISTING("safari"));
+    const refused = JSON.parse(await sync());
 
-    expect(puts).toHaveLength(2);
-    expect(Object.keys(puts[0]!.body.listing)).toEqual(["title", "subtitle", "shortDescription", "fullDescription", "searchTerms", "reviewContactPhone"]);
-    expect(Object.keys(puts[1]!.body.listing)).toEqual(["title", "shortDescription", "fullDescription"]);
-    expect(puts[1]!.body.media.icons).toHaveLength(1);
-    expect(platform.sent("POST", APPROVALS)).toHaveLength(1);
-    expect(platform.sent("POST", APPROVALS)[0]!.body.scope.listingDigest).toBe(digestOf(puts[1]!.body));
-    expect(asked.status).toBe("approval-required");
-    expect(asked.value.stores.safari).toMatchObject({
-      status: "approval-required",
-      approvalId: "apr_d",
-      digest: {
-        client: ["title", "subtitle", "shortDescription", "fullDescription", "categories", "searchTerms", "supportEmail", "privacyPolicyUrl", "homepageUrl", "reviewContactPhone"],
-        platform: LEGACY_SAFARI,
-        differ: ["subtitle", "searchTerms", "reviewContactPhone"],
-      },
-      deferred: ["subtitle", "searchTerms", "reviewContactPhone"],
-      filled: ["title", "shortDescription", "fullDescription", "icons"],
+    expect(platform.sent("PUT", LISTING("safari"))).toHaveLength(1);
+    expect(platform.sent("POST", APPROVALS)).toHaveLength(0);
+    expect(refused.status).toBe("sync-listing-refused");
+    expect(refused.value.stores.safari).toEqual({
+      store: "safari",
+      status: "refused",
+      code: "LISTING_DIGEST_MISMATCH",
+      message: "The platform did not name the fields it hashes; update the platform or this server.",
+      trackUrl: SUBMISSIONS,
+      filled: ["title", "subtitle", "shortDescription", "fullDescription", "searchTerms", "reviewContactPhone", "icons"],
     });
 
-    expect(asked.value.sayToPerson).toBe(
-      "The platform does not take subtitle, searchTerms and reviewContactPhone yet (its build is behind this server); the other 3 fields are in the approval. Say sync-listing again after the platform updates.",
-    );
+    expect(refused.value.sayToPerson).toBe("The platform did not name the fields it hashes; update the platform or this server.");
+    expect(refused.error.message).toContain("did not name the fields it hashes");
 
     platform.calls.length = 0;
 
-    const written = JSON.parse(await sync({ approvalId: "apr_d" }));
-    const withId = platform.sent("PUT", LISTING("safari"));
+    const withId = JSON.parse(await sync({ approvalId: "apr_d" }));
 
-    expect(withId).toHaveLength(2);
-    expect(Object.keys(withId[0]!.body.listing)).toContain("subtitle");
-    expect(Object.keys(withId[1]!.body.listing)).toEqual(["title", "shortDescription", "fullDescription"]);
-    expect(withId[1]!.body.approvalId).toBe("apr_d");
-    expect(written.status).toBe("listing-synced");
-    expect(written.value.stores.safari).toEqual({
-      store: "safari",
-      status: "synced",
-      changes: ['title: "" -> "PII Shield"'],
-      digest: {
-        client: ["title", "subtitle", "shortDescription", "fullDescription", "categories", "searchTerms", "supportEmail", "privacyPolicyUrl", "homepageUrl", "reviewContactPhone"],
-        platform: LEGACY_SAFARI,
-        differ: ["subtitle", "searchTerms", "reviewContactPhone"],
-      },
-      deferred: ["subtitle", "searchTerms", "reviewContactPhone"],
-      filled: ["title", "shortDescription", "fullDescription", "icons"],
-      stillBlocking: [],
-    });
-
-    expect(written.value.sayToPerson).toBe(
-      "The platform does not take subtitle, searchTerms and reviewContactPhone yet (its build is behind this server); the other 3 fields are synced. Say sync-listing again after the platform updates.",
-    );
-
-    expect(written.hint).toContain("the other 3 fields are synced");
-    expect(written.value.links[0].url).toBeTruthy();
+    expect(platform.sent("PUT", LISTING("safari"))).toHaveLength(1);
+    expect(withId.status).toBe("approval-rejected");
+    expect(withId.error.platformCode).toBe("APPROVAL_SCOPE_MISMATCH");
   });
 
   it("retries with the set a newer platform names in digest.platform", async () => {
@@ -1214,6 +1183,26 @@ describe("extension_submit sync-listing sends the fields the platform hashes whe
     expect(asked.value.sayToPerson).toBe(
       "The platform does not take searchTerms and reviewContactPhone yet (its build is behind this server); the other 4 fields are in the approval. Say sync-listing again after the platform updates.",
     );
+
+    platform.calls.length = 0;
+
+    const written = JSON.parse(await sync({ approvalId: "apr_d" }));
+    const withId = platform.sent("PUT", LISTING("safari"));
+
+    expect(withId).toHaveLength(1);
+    expect(Object.keys(withId[0]!.body.listing)).toContain("searchTerms");
+    expect(withId[0]!.body.approvalId).toBe("apr_d");
+    expect(written.status).toBe("listing-synced");
+    expect(written.value.stores.safari).toEqual({
+      store: "safari",
+      status: "synced",
+      changes: ['title: "" -> "PII Shield"'],
+      filled: ["title", "subtitle", "shortDescription", "fullDescription", "searchTerms", "reviewContactPhone", "icons"],
+      stillBlocking: [],
+    });
+
+    expect(written.value.sayToPerson).toBeUndefined();
+    expect(written.value.links[0].url).toBeTruthy();
   });
 
   it("never retries nor defers when the platform hashes every field this server declares", async () => {
@@ -1246,17 +1235,19 @@ describe("extension_submit sync-listing sends the fields the platform hashes whe
     if (process.platform === "win32") return;
 
     platform.login();
-    platform.routes[`PUT ${LISTING("safari")}`] = () => ({
-      status: 403,
-      body: { code: "APPROVAL_REQUIRED", message: "Needs approval.", approvalRequest: { action: ACTION, scope: { store: "safari", listingDigest: "0".repeat(64) }, fingerprint: "f".repeat(64) } },
-    });
 
-    const refused = JSON.parse(await sync());
     const digest = {
       client: ["title", "subtitle", "shortDescription", "fullDescription", "categories", "searchTerms", "supportEmail", "privacyPolicyUrl", "homepageUrl", "reviewContactPhone"],
       platform: LEGACY_SAFARI,
       differ: ["subtitle", "searchTerms", "reviewContactPhone"],
     };
+
+    platform.routes[`PUT ${LISTING("safari")}`] = () => ({
+      status: 403,
+      body: { code: "APPROVAL_REQUIRED", message: "Needs approval.", approvalRequest: { action: ACTION, scope: { store: "safari", listingDigest: "0".repeat(64) }, fingerprint: "f".repeat(64) }, digest },
+    });
+
+    const refused = JSON.parse(await sync());
 
     expect(platform.sent("PUT", LISTING("safari"))).toHaveLength(2);
     expect(platform.sent("POST", APPROVALS)).toHaveLength(0);
@@ -1300,11 +1291,16 @@ describe("extension_submit sync-listing sends the fields the platform hashes whe
 
     platform.login();
 
-    for (const store of ["chrome", "edge", "firefox"]) {
+    for (const store of ["chrome", "edge", "firefox"] as const) {
       platform.calls.length = 0;
       platform.routes[`PUT ${LISTING(store)}`] = () => ({
         status: 403,
-        body: { code: "APPROVAL_REQUIRED", message: "Needs approval.", approvalRequest: { action: ACTION, scope: { store, listingDigest: "0".repeat(64) }, fingerprint: "f".repeat(64) } },
+        body: {
+          code: "APPROVAL_REQUIRED",
+          message: "Needs approval.",
+          approvalRequest: { action: ACTION, scope: { store, listingDigest: "0".repeat(64) }, fingerprint: "f".repeat(64) },
+          digest: { platform: STORE_FIELDS[store], client: STORE_FIELDS[store], differ: [] },
+        },
       });
 
       const refused = JSON.parse(await submit({ action: "sync-listing", browsers: [store], projectPath: root, api: API }));
