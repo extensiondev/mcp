@@ -23,6 +23,8 @@ export const LISTING_TEXT_LIMITS = {
   reviewerNotes: 8_000,
   releaseNotes: 8_000,
   certificationNotes: 8_000,
+  reviewContactName: 100,
+  reviewContactEmail: 200,
   reviewContactPhone: 20,
 } as const;
 
@@ -47,12 +49,18 @@ export interface StoreMdPrivacy {
 
 export type ListingField = keyof ListingText;
 
+export interface StoreMdScreenshots {
+  line: string;
+  files: string[];
+}
+
 export interface StoreMdListing {
   shared: ListingText;
   categoriesByStore: Partial<Record<ListingStore, string[]>>;
   stores: Partial<Record<ListingStore, ListingText>>;
   privacy: StoreMdPrivacy;
   lines: Partial<Record<ListingField, string>>;
+  screenshots?: StoreMdScreenshots;
 }
 
 export interface UnreadLine {
@@ -72,7 +80,7 @@ export const STORE_FIELDS: Record<ListingStore, ListingField[]> = {
   chrome: ["title", "shortDescription", "fullDescription", "categories", "supportEmail", "privacyPolicyUrl", "homepageUrl", "singlePurpose", "permissionJustifications"],
   firefox: ["title", "shortDescription", "fullDescription", "categories", "supportEmail", "privacyPolicyUrl", "homepageUrl", "license", "reviewerNotes", "releaseNotes"],
   edge: ["title", "shortDescription", "fullDescription", "categories", "searchTerms", "supportEmail", "privacyPolicyUrl", "homepageUrl", "certificationNotes"],
-  safari: ["title", "subtitle", "shortDescription", "fullDescription", "categories", "searchTerms", "supportEmail", "privacyPolicyUrl", "homepageUrl", "reviewContactPhone"],
+  safari: ["title", "subtitle", "shortDescription", "fullDescription", "categories", "searchTerms", "supportEmail", "privacyPolicyUrl", "homepageUrl", "reviewerNotes", "reviewContactName", "reviewContactEmail", "reviewContactPhone"],
 };
 
 const BULLET_KEYS: Array<[RegExp, ListingTextField | "categories" | "searchTerms"]> = [
@@ -85,8 +93,15 @@ const BULLET_KEYS: Array<[RegExp, ListingTextField | "categories" | "searchTerms
   [/^(homepage|website|homepage url)$/, "homepageUrl"],
   [/^license$/, "license"],
   [/^(search terms|keywords|tags)$/, "searchTerms"],
+  [/^(app review contact name|review contact name|contact name)$/, "reviewContactName"],
+  [/^(app review contact email|review contact email|contact email)$/, "reviewContactEmail"],
   [/^(app review contact phone|review contact phone|contact phone)$/, "reviewContactPhone"],
 ];
+
+const SCREENSHOTS_KEY = /^screenshots(\s*\([^()]*\))?$/;
+const IMAGE_FILE = /\S+\.(png|jpe?g)$/i;
+const LIST_MARKER = /^\s*(?:\d+[.)]|[-*+])\s+/;
+
 
 const E164 = /^\+[1-9]\d{6,14}$/;
 
@@ -150,7 +165,7 @@ function bullets(body: string): Array<{ key: string; value: string }> {
     if (bullet) {
       flush();
       current = { key: bullet[1]!.trim(), lines: [(bullet[2] ?? "").trim()] };
-    } else if (/^\S/.test(line)) {
+    } else if (/^\S/.test(line) && !(current && /^\d+[.)]\s/.test(line))) {
       flush();
     } else if (current) {
       current.lines.push(line);
@@ -276,8 +291,40 @@ function justifications(body: string): PermissionJustification[] {
   return [];
 }
 
+/* @invariant THE SCREENSHOTS LINE IS READ IN THE TWO FORMS AUTHORS WRITE. The
+ * template's bare "- Screenshots:" and the walk's "- Screenshots (1280x800,
+ * in this order):" both name the files below them, one per line, as a
+ * numbered or dashed list or bare paths, and a short inline list on the line
+ * itself is read too. A token is a file only when it ends in .png, .jpg or
+ * .jpeg, so a prose line ("TODO at least one screenshot") yields no files and
+ * the line is reported as written, with the shape the reader takes, instead
+ * of a silent miss.
+ */
+function screenshotFiles(value: string): string[] {
+  const files: string[] = [];
+
+  for (const raw of value.split("\n")) {
+    const line = raw.replace(LIST_MARKER, "").replace(/`/g, "").trim();
+    if (!line) continue;
+
+    for (const token of line.split(/[,\s]+/)) {
+      const file = token.replace(/[.,;]$/, "");
+      if (IMAGE_FILE.test(file)) files.push(file);
+    }
+  }
+
+  return files;
+}
+
 function readBullets(result: StoreMdListing, body: string, into: ListingText, ownSection: boolean): void {
   for (const { key, value } of bullets(body)) {
+    if (!ownSection && SCREENSHOTS_KEY.test(key.toLowerCase())) {
+      const text = usable(value);
+      if (text) result.screenshots = { line: key, files: screenshotFiles(text) };
+
+      continue;
+    }
+
     const field = BULLET_KEYS.find(([pattern]) => pattern.test(key.toLowerCase()))?.[1];
     const text = usable(value);
     if (!field || !text || (ownSection && field === "categories")) continue;
@@ -366,12 +413,13 @@ function bounded(field: string, value: unknown, skipped: string[], store: Listin
       return { reason: `is ${text.length} characters, over the ${limit} the listing takes` };
     }
 
+    const emailField = field === "supportEmail" || field === "reviewContactEmail";
     const shapeless =
       (/Url$/.test(field) && !/^https?:\/\/\S+$/i.test(text)) ||
-      (field === "supportEmail" && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(text));
+      (emailField && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(text));
 
     if (text && shapeless) {
-      return { reason: `is not ${field === "supportEmail" ? "an email address" : "an http or https URL"}` };
+      return { reason: `is not ${emailField ? "an email address" : "an http or https URL"}` };
     }
 
     if (field === "reviewContactPhone" && text) {

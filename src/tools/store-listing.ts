@@ -48,6 +48,7 @@ import {
   type ListingField,
   type ListingStore,
   type StoreMdPrivacy,
+  type StoreMdScreenshots,
   type UnreadLine,
 } from "../lib/store-md-listing";
 import {
@@ -82,8 +83,14 @@ export interface LocalListing {
   iconMissing?: string;
   skipped: string[];
   unread: Partial<Record<ListingField, UnreadLine>>;
+  lines: Partial<Record<ListingField, string>>;
+  screenshotsLine?: string;
+  screenshotsUnread?: UnreadLine;
   privacy: StoreMdPrivacy;
 }
+
+export const SCREENSHOTS_SHAPE =
+  "`- Screenshots:` with one PNG path per line below it (`1. store/screenshot-1.png`)";
 
 const privacyCoveredFact = (url: string): string =>
   `privacy policy URL found in ${STORE_MD_FILENAME} (${url}), not yet in the console listing`;
@@ -111,18 +118,48 @@ export function readLocalListing(
   const { listing, skipped, unread } = listingForStore(parsed, store);
   const icon = iconFromDist(projectPath, store);
   const patch: ListingPatch = { listing };
+  const fromStoreMd = screenshots?.length ? null : screenshotsFromStoreMd(projectPath, parsed.screenshots);
 
   if ("icon" in icon) patch.icons = [icon.icon];
   if (screenshots?.length) patch.screenshots = screenshots;
+  else if (fromStoreMd && "screenshots" in fromStoreMd) patch.screenshots = fromStoreMd.screenshots;
 
   return {
     file,
     patch,
     skipped,
     unread,
+    lines: parsed.lines,
     privacy: parsed.privacy,
+    ...(parsed.screenshots ? { screenshotsLine: `- ${parsed.screenshots.line}:` } : {}),
+    ...(fromStoreMd && "unread" in fromStoreMd ? { screenshotsUnread: fromStoreMd.unread } : {}),
     ...("missing" in icon ? { iconMissing: icon.missing } : {}),
   };
+}
+
+/* @invariant THE SCREENSHOTS LINE FEEDS THE SYNC THE WAY THE ARGUMENT DOES.
+ * Files named under "- Screenshots:" in STORE.md are read from the project
+ * root exactly as a screenshots argument would be, so the walk's listing no
+ * longer depends on the caller repeating the paths. An explicit argument
+ * still wins. A line whose files cannot be read, or that names no PNG file,
+ * is reported as the line it is with the shape the reader takes, so the
+ * preflight's storeMd block and the requirements list name the same miss.
+ */
+function screenshotsFromStoreMd(
+  projectPath: string,
+  parsed: StoreMdScreenshots | undefined,
+): { screenshots: ListingImage[] } | { unread: UnreadLine } | null {
+  if (!parsed) return null;
+
+  const line = `- ${parsed.line}:`;
+
+  if (!parsed.files.length) {
+    return { unread: { line, reason: "names no .png file" } };
+  }
+
+  const read = readScreenshots(projectPath, parsed.files);
+
+  return "problem" in read ? { unread: { line, reason: read.problem } } : read;
 }
 
 interface CheckCoverage {
@@ -247,9 +284,23 @@ function coverageOf(local: LocalListing, id: string): Coverage {
   }
 
   if (/screenshots_present$/.test(id)) {
+    const shots = local.patch.screenshots;
+
+    if (shots?.length) {
+      return {
+        covered: `screenshots: ${shots.length} ${local.screenshotsLine ? `listed on the \`${local.screenshotsLine}\` line of ${STORE_MD_FILENAME}` : "passed to sync-listing"}, not yet in the listing`,
+      };
+    }
+
+    if (local.screenshotsUnread) {
+      return {
+        unread: `screenshots: the \`${local.screenshotsUnread.line}\` line in ${STORE_MD_FILENAME} ${local.screenshotsUnread.reason}; the reader takes ${SCREENSHOTS_SHAPE}`,
+      };
+    }
+
     return {
       missing:
-        "screenshots: STORE.md does not carry them; pass screenshots (PNG paths inside projectPath, for example from extension_screenshot) to sync-listing",
+        "screenshots: STORE.md does not carry them; list the files under `- Screenshots:` in STORE.md or pass screenshots (PNG paths inside projectPath, for example from extension_screenshot) to sync-listing",
     };
   }
 
@@ -463,7 +514,7 @@ async function syncOne(
     if (
       text(asked.fingerprint) !== actionFingerprint(STORE_LISTING_ACTION, scope)
     ) {
-      const mismatch = retried ?? digestMismatchOf(store, sent.body);
+      const mismatch = retried ?? digestMismatchOf(store, sent.body, patch);
       if (!retried && mismatch.deferred.length) return subsetRetry(mismatch);
 
       return {
@@ -514,7 +565,7 @@ async function syncOne(
   }
 
   if (approvalId && !retried && sent.code === "APPROVAL_SCOPE_MISMATCH") {
-    const mismatch = digestMismatchOf(store, sent.body);
+    const mismatch = digestMismatchOf(store, sent.body, patch);
     if (mismatch.deferred.length) return subsetRetry(mismatch);
   }
 

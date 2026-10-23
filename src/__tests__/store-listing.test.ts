@@ -9,6 +9,7 @@ import { actionFingerprint } from "../lib/approval-gate";
 import { listingDigest } from "../lib/store-listing-media";
 import { STORE_FIELDS, listingForStore, parseStoreMdListing } from "../lib/store-md-listing";
 import { TOOL_POLICY } from "../lib/tool-policy";
+import { readLocalListing } from "../tools/store-listing";
 import { handler as submit, schema } from "../tools/submit";
 import {
   API,
@@ -282,6 +283,136 @@ describe("STORE.md fills the store listing", () => {
     ]);
 
     expect(bare.unread.reviewContactPhone?.line).toBe("- Review contact phone:");
+  });
+
+  it("reads the review contact name, email and reviewer notes under the Safari section, for the App Store only, and refuses an email that is not one", () => {
+    const withContact = (email: string) =>
+      parseStoreMdListing(
+        `${STORE_MD}\n## Safari\n\n- Review contact name: Cezar Augusto\n- Review contact email: ${email}\n- Review contact phone: +5511999999999\n\n### Reviewer notes\n\nTurn Rebeccat on in Safari Settings, then click the toolbar button.\n`,
+      );
+    const safari = listingForStore(withContact("review@example.com"), "safari");
+
+    expect(safari.listing).toMatchObject({
+      reviewContactName: "Cezar Augusto",
+      reviewContactEmail: "review@example.com",
+      reviewContactPhone: "+5511999999999",
+      reviewerNotes: "Turn Rebeccat on in Safari Settings, then click the toolbar button.",
+    });
+
+    expect(safari.skipped).toEqual([]);
+
+    const chrome = listingForStore(withContact("review@example.com"), "chrome").listing;
+    expect(chrome).not.toHaveProperty("reviewContactName");
+    expect(chrome).not.toHaveProperty("reviewContactEmail");
+    expect(chrome).not.toHaveProperty("reviewerNotes");
+
+    const odd = listingForStore(withContact("review at example dot com"), "safari");
+    expect(odd.listing).not.toHaveProperty("reviewContactEmail");
+    expect(odd.listing.reviewContactName).toBe("Cezar Augusto");
+    expect(odd.unread.reviewContactEmail).toEqual({ line: "- Review contact email:", reason: "is not an email address" });
+  });
+
+  it("reads the Screenshots line in the walk's form and in the bare form, and names a line that lists no file", () => {
+    const walk = parseStoreMdListing(
+      STORE_MD.replace(
+        "- Screenshots: TODO at least one 1280x800 screenshot per store.",
+        "- Screenshots (1280x800, in this order):\n  1. store/screenshot-1.png\n  2. store/screenshot-2.png",
+      ),
+    );
+
+    expect(walk.screenshots).toEqual({
+      line: "Screenshots (1280x800, in this order)",
+      files: ["store/screenshot-1.png", "store/screenshot-2.png"],
+    });
+
+    const flush = parseStoreMdListing(
+      STORE_MD.replace(
+        "- Screenshots: TODO at least one 1280x800 screenshot per store.",
+        "- Screenshots (1280x800, in this order):\n1. store/screenshot-1.png\n2. store/screenshot-2.png",
+      ),
+    );
+
+    expect(flush.screenshots?.files).toEqual(["store/screenshot-1.png", "store/screenshot-2.png"]);
+
+    const bare = parseStoreMdListing(
+      STORE_MD.replace(
+        "- Screenshots: TODO at least one 1280x800 screenshot per store.",
+        "- Screenshots:\n  - shots/popup.png\n  - `shots/options.png`",
+      ),
+    );
+
+    expect(bare.screenshots).toEqual({ line: "Screenshots", files: ["shots/popup.png", "shots/options.png"] });
+
+    const inline = parseStoreMdListing(
+      STORE_MD.replace(
+        "- Screenshots: TODO at least one 1280x800 screenshot per store.",
+        "- Screenshots: shots/popup.png, shots/options.png",
+      ),
+    );
+
+    expect(inline.screenshots?.files).toEqual(["shots/popup.png", "shots/options.png"]);
+
+    const prose = parseStoreMdListing(
+      STORE_MD.replace(
+        "- Screenshots: TODO at least one 1280x800 screenshot per store.",
+        "- Screenshots (1280x800): see the store folder",
+      ),
+    );
+
+    expect(prose.screenshots).toEqual({ line: "Screenshots (1280x800)", files: [] });
+    expect(parseStoreMdListing(STORE_MD).screenshots).toBeUndefined();
+    expect(listingForStore(walk, "chrome").listing.fullDescription).toContain("Detection happens on your computer.");
+  });
+
+  it("reads the files the Screenshots line names into the sync patch, the way the screenshots argument does, and names a line it cannot take", () => {
+    const root = project();
+    fs.writeFileSync(
+      path.join(root, "STORE.md"),
+      STORE_MD.replace(
+        "- Screenshots: TODO at least one 1280x800 screenshot per store.",
+        "- Screenshots (1280x800, in this order):\n  1. shots/popup.png",
+      ),
+    );
+
+    const local = readLocalListing(root, "chrome");
+    if ("problem" in local) throw new Error(local.problem);
+
+    expect(local.patch.screenshots?.map((shot) => [shot.source, shot.width, shot.height])).toEqual([["shots/popup.png", 1280, 800]]);
+    expect(local.screenshotsLine).toBe("- Screenshots (1280x800, in this order):");
+    expect(local.screenshotsUnread).toBeUndefined();
+    expect(local.lines.title).toBe("Name");
+
+    const passed = readLocalListing(root, "chrome", [{ sha256: "b".repeat(64), width: 640, height: 400, bytes: png(640, 400), source: "given.png" }]);
+    if ("problem" in passed) throw new Error(passed.problem);
+
+    expect(passed.patch.screenshots?.map((shot) => shot.source)).toEqual(["given.png"]);
+
+    fs.writeFileSync(
+      path.join(root, "STORE.md"),
+      STORE_MD.replace(
+        "- Screenshots: TODO at least one 1280x800 screenshot per store.",
+        "- Screenshots (1280x800): see the store folder",
+      ),
+    );
+
+    const prose = readLocalListing(root, "chrome");
+    if ("problem" in prose) throw new Error(prose.problem);
+
+    expect(prose.patch.screenshots).toBeUndefined();
+    expect(prose.screenshotsUnread).toEqual({ line: "- Screenshots (1280x800):", reason: "names no .png file" });
+
+    fs.writeFileSync(
+      path.join(root, "STORE.md"),
+      STORE_MD.replace(
+        "- Screenshots: TODO at least one 1280x800 screenshot per store.",
+        "- Screenshots:\n  1. shots/missing.png",
+      ),
+    );
+
+    const gone = readLocalListing(root, "chrome");
+    if ("problem" in gone) throw new Error(gone.problem);
+
+    expect(gone.screenshotsUnread).toEqual({ line: "- Screenshots:", reason: "screenshot shots/missing.png does not exist" });
   });
 
   it("hashes the vector the platform pins to the same digest", () => {
@@ -1173,9 +1304,9 @@ describe("extension_submit sync-listing sends the fields the platform hashes whe
     expect(Object.keys(puts[1]!.body.listing)).toEqual(["title", "subtitle", "shortDescription", "fullDescription"]);
     expect(asked.status).toBe("approval-required");
     expect(asked.value.stores.safari.digest).toEqual({
-      client: ["title", "subtitle", "shortDescription", "fullDescription", "categories", "searchTerms", "supportEmail", "privacyPolicyUrl", "homepageUrl", "reviewContactPhone"],
+      client: ["title", "subtitle", "shortDescription", "fullDescription", "categories", "searchTerms", "supportEmail", "privacyPolicyUrl", "homepageUrl", "reviewerNotes", "reviewContactName", "reviewContactEmail", "reviewContactPhone"],
       platform: known,
-      differ: ["searchTerms", "reviewContactPhone"],
+      differ: ["searchTerms", "reviewerNotes", "reviewContactName", "reviewContactEmail", "reviewContactPhone"],
     });
 
     expect(asked.value.stores.safari.deferred).toEqual(["searchTerms", "reviewContactPhone"]);
@@ -1210,7 +1341,7 @@ describe("extension_submit sync-listing sends the fields the platform hashes whe
 
     platform.login();
 
-    const all = [...LEGACY_SAFARI, "subtitle", "searchTerms", "reviewContactPhone"];
+    const all = [...LEGACY_SAFARI, "subtitle", "searchTerms", "reviewerNotes", "reviewContactName", "reviewContactEmail", "reviewContactPhone"];
     platformHashing(all, { platform: all, client: all, differ: [] });
 
     const asked = JSON.parse(await sync());
@@ -1237,9 +1368,9 @@ describe("extension_submit sync-listing sends the fields the platform hashes whe
     platform.login();
 
     const digest = {
-      client: ["title", "subtitle", "shortDescription", "fullDescription", "categories", "searchTerms", "supportEmail", "privacyPolicyUrl", "homepageUrl", "reviewContactPhone"],
+      client: ["title", "subtitle", "shortDescription", "fullDescription", "categories", "searchTerms", "supportEmail", "privacyPolicyUrl", "homepageUrl", "reviewerNotes", "reviewContactName", "reviewContactEmail", "reviewContactPhone"],
       platform: LEGACY_SAFARI,
-      differ: ["subtitle", "searchTerms", "reviewContactPhone"],
+      differ: ["subtitle", "searchTerms", "reviewerNotes", "reviewContactName", "reviewContactEmail", "reviewContactPhone"],
     };
 
     platform.routes[`PUT ${LISTING("safari")}`] = () => ({
@@ -1257,7 +1388,7 @@ describe("extension_submit sync-listing sends the fields the platform hashes whe
       status: "refused",
       code: "LISTING_DIGEST_MISMATCH",
       message:
-        "The platform hashes this listing differently from this server even after leaving out subtitle, searchTerms and reviewContactPhone: this server declares subtitle, searchTerms and reviewContactPhone, which the platform does not hash, so this server is newer than the platform's build. No approval was requested. Say sync-listing again after the platform updates.",
+        "The platform hashes this listing differently from this server even after leaving out subtitle, searchTerms and reviewContactPhone: this server declares subtitle, searchTerms, reviewerNotes, reviewContactName, reviewContactEmail and reviewContactPhone, which the platform does not hash, so this server is newer than the platform's build. No approval was requested. Say sync-listing again after the platform updates.",
       digest,
       trackUrl: SUBMISSIONS,
       filled: ["title", "subtitle", "shortDescription", "fullDescription", "searchTerms", "reviewContactPhone", "icons"],

@@ -539,7 +539,7 @@ function readinessView(
   const failing = checks
     .filter((c) => text(c.status) === "fail")
     .map((c) => checkView(reconciledWithStoreMd(c, local), true));
-  const requirements = requirementsView(json.requirements);
+  const requirements = requirementsView(json.requirements, local);
 
   return {
     canSubmit:

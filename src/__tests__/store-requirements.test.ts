@@ -1,7 +1,12 @@
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+
 import { describe, expect, it } from "vitest";
 
 import { configuredRequirementsNote, missingRequiredSentence, requirementsView } from "../lib/store-requirements";
 import { handler as submit } from "../tools/submit";
+import { solidPng } from "./fixtures/png";
 import { API, PROJECT_ROUTE, useProjectRoutes } from "./fixtures/project-routes";
 
 const PREFLIGHT = (store: string) => `${PROJECT_ROUTE}/stores/${store}/submissions/preflight`;
@@ -50,6 +55,92 @@ const SAFARI_REQUIREMENTS = {
   ],
   missingRequired: 2,
   missingOptional: 1,
+};
+
+const WALK_STORE_MD = `# Store metadata
+
+## Listing
+
+- Name: Rebeccat
+- Summary: Blur names on every open tab with one click.
+- Description:
+
+  Sharing your screen? Click Rebeccat and names are blurred on every open tab.
+
+- Category: Productivity
+- Screenshots (1280x800, in this order):
+  1. store/screenshot-1.png
+  2. store/screenshot-2.png
+
+## Privacy and data use
+
+- Privacy policy URL: https://rebeccat.example/privacy
+
+## Chrome Web Store
+
+### Single purpose
+
+Blur personal information on the pages the user has open, on demand.
+
+### Permissions justification
+
+- storage: Remembers whether the blur is on.
+- scripting: Adds the blur script to tabs that were open before install.
+
+## Safari
+
+- Review contact name: Cezar Augusto
+- Review contact email: review@rebeccat.example
+- Review contact phone: +5511999999999
+
+### Reviewer notes
+
+Turn Rebeccat on in Safari Settings, Extensions, then click the toolbar button.
+`;
+
+function walkProject(storeMd = WALK_STORE_MD): string {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "extdev-walk-"));
+  fs.writeFileSync(path.join(root, "STORE.md"), storeMd);
+  fs.mkdirSync(path.join(root, "store"));
+  fs.writeFileSync(path.join(root, "store", "screenshot-1.png"), solidPng(1280, 800));
+  fs.writeFileSync(path.join(root, "store", "screenshot-2.png"), solidPng(1280, 800));
+
+  return root;
+}
+
+const walkMissing = (store: string, id: string, label: string, satisfiedBy: string, over: Record<string, unknown> = {}) =>
+  requirement({ id, label, format: `${label} as the store asks.`, satisfiedBy, status: "missing", ...over });
+
+const CHROME_WALK = {
+  store: "chrome",
+  items: [
+    walkMissing("chrome", "chrome.title", "Title", "store-md: Name"),
+    walkMissing("chrome", "chrome.summary", "Summary", "store-md: Summary"),
+    walkMissing("chrome", "chrome.description", "Description", "store-md: Description"),
+    walkMissing("chrome", "chrome.category", "Category", "store-md: Category", { actual: "0 categories" }),
+    walkMissing("chrome", "chrome.screenshots", "Screenshots", "store-md: Screenshots", { actual: "0 screenshots" }),
+    walkMissing("chrome", "chrome.single_purpose", "Single purpose description", "store-md: Single purpose"),
+    walkMissing("chrome", "chrome.permission_justifications", "Permission justification", "store-md: Permissions justification", { actual: "0 justifications" }),
+    walkMissing("chrome", "chrome.store_connection", "Chrome Web Store developer account connected", "console-only"),
+    walkMissing("chrome", "chrome.promo_video", "Promo video", "store-dashboard", { required: false }),
+  ],
+  missingRequired: 8,
+  missingOptional: 1,
+};
+
+const SAFARI_WALK = {
+  store: "safari",
+  items: [
+    walkMissing("safari", "safari.review_contact_name", "App Review contact name", "store-md: Review contact name", { push: "not pushed yet" }),
+    walkMissing("safari", "safari.review_contact_email", "App Review contact email", "store-md: Review contact email", { push: "not pushed yet" }),
+    walkMissing("safari", "safari.review_contact_phone", "App Review contact phone", "store-md: Review contact phone", { push: "not pushed yet" }),
+    walkMissing("safari", "safari.reviewer_notes", "App Review notes", "store-md: Reviewer notes", { push: "not pushed yet" }),
+    requirement({ id: "safari.age_rating", label: "Age rating", satisfiedBy: "store-md: Age rating", status: "have", actual: "none to every question (the default)", push: "not pushed yet" }),
+    requirement({ id: "safari.description", label: "Description", satisfiedBy: "listing", status: "have", push: "queued" }),
+    walkMissing("safari", "safari.api_key", "App Store Connect API key", "console-only", { actual: "0 of 3 saved" }),
+  ],
+  missingRequired: 5,
+  missingOptional: 0,
 };
 
 function report(store: string, canSubmit: boolean, requirements?: unknown) {
@@ -105,6 +196,92 @@ describe("extension_submit preflight carries what each store asks for and says w
     expect(out.value.trackUrl ?? out.value.storesPageUrl).toBeTruthy();
   });
 
+  it("answers have, from the STORE.md line sync-listing would send, for every input the walk's STORE.md carries, and counts only what is still missing", async () => {
+    if (process.platform === "win32") return;
+
+    const root = walkProject();
+    platform.login();
+    platform.routes[`POST ${PREFLIGHT("chrome")}`] = () => ({ body: report("chrome", false, CHROME_WALK) });
+    platform.routes[`POST ${PREFLIGHT("safari")}`] = () => ({ body: report("safari", false, SAFARI_WALK) });
+
+    const out = JSON.parse(await submit({ action: "preflight", browsers: ["chrome", "safari"], projectPath: root, api: API }));
+    const chrome = out.value.stores.chrome.requirements;
+    const safari = out.value.stores.safari.requirements;
+    const byId = (view: { items: Array<Record<string, unknown>> }, id: string) => view.items.find((item) => item.id === id);
+
+    expect(byId(chrome, "chrome.title")).toMatchObject({ status: "have", satisfiedBy: "store-md: - Name:", actual: "in STORE.md; sync-listing writes it" });
+    expect(byId(chrome, "chrome.summary")).toMatchObject({ status: "have", satisfiedBy: "store-md: - Summary:" });
+    expect(byId(chrome, "chrome.description")).toMatchObject({ status: "have", satisfiedBy: "store-md: - Description:" });
+    expect(byId(chrome, "chrome.category")).toMatchObject({ status: "have", satisfiedBy: "store-md: - Category:" });
+    expect(byId(chrome, "chrome.single_purpose")).toMatchObject({ status: "have", satisfiedBy: "store-md: ### Single purpose" });
+    expect(byId(chrome, "chrome.permission_justifications")).toMatchObject({ status: "have", satisfiedBy: "store-md: ### Permissions justification" });
+    expect(byId(chrome, "chrome.screenshots")).toMatchObject({
+      status: "have",
+      satisfiedBy: "store-md: - Screenshots (1280x800, in this order):",
+      actual: "2 files on the `- Screenshots (1280x800, in this order):` line of STORE.md; sync-listing uploads them",
+    });
+
+    expect(byId(chrome, "chrome.store_connection")).toMatchObject({ status: "missing", satisfiedBy: "console-only" });
+    expect(byId(chrome, "chrome.promo_video")).toMatchObject({ status: "missing", satisfiedBy: "store-dashboard" });
+    expect(chrome.missingRequired).toBe(1);
+    expect(chrome.missingOptional).toBe(1);
+
+    for (const id of ["safari.review_contact_name", "safari.review_contact_email", "safari.review_contact_phone"]) {
+      expect(byId(safari, id)).toMatchObject({ status: "have", push: "not pushed yet" });
+    }
+
+    expect(byId(safari, "safari.review_contact_phone")?.satisfiedBy).toBe("store-md: - Review contact phone:");
+    expect(byId(safari, "safari.reviewer_notes")).toMatchObject({ status: "have", satisfiedBy: "store-md: ### Reviewer notes", push: "not pushed yet" });
+    expect(byId(safari, "safari.age_rating")).toMatchObject({ status: "have", push: "not pushed yet" });
+    expect(byId(safari, "safari.description")).toMatchObject({ status: "have", satisfiedBy: "listing", push: "queued" });
+    expect(byId(safari, "safari.api_key")).toMatchObject({ status: "missing", actual: "0 of 3 saved" });
+    expect(byId(safari, "safari.api_key")).not.toHaveProperty("push");
+    expect(safari.missingRequired).toBe(1);
+
+    expect(out.value.sayToPerson.startsWith("The Chrome Web Store asks for 1 required input the project does not have yet: Chrome Web Store developer account connected (")).toBe(true);
+    expect(out.value.sayToPerson).toContain("The App Store asks for 1 required input the project does not have yet: App Store Connect API key (");
+    expect(out.value.sayToPerson).not.toContain("Title");
+    expect(out.value.sayToPerson).not.toContain("App Review contact");
+    expect(out.value.sayToPerson).not.toContain("not pushed");
+    expect(out.value.stores.chrome.storeMd.notCovered.some((line: string) => line.startsWith("screenshots"))).toBe(false);
+    expect(out.value.trackUrl ?? out.value.storesPageUrl).toBeTruthy();
+    expect(JSON.stringify(out)).not.toMatch(/github\.com|actions\/runs/);
+  });
+
+  it("keeps the Screenshots item missing when the line is there in a form the reader rejects, naming the line it wants in the item and in the storeMd block", async () => {
+    if (process.platform === "win32") return;
+
+    const root = walkProject(
+      WALK_STORE_MD.replace(
+        "- Screenshots (1280x800, in this order):\n  1. store/screenshot-1.png\n  2. store/screenshot-2.png",
+        "- Screenshots (1280x800): see the store folder",
+      ),
+    );
+    platform.login();
+    platform.routes[`POST ${PREFLIGHT("chrome")}`] = () => ({
+      body: {
+        ...report("chrome", false, CHROME_WALK),
+        checks: [{ id: "listing.chrome_screenshots_present", status: "fail", severity: "blocking", stage: "review", ownership: "shared", message: "Add at least one screenshot." }],
+      },
+    });
+
+    const out = JSON.parse(await submit({ action: "preflight", browsers: ["chrome"], projectPath: root, api: API }));
+    const shots = out.value.stores.chrome.requirements.items.find((item: { id: string }) => item.id === "chrome.screenshots");
+    const wanted = "the `- Screenshots (1280x800):` line in STORE.md names no .png file; the reader takes `- Screenshots:` with one PNG path per line below it";
+
+    expect(shots).toMatchObject({ status: "missing", satisfiedBy: "store-md: Screenshots", actual: wanted });
+    expect(out.value.stores.chrome.storeMd.notCovered).toContain(
+      "screenshots: the `- Screenshots (1280x800):` line in STORE.md names no .png file; the reader takes `- Screenshots:` with one PNG path per line below it (`1. store/screenshot-1.png`)",
+    );
+
+    expect(out.value.stores.chrome.failing[0].message).toBe(
+      "screenshots: the `- Screenshots (1280x800):` line in STORE.md names no .png file; the reader takes `- Screenshots:` with one PNG path per line below it (`1. store/screenshot-1.png`).",
+    );
+
+    expect(out.value.sayToPerson).toContain("Screenshots (Screenshots as the store asks.)");
+    expect(out.value.stores.chrome.requirements.missingRequired).toBe(2);
+  });
+
   it("keeps the readiness answer unchanged for a platform that answers no requirements", async () => {
     if (process.platform === "win32") return;
 
@@ -141,9 +318,11 @@ describe("extension_submit preflight carries what each store asks for and says w
     expect(requirementsView(null)).toBeNull();
     expect(requirementsView({ store: "edge" })).toBeNull();
 
-    const counted = requirementsView({ store: "chrome", items: [requirement({ id: "chrome.title", status: "missing" }), requirement({ id: "chrome.promo_video", required: false, status: "missing" }), requirement({ id: "chrome.x", status: "odd" })] });
+    const counted = requirementsView({ store: "chrome", items: [requirement({ id: "chrome.title", status: "missing", push: "queued" }), requirement({ id: "chrome.promo_video", required: false, status: "missing" }), requirement({ id: "chrome.x", status: "odd" })] });
 
     expect(counted).toMatchObject({ missingRequired: 1, missingOptional: 1 });
+    expect(counted?.items[0]?.push).toBe("queued");
+    expect(requirementsView({ store: "safari", items: [requirement({ status: "have", push: "not pushed yet" })], missingRequired: 0, missingOptional: 0 })).toMatchObject({ missingRequired: 0 });
     expect(counted?.items[2]?.status).toBe("unknown");
     expect(missingRequiredSentence("chrome", counted)).toBe("The Chrome Web Store asks for 1 required input the project does not have yet: Name (Up to 30 characters; the app record's name.).");
     expect(missingRequiredSentence("chrome", requirementsView({ store: "chrome", items: [requirement({})] }))).toBe("");

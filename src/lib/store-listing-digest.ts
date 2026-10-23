@@ -33,15 +33,26 @@ function platformFieldsOf(body: unknown): string[] | null {
   return fields.length ? fields : null;
 }
 
-export function digestMismatchOf(store: ListingStore, body: unknown): DigestMismatch {
+/* @invariant ONLY A FIELD THE PATCH CARRIES IS DEFERRED. The digest names
+ * every field the two sides declare differently, so the owner can see which
+ * build is behind; the deferred list, which the sentence reads out and the
+ * retry leaves out, holds only the fields this listing actually sends, so a
+ * STORE.md with no review contact email is never told the platform does not
+ * take one yet.
+ */
+export function digestMismatchOf(store: ListingStore, body: unknown, patch?: ListingPatch): DigestMismatch {
   const platform = platformFieldsOf(body);
   if (!platform) return { deferred: [] };
 
   const client: string[] = STORE_FIELDS[store];
   const clientOnly = client.filter((field) => !platform.includes(field));
   const platformOnly = platform.filter((field) => !client.includes(field));
+  const sent = patch ? Object.keys(patch.listing) : null;
 
-  return { digest: { client, platform, differ: [...clientOnly, ...platformOnly] }, deferred: clientOnly };
+  return {
+    digest: { client, platform, differ: [...clientOnly, ...platformOnly] },
+    deferred: sent ? clientOnly.filter((field) => sent.includes(field)) : clientOnly,
+  };
 }
 
 export function withoutFields(patch: ListingPatch, deferred: string[]): ListingPatch {
@@ -68,11 +79,12 @@ export function behindSentence(mismatch: DigestMismatch, afterRetry: boolean): s
   const { digest, deferred } = mismatch;
   if (!digest) return UNNAMED_DIGEST_SENTENCE;
 
-  const platformOnly = digest.differ.filter((field) => !deferred.includes(field));
+  const clientOnly = digest.differ.filter((field) => digest.client.includes(field));
+  const platformOnly = digest.differ.filter((field) => !digest.client.includes(field));
   const still = afterRetry ? ` even after leaving out ${joined(deferred)}` : "";
 
   if (digest.differ.length && !platformOnly.length) {
-    return `The platform hashes this listing differently from this server${still}: this server declares ${joined(deferred)}, which the platform does not hash, so this server is newer than the platform's build. No approval was requested. Say sync-listing again after the platform updates.`;
+    return `The platform hashes this listing differently from this server${still}: this server declares ${joined(clientOnly)}, which the platform does not hash, so this server is newer than the platform's build. No approval was requested. Say sync-listing again after the platform updates.`;
   }
 
   const known = platformOnly.length
