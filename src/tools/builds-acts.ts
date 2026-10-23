@@ -13,6 +13,8 @@ import { ConsoleProjectPage } from "@extension.dev/urls/paths";
 import { consoleProjectUrl } from "../lib/registry";
 import { envelope } from "../lib/envelope";
 import { type ApprovalGateInput } from "../lib/approval-gate";
+import { APPROVAL_REQUIRED_STATUS } from "../lib/approval-outcome";
+import { approvalVerdict } from "../lib/approval-policy";
 import {
   OWNER_REQUIRED_CODE,
   openProjectApi,
@@ -25,9 +27,11 @@ import {
   type ProjectApiRefusal,
 } from "../lib/project-api";
 import { approvedSettingsWrite } from "../lib/settings-write";
+import { trackUrl } from "../lib/track-url";
 
 export const COMMAND = "extension_builds";
 const SETTINGS_ACTION = "extension_settings.build";
+const CHANNEL_ACTION = "extension_builds.create-channel";
 export const BUILD_ENVS = ["staging", "production"] as const;
 const BROWSERS = ["chrome", "edge", "firefox", "safari"] as const;
 const FIELDS = ["enabled", "installCommand", "buildCommand", "outputDirectory"] as const;
@@ -241,7 +245,7 @@ export async function configure(args: ActArgs): Promise<string> {
     api: args.api,
     refusedStatus: "configure-refused",
     body: { buildSettings: merged },
-    reason: "A build command runs on every platform build of the project, so a workspace owner must approve this exact change first; the approval page shows the change as the platform computed it.",
+    reason: "A build settings change is a plain act under the owner's own token, and the platform asked a workspace owner to approve this exact one before it is saved; the approval page shows the change as the platform computed it.",
     stateRead: 'extension_workspace (action: "settings") for build settings',
     refusalHint: (code) => (code === "NO_CHANGE" ? "The settings already read this way; nothing needs changing." : undefined),
   };
@@ -271,17 +275,19 @@ export async function configure(args: ActArgs): Promise<string> {
 
   if (!written.ok) return written.out ?? actRefusal(written.sent, "configure", api, args);
 
+  const gateLine = written.verdict === "plain" && !approvalId ? " This was a plain setting under your own token; no approval page was involved." : "";
+
   return envelope({
     ok: true,
     command: COMMAND,
-    status: "configured",
+    status: "build-configured",
     value: {
       action: "configure",
       project,
       buildSettings: merged,
-      consoleUrl: consoleProjectUrl(api.ref, ConsoleProjectPage.projectSettings, args.api),
+      trackUrl: trackUrl("build-settings", { workspace: api.ref.workspace, project: api.ref.project }, args.api),
     },
-    hint: `${project}'s build settings now read as buildSettings. The next build runs them: a push, or extension_builds action:"rebuild".`,
+    hint: `${project}'s build settings now read as buildSettings.${gateLine} The next build runs them: a push, or extension_builds action:"rebuild".`,
   });
 }
 
@@ -299,6 +305,9 @@ export async function createChannel(args: ActArgs): Promise<string> {
   if ("refused" in opened) return opened.refused;
 
   const api = opened.api;
+
+  if (approvalVerdict(CHANNEL_ACTION, { audience }) !== "plain") return publicAudienceKept(api, args, name);
+
   const body: Row = { name };
   if (text(args.description)) body.description = text(args.description);
   if (text(args.color)) body.color = text(args.color);
@@ -320,16 +329,42 @@ export async function createChannel(args: ActArgs): Promise<string> {
   return envelope({
     ok: true,
     command: COMMAND,
-    status: exists ? "exists" : "created",
+    status: exists ? "exists" : "channel-created",
     value: {
       action: "create-channel",
       created: !exists,
       channel: sent.ok ? sent.json : channels.find((c) => text(c.name) === name || text(c.id) === name) ?? { name },
       channels,
+      trackUrl: trackUrl("channels", { workspace: api.ref.workspace, project: api.ref.project }, args.api),
     },
     hint: exists
       ? `${name} already exists, so nothing was created. Point it at a build with ${promote}.`
       : `${name} is a new release channel with no build yet. Point it at a build with ${promote}.`,
     warnings: [list.ok ? null : `The channel list could not be read (${list.message}).`, audienceNote],
+  });
+}
+
+/* @invariant A PUBLIC CHANNEL AUDIENCE IS A PERSON'S DECISION, ANSWERED BEFORE
+ * ANYTHING IS SENT. Creating a channel is a plain act, but a public audience
+ * opens its downloads to anyone with the link, which the ruling of
+ * 2026-10-23 keeps on the approve page; the platform mints no approval for a
+ * channel audience yet, so the answer names the console Releases page where
+ * a workspace owner or admin sets it, and offers the private create instead.
+ */
+function publicAudienceKept(api: ProjectApi, args: ActArgs, name: string): string {
+  const releasesPage = consoleProjectUrl(api.ref, ConsoleProjectPage.releases, args.api);
+  const say = `A public channel is a person's decision: a workspace owner or admin opens ${name} to anyone with the link from the Releases page, ${releasesPage}. I can create it private now and you open it there.`;
+
+  return envelope({
+    ok: false,
+    command: COMMAND,
+    status: APPROVAL_REQUIRED_STATUS,
+    value: { action: "create-channel", channel: name, audience: "public", trackUrl: releasesPage, sayToPerson: say },
+    error: {
+      code: "E_APPROVAL_REQUIRED",
+      name: "ChannelAudienceNeedsAPerson",
+      message: `Creating ${name} as a public channel opens its downloads to anyone with the link, which a person decides on the console Releases page; nothing was sent. Create it with audience private, or without audience, and a workspace owner or admin opens it at ${releasesPage}.`,
+    },
+    hint: say,
   });
 }

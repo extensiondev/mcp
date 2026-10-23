@@ -465,7 +465,7 @@ async function syncOne(
         refusedStatus: `${ACT}-refused`,
         body: approvalBody(store, patch),
         reason:
-          "A store listing is what reviewers and users read, so a workspace owner approves this exact change first; the approval page shows it as the platform computed it.",
+          "A listing sync is a plain act under the owner's own token, and the platform asked a workspace owner to approve this exact change before it is written; the approval page shows it as the platform computed it.",
         stateRead: 'extension_submit (action: "preflight")',
       }),
     ) as Row;
@@ -671,7 +671,7 @@ export async function syncListing(args: ListingArgs): Promise<string> {
       error: {
         code: "E_APPROVAL_REQUIRED",
         name: "ApprovalRequired",
-        message: `A workspace owner approves each store listing change before it is written. Nothing was written for ${approvals.map((row) => text(row.store)).join(", ")}.`,
+        message: `The platform asked a workspace owner to approve the listing change before it is written. Nothing was written for ${approvals.map((row) => text(row.store)).join(", ")}.`,
       },
       hint: `Approve at ${approvals.map((row) => `${text(row.approvalUrl)} (${text(row.store)})`).join(", ")}, then call extension_submit action:"sync-listing" again once per store with browsers:[<store>], the same projectPath and screenshots, and that store's approvalId.`,
     });

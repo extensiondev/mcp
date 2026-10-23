@@ -17,6 +17,7 @@ import { envelope } from "./envelope";
 import { parseJsonObject } from "./json-object";
 import { platformHoldEnvelope, sawPlatformHold } from "./platform-hold";
 
+import type { PolicyWrite } from "./approval-policy";
 import type { MintedApproval } from "./approval-record";
 
 export {
@@ -46,6 +47,8 @@ export interface ApprovalGateInput {
   reason?: string;
   stateRead?: string;
   irreversible?: boolean;
+  write?: PolicyWrite;
+  platformAsked?: boolean;
 }
 
 export type ApprovalGateResult =

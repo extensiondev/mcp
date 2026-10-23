@@ -27,6 +27,7 @@ function input(over: Partial<ApprovalGateInput>): ApprovalGateInput {
     token: "tok_test",
     api: API,
     enabled: true,
+    platformAsked: true,
     ...over,
   };
 }

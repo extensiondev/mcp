@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { actionFingerprint } from "../lib/approval-gate";
-import { SETTINGS_WRITE_GATE } from "../lib/settings-write";
+import { approvalVerdict } from "../lib/approval-policy";
 import { STORE_SETTINGS_ACTION, modeToPatch, readStoreSettingsChange, storeSettingsDigest } from "../lib/store-settings";
 import { TOOL_POLICY } from "../lib/tool-policy";
 import { handler as submit, schema } from "../tools/submit";
@@ -24,7 +24,7 @@ function approvalRequired(scope: Record<string, string>, fingerprint = actionFin
   };
 }
 
-describe("extension_submit configure-store changes a store's settings under an owner's approval and never takes a credential", () => {
+describe("extension_submit configure-store changes a store's settings as a plain call under the owner's token and never takes a credential", () => {
   const platform = useProjectRoutes("extdev-store-configure-");
 
   it("offers configure-store with a storeSettings input, and it is a settings write, not a shipping act", () => {
@@ -35,7 +35,73 @@ describe("extension_submit configure-store changes a store's settings under an o
     const ships = TOOL_POLICY.extension_submit.ships as (args: Record<string, unknown>) => boolean;
 
     expect(ships({ action: "configure-store" })).toBe(false);
-    expect(SETTINGS_WRITE_GATE).toBe("owner-approval");
+    expect(approvalVerdict(STORE_SETTINGS_ACTION)).toBe("plain");
+    expect(approvalVerdict(STORE_SETTINGS_ACTION, { submissionMode: "listed" })).toBe("approval");
+  });
+
+  it("applies a plain change with an owner's token and no approval id, minting nothing and reading no approval", async () => {
+    if (process.platform === "win32") return;
+
+    platform.login();
+    platform.routes[`PUT ${CONFIG}`] = () => ({ body: { ok: true, store: "firefox", changes: ["firefox: enable store publishing", 'firefox.sourceArchive: "none" -> "repository"'] } });
+
+    const out = JSON.parse(await submit({ action: "configure-store", store: "firefox", storeSettings: FIREFOX_PATCH, api: API }));
+    const puts = platform.sent("PUT", CONFIG);
+
+    expect(puts).toHaveLength(1);
+    expect(puts[0].body).toEqual({ firefox: FIREFOX_PATCH });
+    expect(out.ok).toBe(true);
+    expect(out.status).toBe("store-configured");
+    expect(out.value).toMatchObject({
+      action: "configure-store",
+      store: "firefox",
+      project: "acme/widget",
+      changes: ["firefox: enable store publishing", 'firefox.sourceArchive: "none" -> "repository"'],
+    });
+
+    expect(out.value.trackUrl).toMatch(SETTINGS_PAGE);
+    expect(out.value.nextStep.kind).toBe("preflight");
+    expect(out.hint).toContain("no approval page was involved");
+    expect(platform.calls.some((call) => call.path.startsWith(APPROVALS))).toBe(false);
+  });
+
+  it("is refused OWNER_REQUIRED when the token's minter is not an owner, before any approval is asked", async () => {
+    if (process.platform === "win32") return;
+
+    platform.login();
+    platform.routes[`PUT ${CONFIG}`] = () => ({
+      status: 403,
+      body: { code: "OWNER_REQUIRED", message: "Changing store settings with a token is a workspace owner action, and this token was minted by an account that is not an owner of this workspace." },
+    });
+
+    const out = JSON.parse(await submit({ action: "configure-store", store: "firefox", storeSettings: FIREFOX_PATCH, api: API }));
+
+    expect(out.ok).toBe(false);
+    expect(out.error.platformCode).toBe("OWNER_REQUIRED");
+    expect(platform.calls.some((call) => call.path.startsWith(APPROVALS))).toBe(false);
+  });
+
+  it("keeps a listed submission mode on the approve page: the platform asks, the approval names the audience change, and nothing is written", async () => {
+    if (process.platform === "win32") return;
+
+    platform.login();
+    const patch = { dryRun: false, releaseChannel: "listed" };
+    const scope = scopeFor("firefox", patch);
+    platform.routes[`PUT ${CONFIG}`] = () => approvalRequired(scope);
+    platform.routes[`POST ${APPROVALS}`] = () => ({
+      status: 201,
+      body: { approvalId: "apr_listed", approvalUrl: `${API}/device/approve/apr_listed`, changes: ['firefox.submissionMode: "unlisted" -> "listed"'] },
+    });
+
+    const out = JSON.parse(await submit({ action: "configure-store", store: "firefox", storeSettings: { submissionMode: "listed" }, api: API }));
+    const [post] = platform.sent("POST", APPROVALS);
+
+    expect(post.body).toMatchObject({ action: STORE_SETTINGS_ACTION, scope, storeSettings: { firefox: patch } });
+    expect(out.ok).toBe(false);
+    expect(out.status).toBe("approval-required");
+    expect(out.value).toMatchObject({ approvalId: "apr_listed", changes: ['firefox.submissionMode: "unlisted" -> "listed"'] });
+    expect(out.error.message).toContain("changes who can find the extension");
+    expect(platform.sent("PUT", CONFIG)).toHaveLength(1);
   });
 
   it("refuses a storeSettings key that names a credential before any request, with the console connect page and the form's labels", async () => {
@@ -119,7 +185,7 @@ describe("extension_submit configure-store changes a store's settings under an o
     expect(storeSettingsDigest("firefox", { enabled: true })).not.toBe(storeSettingsDigest("chrome", { enabled: true }));
   });
 
-  it("asks a workspace owner to approve the exact change the platform computed, and writes nothing", async () => {
+  it("honors the platform asking for an approval of a plain change, with the change the platform computed, and writes nothing", async () => {
     if (process.platform === "win32") return;
 
     platform.login();
@@ -152,6 +218,7 @@ describe("extension_submit configure-store changes a store's settings under an o
     });
 
     expect(out.error.message).toContain("approvalId apr_cfg");
+    expect(out.error.message).toContain("The platform asked a workspace owner");
     expect(out.hint).toContain(`${API}/device/approve/apr_cfg`);
     expect(platform.sent("PUT", CONFIG)).toHaveLength(1);
   });

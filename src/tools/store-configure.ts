@@ -16,6 +16,7 @@ import {
   type ProjectApi,
   type ProjectApiRefusal,
 } from "../lib/project-api";
+import { approvalVerdict, type PolicyWrite } from "../lib/approval-policy";
 import { approvedSettingsWrite } from "../lib/settings-write";
 import { badShipRequest, openShipApi, text } from "../lib/ship-act";
 import { fallbackConnectUrl, nextStep, storeSettingsUrl } from "../lib/store-connection";
@@ -33,6 +34,9 @@ import {
 export const CONFIGURE_STORE = "configure-store";
 
 const COMMAND = "extension_submit";
+
+const AUDIENCE_REASON = "A listed or public submission mode changes who can find the extension once a build leaves for the store, so a workspace owner approves this exact change on the approve page first; the page shows the change as the platform computed it.";
+const PLATFORM_ASKED_REASON = "The platform asked a workspace owner to approve this exact change before it is saved; the approval page shows the change as the platform computed it.";
 
 export interface ConfigureStoreArgs {
   store?: string;
@@ -131,6 +135,8 @@ export async function configureStore(args: ConfigureStoreArgs): Promise<string> 
   const scope = { store, settingsDigest: storeSettingsDigest(store, read.patch) };
   const settingsPage = storeSettingsUrl(api.ref, args.api);
   const preflightRead = `extension_submit (action: "preflight", browsers: ["${store}"])`;
+  const policyWrite: PolicyWrite = { submissionMode: text(read.requested.submissionMode), releaseChannel: text(read.requested.releaseChannel) };
+  const audienceChange = approvalVerdict(STORE_SETTINGS_ACTION, policyWrite) === "approval";
   const gate: ApprovalGateInput = {
     command: COMMAND,
     action: STORE_SETTINGS_ACTION,
@@ -140,8 +146,9 @@ export async function configureStore(args: ConfigureStoreArgs): Promise<string> 
     api: args.api,
     refusedStatus: "configure-store-refused",
     body: { storeSettings: { [store]: read.patch } },
-    reason: "A store setting decides whether a build leaves for a store and how far it goes there, so a workspace owner approves this exact change first; the approval page shows the change as the platform computed it.",
+    reason: audienceChange ? AUDIENCE_REASON : PLATFORM_ASKED_REASON,
     stateRead: preflightRead,
+    write: policyWrite,
     refusalHint: (code) => (code === "NO_CHANGE" ? "The store settings already read this way; nothing needs changing." : undefined),
   };
 
@@ -174,6 +181,7 @@ export async function configureStore(args: ConfigureStoreArgs): Promise<string> 
 
   const changes = Array.isArray(written.json.changes) ? written.json.changes.filter((line): line is string => typeof line === "string") : lines;
   const say = `The ${store} store settings are saved: ${changes.join("; ")}. Say preflight and I read the store's readiness now.`;
+  const gateLine = written.verdict === "plain" && !text(args.approvalId) ? " This was a plain setting under your own token; no approval page was involved." : "";
 
   return envelope({
     ok: true,
@@ -189,6 +197,6 @@ export async function configureStore(args: ConfigureStoreArgs): Promise<string> 
       sayToPerson: say,
       nextStep: nextStep("preflight", say),
     },
-    hint: `${project}'s ${store} store settings now read as storeSettings: ${changes.join("; ")}. The next submit runs under them; read the store's readiness with ${preflightRead}. The settings page is ${settingsPage}.`,
+    hint: `${project}'s ${store} store settings now read as storeSettings: ${changes.join("; ")}.${gateLine} The next submit runs under them; read the store's readiness with ${preflightRead}. The settings page is ${settingsPage}.`,
   });
 }

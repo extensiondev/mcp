@@ -148,7 +148,7 @@ export async function rebuild(args: ActArgs): Promise<string> {
     api: args.api,
     refusedStatus: "rebuild-refused",
     body: { commitSha: scope.commit, buildEnv: scope.buildEnv },
-    reason: `A rebuild started through this connection spends the workspace's build units, so a workspace owner approves this exact rebuild first. Call again with buildId ${scope.commit} and buildEnv ${scope.buildEnv} so the run matches what was approved.`,
+    reason: `A rebuild is a plain act under the owner's own token, and the platform asked a workspace owner to approve this exact one before it runs. Call again with buildId ${scope.commit} and buildEnv ${scope.buildEnv} so the run matches what was approved.`,
     stateRead: 'extension_builds (action: "list") for the runs it started',
   });
 

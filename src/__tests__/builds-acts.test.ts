@@ -57,7 +57,7 @@ function digestOf(settings: Record<string, any>): string {
   return sha256(JSON.stringify(canonical));
 }
 
-describe("extension_builds starts a rebuild, changes build settings with an approval, and adds a channel", () => {
+describe("extension_builds starts a rebuild, changes build settings as a plain call, and adds a channel", () => {
   let tmp: string;
   let prevXdg: string | undefined;
   let prevApi: string | undefined;
@@ -198,7 +198,43 @@ describe("extension_builds starts a rebuild, changes build settings with an appr
     expect(calls.filter((call) => call.method === "POST")).toHaveLength(1);
   });
 
-  it("configure merges a partial change into the current settings and asks an owner to approve the server's diff", async () => {
+  it("configure applies a merged change with an owner's token and no approval id, minting nothing and reading no approval", async () => {
+    if (process.platform === "win32") return;
+
+    login();
+    const merged = { chrome: CURRENT.chrome, edge: CURRENT.edge, firefox: { ...CURRENT.firefox, enabled: true } };
+    routes[`PUT ${SETTINGS_ROUTE}`] = () => ({ body: { ok: true } });
+
+    const out = JSON.parse(await builds({ action: "configure", buildSettings: { firefox: { enabled: true } }, api: API }));
+    const puts = calls.filter((call) => call.method === "PUT");
+
+    expect(puts).toHaveLength(1);
+    expect(puts[0].body).toEqual({ buildSettings: merged });
+    expect(out.ok).toBe(true);
+    expect(out.status).toBe("build-configured");
+    expect(out.value.buildSettings).toEqual(merged);
+    expect(out.value.trackUrl).toContain("/acme/widget/");
+    expect(out.hint).toContain("no approval page was involved");
+    expect(calls.some((call) => call.url.includes("/api/cli/approvals"))).toBe(false);
+  });
+
+  it("configure is refused OWNER_REQUIRED when the token's minter is not an owner, before any approval is asked", async () => {
+    if (process.platform === "win32") return;
+
+    login();
+    routes[`PUT ${SETTINGS_ROUTE}`] = () => ({
+      status: 403,
+      body: { code: "OWNER_REQUIRED", message: "Changing build settings with a token is a workspace owner action, and this token was minted by an account that is not an owner of this workspace." },
+    });
+
+    const out = JSON.parse(await builds({ action: "configure", buildSettings: { firefox: { enabled: true } }, api: API }));
+
+    expect(out.ok).toBe(false);
+    expect(out.error.platformCode).toBe("OWNER_REQUIRED");
+    expect(calls.some((call) => call.url.includes("/api/cli/approvals"))).toBe(false);
+  });
+
+  it("configure merges a partial change into the current settings and, when the platform asks, requests the approval of the server's diff", async () => {
     if (process.platform === "win32") return;
 
     login();
@@ -243,6 +279,7 @@ describe("extension_builds starts a rebuild, changes build settings with an appr
     });
 
     expect(out.error.message).toContain("approvalId apr_1");
+    expect(out.error.message).toContain("the platform asked a workspace owner");
     expect(out.error.message).not.toContain("irreversible");
   });
 
@@ -339,7 +376,8 @@ describe("extension_builds starts a rebuild, changes build settings with an appr
     expect(puts).toHaveLength(1);
     expect(puts[0].body).toEqual({ buildSettings: merged, approvalId: "apr_1" });
     expect(out.ok).toBe(true);
-    expect(out.status).toBe("configured");
+    expect(out.status).toBe("build-configured");
+    expect(out.hint).not.toContain("no approval page was involved");
   });
 
   it("create-channel adds the channel and answers with the project's channels", async () => {
@@ -362,7 +400,8 @@ describe("extension_builds starts a rebuild, changes build settings with an appr
 
     expect(post?.body).toEqual({ name: "beta", color: "#22c55e" });
     expect(out.ok).toBe(true);
-    expect(out.status).toBe("created");
+    expect(out.status).toBe("channel-created");
+    expect(out.value.trackUrl).toContain("/acme/widget/");
     expect(out.value.channel).toMatchObject({ id: "beta", name: "beta" });
     expect(out.value.channels.map((c: any) => c.name)).toEqual(["beta", "stable"]);
     expect(out.hint).toContain("extension_release_promote");
@@ -392,25 +431,7 @@ describe("extension_builds starts a rebuild, changes build settings with an appr
     expect(calls).toHaveLength(0);
   });
 
-  it("create-channel passes the audience asked for and reports the one the platform gave", async () => {
-    if (process.platform === "win32") return;
-
-    login();
-    routes[`POST ${CHANNELS_ROUTE}`] = () => ({
-      body: { id: "beta", name: "beta", description: "", color: "#22c55e", createdAt: "2026-10-18T18:00:00.000Z", audience: "public" },
-    });
-
-    routes[`GET ${CHANNELS_ROUTE}`] = () => ({ body: [{ id: "beta", name: "beta", audience: "public" }] });
-
-    const out = JSON.parse(await builds({ action: "create-channel", channel: "beta", audience: "public", api: API } as never));
-    const post = calls.find((call) => call.method === "POST");
-
-    expect(post?.body).toEqual({ name: "beta", audience: "public" });
-    expect(out.value.channel.audience).toBe("public");
-    expect(out.warnings).toEqual([]);
-  });
-
-  it("create-channel says so when the platform gave the channel another audience than the one asked for", async () => {
+  it("create-channel passes a private audience through as a plain call", async () => {
     if (process.platform === "win32") return;
 
     login();
@@ -420,12 +441,31 @@ describe("extension_builds starts a rebuild, changes build settings with an appr
 
     routes[`GET ${CHANNELS_ROUTE}`] = () => ({ body: [{ id: "beta", name: "beta", audience: "private" }] });
 
+    const out = JSON.parse(await builds({ action: "create-channel", channel: "beta", audience: "private", api: API } as never));
+    const post = calls.find((call) => call.method === "POST");
+
+    expect(post?.body).toEqual({ name: "beta", audience: "private" });
+    expect(out.status).toBe("channel-created");
+    expect(out.value.channel.audience).toBe("private");
+    expect(out.warnings).toEqual([]);
+    expect(calls.some((call) => call.url.includes("/api/cli/approvals"))).toBe(false);
+  });
+
+  it("create-channel keeps a public audience on a person: it answers approval-required naming the Releases page and sends nothing", async () => {
+    if (process.platform === "win32") return;
+
+    login();
+    routes[`POST ${CHANNELS_ROUTE}`] = () => ({ body: { id: "beta", name: "beta", audience: "public" } });
+
     const out = JSON.parse(await builds({ action: "create-channel", channel: "beta", audience: "public", api: API } as never));
 
-    expect(out.ok).toBe(true);
-    expect(out.status).toBe("created");
-    expect(out.warnings.join(" ")).toMatch(/private, not public/);
-    expect(out.warnings.join(" ")).toMatch(/Audience control on the console Releases page/);
+    expect(out.ok).toBe(false);
+    expect(out.status).toBe("approval-required");
+    expect(out.error.name).toBe("ChannelAudienceNeedsAPerson");
+    expect(out.value).toMatchObject({ action: "create-channel", channel: "beta", audience: "public" });
+    expect(out.value.trackUrl).toMatch(/\/acme\/widget\/releases$/);
+    expect(out.hint).toContain("Releases page");
+    expect(calls.filter((call) => call.method === "POST")).toHaveLength(0);
   });
 
   it("create-channel leaves the audience to the project's visibility when none is asked for", async () => {

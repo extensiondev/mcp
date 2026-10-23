@@ -9,6 +9,7 @@
 import crypto from "node:crypto";
 
 import { approvalUrlFor } from "./approval-outcome";
+import { verdictOfAction } from "./approval-policy";
 import { mintedApproval, rememberMintedApproval } from "./approval-record";
 import { readApprovalSubject } from "./approval-subject";
 import { envelope } from "./envelope";
@@ -67,6 +68,7 @@ export async function requestApprovalAfterRefusal(
     ...input,
     approvalId: undefined,
     enabled: true,
+    platformAsked: true,
   });
 
   return gate.blocked
@@ -298,6 +300,21 @@ export async function evaluateApproval(
   const fingerprint = actionFingerprint(input.action, input.scope);
 
   if (!String(input.approvalId || "").trim()) {
+    const verdict = verdictOfAction(input.action, input.write);
+
+    if (verdict === "console") {
+      return block(
+        input.command,
+        input.refusedStatus || "console-only",
+        "E_CONSOLE_ONLY",
+        "ConsoleOnly",
+        `${input.description} This is a person's act in the extension.dev console and never runs from here, so no approval was requested and nothing was executed.`,
+        { action: input.action, description: input.description },
+      );
+    }
+
+    if (verdict === "plain" && !input.platformAsked) return { blocked: false };
+
     return requestApproval({ base: apiCheck.base, fingerprint, input, doFetch });
   }
 
