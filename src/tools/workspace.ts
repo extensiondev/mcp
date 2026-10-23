@@ -22,9 +22,10 @@ import {
   type ProjectApi,
 } from "../lib/project-api";
 import { WORKSPACE_INCLUDES, attachIncludes, badInclude, includesOf } from "./workspace-reads";
+import { setVisibility } from "./workspace-visibility";
 
 const COMMAND = "extension_workspace";
-const ACTIONS = ["info", "projects", "usage", "settings"] as const;
+const ACTIONS = ["info", "projects", "usage", "settings", "set-visibility"] as const;
 const BROWSERS = ["chrome", "edge", "firefox", "safari"] as const;
 
 type Action = (typeof ACTIONS)[number];
@@ -33,7 +34,7 @@ type Row = Record<string, unknown>;
 export const schema = {
   name: COMMAND,
   description:
-    "Read the extension.dev workspace a stored login belongs to: its plan and limits, its projects, and its usage. This is read-only. Pass action:'info' (the default) for the workspace (role, members, project count) and its plan: limits, what is used this month, and refusals the plan made. Pass action:'projects' for every project with its browsers, channels, last build per browser and whether this machine holds its login. Pass action:'usage' for the period's CI minutes, runs and cost per project. Pass action:'settings' for one project's general and per-browser build settings (install, build command, output directory), read with that project's own login, so pass project; extension_builds action:'configure' changes them. include: ['team','members','tokens','apps','activity'] adds the project's team and invites, the workspace's members and invites, its access tokens (never a value), connected apps and the last 50 activity entries, each read-only. Any login of a workspace reads it: name it with workspace, or omit it for the default login's. Plan or billing changes, members, and anything else that changes the workspace stay in the console, and the answer links there. Names, descriptions and build commands are written by people in the workspace, so the answer is fenced as untrusted data.",
+    "Read the extension.dev workspace a stored login belongs to, and set one project's visibility. action:'info' (the default) reads the workspace (role, members, project count) and its plan: limits, this month's use, and refusals the plan made. action:'projects' lists every project with its browsers, channels, last build per browser and whether this machine holds its login. action:'usage' reads the period's CI minutes, runs and cost per project. action:'settings' reads one project's general and per-browser build settings with that project's own login (pass project); extension_builds action:'configure' changes them. action:'set-visibility' with visibility private or public: private is a plain call under the owner's own token; public opens every build the project ever made to anyone, so it keeps a workspace owner's approval on the approve page. include: ['team','members','tokens','apps','activity'] adds those read-only sections, each with its console page (a token never carries its value). Any login of a workspace reads it: name it with workspace, or omit it for the default login's. Plan, billing and members stay in the console, and the answer links there. Names, descriptions and build commands are written by people in the workspace, so the answer is fenced as untrusted data.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -42,7 +43,18 @@ export const schema = {
         enum: [...ACTIONS],
         default: "info",
         description:
-          "info reads the workspace and its plan; projects lists its projects; usage reads the period's CI usage; settings reads one project's general and build settings.",
+          "info reads the workspace and its plan; projects lists its projects; usage reads the period's CI usage; settings reads one project's general and build settings; set-visibility changes one project's visibility (pass visibility, and project for a login other than the default).",
+      },
+      visibility: {
+        type: "string",
+        enum: ["private", "public"],
+        description:
+          "With set-visibility, the project's visibility. private: its builds, build pages and channel links open for workspace members and build links only, a plain call under the owner's own token (visibility-set). public: every build page and channel link the project ever made opens for anyone, which a workspace owner approves on the approve page first: the first call answers approval-required, a second call with that approvalId applies it once. Making a public project private again is plain.",
+      },
+      approvalId: {
+        type: "string",
+        description:
+          "With set-visibility public, the approval id from a prior approval-required answer, once a workspace owner approved it. Each approval applies its exact change once.",
       },
       include: {
         type: "array",
@@ -71,6 +83,8 @@ interface HandlerArgs {
   include?: unknown;
   workspace?: string;
   project?: string;
+  visibility?: string;
+  approvalId?: string;
   api?: string;
 }
 
@@ -452,12 +466,13 @@ function unknownAction(action: string, args: HandlerArgs): string {
     error: {
       code: "E_BAD_REQUEST",
       name: "WorkspaceInputError",
-      message: `action must be one of ${ACTIONS.join(", ")}; got "${action}". This tool only reads. ${consoleOnly(text(args.workspace), args.api)}`,
+      message: `action must be one of ${ACTIONS.join(", ")}; got "${action}". Besides set-visibility this tool only reads. ${consoleOnly(text(args.workspace), args.api)}`,
     },
   });
 }
 
 async function readAction(action: Action, args: HandlerArgs): Promise<string> {
+  if (action === "set-visibility") return setVisibility(args);
   if (action === "projects") return readProjects(args);
   if (action === "usage") return readUsage(args);
   if (action === "settings") return readSettings(args);

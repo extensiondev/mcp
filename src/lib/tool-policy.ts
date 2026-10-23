@@ -87,7 +87,7 @@ export const TOOL_TITLES: Record<string, string> = {
   extension_publish: "Publish a build link",
   extension_release_status: "Read the release status",
   extension_builds: "Read and rebuild builds",
-  extension_workspace: "Read the workspace",
+  extension_workspace: "Read or change the workspace",
   extension_release_promote: "Promote a release",
   extension_submit: "Submit to a store",
 };
@@ -204,7 +204,7 @@ export const TOOL_POLICY: Record<string, ToolPolicy> = {
   },
   extension_workspace: {
     group: "platform",
-    annotations: reads(true),
+    annotations: acts({ openWorldHint: true }),
     untrusted: true,
   },
   extension_release_promote: {

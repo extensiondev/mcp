@@ -33,6 +33,7 @@ export type TrackPage =
   | "build-settings"
   | "store-settings"
   | "channels"
+  | "visibility"
   | "share-links"
   | "access-tokens"
   | "team"
@@ -69,6 +70,7 @@ const PROJECT_PAGES: Record<Exclude<TrackPage, "console" | "workspace" | "member
   "build-settings": () => ConsoleProjectPage.projectSettingsSection("build"),
   "store-settings": () => ConsoleProjectPage.projectSettingsSection("stores"),
   channels: () => ConsoleProjectPage.projectSettingsSection("channels"),
+  visibility: () => ConsoleProjectPage.projectSettingsSection("visibility"),
   "share-links": () => ConsoleProjectPage.projectSettingsSection("share-links"),
   "access-tokens": () => ConsoleProjectPage.projectSettingsSection("access-tokens"),
   team: () => ConsoleProjectPage.projectSettingsSection("team"),

@@ -197,14 +197,14 @@ describe("extension_workspace reads a workspace with any project login it holds"
     });
   }
 
-  it("is a read-only platform tool fenced as untrusted, since names and build commands are user-written", () => {
+  it("is a platform tool fenced as untrusted, since names and build commands are user-written, whose one write is set-visibility", () => {
     expect(TOOL_POLICY.extension_workspace).toMatchObject({
       group: "platform",
       untrusted: true,
-      annotations: { readOnlyHint: true, destructiveHint: false },
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
     });
 
-    expect(schema.inputSchema.properties.action.enum).toEqual(["info", "projects", "usage", "settings"]);
+    expect(schema.inputSchema.properties.action.enum).toEqual(["info", "projects", "usage", "settings", "set-visibility"]);
   });
 
   it("reads the workspace and its plan by default, from the stored login's workspace", async () => {

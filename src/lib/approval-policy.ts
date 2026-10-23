@@ -17,11 +17,12 @@ export type ApprovalVerdict = "plain" | "approval" | "console";
  * mint on their own; the platform may still ask for one (an audience change
  * it computed from the stored state), and that request is honored.
  * "approval" acts mint before they run. "console" acts never reach the
- * platform from here. The two audience exceptions are computed from the
- * write, never from a flag: a listed or public submission mode, and a public
- * channel audience (asked at creation or set on an existing channel), both
- * keep the page; a channel delete is a person's act in the console, like a
- * project delete. The platform holds the same table in
+ * platform from here. The three audience exceptions are computed from the
+ * write, never from a flag: a listed or public submission mode, a public
+ * channel audience (asked at creation or set on an existing channel) and a
+ * public project visibility, which opens every build the project ever made,
+ * all keep the page; a channel delete is a person's act in the console, like
+ * a project delete. The platform holds the same table in
  * www src/services/registry/approval-policy.ts; a row changed on one side is
  * changed on both.
  */
@@ -33,6 +34,7 @@ export const APPROVAL_POLICY = {
   "extension_builds.recheck": "plain",
   "extension_builds.create-channel": "plain",
   "extension_builds.configure-channel": "plain",
+  "extension_project.visibility": "plain",
   extension_submit: "approval",
   "extension_store.publish": "approval",
   "extension_store.cancel": "approval",
@@ -44,6 +46,7 @@ export const APPROVAL_POLICY = {
   "extension_shares.public": "approval",
   "extension_builds.channel-audience": "approval",
   "extension_settings.store-public-mode": "approval",
+  "extension_project.visibility-public": "approval",
   "extension_store.disconnect": "console",
   "extension_builds.delete-channel": "console",
   "extension_project.delete": "console",
@@ -58,6 +61,7 @@ export interface PolicyWrite {
   submissionMode?: string;
   releaseChannel?: string;
   audience?: string;
+  visibility?: string;
 }
 
 const lower = (value: unknown): string => (typeof value === "string" ? value.trim().toLowerCase() : "");
@@ -74,12 +78,18 @@ export function publicChannelAudience(write: PolicyWrite): boolean {
   return lower(write.audience) === "public";
 }
 
+export function publicProjectVisibility(write: PolicyWrite): boolean {
+  return lower(write.visibility) === "public";
+}
+
 export function approvalVerdict(act: PolicyAct, write: PolicyWrite = {}): ApprovalVerdict {
   if (act === "extension_settings.store" && publicSubmissionMode(write)) return APPROVAL_POLICY["extension_settings.store-public-mode"];
 
   if ((act === "extension_builds.create-channel" || act === "extension_builds.configure-channel") && publicChannelAudience(write)) {
     return APPROVAL_POLICY["extension_builds.channel-audience"];
   }
+
+  if (act === "extension_project.visibility" && publicProjectVisibility(write)) return APPROVAL_POLICY["extension_project.visibility-public"];
 
   return APPROVAL_POLICY[act];
 }

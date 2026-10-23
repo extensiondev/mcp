@@ -11,6 +11,7 @@ const RULED_TABLE: Array<[keyof typeof APPROVAL_POLICY, "plain" | "approval" | "
   ["extension_builds.recheck", "plain"],
   ["extension_builds.create-channel", "plain"],
   ["extension_builds.configure-channel", "plain"],
+  ["extension_project.visibility", "plain"],
   ["extension_submit", "approval"],
   ["extension_store.publish", "approval"],
   ["extension_store.cancel", "approval"],
@@ -22,6 +23,7 @@ const RULED_TABLE: Array<[keyof typeof APPROVAL_POLICY, "plain" | "approval" | "
   ["extension_shares.public", "approval"],
   ["extension_builds.channel-audience", "approval"],
   ["extension_settings.store-public-mode", "approval"],
+  ["extension_project.visibility-public", "approval"],
   ["extension_store.disconnect", "console"],
   ["extension_builds.delete-channel", "console"],
   ["extension_project.delete", "console"],
@@ -62,6 +64,13 @@ describe("the approval policy table holds Cezar's ruling of 2026-10-23 (ledger 1
     expect(approvalVerdict("extension_builds.configure-channel", { audience: "private" })).toBe("plain");
     expect(approvalVerdict("extension_builds.configure-channel", { audience: "Public" })).toBe("approval");
     expect(approvalVerdict("extension_builds.delete-channel")).toBe("console");
+  });
+
+  it("keeps a public project visibility on the approve page while a private one is plain", () => {
+    expect(approvalVerdict("extension_project.visibility")).toBe("plain");
+    expect(approvalVerdict("extension_project.visibility", { visibility: "private" })).toBe("plain");
+    expect(approvalVerdict("extension_project.visibility", { visibility: "public" })).toBe("approval");
+    expect(approvalVerdict("extension_project.visibility", { visibility: "Public" })).toBe("approval");
   });
 
   it("treats an act the table does not name as one that needs an approval", () => {
