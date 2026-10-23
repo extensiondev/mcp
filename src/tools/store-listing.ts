@@ -32,6 +32,13 @@ import {
 } from "../lib/approval-gate";
 import { approvalRoundTrip } from "../lib/approval-outcome";
 import { badShipRequest, isRow, openShipApi, text } from "../lib/ship-act";
+import {
+  behindSentence,
+  deferredSentence,
+  digestMismatchOf,
+  withoutFields,
+  type DigestMismatch,
+} from "../lib/store-listing-digest";
 import { pushAnswer, pushSentence, readPushState, sendListing } from "../lib/store-listing-push";
 import { STORE_MD_FILENAME } from "../lib/store-md";
 import {
@@ -369,11 +376,24 @@ const chromeListingLine = (synced: string[]): string =>
     ? " Chrome's own listing fields, the privacy policy URL included, cannot be written through Google's API: paste them once in the item's dashboard, and extension.dev keeps this copy as the record."
     : "";
 
+/* @invariant A LISTING THE PLATFORM HASHES DIFFERENTLY IS SENT ONCE MORE
+ * WITH ONLY THE FIELDS IT KNOWS. Both sides hash the fields present in the
+ * body, so a server that declares a field the platform's build does not
+ * take can never match its fingerprint with the full listing. When the
+ * fingerprints differ, the fields the platform cannot know are read from
+ * digest.platform on its refusal, or from the set the previous release
+ * declared when the refusal names nothing, and the sync is sent again once
+ * without them, hashing exactly what was sent; the answer then names the
+ * fields left out in deferred and both field sets in digest. A second
+ * mismatch is answered with the same digest and which side is behind. The
+ * same retry covers the approval leg, whose scope was minted for the subset.
+ */
 async function syncOne(
   api: ProjectApi,
   args: ListingArgs,
   store: ListingStore,
   patch: ListingPatch,
+  retried?: DigestMismatch,
 ): Promise<Row | { out: string }> {
   const approvalId = text(args.approvalId);
   const { sent, resend } = await sendListing(api, store, {
@@ -385,6 +405,14 @@ async function syncOne(
     ConsoleProjectPage.submissionsStore(store),
     args.api,
   );
+
+  const subsetRetry = async (mismatch: DigestMismatch): Promise<Row | { out: string }> => {
+    const again = await syncOne(api, args, store, withoutFields(patch, mismatch.deferred), mismatch);
+
+    return "out" in again || again.status === "refused"
+      ? again
+      : { ...again, digest: mismatch.digest, deferred: mismatch.deferred };
+  };
 
   const pushRow = (raw: unknown): Row => {
     const push = pushAnswer(raw, resend, pushUrl);
@@ -435,12 +463,16 @@ async function syncOne(
     if (
       text(asked.fingerprint) !== actionFingerprint(STORE_LISTING_ACTION, scope)
     ) {
+      const mismatch = retried ?? digestMismatchOf(store, sent.body);
+      if (!retried && mismatch.deferred.length) return subsetRetry(mismatch);
+
       return {
         store,
         status: "refused",
         code: "LISTING_DIGEST_MISMATCH",
-        message:
-          "The platform hashes this listing differently from this server, so an approval of it could never be used. No approval was requested.",
+        message: behindSentence(mismatch, Boolean(retried)),
+        digest: mismatch.digest,
+        trackUrl: pushUrl,
       };
     }
 
@@ -479,6 +511,11 @@ async function syncOne(
           code: text(error.platformCode) || text(error.name),
           message: text(error.message),
         };
+  }
+
+  if (approvalId && !retried && sent.code === "APPROVAL_SCOPE_MISMATCH") {
+    const mismatch = digestMismatchOf(store, sent.body);
+    if (mismatch.deferred.length) return subsetRetry(mismatch);
   }
 
   const answered = approvalRoundTrip({
@@ -585,6 +622,7 @@ export async function syncListing(args: ListingArgs): Promise<string> {
   const api = opened.api;
   const stores: Row = {};
   const unreadBack: string[] = [];
+  const said: string[] = [];
 
   for (const [store, local] of locals) {
     if (!filledFields(local.patch).length) {
@@ -601,9 +639,17 @@ export async function syncListing(args: ListingArgs): Promise<string> {
 
     delete result.privacyPage;
 
+    const deferred = Array.isArray(result.deferred) ? (result.deferred as string[]) : [];
+    const filled = filledFields(local.patch).filter((field) => !deferred.includes(field));
+
+    if (deferred.length) {
+      const kept = Object.keys(local.patch.listing).filter((field) => !deferred.includes(field)).length;
+      said.push(deferredSentence(deferred, kept, result.status === "approval-required"));
+    } else if (result.code === "LISTING_DIGEST_MISMATCH") said.push(text(result.message));
+
     stores[store] = {
       ...result,
-      filled: filledFields(local.patch),
+      filled,
       ...(local.iconMissing ? { iconMissing: local.iconMissing } : {}),
       ...(local.skipped.length ? { skipped: local.skipped } : {}),
       ...(blocking ? { stillBlocking: blocking } : {}),
@@ -615,9 +661,9 @@ export async function syncListing(args: ListingArgs): Promise<string> {
     .map((row) => (isRow(row.appStoreConnect) ? row.appStoreConnect : null))
     .find(Boolean);
   const pushState = push ? readPushState(push) : null;
-  const say = pushState
-    ? pushSentence(pushState, push?.resend === "refused" ? "refused" : "none")
-    : "";
+  if (pushState) said.push(pushSentence(pushState, push?.resend === "refused" ? "refused" : "none"));
+
+  const say = said.join(" ");
   const approvals = rows.filter((row) => row.status === "approval-required");
   const failed = rows.filter(
     (row) =>
