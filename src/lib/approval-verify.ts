@@ -12,6 +12,7 @@ import {
   APPROVAL_REJECTED_STATUS,
   pendingApproval,
 } from "./approval-outcome";
+import { storedProjectId } from "./approval-record";
 import { readTokenClaims } from "./credential-source";
 import { envelope } from "./envelope";
 import { parseJsonObject } from "./json-object";
@@ -221,11 +222,12 @@ export async function verifyApproval(params: {
     const mintedFor = minted ? `${minted.workspace}/${minted.project}` : "";
     const claims = readTokenClaims(input.token);
     const resolved = claims ? `${claims.workspace}/${claims.project}` : "";
+    const renamed = Boolean(resolved && resolved !== mintedFor && minted?.projectId && storedProjectId(input.api, resolved) === minted.projectId);
     const known = !mintedFor
       ? `The platform does not know approval ${approvalId}; it may have been minted for another server or project.`
-      : resolved && resolved !== mintedFor
+      : resolved && resolved !== mintedFor && !renamed
         ? `Approval ${approvalId} was minted for ${mintedFor} and this call resolved ${resolved}, so the platform does not know it for this project.`
-        : `The platform does not know approval ${approvalId} for ${mintedFor}, the project this machine minted it for at ${minted!.mintedAt}.`;
+        : `The platform does not know approval ${approvalId} for ${mintedFor}${renamed ? ` (now ${resolved})` : ""}, the project this machine minted it for at ${minted!.mintedAt}.`;
 
     return block(
       input.command,

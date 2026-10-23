@@ -13,7 +13,7 @@ import {
 
 import { openApprovalOnce } from "./approval-open";
 import { bindApprovalProject } from "./approval-record";
-import { envelope, isEnvelope } from "./envelope";
+import { envelope, isEnvelope, type Envelope } from "./envelope";
 import {
   TOOL_POLICY,
   disabledToolEnvelope,
@@ -91,6 +91,35 @@ function refusedFrame(text: string): ToolFrame {
   return { content: [{ type: "text" as const, text }], isError: true };
 }
 
+export function withNote(result: string, note: string | undefined): string {
+  if (!note) return result;
+
+  let parsed: unknown;
+
+  try {
+    parsed = JSON.parse(result);
+  } catch {
+    return result;
+  }
+
+  if (!isEnvelope(parsed)) return result;
+
+  const frame = parsed as Envelope & { hint?: string };
+  const value = frame.value && typeof frame.value === "object" && !Array.isArray(frame.value) ? (frame.value as Record<string, unknown>) : {};
+  const said = typeof value.note === "string" && value.note.trim() ? `${value.note.trim()} ${note}` : note;
+
+  return envelope({
+    ok: frame.ok,
+    command: frame.command,
+    status: frame.status,
+    value: { ...value, note: said },
+    error: frame.error ?? undefined,
+    warnings: frame.warnings,
+    ...(frame.truncated !== undefined ? { truncated: frame.truncated } : {}),
+    ...(frame.hint ? { hint: frame.hint } : {}),
+  });
+}
+
 export function installToolHandlers(server: Server, setup: ToolHandlerOptions): void {
   const { tools, options } = setup;
   const toolMap = new Map(tools.map((tool) => [tool.schema.name, tool]));
@@ -161,7 +190,7 @@ export function installToolHandlers(server: Server, setup: ToolHandlerOptions): 
       const result = await withCallApi(normalizedArgs.api, () =>
         run(
           async () => {
-            const answer = await tool.handler(normalizedArgs);
+            const answer = withNote(await tool.handler(normalizedArgs), bound.note);
 
             if (!platform) return answer;
 
