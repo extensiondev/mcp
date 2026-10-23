@@ -9,13 +9,17 @@
 import fs from "node:fs";
 import path from "node:path";
 
-import { engineBrowserName } from "./browser-family";
+import { CHROMIUM_FAMILY, GECKO_FAMILY, WEBKIT_FAMILY, engineBrowserName } from "./browser-family";
 import { engineProjectRoot } from "./session-paths";
 
 type Manifest = Record<string, unknown>;
 
 const ACTION_KEYS = ["action", "browser_action", "page_action"] as const;
 const SIDEBAR_KEYS = ["side_panel", "sidebar_action"] as const;
+const ENGINE_SESSION_DIR = "extension-js";
+const KNOWN_DIST_BROWSERS: ReadonlySet<string> = new Set(
+  [...CHROMIUM_FAMILY, ...GECKO_FAMILY, ...WEBKIT_FAMILY].map(engineBrowserName),
+);
 
 export interface ResolvedManifestKeys {
   background: unknown;
@@ -29,6 +33,7 @@ export interface ResolvedManifestKeys {
 
 export interface ManifestByBrowser {
   browsers: string[];
+  otherFolders: string[];
   resolved: Record<string, ResolvedManifestKeys>;
   differences: string[];
   emitted: Record<string, Manifest>;
@@ -105,17 +110,33 @@ export function resolvedManifestKeys(manifest: Manifest): ResolvedManifestKeys {
   };
 }
 
-function builtBrowsers(projectPath: string): string[] {
+/* @invariant A DIST FOLDER IS A BROWSER ONLY WHEN THE ENGINE COULD HAVE
+ * WRITTEN IT. The engine builds into dist/<browser> for the browser names in
+ * browser-family.ts (firefox-based is written as gecko-based), so only those
+ * names are read as browsers and carry an emitted manifest here; every other
+ * folder under dist, a hand copy such as chrome-test-host or a test fixture
+ * with its own manifest.json, is listed by name under otherFolders and its
+ * manifest is never read, and the engine's own dist/extension-js session
+ * folder is neither. On 2026-10-23 chrome-dev-assets, chrome-test-host,
+ * chrome-license and firefox-test-host were answered as browsers. */
+function distFolders(projectPath: string): { browsers: string[]; otherFolders: string[] } {
   const dist = path.join(engineProjectRoot(projectPath), "dist");
 
   try {
-    return fs
+    const folders = fs
       .readdirSync(dist, { withFileTypes: true })
-      .filter((entry) => entry.isDirectory() && readManifest(path.join(dist, entry.name, "manifest.json")))
+      .filter((entry) => entry.isDirectory() && entry.name !== ENGINE_SESSION_DIR)
       .map((entry) => entry.name)
       .sort();
+
+    return {
+      browsers: folders.filter(
+        (name) => KNOWN_DIST_BROWSERS.has(name) && readManifest(path.join(dist, name, "manifest.json")),
+      ),
+      otherFolders: folders.filter((name) => !KNOWN_DIST_BROWSERS.has(name)),
+    };
   } catch {
-    return [];
+    return { browsers: [], otherFolders: [] };
   }
 }
 
@@ -125,7 +146,9 @@ export function manifestByBrowser(projectPath: string): ManifestByBrowser {
   const resolved: Record<string, ResolvedManifestKeys> = {};
   const sourceDivergence: Record<string, string[]> = {};
 
-  for (const browser of builtBrowsers(projectPath)) {
+  const folders = distFolders(projectPath);
+
+  for (const browser of folders.browsers) {
     const manifest = builtManifest(projectPath, browser);
     if (!manifest) continue;
 
@@ -144,6 +167,7 @@ export function manifestByBrowser(projectPath: string): ManifestByBrowser {
 
   return {
     browsers,
+    otherFolders: folders.otherFolders,
     resolved,
     differences,
     emitted,

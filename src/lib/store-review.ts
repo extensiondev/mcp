@@ -10,6 +10,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 import { isGeckoFamily } from "./browser-family";
+import { isDevelopmentBuild } from "./build-type";
 
 export type ReviewRiskCode =
   | "BROAD_HOST_ACCESS"
@@ -246,10 +247,6 @@ export function reviewCoverageNotes(report: ReviewReport): string[] {
   }
 
   return notes;
-}
-
-export function isDevelopmentBuild(files: Array<{ path: string }>): boolean {
-  return files.some((f) => /hot-update\./.test(f.path) || /(^|\/)extension-js(-devtools)?\//.test(f.path));
 }
 
 const MANIFEST_KEY_USES: Record<string, (manifest: Record<string, unknown>) => boolean> = {

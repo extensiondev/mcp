@@ -41,7 +41,7 @@
       "name": "extension_analyze",
       "tier": "see",
       "group": "local",
-      "description": "Analyze a BUILT extension on disk: file sizes, declared entry points, permissions, bundle composition, store-readiness checks, and manifestByBrowser, the emitted manifest of every browser built under dist with the resolved keys (background, action, sidebar, permissions, host_permissions, chrome_url_overrides, browser_specific_settings) that differ between them. This is static only: it reads dist/<browser> from the filesystem and never touches a browser, so build first with extension_build. Use extension_inspect for a running extension's live DOM and console.",
+      "description": "Analyze a BUILT extension on disk: sizes, entry points, permissions, bundle composition, store-readiness checks, and manifestByBrowser, the emitted manifest per built browser with the resolved keys (background, action, sidebar, permissions, host_permissions, chrome_url_overrides, browser_specific_settings) that differ; other dist folders are named, not read as browsers. Static: it reads dist/<browser> only. A dist extension_dev rewrote is a development build: buildType says so, store checks are skipped, extension_build makes the build to analyze. extension_inspect reads a running extension.",
       "gate": "none",
       "samplePrompt": "What is in the built extension and is anything too big for the store?",
       "readOnly": true,

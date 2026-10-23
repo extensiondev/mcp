@@ -12,7 +12,8 @@ import path from "node:path";
 import { PROJECT_PATH } from "../lib/common-schema";
 import { envelope } from "../lib/envelope";
 import { engineBrowserName } from "../lib/browser-family";
-import { isDevelopmentBuild, reviewCoverageNotes, reviewRiskWarnings, reviewRisksReport } from "../lib/store-review";
+import { readBuildType } from "../lib/build-type";
+import { reviewCoverageNotes, reviewRiskWarnings, reviewRisksReport } from "../lib/store-review";
 import { engineProjectRoot } from "../lib/session-paths";
 import { manifestByBrowser } from "../lib/manifest-by-browser";
 
@@ -21,7 +22,7 @@ const COMMAND = "extension_analyze";
 export const schema = {
   name: "extension_analyze",
   description:
-    "Analyze a BUILT extension on disk: file sizes, declared entry points, permissions, bundle composition, store-readiness checks, and manifestByBrowser, the emitted manifest of every browser built under dist with the resolved keys (background, action, sidebar, permissions, host_permissions, chrome_url_overrides, browser_specific_settings) that differ between them. This is static only: it reads dist/<browser> from the filesystem and never touches a browser, so build first with extension_build. Use extension_inspect for a running extension's live DOM and console.",
+    "Analyze a BUILT extension on disk: sizes, entry points, permissions, bundle composition, store-readiness checks, and manifestByBrowser, the emitted manifest per built browser with the resolved keys (background, action, sidebar, permissions, host_permissions, chrome_url_overrides, browser_specific_settings) that differ; other dist folders are named, not read as browsers. Static: it reads dist/<browser> only. A dist extension_dev rewrote is a development build: buildType says so, store checks are skipped, extension_build makes the build to analyze. extension_inspect reads a running extension.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -163,7 +164,9 @@ export async function handler(args: {
   }
 
   const sourcemapSize = byType.sourcemap?.size ?? 0;
-  const buildType = isDevelopmentBuild(files) ? "development" : "production";
+  const buildTypeReading = readBuildType(distPath, files);
+  const buildType = buildTypeReading.buildType;
+  const development = buildType === "development";
   const archiveSize = byType.archive?.size ?? 0;
   const shippableSize = totalSize - sourcemapSize - archiveSize;
 
@@ -252,33 +255,37 @@ export async function handler(args: {
     }
   }
 
-  const note =
-    buildType === "development"
-      ? `This dist holds the dev runtime (hot-update or the engine's companion files) and is a dev build; run extension_build for production sizes. shippableSize excludes sourcemaps.`
-      : sourcemapSize > 0
-        ? `This dist contains ${formatBytes(sourcemapSize)} of sourcemaps; they ship unless the build strips them. shippableSize excludes them.`
-        : undefined;
+  const devSentence = development
+    ? `dist/${engineBrowserName(browser)} is a development build (${buildTypeReading.markers.join(", ")}), the one extension_dev writes; store checks (review risks, sourcemaps, store readiness) are skipped for a development build. extension_build with browser: "${browser}" produces the build to analyze.`
+    : undefined;
+  const note = development
+    ? `${devSentence} shippableSize excludes sourcemaps.`
+    : sourcemapSize > 0
+      ? `This dist contains ${formatBytes(sourcemapSize)} of sourcemaps; they ship unless the build strips them. shippableSize excludes them.`
+      : undefined;
   const archiveNote =
     archiveSize > 0
       ? `This dist contains ${formatBytes(archiveSize)} of .zip archive(s) (store packaging output, written into dist by zip builds). shippableSize excludes them so the packaged copy does not double-count the files it contains.`
       : undefined;
 
-  const review = reviewRisksReport({
-    distPath,
-    browser,
-    manifest,
-    files,
-    development: buildType === "development",
-  });
-  const risks = review.risks;
+  const review = development ? null : reviewRisksReport({ distPath, browser, manifest, files, development });
+  const risks = review?.risks ?? null;
 
   const result = {
     browser,
     distPath,
     reviewRisks: risks,
-    reviewCoverage: { unreadable: review.unreadable, notScanned: review.notScanned },
+    reviewCoverage: review ? { unreadable: review.unreadable, notScanned: review.notScanned } : null,
     entrypoints,
     buildType,
+    buildTypeSource: buildTypeReading.source,
+    buildTypeMarkers: buildTypeReading.markers,
+    ...(development
+      ? {
+          note: devSentence,
+          nextStep: { tool: "extension_build", browser, say: `Run extension_build with browser: "${browser}", then extension_analyze again.` },
+        }
+      : {}),
     totalSize,
     totalSizeFormatted: formatBytes(totalSize),
     shippableSize,
@@ -318,23 +325,23 @@ export async function handler(args: {
               sizeFormatted: formatBytes(f.size),
             })),
         }),
-    storeReadiness: {
-      hasManifest: fs.existsSync(manifestPath),
-      hasIcons: files.some(
-        (f) => f.type === "image" && f.path.includes("icon"),
-      ),
-      has128Icon: (() => {
-        const icon = (manifest.icons as Record<string, unknown> | undefined)?.["128"];
+    storeReadiness: development
+      ? null
+      : {
+          hasManifest: fs.existsSync(manifestPath),
+          hasIcons: files.some((f) => f.type === "image" && f.path.includes("icon")),
+          has128Icon: (() => {
+            const icon = (manifest.icons as Record<string, unknown> | undefined)?.["128"];
 
-        return typeof icon === "string" && fs.existsSync(path.join(distPath, icon.replace(/^\.?\//, "")));
-      })(),
-      noSourceMaps: !files.some((f) => f.type === "sourcemap"),
-      noPromoAssets: !files.some((f) => PROMO_RE.test(f.path)),
-      under10MB: totalSize - archiveSize < 10 * 1024 * 1024,
-    },
+            return typeof icon === "string" && fs.existsSync(path.join(distPath, icon.replace(/^\.?\//, "")));
+          })(),
+          noSourceMaps: !files.some((f) => f.type === "sourcemap"),
+          noPromoAssets: !files.some((f) => PROMO_RE.test(f.path)),
+          under10MB: totalSize - archiveSize < 10 * 1024 * 1024,
+        },
     storeReadinessNotes: {
       under10MB: "this server's own 10 MB sanity threshold, not a store limit (the stores publish their own, larger caps)",
-      hasIcons: "a file whose name contains 'icon' under the image types this server recognises",
+      hasIcons: "a file whose name contains 'icon' under the image types this server recognizes",
     },
   };
 
@@ -343,9 +350,10 @@ export async function handler(args: {
     command: COMMAND,
     status: "analyzed",
     value: result,
+    ...(devSentence ? { hint: devSentence } : {}),
     warnings: [
-      ...reviewRiskWarnings(risks),
-      ...reviewCoverageNotes(review),
+      ...(risks ? reviewRiskWarnings(risks) : []),
+      ...(review ? reviewCoverageNotes(review) : []),
       ...sizeWarnings,
       note,
       archiveNote,
