@@ -77,9 +77,9 @@ export function submissionModeOf(json: Row): StoreSubmissionMode | null {
 export async function readConnectionsAndModes(
   args: { project?: string; api?: string; buildSha?: string; channel?: string },
   browsers: string[],
-): Promise<{ connections: Record<string, ConnectionRecord>; modes: Record<string, StoreSubmissionMode> }> {
+): Promise<{ connections: Record<string, ConnectionRecord>; modes: Record<string, StoreSubmissionMode>; reports: Record<string, Row> }> {
   const opened = await openShipApi("extension_submit", args, { action: "submit" }).catch(() => null);
-  if (!opened || "refused" in opened) return { connections: {}, modes: {} };
+  if (!opened || "refused" in opened) return { connections: {}, modes: {}, reports: {} };
 
   const body: Row = {};
   if (text(args.buildSha)) body.buildId = text(args.buildSha);
@@ -90,10 +90,13 @@ export async function readConnectionsAndModes(
   );
   const connections: Record<string, ConnectionRecord> = {};
   const modes: Record<string, StoreSubmissionMode> = {};
+  const reports: Record<string, Row> = {};
 
   browsers.forEach((browser, i) => {
     const read = reads[i];
     if (!read || !read.ok || !isRow(read.json)) return;
+
+    reports[browser] = read.json;
 
     const connection = connectionOf(read.json);
     if (connection) connections[browser] = connection;
@@ -102,7 +105,7 @@ export async function readConnectionsAndModes(
     if (mode) modes[browser] = mode;
   });
 
-  return { connections, modes };
+  return { connections, modes, reports };
 }
 
 export async function readConnections(

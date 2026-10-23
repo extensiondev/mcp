@@ -46,6 +46,7 @@ export interface PlatformSubmission {
   submittedAt?: string;
   failureReason?: string;
   storeUrl?: string;
+  sourceArchive?: string;
   storeReview?: StoreReview;
   storeUpload?: StoreUpload;
   run: SubmissionRun;
@@ -134,6 +135,7 @@ export function toSubmission(raw: Record<string, unknown>): PlatformSubmission |
     ["submittedAt", raw.submittedAt],
     ["failureReason", raw.failureReason],
     ["storeUrl", raw.storeUrl],
+    ["sourceArchive", raw.sourceArchive],
   ];
 
   for (const [key, value] of fields) {

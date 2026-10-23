@@ -15,6 +15,11 @@ import { API_BASE } from "../lib/common-schema";
 import { resolveCredential } from "../lib/credential-source";
 import { envelope, type ErrorCode } from "../lib/envelope";
 import { PROJECT_TOKEN_INPUT, noStoredLoginHint } from "../lib/credentials";
+import {
+  firefoxConnectUrl,
+  firefoxSourcesOutcome,
+  sourceArchiveOf,
+} from "../lib/firefox-store";
 import { resolveApiBase, safeApiBase } from "../lib/login-flow";
 import { identityHeaders } from "../lib/session-identity";
 import { REFUNDED_SAY, REFUNDED_STEP } from "../lib/ship-act";
@@ -149,7 +154,7 @@ export interface SubmitToolArgs {
 export const schema = {
   name: "extension_submit",
   description:
-    "Submit a built extension to a store's review through extension.dev, which holds the store credentials and runs the upload on the platform (Chrome Web Store, Firefox AMO, Edge Add-ons, App Store for Safari), and run the store steps around it: action preflight, sync-listing, publish, cancel and rollout. It records a submission on the platform and answers what the platform recorded after the act in value.outcome and every link it made or touched in value.links, waiting up to waitSeconds for the record and answering submit-dispatched until the record confirms; submitted-partially names the stores the platform did not record, and submit-unconfirmed means no usable answer came back, so read extension_release_status before submitting again. Not for sharing, deploying or sending a link: that is extension_publish. Not for a local zip: that is extension_build. It defaults to a dry run that dispatches nothing; pass dryRun:false to submit, which needs a token issued by a workspace owner and a workspace owner's approval of that exact submission, every time, and is irreversible. Submissions land least public: Chrome and Edge as drafts that enter review only through action:'publish', Firefox unlisted unless the project saved a release channel, Safari as a TestFlight draft. The project comes from your stored login (extension_auth; tokens live at most 7 days, so CI re-mints from the console's Access tokens page), and project picks one of several logins. Every answer carries value.trackUrl, the console page for what it did, and value.nextStep {kind, say, url}, the next thing to do or say.",
+    "Submit a built extension to a store's review through extension.dev, which holds the store credentials and runs the upload (Chrome Web Store, Firefox AMO, Edge Add-ons, App Store for Safari), and run the store steps around it: action preflight, sync-listing, publish, cancel and rollout. It records a submission and answers what the platform recorded in value.outcome and every link it touched in value.links, waiting up to waitSeconds for the record and answering submit-dispatched until it confirms; submitted-partially names the stores not recorded, and submit-unconfirmed means no usable answer came back, so read extension_release_status before submitting again. Not for sharing, deploying or sending a link (extension_publish) or a local zip (extension_build). It defaults to a dry run that dispatches nothing; dryRun:false submits, which needs a token issued by a workspace owner and a workspace owner's approval of that exact submission, every time, and is irreversible. Submissions land least public: Chrome and Edge as drafts that enter review only through action:'publish', Firefox unlisted unless the project saved a release channel, Safari as a TestFlight draft. A Firefox upload carries the source repository at the built commit when the Firefox store setting Source archive says so. The project comes from your stored login (extension_auth; tokens live at most 7 days, CI re-mints from the console's Access tokens page); project picks one of several logins. Every answer carries value.trackUrl, the console page for it, and value.nextStep {kind, say, url}, what to do or say next.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -334,7 +339,7 @@ async function connectionPrecheck(
   browsers: string[],
   ref: ProjectRef | null,
   scope: { buildSha: string; channel: string },
-): Promise<{ refused: string | null; modes: ModeIds }> {
+): Promise<{ refused: string | null; modes: ModeIds; reports: Record<string, Record<string, unknown>> }> {
   const read = await readConnectionsAndModes(
     {
       project: args.project,
@@ -355,7 +360,7 @@ async function connectionPrecheck(
         rowFromConnection(browser, connections[browser]),
     )
     .find((row) => row && isConnectionState(row.state));
-  if (!blocked) return { refused: null, modes };
+  if (!blocked) return { refused: null, modes, reports: read.reports };
 
   const ctx = { ref, api: args.api };
   const step = connectionStep(blocked, connections[blocked.browser], ctx);
@@ -386,7 +391,7 @@ async function connectionPrecheck(
     hint: step.say,
   });
 
-  return { refused, modes };
+  return { refused, modes, reports: read.reports };
 }
 
 async function answer(args: SubmitToolArgs): Promise<string> {
@@ -479,6 +484,7 @@ async function answer(args: SubmitToolArgs): Promise<string> {
   if (args.version) body.version = String(args.version).trim();
 
   let modes: ModeIds = {};
+  let firefoxSetting: string | undefined;
 
   const gateInputFor = (known: ModeIds) => {
     const drafts = browsers.every((browser) => uploadStopsAtDraft(browser, known[browser]));
@@ -519,6 +525,7 @@ async function answer(args: SubmitToolArgs): Promise<string> {
     if (precheck.refused) return precheck.refused;
 
     modes = precheck.modes;
+    firefoxSetting = sourceArchiveOf(precheck.reports.firefox ?? {})?.setting;
 
     const gate = await evaluateApproval({
       ...gateInputFor(modes),
@@ -1007,6 +1014,16 @@ async function answer(args: SubmitToolArgs): Promise<string> {
     result.links = links;
     result.nextStep = doneStep(outcome.stores, itemUrl);
 
+    const firefoxSources = outcome.stores.includes("firefox")
+      ? firefoxSourcesOutcome(
+          waited.record?.firefox,
+          firefoxSetting,
+          firefoxConnectUrl(credential.ref, args.api),
+        )
+      : null;
+    const sourcesLine = firefoxSources ? ` ${firefoxSources.say}` : "";
+    if (firefoxSources) result.firefoxSourceArchive = firefoxSources;
+
     if (waited.failed) {
       return envelope({
         ok: false,
@@ -1066,7 +1083,7 @@ async function answer(args: SubmitToolArgs): Promise<string> {
         command: "extension_submit",
         status: "submit-dispatched",
         value: result,
-        hint: `${dispatchedHint({ acceptedAt, trackUrl: firstPage, readCall: statusRead })} A Chrome or Edge upload under the default modes (Chrome draft-until-public, Edge draft) stops at the draft and does not enter review; a saved public, staged or review mode sends it on. ${made}`,
+        hint: `${dispatchedHint({ acceptedAt, trackUrl: firstPage, readCall: statusRead })} A Chrome or Edge upload under the default modes (Chrome draft-until-public, Edge draft) stops at the draft and does not enter review; a saved public, staged or review mode sends it on.${sourcesLine} ${made}`,
         warnings: [...warnings, channelNote, statusNote, credential.note],
       });
     }
@@ -1079,7 +1096,7 @@ async function answer(args: SubmitToolArgs): Promise<string> {
       hint: `${
         message ||
         `The platform's record confirms the submission for ${outcome.stores.join(", ")} (${waited.outcome.status}${waited.outcome.storeState ? `, store state ${waited.outcome.storeState}` : ""}). A Chrome or Edge upload under the default modes (Chrome draft-until-public, Edge draft) stops at the draft, does not enter review and is recorded as "Uploaded, not public"; a saved public, staged or review mode sends it on, and a store's own review, where it happens, comes after this answer.`
-      } ${made}`,
+      }${sourcesLine} ${made}`,
       warnings: [...warnings, channelNote, statusNote, credential.note],
     });
   }

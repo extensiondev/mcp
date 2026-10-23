@@ -21,6 +21,7 @@ import {
   firefoxConnectSentences,
   firefoxConnectUrl,
   firefoxNotConnected,
+  firefoxSourceArchiveView,
 } from "../lib/firefox-store";
 import {
   readSubmissionRecord,
@@ -587,12 +588,22 @@ export async function preflight(args: StoreActArgs): Promise<string> {
     const read = reads[i];
     if (read.ok) {
       reports[store] = read.json;
-      stores[store] = readinessView(
+      const view = readinessView(
         read.json,
         store,
         text(args.projectPath),
         Boolean(text(args.buildSha)),
       );
+      stores[store] =
+        store === "firefox"
+          ? {
+              ...view,
+              ...firefoxSourceArchiveView(
+                read.json,
+                firefoxConnectUrl(api.ref, args.api),
+              ),
+            }
+          : view;
     } else unread.push(`${store}: ${read.message}`);
   });
 
@@ -635,9 +646,14 @@ export async function preflight(args: StoreActArgs): Promise<string> {
         : "";
     })
     .join("");
+  const firefoxView = isRow(stores.firefox) ? stores.firefox : null;
+  const sourceLine =
+    firefoxView && isRow(firefoxView.sourceArchive)
+      ? ` ${text(firefoxView.sourceArchive.say)}`
+      : "";
   const readinessHint = blocked.length
-    ? `${blocked.join(", ")} cannot be submitted yet; each failing check says what to fix.${syncLine} This read wrote nothing.`
-    : `Every store read here is ready to submit.${buildLine}${modeLine} This read wrote nothing; extension_submit with dryRun:false submits.`;
+    ? `${blocked.join(", ")} cannot be submitted yet; each failing check says what to fix.${syncLine}${sourceLine} This read wrote nothing.`
+    : `Every store read here is ready to submit.${buildLine}${modeLine}${sourceLine} This read wrote nothing; extension_submit with dryRun:false submits.`;
   const chrome = isRow(stores.chrome) ? stores.chrome : null;
   const connection =
     chrome && isRow(chrome.connection) ? chrome.connection : null;
