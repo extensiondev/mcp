@@ -728,8 +728,9 @@ export async function preflight(args: StoreActArgs): Promise<string> {
     });
   }
 
-  const notConnected = (store: string, say: string): string => {
+  const notConnected = (store: string, say: string, step: "connect" | "configure" = "connect"): string => {
     const connectUrl = fallbackConnectUrl(api.ref, store, args.api);
+    const settingsUrl = storeSettingsUrl(api.ref, args.api);
     const full =
       store === "firefox"
         ? `${say} ${firefoxSourceArchiveLine(reports.firefox, connectUrl)}`
@@ -745,9 +746,9 @@ export async function preflight(args: StoreActArgs): Promise<string> {
         stores,
         storesPageUrl,
         connectUrl,
-        trackUrl: storeSettingsUrl(api.ref, args.api),
+        trackUrl: settingsUrl,
         sayToPerson: full,
-        nextStep: nextStep("connect", full, connectUrl),
+        nextStep: nextStep(step, full, step === "configure" ? settingsUrl : connectUrl),
       },
       hint: full,
       warnings: [
@@ -771,13 +772,19 @@ export async function preflight(args: StoreActArgs): Promise<string> {
     (store) => reports[store] && storeSwitchOff(reports[store]),
   );
 
+  /* @invariant THE SWITCH IS ONE PLAIN CALL AWAY, SO THE NEXT STEP NAMES
+   * IT. A store whose credentials are saved and whose "Store publishing"
+   * switch is off needs no person at the console: configure-store with
+   * enabled true turns it on under the owner's own token (ledger 142
+   * addendum), and for Firefox the same call carries the source archive, so
+   * nextStep is "configure" with the settings page, and the console connect
+   * page stays only for credentials, which never pass through this server.
+   */
   if (switchedOff) {
     return notConnected(
       switchedOff,
-      storeSwitchSentences(
-        switchedOff,
-        fallbackConnectUrl(api.ref, switchedOff, args.api),
-      ),
+      storeSwitchSentences(switchedOff, storeSettingsUrl(api.ref, args.api)),
+      "configure",
     );
   }
 

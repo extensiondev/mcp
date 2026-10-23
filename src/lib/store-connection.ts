@@ -39,7 +39,7 @@ export interface ItemLinkUrls {
   linkItemUrl: string;
 }
 
-export type NextStepKind = "connect" | "link-item" | "submit" | "approve" | "publish" | "resubmit" | "preflight" | "done";
+export type NextStepKind = "connect" | "configure" | "link-item" | "submit" | "approve" | "publish" | "resubmit" | "preflight" | "done";
 
 export interface NextStep {
   kind: NextStepKind;
@@ -226,10 +226,10 @@ export function storeSwitchOff(json: Row): boolean {
   return checkStatus(json, ENABLED_CHECK) === "fail" && checkStatus(json, CREDENTIALS_CHECK) !== "fail";
 }
 
-export function storeSwitchSentences(store: string, connectUrl: string): string {
+export function storeSwitchSentences(store: string, settingsUrl: string): string {
   const name = (STORE_NAMES[store] ?? store).replace(/^the /, "");
 
-  return `The ${name} credentials are saved for this project and only the "Store publishing" switch for that store is off, so nothing can be submitted yet; turn it on in the store settings at ${connectUrl}, then say preflight again. The console's Connect flow will save the credentials and turn the switch on in one step soon.`;
+  return `The ${name} credentials are saved for this project and only the "Store publishing" switch for that store is off, so nothing can be submitted yet; turn it on with extension_submit action:"configure-store" store:"${store}" storeSettings:{enabled:true}, a plain call under your own token, or in the store settings at ${settingsUrl}, then say preflight again.`;
 }
 
 export function failedCheckSentence(reason: string): string {

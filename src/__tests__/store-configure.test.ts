@@ -29,7 +29,20 @@ describe("extension_submit configure-store changes a store's settings as a plain
 
   it("offers configure-store with a storeSettings input, and it is a settings write, not a shipping act", () => {
     expect(schema.inputSchema.properties.action.enum).toContain("configure-store");
-    expect(Object.keys((schema.inputSchema.properties as Record<string, any>).storeSettings.properties)).toEqual(["enabled", "submissionMode", "sourceArchive", "releaseChannel"]);
+    expect(Object.keys((schema.inputSchema.properties as Record<string, any>).storeSettings.properties)).toEqual([
+      "enabled",
+      "submissionMode",
+      "sourceArchive",
+      "releaseChannel",
+      "chromeItemId",
+      "edgeProductId",
+      "firefoxAddonGuid",
+    ]);
+
+    for (const property of Object.values((schema.inputSchema.properties as Record<string, any>).storeSettings.properties) as Array<{ description?: string }>) {
+      expect(typeof property.description).toBe("string");
+    }
+
     expect((schema.inputSchema.properties as Record<string, any>).store.description).toContain("configure-store");
 
     const ships = TOOL_POLICY.extension_submit.ships as (args: Record<string, unknown>) => boolean;
@@ -139,9 +152,15 @@ describe("extension_submit configure-store changes a store's settings as a plain
   it("refuses a listing id, a raw mode flag, an unknown key, a foreign mode id and a Firefox-only key before any request", async () => {
     platform.login();
     const cases: Array<[string, Record<string, unknown>, RegExp]> = [
-      ["firefox", { storeId: "{abc}" }, /"storeId".*stay a person at a keyboard in the console/],
+      ["firefox", { storeId: "{abc}" }, /"storeId".*a listing id goes in as chromeItemId, edgeProductId or firefoxAddonGuid.*stay a person at a keyboard in the console/],
+      ["chrome", { publisherId: "acme" }, /"publisherId".*publisher ids, store URLs, bundle ids and the rest stay a person at a keyboard/],
       ["chrome", { skipPublish: true }, /"skipPublish".*console/],
-      ["chrome", { foo: 1 }, /"foo", which is not a store setting; use enabled, submissionMode, sourceArchive, releaseChannel/],
+      ["chrome", { foo: 1 }, /"foo", which is not a store setting; use enabled, submissionMode, sourceArchive, releaseChannel, chromeItemId, edgeProductId, firefoxAddonGuid/],
+      ["firefox", { chromeItemId: "abcdefghijklmnopabcdefghijklmnop" }, /"chromeItemId" is a chrome store setting; firefox does not have it/],
+      ["chrome", { chromeItemId: "not-an-item" }, /chromeItemId must be the item's 32-letter id, or the item's address from the Chrome Web Store developer dashboard/],
+      ["edge", { edgeProductId: "12345" }, /edgeProductId must be the Product ID GUID from Partner Center/],
+      ["firefox", { firefoxAddonGuid: "my-addon-slug" }, /firefoxAddonGuid "my-addon-slug" is not a Firefox add-on GUID.*An AMO slug or numeric id does not identify the add-on to Mozilla's blocklist\./],
+      ["firefox", { firefoxAddonGuid: "1234567" }, /An AMO slug or numeric id does not identify the add-on to Mozilla's blocklist\./],
       ["chrome", { submissionMode: "listed" }, /submissionMode for chrome must be one of draft-until-public, draft, public, staged, dry-run; got "listed"/],
       ["edge", { sourceArchive: "repository" }, /"sourceArchive" is a Firefox store setting; edge does not have it/],
       ["firefox", { enabled: "yes" }, /enabled must be true or false/],
@@ -161,6 +180,42 @@ describe("extension_submit configure-store changes a store's settings as a plain
     expect(noStore.status).toBe("bad-request");
     expect(noStore.error.message).toContain("configure-store needs store");
     expect(platform.calls).toHaveLength(0);
+  });
+
+  it("writes a store's listing id as a plain owner-token write in the store's own terms, and hashes it last", async () => {
+    if (process.platform === "win32") return;
+
+    platform.login();
+    const cases: Array<[string, Record<string, unknown>, string, string]> = [
+      ["chrome", { chromeItemId: "ABCDEFGHIJKLMNOPABCDEFGHIJKLMNOP" }, "abcdefghijklmnopabcdefghijklmnop", "chromeItemId"],
+      ["chrome", { chromeItemId: "https://chrome.google.com/webstore/devconsole/12345678-1234-1234-1234-123456789abc/abcdefghijklmnopabcdefghijklmnop/edit" }, "abcdefghijklmnopabcdefghijklmnop", "chromeItemId"],
+      ["edge", { edgeProductId: "12345678-1234-1234-1234-123456789ABC" }, "12345678-1234-1234-1234-123456789abc", "edgeProductId"],
+      ["firefox", { firefoxAddonGuid: "widget@example.com", enabled: true }, "widget@example.com", "firefoxAddonGuid"],
+      ["firefox", { firefoxAddonGuid: "{11111111-2222-3333-4444-555555555555}" }, "{11111111-2222-3333-4444-555555555555}", "firefoxAddonGuid"],
+    ];
+
+    for (const [store, storeSettings, storeId, key] of cases) {
+      platform.calls.length = 0;
+      platform.routes[`PUT ${CONFIG}`] = (call) => ({ body: { ok: true, store, changes: [`${store}.storeId: "" -> "${call.body[store].storeId}"`] } });
+
+      const out = JSON.parse(await submit({ action: "configure-store", store, storeSettings, api: API }));
+      const [put] = platform.sent("PUT", CONFIG);
+
+      expect(put.body[store].storeId, JSON.stringify(storeSettings)).toBe(storeId);
+      expect(out.status, JSON.stringify(storeSettings)).toBe("store-configured");
+      expect(out.value.storeSettings[key]).toBe(storeId);
+      expect(out.value.changes).toEqual([`${store}.storeId: "" -> "${storeId}"`]);
+      expect(out.hint).toContain("no approval page was involved");
+      expect(platform.calls.some((call) => call.path.startsWith(APPROVALS))).toBe(false);
+    }
+
+    const scope = scopeFor("firefox", { enabled: true, storeId: "widget@example.com" });
+
+    expect(scope.settingsDigest).toBe(
+      storeSettingsDigest("firefox", { storeId: "widget@example.com", enabled: true }),
+    );
+
+    expect(scope.settingsDigest).not.toBe(storeSettingsDigest("firefox", { enabled: true }));
   });
 
   it("writes a mode id as every field the platform derives it from", () => {

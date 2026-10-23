@@ -49,7 +49,7 @@ export function firefoxConnectSentences(connectUrl: string): string {
 
 const SOURCE_ARCHIVE_CHECK = "store.firefox_source_archive";
 
-export const SOURCE_ARCHIVE_FIX = 'turn on Source archive with extension_submit action:"configure-store" store:"firefox" storeSettings:{sourceArchive:"repository"} (one owner approval)';
+export const SOURCE_ARCHIVE_FIX = 'turn on Source archive with extension_submit action:"configure-store" store:"firefox" storeSettings:{sourceArchive:"repository"} (a plain call under your own token)';
 
 export interface SourceArchiveRead {
   attached: boolean;
@@ -72,7 +72,7 @@ export function sourceArchiveSentence(read: SourceArchiveRead, connectUrl: strin
 }
 
 const SOURCE_ARCHIVE_SWITCH_SENTENCE =
-  "The Firefox store settings also hold the Source archive switch, which Mozilla's review needs for a bundled build; every platform build is bundled.";
+  "The Firefox store settings also hold the Source archive switch, which Mozilla's review needs for a bundled build; every platform build is bundled, so the same configure-store call can carry sourceArchive:\"repository\".";
 
 /* @invariant THE SOURCE ARCHIVE IS NAMED BEFORE THE STORE IS CONNECTED. The
  * platform's store.firefox_source_archive check appears only once the

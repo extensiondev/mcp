@@ -27,7 +27,7 @@ const UNCONNECTED = firefoxReport([
   check("store.credentials_present", "fail", "Save the required store secrets.", { actual: "Missing: STORE_FIREFOX_API_KEY, STORE_FIREFOX_API_SECRET" }),
 ]);
 
-const SOURCE_ARCHIVE_SWITCH = "The Firefox store settings also hold the Source archive switch, which Mozilla's review needs for a bundled build; every platform build is bundled.";
+const SOURCE_ARCHIVE_SWITCH = 'The Firefox store settings also hold the Source archive switch, which Mozilla\'s review needs for a bundled build; every platform build is bundled, so the same configure-store call can carry sourceArchive:"repository".';
 
 describe("a Firefox store with no saved AMO credentials answers store-not-connected", () => {
   const platform = useProjectRoutes("extdev-firefox-store-");
@@ -91,7 +91,7 @@ const SWITCH_OFF = [
 describe("a store whose credentials are saved and whose Store publishing switch is off answers store-not-connected", () => {
   const platform = useProjectRoutes("extdev-store-switch-");
 
-  it("Firefox answers the settings page, the switch sentence and the Source archive sentence", async () => {
+  it("Firefox names configure-store for the switch and the Source archive as the next step, with the settings page, not the connect page", async () => {
     if (process.platform === "win32") return;
 
     platform.login();
@@ -102,10 +102,13 @@ describe("a store whose credentials are saved and whose Store publishing switch 
     expect(out.ok).toBe(true);
     expect(out.status).toBe("store-not-connected");
     expect(out.value.connectUrl).toMatch(/\/project-settings\/stores\?connect=firefox$/);
-    expect(out.value.nextStep).toMatchObject({ kind: "connect", url: out.value.connectUrl });
+    expect(out.value.trackUrl).toMatch(/\/project-settings\/stores$/);
+    expect(out.value.nextStep).toMatchObject({ kind: "configure", url: out.value.trackUrl, say: out.value.sayToPerson });
     expect(out.hint).toContain(`The Firefox AMO credentials are saved for this project and only the "Store publishing" switch for that store is off`);
-    expect(out.hint).toContain(`turn it on in the store settings at ${out.value.connectUrl}, then say preflight again.`);
-    expect(out.hint).toContain("The console's Connect flow will save the credentials and turn the switch on in one step soon.");
+    expect(out.hint).toContain('turn it on with extension_submit action:"configure-store" store:"firefox" storeSettings:{enabled:true}, a plain call under your own token');
+    expect(out.hint).toContain(`or in the store settings at ${out.value.trackUrl}, then say preflight again.`);
+    expect(out.hint).not.toContain("Connect flow");
+    expect(out.hint).not.toContain("approval");
     expect(out.hint).toContain(SOURCE_ARCHIVE_SWITCH);
     expect(out.hint).not.toContain("https://addons.mozilla.org/developers/addon/api/key/");
     expect(out.value.stores.firefox.failing.map((c: { id: string }) => c.id)).toEqual(["store.enabled"]);
@@ -136,8 +139,10 @@ describe("a store whose credentials are saved and whose Store publishing switch 
 
     expect(out.status).toBe("store-not-connected");
     expect(out.value.connectUrl).toMatch(/\/project-settings\/stores\?connect=edge$/);
+    expect(out.value.nextStep).toMatchObject({ kind: "configure", url: out.value.trackUrl });
     expect(out.hint).toContain("The Edge Add-ons credentials are saved for this project");
-    expect(out.hint).toContain(out.value.connectUrl);
+    expect(out.hint).toContain('action:"configure-store" store:"edge" storeSettings:{enabled:true}');
+    expect(out.hint).toContain(out.value.trackUrl);
     expect(out.hint).not.toContain("Source archive");
   });
 
@@ -157,8 +162,9 @@ describe("a store whose credentials are saved and whose Store publishing switch 
 
     expect(out.status).toBe("store-not-connected");
     expect(out.value.connectUrl).toMatch(/\/project-settings\/stores\?connect=chrome$/);
+    expect(out.value.nextStep.kind).toBe("configure");
     expect(out.hint).toContain("The Chrome Web Store credentials are saved for this project");
-    expect(out.hint).toContain(out.value.connectUrl);
+    expect(out.hint).toContain('action:"configure-store" store:"chrome" storeSettings:{enabled:true}');
   });
 
   it("keeps the readiness answer when the switch is off and the credentials are missing on a store other than Firefox", async () => {
@@ -224,7 +230,7 @@ describe("the Firefox answers say whether the platform attaches the AMO source a
     expect(out.status).toBe("preflight-read");
     expect(out.value.stores.firefox.sourceArchive).toMatchObject({ attached: false, setting: "none" });
     expect(out.value.stores.firefox.sourceArchive.say).toMatch(/^Firefox source archive: no source archive is configured; Mozilla requires matching sources for a bundled build/);
-    expect(out.value.stores.firefox.sourceArchive.say).toMatch(/turn on Source archive with extension_submit action:"configure-store" store:"firefox" storeSettings:\{sourceArchive:"repository"\} \(one owner approval\) or in the console's Firefox store settings at http.*\/project-settings\/stores\?connect=firefox\.$/);
+    expect(out.value.stores.firefox.sourceArchive.say).toMatch(/turn on Source archive with extension_submit action:"configure-store" store:"firefox" storeSettings:\{sourceArchive:"repository"\} \(a plain call under your own token\) or in the console's Firefox store settings at http.*\/project-settings\/stores\?connect=firefox\.$/);
     expect(out.hint).toContain(out.value.stores.firefox.sourceArchive.say);
     expect(out.value.stores.firefox.warnings.map((c: { id: string }) => c.id)).toEqual(["store.firefox_source_archive"]);
   });
