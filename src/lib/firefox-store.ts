@@ -7,7 +7,7 @@
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
 import { isRow, text } from "./ship-act";
-import { fallbackConnectUrl } from "./store-connection";
+import { connectionOf, failedCheckSentence, fallbackConnectUrl } from "./store-connection";
 
 import type { ProjectRef } from "./registry";
 
@@ -36,7 +36,40 @@ function checkOf(json: Row, id: string): Row | null {
 export function firefoxNotConnected(json: Row): boolean {
   const check = checkOf(json, CREDENTIALS_CHECK);
 
-  return check !== null && text(check.status) === "fail";
+  return check !== null && text(check.status) === "fail" && !text(connectionOf(json)?.kind);
+}
+
+export type FirefoxKeyPairState = "failed" | "unverified" | null;
+
+/* @invariant A SAVED AMO KEY PAIR IS NOT A VERIFIED ONE. On 2026-10-23 a
+ * pasted issuer and secret passed every preflight check, the owner approved
+ * the upload, and AMO answered 401 "Error decoding signature": the approval
+ * was spent to learn the two values did not match. The platform now answers
+ * the Firefox connection the way it answers Chrome's: the record its connect
+ * route wrote or the mirror's probe, whichever answered last. A refusal is
+ * store-connection-failed with AMO's words and the one fix there is; a pair
+ * no store has answered for is store-connection-unverified, with the console
+ * connect page that checks the pair before it saves it. Only the platform or
+ * the runner ever holds the pair; this server reads the verdict.
+ */
+export function firefoxKeyPairState(json: Row): FirefoxKeyPairState {
+  const connection = connectionOf(json);
+  if (!connection || !text(connection.kind)) return null;
+  if (connection.healthy === false) return "failed";
+
+  return connection.healthy === true ? null : "unverified";
+}
+
+export function firefoxKeyPairFailedSentences(reason: string, connectUrl: string): string {
+  return `${failedCheckSentence(reason, "firefox")} The issuer and secret do not match; re-copy both from ${AMO_API_KEY_PAGE} and connect Firefox Add-ons again at ${connectUrl}, where the console checks the pair against AMO before it saves it; then say preflight again. Nothing is submitted to Firefox until AMO answers that check.`;
+}
+
+export function firefoxKeyPairUnverifiedSentences(connectUrl: string, refused: boolean): string {
+  const consequence = refused
+    ? "so the platform refuses the upload until it is"
+    : "so an upload can fail at AMO after the owner's approval is spent";
+
+  return `The AMO key pair saved for this project has not been checked against Mozilla, ${consequence}. Connect Firefox Add-ons once at ${connectUrl}: the console checks the issuer and secret against AMO before it saves them. Then say preflight again.`;
 }
 
 export function firefoxConnectUrl(ref: ProjectRef | null, api?: string): string {

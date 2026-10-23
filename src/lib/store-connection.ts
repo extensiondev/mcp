@@ -232,10 +232,11 @@ export function storeSwitchSentences(store: string, settingsUrl: string): string
   return `The ${name} credentials are saved for this project and only the "Store publishing" switch for that store is off, so nothing can be submitted yet; turn it on with extension_submit action:"configure-store" store:"${store}" storeSettings:{enabled:true}, a plain call under your own token, or in the store settings at ${settingsUrl}, then say preflight again.`;
 }
 
-export function failedCheckSentence(reason: string): string {
+export function failedCheckSentence(reason: string, store = "chrome"): string {
   const said = reason.replace(/[.\s]+$/, "") || "no reason was recorded";
+  const name = (STORE_NAMES[store] ?? store).replace(/^the /, "");
 
-  return `Your Chrome Web Store connection failed its last check: ${said}.`;
+  return `Your ${name} connection failed its last check: ${said}.`;
 }
 
 export function storeSettingsUrl(ref: ProjectRef | null, api?: string): string {

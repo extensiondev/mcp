@@ -8,6 +8,7 @@
 
 import { projectApiSend } from "./project-api";
 import { fetchRegistryJson, registryFileUrl, type ProjectRef, type RegistryFetchRefusal } from "./registry";
+import { firefoxKeyPairFailedSentences } from "./firefox-store";
 import { isRow, openShipApi, text } from "./ship-act";
 import {
   connectSentences,
@@ -149,7 +150,7 @@ export function rowFromConnection(browser: string, connection: ConnectionRecord)
   }
 
   if (connection.healthy === false) {
-    return { ...base, ...who, ok: false, state: "store-connection-failed", configured: true, healthy: false, reason: failedCheckSentence(connection.reason ?? "") };
+    return { ...base, ...who, ok: false, state: "store-connection-failed", configured: true, healthy: false, reason: failedCheckSentence(connection.reason ?? "", browser) };
   }
 
   if (connection.healthy !== true) {
@@ -215,6 +216,12 @@ export function connectionStep(row: StoreRow, connection: ConnectionRecord | und
   }
 
   const connectUrl = connection?.connectUrl || fallbackConnectUrl(ctx.ref, row.browser, ctx.api);
+
+  if (row.browser === "firefox" && row.state === "store-connection-failed") {
+    const say = firefoxKeyPairFailedSentences(connection?.reason ?? "", connectUrl);
+
+    return nextStep("connect", say, connectUrl);
+  }
 
   if (row.browser !== "chrome") {
     const say = `${row.reason ?? ""} Set up the ${row.browser} store once at ${connectUrl}; then I submit it after one owner approval.`.trim();

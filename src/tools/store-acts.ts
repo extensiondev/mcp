@@ -20,6 +20,9 @@ import { envelope, isEnvelope } from "../lib/envelope";
 import {
   firefoxConnectSentences,
   firefoxConnectUrl,
+  firefoxKeyPairFailedSentences,
+  firefoxKeyPairState,
+  firefoxKeyPairUnverifiedSentences,
   firefoxNotConnected,
   firefoxSourceArchiveLine,
   firefoxSourceArchiveView,
@@ -732,6 +735,55 @@ export async function preflight(args: StoreActArgs): Promise<string> {
       },
       hint: say,
       warnings: [unreadLine, "This read wrote nothing."],
+    });
+  }
+
+  const firefoxPair = reports.firefox
+    ? firefoxKeyPairState(reports.firefox)
+    : null;
+
+  if (firefoxPair) {
+    const firefoxConnection = connectionOf(reports.firefox);
+    const settingsUrl = storeSettingsUrl(api.ref, args.api);
+    const connectUrl =
+      text(firefoxConnection?.connectUrl) ||
+      firefoxConnectUrl(api.ref, args.api);
+    const say =
+      firefoxPair === "failed"
+        ? firefoxKeyPairFailedSentences(
+            text(firefoxConnection?.reason),
+            connectUrl,
+          )
+        : firefoxKeyPairUnverifiedSentences(
+            connectUrl,
+            blocked.includes("firefox"),
+          );
+    const others = blocked.filter((store) => store !== "firefox");
+
+    return envelope({
+      ok: true,
+      command: COMMAND,
+      status:
+        firefoxPair === "failed"
+          ? "store-connection-failed"
+          : "store-connection-unverified",
+      value: {
+        action: "preflight",
+        stores,
+        storesPageUrl,
+        connectUrl,
+        trackUrl: settingsUrl,
+        sayToPerson: say,
+        nextStep: nextStep("connect", say, connectUrl),
+      },
+      hint: say,
+      warnings: [
+        others.length
+          ? `${others.join(", ")} cannot be submitted yet either; each failing check says what to fix.`
+          : null,
+        unreadLine,
+        "This read wrote nothing.",
+      ],
     });
   }
 
