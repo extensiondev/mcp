@@ -13,6 +13,7 @@ import { COMMAND, isRow, text, type Row } from "./builds-acts";
 export const LOG_TAIL = 200;
 
 const NOT_RUN_REASON = "the run failed before this browser's job started";
+const CANCELLED_REASON = "the run was cancelled before this browser's job started";
 const FAILED_BUILD_STATUSES = new Set(["failed", "failure", "error", "timed_out", "cancelled", "canceled"]);
 
 export interface LogsRead {
@@ -27,7 +28,16 @@ interface RunSection {
   status: string;
   conclusion: string | null;
   failedJob: Row | null;
+  supersededBy?: string | null;
   validation?: Row | null;
+}
+
+export function cancelledSentence(buildId: string, supersededBy: unknown): string {
+  const newer = text(supersededBy);
+
+  return newer
+    ? `Build ${buildId} was cancelled because ${newer} landed; nothing is wrong with it.`
+    : `Build ${buildId} was cancelled by the platform; nothing is wrong with it.`;
 }
 
 function runSectionOf(value: unknown): RunSection | null {
@@ -36,9 +46,12 @@ function runSectionOf(value: unknown): RunSection | null {
   const failed = isRow(value.failedJob) ? value.failedJob : null;
   const lines = failed && Array.isArray(failed.lines) ? failed.lines.map((line) => text(line)).filter(Boolean) : [];
 
+  const cancelled = text(value.conclusion).toLowerCase() === "cancelled";
+
   return {
     status: text(value.status) || "unknown",
     conclusion: text(value.conclusion) || null,
+    ...(cancelled ? { supersededBy: text(value.supersededBy).slice(0, 7) || null } : {}),
     ...(isRow(value.validation) ? { validation: value.validation } : {}),
     failedJob: failed
       ? {
@@ -69,6 +82,7 @@ function tailOf(item: Row): Row {
 function settled(item: Row, run: RunSection | null, legacyFailed: boolean): Row {
   if (text(item.status) !== "pending") return item;
   if (!concluded(run) && !legacyFailed) return item;
+  if (run?.conclusion === "cancelled") return { ...item, status: "cancelled", reason: text(item.reason) || CANCELLED_REASON };
 
   return { ...item, status: "skipped", reason: text(item.reason) || NOT_RUN_REASON };
 }
@@ -160,10 +174,13 @@ export async function readLogs(read: LogsRead): Promise<string> {
   const failed = items.filter((item) => text(item.status) === "failed").map((item) => text(item.browser));
   const skipped = items.filter((item) => text(item.status) === "skipped").map((item) => text(item.browser));
   const beforeBrowsers = all.length === 0 || all.every((item) => text(item.status) === "skipped");
+  const cancelled = run?.conclusion === "cancelled" ? cancelledSentence(text(answer.json.buildId) || buildId, run.supersededBy) : "";
 
   let hint: string;
 
-  if (run?.failedJob) {
+  if (cancelled) {
+    hint = `${cancelled} The build page is ${read.consoleUrl}.`;
+  } else if (run?.failedJob) {
     const lines = (run.failedJob.lines as string[]) ?? [];
     hint = [failedJobSentence(run.failedJob, beforeBrowsers), ...lines].join("\n");
     hint += `\n${skipped.length ? `${skipped.join(", ")} did not run. ` : ""}The build page is ${read.consoleUrl}.`;
@@ -197,6 +214,8 @@ export async function readLogs(read: LogsRead): Promise<string> {
       buildId: text(answer.json.buildId) || buildId,
       ...(run ? { run } : {}),
       items,
+      trackUrl: read.consoleUrl,
+      ...(cancelled ? { sayToPerson: cancelled } : {}),
     },
     hint,
     warnings: [

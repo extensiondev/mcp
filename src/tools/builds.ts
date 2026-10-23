@@ -22,7 +22,7 @@ import {
 } from "../lib/project-api";
 import { configure, createChannel, type ActArgs } from "./builds-acts";
 import { CONFIGURE_CHANNEL, DELETE_CHANNEL, configureChannel, deleteChannelConsoleOnly } from "./builds-channel";
-import { buildFailures, readLogs } from "./builds-logs";
+import { buildFailures, cancelledSentence, readLogs } from "./builds-logs";
 import { rebuild } from "./builds-rebuild";
 import { recheck } from "./builds-recheck";
 
@@ -141,6 +141,11 @@ function listRow(item: Row, api: ProjectApi, apiHint?: string): Row {
 
   if (typeof item.runId === "number" && item.runId > 0) out.internal = { runId: item.runId };
 
+  if (text(out.status).toLowerCase() === "cancelled") {
+    out.status = "cancelled";
+    out.supersededBy = text(item.supersededBy).slice(0, 7) || null;
+  }
+
   if (text(out.conclusion).toLowerCase() === "partial" || text(item.outcome).toLowerCase() === "partial") {
     if (text(out.status).toLowerCase() === "success") out.runStatus = "success";
 
@@ -177,6 +182,7 @@ async function listBuilds(args: HandlerArgs): Promise<string> {
   const rows = items.map((item) => listRow(item, opened.api, args.api));
   const project = `${opened.api.ref.workspace}/${opened.api.ref.project}`;
   const buildsPageUrl = consoleProjectUrl(opened.api.ref, ConsoleProjectPage.builds, args.api);
+  const cancelledSentences = rows.filter((row) => row.status === "cancelled").map((row) => cancelledSentence(text(row.buildId), row.supersededBy));
 
   return envelope({
     ok: true,
@@ -191,12 +197,14 @@ async function listBuilds(args: HandlerArgs): Promise<string> {
       ...(read.json?.dispatchDisabled === true ? { dispatchDisabled: true } : {}),
       ...(read.json?.pushRefusal ? { pushRefusal: read.json.pushRefusal } : {}),
       buildsPageUrl,
+      trackUrl: buildsPageUrl,
+      ...(cancelledSentences.length ? { sayToPerson: cancelledSentences.join(" ") } : {}),
     },
     hint:
       rows.length > 0
         ? `${rows.length} recent build${rows.length === 1 ? "" : "s"} of ${project}, newest first; the latest is ${rows[0].buildId} (${rows[0].status ?? "status unknown"}). Pass action:"get" or action:"logs" with a buildId to read one.${
             rows.some((row) => row.status === "partial") ? " A partial build finished with at least one browser failed; failedBrowsers names them." : ""
-          }`
+          }${cancelledSentences.length ? ` ${cancelledSentences.join(" ")}` : ""}`
         : `No builds are recorded for ${project} yet. Push a commit to produce one, then check ${buildsPageUrl}.`,
     warnings: [
       rows.length === limit
