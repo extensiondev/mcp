@@ -31,6 +31,7 @@ import {
 } from "../lib/project-batch";
 import { consoleBase } from "../lib/registry";
 import { isProjectRef } from "../lib/credentials";
+import { followProjectMove, followSentence, readProjectMove } from "../lib/project-move";
 import { projectPresence, sameSlugElsewhere, type ProjectPresence } from "../lib/project-on-server";
 
 const FIRST_CALL_BUDGET_MS = 8_000;
@@ -44,7 +45,7 @@ function fail(
   message: string,
   status: string,
   code: ErrorCode,
-  extra?: { hint?: string; value?: Record<string, unknown> },
+  extra?: { hint?: string; value?: Record<string, unknown>; warnings?: string[] },
 ): string {
   return envelope({
     ok: false,
@@ -53,6 +54,7 @@ function fail(
     error: { code, name, message },
     ...(extra?.value ? { value: extra.value } : {}),
     ...(extra?.hint ? { hint: extra.hint } : {}),
+    ...(extra?.warnings?.length ? { warnings: extra.warnings } : {}),
   });
 }
 
@@ -150,6 +152,8 @@ function movedProjectRefusal(
   if (!workspace || !project) return null;
 
   const now = `${workspace}/${project}`;
+  const move = readProjectMove(body, ctx.project);
+  const followed = move ? followProjectMove({ apiBase: ctx.apiBase, move }) : [];
 
   return fail(
     "LoginProjectMoved",
@@ -165,6 +169,7 @@ function movedProjectRefusal(
         movedTo: now,
       },
       hint: `The project ${ctx.project} is now ${now}; every login already minted for it keeps working. Run extension_auth (action: "login", project: "${now}") and pass project: '${now}' from now on.`,
+      ...(followed.length && move ? { warnings: [followSentence(move)] } : {}),
     },
   );
 }

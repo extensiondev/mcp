@@ -6,7 +6,7 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-import { PROJECT_PIN_ENV, isProjectRef, sameProject } from "./credentials";
+import { PROJECT_PIN_ENV, isProjectRef, pinnedProject, sameProject } from "./credentials";
 import { envelope } from "./envelope";
 
 export type FeatureGroup = "local" | "platform";
@@ -367,7 +367,7 @@ export function pinProjectArgs(
   inputSchema: Record<string, unknown>,
   options: ServerOptions,
 ): { args: Args } | { refused: string } {
-  const pinned = options.project;
+  const pinned = options.project ? pinnedProject() || options.project : "";
   if (!pinned) return { args };
 
   if (args.projects !== undefined && args.projects !== null) {

@@ -48,6 +48,31 @@ export function rememberCreatedProject(apiBase: string, project: string): boolea
   }
 }
 
+export function moveCreatedProject(apiBase: string, from: string, to: string): boolean {
+  const server = serverOf(apiBase);
+  const before = from.toLowerCase();
+  const after = to.toLowerCase();
+  if (before === after) return false;
+
+  const file = createdProjectsPath();
+
+  try {
+    return withFileLock(file, "created projects record", () => {
+      const created = readCreated();
+      const onServer = created[server];
+      if (!onServer || typeof onServer !== "object" || !(before in onServer)) return false;
+
+      const { [before]: at, ...rest } = onServer;
+      created[server] = { ...rest, [after]: at ?? Math.floor(Date.now() / 1000) };
+      writePrivateJson(file, created);
+
+      return true;
+    });
+  } catch {
+    return false;
+  }
+}
+
 export function createdOnServer(apiBase: string, project: string): boolean {
   const onServer = readCreated()[serverOf(apiBase)];
 

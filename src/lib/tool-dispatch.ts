@@ -14,6 +14,7 @@ import {
 import { openApprovalOnce } from "./approval-open";
 import { bindApprovalProject } from "./approval-record";
 import { envelope, isEnvelope, type Envelope } from "./envelope";
+import { resolveApiBase } from "./login-flow";
 import {
   TOOL_POLICY,
   disabledToolEnvelope,
@@ -23,6 +24,7 @@ import {
   toolTitle,
 } from "./tool-policy";
 import { withCallApi } from "./origins";
+import { followProjectMove, followSentence, movedAnswer } from "./project-move";
 import { scrubRunAnswer } from "./run-privacy";
 import { serverStamp } from "./server-stamp";
 import { shapeStoreAnswer } from "./store-answer";
@@ -91,8 +93,8 @@ function refusedFrame(text: string): ToolFrame {
   return { content: [{ type: "text" as const, text }], isError: true };
 }
 
-export function withNote(result: string, note: string | undefined): string {
-  if (!note) return result;
+export function annotate(result: string, said: { note?: string; warning?: string }): string {
+  if (!said.note && !said.warning) return result;
 
   let parsed: unknown;
 
@@ -106,18 +108,38 @@ export function withNote(result: string, note: string | undefined): string {
 
   const frame = parsed as Envelope & { hint?: string };
   const value = frame.value && typeof frame.value === "object" && !Array.isArray(frame.value) ? (frame.value as Record<string, unknown>) : {};
-  const said = typeof value.note === "string" && value.note.trim() ? `${value.note.trim()} ${note}` : note;
+  const note = said.note ? (typeof value.note === "string" && value.note.trim() ? `${value.note.trim()} ${said.note}` : said.note) : undefined;
 
   return envelope({
     ok: frame.ok,
     command: frame.command,
     status: frame.status,
-    value: { ...value, note: said },
+    value: note ? { ...value, note } : frame.value,
     error: frame.error ?? undefined,
-    warnings: frame.warnings,
+    warnings: [...frame.warnings, said.warning],
     ...(frame.truncated !== undefined ? { truncated: frame.truncated } : {}),
     ...(frame.hint ? { hint: frame.hint } : {}),
   });
+}
+
+/* @invariant A PLATFORM ANSWER THAT NAMES WHERE THE PROJECT WENT IS FOLLOWED
+ * ONCE, IN THE SAME CALL. The refusal already moved the login; this server's
+ * created record and pin follow it, the call is made again naming the
+ * current slug, and the answer says once that the server follows the new
+ * name. The second answer is taken as it is: a move it names in turn is not
+ * followed, so two renames in one call cannot chase each other.
+ */
+async function followedOnce(
+  answer: string,
+  args: Record<string, unknown>,
+  handler: (args: Record<string, unknown>) => Promise<string>,
+): Promise<string> {
+  const move = movedAnswer(answer);
+  if (!move) return answer;
+
+  followProjectMove({ apiBase: resolveApiBase(typeof args.api === "string" ? args.api : undefined), move });
+
+  return annotate(await handler({ ...args, project: move.to }), { warning: followSentence(move) });
 }
 
 export function installToolHandlers(server: Server, setup: ToolHandlerOptions): void {
@@ -190,7 +212,8 @@ export function installToolHandlers(server: Server, setup: ToolHandlerOptions): 
       const result = await withCallApi(normalizedArgs.api, () =>
         run(
           async () => {
-            const answer = withNote(await tool.handler(normalizedArgs), bound.note);
+            const answered = await tool.handler(normalizedArgs);
+            const answer = annotate(platform ? await followedOnce(answered, normalizedArgs, tool.handler) : answered, { note: bound.note });
 
             if (!platform) return answer;
 

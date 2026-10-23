@@ -16,7 +16,7 @@ import { bindApprovalProject, mintedApproval, rememberMintedApproval, renameNote
 import { verifyApproval } from "../lib/approval-verify";
 import { moveLogin, writeCredentials } from "../lib/credentials";
 import { envelope } from "../lib/envelope";
-import { withNote } from "../lib/tool-dispatch";
+import { annotate } from "../lib/tool-dispatch";
 
 const API = "http://localhost:3100";
 const APPROVAL_ID = "apr_J3pJzcFuh6UWFwP_AMwl_IZ085Ookc_R";
@@ -173,7 +173,7 @@ describe("the rename note rides the answer the retry produces", () => {
   it("lands in value.note beside what the tool answered", () => {
     const answered = envelope({ ok: true, command: "extension_builds", status: "configured", value: { note: "Nothing else changed." }, hint: "Done." });
 
-    const out = JSON.parse(withNote(answered, renameNote("acme/leon", "acme/lion")));
+    const out = JSON.parse(annotate(answered, { note: renameNote("acme/leon", "acme/lion") }));
 
     expect(out.value.note).toBe(`Nothing else changed. ${renameNote("acme/leon", "acme/lion")}`);
     expect(out.hint).toBe("Done.");
@@ -183,6 +183,6 @@ describe("the rename note rides the answer the retry produces", () => {
   it("leaves an answer alone without a note", () => {
     const answered = envelope({ ok: true, command: "extension_builds", status: "configured" });
 
-    expect(withNote(answered, undefined)).toBe(answered);
+    expect(annotate(answered, {})).toBe(answered);
   });
 });

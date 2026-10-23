@@ -19,6 +19,7 @@ import {
   readPlatformMessage,
   sawPlatformHold,
 } from "./platform-hold";
+import { PROJECT_MOVED_STATUS, readProjectMove, type ProjectMove } from "./project-move";
 import { identityHeaders } from "./session-identity";
 import { tokenRefusal } from "./token-refusal";
 
@@ -190,7 +191,7 @@ export async function openProjectApi(args: {
     rememberProjectId(cacheKey, projectId);
 
     if (credential.source === "stored" && credential.ref) {
-      followRenamedProject({ ref: credential.ref, api: args.api, projectId, answer: body });
+      followRenamedProject({ ref: credential.ref, api: base, projectId, answer: body });
     }
   }
 
@@ -256,38 +257,30 @@ export const PROJECT_MOVED_CODE = "PROJECT_MOVED";
 function projectMovedHint(
   read: ProjectApiRefusal,
   context: { workspace?: string; project?: string; api?: string } | undefined,
-): string | null {
-  const body = (read.body ?? {}) as {
-    workspaceSlug?: unknown;
-    projectSlug?: unknown;
-    projectId?: unknown;
-    previousProjectSlug?: unknown;
-  };
+): { hint: string; move: ProjectMove | null } | null {
+  const body = (read.body ?? {}) as { workspaceSlug?: unknown; projectSlug?: unknown };
   const workspace = String(body.workspaceSlug ?? "").trim().toLowerCase();
   const project = String(body.projectSlug ?? "").trim().toLowerCase();
   if (!workspace || !project) return null;
 
-  const named = String(context?.project ?? "").trim().toLowerCase();
-  const previous = String(body.previousProjectSlug ?? "").trim().toLowerCase();
-  const from = named.includes("/") ? named : previous ? `${workspace}/${previous}` : "";
-  const to = `${workspace}/${project}`;
-  if (!from || from === to) return `The project is now ${to}; pass project: '${to}' from now on.`;
+  const move = readProjectMove(read.body, context?.project);
+  if (!move) return { hint: `The project is now ${workspace}/${project}; pass project: '${workspace}/${project}' from now on.`, move: null };
 
-  const [fromWorkspace = "", fromProject = ""] = from.split("/");
+  const [fromWorkspace = "", fromProject = ""] = move.from.split("/");
 
   try {
     moveLogin({
       workspaceSlug: fromWorkspace,
       fromProjectSlug: fromProject,
       toProjectSlug: project,
-      api: context?.api,
-      projectId: String(body.projectId ?? "").trim(),
+      api: resolveApiBase(context?.api),
+      projectId: move.projectId,
     });
   } catch {
-    return loginMoveSentence(from, to);
+    return { hint: loginMoveSentence(move.from, move.to), move };
   }
 
-  return loginMoveSentence(from, to);
+  return { hint: loginMoveSentence(move.from, move.to), move };
 }
 
 function projectNotFoundHint(context: { workspace?: string; project?: string } | undefined): string {
@@ -408,21 +401,21 @@ export function projectApiReadFailure(
   }
 
   if (read.code === PROJECT_MOVED_CODE) {
-    const hint = projectMovedHint(read, { ...options.context, api: options.api });
+    const moved = projectMovedHint(read, { ...options.context, api: options.api });
 
-    if (hint) {
+    if (moved) {
       return envelope({
         ok: false,
         command,
-        status: "moved",
-        value: options.value ?? {},
+        status: PROJECT_MOVED_STATUS,
+        value: { ...(options.value ?? {}), ...(moved.move ? { moved: moved.move } : {}) },
         error: {
           code: "E_PLATFORM",
           name: `${options.name}ProjectMoved`,
           platformCode: read.code,
           message: read.message,
         },
-        hint,
+        hint: moved.hint,
       });
     }
   }
