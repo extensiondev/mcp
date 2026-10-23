@@ -128,7 +128,7 @@ describe("extension_workspace reads environment variables by name and writes pla
 
     expect(out.ok).toBe(false);
     expect(out.status).toBe("secret-console-only");
-    expect(out.error.code).toBe("E_BAD_REQUEST");
+    expect(out.error.code).toBe("E_CONSOLE_ONLY");
     expect(out.error.name).toBe("SecretConsoleOnly");
     expect(out.value.names).toEqual(["STRIPE_KEY"]);
     expect(out.value.consoleUrl).toMatch(/\/acme\/widget\/project-settings\/environment$/);

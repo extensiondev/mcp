@@ -175,7 +175,7 @@ function secretConsoleOnly(names: string[], consoleUrl: string, platformCode?: s
     status: "secret-console-only",
     value: { action: SET_ENVIRONMENT, names, consoleUrl, trackUrl: consoleUrl, sayToPerson: say, nextStep: { kind: "console", say, url: consoleUrl } },
     error: {
-      code: "E_BAD_REQUEST",
+      code: "E_CONSOLE_ONLY",
       name: "SecretConsoleOnly",
       ...(platformCode ? { platformCode } : {}),
       message: `${list} ${names.length === 1 ? "is flagged secret" : "are flagged secret"}, and a secret's value never passes through this server: it is typed by a person on the console environment page, ${consoleUrl}. Nothing was sent. Plain variables (secret false) are set from here.`,
