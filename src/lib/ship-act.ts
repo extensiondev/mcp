@@ -97,6 +97,8 @@ const HINTS: Record<string, string> = {
   PUBLISH_STORE_NOT_SUPPORTED: "Sending a draft to review is a Chrome Web Store act here; the other stores enter review when they are submitted.",
   PUBLISH_IN_FLIGHT: `The publish you asked for is already on its way and nothing was dispatched again. Read the record with ${STORES_READ}, or call extension_submit {action: "status"} when it exists, and never send the draft again while it is on its way.`,
   CANCEL_IN_FLIGHT: `The withdrawal you asked for is already on its way and nothing was dispatched again. Read the record with ${STORES_READ} before asking again.`,
+  SUBMISSION_NOT_CANCELLABLE: `The store holds no review to withdraw for this submission; the platform read the store's current state before asking anyone to approve. ${STORES_READ} reads the record it settled.`,
+  REVIEW_RECORD_STALE: `The store's last answer about this submission is older than a day and the platform could not read the store for this project from here, so it asked the project's poller instead of withdrawing on a stale record. Read the submission again in a few minutes with ${STORES_READ}, then call again.`,
   VERSION_NOT_AHEAD: "Pass a version above the current one, or a level instead of a version.",
   TESTING_WORKSPACE_READ_ONLY: "This is a testing workspace, which reads but does not change anything.",
 };
@@ -112,8 +114,40 @@ export function shipRefusalHint(code: string, retryAfterSeconds?: number): strin
   return HINTS[code];
 }
 
+const STATE_CODES: Record<string, string> = {
+  SUBMISSION_NOT_CANCELLABLE: "store-not-reviewing",
+  REVIEW_RECORD_STALE: "review-record-stale",
+};
+
 function refusedStatus(act: string): string {
   return `${act}-refused`;
+}
+
+/* @invariant THE STORE'S CURRENT STATE IS ANSWERED AS A STATE, WITH NO
+ * APPROVAL ASKED. The platform re-polls a day-old review before it mints an
+ * approval, and its refusal carries the state it read and when; the answer
+ * carries the same and says it in one sentence, so an owner is never asked
+ * to approve withdrawing a review the store already ended.
+ */
+function storeStateFields(code: string, body: Row): Row {
+  const status = STATE_CODES[code];
+  if (!status) return {};
+
+  const state = text(body.state);
+  const checkedAt = text(body.checkedAt);
+  const visibility = text(body.visibility);
+  const say =
+    code === "SUBMISSION_NOT_CANCELLABLE"
+      ? `The Chrome Web Store says ${state || "there is no active submission"}${visibility ? ` (${visibility})` : ""}${checkedAt ? `, read ${checkedAt}` : ""}, so there is no review to withdraw and no approval was requested. Say status to read the record.`
+      : `The store's last answer about this submission${state ? ` (${state}${checkedAt ? `, ${checkedAt}` : ""})` : ""} is older than a day and the platform could not read the store from here, so it asked the project's poller and withdrew nothing; no approval was requested. Say status again in a few minutes.`;
+
+  return {
+    ...(state ? { state } : {}),
+    ...(checkedAt ? { checkedAt } : {}),
+    ...(visibility ? { visibility } : {}),
+    ...(text(body.recordStatus) ? { recordStatus: text(body.recordStatus) } : {}),
+    sayToPerson: say,
+  };
 }
 
 function refusal(act: ShipAct, read: ProjectApiRefusal, api: ProjectApi): string {
@@ -123,7 +157,9 @@ function refusal(act: ShipAct, read: ProjectApiRefusal, api: ProjectApi): string
   const ownerOnly = read.code === OWNER_REQUIRED_CODE;
   const status = ownerOnly
     ? "needs-owner"
-    : read.status === 400
+    : STATE_CODES[read.code]
+      ? STATE_CODES[read.code]
+      : read.status === 400
       ? "bad-request"
       : ALLOWANCE.has(read.code) || read.status === 429
         ? read.code === "BUILD_DISPATCH_DISABLED"
@@ -143,6 +179,7 @@ function refusal(act: ShipAct, read: ProjectApiRefusal, api: ProjectApi): string
       project: `${api.ref.workspace}/${api.ref.project}`,
       ...(act.value ?? {}),
       ...(before ? { refusedBeforeApproval: true } : {}),
+      ...storeStateFields(read.code, body),
       ...(read.retryAfterSeconds ? { retryAfterSeconds: read.retryAfterSeconds } : {}),
       ...(refunded ? { approvalId: act.approvalId, approvalRefunded: true, sayToPerson: REFUNDED_SAY, nextStep: REFUNDED_STEP } : {}),
     },

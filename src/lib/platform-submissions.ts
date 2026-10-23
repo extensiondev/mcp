@@ -28,6 +28,22 @@ export interface StoreReview {
   state: string;
   checkedAt?: string;
   source?: string;
+  visibility?: string;
+  crxVersion?: string;
+}
+
+export interface StoreAct {
+  act: string;
+  status: string;
+  storeMessage?: string;
+  at?: string;
+}
+
+export interface SubmissionDispatch {
+  runState: string;
+  failedStep?: string;
+  failedReason?: string;
+  refunded: boolean;
 }
 
 export interface StoreUpload {
@@ -40,6 +56,9 @@ export interface PlatformSubmission {
   id?: string;
   store: string;
   status?: string;
+  rawStatus?: string;
+  cancel?: StoreAct;
+  dispatch?: SubmissionDispatch;
   version?: string;
   buildSha?: string;
   channel?: string;
@@ -77,8 +96,51 @@ function storeReviewOf(raw: unknown): StoreReview | undefined {
   const out: StoreReview = { state };
   const checkedAt = str(row.checkedAt);
   const source = str(row.source);
+  const visibility = str(row.visibility);
+  const crxVersion = str(row.crxVersion);
   if (checkedAt) out.checkedAt = checkedAt;
   if (source) out.source = source;
+  if (visibility) out.visibility = visibility;
+  if (crxVersion) out.crxVersion = crxVersion;
+
+  return out;
+}
+
+function storeActOf(raw: unknown): StoreAct | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+
+  const row = raw as Record<string, unknown>;
+  const act = str(row.act);
+  const status = str(row.status);
+  if (!act || !status) return undefined;
+
+  const out: StoreAct = { act, status };
+  const storeMessage = str(row.storeMessage);
+  const at = str(row.at);
+  if (storeMessage) out.storeMessage = storeMessage;
+  if (at) out.at = at;
+
+  return out;
+}
+
+/* @invariant THE DISPATCH IS ANSWERED AS A STATE, NEVER AS A RUN. The
+ * platform's dispatch record names the run id and its Actions page beside
+ * the state; this reader keeps the state, the step and the store's reason,
+ * and whether the approval came back, and nothing that names a mirror or a
+ * run, which the answers must never carry.
+ */
+function dispatchOf(raw: unknown): SubmissionDispatch | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+
+  const row = raw as Record<string, unknown>;
+  const runState = str(row.runState);
+  if (!runState) return undefined;
+
+  const out: SubmissionDispatch = { runState, refunded: Boolean(str(row.refundedAt)) };
+  const failedStep = str(row.failedStep);
+  const failedReason = str(row.failedReason);
+  if (failedStep) out.failedStep = failedStep;
+  if (failedReason) out.failedReason = failedReason;
 
   return out;
 }
@@ -123,12 +185,17 @@ export function toSubmission(raw: Record<string, unknown>): PlatformSubmission |
   const out: PlatformSubmission = { store, run };
   const storeReview = storeReviewOf(raw.storeReview);
   const storeUpload = storeUploadOf(raw.storeUpload);
+  const cancel = storeActOf(raw.cancel);
+  const dispatch = dispatchOf(raw.dispatch);
   if (storeReview) out.storeReview = storeReview;
   if (storeUpload) out.storeUpload = storeUpload;
+  if (cancel) out.cancel = cancel;
+  if (dispatch) out.dispatch = dispatch;
 
   const fields: Array<[keyof PlatformSubmission, unknown]> = [
     ["id", raw.id],
     ["status", raw.status],
+    ["rawStatus", raw.rawStatus],
     ["version", raw.version],
     ["buildSha", raw.buildId],
     ["channel", raw.channel],

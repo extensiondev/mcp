@@ -853,6 +853,8 @@ export async function preflight(args: StoreActArgs): Promise<string> {
       : "";
   const green = blocked.length === 0 && unread.length === 0;
   const reviewing = chrome ? await chromeReviewInProgress(api) : null;
+  const reviewBlocks = Boolean(reviewing) && !uploadStopsAtDraft("chrome", modeIdOf(stores.chrome));
+  const reviewLine = reviewing ? (reviewBlocks ? reviewSentence(reviewing) : draftBesideReviewSentence(reviewing)) : "";
   const reviewUrl = consoleProjectUrl(
     api.ref,
     ConsoleProjectPage.submissionsStore("chrome"),
@@ -878,28 +880,43 @@ export async function preflight(args: StoreActArgs): Promise<string> {
       storesPageUrl,
       ...(itemUrl ? { itemUrl } : {}),
       ...(reviewing ? { chromeReview: reviewing, trackUrl: reviewUrl } : {}),
-      sayToPerson: [inputsSay, reviewing ? reviewSay : "", readinessHint]
+      sayToPerson: [inputsSay, reviewLine, readinessHint]
         .filter(Boolean)
         .join(" "),
-      nextStep: reviewing
+      nextStep: reviewBlocks
         ? nextStep("done", reviewSay, reviewUrl)
         : green
           ? submitStep(asked, modeIds)
           : null,
     },
-    hint: [inputsSay, reviewing ? reviewSay : "", readinessHint]
+    hint: [inputsSay, reviewLine, readinessHint]
       .filter(Boolean)
       .join(" "),
     warnings: [unreadLine],
   });
 }
 
-/* @invariant A PREFLIGHT NAMES THE REVIEW THAT IS ALREADY RUNNING. The
- * readiness report says whether a build could be submitted, not whether one
- * already was, and on 2026-10-21 the answer offered a draft while Chrome was
- * reviewing the same project. The platform's own submission record is the
- * only reader of that fact, so the preflight reads it and, when the store's
- * recorded state is a pending review, answers done instead of submit.
+function modeIdOf(view: unknown): string | undefined {
+  return isRow(view) && isRow(view.submissionMode) ? text(view.submissionMode.id) || undefined : undefined;
+}
+
+function draftBesideReviewSentence(review: Row): string {
+  const build = text(review.buildSha);
+
+  return `Chrome is reviewing ${build ? `build ${build}` : "another build"}; under the saved draft mode a submit uploads a new draft beside it and enters no review.`;
+}
+
+/* @invariant A PREFLIGHT NAMES THE REVIEW THAT IS ALREADY RUNNING, AND BLOCKS
+ * ONLY A SUBMIT THAT WOULD ENTER ONE. The readiness report says whether a
+ * build could be submitted, not whether one already was, and on 2026-10-21
+ * the answer offered a draft while Chrome was reviewing the same project.
+ * The platform's record is the reader of that fact, read no older than a day
+ * (the platform re-polls the store before it answers), so the preflight
+ * answers done instead of submit when the recorded state is an open review
+ * and the saved mode would send the upload to review. A draft mode upload
+ * enters no review, so the review is named and the submit step stays; and a
+ * record the store has contradicted (no active submission, published,
+ * rejected) blocks nothing.
  */
 async function chromeReviewInProgress(
   api: Parameters<typeof readSubmissionRecord>[0],
@@ -911,8 +928,10 @@ async function chromeReviewInProgress(
 
   const record = read.record;
   const state = text(record.storeReview?.state);
+  if (text(record.rawStatus) === "no-active-submission") return null;
+
   const pending = state
-    ? /pending|review/i.test(state) && !/published|rejected|taken/i.test(state)
+    ? /pending|review/i.test(state) && !/published|rejected|taken|no_active/i.test(state)
     : text(record.status).toLowerCase() === "submitted";
   if (!pending) return null;
 

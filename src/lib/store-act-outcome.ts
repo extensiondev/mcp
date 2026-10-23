@@ -24,9 +24,20 @@ export function judgePublish(record: PlatformSubmission): Verdict {
   return { kind: "waiting", status: status || null };
 }
 
+/* @invariant A WITHDRAWAL THAT FAILED AT THE STORE IS A RECORDED OUTCOME,
+ * NOT A WAIT. The platform's dispatch record reads failed with the store's
+ * reason once the run died, and the record stops reading submitted once the
+ * store's present is known; either is the answer, and the wait ends there
+ * instead of running out its bound on a record that will never move.
+ */
 export function judgeCancel(record: PlatformSubmission): Verdict {
   const status = text(record.status).toLowerCase();
-  if (status && !LIVE_STATUSES.has(status)) return { kind: "recorded", status };
+
+  if (record.dispatch?.runState === "failed") {
+    return { kind: "recorded", status: "cancel-failed", storeState: record.storeReview?.state ?? null, failed: true };
+  }
+
+  if (status && !LIVE_STATUSES.has(status)) return { kind: "recorded", status, storeState: record.storeReview?.state ?? null };
 
   return { kind: "waiting", status: status || null };
 }

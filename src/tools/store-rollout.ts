@@ -8,7 +8,7 @@
 
 import { awaitRecordedOutcome, dispatchedHint, madeSentence, stampNow } from "../lib/act-outcome";
 import { envelope } from "../lib/envelope";
-import { readSubmissionRecord, type PlatformSubmission } from "../lib/platform-submissions";
+import { readSubmissionRecord, type PlatformSubmission, type SubmissionDispatch } from "../lib/platform-submissions";
 import { projectApiGet } from "../lib/project-api";
 import { badShipRequest, isRow, openShipApi, runShipAct, text } from "../lib/ship-act";
 import { actLinks, judgeCancel, judgeRollout, trackOf } from "../lib/store-act-outcome";
@@ -50,7 +50,8 @@ export async function cancelSubmission(args: StoreActArgs): Promise<string> {
   if (!ran.ok) return ran.out;
 
   const acceptedAt = text(ran.json.dispatchedAt) || stampNow();
-  const base: Row = { action: "cancel", ...ran.json };
+  const { dispatch: sentDispatch, ...answered } = ran.json;
+  const base: Row = { action: "cancel", ...answered };
   const links = actLinks(COMMAND, { ...args, action: "cancel" } as Row, "canceled", base, [], "submission");
   const trackUrl = trackOf(links);
   const waited = await awaitRecordedOutcome<PlatformSubmission>({
@@ -59,13 +60,28 @@ export async function cancelSubmission(args: StoreActArgs): Promise<string> {
     judge: judgeCancel,
   });
   const made = madeSentence(links);
+  const dispatch = dispatchState(waited.record?.dispatch ?? sentDispatch);
+
+  if (waited.failed) {
+    const reason = dispatch.failedReason || "the withdrawal run failed before the store answered";
+    const say = `The withdrawal failed at the store: ${reason}. ${dispatch.refunded ? "The approval was refunded." : "The approval was not refunded."} Say status to read the store's current state.`;
+
+    return envelope({
+      ok: false,
+      command: COMMAND,
+      status: "cancel-failed",
+      value: { ...base, dispatch, outcome: waited.outcome, links, trackUrl, sayToPerson: say },
+      error: { code: "E_PLATFORM", name: "CancelFailed", message: `The withdrawal of submission ${submissionId} failed at the store: ${reason}` },
+      hint: `${say} ${storesRead(args)} reads the record the platform settled from the store. ${made}`,
+    });
+  }
 
   if (waited.outcome.recorded) {
     return envelope({
       ok: true,
       command: COMMAND,
       status: "canceled",
-      value: { ...base, outcome: waited.outcome, links },
+      value: { ...base, dispatch, outcome: waited.outcome, links, trackUrl },
       hint: `The platform's record of submission ${submissionId} now reads ${waited.outcome.status}, so it is out of the store's review. ${storesRead(args)} reads it again. ${made}`,
     });
   }
@@ -74,9 +90,25 @@ export async function cancelSubmission(args: StoreActArgs): Promise<string> {
     ok: true,
     command: COMMAND,
     status: "cancel-dispatched",
-    value: { ...base, outcome: waited.outcome, links },
+    value: { ...base, dispatch, outcome: waited.outcome, links, trackUrl },
     hint: `${dispatchedHint({ acceptedAt, trackUrl, readCall: storesRead(args) })} ${made}`,
   });
+}
+
+/* @invariant `value.dispatch` IS A STATE: runState, the step and the store's
+ * reason when it failed, and whether the approval came back. The platform's
+ * record also names the run and its page; neither is answered here.
+ */
+function dispatchState(raw: unknown): SubmissionDispatch {
+  const row = isRow(raw) ? raw : {};
+  const typed = row as Partial<SubmissionDispatch> & { refundedAt?: unknown };
+
+  return {
+    runState: text(typed.runState) || "unknown",
+    ...(text(typed.failedStep) ? { failedStep: text(typed.failedStep) } : {}),
+    ...(text(typed.failedReason) ? { failedReason: text(typed.failedReason) } : {}),
+    refunded: typed.refunded === true || Boolean(text(typed.refundedAt)),
+  };
 }
 
 export async function raiseRollout(args: StoreActArgs): Promise<string> {

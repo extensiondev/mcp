@@ -101,6 +101,88 @@ describe("extension_submit withdraws a submission, raises a staged rollout and c
     expect(platform.sent("POST", CANCEL)[0].body).toEqual({ approvalId: "apr_c" });
     expect(out.status).toBe("cancel-dispatched");
     expect(out.value.dispatchId).toBe("d-1");
+    expect(out.value.trackUrl).toBeTruthy();
+    expect(out.hint).toContain("extension_release_status");
+  });
+
+  it("cancel whose run failed at the store answers cancel-failed with the store's reason and the refund, never the run", async () => {
+    if (process.platform === "win32") return;
+
+    const reason = "NOT_CANCELLABLE: Your item 'bdio' does not have an active submission that can be cancelled.";
+    platform.login();
+    platform.routes[`POST ${CANCEL}`] = () => ({
+      body: {
+        ok: true,
+        dispatched: true,
+        store: "chrome",
+        submissionId: SUBMISSION,
+        storeSubmissionId: "cws_1",
+        dispatchId: "d-1",
+        dispatchedAt: "2026-10-23T18:03:01.248Z",
+        dispatch: { dispatchId: "d-1", dispatchedAt: "2026-10-23T18:03:01.248Z", action: "cancel", runState: "queued" },
+      },
+    });
+
+    platform.routes["GET /api/cli/stores/submissions"] = () => ({
+      body: {
+        submissions: [
+          {
+            id: SUBMISSION,
+            store: "chrome",
+            status: "draft",
+            rawStatus: "no-active-submission",
+            buildId: "111d167",
+            version: "0.1.0",
+            storeReview: { state: "PUBLISHED", checkedAt: "2026-10-23T18:20:00.000Z", source: "poll", visibility: "unlisted" },
+            cancel: { act: "cancel", status: "failed", storeMessage: reason, at: "2026-10-23T18:20:00.000Z" },
+            dispatch: {
+              dispatchId: "d-1",
+              dispatchedAt: "2026-10-23T18:03:01.248Z",
+              action: "cancel",
+              runState: "failed",
+              failedStep: "Run the Chrome store action",
+              failedReason: reason,
+              refundedAt: "2026-10-23T18:10:00.000Z",
+              workflowRunUrl: "https://github.com/extension-land/1--prj/actions/runs/9",
+            },
+          },
+        ],
+      },
+    });
+
+    const out = JSON.parse(await submit({ action: "cancel", submissionId: SUBMISSION, approvalId: "apr_c", api: API }));
+
+    expect(out.status).toBe("cancel-failed");
+    expect(out.ok).toBe(false);
+    expect(out.value.dispatch).toEqual({ runState: "failed", failedStep: "Run the Chrome store action", failedReason: reason, refunded: true });
+    expect(out.value.sayToPerson).toBe(`The withdrawal failed at the store: ${reason}. The approval was refunded. Say status to read the store's current state.`);
+    expect(out.value.trackUrl).toBeTruthy();
+    expect(JSON.stringify(out)).not.toMatch(/workflowRun|actions\/runs|1--prj/);
+  });
+
+  it("cancel of a review the store already ended answers the store's state and asks for no approval", async () => {
+    if (process.platform === "win32") return;
+
+    platform.login();
+    platform.routes[`POST ${CANCEL}`] = () => ({
+      status: 409,
+      body: {
+        code: "SUBMISSION_NOT_CANCELLABLE",
+        message: "The Chrome Web Store says PUBLISHED (unlisted) for this item, read 2026-10-23T18:20:00.000Z, so there is no review to withdraw.",
+        state: "PUBLISHED",
+        checkedAt: "2026-10-23T18:20:00.000Z",
+        visibility: "unlisted",
+        recordStatus: "draft",
+        refusedBeforeApproval: true,
+      },
+    });
+
+    const out = JSON.parse(await submit({ action: "cancel", submissionId: SUBMISSION, api: API }));
+
+    expect(platform.sent("POST", APPROVALS)).toHaveLength(0);
+    expect(out.status).toBe("store-not-reviewing");
+    expect(out.value).toMatchObject({ state: "PUBLISHED", checkedAt: "2026-10-23T18:20:00.000Z", visibility: "unlisted", recordStatus: "draft", refusedBeforeApproval: true });
+    expect(out.value.sayToPerson).toContain("no review to withdraw and no approval was requested");
     expect(out.hint).toContain("extension_release_status");
   });
 
@@ -227,11 +309,56 @@ describe("extension_submit withdraws a submission, raises a staged rollout and c
     expect(out.hint).toContain("Nothing goes to review until you publish.");
   });
 
-  it("preflight answers done, not submit, while the platform records a Chrome review in progress", async () => {
+  it("preflight keeps the submit step for a draft mode while Chrome reviews another build, naming the review", async () => {
     if (process.platform === "win32") return;
 
     platform.login();
     platform.routes[`POST ${PREFLIGHT("chrome")}`] = () => ({ body: report("chrome", true) });
+    platform.routes["GET /api/cli/stores/submissions"] = () => ({
+      body: {
+        submissions: [
+          { id: SUBMISSION, store: "chrome", status: "submitted", buildId: "111d167", version: "0.1.0", submittedAt: "2026-10-20T12:36:16.000Z", storeReview: { state: "PENDING_REVIEW", checkedAt: "2026-10-21T18:00:27.000Z", source: "poll" } },
+        ],
+      },
+    });
+
+    const out = JSON.parse(await submit({ action: "preflight", browsers: ["chrome"], buildSha: "603fc8a", api: API }));
+
+    expect(out.status).toBe("preflight-read");
+    expect(out.value.stores.chrome.canSubmit).toBe(true);
+    expect(out.value.chromeReview).toMatchObject({ submissionId: SUBMISSION, storeState: "PENDING_REVIEW" });
+    expect(out.value.nextStep.kind).toBe("submit");
+    expect(out.hint).toContain("enters no review");
+    expect(out.hint).not.toContain("already reviewing");
+  });
+
+  it("preflight blocks nothing when the store's own state says there is no active submission", async () => {
+    if (process.platform === "win32") return;
+
+    platform.login();
+    platform.routes[`POST ${PREFLIGHT("chrome")}`] = () => ({ body: report("chrome", true) });
+    platform.routes["GET /api/cli/stores/submissions"] = () => ({
+      body: {
+        submissions: [
+          { id: SUBMISSION, store: "chrome", status: "draft", rawStatus: "no-active-submission", buildId: "111d167", version: "0.1.0", submittedAt: "2026-10-20T12:36:16.000Z", storeReview: { state: "PUBLISHED", checkedAt: "2026-10-23T18:20:00.000Z", source: "poll", visibility: "unlisted" } },
+        ],
+      },
+    });
+
+    const out = JSON.parse(await submit({ action: "preflight", browsers: ["chrome"], buildSha: "603fc8a", api: API }));
+
+    expect(out.value.chromeReview).toBeUndefined();
+    expect(out.value.nextStep.kind).toBe("submit");
+  });
+
+  it("preflight answers done, not submit, while the platform records a Chrome review in progress and the saved mode would enter one", async () => {
+    if (process.platform === "win32") return;
+
+    platform.login();
+    platform.routes[`POST ${PREFLIGHT("chrome")}`] = () => ({
+      body: { ...report("chrome", true), submissionMode: { id: "public", label: "Public", description: "Published to everyone after review.", rollout: "broad" } },
+    });
+
     platform.routes["GET /api/cli/stores/submissions"] = () => ({
       body: {
         submissions: [
