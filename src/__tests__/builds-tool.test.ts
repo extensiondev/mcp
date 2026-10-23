@@ -199,6 +199,8 @@ describe("extension_builds reads the platform's builds with the project's own to
     expect(out.value.build).toMatchObject({ buildId: "603fc8a", status: "success" });
     expect(out.value.build.runUrl).toBe(out.value.build.consoleUrl);
     expect(out.value.artifacts[0]).toMatchObject({ browser: "chrome", type: "Extension package" });
+    expect(out.value.artifacts[0].download).toEqual({ action: "download", buildId: "603fc8a", browser: "chrome" });
+    expect(out.hint).toContain('action:"download"');
     expect(out.value.integrity.chrome).toEqual({
       ok: false,
       failed: [{ id: "download-package", title: "Download package", detail: "HTTP 401 Unauthorized" }],

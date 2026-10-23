@@ -120,8 +120,8 @@ describe("extension_builds starts a rebuild, changes build settings as a plain c
     });
   }
 
-  it("offers rebuild, configure and create-channel beside the reads, and is no longer a read-only tool", () => {
-    expect(schema.inputSchema.properties.action.enum).toEqual(["list", "get", "logs", "rebuild", "recheck", "configure", "create-channel", "configure-channel", "delete-channel"]);
+  it("offers download, rebuild, configure and create-channel beside the reads, and is no longer a read-only tool", () => {
+    expect(schema.inputSchema.properties.action.enum).toEqual(["list", "get", "logs", "download", "rebuild", "recheck", "configure", "create-channel", "configure-channel", "delete-channel"]);
     expect(TOOL_POLICY.extension_builds.annotations).toMatchObject({ readOnlyHint: false, openWorldHint: true });
     expect(TOOL_POLICY.extension_builds.ships).toBeUndefined();
     expect(TOOL_POLICY.extension_builds.untrusted).toBe(true);

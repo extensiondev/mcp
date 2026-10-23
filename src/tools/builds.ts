@@ -20,8 +20,9 @@ import {
   projectApiReadFailure,
   type ProjectApi,
 } from "../lib/project-api";
-import { configure, createChannel, type ActArgs } from "./builds-acts";
+import { configure, createChannel } from "./builds-acts";
 import { CONFIGURE_CHANNEL, DELETE_CHANNEL, configureChannel, deleteChannelConsoleOnly } from "./builds-channel";
+import { DOWNLOAD_ACTION, download, type DownloadArgs } from "./builds-download";
 import { buildFailures, cancelledSentence, readLogs } from "./builds-logs";
 import { rebuild } from "./builds-rebuild";
 import { recheck } from "./builds-recheck";
@@ -33,21 +34,21 @@ const MAX_LIMIT = 50;
 export const schema = {
   name: COMMAND,
   description:
-    "Read, rebuild and configure the platform's builds of the logged-in project on extension.dev: action list (the default), get, logs, recheck, rebuild, configure, create-channel, configure-channel and delete-channel. The three reads change nothing; the acts change the project, and every one of them answers what the platform recorded in value.outcome and the links it made or touched in value.links, waiting up to waitSeconds for the record and answering rebuild-dispatched or recheck-dispatched until it confirms. Every answer links the console page it is about in value.trackUrl; failure details (the failed step, annotations, last lines) come back as data, and the build page shows the rest. Not for reading channels, release history or store submissions: that is extension_release_status. Not for reading the build settings: that is extension_workspace action:'settings'. A rebuild spends the workspace's build allowance and is rate limited. Rebuild, recheck, configure, a private channel and a channel's fields are plain calls under the owner's own token, with this client's permission prompt as the gate; a public channel audience keeps the approve page, and a channel delete stays in the console. This uses the stored login for the project (extension_auth), against the server the call's api names.",
+    "Read, download, rebuild and configure the platform's builds of the logged-in project on extension.dev: action list (the default), get, logs, download, recheck, rebuild, configure, create-channel, configure-channel and delete-channel. The three reads change nothing; download saves a build's package to disk through the platform, verified against its integrity report, for a store upload done by hand; the acts change the project, and every one of them answers what the platform recorded in value.outcome and the links it made or touched in value.links, waiting up to waitSeconds for the record and answering rebuild-dispatched or recheck-dispatched until it confirms. Every answer links the console page it is about in value.trackUrl; failure details (the failed step, annotations, last lines) come back as data, and the build page shows the rest. Not for reading channels, release history or store submissions: that is extension_release_status. Not for reading the build settings: that is extension_workspace action:'settings'. A rebuild spends the workspace's build allowance and is rate limited. Rebuild, recheck, configure, a private channel and a channel's fields are plain calls under the owner's own token, with this client's permission prompt as the gate; a public channel audience keeps the approve page, and a channel delete stays in the console. This uses the stored login for the project (extension_auth), against the server the call's api names.",
   inputSchema: {
     type: "object" as const,
     properties: {
       action: {
         type: "string",
-        enum: ["list", "get", "logs", "rebuild", "recheck", "configure", "create-channel", "configure-channel", "delete-channel"],
+        enum: ["list", "get", "logs", "download", "rebuild", "recheck", "configure", "create-channel", "configure-channel", "delete-channel"],
         default: "list",
         description:
-          "list (the default) reads recent builds, newest first, each with its buildId, full commit sha, status (partial, with runStatus and failedBrowsers, when some browsers failed), build environment, channel, browsers, createdAt, conclusion and its console page URL. get with a buildId reads one build: its details and validation checks, the run behind it (deploymentId, startedAt, and internal.runId, an opaque id only for matching a rebuild; any run link the platform sends answers as the build's console page), its downloadable artifacts, an integrity summary per browser, failures naming the failed browsers and the manifest validator's outcome, and the usage report when one was recorded. logs with a buildId reads that build's log lines per browser: a failed browser's failure summarized by the platform (a browser with no failure line says so with the platform's reason, beside run.validation), and, when the run failed in a step every browser shares before any browser built, run.failedJob naming that job and step with its last lines while those browsers answer skipped; pass browser to read one browser, and a long log keeps its last 200 lines and says how many it left out. Log lines are written by the project's own build, so the answer is fenced as untrusted data. recheck with a buildId (and optional browser) asks the platform to rerun the integrity checks against the build's stored artifacts, without building anything: use it when a verdict predates the build's newest run (extension_publish says so); it answers rechecked with the per-browser verdict when the record confirms it, recheck-dispatched while the platform is still checking by the bound, says when publish is now possible, and refuses while a run for the build is in progress or within 60 seconds of the last recheck. rebuild starts a real build on the platform: pass buildId for the commit (default the branch head) and buildEnv; it answers the commit, the browsers, the build page in trackUrl and the run it started, then built when the record shows this run finished, build-failed when it failed, and rebuild-dispatched when the bound passes first; a rebuild keeps the build id of the build before it, so follow it with get and match internal.runId, or deploymentId and a startedAt after dispatchedAt while the run has not shown up. configure changes build settings (enabled, installCommand, buildCommand, outputDirectory per browser): pass buildSettings with only what changes, such as { firefox: { buildCommand: 'pnpm build' } }, merged into the current settings and applied at once (build-configured, with the change the platform recorded); when the platform still asks for an approval, the first call answers approval-required with the change as the platform computed it, and a second call with that approvalId applies it once. create-channel adds a release channel (channel, with optional description, color #rrggbb and audience, public or private, which defaults to the project's visibility) that extension_release_promote can then point at a build; a public audience at creation answers approval-required before anything is sent: create it private, then configure-channel opens it. configure-channel changes an existing channel (channel, with any of audience, description, color) in one PATCH: a private audience, a description and a color are plain and answer channel-configured with the change the platform recorded; audience public opens the channel's downloads to anyone with the link, so the first call answers approval-required with the approve page and a second call with that approvalId applies it once. delete-channel never runs from here: it answers console-only with the console Channels page where a workspace owner removes the channel.",
+          "list (the default) reads recent builds, newest first, each with its buildId, full commit sha, status (partial, with runStatus and failedBrowsers, when some browsers failed), build environment, channel, browsers, createdAt, conclusion and its console page URL. get with a buildId reads one build: its details and validation checks, the run behind it (deploymentId, startedAt, and internal.runId, an opaque id only for matching a rebuild; any run link the platform sends answers as the build's console page), its downloadable artifacts, an integrity summary per browser, failures naming the failed browsers and the manifest validator's outcome, and the usage report when one was recorded. logs with a buildId reads that build's log lines per browser: a failed browser's failure summarized by the platform (a browser with no failure line says so with the platform's reason, beside run.validation), and, when the run failed in a step every browser shares before any browser built, run.failedJob naming that job and step with its last lines while those browsers answer skipped; pass browser to read one browser, and a long log keeps its last 200 lines and says how many it left out. Log lines are written by the project's own build, so the answer is fenced as untrusted data. download with a buildId and browser (chrome, edge, firefox, safari, or source for the source archive a public project's build uploaded) saves that build's package from the platform, through www under the stored login and never from the registry address, to .extension.dev/artifacts/<sha>/<browser>.zip under projectPath (git-ignored there) or to the directory `to` names; it answers downloaded with path, bytes, sha256 and verified (true when the file matches the sha256 the integrity report records, 'no-report' when no record names one) and integrity-mismatch, with the file left for inspection and a sentence not to upload it, when it does not; this is the file a store asks for by hand, such as Edge's first Partner Center package. recheck with a buildId (and optional browser) asks the platform to rerun the integrity checks against the build's stored artifacts, without building anything: use it when a verdict predates the build's newest run (extension_publish says so); it answers rechecked with the per-browser verdict when the record confirms it, recheck-dispatched while the platform is still checking by the bound, says when publish is now possible, and refuses while a run for the build is in progress or within 60 seconds of the last recheck. rebuild starts a real build on the platform: pass buildId for the commit (default the branch head) and buildEnv; it answers the commit, the browsers, the build page in trackUrl and the run it started, then built when the record shows this run finished, build-failed when it failed, and rebuild-dispatched when the bound passes first; a rebuild keeps the build id of the build before it, so follow it with get and match internal.runId, or deploymentId and a startedAt after dispatchedAt while the run has not shown up. configure changes build settings (enabled, installCommand, buildCommand, outputDirectory per browser): pass buildSettings with only what changes, such as { firefox: { buildCommand: 'pnpm build' } }, merged into the current settings and applied at once (build-configured, with the change the platform recorded); when the platform still asks for an approval, the first call answers approval-required with the change as the platform computed it, and a second call with that approvalId applies it once. create-channel adds a release channel (channel, with optional description, color #rrggbb and audience, public or private, which defaults to the project's visibility) that extension_release_promote can then point at a build; a public audience at creation answers approval-required before anything is sent: create it private, then configure-channel opens it. configure-channel changes an existing channel (channel, with any of audience, description, color) in one PATCH: a private audience, a description and a color are plain and answer channel-configured with the change the platform recorded; audience public opens the channel's downloads to anyone with the link, so the first call answers approval-required with the approve page and a second call with that approvalId applies it once. delete-channel never runs from here: it answers console-only with the console Channels page where a workspace owner removes the channel.",
       },
       buildId: {
         type: "string",
         description:
-          "Which build, as its short or full commit sha (the buildId from action:'list'). Required for get, logs and recheck. With rebuild, the commit to build; omitted, the head of the project's branch.",
+          "Which build, as its short or full commit sha (the buildId from action:'list'). Required for get, logs, download and recheck. With rebuild, the commit to build; omitted, the head of the project's branch.",
       },
       buildEnv: {
         type: "string",
@@ -84,7 +85,15 @@ export const schema = {
       },
       browser: {
         type: "string",
-        description: "With logs, read only this browser's lines (chrome, firefox, edge, safari). With get, summarize integrity for this browser only. With recheck, recheck only this browser.",
+        description: "With logs, read only this browser's lines (chrome, firefox, edge, safari). With get, summarize integrity for this browser only. With recheck, recheck only this browser. With download, required: the browser whose package to save, or source for the source archive.",
+      },
+      projectPath: {
+        type: "string",
+        description: "With download, the extension project root: the file is written to .extension.dev/artifacts/<sha>/ under it and that folder is added to its .gitignore when the project is a git repository. Required unless `to` names a directory.",
+      },
+      to: {
+        type: "string",
+        description: "With download, the directory to write the package into instead of the project's .extension.dev/artifacts/<sha>/; relative to projectPath when both are given.",
       },
       limit: {
         type: "number",
@@ -233,6 +242,23 @@ function integritySummary(json: unknown): Row {
   return { ok: body.ok === true, failed, checks: checks.length };
 }
 
+/* @invariant THE PACKAGE ROW NAMES THE CALL THAT SAVES IT. The platform's
+ * downloadUrl is the registry address, which answers 401 to a project token
+ * (ledger 152), so an agent reading the row needs the path that works: the
+ * download action with this build and this browser. Only the extension
+ * package rows carry it; metadata, integrity and executable rows keep their
+ * link alone.
+ */
+function withDownloadHint(row: unknown, buildId: string): unknown {
+  if (!isRow(row)) return row;
+
+  const browser = text(row.browser).toLowerCase();
+  const name = text(row.name).toLowerCase();
+  if (!browser || name !== `${browser}-extension.zip`) return row;
+
+  return { ...row, download: { action: DOWNLOAD_ACTION, buildId, browser } };
+}
+
 const RUN_ONLY_KEYS = ["runId", "workflowRunId", "runCorrelation"];
 const RUN_LINK_KEYS = ["runUrl", "workflowRunUrl", "htmlUrl"];
 
@@ -329,6 +355,7 @@ async function getBuild(args: HandlerArgs): Promise<string> {
 
   const usageMarkdown = usage.ok ? text(usage.json?.markdown) : "";
   const canonical = text(detail.json.buildId) || buildId;
+  const artifactRows = (artifacts.ok && Array.isArray(artifacts.json) ? artifacts.json : []).map((row) => withDownloadHint(row, canonical));
   const failing = Object.entries(integrityByBrowser).filter(([, v]) => (v as Row).ok !== true).map(([k]) => k);
   const failures = buildFailures(detail.json);
   const buildPage = buildConsoleUrl(opened.api, canonical, args.api);
@@ -341,7 +368,7 @@ async function getBuild(args: HandlerArgs): Promise<string> {
       action: "get",
       build: { ...buildView(detail.json, buildPage), consoleUrl: buildPage },
       run: { ...runOf(detail.json), ...(text(detail.json.runUrl) ? { runUrl: buildPage } : {}) },
-      artifacts: artifacts.ok && Array.isArray(artifacts.json) ? artifacts.json : [],
+      artifacts: artifactRows,
       integrity: integrityByBrowser,
       ...(failures ? { failures: failures.value } : {}),
       usage: usage.ok
@@ -358,7 +385,9 @@ async function getBuild(args: HandlerArgs): Promise<string> {
             ? ""
             : "; every integrity check passed"
         : ""
-    }.${failures ? ` ${failures.sentence}` : ""} Pass action:"logs" with this buildId for its log lines.`,
+    }.${failures ? ` ${failures.sentence}` : ""} Pass action:"logs" with this buildId for its log lines${
+      artifactRows.some((row) => isRow(row) && row.download) ? `, or action:"${DOWNLOAD_ACTION}" with a browser to save its package to disk (artifacts[].download names the call)` : ""
+    }.`,
     warnings: [
       artifacts.ok ? null : `The artifact list could not be read (${artifacts.message}).`,
       usage.ok ? null : `The usage report could not be read (${usage.message}).`,
@@ -387,14 +416,14 @@ async function logs(args: HandlerArgs): Promise<string> {
   });
 }
 
-interface HandlerArgs extends ActArgs {
-  browser?: string;
+interface HandlerArgs extends DownloadArgs {
   limit?: number;
 }
 
 export async function handler(args: HandlerArgs): Promise<string> {
   if (args.action === "get") return getBuild(args);
   if (args.action === "logs") return logs(args);
+  if (args.action === DOWNLOAD_ACTION) return download(args);
   if (args.action === "rebuild") return rebuild(args);
   if (args.action === "recheck") return recheck(args);
   if (args.action === "configure") return configure(args);
