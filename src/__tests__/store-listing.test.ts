@@ -221,6 +221,69 @@ describe("STORE.md fills the store listing", () => {
     ]);
   });
 
+  it("reads a subtitle and search terms for the App Store and refuses each over its limit", () => {
+    const withLines = (subtitle: string, terms: string) =>
+      parseStoreMdListing(
+        STORE_MD.replace(
+          "- Screenshots:",
+          [`- Subtitle: ${subtitle}`, `- Search terms: ${terms}`, "- Screenshots:"].join("\n"),
+        ),
+      );
+    const safari = listingForStore(withLines("Blur names on every tab", "privacy, redact, pii"), "safari");
+
+    expect(safari.listing).toMatchObject({
+      subtitle: "Blur names on every tab",
+      searchTerms: ["privacy", "redact", "pii"],
+    });
+
+    expect(safari.skipped).toEqual([]);
+    expect(listingForStore(withLines("Blur names", "privacy"), "chrome").listing).not.toHaveProperty("subtitle");
+    expect(listingForStore(withLines("Blur names", "privacy"), "chrome").listing).not.toHaveProperty("searchTerms");
+    expect(listingForStore(withLines("Blur names", "privacy"), "edge").listing.searchTerms).toEqual(["privacy"]);
+
+    const long = listingForStore(
+      withLines("Blur every name on every open tab now", Array.from({ length: 12 }, (_, i) => `keyword-${i}`).join(", ")),
+      "safari",
+    );
+
+    expect(long.listing).not.toHaveProperty("subtitle");
+    expect(long.listing).not.toHaveProperty("searchTerms");
+    expect(long.skipped).toEqual([
+      "subtitle in STORE.md is 37 characters, over the 30 the listing takes, so it was left out",
+      "searchTerms in STORE.md is 121 characters joined by commas, over the 100 the App Store keywords take, so it was left out",
+    ]);
+
+    expect(long.unread.subtitle).toEqual({ line: "- Subtitle:", reason: "is 37 characters, over the 30 the listing takes" });
+    expect(listingForStore(withLines("Blur names", "privacy"), "edge").skipped).toEqual([]);
+  });
+
+  it("reads the App Store lines under the Safari section and takes the review contact phone in E.164 only", () => {
+    const withSafari = (phone: string) =>
+      parseStoreMdListing(
+        `${STORE_MD}\n## Safari\n\n- Subtitle: Blur names on screen\n- Search terms: privacy, redact\n- Review contact phone: ${phone}\n\n### Reviewer notes\n\nClick the toolbar button.\n`,
+      );
+    const safari = listingForStore(withSafari("+55 (11) 99999-9999"), "safari");
+
+    expect(safari.listing).toMatchObject({
+      subtitle: "Blur names on screen",
+      searchTerms: ["privacy", "redact"],
+      reviewContactPhone: "+5511999999999",
+    });
+
+    expect(safari.skipped).toEqual([]);
+    expect(listingForStore(withSafari("+5511999999999"), "chrome").listing).not.toHaveProperty("reviewContactPhone");
+    expect(listingForStore(withSafari("+5511999999999"), "chrome").listing).not.toHaveProperty("searchTerms");
+
+    const bare = listingForStore(withSafari("11 99999 9999"), "safari");
+
+    expect(bare.listing).not.toHaveProperty("reviewContactPhone");
+    expect(bare.skipped).toEqual([
+      "reviewContactPhone in STORE.md is not an E.164 phone number (a plus, the country code and the digits, for example +5511999999999), so it was left out",
+    ]);
+
+    expect(bare.unread.reviewContactPhone?.line).toBe("- Review contact phone:");
+  });
+
   it("hashes the vector the platform pins to the same digest", () => {
     const icon = {
       sha256: "a".repeat(64),
@@ -490,6 +553,38 @@ describe("extension_submit sync-listing and the preflight advisory", () => {
       reason: "workflow-stale",
       message: "This project's store workflow does not know the listing push yet.",
     });
+  });
+
+  it("sends the App Store search terms and subtitle so a STORE.md change to either answers changed", async () => {
+    if (process.platform === "win32") return;
+
+    platform.login();
+    fs.writeFileSync(
+      path.join(root, "STORE.md"),
+      STORE_MD.replace("- Screenshots:", "- Search terms: privacy, redact\n- Screenshots:"),
+    );
+
+    platform.routes[`PUT ${LISTING("safari")}`] = (call) => ({
+      body: {
+        ok: true,
+        store: "safari",
+        changes: Array.isArray(call.body.listing.searchTerms)
+          ? [`searchTerms: [] -> ${JSON.stringify(call.body.listing.searchTerms)}`]
+          : [],
+      },
+    });
+
+    platform.routes[`POST ${PREFLIGHT("safari")}`] = () => ({ body: { checks: [] } });
+
+    const written = JSON.parse(
+      await submit({ action: "sync-listing", browsers: ["safari"], projectPath: root, approvalId: "apr_s", api: API }),
+    );
+    const put = platform.sent("PUT", LISTING("safari")).slice(-1)[0]!.body;
+
+    expect(put.listing.searchTerms).toEqual(["privacy", "redact"]);
+    expect(written.status).toBe("listing-synced");
+    expect(written.value.stores.safari.changes).toEqual(['searchTerms: [] -> ["privacy","redact"]']);
+    expect(written.value.stores.safari.filled).toContain("searchTerms");
   });
 
   it("refuses a screenshot outside projectPath and one approval for two stores before sending anything", async () => {
