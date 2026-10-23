@@ -25,6 +25,7 @@ import {
 import { contradictoryRef } from "./store-status";
 import { envelope, type ErrorCode } from "../lib/envelope";
 import { platformHoldEnvelope } from "../lib/platform-hold";
+import { readPlatformVisibility, type ProjectVisibility } from "../lib/platform-visibility";
 
 function fail(
   name: string,
@@ -63,10 +64,12 @@ export async function readReleases(args: {
   const metaUrl = registryFileUrl(ref, "meta.json", args.api);
   const buildsUrl = registryFileUrl(ref, "builds/index.json", args.api);
 
-  const [channelsRaw, metaRes, buildsRaw] = await Promise.all([
+  const named = Boolean(args.workspace || args.project);
+  const [channelsRaw, metaRes, buildsRaw, platform] = await Promise.all([
     fetchRegistryJson(channelsUrl, fetch, { ref, api: args.api }),
     fetchRegistryJson(metaUrl, fetch, { ref, api: args.api }),
     fetchRegistryJson(buildsUrl, fetch, { ref, api: args.api }),
+    readPlatformVisibility({ ref, named, api: args.api }),
   ]);
   const channelsRes = requireShape(channelsRaw, channelsShapeProblem);
   const buildsRes = requireShape(buildsRaw, buildIndexShapeProblem);
@@ -77,11 +80,13 @@ export async function readReleases(args: {
     (res) => !res.ok && res.held === true,
   );
 
-  if (heldRead && !heldRead.ok) {
+  const heldPlatform = !platform.ok && !platform.skipped && platform.held ? platform : null;
+
+  if ((heldRead && !heldRead.ok) || heldPlatform) {
     return platformHoldEnvelope({
       command: "extension_release_status",
       name: "ReleaseListHeld",
-      body: heldRead.body,
+      body: heldRead && !heldRead.ok ? heldRead.body : heldPlatform?.body,
       api: args.api,
       value: { workspace: ref.workspace, project: ref.project },
     });
@@ -120,6 +125,16 @@ export async function readReleases(args: {
     return url ? { ...c, channelUrl: url } : { ...c };
   });
   const channelWithheld = isPrivate ? channelLinkFields(ref, visibility, null, args.api) : {};
+  const registryVisibility: ProjectVisibility | null = metaRes.ok ? (isPrivate ? "private" : "public") : null;
+  const projectVisibility = platform.ok ? platform.visibility : registryVisibility;
+  const projectVisibilitySource = platform.ok ? "platform" : registryVisibility ? "registry" : null;
+  const visibilityNote = platform.ok
+    ? registryVisibility && registryVisibility !== platform.visibility
+      ? `The platform records this project as ${platform.visibility} while the registry's meta.json says ${registryVisibility}: projectVisibility is the platform's record, and the links above follow the registry until meta.json is republished, which saving the Visibility section in the console does.`
+      : null
+    : platform.skipped
+      ? null
+      : `The platform's visibility record could not be read (${platform.message}), so projectVisibility comes from the registry's meta.json${registryVisibility ? "" : ", which could not be read either"}.`;
   const buildsWithUrls = recentBuilds.map((b) => ({
     ...b,
     publicUrl: userlandProjectUrl(
@@ -150,6 +165,8 @@ export async function readReleases(args: {
       project: ref.project,
       ...(meta?.name ? { name: meta.name } : {}),
       ...(meta?.visibility ? { visibility: meta.visibility } : {}),
+      projectVisibility,
+      projectVisibilitySource,
       channels: channelsWithUrls,
       recentBuilds: buildsWithUrls,
       registryUrl: channelsUrl,
@@ -177,6 +194,7 @@ export async function readReleases(args: {
           : `No channels or builds are recorded on the registry yet for ${ref.workspace}/${ref.project}. Push a commit to produce a build, then check ${buildsPageUrl}.`,
     warnings: [
       publicUrlNote,
+      visibilityNote,
       channelsUnavailable,
       buildsUnavailable,
       metaRes.ok ? null : `meta.json could not be read (${metaRes.message}), so the project's visibility is unknown and no public page links are offered.`,
