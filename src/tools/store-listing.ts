@@ -32,6 +32,7 @@ import {
 } from "../lib/approval-gate";
 import { approvalRoundTrip } from "../lib/approval-outcome";
 import { badShipRequest, isRow, openShipApi, text } from "../lib/ship-act";
+import { pushAnswer, pushSentence, readPushState, sendListing } from "../lib/store-listing-push";
 import { STORE_MD_FILENAME } from "../lib/store-md";
 import {
   LISTING_STORES,
@@ -368,32 +369,6 @@ const chromeListingLine = (synced: string[]): string =>
     ? " Chrome's own listing fields, the privacy policy URL included, cannot be written through Google's API: paste them once in the item's dashboard, and extension.dev keeps this copy as the record."
     : "";
 
-/* @invariant THE PUSH TO APPLE IS ANSWERED AS A STATE, NEVER AS A RUN. The
- * platform dispatches the Safari listing push on the project's mirror and may
- * answer with the run it found; this tool passes on whether the push started
- * and why not, and nothing that names a mirror or an Actions run. Its result
- * is read back through preflight, where the record the run writes passes the
- * Safari listing checks.
- */
-function appStoreConnectPush(raw: unknown): Row {
-  if (!isRow(raw)) return {};
-
-  return {
-    appStoreConnect:
-      raw.dispatched === true
-        ? {
-            status: "dispatched",
-            message:
-              'The listing is being pushed to App Store Connect from the project\'s own App Store Connect key; extension_submit (action: "preflight") reports each field once the push lands.',
-          }
-        : {
-            status: "not-dispatched",
-            reason: text(raw.reason),
-            message: text(raw.message),
-          },
-  };
-}
-
 async function syncOne(
   api: ProjectApi,
   args: ListingArgs,
@@ -401,19 +376,28 @@ async function syncOne(
   patch: ListingPatch,
 ): Promise<Row | { out: string }> {
   const approvalId = text(args.approvalId);
-  const sent = await projectApiSend<Row>(
-    api,
-    "PUT",
-    `stores/${store}/listing`,
-    { ...writeBody(patch), ...(approvalId ? { approvalId } : {}) },
+  const { sent, resend } = await sendListing(api, store, {
+    ...writeBody(patch),
+    ...(approvalId ? { approvalId } : {}),
+  });
+  const pushUrl = consoleProjectUrl(
+    api.ref,
+    ConsoleProjectPage.submissionsStore(store),
+    args.api,
   );
+
+  const pushRow = (raw: unknown): Row => {
+    const push = pushAnswer(raw, resend, pushUrl);
+
+    return push ? { appStoreConnect: push } : {};
+  };
 
   if (sent.ok) {
     return {
       store,
       status: "synced",
       changes: Array.isArray(sent.json.changes) ? sent.json.changes : [],
-      ...appStoreConnectPush(sent.json.appStoreConnect),
+      ...pushRow(sent.json.appStoreConnect),
     };
   }
 
@@ -433,7 +417,13 @@ async function syncOne(
     };
   }
 
-  if (sent.code === "NO_CHANGE") return { store, status: "unchanged" };
+  if (sent.code === "NO_CHANGE") {
+    return {
+      store,
+      status: "unchanged",
+      ...pushRow(isRow(sent.body) ? sent.body.appStoreConnect : null),
+    };
+  }
 
   if (!approvalId && sent.code === "APPROVAL_REQUIRED") {
     const scope = { store, listingDigest: listingDigest(patch) };
@@ -621,6 +611,13 @@ export async function syncListing(args: ListingArgs): Promise<string> {
   }
 
   const rows = Object.values(stores) as Row[];
+  const push = rows
+    .map((row) => (isRow(row.appStoreConnect) ? row.appStoreConnect : null))
+    .find(Boolean);
+  const pushState = push ? readPushState(push) : null;
+  const say = pushState
+    ? pushSentence(pushState, push?.resend === "refused" ? "refused" : "none")
+    : "";
   const approvals = rows.filter((row) => row.status === "approval-required");
   const failed = rows.filter(
     (row) =>
@@ -638,6 +635,7 @@ export async function syncListing(args: ListingArgs): Promise<string> {
       ConsoleProjectPage.stores,
       args.api,
     ),
+    ...(say ? { sayToPerson: say } : {}),
   };
   const blockingLine = rows
     .filter(
@@ -726,7 +724,7 @@ export async function syncListing(args: ListingArgs): Promise<string> {
       command: COMMAND,
       status: `${ACT}-dispatched`,
       value: { ...value, outcome, links },
-      hint: `The platform accepted the listing change for ${synced.join(", ") || asked.join(", ")}, and its record could not be read back yet (${outcome.readProblem}); extension_submit action:"preflight" reads what each store carries and still needs. ${made}`,
+      hint: `The platform accepted the listing change for ${synced.join(", ") || asked.join(", ")}, and its record could not be read back yet (${outcome.readProblem}); extension_submit action:"preflight" reads what each store carries and still needs.${say ? ` ${say}` : ""} ${made}`,
     });
   }
 
@@ -735,6 +733,6 @@ export async function syncListing(args: ListingArgs): Promise<string> {
     command: COMMAND,
     status: "listing-synced",
     value: { ...value, outcome, links },
-    hint: `${blockingLine ? `${blockingLine}. ` : ""}The listing on extension.dev now carries what ${STORE_MD_FILENAME} and the build cover, read back from the platform's record; extension_submit action:"preflight" reads what each store still needs.${chromeListingLine(synced)} ${made}`,
+    hint: `${blockingLine ? `${blockingLine}. ` : ""}The listing on extension.dev now carries what ${STORE_MD_FILENAME} and the build cover, read back from the platform's record; extension_submit action:"preflight" reads what each store still needs.${chromeListingLine(synced)}${say ? ` ${say}` : ""} ${made}`,
   });
 }

@@ -479,112 +479,247 @@ describe("extension_submit sync-listing and the preflight advisory", () => {
     expect(written.hint).toContain("chrome still lacks");
   });
 
+  const safariSync = (extra: Record<string, unknown> = {}) =>
+    submit({ action: "sync-listing", browsers: ["safari"], projectPath: root, approvalId: "apr_s", api: API, ...extra });
+  const SUBMISSIONS = "http://console.extension.localhost/acme/widget/submissions/safari";
+
   it("answers the App Store Connect push as a state and never names the run it started", async () => {
     if (process.platform === "win32") return;
 
     platform.login();
-    platform.routes[`PUT ${LISTING("safari")}`] = () => ({
-      body: {
-        ok: true,
-        store: "safari",
-        changes: ['title: "" -> "PII Shield"'],
-        appStoreConnect: {
-          dispatched: true,
-          dispatchId: "d-1",
-          workflowRunId: 77,
-          workflowRunUrl:
-            "https://github.com/extensiondev/1--prj_app/actions/runs/77",
-          runCorrelation: "run-name",
+    platform.routes[`POST ${PREFLIGHT("safari")}`] = () => ({ body: { checks: [] } });
+
+    const answers: Array<[Record<string, unknown>, Record<string, unknown>, string]> = [
+      [
+        { status: "dispatched", runState: "queued", runUrl: "https://github.com/extensiondev/1--prj_app/actions/runs/77", workflowRunId: 77, dispatchId: "d-1" },
+        { status: "dispatched", runState: "queued" },
+        "The App Store Connect push is queued; say preflight in a minute and I read what landed.",
+      ],
+      [
+        { status: "dispatched", runState: "running", runUrl: "https://github.com/extensiondev/1--prj_app/actions/runs/77" },
+        { status: "dispatched", runState: "running" },
+        "The App Store Connect push is running; say preflight in a minute and I read what landed.",
+      ],
+      [
+        { status: "dispatched" },
+        { status: "dispatched" },
+        "The App Store Connect push is dispatched; say preflight in a minute and I read what landed.",
+      ],
+      [
+        {
+          status: "failed",
+          runState: "failed",
+          failedStep: "chmod scripts/store/safari-listing.sh",
+          retryHint: "The mirror is missing the listing scripts; the next mirror sync adds them, then sync-listing again",
+          runUrl: "https://github.com/extensiondev/1--prj_app/actions/runs/78",
         },
-        trackUrl: `${API}/acme/widget/project-settings/stores`,
-      },
-    });
-
-    platform.routes[`POST ${PREFLIGHT("safari")}`] = () => ({
-      body: { checks: [] },
-    });
-
-    const written = JSON.parse(
-      await submit({
-        action: "sync-listing",
-        browsers: ["safari"],
-        projectPath: root,
-        approvalId: "apr_s",
-        api: API,
-      }),
-    );
-
-    expect(written.status).toBe("listing-synced");
-    expect(written.value.stores.safari.appStoreConnect).toEqual({
-      status: "dispatched",
-      message: expect.stringContaining("App Store Connect"),
-    });
-
-    const answer = JSON.stringify(written);
-    expect(answer).not.toContain("actions/runs");
-    expect(answer).not.toContain("1--prj_app");
-    expect(answer).not.toContain("workflowRunUrl");
-
-    platform.routes[`PUT ${LISTING("safari")}`] = () => ({
-      body: {
-        ok: true,
-        store: "safari",
-        changes: ['title: "" -> "PII Shield"'],
-        appStoreConnect: {
-          dispatched: false,
-          reason: "workflow-stale",
-          message: "This project's store workflow does not know the listing push yet.",
+        {
+          status: "failed",
+          runState: "failed",
+          failedStep: "chmod scripts/store/safari-listing.sh",
+          retryHint: "The mirror is missing the listing scripts; the next mirror sync adds them, then sync-listing again",
         },
-      },
-    });
+        "The App Store Connect push failed at chmod scripts/store/safari-listing.sh. The mirror is missing the listing scripts; the next mirror sync adds them, then sync-listing again. Say sync-listing again.",
+      ],
+      [
+        { status: "landed", runState: "landed", fieldsWritten: 8, checkedAt: "2026-10-23T15:00:00.000Z" },
+        { status: "landed", runState: "landed", fieldsWritten: 8, checkedAt: "2026-10-23T15:00:00.000Z" },
+        "The push wrote 8 fields to App Store Connect at October 23, 2026 at 15:00 UTC.",
+      ],
+      [
+        { dispatched: true, dispatchId: "d-1", workflowRunId: 77, workflowRunUrl: "https://github.com/extensiondev/1--prj_app/actions/runs/77", runCorrelation: "run-name" },
+        { status: "dispatched" },
+        "The App Store Connect push is dispatched; say preflight in a minute and I read what landed.",
+      ],
+      [
+        { dispatched: false, reason: "workflow-stale", message: "This project's store workflow does not know the listing push yet." },
+        { status: "failed", reason: "This project's store workflow does not know the listing push yet." },
+        "The App Store Connect push failed: This project's store workflow does not know the listing push yet. Say sync-listing again.",
+      ],
+    ];
 
-    const held = JSON.parse(
-      await submit({
-        action: "sync-listing",
-        browsers: ["safari"],
-        projectPath: root,
-        approvalId: "apr_s",
-        api: API,
-      }),
-    );
+    for (const [raw, state, say] of answers) {
+      platform.routes[`PUT ${LISTING("safari")}`] = () => ({
+        body: { ok: true, store: "safari", changes: ['title: "" -> "PII Shield"'], appStoreConnect: raw },
+      });
 
-    expect(held.value.stores.safari.appStoreConnect).toEqual({
-      status: "not-dispatched",
-      reason: "workflow-stale",
-      message: "This project's store workflow does not know the listing push yet.",
-    });
+      const written = JSON.parse(await safariSync());
+
+      expect(written.status).toBe("listing-synced");
+      expect(written.value.stores.safari.appStoreConnect).toEqual({ ...state, trackUrl: SUBMISSIONS });
+      expect(written.value.sayToPerson).toBe(say);
+      expect(written.hint).toContain(say);
+
+      const answer = JSON.stringify(written);
+      expect(answer).not.toContain("actions/runs");
+      expect(answer).not.toContain("1--prj_app");
+      expect(answer).not.toContain("runUrl");
+      expect(answer).not.toContain("workflowRunId");
+      expect(answer).not.toContain("dispatchId");
+      expect(answer).not.toContain("run-name");
+    }
   });
 
-  it("sends the App Store search terms and subtitle so a STORE.md change to either answers changed", async () => {
+  it("says the failed push's next step from its reason when the platform gives no retry hint", async () => {
     if (process.platform === "win32") return;
 
     platform.login();
-    fs.writeFileSync(
-      path.join(root, "STORE.md"),
-      STORE_MD.replace("- Screenshots:", "- Search terms: privacy, redact\n- Screenshots:"),
-    );
+    platform.routes[`POST ${PREFLIGHT("safari")}`] = () => ({ body: { checks: [] } });
 
-    platform.routes[`PUT ${LISTING("safari")}`] = (call) => ({
+    const nexts: Array<[string, string]> = [
+      ["The App Store Connect key was refused (401).", "Connect the App Store in the console store settings, then say sync-listing again."],
+      ["The description is over the listing's limit.", "Fix STORE.md, then say sync-listing again."],
+      ["The runner was lost.", "Say sync-listing again."],
+    ];
+
+    for (const [reason, next] of nexts) {
+      platform.routes[`PUT ${LISTING("safari")}`] = () => ({
+        body: { ok: true, store: "safari", changes: [], appStoreConnect: { status: "failed", reason } },
+      });
+
+      const written = JSON.parse(await safariSync());
+
+      expect(written.value.sayToPerson).toBe(`The App Store Connect push failed: ${reason} ${next}`);
+    }
+  });
+
+  it("names what App Store Connect still owes with the STORE.md line for each field", async () => {
+    if (process.platform === "win32") return;
+
+    platform.login();
+    platform.routes[`POST ${PREFLIGHT("safari")}`] = () => ({ body: { checks: [] } });
+    platform.routes[`PUT ${LISTING("safari")}`] = () => ({
       body: {
         ok: true,
         store: "safari",
-        changes: Array.isArray(call.body.listing.searchTerms)
-          ? [`searchTerms: [] -> ${JSON.stringify(call.body.listing.searchTerms)}`]
-          : [],
+        changes: [],
+        appStoreConnect: {
+          status: "landed",
+          runState: "landed",
+          fieldsWritten: 7,
+          landedAt: "2026-10-23T15:10:00.000Z",
+          owed: [
+            { field: "contactPhone", reason: "contactPhone required" },
+            { field: "subtitle", reason: "empty" },
+          ],
+          warnings: ["keywords were cut to 100 characters"],
+        },
       },
     });
 
+    const written = JSON.parse(await safariSync());
+
+    expect(written.value.stores.safari.appStoreConnect).toMatchObject({
+      status: "landed",
+      owed: [
+        { field: "contactPhone", reason: "contactPhone required" },
+        { field: "subtitle", reason: "empty" },
+      ],
+      warnings: ["keywords were cut to 100 characters"],
+    });
+
+    expect(written.value.sayToPerson).toBe(
+      "The push wrote 7 fields to App Store Connect at October 23, 2026 at 15:10 UTC. App Store Connect still needs: contactPhone (contactPhone required), subtitle (empty); add `- Review contact phone:` and `- Subtitle:` under the Safari section and say sync-listing again.",
+    );
+  });
+
+  it("sends an unchanged safari listing again with force when no push ever landed", async () => {
+    if (process.platform === "win32") return;
+
+    platform.login();
+    platform.routes[`POST ${PREFLIGHT("safari")}`] = () => ({ body: { checks: [] } });
+    platform.routes[`PUT ${LISTING("safari")}`] = (call) =>
+      call.body.force === true
+        ? {
+            body: {
+              ok: true,
+              store: "safari",
+              changes: [],
+              appStoreConnect: { status: "dispatched", runState: "queued", runUrl: "https://github.com/extensiondev/1--prj_app/actions/runs/79" },
+            },
+          }
+        : {
+            status: 409,
+            body: { code: "NO_CHANGE", message: "The listing already reads this way.", appStoreConnect: { status: "unchanged", runState: "unknown" } },
+          };
+
+    const resent = JSON.parse(await safariSync());
+    const puts = platform.sent("PUT", LISTING("safari"));
+
+    expect(puts).toHaveLength(2);
+    expect(puts[0]!.body.force).toBeUndefined();
+    expect(puts[1]!.body.force).toBe(true);
+    expect(puts[1]!.body.listing.title).toBe("PII Shield");
+    expect(puts[1]!.body.approvalId).toBe("apr_s");
+    expect(resent.status).toBe("listing-synced");
+    expect(resent.value.stores.safari).toMatchObject({ status: "synced", appStoreConnect: { status: "dispatched", runState: "queued", trackUrl: SUBMISSIONS } });
+    expect(resent.value.sayToPerson).toBe("The App Store Connect push is queued; say preflight in a minute and I read what landed.");
+    expect(JSON.stringify(resent)).not.toContain("actions/runs");
+
+    platform.calls.length = 0;
+    platform.routes[`PUT ${LISTING("safari")}`] = () => ({
+      status: 409,
+      body: { code: "NO_CHANGE", message: "The listing already reads this way.", appStoreConnect: { status: "unchanged", runState: "landed", landedAt: "2026-10-23T15:10:00.000Z" } },
+    });
+
+    const landed = JSON.parse(await safariSync());
+
+    expect(platform.sent("PUT", LISTING("safari"))).toHaveLength(1);
+    expect(landed.status).toBe("listing-synced");
+    expect(landed.value.outcome.status).toBe("unchanged");
+    expect(landed.value.stores.safari).toMatchObject({ status: "unchanged", appStoreConnect: { status: "unchanged", runState: "landed", trackUrl: SUBMISSIONS } });
+    expect(landed.value.sayToPerson).toBe(
+      "The listing is unchanged and its last App Store Connect push landed at October 23, 2026 at 15:10 UTC; say preflight and I read what it carries.",
+    );
+  });
+
+  it("answers unchanged with the note when an older platform refuses the forced resend", async () => {
+    if (process.platform === "win32") return;
+
+    platform.login();
     platform.routes[`POST ${PREFLIGHT("safari")}`] = () => ({ body: { checks: [] } });
 
-    const written = JSON.parse(
-      await submit({ action: "sync-listing", browsers: ["safari"], projectPath: root, approvalId: "apr_s", api: API }),
-    );
-    const put = platform.sent("PUT", LISTING("safari")).slice(-1)[0]!.body;
+    const refusals: Array<(force: unknown) => { status: number; body: Record<string, unknown> }> = [
+      (force) =>
+        force === true
+          ? { status: 400, body: { code: "BAD_REQUEST", message: "Unknown field force." } }
+          : { status: 409, body: { code: "NO_CHANGE", message: "The listing already reads this way." } },
+      () => ({ status: 409, body: { code: "NO_CHANGE", message: "The listing already reads this way." } }),
+    ];
 
-    expect(put.listing.searchTerms).toEqual(["privacy", "redact"]);
-    expect(written.status).toBe("listing-synced");
-    expect(written.value.stores.safari.changes).toEqual(['searchTerms: [] -> ["privacy","redact"]']);
-    expect(written.value.stores.safari.filled).toContain("searchTerms");
+    for (const refusal of refusals) {
+      platform.calls.length = 0;
+      platform.routes[`PUT ${LISTING("safari")}`] = (call) => refusal(call.body.force);
+
+      const unchanged = JSON.parse(await safariSync());
+      const puts = platform.sent("PUT", LISTING("safari"));
+
+      expect(puts).toHaveLength(2);
+      expect(puts[1]!.body.force).toBe(true);
+      expect(unchanged.status).toBe("listing-synced");
+      expect(unchanged.value.outcome.status).toBe("unchanged");
+      expect(unchanged.value.stores.safari).toEqual({
+        store: "safari",
+        status: "unchanged",
+        appStoreConnect: { status: "unchanged", resend: "refused", trackUrl: SUBMISSIONS },
+        filled: ["title", "shortDescription", "fullDescription", "icons"],
+        stillBlocking: [],
+      });
+
+      expect(unchanged.value.sayToPerson).toBe(
+        "The listing is unchanged and no App Store Connect push has landed; the platform cannot resend an unchanged listing yet.",
+      );
+    }
+
+    platform.calls.length = 0;
+    platform.routes[`PUT ${LISTING("chrome")}`] = () => ({ status: 409, body: { code: "NO_CHANGE", message: "The listing already reads this way." } });
+    platform.routes[`POST ${PREFLIGHT("chrome")}`] = () => ({ body: { checks: [] } });
+
+    const chrome = JSON.parse(await submit({ action: "sync-listing", browsers: ["chrome"], projectPath: root, approvalId: "apr_c", api: API }));
+
+    expect(platform.sent("PUT", LISTING("chrome"))).toHaveLength(1);
+    expect(chrome.value.stores.chrome.appStoreConnect).toBeUndefined();
+    expect(chrome.value.sayToPerson).toBeUndefined();
   });
 
   it("refuses a screenshot outside projectPath and one approval for two stores before sending anything", async () => {
