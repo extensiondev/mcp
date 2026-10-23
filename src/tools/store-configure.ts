@@ -53,7 +53,7 @@ export interface ConfigureStoreArgs {
 function credentialsConsoleOnly(args: ConfigureStoreArgs, store: StoreSettingsStore, keys: string[]): string {
   const ref = resolveCredential({ project: args.project, api: args.api }).ref;
   const connectUrl = fallbackConnectUrl(ref, store, args.api);
-  const say = `Store credentials never pass through this server, so nothing was sent. The console takes ${CREDENTIAL_LABELS[store]} once, at ${connectUrl}; paste them there, then say preflight.`;
+  const say = `Store credentials never pass through this server, so nothing was sent. The console takes ${CREDENTIAL_LABELS[store]}; the form is at ${connectUrl}. Paste them there, then say preflight.`;
 
   return envelope({
     ok: false,
