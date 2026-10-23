@@ -39,7 +39,7 @@ export interface ItemLinkUrls {
   linkItemUrl: string;
 }
 
-export type NextStepKind = "connect" | "link-item" | "submit" | "approve" | "publish" | "resubmit" | "done";
+export type NextStepKind = "connect" | "link-item" | "submit" | "approve" | "publish" | "resubmit" | "preflight" | "done";
 
 export interface NextStep {
   kind: NextStepKind;
@@ -142,7 +142,7 @@ export function doneStep(stores: string[], itemUrl: string): NextStep {
   return nextStep(
     "done",
     drafts
-      ? `${uploaded} To send it to review, save a publishing mode in the project's store settings on extension.dev; a chat act for that store is not available yet.`
+      ? `${uploaded} To send the next upload on to review, set the store's submission mode with extension_submit action:"configure-store" (one owner approval) or in the project's store settings on extension.dev.`
       : `The platform recorded the submission for ${storeNames(stores)}; each store's own review comes after this.`,
     drafts ? undefined : itemUrl || undefined,
   );

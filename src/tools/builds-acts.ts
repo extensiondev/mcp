@@ -12,13 +12,7 @@ import { ConsoleProjectPage } from "@extension.dev/urls/paths";
 
 import { consoleProjectUrl } from "../lib/registry";
 import { envelope } from "../lib/envelope";
-import { approvalRoundTrip } from "../lib/approval-outcome";
-import {
-  actionFingerprint,
-  evaluateApproval,
-  requestApprovalAfterRefusal,
-  type ApprovalGateInput,
-} from "../lib/approval-gate";
+import { type ApprovalGateInput } from "../lib/approval-gate";
 import {
   OWNER_REQUIRED_CODE,
   openProjectApi,
@@ -30,6 +24,7 @@ import {
   type ProjectApi,
   type ProjectApiRefusal,
 } from "../lib/project-api";
+import { approvedSettingsWrite } from "../lib/settings-write";
 
 export const COMMAND = "extension_builds";
 const SETTINGS_ACTION = "extension_settings.build";
@@ -251,51 +246,30 @@ export async function configure(args: ActArgs): Promise<string> {
     refusalHint: (code) => (code === "NO_CHANGE" ? "The settings already read this way; nothing needs changing." : undefined),
   };
 
-  if (approvalId) {
-    const gate = await evaluateApproval({ ...gateInput, approvalId, enabled: true });
-    if (gate.blocked) return gate.envelope;
-  }
+  const written = await approvedSettingsWrite({
+    api,
+    route: "settings/build",
+    body: { buildSettings: merged },
+    approvalId,
+    gate: gateInput,
+    mismatch: () =>
+      envelope({
+        ok: false,
+        command: COMMAND,
+        status: "configure-refused",
+        value: { action: "configure", settingsDigest: scope.settingsDigest },
+        error: {
+          code: "E_PLATFORM",
+          name: "SettingsDigestMismatch",
+          message: "The platform hashes this change differently from this server, so an approval of it could never be used. No approval was requested and nothing was changed.",
+        },
+      }),
+    undone: "Nothing was changed by this call.",
+    value: { action: "configure" },
+    next: { used: SETTINGS_CONSUMED_NEXT },
+  });
 
-  const sent = await projectApiSend<Row>(api, "PUT", "settings/build", { buildSettings: merged, ...(approvalId ? { approvalId } : {}) });
-
-  if (!sent.ok) {
-    if (!approvalId && sent.code === "APPROVAL_REQUIRED") {
-      const asked = isRow(sent.body) && isRow((sent.body as Row).approvalRequest) ? ((sent.body as Row).approvalRequest as Row) : {};
-      const ours = actionFingerprint(SETTINGS_ACTION, scope);
-
-      if (text(asked.fingerprint) && text(asked.fingerprint) !== ours) {
-        return envelope({
-          ok: false,
-          command: COMMAND,
-          status: "configure-refused",
-          value: { action: "configure", settingsDigest: scope.settingsDigest },
-          error: {
-            code: "E_PLATFORM",
-            name: "SettingsDigestMismatch",
-            message: "The platform hashes this change differently from this server, so an approval of it could never be used. No approval was requested and nothing was changed.",
-          },
-        });
-      }
-
-      return requestApprovalAfterRefusal(gateInput);
-    }
-
-    const answered = approvalRoundTrip({
-      command: COMMAND,
-      platformCode: sent.code,
-      message: sent.message,
-      approvalId,
-      undone: "Nothing was changed by this call.",
-      api: args.api,
-      value: { action: "configure" },
-      next: { used: SETTINGS_CONSUMED_NEXT },
-      retryAfterSeconds: sent.retryAfterSeconds,
-    });
-
-    if (answered) return answered;
-
-    return actRefusal(sent, "configure", api, args);
-  }
+  if (!written.ok) return written.out ?? actRefusal(written.sent, "configure", api, args);
 
   return envelope({
     ok: true,

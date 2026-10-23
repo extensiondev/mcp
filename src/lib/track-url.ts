@@ -134,6 +134,7 @@ function submitPlan(call: TrackCall): TrackPlan {
   }
 
   if (action === "rollout") return { track: { page: "store", target: { store: "chrome" } } };
+  if (action === "configure-store") return { track: { page: "store-settings" } };
 
   if (action === "publish" || action === "review") {
     const submissionId = text(call.value.submissionId) || text(call.args.submissionId);

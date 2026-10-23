@@ -37,7 +37,7 @@ describe("extension_submit withdraws a submission, raises a staged rollout and c
   const platform = useProjectRoutes("extdev-store-acts-");
 
   it("offers the store acts beside submit, and only the ones that change what users get count as shipping", () => {
-    expect(schema.inputSchema.properties.action.enum).toEqual(["submit", "preflight", "sync-listing", "cancel", "rollout", "publish", "review"]);
+    expect(schema.inputSchema.properties.action.enum).toEqual(["submit", "preflight", "sync-listing", "cancel", "rollout", "publish", "review", "configure-store"]);
     expect(schema.inputSchema.required).toEqual([]);
 
     const ships = TOOL_POLICY.extension_submit.ships as (args: Record<string, unknown>) => boolean;

@@ -130,6 +130,14 @@ export const WORLD_CASES: Record<string, WorldCase[]> = {
       },
     },
     {
+      name: "configure-store pending",
+      approval: true,
+      args: { action: "configure-store", store: "firefox", storeSettings: { enabled: true, sourceArchive: "repository" }, approvalId: "apr_cfg", ...api },
+      setup: (world) => {
+        world.routes.push([/^GET \/api\/cli\/approvals\/apr_cfg$/, () => ({ body: { status: "pending", used: false } })]);
+      },
+    },
+    {
       name: "cancel approval",
       approval: true,
       args: { action: "cancel", submissionId: "sub_1", approvalId: "apr_cancel", ...api },

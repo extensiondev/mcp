@@ -63,6 +63,7 @@ import {
   preflight as readPreflight,
   publishDraft,
 } from "./store-acts";
+import { CONFIGURE_STORE, configureStore } from "./store-configure";
 import { cancelSubmission, raiseRollout } from "./store-rollout";
 import {
   ITEM_NOT_LINKED_CODE,
@@ -146,6 +147,7 @@ export interface SubmitToolArgs {
   dryRun?: boolean;
   projectPath?: string;
   screenshots?: unknown;
+  storeSettings?: unknown;
   approvalId?: string;
   waitSeconds?: unknown;
   api?: string;
@@ -154,7 +156,7 @@ export interface SubmitToolArgs {
 export const schema = {
   name: "extension_submit",
   description:
-    "Submit a built extension to a store's review through extension.dev, which holds the store credentials and runs the upload (Chrome Web Store, Firefox AMO, Edge Add-ons, App Store for Safari), and run the store steps around it: action preflight, sync-listing, publish, cancel and rollout. It records a submission and answers what the platform recorded in value.outcome and every link it touched in value.links, waiting up to waitSeconds for the record and answering submit-dispatched until it confirms; submitted-partially names the stores not recorded, and submit-unconfirmed means no usable answer came back, so read extension_release_status before submitting again. Not for sharing, deploying or sending a link (extension_publish) or a local zip (extension_build). It defaults to a dry run that dispatches nothing; dryRun:false submits, which needs a token issued by a workspace owner and a workspace owner's approval of that exact submission, every time, and is irreversible. Submissions land least public: Chrome and Edge as drafts that enter review only through action:'publish', Firefox unlisted unless the project saved a release channel, Safari as a TestFlight draft. A Firefox upload carries the source repository at the built commit when the Firefox store setting Source archive says so. The project comes from your stored login (extension_auth; tokens live at most 7 days, CI re-mints from the console's Access tokens page); project picks one of several logins. Every answer carries value.trackUrl, the console page for it, and value.nextStep {kind, say, url}, what to do or say next.",
+    "Submit a built extension to a store's review through extension.dev, which holds the store credentials and runs the upload (Chrome Web Store, Firefox AMO, Edge Add-ons, App Store for Safari), and run the store steps around it: action preflight, sync-listing, configure-store, publish, cancel and rollout. It records a submission and answers what the platform recorded in value.outcome and every link it touched in value.links, waiting up to waitSeconds for the record and answering submit-dispatched until it confirms; submitted-partially names the stores not recorded, and submit-unconfirmed means no usable answer came back, so read extension_release_status before submitting again. Not for sharing, deploying or sending a link (extension_publish) or a local zip (extension_build). It defaults to a dry run that dispatches nothing; dryRun:false submits, which needs a token issued by a workspace owner and a workspace owner's approval of that exact submission, every time, and is irreversible. Submissions land least public: Chrome and Edge as drafts that enter review only through action:'publish', Firefox unlisted unless the project saved a release channel, Safari as a TestFlight draft. A Firefox upload carries the source repository at the built commit when the Firefox store setting Source archive says so. The project comes from your stored login (extension_auth; tokens live at most 7 days, CI re-mints before expiry); project picks one of several logins. Every answer carries value.trackUrl, the console page for it, and value.nextStep {kind, say, url}, what to do or say next.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -168,10 +170,11 @@ export const schema = {
           "rollout",
           "publish",
           "review",
+          "configure-store",
         ],
         default: "submit",
         description:
-          "submit (the default) sends buildSha to every store in browsers: Chrome and Edge upload a draft that is not published and does not enter review, even for an item that is already live; Firefox uploads to the unlisted channel whenever the project has no saved release channel (AMO is read only as a guard: an add-on AMO already lists, with no saved channel, is refused before upload, because an unlisted upload of a listed add-on burns the version number) and signs it for self distribution; Safari uploads to App Store Connect and stops at the TestFlight draft; no store's API sets listing visibility, and a store that only uploaded is recorded as 'Uploaded, not public', never as live. preflight reads each store's readiness for browsers and writes nothing: the failing checks with what to fix (never a secret value or a secret's name); with projectPath, which failing listing checks the local STORE.md and the built icons already cover (a missing privacy policy URL names the STORE.md line to add); and the store connection: store-not-connected with value.connectUrl, store-connection-failed with the reason, store-item-not-linked with value.linkItemUrl, value.newItemUrl and value.packageUrl, each with the sentences to say in hint, and the store's own page in value.itemUrl as information only. A preflight with failing checks answers nextStep null. sync-listing fills the extension.dev store listing for browsers from projectPath's STORE.md (title, summary, description, category, license, support email, homepage URL, search terms, privacy policy URL, single purpose, permission justifications, reviewer, release and certification notes; a trailing parenthetical note on a category, license, support email or homepage line stays out of the value), the 128 px icon in the built dist/<browser> and the screenshots named, after a workspace owner approves each store's exact change (the first call answers approval-required with the change as the platform computed it; a second call with browsers:[store] and that approvalId writes it once), and answers what changed and what the listing still lacks. publish (alias review) with browsers:['chrome'] sends the newest Chrome draft, or the submissionId named, to Chrome's review, and with browsers:['edge'] the newest Edge Add-ons draft to Edge's certification review: approval-required first, then in-review with value.trackUrl once the record carries the store's own state in outcome.storeState, and publish-dispatched until then even when the run finished; with no store connected or no item linked it answers store-not-connected or store-item-not-linked before anyone is asked. cancel withdraws a submission from review (store, default chrome; submissionId from extension_release_status) and rollout raises the Chrome staged rollout to deployPercentage, which Chrome never lets drop again; both need a workspace owner's approval of the exact act and answer approval-required, or a refusal with the reason before anyone is asked. Recorded statuses (submitted, in-review, canceled, rolled-out, listing-synced) come only with outcome.recorded true; a record that reads failed answers submit-failed or publish-failed; a refusal whose value.approvalRefunded is true keeps its approvalId for the next call.",
+          "submit (the default) sends buildSha to every store in browsers: Chrome and Edge upload a draft that is not published and does not enter review, even for an item that is already live; Firefox uploads to the unlisted channel whenever the project has no saved release channel (AMO is read only as a guard: an add-on AMO already lists, with no saved channel, is refused before upload, because an unlisted upload of a listed add-on burns the version number) and signs it for self distribution; Safari uploads to App Store Connect and stops at the TestFlight draft; no store's API sets listing visibility, and a store that only uploaded is recorded as 'Uploaded, not public', never as live. preflight reads each store's readiness for browsers and writes nothing: the failing checks with what to fix (never a secret value or a secret's name); with projectPath, which failing listing checks the local STORE.md and the built icons already cover (a missing privacy policy URL names the STORE.md line to add); and the store connection: store-not-connected with value.connectUrl, store-connection-failed with the reason, store-item-not-linked with value.linkItemUrl, value.newItemUrl and value.packageUrl, each with the sentences to say in hint, and the store's own page in value.itemUrl as information only. A preflight with failing checks answers nextStep null. sync-listing fills the extension.dev store listing for browsers from projectPath's STORE.md (title, summary, description, category, license, support email, homepage URL, search terms, privacy policy URL, single purpose, permission justifications, reviewer, release and certification notes; a trailing parenthetical note on a category, license, support email or homepage line stays out of the value), the 128 px icon in the built dist/<browser> and the screenshots named, after a workspace owner approves each store's exact change (the first call answers approval-required with the change as the platform computed it; a second call with browsers:[store] and that approvalId writes it once), and answers what changed and what the listing still lacks. publish (alias review) with browsers:['chrome'] sends the newest Chrome draft, or the submissionId named, to Chrome's review, and with browsers:['edge'] the newest Edge Add-ons draft to Edge's certification review: approval-required first, then in-review with value.trackUrl once the record carries the store's own state in outcome.storeState, and publish-dispatched until then even when the run finished; with no store connected or no item linked it answers store-not-connected or store-item-not-linked before anyone is asked. cancel withdraws a submission from review (store, default chrome; submissionId from extension_release_status) and rollout raises the Chrome staged rollout to deployPercentage, which Chrome never lets drop again; both need a workspace owner's approval of the exact act and answer approval-required, or a refusal with the reason before anyone is asked. configure-store changes one store's settings (store, and storeSettings with only what changes: enabled, submissionMode among the store's own mode ids, and for Firefox sourceArchive repository or none and releaseChannel listed or unlisted) under the same owner approval as extension_builds configure: the first call answers approval-required with the change as the platform computed it, a second call with that approvalId applies it once, and store-configured answers what changed, the console store settings page in value.trackUrl and preflight as nextStep; a storeSettings key that names a credential answers credentials-console-only before anything is sent, with the console connect page in value.connectUrl and the form's own field labels, since store credentials never pass through this server. Recorded statuses (submitted, in-review, canceled, rolled-out, listing-synced) come only with outcome.recorded true; a record that reads failed answers submit-failed or publish-failed; a refusal whose value.approvalRefunded is true keeps its approvalId for the next call.",
       },
       project: PROJECT_TOKEN_INPUT,
       browsers: {
@@ -210,7 +213,7 @@ export const schema = {
       approvalId: {
         type: "string",
         description:
-          "The approval handle returned by a prior approval-required response for a real submission. A real submission (dryRun:false) is irreversible and needs a workspace owner's approval every time: call once without this to get an approval id and URL, have a human approve at extension.dev, then call again with the same id. A dry run never needs it.",
+          "The approval handle returned by a prior approval-required response for a real submission, a publish, a cancel, a rollout, a sync-listing or a configure-store. A real submission (dryRun:false) is irreversible and needs a workspace owner's approval every time: call once without this to get an approval id and URL, have a human approve at extension.dev, then call again with the same id. A dry run never needs it.",
       },
       screenshots: {
         type: "array",
@@ -223,7 +226,18 @@ export const schema = {
         type: "string",
         enum: ["chrome", "firefox", "edge", "safari"],
         description:
-          "With cancel or rollout, the store (default chrome, the one store that supports both).",
+          "With cancel or rollout, the store (default chrome, the one store that supports both); with configure-store, the store whose settings change (required).",
+      },
+      storeSettings: {
+        type: "object",
+        properties: {
+          enabled: { type: "boolean" },
+          submissionMode: { type: "string" },
+          sourceArchive: { type: "string", enum: ["repository", "none"] },
+          releaseChannel: { type: "string", enum: ["listed", "unlisted"] },
+        },
+        description:
+          "With configure-store, only the settings that change for store: enabled (boolean: whether the platform submits to this store at all), submissionMode (the store's own mode id: chrome draft-until-public, draft, public or staged; edge draft or review; firefox unlisted or listed; safari draft; dry-run on any store rehearses without uploading), and for Firefox sourceArchive (repository attaches the source repository at the built commit, which Mozilla requires for a bundled build; none sends nothing) and releaseChannel (listed or unlisted, the same write as submissionMode). Never a credential, a store id, a publisher id or a bundle id: those stay in the console.",
       },
       submissionId: {
         type: "string",
@@ -398,6 +412,7 @@ async function answer(args: SubmitToolArgs): Promise<string> {
   if (args.action === "preflight") return readPreflight(args);
   if (args.action === "cancel") return cancelSubmission(args);
   if (args.action === "rollout") return raiseRollout(args);
+  if (args.action === CONFIGURE_STORE) return configureStore(args);
 
   if (args.action && PUBLISH_ACTIONS.has(args.action)) {
     return publishDraft(args);
@@ -410,7 +425,7 @@ async function answer(args: SubmitToolArgs): Promise<string> {
   if (args.action !== undefined && args.action !== "submit") {
     return fail(
       "SubmitInputError",
-      `action must be submit, preflight, sync-listing, cancel, rollout or publish (alias review); got "${args.action}". Nothing was sent.`,
+      `action must be submit, preflight, sync-listing, configure-store, cancel, rollout or publish (alias review); got "${args.action}". Nothing was sent.`,
       "bad-request",
       "E_BAD_REQUEST",
     );

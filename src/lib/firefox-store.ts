@@ -44,10 +44,12 @@ export function firefoxConnectUrl(ref: ProjectRef | null, api?: string): string 
 }
 
 export function firefoxConnectSentences(connectUrl: string): string {
-  return `Firefox AMO is not connected to this project yet. Mozilla issues the two values once at ${AMO_API_KEY_PAGE}: the JWT issuer and the JWT secret, as the console form labels them. Paste them, with the add-on id or its AMO dashboard address, into the Firefox store settings at ${connectUrl} and turn store publishing on there; then say preflight again. I upload to the unlisted channel unless the project saved a release channel, and sign it for self distribution.`;
+  return `Firefox AMO is not connected to this project yet. Mozilla issues the two values once at ${AMO_API_KEY_PAGE}: the JWT issuer and the JWT secret, as the console form labels them. Paste them, with the add-on id or its AMO dashboard address, into the Firefox store settings at ${connectUrl}; store publishing is turned on there or with extension_submit action:"configure-store" store:"firefox" storeSettings:{enabled:true} (one owner approval); then say preflight again. I upload to the unlisted channel unless the project saved a release channel, and sign it for self distribution.`;
 }
 
 const SOURCE_ARCHIVE_CHECK = "store.firefox_source_archive";
+
+export const SOURCE_ARCHIVE_FIX = 'turn on Source archive with extension_submit action:"configure-store" store:"firefox" storeSettings:{sourceArchive:"repository"} (one owner approval)';
 
 export interface SourceArchiveRead {
   attached: boolean;
@@ -66,7 +68,7 @@ export function sourceArchiveOf(json: Row): SourceArchiveRead | null {
 export function sourceArchiveSentence(read: SourceArchiveRead, connectUrl: string): string {
   return read.attached
     ? "Firefox source archive: the platform will attach the source repository at the built commit to the upload for Mozilla's reviewers."
-    : `Firefox source archive: no source archive is configured; Mozilla requires matching sources for a bundled build, and every platform build is bundled; turn on Source archive in the console's Firefox store settings at ${connectUrl}.`;
+    : `Firefox source archive: no source archive is configured; Mozilla requires matching sources for a bundled build, and every platform build is bundled; ${SOURCE_ARCHIVE_FIX} or in the console's Firefox store settings at ${connectUrl}.`;
 }
 
 const SOURCE_ARCHIVE_SWITCH_SENTENCE =
@@ -136,6 +138,6 @@ export function firefoxSourcesOutcome(
   return {
     attached: false,
     source,
-    say: `Firefox: no sources attached; the upload went without a source archive, and Mozilla requires matching sources for a bundled build; turn on Source archive in the console's Firefox store settings at ${connectUrl} before the next submit.`,
+    say: `Firefox: no sources attached; the upload went without a source archive, and Mozilla requires matching sources for a bundled build; ${SOURCE_ARCHIVE_FIX} or in the console's Firefox store settings at ${connectUrl} before the next submit.`,
   };
 }
