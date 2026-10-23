@@ -12,6 +12,7 @@ const RULED_TABLE: Array<[keyof typeof APPROVAL_POLICY, "plain" | "approval" | "
   ["extension_builds.create-channel", "plain"],
   ["extension_builds.configure-channel", "plain"],
   ["extension_project.visibility", "plain"],
+  ["extension_settings.project", "plain"],
   ["extension_submit", "approval"],
   ["extension_store.publish", "approval"],
   ["extension_store.cancel", "approval"],
@@ -71,6 +72,12 @@ describe("the approval policy table holds Cezar's ruling of 2026-10-23 (ledger 1
     expect(approvalVerdict("extension_project.visibility", { visibility: "private" })).toBe("plain");
     expect(approvalVerdict("extension_project.visibility", { visibility: "public" })).toBe("approval");
     expect(approvalVerdict("extension_project.visibility", { visibility: "Public" })).toBe("approval");
+  });
+
+  it("keeps a live channel whose recorded audience is public on the approve page through the channel-audience row, while every other project setting is plain", () => {
+    expect(approvalVerdict("extension_settings.project")).toBe("plain");
+    expect(approvalVerdict("extension_settings.project", { audience: "private" })).toBe("plain");
+    expect(approvalVerdict("extension_settings.project", { audience: "public" })).toBe("approval");
   });
 
   it("treats an act the table does not name as one that needs an approval", () => {

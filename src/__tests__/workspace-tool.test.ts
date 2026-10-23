@@ -197,14 +197,14 @@ describe("extension_workspace reads a workspace with any project login it holds"
     });
   }
 
-  it("is a platform tool fenced as untrusted, since names and build commands are user-written, whose one write is set-visibility", () => {
+  it("is a platform tool fenced as untrusted, since names and build commands are user-written, and no longer read-only since it writes visibility and project settings", () => {
     expect(TOOL_POLICY.extension_workspace).toMatchObject({
       group: "platform",
       untrusted: true,
       annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
     });
 
-    expect(schema.inputSchema.properties.action.enum).toEqual(["info", "projects", "usage", "settings", "set-visibility"]);
+    expect(schema.inputSchema.properties.action.enum).toEqual(["info", "projects", "usage", "settings", "set-visibility", "configure-project"]);
   });
 
   it("reads the workspace and its plan by default, from the stored login's workspace", async () => {
@@ -340,7 +340,7 @@ describe("extension_workspace reads a workspace with any project login it holds"
     expect(out.value.build.chrome).toEqual(BUILD.buildSettings.chrome);
     expect(out.value.enabledBrowsers).toEqual(["chrome", "firefox"]);
     expect(out.value.consoleUrl).toContain("/acme/alpha/project-settings");
-    expect(out.hint).toContain("extension_builds (action: 'configure')");
+    expect(out.hint).toContain('extension_builds (action: "configure")');
     expect(out.hint).not.toContain("not here");
   });
 

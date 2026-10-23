@@ -22,7 +22,9 @@ export type ApprovalVerdict = "plain" | "approval" | "console";
  * channel audience (asked at creation or set on an existing channel) and a
  * public project visibility, which opens every build the project ever made,
  * all keep the page; a channel delete is a person's act in the console, like
- * a project delete. The platform holds the same table in
+ * a project delete; a live channel whose recorded audience is public
+ * resolves to the channel-audience row, since it changes what the
+ * project's live link serves. The platform holds the same table in
  * www src/services/registry/approval-policy.ts; a row changed on one side is
  * changed on both.
  */
@@ -35,6 +37,7 @@ export const APPROVAL_POLICY = {
   "extension_builds.create-channel": "plain",
   "extension_builds.configure-channel": "plain",
   "extension_project.visibility": "plain",
+  "extension_settings.project": "plain",
   extension_submit: "approval",
   "extension_store.publish": "approval",
   "extension_store.cancel": "approval",
@@ -85,7 +88,7 @@ export function publicProjectVisibility(write: PolicyWrite): boolean {
 export function approvalVerdict(act: PolicyAct, write: PolicyWrite = {}): ApprovalVerdict {
   if (act === "extension_settings.store" && publicSubmissionMode(write)) return APPROVAL_POLICY["extension_settings.store-public-mode"];
 
-  if ((act === "extension_builds.create-channel" || act === "extension_builds.configure-channel") && publicChannelAudience(write)) {
+  if ((act === "extension_builds.create-channel" || act === "extension_builds.configure-channel" || act === "extension_settings.project") && publicChannelAudience(write)) {
     return APPROVAL_POLICY["extension_builds.channel-audience"];
   }
 

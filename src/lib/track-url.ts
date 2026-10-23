@@ -31,6 +31,7 @@ export type TrackPage =
   | "store"
   | "submission"
   | "build-settings"
+  | "project-settings"
   | "store-settings"
   | "channels"
   | "visibility"
@@ -68,6 +69,7 @@ const PROJECT_PAGES: Record<Exclude<TrackPage, "console" | "workspace" | "member
         ? ConsoleProjectPage.storeSubmissions(t.store)
         : ConsoleProjectPage.submissions,
   "build-settings": () => ConsoleProjectPage.projectSettingsSection("build"),
+  "project-settings": () => ConsoleProjectPage.projectSettingsSection("general"),
   "store-settings": () => ConsoleProjectPage.projectSettingsSection("stores"),
   channels: () => ConsoleProjectPage.projectSettingsSection("channels"),
   visibility: () => ConsoleProjectPage.projectSettingsSection("visibility"),
@@ -242,6 +244,7 @@ export const TRACK_ACTS: Record<string, (call: TrackCall) => TrackPlan | null> =
     const included = include.map((section) => WORKSPACE_INCLUDE_PAGES[section]).find(Boolean);
 
     if (included) return { track: { page: included } };
+    if (action === "configure-project") return { track: { page: "project-settings" } };
 
     return action === "settings" ? { track: { page: "build-settings" } } : { track: { page: "workspace" } };
   },
