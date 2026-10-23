@@ -23,6 +23,7 @@ import {
 } from "../lib/share-record";
 import { envelope } from "../lib/envelope";
 import { createShareFromBuild } from "./shares-create";
+import { listBuildLinkShares, namesBuildLink, revokeBuildLinkShare, withBuildLinks } from "./shares-build-links";
 import { resolveToken } from "../lib/publish";
 import { LOGIN_STEPS, PROJECT_TOKEN_INPUT, noStoredLoginHint } from "../lib/credentials";
 import {
@@ -42,11 +43,22 @@ const LOGIN_HINT = LOGIN_STEPS;
 export const schema = {
   name: "extension_shares",
   description:
-    "List, create and revoke the emulator preview links that give a tester one build and its zip: the uploads this login has shared, the same links extension_preview_web share:true hands out. Not for the build link or the channel link extension_publish makes, which open a page with a download and a run command for each browser: use extension_publish for those. action list (the default) answers every artifact the logged-in project owns with its ids, state, dates and URLs so a link whose answer you lost is findable again; action create shares a build the platform already made, with no local build, metered like share:true; action revoke kills one link permanently, with no way back, after a workspace owner approves. It records the share on the platform and answers what the platform recorded in value.outcome and every link it made or touched in value.links. Pass projectPath to reconcile against the project's own append-only .extension.dev/shared-previews.json, which is read and never rewritten. This needs the same login as sharing (extension_auth or EXTENSION_DEV_TOKEN); without one, list still answers the local record with a login hint.",
+    "List, create and revoke the emulator preview links that give a tester one build and its zip (the uploads this login has shared, the same links extension_preview_web share:true hands out), and list and revoke the build links extension_publish minted (kind: build-link, preview, or both, the default). Not for making a build link or a channel link: use extension_publish. action list (the default) answers every artifact the logged-in project owns with its ids, state, dates and URLs so a link whose answer you lost is findable again; action create shares a build the platform already made, with no local build, metered like share:true; action revoke kills one link permanently, with no way back, after a workspace owner approves. It records the share on the platform and answers what the platform recorded in value.outcome and every link it made or touched in value.links. Pass projectPath to reconcile against the project's own append-only .extension.dev/shared-previews.json, which is read and never rewritten. This needs the same login as sharing (extension_auth or EXTENSION_DEV_TOKEN); without one, list still answers the local record with a login hint.",
   inputSchema: {
     type: "object" as const,
     properties: {
       project: PROJECT_TOKEN_INPUT,
+      kind: {
+        type: "string",
+        enum: ["build-link", "preview", "both"],
+        default: "both",
+        description:
+          "Which links list and revoke address. preview: the emulator preview uploads. build-link: the links extension_publish minted, each with its tokenId, label, build, audience, createdAt, expiresAt, revokedAt, live and shareUrl, read from the platform's access token list (never a token value; lastUsedAt is null because the platform does not record it). both (the default) lists both, with the build links under value.buildLinks; a revoke with a tokenId, or a url carrying share=, is a build link revoke.",
+      },
+      tokenId: {
+        type: "string",
+        description: "With revoke and kind build-link, the build link to kill (the tokenId from action list with kind build-link). The link itself as url works too.",
+      },
       action: {
         type: "string",
         enum: ["list", "create", "revoke"],
@@ -563,6 +575,8 @@ async function revokeShare(args: {
 
 export async function handler(args: {
   action?: string;
+  kind?: string;
+  tokenId?: string;
   buildId?: string;
   browser?: string;
   artifactId?: string;
@@ -578,6 +592,16 @@ export async function handler(args: {
     return createShareFromBuild({ buildId: args.buildId, browser: args.browser, project: args.project, api: args.api });
   }
 
+  if (args.action === "revoke" && namesBuildLink(args)) {
+    return revokeBuildLinkShare({
+      ...(args.tokenId ? { tokenId: args.tokenId } : {}),
+      ...(args.url ? { url: args.url } : {}),
+      ...(args.approvalId ? { approvalId: args.approvalId } : {}),
+      ...(args.api ? { api: args.api } : {}),
+      ...(args.project ? { project: args.project } : {}),
+    });
+  }
+
   if (args.action === "revoke") {
     return revokeShare({
       ...(args.artifactId ? { artifactId: args.artifactId } : {}),
@@ -589,11 +613,20 @@ export async function handler(args: {
     });
   }
 
-  return listShares({
-    ...(args.projectPath ? { projectPath: args.projectPath } : {}),
+  const kind = String(args.kind ?? "both").trim() || "both";
+  const linkArgs = {
     ...(args.status ? { status: args.status } : {}),
-    ...(args.limit != null ? { limit: args.limit } : {}),
     ...(args.api ? { api: args.api } : {}),
     ...(args.project ? { project: args.project } : {}),
+  };
+
+  if (kind === "build-link") return listBuildLinkShares(linkArgs);
+
+  const previews = await listShares({
+    ...(args.projectPath ? { projectPath: args.projectPath } : {}),
+    ...linkArgs,
+    ...(args.limit != null ? { limit: args.limit } : {}),
   });
+
+  return kind === "preview" ? previews : withBuildLinks(previews, await listBuildLinkShares(linkArgs));
 }
