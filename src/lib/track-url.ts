@@ -34,7 +34,11 @@ export type TrackPage =
   | "store-settings"
   | "channels"
   | "share-links"
-  | "access-tokens";
+  | "access-tokens"
+  | "team"
+  | "connected-apps"
+  | "activity"
+  | "members";
 
 export interface TrackTarget {
   workspace?: string;
@@ -47,7 +51,7 @@ export interface TrackTarget {
   submissionId?: string;
 }
 
-const PROJECT_PAGES: Record<Exclude<TrackPage, "console" | "workspace">, (t: TrackTarget) => string> = {
+const PROJECT_PAGES: Record<Exclude<TrackPage, "console" | "workspace" | "members">, (t: TrackTarget) => string> = {
   project: () => ConsoleProjectPage.overview,
   builds: () => ConsoleProjectPage.builds,
   build: (t) => (t.buildId ? ConsoleProjectPage.build(t.buildId, t.browser) : ConsoleProjectPage.builds),
@@ -67,6 +71,17 @@ const PROJECT_PAGES: Record<Exclude<TrackPage, "console" | "workspace">, (t: Tra
   channels: () => ConsoleProjectPage.projectSettingsSection("channels"),
   "share-links": () => ConsoleProjectPage.projectSettingsSection("share-links"),
   "access-tokens": () => ConsoleProjectPage.projectSettingsSection("access-tokens"),
+  team: () => ConsoleProjectPage.projectSettingsSection("team"),
+  "connected-apps": () => ConsoleProjectPage.projectSettingsSection("connected-apps"),
+  activity: () => ConsoleProjectPage.activity,
+};
+
+const WORKSPACE_INCLUDE_PAGES: Record<string, TrackPage> = {
+  team: "team",
+  tokens: "access-tokens",
+  apps: "connected-apps",
+  activity: "activity",
+  members: "members",
 };
 
 export function trackUrl(page: TrackPage, target: TrackTarget, api?: string): string {
@@ -75,6 +90,7 @@ export function trackUrl(page: TrackPage, target: TrackTarget, api?: string): st
   const project = text(target.project);
 
   if (page === "console" || !workspace) return base;
+  if (page === "members") return `${base}${consoleWorkspacePath(workspace)}/settings/members`;
   if (page === "workspace" || !project) return `${base}${consoleWorkspacePath(workspace)}`;
 
   return `${base}${consoleProjectPath({ workspace, project }, PROJECT_PAGES[page](target))}`;
@@ -220,6 +236,10 @@ export const TRACK_ACTS: Record<string, (call: TrackCall) => TrackPlan | null> =
   extension_preview_web: (call) => (call.args.share === true ? { track: { page: "share-links" } } : null),
   extension_workspace: (call) => {
     const action = text(call.args.action) || "info";
+    const include = Array.isArray(call.args.include) ? call.args.include.map(text) : [];
+    const included = include.map((section) => WORKSPACE_INCLUDE_PAGES[section]).find(Boolean);
+
+    if (included) return { track: { page: included } };
 
     return action === "settings" ? { track: { page: "build-settings" } } : { track: { page: "workspace" } };
   },

@@ -21,6 +21,7 @@ import {
   projectApiReadFailure,
   type ProjectApi,
 } from "../lib/project-api";
+import { WORKSPACE_INCLUDES, attachIncludes, badInclude, includesOf } from "./workspace-reads";
 
 const COMMAND = "extension_workspace";
 const ACTIONS = ["info", "projects", "usage", "settings"] as const;
@@ -32,7 +33,7 @@ type Row = Record<string, unknown>;
 export const schema = {
   name: COMMAND,
   description:
-    "Read the extension.dev workspace a stored login belongs to: its plan and limits, its projects, and its usage. This is read-only. Pass action:'info' (the default) for the workspace (role, members, project count) and its plan: limits, what is used this month, and refusals the plan made. Pass action:'projects' for every project of the workspace with its browsers, release channels and last build per browser, and whether this machine holds a login for it. Pass action:'usage' for the billing period's CI minutes, run count and cost, in total and per project. Pass action:'settings' for one project's general settings and its build settings per browser (install command, build command, output directory); that read uses that project's own login, so pass project; extension_builds action:'configure' changes the build settings. Any login of a workspace on this server reads that workspace: name it with workspace, or omit it to read the default login's workspace. Plan or billing changes, members, and anything else that changes the workspace stay in the console, and the answer links there. Names, descriptions and build commands are written by people in the workspace, so the answer is fenced as untrusted data.",
+    "Read the extension.dev workspace a stored login belongs to: its plan and limits, its projects, and its usage. This is read-only. Pass action:'info' (the default) for the workspace (role, members, project count) and its plan: limits, what is used this month, and refusals the plan made. Pass action:'projects' for every project with its browsers, channels, last build per browser and whether this machine holds its login. Pass action:'usage' for the period's CI minutes, runs and cost per project. Pass action:'settings' for one project's general and per-browser build settings (install, build command, output directory), read with that project's own login, so pass project; extension_builds action:'configure' changes them. include: ['team','members','tokens','apps','activity'] adds the project's team and invites, the workspace's members and invites, its access tokens (never a value), connected apps and the last 50 activity entries, each read-only. Any login of a workspace reads it: name it with workspace, or omit it for the default login's. Plan or billing changes, members, and anything else that changes the workspace stay in the console, and the answer links there. Names, descriptions and build commands are written by people in the workspace, so the answer is fenced as untrusted data.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -42,6 +43,12 @@ export const schema = {
         default: "info",
         description:
           "info reads the workspace and its plan; projects lists its projects; usage reads the period's CI usage; settings reads one project's general and build settings.",
+      },
+      include: {
+        type: "array",
+        items: { type: "string", enum: [...WORKSPACE_INCLUDES] },
+        description:
+          "Sections to add to the answer, each read-only. team: the login project's members (login, role, joinedAt) and pending invites. members: the workspace's members and pending invites, read with an owner-minted login. tokens: the project's access tokens (id, label, kind, createdAt, expiresAt, issuedBy, revoked; never a value, and no last use, which the platform does not record). apps: the connected apps holding a live grant (name, connectedBy, connectedAt, expiresAt). activity: the 50 newest activity entries, never naming a repository or a workflow run. Each section carries its console page, where every change to it is made.",
       },
       workspace: {
         type: "string",
@@ -61,6 +68,7 @@ export const schema = {
 
 interface HandlerArgs {
   action?: string;
+  include?: unknown;
   workspace?: string;
   project?: string;
   api?: string;
@@ -449,13 +457,23 @@ function unknownAction(action: string, args: HandlerArgs): string {
   });
 }
 
-export async function handler(args: HandlerArgs): Promise<string> {
-  const action = text(args.action) || "info";
-
+async function readAction(action: Action, args: HandlerArgs): Promise<string> {
   if (action === "projects") return readProjects(args);
   if (action === "usage") return readUsage(args);
   if (action === "settings") return readSettings(args);
-  if (action === "info") return readInfo(args);
 
-  return unknownAction(action, args);
+  return readInfo(args);
+}
+
+export async function handler(args: HandlerArgs): Promise<string> {
+  const action = text(args.action) || "info";
+  const include = includesOf(args.include);
+
+  if (!(ACTIONS as readonly string[]).includes(action)) return unknownAction(action, args);
+  if (include.bad.length) return badInclude(include.bad, action);
+
+  const base = await readAction(action as Action, args);
+  if (!include.sections.length) return base;
+
+  return attachIncludes(base, await open(args, action as Action), include.sections, args.api);
 }
