@@ -347,13 +347,14 @@ export async function createChannel(args: ActArgs): Promise<string> {
 /* @invariant A PUBLIC CHANNEL AUDIENCE IS A PERSON'S DECISION, ANSWERED BEFORE
  * ANYTHING IS SENT. Creating a channel is a plain act, but a public audience
  * opens its downloads to anyone with the link, which the ruling of
- * 2026-10-23 keeps on the approve page; the platform mints no approval for a
- * channel audience yet, so the answer names the console Releases page where
- * a workspace owner or admin sets it, and offers the private create instead.
+ * 2026-10-23 keeps on the approve page; the platform mints that approval
+ * only for a channel that exists (configure-channel), so the answer offers
+ * the private create followed by configure-channel, and names the console
+ * Releases page where a workspace owner or admin sets it by hand.
  */
 function publicAudienceKept(api: ProjectApi, args: ActArgs, name: string): string {
   const releasesPage = consoleProjectUrl(api.ref, ConsoleProjectPage.releases, args.api);
-  const say = `A public channel is a person's decision: a workspace owner or admin opens ${name} to anyone with the link from the Releases page, ${releasesPage}. I can create it private now and you open it there.`;
+  const say = `A public channel is a person's decision: I can create ${name} private now, then open it with configure-channel (audience public), which asks a workspace owner to approve on the approve page; or a workspace owner or admin opens it from the Releases page, ${releasesPage}.`;
 
   return envelope({
     ok: false,
@@ -363,7 +364,7 @@ function publicAudienceKept(api: ProjectApi, args: ActArgs, name: string): strin
     error: {
       code: "E_APPROVAL_REQUIRED",
       name: "ChannelAudienceNeedsAPerson",
-      message: `Creating ${name} as a public channel opens its downloads to anyone with the link, which a person decides on the console Releases page; nothing was sent. Create it with audience private, or without audience, and a workspace owner or admin opens it at ${releasesPage}.`,
+      message: `Creating ${name} as a public channel opens its downloads to anyone with the link, which a person decides; nothing was sent. Create it with audience private, or without audience, then extension_builds action:"configure-channel" (channel: "${name}", audience: "public") asks a workspace owner's approval of that exact change, or a workspace owner or admin opens it at ${releasesPage}.`,
     },
     hint: say,
   });

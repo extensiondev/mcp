@@ -16,18 +16,20 @@ type Row = Record<string, unknown>;
 
 /* @invariant A SETTINGS WRITE IS SENT PLAINLY, AND AN APPROVAL IS MINTED ONLY
  * WHEN THE PLATFORM ASKS. Every settings write this server makes (build
- * settings, store settings) goes through here. The policy table
+ * settings, store settings, a channel's audience and fields, a project's
+ * visibility) goes through here. The policy table
  * (approval-policy.ts) says a settings write is a plain act under the
  * owner's own token, so the write goes out with no approval and no approval
  * is minted first; the platform answers APPROVAL_REQUIRED only for an
- * audience change it computed from the stored state (a listed or public
- * submission mode), and that request is honored with the fingerprint it
+ * audience change it computed from the write (a listed or public submission
+ * mode, a public channel, a public project), and that request is honored with the fingerprint it
  * named. An approvalId the caller presents is verified first, whatever the
  * verdict, so a pending or spent grant answers legibly instead of reaching
  * the platform.
  */
 export interface SettingsWrite {
   api: ProjectApi;
+  method?: "PUT" | "PATCH";
   route: string;
   body: Row;
   approvalId: string;
@@ -52,7 +54,7 @@ export async function approvedSettingsWrite(write: SettingsWrite): Promise<Setti
     if (gate.blocked) return { ok: false, out: gate.envelope, sent: refusedByGate() };
   }
 
-  const sent = await projectApiSend<Row>(write.api, "PUT", write.route, { ...write.body, ...(approvalId ? { approvalId } : {}) });
+  const sent = await projectApiSend<Row>(write.api, write.method ?? "PUT", write.route, { ...write.body, ...(approvalId ? { approvalId } : {}) });
   if (sent.ok) return { ok: true, json: isRow(sent.json) ? sent.json : {}, verdict: settingsWriteVerdict(write) };
 
   if (!approvalId && sent.code === "APPROVAL_REQUIRED") {

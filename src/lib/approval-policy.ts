@@ -19,7 +19,9 @@ export type ApprovalVerdict = "plain" | "approval" | "console";
  * "approval" acts mint before they run. "console" acts never reach the
  * platform from here. The two audience exceptions are computed from the
  * write, never from a flag: a listed or public submission mode, and a public
- * channel audience, both keep the page. The platform holds the same table in
+ * channel audience (asked at creation or set on an existing channel), both
+ * keep the page; a channel delete is a person's act in the console, like a
+ * project delete. The platform holds the same table in
  * www src/services/registry/approval-policy.ts; a row changed on one side is
  * changed on both.
  */
@@ -30,6 +32,7 @@ export const APPROVAL_POLICY = {
   "extension_builds.rebuild": "plain",
   "extension_builds.recheck": "plain",
   "extension_builds.create-channel": "plain",
+  "extension_builds.configure-channel": "plain",
   extension_submit: "approval",
   "extension_store.publish": "approval",
   "extension_store.cancel": "approval",
@@ -42,6 +45,7 @@ export const APPROVAL_POLICY = {
   "extension_builds.channel-audience": "approval",
   "extension_settings.store-public-mode": "approval",
   "extension_store.disconnect": "console",
+  "extension_builds.delete-channel": "console",
   "extension_project.delete": "console",
   "extension_store.credentials": "console",
 } as const satisfies Record<string, ApprovalVerdict>;
@@ -72,7 +76,10 @@ export function publicChannelAudience(write: PolicyWrite): boolean {
 
 export function approvalVerdict(act: PolicyAct, write: PolicyWrite = {}): ApprovalVerdict {
   if (act === "extension_settings.store" && publicSubmissionMode(write)) return APPROVAL_POLICY["extension_settings.store-public-mode"];
-  if (act === "extension_builds.create-channel" && publicChannelAudience(write)) return APPROVAL_POLICY["extension_builds.channel-audience"];
+
+  if ((act === "extension_builds.create-channel" || act === "extension_builds.configure-channel") && publicChannelAudience(write)) {
+    return APPROVAL_POLICY["extension_builds.channel-audience"];
+  }
 
   return APPROVAL_POLICY[act];
 }

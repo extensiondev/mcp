@@ -37,6 +37,7 @@ export type ErrorCode =
   | "E_CLI"
   | "E_COMPILE"
   | "E_CONFIG"
+  | "E_CONSOLE_ONLY"
   | "E_CONTRACT_ERROR"
   | "E_CONTROL_CHANNEL"
   | "E_CONTROL_ENVELOPE"
@@ -119,6 +120,7 @@ export const ERROR_CODES: ErrorCode[] = [
   "E_CLI",
   "E_COMPILE",
   "E_CONFIG",
+  "E_CONSOLE_ONLY",
   "E_CONTRACT_ERROR",
   "E_CONTROL_CHANNEL",
   "E_CONTROL_ENVELOPE",

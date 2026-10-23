@@ -309,7 +309,7 @@ export async function platformApiGet<T = unknown>(
   api: Pick<ProjectApi, "base" | "token" | "command">,
   path: string,
   query?: Record<string, string | number | undefined>,
-  send?: { method: "POST" | "PUT"; body: unknown },
+  send?: { method: "POST" | "PUT" | "PATCH"; body: unknown },
 ): Promise<ProjectApiRead<T>> {
   const search = new URLSearchParams();
 
@@ -352,7 +352,7 @@ export async function projectApiGet<T = unknown>(
 
 export async function projectApiSend<T = unknown>(
   api: ProjectApi,
-  method: "POST" | "PUT",
+  method: "POST" | "PUT" | "PATCH",
   route: string,
   body: unknown,
 ): Promise<ProjectApiRead<T>> {

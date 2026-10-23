@@ -10,6 +10,7 @@ const RULED_TABLE: Array<[keyof typeof APPROVAL_POLICY, "plain" | "approval" | "
   ["extension_builds.rebuild", "plain"],
   ["extension_builds.recheck", "plain"],
   ["extension_builds.create-channel", "plain"],
+  ["extension_builds.configure-channel", "plain"],
   ["extension_submit", "approval"],
   ["extension_store.publish", "approval"],
   ["extension_store.cancel", "approval"],
@@ -22,6 +23,7 @@ const RULED_TABLE: Array<[keyof typeof APPROVAL_POLICY, "plain" | "approval" | "
   ["extension_builds.channel-audience", "approval"],
   ["extension_settings.store-public-mode", "approval"],
   ["extension_store.disconnect", "console"],
+  ["extension_builds.delete-channel", "console"],
   ["extension_project.delete", "console"],
   ["extension_store.credentials", "console"],
 ];
@@ -52,10 +54,14 @@ describe("the approval policy table holds Cezar's ruling of 2026-10-23 (ledger 1
     expect(publicSubmissionMode({})).toBe(false);
   });
 
-  it("keeps a public channel audience on the approve page while a private channel is plain", () => {
+  it("keeps a public channel audience on the approve page while a private channel is plain, at creation and on an existing channel", () => {
     expect(approvalVerdict("extension_builds.create-channel")).toBe("plain");
     expect(approvalVerdict("extension_builds.create-channel", { audience: "private" })).toBe("plain");
     expect(approvalVerdict("extension_builds.create-channel", { audience: "public" })).toBe("approval");
+    expect(approvalVerdict("extension_builds.configure-channel")).toBe("plain");
+    expect(approvalVerdict("extension_builds.configure-channel", { audience: "private" })).toBe("plain");
+    expect(approvalVerdict("extension_builds.configure-channel", { audience: "Public" })).toBe("approval");
+    expect(approvalVerdict("extension_builds.delete-channel")).toBe("console");
   });
 
   it("treats an act the table does not name as one that needs an approval", () => {
