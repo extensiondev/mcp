@@ -25,6 +25,7 @@ export interface RequirementRow {
   actual?: string;
   value?: string;
   push?: string;
+  pushError?: string;
 }
 
 export interface RequirementsView {
@@ -126,7 +127,8 @@ function withStoreMd(row: RequirementRow, local: LocalListingRead): RequirementR
 /* @invariant THE LIST IS THE PLATFORM'S, PASSED THROUGH WHOLE. Every row the
  * platform answers is kept with its own words: the store's label, the exact
  * format, what satisfies it, whether the project has it and, for the App
- * Store, the state of the push that carries it. Nothing here adds an input,
+ * Store, the state of the push that carries it and, when that push failed,
+ * App Store Connect's own words for the refusal. Nothing here adds an input,
  * drops one, or offers to make one; the platform generates none of these
  * artifacts and neither does this server. A missing count is read from the
  * platform when it answers one and counted from the rows only when it does
@@ -150,6 +152,7 @@ export function requirementsView(value: unknown, local: LocalListingRead = null)
         ...(text(row.actual) ? { actual: text(row.actual) } : {}),
         ...(text(row.value) ? { value: text(row.value) } : {}),
         ...(text(row.push) ? { push: text(row.push) } : {}),
+        ...(text(row.pushError) ? { pushError: text(row.pushError) } : {}),
       },
       local,
     ),

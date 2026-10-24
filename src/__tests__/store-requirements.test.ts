@@ -350,6 +350,16 @@ describe("extension_submit preflight carries what each store asks for and says w
     expect(counted).toMatchObject({ missingRequired: 1, missingOptional: 1 });
     expect(counted?.items[0]?.push).toBe("queued");
     expect(requirementsView({ store: "safari", items: [requirement({ status: "have", push: "not pushed yet" })], missingRequired: 0, missingOptional: 0 })).toMatchObject({ missingRequired: 0 });
+    const refused = requirementsView({
+      store: "safari",
+      items: [
+        requirement({ id: "safari.description", push: "failed", pushError: "App Store Connect answered 409: STATE_ERROR: Attribute 'whatsNew' cannot be edited at this time" }),
+        requirement({ id: "safari.subtitle", push: "landed", pushError: "  " }),
+      ],
+    });
+
+    expect(refused?.items[0]).toMatchObject({ push: "failed", pushError: "App Store Connect answered 409: STATE_ERROR: Attribute 'whatsNew' cannot be edited at this time" });
+    expect(refused?.items[1]).not.toHaveProperty("pushError");
     expect(counted?.items[2]?.status).toBe("unknown");
     expect(missingRequiredSentence("chrome", counted)).toBe("The Chrome Web Store asks for 1 required input the project does not have yet: Name (Up to 30 characters; the app record's name.).");
     expect(missingRequiredSentence("chrome", requirementsView({ store: "chrome", items: [requirement({})] }))).toBe("");
