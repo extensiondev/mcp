@@ -47,6 +47,7 @@ import {
   PUBLISH_APPROVAL_SENTENCE,
   connectSentences,
   connectionOf,
+  connectionSourceOf,
   failedCheckSentence,
   fallbackConnectUrl,
   itemLinkUrls,
@@ -707,7 +708,7 @@ export async function preflight(args: StoreActArgs): Promise<string> {
       text(connection.connectUrl) ||
       fallbackConnectUrl(api.ref, "chrome", args.api);
     const say = connected
-      ? `${failedCheckSentence(text(connection.reason))} ${connectSentences(connectUrl)}`
+      ? `${failedCheckSentence(text(connection.reason), "chrome", connectionSourceOf(connection.source))} ${connectSentences(connectUrl)}`
       : connectSentences(connectUrl);
     const others = blocked.filter((store) => store !== "chrome");
 

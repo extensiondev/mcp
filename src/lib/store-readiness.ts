@@ -150,7 +150,7 @@ export function rowFromConnection(browser: string, connection: ConnectionRecord)
   }
 
   if (connection.healthy === false) {
-    return { ...base, ...who, ok: false, state: "store-connection-failed", configured: true, healthy: false, reason: failedCheckSentence(connection.reason ?? "", browser) };
+    return { ...base, ...who, ok: false, state: "store-connection-failed", configured: true, healthy: false, reason: failedCheckSentence(connection.reason ?? "", browser, connection.source) };
   }
 
   if (connection.healthy !== true) {

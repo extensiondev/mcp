@@ -23,8 +23,11 @@ export const ITEM_NOT_LINKED_CODE = "STORE_ITEM_NOT_LINKED";
 
 const CHROME_DASHBOARD = "https://chrome.google.com/webstore/devconsole";
 
+export type ConnectionSource = "project" | "workspace";
+
 export interface StoreConnection {
   kind: string | null;
+  source?: ConnectionSource;
   connectedAs: string | null;
   healthy: boolean | null;
   itemId: string | null;
@@ -259,11 +262,27 @@ export function storeSwitchSentences(store: string, settingsUrl: string): string
   return `The ${name} credentials are saved for this project and only the "Store publishing" switch for that store is off, so nothing can be submitted yet; turn it on with extension_submit action:"configure-store" store:"${store}" storeSettings:{enabled:true}, a plain call under your own token, or in the store settings at ${settingsUrl}, then say preflight again.`;
 }
 
-export function failedCheckSentence(reason: string, store = "chrome"): string {
+/* @invariant A WORKSPACE'S STORE ACCOUNT FAILS FOR EVERY PROJECT IT COVERS,
+ * AND THE SENTENCE SAYS WHOSE IT IS. Cezar ruled on 2026-10-24 that a store
+ * account is saved once per workspace and every project without its own reads
+ * it, answered by the platform as `connection.source: "workspace"`. A failing
+ * check on such a connection is the workspace's account failing, so the
+ * sentence names the workspace's account and its Store accounts settings,
+ * where a workspace owner reconnects it once for every covered project.
+ */
+export function failedCheckSentence(reason: string, store = "chrome", source?: ConnectionSource | null): string {
   const said = reason.replace(/[.\s]+$/, "") || "no reason was recorded";
   const name = (STORE_NAMES[store] ?? store).replace(/^the /, "");
 
-  return `Your ${name} connection failed its last check: ${said}.`;
+  return source === "workspace"
+    ? `The workspace's ${name} account failed its last check: ${said}. A workspace owner reconnects it once in the workspace's Store accounts settings, and every project that uses it is covered again.`
+    : `Your ${name} connection failed its last check: ${said}.`;
+}
+
+export function connectionSourceOf(value: unknown): ConnectionSource | null {
+  const source = text(value);
+
+  return source === "project" || source === "workspace" ? source : null;
 }
 
 export function storeSettingsUrl(ref: ProjectRef | null, api?: string): string {
@@ -296,12 +315,14 @@ export function connectionOf(json: Row): (StoreConnection & Partial<ItemLinkUrls
   const reason = text(row.reason) || text(row.message) || text(row.lastCheckMessage);
   const itemUrl = chromeItemUrl(row);
   const connectUrl = text(json.connectUrl) || text(row.connectUrl);
+  const source = connectionSourceOf(row.source) ?? connectionSourceOf(json.connectionSource);
   const links = ["newItemUrl", "packageUrl", "linkItemUrl"]
     .map((key) => [key, text(row[key]) || text(json[key])] as const)
     .filter(([, url]) => url);
 
   return {
     kind,
+    ...(source ? { source } : {}),
     connectedAs: text(row.connectedAs) || null,
     healthy: typeof row.healthy === "boolean" ? row.healthy : null,
     itemId: text(row.itemId) || null,
