@@ -12,6 +12,7 @@ import {
   APPROVAL_REJECTED_STATUS,
   pendingApproval,
 } from "./approval-outcome";
+import { loginRefusedOnApproval } from "./approval-login";
 import { storedProjectId } from "./approval-record";
 import { readTokenClaims } from "./credential-source";
 import { envelope } from "./envelope";
@@ -201,6 +202,17 @@ export async function verifyApproval(params: {
   }
 
   const platformCode = typeof data.code === "string" ? data.code : "";
+
+  if (res.status === 401) {
+    return loginRefusedOnApproval({
+      input,
+      approvalId,
+      fingerprint,
+      status: res.status,
+      reason: typeof data.message === "string" ? withoutClosingStop(data.message) : "",
+      minted,
+    });
+  }
 
   if (res.status === 410 && platformCode === "APPROVAL_EXPIRED") {
     const expiresAt = typeof data.expiresAt === "string" ? data.expiresAt.trim() : "";

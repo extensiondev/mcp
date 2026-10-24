@@ -11,7 +11,7 @@ import path from "node:path";
 
 import { APPROVAL_REJECTED_STATUS } from "./approval-outcome";
 import { targetServer } from "./credential-server";
-import { readTokenClaims, splitRef } from "./credential-source";
+import { loginIdOf, readTokenClaims, splitRef } from "./credential-source";
 import { credentialsPath, readCredentials } from "./credentials";
 import { envelope } from "./envelope";
 import { withFileLock, writePrivateJson } from "./private-file";
@@ -21,6 +21,7 @@ export interface MintedApproval {
   workspace: string;
   project: string;
   projectId?: string;
+  loginId?: string;
   action: string;
   fingerprint: string;
   approvalUrl: string;
@@ -110,7 +111,9 @@ function prune(file: ApprovalFile, now: number): ApprovalFile {
  * bound by its prj_ id, read from the stored login the token belongs to,
  * because a rename moves the slug and not the project: the platform keeps
  * answering the approval to the same project under its new name, so a retry
- * that names the new slug is the same act, not another project's.
+ * that names the new slug is the same act, not another project's. The login
+ * itself is named by the token's own id (a fingerprint when the claims carry
+ * none, never the token), so the retry is made with the login that asked.
  */
 export function rememberMintedApproval(args: {
   api?: string;
@@ -133,11 +136,13 @@ export function rememberMintedApproval(args: {
     ? new Date(Date.parse(trimmed(args.expiresAt))).toISOString()
     : new Date(now + LONGEST_APPROVAL_TTL_SECONDS * 1000).toISOString();
   const projectId = trimmed(args.projectId) || storedProjectId(args.api, `${claims.workspace}/${claims.project}`);
+  const loginId = loginIdOf(args.token);
   const record: MintedApproval = {
     approvalId,
     workspace: claims.workspace,
     project: claims.project,
     ...(projectId ? { projectId } : {}),
+    ...(loginId ? { loginId } : {}),
     action: args.action,
     fingerprint: args.fingerprint,
     approvalUrl: trimmed(args.approvalUrl),

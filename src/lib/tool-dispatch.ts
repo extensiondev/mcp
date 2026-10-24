@@ -11,8 +11,10 @@ import {
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 
+import { bindApprovalLogin } from "./approval-login";
 import { openApprovalOnce } from "./approval-open";
 import { bindApprovalProject } from "./approval-record";
+import { withApprovalLogin } from "./approval-scope";
 import { envelope, isEnvelope, type Envelope } from "./envelope";
 import { resolveApiBase } from "./login-flow";
 import {
@@ -226,8 +228,13 @@ export function installToolHandlers(server: Server, setup: ToolHandlerOptions): 
       return toolResultFrame(attachTrack(name, normalizedArgs, staleEnvelope(name, rebuilt, stamp.stamp(), normalizedArgs)), untrusted);
     }
 
+    const held = bindApprovalLogin(name, normalizedArgs);
+
+    if ("refused" in held) return refusedFrame(held.refused);
+
     try {
       const result = await withCallApi(normalizedArgs.api, () =>
+        withApprovalLogin(held.login, () =>
         run(
           async () => {
             const answered = await tool.handler(normalizedArgs);
@@ -241,6 +248,7 @@ export function installToolHandlers(server: Server, setup: ToolHandlerOptions): 
           },
           name,
           normalizedArgs,
+        ),
         ),
       );
 

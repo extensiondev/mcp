@@ -8,6 +8,7 @@
 
 import crypto from "node:crypto";
 
+import { loginRefusedBeforeApproval } from "./approval-login";
 import { approvalUrlFor } from "./approval-outcome";
 import { verdictOfAction } from "./approval-policy";
 import { mintedApproval, rememberMintedApproval } from "./approval-record";
@@ -23,6 +24,7 @@ import {
   block,
   readJson,
   verifyApproval,
+  withoutClosingStop,
   type ApprovalGateInput,
   type ExpiredApproval,
   type ApprovalGateResult,
@@ -160,6 +162,10 @@ async function requestApproval(params: {
         value: { action: input.action, description: input.description },
       }),
     };
+  }
+
+  if (res.status === 401) {
+    return loginRefusedBeforeApproval(input, res.status, typeof data.message === "string" ? withoutClosingStop(data.message) : "");
   }
 
   if (!res.ok && data.refusedBeforeApproval === true) {

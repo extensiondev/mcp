@@ -39,7 +39,7 @@ afterEach(() => {
 
 describe("readTokenClaims", () => {
   it("reads the workspace, project and expiry off a platform token", () => {
-    expect(readTokenClaims(claimsToken("Acme", "Widget", 123))).toEqual({ workspace: "acme", project: "widget", expiresAt: 123 });
+    expect(readTokenClaims(claimsToken("Acme", "Widget", 123))).toEqual({ workspace: "acme", project: "widget", expiresAt: 123, tokenId: "x" });
   });
 
   it("answers null for a token with no readable claims", () => {

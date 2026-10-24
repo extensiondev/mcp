@@ -6,6 +6,9 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
+import crypto from "node:crypto";
+
+import { approvalLogin } from "./approval-scope";
 import { envToken } from "./credential-scope";
 import { defaultLoginDrift, dropLoginAlias, loginDriftSentence, loginMoveSentence, pinnedProject, readValidCredentials } from "./credentials";
 import { deferWarning } from "./deferred-warnings";
@@ -17,6 +20,7 @@ export interface CredentialRef {
 
 export interface TokenClaims extends CredentialRef {
   expiresAt: number | null;
+  tokenId: string | null;
 }
 
 export function readTokenClaims(token: string): TokenClaims | null {
@@ -28,6 +32,7 @@ export function readTokenClaims(token: string): TokenClaims | null {
     const parsed = JSON.parse(Buffer.from(padded, "base64").toString("utf8")) as {
       u?: unknown;
       p?: unknown;
+      n?: unknown;
       exp?: unknown;
     };
     const workspace = String(parsed?.u ?? "").trim().toLowerCase();
@@ -38,10 +43,18 @@ export function readTokenClaims(token: string): TokenClaims | null {
       workspace,
       project,
       expiresAt: typeof parsed.exp === "number" && Number.isFinite(parsed.exp) ? parsed.exp : null,
+      tokenId: String(parsed?.n ?? "").trim() || null,
     };
   } catch {
     return null;
   }
+}
+
+export function loginIdOf(token: string): string {
+  const value = String(token ?? "").trim();
+  if (!value) return "";
+
+  return readTokenClaims(value)?.tokenId ?? `sha256:${crypto.createHash("sha256").update(value).digest("hex").slice(0, 16)}`;
 }
 
 export function splitRef(name: string): CredentialRef | null {
@@ -72,6 +85,19 @@ export interface ResolvedCredential {
 export function resolveCredential(options: { project?: string; api?: string } = {}): ResolvedCredential {
   const named = String(options.project ?? "").trim();
   const api = String(options.api ?? "").trim() || undefined;
+  const held = approvalLogin();
+
+  if (held) {
+    return {
+      token: String(held.token).trim(),
+      source: "stored",
+      ref: { workspace: held.workspaceSlug, project: held.projectSlug },
+      refSource: "stored",
+      mismatch: null,
+      note: null,
+    };
+  }
+
   const pinned = pinnedProject();
   const wanted = named || pinned;
   const env = envToken();
