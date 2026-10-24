@@ -30,17 +30,26 @@ function json(body: unknown, status = 200): Response {
 describe("extension_builds download saves the platform's package through www", () => {
   let tmp: string;
   let project: string;
+  let cache: string;
   let prevXdg: string | undefined;
+  let prevCache: string | undefined;
   let prevApi: string | undefined;
+
+  const cachedPath = (browser: string) => path.join(cache, "extension-dev", "artifacts", "acme", "leon", SHA, `${browser}.zip`);
+  const projectEntries = () => fs.readdirSync(project).sort();
 
   beforeEach(() => {
     tmp = fs.mkdtempSync(path.join(os.tmpdir(), "extdev-builds-download-"));
     project = path.join(tmp, "leon");
+    cache = path.join(tmp, "cache");
     fs.mkdirSync(path.join(project, ".git"), { recursive: true });
+    fs.writeFileSync(path.join(project, ".gitignore"), "node_modules/\ndist/\n");
     prevXdg = process.env.XDG_CONFIG_HOME;
+    prevCache = process.env.XDG_CACHE_HOME;
     prevApi = process.env.EXTENSION_DEV_API_URL;
     delete process.env.EXTENSION_DEV_API_URL;
     process.env.XDG_CONFIG_HOME = path.join(tmp, "config");
+    process.env.XDG_CACHE_HOME = cache;
     platform.calls = [];
     platform.relay = {
       status: 200,
@@ -100,18 +109,22 @@ describe("extension_builds download saves the platform's package through www", (
     vi.unstubAllGlobals();
     if (prevXdg === undefined) delete process.env.XDG_CONFIG_HOME;
     else process.env.XDG_CONFIG_HOME = prevXdg;
+    if (prevCache === undefined) delete process.env.XDG_CACHE_HOME;
+    else process.env.XDG_CACHE_HOME = prevCache;
     if (prevApi === undefined) delete process.env.EXTENSION_DEV_API_URL;
     else process.env.EXTENSION_DEV_API_URL = prevApi;
 
     fs.rmSync(tmp, { recursive: true, force: true });
   });
 
-  it("writes the edge package under the project's git-ignored state folder, verified against the integrity report, with the build page as trackUrl", async () => {
+  it("writes the edge package under the user's cache directory, keyed by workspace, project and build, and leaves the project's .gitignore byte-identical", async () => {
     if (process.platform === "win32") return;
 
+    const ignoreBefore = fs.readFileSync(path.join(project, ".gitignore"));
+    const entriesBefore = projectEntries();
     const raw = await builds({ action: "download", buildId: FULL_SHA, browser: "edge", projectPath: project, api: API });
     const out = JSON.parse(raw);
-    const expectedPath = path.join(project, ".extension.dev", "artifacts", SHA, "edge.zip");
+    const expectedPath = cachedPath("edge");
 
     expect(out.ok).toBe(true);
     expect(out.status).toBe("downloaded");
@@ -124,16 +137,22 @@ describe("extension_builds download saves the platform's package through www", (
       sha256: sha256(EDGE_ZIP),
       verified: true,
       report: "integrity-report",
-      gitignored: "added",
     });
 
+    expect(path.isAbsolute(out.value.path)).toBe(true);
+    expect(out.value.path.startsWith(project)).toBe(false);
+    expect(out.value.gitignored).toBeUndefined();
     expect(out.value.trackUrl).toMatch(/\/acme\/leon\/builds\/7c80e15$/);
     expect(out.value.sayToPerson).toBe(
-      `Saved the platform's edge package for build ${SHA} at ${expectedPath}, byte-identical to what the integrity report describes (sha256 ${sha256(EDGE_ZIP)}).`,
+      `Saved the platform's edge package for build ${SHA} at ${expectedPath}, byte-identical to what the integrity report describes (sha256 ${sha256(EDGE_ZIP)}). That is your cache directory, outside the project, whose files and .gitignore were not touched.`,
     );
 
+    expect(out.hint).not.toContain(".gitignore was");
+
     expect(fs.readFileSync(expectedPath).equals(EDGE_ZIP)).toBe(true);
-    expect(fs.readFileSync(path.join(project, ".gitignore"), "utf8")).toContain(".extension.dev/");
+    expect(fs.readFileSync(path.join(project, ".gitignore")).equals(ignoreBefore)).toBe(true);
+    expect(projectEntries()).toEqual(entriesBefore);
+    expect(fs.existsSync(path.join(project, ".extension.dev"))).toBe(false);
 
     const relayCall = platform.calls.find((call) => call.url.includes("/artifacts/edge.zip"));
     expect(relayCall?.url).toBe(`${API}/api/projects/${PROJECT_ID}/builds/${FULL_SHA}/artifacts/edge.zip`);
@@ -142,6 +161,28 @@ describe("extension_builds download saves the platform's package through www", (
     expect(platform.calls.some((call) => call.url.includes("registry.extension.land"))).toBe(false);
     expect(raw).not.toContain(TOKEN);
     expect(raw).not.toMatch(/github\.com|actions\/runs/);
+  });
+
+  it("needs no projectPath for the default destination, and a project with no .gitignore gets the file without one being created", async () => {
+    if (process.platform === "win32") return;
+
+    fs.rmSync(path.join(project, ".gitignore"));
+
+    const entriesBefore = projectEntries();
+
+    const bare = JSON.parse(await builds({ action: "download", buildId: SHA, browser: "edge", api: API }));
+
+    expect(bare.ok).toBe(true);
+    expect(bare.status).toBe("downloaded");
+    expect(bare.value.path).toBe(cachedPath("edge"));
+    expect(fs.readFileSync(bare.value.path).equals(EDGE_ZIP)).toBe(true);
+
+    const withProject = JSON.parse(await builds({ action: "download", buildId: SHA, browser: "edge", projectPath: project, api: API }));
+
+    expect(withProject.ok).toBe(true);
+    expect(withProject.value.path).toBe(cachedPath("edge"));
+    expect(fs.existsSync(path.join(project, ".gitignore"))).toBe(false);
+    expect(projectEntries()).toEqual(entriesBefore);
   });
 
   it("refuses the file and says not to upload it when the bytes are not the ones the report describes", async () => {
@@ -186,14 +227,23 @@ describe("extension_builds download saves the platform's package through www", (
       body: null,
     };
 
+    const ignoreBefore = fs.readFileSync(path.join(project, ".gitignore"));
     const out = JSON.parse(await builds({ action: "download", buildId: SHA, browser: "source", to, api: API }));
 
     expect(out.ok).toBe(true);
     expect(out.value).toMatchObject({ browser: "source", path: path.join(to, "source.zip"), verified: true, report: "build-record" });
     expect(out.value.gitignored).toBeUndefined();
     expect(out.value.sayToPerson).toContain("source archive");
+    expect(out.value.sayToPerson).toContain("The project's files and .gitignore were not touched.");
     expect(fs.readFileSync(path.join(to, "source.zip")).equals(SOURCE_ZIP)).toBe(true);
+    expect(fs.existsSync(cachedPath("source"))).toBe(false);
     expect(platform.calls.some((call) => /\/integrity\//.test(call.url))).toBe(false);
+
+    const relative = JSON.parse(await builds({ action: "download", buildId: SHA, browser: "source", to: "packages/out", projectPath: project, api: API }));
+
+    expect(relative.value.path).toBe(path.join(project, "packages", "out", "source.zip"));
+    expect(path.isAbsolute(relative.value.path)).toBe(true);
+    expect(fs.readFileSync(path.join(project, ".gitignore")).equals(ignoreBefore)).toBe(true);
   });
 
   it("writes nothing when the platform refuses the token with 401 or 403", async () => {
@@ -213,6 +263,7 @@ describe("extension_builds download saves the platform's package through www", (
       expect(out.error.platformCode, String(status)).toBe(code);
       expect(out.value.trackUrl, String(status)).toMatch(/\/builds\/7c80e15$/);
       expect(fs.existsSync(path.join(project, ".extension.dev")), String(status)).toBe(false);
+      expect(fs.existsSync(cache), String(status)).toBe(false);
     }
   });
 
@@ -229,16 +280,12 @@ describe("extension_builds download saves the platform's package through www", (
     expect(out.hint).toContain('action: "get"');
   });
 
-  it("refuses before asking the platform when the browser or the destination is missing", async () => {
+  it("refuses before asking the platform when the browser or the build is missing", async () => {
     if (process.platform === "win32") return;
 
     const noBrowser = JSON.parse(await builds({ action: "download", buildId: SHA, projectPath: project, api: API }));
     expect(noBrowser.status).toBe("bad-request");
     expect(noBrowser.error.message).toContain("chrome, edge, firefox, safari");
-
-    const noPlace = JSON.parse(await builds({ action: "download", buildId: SHA, browser: "edge", api: API }));
-    expect(noPlace.status).toBe("bad-request");
-    expect(noPlace.error.message).toContain("projectPath");
 
     const noBuild = JSON.parse(await builds({ action: "download", browser: "edge", projectPath: project, api: API }));
     expect(noBuild.status).toBe("bad-request");

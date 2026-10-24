@@ -13,9 +13,8 @@ import path from "node:path";
 import { envelope } from "../lib/envelope";
 import { projectApiBytes } from "../lib/project-api-bytes";
 import { projectApiGet, projectApiReadFailure, type ProjectApi } from "../lib/project-api";
-import { ensureProjectIgnored, type ProjectIgnoreState } from "../lib/project-ignore";
-import { SHARE_STATE_DIR } from "../lib/share-record";
 import { trackUrl } from "../lib/track-url";
+import { userCacheDir } from "../lib/user-cache-dir";
 import { COMMAND, actRefusal, badRequest, isRow, openFor, text, type ActArgs } from "./builds-acts";
 
 export const DOWNLOAD_ACTION = "download";
@@ -26,7 +25,6 @@ export const MAX_PACKAGE_BYTES = 512 * 1024 * 1024;
 const PACKAGE_BROWSERS = ["chrome", "edge", "firefox", "safari"] as const;
 const SHA256 = /^[0-9a-f]{64}$/;
 const FULL_SHA = /^[a-f0-9]{7,40}$/i;
-const IGNORE_COMMENT = "# Extension.dev local state: downloaded build packages and share records, not part of your extension.";
 
 export type Verified = true | false | "no-report";
 
@@ -36,8 +34,17 @@ export interface DownloadArgs extends ActArgs {
   projectPath?: string;
 }
 
-export function defaultArtifactsDir(projectPath: string, buildId: string): string {
-  return path.join(path.resolve(projectPath), SHARE_STATE_DIR, ARTIFACTS_DIR, buildId);
+/* @invariant A READ NEVER DIRTIES THE OWNER'S REPOSITORY. The package a
+ * download saves is a copy of what the platform holds, so by default it
+ * lands in the user's cache directory, keyed by workspace, project and
+ * build, and never under the project: the first version wrote it to
+ * .extension.dev/artifacts/ inside the project and appended that folder to
+ * the project's .gitignore, which left a tracked file modified after a
+ * read-only ask (ledger 249). Only an explicit `to` writes anywhere else,
+ * and no path this action takes touches .gitignore.
+ */
+export function defaultArtifactsDir(workspace: string, project: string, buildId: string): string {
+  return path.join(userCacheDir(), ARTIFACTS_DIR, workspace, project, buildId);
 }
 
 function shortSha(buildId: string): string {
@@ -87,20 +94,12 @@ export function judge(expected: string, actual: string): Verified {
   return expected === actual;
 }
 
-function resolveTarget(args: DownloadArgs, sha: string, projectPath: string): { dir: string } | { problem: string } {
+function explicitTarget(args: DownloadArgs, projectPath: string): string {
   const to = text(args.to);
 
-  if (to) {
-    return { dir: path.isAbsolute(to) ? to : path.resolve(projectPath || process.cwd(), to) };
-  }
+  if (!to) return "";
 
-  if (!projectPath) {
-    return {
-      problem: `action:"${DOWNLOAD_ACTION}" needs projectPath (the file goes to ${SHARE_STATE_DIR}/${ARTIFACTS_DIR}/${sha}/ under it, git-ignored) or to, a directory to write into.`,
-    };
-  }
-
-  return { dir: defaultArtifactsDir(projectPath, sha) };
+  return path.isAbsolute(to) ? path.resolve(to) : path.resolve(projectPath || process.cwd(), to);
 }
 
 export async function download(args: DownloadArgs): Promise<string> {
@@ -123,13 +122,12 @@ export async function download(args: DownloadArgs): Promise<string> {
   }
 
   const sha = shortSha(buildId);
-  const target = resolveTarget(args, sha, projectPath);
-  if ("problem" in target) return badRequest(DOWNLOAD_ACTION, "BuildsInputError", target.problem, value);
-
+  const chosen = explicitTarget(args, projectPath);
   const opened = await openFor(args, DOWNLOAD_ACTION, value);
   if ("refused" in opened) return opened.refused;
 
   const api = opened.api;
+  const dir = chosen || defaultArtifactsDir(api.ref.workspace, api.ref.project, sha);
   const buildPage = trackUrl("build", { workspace: api.ref.workspace, project: api.ref.project, buildId: sha }, args.api);
   const fileName = `${browser}.zip`;
   const [fetched, reportSha] = await Promise.all([
@@ -166,10 +164,10 @@ export async function download(args: DownloadArgs): Promise<string> {
     return actRefusal(fetched, DOWNLOAD_ACTION, api, args, { ...value, trackUrl: buildPage });
   }
 
-  const filePath = path.join(target.dir, fileName);
+  const filePath = path.join(dir, fileName);
 
   try {
-    fs.mkdirSync(target.dir, { recursive: true });
+    fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(filePath, fetched.bytes);
   } catch (err: any) {
     return envelope({
@@ -185,16 +183,9 @@ export async function download(args: DownloadArgs): Promise<string> {
   const actual = sha256Of(written);
   const expected = reportSha || expectedFromRelay(fetched.headers);
   const verified = judge(expected, actual);
-  let gitignored: ProjectIgnoreState | undefined;
-
-  if (!text(args.to) && projectPath) {
-    gitignored = ensureProjectIgnored(projectPath, {
-      entry: `${SHARE_STATE_DIR}/`,
-      aliases: [SHARE_STATE_DIR, `/${SHARE_STATE_DIR}`, `/${SHARE_STATE_DIR}/`],
-      comment: IGNORE_COMMENT,
-    }).state;
-  }
-
+  const untouched = chosen
+    ? "The project's files and .gitignore were not touched."
+    : "That is your cache directory, outside the project, whose files and .gitignore were not touched.";
   const common = {
     ...value,
     buildId: sha,
@@ -203,7 +194,6 @@ export async function download(args: DownloadArgs): Promise<string> {
     sha256: actual,
     verified,
     ...(expected ? { expectedSha256: expected, report: reportSha ? "integrity-report" : "build-record" } : { report: "none" }),
-    ...(gitignored ? { gitignored } : {}),
     trackUrl: buildPage,
   };
 
@@ -222,18 +212,15 @@ export async function download(args: DownloadArgs): Promise<string> {
 
   const say =
     verified === true
-      ? `Saved the platform's ${describe(browser)} for build ${sha} at ${filePath}, byte-identical to what the integrity report describes (sha256 ${actual}).`
-      : `Saved the platform's ${describe(browser)} for build ${sha} at ${filePath} (sha256 ${actual}); no integrity report names a digest for it, so the bytes are the platform's but unverified.`;
+      ? `Saved the platform's ${describe(browser)} for build ${sha} at ${filePath}, byte-identical to what the integrity report describes (sha256 ${actual}). ${untouched}`
+      : `Saved the platform's ${describe(browser)} for build ${sha} at ${filePath} (sha256 ${actual}); no integrity report names a digest for it, so the bytes are the platform's but unverified. ${untouched}`;
 
   return envelope({
     ok: true,
     command: COMMAND,
     status: "downloaded",
     value: { ...common, sayToPerson: say },
-    hint: `${say}${gitignored === "added" ? ` ${SHARE_STATE_DIR}/ was added to the project's .gitignore.` : ""} The build page is ${buildPage}.`,
-    warnings: [
-      gitignored === "failed" ? `${SHARE_STATE_DIR}/ could not be added to the project's .gitignore; add it by hand so the package is not committed.` : null,
-      verified === "no-report" ? `Run extension_builds (action: "recheck", buildId: "${sha}") to have the platform record a digest for this build.` : null,
-    ],
+    hint: `${say} The build page is ${buildPage}.`,
+    warnings: [verified === "no-report" ? `Run extension_builds (action: "recheck", buildId: "${sha}") to have the platform record a digest for this build.` : null],
   });
 }
