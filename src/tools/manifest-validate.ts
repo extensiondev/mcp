@@ -13,6 +13,7 @@ import { engineManifestView } from "../lib/engine-manifest-view";
 import { CHROMIUM_FAMILY, GECKO_FAMILY, WEBKIT_FAMILY, isChromiumFamily, isGeckoFamily } from "../lib/browser-family";
 import { listTemplates } from "../lib/templates-cache";
 import { envelope } from "../lib/envelope";
+import { apiUsesIn, type ApiUse } from "../lib/guarded-api-uses";
 
 const COMMAND = "extension_manifest_validate";
 
@@ -264,8 +265,9 @@ const SCAN_FILE_CAP = 300;
 function scanApiUsage(
   roots: string[],
   excluded: string[] = [],
-): { used: Set<string>; filesRead: number; capped: boolean; unreadable: string[] } {
+): { used: Set<string>; sources: Map<string, string>; filesRead: number; capped: boolean; unreadable: string[] } {
   const used = new Set<string>();
+  const sources = new Map<string, string>();
   const unreadable: string[] = [];
   const skip = new Set(excluded.map((d) => path.resolve(d)));
   const seen = new Set<string>();
@@ -315,7 +317,10 @@ function scanApiUsage(
       let m: RegExpExecArray | null;
 
       while ((m = re.exec(src))) {
-        if (API_PERMISSION[m[1]]) used.add(m[1]);
+        if (!API_PERMISSION[m[1]]) continue;
+
+        used.add(m[1]);
+        sources.set(full, src);
       }
     }
 
@@ -324,7 +329,7 @@ function scanApiUsage(
 
   for (const root of new Set(roots)) walk(root, 0);
 
-  return { used, filesRead, capped, unreadable };
+  return { used, sources, filesRead, capped, unreadable };
 }
 
 const DEFAULT_BROWSERS = ["chrome", "firefox", "edge"];
@@ -519,6 +524,19 @@ export async function handler(args: {
     roots.map((r) => path.join(r, "extensions")),
   );
   const usedApis = scan.used;
+
+  const usesByApi = new Map<string, ApiUse[]>();
+
+  const usesOf = (api: string): ApiUse[] => {
+    let uses = usesByApi.get(api);
+
+    if (!uses) {
+      uses = [...scan.sources].flatMap(([file, src]) => apiUsesIn(path.relative(projectRoot, file) || file, src, api));
+      usesByApi.set(api, uses);
+    }
+
+    return uses;
+  };
 
   if (scan.capped) {
     result.warnings.push(
@@ -791,9 +809,30 @@ export async function handler(args: {
       if (!isGranted(declaredPermSet, api)) continue;
 
       const ns = isFirefox ? "browser" : "chrome";
-      issues.push(
-        `Code calls ${ns}.${api} but the ${browser} build's permissions do not include ${grantPhrase(api)} (it is declared only under another target's prefixed key, e.g. chromium:permissions). An unguarded call crashes this target at runtime. If every call sits behind a feature check (typeof ${ns}.${api} !== "undefined"), the build is sound: pass skipValidation: true to extension_build, or grant ${grantPhrase(api)} to this target too.`,
-      );
+      const where = (uses: ApiUse[]): string =>
+        uses.slice(0, 5).map((use) => `${use.file}:${use.line}`).join(", ") + (uses.length > 5 ? `, and ${uses.length - 5} more` : "");
+      const uses = usesOf(api);
+      const guarded = uses.filter((use) => use.guarded);
+      const unguarded = uses.filter((use) => !use.guarded);
+      const gap = `the ${browser} build's permissions do not include ${grantPhrase(api)} (it is declared only under another target's prefixed key, e.g. chromium:permissions)`;
+
+      if (!uses.length) {
+        result.warnings.push(
+          `${browser}: the source names ${ns}.${api} but never reads a member through it (only presence checks or bare references), and ${gap}. Grant ${grantPhrase(api)} to this target if that code should use it there.`,
+        );
+      }
+
+      if (guarded.length) {
+        result.warnings.push(
+          `${browser}: ${ns}.${api} at ${where(guarded)} is guarded: runs only where ${ns}.${api} exists. ${gap[0].toUpperCase()}${gap.slice(1)}, so on ${browser} that code is skipped; grant ${grantPhrase(api)} to this target if it should run there.`,
+        );
+      }
+
+      if (unguarded.length) {
+        issues.push(
+          `Code calls ${ns}.${api} at ${where(unguarded)} but ${gap}. An unguarded call crashes this target at runtime. Guard it (${ns}.${api}?.method(...), if (${ns}.${api}), typeof ${ns}.${api} !== "undefined", or '${api}' in ${ns}), or grant ${grantPhrase(api)} to this target too.`,
+        );
+      }
     }
 
     if (WEBKIT_FAMILY.has(browser)) {
