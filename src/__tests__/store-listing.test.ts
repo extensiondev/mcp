@@ -66,6 +66,21 @@ To test: click the toolbar button.
 TODO user-facing notes.
 `;
 
+const SAFARI_UNREAD = [
+  { field: "subtitle", line: "- Subtitle:", section: "## Listing" },
+  { field: "searchTerms", line: "- Search terms:", section: "## Listing" },
+  { field: "supportEmail", line: "- Support email:", section: "## Listing" },
+  { field: "privacyPolicyUrl", line: "- Privacy policy URL:", section: "## Privacy and data use" },
+  { field: "homepageUrl", line: "- Homepage:", section: "## Listing" },
+  { field: "reviewerNotes", line: "### Reviewer notes", section: "## Safari" },
+  { field: "reviewContactName", line: "- Review contact name:", section: "## Safari" },
+  { field: "reviewContactEmail", line: "- Review contact email:", section: "## Safari" },
+  { field: "reviewContactPhone", line: "- Review contact phone:", section: "## Safari" },
+  { field: "screenshots", line: "- Screenshots:", section: "## Listing" },
+];
+
+const SAFARI_SECTION_UNREAD = SAFARI_UNREAD.filter((row) => !["subtitle", "searchTerms", "reviewContactPhone"].includes(row.field));
+
 function png(width: number, height: number): Buffer {
   const bytes = Buffer.alloc(40);
   Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]).copy(bytes, 0);
@@ -677,6 +692,39 @@ describe("extension_submit sync-listing and the preflight advisory", () => {
     expect(written.hint).toContain("chrome still lacks");
   });
 
+  it("answers the lines it looked for and did not find per store, each with the section the table gives it", async () => {
+    if (process.platform === "win32") return;
+
+    platform.login();
+    platform.routes[`PUT ${LISTING("firefox")}`] = () => ({ status: 409, body: { code: "NO_CHANGE", message: "The listing already reads this way." } });
+    platform.routes[`POST ${PREFLIGHT("firefox")}`] = () => ({ body: { checks: [] } });
+
+    const out = JSON.parse(await submit({ action: "sync-listing", browsers: ["firefox"], projectPath: root, api: API }));
+
+    expect(out.status).toBe("listing-synced");
+    expect(out.value.stores.firefox.status).toBe("unchanged");
+    expect(out.value.stores.firefox.filled).toEqual(["title", "shortDescription", "fullDescription", "categories", "reviewerNotes", "icons"]);
+    expect(out.value.stores.firefox.unread).toEqual([
+      { field: "supportEmail", line: "- Support email:", section: "## Listing" },
+      { field: "privacyPolicyUrl", line: "- Privacy policy URL:", section: "## Privacy and data use" },
+      { field: "homepageUrl", line: "- Homepage:", section: "## Listing" },
+      { field: "license", line: "- License:", section: "## Listing" },
+      { field: "releaseNotes", line: "### Release notes", section: "## Firefox Add-ons" },
+      { field: "screenshots", line: "- Screenshots:", section: "## Listing" },
+    ]);
+
+    fs.writeFileSync(
+      path.join(root, "STORE.md"),
+      STORE_MD.replace("- Screenshots: TODO at least one 1280x800 screenshot per store.", "- Support email: help at example dot com\n- Screenshots:\n  1. shots/popup.png"),
+    );
+
+    const again = JSON.parse(await submit({ action: "sync-listing", browsers: ["firefox"], projectPath: root, api: API }));
+    const fields = again.value.stores.firefox.unread.map((row: { field: string }) => row.field);
+
+    expect(fields).toEqual(["privacyPolicyUrl", "homepageUrl", "license", "releaseNotes"]);
+    expect(again.value.stores.firefox.skipped).toEqual(["supportEmail in STORE.md is not an email address, so it was left out"]);
+  });
+
   const safariSync = (extra: Record<string, unknown> = {}) =>
     submit({ action: "sync-listing", browsers: ["safari"], projectPath: root, approvalId: "apr_s", api: API, ...extra });
   const SUBMISSIONS = "http://console.extension.localhost/acme/widget/submissions/safari";
@@ -936,6 +984,7 @@ describe("extension_submit sync-listing and the preflight advisory", () => {
         status: "unchanged",
         appStoreConnect: { status: "unchanged", resend: "refused", trackUrl: SUBMISSIONS },
         filled: ["title", "shortDescription", "fullDescription", "icons"],
+        unread: SAFARI_UNREAD,
         stillBlocking: [],
       });
 
@@ -1026,7 +1075,7 @@ describe("extension_submit sync-listing and the preflight advisory", () => {
         line.startsWith("privacy policy URL"),
       ),
     ).toBe(
-      "privacy policy URL: not in STORE.md; add `- Privacy policy URL: <address>` under `## Privacy and data use`",
+      "privacy policy URL: STORE.md has no `- Privacy policy URL:` under `## Privacy and data use`",
     );
 
     expect(out.hint).toContain('action:"sync-listing"');
@@ -1183,7 +1232,7 @@ describe("extension_submit sync-listing and the preflight advisory", () => {
     expect(firefox.storeMd.notCovered).toEqual([
       category,
       email,
-      "license: not in STORE.md",
+      "license: STORE.md has no `- License:` under `## Listing`",
     ]);
 
     expect(firefox.failing.map((check: { message?: string }) => check.message)).toEqual([
@@ -1298,7 +1347,7 @@ describe("extension_submit sync-listing and the preflight advisory", () => {
     ]);
 
     expect(advisory.covers).toEqual([]);
-    expect(advisory.notCovered).toEqual(["description: not in STORE.md"]);
+    expect(advisory.notCovered).toEqual(["description: STORE.md has no `- Summary:` or `- Description:` under `## Listing`"]);
   });
 });
 
@@ -1376,6 +1425,7 @@ describe("extension_submit sync-listing sends the fields the platform hashes whe
       message: "The platform did not name the fields it hashes; update the platform or this server.",
       trackUrl: SUBMISSIONS,
       filled: ["title", "subtitle", "shortDescription", "fullDescription", "searchTerms", "reviewContactPhone", "icons"],
+      unread: SAFARI_SECTION_UNREAD,
     });
 
     expect(refused.value.sayToPerson).toBe("The platform did not name the fields it hashes; update the platform or this server.");
@@ -1430,6 +1480,7 @@ describe("extension_submit sync-listing sends the fields the platform hashes whe
       status: "synced",
       changes: ['title: "" -> "PII Shield"'],
       filled: ["title", "subtitle", "shortDescription", "fullDescription", "searchTerms", "reviewContactPhone", "icons"],
+      unread: SAFARI_SECTION_UNREAD,
       stillBlocking: [],
     });
 
@@ -1493,6 +1544,7 @@ describe("extension_submit sync-listing sends the fields the platform hashes whe
       digest,
       trackUrl: SUBMISSIONS,
       filled: ["title", "subtitle", "shortDescription", "fullDescription", "searchTerms", "reviewContactPhone", "icons"],
+      unread: SAFARI_SECTION_UNREAD,
     });
 
     expect(refused.value.sayToPerson).toBe(refused.value.stores.safari.message);

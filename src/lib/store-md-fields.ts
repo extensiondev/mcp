@@ -24,6 +24,8 @@ import {
   type ListingTextField,
 } from "./store-md-declarations";
 
+import type { LocalListing } from "../tools/store-listing";
+
 export type StoreMdField = ListingField | "screenshots";
 
 export interface StoreMdFieldRow {
@@ -112,4 +114,35 @@ export function storeMdFieldRows(store: ListingStore): StoreMdFieldRow[] {
     ...storeMdSectionOf(field, store),
     limit: limitOf(field, store),
   }));
+}
+
+export interface StoreMdLineNotFound {
+  field: StoreMdField;
+  line: string;
+  section: string;
+}
+
+/* @invariant A MISS IS NAMED BY THE LINE LOOKED FOR, NEVER BY THE FIELD. The
+ * sync answers the exact STORE.md lines it read for and did not find, each
+ * with the section the table gives it, so the author adds "- Category:"
+ * under "## Listing" instead of guessing what "categories" means. A line that
+ * is there and could not be taken is already in skipped with its reason and
+ * is not repeated here; the screenshots line is listed when neither STORE.md
+ * nor the screenshots argument carried a file.
+ */
+export function linesNotFound(local: LocalListing): StoreMdLineNotFound[] {
+  const listing = local.patch.listing as Record<string, unknown>;
+  const missing: StoreMdLineNotFound[] = [];
+
+  for (const field of STORE_FIELDS[local.store]) {
+    if (listing[field] !== undefined || local.unread[field]) continue;
+
+    missing.push({ field, line: storeMdLineOf(field), section: storeMdSectionOf(field, local.store).section });
+  }
+
+  if (!local.patch.screenshots?.length && !local.screenshotsUnread) {
+    missing.push({ field: "screenshots", line: storeMdLineOf("screenshots"), section: LISTING_SECTION });
+  }
+
+  return missing;
 }

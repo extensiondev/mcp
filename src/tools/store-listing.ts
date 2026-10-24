@@ -42,8 +42,11 @@ import {
 } from "../lib/store-listing-digest";
 import { pushAnswer, pushSentence, readPushState, sendListing } from "../lib/store-listing-push";
 import { STORE_MD_FILENAME } from "../lib/store-md";
+import { linesNotFound, storeMdLineOf, storeMdSectionOf } from "../lib/store-md-fields";
 import {
+  LISTING_SECTION,
   LISTING_STORES,
+  PRIVACY_SECTION,
   derivedListingFields,
   listingForStore,
   parseStoreMdListing,
@@ -81,6 +84,7 @@ export interface ListingArgs {
 
 export interface LocalListing {
   file: string;
+  store: ListingStore;
   patch: ListingPatch;
   iconMissing?: string;
   skipped: string[];
@@ -98,7 +102,7 @@ const privacyCoveredFact = (url: string): string =>
   `privacy policy URL found in ${STORE_MD_FILENAME} (${url}), not yet in the console listing`;
 
 export const privacyMissingLine = (): string =>
-  `privacy policy URL: not in ${STORE_MD_FILENAME}; add \`- Privacy policy URL: <address>\` under \`## Privacy and data use\``;
+  `privacy policy URL: ${STORE_MD_FILENAME} has no \`${storeMdLineOf("privacyPolicyUrl")}\` under \`${PRIVACY_SECTION}\``;
 
 export function readLocalListing(
   projectPath: string,
@@ -128,6 +132,7 @@ export function readLocalListing(
 
   return {
     file,
+    store,
     patch,
     skipped,
     unread,
@@ -218,6 +223,14 @@ const CHECK_COVERAGE: CheckCoverage[] = [
   },
 ];
 
+function notFoundLine(local: LocalListing, rule: CheckCoverage): string {
+  const lines = rule.fields.map((field) => `\`${storeMdLineOf(field)}\``);
+  const joined = lines.length > 1 ? `${lines.slice(0, -1).join(", ")} or ${lines[lines.length - 1]}` : lines[0];
+  const { section } = storeMdSectionOf(rule.fields[0]!, local.store);
+
+  return `${rule.label}: ${STORE_MD_FILENAME} has no ${joined} under \`${section}\``;
+}
+
 function unreadLine(local: LocalListing, rule: CheckCoverage): string | null {
   for (const field of rule.fields) {
     const unread = local.unread[field];
@@ -301,8 +314,7 @@ function coverageOf(local: LocalListing, id: string): Coverage {
     }
 
     return {
-      missing:
-        "screenshots: STORE.md does not carry them; list the files under `- Screenshots:` in STORE.md or pass screenshots (PNG paths inside projectPath, for example from extension_screenshot) to sync-listing",
+      missing: `screenshots: ${STORE_MD_FILENAME} has no \`${storeMdLineOf("screenshots")}\` under \`${LISTING_SECTION}\`; list the files there, one PNG path per line, or pass screenshots (PNG paths inside projectPath, for example from extension_screenshot) to sync-listing`,
     };
   }
 
@@ -317,9 +329,7 @@ function coverageOf(local: LocalListing, id: string): Coverage {
 
   const unread = unreadLine(local, rule);
 
-  return unread
-    ? { unread }
-    : { missing: `${rule.label}: not in ${STORE_MD_FILENAME}` };
+  return unread ? { unread } : { missing: notFoundLine(local, rule) };
 }
 
 /* @invariant ONE INSTRUCTION PER CHECK. The platform's fix text for a
@@ -734,8 +744,11 @@ export async function syncListing(args: ListingArgs): Promise<string> {
   const said: string[] = [];
 
   for (const [store, local] of locals) {
+    const notFound = linesNotFound(local);
+    const unread = notFound.length ? { unread: notFound } : {};
+
     if (!filledFields(local.patch).length) {
-      stores[store] = { store, status: "nothing-to-sync" };
+      stores[store] = { store, status: "nothing-to-sync", ...unread };
       continue;
     }
 
@@ -761,6 +774,7 @@ export async function syncListing(args: ListingArgs): Promise<string> {
     stores[store] = {
       ...result,
       filled,
+      ...unread,
       ...(local.iconMissing ? { iconMissing: local.iconMissing } : {}),
       ...(local.skipped.length ? { skipped: local.skipped } : {}),
       ...(blocking ? { stillBlocking: blocking } : {}),
