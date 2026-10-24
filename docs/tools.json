@@ -1919,7 +1919,14 @@
           "type": "boolean",
           "required": false,
           "default": false,
-          "description": "Stop every known session across projects and browsers, found from this server's registry AND the on-disk markers written by this server or by servers that are no longer running, so it still works after an MCP restart. A marker owned by another MCP server that is still running is left alone and listed under skippedForeign unless includeOtherServers is true. It also takes back every live-preview carrier still recorded on this machine, including one in a project whose session was never stopped. projectPath/browser are then ignored."
+          "description": "Stop every known session across projects and browsers, found from this server's registry AND the on-disk markers written by this server or by servers that are no longer running, so it still works after an MCP restart. Because it crosses projects, a call with no projectPath whose sessions span more than one project answers confirm-required with every session it would end grouped by project (wouldStop) and stops nothing until called again with confirm: true; projectPath beside it scopes the stop to that one project's sessions and carrier with no confirmation, and sessions that all belong to one project need none either. browser is ignored. A marker owned by another MCP server that is still running is left alone and listed under skippedForeign (foreign on a confirm-required answer) unless includeOtherServers is true. It also takes back every live-preview carrier still recorded on this machine, including one in a project whose session was never stopped."
+        },
+        {
+          "name": "confirm",
+          "type": "boolean",
+          "required": false,
+          "default": false,
+          "description": "With all: true and no projectPath, end every session the confirm-required answer listed, across projects. Without it, a stop that would cross projects only lists what it would end."
         },
         {
           "name": "includeOtherServers",

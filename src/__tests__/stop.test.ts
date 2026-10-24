@@ -153,7 +153,7 @@ describe("extension_stop", () => {
     expect(fs.existsSync(readyPath)).toBe(false);
   });
 
-  it("stops everything with all=true", async () => {
+  it("stops everything with all=true once confirm: true carries the cross-project stop", async () => {
     const projectA = tmpProject();
     const projectB = tmpProject();
     const pidA = spawnVictim();
@@ -172,7 +172,8 @@ describe("extension_stop", () => {
       command: "start",
     });
 
-    const result = JSON.parse(await stop.handler({ all: true }));
+    const result = JSON.parse(await stop.handler({ all: true, confirm: true }));
+    expect(result.status).toBe("stopped-all");
     const stoppedPids = result.value.stopped.map((o: { pid: number }) => o.pid);
     expect(stoppedPids).toContain(pidA);
     expect(stoppedPids).toContain(pidB);

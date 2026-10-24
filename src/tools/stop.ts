@@ -38,8 +38,9 @@ import { sweepCarriers, type CarrierSweepEntry } from "../lib/carrier-exit";
 import { readRememberedCarriers } from "../lib/carrier-registry";
 import { envelope } from "../lib/envelope";
 import { killWindowsTree } from "../lib/exec";
+import { trackUrl } from "../lib/track-url";
 
-import type { ReadyContract } from "../lib/types";
+import type { ProcessInfo, ReadyContract } from "../lib/types";
 
 export const schema = {
   name: "extension_stop",
@@ -58,7 +59,13 @@ export const schema = {
         type: "boolean",
         default: false,
         description:
-          "Stop every known session across projects and browsers, found from this server's registry AND the on-disk markers written by this server or by servers that are no longer running, so it still works after an MCP restart. A marker owned by another MCP server that is still running is left alone and listed under skippedForeign unless includeOtherServers is true. It also takes back every live-preview carrier still recorded on this machine, including one in a project whose session was never stopped. projectPath/browser are then ignored.",
+          "Stop every known session across projects and browsers, found from this server's registry AND the on-disk markers written by this server or by servers that are no longer running, so it still works after an MCP restart. Because it crosses projects, a call with no projectPath whose sessions span more than one project answers confirm-required with every session it would end grouped by project (wouldStop) and stops nothing until called again with confirm: true; projectPath beside it scopes the stop to that one project's sessions and carrier with no confirmation, and sessions that all belong to one project need none either. browser is ignored. A marker owned by another MCP server that is still running is left alone and listed under skippedForeign (foreign on a confirm-required answer) unless includeOtherServers is true. It also takes back every live-preview carrier still recorded on this machine, including one in a project whose session was never stopped.",
+      },
+      confirm: {
+        type: "boolean",
+        default: false,
+        description:
+          "With all: true and no projectPath, end every session the confirm-required answer listed, across projects. Without it, a stop that would cross projects only lists what it would end.",
       },
       includeOtherServers: {
         type: "boolean",
@@ -443,23 +450,54 @@ export async function stopOne(
   };
 }
 
+interface SessionGroup {
+  projectPath: string;
+  sessions: Array<{ browser: string; pid: number; mode: ProcessInfo["command"] }>;
+}
+
+function groupByProject(sessions: Iterable<ProcessInfo>): SessionGroup[] {
+  const groups = new Map<string, SessionGroup>();
+
+  for (const s of sessions) {
+    const key = path.resolve(s.projectPath);
+    const group = groups.get(key) ?? { projectPath: s.projectPath, sessions: [] };
+    group.sessions.push({ browser: s.browser, pid: s.pid, mode: s.command });
+    groups.set(key, group);
+  }
+
+  return [...groups.values()];
+}
+
+function describeGroups(groups: SessionGroup[]): string {
+  return groups
+    .map((g) => `${g.projectPath}: ${g.sessions.map((s) => `${s.browser} pid ${s.pid} (${s.mode})`).join(", ")}`)
+    .join("; ");
+}
+
 export async function handler(args: {
   projectPath?: string;
   browser?: string;
   all?: boolean;
+  confirm?: boolean;
   includeOtherServers?: boolean;
 }): Promise<string> {
+  const consolePage = trackUrl("console", {});
+
   if (args.all) {
-    const candidates = new Map<string, { projectPath: string; browser: string }>();
+    const scope = args.projectPath ? path.resolve(args.projectPath) : null;
+    const inScope = (projectPath: string): boolean => scope === null || path.resolve(projectPath) === scope;
+    const candidates = new Map<string, ProcessInfo>();
 
     for (const s of listSessions()) {
-      candidates.set(`${path.resolve(s.projectPath)}::${s.browser}`, s);
+      if (inScope(s.projectPath)) candidates.set(`${path.resolve(s.projectPath)}::${s.browser}`, s);
     }
 
     const markersRead = readSessionMarkers();
     const skippedForeign: Array<{ projectPath: string; browser: string; serverPid: number }> = [];
 
     for (const m of markersRead.markers) {
+      if (!inScope(m.projectPath)) continue;
+
       const key = `${path.resolve(m.projectPath)}::${m.browser}`;
       const foreign =
         typeof m.serverPid === "number" && m.serverPid !== process.pid && pidState(m.serverPid) === "alive";
@@ -470,6 +508,26 @@ export async function handler(args: {
       }
 
       if (!candidates.has(key)) candidates.set(key, m);
+    }
+
+    const wouldStop = groupByProject(candidates.values());
+
+    if (scope === null && !args.confirm && wouldStop.length > 1) {
+      return envelope({
+        ok: false,
+        command: schema.name,
+        status: "confirm-required",
+        value: {
+          wouldStop,
+          foreign: skippedForeign,
+          sayToPerson: `This would stop ${candidates.size} sessions across ${wouldStop.length} projects: ${describeGroups(wouldStop)}. Say stop again with confirm: true to end them all, or name projectPath to stop one project.`,
+          trackUrl: consolePage,
+        },
+        warnings: [
+          markersRead.unreadable ? `Session markers could not be fully read: ${markersRead.unreadable}; a session recorded there may still be running.` : null,
+        ],
+        hint: "Nothing was stopped. Call again with confirm: true to end every session listed, or pass projectPath beside all: true to stop one project's sessions with no confirmation.",
+      });
     }
 
     const outcomes: StopOutcome[] = [];
@@ -483,7 +541,7 @@ export async function handler(args: {
     );
     const carriersRead = readRememberedCarriers();
     const carriers: CarrierSweepEntry[] = sweepCarriers(
-      carriersRead.carriers.filter((p) => !visited.has(path.resolve(p))),
+      carriersRead.carriers.filter((p) => inScope(p) && !visited.has(path.resolve(p))),
     );
     const unreadNotes = [
       skippedForeign.length
@@ -498,7 +556,7 @@ export async function handler(args: {
         ok: unreadNotes.length === 0,
         command: schema.name,
         status: unreadNotes.length ? "nothing-found-unreadable" : "nothing-to-stop",
-        value: { stopped: [], ...(skippedForeign.length ? { skippedForeign } : {}) },
+        value: { stopped: [], ...(skippedForeign.length ? { skippedForeign } : {}), trackUrl: consolePage },
         warnings: unreadNotes,
         hint: unreadNotes.length
           ? "No sessions registered in this server and nothing readable on disk, but part of the record could not be read, so nothing is known to be stopped."
@@ -514,6 +572,7 @@ export async function handler(args: {
         ...(skippedForeign.length ? { skippedForeign } : {}),
         stopped: outcomes,
         ...(carriers.length ? { carriersSwept: carriers } : {}),
+        trackUrl: consolePage,
       },
       warnings: [
         ...outcomes.map((o) => (o.stopped ? null : o.detail)),
@@ -536,6 +595,7 @@ export async function handler(args: {
         message:
           "projectPath is required unless all=true. Pass the same projectPath used with extension_dev/extension_start.",
       },
+      value: { trackUrl: consolePage },
     });
   }
 
@@ -554,7 +614,7 @@ export async function handler(args: {
         : outcome.stopped
           ? "stopped"
           : "still-alive",
-    value: outcome,
+    value: { ...outcome, trackUrl: consolePage },
     warnings: [outcome.stopped ? null : outcome.detail],
   });
 }
