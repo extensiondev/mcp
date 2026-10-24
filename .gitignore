@@ -2,6 +2,8 @@ node_modules/
 .pnpm-store/
 *.log
 dist/
+dist.next/
+dist.prev/
 build/
 coverage/
 .vitest/
