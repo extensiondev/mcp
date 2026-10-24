@@ -11,6 +11,7 @@ import { envelope } from "../lib/envelope";
 import { type ApprovalGateInput } from "../lib/approval-gate";
 import {
   OWNER_REQUIRED_CODE,
+  projectApiGet,
   projectApiReadFailure,
   tokenRefusal,
   type ProjectApi,
@@ -18,8 +19,15 @@ import {
 } from "../lib/project-api";
 import { approvalVerdict, type PolicyWrite } from "../lib/approval-policy";
 import { approvedSettingsWrite } from "../lib/settings-write";
-import { badShipRequest, openShipApi, text } from "../lib/ship-act";
-import { fallbackConnectUrl, nextStep, storeSettingsUrl } from "../lib/store-connection";
+import { badShipRequest, isRow, openShipApi, text } from "../lib/ship-act";
+import {
+  connectionOf,
+  fallbackConnectUrl,
+  nextStep,
+  storeSettingsUrl,
+  workspaceAccountSentence,
+  workspaceStoreAccountsUrl,
+} from "../lib/store-connection";
 import { configuredRequirementsNote } from "../lib/store-requirements";
 import {
   CREDENTIAL_LABELS,
@@ -60,7 +68,10 @@ export interface ConfigureStoreArgs {
 function credentialsConsoleOnly(args: ConfigureStoreArgs, store: StoreSettingsStore, keys: string[]): string {
   const ref = resolveCredential({ project: args.project, api: args.api }).ref;
   const connectUrl = fallbackConnectUrl(ref, store, args.api);
-  const say = `Store credentials never pass through this server, so nothing was sent. The console takes ${CREDENTIAL_LABELS[store]}; the form is at ${connectUrl}. Paste them there, then say preflight.`;
+  const accountsUrl = store === "chrome" ? "" : workspaceStoreAccountsUrl(ref, args.api);
+  const say = accountsUrl
+    ? `Store credentials never pass through this server, so nothing was sent. The console takes ${CREDENTIAL_LABELS[store]} once for the whole workspace on its Store accounts page at ${accountsUrl}, and every project without its own key uses them; a project that needs a different account opens ${connectUrl}. Paste them there, then say preflight.`
+    : `Store credentials never pass through this server, so nothing was sent. The console takes ${CREDENTIAL_LABELS[store]}; the form is at ${connectUrl}. Paste them there, then say preflight.`;
 
   return envelope({
     ok: false,
@@ -71,9 +82,10 @@ function credentialsConsoleOnly(args: ConfigureStoreArgs, store: StoreSettingsSt
       store,
       refusedKeys: keys,
       connectUrl,
+      ...(accountsUrl ? { workspaceStoreAccountsUrl: accountsUrl } : {}),
       trackUrl: storeSettingsUrl(ref, args.api),
       sayToPerson: say,
-      nextStep: nextStep("connect", say, connectUrl),
+      nextStep: nextStep("connect", say, accountsUrl || connectUrl),
     },
     error: {
       code: "E_BAD_REQUEST",
@@ -183,7 +195,11 @@ export async function configureStore(args: ConfigureStoreArgs): Promise<string> 
   if (!written.ok) return written.out ?? refusal(written.sent, api, args, store, settingsPage);
 
   const changes = Array.isArray(written.json.changes) ? written.json.changes.filter((line): line is string => typeof line === "string") : lines;
-  const say = `The ${store} store settings are saved: ${changes.join("; ")}. Say preflight and I read the store's readiness now.${configuredRequirementsNote(written.json, store)}`;
+  const config = await projectApiGet<Record<string, unknown>>(api, "stores/config").catch(() => null);
+  const storeConfig = config && config.ok && isRow(config.json[store]) ? (config.json[store] as Record<string, unknown>) : null;
+  const connection = storeConfig ? connectionOf(storeConfig) : null;
+  const accountLine = connection?.source === "workspace" ? ` ${workspaceAccountSentence(store, connection.connectedAs)}` : "";
+  const say = `The ${store} store settings are saved: ${changes.join("; ")}.${accountLine} Say preflight and I read the store's readiness now.${configuredRequirementsNote(written.json, store)}`;
   const gateLine = written.verdict === "plain" && !text(args.approvalId) ? " This was a plain setting under your own token; no approval page was involved." : "";
 
   return envelope({
@@ -196,6 +212,9 @@ export async function configureStore(args: ConfigureStoreArgs): Promise<string> 
       project,
       storeSettings: read.requested,
       changes,
+      ...(connection?.source
+        ? { connection: { source: connection.source, connectedAs: connection.connectedAs, healthy: connection.healthy } }
+        : {}),
       trackUrl: settingsPage,
       sayToPerson: say,
       nextStep: nextStep("preflight", say),

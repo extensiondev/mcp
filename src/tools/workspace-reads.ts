@@ -14,7 +14,7 @@ import { platformApiGet, projectApiGet, type ProjectApi, type ProjectApiRead } f
 import { isRow, text } from "../lib/ship-act";
 import { readEnvironment } from "./workspace-environment";
 
-export const WORKSPACE_INCLUDES = ["team", "members", "tokens", "apps", "activity", "environment"] as const;
+export const WORKSPACE_INCLUDES = ["team", "members", "tokens", "apps", "activity", "environment", "storeAccounts"] as const;
 
 export type WorkspaceInclude = (typeof WORKSPACE_INCLUDES)[number];
 
@@ -120,6 +120,55 @@ async function readMembers(api: ProjectApi, workspace: string, apiHint?: string)
       consoleUrl,
     },
     say: `${workspace} has ${roster.length} member${roster.length === 1 ? "" : "s"}${pending ? ` and ${pending.length} pending invite${pending.length === 1 ? "" : "s"}` : ""}; roles, invites and ownership change in the console.`,
+  };
+}
+
+const ACCOUNT_STORES = ["chrome", "firefox", "edge", "safari"] as const;
+
+const ACCOUNT_STORE_NAMES: Record<string, string> = {
+  chrome: "Chrome Web Store",
+  firefox: "Firefox Add-ons",
+  edge: "Microsoft Edge Add-ons",
+  safari: "App Store",
+};
+
+/* @invariant A WORKSPACE STORE ACCOUNT ROW NAMES THE ACCOUNT, NEVER A KEY.
+ * Cezar ruled on 2026-10-24 that each store's account is saved once per
+ * workspace; the platform's record holds the account name, when it was
+ * connected and checked and the store's last answer, and this view copies
+ * exactly those fields, so a field the platform adds later stays behind.
+ * Connecting or disconnecting an account is the console's Store accounts page.
+ */
+function storeAccountRow(store: string, raw: unknown): Row {
+  const row = isRow(raw) ? raw : null;
+
+  return {
+    store,
+    connected: Boolean(row && text(row.kind)),
+    connectedAs: row ? orNull(row.connectedAs) : null,
+    connectedAt: row ? orNull(row.connectedAt) : null,
+    checkedAt: row ? orNull(row.checkedAt) : null,
+    healthy: row && typeof row.healthy === "boolean" ? row.healthy : null,
+    ...(row && text(row.reason) ? { reason: text(row.reason) } : {}),
+  };
+}
+
+async function readStoreAccounts(api: ProjectApi, workspace: string, apiHint?: string): Promise<Section> {
+  const consoleUrl = `${consoleBase(apiHint)}${consoleWorkspacePath(workspace)}/settings/store-accounts`;
+  const read = await platformApiGet<Row>(api, `/api/workspaces/${encodeURIComponent(workspace)}/store-accounts`);
+
+  if (!read.ok) return { warning: unread(read, "The workspace store accounts", consoleUrl) };
+
+  const accounts = isRow(read.json.storeAccounts) ? read.json.storeAccounts : {};
+  const list = ACCOUNT_STORES.map((store) => storeAccountRow(store, accounts[store]));
+  const connected = list.filter((row) => row.connected);
+  const named = connected.map((row) => `${ACCOUNT_STORE_NAMES[String(row.store)]}${row.connectedAs ? ` (${String(row.connectedAs)})` : ""}`);
+
+  return {
+    value: { workspace, accounts: list, consoleUrl },
+    say: connected.length
+      ? `${workspace} has a store account for ${named.join(", ")}; every project without its own key uses it, and accounts are connected or disconnected on the workspace's Store accounts page.`
+      : `${workspace} has no store account yet; each is connected once on the workspace's Store accounts page, and every project then uses it.`,
   };
 }
 
@@ -247,6 +296,7 @@ function readSection(section: WorkspaceInclude, api: ProjectApi, workspace: stri
   if (section === "tokens") return readTokens(api, apiHint);
   if (section === "apps") return readApps(api, apiHint);
   if (section === "environment") return readEnvironment(api, apiHint);
+  if (section === "storeAccounts") return readStoreAccounts(api, workspace, apiHint);
 
   return readActivity(api, apiHint);
 }

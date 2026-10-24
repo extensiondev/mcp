@@ -23,6 +23,7 @@ import {
   firefoxKeyPairFailedSentences,
   firefoxKeyPairState,
   firefoxKeyPairUnverifiedSentences,
+  firefoxWorkspaceKeyPairSentences,
   firefoxNotConnected,
   firefoxSourceArchiveLine,
   firefoxSourceArchiveView,
@@ -48,6 +49,9 @@ import {
   connectSentences,
   connectionOf,
   connectionSourceOf,
+  reportConnectionSource,
+  workspaceAccountSentence,
+  workspaceStoreAccountsUrl,
   failedCheckSentence,
   fallbackConnectUrl,
   itemLinkUrls,
@@ -521,6 +525,7 @@ function readinessView(
     ? readLocalListing(projectPath, store as ListingStore)
     : null;
   const connection = connectionOf(json);
+  const connectionSource = reportConnectionSource(json);
   const mode = isRow(json.submissionMode) ? json.submissionMode : null;
   const submissionMode =
     mode && text(mode.id)
@@ -547,6 +552,7 @@ function readinessView(
       summary.canSubmit === true ||
       (deferred.length > 0 && failing.length === 0),
     ...(connection ? { connection } : {}),
+    ...(connectionSource ? { connectionSource } : {}),
     ...(submissionMode ? { submissionMode } : {}),
     ...(requirements ? { requirements } : {}),
     summary,
@@ -690,9 +696,17 @@ export async function preflight(args: StoreActArgs): Promise<string> {
       ? ` ${text(firefoxView.sourceArchive.say)}`
       : "";
   const inputsSay = missingRequirementsSentences(stores);
+  const workspaceLine = Object.entries(stores)
+    .filter(([, view]) => (view as Row).connectionSource === "workspace")
+    .map(([store, view]) => {
+      const row = isRow((view as Row).connection) ? ((view as Row).connection as Row) : {};
+
+      return ` ${workspaceAccountSentence(store, text(row.connectedAs) || null)}`;
+    })
+    .join("");
   const readinessHint = blocked.length
     ? `${blocked.join(", ")} cannot be submitted yet; each failing check says what to fix.${syncLine}${sourceLine} This read wrote nothing.`
-    : `Every store read here is ready to submit.${buildLine}${modeLine}${sourceLine} This read wrote nothing; extension_submit with dryRun:false submits.`;
+    : `Every store read here is ready to submit.${buildLine}${modeLine}${sourceLine}${workspaceLine} This read wrote nothing; extension_submit with dryRun:false submits.`;
   const chrome = isRow(stores.chrome) ? stores.chrome : null;
   const connection =
     chrome && isRow(chrome.connection) ? chrome.connection : null;
@@ -767,6 +781,37 @@ export async function preflight(args: StoreActArgs): Promise<string> {
   const firefoxPair = reports.firefox
     ? firefoxKeyPairState(reports.firefox)
     : null;
+
+  if (firefoxPair && reportConnectionSource(reports.firefox) === "workspace") {
+    const firefoxConnection = connectionOf(reports.firefox);
+    const accountsUrl = workspaceStoreAccountsUrl(api.ref, args.api);
+    const say = firefoxWorkspaceKeyPairSentences(
+      firefoxPair,
+      text(firefoxConnection?.reason),
+      accountsUrl,
+    );
+
+    return envelope({
+      ok: true,
+      command: COMMAND,
+      status:
+        firefoxPair === "failed"
+          ? "store-connection-failed"
+          : "store-connection-unverified",
+      value: {
+        action: "preflight",
+        stores,
+        storesPageUrl,
+        connectionSource: "workspace",
+        workspaceStoreAccountsUrl: accountsUrl,
+        trackUrl: accountsUrl,
+        sayToPerson: say,
+        nextStep: nextStep("configure", say, accountsUrl),
+      },
+      hint: say,
+      warnings: [unreadLine, "This read wrote nothing."],
+    });
+  }
 
   if (firefoxPair) {
     const firefoxConnection = connectionOf(reports.firefox);

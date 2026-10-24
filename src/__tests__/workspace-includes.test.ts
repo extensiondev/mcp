@@ -162,9 +162,9 @@ describe("extension_workspace include reads the team, members, tokens, apps and 
   it("offers include with the five sections and keeps the action enum", () => {
     const props = schema.inputSchema.properties as unknown as Record<string, { enum?: string[]; items?: { enum: string[] } }>;
 
-    expect(props.include.items?.enum).toEqual(["team", "members", "tokens", "apps", "activity", "environment"]);
+    expect(props.include.items?.enum).toEqual(["team", "members", "tokens", "apps", "activity", "environment", "storeAccounts"]);
     expect(props.action.enum).toEqual(["info", "projects", "usage", "settings", "set-visibility", "configure-project", "set-environment"]);
-    expect(schema.description).toContain("include also takes team, members, tokens, apps, activity, read-only");
+    expect(schema.description).toContain("include also takes team, members, tokens, apps, activity, storeAccounts, read-only");
     expect(includesOf(["team", "team", "nope", 3])).toEqual({ sections: ["team"], bad: ["nope", "3"] });
   });
 
@@ -240,6 +240,37 @@ describe("extension_workspace include reads the team, members, tokens, apps and 
     expect(raw).not.toContain("workflowName");
     expect(raw).not.toContain("octo@acme.test");
     expect(raw).not.toContain('"source"');
+  });
+
+  it("lists the workspace's store accounts by name and never a key", async () => {
+    if (process.platform === "win32") return;
+
+    routes["/api/workspaces/acme/store-accounts"] = {
+      body: {
+        workspace: "acme",
+        storeAccounts: {
+          chrome: null,
+          firefox: { kind: "keys", connectedAs: "user:1:2", connectedAt: "2026-10-24T01:00:00.000Z", checkedAt: "2026-10-24T01:00:00.000Z", healthy: true, secret: "never-answered" },
+          edge: null,
+          safari: null,
+        },
+      },
+    };
+
+    const raw = await workspace({ include: ["storeAccounts"], api: API });
+    const out = JSON.parse(raw);
+
+    expect(out.ok).toBe(true);
+    expect(out.value.storeAccounts.accounts).toEqual([
+      { store: "chrome", connected: false, connectedAs: null, connectedAt: null, checkedAt: null, healthy: null },
+      { store: "firefox", connected: true, connectedAs: "user:1:2", connectedAt: "2026-10-24T01:00:00.000Z", checkedAt: "2026-10-24T01:00:00.000Z", healthy: true },
+      { store: "edge", connected: false, connectedAs: null, connectedAt: null, checkedAt: null, healthy: null },
+      { store: "safari", connected: false, connectedAs: null, connectedAt: null, checkedAt: null, healthy: null },
+    ]);
+
+    expect(out.value.storeAccounts.consoleUrl).toContain("/acme/settings/store-accounts");
+    expect(out.hint).toContain("acme has a store account for Firefox Add-ons (user:1:2)");
+    expect(raw).not.toContain("never-answered");
   });
 
   it("names a section the platform did not answer and keeps the others", async () => {

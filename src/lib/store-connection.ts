@@ -6,10 +6,10 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-import { ConsoleProjectPage } from "@extension.dev/urls/paths";
+import { ConsoleProjectPage, consoleWorkspacePath } from "@extension.dev/urls/paths";
 
 import { approvalSubjectPhrase, subjectOf } from "./approval-subject";
-import { consoleProjectUrl } from "./console-urls";
+import { consoleBase, consoleProjectUrl } from "./console-urls";
 import { envelope, isEnvelope } from "./envelope";
 import { isRow, text } from "./ship-act";
 
@@ -332,6 +332,36 @@ export function connectionOf(json: Row): (StoreConnection & Partial<ItemLinkUrls
     ...(itemUrl ? { itemUrl } : {}),
     ...(connectUrl ? { connectUrl } : {}),
   };
+}
+
+export function reportConnectionSource(json: Row): ConnectionSource | null {
+  const row = isRow(json.connection) ? json.connection : {};
+
+  return connectionSourceOf(row.source) ?? connectionSourceOf(json.connectionSource);
+}
+
+export function workspaceStoreAccountsUrl(ref: ProjectRef | null, api?: string): string {
+  const workspace = text(ref?.workspace);
+
+  return workspace
+    ? `${consoleBase(api)}${consoleWorkspacePath(workspace)}/settings/store-accounts`
+    : storeSettingsUrl(ref, api);
+}
+
+export function storeLabel(store: string): string {
+  return (STORE_NAMES[store] ?? store).replace(/^the /, "");
+}
+
+/* @invariant A PROJECT THE WORKSPACE COVERS IS NEVER TOLD TO CONNECT THE
+ * STORE. Cezar ruled on 2026-10-24 that AMO, Partner Center and App Store
+ * Connect keys are saved once per workspace and every project without a key
+ * of its own uses them. When the platform answers connection.source
+ * "workspace" the answer names the workspace's account once and, when that
+ * account needs attention, sends the person to the workspace's Store
+ * accounts page, never to a per-project connect form.
+ */
+export function workspaceAccountSentence(store: string, connectedAs: string | null): string {
+  return `${storeLabel(store)} uses the workspace's account${connectedAs ? ` (${connectedAs})` : ""}.`;
 }
 
 const SECRET_NAME =

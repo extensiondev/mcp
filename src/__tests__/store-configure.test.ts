@@ -130,7 +130,9 @@ describe("extension_submit configure-store changes a store's settings as a plain
     expect(out.value.refusedKeys).toEqual(["jwtIssuer", "jwtSecret"]);
     expect(out.value.connectUrl).toMatch(/\/acme\/widget\/project-settings\/stores\?connect=firefox$/);
     expect(out.value.trackUrl).toMatch(SETTINGS_PAGE);
-    expect(out.value.nextStep).toMatchObject({ kind: "connect", url: out.value.connectUrl });
+    expect(out.value.workspaceStoreAccountsUrl).toMatch(/\/acme\/settings\/store-accounts$/);
+    expect(out.value.nextStep).toMatchObject({ kind: "connect", url: out.value.workspaceStoreAccountsUrl });
+    expect(out.hint).toContain("once for the whole workspace on its Store accounts page");
     expect(out.hint).toContain("the JWT issuer and the JWT secret, as the console form labels them");
     expect(out.hint).toContain("https://addons.mozilla.org/developers/addon/api/key/");
     expect(JSON.stringify(out)).not.toMatch(/STORE_|AMO_|FIREFOX_JWT|abc|user:1:2/);
