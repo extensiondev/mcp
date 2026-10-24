@@ -25,12 +25,12 @@ export const schema = {
         enum: ["status", "login", "logout"],
         default: "status",
         description:
-          "status (the default) reports the stored login and lists every stored login under `logins`, each with its server, workspace, project and expiry, plus the server's own verdict on the one the call targets. login signs in: the first call answers a code and the URL to authorize at extension.dev/device, the second, with `deviceCode`, stores the token; with `projects` or `workspace` it stores one token per project under one approval, and the answer names each project signed in. logout deletes the local credentials only (with `project`, just that project's login); the token stays valid server-side until it is revoked at the URL the answer returns.",
+          "status (the default) reports the default login for unnamed calls and lists every stored login under `logins`, each with its server, workspace, project, expiry and whether it is the default, plus the server's own verdict on the token it reports; with `project` it reports that project's login instead, verified with that login's own token, and answers not-signed-in when none is stored for it. login signs in: the first call answers a code and the URL to authorize at extension.dev/device, the second, with `deviceCode`, stores the token; with `projects` or `workspace` it stores one token per project under one approval, and the answer names each project signed in. logout deletes the local credentials only (with `project`, just that project's login); the token stays valid server-side until it is revoked at the URL the answer returns.",
       },
       project: {
         type: "string",
         description:
-          "login: target project as '<workspace>/<project>'; the token is scoped to it. The slug pair is the console address bar: an existing project's page is console.extension.dev/<workspace>/<project>. Create one at extension.dev/new if none exists yet. Logins to several projects are all kept, the latest is the default; token-scoped tools take `project` to pick another. logout: remove only this project's login (omitted, every stored login goes).",
+          "login: target project as '<workspace>/<project>'; the token is scoped to it. The slug pair is the console address bar: an existing project's page is console.extension.dev/<workspace>/<project>. Create one at extension.dev/new if none exists yet. Logins to several projects are all kept, the latest is the default; token-scoped tools take `project` to pick another. status: report this project's stored login and the server's verdict on its token (omitted, the default login with the list of every stored one). logout: remove only this project's login (omitted, every stored login goes).",
       },
       projects: {
         type: ["array", "string"],
@@ -126,5 +126,5 @@ export async function handler(args: {
     });
   }
 
-  return readIdentity(undefined, args.api);
+  return readIdentity(undefined, args.api, args.project);
 }

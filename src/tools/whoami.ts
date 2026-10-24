@@ -80,11 +80,35 @@ function elsewhereNote(server: string): { note: string; logins: Array<{ project:
   };
 }
 
+function storedLogins(target: string, now: number) {
+  return listCredentials().map((entry) => ({
+    project: `${entry.workspaceSlug}/${entry.projectSlug}`,
+    server: entry.server,
+    active: entry.active && entry.server === target,
+    expiresAt: entry.expiresAt ? new Date(entry.expiresAt * 1000).toISOString() : null,
+    expired: Boolean(entry.expiresAt && entry.expiresAt <= now),
+  }));
+}
+
+function notSignedIn(project: string, target: string, now: number): string {
+  const logins = storedLogins(target, now);
+  const onServer = logins.filter((login) => login.server === target);
+
+  return envelope({
+    ok: true,
+    command: "extension_auth",
+    status: "not-signed-in",
+    value: { project, server: target, logins },
+    hint: `No stored login for ${project} on ${target}, so there is nothing to report or verify for it. Run extension_auth (action: login, project: "${project}") to sign in to it${onServer.length ? `; the logins this machine holds for ${target} are ${onServer.map((login) => login.project).join(", ")}, listed under logins` : ""}.`,
+  });
+}
+
 export async function readIdentity(deps?: {
   fetchImpl?: typeof fetch;
-}, api?: string): Promise<string> {
+}, api?: string, project?: string): Promise<string> {
   const target = targetServer(api);
-  const creds = readCredentials({ api });
+  const wanted = String(project ?? "").trim();
+  const creds = readCredentials({ ...(wanted ? { project: wanted } : {}), api });
   const problem = creds ? null : credentialStoreProblem();
 
   if (problem) {
@@ -101,6 +125,8 @@ export async function readIdentity(deps?: {
       hint: "This is not a logged-out machine: the file is there and may hold logins. Fix or move it and run extension_auth (action: status) again; a new login is refused while it is unreadable, and extension_auth (action: logout) with no project removes it if its logins are not worth recovering.",
     });
   }
+
+  if (wanted && !creds) return notSignedIn(wanted, target, Math.floor(Date.now() / 1000));
 
   const elsewhere = creds ? null : elsewhereNote(target);
 
@@ -170,13 +196,18 @@ export async function readIdentity(deps?: {
   const server = describeServer(check, askApi);
 
   const hosted = Boolean(requestCredential());
+  const slugs = `${creds.workspaceSlug}/${creds.projectSlug}`;
   const identityNote = hosted
     ? expired
       ? "This connection's token has expired. Sign in again from your MCP client."
-      : `Signed in as ${creds.workspaceSlug}/${creds.projectSlug} through this connection's OAuth token, which scopes every call.`
-    : expired
-      ? "The stored token has expired. Run extension_auth (action: login) to refresh it."
-      : `Logged in as ${creds.workspaceSlug}/${creds.projectSlug}, per the token extension_auth stored on this machine. That token is what scopes the identity: it does not follow the current working directory or project folder.`;
+      : `Signed in as ${slugs} through this connection's OAuth token, which scopes every call.`
+    : wanted
+      ? expired
+        ? `The stored login for ${slugs} has expired. Run extension_auth (action: login, project: "${slugs}") to refresh it.`
+        : `This is the login stored for ${slugs}, the one a token-scoped tool sends when it names project: "${slugs}"; the default login for unnamed calls may be another one.`
+      : expired
+        ? "The stored token has expired. Run extension_auth (action: login) to refresh it."
+        : `Logged in as ${slugs}, per the token extension_auth stored on this machine. That token is what scopes the identity: it does not follow the current working directory or project folder.`;
   const resolved = resolveCredential({ api });
   const envTokenNote = envTokenSet
     ? `EXTENSION_DEV_TOKEN is set: an unnamed call sends it${resolved.ref ? ` (per its claims it belongs to ${resolved.ref.workspace}/${resolved.ref.project})` : " (its claims could not be read)"}, while a call naming a project, or a server pinned to one, sends that project's stored login first; this report describes only the stored login.`
@@ -185,18 +216,12 @@ export async function readIdentity(deps?: {
     check.kind === "confirmed" && check.login.toLowerCase() !== `${creds.workspaceSlug}/${creds.projectSlug}`.toLowerCase()
       ? `The server resolves this token to ${check.login}, not to the ${creds.workspaceSlug}/${creds.projectSlug} the stored file claims; the file's slugs are stale or were edited. Log in again to refresh them.`
       : null;
-  const logins = listCredentials().map((entry) => ({
-    project: `${entry.workspaceSlug}/${entry.projectSlug}`,
-    server: entry.server,
-    active: entry.active && entry.server === target,
-    expiresAt: entry.expiresAt ? new Date(entry.expiresAt * 1000).toISOString() : null,
-    expired: Boolean(entry.expiresAt && entry.expiresAt <= now),
-  }));
+  const logins = wanted ? [] : storedLogins(target, now);
   const loginsNote =
     logins.length > 1
       ? `${logins.length} logins are stored on this machine (${logins.map((l) => (l.server === target ? l.project : `${l.project} on ${l.server}`)).join(", ")}); the one above is the default for token-scoped tools on ${target}, each of them takes \`project\` to use another, and a login minted on another server is used only when a call targets that server.`
       : null;
-  const drift = hosted ? null : defaultLoginDrift(api);
+  const drift = hosted || wanted ? null : defaultLoginDrift(api);
   const driftNote = drift ? loginDriftSentence(drift) : null;
 
   const message = [
@@ -217,6 +242,7 @@ export async function readIdentity(deps?: {
     value: {
       workspaceSlug: creds.workspaceSlug,
       projectSlug: creds.projectSlug,
+      projectId: creds.projectId ?? null,
       ...(recordedApi ? { apiRecordedAtLogin: recordedApi } : {}),
       apiDefault: effectiveDefaultApi,
       provider: creds.provider ?? "extensiondev",
@@ -226,7 +252,7 @@ export async function readIdentity(deps?: {
       expiresInSeconds: creds.expiresAt ? creds.expiresAt - now : null,
       expired,
       server: server.value,
-      logins,
+      ...(wanted ? {} : { logins }),
     },
     hint: message,
     warnings: [
