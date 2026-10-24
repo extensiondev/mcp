@@ -175,7 +175,7 @@ export const schema = {
         ],
         default: "submit",
         description:
-          "submit (the default) sends buildSha to every store in browsers: Chrome and Edge upload a draft that is not published and does not enter review, even for an item that is already live; Firefox uploads to the unlisted channel whenever the project has no saved release channel (AMO is read only as a guard: an add-on AMO already lists, with no saved channel, is refused before upload, because an unlisted upload of a listed add-on burns the version number) and signs it for self distribution; Safari uploads to App Store Connect and stops at the TestFlight draft; no store's API sets listing visibility, and a store that only uploaded is recorded as 'Uploaded, not public', never as live. preflight reads each store's readiness for browsers and writes nothing: the failing checks with what to fix (never a secret value or a secret's name); with projectPath, which failing listing checks the local STORE.md and the built icons already cover (a missing privacy policy URL names the STORE.md line to add); and the store connection: store-not-connected with value.connectUrl, store-connection-failed with the reason, store-item-not-linked with value.linkItemUrl, value.newItemUrl and value.packageUrl, each with the sentences to say in hint, and the store's own page in value.itemUrl as information only. A preflight with failing checks answers nextStep null. sync-listing fills the extension.dev store listing for browsers from projectPath's STORE.md (title, summary, description, category, license, support email, homepage URL, search terms, privacy policy URL, single purpose, permission justifications, reviewer, release and certification notes; a trailing parenthetical note on a category, license, support email or homepage line stays out of the value), the 128 px icon in the built dist/<browser> and the screenshots named, written at once under the owner's own token (listing-synced), and answers what changed and what the listing still lacks; when the platform still asks for an approval, the first call answers approval-required with the change as the platform computed it and a second call with browsers:[store] and that approvalId writes it once. publish (alias review) with browsers:['chrome'] sends the newest Chrome draft, or the submissionId named, to Chrome's review, and with browsers:['edge'] the newest Edge Add-ons draft to Edge's certification review: approval-required first, then in-review with value.trackUrl once the record carries the store's own state in outcome.storeState, and publish-dispatched until then even when the run finished; with no store connected or no item linked it answers store-not-connected or store-item-not-linked before anyone is asked. cancel withdraws a submission from review (store, default chrome; submissionId from extension_release_status) and rollout raises the Chrome staged rollout to deployPercentage, which Chrome never lets drop again; both need a workspace owner's approval of the exact act and answer approval-required, or a refusal with the reason before anyone is asked. configure-store changes one store's settings (store, and storeSettings with only what changes: enabled, submissionMode among the store's own mode ids, the store's listing id, and for Firefox sourceArchive and releaseChannel) at once under the owner's own token, the same as extension_builds configure: store-configured answers what changed, the console store settings page in value.trackUrl and preflight as nextStep; a listed or public submission mode changes who can find the extension, so it answers approval-required first with the change as the platform computed it, and a second call with that approvalId applies it once; a storeSettings key that names a credential answers credentials-console-only before anything is sent, with the console connect page in value.connectUrl and the form's own field labels, since store credentials never pass through this server. Recorded statuses (submitted, in-review, canceled, rolled-out, listing-synced) come only with outcome.recorded true; a record that reads failed answers submit-failed or publish-failed; a refusal whose value.approvalRefunded is true keeps its approvalId for the next call.",
+          "submit (the default) sends buildSha to every store in browsers: Chrome and Edge upload a draft that is not published and does not enter review, even for an item that is already live; Firefox uploads to the unlisted channel whenever the project has no saved release channel (AMO is read only as a guard: an add-on AMO already lists, with no saved channel, is refused before upload, because an unlisted upload of a listed add-on burns the version number) and signs it for self distribution; Safari uploads to App Store Connect and stops at the TestFlight draft; no store's API sets listing visibility, and a store that only uploaded is recorded as 'Uploaded, not public', never as live. preflight reads each store's readiness for browsers and writes nothing: the failing checks with what to fix (never a secret value or a secret's name); with projectPath, which failing listing checks the local STORE.md and the built icons already cover (a missing privacy policy URL names the STORE.md line to add); and the store connection: store-not-connected with value.connectUrl, store-connection-failed with the reason, store-item-not-linked with value.linkItemUrl, value.newItemUrl and value.packageUrl, each with the sentences to say in hint, and the store's own page in value.itemUrl as information only. A preflight with failing checks answers nextStep null. sync-listing fills the extension.dev store listing for browsers from projectPath's STORE.md (title, summary, description, category, license, support email, homepage URL, search terms, privacy policy URL, single purpose, permission justifications, reviewer, release and certification notes; a trailing parenthetical note on a category, license, support email or homepage line stays out of the value), the 128 px icon in the built dist/<browser> and the screenshots named, written at once under the owner's own token (listing-synced), and answers what changed and what the listing still lacks; when the platform still asks for an approval, the first call answers approval-required with the change as the platform computed it and a second call with browsers:[store] and that approvalId writes it once. publish (alias review) with browsers:['chrome'] sends the newest Chrome draft, or the submissionId named, to Chrome's review, and with browsers:['edge'] the newest Edge Add-ons draft to Edge's certification review: approval-required first, then in-review with value.trackUrl once the record carries the store's own state in outcome.storeState, and publish-dispatched until then even when the run finished; with no store connected or no item linked it answers store-not-connected or store-item-not-linked before anyone is asked. An Edge submission whose package carries a compressed file (.zip, .gz, .tgz, .tar, .br, .bz2, .xz, .7z, .rar, .jar, .crx, .xpi, or gzip bytes under any name), which Partner Center refuses in an extension package, answers package-refused with value.files and the build page in value.trackUrl before any approval; the fix is in the build (Tesseract .traineddata ships uncompressed with gzip: false), never in a file this server rewrites. cancel withdraws a submission from review (store, default chrome; submissionId from extension_release_status) and rollout raises the Chrome staged rollout to deployPercentage, which Chrome never lets drop again; both need a workspace owner's approval of the exact act and answer approval-required, or a refusal with the reason before anyone is asked. configure-store changes one store's settings (store, and storeSettings with only what changes: enabled, submissionMode among the store's own mode ids, the store's listing id, and for Firefox sourceArchive and releaseChannel) at once under the owner's own token, the same as extension_builds configure: store-configured answers what changed, the console store settings page in value.trackUrl and preflight as nextStep; a listed or public submission mode changes who can find the extension, so it answers approval-required first with the change as the platform computed it, and a second call with that approvalId applies it once; a storeSettings key that names a credential answers credentials-console-only before anything is sent, with the console connect page in value.connectUrl and the form's own field labels, since store credentials never pass through this server. Recorded statuses (submitted, in-review, canceled, rolled-out, listing-synced) come only with outcome.recorded true; a record that reads failed answers submit-failed or publish-failed; a refusal whose value.approvalRefunded is true keeps its approvalId for the next call.",
       },
       project: PROJECT_TOKEN_INPUT,
       browsers: {
@@ -279,6 +279,21 @@ export async function handler(args: SubmitToolArgs): Promise<string> {
 
 const DRAFT_STORES = new Set(["chrome", "edge"]);
 const SUBMIT_PENDING = new Set(["pending", "queued", "dispatched"]);
+const EDGE_PACKAGE_HAS_ARCHIVES_CODE = "EDGE_PACKAGE_HAS_ARCHIVES";
+const TESSERACT_HINT = "ship `.traineddata` uncompressed (Tesseract.js takes `gzip: false`)";
+
+function packageRefusedSentences(args: {
+  buildSha: string;
+  files: string[];
+  buildUrl: string;
+}): string {
+  const count = args.files.length;
+  const named = count
+    ? ` (${args.files.join(", ")})`
+    : "";
+
+  return `The Edge package of build ${args.buildSha} carries ${count || "some"} compressed ${count === 1 ? "file" : "files"}${named}, and Partner Center refuses any archive inside an extension package, so nothing was submitted. Ship the files uncompressed and rebuild; for Tesseract, ${TESSERACT_HINT}. Then submit again; the build is at ${args.buildUrl}.`;
+}
 
 function judgeSubmit(
   byStore: Record<string, PlatformSubmission>,
@@ -644,6 +659,48 @@ async function answer(args: SubmitToolArgs): Promise<string> {
           trackUrl: settingsUrl,
           sayToPerson: say,
           nextStep: nextStep("link-item", say, urls.linkItemUrl),
+        },
+        hint: say,
+      });
+    }
+
+    if (refusedCode === EDGE_PACKAGE_HAS_ARCHIVES_CODE) {
+      const files = (Array.isArray(data?.files) ? data.files : [])
+        .map((file: unknown) => String(file ?? "").trim())
+        .filter(Boolean);
+      const buildUrl = consoleTrackUrl(
+        "build",
+        {
+          ...(credential.ref
+            ? { workspace: credential.ref.workspace, project: credential.ref.project }
+            : {}),
+          buildId: buildSha,
+          browser: "edge",
+        },
+        args.api,
+      );
+      const say = packageRefusedSentences({ buildSha, files, buildUrl });
+
+      return envelope({
+        ok: false,
+        command: "extension_submit",
+        status: "package-refused",
+        error: {
+          code: "E_PLATFORM",
+          name: "EdgePackageRefused",
+          message:
+            "The Edge package carries compressed files, which Partner Center refuses in an extension package, so nothing was submitted by this call.",
+          platformCode: refusedCode,
+        },
+        value: {
+          browsers,
+          buildSha,
+          channel,
+          store: "edge",
+          files,
+          trackUrl: buildUrl,
+          sayToPerson: say,
+          nextStep: nextStep("resubmit", say, buildUrl),
         },
         hint: say,
       });
