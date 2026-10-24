@@ -128,14 +128,24 @@ export interface StoreMdLineNotFound {
  * under "## Listing" instead of guessing what "categories" means. A line that
  * is there and could not be taken is already in skipped with its reason and
  * is not repeated here; the screenshots line is listed when neither STORE.md
- * nor the screenshots argument carried a file.
+ * nor the screenshots argument carried a file. "- App Store name:" is
+ * missed only when the Name it stands in for is absent or over the App
+ * Store's limit, since a Name that fits is the name the record keeps
+ * (ledger 158).
  */
+function nameFitsTheAppStore(title: unknown): boolean {
+  const name = typeof title === "string" ? title.trim() : "";
+
+  return Boolean(name) && name.length <= LISTING_TEXT_LIMITS.appStoreName;
+}
+
 export function linesNotFound(local: LocalListing): StoreMdLineNotFound[] {
   const listing = local.patch.listing as Record<string, unknown>;
   const missing: StoreMdLineNotFound[] = [];
 
   for (const field of STORE_FIELDS[local.store]) {
     if (listing[field] !== undefined || local.unread[field]) continue;
+    if (field === "appStoreName" && nameFitsTheAppStore(listing.title)) continue;
 
     missing.push({ field, line: storeMdLineOf(field), section: storeMdSectionOf(field, local.store).section });
   }

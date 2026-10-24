@@ -296,6 +296,15 @@
         "limit": "up to 100 characters"
       },
       {
+        "field": "appStoreName",
+        "line": "- App Store name:",
+        "section": "## Safari",
+        "alsoRead": [
+          "## Listing"
+        ],
+        "limit": "up to 30 characters"
+      },
+      {
         "field": "subtitle",
         "line": "- Subtitle:",
         "section": "## Listing",

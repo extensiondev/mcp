@@ -138,6 +138,7 @@ export function pushAnswer(raw: unknown, resend: Resend, trackUrl: string): Row 
 const STORE_MD_LINES: Record<string, string> = {
   title: "Name",
   name: "Name",
+  appStoreName: "App Store name",
   subtitle: "Subtitle",
   shortDescription: "Summary",
   summary: "Summary",

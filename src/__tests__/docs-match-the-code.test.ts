@@ -33,6 +33,7 @@ const DOCS = [
 
 const PLATFORM_STORE_MD_LABELS = [
   "Name",
+  "App Store name",
   "Subtitle",
   "Summary",
   "Description",

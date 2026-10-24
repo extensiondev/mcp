@@ -64,11 +64,12 @@ Generated from the parser's own declarations in `src/lib/store-md-declarations.t
 
 ## safari (App Store (Safari), `## Safari`)
 
-15 fields.
+16 fields.
 
 | line | section | also read from | field | limit |
 | --- | --- | --- | --- | --- |
 | `- Name:` | `## Listing` | `## Safari` | `title` | up to 100 characters |
+| `- App Store name:` | `## Safari` | `## Listing` | `appStoreName` | up to 30 characters |
 | `- Subtitle:` | `## Listing` | `## Safari` | `subtitle` | up to 30 characters |
 | `- Summary:` | `## Listing` | `## Safari` | `shortDescription` | up to 250 characters |
 | `- Description:` | `## Listing` | `## Safari` | `fullDescription` | paragraphs indented below the bullet, up to 16,000 characters |

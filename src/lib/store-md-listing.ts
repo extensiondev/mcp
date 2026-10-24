@@ -57,6 +57,7 @@ const NOTED_FIELDS: ListingField[] = ["license", "supportEmail", "homepageUrl", 
 
 const SINGLE_LINE_FIELDS: ListingField[] = [
   "title",
+  "appStoreName",
   "subtitle",
   "shortDescription",
   "license",

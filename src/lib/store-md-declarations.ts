@@ -12,6 +12,7 @@ export type ListingStore = (typeof LISTING_STORES)[number];
 
 export const LISTING_TEXT_LIMITS = {
   title: 100,
+  appStoreName: 30,
   subtitle: 30,
   shortDescription: 250,
   fullDescription: 16_000,
@@ -63,7 +64,7 @@ export const STORE_SECTIONS: Record<ListingStore, string> = {
 };
 
 export const STORE_OWN_LINES: Partial<Record<ListingStore, ListingField[]>> = {
-  safari: ["reviewContactName", "reviewContactEmail", "reviewContactPhone"],
+  safari: ["appStoreName", "reviewContactName", "reviewContactEmail", "reviewContactPhone"],
 };
 
 export const SCREENSHOTS_LINE = "Screenshots";
@@ -72,7 +73,7 @@ export const STORE_FIELDS: Record<ListingStore, ListingField[]> = {
   chrome: ["title", "shortDescription", "fullDescription", "categories", "supportEmail", "privacyPolicyUrl", "homepageUrl", "singlePurpose", "permissionJustifications"],
   firefox: ["title", "shortDescription", "fullDescription", "categories", "supportEmail", "privacyPolicyUrl", "homepageUrl", "license", "reviewerNotes", "releaseNotes"],
   edge: ["title", "shortDescription", "fullDescription", "categories", "searchTerms", "supportEmail", "privacyPolicyUrl", "homepageUrl", "certificationNotes"],
-  safari: ["title", "subtitle", "shortDescription", "fullDescription", "categories", "searchTerms", "supportEmail", "privacyPolicyUrl", "homepageUrl", "reviewerNotes", "reviewContactName", "reviewContactEmail", "reviewContactPhone", "supportUrl"],
+  safari: ["title", "appStoreName", "subtitle", "shortDescription", "fullDescription", "categories", "searchTerms", "supportEmail", "privacyPolicyUrl", "homepageUrl", "reviewerNotes", "reviewContactName", "reviewContactEmail", "reviewContactPhone", "supportUrl"],
 };
 
 export type BulletField = Exclude<ListingField, "permissionJustifications">;
@@ -85,6 +86,7 @@ export interface BulletKey {
 
 export const BULLET_KEYS: BulletKey[] = [
   { field: "title", line: "Name", pattern: /^(name|title)$/ },
+  { field: "appStoreName", line: "App Store name", pattern: /^app store name$/ },
   { field: "subtitle", line: "Subtitle", pattern: /^subtitle$/ },
   { field: "shortDescription", line: "Summary", pattern: /^(summary|short description)$/ },
   { field: "fullDescription", line: "Description", pattern: /^(description|long description|full description)$/ },
