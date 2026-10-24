@@ -23,6 +23,7 @@ export interface RequirementRow {
   how: string;
   docs?: string;
   actual?: string;
+  value?: string;
   push?: string;
 }
 
@@ -147,6 +148,7 @@ export function requirementsView(value: unknown, local: LocalListingRead = null)
         how: text(row.how),
         ...(text(row.docs) ? { docs: text(row.docs) } : {}),
         ...(text(row.actual) ? { actual: text(row.actual) } : {}),
+        ...(text(row.value) ? { value: text(row.value) } : {}),
         ...(text(row.push) ? { push: text(row.push) } : {}),
       },
       local,
@@ -177,13 +179,50 @@ export function missingRequiredSentence(store: string, view: RequirementsView | 
   return `${STORE_NAMES[store] ?? store} asks for ${count} the project does not have yet: ${named.join("; ")}${more > 0 ? `; and ${more} more` : ""}.`;
 }
 
+/* @invariant AN INPUT THE PROJECT ALREADY HOLDS IS OFFERED AS THE EXACT CALL
+ * THAT SAVES IT. The platform reads the Safari bundle id from the
+ * repository's extension.config.js when the store settings hold none
+ * (ledger 155) and answers it in the row's value, so the answer names the
+ * configure-store call with that value instead of sending the owner to the
+ * console to type it. A missing App Store support URL names the two places
+ * that set it without the console (ledger 159): the project's support URL
+ * through extension_workspace configure-project, and the STORE.md line
+ * sync-listing sends.
+ */
+export function safariOfferSentences(view: RequirementsView | null): string {
+  if (!view) return "";
+
+  const bundle = view.items.find((item) => item.id === "safari.bundle_identifiers");
+  const support = view.items.find((item) => item.id === "safari.support_url");
+  const lines: string[] = [];
+
+  if (bundle?.status === "have" && bundle.value && bundle.satisfiedBy.startsWith("file:")) {
+    const file = bundle.satisfiedBy.replace(/^file:\s*/, "");
+
+    lines.push(
+      `${file} names the bundle id ${bundle.value} and the Safari store settings hold none yet; extension_submit (action: "configure-store", store: "safari", storeSettings: { bundleId: "${bundle.value}" }) saves it.`,
+    );
+  }
+
+  if (support?.status === "missing") {
+    lines.push(
+      'The App Store support URL is set with extension_workspace (action: "configure-project", supportUrl: "https://..."), or with a `- Support URL:` line under `## Listing` in STORE.md that sync-listing sends.',
+    );
+  }
+
+  return lines.join(" ");
+}
+
 export function missingRequirementsSentences(stores: Record<string, unknown>): string {
   return Object.entries(stores)
-    .map(([store, view]) =>
-      isRow(view) && isRow(view.requirements)
-        ? missingRequiredSentence(store, requirementsView(view.requirements))
-        : "",
-    )
+    .map(([store, view]) => {
+      if (!isRow(view) || !isRow(view.requirements)) return "";
+
+      const requirements = requirementsView(view.requirements);
+      const offers = store === "safari" ? safariOfferSentences(requirements) : "";
+
+      return [missingRequiredSentence(store, requirements), offers].filter(Boolean).join(" ");
+    })
     .filter(Boolean)
     .join(" ");
 }

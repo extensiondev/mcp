@@ -53,7 +53,7 @@ export interface StoreListingRead {
   unread: Partial<Record<ListingField, UnreadLine>>;
 }
 
-const NOTED_FIELDS: ListingField[] = ["license", "supportEmail", "homepageUrl"];
+const NOTED_FIELDS: ListingField[] = ["license", "supportEmail", "homepageUrl", "supportUrl"];
 
 const SINGLE_LINE_FIELDS: ListingField[] = [
   "title",
@@ -62,6 +62,7 @@ const SINGLE_LINE_FIELDS: ListingField[] = [
   "license",
   "supportEmail",
   "homepageUrl",
+  "supportUrl",
   "reviewContactName",
   "reviewContactEmail",
   "reviewContactPhone",

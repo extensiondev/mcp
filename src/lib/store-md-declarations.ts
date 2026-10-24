@@ -26,6 +26,7 @@ export const LISTING_TEXT_LIMITS = {
   reviewContactName: 100,
   reviewContactEmail: 200,
   reviewContactPhone: 20,
+  supportUrl: 2_000,
 } as const;
 
 export type ListingTextField = keyof typeof LISTING_TEXT_LIMITS;
@@ -71,7 +72,7 @@ export const STORE_FIELDS: Record<ListingStore, ListingField[]> = {
   chrome: ["title", "shortDescription", "fullDescription", "categories", "supportEmail", "privacyPolicyUrl", "homepageUrl", "singlePurpose", "permissionJustifications"],
   firefox: ["title", "shortDescription", "fullDescription", "categories", "supportEmail", "privacyPolicyUrl", "homepageUrl", "license", "reviewerNotes", "releaseNotes"],
   edge: ["title", "shortDescription", "fullDescription", "categories", "searchTerms", "supportEmail", "privacyPolicyUrl", "homepageUrl", "certificationNotes"],
-  safari: ["title", "subtitle", "shortDescription", "fullDescription", "categories", "searchTerms", "supportEmail", "privacyPolicyUrl", "homepageUrl", "reviewerNotes", "reviewContactName", "reviewContactEmail", "reviewContactPhone"],
+  safari: ["title", "subtitle", "shortDescription", "fullDescription", "categories", "searchTerms", "supportEmail", "privacyPolicyUrl", "homepageUrl", "reviewerNotes", "reviewContactName", "reviewContactEmail", "reviewContactPhone", "supportUrl"],
 };
 
 export type BulletField = Exclude<ListingField, "permissionJustifications">;
@@ -91,6 +92,7 @@ export const BULLET_KEYS: BulletKey[] = [
   { field: "supportEmail", line: "Support email", pattern: /^support email$/ },
   { field: "privacyPolicyUrl", line: "Privacy policy URL", pattern: /^privacy policy( url)?$/ },
   { field: "homepageUrl", line: "Homepage", pattern: /^(homepage|website|homepage url)$/ },
+  { field: "supportUrl", line: "Support URL", pattern: /^support (url|page|website)$/ },
   { field: "license", line: "License", pattern: /^license$/ },
   { field: "searchTerms", line: "Search terms", pattern: /^(search terms|keywords|tags)$/ },
   { field: "reviewContactName", line: "Review contact name", pattern: /^(app review contact name|review contact name|contact name)$/ },

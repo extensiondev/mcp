@@ -37,6 +37,8 @@ describe("extension_submit configure-store changes a store's settings as a plain
       "chromeItemId",
       "edgeProductId",
       "firefoxAddonGuid",
+      "appStoreId",
+      "bundleId",
     ]);
 
     for (const property of Object.values((schema.inputSchema.properties as Record<string, any>).storeSettings.properties) as Array<{ description?: string }>) {
@@ -152,8 +154,12 @@ describe("extension_submit configure-store changes a store's settings as a plain
   it("refuses a listing id, a raw mode flag, an unknown key, a foreign mode id and a Firefox-only key before any request", async () => {
     platform.login();
     const cases: Array<[string, Record<string, unknown>, RegExp]> = [
-      ["firefox", { storeId: "{abc}" }, /"storeId".*a listing id goes in as chromeItemId, edgeProductId or firefoxAddonGuid.*stay a person at a keyboard in the console/],
-      ["chrome", { publisherId: "acme" }, /"publisherId".*publisher ids, store URLs, bundle ids and the rest stay a person at a keyboard/],
+      ["firefox", { storeId: "{abc}" }, /"storeId".*a listing id goes in as chromeItemId, edgeProductId, firefoxAddonGuid or appStoreId.*stay a person at a keyboard in the console/],
+      ["chrome", { publisherId: "acme" }, /"publisherId".*the Safari bundle id as bundleId, and publisher ids, store URLs and the rest stay a person at a keyboard/],
+      ["chrome", { bundleId: "com.acme.widget" }, /"bundleId" is a safari store setting; chrome does not have it/],
+      ["safari", { bundleId: "widget" }, /bundleId must be a reverse-DNS identifier with two or more labels/],
+      ["safari", { appStoreId: "id6826486337" }, /appStoreId must be the App Store id of the app record: the 6 to 15 digit Apple ID/],
+      ["chrome", { appStoreId: "6826486337" }, /"appStoreId" is a safari store setting; chrome does not have it/],
       ["chrome", { skipPublish: true }, /"skipPublish".*console/],
       ["chrome", { foo: 1 }, /"foo", which is not a store setting; use enabled, submissionMode, sourceArchive, releaseChannel, chromeItemId, edgeProductId, firefoxAddonGuid/],
       ["firefox", { chromeItemId: "abcdefghijklmnopabcdefghijklmnop" }, /"chromeItemId" is a chrome store setting; firefox does not have it/],
@@ -216,6 +222,37 @@ describe("extension_submit configure-store changes a store's settings as a plain
     );
 
     expect(scope.settingsDigest).not.toBe(storeSettingsDigest("firefox", { enabled: true }));
+  });
+
+  it("writes the Safari bundle id and App Store id as plain owner-token writes, hashing bundleId last, and no longer calls the bundle id console-only", async () => {
+    if (process.platform === "win32") return;
+
+    platform.login();
+    platform.routes[`PUT ${CONFIG}`] = () => ({
+      body: { ok: true, store: "safari", changes: ['safari.storeId: "" -> "6826486337"', 'safari.bundleId: "" -> "com.acme.widget"'] },
+    });
+
+    const out = JSON.parse(
+      await submit({ action: "configure-store", store: "safari", storeSettings: { bundleId: "com.acme.widget", appStoreId: "6826486337" }, api: API }),
+    );
+    const [put] = platform.sent("PUT", CONFIG);
+
+    expect(put.body).toEqual({ safari: { storeId: "6826486337", bundleId: "com.acme.widget" } });
+    expect(out.status).toBe("store-configured");
+    expect(out.value.storeSettings).toEqual({ appStoreId: "6826486337", bundleId: "com.acme.widget" });
+    expect(out.value.changes).toEqual(['safari.storeId: "" -> "6826486337"', 'safari.bundleId: "" -> "com.acme.widget"']);
+    expect(out.value.trackUrl).toMatch(SETTINGS_PAGE);
+    expect(out.hint).toContain("no approval page was involved");
+    expect(platform.calls.some((call) => call.path.startsWith(APPROVALS))).toBe(false);
+
+    expect(storeSettingsDigest("safari", { storeId: "6826486337", bundleId: "com.acme.widget" })).toBe(
+      storeSettingsDigest("safari", { bundleId: "com.acme.widget", storeId: "6826486337" }),
+    );
+
+    const description = (schema.inputSchema.properties as Record<string, any>).storeSettings.description as string;
+
+    expect(description).toContain("for Safari bundleId");
+    expect(description).not.toMatch(/bundle id: those stay in the console/);
   });
 
   it("writes a mode id as every field the platform derives it from", () => {

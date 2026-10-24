@@ -76,6 +76,7 @@ const SAFARI_UNREAD = [
   { field: "reviewContactName", line: "- Review contact name:", section: "## Safari" },
   { field: "reviewContactEmail", line: "- Review contact email:", section: "## Safari" },
   { field: "reviewContactPhone", line: "- Review contact phone:", section: "## Safari" },
+  { field: "supportUrl", line: "- Support URL:", section: "## Listing" },
   { field: "screenshots", line: "- Screenshots:", section: "## Listing" },
 ];
 
@@ -557,6 +558,12 @@ describe("STORE.md fills the store listing", () => {
         icons: [icon],
       }),
     ).toBe("140c4c8fb822aab0a502affa88bdfc97da96392892e41e23755df07f14fa100b");
+
+    expect(
+      listingDigest({
+        listing: { title: "PII Shield", reviewContactPhone: "+5511999999999", supportUrl: "https://example.com/support" },
+      }),
+    ).toBe("e660d01dee637ba0e15fc7a0f938f3ead7a8e6683239b9460649ee5af0a3b732");
   });
 
   it("is an action of extension_submit that counts as shipping", () => {
@@ -1518,9 +1525,9 @@ describe("extension_submit sync-listing sends the fields the platform hashes whe
     expect(Object.keys(puts[1]!.body.listing)).toEqual(["title", "subtitle", "shortDescription", "fullDescription"]);
     expect(asked.status).toBe("approval-required");
     expect(asked.value.stores.safari.digest).toEqual({
-      client: ["title", "subtitle", "shortDescription", "fullDescription", "categories", "searchTerms", "supportEmail", "privacyPolicyUrl", "homepageUrl", "reviewerNotes", "reviewContactName", "reviewContactEmail", "reviewContactPhone"],
+      client: ["title", "subtitle", "shortDescription", "fullDescription", "categories", "searchTerms", "supportEmail", "privacyPolicyUrl", "homepageUrl", "reviewerNotes", "reviewContactName", "reviewContactEmail", "reviewContactPhone", "supportUrl"],
       platform: known,
-      differ: ["searchTerms", "reviewerNotes", "reviewContactName", "reviewContactEmail", "reviewContactPhone"],
+      differ: ["searchTerms", "reviewerNotes", "reviewContactName", "reviewContactEmail", "reviewContactPhone", "supportUrl"],
     });
 
     expect(asked.value.stores.safari.deferred).toEqual(["searchTerms", "reviewContactPhone"]);
@@ -1583,9 +1590,9 @@ describe("extension_submit sync-listing sends the fields the platform hashes whe
     platform.login();
 
     const digest = {
-      client: ["title", "subtitle", "shortDescription", "fullDescription", "categories", "searchTerms", "supportEmail", "privacyPolicyUrl", "homepageUrl", "reviewerNotes", "reviewContactName", "reviewContactEmail", "reviewContactPhone"],
+      client: ["title", "subtitle", "shortDescription", "fullDescription", "categories", "searchTerms", "supportEmail", "privacyPolicyUrl", "homepageUrl", "reviewerNotes", "reviewContactName", "reviewContactEmail", "reviewContactPhone", "supportUrl"],
       platform: LEGACY_SAFARI,
-      differ: ["subtitle", "searchTerms", "reviewerNotes", "reviewContactName", "reviewContactEmail", "reviewContactPhone"],
+      differ: ["subtitle", "searchTerms", "reviewerNotes", "reviewContactName", "reviewContactEmail", "reviewContactPhone", "supportUrl"],
     };
 
     platform.routes[`PUT ${LISTING("safari")}`] = () => ({
@@ -1603,7 +1610,7 @@ describe("extension_submit sync-listing sends the fields the platform hashes whe
       status: "refused",
       code: "LISTING_DIGEST_MISMATCH",
       message:
-        "The platform hashes this listing differently from this server even after leaving out subtitle, searchTerms and reviewContactPhone: this server declares subtitle, searchTerms, reviewerNotes, reviewContactName, reviewContactEmail and reviewContactPhone, which the platform does not hash, so this server is newer than the platform's build. No approval was requested. Say sync-listing again after the platform updates.",
+        "The platform hashes this listing differently from this server even after leaving out subtitle, searchTerms and reviewContactPhone: this server declares subtitle, searchTerms, reviewerNotes, reviewContactName, reviewContactEmail, reviewContactPhone and supportUrl, which the platform does not hash, so this server is newer than the platform's build. No approval was requested. Say sync-listing again after the platform updates.",
       digest,
       trackUrl: SUBMISSIONS,
       filled: ["title", "subtitle", "shortDescription", "fullDescription", "searchTerms", "reviewContactPhone", "icons"],
@@ -1691,3 +1698,14 @@ function digestOf(body: {
       : {}),
 });
 }
+
+describe("the STORE.md Support URL line", () => {
+  it("is read under ## Listing as the App Store's support URL and sent with the Safari listing only", () => {
+    const parsed = parseStoreMdListing("## Listing\n\n- Name: Widget\n- Support URL: https://example.com/support\n- Homepage: https://example.com\n");
+
+    expect(listingForStore(parsed, "safari").listing.supportUrl).toBe("https://example.com/support");
+    expect(listingForStore(parsed, "safari").listing.homepageUrl).toBe("https://example.com");
+    expect(listingForStore(parsed, "chrome").listing.supportUrl).toBeUndefined();
+    expect(STORE_FIELDS.safari[STORE_FIELDS.safari.length - 1]).toBe("supportUrl");
+  });
+});

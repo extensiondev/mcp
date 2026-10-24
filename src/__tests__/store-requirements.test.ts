@@ -4,7 +4,7 @@ import path from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { configuredRequirementsNote, missingRequiredSentence, requirementsView } from "../lib/store-requirements";
+import { configuredRequirementsNote, missingRequiredSentence, missingRequirementsSentences, requirementsView, safariOfferSentences } from "../lib/store-requirements";
 import { handler as submit } from "../tools/submit";
 import { solidPng } from "./fixtures/png";
 import { API, PROJECT_ROUTE, useProjectRoutes } from "./fixtures/project-routes";
@@ -361,5 +361,37 @@ describe("extension_submit preflight carries what each store asks for and says w
     expect(configuredRequirementsNote({ requirements: { safari: { ...SAFARI_REQUIREMENTS, missingRequired: 0 } } }, "safari")).toBe(" Every required input the store asks for is on file.");
     expect(configuredRequirementsNote({ requirements: { chrome: SAFARI_REQUIREMENTS } }, "safari")).toBe("");
     expect(configuredRequirementsNote({ ok: true }, "safari")).toBe("");
+  });
+});
+
+describe("the Safari preflight offers the call that saves an input the project already holds", () => {
+  const bundleFromFile = requirement({
+    id: "safari.bundle_identifiers",
+    label: "Two bundle identifiers",
+    satisfiedBy: "file: extension.config.js",
+    status: "have",
+    value: "com.acme.widget",
+    actual: "com.acme.widget and com.acme.widget.extension, named in extension.config.js at 603fc8a; not saved to the Safari store settings yet",
+  });
+  const supportMissing = requirement({ id: "safari.support_url", label: "Support URL", satisfiedBy: "store-md: Support URL", status: "missing" });
+
+  it("names the configure-store write of the bundle id extension.config.js holds, and the two ways to set the support URL", () => {
+    const view = requirementsView({ store: "safari", items: [bundleFromFile, supportMissing] });
+
+    expect(view?.items[0]?.value).toBe("com.acme.widget");
+    expect(safariOfferSentences(view)).toBe(
+      'extension.config.js names the bundle id com.acme.widget and the Safari store settings hold none yet; extension_submit (action: "configure-store", store: "safari", storeSettings: { bundleId: "com.acme.widget" }) saves it. The App Store support URL is set with extension_workspace (action: "configure-project", supportUrl: "https://..."), or with a `- Support URL:` line under `## Listing` in STORE.md that sync-listing sends.',
+    );
+
+    expect(missingRequirementsSentences({ safari: { requirements: { store: "safari", items: [bundleFromFile, supportMissing] } } })).toContain('storeSettings: { bundleId: "com.acme.widget" }');
+  });
+
+  it("offers nothing when the bundle id is saved or the file holds none, and says nothing for another store", () => {
+    const saved = requirement({ id: "safari.bundle_identifiers", satisfiedBy: "store-config: bundleId", status: "have" });
+    const missing = requirement({ id: "safari.bundle_identifiers", satisfiedBy: "store-config: bundleId", status: "missing" });
+
+    expect(safariOfferSentences(requirementsView({ store: "safari", items: [saved] }))).toBe("");
+    expect(safariOfferSentences(requirementsView({ store: "safari", items: [missing] }))).toBe("");
+    expect(missingRequirementsSentences({ chrome: { requirements: { store: "chrome", items: [bundleFromFile] } } })).toBe("");
   });
 });

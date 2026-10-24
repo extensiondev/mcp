@@ -64,7 +64,7 @@ Generated from the parser's own declarations in `src/lib/store-md-declarations.t
 
 ## safari (App Store (Safari), `## Safari`)
 
-14 fields.
+15 fields.
 
 | line | section | also read from | field | limit |
 | --- | --- | --- | --- | --- |
@@ -81,4 +81,5 @@ Generated from the parser's own declarations in `src/lib/store-md-declarations.t
 | `- Review contact name:` | `## Safari` | `## Listing` | `reviewContactName` | up to 100 characters |
 | `- Review contact email:` | `## Safari` | `## Listing` | `reviewContactEmail` | an email address, up to 200 characters |
 | `- Review contact phone:` | `## Safari` | `## Listing` | `reviewContactPhone` | an E.164 phone number, up to 20 characters |
+| `- Support URL:` | `## Listing` | `## Safari` | `supportUrl` | an http or https URL, up to 2,000 characters |
 | `- Screenshots:` | `## Listing` |  | `screenshots` | up to 5 PNG files inside the project, one path per line below the bullet |

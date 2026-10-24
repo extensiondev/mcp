@@ -53,8 +53,9 @@ export interface ConfigureStoreArgs {
  * with the console's connect page and the field labels the console form
  * shows, never the platform's secret names, and the platform is not asked;
  * the only settings a token may write are enabled, the submission mode, the
- * Firefox release channel, the Firefox source archive and the store's own
- * listing id (chromeItemId, edgeProductId, firefoxAddonGuid).
+ * Firefox release channel, the Firefox source archive, the store's own
+ * listing id (chromeItemId, edgeProductId, firefoxAddonGuid, appStoreId) and
+ * the Safari bundleId, which is the project's identifier and not a secret.
  */
 function credentialsConsoleOnly(args: ConfigureStoreArgs, store: StoreSettingsStore, keys: string[]): string {
   const ref = resolveCredential({ project: args.project, api: args.api }).ref;

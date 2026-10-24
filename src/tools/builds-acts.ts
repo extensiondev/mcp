@@ -219,6 +219,32 @@ export function settingsDigest(settings: Record<string, BrowserConfig>): string 
   return crypto.createHash("sha256").update(JSON.stringify(canonical)).digest("hex");
 }
 
+const strings = (value: unknown): string[] => (Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : []);
+
+/* @invariant THE ANSWER IS WHAT THE PLATFORM STORED, NOT WHAT WAS SENT. The
+ * platform fills an enabled browser's empty install, build and output
+ * settings from the project's own pattern (ledger 155), so the settings this
+ * server merged are not the settings saved. When the platform answers its
+ * stored buildSettings, its change lines (a filled one ends "(defaulted)"),
+ * the fields it filled and a per-browser note (what a Safari platform build
+ * needs beyond these fields), they are passed through as they came; an older
+ * platform that answers only ok leaves the merged settings and no changes.
+ */
+function recordedConfigure(json: Row): { buildSettings: Row | null; changes: string[] | null; defaulted: string[]; notes: Record<string, string> } {
+  const notes: Record<string, string> = {};
+
+  if (isRow(json.notes)) {
+    for (const [browser, note] of Object.entries(json.notes)) if (typeof note === "string" && note.trim()) notes[browser] = note.trim();
+  }
+
+  return {
+    buildSettings: isRow(json.buildSettings) ? json.buildSettings : null,
+    changes: Array.isArray(json.changes) ? strings(json.changes) : null,
+    defaulted: strings(json.defaulted),
+    notes,
+  };
+}
+
 const SETTINGS_CONSUMED_NEXT = 'The call that used it may already have changed the settings: read them with extension_workspace (action: "settings") first, and request a fresh approval only if the change is not there.';
 
 export async function configure(args: ActArgs): Promise<string> {
@@ -276,6 +302,11 @@ export async function configure(args: ActArgs): Promise<string> {
   if (!written.ok) return written.out ?? actRefusal(written.sent, "configure", api, args);
 
   const gateLine = written.verdict === "plain" && !approvalId ? " This was a plain setting under your own token; no approval page was involved." : "";
+  const recorded = recordedConfigure(written.json);
+  const defaultedLine = recorded.defaulted.length
+    ? ` The platform filled ${recorded.defaulted.join(", ")} from the project's own pattern, and changes marks each one (defaulted); pass a value to replace one.`
+    : "";
+  const noteLines = Object.values(recorded.notes).map((note) => ` ${note}`).join("");
 
   return envelope({
     ok: true,
@@ -284,10 +315,13 @@ export async function configure(args: ActArgs): Promise<string> {
     value: {
       action: "configure",
       project,
-      buildSettings: merged,
+      buildSettings: recorded.buildSettings ?? merged,
+      ...(recorded.changes ? { changes: recorded.changes } : {}),
+      ...(recorded.defaulted.length ? { defaulted: recorded.defaulted } : {}),
+      ...(Object.keys(recorded.notes).length ? { notes: recorded.notes } : {}),
       trackUrl: trackUrl("build-settings", { workspace: api.ref.workspace, project: api.ref.project }, args.api),
     },
-    hint: `${project}'s build settings now read as buildSettings.${gateLine} The next build runs them: a push, or extension_builds action:"rebuild".`,
+    hint: `${project}'s build settings now read as buildSettings.${gateLine}${defaultedLine}${noteLines} The next build runs them: a push, or extension_builds action:"rebuild".`,
   });
 }
 

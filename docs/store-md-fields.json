@@ -401,6 +401,15 @@
         "limit": "an E.164 phone number, up to 20 characters"
       },
       {
+        "field": "supportUrl",
+        "line": "- Support URL:",
+        "section": "## Listing",
+        "alsoRead": [
+          "## Safari"
+        ],
+        "limit": "an http or https URL, up to 2,000 characters"
+      },
+      {
         "field": "screenshots",
         "line": "- Screenshots:",
         "section": "## Listing",

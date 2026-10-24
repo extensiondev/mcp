@@ -152,7 +152,7 @@ const STORE_MD_LINES: Record<string, string> = {
   contactEmail: "Support email",
   homepageUrl: "Homepage",
   marketingUrl: "Homepage",
-  supportUrl: "Homepage",
+  supportUrl: "Support URL",
   privacyPolicyUrl: "Privacy policy URL",
   reviewContactPhone: "Review contact phone",
   contactPhone: "Review contact phone",

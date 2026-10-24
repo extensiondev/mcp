@@ -26,23 +26,24 @@ export const SUBMISSION_MODE_IDS: Record<StoreSettingsStore, readonly string[]> 
   safari: ["draft", "dry-run"],
 };
 
-export const STORE_SETTING_KEYS = ["enabled", "submissionMode", "sourceArchive", "releaseChannel", "chromeItemId", "edgeProductId", "firefoxAddonGuid"] as const;
+export const STORE_SETTING_KEYS = ["enabled", "submissionMode", "sourceArchive", "releaseChannel", "chromeItemId", "edgeProductId", "firefoxAddonGuid", "appStoreId", "bundleId"] as const;
 
 const FIREFOX_ONLY_KEYS = new Set(["sourceArchive", "releaseChannel"]);
 
-export const ID_KEYS: Record<string, StoreSettingsStore> = { chromeItemId: "chrome", edgeProductId: "edge", firefoxAddonGuid: "firefox" };
+export const ID_KEYS: Record<string, StoreSettingsStore> = { chromeItemId: "chrome", edgeProductId: "edge", firefoxAddonGuid: "firefox", appStoreId: "safari" };
 
 const CHROME_ITEM_ID = /^[a-p]{32}$/i;
 const CHROME_DASHBOARD_ADDRESS = /devconsole\/(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[^/\s]+)\/([a-p]{32})(?:[/?#]|$)/i;
 const EDGE_PRODUCT_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const AMO_GUID = /^(?:\{[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\}|[a-z0-9._-]*@[a-z0-9._-]+)$/i;
+const APP_STORE_ID = /^[1-9]\d{5,14}$/;
+const BUNDLE_ID = /^[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)+$/;
 const AMO_GUID_RULING = "An AMO slug or numeric id does not identify the add-on to Mozilla's blocklist.";
 
 const CONSOLE_ONLY_KEYS = new Set([
   "storeId",
   "storeUrl",
   "publisherId",
-  "bundleId",
   "appAppleId",
   "deployPercentage",
   "reviewExemption",
@@ -55,7 +56,7 @@ const CONSOLE_ONLY_KEYS = new Set([
 
 const CREDENTIAL_KEY = /secret|token|password|credential|issuer|key|client|json|p8|pem|cert|account|oauth|refresh/i;
 
-export const PATCH_KEYS = ["enabled", "dryRun", "skipPublish", "stagedPublish", "publishAfter", "releaseChannel", "sourceArchive", "storeId"] as const;
+export const PATCH_KEYS = ["enabled", "dryRun", "skipPublish", "stagedPublish", "publishAfter", "releaseChannel", "sourceArchive", "storeId", "bundleId"] as const;
 
 export type StoreSettingsPatch = Partial<Record<(typeof PATCH_KEYS)[number], boolean | string | null>>;
 
@@ -112,7 +113,7 @@ export function readStoreSettingsChange(store: StoreSettingsStore, raw: unknown)
 
   if (consoleOnly.length) {
     return {
-      problem: `storeSettings has ${consoleOnly.map((k) => `"${k}"`).join(", ")}, which is a raw platform field; a listing id goes in as chromeItemId, edgeProductId or firefoxAddonGuid, and publisher ids, store URLs, bundle ids and the rest stay a person at a keyboard in the console store settings. Use ${STORE_SETTING_KEYS.join(", ")}.`,
+      problem: `storeSettings has ${consoleOnly.map((k) => `"${k}"`).join(", ")}, which is a raw platform field; a listing id goes in as chromeItemId, edgeProductId, firefoxAddonGuid or appStoreId, the Safari bundle id as bundleId, and publisher ids, store URLs and the rest stay a person at a keyboard in the console store settings. Use ${STORE_SETTING_KEYS.join(", ")}.`,
     };
   }
 
@@ -126,6 +127,10 @@ export function readStoreSettingsChange(store: StoreSettingsStore, raw: unknown)
 
   if (store !== "firefox" && firefoxOnly.length) {
     return { problem: `${firefoxOnly.map((k) => `"${k}"`).join(", ")} is a Firefox store setting; ${store} does not have it.` };
+  }
+
+  if (store !== "safari" && "bundleId" in raw) {
+    return { problem: `"bundleId" is a safari store setting; ${store} does not have it.` };
   }
 
   const foreignId = Object.keys(raw).filter((key) => key in ID_KEYS && ID_KEYS[key] !== store);
@@ -143,6 +148,17 @@ export function readStoreSettingsChange(store: StoreSettingsStore, raw: unknown)
   if (id) {
     patch.storeId = id.storeId;
     requested[id.key] = id.storeId;
+  }
+
+  if ("bundleId" in raw) {
+    const bundleId = text(raw.bundleId);
+
+    if (!BUNDLE_ID.test(bundleId)) {
+      return { problem: `bundleId must be a reverse-DNS identifier with two or more labels of letters, digits and hyphens, under a domain your Apple team controls, such as com.yourcompany.yourextension; got "${bundleId}".` };
+    }
+
+    patch.bundleId = bundleId;
+    requested.bundleId = bundleId;
   }
 
   if ("enabled" in raw) {
@@ -197,9 +213,11 @@ export function readStoreSettingsChange(store: StoreSettingsStore, raw: unknown)
  * item id or the dashboard address the console's own field parses it from;
  * Edge takes the Product ID GUID Partner Center shows; Firefox takes only an
  * add-on GUID (name@example.com or {uuid}), never an AMO slug or numeric id,
- * which does not identify the add-on to Mozilla's blocklist. Each goes to
- * the platform as that store's storeId, a plain write under an owner's
- * token; publisher ids, store URLs and bundle ids stay in the console.
+ * which does not identify the add-on to Mozilla's blocklist; Safari takes the
+ * app record's numeric App Store id (ledger 159). Each goes to the platform
+ * as that store's storeId, a plain write under an owner's token, beside the
+ * Safari bundleId, the project's own identifier (ledger 155); publisher ids
+ * and store URLs stay in the console.
  */
 function readStoreId(store: StoreSettingsStore, raw: Row): { key: string; storeId: string } | { problem: string } | null {
   const key = Object.keys(ID_KEYS).find((name) => name in raw && ID_KEYS[name] === store);
@@ -221,6 +239,12 @@ function readStoreId(store: StoreSettingsStore, raw: Row): { key: string; storeI
       : { problem: `edgeProductId must be the Product ID GUID from Partner Center (xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx); got "${value}".` };
   }
 
+  if (store === "safari") {
+    return APP_STORE_ID.test(value)
+      ? { key, storeId: value }
+      : { problem: `appStoreId must be the App Store id of the app record: the 6 to 15 digit Apple ID shown under App Information in App Store Connect; got "${value}".` };
+  }
+
   return value.length <= 255 && AMO_GUID.test(value)
     ? { key, storeId: value }
     : { problem: `firefoxAddonGuid "${value}" is not a Firefox add-on GUID. Enter the GUID from your manifest or your AMO developer page, in the form name@example.com or {xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx}. ${AMO_GUID_RULING}` };
@@ -229,7 +253,7 @@ function readStoreId(store: StoreSettingsStore, raw: Row): { key: string; storeI
 /* @invariant THE CLIENT HASHES THE BYTES THE SERVER HASHES. The approval is
  * a sha256 over {store, settings} with the settings keys in the order
  * enabled, dryRun, skipPublish, stagedPublish, publishAfter, releaseChannel,
- * sourceArchive, storeId, only the keys the patch carries, rendered with
+ * sourceArchive, storeId, bundleId, only the keys the patch carries, rendered with
  * JSON.stringify. A digest that differs from the platform's asks a human to
  * approve a change that can never run, so it is refused instead.
  */
