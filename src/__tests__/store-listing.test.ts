@@ -764,6 +764,30 @@ describe("extension_submit sync-listing and the preflight advisory", () => {
     expect(again.value.stores.firefox.skipped).toEqual(["supportEmail in STORE.md is not an email address, so it was left out"]);
   });
 
+  it("sends the files the Screenshots line names when the call passes no screenshots argument", async () => {
+    if (process.platform === "win32") return;
+
+    platform.login();
+    fs.writeFileSync(
+      path.join(root, "STORE.md"),
+      STORE_MD.replace("- Screenshots: TODO at least one 1280x800 screenshot per store.", "- Screenshots (1280x800, in this order):\n  1. shots/popup.png"),
+    );
+
+    platform.routes[`PUT ${LISTING("chrome")}`] = () => ({ status: 409, body: { code: "NO_CHANGE", message: "The listing already reads this way." } });
+    platform.routes[`POST ${PREFLIGHT("chrome")}`] = () => ({ body: { checks: [] } });
+
+    const out = JSON.parse(await submit({ action: "sync-listing", browsers: ["chrome"], projectPath: root, api: API }));
+    const put = platform.sent("PUT", LISTING("chrome"))[0]!.body;
+
+    expect(out.status).toBe("listing-synced");
+    expect(put.media.screenshots).toHaveLength(1);
+    const header = Buffer.from(put.media.screenshots[0].dataBase64, "base64");
+
+    expect([header.readUInt32BE(16), header.readUInt32BE(20)]).toEqual([1280, 800]);
+    expect(out.value.stores.chrome.filled).toContain("screenshots");
+    expect(out.value.stores.chrome.unread.map((row: { field: string }) => row.field)).not.toContain("screenshots");
+  });
+
   const safariSync = (extra: Record<string, unknown> = {}) =>
     submit({ action: "sync-listing", browsers: ["safari"], projectPath: root, approvalId: "apr_s", api: API, ...extra });
   const SUBMISSIONS = "http://console.extension.localhost/acme/widget/submissions/safari";
