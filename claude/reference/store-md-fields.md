@@ -12,7 +12,7 @@ Generated from the parser's own declarations in `src/lib/store-md-declarations.t
 
 ## chrome (Chrome Web Store, `## Chrome Web Store`)
 
-10 fields.
+11 fields.
 
 | line | section | also read from | field | limit |
 | --- | --- | --- | --- | --- |
@@ -25,6 +25,7 @@ Generated from the parser's own declarations in `src/lib/store-md-declarations.t
 | `- Homepage:` | `## Listing` | `## Chrome Web Store` | `homepageUrl` | an http or https URL, up to 2,000 characters |
 | `### Single purpose` | `## Chrome Web Store` |  | `singlePurpose` | up to 1,000 characters |
 | `### Permissions justification` | `## Chrome Web Store` |  | `permissionJustifications` | one `- <permission>: <reason>` bullet each, up to 50; a permission up to 200 characters, a reason up to 1,000 |
+| `- Visibility:` | `## Chrome Web Store` | `## Listing` | `visibility` | public, unlisted or private (trusted testers); unlisted, the least public, when the line is absent |
 | `- Screenshots:` | `## Listing` |  | `screenshots` | up to 5 PNG files inside the project, one path per line below the bullet |
 
 ## firefox (Firefox Add-ons, `## Firefox Add-ons`)

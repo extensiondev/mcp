@@ -28,6 +28,7 @@ export const LISTING_TEXT_LIMITS = {
   reviewContactEmail: 200,
   reviewContactPhone: 20,
   supportUrl: 2_000,
+  visibility: 100,
 } as const;
 
 export type ListingTextField = keyof typeof LISTING_TEXT_LIMITS;
@@ -65,12 +66,13 @@ export const STORE_SECTIONS: Record<ListingStore, string> = {
 
 export const STORE_OWN_LINES: Partial<Record<ListingStore, ListingField[]>> = {
   safari: ["appStoreName", "reviewContactName", "reviewContactEmail", "reviewContactPhone"],
+  chrome: ["visibility"],
 };
 
 export const SCREENSHOTS_LINE = "Screenshots";
 
 export const STORE_FIELDS: Record<ListingStore, ListingField[]> = {
-  chrome: ["title", "shortDescription", "fullDescription", "categories", "supportEmail", "privacyPolicyUrl", "homepageUrl", "singlePurpose", "permissionJustifications"],
+  chrome: ["title", "shortDescription", "fullDescription", "categories", "supportEmail", "privacyPolicyUrl", "homepageUrl", "singlePurpose", "permissionJustifications", "visibility"],
   firefox: ["title", "shortDescription", "fullDescription", "categories", "supportEmail", "privacyPolicyUrl", "homepageUrl", "license", "reviewerNotes", "releaseNotes"],
   edge: ["title", "shortDescription", "fullDescription", "categories", "searchTerms", "supportEmail", "privacyPolicyUrl", "homepageUrl", "certificationNotes"],
   safari: ["title", "appStoreName", "subtitle", "shortDescription", "fullDescription", "categories", "searchTerms", "supportEmail", "privacyPolicyUrl", "homepageUrl", "reviewerNotes", "reviewContactName", "reviewContactEmail", "reviewContactPhone", "supportUrl"],
@@ -100,6 +102,7 @@ export const BULLET_KEYS: BulletKey[] = [
   { field: "reviewContactName", line: "Review contact name", pattern: /^(app review contact name|review contact name|contact name)$/ },
   { field: "reviewContactEmail", line: "Review contact email", pattern: /^(app review contact email|review contact email|contact email)$/ },
   { field: "reviewContactPhone", line: "Review contact phone", pattern: /^(app review contact phone|review contact phone|contact phone)$/ },
+  { field: "visibility", line: "Visibility", pattern: /^visibility$/ },
 ];
 
 export interface SubsectionKey {

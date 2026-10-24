@@ -555,6 +555,7 @@ function readinessView(
     ...(connectionSource ? { connectionSource } : {}),
     ...(submissionMode ? { submissionMode } : {}),
     ...(requirements ? { requirements } : {}),
+    ...(text(json.dashboardUrl) ? { dashboardUrl: text(json.dashboardUrl) } : {}),
     summary,
     ...(deferred.length ? { namedBySubmit: ["build"] } : {}),
     failing,

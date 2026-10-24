@@ -32,6 +32,8 @@ import {
   requestApprovalAfterRefusal,
 } from "../lib/approval-gate";
 import { approvalRoundTrip } from "../lib/approval-outcome";
+import { chromeDashboardPaste, chromePasteSentence } from "../lib/chrome-dashboard-paste";
+import { withChromeVisibility } from "../lib/chrome-visibility";
 import { approvalVerdict } from "../lib/approval-policy";
 import { badShipRequest, isRow, openShipApi, text } from "../lib/ship-act";
 import {
@@ -151,7 +153,7 @@ export function readLocalListing(
   }
 
   const parsed = parseStoreMdListing(content);
-  const { listing, skipped, unread } = listingForStore(parsed, store);
+  const { listing, skipped, unread } = withChromeVisibility(listingForStore(parsed, store), parsed.lines.visibility);
   const icon = iconFromDist(projectPath, store);
   const patch: ListingPatch = { listing };
   const fromStoreMd = screenshots?.length ? null : screenshotsFromStoreMd(projectPath, parsed.screenshots);
@@ -428,10 +430,15 @@ function filledFields(patch: ListingPatch): string[] {
   ];
 }
 
+interface StoreReadBack {
+  blocking: string[];
+  dashboardUrl: string | null;
+}
+
 async function stillBlocking(
   api: ProjectApi,
   store: string,
-): Promise<string[] | null> {
+): Promise<StoreReadBack | null> {
   const read = await projectApiSend<Row>(
     api,
     "POST",
@@ -444,16 +451,19 @@ async function stillBlocking(
     Array.isArray(read.json.checks) ? read.json.checks : []
   ).filter(isRow);
 
-  return checks
-    .filter(
-      (check) =>
-        text(check.id).startsWith("listing.") &&
-        (text(check.status) === "fail" || text(check.status) === "warn"),
-    )
-    .map(
-      (check) =>
-        `${text(check.id)}${text(check.status) === "warn" ? " (warning)" : ""}`,
-    );
+  return {
+    blocking: checks
+      .filter(
+        (check) =>
+          text(check.id).startsWith("listing.") &&
+          (text(check.status) === "fail" || text(check.status) === "warn"),
+      )
+      .map(
+        (check) =>
+          `${text(check.id)}${text(check.status) === "warn" ? " (warning)" : ""}`,
+      ),
+    dashboardUrl: text(read.json.dashboardUrl) || null,
+  };
 }
 
 const LISTING_NEXT = {
@@ -510,11 +520,6 @@ export function derivedSentence(marks: DerivedMark[]): string {
 
   return `The platform marked ${named.join(" and ")} as derived: ${STORE_MD_FILENAME} carries no line for it, so a workspace owner approves that text before it reaches the store; add ${joined} in ${STORE_MD_FILENAME} to write your own.`;
 }
-
-const chromeListingLine = (synced: string[]): string =>
-  synced.includes("chrome")
-    ? " Chrome's own listing fields, the privacy policy URL included, cannot be written through Google's API: paste them once in the item's dashboard, and extension.dev keeps this copy as the record."
-    : "";
 
 /* @invariant A LISTING THE PLATFORM HASHES DIFFERENTLY IS SENT ONCE MORE
  * WITH ONLY THE FIELDS IT KNOWS. Both sides hash the fields present in the
@@ -790,8 +795,17 @@ export async function syncListing(args: ListingArgs): Promise<string> {
     if ("out" in result) return result.out as string;
 
     const done = result.status === "synced" || result.status === "unchanged";
-    const blocking = done ? await stillBlocking(api, store) : null;
-    if (done && blocking === null) unreadBack.push(store);
+    const readBack = done ? await stillBlocking(api, store) : null;
+    const blocking = readBack?.blocking ?? null;
+    if (done && readBack === null) unreadBack.push(store);
+
+    const paste = store === "chrome" && done ? chromeDashboardPaste(local, readBack?.dashboardUrl ?? null) : null;
+
+    if (paste) {
+      if (result.status === "synced") result.status = "recorded";
+
+      said.push(chromePasteSentence(paste));
+    }
 
     delete result.privacyPage;
 
@@ -816,6 +830,7 @@ export async function syncListing(args: ListingArgs): Promise<string> {
       ...(local.iconMissing ? { iconMissing: local.iconMissing } : {}),
       ...(local.skipped.length ? { skipped: local.skipped } : {}),
       ...(blocking ? { stillBlocking: blocking } : {}),
+      ...(paste ? { pasteInDashboard: paste } : {}),
     };
   }
 
@@ -830,7 +845,7 @@ export async function syncListing(args: ListingArgs): Promise<string> {
   const approvals = rows.filter((row) => row.status === "approval-required");
   const failed = rows.filter(
     (row) =>
-      !["synced", "unchanged", "nothing-to-sync", "approval-required"].includes(
+      !["synced", "recorded", "unchanged", "nothing-to-sync", "approval-required"].includes(
         text(row.status),
       ),
   );
@@ -909,13 +924,16 @@ export async function syncListing(args: ListingArgs): Promise<string> {
   }
 
   const synced = rows
-    .filter((row) => row.status === "synced")
+    .filter((row) => row.status === "synced" || row.status === "recorded")
     .map((row) => text(row.store));
+  const sentToStore = rows.some((row) => row.status === "synced" || (row.status === "unchanged" && text(row.store) !== "chrome"));
+  const onlyRecorded = rows.some((row) => text(row.store) === "chrome" && isRow(row.pasteInDashboard)) && !sentToStore;
+  const recordedStatus = onlyRecorded ? "listing-recorded" : "listing-synced";
   const links = linksOf([
     ...trackLinks(
       COMMAND,
       { ...args, action: ACT } as Row,
-      "listing-synced",
+      recordedStatus,
       value,
     ),
   ]);
@@ -940,8 +958,8 @@ export async function syncListing(args: ListingArgs): Promise<string> {
   return envelope({
     ok: true,
     command: COMMAND,
-    status: "listing-synced",
+    status: recordedStatus,
     value: { ...value, outcome, links },
-    hint: `${blockingLine ? `${blockingLine}. ` : ""}The listing on extension.dev now carries what ${STORE_MD_FILENAME} and the build cover, read back from the platform's record; extension_submit action:"preflight" reads what each store still needs.${chromeListingLine(synced)}${say ? ` ${say}` : ""} ${made}`,
+    hint: `${blockingLine ? `${blockingLine}. ` : ""}The listing on extension.dev now carries what ${STORE_MD_FILENAME} and the build cover, read back from the platform's record; extension_submit action:"preflight" reads what each store still needs.${say ? ` ${say}` : ""} ${made}`,
   });
 }

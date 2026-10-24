@@ -97,6 +97,15 @@
         "limit": "one `- <permission>: <reason>` bullet each, up to 50; a permission up to 200 characters, a reason up to 1,000"
       },
       {
+        "field": "visibility",
+        "line": "- Visibility:",
+        "section": "## Chrome Web Store",
+        "alsoRead": [
+          "## Listing"
+        ],
+        "limit": "public, unlisted or private (trusted testers); unlisted, the least public, when the line is absent"
+      },
+      {
         "field": "screenshots",
         "line": "- Screenshots:",
         "section": "## Listing",

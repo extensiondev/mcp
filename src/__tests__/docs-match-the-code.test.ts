@@ -44,6 +44,7 @@ const PLATFORM_STORE_MD_LABELS = [
   "Privacy policy URL",
   "Homepage",
   "Support URL",
+  "Visibility",
   "Support email",
   "License",
   "Search terms",

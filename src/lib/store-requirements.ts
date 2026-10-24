@@ -26,6 +26,8 @@ export interface RequirementRow {
   value?: string;
   push?: string;
   pushError?: string;
+  dashboardTab?: string;
+  dashboardUrl?: string;
 }
 
 export interface RequirementsView {
@@ -153,6 +155,8 @@ export function requirementsView(value: unknown, local: LocalListingRead = null)
         ...(text(row.value) ? { value: text(row.value) } : {}),
         ...(text(row.push) ? { push: text(row.push) } : {}),
         ...(text(row.pushError) ? { pushError: text(row.pushError) } : {}),
+        ...(text(row.dashboardTab) ? { dashboardTab: text(row.dashboardTab) } : {}),
+        ...(text(row.dashboardUrl) ? { dashboardUrl: text(row.dashboardUrl) } : {}),
       },
       local,
     ),
@@ -216,6 +220,32 @@ export function safariOfferSentences(view: RequirementsView | null): string {
   return lines.join(" ");
 }
 
+/* @invariant A CHROME INPUT ONLY THE DASHBOARD HOLDS IS SAID TO BE UNKNOWN,
+ * WITH ITS TAB. The platform answers every Store listing, Privacy,
+ * Distribution and Test instructions field unknown, because Google's API
+ * neither writes nor reads them (MCP ledger 159); this sentence groups the
+ * required ones by the exact tab, adds the visibility intent beside the
+ * Public default a new item starts with, and names the item's dashboard
+ * address when the platform knows it, so the person confirms each field
+ * there instead of reading STORE.md as the store's state.
+ */
+export function chromeDashboardSentence(view: RequirementsView | null): string {
+  if (!view) return "";
+
+  const unknown = view.items.filter((item) => item.required && item.status === "unknown" && item.dashboardTab);
+  if (!unknown.length) return "";
+
+  const tabs = [...new Set(unknown.map((item) => item.dashboardTab!))].map(
+    (tab) => `${tab} (${unknown.filter((item) => item.dashboardTab === tab).map((item) => item.label.toLowerCase()).join(", ")})`,
+  );
+  const url = unknown.find((item) => item.dashboardUrl)?.dashboardUrl;
+  const visibility = view.items.find((item) => item.id === "chrome.visibility");
+  const intent = visibility?.status === "unknown" && visibility.actual ? ` Visibility: ${visibility.actual}.` : "";
+  const mismatch = visibility?.status === "missing" && visibility.actual ? ` Visibility: ${visibility.actual}.` : "";
+
+  return `The Chrome Web Store dashboard alone holds ${unknown.length} required inputs Google's API cannot read, so they are unknown, not on file: ${tabs.join("; ")}. Confirm each on its tab${url ? ` at ${url}` : " of the item's dashboard"}.${intent}${mismatch}`;
+}
+
 export function missingRequirementsSentences(stores: Record<string, unknown>): string {
   return Object.entries(stores)
     .map(([store, view]) => {
@@ -223,8 +253,9 @@ export function missingRequirementsSentences(stores: Record<string, unknown>): s
 
       const requirements = requirementsView(view.requirements);
       const offers = store === "safari" ? safariOfferSentences(requirements) : "";
+      const dashboard = store === "chrome" ? chromeDashboardSentence(requirements) : "";
 
-      return [missingRequiredSentence(store, requirements), offers].filter(Boolean).join(" ");
+      return [missingRequiredSentence(store, requirements), offers, dashboard].filter(Boolean).join(" ");
     })
     .filter(Boolean)
     .join(" ");

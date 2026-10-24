@@ -97,6 +97,8 @@ function limitOf(field: StoreMdField, store: ListingStore): string {
     return `one \`- <permission>: <reason>\` bullet each, up to ${limits.items}; a permission up to ${limits.permission} characters, a reason up to ${count(limits.justification)}`;
   }
 
+  if (field === "visibility") return "public, unlisted or private (trusted testers); unlisted, the least public, when the line is absent";
+
   const chars = `up to ${count(LISTING_TEXT_LIMITS[field as ListingTextField])} characters`;
 
   if (/Url$/.test(field)) return `an http or https URL, ${chars}`;

@@ -682,6 +682,7 @@ describe("extension_submit sync-listing and the preflight advisory", () => {
           { id: "listing.privacy_policy_present", status: "warn" },
           { id: "listing.title_present", status: "pass" },
         ],
+        dashboardUrl: "https://chrome.google.com/webstore/devconsole/pub/abcdefghijklmnopabcdefghijklmnop/edit",
       },
     });
 
@@ -729,13 +730,30 @@ describe("extension_submit sync-listing and the preflight advisory", () => {
       Buffer.from(put.media.icons[0].dataBase64, "base64").readUInt32BE(16),
     ).toBe(128);
 
-    expect(written.status).toBe("listing-synced");
+    expect(written.status).toBe("listing-recorded");
+    expect(written.value.stores.chrome.status).toBe("recorded");
     expect(written.value.stores.chrome.stillBlocking).toEqual([
       "listing.chrome_screenshots_present",
       "listing.privacy_policy_present (warning)",
     ]);
 
     expect(written.hint).toContain("chrome still lacks");
+
+    const paste = written.value.stores.chrome.pasteInDashboard;
+
+    expect(paste.dashboardUrl).toBe("https://chrome.google.com/webstore/devconsole/pub/abcdefghijklmnopabcdefghijklmnop/edit");
+    expect([...new Set(paste.fields.map((row: { tab: string }) => row.tab))]).toEqual([
+      "Store listing",
+      "Privacy",
+      "Distribution",
+      "Test instructions",
+    ]);
+
+    expect(paste.fields.find((row: { field: string }) => row.field === "screenshots").from).toContain("1 files on");
+    expect(paste.fields.find((row: { field: string }) => row.field === "remoteCode").from).toBeNull();
+    expect(written.hint).toContain("Nothing of this listing reached Google");
+    expect(written.hint).toContain("pastes it on each tab at https://chrome.google.com/webstore/devconsole/pub/");
+    expect(written.hint).not.toContain("listing-synced");
   });
 
   it("answers the lines it looked for and did not find per store, each with the section the table gives it", async () => {
@@ -786,7 +804,7 @@ describe("extension_submit sync-listing and the preflight advisory", () => {
     const out = JSON.parse(await submit({ action: "sync-listing", browsers: ["chrome"], projectPath: root, api: API }));
     const put = platform.sent("PUT", LISTING("chrome"))[0]!.body;
 
-    expect(out.status).toBe("listing-synced");
+    expect(out.status).toBe("listing-recorded");
     expect(put.media.screenshots).toHaveLength(1);
     const header = Buffer.from(put.media.screenshots[0].dataBase64, "base64");
 
@@ -1071,7 +1089,8 @@ describe("extension_submit sync-listing and the preflight advisory", () => {
 
     expect(platform.sent("PUT", LISTING("chrome"))).toHaveLength(1);
     expect(chrome.value.stores.chrome.appStoreConnect).toBeUndefined();
-    expect(chrome.value.sayToPerson).toBeUndefined();
+    expect(chrome.value.sayToPerson).toMatch(/^Nothing of this listing reached Google/);
+    expect(chrome.value.sayToPerson).not.toContain("App Store Connect");
   });
 
   it("refuses a screenshot outside projectPath and one approval for two stores before sending anything", async () => {
