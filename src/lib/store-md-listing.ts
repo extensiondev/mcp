@@ -18,6 +18,7 @@ import {
   type ListingText,
   type PermissionJustification,
 } from "./store-md-declarations";
+import { safariTitle } from "./store-md-safari-title";
 
 export * from "./store-md-declarations";
 
@@ -565,6 +566,8 @@ export function listingForStore(parsed: StoreMdListing, store: ListingStore): St
       (listing as Record<string, unknown>)[field] = read.value;
     }
   }
+
+  if (store === "safari") safariTitle(listing, skipped, unread, parsed.lines.title);
 
   if (listing.categories === undefined && parsed.lines.categories) {
     const named = Object.keys({ ...parsed.categoriesByStore, ...parsed.categoryOverrides });

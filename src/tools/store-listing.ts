@@ -21,6 +21,7 @@ import {
 import { envelope } from "../lib/envelope";
 import { consoleProjectUrl } from "../lib/registry";
 import {
+  projectApiGet,
   projectApiReadFailure,
   projectApiSend,
   tokenRefusal,
@@ -46,6 +47,7 @@ import { linesNotFound, storeMdLineOf, storeMdSectionOf } from "../lib/store-md-
 import {
   LISTING_SECTION,
   LISTING_STORES,
+  LISTING_TEXT_LIMITS,
   PRIVACY_SECTION,
   derivedListingFields,
   listingForStore,
@@ -103,6 +105,34 @@ const privacyCoveredFact = (url: string): string =>
 
 export const privacyMissingLine = (): string =>
   `privacy policy URL: ${STORE_MD_FILENAME} has no \`${storeMdLineOf("privacyPolicyUrl")}\` under \`${PRIVACY_SECTION}\``;
+
+export const PLAIN_LISTING_SENTENCE =
+  "This listing sync was a plain act under the owner's own token (ruling 143), since every value is the owner's own STORE.md line; only a value the platform derives takes a workspace owner's approval.";
+
+/* @invariant WITH NO APP STORE NAME LINE, THE APP STORE TITLE IS THE RECORD'S
+ * OWN NAME. The credential test reads the app record's name from Apple for
+ * the saved bundle id and the platform keeps it beside the Safari settings;
+ * the record's name is what Apple shows and what the listing must match, so
+ * it stands in for a Name that is over the limit or different from it
+ * (ledger 160). A `- App Store name:` line is the owner's word and wins, and
+ * a config read that fails changes nothing.
+ */
+async function adoptAppRecordName(api: ProjectApi, local: LocalListing): Promise<void> {
+  if (local.patch.listing.appStoreName) return;
+
+  const read = await projectApiGet<Row>(api, "stores/config").catch(() => null);
+  if (!read || !read.ok) return;
+
+  const safari = isRow(read.json) && isRow(read.json.safari) ? read.json.safari : null;
+  const record = safari && isRow(safari.appRecord) ? safari.appRecord : null;
+  const name = record ? text(record.name) : "";
+
+  if (!name || name.length > LISTING_TEXT_LIMITS.appStoreName) return;
+
+  local.patch.listing.title = name;
+  delete local.unread.title;
+  local.skipped = local.skipped.filter((line) => !line.startsWith("title in STORE.md"));
+}
 
 export function readLocalListing(
   projectPath: string,
@@ -743,7 +773,11 @@ export async function syncListing(args: ListingArgs): Promise<string> {
   const unreadBack: string[] = [];
   const said: string[] = [];
 
+  let plain = false;
+
   for (const [store, local] of locals) {
+    if (store === "safari") await adoptAppRecordName(api, local);
+
     const notFound = linesNotFound(local);
     const unread = notFound.length ? { unread: notFound } : {};
 
@@ -770,6 +804,10 @@ export async function syncListing(args: ListingArgs): Promise<string> {
     } else if (result.code === "LISTING_DIGEST_MISMATCH") said.push(text(result.message));
 
     if (Array.isArray(result.derived)) said.push(derivedSentence(result.derived as DerivedMark[]));
+    else if (done && !text(args.approvalId) && !plain) {
+      plain = true;
+      said.push(PLAIN_LISTING_SENTENCE);
+    }
 
     stores[store] = {
       ...result,
