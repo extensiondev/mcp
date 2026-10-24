@@ -81,7 +81,7 @@ function limitOf(field: StoreMdField, store: ListingStore): string {
   if (field === "categories") {
     const limits = LISTING_LIST_LIMITS.categories;
 
-    return `up to ${limits.items} names of ${limits.each} characters each; one name for every store, or \`<name> (Chrome), <name> (Firefox)\` per store`;
+    return `up to ${limits.items} names of ${limits.each} characters each; one name for every store, \`<name> (Chrome), <name> (Firefox)\` per store, or \`<name> (Chrome: <name>, Safari: <name>)\` with the stores that differ`;
   }
 
   if (field === "searchTerms") {

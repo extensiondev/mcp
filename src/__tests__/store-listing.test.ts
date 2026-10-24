@@ -209,6 +209,45 @@ describe("STORE.md fills the store listing", () => {
     expect(listingForStore(own, "chrome").listing.privacyPolicyUrl).toBeUndefined();
   });
 
+  it("reads a single-value line up to its store note and takes the per-store values the note gives", () => {
+    const parsed = parseStoreMdListing(
+      STORE_MD.replace(
+        "- Category: Productivity (Chrome Web Store), Privacy & Security (Firefox and\n  Edge).",
+        [
+          "- Name: PII Shield (Safari: PII Shield for Safari, Edge: PII Shield for Edge)",
+          "- Summary: Hide personal information on every open tab (beta)",
+          "- Category: Productivity (Chrome: Productivity, Safari: Utilities)",
+        ].join("\n"),
+      ),
+    );
+    const chrome = listingForStore(parsed, "chrome").listing;
+    const safari = listingForStore(parsed, "safari").listing;
+    const edge = listingForStore(parsed, "edge").listing;
+
+    expect(chrome).toMatchObject({ title: "PII Shield", shortDescription: "Hide personal information on every open tab (beta)", categories: ["Productivity"] });
+    expect(listingForStore(parsed, "firefox").listing.categories).toEqual(["Productivity"]);
+    expect(safari).toMatchObject({ title: "PII Shield for Safari", categories: ["Utilities"] });
+    expect(edge).toMatchObject({ title: "PII Shield for Edge", categories: ["Productivity"] });
+    expect(listingForStore(parsed, "safari").unread).toEqual({});
+
+    const several = parseStoreMdListing(
+      STORE_MD.replace(
+        "- Category: Productivity (Chrome Web Store), Privacy & Security (Firefox and\n  Edge).",
+        "- Category: Productivity (Chrome Web Store), Privacy & Security (Firefox: Privacy & Security, Edge)",
+      ),
+    );
+
+    expect(listingForStore(several, "chrome").listing.categories).toEqual(["Productivity"]);
+    expect(listingForStore(several, "firefox").listing.categories).toEqual(["Privacy & Security"]);
+    expect(listingForStore(several, "edge").listing.categories).toEqual(["Privacy & Security"]);
+    expect(listingForStore(several, "safari").unread.categories).toEqual({ line: "- Category:", reason: "names chrome, edge and firefox only" });
+
+    const own = parseStoreMdListing(`${STORE_MD.replace(/- Name: .*\n/, "- Name: PII Shield (Safari: PII Shield for Safari)\n")}\n## Safari\n\n- Name: Shield (Chrome: Not read here)\n`);
+
+    expect(listingForStore(own, "safari").listing.title).toBe("Shield");
+    expect(listingForStore(own, "chrome").listing.title).toBe("PII Shield");
+  });
+
   it("keeps a trailing note out of the license, support email and homepage", () => {
     const parsed = parseStoreMdListing(
       STORE_MD.replace(

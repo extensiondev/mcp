@@ -34,6 +34,8 @@ export interface StoreMdScreenshots {
 export interface StoreMdListing {
   shared: ListingText;
   categoriesByStore: Partial<Record<ListingStore, string[]>>;
+  categoryOverrides: Partial<Record<ListingStore, string[]>>;
+  overrides: Partial<Record<ListingStore, ListingText>>;
   stores: Partial<Record<ListingStore, ListingText>>;
   privacy: StoreMdPrivacy;
   lines: Partial<Record<ListingField, string>>;
@@ -52,6 +54,18 @@ export interface StoreListingRead {
 }
 
 const NOTED_FIELDS: ListingField[] = ["license", "supportEmail", "homepageUrl"];
+
+const SINGLE_LINE_FIELDS: ListingField[] = [
+  "title",
+  "subtitle",
+  "shortDescription",
+  "license",
+  "supportEmail",
+  "homepageUrl",
+  "reviewContactName",
+  "reviewContactEmail",
+  "reviewContactPhone",
+];
 
 const SCREENSHOTS_KEY = /^screenshots(\s*\([^()]*\))?$/;
 const IMAGE_FILE = /\S+\.(png|jpe?g)$/i;
@@ -153,11 +167,43 @@ const policyUrl = (value: string): string | undefined => {
 
 const TRAILING_NOTE = /^(.*?)\s*\(([^()]*)\)$/;
 
-const withoutNote = (value: string): string => {
-  const noted = TRAILING_NOTE.exec(value);
+interface StoreNote {
+  base: string;
+  stores: ListingStore[];
+  perStore: Partial<Record<ListingStore, string>>;
+  remark: boolean;
+}
 
-  return noted && noted[1]!.trim() ? noted[1]!.trim() : value;
-};
+/* @invariant A LINE IS READ UP TO ITS STORE NOTE, AND THE NOTE IS READ TOO.
+ * A trailing parenthetical on a single-value line is one of three things: a
+ * remark ("MIT (see LICENSE)"), a list of the stores the value is for
+ * ("Productivity (Chrome Web Store)"), or per-store values ("Productivity
+ * (Chrome: Productivity, Safari: Utilities)"), told apart by whether its
+ * comma items name a store and carry a colon. The text before the note is
+ * the value every store takes; a "Store: value" pair inside it is that
+ * store's own value and wins over the text before the note for that store
+ * alone. A remark is kept out of the structured lines (license, support
+ * email, homepage) and left in the prose lines, since "(beta)" on a Summary
+ * is the author's copy and this server never rewrites copy.
+ */
+function storeNote(value: string): StoreNote | null {
+  const noted = TRAILING_NOTE.exec(value);
+  if (!noted || !noted[1]!.trim()) return null;
+
+  const perStore: Partial<Record<ListingStore, string>> = {};
+  const stores: ListingStore[] = [];
+
+  for (const item of noted[2]!.split(",")) {
+    const pair = /^\s*([^:]+?)\s*:\s*(.+?)\s*$/.exec(item);
+    const named = classifyStore(pair ? pair[1]! : item);
+
+    if (pair && named.length) {
+      for (const store of named) perStore[store] = pair[2]!;
+    } else stores.push(...named);
+  }
+
+  return { base: noted[1]!.trim(), stores, perStore, remark: !stores.length && !Object.keys(perStore).length };
+}
 
 function splitOutsideNotes(text: string): string[] {
   const items: string[] = [];
@@ -179,6 +225,12 @@ function splitOutsideNotes(text: string): string[] {
   return items.map((item) => item.replace(/^\s*(and\s+)?/i, "").trim()).filter(Boolean);
 }
 
+interface ParsedCategories {
+  all: string[];
+  byStore: Partial<Record<ListingStore, string[]>>;
+  overrides: Partial<Record<ListingStore, string[]>>;
+}
+
 /* @invariant A STORE NOTE ON ONE CATEGORY IS A REMARK. A single category
  * applies to every store whatever its parenthetical says, since the
  * template's wording invites a note like "(Chrome Web Store)" beside the
@@ -186,19 +238,24 @@ function splitOutsideNotes(text: string): string[] {
  * reads a parenthetical naming stores as the stores that category is for;
  * a category without a store note on such a line applies to every store,
  * and a store that none of the notes name is answered with the line shape
- * the reader takes, never guessed.
+ * the reader takes, never guessed. A "Store: name" pair inside the note is
+ * different: it is that store's category in place of the one before the
+ * note, on a line of one category or of several.
  */
-function parseCategories(raw: string): { all: string[]; byStore: Partial<Record<ListingStore, string[]>> } {
+function parseCategories(raw: string): ParsedCategories {
   const items = splitOutsideNotes(unwrap(raw).replace(/\.$/, "")).map((item) => {
-    const noted = TRAILING_NOTE.exec(item);
+    const note = storeNote(item);
 
-    return noted ? { name: noted[1]!.trim(), stores: classifyStore(noted[2]!) } : { name: item, stores: [] as ListingStore[] };
+    return note ? { name: note.base, stores: note.stores, perStore: note.perStore } : { name: item, stores: [] as ListingStore[], perStore: {} };
   });
   const all: string[] = [];
   const byStore: Partial<Record<ListingStore, string[]>> = {};
+  const overrides: Partial<Record<ListingStore, string[]>> = {};
 
-  for (const { name, stores } of items) {
+  for (const { name, stores, perStore } of items) {
     if (!name) continue;
+
+    for (const [store, own] of Object.entries(perStore) as Array<[ListingStore, string]>) overrides[store] = [own];
 
     if (items.length === 1 || !stores.length) {
       all.push(name);
@@ -208,7 +265,7 @@ function parseCategories(raw: string): { all: string[]; byStore: Partial<Record<
     for (const store of stores) byStore[store] = [...(byStore[store] ?? []), name];
   }
 
-  return { all, byStore };
+  return { all, byStore, overrides };
 }
 
 function fieldText(body: string, prefix: string): string {
@@ -277,6 +334,23 @@ function screenshotFiles(value: string): string[] {
   return files;
 }
 
+function readSingleLine(result: StoreMdListing, field: ListingField, flat: string, into: ListingText, ownSection: boolean): void {
+  const note = storeNote(flat);
+
+  if (!note || (note.remark && !NOTED_FIELDS.includes(field))) {
+    (into as Record<string, string>)[field] = flat;
+
+    return;
+  }
+
+  (into as Record<string, string>)[field] = note.base;
+  if (ownSection) return;
+
+  for (const [store, own] of Object.entries(note.perStore) as Array<[ListingStore, string]>) {
+    result.overrides[store] = { ...(result.overrides[store] ?? {}), [field]: own };
+  }
+}
+
 function readBullets(result: StoreMdListing, body: string, into: ListingText, ownSection: boolean): void {
   for (const { key, value } of bullets(body)) {
     if (!ownSection && SCREENSHOTS_KEY.test(key.toLowerCase())) {
@@ -297,13 +371,14 @@ function readBullets(result: StoreMdListing, body: string, into: ListingText, ow
       if (parsed.all.length) into.categories = parsed.all;
 
       result.categoriesByStore = parsed.byStore;
+      result.categoryOverrides = parsed.overrides;
     } else if (field === "searchTerms") {
       into.searchTerms = unwrap(text).split(",").map((item) => item.trim()).filter(Boolean);
     } else if (field === "privacyPolicyUrl") {
       const url = policyUrl(text);
       if (url) into.privacyPolicyUrl = url;
-    } else if (NOTED_FIELDS.includes(field)) {
-      into[field] = withoutNote(unwrap(text));
+    } else if (SINGLE_LINE_FIELDS.includes(field)) {
+      readSingleLine(result, field, unwrap(text), into, ownSection);
     } else {
       into[field] = unwrap(text);
     }
@@ -321,7 +396,15 @@ function readBullets(result: StoreMdListing, body: string, into: ListingText, ow
  * Listing"; the privacy section wins when both carry one.
  */
 export function parseStoreMdListing(content: string): StoreMdListing {
-  const result: StoreMdListing = { shared: {}, categoriesByStore: {}, stores: {}, privacy: { section: "", attested: null }, lines: {} };
+  const result: StoreMdListing = {
+    shared: {},
+    categoriesByStore: {},
+    categoryOverrides: {},
+    overrides: {},
+    stores: {},
+    privacy: { section: "", attested: null },
+    lines: {},
+  };
 
   for (const section of splitSections(content, 2)) {
     const heading = section.heading.toLowerCase();
@@ -459,8 +542,8 @@ const storeList = (stores: string[]): string =>
   stores.length > 1 ? `${stores.slice(0, -1).join(", ")} and ${stores[stores.length - 1]}` : stores[0] ?? "";
 
 export function listingForStore(parsed: StoreMdListing, store: ListingStore): StoreListingRead {
-  const merged: ListingText = { ...parsed.shared, ...(parsed.stores[store] ?? {}) };
-  const categories = [...(parsed.shared.categories ?? []), ...(parsed.categoriesByStore[store] ?? [])];
+  const merged: ListingText = { ...parsed.shared, ...(parsed.overrides[store] ?? {}), ...(parsed.stores[store] ?? {}) };
+  const categories = parsed.categoryOverrides[store] ?? [...(parsed.shared.categories ?? []), ...(parsed.categoriesByStore[store] ?? [])];
   if (categories.length) merged.categories = categories;
   else delete merged.categories;
 
@@ -482,7 +565,7 @@ export function listingForStore(parsed: StoreMdListing, store: ListingStore): St
   }
 
   if (listing.categories === undefined && parsed.lines.categories) {
-    const named = Object.keys(parsed.categoriesByStore);
+    const named = Object.keys({ ...parsed.categoriesByStore, ...parsed.categoryOverrides });
 
     unread.categories = {
       line: `- ${parsed.lines.categories}:`,
