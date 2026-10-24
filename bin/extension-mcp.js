@@ -41,7 +41,7 @@ if (cmd === undefined || isServerFlag(cmd)) {
     process.exit(1)
   }
 
-  startServer(resolved.options)
+  startServer(resolved.options, {importBuild: (specifier) => import(specifier)})
 } else if (['login', 'logout', 'whoami', 'release'].includes(cmd)) {
   runCli(cmd, rest)
     .then((code) => process.exit(code))

@@ -50,3 +50,11 @@ export function moveKeptLogin(file: string, from: string, to: string): void {
     if (name.startsWith(`${file}\n`) && value === from) kept.set(name, to);
   }
 }
+
+export function keptLoginEntries(): Array<[string, string]> {
+  return [...kept];
+}
+
+export function adoptKeptLogins(entries: Array<[string, string]>): void {
+  for (const [name, key] of entries) kept.set(name, key);
+}

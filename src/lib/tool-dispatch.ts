@@ -28,7 +28,8 @@ import {
 import { withCallApi } from "./origins";
 import { followProjectMove, followSentence, movedAnswer } from "./project-move";
 import { scrubRunAnswer } from "./run-privacy";
-import { serverStamp, staleEnvelope, type ServerStampReader } from "./server-stamp";
+import { createReloader, handoverState, type BuildImporter, type RebuiltCall, type ToolFrame } from "./server-reload";
+import { localRebuiltWarning, reloadedWarning, serverStamp, staleEnvelope, type ServerStampReader } from "./server-stamp";
 import { shapeStoreAnswer } from "./store-answer";
 import { attachTrack } from "./track-url";
 import { fenceUntrusted } from "./untrusted-fence";
@@ -39,6 +40,8 @@ import {
 } from "./validate-input";
 
 import type { Server } from "@modelcontextprotocol/sdk/server/index.js";
+
+export type { ToolFrame } from "./server-reload";
 
 export interface ToolModule {
   schema: {
@@ -56,12 +59,8 @@ export interface ToolHandlerOptions {
   run?: (call: () => Promise<string>, name: string, args: Record<string, unknown>) => Promise<string>;
   openApprovals?: boolean;
   stamp?: ServerStampReader;
+  importBuild?: BuildImporter;
 }
-
-type ToolFrame = {
-  content: Array<{ type: "text"; text: string }>;
-  isError?: boolean;
-};
 
 function isEnvelopeText(result: string): boolean {
   try {
@@ -145,25 +144,19 @@ async function followedOnce(
   return annotate(await handler({ ...args, project: move.to }), { warning: followSentence(move) });
 }
 
-export function installToolHandlers(server: Server, setup: ToolHandlerOptions): void {
+export function createToolDispatcher(setup: ToolHandlerOptions): (call: RebuiltCall) => Promise<ToolFrame> {
   const { tools, options } = setup;
   const toolMap = new Map(tools.map((tool) => [tool.schema.name, tool]));
   const run = setup.run ?? ((call: () => Promise<string>) => call());
   const stamp = setup.stamp ?? serverStamp;
+  const reloader = createReloader({
+    entry: stamp.entry,
+    importBuild: setup.importBuild ?? null,
+    handover: () => handoverState(options),
+  });
+  let localSaid: string | null = null;
 
-  server.setRequestHandler(ListToolsRequestSchema, async () => ({
-    tools: tools
-      .filter((t) => isToolListed(t.schema.name, options))
-      .map((t) => ({
-        name: t.schema.name,
-        description: t.schema.description,
-        inputSchema: t.schema.inputSchema,
-        annotations: { title: toolTitle(t.schema.name), ...TOOL_POLICY[t.schema.name].annotations },
-      })),
-  }));
-
-  server.setRequestHandler(CallToolRequestSchema, async (request) => {
-    const { name, arguments: args } = request.params;
+  return async ({ name, arguments: args }) => {
     const tool = toolMap.get(name);
 
     if (!tool) {
@@ -198,6 +191,57 @@ export function installToolHandlers(server: Server, setup: ToolHandlerOptions): 
 
     if ("refused" in pinned) return refusedFrame(pinned.refused);
 
+    const untrusted = TOOL_POLICY[name]?.untrusted === true;
+    const platform = TOOL_POLICY[name]?.group === "platform";
+    const rebuilt = stamp.rebuiltSince();
+
+    /* @invariant A SERVER THAT KNOWS IT IS STALE RELOADS ITS PLATFORM CODE
+     * INSTEAD OF REFUSING. The operation rebuilds this server from source
+     * several times a night, and until ledger 248 every rebuild stopped the
+     * walk until the owner ran /mcp by hand: five times in one evening. Now,
+     * when the entry file on disk is newer than the one this process loaded,
+     * a platform call imports the rebuilt dist/module.js under a stamped
+     * specifier (the bundle is one file, so nothing beside it comes back
+     * from the loader's cache) and is answered by that build's own
+     * dispatcher, while this process keeps the transport, the stdio pair and
+     * the tool list the client was given. What crosses over: the server
+     * options (features, noShip, the project pin) and the kept default login
+     * per store and server, handed from the active generation to the next,
+     * so a login made through a reloaded build travels on. What the new code
+     * reads from disk as it is: the credential store, approvals.json, the
+     * created-project records and the session markers. What stays here: the
+     * opened-approvals set, so an approval page opens once across
+     * generations. What is rebuilt: the project id cache, refilled from the
+     * platform's whoami. A tool the rebuild added or reshaped still needs
+     * /mcp, since the client holds the list this process announced. The
+     * first answer after each reload says so in warnings, once.
+     * E_SERVER_STALE remains only when the reload fails (no loader, an
+     * import error, a build without the reload contract, a refused
+     * handover), with value.reloadError saying why and the /mcp sentence as
+     * the last resort. Local tools stay on the loaded code: their dev
+     * sessions, child processes and open targets live in this module's
+     * memory and a reload would orphan them, so a rebuilt server warns once
+     * per build that /mcp picks up their new code.
+     */
+    if (rebuilt && platform) {
+      const outcome = await reloader.dispatch({ name, arguments: pinned.args }, rebuilt);
+
+      if ("reloadError" in outcome) {
+        return toolResultFrame(
+          attachTrack(name, pinned.args, staleEnvelope(name, rebuilt, stamp.stamp(), pinned.args, outcome.reloadError)),
+          untrusted,
+        );
+      }
+
+      const text = outcome.frame.content[0]?.text ?? "";
+      const said = annotate(
+        setup.openApprovals ? openApprovalOnce(text, options) : text,
+        outcome.reloaded ? { warning: reloadedWarning(outcome.reloaded) } : {},
+      );
+
+      return said === text ? outcome.frame : toolResultFrame(said, untrusted);
+    }
+
     const bound = bindApprovalProject(name, pinned.args);
 
     if ("refused" in bound) return refusedFrame(bound.refused);
@@ -207,25 +251,6 @@ export function installToolHandlers(server: Server, setup: ToolHandlerOptions): 
 
     if (issues.length) {
       return refusedFrame(inputValidationError(name, issues, tool.schema.inputSchema));
-    }
-
-    const untrusted = TOOL_POLICY[name]?.untrusted === true;
-    const platform = TOOL_POLICY[name]?.group === "platform";
-
-    /* @invariant A SERVER THAT KNOWS IT IS STALE SAYS SO BEFORE IT ASKS THE
-     * PLATFORM. The stamp's own signal (the entry file on disk newer than the
-     * one this process loaded) is read before a platform tool's handler runs,
-     * and a stale server answers E_SERVER_STALE with the reconnect sentence
-     * and no fetch, so the person learns in one call, not after the platform
-     * read has finished or failed. The rebuilt warning used to ride along only
-     * with the answer, which on ledger 148 meant after a 385 s hang. Local
-     * tools are not gated: the code they loaded still runs the sessions it
-     * started, and a forced reconnect would end them.
-     */
-    const rebuilt = platform ? stamp.rebuiltSince() : null;
-
-    if (rebuilt) {
-      return toolResultFrame(attachTrack(name, normalizedArgs, staleEnvelope(name, rebuilt, stamp.stamp(), normalizedArgs)), untrusted);
     }
 
     const held = bindApprovalLogin(name, normalizedArgs);
@@ -252,6 +277,12 @@ export function installToolHandlers(server: Server, setup: ToolHandlerOptions): 
         ),
       );
 
+      if (rebuilt && localSaid !== rebuilt) {
+        localSaid = rebuilt;
+
+        return toolResultFrame(annotate(result, { warning: localRebuiltWarning(rebuilt) }), untrusted);
+      }
+
       return toolResultFrame(result, untrusted);
     } catch (err) {
       return toolResultFrame(
@@ -268,5 +299,23 @@ export function installToolHandlers(server: Server, setup: ToolHandlerOptions): 
         untrusted,
       );
     }
-  });
+  };
+}
+
+export function installToolHandlers(server: Server, setup: ToolHandlerOptions): void {
+  const { tools, options } = setup;
+  const dispatch = createToolDispatcher(setup);
+
+  server.setRequestHandler(ListToolsRequestSchema, async () => ({
+    tools: tools
+      .filter((t) => isToolListed(t.schema.name, options))
+      .map((t) => ({
+        name: t.schema.name,
+        description: t.schema.description,
+        inputSchema: t.schema.inputSchema,
+        annotations: { title: toolTitle(t.schema.name), ...TOOL_POLICY[t.schema.name].annotations },
+      })),
+  }));
+
+  server.setRequestHandler(CallToolRequestSchema, async (request) => dispatch(request.params));
 }

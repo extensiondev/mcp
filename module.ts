@@ -8,3 +8,4 @@
 
 export { startServer, runCli, version } from "./src/index";
 export { isServerFlag, resolveServerOptions } from "./src/lib/tool-policy";
+export { adoptHandover, dispatchRebuilt, handoverState } from "./src/lib/server-reload";

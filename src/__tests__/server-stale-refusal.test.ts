@@ -57,7 +57,7 @@ async function call(stamp: ServerStampReader, name: string, args: Record<string,
   return { isError: result.isError === true, out: JSON.parse((result.content as Array<{ text: string }>)[0].text) };
 }
 
-describe("a server that knows it was rebuilt refuses platform tools before any fetch", () => {
+describe("a server that knows it was rebuilt and has no loader refuses platform tools before any fetch", () => {
   let tmp: string;
   let prevXdg: string | undefined;
   let prevApi: string | undefined;
@@ -120,6 +120,7 @@ describe("a server that knows it was rebuilt refuses platform tools before any f
     expect(out.error.message).toBe("This server was rebuilt at 2026-10-23T15:17:33.978Z; run /mcp and pick extension-dev, then call again.");
     expect(out.value.server).toEqual({ version, builtAt: "2026-10-23T14:19:47.654Z" });
     expect(out.value.action).toBe("list");
+    expect(out.value.reloadError).toBe("this server was started without a loader for a rebuilt build; the extension-mcp launcher provides one");
     expect(out.value.trackUrl).toMatch(/\/acme\/widget\/builds$/);
     expect(out.warnings).toEqual([]);
     expect(fetchSpy).toHaveBeenCalledTimes(0);

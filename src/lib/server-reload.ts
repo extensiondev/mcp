@@ -1,0 +1,165 @@
+// ███╗   ███╗ ██████╗██████╗
+// ████╗ ████║██╔════╝██╔══██╗
+// ██╔████╔██║██║     ██████╔╝
+// ██║╚██╔╝██║██║     ██╔═══╝
+// ██║ ╚═╝ ██║╚██████╗██║
+// ╚═╝     ╚═╝ ╚═════╝╚═╝
+// Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
+
+import { pathToFileURL } from "node:url";
+
+import { adoptKeptLogins, keptLoginEntries } from "./session-login";
+import { DEFAULT_SERVER_OPTIONS, setServerOptions, type ServerOptions } from "./tool-policy";
+
+export type ToolFrame = {
+  content: Array<{ type: "text"; text: string }>;
+  isError?: boolean;
+};
+
+export interface RebuiltCall {
+  name: string;
+  arguments?: Record<string, unknown>;
+}
+
+export interface Handover {
+  options: ServerOptions;
+  keptLogins: Array<[string, string]>;
+}
+
+export interface RebuiltBuild {
+  dispatchRebuilt: (call: RebuiltCall) => Promise<ToolFrame>;
+  adoptHandover: (state: Handover) => void;
+  handoverState: () => Handover;
+}
+
+export type BuildImporter = (specifier: string) => Promise<unknown>;
+
+export type RebuiltDispatch = (call: RebuiltCall, options: ServerOptions) => Promise<ToolFrame>;
+
+export const RELOAD_CONTRACT = ["dispatchRebuilt", "adoptHandover", "handoverState"] as const;
+
+let adoptedOptions: ServerOptions | null = null;
+let rebuiltDispatch: RebuiltDispatch | null = null;
+
+export function provideRebuiltDispatch(dispatch: RebuiltDispatch): void {
+  rebuiltDispatch = dispatch;
+}
+
+export function handoverState(options: ServerOptions = adoptedOptions ?? DEFAULT_SERVER_OPTIONS): Handover {
+  return { options, keptLogins: keptLoginEntries() };
+}
+
+export function adoptHandover(state: Handover): void {
+  adoptedOptions = state.options;
+  setServerOptions(state.options);
+  adoptKeptLogins(state.keptLogins);
+}
+
+export async function dispatchRebuilt(call: RebuiltCall): Promise<ToolFrame> {
+  if (!rebuiltDispatch) throw new Error("this build registered no tool dispatcher");
+
+  return rebuiltDispatch(call, adoptedOptions ?? DEFAULT_SERVER_OPTIONS);
+}
+
+export function isRebuiltBuild(candidate: unknown): candidate is RebuiltBuild {
+  if (!candidate || typeof candidate !== "object") return false;
+
+  return RELOAD_CONTRACT.every((name) => typeof (candidate as Record<string, unknown>)[name] === "function");
+}
+
+export function buildSpecifier(entry: string, builtAt: string, attempt: number): string {
+  return `${pathToFileURL(entry).href}?stamp=${encodeURIComponent(builtAt)}&attempt=${attempt}`;
+}
+
+export type ReloadOutcome = { frame: ToolFrame; reloaded: string | null } | { reloadError: string };
+
+type Loaded = RebuiltBuild | { reloadError: string };
+
+type Loading = { builtAt: string; done: Promise<Loaded> };
+
+const messageOf = (err: unknown): string => (err instanceof Error ? err.message : String(err));
+
+export function createReloader(deps: {
+  entry: string;
+  importBuild: BuildImporter | null;
+  handover: () => Handover;
+}): { dispatch: (call: RebuiltCall, builtAt: string) => Promise<ReloadOutcome> } {
+  let active: { builtAt: string; build: RebuiltBuild; said: boolean } | null = null;
+  let loading: Loading | null = null;
+  let attempts = 0;
+
+  const load = async (builtAt: string): Promise<Loaded> => {
+    if (!deps.importBuild) {
+      return { reloadError: "this server was started without a loader for a rebuilt build; the extension-mcp launcher provides one" };
+    }
+
+    if (!deps.entry) return { reloadError: "this server does not know which file it loaded" };
+
+    attempts += 1;
+    let candidate: unknown;
+
+    try {
+      candidate = await deps.importBuild(buildSpecifier(deps.entry, builtAt, attempts));
+    } catch (err) {
+      return { reloadError: `import of the ${builtAt} build failed: ${messageOf(err)}` };
+    }
+
+    if (!isRebuiltBuild(candidate)) {
+      return { reloadError: `the ${builtAt} build does not export the reload contract (${RELOAD_CONTRACT.join(", ")})` };
+    }
+
+    const state = active ? active.build.handoverState() : deps.handover();
+
+    try {
+      candidate.adoptHandover(state);
+    } catch (err) {
+      return { reloadError: `the ${builtAt} build refused the handover: ${messageOf(err)}` };
+    }
+
+    return candidate;
+  };
+
+  const begin = (builtAt: string): Loading => {
+    const pending: Loading = {
+      builtAt,
+      done: load(builtAt).then((loaded) => {
+        if (loading === pending) loading = null;
+        if (!("reloadError" in loaded)) active = { builtAt, build: loaded, said: false };
+
+        return loaded;
+      }),
+    };
+    loading = pending;
+
+    return pending;
+  };
+
+  const activate = (builtAt: string): Promise<Loaded> => {
+    if (active?.builtAt === builtAt) return Promise.resolve(active.build);
+
+    const pending = loading?.builtAt === builtAt ? loading : begin(builtAt);
+
+    return pending.done;
+  };
+
+  return {
+    async dispatch(call, builtAt) {
+      const loaded = await activate(builtAt);
+
+      if ("reloadError" in loaded) return loaded;
+
+      let frame: ToolFrame;
+
+      try {
+        frame = await loaded.dispatchRebuilt(call);
+      } catch (err) {
+        return { reloadError: `the ${builtAt} build threw while answering ${call.name}: ${messageOf(err)}` };
+      }
+
+      const first = active?.builtAt === builtAt && !active.said;
+      if (active?.builtAt === builtAt) active.said = true;
+
+      return { frame, reloaded: first ? builtAt : null };
+    },
+  };
+}

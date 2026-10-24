@@ -20,8 +20,10 @@ function entryFile(): string {
 
 describe("every platform answer says which server answered", () => {
   it("stamps the package version and the build time of the file the process loaded", () => {
-    const stamp = createServerStamp(entryFile());
+    const file = entryFile();
+    const stamp = createServerStamp(file);
 
+    expect(stamp.entry).toBe(file);
     expect(stamp.stamp()).toEqual({ version, builtAt: "2026-10-20T10:00:00.000Z" });
     expect(stamp.rebuiltSince()).toBeNull();
 

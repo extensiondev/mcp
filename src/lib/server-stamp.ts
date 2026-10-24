@@ -30,12 +30,24 @@ export function staleSentence(at: string): string {
   return `This server was rebuilt at ${at}; run /mcp and pick extension-dev, then call again.`;
 }
 
-export function staleEnvelope(command: string, at: string, stamp: ServerStamp, args: Row = {}): string {
+export function reloadedWarning(at: string): string {
+  return `This server reloaded its code from the ${at} build before answering.`;
+}
+
+export function localRebuiltWarning(at: string): string {
+  return `This server was rebuilt at ${at}; its local tools keep the code they loaded until you run /mcp and pick extension-dev, while platform tools already answer from the new build.`;
+}
+
+export function staleEnvelope(command: string, at: string, stamp: ServerStamp, args: Row = {}, reloadError?: string): string {
   return envelope({
     ok: false,
     command,
     status: SERVER_STALE_STATUS,
-    value: { ...(typeof args.action === "string" ? { action: args.action } : {}), server: stamp },
+    value: {
+      ...(typeof args.action === "string" ? { action: args.action } : {}),
+      server: stamp,
+      ...(reloadError ? { reloadError } : {}),
+    },
     error: { code: "E_SERVER_STALE", name: "ServerStale", message: staleSentence(at) },
   });
 }
@@ -59,6 +71,7 @@ function mtimeOf(file: string): string | null {
  * than the one running, which is exactly when a reconnect does something.
  */
 export function createServerStamp(entry: string): {
+  entry: string;
   stamp: () => ServerStamp;
   rebuiltSince: () => string | null;
   apply: (result: string) => string;
@@ -100,7 +113,7 @@ export function createServerStamp(entry: string): {
     });
   };
 
-  return { stamp, rebuiltSince, apply };
+  return { entry, stamp, rebuiltSince, apply };
 }
 
 export type ServerStampReader = ReturnType<typeof createServerStamp>;
