@@ -171,6 +171,29 @@ describe("STORE.md fills the store listing", () => {
     ]);
   });
 
+  it("reads a Privacy policy URL line under Listing or a store section, and lets the privacy section win", () => {
+    const underListing = parseStoreMdListing(
+      STORE_MD.replace("- Screenshots:", "- Privacy policy URL: https://example.com/privacy.\n- Screenshots:"),
+    );
+
+    expect(listingForStore(underListing, "chrome").listing.privacyPolicyUrl).toBe("https://example.com/privacy");
+    expect(underListing.lines.privacyPolicyUrl).toBe("Privacy policy URL");
+
+    const both = parseStoreMdListing(
+      STORE_MD.replace("- Screenshots:", "- Privacy policy URL: https://example.com/listing\n- Screenshots:").replace(
+        "- Privacy policy URL: TODO. Not strictly required.",
+        "- Privacy policy URL: https://example.com/privacy",
+      ),
+    );
+
+    expect(listingForStore(both, "firefox").listing.privacyPolicyUrl).toBe("https://example.com/privacy");
+
+    const own = parseStoreMdListing(`${STORE_MD}\n## Safari\n\n- Privacy policy URL: https://example.com/safari-privacy\n`);
+
+    expect(listingForStore(own, "safari").listing.privacyPolicyUrl).toBe("https://example.com/safari-privacy");
+    expect(listingForStore(own, "chrome").listing.privacyPolicyUrl).toBeUndefined();
+  });
+
   it("keeps a trailing note out of the license, support email and homepage", () => {
     const parsed = parseStoreMdListing(
       STORE_MD.replace(

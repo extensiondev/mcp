@@ -8,8 +8,9 @@
 
 import { isRow, text } from "./ship-act";
 import { STORE_MD_FILENAME } from "./store-md";
+import { storeMdLineOf, type StoreMdField } from "./store-md-fields";
+import { BULLET_KEYS, SCREENSHOTS_LINE, SUBSECTION_KEYS, type ListingField } from "./store-md-listing";
 
-import type { ListingField } from "./store-md-listing";
 import type { LocalListing } from "../tools/store-listing";
 
 export interface RequirementRow {
@@ -43,36 +44,11 @@ const STORE_NAMES: Record<string, string> = {
 
 const NAMED_AT_MOST = 8;
 
-const STORE_MD_REFS: Record<string, ListingField | "screenshots"> = {
-  name: "title",
-  subtitle: "subtitle",
-  summary: "shortDescription",
-  description: "fullDescription",
-  category: "categories",
-  screenshots: "screenshots",
-  "single purpose": "singlePurpose",
-  "permissions justification": "permissionJustifications",
-  "privacy policy url": "privacyPolicyUrl",
-  homepage: "homepageUrl",
-  "search terms": "searchTerms",
-  "release notes": "releaseNotes",
-  "reviewer notes": "reviewerNotes",
-  "review contact name": "reviewContactName",
-  "review contact email": "reviewContactEmail",
-  "review contact phone": "reviewContactPhone",
-  license: "license",
-  "support email": "supportEmail",
-  "certification notes": "certificationNotes",
-};
-
-const SECTION_HEADINGS: Partial<Record<ListingField, string>> = {
-  singlePurpose: "### Single purpose",
-  permissionJustifications: "### Permissions justification",
-  reviewerNotes: "### Reviewer notes",
-  releaseNotes: "### Release notes",
-  certificationNotes: "### Certification notes",
-  privacyPolicyUrl: "- Privacy policy URL:",
-};
+const STORE_MD_REFS: Record<string, StoreMdField> = Object.fromEntries([
+  ...BULLET_KEYS.map((key) => [key.line.toLowerCase(), key.field]),
+  ...SUBSECTION_KEYS.map((key) => [key.heading.replace(/^### /, "").toLowerCase(), key.field]),
+  [SCREENSHOTS_LINE.toLowerCase(), "screenshots"],
+]);
 
 function statusOf(value: unknown): RequirementRow["status"] {
   const status = text(value);
@@ -80,7 +56,7 @@ function statusOf(value: unknown): RequirementRow["status"] {
   return status === "have" || status === "missing" ? status : "unknown";
 }
 
-function storeMdField(satisfiedBy: string): ListingField | "screenshots" | null {
+function storeMdField(satisfiedBy: string): StoreMdField | null {
   const match = /^store-md:\s*(.+)$/i.exec(satisfiedBy);
 
   return match ? (STORE_MD_REFS[match[1]!.trim().toLowerCase()] ?? null) : null;
@@ -89,7 +65,7 @@ function storeMdField(satisfiedBy: string): ListingField | "screenshots" | null 
 function lineOf(local: LocalListing, field: ListingField): string {
   const written = local.lines[field];
 
-  return written ? `- ${written}:` : SECTION_HEADINGS[field] ?? `- ${field}:`;
+  return written ? `- ${written}:` : storeMdLineOf(field);
 }
 
 /* @invariant STORE.md SATISFIES AN INPUT THROUGH THE ONE PARSER THE SYNC USES.
@@ -123,7 +99,7 @@ function withStoreMd(row: RequirementRow, local: LocalListingRead): RequirementR
     return local.screenshotsUnread
       ? {
           ...row,
-          actual: `the \`${local.screenshotsUnread.line}\` line in ${STORE_MD_FILENAME} ${local.screenshotsUnread.reason}; the reader takes \`- Screenshots:\` with one PNG path per line below it`,
+          actual: `the \`${local.screenshotsUnread.line}\` line in ${STORE_MD_FILENAME} ${local.screenshotsUnread.reason}; the reader takes \`${storeMdLineOf("screenshots")}\` with one PNG path per line below it`,
         }
       : row;
   }

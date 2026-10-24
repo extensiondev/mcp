@@ -20,6 +20,7 @@ claude/
     cross-browser.md      Cross-browser manifest field mapping
   reference/
     mcp-tools.md          MCP tool reference, generated from the server's schemas (pnpm docs:tools); read on demand, never a rule
+    store-md-fields.md    STORE.md lines the preflight and sync-listing read, per store, with section and limit; generated from the parser (pnpm docs:tools)
   examples/
     create-extension.md   Example prompt: scaffold and customize an extension
     add-sidebar.md        Example prompt: add a sidebar panel to an existing extension

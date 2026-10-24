@@ -6,48 +6,25 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-export const LISTING_STORES = ["chrome", "firefox", "edge", "safari"] as const;
+import {
+  BULLET_KEYS,
+  LISTING_LIST_LIMITS,
+  LISTING_TEXT_LIMITS,
+  SEARCH_TERMS_JOINED_LIMITS,
+  STORE_FIELDS,
+  SUBSECTION_KEYS,
+  type ListingField,
+  type ListingStore,
+  type ListingText,
+  type PermissionJustification,
+} from "./store-md-declarations";
 
-export type ListingStore = (typeof LISTING_STORES)[number];
-
-export const LISTING_TEXT_LIMITS = {
-  title: 100,
-  subtitle: 30,
-  shortDescription: 250,
-  fullDescription: 16_000,
-  supportEmail: 200,
-  privacyPolicyUrl: 2_000,
-  homepageUrl: 2_000,
-  license: 100,
-  singlePurpose: 1_000,
-  reviewerNotes: 8_000,
-  releaseNotes: 8_000,
-  certificationNotes: 8_000,
-  reviewContactName: 100,
-  reviewContactEmail: 200,
-  reviewContactPhone: 20,
-} as const;
-
-export type ListingTextField = keyof typeof LISTING_TEXT_LIMITS;
-
-export const SEARCH_TERMS_JOINED_LIMITS: Partial<Record<ListingStore, number>> = { safari: 100 };
-
-export const LISTING_TEXT_FIELDS = Object.keys(LISTING_TEXT_LIMITS) as ListingTextField[];
-
-export type PermissionJustification = { permission: string; justification: string };
-
-export type ListingText = Partial<Record<ListingTextField, string>> & {
-  categories?: string[];
-  searchTerms?: string[];
-  permissionJustifications?: PermissionJustification[];
-};
+export * from "./store-md-declarations";
 
 export interface StoreMdPrivacy {
   section: string;
   attested: boolean | null;
 }
-
-export type ListingField = keyof ListingText;
 
 export interface StoreMdScreenshots {
   line: string;
@@ -76,32 +53,10 @@ export interface StoreListingRead {
 
 const NOTED_FIELDS: ListingField[] = ["license", "supportEmail", "homepageUrl"];
 
-export const STORE_FIELDS: Record<ListingStore, ListingField[]> = {
-  chrome: ["title", "shortDescription", "fullDescription", "categories", "supportEmail", "privacyPolicyUrl", "homepageUrl", "singlePurpose", "permissionJustifications"],
-  firefox: ["title", "shortDescription", "fullDescription", "categories", "supportEmail", "privacyPolicyUrl", "homepageUrl", "license", "reviewerNotes", "releaseNotes"],
-  edge: ["title", "shortDescription", "fullDescription", "categories", "searchTerms", "supportEmail", "privacyPolicyUrl", "homepageUrl", "certificationNotes"],
-  safari: ["title", "subtitle", "shortDescription", "fullDescription", "categories", "searchTerms", "supportEmail", "privacyPolicyUrl", "homepageUrl", "reviewerNotes", "reviewContactName", "reviewContactEmail", "reviewContactPhone"],
-};
-
-const BULLET_KEYS: Array<[RegExp, ListingTextField | "categories" | "searchTerms"]> = [
-  [/^(name|title)$/, "title"],
-  [/^subtitle$/, "subtitle"],
-  [/^(summary|short description)$/, "shortDescription"],
-  [/^(description|long description|full description)$/, "fullDescription"],
-  [/^categor(y|ies)$/, "categories"],
-  [/^support email$/, "supportEmail"],
-  [/^(homepage|website|homepage url)$/, "homepageUrl"],
-  [/^license$/, "license"],
-  [/^(search terms|keywords|tags)$/, "searchTerms"],
-  [/^(app review contact name|review contact name|contact name)$/, "reviewContactName"],
-  [/^(app review contact email|review contact email|contact email)$/, "reviewContactEmail"],
-  [/^(app review contact phone|review contact phone|contact phone)$/, "reviewContactPhone"],
-];
-
 const SCREENSHOTS_KEY = /^screenshots(\s*\([^()]*\))?$/;
 const IMAGE_FILE = /\S+\.(png|jpe?g)$/i;
 const LIST_MARKER = /^\s*(?:\d+[.)]|[-*+])\s+/;
-
+const URL_IN_TEXT = /https?:\/\/[^\s)>"]+/;
 
 const E164 = /^\+[1-9]\d{6,14}$/;
 
@@ -127,7 +82,7 @@ function splitSections(content: string, level: number): Section[] {
   return sections;
 }
 
-function classifyStore(text: string): ListingStore[] {
+export function classifyStore(text: string): ListingStore[] {
   const lower = text.toLowerCase();
   const found: ListingStore[] = [];
 
@@ -189,6 +144,12 @@ const unwrap = (value: string): string =>
     .map((paragraph) => paragraph.replace(/\s*\n\s*/g, " ").trim())
     .filter(Boolean)
     .join("\n\n");
+
+const policyUrl = (value: string): string | undefined => {
+  const url = URL_IN_TEXT.exec(value)?.[0];
+
+  return url ? url.replace(/[.,;]$/, "") : undefined;
+};
 
 const TRAILING_NOTE = /^(.*?)\s*\(([^()]*)\)$/;
 
@@ -279,9 +240,9 @@ function privacyProse(body: string): string {
   return usable(kept.join("\n").trim());
 }
 
-function justifications(body: string): PermissionJustification[] {
+function justifications(body: string, prefix: string): PermissionJustification[] {
   for (const sub of splitSections(body, 3)) {
-    if (!sub.heading.toLowerCase().startsWith("permission")) continue;
+    if (!sub.heading.toLowerCase().startsWith(prefix)) continue;
 
     return bullets(sub.body)
       .map(({ key, value }) => ({ permission: key, justification: usable(unwrap(value)) }))
@@ -325,7 +286,7 @@ function readBullets(result: StoreMdListing, body: string, into: ListingText, ow
       continue;
     }
 
-    const field = BULLET_KEYS.find(([pattern]) => pattern.test(key.toLowerCase()))?.[1];
+    const field = BULLET_KEYS.find(({ pattern }) => pattern.test(key.toLowerCase()))?.field;
     const text = usable(value);
     if (!field || !text || (ownSection && field === "categories")) continue;
 
@@ -338,6 +299,9 @@ function readBullets(result: StoreMdListing, body: string, into: ListingText, ow
       result.categoriesByStore = parsed.byStore;
     } else if (field === "searchTerms") {
       into.searchTerms = unwrap(text).split(",").map((item) => item.trim()).filter(Boolean);
+    } else if (field === "privacyPolicyUrl") {
+      const url = policyUrl(text);
+      if (url) into.privacyPolicyUrl = url;
     } else if (NOTED_FIELDS.includes(field)) {
       into[field] = withoutNote(unwrap(text));
     } else {
@@ -351,7 +315,10 @@ function readBullets(result: StoreMdListing, body: string, into: ListingText, ow
  * same keys as "## Listing" and win for that store alone, so the App Store's
  * subtitle, keywords and review contact phone can sit under "## Safari" as
  * the owed message asks, while "- Category:" keeps its per-store note syntax
- * on the shared line.
+ * on the shared line. The privacy policy URL's home is "## Privacy and data
+ * use", and a "- Privacy policy URL:" line under "## Listing" or a store
+ * section is read as well, since the template's header once said "under
+ * Listing"; the privacy section wins when both carry one.
  */
 export function parseStoreMdListing(content: string): StoreMdListing {
   const result: StoreMdListing = { shared: {}, categoriesByStore: {}, stores: {}, privacy: { section: "", attested: null }, lines: {} };
@@ -365,8 +332,12 @@ export function parseStoreMdListing(content: string): StoreMdListing {
       const rows = bullets(section.body);
       const policy = rows.find(({ key }) => /privacy policy/i.test(key) && !/attested/i.test(key));
       const attested = rows.find(({ key }) => /^privacy policy attested$/i.test(key));
-      const url = policy ? /https?:\/\/[^\s)>"]+/.exec(policy.value)?.[0] : undefined;
-      if (url) result.shared.privacyPolicyUrl = url.replace(/[.,;]$/, "");
+      const url = policy ? policyUrl(policy.value) : undefined;
+
+      if (url) {
+        result.shared.privacyPolicyUrl = url;
+        result.lines.privacyPolicyUrl = policy!.key;
+      }
 
       result.privacy = { section: privacyProse(section.body), attested: attested ? /^yes\b/i.test(attested.value.trim()) : null };
     } else {
@@ -374,17 +345,18 @@ export function parseStoreMdListing(content: string): StoreMdListing {
       if (!store || result.stores[store]) continue;
 
       const text: ListingText = {};
-      const singlePurpose = fieldText(section.body, "single purpose");
-      const reviewerNotes = fieldText(section.body, "reviewer notes");
-      const releaseNotes = fieldText(section.body, "release notes");
-      const certificationNotes = fieldText(section.body, "certification notes");
-      const permissions = justifications(section.body);
 
-      if (singlePurpose) text.singlePurpose = singlePurpose;
-      if (reviewerNotes) text.reviewerNotes = reviewerNotes;
-      if (releaseNotes) text.releaseNotes = releaseNotes;
-      if (certificationNotes) text.certificationNotes = certificationNotes;
-      if (permissions.length) text.permissionJustifications = permissions;
+      for (const { field, prefix } of SUBSECTION_KEYS) {
+        if (field === "permissionJustifications") {
+          const permissions = justifications(section.body, prefix);
+          if (permissions.length) text.permissionJustifications = permissions;
+
+          continue;
+        }
+
+        const value = fieldText(section.body, prefix);
+        if (value) (text as Record<string, string>)[field] = value;
+      }
 
       readBullets(result, section.body.split(/^###\s/m)[0]!, text, true);
       result.stores[store] = text;
@@ -432,16 +404,18 @@ function bounded(field: string, value: unknown, skipped: string[], store: Listin
   }
 
   if (field === "permissionJustifications") {
+    const limits = LISTING_LIST_LIMITS.permissionJustifications;
     const entries = (value as PermissionJustification[])
       .map((entry) => ({ permission: clean(entry.permission), justification: clean(entry.justification) }))
-      .filter((entry) => entry.permission && entry.permission.length <= 200 && entry.justification.length <= 1_000);
+      .filter((entry) => entry.permission && entry.permission.length <= limits.permission && entry.justification.length <= limits.justification);
 
-    if (entries.length < (value as unknown[]).length) skipped.push("a permission justification over 1000 characters was left out");
+    if (entries.length < (value as unknown[]).length) skipped.push(`a permission justification over ${limits.justification} characters was left out`);
 
-    return { value: entries.length ? entries.slice(0, 50) : undefined };
+    return { value: entries.length ? entries.slice(0, limits.items) : undefined };
   }
 
-  const items = (value as string[]).map(clean).filter((item) => item && item.length <= 100);
+  const limits = field === "categories" ? LISTING_LIST_LIMITS.categories : LISTING_LIST_LIMITS.searchTerms;
+  const items = (value as string[]).map(clean).filter((item) => item && item.length <= limits.each);
   const joinedLimit = field === "searchTerms" ? SEARCH_TERMS_JOINED_LIMITS[store] : undefined;
   const joined = items.join(",").length;
 
@@ -449,7 +423,7 @@ function bounded(field: string, value: unknown, skipped: string[], store: Listin
     return { reason: `is ${joined} characters joined by commas, over the ${joinedLimit} the App Store keywords take` };
   }
 
-  return { value: items.length ? items.slice(0, field === "categories" ? 5 : 16) : undefined };
+  return { value: items.length ? items.slice(0, limits.items) : undefined };
 }
 
 export interface DerivedListingField {

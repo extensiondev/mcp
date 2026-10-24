@@ -8,6 +8,9 @@ import { describe, it, expect } from "vitest";
 import { tools } from "../index";
 import { renderToolsDoc } from "../lib/docs-tools";
 import { renderClientsJson, renderToolsJson } from "../lib/docs-json";
+import { renderStoreMdFieldsDoc, renderStoreMdFieldsJson } from "../lib/docs-store-md-fields";
+import { storeMdFieldRows } from "../lib/store-md-fields";
+import { LISTING_STORES, STORE_FIELDS } from "../lib/store-md-listing";
 import { TOOL_DOCS } from "../lib/docs-meta";
 import { validateToolInput } from "../lib/validate-input";
 import { TOOL_POLICY } from "../lib/tool-policy";
@@ -26,6 +29,29 @@ const DOCS = [
   "claude/commands/extension-publish.md",
   "claude/rules/extension-dev.md",
   "claude/rules/cross-browser.md",
+];
+
+const PLATFORM_STORE_MD_LABELS = [
+  "Name",
+  "Subtitle",
+  "Summary",
+  "Description",
+  "Category",
+  "Screenshots",
+  "Single purpose",
+  "Permissions justification",
+  "Privacy policy URL",
+  "Homepage",
+  "Support email",
+  "License",
+  "Search terms",
+  "Reviewer notes",
+  "Release notes",
+  "Certification notes",
+  "Review contact name",
+  "Review contact email",
+  "Review contact phone",
+  "Age rating",
 ];
 
 function looseJson(objectText: string): Record<string, unknown> | null {
@@ -76,6 +102,38 @@ describe("the docs say what the code does", () => {
 
     expect(read("docs/tools.json")).toBe(toolsJson);
     expect(read("docs/clients.json")).toBe(clientsJson);
+  });
+
+  it("renders the STORE.md field table from the parser's declarations, the files on disk are that rendering, and every line is a label the platform's requirements name", () => {
+    const version = String((require("../../package.json") as { version: string }).version);
+    const doc = `${renderStoreMdFieldsDoc()}\n`;
+    const json = `${JSON.stringify(renderStoreMdFieldsJson(version), null, 2)}\n`;
+
+    if (process.env.WRITE_TOOLS_DOC === "1") {
+      fs.writeFileSync(fileURLToPath(new URL("../../claude/reference/store-md-fields.md", import.meta.url)), doc);
+      fs.writeFileSync(fileURLToPath(new URL("../../docs/store-md-fields.json", import.meta.url)), json);
+    }
+
+    expect(read("claude/reference/store-md-fields.md")).toBe(doc);
+    expect(read("docs/store-md-fields.json")).toBe(json);
+
+    for (const store of LISTING_STORES) {
+      const rows = storeMdFieldRows(store);
+
+      expect(rows.map((row) => row.field)).toEqual([...STORE_FIELDS[store], "screenshots"]);
+      expect(doc).toContain(`## ${store} (`);
+
+      for (const row of rows) {
+        expect(PLATFORM_STORE_MD_LABELS, `${store} ${row.line}`).toContain(row.line.replace(/^(- |### )/, "").replace(/:$/, ""));
+        expect(row.section.startsWith("## "), `${store} ${row.field} section`).toBe(true);
+        expect(row.alsoRead).not.toContain(row.section);
+        expect(row.limit.length).toBeGreaterThan(0);
+      }
+    }
+
+    expect(doc).toContain("| `- Privacy policy URL:` | `## Privacy and data use` | `## Listing`, `## Chrome Web Store` |");
+    expect(doc).toContain("| `### Single purpose` | `## Chrome Web Store` |  |");
+    expect(doc).toContain("| `- Review contact phone:` | `## Safari` | `## Listing` |");
   });
 
   it("gives every registered tool a tier, a gate and a sample prompt, and names no retired tool", () => {
