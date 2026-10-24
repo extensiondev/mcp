@@ -39,7 +39,7 @@ export interface ItemLinkUrls {
   linkItemUrl: string;
 }
 
-export type NextStepKind = "connect" | "configure" | "link-item" | "submit" | "approve" | "publish" | "resubmit" | "preflight" | "done";
+export type NextStepKind = "connect" | "configure" | "link-item" | "submit" | "approve" | "publish" | "resubmit" | "preflight" | "watch" | "done";
 
 export interface NextStep {
   kind: NextStepKind;
@@ -128,6 +128,33 @@ export function submitStep(stores: string[], modes: ModeIds = {}): NextStep {
 export const PUBLISH_SENTENCE = "To send it to review, say publish; that is one more approval.";
 
 export const PUBLISH_APPROVAL_SENTENCE = "This sends the item to Chrome's review.";
+
+/* @invariant WHAT THE ANSWER SAYS FOLLOWS outcome.recorded, NEVER THE ACT.
+ *
+ * A submit the platform accepted is not a submit the platform recorded: on
+ * 2026-10-24 an Edge submit answered submit-dispatched with outcome.recorded
+ * false while its next step said "uploaded to Edge Add-ons as a draft,
+ * recorded as uploaded", and the run had in fact failed after the upload.
+ * While the record has not confirmed, the step is `watch` and says only that
+ * the submission was dispatched and that the record confirms when the run
+ * finishes. A record that reads `uploaded` with a failed step says the store
+ * holds the package and names the step that failed after it.
+ */
+export function dispatchedStep(stores: string[], trackUrl: string): NextStep {
+  return nextStep(
+    "watch",
+    `The submission to ${storeNames(stores)} is dispatched; the record confirms when the run finishes. Watch ${trackUrl}, or call extension_release_status to read the record; do not submit again before it answers.`,
+    trackUrl,
+  );
+}
+
+export function uploadedStepFailedStep(stores: string[], step: string, trackUrl: string): NextStep {
+  return nextStep(
+    "watch",
+    `The platform's record says ${storeNames(stores)} took the package as a draft, not public and not in review, and that a later step of the run failed: ${step}. The upload itself landed, so do not submit the same build again; ${trackUrl} names the step and its last lines.`,
+    trackUrl,
+  );
+}
 
 export function doneStep(stores: string[], itemUrl: string): NextStep {
   const drafts = stores.length > 0 && stores.every((store) => DRAFT_STORES.has(store));

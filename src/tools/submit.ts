@@ -71,6 +71,7 @@ import {
   NOT_CONNECTED_CODES,
   chromeItemUrl,
   connectSentences,
+  dispatchedStep,
   doneStep,
   failedCheckSentence,
   fallbackConnectUrl,
@@ -79,6 +80,7 @@ import {
   nextStep,
   reviewSentenceFor,
   storeSettingsUrl,
+  uploadedStepFailedStep,
   uploadStopsAtDraft,
   withApproveStep,
   withReviewPromise,
@@ -1086,9 +1088,29 @@ async function answer(args: SubmitToolArgs): Promise<string> {
         `${store}: ${String(waited.record?.[store]?.failureReason ?? "").trim() || "the store run failed"}`,
     );
 
+    const uploadedFailures = waited.outcome.recorded
+      ? outcome.stores
+          .map((store) => ({ store, record: waited.record?.[store] }))
+          .filter(
+            (row) =>
+              String(row.record?.status ?? "").toLowerCase() === "uploaded" &&
+              Boolean(row.record?.failure?.step),
+          )
+      : [];
+    const step = !waited.outcome.recorded
+      ? dispatchedStep(outcome.stores, firstPage)
+      : uploadedFailures.length
+        ? uploadedStepFailedStep(
+            uploadedFailures.map((row) => row.store),
+            uploadedFailures.map((row) => String(row.record?.failure?.step)).join("; "),
+            firstPage,
+          )
+        : doneStep(outcome.stores, itemUrl);
+
     result.outcome = waited.outcome;
     result.links = links;
-    result.nextStep = doneStep(outcome.stores, itemUrl);
+    result.nextStep = step;
+    result.sayToPerson = step.say;
 
     const firefoxSources = outcome.stores.includes("firefox")
       ? firefoxSourcesOutcome(
@@ -1160,6 +1182,17 @@ async function answer(args: SubmitToolArgs): Promise<string> {
         status: "submit-dispatched",
         value: result,
         hint: `${dispatchedHint({ acceptedAt, trackUrl: firstPage, readCall: statusRead })} A Chrome or Edge upload under the default modes (Chrome draft-until-public, Edge draft) stops at the draft and does not enter review; a saved public, staged or review mode sends it on.${sourcesLine} ${made}`,
+        warnings: [...warnings, channelNote, statusNote, credential.note],
+      });
+    }
+
+    if (uploadedFailures.length) {
+      return envelope({
+        ok: true,
+        command: "extension_submit",
+        status: "submitted",
+        value: result,
+        hint: `${step.say}${sourcesLine} ${made}`,
         warnings: [...warnings, channelNote, statusNote, credential.note],
       });
     }

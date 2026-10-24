@@ -51,6 +51,10 @@ export interface StoreUpload {
   checkedAt?: string;
 }
 
+export interface StepFailure {
+  step: string;
+}
+
 export interface PlatformSubmission {
   id?: string;
   store: string;
@@ -67,6 +71,7 @@ export interface PlatformSubmission {
   sourceArchive?: string;
   storeReview?: StoreReview;
   storeUpload?: StoreUpload;
+  failure?: StepFailure;
   run: SubmissionRun;
 }
 
@@ -190,6 +195,10 @@ export function toSubmission(raw: Record<string, unknown>): PlatformSubmission |
   if (storeUpload) out.storeUpload = storeUpload;
   if (cancel) out.cancel = cancel;
   if (dispatch) out.dispatch = dispatch;
+
+  const failureRaw = raw.failure && typeof raw.failure === "object" ? (raw.failure as Record<string, unknown>) : null;
+  const failedAt = failureRaw ? str(failureRaw.step) : undefined;
+  if (failedAt) out.failure = { step: failedAt };
 
   const fields: Array<[keyof PlatformSubmission, unknown]> = [
     ["id", raw.id],
