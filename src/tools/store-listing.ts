@@ -31,6 +31,7 @@ import {
   requestApprovalAfterRefusal,
 } from "../lib/approval-gate";
 import { approvalRoundTrip } from "../lib/approval-outcome";
+import { approvalVerdict } from "../lib/approval-policy";
 import { badShipRequest, isRow, openShipApi, text } from "../lib/ship-act";
 import {
   behindSentence,
@@ -43,6 +44,7 @@ import { pushAnswer, pushSentence, readPushState, sendListing } from "../lib/sto
 import { STORE_MD_FILENAME } from "../lib/store-md";
 import {
   LISTING_STORES,
+  derivedListingFields,
   listingForStore,
   parseStoreMdListing,
   type ListingField,
@@ -422,6 +424,53 @@ const LISTING_NEXT = {
   used: "The call that used it may already have written the listing; run preflight first, and request a fresh approval only if the listing is not there.",
 };
 
+export interface DerivedMark {
+  field: string;
+  from: string;
+  line: string;
+}
+
+const DERIVED_LINE_TO_ADD: Record<string, string> = { subtitle: "`- Subtitle:` under `## Listing`" };
+
+const SOURCE_LINE: Record<string, string> = { shortDescription: "Summary" };
+
+/* @invariant A DERIVED VALUE IS NAMED AS THE PLATFORM MARKED IT, NEVER
+ * INFERRED HERE. The platform's sync answer marks every change entry it did
+ * not copy verbatim from the owner with derived true and the field it came
+ * from (today the App Store subtitle from the Summary), and its approval
+ * answer carries the same mark in the line's own words ("subtitle (derived
+ * from Summary): ..."). Both shapes are read, and only those; this server
+ * never decides on its own that a value the platform stored was derived, so
+ * the sentence to the person says exactly what the platform did and which
+ * STORE.md line replaces it with the owner's own words.
+ */
+export function derivedMarks(changes: unknown): DerivedMark[] {
+  if (!Array.isArray(changes)) return [];
+
+  const marks: DerivedMark[] = [];
+
+  for (const change of changes) {
+    if (isRow(change) && change.derived === true && text(change.field)) {
+      marks.push({ field: text(change.field), from: SOURCE_LINE[text(change.derivedFrom)] ?? text(change.derivedFrom), line: text(change.line) });
+    } else if (typeof change === "string") {
+      const match = /^(\w+) \(derived from ([^)]+)\): /.exec(change);
+      if (match) marks.push({ field: match[1]!, from: match[2]!, line: change });
+    }
+  }
+
+  return marks;
+}
+
+export function derivedSentence(marks: DerivedMark[]): string {
+  if (!marks.length) return "";
+
+  const named = marks.map((mark) => `the ${mark.field} (copied from the ${mark.from} line)`);
+  const lines = [...new Set(marks.map((mark) => DERIVED_LINE_TO_ADD[mark.field] ?? `\`- ${mark.field}:\``))];
+  const joined = lines.length > 1 ? `${lines.slice(0, -1).join(", ")} and ${lines[lines.length - 1]}` : lines[0];
+
+  return `The platform marked ${named.join(" and ")} as derived: ${STORE_MD_FILENAME} carries no line for it, so a workspace owner approves that text before it reaches the store; add ${joined} in ${STORE_MD_FILENAME} to write your own.`;
+}
+
 const chromeListingLine = (synced: string[]): string =>
   synced.includes("chrome")
     ? " Chrome's own listing fields, the privacy policy URL included, cannot be written through Google's API: paste them once in the item's dashboard, and extension.dev keeps this copy as the record."
@@ -472,10 +521,13 @@ async function syncOne(
   };
 
   if (sent.ok) {
+    const derived = derivedMarks(sent.json.changes);
+
     return {
       store,
       status: "synced",
       changes: Array.isArray(sent.json.changes) ? sent.json.changes : [],
+      ...(derived.length ? { derived } : {}),
       ...pushRow(sent.json.appStoreConnect),
     };
   }
@@ -527,6 +579,9 @@ async function syncOne(
       };
     }
 
+    const expected = derivedListingFields(store, patch.listing);
+    const derivedAct =
+      approvalVerdict(STORE_LISTING_ACTION, { derived: expected.length > 0 }) === "approval";
     const asking = JSON.parse(
       await requestApprovalAfterRefusal({
         command: COMMAND,
@@ -537,13 +592,15 @@ async function syncOne(
         api: args.api,
         refusedStatus: `${ACT}-refused`,
         body: approvalBody(store, patch),
-        reason:
-          "A listing sync is a plain act under the owner's own token, and the platform asked a workspace owner to approve this exact change before it is written; the approval page shows it as the platform computed it.",
+        reason: derivedAct
+          ? `The listing carries a value the platform derives rather than copies from ${STORE_MD_FILENAME} (${expected.map((field) => `the App Store ${field.field} from the ${field.line} line`).join(", ")}), and the platform asks a workspace owner to approve that text before it is written; the approval page shows it marked derived.`
+          : "A listing sync is a plain act under the owner's own token, and the platform asked a workspace owner to approve this exact change before it is written; the approval page shows it as the platform computed it.",
         stateRead: 'extension_submit (action: "preflight")',
       }),
     ) as Row;
     const value = isRow(asking.value) ? asking.value : {};
     const error = isRow(asking.error) ? asking.error : {};
+    const derived = derivedMarks(value.changes);
 
     return text(value.approvalId)
       ? {
@@ -555,6 +612,7 @@ async function syncOne(
             ? { expiresAt: text(value.expiresAt) }
             : {}),
           changes: Array.isArray(value.changes) ? value.changes : [],
+          ...(derived.length ? { derived } : {}),
         }
       : {
           store,
@@ -697,6 +755,8 @@ export async function syncListing(args: ListingArgs): Promise<string> {
       const kept = Object.keys(local.patch.listing).filter((field) => !deferred.includes(field)).length;
       said.push(deferredSentence(deferred, kept, result.status === "approval-required"));
     } else if (result.code === "LISTING_DIGEST_MISMATCH") said.push(text(result.message));
+
+    if (Array.isArray(result.derived)) said.push(derivedSentence(result.derived as DerivedMark[]));
 
     stores[store] = {
       ...result,

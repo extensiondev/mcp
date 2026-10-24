@@ -26,6 +26,7 @@ const RULED_TABLE: Array<[keyof typeof APPROVAL_POLICY, "plain" | "approval" | "
   ["extension_builds.channel-audience", "approval"],
   ["extension_settings.store-public-mode", "approval"],
   ["extension_project.visibility-public", "approval"],
+  ["extension_store.listing-derived", "approval"],
   ["extension_store.disconnect", "console"],
   ["extension_builds.delete-channel", "console"],
   ["extension_project.delete", "console"],
@@ -82,6 +83,14 @@ describe("the approval policy table holds Cezar's ruling of 2026-10-23 (ledger 1
     expect(approvalVerdict("extension_settings.project", { audience: "public" })).toBe("approval");
     expect(approvalVerdict("extension_settings.environment")).toBe("plain");
     expect(approvalVerdict("extension_settings.environment-secret")).toBe("console");
+  });
+
+  it("keeps a listing sync whose changes carry a value the platform derived on the approve page, while a verbatim copy is plain", () => {
+    expect(approvalVerdict("extension_store.listing")).toBe("plain");
+    expect(approvalVerdict("extension_store.listing", { derived: false })).toBe("plain");
+    expect(approvalVerdict("extension_store.listing", { derived: true })).toBe("approval");
+    expect(verdictOfAction("extension_store.listing", { derived: true })).toBe("approval");
+    expect(approvalVerdict("extension_settings.store", { derived: true })).toBe("plain");
   });
 
   it("treats an act the table does not name as one that needs an approval", () => {

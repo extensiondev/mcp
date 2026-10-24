@@ -452,6 +452,35 @@ function bounded(field: string, value: unknown, skipped: string[], store: Listin
   return { value: items.length ? items.slice(0, field === "categories" ? 5 : 16) : undefined };
 }
 
+export interface DerivedListingField {
+  field: "subtitle";
+  from: "shortDescription";
+  line: string;
+  value: string;
+}
+
+/* @invariant THIS SERVER COPIES STORE.md; IT NEVER WRITES A LISTING LINE.
+ * Every field the sync sends is the owner's own text from a STORE.md line,
+ * bounded and cleaned, never composed. The one value a store receives
+ * without a line is derived downstream, by the platform's Safari push: the
+ * App Store subtitle, copied from the Summary when STORE.md has no
+ * `- Subtitle:` line and the Summary is 30 characters or fewer. This names
+ * that value from the same two facts before the sync is sent, so the answer
+ * can say which value the owner did not write and why the platform asked an
+ * owner to approve it (the listing-derived row of the approval table), and
+ * the owner learns the line to add. Nothing here puts the value into the
+ * patch: the listing the platform stores holds only what STORE.md says.
+ */
+export function derivedListingFields(store: ListingStore, listing: ListingText): DerivedListingField[] {
+  if (store !== "safari" || listing.subtitle) return [];
+
+  const summary = listing.shortDescription ?? "";
+
+  return summary && summary.length <= LISTING_TEXT_LIMITS.subtitle
+    ? [{ field: "subtitle", from: "shortDescription", line: "Summary", value: summary }]
+    : [];
+}
+
 const storeList = (stores: string[]): string =>
   stores.length > 1 ? `${stores.slice(0, -1).join(", ")} and ${stores[stores.length - 1]}` : stores[0] ?? "";
 

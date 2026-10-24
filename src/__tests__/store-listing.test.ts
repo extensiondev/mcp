@@ -7,9 +7,9 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import { actionFingerprint } from "../lib/approval-gate";
 import { listingDigest } from "../lib/store-listing-media";
-import { STORE_FIELDS, listingForStore, parseStoreMdListing } from "../lib/store-md-listing";
+import { STORE_FIELDS, derivedListingFields, listingForStore, parseStoreMdListing } from "../lib/store-md-listing";
 import { TOOL_POLICY } from "../lib/tool-policy";
-import { readLocalListing } from "../tools/store-listing";
+import { derivedMarks, derivedSentence, readLocalListing } from "../tools/store-listing";
 import { handler as submit, schema } from "../tools/submit";
 import {
   API,
@@ -256,6 +256,49 @@ describe("STORE.md fills the store listing", () => {
 
     expect(long.unread.subtitle).toEqual({ line: "- Subtitle:", reason: "is 37 characters, over the 30 the listing takes" });
     expect(listingForStore(withLines("Blur names", "privacy"), "edge").skipped).toEqual([]);
+  });
+
+  it("names the App Store subtitle the platform derives from a short Summary, and nothing when the Summary is long or a Subtitle line exists", () => {
+    const summary = (text: string) => listingForStore(parseStoreMdListing(STORE_MD.replace(/- Summary: .*\n/, `- Summary: ${text}\n`)), "safari");
+    const long = "Blur names, emails, phone numbers and card numbers on every open tab with one click, before you share it all.";
+    const short = "Blur personal data on a page";
+
+    expect(long).toHaveLength(109);
+    expect(short).toHaveLength(28);
+    expect(summary(long).listing).not.toHaveProperty("subtitle");
+    expect(derivedListingFields("safari", summary(long).listing)).toEqual([]);
+    expect(summary(short).listing).not.toHaveProperty("subtitle");
+    expect(derivedListingFields("safari", summary(short).listing)).toEqual([
+      { field: "subtitle", from: "shortDescription", line: "Summary", value: short },
+    ]);
+
+    expect(derivedListingFields("chrome", summary(short).listing)).toEqual([]);
+
+    const own = listingForStore(
+      parseStoreMdListing(STORE_MD.replace("- Screenshots:", `- Subtitle: Blur names on screen\n- Screenshots:`).replace(/- Summary: .*\n/, `- Summary: ${short}\n`)),
+      "safari",
+    );
+
+    expect(own.listing.subtitle).toBe("Blur names on screen");
+    expect(derivedListingFields("safari", own.listing)).toEqual([]);
+  });
+
+  it("reads the platform's derived marks in both shapes and says which STORE.md line replaces the copy", () => {
+    const entries = [
+      { field: "title", line: 'title: "" -> "PII Shield"', derived: false },
+      { field: "subtitle", line: 'subtitle (derived from Summary): "" -> "Blur personal data on a page"', derived: true, derivedFrom: "shortDescription" },
+    ];
+    const marks = derivedMarks(entries);
+
+    expect(marks).toEqual([{ field: "subtitle", from: "Summary", line: 'subtitle (derived from Summary): "" -> "Blur personal data on a page"' }]);
+    expect(derivedMarks(['title: "" -> "PII Shield"', 'subtitle (derived from Summary): "" -> "Blur personal data on a page"'])).toEqual(marks);
+    expect(derivedMarks(['title: "" -> "PII Shield"'])).toEqual([]);
+    expect(derivedMarks(undefined)).toEqual([]);
+    expect(derivedSentence(marks)).toBe(
+      "The platform marked the subtitle (copied from the Summary line) as derived: STORE.md carries no line for it, so a workspace owner approves that text before it reaches the store; add `- Subtitle:` under `## Listing` in STORE.md to write your own.",
+    );
+
+    expect(derivedSentence([])).toBe("");
   });
 
   it("reads the App Store lines under the Safari section and takes the review contact phone in E.164 only", () => {
@@ -690,6 +733,41 @@ describe("extension_submit sync-listing and the preflight advisory", () => {
       expect(answer).not.toContain("dispatchId");
       expect(answer).not.toContain("run-name");
     }
+  });
+
+  it("marks the derived subtitle in its answer when the platform's change list carries it, and says nothing when every value is the owner's copy", async () => {
+    if (process.platform === "win32") return;
+
+    platform.login();
+    platform.routes[`POST ${PREFLIGHT("safari")}`] = () => ({ body: { checks: [] } });
+
+    const derivedEntry = { field: "subtitle", line: 'subtitle (derived from Summary): "" -> "Blur personal data on a page"', derived: true, derivedFrom: "shortDescription" };
+    platform.routes[`PUT ${LISTING("safari")}`] = () => ({
+      body: {
+        ok: true,
+        store: "safari",
+        changes: [{ field: "title", line: 'title: "" -> "PII Shield"', derived: false }, derivedEntry],
+        appStoreConnect: { status: "dispatched", runState: "queued" },
+      },
+    });
+
+    const marked = JSON.parse(await safariSync());
+
+    expect(marked.status).toBe("listing-synced");
+    expect(marked.value.stores.safari.derived).toEqual([{ field: "subtitle", from: "Summary", line: derivedEntry.line }]);
+    expect(marked.value.stores.safari.changes).toHaveLength(2);
+    expect(marked.value.sayToPerson).toContain("The platform marked the subtitle (copied from the Summary line) as derived");
+    expect(marked.value.sayToPerson).toContain("add `- Subtitle:` under `## Listing` in STORE.md to write your own");
+    expect(marked.value.stores.safari.appStoreConnect.trackUrl).toBe(SUBMISSIONS);
+
+    platform.routes[`PUT ${LISTING("safari")}`] = () => ({
+      body: { ok: true, store: "safari", changes: [{ field: "subtitle", line: 'subtitle: "" -> "Blur names on screen"', derived: false }], appStoreConnect: { status: "dispatched" } },
+    });
+
+    const plain = JSON.parse(await safariSync());
+
+    expect(plain.value.stores.safari).not.toHaveProperty("derived");
+    expect(plain.value.sayToPerson).not.toContain("derived");
   });
 
   it("says the failed push's next step from its reason when the platform gives no retry hint", async () => {

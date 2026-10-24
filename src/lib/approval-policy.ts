@@ -25,9 +25,13 @@ export type ApprovalVerdict = "plain" | "approval" | "console";
  * a project delete; a live channel whose recorded audience is public
  * resolves to the channel-audience row, since it changes what the
  * project's live link serves; a secret environment variable is a console
- * act under its own row. The platform holds the same table in
- * www src/services/registry/approval-policy.ts; a row changed on one side is
- * changed on both.
+ * act under its own row. A listing sync is plain while every value in it is
+ * the owner's own copy from STORE.md; a sync whose changes carry a value the
+ * platform did not copy verbatim (the App Store subtitle the push takes from
+ * the Summary when STORE.md has no `- Subtitle:` line) keeps the page through
+ * the listing-derived row, because the owner never wrote that text. The
+ * platform holds the same table in www src/services/registry/approval-policy.ts;
+ * a row changed on one side is changed on both.
  */
 export const APPROVAL_POLICY = {
   "extension_settings.build": "plain",
@@ -52,6 +56,7 @@ export const APPROVAL_POLICY = {
   "extension_builds.channel-audience": "approval",
   "extension_settings.store-public-mode": "approval",
   "extension_project.visibility-public": "approval",
+  "extension_store.listing-derived": "approval",
   "extension_store.disconnect": "console",
   "extension_builds.delete-channel": "console",
   "extension_project.delete": "console",
@@ -68,6 +73,7 @@ export interface PolicyWrite {
   releaseChannel?: string;
   audience?: string;
   visibility?: string;
+  derived?: boolean;
 }
 
 const lower = (value: unknown): string => (typeof value === "string" ? value.trim().toLowerCase() : "");
@@ -96,6 +102,8 @@ export function approvalVerdict(act: PolicyAct, write: PolicyWrite = {}): Approv
   }
 
   if (act === "extension_project.visibility" && publicProjectVisibility(write)) return APPROVAL_POLICY["extension_project.visibility-public"];
+
+  if (act === "extension_store.listing" && write.derived === true) return APPROVAL_POLICY["extension_store.listing-derived"];
 
   return APPROVAL_POLICY[act];
 }

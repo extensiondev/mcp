@@ -51,7 +51,7 @@ const SAFARI_REQUIREMENTS = {
       status: "missing",
     }),
     requirement({ id: "safari.app_privacy", label: "App Privacy answers", satisfiedBy: "store-dashboard", how: "Answer the App Privacy sheet once in App Store Connect; it has no API.", status: "unknown" }),
-    requirement({ id: "safari.subtitle", label: "Subtitle", required: false, format: "Up to 30 characters.", satisfiedBy: "store-md: Summary", status: "missing" }),
+    requirement({ id: "safari.subtitle", label: "Subtitle", required: false, format: "Up to 30 characters.", satisfiedBy: "store-md: Subtitle", status: "missing", actual: "missing (optional), add `- Subtitle:` under `## Listing`" }),
   ],
   missingRequired: 2,
   missingOptional: 1,
@@ -246,6 +246,33 @@ describe("extension_submit preflight carries what each store asks for and says w
     expect(out.value.stores.chrome.storeMd.notCovered.some((line: string) => line.startsWith("screenshots"))).toBe(false);
     expect(out.value.trackUrl ?? out.value.storesPageUrl).toBeTruthy();
     expect(JSON.stringify(out)).not.toMatch(/github\.com|actions\/runs/);
+  });
+
+  it("answers the App Store subtitle have from a `- Subtitle:` line and keeps it missing, with the line to add, when STORE.md has only a Summary", async () => {
+    if (process.platform === "win32") return;
+
+    platform.login();
+    platform.routes[`POST ${PREFLIGHT("safari")}`] = () => ({ body: report("safari", false, SAFARI_REQUIREMENTS) });
+
+    const only = JSON.parse(await submit({ action: "preflight", browsers: ["safari"], projectPath: walkProject(), api: API }));
+    const item = (out: { value: { stores: { safari: { requirements: { items: Array<Record<string, unknown>> } } } } }) =>
+      out.value.stores.safari.requirements.items.find((row) => row.id === "safari.subtitle");
+
+    expect(item(only)).toMatchObject({ status: "missing", satisfiedBy: "store-md: Subtitle", actual: "missing (optional), add `- Subtitle:` under `## Listing`" });
+    expect(only.value.stores.safari.requirements.missingOptional).toBe(1);
+
+    const written = JSON.parse(
+      await submit({
+        action: "preflight",
+        browsers: ["safari"],
+        projectPath: walkProject(WALK_STORE_MD.replace("- Summary:", "- Subtitle: Blur names on screen\n- Summary:")),
+        api: API,
+      }),
+    );
+
+    expect(item(written)).toMatchObject({ status: "have", satisfiedBy: "store-md: - Subtitle:", actual: "in STORE.md; sync-listing writes it" });
+    expect(written.value.stores.safari.requirements.missingOptional).toBe(0);
+    expect(JSON.stringify(written)).not.toMatch(/when it fits/);
   });
 
   it("keeps the Screenshots item missing when the line is there in a form the reader rejects, naming the line it wants in the item and in the storeMd block", async () => {

@@ -45,6 +45,7 @@ const NAMED_AT_MOST = 8;
 
 const STORE_MD_REFS: Record<string, ListingField | "screenshots"> = {
   name: "title",
+  subtitle: "subtitle",
   summary: "shortDescription",
   description: "fullDescription",
   category: "categories",
