@@ -96,9 +96,13 @@ export interface ReadyContract {
   reloadLabel?: string;
   runtime?: string;
   profilePath?: string;
+  profileReused?: boolean;
   browserPid?: number | null;
   launcherPid?: number;
   extensionId?: string;
+  browserUpNotAttachedAt?: string;
+  browserUpNotAttachedWaitMs?: number;
+  browserUpNotAttachedHint?: string;
 }
 
 export interface ProcessInfo {

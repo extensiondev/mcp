@@ -15,6 +15,7 @@ import {
   ambiguousSessionRefusal,
   resolveSessionBrowser,
 } from "../lib/session-browser";
+import { pidState } from "../lib/process-identity";
 import { readyContractPath } from "../lib/session-paths";
 import { productionLaunchEvidence, readLoadOverDebugPort } from "../lib/production-launch";
 import { sessionPorts } from "../lib/session-ports";
@@ -25,7 +26,11 @@ import {
 import { verifyGuestLoaded } from "../lib/guest-load-oracle";
 import { detachedVerdictFrame, readDetachedVerdict } from "../lib/background-liveness";
 import { WAIT_MODE_PROPERTIES, contractErrorList, waitModeFrame } from "../lib/wait-modes";
-import { notAttachedHint } from "../lib/safari-dev-options";
+import {
+  browserUpNotAttached,
+  browserUpNotAttachedAnswer,
+  compiledNotAttachedAnswer,
+} from "../lib/compiled-not-attached";
 import { safariSigningFrame } from "../lib/safari-signing";
 import { recentErrorLogs } from "./doctor";
 
@@ -36,15 +41,7 @@ const DEFAULT_TIMEOUT_MS = 45_000;
 const MIN_TIMEOUT_MS = 1_000;
 const CONTRACT_MTIME_GRANULARITY_SLACK_MS = 2_000;
 
-function isAlive(pid: number): boolean {
-  try {
-    process.kill(pid, 0);
-
-    return true;
-  } catch {
-    return false;
-  }
-}
+const isAlive = (pid: number): boolean => pidState(pid) !== "dead";
 
 export const schema = {
   name: "extension_wait",
@@ -289,6 +286,18 @@ export async function handler(args: {
           });
         }
 
+        if (!attached && browserUpNotAttached(contract)) {
+          return browserUpNotAttachedAnswer(contract, {
+            command: schema.name,
+            projectPath: args.projectPath,
+            browser,
+            readyPath,
+            budgetMs,
+            elapsedMs: Date.now() - start,
+            warnings: [clampNote, staleContractNote],
+          });
+        }
+
         if (!attached) {
           await sleep(pollInterval);
           sawCompiledButUnattached = true;
@@ -381,26 +390,14 @@ export async function handler(args: {
   }
 
   if (sawCompiledButUnattached) {
-    const signingFrame = await safariSigningFrame(args.projectPath, browser);
-
-    return envelope({
-      ok: false,
+    return compiledNotAttachedAnswer({
       command: schema.name,
-      status: "compiled-not-attached",
-      error: {
-        code: "E_NOT_ATTACHED",
-        message: `The extension compiled, but the runtime executor never attached within this call's ${budgetMs}ms budget. The build is fine; the browser side is not connected, so extension_eval/storage/reload/open will fail with "no executor connected".`,
-      },
-      value: {
-        compiled: true,
-        browserAttached: false,
-        readyPath,
-        budgetMs,
-        elapsedMs: Date.now() - start,
-        ...(signingFrame ? { signing: signingFrame.signing } : {}),
-      },
-      warnings: [clampNote, staleContractNote, ...(signingFrame?.warnings ?? [])],
-      hint: [notAttachedHint(browser, findSessionInfo(args.projectPath, browser)?.enableExtension === true), ...(signingFrame?.hints ?? [])].join(" "),
+      projectPath: args.projectPath,
+      browser,
+      readyPath,
+      budgetMs,
+      elapsedMs: Date.now() - start,
+      warnings: [clampNote, staleContractNote],
     });
   }
 

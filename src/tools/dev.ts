@@ -58,6 +58,10 @@ import {
   type SafariDevOptionArgs,
 } from "../lib/safari-dev-options";
 import { safariSigningFrame } from "../lib/safari-signing";
+import {
+  NO_ATTACH_DIAGNOSIS_NOTE,
+  browserUpNotAttachedRelay,
+} from "../lib/compiled-not-attached";
 
 export const schema = {
   name: "extension_dev",
@@ -425,13 +429,41 @@ export async function handler(
         ? "Port 0 asked the engine for any free port, and it has not stamped its ready.json contract yet, so the port it picked is not known at response time. extension_wait reports it from that contract once it lands."
         : "The engine has not stamped its ready.json contract yet, so the bound port is not known at response time (a taken port makes the server bind the next free one). extension_wait reports the bound port from that contract once it lands; requestedPort above is only what was asked for.";
 
+  const diagnosis = readiness ? browserUpNotAttachedRelay(readiness.ready) : null;
+
+  if (diagnosis) {
+    return envelope({
+      ok: false,
+      command: schema.name,
+      status: "compiled-not-attached",
+      error: { code: "E_NOT_ATTACHED", message: diagnosis.message },
+      value: {
+        pid,
+        browser,
+        ...portReport,
+        ...readiness,
+        ...diagnosis.value,
+        projectPath: args.projectPath,
+        ...(replaced.length > 0 ? { replacedSession: replaced[0] } : {}),
+        headless: visibility.headless,
+        capabilities,
+        engine: describeExtensionInvocation(args.projectPath),
+        logPath,
+      },
+      warnings: [portNote, ...boot.warnings, markerWarning],
+      hint: diagnosis.hint,
+    });
+  }
+
   const nextStep = sessionReady
     ? "The session is ready (ready.status: ready) and the first log lines are in firstLogs, so no extension_wait is needed: extension_inspect reads the live state and extension_logs the console."
     : readiness
       ? `ready.status is ${readiness.ready.status}, not ready: ${
           readiness.ready.status === "compiled-not-attached" && isSafariTarget(browser)
             ? notAttachedHint(browser, Boolean(args.enableExtension))
-            : "call extension_wait to keep waiting on the same contract, then extension_inspect to inspect the live state."
+            : readiness.ready.status === "compiled-not-attached"
+              ? `call extension_wait to keep waiting on the same contract, then extension_inspect to inspect the live state; ${NO_ATTACH_DIAGNOSIS_NOTE}.`
+              : "call extension_wait to keep waiting on the same contract, then extension_inspect to inspect the live state."
         }`
       : "Use extension_wait to check when the extension is fully loaded, then extension_inspect to inspect the live state.";
 
