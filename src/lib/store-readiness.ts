@@ -20,6 +20,9 @@ import {
   nextStep,
   storeSettingsUrl,
   submitStep,
+  WORKSPACE_RECONNECT_STATE,
+  workspaceReconnectSentences,
+  workspaceStoreAccountsUrl,
   type NextStep,
   type StoreConnection,
 } from "./store-connection";
@@ -35,6 +38,7 @@ export type StoreState =
   | "store-item-not-linked"
   | "store-not-configured"
   | "store-unhealthy"
+  | "workspace-reconnect-required"
   | "not-checked";
 
 export type Verdict = StoreState | "platform-refused";
@@ -60,7 +64,7 @@ interface Context {
   api?: string;
 }
 
-const CONNECTION_STATES = new Set<StoreState>(["store-not-connected", "store-connection-failed", "store-item-not-linked"]);
+const CONNECTION_STATES = new Set<StoreState>(["store-not-connected", "store-connection-failed", "store-item-not-linked", "workspace-reconnect-required"]);
 
 export function isConnectionState(state: string): boolean {
   return CONNECTION_STATES.has(state as StoreState);
@@ -149,6 +153,10 @@ export function rowFromConnection(browser: string, connection: ConnectionRecord)
     return { ...base, ok: false, state: "store-not-connected", configured: false, reason: `No ${browser} store account is connected to this project.` };
   }
 
+  if (connection.state === WORKSPACE_RECONNECT_STATE) {
+    return { ...base, ...who, ok: false, state: "workspace-reconnect-required", configured: true, healthy: false, reason: connection.reason ?? "" };
+  }
+
   if (connection.healthy === false) {
     return { ...base, ...who, ok: false, state: "store-connection-failed", configured: true, healthy: false, reason: failedCheckSentence(connection.reason ?? "", browser, connection.source) };
   }
@@ -213,6 +221,12 @@ export function connectionStep(row: StoreRow, connection: ConnectionRecord | und
     const urls = itemLinkUrls([connection ?? {}], settingsUrl);
 
     return nextStep("link-item", linkItemSentences(urls), urls.linkItemUrl);
+  }
+
+  if (row.state === WORKSPACE_RECONNECT_STATE) {
+    const accountsUrl = workspaceStoreAccountsUrl(ctx.ref, ctx.api);
+
+    return nextStep("configure", workspaceReconnectSentences(row.reason ?? "", accountsUrl), accountsUrl);
   }
 
   const connectUrl = connection?.connectUrl || fallbackConnectUrl(ctx.ref, row.browser, ctx.api);

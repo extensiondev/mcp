@@ -34,6 +34,23 @@ export interface StoreConnection {
   itemLinked?: boolean;
   reason?: string;
   itemUrl?: string;
+  state?: string;
+}
+
+export const WORKSPACE_RECONNECT_STATE = "workspace-reconnect-required";
+
+/* @invariant A WORKSPACE ACCOUNT SAVED BEFORE THE PLATFORM'S VAULT IS
+ * RECONNECTED WITH THE SAME KEY, NEVER REPLACED. The platform answers such an
+ * account as connection.state "workspace-reconnect-required" with its own
+ * sentence in reason. On 2026-10-25 the preflight read it as not connected and
+ * told Rebeccat's owner to generate a new AMO key, which revokes the old one
+ * for every sibling project. So the answer is the platform's sentence and the
+ * workspace's Store accounts page, never a store's key page.
+ */
+export function workspaceReconnectSentences(reason: string, accountsUrl: string): string {
+  const said = reason.trim() || "This project uses a workspace store account saved before the platform kept store keys itself, so no run can read it yet. A workspace owner reconnects it once in the workspace's Store accounts with the same key the workspace already uses.";
+
+  return `${said} The workspace's Store accounts page is ${accountsUrl}; then say preflight again.`;
 }
 
 export interface ItemLinkUrls {
@@ -320,9 +337,12 @@ export function connectionOf(json: Row): (StoreConnection & Partial<ItemLinkUrls
     .map((key) => [key, text(row[key]) || text(json[key])] as const)
     .filter(([, url]) => url);
 
+  const state = text(row.state);
+
   return {
     kind,
     ...(source ? { source } : {}),
+    ...(state ? { state } : {}),
     connectedAs: text(row.connectedAs) || null,
     healthy: typeof row.healthy === "boolean" ? row.healthy : null,
     itemId: text(row.itemId) || null,

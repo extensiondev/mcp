@@ -46,11 +46,13 @@ import {
   ITEM_NOT_LINKED_CODE,
   NOT_CONNECTED_CODES,
   PUBLISH_APPROVAL_SENTENCE,
+  WORKSPACE_RECONNECT_STATE,
   connectSentences,
   connectionOf,
   connectionSourceOf,
   reportConnectionSource,
   workspaceAccountSentence,
+  workspaceReconnectSentences,
   workspaceStoreAccountsUrl,
   failedCheckSentence,
   fallbackConnectUrl,
@@ -776,6 +778,43 @@ export async function preflight(args: StoreActArgs): Promise<string> {
       },
       hint: say,
       warnings: [unreadLine, "This read wrote nothing."],
+    });
+  }
+
+  const reconnecting = asked.find(
+    (store) => reports[store] && connectionOf(reports[store])?.state === WORKSPACE_RECONNECT_STATE,
+  );
+
+  if (reconnecting) {
+    const accountsUrl = workspaceStoreAccountsUrl(api.ref, args.api);
+    const say = workspaceReconnectSentences(
+      text(connectionOf(reports[reconnecting])?.reason),
+      accountsUrl,
+    );
+    const others = blocked.filter((store) => store !== reconnecting);
+
+    return envelope({
+      ok: true,
+      command: COMMAND,
+      status: WORKSPACE_RECONNECT_STATE,
+      value: {
+        action: "preflight",
+        stores,
+        storesPageUrl,
+        connectionSource: "workspace",
+        workspaceStoreAccountsUrl: accountsUrl,
+        trackUrl: accountsUrl,
+        sayToPerson: say,
+        nextStep: nextStep("configure", say, accountsUrl),
+      },
+      hint: say,
+      warnings: [
+        others.length
+          ? `${others.join(", ")} cannot be submitted yet either; each failing check says what to fix.`
+          : null,
+        unreadLine,
+        "This read wrote nothing.",
+      ],
     });
   }
 
