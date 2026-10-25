@@ -187,6 +187,41 @@ describe("extension_builds reads the platform's builds with the project's own to
     expect(calls.some((call) => call.url.startsWith(`${API}/api/projects/${PROJECT_ID}/builds?limit=`))).toBe(true);
   });
 
+  it("leads with a branch head the platform has not built and passes the last push through", async () => {
+    if (process.platform === "win32") return;
+
+    login();
+    const lastPush = {
+      commit: "4478aff",
+      ref: "main",
+      receivedAt: "2026-10-24T23:50:33.000Z",
+      outcome: "PUSH_BUILDS_EXHAUSTED",
+      dispatched: false,
+    };
+    const headLag = {
+      branch: "main",
+      headCommit: "4478aff",
+      lastBuildId: "603fc8a",
+      lastBuildAt: "2026-10-11T16:45:37.000Z",
+      reason: "push_refused",
+      pushCode: "PUSH_BUILDS_EXHAUSTED",
+      pushReceivedAt: "2026-10-24T23:50:33.000Z",
+      restarting: false,
+      message:
+        "main is at 4478aff, last build 603fc8a, no build started for it. The push arrived and was not built (PUSH_BUILDS_EXHAUSTED). Build it from the builds page or with a rebuild if you want it.",
+    };
+    routes[`/api/projects/${PROJECT_ID}/builds`] = {
+      body: { items: [BUILD_ROW], latest: BUILD_ROW, lastPush, headLag },
+    };
+
+    const out = JSON.parse(await builds({ api: API }));
+
+    expect(out.value.lastPush).toEqual(lastPush);
+    expect(out.value.headLag).toEqual(headLag);
+    expect(out.value.sayToPerson).toBe(headLag.message);
+    expect(out.hint.startsWith(headLag.message)).toBe(true);
+  });
+
   it("gets one build with its artifacts, an integrity summary per browser, and usage", async () => {
     if (process.platform === "win32") return;
 

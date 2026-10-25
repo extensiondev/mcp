@@ -179,7 +179,13 @@ async function listBuilds(args: HandlerArgs): Promise<string> {
   if (!opened.ok) return projectApiOpenFailure(COMMAND, opened, { api: args.api, name: "Builds", value: { action: "list" } });
 
   const limit = Math.min(Math.max(Math.floor(Number(args.limit) || DEFAULT_LIMIT), 1), MAX_LIMIT);
-  const read = await projectApiGet<{ items?: unknown[]; dispatchDisabled?: boolean; pushRefusal?: unknown }>(
+  const read = await projectApiGet<{
+    items?: unknown[];
+    dispatchDisabled?: boolean;
+    pushRefusal?: unknown;
+    lastPush?: unknown;
+    headLag?: unknown;
+  }>(
     opened.api,
     "builds",
     { limit },
@@ -192,6 +198,9 @@ async function listBuilds(args: HandlerArgs): Promise<string> {
   const project = `${opened.api.ref.workspace}/${opened.api.ref.project}`;
   const buildsPageUrl = consoleProjectUrl(opened.api.ref, ConsoleProjectPage.builds, args.api);
   const cancelledSentences = rows.filter((row) => row.status === "cancelled").map((row) => cancelledSentence(text(row.buildId), row.supersededBy));
+  const lastPush = isRow(read.json?.lastPush) ? read.json.lastPush : null;
+  const headLag = isRow(read.json?.headLag) && text(read.json.headLag.message) ? read.json.headLag : null;
+  const spoken = [...(headLag ? [text(headLag.message)] : []), ...cancelledSentences];
 
   return envelope({
     ok: true,
@@ -205,16 +214,19 @@ async function listBuilds(args: HandlerArgs): Promise<string> {
       limit,
       ...(read.json?.dispatchDisabled === true ? { dispatchDisabled: true } : {}),
       ...(read.json?.pushRefusal ? { pushRefusal: read.json.pushRefusal } : {}),
+      ...(lastPush ? { lastPush } : {}),
+      ...(headLag ? { headLag } : {}),
       buildsPageUrl,
       trackUrl: buildsPageUrl,
-      ...(cancelledSentences.length ? { sayToPerson: cancelledSentences.join(" ") } : {}),
+      ...(spoken.length ? { sayToPerson: spoken.join(" ") } : {}),
     },
-    hint:
+    hint: `${headLag ? `${text(headLag.message)} ` : ""}${
       rows.length > 0
         ? `${rows.length} recent build${rows.length === 1 ? "" : "s"} of ${project}, newest first; the latest is ${rows[0].buildId} (${rows[0].status ?? "status unknown"}). Pass action:"get" or action:"logs" with a buildId to read one.${
             rows.some((row) => row.status === "partial") ? " A partial build finished with at least one browser failed; failedBrowsers names them." : ""
           }${cancelledSentences.length ? ` ${cancelledSentences.join(" ")}` : ""}`
-        : `No builds are recorded for ${project} yet. Push a commit to produce one, then check ${buildsPageUrl}.`,
+        : `No builds are recorded for ${project} yet. Push a commit to produce one, then check ${buildsPageUrl}.`
+    }`,
     warnings: [
       rows.length === limit
         ? `This is the newest ${limit}; raise limit (max ${MAX_LIMIT}) to see older builds.`
