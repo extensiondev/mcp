@@ -196,7 +196,7 @@ export const schema = {
       },
       channel: {
         type: "string",
-        description: "Release channel to submit from (default stable).",
+        description: "Release channel label the submission is recorded under (default stable). The build sent is always buildSha; a channel pointing at another build changes nothing that is uploaded.",
       },
       version: {
         type: "string",
@@ -910,7 +910,7 @@ async function answer(args: SubmitToolArgs): Promise<string> {
         browsers,
         ctx,
       ),
-      ref
+      ref && String(args.channel || "").trim()
         ? fetchRegistryJson(
             registryFileUrl(ref, "channels.json", args.api),
             fetch,
@@ -928,6 +928,7 @@ async function answer(args: SubmitToolArgs): Promise<string> {
       (channelDefaulted ? "stable" : String(args.channel).trim());
 
     if (
+      !channelDefaulted &&
       channelRows &&
       !channelRows.some(
         (r) =>
@@ -936,9 +937,9 @@ async function answer(args: SubmitToolArgs): Promise<string> {
       )
     ) {
       warnings.push(
-        `Channel "${resolvedChannel}"${channelDefaulted ? " (the default)" : ""} does not exist in this project's channels (existing: ${
+        `Channel "${resolvedChannel}" is not one of this project's release channels (existing: ${
           channelRows.map((r) => r.channel).join(", ") || "none"
-        }), so a real submission from it has no promoted build to serve. Promote a build there first (extension_release_promote) or pass an existing channel.`,
+        }). The submission still sends build ${buildSha} as named; the channel is only the label its store records carry, so pass an existing channel if those records should match a release channel.`,
       );
     }
 

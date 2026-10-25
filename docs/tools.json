@@ -408,7 +408,7 @@
           "name": "waitSeconds",
           "type": "number",
           "required": false,
-          "description": "How long, in seconds, this call waits for the platform's own record to show the act's result before answering: 0 to 600, default 180. 0 reads the record once and answers at once. When the bound passes first, the status is <act>-dispatched with value.outcome.recorded false, and the hint names the read that confirms it later."
+          "description": "How long, in seconds, this call waits for the platform's own record to show the act's result before answering: 0 to 600, default 180. 0 reads the record once and answers at once. When the bound passes first, the status is <act>-dispatched with value.outcome.recorded false, and the hint names the read that confirms it later. With approvalId, a call that names waitSeconds also waits for an approval nobody has decided yet: it polls the approval every retryAfterSeconds up to the bound, and once a person approves it goes straight on to the act and the record wait in the same call, with what is left of the bound."
         },
         {
           "name": "api",
@@ -1382,7 +1382,7 @@
           "name": "waitSeconds",
           "type": "number",
           "required": false,
-          "description": "How long, in seconds, this call waits for the platform's own record to show the act's result before answering: 0 to 600, default 180. 0 reads the record once and answers at once. When the bound passes first, the status is <act>-dispatched with value.outcome.recorded false, and the hint names the read that confirms it later."
+          "description": "How long, in seconds, this call waits for the platform's own record to show the act's result before answering: 0 to 600, default 180. 0 reads the record once and answers at once. When the bound passes first, the status is <act>-dispatched with value.outcome.recorded false, and the hint names the read that confirms it later. With approvalId, a call that names waitSeconds also waits for an approval nobody has decided yet: it polls the approval every retryAfterSeconds up to the bound, and once a person approves it goes straight on to the act and the record wait in the same call, with what is left of the bound."
         },
         {
           "name": "api",
@@ -1470,7 +1470,7 @@
           "name": "waitSeconds",
           "type": "number",
           "required": false,
-          "description": "How long, in seconds, this call waits for the platform's own record to show the act's result before answering: 0 to 600, default 180. 0 reads the record once and answers at once. When the bound passes first, the status is <act>-dispatched with value.outcome.recorded false, and the hint names the read that confirms it later."
+          "description": "How long, in seconds, this call waits for the platform's own record to show the act's result before answering: 0 to 600, default 180. 0 reads the record once and answers at once. When the bound passes first, the status is <act>-dispatched with value.outcome.recorded false, and the hint names the read that confirms it later. With approvalId, a call that names waitSeconds also waits for an approval nobody has decided yet: it polls the approval every retryAfterSeconds up to the bound, and once a person approves it goes straight on to the act and the record wait in the same call, with what is left of the bound."
         },
         {
           "name": "api",
@@ -2037,7 +2037,7 @@
           "name": "channel",
           "type": "string",
           "required": false,
-          "description": "Release channel to submit from (default stable)."
+          "description": "Release channel label the submission is recorded under (default stable). The build sent is always buildSha; a channel pointing at another build changes nothing that is uploaded."
         },
         {
           "name": "version",
@@ -2104,7 +2104,7 @@
           "name": "waitSeconds",
           "type": "number",
           "required": false,
-          "description": "How long, in seconds, this call waits for the platform's own record to show the act's result before answering: 0 to 600, default 180. 0 reads the record once and answers at once. When the bound passes first, the status is <act>-dispatched with value.outcome.recorded false, and the hint names the read that confirms it later."
+          "description": "How long, in seconds, this call waits for the platform's own record to show the act's result before answering: 0 to 600, default 180. 0 reads the record once and answers at once. When the bound passes first, the status is <act>-dispatched with value.outcome.recorded false, and the hint names the read that confirms it later. With approvalId, a call that names waitSeconds also waits for an approval nobody has decided yet: it polls the approval every retryAfterSeconds up to the bound, and once a person approves it goes straight on to the act and the record wait in the same call, with what is left of the bound."
         }
       ]
     },

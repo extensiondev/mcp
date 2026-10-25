@@ -315,7 +315,7 @@ function selectEntry(
     const session = held ? live.find(([key]) => key === held) : undefined;
     const chosen = session ?? live.find(([key]) => key === store.active) ?? live[live.length - 1];
 
-    if (chosen && file && !session) keepLogin(file, server, chosen[0]);
+    if (chosen && file && !session && live.length === 1) keepLogin(file, server, chosen[0]);
 
     return chosen?.[1] ?? null;
   }

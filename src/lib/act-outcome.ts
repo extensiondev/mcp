@@ -20,7 +20,7 @@ export const OUTCOME_POLL_MS = 5_000;
 export const WAIT_SECONDS_INPUT = {
   type: "number",
   description:
-    "How long, in seconds, this call waits for the platform's own record to show the act's result before answering: 0 to 600, default 180. 0 reads the record once and answers at once. When the bound passes first, the status is <act>-dispatched with value.outcome.recorded false, and the hint names the read that confirms it later.",
+    "How long, in seconds, this call waits for the platform's own record to show the act's result before answering: 0 to 600, default 180. 0 reads the record once and answers at once. When the bound passes first, the status is <act>-dispatched with value.outcome.recorded false, and the hint names the read that confirms it later. With approvalId, a call that names waitSeconds also waits for an approval nobody has decided yet: it polls the approval every retryAfterSeconds up to the bound, and once a person approves it goes straight on to the act and the record wait in the same call, with what is left of the bound.",
 };
 
 export const outcomeClock = {

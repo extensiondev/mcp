@@ -15,7 +15,11 @@
  * signed in to rebeccat a minute earlier, while every call before it had
  * resolved leon. So the first unnamed resolve on a server records the key it
  * chose, per store file and per platform server, and every later unnamed
- * call uses that same entry while it is still stored. Only this process
+ * call uses that same entry while it is still stored. It records one only
+ * when the server holds a single login then: with several and none chosen
+ * here, the newest is a guess (ledger 252 answered leon for a rebeccat
+ * directory after a reconnect), so a platform call that names neither a
+ * project nor a project directory is refused instead. Only this process
  * moves it: a login or logout made through this server, or a rename the
  * platform answers. A call that names `project` never consults it.
  */

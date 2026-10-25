@@ -13,6 +13,7 @@ import {
 
 import { bindApprovalLogin } from "./approval-login";
 import { openApprovalOnce } from "./approval-open";
+import { answerOnceDecided } from "./approval-wait";
 import { bindApprovalProject } from "./approval-record";
 import { withApprovalLogin } from "./approval-scope";
 import { envelope, isEnvelope, type Envelope } from "./envelope";
@@ -26,6 +27,7 @@ import {
   toolTitle,
 } from "./tool-policy";
 import { withCallApi } from "./origins";
+import { bindCallProject, stampAnsweredFor } from "./project-binding";
 import { followProjectMove, followSentence, movedAnswer } from "./project-move";
 import { scrubRunAnswer } from "./run-privacy";
 import { createReloader, handoverState, type BuildImporter, type RebuiltCall, type ToolFrame } from "./server-reload";
@@ -262,12 +264,19 @@ export function createToolDispatcher(setup: ToolHandlerOptions): (call: RebuiltC
         withApprovalLogin(held.login, () =>
         run(
           async () => {
-            const answered = await tool.handler(normalizedArgs);
-            const answer = annotate(platform ? await followedOnce(answered, normalizedArgs, tool.handler) : answered, { note: bound.note });
+            if (!platform) return annotate(await tool.handler(normalizedArgs), { note: bound.note });
 
-            if (!platform) return answer;
+            const scoped = bindCallProject(name, normalizedArgs, tool.schema.inputSchema, options);
 
-            const shaped = stamp.apply(scrubRunAnswer(attachTrack(name, normalizedArgs, shapeStoreAnswer(name, normalizedArgs, answer))));
+            if ("refused" in scoped) return stamp.apply(scoped.refused);
+
+            const callArgs = scoped.args;
+            const answered = await answerOnceDecided(callArgs, tool.handler);
+            const followed = await followedOnce(answered, callArgs, tool.handler);
+            const answer = annotate(annotate(followed, { note: bound.note }), { note: scoped.note });
+            const shaped = stamp.apply(
+              scrubRunAnswer(attachTrack(name, callArgs, shapeStoreAnswer(name, callArgs, stampAnsweredFor(answer, scoped.answeredFor)))),
+            );
 
             return setup.openApprovals ? openApprovalOnce(shaped, options) : shaped;
           },
