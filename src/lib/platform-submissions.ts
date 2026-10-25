@@ -12,6 +12,8 @@ import { platformFetch } from "./platform-fetch";
 import { platformApiGet, type ProjectApi } from "./project-api";
 import { identityHeaders } from "./session-identity";
 
+export const RETRIED_SENTENCE = "GitHub canceled the run before upload; the platform started it again.";
+
 export interface SubmissionRun {
   status?: string;
   conclusion?: string;
@@ -72,6 +74,8 @@ export interface PlatformSubmission {
   storeReview?: StoreReview;
   storeUpload?: StoreUpload;
   failure?: StepFailure;
+  retryOf?: string;
+  retriedAs?: string;
   run: SubmissionRun;
 }
 
@@ -84,6 +88,24 @@ function str(value: unknown): string | undefined {
   const text = String(value ?? "").trim();
 
   return text || undefined;
+}
+
+/* @invariant A RECORD SAYS THE RETRY ONCE, AND ONLY WHILE IT IS TRUE NEWS.
+ * The record GitHub canceled names its retry in `retriedAs`, and the retry
+ * names the record it replaces in `retryOf`; the sentence is said for the
+ * first, and for the second only while it is still running, since a settled
+ * retry speaks for itself through its own status and reason.
+ */
+export function retryNote(
+  submission: { status?: string; retryOf?: string; retriedAs?: string },
+  alreadySaid?: string,
+): string | null {
+  const retried = Boolean(str(submission.retriedAs)) ||
+    (Boolean(str(submission.retryOf)) && ["pending", "submitted"].includes(str(submission.status) ?? ""));
+
+  if (!retried || String(alreadySaid ?? "").includes(RETRIED_SENTENCE)) return null;
+
+  return RETRIED_SENTENCE.replace(/\.$/, "");
 }
 
 function sameProject(a: { workspace: string; project: string }, b: { workspace: string; project: string }): boolean {
@@ -211,6 +233,8 @@ export function toSubmission(raw: Record<string, unknown>): PlatformSubmission |
     ["failureReason", raw.failureReason],
     ["storeUrl", raw.storeUrl],
     ["sourceArchive", raw.sourceArchive],
+    ["retryOf", raw.retryOf],
+    ["retriedAs", raw.retriedAs],
   ];
 
   for (const [key, value] of fields) {

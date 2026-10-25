@@ -174,9 +174,17 @@ function submitPlan(call: TrackCall): TrackPlan {
     return { track: { page: store ? "store" : "submissions", target: { store } } };
   }
 
+  const retried = new Map(
+    (Array.isArray(call.value.retried) ? call.value.retried : [])
+      .filter(isRow)
+      .map((row) => [text(row.store), text(row.submissionId)] as const),
+  );
   const recorded = (call.args.dryRun === false && Array.isArray(call.value.submissions) ? call.value.submissions : [])
     .filter(isRow)
-    .map((row) => ({ store: text(row.store), submissionId: text(row.id) || text(row.submissionId) }))
+    .map((row) => ({
+      store: text(row.store),
+      submissionId: retried.get(text(row.store)) || text(row.id) || text(row.submissionId),
+    }))
     .filter((row) => row.store);
 
   if (recorded.length) {

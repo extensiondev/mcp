@@ -46,6 +46,7 @@ import {
   type Verdict,
 } from "../lib/act-outcome";
 import {
+  RETRIED_SENTENCE,
   readSubmissionRecords,
   type PlatformSubmission,
 } from "../lib/platform-submissions";
@@ -303,10 +304,27 @@ function packageRefusedSentences(args: {
   return `The Edge package of build ${args.buildSha} carries ${count || "some"} compressed ${count === 1 ? "file" : "files"}${named}, and Partner Center refuses any archive inside an extension package, so nothing was submitted. Ship the files uncompressed and rebuild; for Tesseract, ${TESSERACT_HINT}. Then submit again; the build is at ${args.buildUrl}.`;
 }
 
+interface StoreRetry {
+  retryOf: string;
+  submissionId: string;
+}
+
+/* @invariant A RUN GITHUB CANCELED BEFORE UPLOAD IS FOLLOWED TO ITS RETRY,
+ * NEVER CALLED FAILED.
+ *
+ * The platform settles such a run on the first read of its record and starts
+ * the store once more; the record this call dispatched then reads `failed`
+ * and names the retry in `retriedAs`. Judging that record would answer
+ * submit-failed and tell the person to submit again, which is the second
+ * submission the retry exists to spare them. So the judge moves the store's
+ * id to the retry, keeps waiting, and later reads judge the retry's own
+ * record; a retry is never retried, so its own failure is a real one.
+ */
 function judgeSubmit(
   byStore: Record<string, PlatformSubmission>,
   stores: string[],
   ids: Record<string, string>,
+  retried: Record<string, StoreRetry> = {},
 ): Verdict {
   const settled: Array<{
     store: string;
@@ -318,6 +336,15 @@ function judgeSubmit(
 
   for (const store of stores) {
     const record = byStore[store];
+    const retriedAs = String(record?.retriedAs ?? "").trim();
+
+    if (record && retriedAs && (!ids[store] || record.id === ids[store])) {
+      retried[store] = { retryOf: String(record.id ?? "").trim(), submissionId: retriedAs };
+      ids[store] = retriedAs;
+      waiting.push(`${store}: ${RETRIED_SENTENCE}`);
+      continue;
+    }
+
     const status = record
       ? String(record.status ?? "")
           .trim()
@@ -1063,7 +1090,8 @@ async function answer(args: SubmitToolArgs): Promise<string> {
         ? [{ kind: "item" as const, url: itemUrl, audience: "you" as const }]
         : []),
     ]);
-    const firstPage =
+    const retried: Record<string, StoreRetry> = {};
+    const openingPage =
       links.find((link) => link.kind === "submission")?.url ??
       consoleProjectUrl(
         credential.ref,
@@ -1080,9 +1108,38 @@ async function answer(args: SubmitToolArgs): Promise<string> {
           token,
           command: "extension_submit",
         }),
-      judge: (byStore) => judgeSubmit(byStore, outcome.stores, ids),
+      judge: (byStore) => judgeSubmit(byStore, outcome.stores, ids, retried),
     });
-    const made = madeSentence(links);
+    const retries = Object.entries(retried).map(([store, row]) => ({
+      store,
+      retryOf: row.retryOf,
+      submissionId: row.submissionId,
+      trackUrl: consoleTrackUrl(
+        "submission",
+        { ...refTarget, store, submissionId: row.submissionId },
+        args.api,
+      ),
+    }));
+    const actLinks: ActLink[] = retries.length
+      ? [
+          ...linksOf(
+            retries.map((row) => ({
+              kind: "submission" as const,
+              url: row.trackUrl,
+              made: true,
+            })),
+          ),
+          ...links,
+        ]
+      : links;
+    const firstPage = retries[0]?.trackUrl ?? openingPage;
+    const retryLine = retries.length
+      ? `${retries.map((row) => row.store).join(", ")}: ${RETRIED_SENTENCE}`
+      : "";
+    const made = [retryLine, madeSentence(actLinks)].filter(Boolean).join(" ");
+
+    if (retries.length) result.retried = retries;
+
     const failedStores = waited.outcome.recorded
       ? outcome.stores.filter((store) =>
           FAILED_STATUSES.has(
@@ -1104,7 +1161,7 @@ async function answer(args: SubmitToolArgs): Promise<string> {
               Boolean(row.record?.failure?.step),
           )
       : [];
-    const step = !waited.outcome.recorded
+    const judgedStep = !waited.outcome.recorded
       ? dispatchedStep(outcome.stores, firstPage)
       : uploadedFailures.length
         ? uploadedStepFailedStep(
@@ -1113,9 +1170,12 @@ async function answer(args: SubmitToolArgs): Promise<string> {
             firstPage,
           )
         : doneStep(outcome.stores, itemUrl);
+    const step = retryLine
+      ? { ...judgedStep, say: `${retryLine} ${judgedStep.say}` }
+      : judgedStep;
 
     result.outcome = waited.outcome;
-    result.links = links;
+    result.links = actLinks;
     result.nextStep = step;
     result.sayToPerson = step.say;
 
@@ -1199,7 +1259,7 @@ async function answer(args: SubmitToolArgs): Promise<string> {
         command: "extension_submit",
         status: "submitted",
         value: result,
-        hint: `${step.say}${sourcesLine} ${made}`,
+        hint: `${judgedStep.say}${sourcesLine} ${made}`,
         warnings: [...warnings, channelNote, statusNote, credential.note],
       });
     }

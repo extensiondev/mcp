@@ -19,6 +19,7 @@ import { platformHoldEnvelope } from "../lib/platform-hold";
 import {
   isNewerOrSame,
   readPlatformSubmissions,
+  retryNote,
   type SubmissionRun,
 } from "../lib/platform-submissions";
 import {
@@ -410,6 +411,9 @@ export async function readStores(args: {
           ? run.message.slice(reason.length).trim()
           : run?.message;
       if (runNote) tail.push(runNote);
+
+      const retry = retryNote(submission, runNote);
+      if (retry) tail.push(retry);
     } else if (row.configured === true) {
       tail.push(
         submissionsKnown || (records.ok && records.history[store])
