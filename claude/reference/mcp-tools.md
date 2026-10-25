@@ -440,7 +440,7 @@ Stop a session that extension_dev or extension_start is running: terminate the s
 
 ## extension_storage
 
-Read or write chrome.storage in a running extension. Every call runs in the extension's background (the engine honours no context), so it proves nothing about what a content script or page can read. A set is read back and the answer says whether the stored value matches. Rides the dev session's control channel, on unless extension_dev was called with allowControl:false. Set one key per call: there is no bulk-object set.
+Read or write chrome.storage in a running extension. Every call runs in the extension's background (the engine honors no context), so it proves nothing about what a content script or page can read. A set is read back and the answer says whether the stored value and its type match. Rides the dev session's control channel, on unless extension_dev was called with allowControl:false. One key per call.
 
 | input | type | required | default | description |
 | --- | --- | --- | --- | --- |
@@ -448,7 +448,8 @@ Read or write chrome.storage in a running extension. Every call runs in the exte
 | `action` | "get" \| "set" | yes |  | get reads a key (or the whole area); set writes a key |
 | `area` | "local" \| "sync" \| "session" \| "managed" | no | `"local"` |  |
 | `key` | string | no |  | Key to get or set |
-| `value` | any | no |  | Value to set (any JSON value); required for action=set |
+| `value` | any | no |  | Value to set (any JSON value); action=set needs value or valueJson. Some clients send null as the text "null" and an empty string as the two characters ""; both are refused here as ambiguous, so pass valueJson for them. |
+| `valueJson` | string | no |  | The value to set as JSON text, parsed by this server so its type survives any client: "null" stores null, "\"\"" an empty string, "0", "false", "[1,2]" and "{\"a\":1}" their own types. Pass value or valueJson, not both. |
 | `browser` | string | no |  | Session browser; defaults to this project's live session. Required when the project runs sessions for more than one browser: the call is refused with the list rather than picking one. |
 | `timeout` | number | no |  | Command timeout in ms. When omitted, the default depends on the route: 30000 through the dev session's control channel, 10000 over the Firefox debugger protocol, and 15000 per command over the Chromium debug port. |
 

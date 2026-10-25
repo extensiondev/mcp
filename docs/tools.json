@@ -1941,7 +1941,7 @@
       "name": "extension_storage",
       "tier": "act",
       "group": "local",
-      "description": "Read or write chrome.storage in a running extension. Every call runs in the extension's background (the engine honours no context), so it proves nothing about what a content script or page can read. A set is read back and the answer says whether the stored value matches. Rides the dev session's control channel, on unless extension_dev was called with allowControl:false. Set one key per call: there is no bulk-object set.",
+      "description": "Read or write chrome.storage in a running extension. Every call runs in the extension's background (the engine honors no context), so it proves nothing about what a content script or page can read. A set is read back and the answer says whether the stored value and its type match. Rides the dev session's control channel, on unless extension_dev was called with allowControl:false. One key per call.",
       "gate": "a dev session, which carries control unless started with allowControl: false",
       "samplePrompt": "Read chrome.storage.local and set settings.theme to dark",
       "readOnly": false,
@@ -1979,7 +1979,13 @@
           "name": "value",
           "type": "any",
           "required": false,
-          "description": "Value to set (any JSON value); required for action=set"
+          "description": "Value to set (any JSON value); action=set needs value or valueJson. Some clients send null as the text \"null\" and an empty string as the two characters \"\"; both are refused here as ambiguous, so pass valueJson for them."
+        },
+        {
+          "name": "valueJson",
+          "type": "string",
+          "required": false,
+          "description": "The value to set as JSON text, parsed by this server so its type survives any client: \"null\" stores null, \"\\\"\\\"\" an empty string, \"0\", \"false\", \"[1,2]\" and \"{\\\"a\\\":1}\" their own types. Pass value or valueJson, not both."
         },
         {
           "name": "browser",

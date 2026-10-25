@@ -16,6 +16,7 @@ import {
 } from "../lib/common-schema";
 import { actFrameJson, addWarning, patchValue, runActVerb, type ActArgs } from "../lib/act";
 import { envelope } from "../lib/envelope";
+import { jsonTextType, jsonType, sameJsonValue } from "../lib/json-value";
 import {
   ambiguousSessionRefusal,
   resolveSessionBrowser,
@@ -24,7 +25,7 @@ import {
 export const schema = {
   name: "extension_storage",
   description:
-    "Read or write chrome.storage in a running extension. Every call runs in the extension's background (the engine honours no context), so it proves nothing about what a content script or page can read. A set is read back and the answer says whether the stored value matches. Rides the dev session's control channel, on unless extension_dev was called with allowControl:false. Set one key per call: there is no bulk-object set.",
+    "Read or write chrome.storage in a running extension. Every call runs in the extension's background (the engine honors no context), so it proves nothing about what a content script or page can read. A set is read back and the answer says whether the stored value and its type match. Rides the dev session's control channel, on unless extension_dev was called with allowControl:false. One key per call.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -41,7 +42,13 @@ export const schema = {
       },
       key: { type: "string", description: "Key to get or set" },
       value: {
-        description: "Value to set (any JSON value); required for action=set",
+        description:
+          "Value to set (any JSON value); action=set needs value or valueJson. Some clients send null as the text \"null\" and an empty string as the two characters \"\"; both are refused here as ambiguous, so pass valueJson for them.",
+      },
+      valueJson: {
+        type: "string",
+        description:
+          "The value to set as JSON text, parsed by this server so its type survives any client: \"null\" stores null, \"\\\"\\\"\" an empty string, \"0\", \"false\", \"[1,2]\" and \"{\\\"a\\\":1}\" their own types. Pass value or valueJson, not both.",
       },
       browser: SESSION_BROWSER,
       timeout: CALL_TIMEOUT,
@@ -76,6 +83,7 @@ export async function handler(
     area?: string;
     key?: string;
     value?: unknown;
+    valueJson?: string;
   },
 ): Promise<string> {
   const ambiguous = ambiguousSessionRefusal(schema.name, args.projectPath, args.browser);
@@ -86,18 +94,43 @@ export async function handler(
   if (args.area) cli.push("--area", args.area);
   if (args.key) cli.push("--key", args.key);
 
+  let intended: unknown;
+  let looksLikeJsonText: string | null = null;
+
   if (args.action === "set") {
-    if (args.value === undefined) {
-      return envelope({
+    const refusal = (message: string) =>
+      envelope({
         ok: false,
         command: schema.name,
         status: "bad-request",
-        error: {
-          code: "E_BAD_REQUEST",
-          name: "BadRequest",
-          message: "storage set requires a value",
-        },
+        error: { code: "E_BAD_REQUEST", name: "BadRequest", message },
       });
+
+    if (args.value !== undefined && args.valueJson !== undefined) {
+      return refusal("storage set takes value or valueJson, not both.");
+    }
+
+    if (args.valueJson !== undefined) {
+      try {
+        intended = JSON.parse(args.valueJson);
+      } catch (err) {
+        return refusal(`valueJson is not JSON text (${(err as Error).message}). Quote a string inside it: valueJson: "\\"dark\\"" stores the string dark.`);
+      }
+    } else if (args.value === undefined) {
+      return refusal("storage set requires a value (or valueJson)");
+    } else {
+      intended = args.value;
+      const textType = typeof intended === "string" ? jsonTextType(intended) : null;
+
+      if (textType === "null" || textType === "string") {
+        const meant = textType === "null" ? "null" : JSON.stringify(JSON.parse(intended as string));
+
+        return refusal(
+          `value arrived as the text ${JSON.stringify(intended)}, which is how some clients send ${textType === "null" ? "JSON null" : `the string ${meant}`}; storing it would write those ${(intended as string).length} characters as a string. Pass valueJson: ${JSON.stringify(intended)} to store ${textType === "null" ? "null" : meant}, or valueJson: ${JSON.stringify(JSON.stringify(intended))} to store the text exactly as sent.`,
+        );
+      }
+
+      if (textType !== null) looksLikeJsonText = textType;
     }
 
     if (args.key === undefined) {
@@ -114,7 +147,7 @@ export async function handler(
       });
     }
 
-    cli.push("--value", JSON.stringify(args.value));
+    cli.push("--value", JSON.stringify(intended));
   }
 
   cli.push("--browser", browser);
@@ -134,7 +167,7 @@ export async function handler(
   if (args.context && args.context !== "background") {
     addWarning(
       parsed,
-      `context: "${args.context}" is not honoured: the engine runs every storage call in the background, so this says nothing about what the ${args.context} can read.`,
+      `context: "${args.context}" is not honored: the engine runs every storage call in the background, so this says nothing about what the ${args.context} can read.`,
     );
   }
 
@@ -167,14 +200,25 @@ export async function handler(
       readBack?.ok === true && readBack.value && typeof readBack.value === "object" && args.key in readBack.value
         ? (readBack.value as Record<string, unknown>)[args.key]
         : undefined;
-    const matches = readBack?.ok === true && JSON.stringify(stored) === JSON.stringify(args.value);
+    const present = stored !== undefined;
+    const matches = readBack?.ok === true && present && sameJsonValue(stored, intended);
     patchValue(parsed, {
       readBack: {
         key: args.key,
-        ...(readBack?.ok === true ? { value: stored === undefined ? null : stored, present: stored !== undefined } : { unreadable: String(readBack?.error?.message ?? readBackRaw.slice(0, 200)) }),
+        ...(readBack?.ok === true
+          ? { value: present ? stored : null, present, ...(present ? { type: jsonType(stored) } : {}) }
+          : { unreadable: String(readBack?.error?.message ?? readBackRaw.slice(0, 200)) }),
+        sentType: jsonType(intended),
         matches,
       },
     });
+
+    if (looksLikeJsonText) {
+      addWarning(
+        parsed,
+        `value arrived as a string that reads as JSON (${looksLikeJsonText}), so it was stored as that string. If you meant the ${looksLikeJsonText}, call again with valueJson: ${JSON.stringify(intended)}.`,
+      );
+    }
 
     if (!matches) {
       parsed.ok = false;
@@ -184,7 +228,7 @@ export async function handler(
         name: "SetUnconfirmed",
         message:
           readBack?.ok === true
-            ? `The engine accepted the set, but reading "${args.key}" back from storage.${args.area ?? "local"} answered ${stored === undefined ? "no such key" : JSON.stringify(stored)}, not the value sent.`
+            ? `The engine accepted the set, but reading "${args.key}" back from storage.${args.area ?? "local"} answered ${present ? `${JSON.stringify(stored)} (${jsonType(stored)})` : "no such key"}, not the value sent (${JSON.stringify(intended)}, ${jsonType(intended)}).`
             : `The engine accepted the set, but "${args.key}" could not be read back from storage.${args.area ?? "local"}: ${String(readBack?.error?.message ?? readBackRaw.slice(0, 200))}.`,
       };
 
