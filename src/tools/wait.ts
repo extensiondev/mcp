@@ -103,6 +103,7 @@ export async function handler(args: {
   const start = Date.now();
   const pollInterval = 1000;
   let sawCompiledButUnattached = false;
+  let unattachedContract: ReadyContract | null = null;
   let lastContractStatus: string | null = null;
   let staleContractNote: string | null = null;
   let contractUnreadable: string | null = null;
@@ -301,6 +302,7 @@ export async function handler(args: {
         if (!attached) {
           await sleep(pollInterval);
           sawCompiledButUnattached = true;
+          unattachedContract = contract;
           continue;
         }
 
@@ -398,6 +400,7 @@ export async function handler(args: {
       budgetMs,
       elapsedMs: Date.now() - start,
       warnings: [clampNote, staleContractNote],
+      contract: unattachedContract,
     });
   }
 

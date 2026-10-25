@@ -20,6 +20,11 @@ import type * as WaitModule from "../tools/wait";
 import type * as LogsModule from "../tools/logs";
 
 const spawned: ChildProcess[] = [];
+const onSpawn = vi.hoisted(() => ({ write: null as null | (() => void), replaced: [] as Array<{ pid: number; browser: string; controlPort?: number }> }));
+
+vi.mock("../lib/same-browser-session", () => ({
+  guardSameBrowserSession: async () => ({ replaced: onSpawn.replaced }),
+}));
 
 function fakeCli(): SpawnedCli {
   const logDir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-fake-cli-"));
@@ -30,6 +35,7 @@ function fakeCli(): SpawnedCli {
   });
   fs.closeSync(fd);
   spawned.push(child);
+  onSpawn.write?.();
 
   return {
     child,
@@ -125,6 +131,8 @@ function tmpProject(): string {
 
 afterEach(() => {
   waitAnswer = undiagnosed;
+  onSpawn.write = null;
+  onSpawn.replaced = [];
 
   for (const child of spawned.splice(0)) {
     try {
@@ -198,5 +206,40 @@ describe("extension_dev relays the engine's attach diagnosis instead of a generi
     expect(result.status).toBe("started");
     expect(result.hint).toContain("The extension is not enabled in Safari yet");
     expect(result.hint).not.toContain(NO_ATTACH_DIAGNOSIS_NOTE);
+  }, 15_000);
+});
+
+describe("extension_dev relays the legs this server read when the engine stamps no diagnosis", () => {
+  it("answers compiled-not-attached with the failed leg and the fresh-profile relaunch, and calls the kept control port by design", async () => {
+    const project = tmpProject();
+    const { writeCompiledUnattachedContract } = await import("./fixtures/ready-contract");
+    const says = "The browser is up (pid 1076) and the extension is loaded, but its background never connected to this session's control channel on port 49239.";
+
+    onSpawn.replaced = [{ pid: 96457, browser: "chrome", controlPort: 49239 }];
+    onSpawn.write = () => writeCompiledUnattachedContract(project, "chrome", { pid: process.pid, controlPort: 49239 });
+    waitAnswer = () =>
+      JSON.stringify({
+        ok: false,
+        status: "compiled-not-attached",
+        value: {
+          compiled: true,
+          browserAttached: false,
+          failedLeg: "executor",
+          failedLegSays: says,
+          legs: { controlChannel: { port: 49239 } },
+          sayToPerson: `${says} ${WAY_OUT}`,
+          nextStep: { kind: "relaunch", tool: "extension_dev", args: { projectPath: project, browser: "chrome", replace: true, profile: FRESH }, say: WAY_OUT },
+        },
+      });
+
+    const result = JSON.parse(await dev.handler({ projectPath: project, replace: true }));
+
+    expect(result.ok).toBe(false);
+    expect(result.status).toBe("compiled-not-attached");
+    expect(result.value.failedLeg).toBe("executor");
+    expect(result.value.nextStep.args.profile).toBe(FRESH);
+    expect(result.value.replacedSession).toEqual({ pid: 96457, browser: "chrome", controlPort: 49239 });
+    expect(result.hint).toBe(`${says} ${WAY_OUT}`);
+    expect(result.warnings.join(" ")).toContain("Control port 49239 is the replaced session's: the engine keeps one control port per project and browser on purpose");
   }, 15_000);
 });

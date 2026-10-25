@@ -6,13 +6,28 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
+import fs from "node:fs";
+
 import { envelope } from "./envelope";
 import { liveProjectSessions } from "./session-browser";
+import { readyContractPath } from "./session-paths";
 import { stopOne } from "../tools/stop";
+
+export type ReplacedSession = { pid: number; browser: string; controlPort?: number };
 
 export type SameBrowserGuard =
   | { refusal: string }
-  | { replaced: Array<{ pid: number; browser: string }> };
+  | { replaced: ReplacedSession[] };
+
+function contractControlPort(projectPath: string, browser: string): number | null {
+  try {
+    const port = JSON.parse(fs.readFileSync(readyContractPath(projectPath, browser), "utf8"))?.controlPort;
+
+    return typeof port === "number" ? port : null;
+  } catch {
+    return null;
+  }
+}
 
 export async function guardSameBrowserSession(input: {
   tool: string;
@@ -24,7 +39,7 @@ export async function guardSameBrowserSession(input: {
 }): Promise<SameBrowserGuard> {
   const { tool, projectPath, browser } = input;
   const existing = liveProjectSessions(projectPath).filter((s) => s.browser === browser);
-  const replaced: Array<{ pid: number; browser: string }> = [];
+  const replaced: ReplacedSession[] = [];
 
   if (existing.length > 0 && !input.replace) {
     const listed = existing.map((s) => `pid ${s.pid} (${s.browser})`).join(", ");
@@ -50,6 +65,7 @@ export async function guardSameBrowserSession(input: {
   }
 
   for (const s of existing) {
+    const controlPort = contractControlPort(projectPath, s.browser);
     const outcome = await stopOne(projectPath, s.browser);
 
     if (!outcome.stopped && !outcome.staleRecord) {
@@ -72,7 +88,7 @@ export async function guardSameBrowserSession(input: {
       };
     }
 
-    if (!outcome.staleRecord) replaced.push({ pid: s.pid, browser: s.browser });
+    if (!outcome.staleRecord) replaced.push({ pid: s.pid, browser: s.browser, ...(controlPort !== null ? { controlPort } : {}) });
   }
 
   return { replaced };

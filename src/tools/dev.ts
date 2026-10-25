@@ -59,7 +59,9 @@ import {
 } from "../lib/safari-dev-options";
 import { safariSigningFrame } from "../lib/safari-signing";
 import {
+  CONTROL_PORT_KEPT_NOTE,
   NO_ATTACH_DIAGNOSIS_NOTE,
+  observedNotAttachedRelay,
   browserUpNotAttachedRelay,
 } from "../lib/compiled-not-attached";
 
@@ -429,7 +431,14 @@ export async function handler(
         ? "Port 0 asked the engine for any free port, and it has not stamped its ready.json contract yet, so the port it picked is not known at response time. extension_wait reports it from that contract once it lands."
         : "The engine has not stamped its ready.json contract yet, so the bound port is not known at response time (a taken port makes the server bind the next free one). extension_wait reports the bound port from that contract once it lands; requestedPort above is only what was asked for.";
 
-  const diagnosis = readiness ? browserUpNotAttachedRelay(readiness.ready) : null;
+  const diagnosis = readiness
+    ? (browserUpNotAttachedRelay(readiness.ready) ?? observedNotAttachedRelay(readiness.ready))
+    : null;
+  const replacedPort = replaced[0]?.controlPort;
+  const portKeptNote =
+    replacedPort !== undefined && replacedPort === control.port
+      ? `Control port ${replacedPort} is the replaced session's: ${CONTROL_PORT_KEPT_NOTE}.`
+      : null;
 
   if (diagnosis) {
     return envelope({
@@ -450,7 +459,7 @@ export async function handler(
         engine: describeExtensionInvocation(args.projectPath),
         logPath,
       },
-      warnings: [portNote, ...boot.warnings, markerWarning],
+      warnings: [portNote, portKeptNote, ...boot.warnings, markerWarning],
       hint: diagnosis.hint,
     });
   }
@@ -462,7 +471,9 @@ export async function handler(
           readiness.ready.status === "compiled-not-attached" && isSafariTarget(browser)
             ? notAttachedHint(browser, Boolean(args.enableExtension))
             : readiness.ready.status === "compiled-not-attached"
-              ? `call extension_wait to keep waiting on the same contract, then extension_inspect to inspect the live state; ${NO_ATTACH_DIAGNOSIS_NOTE}.`
+              ? typeof (readiness.ready as Record<string, unknown>).failedLegSays === "string"
+                ? `${String((readiness.ready as Record<string, unknown>).failedLegSays)} Call extension_wait to keep waiting on the same contract; ${NO_ATTACH_DIAGNOSIS_NOTE}, so this server read the legs itself.`
+                : `call extension_wait to keep waiting on the same contract, then extension_inspect to inspect the live state; ${NO_ATTACH_DIAGNOSIS_NOTE}.`
               : "call extension_wait to keep waiting on the same contract, then extension_inspect to inspect the live state."
         }`
       : "Use extension_wait to check when the extension is fully loaded, then extension_inspect to inspect the live state.";
@@ -488,6 +499,7 @@ export async function handler(
     warnings: [
       profileReused && !args.noBrowser ? reusedProfileNote(launchedProfile) : null,
       portNote,
+      portKeptNote,
       ...boot.warnings,
       ...(signingFrame?.warnings ?? []),
       markerWarning,
