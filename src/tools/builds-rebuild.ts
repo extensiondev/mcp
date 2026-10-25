@@ -29,7 +29,7 @@ import {
   requestApprovalAfterRefusal,
   type ApprovalGateInput,
 } from "../lib/approval-gate";
-import { projectApiGet, projectApiSend } from "../lib/project-api";
+import { projectApiGet, projectApiSend, type ProjectApi, type ProjectApiRefusal } from "../lib/project-api";
 import {
   BUILD_ENVS,
   COMMAND,
@@ -107,6 +107,109 @@ function judgeRebuild(detail: Row, match: Row | undefined, acceptedAt: string): 
   return { kind: "recorded", status };
 }
 
+const ALREADY_RUNNING_CODE = "BUILD_ALREADY_RUNNING";
+
+const RUNNING_WORDS: Record<string, string> = {
+  in_progress: "is already building",
+  queued: "is already queued to build",
+  starting: "was just pushed and its build is starting",
+};
+
+function judgeRunning(detail: Row, startedAfter: string): Verdict {
+  const run = isRow(detail.run) ? detail.run : {};
+  const startedAt = text(detail.startedAt) || text(run.startedAt) || text(detail.createdAt);
+
+  if (startedAfter && startedAt && !after(startedAt, startedAfter)) return { kind: "waiting", status: "earlier run" };
+
+  const status = text(detail.status).toLowerCase();
+  if (!status || PENDING_STATUSES.has(status)) return { kind: "waiting", status: status || null };
+  if (FAILED_STATUSES.has(status)) return { kind: "recorded", status, failed: true };
+
+  return { kind: "recorded", status };
+}
+
+/* @invariant A REBUILD NEVER CANCELS THE BUILD IT ASKS FOR. The platform
+ * answers BUILD_ALREADY_RUNNING, dispatching and spending nothing, when the
+ * commit is already queued, running or starting from its push, because a
+ * second build of it would cancel the first. That is the build this call
+ * wanted, so the answer follows it like a rebuild of its own: the same build
+ * page, the same bounded wait on the platform's record, and no success word
+ * before the record shows one.
+ */
+async function alreadyRunning(sent: ProjectApiRefusal, args: ActArgs, api: ProjectApi, buildEnv: string, commitSha: string): Promise<string> {
+  const body = isRow(sent.body) ? sent.body : {};
+  const details = isRow(body.details) ? body.details : {};
+  const commit = text(details.buildId) || text(details.commit) || commitSha.slice(0, 7).toLowerCase();
+  const state = text(details.state) || "in_progress";
+  const startedAt = text(details.startedAt) || null;
+  const deploymentId = text(details.deploymentId);
+  const project = `${api.ref.workspace}/${api.ref.project}`;
+  const scope = args.project ? { project: args.project } : {};
+  const base: Row = {
+    action: "rebuild",
+    project,
+    commit,
+    branch: text(details.branch) || null,
+    buildEnv: buildEnv || "staging",
+    dispatched: false,
+    running: { state, startedAt, ...(deploymentId ? { deploymentId } : {}) },
+    follow: {
+      list: { action: "list", ...scope },
+      get: { action: "get", buildId: commit, ...scope },
+      logs: { action: "logs", buildId: commit, ...scope },
+    },
+    buildsPageUrl: consoleProjectUrl(api.ref, ConsoleProjectPage.builds, args.api),
+  };
+  const links = linksOf(trackLinks(COMMAND, { ...args, action: "rebuild", buildId: commit } as Row, "build-already-running", base).map((row) => (row.kind === "track" ? { ...row, kind: "build" as const } : row)));
+  const buildPage = links.find((link) => link.kind === "build")?.url ?? String(base.buildsPageUrl);
+  const startedAfter = state === "starting" && startedAt ? startedAt : "";
+  const waited = await awaitRecordedOutcome<Row>({
+    waitSeconds: args.waitSeconds,
+    read: async () => {
+      if (!commit) return { ok: false, message: "the platform named no commit for the running build, so its record cannot be read by build id" };
+
+      const read = await projectApiGet<Row>(api, `builds/${encodeURIComponent(commit)}`);
+      if (!read.ok) return { ok: false, message: read.message };
+
+      return { ok: true, record: isRow(read.json) ? read.json : {} };
+    },
+    judge: (detail) => judgeRunning(detail, startedAfter),
+  });
+  const value = { ...base, outcome: waited.outcome, links };
+  const made = madeSentence(links);
+  const readCall = `extension_builds (action: "get", buildId: "${commit}")`;
+  const nothing = `Nothing was dispatched and nothing was spent: build ${commit} of ${project} ${RUNNING_WORDS[state] ?? RUNNING_WORDS.in_progress}${startedAt ? ` (since ${startedAt})` : ""}, and a second build of the same commit would cancel it.`;
+
+  if (waited.failed) {
+    return envelope({
+      ok: false,
+      command: COMMAND,
+      status: "build-failed",
+      value,
+      error: { code: "E_PLATFORM", name: "BuildFailed", message: `The platform's record of build ${commit} reads ${waited.outcome.status}.` },
+      hint: `${nothing} That build has now finished and failed: read extension_builds action:"logs" with buildId ${commit} for the failed browser and step, and the build page ${buildPage}. ${made}`,
+    });
+  }
+
+  if (waited.outcome.recorded) {
+    return envelope({
+      ok: true,
+      command: COMMAND,
+      status: "built",
+      value,
+      hint: `${nothing} That build has now finished: the platform's record reads ${waited.outcome.status}; ${readCall} reads its artifacts and checks, and the build page is ${buildPage}. ${made}`,
+    });
+  }
+
+  return envelope({
+    ok: true,
+    command: COMMAND,
+    status: "build-already-running",
+    value,
+    hint: `${nothing} Follow it at ${buildPage}, or call ${readCall} to read where it is. Do not rebuild while it runs; rebuild it once it has finished if you still need another build. ${made}`,
+  });
+}
+
 /* @invariant A REBUILD IS A REAL BUILD, ASKED FOR AS THE AGENT AND NEVER FORCED.
  * The dispatch spends the workspace's build allowance on real runners, so the
  * request names its origin as mcp for the meter, and never sends force: a
@@ -166,6 +269,8 @@ export async function rebuild(args: ActArgs): Promise<string> {
   const sent = await projectApiSend<Row>(api, "POST", "builds/dispatch", body);
 
   if (!sent.ok) {
+    if (sent.code === ALREADY_RUNNING_CODE) return alreadyRunning(sent, args, api, buildEnv, commitSha);
+
     if (!approvalId && sent.code === "APPROVAL_REQUIRED") {
       const asked = isRow(sent.body) && isRow((sent.body as Row).approvalRequest) ? ((sent.body as Row).approvalRequest as Row) : {};
       const scope = isRow(asked.scope) ? (asked.scope as Row) : {};
