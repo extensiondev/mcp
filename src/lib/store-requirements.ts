@@ -9,7 +9,7 @@
 import { isRow, text } from "./ship-act";
 import { STORE_MD_FILENAME } from "./store-md";
 import { storeMdLineOf, type StoreMdField } from "./store-md-fields";
-import { BULLET_KEYS, SCREENSHOTS_LINE, SUBSECTION_KEYS, type ListingField } from "./store-md-listing";
+import { BULLET_KEYS, SUBSECTION_KEYS, type ListingField } from "./store-md-listing";
 
 import type { LocalListing } from "../tools/store-listing";
 
@@ -51,7 +51,6 @@ const NAMED_AT_MOST = 8;
 const STORE_MD_REFS: Record<string, StoreMdField> = Object.fromEntries([
   ...BULLET_KEYS.map((key) => [key.line.toLowerCase(), key.field]),
   ...SUBSECTION_KEYS.map((key) => [key.heading.replace(/^### /, "").toLowerCase(), key.field]),
-  [SCREENSHOTS_LINE.toLowerCase(), "screenshots"],
 ]);
 
 function statusOf(value: unknown): RequirementRow["status"] {
@@ -80,33 +79,15 @@ function lineOf(local: LocalListing, field: ListingField): string {
  * write a line that is there; a line the reader could not take keeps the
  * input missing and names, in actual, the line it wants. Nothing here invents
  * an input, and the storeMd block of the same answer is built from the same
- * LocalListing, so the two can only agree.
+ * LocalListing, so the two can only agree. A screenshots row is never
+ * overlaid: STORE.md carries no image, so the platform's own verdict on the
+ * listing record stands.
  */
 function withStoreMd(row: RequirementRow, local: LocalListingRead): RequirementRow {
   if (!local || "problem" in local || row.status !== "missing") return row;
 
   const field = storeMdField(row.satisfiedBy);
   if (!field) return row;
-
-  if (field === "screenshots") {
-    const shots = local.patch.screenshots;
-
-    if (shots?.length && local.screenshotsLine) {
-      return {
-        ...row,
-        status: "have",
-        satisfiedBy: `store-md: ${local.screenshotsLine}`,
-        actual: `${shots.length} files on the \`${local.screenshotsLine}\` line of ${STORE_MD_FILENAME}; sync-listing uploads them`,
-      };
-    }
-
-    return local.screenshotsUnread
-      ? {
-          ...row,
-          actual: `the \`${local.screenshotsUnread.line}\` line in ${STORE_MD_FILENAME} ${local.screenshotsUnread.reason}; the reader takes \`${storeMdLineOf("screenshots")}\` with one PNG path per line below it`,
-        }
-      : row;
-  }
 
   const listing = local.patch.listing as Record<string, unknown>;
 

@@ -69,8 +69,6 @@ export const STORE_OWN_LINES: Partial<Record<ListingStore, ListingField[]>> = {
   chrome: ["visibility"],
 };
 
-export const SCREENSHOTS_LINE = "Screenshots";
-
 export const STORE_FIELDS: Record<ListingStore, ListingField[]> = {
   chrome: ["title", "shortDescription", "fullDescription", "categories", "supportEmail", "privacyPolicyUrl", "homepageUrl", "singlePurpose", "permissionJustifications", "visibility"],
   firefox: ["title", "shortDescription", "fullDescription", "categories", "supportEmail", "privacyPolicyUrl", "homepageUrl", "license", "reviewerNotes", "releaseNotes"],

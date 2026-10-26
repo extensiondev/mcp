@@ -27,11 +27,6 @@ export interface StoreMdPrivacy {
   attested: boolean | null;
 }
 
-export interface StoreMdScreenshots {
-  line: string;
-  files: string[];
-}
-
 export interface StoreMdListing {
   shared: ListingText;
   categoriesByStore: Partial<Record<ListingStore, string[]>>;
@@ -40,7 +35,7 @@ export interface StoreMdListing {
   stores: Partial<Record<ListingStore, ListingText>>;
   privacy: StoreMdPrivacy;
   lines: Partial<Record<ListingField, string>>;
-  screenshots?: StoreMdScreenshots;
+  screenshotsLine?: string;
 }
 
 export interface UnreadLine {
@@ -71,8 +66,6 @@ const SINGLE_LINE_FIELDS: ListingField[] = [
 ];
 
 const SCREENSHOTS_KEY = /^screenshots(\s*\([^()]*\))?$/;
-const IMAGE_FILE = /\S+\.(png|jpe?g)$/i;
-const LIST_MARKER = /^\s*(?:\d+[.)]|[-*+])\s+/;
 const URL_IN_TEXT = /https?:\/\/[^\s)>"]+/;
 
 const E164 = /^\+[1-9]\d{6,14}$/;
@@ -312,31 +305,14 @@ function justifications(body: string, prefix: string): PermissionJustification[]
   return [];
 }
 
-/* @invariant THE SCREENSHOTS LINE IS READ IN THE TWO FORMS AUTHORS WRITE. The
- * template's bare "- Screenshots:" and the walk's "- Screenshots (1280x800,
- * in this order):" both name the files below them, one per line, as a
- * numbered or dashed list or bare paths, and a short inline list on the line
- * itself is read too. A token is a file only when it ends in .png, .jpg or
- * .jpeg, so a prose line ("TODO at least one screenshot") yields no files and
- * the line is reported as written, with the shape the reader takes, instead
- * of a silent miss.
+/* @invariant STORE.md CARRIES NO SCREENSHOT. A "- Screenshots:" line, in
+ * the bare form or with a note, is recorded by its key and read for no
+ * file: images live in the extension.dev listing record, written by
+ * sync-listing from the screenshots argument (a path extension_screenshot
+ * wrote), so the file stays text and a screenshot never chains to the
+ * commit STORE.md is read at. The line is kept only so the sync can say it
+ * was seen and not taken, instead of a silent skip.
  */
-function screenshotFiles(value: string): string[] {
-  const files: string[] = [];
-
-  for (const raw of value.split("\n")) {
-    const line = raw.replace(LIST_MARKER, "").replace(/`/g, "").trim();
-    if (!line) continue;
-
-    for (const token of line.split(/[,\s]+/)) {
-      const file = token.replace(/[.,;]$/, "");
-      if (IMAGE_FILE.test(file)) files.push(file);
-    }
-  }
-
-  return files;
-}
-
 function readSingleLine(result: StoreMdListing, field: ListingField, flat: string, into: ListingText, ownSection: boolean): void {
   const note = storeNote(flat);
 
@@ -357,8 +333,7 @@ function readSingleLine(result: StoreMdListing, field: ListingField, flat: strin
 function readBullets(result: StoreMdListing, body: string, into: ListingText, ownSection: boolean): void {
   for (const { key, value } of bullets(body)) {
     if (!ownSection && SCREENSHOTS_KEY.test(key.toLowerCase())) {
-      const text = usable(value);
-      if (text) result.screenshots = { line: key, files: screenshotFiles(text) };
+      result.screenshotsLine = key;
 
       continue;
     }

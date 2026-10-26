@@ -77,10 +77,11 @@ const SAFARI_UNREAD = [
   { field: "reviewContactEmail", line: "- Review contact email:", section: "## Safari" },
   { field: "reviewContactPhone", line: "- Review contact phone:", section: "## Safari" },
   { field: "supportUrl", line: "- Support URL:", section: "## Listing" },
-  { field: "screenshots", line: "- Screenshots:", section: "## Listing" },
 ];
 
 const SAFARI_SECTION_UNREAD = SAFARI_UNREAD.filter((row) => !["subtitle", "searchTerms", "reviewContactPhone"].includes(row.field));
+
+const SCREENSHOTS_SKIPPED = 'the `- Screenshots:` line in STORE.md is not read: STORE.md carries no screenshot; pass screenshots to sync-listing as PNG paths inside projectPath, written by extension_screenshot with forStore: "<store>"';
 
 function png(width: number, height: number): Buffer {
   const bytes = Buffer.alloc(40);
@@ -433,7 +434,7 @@ describe("STORE.md fills the store listing", () => {
     expect(odd.unread.reviewContactEmail).toEqual({ line: "- Review contact email:", reason: "is not an email address" });
   });
 
-  it("reads the Screenshots line in the walk's form and in the bare form, and names a line that lists no file", () => {
+  it("records a Screenshots line by its key, in the bare form and with a note, and reads no file from it", () => {
     const walk = parseStoreMdListing(
       STORE_MD.replace(
         "- Screenshots: TODO at least one 1280x800 screenshot per store.",
@@ -441,51 +442,14 @@ describe("STORE.md fills the store listing", () => {
       ),
     );
 
-    expect(walk.screenshots).toEqual({
-      line: "Screenshots (1280x800, in this order)",
-      files: ["store/screenshot-1.png", "store/screenshot-2.png"],
-    });
-
-    const flush = parseStoreMdListing(
-      STORE_MD.replace(
-        "- Screenshots: TODO at least one 1280x800 screenshot per store.",
-        "- Screenshots (1280x800, in this order):\n1. store/screenshot-1.png\n2. store/screenshot-2.png",
-      ),
-    );
-
-    expect(flush.screenshots?.files).toEqual(["store/screenshot-1.png", "store/screenshot-2.png"]);
-
-    const bare = parseStoreMdListing(
-      STORE_MD.replace(
-        "- Screenshots: TODO at least one 1280x800 screenshot per store.",
-        "- Screenshots:\n  - shots/popup.png\n  - `shots/options.png`",
-      ),
-    );
-
-    expect(bare.screenshots).toEqual({ line: "Screenshots", files: ["shots/popup.png", "shots/options.png"] });
-
-    const inline = parseStoreMdListing(
-      STORE_MD.replace(
-        "- Screenshots: TODO at least one 1280x800 screenshot per store.",
-        "- Screenshots: shots/popup.png, shots/options.png",
-      ),
-    );
-
-    expect(inline.screenshots?.files).toEqual(["shots/popup.png", "shots/options.png"]);
-
-    const prose = parseStoreMdListing(
-      STORE_MD.replace(
-        "- Screenshots: TODO at least one 1280x800 screenshot per store.",
-        "- Screenshots (1280x800): see the store folder",
-      ),
-    );
-
-    expect(prose.screenshots).toEqual({ line: "Screenshots (1280x800)", files: [] });
-    expect(parseStoreMdListing(STORE_MD).screenshots).toBeUndefined();
+    expect(walk.screenshotsLine).toBe("Screenshots (1280x800, in this order)");
+    expect(walk).not.toHaveProperty("screenshots");
+    expect(parseStoreMdListing(STORE_MD).screenshotsLine).toBe("Screenshots");
+    expect(parseStoreMdListing(STORE_MD.replace("- Screenshots: TODO at least one 1280x800 screenshot per store.\n", "")).screenshotsLine).toBeUndefined();
     expect(listingForStore(walk, "chrome").listing.fullDescription).toContain("Detection happens on your computer.");
   });
 
-  it("reads the files the Screenshots line names into the sync patch, the way the screenshots argument does, and names a line it cannot take", () => {
+  it("takes screenshots only from the argument and names a Screenshots line in STORE.md as skipped with the sync-listing door", () => {
     const root = project();
     fs.writeFileSync(
       path.join(root, "STORE.md"),
@@ -498,9 +462,12 @@ describe("STORE.md fills the store listing", () => {
     const local = readLocalListing(root, "chrome");
     if ("problem" in local) throw new Error(local.problem);
 
-    expect(local.patch.screenshots?.map((shot) => [shot.source, shot.width, shot.height])).toEqual([["shots/popup.png", 1280, 800]]);
-    expect(local.screenshotsLine).toBe("- Screenshots (1280x800, in this order):");
-    expect(local.screenshotsUnread).toBeUndefined();
+    expect(local.patch.screenshots).toBeUndefined();
+    expect(local).not.toHaveProperty("screenshotsLine");
+    expect(local.skipped).toEqual([
+      'the `- Screenshots (1280x800, in this order):` line in STORE.md is not read: STORE.md carries no screenshot; pass screenshots to sync-listing as PNG paths inside projectPath, written by extension_screenshot with forStore: "<store>"',
+    ]);
+
     expect(local.lines.title).toBe("Name");
 
     const passed = readLocalListing(root, "chrome", [{ sha256: "b".repeat(64), width: 640, height: 400, bytes: png(640, 400), source: "given.png" }]);
@@ -508,32 +475,13 @@ describe("STORE.md fills the store listing", () => {
 
     expect(passed.patch.screenshots?.map((shot) => shot.source)).toEqual(["given.png"]);
 
-    fs.writeFileSync(
-      path.join(root, "STORE.md"),
-      STORE_MD.replace(
-        "- Screenshots: TODO at least one 1280x800 screenshot per store.",
-        "- Screenshots (1280x800): see the store folder",
-      ),
-    );
+    fs.writeFileSync(path.join(root, "STORE.md"), STORE_MD.replace("- Screenshots: TODO at least one 1280x800 screenshot per store.\n", ""));
 
-    const prose = readLocalListing(root, "chrome");
-    if ("problem" in prose) throw new Error(prose.problem);
+    const none = readLocalListing(root, "chrome");
+    if ("problem" in none) throw new Error(none.problem);
 
-    expect(prose.patch.screenshots).toBeUndefined();
-    expect(prose.screenshotsUnread).toEqual({ line: "- Screenshots (1280x800):", reason: "names no .png file" });
-
-    fs.writeFileSync(
-      path.join(root, "STORE.md"),
-      STORE_MD.replace(
-        "- Screenshots: TODO at least one 1280x800 screenshot per store.",
-        "- Screenshots:\n  1. shots/missing.png",
-      ),
-    );
-
-    const gone = readLocalListing(root, "chrome");
-    if ("problem" in gone) throw new Error(gone.problem);
-
-    expect(gone.screenshotsUnread).toEqual({ line: "- Screenshots:", reason: "screenshot shots/missing.png does not exist" });
+    expect(none.skipped).toEqual([]);
+    expect(none.patch.screenshots).toBeUndefined();
   });
 
   it("hashes the vector the platform pins to the same digest", () => {
@@ -749,7 +697,7 @@ describe("extension_submit sync-listing and the preflight advisory", () => {
       "Test instructions",
     ]);
 
-    expect(paste.fields.find((row: { field: string }) => row.field === "screenshots").from).toContain("1 files on");
+    expect(paste.fields.find((row: { field: string }) => row.field === "screenshots").from).toBe("1 screenshot in the extension.dev listing record, sent by sync-listing");
     expect(paste.fields.find((row: { field: string }) => row.field === "remoteCode").from).toBeNull();
     expect(written.hint).toContain("Nothing of this listing reached Google");
     expect(written.hint).toContain("pastes it on each tab at https://chrome.google.com/webstore/devconsole/pub/");
@@ -774,7 +722,6 @@ describe("extension_submit sync-listing and the preflight advisory", () => {
       { field: "homepageUrl", line: "- Homepage:", section: "## Listing" },
       { field: "license", line: "- License:", section: "## Listing" },
       { field: "releaseNotes", line: "### Release notes", section: "## Firefox Add-ons" },
-      { field: "screenshots", line: "- Screenshots:", section: "## Listing" },
     ]);
 
     fs.writeFileSync(
@@ -786,10 +733,13 @@ describe("extension_submit sync-listing and the preflight advisory", () => {
     const fields = again.value.stores.firefox.unread.map((row: { field: string }) => row.field);
 
     expect(fields).toEqual(["privacyPolicyUrl", "homepageUrl", "license", "releaseNotes"]);
-    expect(again.value.stores.firefox.skipped).toEqual(["supportEmail in STORE.md is not an email address, so it was left out"]);
+    expect(again.value.stores.firefox.skipped).toEqual([
+      "supportEmail in STORE.md is not an email address, so it was left out",
+      'the `- Screenshots:` line in STORE.md is not read: STORE.md carries no screenshot; pass screenshots to sync-listing as PNG paths inside projectPath, written by extension_screenshot with forStore: "<store>"',
+    ]);
   });
 
-  it("sends the files the Screenshots line names when the call passes no screenshots argument", async () => {
+  it("sends no file a Screenshots line names, and answers which image rows the screenshots argument cleared, read back from the platform", async () => {
     if (process.platform === "win32") return;
 
     platform.login();
@@ -799,18 +749,35 @@ describe("extension_submit sync-listing and the preflight advisory", () => {
     );
 
     platform.routes[`PUT ${LISTING("chrome")}`] = () => ({ status: 409, body: { code: "NO_CHANGE", message: "The listing already reads this way." } });
-    platform.routes[`POST ${PREFLIGHT("chrome")}`] = () => ({ body: { checks: [] } });
+    const rows = (shots: number) => ({
+      store: "chrome",
+      items: [
+        { id: "chrome.store_icon", label: "Store icon", required: true, format: "128x128 px PNG.", satisfiedBy: "store-dashboard", how: "Upload it on the Store listing tab.", status: "unknown", dashboardTab: "Store listing" },
+        { id: "chrome.screenshots", label: "Screenshots", required: true, format: "1 to 5 images, 1280x800 or 640x400 px, JPEG or 24-bit PNG with no alpha.", satisfiedBy: shots ? "listing" : "store-dashboard", how: "Add them.", status: shots ? "have" : "missing", actual: `${shots} screenshots` },
+        { id: "chrome.title", label: "Title", required: true, format: "Up to 75 characters.", satisfiedBy: "store-md: Name", how: "Set it.", status: "have" },
+      ],
+    });
+    let held = 0;
+    platform.routes[`POST ${PREFLIGHT("chrome")}`] = () => ({ body: { checks: [], requirements: rows(held) } });
 
-    const out = JSON.parse(await submit({ action: "sync-listing", browsers: ["chrome"], projectPath: root, api: API }));
+    const bare = JSON.parse(await submit({ action: "sync-listing", browsers: ["chrome"], projectPath: root, api: API }));
     const put = platform.sent("PUT", LISTING("chrome"))[0]!.body;
 
-    expect(out.status).toBe("listing-recorded");
-    expect(put.media.screenshots).toHaveLength(1);
-    const header = Buffer.from(put.media.screenshots[0].dataBase64, "base64");
+    expect(bare.status).toBe("listing-recorded");
+    expect(put.media?.screenshots).toBeUndefined();
+    expect(bare.value.stores.chrome.filled).not.toContain("screenshots");
+    expect(bare.value.stores.chrome.skipped[0]).toContain("is not read");
+    expect(bare.value.stores.chrome.images).toEqual({ clears: [], remain: ["Store icon (128x128 px PNG.), confirmed only on the store's dashboard", "Screenshots (1 to 5 images, 1280x800 or 640x400 px, JPEG or 24-bit PNG with no alpha.)"] });
+    expect(bare.value.sayToPerson).not.toContain("clear");
 
-    expect([header.readUInt32BE(16), header.readUInt32BE(20)]).toEqual([1280, 800]);
-    expect(out.value.stores.chrome.filled).toContain("screenshots");
-    expect(out.value.stores.chrome.unread.map((row: { field: string }) => row.field)).not.toContain("screenshots");
+    held = 1;
+    const sent = JSON.parse(await submit({ action: "sync-listing", browsers: ["chrome"], projectPath: root, screenshots: ["shots/popup.png"], api: API }));
+    const again = platform.sent("PUT", LISTING("chrome")).slice(-1)[0]!.body;
+
+    expect(again.media.screenshots).toHaveLength(1);
+    expect(sent.value.stores.chrome.filled).toContain("screenshots");
+    expect(sent.value.stores.chrome.images).toEqual({ clears: ["Screenshots"], remain: ["Store icon (128x128 px PNG.), confirmed only on the store's dashboard"] });
+    expect(sent.value.sayToPerson).toContain("1 screenshot clears the Chrome Web Store Screenshots row; still open: Store icon (128x128 px PNG.), confirmed only on the store's dashboard.");
   });
 
   const safariSync = (extra: Record<string, unknown> = {}) =>
@@ -1069,6 +1036,7 @@ describe("extension_submit sync-listing and the preflight advisory", () => {
       expect(unchanged.value.outcome.status).toBe("unchanged");
       expect(unchanged.value.stores.safari).toEqual({
         store: "safari",
+        skipped: [SCREENSHOTS_SKIPPED],
         status: "unchanged",
         appStoreConnect: { status: "unchanged", resend: "refused", trackUrl: SUBMISSIONS },
         filled: ["title", "shortDescription", "fullDescription", "icons"],
@@ -1333,6 +1301,7 @@ describe("extension_submit sync-listing and the preflight advisory", () => {
     expect(firefox.warnings[0].message).toBe(`${email}.`);
     expect(firefox.storeMd.skipped).toEqual([
       "supportEmail in STORE.md is not an email address, so it was left out",
+      SCREENSHOTS_SKIPPED,
     ]);
   });
 
@@ -1510,6 +1479,7 @@ describe("extension_submit sync-listing sends the fields the platform hashes whe
     expect(refused.status).toBe("sync-listing-refused");
     expect(refused.value.stores.safari).toEqual({
       store: "safari",
+        skipped: [SCREENSHOTS_SKIPPED],
       status: "refused",
       code: "LISTING_DIGEST_MISMATCH",
       message: "The platform did not name the fields it hashes; update the platform or this server.",
@@ -1568,6 +1538,7 @@ describe("extension_submit sync-listing sends the fields the platform hashes whe
     expect(written.status).toBe("listing-synced");
     expect(written.value.stores.safari).toEqual({
       store: "safari",
+        skipped: [SCREENSHOTS_SKIPPED],
       status: "synced",
       changes: ['title: "" -> "PII Shield"'],
       filled: ["title", "subtitle", "shortDescription", "fullDescription", "searchTerms", "reviewContactPhone", "icons"],
@@ -1629,6 +1600,7 @@ describe("extension_submit sync-listing sends the fields the platform hashes whe
     expect(refused.status).toBe("sync-listing-refused");
     expect(refused.value.stores.safari).toEqual({
       store: "safari",
+        skipped: [SCREENSHOTS_SKIPPED],
       status: "refused",
       code: "LISTING_DIGEST_MISMATCH",
       message:

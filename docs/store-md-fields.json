@@ -16,7 +16,8 @@
     "A line is a `- Key: value` bullet; the key is case-insensitive, and the value may continue on the indented lines below it. A value that starts with TODO counts as absent. HTML comments are skipped.",
     "The section column is the line's home. A line is also read from the sections in the also-read-from column, and the home wins when both carry one; a store section's own `- Key:` lines (those above its first `###`) are read with the same keys as `## Listing` and win for that store alone.",
     "A single-value line is read up to a trailing parenthetical that names a store. `- Category: Productivity (Chrome: Productivity, Safari: Utilities)` reads `Productivity` for every store and the named store's own value where the note gives one, with a colon; the same `(Store: value)` note works on the name, subtitle, summary, license, support email, homepage and review contact lines. `- Category:` is read from `## Listing` only, and a line of several categories reads a plain `(Chrome Web Store)` note as the stores that category is for. A parenthetical that names no store is a remark: kept out of the license, support email and homepage, left in the prose lines.",
-    "A line that is present but over its limit or not in the shape the reader takes is left out of the sync and named, with its reason, in `skipped`; the preflight's `storeMd` block names the same line with the shape it wants."
+    "A line that is present but over its limit or not in the shape the reader takes is left out of the sync and named, with its reason, in `skipped`; the preflight's `storeMd` block names the same line with the shape it wants.",
+    "Screenshots and the icon are never read from STORE.md. The icon comes from the build the store receives, and screenshots reach the per-store listing record only through the `screenshots` input of `sync-listing` (PNG paths inside the project, written by `extension_screenshot` with `forStore`); a `- Screenshots:` line is named in `skipped` and read for no file."
   ],
   "stores": {
     "chrome": [
@@ -104,13 +105,6 @@
           "## Listing"
         ],
         "limit": "public, unlisted or private (trusted testers); unlisted, the least public, when the line is absent"
-      },
-      {
-        "field": "screenshots",
-        "line": "- Screenshots:",
-        "section": "## Listing",
-        "alsoRead": [],
-        "limit": "up to 5 PNG files inside the project, one path per line below the bullet"
       }
     ],
     "firefox": [
@@ -198,13 +192,6 @@
         "section": "## Firefox Add-ons",
         "alsoRead": [],
         "limit": "up to 8,000 characters"
-      },
-      {
-        "field": "screenshots",
-        "line": "- Screenshots:",
-        "section": "## Listing",
-        "alsoRead": [],
-        "limit": "up to 5 PNG files inside the project, one path per line below the bullet"
       }
     ],
     "edge": [
@@ -285,13 +272,6 @@
         "section": "## Edge Add-ons",
         "alsoRead": [],
         "limit": "up to 8,000 characters"
-      },
-      {
-        "field": "screenshots",
-        "line": "- Screenshots:",
-        "section": "## Listing",
-        "alsoRead": [],
-        "limit": "up to 5 PNG files inside the project, one path per line below the bullet"
       }
     ],
     "safari": [
@@ -426,13 +406,6 @@
           "## Safari"
         ],
         "limit": "an http or https URL, up to 2,000 characters"
-      },
-      {
-        "field": "screenshots",
-        "line": "- Screenshots:",
-        "section": "## Listing",
-        "alsoRead": [],
-        "limit": "up to 5 PNG files inside the project, one path per line below the bullet"
       }
     ]
   }

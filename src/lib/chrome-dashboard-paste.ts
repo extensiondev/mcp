@@ -57,7 +57,7 @@ function fromOf(local: LocalListing, source: Row["source"]): string | null {
   if (source === "screenshots") {
     const shots = local.patch.screenshots?.length ?? 0;
 
-    return shots ? `${shots} files on \`${local.screenshotsLine ? `- ${local.screenshotsLine}:` : storeMdLineOf("screenshots")}\` in ${STORE_MD_FILENAME}` : null;
+    return shots ? `${shots} screenshot${shots === 1 ? "" : "s"} in the extension.dev listing record, sent by sync-listing` : null;
   }
 
   if (source === "privacy") return local.privacy.section ? `\`## Privacy and data use\` in ${STORE_MD_FILENAME}` : null;

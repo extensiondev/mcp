@@ -38,7 +38,6 @@ const PLATFORM_STORE_MD_LABELS = [
   "Summary",
   "Description",
   "Category",
-  "Screenshots",
   "Single purpose",
   "Permissions justification",
   "Privacy policy URL",
@@ -123,7 +122,7 @@ describe("the docs say what the code does", () => {
     for (const store of LISTING_STORES) {
       const rows = storeMdFieldRows(store);
 
-      expect(rows.map((row) => row.field)).toEqual([...STORE_FIELDS[store], "screenshots"]);
+      expect(rows.map((row) => row.field)).toEqual([...STORE_FIELDS[store]]);
       expect(doc).toContain(`## ${store} (`);
 
       for (const row of rows) {
@@ -137,6 +136,8 @@ describe("the docs say what the code does", () => {
     expect(doc).toContain("| `- Privacy policy URL:` | `## Privacy and data use` | `## Listing`, `## Chrome Web Store` |");
     expect(doc).toContain("| `### Single purpose` | `## Chrome Web Store` |  |");
     expect(doc).toContain("| `- Review contact phone:` | `## Safari` | `## Listing` |");
+    expect(doc).not.toContain("- Screenshots:` | `## Listing`");
+    expect(doc).toContain("Screenshots and the icon are never read from STORE.md");
   });
 
   it("gives every registered tool a tier, a gate and a sample prompt, and names no retired tool", () => {

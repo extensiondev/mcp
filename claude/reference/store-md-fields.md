@@ -9,10 +9,11 @@ Generated from the parser's own declarations in `src/lib/store-md-declarations.t
 - The section column is the line's home. A line is also read from the sections in the also-read-from column, and the home wins when both carry one; a store section's own `- Key:` lines (those above its first `###`) are read with the same keys as `## Listing` and win for that store alone.
 - A single-value line is read up to a trailing parenthetical that names a store. `- Category: Productivity (Chrome: Productivity, Safari: Utilities)` reads `Productivity` for every store and the named store's own value where the note gives one, with a colon; the same `(Store: value)` note works on the name, subtitle, summary, license, support email, homepage and review contact lines. `- Category:` is read from `## Listing` only, and a line of several categories reads a plain `(Chrome Web Store)` note as the stores that category is for. A parenthetical that names no store is a remark: kept out of the license, support email and homepage, left in the prose lines.
 - A line that is present but over its limit or not in the shape the reader takes is left out of the sync and named, with its reason, in `skipped`; the preflight's `storeMd` block names the same line with the shape it wants.
+- Screenshots and the icon are never read from STORE.md. The icon comes from the build the store receives, and screenshots reach the per-store listing record only through the `screenshots` input of `sync-listing` (PNG paths inside the project, written by `extension_screenshot` with `forStore`); a `- Screenshots:` line is named in `skipped` and read for no file.
 
 ## chrome (Chrome Web Store, `## Chrome Web Store`)
 
-11 fields.
+10 fields.
 
 | line | section | also read from | field | limit |
 | --- | --- | --- | --- | --- |
@@ -26,11 +27,10 @@ Generated from the parser's own declarations in `src/lib/store-md-declarations.t
 | `### Single purpose` | `## Chrome Web Store` |  | `singlePurpose` | up to 1,000 characters |
 | `### Permissions justification` | `## Chrome Web Store` |  | `permissionJustifications` | one `- <permission>: <reason>` bullet each, up to 50; a permission up to 200 characters, a reason up to 1,000 |
 | `- Visibility:` | `## Chrome Web Store` | `## Listing` | `visibility` | public, unlisted or private (trusted testers); unlisted, the least public, when the line is absent |
-| `- Screenshots:` | `## Listing` |  | `screenshots` | up to 5 PNG files inside the project, one path per line below the bullet |
 
 ## firefox (Firefox Add-ons, `## Firefox Add-ons`)
 
-11 fields.
+10 fields.
 
 | line | section | also read from | field | limit |
 | --- | --- | --- | --- | --- |
@@ -44,11 +44,10 @@ Generated from the parser's own declarations in `src/lib/store-md-declarations.t
 | `- License:` | `## Listing` | `## Firefox Add-ons` | `license` | up to 100 characters |
 | `### Reviewer notes` | `## Firefox Add-ons` |  | `reviewerNotes` | up to 8,000 characters |
 | `### Release notes` | `## Firefox Add-ons` |  | `releaseNotes` | up to 8,000 characters |
-| `- Screenshots:` | `## Listing` |  | `screenshots` | up to 5 PNG files inside the project, one path per line below the bullet |
 
 ## edge (Edge Add-ons, `## Edge Add-ons`)
 
-10 fields.
+9 fields.
 
 | line | section | also read from | field | limit |
 | --- | --- | --- | --- | --- |
@@ -61,11 +60,10 @@ Generated from the parser's own declarations in `src/lib/store-md-declarations.t
 | `- Privacy policy URL:` | `## Privacy and data use` | `## Listing`, `## Edge Add-ons` | `privacyPolicyUrl` | an http or https URL, up to 2,000 characters |
 | `- Homepage:` | `## Listing` | `## Edge Add-ons` | `homepageUrl` | an http or https URL, up to 2,000 characters |
 | `### Certification notes` | `## Edge Add-ons` |  | `certificationNotes` | up to 8,000 characters |
-| `- Screenshots:` | `## Listing` |  | `screenshots` | up to 5 PNG files inside the project, one path per line below the bullet |
 
 ## safari (App Store (Safari), `## Safari`)
 
-16 fields.
+15 fields.
 
 | line | section | also read from | field | limit |
 | --- | --- | --- | --- | --- |
@@ -84,4 +82,3 @@ Generated from the parser's own declarations in `src/lib/store-md-declarations.t
 | `- Review contact email:` | `## Safari` | `## Listing` | `reviewContactEmail` | an email address, up to 200 characters |
 | `- Review contact phone:` | `## Safari` | `## Listing` | `reviewContactPhone` | an E.164 phone number, up to 20 characters |
 | `- Support URL:` | `## Listing` | `## Safari` | `supportUrl` | an http or https URL, up to 2,000 characters |
-| `- Screenshots:` | `## Listing` |  | `screenshots` | up to 5 PNG files inside the project, one path per line below the bullet |

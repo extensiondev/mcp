@@ -98,6 +98,8 @@ import {
   rowFromConnection,
 } from "../lib/store-readiness";
 import { syncListing } from "./store-listing";
+import { screenshotDoor } from "../lib/store-bring-list";
+import { LISTING_INCOMPLETE_CODE, listingIncompleteOf, listingIncompleteSentence } from "../lib/store-listing-incomplete";
 
 export function storeMdWarnings(browsers: string[], cwd: string): string[] {
   const wantsFirefox = browsers.includes("firefox");
@@ -294,6 +296,12 @@ export async function handler(args: SubmitToolArgs): Promise<string> {
 }
 
 const DRAFT_STORES = new Set(["chrome", "edge"]);
+const STORE_WORDS: Record<string, string> = {
+  chrome: "The Chrome Web Store",
+  edge: "Edge Add-ons",
+  firefox: "Firefox AMO",
+  safari: "The App Store",
+};
 const SUBMIT_PENDING = new Set(["pending", "queued", "dispatched"]);
 const EDGE_PACKAGE_HAS_ARCHIVES_CODE = "EDGE_PACKAGE_HAS_ARCHIVES";
 const TESSERACT_HINT = "ship `.traineddata` uncompressed (Tesseract.js takes `gzip: false`)";
@@ -706,6 +714,40 @@ async function answer(args: SubmitToolArgs): Promise<string> {
       });
     }
 
+    const incomplete = refusedCode === LISTING_INCOMPLETE_CODE ? listingIncompleteOf(refusedCode, data) : null;
+
+    if (incomplete) {
+      const store = incomplete.store || browsers[0] || "chrome";
+      const trackUrl = consoleTrackUrl(
+        "store",
+        { ...(credential.ref ? { workspace: credential.ref.workspace, project: credential.ref.project } : {}), store },
+        args.api,
+      );
+      const name = STORE_WORDS[store] ?? store;
+      const say = `${listingIncompleteSentence(incomplete, name)}${incomplete.bringList ? ` ${incomplete.bringList.say}` : ""}`;
+      const needsImage = incomplete.missing.some((row) => /\.screenshots$/.test(row.id));
+
+      return envelope({
+        ok: false,
+        command: "extension_submit",
+        status: "listing-incomplete",
+        error: { code: "E_PLATFORM", name: "ListingIncomplete", platformCode: refusedCode, message: data?.message || say },
+        value: {
+          browsers,
+          buildSha,
+          channel,
+          store,
+          refusedBeforeApproval: true,
+          missing: incomplete.missing,
+          ...(incomplete.bringList ? { bringList: incomplete.bringList } : {}),
+          trackUrl,
+          sayToPerson: say,
+          nextStep: nextStep(needsImage ? "screenshot" : "sync-listing", say, trackUrl),
+        },
+        hint: `${say} ${needsImage ? `${screenshotDoor(store)}. ` : ""}Fill the rows, run extension_submit action:"sync-listing" for ${store}, then submit again; the preflight reads the same rows.`,
+      });
+    }
+
     if (refusedCode === EDGE_PACKAGE_HAS_ARCHIVES_CODE) {
       const files = (Array.isArray(data?.files) ? data.files : [])
         .map((file: unknown) => String(file ?? "").trim())
@@ -810,6 +852,7 @@ async function answer(args: SubmitToolArgs): Promise<string> {
     const maybeDispatched =
       !dryRun && res.status >= 500 && !saidNothingDispatched;
     const BEFORE_APPROVAL = new Set([
+      LISTING_INCOMPLETE_CODE,
       "BUILD_DISPATCH_DISABLED",
       "OWNER_REQUIRED",
       "TOKEN_ISSUER_UNKNOWN",

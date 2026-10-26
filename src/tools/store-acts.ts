@@ -70,6 +70,8 @@ import {
   missingRequirementsSentences,
   requirementsView,
 } from "../lib/store-requirements";
+import { bringListOf, bringListSentences, screenshotDoor } from "../lib/store-bring-list";
+import { LISTING_INCOMPLETE_CODE, listingIncompleteOf, listingIncompleteSentence } from "../lib/store-listing-incomplete";
 import {
   readLocalListing,
   reconciledWithStoreMd,
@@ -173,6 +175,44 @@ function reworded(
 
   const code = text(parsed.error?.platformCode);
   const settingsUrl = storeSettingsUrl(api.ref, apiHint);
+  const incomplete = code === LISTING_INCOMPLETE_CODE ? listingIncompleteOf(code, value.listingIncomplete) : null;
+
+  /* @invariant A LISTING REFUSAL IS A LIST, NEVER A RECORD. The platform
+   * answers 409 LISTING_INCOMPLETE before it mints or consumes an approval,
+   * so the answer carries the rows in the store's own words with the door
+   * that clears each, the store's console page in trackUrl, and says that
+   * nothing was sent, no approval was spent and no submission was recorded;
+   * it never reads as publish-dispatched or in-review.
+   */
+  if (incomplete) {
+    const words = storeWords(store);
+    const trackUrl = consoleProjectUrl(api.ref, ConsoleProjectPage.submissionsStore(store), apiHint);
+    const say = `${listingIncompleteSentence(incomplete, words.name.charAt(0).toUpperCase() + words.name.slice(1))}${incomplete.bringList ? ` ${incomplete.bringList.say}` : ""}`;
+    const needsImage = incomplete.missing.some((row) => /\.screenshots$/.test(row.id));
+
+    return envelope({
+      ok: false,
+      command: COMMAND,
+      status: "listing-incomplete",
+      error: {
+        code: "E_PLATFORM",
+        name: "ListingIncomplete",
+        platformCode: code,
+        message: (isRow(value.listingIncomplete) ? text(value.listingIncomplete.message) : "") || say,
+      },
+      value: {
+        action: "publish",
+        store,
+        refusedBeforeApproval: true,
+        missing: incomplete.missing,
+        ...(incomplete.bringList ? { bringList: incomplete.bringList } : {}),
+        trackUrl,
+        sayToPerson: say,
+        nextStep: nextStep(needsImage ? "screenshot" : "sync-listing", say, trackUrl),
+      },
+      hint: `${say} ${needsImage ? `${screenshotDoor(store)}. ` : ""}Fill the rows, run extension_submit action:"sync-listing" for ${store}, then say publish again; the preflight reads the same rows.`,
+    });
+  }
 
   if (code === "SUBMISSION_NOT_JOINABLE" && text(value.uploadRunState)) {
     const sha = text(value.buildId);
@@ -561,6 +601,8 @@ function readinessView(
     .filter((c) => text(c.status) === "fail")
     .map((c) => checkView(reconciledWithStoreMd(c, local), true));
   const requirements = requirementsView(json.requirements, local);
+  const review = isRow(summary.review) ? summary.review : null;
+  const bringList = bringListOf(store, requirements, review?.canSubmitForReview !== false);
 
   return {
     canSubmit:
@@ -570,6 +612,7 @@ function readinessView(
     ...(connectionSource ? { connectionSource } : {}),
     ...(submissionMode ? { submissionMode } : {}),
     ...(requirements ? { requirements } : {}),
+    ...(bringList ? { readyForReview: bringList.readyForReview, bringList } : {}),
     ...(text(json.dashboardUrl) ? { dashboardUrl: text(json.dashboardUrl) } : {}),
     summary,
     ...(deferred.length ? { namedBySubmit: ["build"] } : {}),
@@ -711,7 +754,7 @@ export async function preflight(args: StoreActArgs): Promise<string> {
     firefoxView && isRow(firefoxView.sourceArchive)
       ? ` ${text(firefoxView.sourceArchive.say)}`
       : "";
-  const inputsSay = missingRequirementsSentences(stores);
+  const inputsSay = [missingRequirementsSentences(stores), bringListSentences(stores)].filter(Boolean).join(" ");
   const workspaceLine = Object.entries(stores)
     .filter(([, view]) => (view as Row).connectionSource === "workspace")
     .map(([store, view]) => {

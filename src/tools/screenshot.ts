@@ -47,6 +47,9 @@ import {
   type CaptureOutcome,
   type CaptureSize,
 } from "../lib/capture";
+import { flattenPngAlpha, pngHeader } from "../lib/png-flat";
+import { clearsStoreRow, isListingStoreName, pickStoreSize, STORE_SCREENSHOT_SPECS, sizeLabel, storeSizeSentence } from "../lib/store-screenshot-sizes";
+import { LISTING_STORES, type ListingStore } from "../lib/store-md-declarations";
 import { resolveExtensionId, surfaceDocument, SURFACE_MANIFEST_KEYS } from "./open";
 
 const COMMAND = "extension_screenshot";
@@ -56,7 +59,7 @@ const DEFAULT_TIMEOUT_MS = 15_000;
 export const schema = {
   name: COMMAND,
   description:
-    "Take a screenshot of one open extension surface (popup, options, sidebar, newtab, history, bookmarks) or web page in a live extension_dev or extension_start session and save it as a .png file. It asks the browser for that page's own pixels over the session's debug port: CDP Page.captureScreenshot on Chromium, the debugger protocol's screenshot actor on Firefox, and WebDriver on Safari, where only web pages can be captured. It never captures the screen or another window and never brings a window to the front, so there is no need for screencapture, AppleScript or a Playwright script. The surface must already be open: open it with extension_open first. Pass `targetId` (the target.targetId extension_open answers, or one from extension_dom_snapshot listTargets) to capture that exact page; when a url matches several tabs that show the same page, the most recently active one is captured and a warning names the others. width and height set the viewport on Chromium and crop from the top left on Firefox; deviceScaleFactor sets the pixel ratio. The file goes under dist/extension-js/<browser>/screenshots unless `path` names one, and the answer gives its path and pixel size. Use extension_dom_snapshot for the page's structure as text.",
+    "Take a screenshot of one open extension surface (popup, options, sidebar, newtab, history, bookmarks) or web page in a live extension_dev or extension_start session and save it as a .png file. It asks the browser for that page's own pixels over the session's debug port (CDP on Chromium, the screenshot actor on Firefox, WebDriver on Safari, where only web pages can be captured); it never captures the screen or another window and never brings a window to the front. Open the surface with extension_open first. `targetId` (from extension_open or extension_dom_snapshot listTargets) captures that exact page; when a url matches several tabs showing the same page, the most recently active one is captured and a warning names the others. width and height set the viewport on Chromium and crop from the top left on Firefox; deviceScaleFactor sets the pixel ratio. `forStore` (chrome, firefox, edge or safari) captures a store listing screenshot at that store's accepted size (1280x800 by default) as a 24-bit PNG with no alpha, and value.forStore says whether it clears the store's screenshot row; pass the path to extension_submit sync-listing screenshots. The file goes under dist/extension-js/<browser>/screenshots unless `path` names one; the answer gives its path and pixel size.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -72,7 +75,13 @@ export const schema = {
       targetId: TARGET_ID_PROPERTY,
       width: { type: "number", description: "Viewport width in CSS pixels (Chromium renders at it; Firefox crops to it)." },
       height: { type: "number", description: "Viewport height in CSS pixels (Chromium renders at it; Firefox crops to it)." },
-      deviceScaleFactor: { type: "number", description: "Pixel ratio of the image, 0.5 to 4. Defaults to the browser's own on Chromium and 1 on Firefox." },
+      deviceScaleFactor: { type: "number", description: "Pixel ratio of the image, 0.5 to 4. Defaults to the browser's own on Chromium and 1 on Firefox; with forStore it is 1." },
+      forStore: {
+        type: "string",
+        enum: [...LISTING_STORES],
+        description:
+          "Capture for this store's listing: chrome (1280x800 or 640x400, 24-bit PNG, no alpha), firefox (1280x800 reads best), edge (1280x800 or 640x480) or safari (exactly 1280x800, 1440x900, 2560x1600 or 2880x1800, no alpha). The default 1280x800 24-bit capture clears the screenshot row of all four stores at once.",
+      },
       path: {
         type: "string",
         description:
@@ -91,7 +100,18 @@ interface Args extends CaptureSize {
   url?: string;
   targetId?: string;
   path?: string;
+  forStore?: string;
   timeout?: number;
+}
+
+interface StoreVerdict {
+  store: ListingStore;
+  size: string;
+  alpha: "flattened" | "none";
+  clears: boolean;
+  reason?: string;
+  sizes: string[];
+  docs: string;
 }
 
 function refuse(status: string, code: string, message: string, hint?: string, value?: unknown): string {
@@ -131,21 +151,40 @@ function captured(
     );
   }
 
-  const size = pngDimensions(outcome.png);
+  let png = outcome.png;
+  const size = pngDimensions(png);
   if (!size) return refuse("capture-failed", "E_CAPTURE_FAILED", `The browser answered data for ${url} that is not a .png image.`);
 
-  const written = writeScreenshot(args.projectPath, browser, context, outcome.png, args.path);
+  const store = isListingStoreName(args.forStore) ? args.forStore : null;
+  let verdict: StoreVerdict | null = null;
+
+  if (store) {
+    const flat = flattenPngAlpha(png);
+    if ("problem" in flat) return refuse("capture-failed", "E_CAPTURE_FAILED", `The browser answered ${flat.problem} for ${url}, which this tool cannot flatten for a store listing.`);
+
+    png = flat.png;
+    const judged = clearsStoreRow(store, size.width, size.height, pngHeader(png)?.alpha !== "none");
+    const spec = STORE_SCREENSHOT_SPECS[store];
+    verdict = { store, size: sizeLabel([size.width, size.height]), alpha: flat.hadAlpha ? "flattened" : "none", ...judged, sizes: spec.sizes.map(sizeLabel), docs: spec.docs };
+  }
+
+  const written = writeScreenshot(args.projectPath, browser, context, png, args.path);
   if (!written.ok) return refuse("bad-request", "E_BAD_REQUEST", written.message, written.hint);
 
   const file = written.file;
+  const storeLine = verdict
+    ? verdict.clears
+      ? ` It is a ${verdict.size} 24-bit PNG with no alpha, which clears the screenshot row of ${STORE_SCREENSHOT_SPECS[verdict.store].name}; pass it to extension_submit action:"sync-listing" screenshots: ["${file}"] to write it to that store's listing record.`
+      : ` It does not clear the screenshot row of ${STORE_SCREENSHOT_SPECS[verdict.store].name}: ${verdict.reason}. ${storeSizeSentence(verdict.store)}`
+    : "";
 
   return envelope({
     ok: true,
     command: COMMAND,
     status: "captured",
-    value: { browser, context, url, ...(targetId ? { targetId } : {}), path: file, width: size.width, height: size.height, bytes: outcome.png.length, transport },
+    value: { browser, context, url, ...(targetId ? { targetId } : {}), path: file, width: size.width, height: size.height, bytes: png.length, transport, ...(verdict ? { forStore: verdict } : {}) },
     warnings,
-    hint: `The image is ${file} (${size.width} x ${size.height} pixels). Open it with your image reader to look at it.`,
+    hint: `The image is ${file} (${size.width} x ${size.height} pixels).${storeLine || " Open it with your image reader to look at it."}`,
   });
 }
 
@@ -363,6 +402,16 @@ export async function handler(args: Args): Promise<string> {
 
   const invalid = badSize(args);
   if (invalid) return refuse("bad-request", "E_BAD_REQUEST", invalid);
+
+  if (args.forStore !== undefined) {
+    if (!isListingStoreName(args.forStore)) return refuse("bad-request", "E_BAD_REQUEST", `forStore must be one of ${LISTING_STORES.join(", ")}; got "${String(args.forStore)}".`);
+    if (args.deviceScaleFactor !== undefined && args.deviceScaleFactor !== 1) return refuse("bad-request", "E_BAD_REQUEST", "A store screenshot is captured at a 1x pixel ratio so its pixel size is the store's size; omit deviceScaleFactor with forStore.");
+
+    const picked = pickStoreSize(args.forStore, args.width, args.height);
+    if (!picked.ok) return refuse("bad-request", "E_BAD_REQUEST", picked.message, storeSizeSentence(args.forStore));
+
+    args = { ...args, width: picked.width, height: picked.height, deviceScaleFactor: 1 };
+  }
 
   const context = args.context ?? "page";
   if (context !== "page" && !SURFACES.includes(context)) return refuse("bad-request", "E_BAD_REQUEST", `context must be page or one of ${SURFACES.join(", ")}.`);

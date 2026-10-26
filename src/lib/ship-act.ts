@@ -179,6 +179,7 @@ function refusal(act: ShipAct, read: ProjectApiRefusal, api: ProjectApi): string
       project: `${api.ref.workspace}/${api.ref.project}`,
       ...(act.value ?? {}),
       ...(before ? { refusedBeforeApproval: true } : {}),
+      ...(read.code === "LISTING_INCOMPLETE" ? { listingIncomplete: body } : {}),
       ...storeStateFields(read.code, body),
       ...(text(body.uploadRunState)
         ? {

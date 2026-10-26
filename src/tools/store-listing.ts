@@ -45,9 +45,9 @@ import {
 } from "../lib/store-listing-digest";
 import { pushAnswer, pushSentence, readPushState, sendListing } from "../lib/store-listing-push";
 import { STORE_MD_FILENAME } from "../lib/store-md";
+import { requirementsView, type RequirementsView } from "../lib/store-requirements";
 import { linesNotFound, storeMdLineOf, storeMdSectionOf } from "../lib/store-md-fields";
 import {
-  LISTING_SECTION,
   LISTING_STORES,
   LISTING_TEXT_LIMITS,
   PRIVACY_SECTION,
@@ -57,7 +57,6 @@ import {
   type ListingField,
   type ListingStore,
   type StoreMdPrivacy,
-  type StoreMdScreenshots,
   type UnreadLine,
 } from "../lib/store-md-listing";
 import {
@@ -105,13 +104,14 @@ export interface LocalListing {
   skipped: string[];
   unread: Partial<Record<ListingField, UnreadLine>>;
   lines: Partial<Record<ListingField, string>>;
-  screenshotsLine?: string;
-  screenshotsUnread?: UnreadLine;
   privacy: StoreMdPrivacy;
 }
 
-export const SCREENSHOTS_SHAPE =
-  "`- Screenshots:` with one PNG path per line below it (`1. store/screenshot-1.png`)";
+export const SCREENSHOTS_DOOR =
+  'pass screenshots to sync-listing as PNG paths inside projectPath, written by extension_screenshot with forStore: "<store>"';
+
+export const screenshotsLineSkipped = (line: string): string =>
+  `the \`- ${line}:\` line in ${STORE_MD_FILENAME} is not read: ${STORE_MD_FILENAME} carries no screenshot; ${SCREENSHOTS_DOOR}`;
 
 const privacyCoveredFact = (url: string): string =>
   `privacy policy URL found in ${STORE_MD_FILENAME} (${url}), not yet in the console listing`;
@@ -167,11 +167,10 @@ export function readLocalListing(
   const { listing, skipped, unread } = withChromeVisibility(listingForStore(parsed, store), parsed.lines.visibility);
   const icon = localIcon(projectPath, store);
   const patch: ListingPatch = { listing };
-  const fromStoreMd = screenshots?.length ? null : screenshotsFromStoreMd(projectPath, parsed.screenshots);
 
+  if (parsed.screenshotsLine) skipped.push(screenshotsLineSkipped(parsed.screenshotsLine));
   if ("icon" in icon) patch.icons = [icon.icon];
   if (screenshots?.length) patch.screenshots = screenshots;
-  else if (fromStoreMd && "screenshots" in fromStoreMd) patch.screenshots = fromStoreMd.screenshots;
 
   return {
     file,
@@ -181,8 +180,6 @@ export function readLocalListing(
     unread,
     lines: parsed.lines,
     privacy: parsed.privacy,
-    ...(parsed.screenshots ? { screenshotsLine: `- ${parsed.screenshots.line}:` } : {}),
-    ...(fromStoreMd && "unread" in fromStoreMd ? { screenshotsUnread: fromStoreMd.unread } : {}),
     ...("icon" in icon ? { icon: icon.origin } : { iconMissing: icon.missing }),
     ...("stale" in icon && icon.stale ? { iconStale: icon.stale } : {}),
   };
@@ -217,31 +214,6 @@ async function adoptBuildIcon(
   }
 
   if (local.iconStale) local.iconMissing = staleSentence(local.iconStale, builds.newest);
-}
-
-/* @invariant THE SCREENSHOTS LINE FEEDS THE SYNC THE WAY THE ARGUMENT DOES.
- * Files named under "- Screenshots:" in STORE.md are read from the project
- * root exactly as a screenshots argument would be, so the walk's listing no
- * longer depends on the caller repeating the paths. An explicit argument
- * still wins. A line whose files cannot be read, or that names no PNG file,
- * is reported as the line it is with the shape the reader takes, so the
- * preflight's storeMd block and the requirements list name the same miss.
- */
-function screenshotsFromStoreMd(
-  projectPath: string,
-  parsed: StoreMdScreenshots | undefined,
-): { screenshots: ListingImage[] } | { unread: UnreadLine } | null {
-  if (!parsed) return null;
-
-  const line = `- ${parsed.line}:`;
-
-  if (!parsed.files.length) {
-    return { unread: { line, reason: "names no .png file" } };
-  }
-
-  const read = readScreenshots(projectPath, parsed.files);
-
-  return "problem" in read ? { unread: { line, reason: read.problem } } : read;
 }
 
 interface CheckCoverage {
@@ -376,21 +348,9 @@ function coverageOf(local: LocalListing, id: string): Coverage {
   if (/screenshots_present$/.test(id)) {
     const shots = local.patch.screenshots;
 
-    if (shots?.length) {
-      return {
-        covered: `screenshots: ${shots.length} ${local.screenshotsLine ? `listed on the \`${local.screenshotsLine}\` line of ${STORE_MD_FILENAME}` : "passed to sync-listing"}, not yet in the listing`,
-      };
-    }
+    if (shots?.length) return { covered: `screenshots: ${shots.length} passed to sync-listing, not yet in the listing` };
 
-    if (local.screenshotsUnread) {
-      return {
-        unread: `screenshots: the \`${local.screenshotsUnread.line}\` line in ${STORE_MD_FILENAME} ${local.screenshotsUnread.reason}; the reader takes ${SCREENSHOTS_SHAPE}`,
-      };
-    }
-
-    return {
-      missing: `screenshots: ${STORE_MD_FILENAME} has no \`${storeMdLineOf("screenshots")}\` under \`${LISTING_SECTION}\`; list the files there, one PNG path per line, or pass screenshots (PNG paths inside projectPath, for example from extension_screenshot) to sync-listing`,
-    };
+    return { missing: `screenshots: ${STORE_MD_FILENAME} carries no screenshot; ${SCREENSHOTS_DOOR}` };
   }
 
   const rule = CHECK_COVERAGE.find((entry) => entry.test.test(id));
@@ -476,6 +436,7 @@ function filledFields(patch: ListingPatch): string[] {
 interface StoreReadBack {
   blocking: string[];
   dashboardUrl: string | null;
+  images?: ImageRows;
 }
 
 async function stillBlocking(
@@ -493,8 +454,10 @@ async function stillBlocking(
   const checks = (
     Array.isArray(read.json.checks) ? read.json.checks : []
   ).filter(isRow);
+  const requirements = requirementsView(read.json.requirements);
 
   return {
+    ...(requirements ? { images: imageRows(store, requirements) } : {}),
     blocking: checks
       .filter(
         (check) =>
@@ -507,6 +470,47 @@ async function stillBlocking(
       ),
     dashboardUrl: text(read.json.dashboardUrl) || null,
   };
+}
+
+export interface ImageRows {
+  clears: string[];
+  remain: string[];
+}
+
+const IMAGE_ROW = /\.(screenshots|store_icon|icon|app_icon|store_logo)$/;
+
+/* @invariant THE ROWS AN IMAGE CLEARS ARE THE PLATFORM'S VERDICT, READ BACK
+ * AFTER THE WRITE. Once the listing record holds the screenshots and the
+ * icon, the same preflight read that names the still-blocking checks also
+ * carries the store's requirement rows; the image rows among them are
+ * answered as cleared (have) or remaining (missing or unknown, with the
+ * store's own format), so the owner learns which store rows the files just
+ * sent satisfy without a second call, and from the platform's judgment, not
+ * this server's.
+ */
+function imageRows(store: string, view: RequirementsView): ImageRows {
+  const rows = view.items.filter((row) => IMAGE_ROW.test(row.id));
+
+  return {
+    clears: rows.filter((row) => row.status === "have").map((row) => row.label),
+    remain: rows.filter((row) => row.status !== "have").map((row) => `${row.label} (${row.format})${row.status === "unknown" ? ", confirmed only on the store's dashboard" : ""}`),
+  };
+}
+
+const STORE_NAMES: Record<string, string> = {
+  chrome: "Chrome Web Store",
+  edge: "Edge Add-ons",
+  firefox: "Firefox AMO",
+  safari: "App Store",
+};
+
+export function imagesSentence(store: string, sent: number, images: ImageRows): string {
+  const name = STORE_NAMES[store] ?? store;
+  const files = `${sent} screenshot${sent === 1 ? "" : "s"}`;
+  const cleared = images.clears.length ? `${files} clear${sent === 1 ? "s" : ""} the ${name} ${images.clears.join(" and ")} row${images.clears.length === 1 ? "" : "s"}` : `${files} sent; no ${name} image row reads have yet`;
+  const remain = images.remain.length ? `; still open: ${images.remain.join("; ")}` : "";
+
+  return `${cleared}${remain}.`;
 }
 
 const LISTING_NEXT = {
@@ -860,6 +864,8 @@ export async function syncListing(args: ListingArgs): Promise<string> {
     if (done && readBack === null) unreadBack.push(store);
 
     const paste = store === "chrome" && done ? chromeDashboardPaste(local, readBack?.dashboardUrl ?? null) : null;
+    const sentImages = local.patch.screenshots?.length ?? 0;
+    if (readBack?.images && (sentImages || readBack.images.clears.length)) said.push(imagesSentence(store, sentImages, readBack.images));
 
     if (paste) {
       if (result.status === "synced") result.status = "recorded";
@@ -891,6 +897,7 @@ export async function syncListing(args: ListingArgs): Promise<string> {
       ...(local.iconMissing ? { iconMissing: local.iconMissing } : {}),
       ...(local.skipped.length ? { skipped: local.skipped } : {}),
       ...(blocking ? { stillBlocking: blocking } : {}),
+      ...(readBack?.images ? { images: readBack.images } : {}),
       ...(paste ? { pasteInDashboard: paste } : {}),
     };
   }

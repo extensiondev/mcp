@@ -6,14 +6,12 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-import { MAX_SCREENSHOTS } from "./store-listing-media";
 import {
   BULLET_KEYS,
   LISTING_LIST_LIMITS,
   LISTING_SECTION,
   LISTING_TEXT_LIMITS,
   PRIVACY_SECTION,
-  SCREENSHOTS_LINE,
   SEARCH_TERMS_JOINED_LIMITS,
   STORE_FIELDS,
   STORE_OWN_LINES,
@@ -26,7 +24,7 @@ import {
 
 import type { LocalListing } from "../tools/store-listing";
 
-export type StoreMdField = ListingField | "screenshots";
+export type StoreMdField = ListingField;
 
 export interface StoreMdFieldRow {
   field: StoreMdField;
@@ -42,8 +40,6 @@ export interface StoreMdFieldHome {
 }
 
 export function storeMdLineOf(field: StoreMdField): string {
-  if (field === "screenshots") return `- ${SCREENSHOTS_LINE}:`;
-
   const bullet = BULLET_KEYS.find((key) => key.field === field);
   if (bullet) return `- ${bullet.line}:`;
 
@@ -59,15 +55,16 @@ export function storeMdLineOf(field: StoreMdField): string {
  * in "## Privacy and data use" and is also read under "## Listing" or a
  * store section, the App Store's review contact lines in "## Safari" and
  * also under "## Listing", every other bullet in "## Listing" and also in
- * the store's own section, and "- Category:" and "- Screenshots:" in
- * "## Listing" only). A field the reader learns to take appears here the
- * same hour, and the platform's requirements name the same labels in
- * satisfiedBy "store-md: <line>", so both sides read one table.
+ * the store's own section, and "- Category:" in "## Listing" only). A field
+ * the reader learns to take appears here the same hour, and the platform's
+ * requirements name the same labels in satisfiedBy "store-md: <line>", so
+ * both sides read one table. Screenshots have no row: STORE.md carries no
+ * image, and the listing record takes them through sync-listing.
  */
 export function storeMdSectionOf(field: StoreMdField, store: ListingStore): StoreMdFieldHome {
   if (SUBSECTION_KEYS.some((key) => key.field === field)) return { section: STORE_SECTIONS[store], alsoRead: [] };
   if (field === "privacyPolicyUrl") return { section: PRIVACY_SECTION, alsoRead: [LISTING_SECTION, STORE_SECTIONS[store]] };
-  if (field === "categories" || field === "screenshots") return { section: LISTING_SECTION, alsoRead: [] };
+  if (field === "categories") return { section: LISTING_SECTION, alsoRead: [] };
   if (STORE_OWN_LINES[store]?.includes(field)) return { section: STORE_SECTIONS[store], alsoRead: [LISTING_SECTION] };
 
   return { section: LISTING_SECTION, alsoRead: [STORE_SECTIONS[store]] };
@@ -76,8 +73,6 @@ export function storeMdSectionOf(field: StoreMdField, store: ListingStore): Stor
 const count = (n: number): string => n.toLocaleString("en-US");
 
 function limitOf(field: StoreMdField, store: ListingStore): string {
-  if (field === "screenshots") return `up to ${MAX_SCREENSHOTS} PNG files inside the project, one path per line below the bullet`;
-
   if (field === "categories") {
     const limits = LISTING_LIST_LIMITS.categories;
 
@@ -110,7 +105,7 @@ function limitOf(field: StoreMdField, store: ListingStore): string {
 }
 
 export function storeMdFieldRows(store: ListingStore): StoreMdFieldRow[] {
-  return [...STORE_FIELDS[store], "screenshots" as const].map((field) => ({
+  return STORE_FIELDS[store].map((field) => ({
     field,
     line: storeMdLineOf(field),
     ...storeMdSectionOf(field, store),
@@ -129,8 +124,8 @@ export interface StoreMdLineNotFound {
  * with the section the table gives it, so the author adds "- Category:"
  * under "## Listing" instead of guessing what "categories" means. A line that
  * is there and could not be taken is already in skipped with its reason and
- * is not repeated here; the screenshots line is listed when neither STORE.md
- * nor the screenshots argument carried a file. "- App Store name:" is
+ * is not repeated here, and screenshots are never a line here, since STORE.md
+ * carries none. "- App Store name:" is
  * missed only when the Name it stands in for is absent or over the App
  * Store's limit, since a Name that fits is the name the record keeps
  * (ledger 158).
@@ -150,10 +145,6 @@ export function linesNotFound(local: LocalListing): StoreMdLineNotFound[] {
     if (field === "appStoreName" && nameFitsTheAppStore(listing.title)) continue;
 
     missing.push({ field, line: storeMdLineOf(field), section: storeMdSectionOf(field, local.store).section });
-  }
-
-  if (!local.patch.screenshots?.length && !local.screenshotsUnread) {
-    missing.push({ field: "screenshots", line: storeMdLineOf("screenshots"), section: LISTING_SECTION });
   }
 
   return missing;
