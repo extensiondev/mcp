@@ -49,6 +49,14 @@ function inside(root: string, target: string): boolean {
   return relative !== "" && !relative.startsWith("..") && !path.isAbsolute(relative);
 }
 
+function imageFromBytes(bytes: Buffer, maxBytes: number, source: string): ListingImage | string {
+  const size = readPngSize(bytes);
+  if (!size) return `${source} is not a PNG image`;
+  if (bytes.length > maxBytes) return `${source} is ${bytes.length} bytes, over the ${maxBytes} a listing image takes`;
+
+  return { sha256: crypto.createHash("sha256").update(bytes).digest("hex"), ...size, bytes, source };
+}
+
 function readImage(file: string, maxBytes: number, source: string): ListingImage | string {
   let bytes: Buffer;
 
@@ -58,11 +66,25 @@ function readImage(file: string, maxBytes: number, source: string): ListingImage
     return `${source} could not be read`;
   }
 
-  const size = readPngSize(bytes);
-  if (!size) return `${source} is not a PNG image`;
-  if (bytes.length > maxBytes) return `${source} is ${bytes.length} bytes, over the ${maxBytes} a listing image takes`;
+  return imageFromBytes(bytes, maxBytes, source);
+}
 
-  return { sha256: crypto.createHash("sha256").update(bytes).digest("hex"), ...size, bytes, source };
+export function icon128FromBytes(bytes: Buffer, source: string): { icon: ListingImage } | { missing: string } {
+  const read = imageFromBytes(bytes, MAX_ICON_BYTES, source);
+  if (typeof read === "string") return { missing: read };
+  if (read.width !== 128 || read.height !== 128) return { missing: `${read.source} is ${read.width}x${read.height}, not 128x128` };
+
+  return { icon: read };
+}
+
+export function declaredIcon128(manifest: unknown): string {
+  const icons = isRecord(manifest) && isRecord(manifest.icons) ? manifest.icons : {};
+
+  return typeof icons["128"] === "string" ? icons["128"].trim() : "";
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
 function distFor(projectPath: string, store: ListingStore): string | null {
@@ -76,21 +98,17 @@ function distFor(projectPath: string, store: ListingStore): string | null {
   return null;
 }
 
-export function iconFromDist(projectPath: string, store: ListingStore): { icon: ListingImage } | { missing: string } {
-  const dir = distFor(projectPath, store);
-  if (!dir) return { missing: `no built dist/${store}/manifest.json; build it with extension_build first` };
-
-  const relDir = path.relative(projectPath, dir);
-  let icons: Record<string, unknown> = {};
+function iconBesideManifest(projectPath: string, manifestFile: string): { icon: ListingImage } | { missing: string } {
+  const dir = path.dirname(manifestFile);
+  const relDir = path.relative(projectPath, dir) || ".";
+  let declared = "";
 
   try {
-    const manifest = JSON.parse(fs.readFileSync(path.join(dir, "manifest.json"), "utf8"));
-    icons = manifest && typeof manifest.icons === "object" && manifest.icons ? manifest.icons : {};
+    declared = declaredIcon128(JSON.parse(fs.readFileSync(manifestFile, "utf8")));
   } catch {
     return { missing: `${relDir}/manifest.json could not be read` };
   }
 
-  const declared = typeof icons["128"] === "string" ? (icons["128"] as string) : "";
   if (!declared) return { missing: `${relDir}/manifest.json declares no 128 px icon` };
 
   const file = path.resolve(dir, declared.replace(/^\/+/, ""));
@@ -101,6 +119,21 @@ export function iconFromDist(projectPath: string, store: ListingStore): { icon: 
   if (read.width !== 128 || read.height !== 128) return { missing: `${read.source} is ${read.width}x${read.height}, not 128x128` };
 
   return { icon: read };
+}
+
+export function iconFromDist(projectPath: string, store: ListingStore): { icon: ListingImage } | { missing: string } {
+  const dir = distFor(projectPath, store);
+  if (!dir) return { missing: `no built dist/${store}/manifest.json; build it with extension_build first` };
+
+  return iconBesideManifest(projectPath, path.join(dir, "manifest.json"));
+}
+
+export function iconFromSource(projectPath: string): { icon: ListingImage } | { missing: string } {
+  for (const file of [path.join(projectPath, "src", "manifest.json"), path.join(projectPath, "manifest.json")]) {
+    if (fs.existsSync(file)) return iconBesideManifest(projectPath, file);
+  }
+
+  return { missing: "no manifest.json in the project" };
 }
 
 export function readScreenshots(projectPath: string, paths: unknown): { screenshots: ListingImage[] } | { problem: string } {

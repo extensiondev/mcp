@@ -61,9 +61,15 @@ import {
   type UnreadLine,
 } from "../lib/store-md-listing";
 import {
+  localIcon,
+  platformBuildIcons,
+  staleSentence,
+  type IconOrigin,
+  type IconStale,
+} from "../lib/store-listing-icon";
+import {
   STORE_LISTING_ACTION,
   approvalBody,
-  iconFromDist,
   listingDigest,
   readScreenshots,
   writeBody,
@@ -73,6 +79,7 @@ import {
 
 const COMMAND = "extension_submit";
 const ACT = "sync-listing";
+const DONE_STATUSES = new Set(["synced", "unchanged", "icon-stale"]);
 
 type Row = Record<string, unknown>;
 
@@ -82,6 +89,7 @@ export interface ListingArgs {
   projectPath?: string;
   screenshots?: unknown;
   approvalId?: string;
+  useBuild?: string;
   project?: string;
   api?: string;
 }
@@ -90,7 +98,10 @@ export interface LocalListing {
   file: string;
   store: ListingStore;
   patch: ListingPatch;
+  icon?: IconOrigin;
   iconMissing?: string;
+  iconStale?: IconStale;
+  iconNote?: string;
   skipped: string[];
   unread: Partial<Record<ListingField, UnreadLine>>;
   lines: Partial<Record<ListingField, string>>;
@@ -154,7 +165,7 @@ export function readLocalListing(
 
   const parsed = parseStoreMdListing(content);
   const { listing, skipped, unread } = withChromeVisibility(listingForStore(parsed, store), parsed.lines.visibility);
-  const icon = iconFromDist(projectPath, store);
+  const icon = localIcon(projectPath, store);
   const patch: ListingPatch = { listing };
   const fromStoreMd = screenshots?.length ? null : screenshotsFromStoreMd(projectPath, parsed.screenshots);
 
@@ -172,8 +183,40 @@ export function readLocalListing(
     privacy: parsed.privacy,
     ...(parsed.screenshots ? { screenshotsLine: `- ${parsed.screenshots.line}:` } : {}),
     ...(fromStoreMd && "unread" in fromStoreMd ? { screenshotsUnread: fromStoreMd.unread } : {}),
-    ...("missing" in icon ? { iconMissing: icon.missing } : {}),
+    ...("icon" in icon ? { icon: icon.origin } : { iconMissing: icon.missing }),
+    ...("stale" in icon && icon.stale ? { iconStale: icon.stale } : {}),
   };
+}
+
+/* @invariant THE ICON A BUILD CARRIES REPLACES THE LOCAL READ; A LOCAL READ
+ * THE PLATFORM BUILD CANNOT BE READ FOR STAYS WHAT IT WAS. With a completed
+ * platform build of the checked out commit (or of useBuild), the store's icon
+ * is the one in that build's package, whatever dist holds; the local pick is
+ * kept only when the package cannot be read, with the reason beside it, and a
+ * dist older than the source stays withheld either way, now naming the newest
+ * platform build to take the icon from.
+ */
+async function adoptBuildIcon(
+  builds: Awaited<ReturnType<typeof platformBuildIcons>>,
+  store: ListingStore,
+  local: LocalListing,
+): Promise<void> {
+  if (builds.build) {
+    const taken = await builds.take(store);
+
+    if ("icon" in taken) {
+      local.patch.icons = [taken.icon];
+      local.icon = taken.origin;
+      delete local.iconMissing;
+      delete local.iconStale;
+
+      return;
+    }
+
+    local.iconNote = `The icon of build ${builds.build} could not be read for ${store} (${taken.problem})${local.icon ? `; the ${local.icon.from} icon was sent instead` : ""}.`;
+  }
+
+  if (local.iconStale) local.iconMissing = staleSentence(local.iconStale, builds.newest);
 }
 
 /* @invariant THE SCREENSHOTS LINE FEEDS THE SYNC THE WAY THE ARGUMENT DOES.
@@ -774,6 +817,17 @@ export async function syncListing(args: ListingArgs): Promise<string> {
   if ("refused" in opened) return opened.refused;
 
   const api = opened.api;
+  const builds = await platformBuildIcons(api, projectPath, text(args.useBuild));
+
+  if (text(args.useBuild) && !builds.build) {
+    return badShipRequest(
+      COMMAND,
+      ACT,
+      "ListingInputError",
+      `${text(args.useBuild)} is not a completed platform build of this project${builds.unreadable ? ` (${builds.unreadable})` : ""}; extension_builds lists the shas. Nothing was sent.`,
+    );
+  }
+
   const stores: Row = {};
   const unreadBack: string[] = [];
   const said: string[] = [];
@@ -782,6 +836,8 @@ export async function syncListing(args: ListingArgs): Promise<string> {
 
   for (const [store, local] of locals) {
     if (store === "safari") await adoptAppRecordName(api, local);
+
+    await adoptBuildIcon(builds, store, local);
 
     const notFound = linesNotFound(local);
     const unread = notFound.length ? { unread: notFound } : {};
@@ -794,7 +850,11 @@ export async function syncListing(args: ListingArgs): Promise<string> {
     const result = await syncOne(api, args, store, local.patch);
     if ("out" in result) return result.out as string;
 
-    const done = result.status === "synced" || result.status === "unchanged";
+    if (local.iconStale && result.status === "unchanged") result.status = "icon-stale";
+    if (local.iconStale) said.push(`For ${store}, ${local.iconMissing}.`);
+    if (local.iconNote) said.push(local.iconNote);
+
+    const done = DONE_STATUSES.has(text(result.status));
     const readBack = done ? await stillBlocking(api, store) : null;
     const blocking = readBack?.blocking ?? null;
     if (done && readBack === null) unreadBack.push(store);
@@ -827,6 +887,7 @@ export async function syncListing(args: ListingArgs): Promise<string> {
       ...result,
       filled,
       ...unread,
+      ...(local.patch.icons && local.icon ? { icon: local.icon } : {}),
       ...(local.iconMissing ? { iconMissing: local.iconMissing } : {}),
       ...(local.skipped.length ? { skipped: local.skipped } : {}),
       ...(blocking ? { stillBlocking: blocking } : {}),
@@ -845,7 +906,7 @@ export async function syncListing(args: ListingArgs): Promise<string> {
   const approvals = rows.filter((row) => row.status === "approval-required");
   const failed = rows.filter(
     (row) =>
-      !["synced", "recorded", "unchanged", "nothing-to-sync", "approval-required"].includes(
+      !["synced", "recorded", "unchanged", "icon-stale", "nothing-to-sync", "approval-required"].includes(
         text(row.status),
       ),
   );
@@ -926,7 +987,7 @@ export async function syncListing(args: ListingArgs): Promise<string> {
   const synced = rows
     .filter((row) => row.status === "synced" || row.status === "recorded")
     .map((row) => text(row.store));
-  const sentToStore = rows.some((row) => row.status === "synced" || (row.status === "unchanged" && text(row.store) !== "chrome"));
+  const sentToStore = rows.some((row) => row.status === "synced" || ((row.status === "unchanged" || row.status === "icon-stale") && text(row.store) !== "chrome"));
   const onlyRecorded = rows.some((row) => text(row.store) === "chrome" && isRow(row.pasteInDashboard)) && !sentToStore;
   const recordedStatus = onlyRecorded ? "listing-recorded" : "listing-synced";
   const links = linksOf([

@@ -10,10 +10,10 @@ export const API = "http://localhost:3100";
 export const PROJECT_ID = "prj_probe";
 export const PROJECT_ROUTE = `/api/projects/${PROJECT_ID}`;
 
-export type Reply = { body: unknown; status?: number; headers?: Record<string, string> };
+export type Reply = { body: unknown; status?: number; headers?: Record<string, string>; bytes?: Buffer };
 export type Call = { url: string; path: string; method: string; auth: string; body: any };
 
-function reply({ body, status = 200, headers = {} }: Reply): Response {
+function reply({ body, status = 200, headers = {}, bytes }: Reply): Response {
   const lower = Object.fromEntries(Object.entries(headers).map(([k, v]) => [k.toLowerCase(), v]));
 
   return {
@@ -22,6 +22,11 @@ function reply({ body, status = 200, headers = {} }: Reply): Response {
     headers: { get: (name: string) => lower[name.toLowerCase()] ?? null },
     text: async () => JSON.stringify(body),
     json: async () => body,
+    arrayBuffer: async () => {
+      const raw = bytes ?? Buffer.from(JSON.stringify(body));
+
+      return raw.buffer.slice(raw.byteOffset, raw.byteOffset + raw.byteLength);
+    },
   } as unknown as Response;
 }
 

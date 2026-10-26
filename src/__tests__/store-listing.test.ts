@@ -1072,6 +1072,7 @@ describe("extension_submit sync-listing and the preflight advisory", () => {
         status: "unchanged",
         appStoreConnect: { status: "unchanged", resend: "refused", trackUrl: SUBMISSIONS },
         filled: ["title", "shortDescription", "fullDescription", "icons"],
+        icon: { from: "dist", file: "dist/chrome/icons/128.png" },
         unread: SAFARI_UNREAD,
         stillBlocking: [],
       });
@@ -1514,6 +1515,7 @@ describe("extension_submit sync-listing sends the fields the platform hashes whe
       message: "The platform did not name the fields it hashes; update the platform or this server.",
       trackUrl: SUBMISSIONS,
       filled: ["title", "subtitle", "shortDescription", "fullDescription", "searchTerms", "reviewContactPhone", "icons"],
+      icon: { from: "dist", file: "dist/chrome/icons/128.png" },
       unread: SAFARI_SECTION_UNREAD,
     });
 
@@ -1569,6 +1571,7 @@ describe("extension_submit sync-listing sends the fields the platform hashes whe
       status: "synced",
       changes: ['title: "" -> "PII Shield"'],
       filled: ["title", "subtitle", "shortDescription", "fullDescription", "searchTerms", "reviewContactPhone", "icons"],
+      icon: { from: "dist", file: "dist/chrome/icons/128.png" },
       unread: SAFARI_SECTION_UNREAD,
       stillBlocking: [],
     });
@@ -1633,6 +1636,7 @@ describe("extension_submit sync-listing sends the fields the platform hashes whe
       digest,
       trackUrl: SUBMISSIONS,
       filled: ["title", "subtitle", "shortDescription", "fullDescription", "searchTerms", "reviewContactPhone", "icons"],
+      icon: { from: "dist", file: "dist/chrome/icons/128.png" },
       unread: SAFARI_SECTION_UNREAD,
     });
 

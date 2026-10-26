@@ -112,17 +112,17 @@ function safeEntryPath(intoDir: string, name: string): string | null {
   return target.startsWith(path.resolve(intoDir) + path.sep) ? target : null;
 }
 
-/* @invariant AN ARCHIVE NEVER WRITES OUTSIDE THE FOLDER IT IS UNPACKED INTO.
- * A build zip comes from the network, so an entry naming an absolute path, a
- * drive, a backslash or a ".." segment refuses the whole archive before any
- * byte is written, and the entry count and unpacked size are capped so a
- * small download cannot fill the disk.
- */
-export function unpackZip(
-  bytes: Buffer,
-  intoDir: string,
-  limits: { maxEntries: number; maxBytes: number },
-): ZipUnpack {
+interface ZipEntry {
+  name: string;
+  method: number;
+  compressed: number;
+  size: number;
+  offset: number;
+}
+
+type ZipDirectory = { ok: true; entries: ZipEntry[] } | { ok: false; message: string };
+
+function readZipDirectory(bytes: Buffer, maxEntries: number): ZipDirectory {
   if (bytes.length < EOCD_MIN_LENGTH) return { ok: false, message: "the archive is too short to be a zip" };
 
   let eocd = -1;
@@ -140,9 +140,9 @@ export function unpackZip(
   const count = bytes.readUInt16LE(eocd + 10);
   const directoryOffset = bytes.readUInt32LE(eocd + 16);
 
-  if (count > limits.maxEntries) return { ok: false, message: `the archive holds ${count} entries, over the ${limits.maxEntries} allowed` };
+  if (count > maxEntries) return { ok: false, message: `the archive holds ${count} entries, over the ${maxEntries} allowed` };
 
-  const entries: Array<{ name: string; method: number; compressed: number; size: number; offset: number }> = [];
+  const entries: ZipEntry[] = [];
   let at = directoryOffset;
 
   for (let i = 0; i < count; i += 1) {
@@ -164,9 +164,70 @@ export function unpackZip(
     at += 46 + nameLength + bytes.readUInt16LE(at + 30) + bytes.readUInt16LE(at + 32);
   }
 
+  return { ok: true, entries };
+}
+
+function readZipEntryData(bytes: Buffer, entry: ZipEntry): Buffer | string {
+  if (entry.method !== 0 && entry.method !== 8) {
+    return `the archive entry "${entry.name}" uses compression method ${entry.method}, which this tool does not read`;
+  }
+
+  const local = entry.offset;
+
+  if (local + 30 > bytes.length || bytes.readUInt32LE(local) !== LOCAL_SIGNATURE) {
+    return `the archive entry "${entry.name}" is damaged`;
+  }
+
+  const start = local + 30 + bytes.readUInt16LE(local + 26) + bytes.readUInt16LE(local + 28);
+  const raw = bytes.subarray(start, start + entry.compressed);
+  let data: Buffer;
+
+  try {
+    data = entry.method === 8 ? zlib.inflateRawSync(raw, { maxOutputLength: Math.max(1, entry.size) }) : Buffer.from(raw);
+  } catch (err: any) {
+    return `the archive entry "${entry.name}" could not be unpacked: ${err?.message || err}`;
+  }
+
+  if (data.length !== entry.size) {
+    return `the archive entry "${entry.name}" unpacked to ${data.length} bytes, not the ${entry.size} its directory records`;
+  }
+
+  return data;
+}
+
+export type ZipEntryRead = { ok: true; data: Buffer } | { ok: false; message: string; absent: boolean };
+
+export function readZipEntry(bytes: Buffer, name: string, limits: { maxEntries: number; maxBytes: number }): ZipEntryRead {
+  const directory = readZipDirectory(bytes, limits.maxEntries);
+  if (!directory.ok) return { ok: false, message: directory.message, absent: false };
+
+  const wanted = name.replace(/^\.?\//, "");
+  const entry = directory.entries.find((candidate) => candidate.name === wanted);
+  if (!entry) return { ok: false, message: `the archive has no ${wanted}`, absent: true };
+  if (entry.size > limits.maxBytes) return { ok: false, message: `${wanted} is ${entry.size} bytes, over the ${limits.maxBytes} allowed`, absent: false };
+
+  const data = readZipEntryData(bytes, entry);
+
+  return typeof data === "string" ? { ok: false, message: data, absent: false } : { ok: true, data };
+}
+
+/* @invariant AN ARCHIVE NEVER WRITES OUTSIDE THE FOLDER IT IS UNPACKED INTO.
+ * A build zip comes from the network, so an entry naming an absolute path, a
+ * drive, a backslash or a ".." segment refuses the whole archive before any
+ * byte is written, and the entry count and unpacked size are capped so a
+ * small download cannot fill the disk.
+ */
+export function unpackZip(
+  bytes: Buffer,
+  intoDir: string,
+  limits: { maxEntries: number; maxBytes: number },
+): ZipUnpack {
+  const directory = readZipDirectory(bytes, limits.maxEntries);
+  if (!directory.ok) return directory;
+
   let total = 0;
 
-  for (const entry of entries) {
+  for (const entry of directory.entries) {
     const checked = entry.name.replace(/\/+$/, "");
 
     if (checked !== "" && checked !== "." && !safeEntryPath(intoDir, checked)) {
@@ -185,29 +246,12 @@ export function unpackZip(
   let files = 0;
   let written = 0;
 
-  for (const entry of entries) {
+  for (const entry of directory.entries) {
     if (entry.name.endsWith("/")) continue;
 
     const target = safeEntryPath(intoDir, entry.name) as string;
-    const local = entry.offset;
-
-    if (local + 30 > bytes.length || bytes.readUInt32LE(local) !== LOCAL_SIGNATURE) {
-      return { ok: false, message: `the archive entry "${entry.name}" is damaged` };
-    }
-
-    const start = local + 30 + bytes.readUInt16LE(local + 26) + bytes.readUInt16LE(local + 28);
-    const raw = bytes.subarray(start, start + entry.compressed);
-    let data: Buffer;
-
-    try {
-      data = entry.method === 8 ? zlib.inflateRawSync(raw, { maxOutputLength: Math.max(1, entry.size) }) : Buffer.from(raw);
-    } catch (err: any) {
-      return { ok: false, message: `the archive entry "${entry.name}" could not be unpacked: ${err?.message || err}` };
-    }
-
-    if (data.length !== entry.size) {
-      return { ok: false, message: `the archive entry "${entry.name}" unpacked to ${data.length} bytes, not the ${entry.size} its directory records` };
-    }
+    const data = readZipEntryData(bytes, entry);
+    if (typeof data === "string") return { ok: false, message: data };
 
     fs.mkdirSync(path.dirname(target), { recursive: true });
     fs.writeFileSync(target, data);
