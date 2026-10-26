@@ -155,6 +155,34 @@ describe("extension_submit publish sends a Chrome draft to review after one appr
     expect(JSON.stringify(out)).not.toMatch(/on its way/);
   });
 
+  it("keeps answering publish-dispatched while Edge's operation reads INPROGRESS and the record reads publishing, never in-review", async () => {
+    if (process.platform === "win32") return;
+
+    platform.login();
+    platform.routes[`POST ${PUBLISH}`] = dispatched;
+    platform.routes["GET /api/cli/stores/submissions"] = () => ({
+      body: {
+        submissions: [
+          {
+            id: "sub_2",
+            store: "chrome",
+            status: "draft",
+            rawStatus: "publishing",
+            storeReview: { state: "INPROGRESS", checkedAt: "2026-10-26T18:18:46.000Z", source: "publish-answer" },
+            publish: { act: "publish", status: "publishing", storeMessage: "Edge is still accepting the submission for product p1 (operation op-1 INPROGRESS).", at: "2026-10-26T18:18:46.000Z" },
+          },
+        ],
+      },
+    });
+
+    const out = JSON.parse(await submit({ action: "publish", browsers: ["chrome"], approvalId: "apr_p", waitSeconds: 5, api: API }));
+
+    expect(out.ok).toBe(true);
+    expect(out.status).toBe("publish-dispatched");
+    expect(out.value.outcome).toMatchObject({ recorded: false, status: "publishing", storeState: null });
+    expect(JSON.stringify(out)).not.toMatch(/\bin review\b|\bin-review\b|on its way/);
+  });
+
   it("answers publish-failed with the store's own words when the record carries a refused publish", async () => {
     if (process.platform === "win32") return;
 
@@ -406,7 +434,7 @@ describe("extension_submit publish sends a Chrome draft to review after one appr
     });
 
     platform.routes["GET /api/cli/stores/submissions"] = () => ({
-      body: { submissions: [{ id: "sub_e1", store: "edge", status: "submitted", storeReview: { state: "INPROGRESS", checkedAt: "2026-10-20T18:00:05.000Z", source: "publish-answer" } }] },
+      body: { submissions: [{ id: "sub_e1", store: "edge", status: "submitted", storeReview: { state: "SUCCEEDED", checkedAt: "2026-10-20T18:00:05.000Z", source: "publish-answer" }, publish: { act: "publish", status: "in-review", storeMessage: "Edge took product p1 into certification review (operation op-1 SUCCEEDED).", at: "2026-10-20T18:00:05.000Z" } }] },
     });
 
     const out = JSON.parse(await submit({ action: "publish", browsers: ["edge"], approvalId: "apr_e", waitSeconds: 0, api: API }));
@@ -414,7 +442,7 @@ describe("extension_submit publish sends a Chrome draft to review after one appr
     expect(platform.sent("POST", EDGE_PUBLISH)[0].body).toEqual({ approvalId: "apr_e" });
     expect(out.status).toBe("in-review");
     expect(out.value.store).toBe("edge");
-    expect(out.value.outcome).toMatchObject({ recorded: true, storeState: "INPROGRESS" });
+    expect(out.value.outcome).toMatchObject({ recorded: true, storeState: "SUCCEEDED" });
     expect(out.value.sayToPerson).toContain("Edge's certification review");
     expect(out.hint).not.toContain("Chrome");
   });

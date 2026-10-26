@@ -34,6 +34,14 @@ export const NO_ACTIVE_SUBMISSION = "NO_ACTIVE_SUBMISSION";
  * state reads FAILED (Edge answers that on the publish call itself, and
  * nothing enters certification); each of those ends the wait as
  * publish-failed, so the answer never says the draft is on its way.
+ *
+ * A PUBLISH THE STORE IS STILL ACCEPTING IS NOT A REVIEW. Edge answers the
+ * publish call with an operation that reads INPROGRESS until Partner Center
+ * settles it to Succeeded (the product enters certification) or Failed; the
+ * record reads `publish.status: "publishing"` meanwhile (Rebeccat's fourth
+ * Edge publish of 2026-10-26 was answered in-review from that first read
+ * while Partner Center still said In draft). That is a wait, answered as
+ * publishing, never as in-review.
  */
 export function judgePublish(acceptedAt: string): (record: PlatformSubmission) => Verdict {
   return (record) => {
@@ -52,6 +60,12 @@ export function judgePublish(acceptedAt: string): (record: PlatformSubmission) =
 
     if (refused || runFailed || operationFailed) {
       return { kind: "recorded", status: "publish-failed", storeState: state || null, liveState, failed: true };
+    }
+
+    const publishing = record.publish?.status === "publishing" && after(record.publish.at, acceptedAt);
+
+    if (publishing || (state === "INPROGRESS" && after(review?.checkedAt, acceptedAt))) {
+      return { kind: "waiting", status: "publishing" };
     }
 
     if (!state || state === NO_ACTIVE_SUBMISSION || !after(review?.checkedAt, acceptedAt)) {
