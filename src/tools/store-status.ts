@@ -90,7 +90,9 @@ function submissionView(row: Record<string, unknown>): SubmissionView {
   const channel = str(row.channel);
   const buildSha = str(row.buildSha) || str(row.buildId);
   const storeSubmissionId = str(row.storeSubmissionId);
-  const failureReason = str(row.failureReason);
+  const publish = row.publish && typeof row.publish === "object" ? (row.publish as Record<string, unknown>) : null;
+  const refusal = publish && str(publish.status) === "failed" ? str(publish.storeMessage) : undefined;
+  const failureReason = str(row.failureReason) || refusal;
   const storeVersion = storeVersionOf(row.storeVersion);
   const storeCrxVersion = typeof row.storeCrxVersion === "string" ? row.storeCrxVersion.trim() : "";
   const storeReview = storeReviewOfRow(row.storeReview);

@@ -53,6 +53,9 @@ const HEALTH = {
   },
 };
 
+const EDGE_REFUSAL =
+  "Edge did not take product 903d21e4 into review: the publish operation ended Failed (CreateNotAllowed: Can't create new extension.). Nothing is in certification review.";
+
 const SUBMISSIONS = {
   updatedAt: "2026-07-22T17:25:05.000Z",
   submissions: [
@@ -77,6 +80,25 @@ const SUBMISSIONS = {
       buildId: "0c7471e",
       storeUrl: "https://addons.mozilla.org/firefox/addon/probe",
     },
+  ],
+};
+
+const SUBMISSIONS_WITH_REFUSED_EDGE = {
+  ...SUBMISSIONS,
+  submissions: [
+    {
+      id: "sub-edge",
+      store: "edge",
+      channel: "stable",
+      storeSubmissionId: "op-63e9",
+      version: "0.2.0",
+      status: "draft",
+      rawStatus: "draft",
+      submittedAt: "2026-07-21T00:00:00.000Z",
+      storeReview: { state: "FAILED", checkedAt: "2026-07-21T00:05:00.000Z", source: "poll" },
+      publish: { act: "publish", status: "failed", storeMessage: EDGE_REFUSAL, at: "2026-07-21T00:05:00.000Z" },
+    },
+    ...SUBMISSIONS.submissions,
   ],
 };
 
@@ -164,7 +186,7 @@ describe("store-status reader", () => {
     global.fetch = fetchByFile({
       "stores/health.json": HEALTH,
       "stores/status.json": STATUS_V3,
-      "stores/submissions.json": SUBMISSIONS,
+      "stores/submissions.json": SUBMISSIONS_WITH_REFUSED_EDGE,
     });
 
     const out = JSON.parse(
@@ -187,6 +209,9 @@ describe("store-status reader", () => {
     expect(byStore.edge.configured).toBe(true);
     expect(byStore.edge.health.ok).toBe(false);
     expect(byStore.edge.health.message).toContain("Unauthorized");
+    expect(byStore.edge.lastSubmission.status).toBe("draft");
+    expect(byStore.edge.lastSubmission.failureReason).toBe(EDGE_REFUSAL);
+    expect(JSON.stringify(out)).toContain("CreateNotAllowed");
 
     expect(byStore.safari.configured).toBe(false);
     expect(byStore.safari.lastSubmission).toBeUndefined();
