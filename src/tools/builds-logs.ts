@@ -13,7 +13,7 @@ import { COMMAND, isRow, text, type Row } from "./builds-acts";
 export const LOG_TAIL = 200;
 
 const NOT_RUN_REASON = "the run failed before this browser's job started";
-const CANCELLED_REASON = "the run was cancelled before this browser's job started";
+const CANCELLED_REASON = "the run was canceled before this browser's job started";
 const FAILED_BUILD_STATUSES = new Set(["failed", "failure", "error", "timed_out", "cancelled", "canceled"]);
 
 export interface LogsRead {
@@ -36,8 +36,8 @@ export function cancelledSentence(buildId: string, supersededBy: unknown): strin
   const newer = text(supersededBy);
 
   return newer
-    ? `Build ${buildId} was cancelled because ${newer} landed; nothing is wrong with it.`
-    : `Build ${buildId} was cancelled by the platform; nothing is wrong with it.`;
+    ? `Build ${buildId} was canceled because ${newer} landed; nothing is wrong with it.`
+    : `Build ${buildId} was canceled by the platform; nothing is wrong with it.`;
 }
 
 function runSectionOf(value: unknown): RunSection | null {

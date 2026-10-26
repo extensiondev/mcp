@@ -32,7 +32,7 @@ const ORIGINAL = {
   stage: "before-store",
   retriedAs: "sub_edge_retry",
   failureReason:
-    "The edge run was cancelled before any store step ran, so no store received this submission; the platform dispatched it once more.",
+    "The edge run was canceled before any store step ran, so no store received this submission; the platform dispatched it once more.",
   message: SENTENCE,
 };
 
@@ -140,7 +140,7 @@ describe("a submit whose run GitHub canceled before upload follows the platform'
         retryOf: "sub_edge",
         stage: "before-store",
         failureReason:
-          "The edge run was cancelled before any store step ran, so no store received this submission, and it was already the platform's one retry. Submit edge again; nothing reached the store.",
+          "The edge run was canceled before any store step ran, so no store received this submission, and it was already the platform's one retry. Submit edge again; nothing reached the store.",
       },
     ]);
 

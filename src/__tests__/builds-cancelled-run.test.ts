@@ -58,7 +58,7 @@ const CANCELLED_ITEMS = ["chrome", "edge", "firefox"].map((browser) => ({
   status: "cancelled",
   issueKind: "info",
   runUrl: RUN_URL,
-  reason: "the run was cancelled before this browser's job started",
+  reason: "the run was canceled before this browser's job started",
   logs: [],
 }));
 
@@ -72,7 +72,7 @@ const CANCELLED_LOGS = {
     failedJob: null,
     supersededBy: "9081f4d",
     source: "run",
-    note: "The platform cancelled this run because 9081f4d landed on the same branch; nothing is wrong with this build.",
+    note: "The platform canceled this run because 9081f4d landed on the same branch; nothing is wrong with this build.",
   },
   items: CANCELLED_ITEMS,
 };
@@ -135,8 +135,8 @@ describe("extension_builds reads a run the platform cancelled as cancelled", () 
     expect(byId["9081f4d"].supersededBy).toBeUndefined();
     expect(byId["5a5a5a5"]).toMatchObject({ status: "failed" });
     expect(byId["5a5a5a5"].supersededBy).toBeUndefined();
-    expect(out.value.sayToPerson).toBe("Build d8044e3 was cancelled because 9081f4d landed; nothing is wrong with it.");
-    expect(out.hint).toContain("Build d8044e3 was cancelled because 9081f4d landed; nothing is wrong with it.");
+    expect(out.value.sayToPerson).toBe("Build d8044e3 was canceled because 9081f4d landed; nothing is wrong with it.");
+    expect(out.hint).toContain("Build d8044e3 was canceled because 9081f4d landed; nothing is wrong with it.");
     expect(out.value.trackUrl).toContain("/acme/widget/builds");
   });
 
@@ -148,7 +148,7 @@ describe("extension_builds reads a run the platform cancelled as cancelled", () 
     const out = JSON.parse(await builds({ action: "list", api: API }));
 
     expect(out.value.builds[0]).toMatchObject({ status: "cancelled", supersededBy: null });
-    expect(out.value.sayToPerson).toBe("Build d8044e3 was cancelled by the platform; nothing is wrong with it.");
+    expect(out.value.sayToPerson).toBe("Build d8044e3 was canceled by the platform; nothing is wrong with it.");
   });
 
   it("passes the cancelled run and supersededBy through the logs answer, with no browser called failed", async () => {
@@ -158,9 +158,9 @@ describe("extension_builds reads a run the platform cancelled as cancelled", () 
 
     expect(out.value.run).toMatchObject({ status: "completed", conclusion: "cancelled", supersededBy: "9081f4d", failedJob: null });
     expect(out.value.items.map((item: { status: string }) => item.status)).toEqual(["cancelled", "cancelled", "cancelled"]);
-    expect(out.value.items[0].reason).toBe("the run was cancelled before this browser's job started");
-    expect(out.value.sayToPerson).toBe("Build d8044e3 was cancelled because 9081f4d landed; nothing is wrong with it.");
-    expect(out.hint.startsWith("Build d8044e3 was cancelled because 9081f4d landed; nothing is wrong with it.")).toBe(true);
+    expect(out.value.items[0].reason).toBe("the run was canceled before this browser's job started");
+    expect(out.value.sayToPerson).toBe("Build d8044e3 was canceled because 9081f4d landed; nothing is wrong with it.");
+    expect(out.hint.startsWith("Build d8044e3 was canceled because 9081f4d landed; nothing is wrong with it.")).toBe(true);
     expect(out.value.trackUrl).toContain("/builds/d8044e3");
     expect(JSON.stringify(out)).not.toContain("failed before");
   });
@@ -175,7 +175,7 @@ describe("extension_builds reads a run the platform cancelled as cancelled", () 
     const out = JSON.parse(await builds({ action: "logs", buildId: "d8044e3", api: API }));
 
     expect(out.value.items.map((item: { status: string }) => item.status)).toEqual(["cancelled", "cancelled", "cancelled"]);
-    expect(out.value.items[1].reason).toBe("the run was cancelled before this browser's job started");
+    expect(out.value.items[1].reason).toBe("the run was canceled before this browser's job started");
     expect(JSON.stringify(out)).not.toContain('"skipped"');
   });
 });
