@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { actionFingerprint } from "../lib/approval-gate";
+import { attachTrack } from "../lib/track-url";
 import { handler as submit } from "../tools/submit";
 import { API, PROJECT_ROUTE, useProjectRoutes } from "./fixtures/project-routes";
 
@@ -383,10 +384,136 @@ describe("extension_submit publish sends a Chrome draft to review after one appr
     expect(platform.sent("POST", APPROVALS)[0].body).toMatchObject({ action: "extension_store.publish", scope: EDGE_SCOPE });
   });
 
-  it("refuses any store but chrome and edge without calling the platform", async () => {
+  it("refuses firefox without calling the platform, since Firefox enters review when it is submitted", async () => {
     const out = JSON.parse(await submit({ action: "publish", browsers: ["firefox"], api: API }));
 
     expect(out.status).toBe("bad-request");
+    expect(out.error.message).toContain('["safari"]');
     expect(platform.calls).toHaveLength(0);
   });
+
+  const SAFARI_PUBLISH = `${PROJECT_ROUTE}/stores/safari/publish`;
+  const ASC_URL = "https://appstoreconnect.apple.com/apps/6740000001/distribution";
+  const SAFARI_TRACK = "https://console.extension.dev/acme/widget/submissions/safari/sub_s1";
+
+  it("sends the App Store version holding the TestFlight build to App Review on the safari lane with Apple's words", async () => {
+    if (process.platform === "win32") return;
+
+    platform.login();
+    platform.routes[`POST ${SAFARI_PUBLISH}`] = () => ({
+      body: { ok: true, dispatched: true, status: "in-review", store: "safari", submissionId: "sub_s1", version: "0.2.0", buildId: "2bda5b2", itemUrl: ASC_URL, trackUrl: SAFARI_TRACK, dispatchedAt: "2026-10-26T12:00:00.000Z" },
+    });
+
+    platform.routes["GET /api/cli/stores/submissions"] = () => ({
+      body: { submissions: [{ id: "sub_s1", store: "safari", status: "submitted", storeReview: { state: "WAITING_FOR_REVIEW", checkedAt: "2026-10-26T12:00:30.000Z", source: "publish-answer" } }] },
+    });
+
+    const out = JSON.parse(await submit({ action: "publish", browsers: ["safari"], approvalId: "apr_s", waitSeconds: 0, api: API }));
+
+    expect(platform.sent("POST", SAFARI_PUBLISH)[0].body).toEqual({ approvalId: "apr_s" });
+    expect(out.status).toBe("in-review");
+    expect(out.value).toMatchObject({ store: "safari", submissionId: "sub_s1", trackUrl: SAFARI_TRACK, itemUrl: ASC_URL });
+    expect(out.value.outcome).toMatchObject({ recorded: true, storeState: "WAITING_FOR_REVIEW" });
+    expect(out.value.links).toEqual([
+      { kind: "submission", url: SAFARI_TRACK, audience: "workspace members", expiresAt: null, made: false },
+      { kind: "item", url: ASC_URL, audience: "you", expiresAt: null, made: false },
+    ]);
+
+    expect(out.value.sayToPerson).toContain("Apple's App Review");
+    expect(out.hint).toContain("carries Apple's own state, WAITING_FOR_REVIEW");
+    expect(out.hint).not.toContain("Chrome");
+  });
+
+  it("answers publish-dispatched for safari until the record carries Apple's state", async () => {
+    if (process.platform === "win32") return;
+
+    platform.login();
+    platform.routes[`POST ${SAFARI_PUBLISH}`] = () => ({
+      body: { ok: true, dispatched: true, status: "in-review", store: "safari", submissionId: "sub_s1", trackUrl: SAFARI_TRACK, dispatchedAt: "2026-10-26T12:00:00.000Z" },
+    });
+
+    platform.routes["GET /api/cli/stores/submissions"] = () => ({
+      body: { submissions: [{ id: "sub_s1", store: "safari", status: "draft" }] },
+    });
+
+    const out = JSON.parse(await submit({ action: "publish", browsers: ["safari"], approvalId: "apr_s", waitSeconds: 0, api: API }));
+
+    expect(out.status).toBe("publish-dispatched");
+    expect(out.value.outcome).toMatchObject({ recorded: false, storeState: null });
+    expect(out.hint).not.toMatch(/\bin review\b|\bin-review\b/);
+    expect(out.hint).toContain(SAFARI_TRACK);
+  });
+
+  it("answers publish-failed with Apple's own refusal when the record reads failed", async () => {
+    if (process.platform === "win32") return;
+
+    platform.login();
+    platform.routes[`POST ${SAFARI_PUBLISH}`] = () => ({
+      body: { ok: true, dispatched: true, status: "in-review", store: "safari", submissionId: "sub_s1", trackUrl: SAFARI_TRACK },
+    });
+
+    platform.routes["GET /api/cli/stores/submissions"] = () => ({
+      body: { submissions: [{ id: "sub_s1", store: "safari", status: "failed", failureReason: "App Store Connect refused to submit version 0.2.0 for review: appPrivacy: STATE_ERROR.ENTITY_STATE_INVALID: App Privacy must be answered before submitting." }] },
+    });
+
+    const out = JSON.parse(await submit({ action: "publish", browsers: ["safari"], approvalId: "apr_s", api: API }));
+
+    expect(out.status).toBe("publish-failed");
+    expect(out.error.message).toContain("Apple's App Review");
+    expect(out.error.message).toContain("App Privacy must be answered");
+  });
+
+  it("asks for a Safari approval in Apple's words and keeps the release mode out of the act", async () => {
+    if (process.platform === "win32") return;
+
+    platform.login();
+    const SAFARI_SCOPE = { store: "safari", submissionId: "sub_s1" };
+    platform.routes[`POST ${SAFARI_PUBLISH}`] = () => ({
+      status: 403,
+      body: { code: "APPROVAL_REQUIRED", message: "Needs an owner's approval.", approvalRequest: { action: "extension_store.publish", scope: SAFARI_SCOPE, fingerprint: actionFingerprint("extension_store.publish", SAFARI_SCOPE) } },
+    });
+
+    platform.routes[`POST ${APPROVALS}`] = () => ({ status: 201, body: { approvalId: "apr_s", approvalUrl: `${API}/approve/apr_s`, expiresAt: "2026-10-27T06:15:00.000Z" } });
+
+    const out = JSON.parse(await submit({ action: "publish", browsers: ["safari"], submissionId: "sub_s1", api: API }));
+
+    expect(out.status).toBe("approval-required");
+    expect(out.value.nextStep.say).toBe(
+      `Approve it at ${API}/approve/apr_s before 2026-10-27T06:15:00.000Z. This sends the App Store version holding the TestFlight build to Apple's App Review; the release mode set in App Store Connect stays as it is.`,
+    );
+
+    expect(platform.sent("POST", APPROVALS)[0].body).toMatchObject({ action: "extension_store.publish", scope: SAFARI_SCOPE, description: "Send the App Store TestFlight build to review." });
+  });
+});
+
+describe("the approval-required publish answer names the page to check for the store it acts on", () => {
+  const platform = useProjectRoutes("extdev-store-publish-check-");
+
+  for (const store of ["chrome", "edge", "safari"] as const) {
+    it(`${store}: checkUrl is that store's submissions page, never another store's`, async () => {
+      if (process.platform === "win32") return;
+
+      platform.login();
+      const scope = { store, submissionId: `sub_${store}` };
+      platform.routes[`POST ${PROJECT_ROUTE}/stores/${store}/publish`] = () => ({
+        status: 403,
+        body: { code: "APPROVAL_REQUIRED", message: "Needs an owner's approval.", approvalRequest: { action: "extension_store.publish", scope, fingerprint: actionFingerprint("extension_store.publish", scope) } },
+      });
+
+      platform.routes[`POST ${APPROVALS}`] = () => ({ status: 201, body: { approvalId: `apr_${store}`, approvalUrl: `${API}/approve/apr_${store}`, expiresAt: "2026-10-27T06:15:00.000Z" } });
+
+      const args = { action: "publish", browsers: [store], api: API };
+      const out = JSON.parse(attachTrack("extension_submit", args, await submit(args)));
+
+      expect(out.status).toBe("approval-required");
+      expect(out.value.trackUrl).toBe(`${API}/approve/apr_${store}`);
+      expect(out.value.checkUrl).toMatch(new RegExp(`/acme/widget/submissions/${store}$`));
+
+      for (const other of ["chrome", "edge", "safari"].filter((name) => name !== store)) {
+        expect(out.value.checkUrl).not.toContain(`/submissions/${other}`);
+      }
+
+      expect(out.hint).toContain(out.value.checkUrl);
+    });
+  }
 });

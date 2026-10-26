@@ -268,35 +268,46 @@ function reworded(
   return out;
 }
 
-type PublishStore = "chrome" | "edge";
+type PublishStore = "chrome" | "edge" | "safari";
 
-const PUBLISH_STORES: readonly PublishStore[] = ["chrome", "edge"];
+const PUBLISH_STORES: readonly PublishStore[] = ["chrome", "edge", "safari"];
 
-function storeWords(store: PublishStore): {
-  name: string;
-  reviewer: string;
-  noun: string;
-  reviewWord: string;
-} {
-  return store === "edge"
-    ? {
-        name: "Edge Add-ons",
-        reviewer: "Edge",
-        noun: "product",
-        reviewWord: "certification review",
-      }
-    : {
-        name: "the Chrome Web Store",
-        reviewer: "Chrome",
-        noun: "item",
-        reviewWord: "review",
-      };
+const PUBLISH_WORDS: Record<
+  PublishStore,
+  { name: string; reviewer: string; noun: string; reviewWord: string }
+> = {
+  chrome: {
+    name: "the Chrome Web Store",
+    reviewer: "Chrome",
+    noun: "item",
+    reviewWord: "review",
+  },
+  edge: {
+    name: "Edge Add-ons",
+    reviewer: "Edge",
+    noun: "product",
+    reviewWord: "certification review",
+  },
+  safari: {
+    name: "the App Store",
+    reviewer: "Apple",
+    noun: "version",
+    reviewWord: "App Review",
+  },
+};
+
+function storeWords(store: PublishStore): (typeof PUBLISH_WORDS)[PublishStore] {
+  return PUBLISH_WORDS[store];
 }
 
 function publishApprovalSentence(store: PublishStore): string {
-  return store === "edge"
-    ? "This sends the product to Edge's certification review."
-    : PUBLISH_APPROVAL_SENTENCE;
+  if (store === "edge") return "This sends the product to Edge's certification review.";
+
+  if (store === "safari") {
+    return "This sends the App Store version holding the TestFlight build to Apple's App Review; the release mode set in App Store Connect stays as it is.";
+  }
+
+  return PUBLISH_APPROVAL_SENTENCE;
 }
 
 export async function publishDraft(args: StoreActArgs): Promise<string> {
@@ -312,7 +323,7 @@ export async function publishDraft(args: StoreActArgs): Promise<string> {
       COMMAND,
       "publish",
       "PublishInputError",
-      `publish sends one store's draft to review, so browsers must be ["chrome"] or ["edge"]; got ${JSON.stringify(args.browsers ?? args.store ?? null)}. Firefox and Safari enter review when they are submitted. Nothing was sent.`,
+      `publish sends one store's draft to review, so browsers must be ["chrome"], ["edge"] or ["safari"]; got ${JSON.stringify(args.browsers ?? args.store ?? null)}. Firefox enters review when it is submitted. Nothing was sent.`,
     );
   }
 
@@ -329,7 +340,7 @@ export async function publishDraft(args: StoreActArgs): Promise<string> {
       route: `stores/${store}/publish`,
       body: submissionId ? { submissionId } : {},
       approvalId: args.approvalId,
-      description: `Send the ${words.name.replace(/^the /, "")} draft to review.`,
+      description: `Send the ${words.name.replace(/^the /, "")} ${store === "safari" ? "TestFlight build" : "draft"} to review.`,
       reason: `${publishApprovalSentence(store)} Nothing changes for current users until ${words.reviewer} approves it, so a workspace owner approves this exact draft first.`,
       stateRead: storesRead(args),
       scopeFits: (scope) =>

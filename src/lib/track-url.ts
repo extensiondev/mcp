@@ -162,8 +162,9 @@ function submitPlan(call: TrackCall): TrackPlan {
 
   if (action === "publish" || action === "review") {
     const submissionId = text(call.value.submissionId) || text(call.args.submissionId);
+    const store = text(call.value.store) || firstBrowser(call.args) || "chrome";
 
-    return { track: { page: submissionId ? "submission" : "store", target: { store: "chrome", submissionId } } };
+    return { track: { page: submissionId ? "submission" : "store", target: { store, submissionId } } };
   }
 
   if (action === "preflight" && STORE_CONNECT_STATUSES.has(call.status)) return { track: { page: "store-settings" } };

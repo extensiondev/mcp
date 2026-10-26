@@ -180,7 +180,7 @@ describe("the share and store tools describe what a person gets, so the agent le
       .filter((sentence) => /chrome|submissions land|submissions default/i.test(sentence));
 
     expect(submissionSentences.filter((sentence) => /testers/i.test(sentence))).toEqual([]);
-    expect(description).toMatch(/Submissions land least public: Chrome and Edge as drafts that enter review only through action:'publish', Firefox unlisted unless the project saved a release channel, Safari as a TestFlight draft\./);
+    expect(description).toMatch(/Submissions land least public: Chrome and Edge as drafts and Safari as a TestFlight build, each entering review only through action:'publish'; Firefox unlisted unless the project saved a release channel\./);
     expect(read).toMatch(/Chrome and Edge upload a draft that is not published and does not enter review/);
     expect(read).toMatch(/recorded as 'Uploaded, not public', never as live/);
     expect(description.length).toBeLessThan(1600);
