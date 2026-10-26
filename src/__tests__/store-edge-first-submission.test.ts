@@ -75,6 +75,57 @@ describe("a never-submitted Edge product is named before any approval", () => {
     expect(out.value.nextStep?.kind).toBe("submit");
   });
 
+  it("never calls a store green beside a list that is not ready for review: the first submission row missing answers the dashboard and names the write that records it", async () => {
+    if (process.platform === "win32") return;
+
+    platform.login();
+    platform.routes[PREFLIGHT] = () => ({
+      body: {
+        ...report(false),
+        summary: { pass: 12, warn: 0, fail: 0, blockingFailures: 0, canSubmit: true },
+        requirements: { store: "edge", items: [ROW], missingRequired: 1, missingOptional: 0, readyForReview: false, reviewBlockers: [ROW.id] },
+      },
+    });
+
+    const out = JSON.parse(await submit({ action: "preflight", browsers: ["edge"], api: API }));
+
+    expect(out.status).toBe("preflight-read");
+    expect(out.value.stores.edge.readyForReview).toBe(false);
+    expect(out.value.nextStep).toMatchObject({ kind: "dashboard", url: PRODUCT_URL });
+    expect(out.value.nextStep.say).toContain('extension_submit action:"configure-store" store:"edge" storeSettings:{firstSubmitted:true}');
+    expect(out.value.trackUrl).toMatch(/\/acme\/widget\/submissions$/);
+    expect(out.hint).toContain("not ready for review");
+    expect(JSON.stringify(out.value.nextStep)).not.toMatch(/Every check for/);
+    expect(out.hint).not.toMatch(/Every store read here is ready to submit/);
+    expect(JSON.stringify(out)).not.toMatch(/extension-user-land|\/actions\/runs\//);
+  });
+
+  it("names the missing inputs on the store settings page when the list is short of something other than the first submission", async () => {
+    if (process.platform === "win32") return;
+
+    platform.login();
+    platform.routes[PREFLIGHT] = () => ({
+      body: {
+        ...report(false),
+        edgeFirstSubmission: { state: "have", productId: PRODUCT, partnerCenterUrl: PRODUCT_URL, blocksSubmit: false, steps: [] },
+        requirements: {
+          store: "edge",
+          items: [{ ...ROW, status: "have" }, { id: "edge.category", label: "Category", required: true, satisfiedBy: "store-md: Category", status: "missing" }],
+          missingRequired: 1,
+          missingOptional: 0,
+          readyForReview: false,
+          reviewBlockers: ["edge.category"],
+        },
+      },
+    });
+
+    const out = JSON.parse(await submit({ action: "preflight", browsers: ["edge"], api: API }));
+
+    expect(out.value.nextStep.kind).toBe("configure");
+    expect(out.value.nextStep.url).toMatch(/\/acme\/widget\/submissions$/);
+    expect(out.value.nextStep.say).toContain("edge is not ready for review yet.");
+  });
+
   it("a dry-run submit under the review mode answers the state as its verdict with the dashboard as the next step", async () => {
     if (process.platform === "win32") return;
 

@@ -60,10 +60,22 @@ export function edgeFirstSubmissionOf(report: unknown): EdgeFirstSubmission | nu
   };
 }
 
+export const FIRST_SUBMITTED_WRITE = `extension_submit action:"configure-store" store:"edge" storeSettings:{firstSubmitted:true}`;
+
+/* @invariant THE FIRST-SUBMISSION HINT NAMES THE WRITE THAT RECORDS IT.
+ * Microsoft exposes nothing that says a product was submitted, so once the
+ * owner has submitted it in Partner Center the platform learns it from a
+ * publish it records or from the owner's word; the word is one plain owner
+ * write from here (configure-store with firstSubmitted true) or the console
+ * switch, and the hint says both so the agent can record it when told. */
+export function firstSubmittedWriteSentence(): string {
+  return `Once the owner says it was submitted there, ${FIRST_SUBMITTED_WRITE} records it (a plain owner write; the console's "Submitted once in Partner Center" switch is the same record), and the Edge first-submission requirement then reads have.`;
+}
+
 export function firstSubmissionSentences(first: Pick<EdgeFirstSubmission, "partnerCenterUrl" | "steps">): string {
   const steps = first.steps.length ? ` ${first.steps.map((step, i) => `${i + 1}. ${step}`).join(" ")}` : "";
 
-  return `${edgeFirstSubmissionAdvice(first.partnerCenterUrl)}${steps} Nothing was sent and no approval was asked for.`;
+  return `${edgeFirstSubmissionAdvice(first.partnerCenterUrl)}${steps} ${firstSubmittedWriteSentence()} Nothing was sent and no approval was asked for.`;
 }
 
 export function firstSubmissionStep(first: Pick<EdgeFirstSubmission, "partnerCenterUrl" | "steps">, fallbackUrl?: string): NextStep {

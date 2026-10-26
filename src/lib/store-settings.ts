@@ -26,7 +26,7 @@ export const SUBMISSION_MODE_IDS: Record<StoreSettingsStore, readonly string[]> 
   safari: ["draft", "dry-run"],
 };
 
-export const STORE_SETTING_KEYS = ["enabled", "submissionMode", "sourceArchive", "releaseChannel", "chromeItemId", "edgeProductId", "firefoxAddonGuid", "appStoreId", "bundleId"] as const;
+export const STORE_SETTING_KEYS = ["enabled", "submissionMode", "sourceArchive", "releaseChannel", "chromeItemId", "edgeProductId", "firefoxAddonGuid", "appStoreId", "bundleId", "firstSubmitted"] as const;
 
 const FIREFOX_ONLY_KEYS = new Set(["sourceArchive", "releaseChannel"]);
 
@@ -56,7 +56,7 @@ const CONSOLE_ONLY_KEYS = new Set([
 
 const CREDENTIAL_KEY = /secret|token|password|credential|issuer|key|client|json|p8|pem|cert|account|oauth|refresh/i;
 
-export const PATCH_KEYS = ["enabled", "dryRun", "skipPublish", "stagedPublish", "publishAfter", "releaseChannel", "sourceArchive", "storeId", "bundleId"] as const;
+export const PATCH_KEYS = ["enabled", "dryRun", "skipPublish", "stagedPublish", "publishAfter", "releaseChannel", "sourceArchive", "storeId", "bundleId", "firstSubmitted"] as const;
 
 export type StoreSettingsPatch = Partial<Record<(typeof PATCH_KEYS)[number], boolean | string | null>>;
 
@@ -133,6 +133,10 @@ export function readStoreSettingsChange(store: StoreSettingsStore, raw: unknown)
     return { problem: `"bundleId" is a safari store setting; ${store} does not have it.` };
   }
 
+  if (store !== "edge" && "firstSubmitted" in raw) {
+    return { problem: `"firstSubmitted" is an edge store setting; ${store} does not have it.` };
+  }
+
   const foreignId = Object.keys(raw).filter((key) => key in ID_KEYS && ID_KEYS[key] !== store);
 
   if (foreignId.length) {
@@ -166,6 +170,19 @@ export function readStoreSettingsChange(store: StoreSettingsStore, raw: unknown)
 
     patch.enabled = raw.enabled;
     requested.enabled = raw.enabled;
+  }
+
+  /* @invariant THE EDGE FIRST-SUBMISSION WORD IS THE OWNER'S, SENT AS IS.
+   * `firstSubmitted: true` says the product was submitted once in Partner
+   * Center (the console card's "Submitted once in Partner Center" switch);
+   * the platform stamps the time itself and `false` withdraws it. A plain
+   * owner write through the same store config route, never a date from here.
+   */
+  if ("firstSubmitted" in raw) {
+    if (typeof raw.firstSubmitted !== "boolean") return { problem: "storeSettings.firstSubmitted must be true or false." };
+
+    patch.firstSubmitted = raw.firstSubmitted;
+    requested.firstSubmitted = raw.firstSubmitted;
   }
 
   const mode = "submissionMode" in raw ? text(raw.submissionMode).toLowerCase() : "";
@@ -253,7 +270,7 @@ function readStoreId(store: StoreSettingsStore, raw: Row): { key: string; storeI
 /* @invariant THE CLIENT HASHES THE BYTES THE SERVER HASHES. The approval is
  * a sha256 over {store, settings} with the settings keys in the order
  * enabled, dryRun, skipPublish, stagedPublish, publishAfter, releaseChannel,
- * sourceArchive, storeId, bundleId, only the keys the patch carries, rendered with
+ * sourceArchive, storeId, bundleId, firstSubmitted, only the keys the patch carries, rendered with
  * JSON.stringify. A digest that differs from the platform's asks a human to
  * approve a change that can never run, so it is refused instead.
  */

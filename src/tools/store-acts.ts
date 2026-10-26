@@ -71,6 +71,7 @@ import {
   requirementsView,
 } from "../lib/store-requirements";
 import { bringListOf, bringListSentences, screenshotDoor } from "../lib/store-bring-list";
+import { notReadyForReviewStep, notReadyLine } from "../lib/store-not-ready";
 import { LISTING_INCOMPLETE_CODE, listingIncompleteOf, listingIncompleteSentence } from "../lib/store-listing-incomplete";
 import {
   EDGE_FIRST_SUBMISSION_STATE,
@@ -815,9 +816,12 @@ export async function preflight(args: StoreActArgs): Promise<string> {
       return ` ${workspaceAccountSentence(store, text(row.connectedAs) || null)}`;
     })
     .join("");
+  const notReady = Object.entries(stores)
+    .filter(([, view]) => (view as Row).readyForReview === false)
+    .map(([store]) => store);
   const readinessHint = blocked.length
     ? `${blocked.join(", ")} cannot be submitted yet; each failing check says what to fix.${syncLine}${sourceLine} This read wrote nothing.`
-    : `Every store read here is ready to submit.${buildLine}${modeLine}${sourceLine}${workspaceLine} This read wrote nothing; extension_submit with dryRun:false submits.`;
+    : `${notReady.length ? "Every store read here can take an upload." : "Every store read here is ready to submit."}${buildLine}${modeLine}${sourceLine}${workspaceLine} This read wrote nothing; extension_submit with dryRun:false submits.`;
   const chrome = isRow(stores.chrome) ? stores.chrome : null;
   const connection =
     chrome && isRow(chrome.connection) ? chrome.connection : null;
@@ -1118,6 +1122,9 @@ export async function preflight(args: StoreActArgs): Promise<string> {
       ? text(connection.itemUrl)
       : "";
   const green = blocked.length === 0 && unread.length === 0;
+  const notReadyStep = notReady.length
+    ? notReadyForReviewStep(notReady, inputsSay, edgeFirst, storesPageUrl, storeSettingsUrl(api.ref, args.api))
+    : null;
   const reviewing = chrome ? await chromeReviewInProgress(api) : null;
   const reviewBlocks = Boolean(reviewing) && !uploadStopsAtDraft("chrome", modeIdOf(stores.chrome));
   const reviewLine = reviewing ? (reviewBlocks ? reviewSentence(reviewing) : draftBesideReviewSentence(reviewing)) : "";
@@ -1145,17 +1152,18 @@ export async function preflight(args: StoreActArgs): Promise<string> {
       stores,
       storesPageUrl,
       ...(itemUrl ? { itemUrl } : {}),
-      ...(reviewing ? { chromeReview: reviewing, trackUrl: reviewUrl } : {}),
-      sayToPerson: [inputsSay, edgeFirstLine, reviewLine, readinessHint]
+      ...(reviewing ? { chromeReview: reviewing } : {}),
+      trackUrl: reviewing ? reviewUrl : storesPageUrl,
+      sayToPerson: [inputsSay, edgeFirstLine, reviewLine, notReadyLine(notReady, green), readinessHint]
         .filter(Boolean)
         .join(" "),
       nextStep: reviewBlocks
         ? nextStep("done", reviewSay, reviewUrl)
         : green
-          ? submitStep(asked, modeIds)
+          ? notReadyStep ?? submitStep(asked, modeIds)
           : null,
     },
-    hint: [inputsSay, edgeFirstLine, reviewLine, readinessHint]
+    hint: [inputsSay, edgeFirstLine, reviewLine, notReadyLine(notReady, green), readinessHint]
       .filter(Boolean)
       .join(" "),
     warnings: [unreadLine],

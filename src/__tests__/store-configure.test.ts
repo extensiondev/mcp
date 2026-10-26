@@ -39,6 +39,7 @@ describe("extension_submit configure-store changes a store's settings as a plain
       "firefoxAddonGuid",
       "appStoreId",
       "bundleId",
+      "firstSubmitted",
     ]);
 
     for (const property of Object.values((schema.inputSchema.properties as Record<string, any>).storeSettings.properties) as Array<{ description?: string }>) {
@@ -224,6 +225,40 @@ describe("extension_submit configure-store changes a store's settings as a plain
     );
 
     expect(scope.settingsDigest).not.toBe(storeSettingsDigest("firefox", { enabled: true }));
+  });
+
+  it("records the owner's word that the Edge product was submitted once in Partner Center as a plain write through the store config route", async () => {
+    if (process.platform === "win32") return;
+
+    platform.login();
+    platform.routes[`PUT ${CONFIG}`] = () => ({ body: { ok: true, store: "edge", changes: ["edge.firstSubmitted: false -> true"] } });
+
+    const out = JSON.parse(await submit({ action: "configure-store", store: "edge", storeSettings: { firstSubmitted: true }, api: API }));
+    const puts = platform.sent("PUT", CONFIG);
+
+    expect(puts).toHaveLength(1);
+    expect(puts[0].body).toEqual({ edge: { firstSubmitted: true } });
+    expect(out.status).toBe("store-configured");
+    expect(out.value.storeSettings).toEqual({ firstSubmitted: true });
+    expect(out.value.changes).toEqual(["edge.firstSubmitted: false -> true"]);
+    expect(out.value.trackUrl).toMatch(SETTINGS_PAGE);
+    expect(out.value.nextStep.kind).toBe("preflight");
+    expect(out.hint).toContain("no approval page was involved");
+    expect(platform.calls.some((call) => call.path.startsWith(APPROVALS))).toBe(false);
+    expect(JSON.stringify(out)).not.toMatch(/extension-user-land|\/actions\/runs\//);
+  });
+
+  it("hashes firstSubmitted last, the bytes the platform hashes, and refuses it off Edge or as anything but a boolean", async () => {
+    const { createHash } = await import("node:crypto");
+    const platformBytes = JSON.stringify({ store: "edge", settings: { publishAfter: true, firstSubmitted: true } });
+
+    expect(storeSettingsDigest("edge", { firstSubmitted: true, publishAfter: true })).toBe(
+      createHash("sha256").update(platformBytes).digest("hex"),
+    );
+
+    expect(readStoreSettingsChange("edge", { firstSubmitted: false })).toEqual({ patch: { firstSubmitted: false }, requested: { firstSubmitted: false } });
+    expect(readStoreSettingsChange("chrome", { firstSubmitted: true })).toEqual({ problem: '"firstSubmitted" is an edge store setting; chrome does not have it.' });
+    expect(readStoreSettingsChange("edge", { firstSubmitted: "yes" })).toEqual({ problem: "storeSettings.firstSubmitted must be true or false." });
   });
 
   it("writes the Safari bundle id and App Store id as plain owner-token writes, hashing bundleId last, and no longer calls the bundle id console-only", async () => {
