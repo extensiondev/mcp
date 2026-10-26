@@ -34,7 +34,7 @@ import {
 } from "../lib/platform-submissions";
 import { consoleProjectUrl } from "../lib/registry";
 import { projectApiReadFailure, projectApiSend } from "../lib/project-api";
-import { actLinks, judgePublish, trackOf } from "../lib/store-act-outcome";
+import { actLinks, judgePublish, publishFailureReason, trackOf } from "../lib/store-act-outcome";
 import {
   badShipRequest,
   isRow,
@@ -383,6 +383,7 @@ export async function publishDraft(args: StoreActArgs): Promise<string> {
       );
   const trackUrl = text(json.trackUrl) || trackOf(links);
   const say = `It is on its way to ${words.reviewer}'s ${words.reviewWord}; follow it at ${trackUrl || "the submission page"}. Nothing changes for current users until ${words.reviewer} approves it.`;
+  const accepted = `The platform accepted the publish at ${acceptedAt} and ${words.reviewer} has not confirmed it yet, so it is accepted, not yet confirmed; follow it at ${trackUrl || "the submission page"}. Nothing changes for current users until ${words.reviewer} approves it.`;
   const waited = await awaitRecordedOutcome<PlatformSubmission>({
     waitSeconds: args.waitSeconds,
     read: () =>
@@ -398,9 +399,10 @@ export async function publishDraft(args: StoreActArgs): Promise<string> {
   };
 
   if (waited.failed) {
-    const reason =
-      text(waited.record?.failureReason) ||
-      `the platform's record of submission ${sentId} reads ${waited.outcome.status}`;
+    const reason = publishFailureReason(
+      waited.record,
+      `the platform's record of submission ${sentId} reads ${waited.outcome.status}`,
+    );
 
     return envelope({
       ok: false,
@@ -436,8 +438,8 @@ export async function publishDraft(args: StoreActArgs): Promise<string> {
     status: "publish-dispatched",
     value: {
       ...value,
-      sayToPerson: say,
-      nextStep: nextStep("done", say, trackUrl),
+      sayToPerson: accepted,
+      nextStep: nextStep("done", accepted, trackUrl),
     },
     hint: `${dispatchedHint({ acceptedAt, trackUrl, readCall: storesRead(args) })} ${made}`,
   });

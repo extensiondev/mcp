@@ -150,6 +150,61 @@ describe("extension_submit publish sends a Chrome draft to review after one appr
     expect(out.hint).not.toMatch(/\bin review\b|\bin-review\b/);
     expect(out.value.nextStep.kind).toBe("done");
     expect(out.value.nextStep.say).toContain("Nothing changes for current users until Chrome approves it.");
+    expect(out.value.sayToPerson).toContain("accepted, not yet confirmed");
+    expect(out.value.sayToPerson).toContain(TRACK_URL);
+    expect(JSON.stringify(out)).not.toMatch(/on its way/);
+  });
+
+  it("answers publish-failed with the store's own words when the record carries a refused publish", async () => {
+    if (process.platform === "win32") return;
+
+    platform.login();
+    platform.routes[`POST ${PUBLISH}`] = dispatched;
+    platform.routes["GET /api/cli/stores/submissions"] = () => ({
+      body: {
+        submissions: [
+          {
+            id: "sub_2",
+            store: "chrome",
+            status: "draft",
+            storeReview: { state: "FAILED", checkedAt: "2026-10-26T15:05:34.939Z", source: "publish-answer" },
+            publish: { act: "publish", status: "failed", storeMessage: "Edge did not take product p1 into review: the publish operation ended Failed (NoDraftPackage).", at: "2026-10-26T15:05:37.000Z" },
+          },
+        ],
+      },
+    });
+
+    const out = JSON.parse(await submit({ action: "publish", browsers: ["chrome"], approvalId: "apr_p", api: API }));
+
+    expect(out.ok).toBe(false);
+    expect(out.status).toBe("publish-failed");
+    expect(out.value.outcome).toMatchObject({ recorded: true, status: "publish-failed", storeState: "FAILED" });
+    expect(out.error.message).toContain("NoDraftPackage");
+    expect(JSON.stringify(out)).not.toMatch(/on its way/);
+  });
+
+  it("answers publish-failed with the run's reason when the publish dispatch died before the store answered", async () => {
+    if (process.platform === "win32") return;
+
+    platform.login();
+    platform.routes[`POST ${PUBLISH}`] = dispatched;
+    platform.routes["GET /api/cli/stores/submissions"] = () => ({
+      body: {
+        submissions: [
+          {
+            id: "sub_2",
+            store: "chrome",
+            status: "draft",
+            dispatch: { dispatchId: "d-1", dispatchedAt: "2026-10-26T15:18:21.936Z", action: "publish", runState: "failed", failedStep: "Record the publish on the submission", failedReason: "no run started" },
+          },
+        ],
+      },
+    });
+
+    const out = JSON.parse(await submit({ action: "publish", browsers: ["chrome"], approvalId: "apr_p", api: API }));
+
+    expect(out.status).toBe("publish-failed");
+    expect(out.error.message).toContain("no run started");
   });
 
   it("answers in-review with Chrome's own state once the record carries storeReview", async () => {

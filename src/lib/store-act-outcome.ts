@@ -14,7 +14,7 @@ type Row = Record<string, unknown>;
 
 const LIVE_STATUSES = new Set(["pending", "submitted"]);
 
-const REJECTING_STATES = new Set(["REJECTED", "CANCELLED", "CANCELED", "TAKEN_DOWN", "FAILED"]);
+const REJECTING_STATES = new Set(["REJECTED", "CANCELLED", "CANCELED", "TAKEN_DOWN"]);
 
 export const NO_ACTIVE_SUBMISSION = "NO_ACTIVE_SUBMISSION";
 
@@ -26,6 +26,14 @@ export const NO_ACTIVE_SUBMISSION = "NO_ACTIVE_SUBMISSION";
  * act's outcome and the wait goes on. The state answered is the submitted
  * draft's; what the store serves meanwhile travels as liveState. A line that
  * says the store holds nothing in review is not a recorded publish either.
+ *
+ * A PUBLISH THE STORE REFUSED, OR WHOSE RUN DIED BEFORE THE STORE ANSWERED,
+ * IS A RECORDED OUTCOME AND NEVER A REVIEW. The record's `publish` block
+ * written after the act reads failed with the store's words, or its publish
+ * dispatch reads failed with the run's reason, or the store's own operation
+ * state reads FAILED (Edge answers that on the publish call itself, and
+ * nothing enters certification); each of those ends the wait as
+ * publish-failed, so the answer never says the draft is on its way.
  */
 export function judgePublish(acceptedAt: string): (record: PlatformSubmission) => Verdict {
   return (record) => {
@@ -35,6 +43,16 @@ export function judgePublish(acceptedAt: string): (record: PlatformSubmission) =
     const review = record.storeReview;
     const state = text(review?.state).toUpperCase();
     const liveState = text(review?.liveState).toUpperCase() || null;
+    const refused = record.publish?.status === "failed" && after(record.publish.at, acceptedAt);
+    const runFailed =
+      record.dispatch?.action === "publish" &&
+      record.dispatch.runState === "failed" &&
+      after(record.dispatch.dispatchedAt, acceptedAt);
+    const operationFailed = state === "FAILED" && after(review?.checkedAt, acceptedAt);
+
+    if (refused || runFailed || operationFailed) {
+      return { kind: "recorded", status: "publish-failed", storeState: state || null, liveState, failed: true };
+    }
 
     if (!state || state === NO_ACTIVE_SUBMISSION || !after(review?.checkedAt, acceptedAt)) {
       return { kind: "waiting", status: status || null };
@@ -44,6 +62,22 @@ export function judgePublish(acceptedAt: string): (record: PlatformSubmission) =
 
     return { kind: "recorded", status: "in-review", storeState: state, liveState };
   };
+}
+
+export function publishFailureReason(record: PlatformSubmission | null, fallback: string): string {
+  if (!record) return fallback;
+
+  const refusal = record.publish?.status === "failed" ? text(record.publish.storeMessage) : "";
+  const runReason = record.dispatch?.action === "publish" && record.dispatch.runState === "failed" ? text(record.dispatch.failedReason) : "";
+  const state = text(record.storeReview?.state).toUpperCase();
+
+  return (
+    refusal ||
+    runReason ||
+    text(record.failureReason) ||
+    (state === "FAILED" ? "the store answered the publish operation as FAILED, so nothing entered review" : "") ||
+    fallback
+  );
 }
 
 /* @invariant A WITHDRAWAL THAT FAILED AT THE STORE IS A RECORDED OUTCOME,

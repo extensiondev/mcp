@@ -42,6 +42,8 @@ export interface StoreAct {
 }
 
 export interface SubmissionDispatch {
+  action?: string;
+  dispatchedAt?: string;
   runState: string;
   failedStep?: string;
   failedReason?: string;
@@ -64,6 +66,7 @@ export interface PlatformSubmission {
   status?: string;
   rawStatus?: string;
   cancel?: StoreAct;
+  publish?: StoreAct;
   dispatch?: SubmissionDispatch;
   version?: string;
   buildSha?: string;
@@ -166,8 +169,12 @@ function dispatchOf(raw: unknown): SubmissionDispatch | undefined {
   if (!runState) return undefined;
 
   const out: SubmissionDispatch = { runState, refunded: Boolean(str(row.refundedAt)) };
+  const action = str(row.action);
+  const dispatchedAt = str(row.dispatchedAt);
   const failedStep = str(row.failedStep);
   const failedReason = str(row.failedReason);
+  if (action) out.action = action;
+  if (dispatchedAt) out.dispatchedAt = dispatchedAt;
   if (failedStep) out.failedStep = failedStep;
   if (failedReason) out.failedReason = failedReason;
 
@@ -215,10 +222,12 @@ export function toSubmission(raw: Record<string, unknown>): PlatformSubmission |
   const storeReview = storeReviewOf(raw.storeReview);
   const storeUpload = storeUploadOf(raw.storeUpload);
   const cancel = storeActOf(raw.cancel);
+  const publish = storeActOf(raw.publish);
   const dispatch = dispatchOf(raw.dispatch);
   if (storeReview) out.storeReview = storeReview;
   if (storeUpload) out.storeUpload = storeUpload;
   if (cancel) out.cancel = cancel;
+  if (publish) out.publish = publish;
   if (dispatch) out.dispatch = dispatch;
 
   const failureRaw = raw.failure && typeof raw.failure === "object" ? (raw.failure as Record<string, unknown>) : null;
