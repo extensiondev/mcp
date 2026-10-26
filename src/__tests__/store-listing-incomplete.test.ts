@@ -34,9 +34,9 @@ const STUB = {
   ok: false,
   code: LISTING_INCOMPLETE_CODE,
   message: "The Chrome Web Store listing is missing 2 required inputs, so the draft was not sent to review.",
+  rows: MISSING,
   store: "chrome",
   refusedBeforeApproval: true,
-  missing: MISSING,
 };
 
 describe("extension_submit relays the platform's 409 LISTING_INCOMPLETE as a list, never as a recorded submission", () => {
@@ -82,7 +82,7 @@ describe("extension_submit relays the platform's 409 LISTING_INCOMPLETE as a lis
 
     process.env.EXTENSION_DEV_APPROVAL_GATE = "0";
     platform.login();
-    platform.routes[`POST ${SUBMIT}`] = () => ({ status: 409, body: { ...STUB, missing: [MISSING[1]] } });
+    platform.routes[`POST ${SUBMIT}`] = () => ({ status: 409, body: { code: LISTING_INCOMPLETE_CODE, message: STUB.message, rows: [MISSING[1]] } });
 
     const out = JSON.parse(await submit({ browsers: ["chrome"], buildSha: "2bda5b2", dryRun: false, approvalId: "apr_x", api: API }));
 
@@ -99,7 +99,9 @@ describe("extension_submit relays the platform's 409 LISTING_INCOMPLETE as a lis
     expect(JSON.stringify(out)).not.toMatch(/approval presented|may have spent|submitted to|github\.com|actions\/runs/);
   });
 
-  it("reads the stub shape and its sibling spellings, and reads nothing for another code", () => {
+  it("reads the { code, message, rows } shape the console lane reads, its sibling spellings, and nothing for another code", () => {
+    expect(listingIncompleteOf(LISTING_INCOMPLETE_CODE, { code: LISTING_INCOMPLETE_CODE, message: "x", rows: MISSING })?.missing.map((row) => row.id)).toEqual(["chrome.screenshots", "chrome.single_purpose"]);
+    expect(listingIncompleteOf(LISTING_INCOMPLETE_CODE, { missing: [MISSING[1]] }, "chrome")).toMatchObject({ store: "chrome", bringList: { store: "chrome" } });
     expect(listingIncompleteOf("EDGE_PACKAGE_HAS_ARCHIVES", STUB)).toBeNull();
     expect(listingIncompleteOf(LISTING_INCOMPLETE_CODE, "nope")).toBeNull();
 

@@ -175,7 +175,7 @@ function reworded(
 
   const code = text(parsed.error?.platformCode);
   const settingsUrl = storeSettingsUrl(api.ref, apiHint);
-  const incomplete = code === LISTING_INCOMPLETE_CODE ? listingIncompleteOf(code, value.listingIncomplete) : null;
+  const incomplete = code === LISTING_INCOMPLETE_CODE ? listingIncompleteOf(code, value.listingIncomplete, store) : null;
 
   /* @invariant A LISTING REFUSAL IS A LIST, NEVER A RECORD. The platform
    * answers 409 LISTING_INCOMPLETE before it mints or consumes an approval,

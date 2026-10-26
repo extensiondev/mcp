@@ -714,10 +714,10 @@ async function answer(args: SubmitToolArgs): Promise<string> {
       });
     }
 
-    const incomplete = refusedCode === LISTING_INCOMPLETE_CODE ? listingIncompleteOf(refusedCode, data) : null;
+    const incomplete = refusedCode === LISTING_INCOMPLETE_CODE ? listingIncompleteOf(refusedCode, data, browsers[0] || "chrome") : null;
 
     if (incomplete) {
-      const store = incomplete.store || browsers[0] || "chrome";
+      const store = incomplete.store;
       const trackUrl = consoleTrackUrl(
         "store",
         { ...(credential.ref ? { workspace: credential.ref.workspace, project: credential.ref.project } : {}), store },
