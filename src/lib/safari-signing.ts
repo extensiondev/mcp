@@ -98,7 +98,9 @@ export function appPathFromSessionOutput(output: string): string | null {
   const project = output.match(/-project\s+(\S+?)\.xcodeproj\b/)?.[1];
   if (!derived || !project) return null;
 
-  return path.posix.join(derived, "Build", "Products", "Release", `${path.posix.basename(project)}.app`);
+  const layout = derived.includes("\\") ? path.win32 : path.posix;
+
+  return layout.join(derived, "Build", "Products", "Release", `${layout.basename(project)}.app`);
 }
 
 export function safariAppPath(

@@ -92,6 +92,10 @@ describe("codesign output is read into one identity", () => {
 
   it("finds the app from the xcodebuild line the engine printed into the session log", () => {
     expect(appPathFromSessionOutput(XCODEBUILD_LINE)).toBe("/w/leon/dist/safari-xcode/.derived/Build/Products/Release/Leon.app");
+    expect(appPathFromSessionOutput(XCODEBUILD_LINE.replace(/\/w\/leon\/dist\/safari-xcode/g, "C:\\w\\leon\\dist\\safari-xcode"))).toBe(
+      "C:\\w\\leon\\dist\\safari-xcode\\.derived\\Build\\Products\\Release\\Leon.app",
+    );
+
     expect(appPathFromSessionOutput("compiled in 830 ms")).toBeNull();
   });
 
