@@ -179,7 +179,7 @@ describe("extension_submit publish sends a Chrome draft to review after one appr
     expect(out.ok).toBe(true);
     expect(out.status).toBe("in-review");
     expect(out.value.outcome).toMatchObject({ recorded: true, status: "in-review", storeState: "PENDING_REVIEW", source: "platform-record", waitedSeconds: 5 });
-    expect(out.hint).toContain("carries Chrome's own state, PENDING_REVIEW");
+    expect(out.hint).toContain("carries Chrome's own state for the draft, PENDING_REVIEW");
     expect(out.hint).toContain("Made: no new links.");
     expect(out.value.nextStep.kind).toBe("done");
   });
@@ -420,7 +420,7 @@ describe("extension_submit publish sends a Chrome draft to review after one appr
     ]);
 
     expect(out.value.sayToPerson).toContain("Apple's App Review");
-    expect(out.hint).toContain("carries Apple's own state, WAITING_FOR_REVIEW");
+    expect(out.hint).toContain("carries Apple's own state for the draft, WAITING_FOR_REVIEW");
     expect(out.hint).not.toContain("Chrome");
   });
 

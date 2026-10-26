@@ -31,6 +31,7 @@ export interface StoreReview {
   source?: string;
   visibility?: string;
   crxVersion?: string;
+  liveState?: string;
 }
 
 export interface StoreAct {
@@ -124,10 +125,12 @@ function storeReviewOf(raw: unknown): StoreReview | undefined {
   const source = str(row.source);
   const visibility = str(row.visibility);
   const crxVersion = str(row.crxVersion);
+  const liveState = str(row.liveState);
   if (checkedAt) out.checkedAt = checkedAt;
   if (source) out.source = source;
   if (visibility) out.visibility = visibility;
   if (crxVersion) out.crxVersion = crxVersion;
+  if (liveState) out.liveState = liveState;
 
   return out;
 }

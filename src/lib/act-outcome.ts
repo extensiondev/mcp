@@ -41,6 +41,7 @@ export interface ActOutcome {
   recorded: boolean;
   status: string | null;
   storeState: string | null;
+  liveState?: string | null;
   checkedAt: string;
   source: "platform-record";
   waitedSeconds: number;
@@ -50,7 +51,7 @@ export interface ActOutcome {
 export type RecordRead<T> = { ok: true; record: T | null } | { ok: false; message: string };
 
 export type Verdict =
-  | { kind: "recorded"; status: string; storeState?: string | null; failed?: boolean }
+  | { kind: "recorded"; status: string; storeState?: string | null; liveState?: string | null; failed?: boolean }
   | { kind: "unrecorded"; status?: string | null }
   | { kind: "waiting"; status?: string | null };
 
@@ -89,6 +90,7 @@ export async function awaitRecordedOutcome<T>(args: {
           recorded: true,
           status: verdict.status,
           storeState: verdict.storeState ?? null,
+          ...(verdict.liveState ? { liveState: verdict.liveState } : {}),
           checkedAt: new Date(outcomeClock.now()).toISOString(),
           source: "platform-record",
           waitedSeconds: Math.round((outcomeClock.now() - started) / 1000),

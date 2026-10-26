@@ -387,7 +387,7 @@ export async function publishDraft(args: StoreActArgs): Promise<string> {
     waitSeconds: args.waitSeconds,
     read: () =>
       readSubmissionRecord(opened.api, { submissionId: sentId, store }),
-    judge: judgePublish,
+    judge: judgePublish(acceptedAt),
   });
   const made = madeSentence(links);
   const value: Row = {
@@ -426,7 +426,7 @@ export async function publishDraft(args: StoreActArgs): Promise<string> {
         sayToPerson: say,
         nextStep: nextStep("done", say, trackUrl),
       },
-      hint: `The platform's record of submission ${sentId} carries ${words.reviewer}'s own state, ${waited.outcome.storeState}, so the draft is in ${words.reviewer}'s ${words.reviewWord}. ${say} ${made}`,
+      hint: `The platform's record of submission ${sentId} carries ${words.reviewer}'s own state for the draft, ${waited.outcome.storeState}, so the draft is in ${words.reviewer}'s ${words.reviewWord}${waited.outcome.liveState ? `; the item already live stays ${waited.outcome.liveState} until ${words.reviewer} approves the draft` : ""}. ${say} ${made}`,
     });
   }
 

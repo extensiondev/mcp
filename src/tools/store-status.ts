@@ -20,8 +20,15 @@ import {
   isNewerOrSame,
   readPlatformSubmissions,
   retryNote,
+  type StoreReview,
   type SubmissionRun,
 } from "../lib/platform-submissions";
+import {
+  reviewBesideSubmission,
+  reviewSentence,
+  storeReviewOfRow,
+  type ReviewView,
+} from "../lib/review-beside-submission";
 import {
   earlierSubmissions,
   readPlatformStoreRecords,
@@ -48,6 +55,7 @@ interface SubmissionView {
   failureReason?: string;
   storeVersion?: { packaged: string; displayed: string; source: string; buildNumber?: number };
   storeCrxVersion?: string;
+  storeReview?: StoreReview;
 }
 
 function storeVersionOf(raw: unknown): SubmissionView["storeVersion"] | undefined {
@@ -61,13 +69,6 @@ function storeVersionOf(raw: unknown): SubmissionView["storeVersion"] | undefine
   const buildNumber = typeof raw.buildNumber === "number" && Number.isInteger(raw.buildNumber) && raw.buildNumber > 0 ? raw.buildNumber : undefined;
 
   return { packaged, displayed, source, ...(buildNumber ? { buildNumber } : {}) };
-}
-
-interface ReviewView {
-  status?: string;
-  version?: string;
-  buildId?: string;
-  checkedAt?: string;
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -92,6 +93,7 @@ function submissionView(row: Record<string, unknown>): SubmissionView {
   const failureReason = str(row.failureReason);
   const storeVersion = storeVersionOf(row.storeVersion);
   const storeCrxVersion = typeof row.storeCrxVersion === "string" ? row.storeCrxVersion.trim() : "";
+  const storeReview = storeReviewOfRow(row.storeReview);
   if (version) view.version = version;
   if (status) view.status = status;
   if (storeUrl) view.storeUrl = storeUrl;
@@ -102,6 +104,7 @@ function submissionView(row: Record<string, unknown>): SubmissionView {
   if (failureReason) view.failureReason = failureReason;
   if (storeVersion) view.storeVersion = storeVersion;
   if (storeCrxVersion) view.storeCrxVersion = storeCrxVersion;
+  if (storeReview) view.storeReview = storeReview;
 
   return view;
 }
@@ -353,7 +356,7 @@ export async function readStores(args: {
       : [];
     if (earlier.length > 0) row.submissionHistory = earlier;
 
-    const review = status.reviews[store];
+    const review = reviewBesideSubmission(status.reviews[store], submissionsByStore[store]);
 
     if (review && Object.values(review).some(Boolean)) {
       row.review = review;
@@ -422,11 +425,7 @@ export async function readStores(args: {
       );
     }
 
-    if (review?.status) {
-      tail.push(
-        `review ${review.status}${review.checkedAt ? ` (checked ${review.checkedAt})` : ""}`,
-      );
-    }
+    if (review?.status) tail.push(reviewSentence(review));
 
     return tail.length > 0 ? `${head}; ${tail.join("; ")}` : head;
   });

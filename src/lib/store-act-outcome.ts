@@ -6,7 +6,7 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-import { FAILED_STATUSES, linksOf, text, trackLinks, type ActLink, type LinkRow, type Verdict } from "./act-outcome";
+import { FAILED_STATUSES, after, linksOf, text, trackLinks, type ActLink, type LinkRow, type Verdict } from "./act-outcome";
 
 import type { PlatformSubmission } from "./platform-submissions";
 
@@ -14,14 +14,36 @@ type Row = Record<string, unknown>;
 
 const LIVE_STATUSES = new Set(["pending", "submitted"]);
 
-export function judgePublish(record: PlatformSubmission): Verdict {
-  const state = record.storeReview?.state;
-  if (state) return { kind: "recorded", status: "in-review", storeState: state };
+const REJECTING_STATES = new Set(["REJECTED", "CANCELLED", "CANCELED", "TAKEN_DOWN", "FAILED"]);
 
-  const status = text(record.status).toLowerCase();
-  if (FAILED_STATUSES.has(status)) return { kind: "recorded", status, failed: true };
+export const NO_ACTIVE_SUBMISSION = "NO_ACTIVE_SUBMISSION";
 
-  return { kind: "waiting", status: status || null };
+/* @invariant A PUBLISH ANSWERS THE DRAFT'S OWN STATE, READ AFTER THE ACT.
+ * The record's review line is also written by polls, and a draft polled
+ * before it was sent to review carries the state of the item already live
+ * (PUBLISHED for rebeccat on 2026-10-26, while the dashboard said Pending
+ * review), so a line checked before the platform accepted the act is not the
+ * act's outcome and the wait goes on. The state answered is the submitted
+ * draft's; what the store serves meanwhile travels as liveState. A line that
+ * says the store holds nothing in review is not a recorded publish either.
+ */
+export function judgePublish(acceptedAt: string): (record: PlatformSubmission) => Verdict {
+  return (record) => {
+    const status = text(record.status).toLowerCase();
+    if (FAILED_STATUSES.has(status)) return { kind: "recorded", status, failed: true };
+
+    const review = record.storeReview;
+    const state = text(review?.state).toUpperCase();
+    const liveState = text(review?.liveState).toUpperCase() || null;
+
+    if (!state || state === NO_ACTIVE_SUBMISSION || !after(review?.checkedAt, acceptedAt)) {
+      return { kind: "waiting", status: status || null };
+    }
+
+    if (REJECTING_STATES.has(state)) return { kind: "recorded", status: "rejected", storeState: state, liveState, failed: true };
+
+    return { kind: "recorded", status: "in-review", storeState: state, liveState };
+  };
 }
 
 /* @invariant A WITHDRAWAL THAT FAILED AT THE STORE IS A RECORDED OUTCOME,
