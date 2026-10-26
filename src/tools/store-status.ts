@@ -34,6 +34,71 @@ import {
   readPlatformStoreRecords,
 } from "../lib/platform-store-records";
 import { storeRecordUnread } from "../lib/store-readiness";
+import { openProjectApi, projectApiSend } from "../lib/project-api";
+
+export const REFRESHABLE_STORES = ["chrome", "edge", "firefox", "safari"] as const;
+
+export interface StoreRefreshView {
+  dispatched: boolean;
+  queued: boolean;
+  dispatchedAt?: string;
+  dueAt?: string;
+  message?: string;
+}
+
+/* @invariant A REFRESH READS THE STORE AGAIN AND ACTS ON NOTHING. For each
+ * store named it asks the platform for one poll now under the stored login,
+ * a member's read with no approval; the platform bounds it (one per project
+ * per two minutes, the GitHub budget) and the answer carries what it did:
+ * dispatched, queued for the budget reset, or refused in its own words.
+ * The registry the rest of this read answers from reflects the poll a
+ * minute or two later, so the hint says to read again, never that the
+ * state already changed.
+ */
+export async function refreshStores(args: {
+  stores: string[];
+  project?: string;
+  api?: string;
+}): Promise<Record<string, StoreRefreshView>> {
+  const wanted = args.stores
+    .map((store) => String(store || "").trim().toLowerCase())
+    .filter((store, index, all) => (REFRESHABLE_STORES as readonly string[]).includes(store) && all.indexOf(store) === index);
+  const out: Record<string, StoreRefreshView> = {};
+
+  if (!wanted.length) return out;
+
+  const opened = await openProjectApi({ command: "extension_release_status", project: args.project, api: args.api });
+
+  if (!opened.ok) {
+    for (const store of wanted) out[store] = { dispatched: false, queued: false, message: opened.message };
+
+    return out;
+  }
+
+  for (const store of wanted) {
+    const sent = await projectApiSend<Record<string, unknown>>(opened.api, "POST", `stores/${store}/poll`, {});
+
+    if (!sent.ok) {
+      out[store] = { dispatched: false, queued: false, message: sent.message };
+      continue;
+    }
+
+    const json = sent.json ?? {};
+    const dispatchedAt = str(json.dispatchedAt);
+    const dueAt = str(json.dueAt);
+    const message = str(json.message);
+
+    out[store] = {
+      dispatched: json.dispatched === true,
+      queued: json.queued === true,
+      ...(dispatchedAt ? { dispatchedAt } : {}),
+      ...(dueAt ? { dueAt } : {}),
+      ...(message ? { message } : {}),
+    };
+  }
+
+  return out;
+}
 
 const KNOWN_STORES = ["chrome", "firefox", "edge", "safari"] as const;
 
@@ -83,7 +148,8 @@ function str(value: unknown): string | undefined {
 
 function submissionView(row: Record<string, unknown>): SubmissionView {
   const view: SubmissionView = {};
-  const version = str(row.version);
+  const storeVersion = storeVersionOf(row.storeVersion);
+  const version = storeVersion?.packaged || storeVersion?.displayed || str(row.version);
   const status = str(row.status);
   const storeUrl = str(row.storeUrl);
   const submittedAt = str(row.submittedAt) || str(row.timestamp);
@@ -93,7 +159,6 @@ function submissionView(row: Record<string, unknown>): SubmissionView {
   const publish = row.publish && typeof row.publish === "object" ? (row.publish as Record<string, unknown>) : null;
   const refusal = publish && str(publish.status) === "failed" ? str(publish.storeMessage) : undefined;
   const failureReason = str(row.failureReason) || refusal;
-  const storeVersion = storeVersionOf(row.storeVersion);
   const storeCrxVersion = typeof row.storeCrxVersion === "string" ? row.storeCrxVersion.trim() : "";
   const storeReview = storeReviewOfRow(row.storeReview);
   if (version) view.version = version;
@@ -224,10 +289,23 @@ export function contradictoryRef(args: { workspace?: string; project?: string })
   return `workspace '${workspace}' and project '${project}' name different workspaces; pass one of them, or project as '<workspace>/<project>' alone.`;
 }
 
+function refreshSentence(refresh: Record<string, StoreRefreshView> | null): string {
+  if (!refresh || !Object.keys(refresh).length) return "";
+
+  const rows = Object.entries(refresh).map(([store, row]) => {
+    const word = row.dispatched ? "dispatched" : row.queued ? "queued for the budget reset" : `refused: ${row.message || "no reason given"}`;
+
+    return `${store} ${word}`;
+  });
+
+  return `A store check was asked for (${rows.join("; ")}); the registry reflects it within a minute or two, so read extension_release_status again before saying the state changed. `;
+}
+
 export async function readStores(args: {
   workspace?: string;
   project?: string;
   api?: string;
+  refresh?: string[];
 }): Promise<string> {
   const ref = resolveProjectRef(args);
 
@@ -251,6 +329,14 @@ export async function readStores(args: {
   );
 
   const named = Boolean(args.workspace || args.project);
+  const refresh =
+    Array.isArray(args.refresh) && args.refresh.length
+      ? await refreshStores({
+          stores: args.refresh,
+          project: named ? `${ref.workspace}/${ref.project}` : undefined,
+          api: args.api,
+        })
+      : null;
   const [healthRes, statusRes, submissionsRes, platform, records] = await Promise.all([
     fetchRegistryJson(healthUrl, fetch, { ref, api: args.api }),
     fetchRegistryJson(statusUrl, fetch, { ref, api: args.api }),
@@ -465,6 +551,7 @@ export async function readStores(args: {
         ? { lastSubmission: status.lastSubmission }
         : {}),
       ...(status.lastPollAt ? { lastPollAt: status.lastPollAt } : {}),
+      ...(refresh ? { refresh } : {}),
       registryUrls: {
         health: healthUrl,
         status: statusUrl,
@@ -472,7 +559,7 @@ export async function readStores(args: {
       },
       consoleStoresUrl,
     },
-    hint: `${summaryParts.join(". ")}. This is the registry's recorded state (submissions and the review poller write it)${
+    hint: `${refreshSentence(refresh)}${summaryParts.join(". ")}. This is the registry's recorded state (submissions and the review poller write it)${
       platform.ok ? ", with the platform's own submission records and their runs" : ""
     }; the store dashboards are authoritative and may be ahead of it.`,
     warnings: [

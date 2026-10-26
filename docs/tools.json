@@ -1510,6 +1510,12 @@
           "description": "With runs, the earliest date to read from (ISO 8601, within the last 30 days; default 7 days)."
         },
         {
+          "name": "refresh",
+          "type": "array of \"chrome\" | \"edge\" | \"firefox\" | \"safari\"",
+          "required": false,
+          "description": "With stores, ask the platform to read these stores again now (one poll per project per two minutes, within the platform's GitHub budget), under the stored login and with no approval; value.refresh names what happened per store (dispatched, queued for the budget reset, or refused with the reason). The registry reflects the poll a minute or two later, so read again before saying the state changed. Use it after a publish, or after the owner submitted in a store's own dashboard."
+        },
+        {
           "name": "store",
           "type": "\"chrome\" | \"firefox\" | \"edge\" | \"safari\"",
           "required": false,

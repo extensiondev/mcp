@@ -32,6 +32,12 @@ export const schema = {
         type: "string",
         description: "With runs, the earliest date to read from (ISO 8601, within the last 30 days; default 7 days).",
       },
+      refresh: {
+        type: "array",
+        items: { type: "string", enum: ["chrome", "edge", "firefox", "safari"] },
+        description:
+          "With stores, ask the platform to read these stores again now (one poll per project per two minutes, within the platform's GitHub budget), under the stored login and with no approval; value.refresh names what happened per store (dispatched, queued for the budget reset, or refused with the reason). The registry reflects the poll a minute or two later, so read again before saying the state changed. Use it after a publish, or after the owner submitted in a store's own dashboard.",
+      },
       store: {
         type: "string",
         enum: ["chrome", "firefox", "edge", "safari"],
@@ -71,6 +77,7 @@ function parse(raw: string): Record<string, unknown> {
 export async function handler(args: {
   include?: string[];
   since?: string;
+  refresh?: string[];
   store?: string;
   releaseId?: string;
   workspace?: string;
@@ -92,7 +99,7 @@ export async function handler(args: {
 
   const [releases, stores, history, release, runs, rollout, cut, listing] = await Promise.all([
     include.includes("releases") ? readReleases(scope).then(parse) : null,
-    include.includes("stores") ? readStores(scope).then(parse) : null,
+    include.includes("stores") ? readStores({ ...scope, refresh: args.refresh }).then(parse) : null,
     include.includes("history") ? readReleaseHistory(scope).then(parse) : null,
     releaseId ? readOneRelease({ ...scope, releaseId }).then(parse) : null,
     include.includes("runs") ? readPromotionRuns({ ...scope, since: args.since }).then(parse) : null,

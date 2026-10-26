@@ -95,6 +95,7 @@ const SUBMISSIONS_WITH_REFUSED_EDGE = {
       status: "draft",
       rawStatus: "draft",
       submittedAt: "2026-07-21T00:00:00.000Z",
+      storeVersion: { packaged: "0.2.0.7", displayed: "0.2.0", source: "platform", buildNumber: 7 },
       storeReview: { state: "FAILED", checkedAt: "2026-07-21T00:05:00.000Z", source: "poll" },
       publish: { act: "publish", status: "failed", storeMessage: EDGE_REFUSAL, at: "2026-07-21T00:05:00.000Z" },
     },
@@ -138,7 +139,7 @@ describe("extension_release_status: registration + schema", () => {
       (schema.inputSchema as { properties: Record<string, unknown> })
         .properties,
     );
-    expect(props.sort()).toEqual(["api", "include", "project", "releaseId", "since", "store", "workspace"]);
+    expect(props.sort()).toEqual(["api", "include", "project", "refresh", "releaseId", "since", "store", "workspace"]);
     expect((schema.inputSchema as { required: string[] }).required).toEqual([]);
   });
 
@@ -210,6 +211,8 @@ describe("store-status reader", () => {
     expect(byStore.edge.health.ok).toBe(false);
     expect(byStore.edge.health.message).toContain("Unauthorized");
     expect(byStore.edge.lastSubmission.status).toBe("draft");
+    expect(byStore.edge.lastSubmission.version).toBe("0.2.0.7");
+    expect(byStore.edge.lastSubmission.storeVersion).toMatchObject({ packaged: "0.2.0.7", displayed: "0.2.0" });
     expect(byStore.edge.lastSubmission.failureReason).toBe(EDGE_REFUSAL);
     expect(JSON.stringify(out)).toContain("CreateNotAllowed");
 
@@ -340,6 +343,47 @@ describe("store-status reader", () => {
     expect(out.error.name).toBe("StoreStatusNotFound");
     expect(out.error.message).toContain("submissions/new");
     expect(out.value.consoleStoresUrl).toContain("/acme/widget/submissions");
+  });
+
+  it("asks the platform to read a store again with refresh, under the stored login, and says to read again", async () => {
+    if (process.platform === "win32") return;
+
+    writeCredentials({
+      version: 1,
+      token: "claims.sig",
+      workspaceSlug: "acme",
+      projectSlug: "widget",
+      projectId: "prj_1",
+      expiresAt: Math.floor(Date.now() / 1000) + 3600,
+      api: "https://www.extension.dev",
+    });
+
+    const files = fetchByFile({
+      "stores/health.json": HEALTH,
+      "stores/status.json": STATUS_V3,
+      "stores/submissions.json": SUBMISSIONS,
+    });
+    const sent: Array<{ url: string; method: string }> = [];
+    global.fetch = (async (url: string, init?: RequestInit) => {
+      if (String(url).endsWith("/api/projects/prj_1/stores/edge/poll")) {
+        sent.push({ url: String(url), method: String(init?.method || "GET") });
+
+        return jsonResponse({ ok: true, dispatched: true, queued: false, dispatchedAt: "2026-10-26T20:30:00.000Z", store: "edge" });
+      }
+
+      if (String(url).endsWith("/api/cli/whoami")) return jsonResponse({ projectId: "prj_1", workspaceSlug: "acme", projectSlug: "widget" });
+      if (String(url).includes("/api/cli/")) return jsonResponse({ message: "not found" }, false, 404);
+
+      return files(url);
+    }) as unknown as typeof fetch;
+
+    const out = JSON.parse(await handler({ refresh: ["edge"], workspace: "acme", project: "widget" }));
+
+    expect(out.value.refresh).toEqual({ edge: { dispatched: true, queued: false, dispatchedAt: "2026-10-26T20:30:00.000Z" } });
+    expect(sent).toEqual([{ url: "https://www.extension.dev/api/projects/prj_1/stores/edge/poll", method: "POST" }]);
+    expect(out.hint).toContain("edge dispatched");
+    expect(out.hint).toContain("read extension_release_status again");
+    expect(JSON.stringify(out)).not.toMatch(/actions\/runs|mirror/i);
   });
 
   it("defaults to the stored login's project", async () => {
