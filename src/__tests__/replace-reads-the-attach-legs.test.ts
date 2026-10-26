@@ -104,7 +104,8 @@ describe("a Chrome session that never attaches names the leg that failed, read b
     expect(result.value.failedLegSays).toContain(`never connected to this session's control channel on port ${PORT}`);
     expect(result.value.failedLegSays).toContain("a plain restart does not help");
     expect(result.value.nextStep).toMatchObject({ kind: "relaunch", tool: "extension_dev", args: { projectPath: dir, browser: "chrome", replace: true } });
-    expect(result.value.nextStep.args.profile).toMatch(new RegExp(`^${profile}-fresh-\\d{12}$`));
+    expect(result.value.nextStep.args.profile.startsWith(`${profile}-fresh-`)).toBe(true);
+    expect(result.value.nextStep.args.profile.slice(profile.length)).toMatch(/^-fresh-\d{12}$/);
     expect(result.hint).not.toContain("a restart reliably reattaches");
     expect(result.error.message).toContain("Read here instead:");
   }, 10_000);

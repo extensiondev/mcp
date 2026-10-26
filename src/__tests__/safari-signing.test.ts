@@ -103,7 +103,10 @@ describe("codesign output is read into one identity", () => {
       path.join(dir, "dist", "safari-xcode", ".derived", "Build", "Products", "Release", "Leon blur faces.app"),
     );
 
-    expect(safariAppPath(dir, "safari", { appName: "Custom" })).toMatch(/Release\/Custom\.app$/);
+    expect(safariAppPath(dir, "safari", { appName: "Custom" })).toBe(
+      path.join(dir, "dist", "safari-xcode", ".derived", "Build", "Products", "Release", "Custom.app"),
+    );
+
     expect(safariAppPath(dir, "safari", { sessionOutput: XCODEBUILD_LINE })).toBe(
       "/w/leon/dist/safari-xcode/.derived/Build/Products/Release/Leon.app",
     );
