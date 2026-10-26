@@ -59,7 +59,7 @@ export interface ItemLinkUrls {
   linkItemUrl: string;
 }
 
-export type NextStepKind = "connect" | "configure" | "link-item" | "submit" | "approve" | "publish" | "resubmit" | "preflight" | "watch" | "sync-listing" | "screenshot" | "done";
+export type NextStepKind = "connect" | "configure" | "link-item" | "submit" | "approve" | "publish" | "resubmit" | "preflight" | "watch" | "sync-listing" | "screenshot" | "dashboard" | "done";
 
 export interface NextStep {
   kind: NextStepKind;

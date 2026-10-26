@@ -449,6 +449,7 @@ async function connectionPrecheck(
   const step = connectionStep(blocked, connections[blocked.browser], ctx);
   const settingsUrl = storeSettingsUrl(ref, args.api);
   const linked = blocked.state === "store-item-not-linked";
+  const firstSubmission = blocked.state === "first-submission-in-partner-center";
 
   const refused = envelope({
     ok: false,
@@ -456,7 +457,7 @@ async function connectionPrecheck(
     status: blocked.state,
     error: {
       code: "E_PLATFORM",
-      name: linked ? "StoreItemNotLinked" : "StoreNotConnected",
+      name: linked ? "StoreItemNotLinked" : firstSubmission ? "FirstSubmissionInPartnerCenter" : "StoreNotConnected",
       message: `${blocked.reason} Nothing was submitted and no approval was asked for.`,
     },
     value: {

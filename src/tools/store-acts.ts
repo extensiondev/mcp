@@ -73,6 +73,16 @@ import {
 import { bringListOf, bringListSentences, screenshotDoor } from "../lib/store-bring-list";
 import { LISTING_INCOMPLETE_CODE, listingIncompleteOf, listingIncompleteSentence } from "../lib/store-listing-incomplete";
 import {
+  EDGE_FIRST_SUBMISSION_STATE,
+  edgeFirstSubmissionOf,
+  firstSubmissionFromRefusal,
+  firstSubmissionSentences,
+  firstSubmissionStep,
+  isEdgeCreateNotAllowed,
+  partnerCenterProductUrl,
+  publishRefusedMessage,
+} from "../lib/edge-first-submission";
+import {
   readLocalListing,
   reconciledWithStoreMd,
   storeMdAdvisory,
@@ -187,6 +197,42 @@ function reworded(
   if (incomplete) {
     const words = storeWords(store);
     const trackUrl = consoleProjectUrl(api.ref, ConsoleProjectPage.submissionsStore(store), apiHint);
+    const first = store === "edge" ? firstSubmissionFromRefusal(value.listingIncomplete, incomplete.missing) : null;
+
+    /* @invariant A PRODUCT NEVER SUBMITTED THROUGH PARTNER CENTER IS ANSWERED
+     * AS ITS OWN STATE, WITH THE DASHBOARD AS THE NEXT STEP. Microsoft's
+     * Publish API cannot make the first submission (CreateNotAllowed), so no
+     * STORE.md line and no sync-listing clears this row: the answer is
+     * `first-submission-in-partner-center`, the product's Partner Center page
+     * and the one-time steps, before any approval is asked for. */
+    if (first) {
+      const step = firstSubmissionStep(first, trackUrl);
+
+      return envelope({
+        ok: false,
+        command: COMMAND,
+        status: EDGE_FIRST_SUBMISSION_STATE,
+        error: {
+          code: "E_PLATFORM",
+          name: "FirstSubmissionInPartnerCenter",
+          platformCode: code,
+          message: (isRow(value.listingIncomplete) ? text(value.listingIncomplete.message) : "") || step.say,
+        },
+        value: {
+          action: "publish",
+          store,
+          refusedBeforeApproval: true,
+          missing: incomplete.missing,
+          ...(first.partnerCenterUrl ? { partnerCenterUrl: first.partnerCenterUrl } : {}),
+          steps: first.steps,
+          trackUrl,
+          sayToPerson: step.say,
+          nextStep: step,
+        },
+        hint: `${step.say} Once the product has been submitted there once, turn on "Submitted once in Partner Center" in the console Edge store settings (or wait for the platform to record the first publish Partner Center accepted), then say publish again.`,
+      });
+    }
+
     const say = `${listingIncompleteSentence(incomplete, words.name.charAt(0).toUpperCase() + words.name.slice(1))}${incomplete.bringList ? ` ${incomplete.bringList.say}` : ""}`;
     const needsImage = incomplete.missing.some((row) => /\.screenshots$/.test(row.id));
 
@@ -439,22 +485,28 @@ export async function publishDraft(args: StoreActArgs): Promise<string> {
   };
 
   if (waited.failed) {
-    const reason = publishFailureReason(
+    const refusal = publishFailureReason(
       waited.record,
       `the platform's record of submission ${sentId} reads ${waited.outcome.status}`,
     );
+    const productUrl = store === "edge" && text(json.itemId) ? partnerCenterProductUrl(text(json.itemId)) : null;
+    const firstSubmission = store === "edge" && isEdgeCreateNotAllowed(refusal);
+    const reason = publishRefusedMessage(refusal, productUrl);
+    const step = firstSubmission ? firstSubmissionStep({ partnerCenterUrl: productUrl, steps: [] }, trackUrl) : null;
 
     return envelope({
       ok: false,
       command: COMMAND,
       status: "publish-failed",
-      value,
+      value: step ? { ...value, ...(productUrl ? { partnerCenterUrl: productUrl } : {}), sayToPerson: step.say, nextStep: step } : value,
       error: {
         code: "E_PLATFORM",
-        name: "PublishFailed",
+        name: firstSubmission ? "FirstSubmissionInPartnerCenter" : "PublishFailed",
         message: `The publish did not reach ${words.reviewer}'s ${words.reviewWord}: ${reason}.`,
       },
-      hint: `Fix the cause and call extension_submit action "publish" again; ${storesRead(args)} reads the record. ${made}`,
+      hint: firstSubmission
+        ? `${step?.say ?? ""} Once it has been submitted there once, turn on "Submitted once in Partner Center" in the console Edge store settings (or wait for the platform to record the first publish Partner Center accepted), then call extension_submit action "publish" again; ${storesRead(args)} reads the record. ${made}`
+        : `Fix the cause and call extension_submit action "publish" again; ${storesRead(args)} reads the record. ${made}`,
     });
   }
 
@@ -1014,6 +1066,53 @@ export async function preflight(args: StoreActArgs): Promise<string> {
     );
   }
 
+  /* @invariant THE EDGE PREFLIGHT NAMES A NEVER-SUBMITTED PRODUCT BEFORE
+   * ANY APPROVAL. The platform's report carries `edgeFirstSubmission`; when
+   * the saved mode would send the upload on to review the preflight answers
+   * `first-submission-in-partner-center` with the product page and the
+   * one-time steps as the next step, and when the upload would stop at a
+   * draft the state is said beside the stores with the same steps, so the
+   * person learns the one-time move before the first publish is asked for. */
+  const edgeFirst = reports.edge ? edgeFirstSubmissionOf(reports.edge) : null;
+  const edgeFirstLine =
+    edgeFirst && edgeFirst.state === EDGE_FIRST_SUBMISSION_STATE
+      ? firstSubmissionSentences(edgeFirst).replace(/ Nothing was sent and no approval was asked for\.$/, "")
+      : "";
+
+  if (edgeFirst && edgeFirst.state === EDGE_FIRST_SUBMISSION_STATE) {
+    stores.edge = { ...(stores.edge as Row), firstSubmission: edgeFirst };
+  }
+
+  if (edgeFirst && edgeFirst.state === EDGE_FIRST_SUBMISSION_STATE && edgeFirst.blocksSubmit) {
+    const settingsUrl = storeSettingsUrl(api.ref, args.api);
+    const step = firstSubmissionStep(edgeFirst, settingsUrl);
+    const others = blocked.filter((name) => name !== "edge");
+
+    return envelope({
+      ok: true,
+      command: COMMAND,
+      status: EDGE_FIRST_SUBMISSION_STATE,
+      value: {
+        action: "preflight",
+        stores,
+        storesPageUrl,
+        ...(edgeFirst.partnerCenterUrl ? { partnerCenterUrl: edgeFirst.partnerCenterUrl } : {}),
+        steps: edgeFirst.steps,
+        trackUrl: settingsUrl,
+        sayToPerson: step.say,
+        nextStep: step,
+      },
+      hint: step.say,
+      warnings: [
+        others.length
+          ? `${others.join(", ")} cannot be submitted yet either; each failing check says what to fix.`
+          : null,
+        unreadLine,
+        "This read wrote nothing.",
+      ],
+    });
+  }
+
   const itemUrl =
     chrome && connection && text(connection.itemId)
       ? text(connection.itemUrl)
@@ -1047,7 +1146,7 @@ export async function preflight(args: StoreActArgs): Promise<string> {
       storesPageUrl,
       ...(itemUrl ? { itemUrl } : {}),
       ...(reviewing ? { chromeReview: reviewing, trackUrl: reviewUrl } : {}),
-      sayToPerson: [inputsSay, reviewLine, readinessHint]
+      sayToPerson: [inputsSay, edgeFirstLine, reviewLine, readinessHint]
         .filter(Boolean)
         .join(" "),
       nextStep: reviewBlocks
@@ -1056,7 +1155,7 @@ export async function preflight(args: StoreActArgs): Promise<string> {
           ? submitStep(asked, modeIds)
           : null,
     },
-    hint: [inputsSay, reviewLine, readinessHint]
+    hint: [inputsSay, edgeFirstLine, reviewLine, readinessHint]
       .filter(Boolean)
       .join(" "),
     warnings: [unreadLine],

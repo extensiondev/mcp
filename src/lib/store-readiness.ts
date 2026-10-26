@@ -6,6 +6,7 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
+import { EDGE_FIRST_SUBMISSION_STATE, edgeFirstSubmissionOf, firstSubmissionStep, type EdgeFirstSubmission } from "./edge-first-submission";
 import { projectApiSend } from "./project-api";
 import { fetchRegistryJson, registryFileUrl, type ProjectRef, type RegistryFetchRefusal } from "./registry";
 import { firefoxKeyPairFailedSentences } from "./firefox-store";
@@ -39,11 +40,18 @@ export type StoreState =
   | "store-not-configured"
   | "store-unhealthy"
   | "workspace-reconnect-required"
+  | typeof EDGE_FIRST_SUBMISSION_STATE
   | "not-checked";
 
 export type Verdict = StoreState | "platform-refused";
 
-export type ConnectionRecord = StoreConnection & { connectUrl?: string; newItemUrl?: string; packageUrl?: string; linkItemUrl?: string };
+export type ConnectionRecord = StoreConnection & {
+  connectUrl?: string;
+  newItemUrl?: string;
+  packageUrl?: string;
+  linkItemUrl?: string;
+  firstSubmission?: EdgeFirstSubmission;
+};
 
 export interface StoreRow {
   browser: string;
@@ -64,7 +72,7 @@ interface Context {
   api?: string;
 }
 
-const CONNECTION_STATES = new Set<StoreState>(["store-not-connected", "store-connection-failed", "store-item-not-linked", "workspace-reconnect-required"]);
+const CONNECTION_STATES = new Set<StoreState>(["store-not-connected", "store-connection-failed", "store-item-not-linked", "workspace-reconnect-required", EDGE_FIRST_SUBMISSION_STATE]);
 
 export function isConnectionState(state: string): boolean {
   return CONNECTION_STATES.has(state as StoreState);
@@ -104,7 +112,8 @@ export async function readConnectionsAndModes(
     reports[browser] = read.json;
 
     const connection = connectionOf(read.json);
-    if (connection) connections[browser] = connection;
+    const firstSubmission = browser === "edge" ? edgeFirstSubmissionOf(read.json) : null;
+    if (connection) connections[browser] = firstSubmission ? { ...connection, firstSubmission } : connection;
 
     const mode = submissionModeOf(read.json);
     if (mode) modes[browser] = mode;
@@ -169,6 +178,28 @@ export function rowFromConnection(browser: string, connection: ConnectionRecord)
     return { ...base, ...who, ok: false, state: "store-item-not-linked", configured: true, healthy: true, itemLinked: false, reason: `The ${browser} store is connected and healthy, and no store item is linked to this project yet.` };
   }
 
+  /* @invariant A NEVER-SUBMITTED EDGE PRODUCT BLOCKS ONLY THE ACT THAT WOULD
+   * PUBLISH. The platform's preflight says whether the saved Edge mode sends
+   * the upload on to review; a draft upload lands in Partner Center as it
+   * should, so the row stays ready for it and the state is named only when
+   * the API would answer CreateNotAllowed (Rebeccat, 2026-10-26, four
+   * approvals before anyone said the product had to be submitted by hand). */
+  const first = connection.firstSubmission;
+
+  if (first && first.state === EDGE_FIRST_SUBMISSION_STATE && first.blocksSubmit) {
+    return {
+      ...base,
+      ...who,
+      ok: false,
+      state: EDGE_FIRST_SUBMISSION_STATE,
+      configured: true,
+      healthy: true,
+      itemLinked: true,
+      ...(connection.itemUrl ? { itemUrl: connection.itemUrl } : {}),
+      reason: `Edge Add-ons product ${first.productId || "for this project"} was never submitted through Partner Center, and the saved Edge mode sends this upload on to review, which Microsoft's Publish API refuses for a product never submitted there (CreateNotAllowed).`,
+    };
+  }
+
   return {
     ...base,
     ...who,
@@ -216,6 +247,10 @@ export async function readStoreRows(
 
 export function connectionStep(row: StoreRow, connection: ConnectionRecord | undefined, ctx: Context): NextStep {
   const settingsUrl = storeSettingsUrl(ctx.ref, ctx.api);
+
+  if (row.state === EDGE_FIRST_SUBMISSION_STATE) {
+    return firstSubmissionStep(connection?.firstSubmission ?? { partnerCenterUrl: null, steps: [] }, settingsUrl);
+  }
 
   if (row.state === "store-item-not-linked") {
     const urls = itemLinkUrls([connection ?? {}], settingsUrl);
