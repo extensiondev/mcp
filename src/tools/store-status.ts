@@ -33,10 +33,20 @@ import {
   earlierSubmissions,
   readPlatformStoreRecords,
 } from "../lib/platform-store-records";
+import { repairEdgeStoreUrl } from "../lib/edge-listing";
 import { storeRecordUnread } from "../lib/store-readiness";
 import { openProjectApi, projectApiSend } from "../lib/project-api";
 
 export const REFRESHABLE_STORES = ["chrome", "edge", "firefox", "safari"] as const;
+
+export interface StoreReadView {
+  state: "live" | "absent" | "unreadable" | "unresolved";
+  version?: string;
+  manifestVersion?: string;
+  listingUrl?: string;
+  checkedAt?: string;
+  reason?: string;
+}
 
 export interface StoreRefreshView {
   dispatched: boolean;
@@ -44,6 +54,24 @@ export interface StoreRefreshView {
   dispatchedAt?: string;
   dueAt?: string;
   message?: string;
+  storeRead?: StoreReadView;
+}
+
+function storeReadOf(raw: unknown): StoreReadView | undefined {
+  if (!isPlainObject(raw)) return undefined;
+
+  const state = str(raw.state);
+
+  if (state !== "live" && state !== "absent" && state !== "unreadable" && state !== "unresolved") return undefined;
+
+  const view: StoreReadView = { state };
+
+  for (const key of ["version", "manifestVersion", "listingUrl", "checkedAt", "reason"] as const) {
+    const value = str(raw[key]);
+    if (value) view[key] = value;
+  }
+
+  return view;
 }
 
 /* @invariant A REFRESH READS THE STORE AGAIN AND ACTS ON NOTHING. For each
@@ -88,12 +116,15 @@ export async function refreshStores(args: {
     const dueAt = str(json.dueAt);
     const message = str(json.message);
 
+    const storeRead = storeReadOf(json.storeRead);
+
     out[store] = {
       dispatched: json.dispatched === true,
       queued: json.queued === true,
       ...(dispatchedAt ? { dispatchedAt } : {}),
       ...(dueAt ? { dueAt } : {}),
       ...(message ? { message } : {}),
+      ...(storeRead ? { storeRead } : {}),
     };
   }
 
@@ -292,13 +323,33 @@ export function contradictoryRef(args: { workspace?: string; project?: string })
 function refreshSentence(refresh: Record<string, StoreRefreshView> | null): string {
   if (!refresh || !Object.keys(refresh).length) return "";
 
+  const reads: string[] = [];
   const rows = Object.entries(refresh).map(([store, row]) => {
-    const word = row.dispatched ? "dispatched" : row.queued ? "queued for the budget reset" : `refused: ${row.message || "no reason given"}`;
+    const word = row.dispatched
+      ? "dispatched"
+      : row.queued
+        ? "queued for the budget reset"
+        : row.storeRead
+          ? "read now"
+          : `refused: ${row.message || "no reason given"}`;
+    const read = row.storeRead;
+
+    if (read?.state === "live") {
+      reads.push(
+        `Edge Add-ons serves version ${read.version || read.manifestVersion || "unknown"}${
+          read.manifestVersion && read.manifestVersion !== read.version ? ` (${read.manifestVersion})` : ""
+        } now${read.listingUrl ? ` at ${read.listingUrl}` : ""}, and the platform recorded it before this read`,
+      );
+    } else if (read?.state === "absent") {
+      reads.push("Edge Add-ons does not list the product yet");
+    } else if (read?.state === "unresolved" || read?.state === "unreadable") {
+      reads.push(`Edge Add-ons was not read: ${read.reason || "no reason given"}`);
+    }
 
     return `${store} ${word}`;
   });
 
-  return `A store check was asked for (${rows.join("; ")}); the registry reflects it within a minute or two, so read extension_release_status again before saying the state changed. `;
+  return `A store check was asked for (${rows.join("; ")})${reads.length ? `. ${reads.join(". ")}` : ""}; the registry reflects the rest of the check within a minute or two, so read extension_release_status again before saying the state changed. `;
 }
 
 export async function readStores(args: {
@@ -433,15 +484,30 @@ export async function readStores(args: {
 
     const submission = submissionsByStore[store];
 
+    if (submission && store === "edge") {
+      const repaired = repairEdgeStoreUrl(submission.storeUrl, config?.storeUrl);
+
+      if (repaired) submission.storeUrl = repaired;
+      else delete submission.storeUrl;
+    }
+
     if (submission && Object.keys(submission).length > 0) {
       row.lastSubmission = submission;
     }
 
     if (runsByStore[store]) row.submissionRun = runsByStore[store];
 
-    const earlier = records.ok
+    const earlier = (records.ok
       ? earlierSubmissions(records.history[store] ?? [], submissionsByStore[store])
-      : [];
+      : []
+    ).map((entry) => {
+      if (store !== "edge" || !entry.storeUrl) return entry;
+
+      const repaired = repairEdgeStoreUrl(entry.storeUrl, config?.storeUrl);
+      const { storeUrl: _dead, ...rest } = entry;
+
+      return repaired ? { ...rest, storeUrl: repaired } : rest;
+    });
     if (earlier.length > 0) row.submissionHistory = earlier;
 
     const review = reviewBesideSubmission(status.reviews[store], submissionsByStore[store]);

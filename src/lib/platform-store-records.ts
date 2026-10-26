@@ -6,6 +6,7 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
+import { repairEdgeStoreUrl } from "./edge-listing";
 import { openProjectApi, projectApiGet } from "./project-api";
 
 const HISTORY_PER_STORE = 5;
@@ -64,7 +65,7 @@ function str(value: unknown): string | undefined {
  * credential, so only the fields named here leave this function, and a missing
  * credential is reported by its variable name alone, never by a value.
  */
-export function storeConfigView(raw: unknown): StoreConfigView | null {
+export function storeConfigView(raw: unknown, store?: string): StoreConfigView | null {
   if (!isRow(raw)) return null;
 
   const view: StoreConfigView = {
@@ -81,6 +82,13 @@ export function storeConfigView(raw: unknown): StoreConfigView | null {
   for (const key of ["storeUrl", "storeId", "bundleId", "releaseChannel"] as const) {
     const value = str(raw[key]);
     if (value) view[key] = value;
+  }
+
+  if (store === "edge" && view.storeUrl) {
+    const listing = repairEdgeStoreUrl(view.storeUrl, raw.crxId);
+
+    if (listing) view.storeUrl = listing;
+    else delete view.storeUrl;
   }
 
   const mode = isRow(raw.submissionMode) ? str(raw.submissionMode.id) : str(raw.submissionMode);
@@ -171,7 +179,7 @@ export async function readPlatformStoreRecords(args: {
     views = {};
 
     for (const store of args.stores) {
-      const view = storeConfigView(config.json[store]);
+      const view = storeConfigView(config.json[store], store);
       if (view) views[store] = view;
     }
   }

@@ -386,6 +386,73 @@ describe("store-status reader", () => {
     expect(JSON.stringify(out)).not.toMatch(/actions\/runs|mirror/i);
   });
 
+  it("relays what Edge Add-ons serves from an Edge refresh, and never relays an Edge link keyed by the product id", async () => {
+    if (process.platform === "win32") return;
+
+    writeCredentials({
+      version: 1,
+      token: "claims.sig",
+      workspaceSlug: "acme",
+      projectSlug: "widget",
+      projectId: "prj_1",
+      expiresAt: Math.floor(Date.now() / 1000) + 3600,
+      api: "https://www.extension.dev",
+    });
+
+    const crx = "beinobilkpkoinfeiljeplnjollkgmbp";
+    const dead = "https://microsoftedge.microsoft.com/addons/detail/903d21e4-0e5b-4507-95f2-4620fcf06f1c";
+    const files = fetchByFile({
+      "stores/health.json": HEALTH,
+      "stores/status.json": STATUS_V3,
+      "stores/submissions.json": {
+        updatedAt: "2026-10-26T20:49:25.452Z",
+        submissions: [
+          {
+            id: "d042b1f6",
+            store: "edge",
+            status: "draft",
+            version: "0.2.0",
+            buildId: "6d9e10c",
+            submittedAt: "2026-10-26T18:18:34Z",
+            storeUrl: dead,
+          },
+        ],
+      },
+    });
+    global.fetch = (async (url: string) => {
+      if (String(url).endsWith("/api/projects/prj_1/stores/edge/poll")) {
+        return jsonResponse({
+          ok: true,
+          dispatched: false,
+          queued: false,
+          store: "edge",
+          storeRead: {
+            state: "live",
+            version: "0.2.0",
+            manifestVersion: "0.2.0.7",
+            listingUrl: `https://microsoftedge.microsoft.com/addons/detail/${crx}`,
+            checkedAt: "2026-10-26T23:40:00.000Z",
+          },
+        });
+      }
+
+      if (String(url).endsWith("/api/cli/whoami")) return jsonResponse({ projectId: "prj_1", workspaceSlug: "acme", projectSlug: "widget" });
+      if (String(url).includes("/api/cli/")) return jsonResponse({ message: "not found" }, false, 404);
+
+      return files(url);
+    }) as unknown as typeof fetch;
+
+    const out = JSON.parse(await handler({ refresh: ["edge"], workspace: "acme", project: "widget" }));
+    const edge = out.value.stores.find((row: { store: string }) => row.store === "edge");
+
+    expect(out.value.refresh.edge.storeRead).toMatchObject({ state: "live", version: "0.2.0", manifestVersion: "0.2.0.7" });
+    expect(out.hint).toContain("edge read now");
+    expect(out.hint).toContain(`Edge Add-ons serves version 0.2.0 (0.2.0.7) now at https://microsoftedge.microsoft.com/addons/detail/${crx}`);
+    expect(edge.lastSubmission.storeUrl).toBeUndefined();
+    expect(JSON.stringify(out)).not.toContain(dead);
+    expect(JSON.stringify(out)).not.toMatch(/actions\/runs|mirror/i);
+  });
+
   it("defaults to the stored login's project", async () => {
     if (process.platform === "win32") return;
 
