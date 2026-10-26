@@ -6,10 +6,9 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
+import { missedRead, type RecordRead } from "./act-outcome";
 import { platformFetch } from "./platform-fetch";
 import { identityHeaders } from "./session-identity";
-
-import type { RecordRead } from "./act-outcome";
 
 export interface ShareRecord {
   id: string;
@@ -31,7 +30,7 @@ export async function readShareRecord(args: {
     headers: { accept: "application/json", ...identityHeaders("extension_publish") },
   });
 
-  if (!sent.ok) return { ok: false, message: sent.unreached.message };
+  if (!sent.ok) return { ok: false, message: sent.unreached.message, transient: true };
 
   const res = sent.res;
 
@@ -46,7 +45,7 @@ export async function readShareRecord(args: {
     body = null;
   }
 
-  if (!res.ok || !body) return { ok: false, message: `${url.origin}${url.pathname} answered ${res.status}` };
+  if (!res.ok || !body) return missedRead({ status: res.status, message: `${url.origin}${url.pathname} answered ${res.status}` });
 
   const epoch = typeof body.expiresAt === "number" ? body.expiresAt : Number(body.expiresAt);
   const expiresAt = Number.isFinite(epoch) && epoch > 0 ? new Date(epoch * 1000).toISOString() : null;

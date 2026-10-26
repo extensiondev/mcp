@@ -55,7 +55,7 @@ export type BuildHealth =
       failed: string[];
       unchecked: string[];
     }
-  | { checked: false; buildId: string; reason: string };
+  | { checked: false; buildId: string; reason: string; status?: number };
 
 function text(value: unknown): string {
   return typeof value === "string" ? value.trim() : typeof value === "number" ? String(value) : "";
@@ -255,7 +255,7 @@ export async function readBuildHealth(args: {
   const route = `builds/${encodeURIComponent(buildId)}`;
   const detail = await projectApiGet<Row>(opened.api, route);
 
-  if (!detail.ok) return { checked: false, buildId, reason: detail.message };
+  if (!detail.ok) return { checked: false, buildId, reason: detail.message, status: detail.status };
 
   const rows = (Array.isArray(detail.json.browsers) ? detail.json.browsers : [])
     .map((b) =>

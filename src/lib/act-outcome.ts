@@ -20,7 +20,7 @@ export const OUTCOME_POLL_MS = 5_000;
 export const WAIT_SECONDS_INPUT = {
   type: "number",
   description:
-    "How long, in seconds, this call waits for the platform's own record to show the act's result before answering: 0 to 600, default 180. 0 reads the record once and answers at once. When the bound passes first, the status is <act>-dispatched with value.outcome.recorded false, and the hint names the read that confirms it later. With approvalId, a call that names waitSeconds also waits for an approval nobody has decided yet: it polls the approval every retryAfterSeconds up to the bound, and once a person approves it goes straight on to the act and the record wait in the same call, with what is left of the bound.",
+    "How long, in seconds, this call waits for the platform's own record to show the act's result before answering: 0 to 600, default 180. 0 reads the record once and answers at once. When the bound passes first, the status is <act>-dispatched with value.outcome.recorded false, and the hint names the read that confirms it later. A read the platform does not answer (a timeout, a refused connection, a 429 or a 5xx) is retried after retryAfterSeconds while the bound lasts, and only when the bound is spent on such reads does value.outcome.readProblem name them with their count. With approvalId, a call that names waitSeconds also waits for an approval nobody has decided yet: it polls the approval every retryAfterSeconds up to the bound, and once a person approves it goes straight on to the act and the record wait in the same call, with what is left of the bound.",
 };
 
 export const outcomeClock = {
@@ -46,9 +46,38 @@ export interface ActOutcome {
   source: "platform-record";
   waitedSeconds: number;
   readProblem?: string;
+  readMisses?: number;
 }
 
-export type RecordRead<T> = { ok: true; record: T | null } | { ok: false; message: string };
+export interface RecordMiss {
+  ok: false;
+  message: string;
+  transient?: boolean;
+  retryAfterSeconds?: number;
+}
+
+export type RecordRead<T> = { ok: true; record: T | null } | RecordMiss;
+
+export const TRANSIENT_READ_STATUSES = new Set([0, 408, 425, 429, 500, 502, 503, 504]);
+
+export function missedRead(read: { status: number; message: string; retryAfterSeconds?: number }): RecordMiss {
+  return {
+    ok: false,
+    message: read.message,
+    transient: TRANSIENT_READ_STATUSES.has(read.status),
+    ...(read.retryAfterSeconds ? { retryAfterSeconds: read.retryAfterSeconds } : {}),
+  };
+}
+
+export function missesSentence(misses: number, waitedSeconds: number, last: string, what = "the record"): string {
+  return `${last}; ${misses} ${misses === 1 ? "read" : "reads"} of ${what} missed over ${waitedSeconds} s`;
+}
+
+export function retryMs(retryAfterSeconds: unknown): number {
+  const seconds = Number(retryAfterSeconds);
+
+  return Number.isFinite(seconds) && seconds > 0 ? seconds * 1000 : OUTCOME_POLL_MS;
+}
 
 export type Verdict =
   | { kind: "recorded"; status: string; storeState?: string | null; liveState?: string | null; failed?: boolean }
@@ -71,13 +100,27 @@ export async function awaitRecordedOutcome<T>(args: {
   let record: T | null = null;
   let seen: string | null = null;
   let readProblem: string | undefined;
+  let misses = 0;
 
   for (;;) {
     const read = await args.read();
 
     if (!read.ok) {
-      readProblem = read.message;
-      break;
+      if (!read.transient) {
+        readProblem = read.message;
+        break;
+      }
+
+      misses += 1;
+      const elapsed = outcomeClock.now() - started;
+
+      if (elapsed >= boundMs) {
+        readProblem = missesSentence(misses, Math.round(elapsed / 1000), read.message);
+        break;
+      }
+
+      await outcomeClock.sleep(Math.min(retryMs(read.retryAfterSeconds), boundMs - elapsed));
+      continue;
     }
 
     record = read.record;
@@ -94,6 +137,7 @@ export async function awaitRecordedOutcome<T>(args: {
           checkedAt: new Date(outcomeClock.now()).toISOString(),
           source: "platform-record",
           waitedSeconds: Math.round((outcomeClock.now() - started) / 1000),
+          ...(misses ? { readMisses: misses } : {}),
         },
         record,
         failed: verdict.failed === true,
@@ -117,6 +161,7 @@ export async function awaitRecordedOutcome<T>(args: {
       source: "platform-record",
       waitedSeconds: Math.round((outcomeClock.now() - started) / 1000),
       ...(readProblem ? { readProblem } : {}),
+      ...(misses ? { readMisses: misses } : {}),
     },
     record,
     failed: false,

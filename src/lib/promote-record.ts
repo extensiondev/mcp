@@ -15,6 +15,7 @@ import {
   awaitRecordedOutcome,
   isRow,
   linksOf,
+  missedRead,
   text,
   trackLinks,
   type ActLink,
@@ -58,7 +59,7 @@ export async function awaitPromoteRecord(args: {
     if (!opened.ok) return { ok: false, message: opened.message };
 
     const list = await projectApiGet<{ items?: unknown }>(opened.api, "releases");
-    if (!list.ok) return { ok: false, message: list.message };
+    if (!list.ok) return missedRead(list);
 
     const items = (Array.isArray(list.json.items) ? list.json.items : []).filter(isRow);
     const match = items.find((item) => {

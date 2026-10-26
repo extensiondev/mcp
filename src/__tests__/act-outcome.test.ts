@@ -15,6 +15,7 @@ import {
   dispatchedHint,
   linksOf,
   madeSentence,
+  missedRead,
   outcomeClock,
   waitBound,
 } from "../lib/act-outcome";
@@ -104,6 +105,90 @@ describe("awaitRecordedOutcome reads the platform's record until it shows the ac
     });
 
     expect(failed.outcome).toMatchObject({ recorded: false, readProblem: "the record read answered 503", waitedSeconds: 0 });
+  });
+
+  it("retries a read the platform did not answer while the bound lasts, and answers the recorded result after it", async () => {
+    let reads = 0;
+    const slept: number[] = [];
+    const sleep = outcomeClock.sleep;
+
+    outcomeClock.sleep = async (ms) => {
+      slept.push(ms);
+      await sleep(ms);
+    };
+
+    try {
+      const out = await awaitRecordedOutcome<{ status: string }>({
+        waitSeconds: 300,
+        read: async () => {
+          reads += 1;
+          if (reads === 1) return missedRead({ status: 0, message: "could not reach https://api.test/api/cli/stores/submissions: the platform did not answer within 15 s" });
+          if (reads === 2) return missedRead({ status: 429, message: "https://api.test/api/cli/stores/submissions answered 429", retryAfterSeconds: 20 });
+
+          return { ok: true, record: { status: "failed" } };
+        },
+        judge: (record) => ({ kind: "recorded", status: record.status, failed: true }),
+      });
+
+      expect(reads).toBe(3);
+      expect(slept).toEqual([OUTCOME_POLL_MS, 20_000]);
+      expect(out.failed).toBe(true);
+      expect(out.outcome).toMatchObject({ recorded: true, status: "failed", waitedSeconds: 25, readMisses: 2 });
+      expect(out.outcome.readProblem).toBeUndefined();
+    } finally {
+      outcomeClock.sleep = sleep;
+    }
+  });
+
+  it("names the misses in readProblem only once the bound is spent on them, and keeps a refused read as the end", async () => {
+    let reads = 0;
+    const spent = await awaitRecordedOutcome<{ status: string }>({
+      waitSeconds: 20,
+      read: async () => {
+        reads += 1;
+
+        return missedRead({ status: 503, message: "https://api.test/api/cli/stores/submissions answered 503" });
+      },
+      judge: () => ({ kind: "waiting" }),
+    });
+
+    expect(reads).toBe(5);
+    expect(spent.outcome).toMatchObject({
+      recorded: false,
+      status: null,
+      waitedSeconds: 20,
+      readMisses: 5,
+      readProblem: "https://api.test/api/cli/stores/submissions answered 503; 5 reads of the record missed over 20 s",
+    });
+
+    reads = 0;
+    const once = await awaitRecordedOutcome<{ status: string }>({
+      waitSeconds: 0,
+      read: async () => {
+        reads += 1;
+
+        return missedRead({ status: 0, message: "could not reach https://api.test/x: the connection was refused by api.test (ECONNREFUSED)" });
+      },
+      judge: () => ({ kind: "waiting" }),
+    });
+
+    expect(reads).toBe(1);
+    expect(once.outcome.readProblem).toBe("could not reach https://api.test/x: the connection was refused by api.test (ECONNREFUSED); 1 read of the record missed over 0 s");
+
+    reads = 0;
+    const refused = await awaitRecordedOutcome<{ status: string }>({
+      waitSeconds: 300,
+      read: async () => {
+        reads += 1;
+
+        return missedRead({ status: 401, message: "https://api.test/api/cli/stores/submissions answered 401" });
+      },
+      judge: () => ({ kind: "waiting" }),
+    });
+
+    expect(reads).toBe(1);
+    expect(refused.outcome).toMatchObject({ recorded: false, readProblem: "https://api.test/api/cli/stores/submissions answered 401", waitedSeconds: 0 });
+    expect(refused.outcome.readMisses).toBeUndefined();
   });
 
   it("stops early when the record says nothing more will be recorded, and marks a recorded failure", async () => {

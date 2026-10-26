@@ -6,7 +6,7 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-import { after, awaitRecordedOutcome, dispatchedHint, linksOf, madeSentence, stampNow, type Verdict } from "../lib/act-outcome";
+import { after, awaitRecordedOutcome, dispatchedHint, linksOf, madeSentence, missedRead, stampNow, type Verdict } from "../lib/act-outcome";
 import { browserHealthOf, describeBrowserHealth, readBuildHealth, type BrowserHealth } from "../lib/build-health";
 import { envelope } from "../lib/envelope";
 import { projectApiSend, type ProjectApi } from "../lib/project-api";
@@ -168,7 +168,7 @@ export async function recheck(args: ActArgs & { browser?: string }): Promise<str
     waitSeconds: args.waitSeconds,
     read: async () => {
       const health = await readBuildHealth({ command: COMMAND, buildId: canonical, project: args.project, api: args.api });
-      if (!health.checked) return { ok: false, message: health.reason };
+      if (!health.checked) return missedRead({ status: health.status ?? -1, message: health.reason });
 
       return { ok: true, record: health.browsers };
     },

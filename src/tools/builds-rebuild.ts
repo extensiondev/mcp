@@ -16,6 +16,7 @@ import {
   dispatchedHint,
   linksOf,
   madeSentence,
+  missedRead,
   stampNow,
   trackLinks,
   type Verdict,
@@ -169,7 +170,7 @@ async function alreadyRunning(sent: ProjectApiRefusal, args: ActArgs, api: Proje
       if (!commit) return { ok: false, message: "the platform named no commit for the running build, so its record cannot be read by build id" };
 
       const read = await projectApiGet<Row>(api, `builds/${encodeURIComponent(commit)}`);
-      if (!read.ok) return { ok: false, message: read.message };
+      if (!read.ok) return missedRead(read);
 
       return { ok: true, record: isRow(read.json) ? read.json : {} };
     },
@@ -351,7 +352,7 @@ export async function rebuild(args: ActArgs): Promise<string> {
       if (!commit) return { ok: false, message: "the platform named no commit for this rebuild, so its record cannot be read by build id" };
 
       const read = await projectApiGet<Row>(api, `builds/${encodeURIComponent(commit)}`);
-      if (!read.ok) return { ok: false, message: read.message };
+      if (!read.ok) return missedRead(read);
 
       return { ok: true, record: isRow(read.json) ? read.json : {} };
     },

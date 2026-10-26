@@ -6,7 +6,7 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-import { awaitRecordedOutcome, dispatchedHint, madeSentence, stampNow } from "../lib/act-outcome";
+import { awaitRecordedOutcome, dispatchedHint, madeSentence, missedRead, stampNow } from "../lib/act-outcome";
 import { envelope } from "../lib/envelope";
 import { readSubmissionRecord, type PlatformSubmission, type SubmissionDispatch } from "../lib/platform-submissions";
 import { projectApiGet } from "../lib/project-api";
@@ -157,7 +157,7 @@ export async function raiseRollout(args: StoreActArgs): Promise<string> {
     waitSeconds: args.waitSeconds,
     read: async () => {
       const read = await projectApiGet<Row>(opened.api, `stores/${store}/rollout`);
-      if (!read.ok) return { ok: false, message: read.message };
+      if (!read.ok) return missedRead(read);
 
       return { ok: true, record: isRow(read.json.rollout) ? read.json.rollout : {} };
     },

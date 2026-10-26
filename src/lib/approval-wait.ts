@@ -6,7 +6,7 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-import { outcomeClock, waitBound } from "./act-outcome";
+import { TRANSIENT_READ_STATUSES, missesSentence, outcomeClock, waitBound } from "./act-outcome";
 import { APPROVAL_PENDING_RETRY_SECONDS, APPROVAL_PENDING_STATUS } from "./approval-outcome";
 import { resolveCredential } from "./credential-source";
 import { envelope, isEnvelope, type Envelope } from "./envelope";
@@ -36,31 +36,35 @@ function pendingRetry(answer: string): number | null {
   return Number.isFinite(seconds) && seconds > 0 ? seconds : APPROVAL_PENDING_RETRY_SECONDS;
 }
 
-async function stillWaiting(approvalId: string, args: Args): Promise<boolean> {
+type ApprovalPoll = { state: "pending" | "decided" } | { state: "missed"; problem: string };
+
+async function pollApproval(approvalId: string, args: Args): Promise<ApprovalPoll> {
   const api = text(args.api) || undefined;
   const token = resolveCredential({ project: text(args.project) || undefined, api }).token;
   const check = safeApiBase(resolveApiBase(api), api);
-  if (!token || !check.ok) return false;
+  if (!token || !check.ok) return { state: "decided" };
 
+  const url = `${check.base}/api/cli/approvals/${encodeURIComponent(approvalId)}`;
   const sent = await platformFetch(
-    `${check.base}/api/cli/approvals/${encodeURIComponent(approvalId)}`,
+    url,
     { method: "GET", headers: { authorization: `Bearer ${token}`, accept: "application/json" } },
     { kind: "read" },
   );
-  if (!sent.ok) return true;
-  if (!sent.res.ok) return false;
+  if (!sent.ok) return { state: "missed", problem: sent.unreached.message };
+  if (TRANSIENT_READ_STATUSES.has(sent.res.status)) return { state: "missed", problem: `${url} answered ${sent.res.status}` };
+  if (!sent.res.ok) return { state: "decided" };
 
   try {
     const body = JSON.parse(await sent.res.text()) as { status?: unknown };
     const status = String(body?.status ?? "").trim().toLowerCase();
 
-    return status === "" || status === "pending";
+    return { state: status === "" || status === "pending" ? "pending" : "decided" };
   } catch {
-    return false;
+    return { state: "decided" };
   }
 }
 
-function withWaited(answer: string, waitedSeconds: number, pending: boolean): string {
+function withWaited(answer: string, waitedSeconds: number, pending: boolean, readProblem?: string): string {
   let parsed: unknown;
 
   try {
@@ -74,14 +78,14 @@ function withWaited(answer: string, waitedSeconds: number, pending: boolean): st
   const frame = parsed as Envelope & { hint?: string };
   const value = frame.value && typeof frame.value === "object" && !Array.isArray(frame.value) ? (frame.value as Args) : {};
   const said = pending
-    ? `This call waited ${waitedSeconds} s for the approval, which nobody has decided yet.`
+    ? `This call waited ${waitedSeconds} s for the approval, which nobody has decided yet${readProblem ? `; the approval itself could not always be read (${readProblem})` : ""}.`
     : `This call waited ${waitedSeconds} s for the approval, then went on once it was decided.`;
 
   return envelope({
     ok: frame.ok,
     command: frame.command,
     status: frame.status,
-    value: { ...value, approvalWaitedSeconds: waitedSeconds },
+    value: { ...value, approvalWaitedSeconds: waitedSeconds, ...(readProblem ? { readProblem } : {}) },
     error: frame.error ?? undefined,
     warnings: frame.warnings,
     ...(frame.truncated !== undefined ? { truncated: frame.truncated } : {}),
@@ -98,8 +102,11 @@ function withWaited(answer: string, waitedSeconds: number, pending: boolean): st
  * wait, so a granted approval dispatches and answers its recorded outcome in
  * one call and a declined or expired one answers its own refusal. Only when
  * the bound passes does the answer stay approval-pending, saying how long it
- * waited (ledger 254: the agent slept in a shell between calls). A call with
- * no waitSeconds answers at once, as before.
+ * waited (ledger 254: the agent slept in a shell between calls). A poll the
+ * platform does not answer (a timeout, a refused connection, a 429 or a 5xx)
+ * is a miss, not a decision: the wait goes on, and only an answer at the
+ * bound names the misses in readProblem. A call with no waitSeconds answers
+ * at once, as before.
  */
 export async function answerOnceDecided(args: Args, call: (args: Args) => Promise<string>): Promise<string> {
   const first = await call(args);
@@ -112,14 +119,24 @@ export async function answerOnceDecided(args: Args, call: (args: Args) => Promis
   const boundMs = waitBound(args.waitSeconds) * 1000;
   const started = outcomeClock.now();
   let last = first;
+  let misses = 0;
+  let lastMiss = "";
   const waited = (): number => Math.round((outcomeClock.now() - started) / 1000);
 
   for (;;) {
     const elapsed = outcomeClock.now() - started;
-    if (elapsed >= boundMs) return withWaited(last, waited(), true);
+    if (elapsed >= boundMs) return withWaited(last, waited(), true, misses ? missesSentence(misses, waited(), lastMiss, "the approval") : undefined);
 
     await outcomeClock.sleep(Math.min(retry * 1000, boundMs - elapsed));
-    if (await stillWaiting(approvalId, args)) continue;
+    const poll = await pollApproval(approvalId, args);
+
+    if (poll.state === "missed") {
+      misses += 1;
+      lastMiss = poll.problem;
+      continue;
+    }
+
+    if (poll.state === "pending") continue;
 
     const decided = waited();
     const left = Math.max(0, Math.round((boundMs - (outcomeClock.now() - started)) / 1000));

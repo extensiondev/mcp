@@ -139,6 +139,48 @@ describe("ledger 254: an approval still waiting is waited for inside a call that
     expect(out.hint).toContain("waited 45 s for the approval, which nobody has decided yet");
   });
 
+  it("treats a poll the platform did not answer as a miss and keeps waiting, then runs the act once granted", async () => {
+    const routed = global.fetch;
+    let misses = 2;
+    grantAfterPolls = 5;
+    global.fetch = (async (url: string, init?: RequestInit) => {
+      if (misses > 0) {
+        misses -= 1;
+        polls.push("missed");
+
+        throw Object.assign(new TypeError("fetch failed"), { cause: Object.assign(new Error("connect ECONNRESET"), { code: "ECONNRESET" }) });
+      }
+
+      return routed(url, init);
+    }) as unknown as typeof fetch;
+
+    const out = await call({ approvalId: APPROVAL_ID, waitSeconds: 300 });
+
+    expect(out.status).toBe("submitted");
+    expect(polls).toEqual(["missed", "missed", "Bearer rebeccat.sig", "Bearer rebeccat.sig", "Bearer rebeccat.sig"]);
+    expect(calls).toHaveLength(2);
+    expect(calls[1]?.waitSeconds).toBe(250);
+    expect(out.value.approvalWaitedSeconds).toBe(50);
+    expect(out.value.readProblem).toBeUndefined();
+  });
+
+  it("names the misses in readProblem when the bound was spent on polls the platform did not answer", async () => {
+    global.fetch = (async () => {
+      polls.push("missed");
+
+      return { ok: false, status: 503, headers: { get: () => null }, text: async () => "" } as unknown as Response;
+    }) as unknown as typeof fetch;
+
+    const out = await call({ approvalId: APPROVAL_ID, waitSeconds: 45 });
+
+    expect(out.status).toBe("approval-pending");
+    expect(calls).toHaveLength(1);
+    expect(polls).toHaveLength(5);
+    expect(out.value.approvalWaitedSeconds).toBe(45);
+    expect(out.value.readProblem).toBe(`${API}/api/cli/approvals/${APPROVAL_ID} answered 503; 5 reads of the approval missed over 45 s`);
+    expect(out.hint).toContain("waited 45 s for the approval, which nobody has decided yet; the approval itself could not always be read (");
+  });
+
   it("answers at once, polling nothing, when the call names no waitSeconds", async () => {
     const out = await call({ approvalId: APPROVAL_ID });
 

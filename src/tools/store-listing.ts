@@ -12,8 +12,10 @@ import path from "node:path";
 import { ConsoleProjectPage } from "@extension.dev/urls/paths";
 
 import {
+  awaitRecordedOutcome,
   linksOf,
   madeSentence,
+  missedRead,
   recordedOutcome,
   trackLinks,
   unrecordedOutcome,
@@ -91,6 +93,7 @@ export interface ListingArgs {
   useBuild?: string;
   project?: string;
   api?: string;
+  waitSeconds?: unknown;
 }
 
 export interface LocalListing {
@@ -439,22 +442,9 @@ interface StoreReadBack {
   images?: ImageRows;
 }
 
-async function stillBlocking(
-  api: ProjectApi,
-  store: string,
-): Promise<StoreReadBack | null> {
-  const read = await projectApiSend<Row>(
-    api,
-    "POST",
-    `stores/${store}/submissions/preflight`,
-    {},
-  );
-  if (!read.ok) return null;
-
-  const checks = (
-    Array.isArray(read.json.checks) ? read.json.checks : []
-  ).filter(isRow);
-  const requirements = requirementsView(read.json.requirements);
+function readBackOf(store: string, json: Row): StoreReadBack {
+  const checks = (Array.isArray(json.checks) ? json.checks : []).filter(isRow);
+  const requirements = requirementsView(json.requirements);
 
   return {
     ...(requirements ? { images: imageRows(store, requirements) } : {}),
@@ -468,8 +458,32 @@ async function stillBlocking(
         (check) =>
           `${text(check.id)}${text(check.status) === "warn" ? " (warning)" : ""}`,
       ),
-    dashboardUrl: text(read.json.dashboardUrl) || null,
+    dashboardUrl: text(json.dashboardUrl) || null,
   };
+}
+
+async function stillBlocking(
+  api: ProjectApi,
+  store: string,
+  waitSeconds: unknown,
+): Promise<{ readBack: StoreReadBack | null; problem: string | null }> {
+  const waited = await awaitRecordedOutcome<StoreReadBack>({
+    waitSeconds,
+    read: async () => {
+      const read = await projectApiSend<Row>(
+        api,
+        "POST",
+        `stores/${store}/submissions/preflight`,
+        {},
+      );
+      if (!read.ok) return missedRead(read);
+
+      return { ok: true, record: readBackOf(store, read.json) };
+    },
+    judge: () => ({ kind: "recorded", status: "read" }),
+  });
+
+  return { readBack: waited.record, problem: waited.outcome.readProblem ?? null };
 }
 
 export interface ImageRows {
@@ -834,6 +848,7 @@ export async function syncListing(args: ListingArgs): Promise<string> {
 
   const stores: Row = {};
   const unreadBack: string[] = [];
+  const readProblems: string[] = [];
   const said: string[] = [];
 
   let plain = false;
@@ -859,9 +874,14 @@ export async function syncListing(args: ListingArgs): Promise<string> {
     if (local.iconNote) said.push(local.iconNote);
 
     const done = DONE_STATUSES.has(text(result.status));
-    const readBack = done ? await stillBlocking(api, store) : null;
+    const back = done ? await stillBlocking(api, store, args.waitSeconds) : null;
+    const readBack = back?.readBack ?? null;
     const blocking = readBack?.blocking ?? null;
-    if (done && readBack === null) unreadBack.push(store);
+
+    if (done && readBack === null) {
+      unreadBack.push(store);
+      if (back?.problem) readProblems.push(back.problem);
+    }
 
     const paste = store === "chrome" && done ? chromeDashboardPaste(local, readBack?.dashboardUrl ?? null) : null;
     const sentImages = local.patch.screenshots?.length ?? 0;
@@ -1009,7 +1029,7 @@ export async function syncListing(args: ListingArgs): Promise<string> {
   const outcome = recorded
     ? recordedOutcome(synced.length ? "synced" : "unchanged")
     : unrecordedOutcome(
-        `the listing of ${unreadBack.join(", ")} could not be read back after the write`,
+        `the listing of ${unreadBack.join(", ")} could not be read back after the write${readProblems.length ? ` (${readProblems.join("; ")})` : ""}`,
       );
   const made = madeSentence(links);
 

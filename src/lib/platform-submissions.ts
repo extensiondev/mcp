@@ -8,6 +8,7 @@
 
 import { resolveCredential } from "./credential-source";
 import { resolveApiBase, safeApiBase } from "./login-flow";
+import { missedRead, type RecordRead } from "./act-outcome";
 import { platformFetch } from "./platform-fetch";
 import { platformApiGet, type ProjectApi } from "./project-api";
 import { identityHeaders } from "./session-identity";
@@ -322,9 +323,7 @@ export async function readPlatformSubmissions(args: {
   return { ok: true, byStore };
 }
 
-export type SubmissionRecordRead =
-  | { ok: true; record: PlatformSubmission | null }
-  | { ok: false; message: string };
+export type SubmissionRecordRead = RecordRead<PlatformSubmission>;
 
 export async function readSubmissionRecord(
   api: Pick<ProjectApi, "base" | "token" | "command">,
@@ -336,7 +335,7 @@ export async function readSubmissionRecord(
   if (!read.ok) {
     if (read.status === 404 && read.code === "SUBMISSION_NOT_FOUND") return { ok: true, record: null };
 
-    return { ok: false, message: read.message };
+    return missedRead(read);
   }
 
   const rows = Array.isArray(read.json.submissions) ? read.json.submissions : null;
@@ -358,9 +357,9 @@ export async function readSubmissionRecord(
 
 export async function readSubmissionRecords(
   api: Pick<ProjectApi, "base" | "token" | "command">,
-): Promise<{ ok: true; record: Record<string, PlatformSubmission> } | { ok: false; message: string }> {
+): Promise<RecordRead<Record<string, PlatformSubmission>>> {
   const read = await platformApiGet<{ submissions?: unknown }>(api, "/api/cli/stores/submissions");
-  if (!read.ok) return { ok: false, message: read.message };
+  if (!read.ok) return missedRead(read);
 
   const rows = Array.isArray(read.json.submissions) ? read.json.submissions : null;
   if (!rows) return { ok: false, message: `${api.base}/api/cli/stores/submissions answered without a list of submissions` };
