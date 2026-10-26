@@ -214,6 +214,34 @@ describe("store acts and builds answer the recorded outcome", () => {
     expect(out.error.message).toContain("chrome: The run died before the store step.");
     expect(out.value.outcome).toMatchObject({ recorded: true, status: "failed" });
     expect(out.value.links[0]).toMatchObject({ kind: "submission", made: true });
+    expect(out.value.nextStep.kind).toBe("resubmit");
+    expect(out.value.nextStep.say).toContain("did not reach the Chrome Web Store; nothing is in review");
+    expect(out.value.nextStep.say).toContain("The store answered: chrome: The run died before the store step. Fix the cause");
+    expect(out.value.nextStep.say).not.toContain("recorded the submission");
+    expect(out.value.nextStep.say).not.toContain("review comes after this");
+    expect(out.value.sayToPerson).toBe(out.value.nextStep.say);
+    expect(out.value.nextStep.url).toMatch(/\/submissions\//);
+  });
+
+  it("a listed Firefox upload AMO refused answers the store's own words in the next step", async () => {
+    if (process.platform === "win32") return;
+
+    platform.login();
+    process.env.EXTENSION_DEV_APPROVAL_GATE = "0";
+    const reason =
+      'HTTP 400 Bad Request, POST https://addons.mozilla.org/api/v5/addons/addon/rebeccat@extension.dev/versions/ {"license":["This field, or custom_license, is required for listed versions."]}';
+    platform.routes["POST /api/cli/stores/submit"] = () => ({ body: { ok: true, submissions: [{ id: "sub_ff", store: "firefox", status: "pending" }] } });
+    platform.routes["GET /api/cli/stores/submissions"] = () => ({ body: { submissions: [{ id: "sub_ff", store: "firefox", status: "failed", failureReason: reason }] } });
+
+    const out = JSON.parse(await submit({ browsers: ["firefox"], buildSha: "6d9e10c", dryRun: false, api: API }));
+
+    expect(out.status).toBe("submit-failed");
+    expect(out.value.nextStep.kind).toBe("resubmit");
+    expect(out.value.nextStep.say).toContain("did not reach Firefox AMO; nothing is in review");
+    expect(out.value.nextStep.say).toContain("required for listed versions");
+    expect(out.value.nextStep.say).toContain("submit the same build again");
+    expect(out.value.nextStep.say).not.toContain("review comes after this");
+    expect(JSON.stringify(out)).not.toMatch(/extension-user-land-dev|\/actions\/runs\//);
   });
 
   it("rebuild answers built when the build record shows this run finished, and build-failed when it failed", async () => {

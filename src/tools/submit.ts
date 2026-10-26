@@ -74,6 +74,7 @@ import {
   connectSentences,
   dispatchedStep,
   doneStep,
+  submitFailedStep,
   failedCheckSentence,
   fallbackConnectUrl,
   itemLinkUrls,
@@ -1169,13 +1170,15 @@ async function answer(args: SubmitToolArgs): Promise<string> {
       : [];
     const judgedStep = !waited.outcome.recorded
       ? dispatchedStep(outcome.stores, firstPage)
-      : uploadedFailures.length
-        ? uploadedStepFailedStep(
-            uploadedFailures.map((row) => row.store),
-            uploadedFailures.map((row) => String(row.record?.failure?.step)).join("; "),
-            firstPage,
-          )
-        : doneStep(outcome.stores, itemUrl);
+      : failedStores.length
+        ? submitFailedStep(failureLines, firstPage)
+        : uploadedFailures.length
+          ? uploadedStepFailedStep(
+              uploadedFailures.map((row) => row.store),
+              uploadedFailures.map((row) => String(row.record?.failure?.step)).join("; "),
+              firstPage,
+            )
+          : doneStep(outcome.stores, itemUrl);
     const step = retryLine
       ? { ...judgedStep, say: `${retryLine} ${judgedStep.say}` }
       : judgedStep;

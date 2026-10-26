@@ -176,6 +176,27 @@ export function uploadedStepFailedStep(stores: string[], step: string, trackUrl:
   );
 }
 
+/* @invariant A FAILED RECORD NEVER GETS THE DONE SENTENCE.
+ *
+ * On 2026-10-26 Rebeccat's first listed Firefox upload answered submit-failed
+ * with AMO's own refusal in error.message while nextStep still said "The
+ * platform recorded the submission for Firefox AMO; each store's own review
+ * comes after this", because the step was judged before the failed statuses
+ * were. A record that reads failed says so with the store's own words, that
+ * nothing is in review, and that the same build is submitted again once the
+ * cause is fixed; the track page holds the run's words.
+ */
+export function submitFailedStep(failures: string[], trackUrl: string): NextStep {
+  const stores = failures.map((line) => line.split(":")[0]?.trim() ?? "").filter(Boolean);
+  const answered = failures.map((line) => line.trim().replace(/[.\s]+$/, ""));
+
+  return nextStep(
+    "resubmit",
+    `The submission did not reach ${storeNames(stores)}; nothing is in review. The store answered: ${answered.join("; ")}. Fix the cause, then submit the same build again; ${trackUrl} holds the run's own words.`,
+    trackUrl,
+  );
+}
+
 export function doneStep(stores: string[], itemUrl: string): NextStep {
   const drafts = stores.length > 0 && stores.every((store) => DRAFT_STORES.has(store));
   const uploaded = `The build is uploaded to ${storeNames(stores)} as a draft, recorded as uploaded and not public.`;
