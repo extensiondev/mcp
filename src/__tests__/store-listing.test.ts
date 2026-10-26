@@ -716,6 +716,11 @@ describe("extension_submit sync-listing and the preflight advisory", () => {
     expect(out.status).toBe("listing-synced");
     expect(out.value.stores.firefox.status).toBe("unchanged");
     expect(out.value.stores.firefox.filled).toEqual(["title", "shortDescription", "fullDescription", "categories", "reviewerNotes", "icons"]);
+    expect(out.value.sayToPerson).toContain(
+      "For firefox, the listing's categories, summary, description, homepage and support reach the AMO add-on with the next listed upload, in the same run, before the version is created; AMO's refusal of any of them fails that upload with AMO's own words in the submission record. An unlisted upload leaves the AMO listing untouched.",
+    );
+
+    expect(out.value.sayToPerson).not.toMatch(/recorded only|record only/);
     expect(out.value.stores.firefox.unread).toEqual([
       { field: "supportEmail", line: "- Support email:", section: "## Listing" },
       { field: "privacyPolicyUrl", line: "- Privacy policy URL:", section: "## Privacy and data use" },

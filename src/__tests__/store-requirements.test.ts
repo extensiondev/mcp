@@ -259,6 +259,32 @@ describe("extension_submit preflight carries what each store asks for and says w
     expect(JSON.stringify(out)).not.toMatch(/github\.com|actions\/runs/);
   });
 
+  it("retires the STORE.md Screenshots line instead of calling it unread once the store's screenshots row reads have", async () => {
+    if (process.platform === "win32") return;
+
+    const root = walkProject();
+    platform.login();
+    platform.routes[`POST ${PREFLIGHT("firefox")}`] = () => ({
+      body: report("firefox", true, {
+        store: "firefox",
+        items: [
+          requirement({ id: "firefox.screenshots", label: "Screenshots", required: false, satisfiedBy: "store-md: Screenshots", status: "have", actual: "5 screenshots (1280x800 x5)" }),
+          walkMissing("firefox", "firefox.support_email", "Support email", "store-md: Support email"),
+        ],
+        missingRequired: 1,
+        missingOptional: 0,
+      }),
+    });
+
+    const out = JSON.parse(await submit({ action: "preflight", browsers: ["firefox"], projectPath: root, api: API }));
+
+    expect(out.value.stores.firefox.storeMd.skipped).toEqual([
+      "the `- Screenshots (1280x800, in this order):` line in STORE.md is retired: the images come from the listing record (5 screenshots (1280x800 x5)), written by sync-listing, not from STORE.md",
+    ]);
+
+    expect(JSON.stringify(out.value.stores.firefox.storeMd)).not.toContain("is not read: STORE.md carries no screenshot");
+  });
+
   it("answers the App Store subtitle have from a `- Subtitle:` line and keeps it missing, with the line to add, when STORE.md has only a Summary", async () => {
     if (process.platform === "win32") return;
 

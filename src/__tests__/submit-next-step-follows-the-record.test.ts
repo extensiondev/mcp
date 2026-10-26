@@ -56,6 +56,66 @@ function approvedEdgeSubmit(world: World, record: Record<string, unknown>): void
   world.routes.push([RECORDS, () => ({ body: { submissions: [{ id: "sub_edge", store: "edge", ...record }] } })]);
 }
 
+const FIREFOX_ARGS = { ...ARGS, browsers: ["firefox"], approvalId: "apr_firefox" };
+const AMO_WORDS =
+  'FIREFOX_METADATA_REFUSED: AMO refused the listing metadata (HTTP 400 on categories, summary): categories: Invalid pk "productivity" - object does not exist.; summary (en-US): Ensure this field has no more than 250 characters.';
+
+function approvedFirefoxSubmit(world: World, record: Record<string, unknown>): void {
+  world.routes.push([
+    /^GET \/api\/cli\/approvals\/apr_firefox$/,
+    () => ({
+      body: {
+        status: "approved",
+        used: false,
+        expiresAt: new Date(Date.now() + 600_000).toISOString(),
+        fingerprint: actionFingerprint("extension_submit", {
+          browsers: ["firefox"],
+          buildSha: "f29f204",
+          channel: "stable",
+        }),
+      },
+    }),
+  ]);
+
+  world.routes.push([
+    SUBMIT,
+    () => ({
+      body: {
+        ok: true,
+        buildId: "f29f204",
+        channel: "stable",
+        dispatchedAt: "2026-10-26T17:36:41.000Z",
+        submissions: [{ id: "sub_firefox", store: "firefox", status: "pending" }],
+      },
+    }),
+  ]);
+
+  world.routes.push([RECORDS, () => ({ body: { submissions: [{ id: "sub_firefox", store: "firefox", ...record }] } })]);
+}
+
+describe("a failed Firefox listed upload answers AMO's own words", () => {
+  const world = usePlatformWorld("extdev-firefox-record-");
+
+  it("carries the metadata refusal word for word and never the done sentence", async () => {
+    if (process.platform === "win32") return;
+
+    world.login();
+    approvedFirefoxSubmit(world, { status: "failed", rawStatus: "failed", failureReason: AMO_WORDS });
+
+    const out = await world.call("extension_submit", { ...FIREFOX_ARGS, waitSeconds: 5 });
+    const context = JSON.stringify(out).slice(0, 2000);
+
+    expect(out.status, context).toBe("submit-failed");
+    expect(out.value.outcome.recorded).toBe(true);
+    expect(out.value.outcome.status).toBe("failed");
+    expect(out.value.nextStep.kind).toBe("resubmit");
+    expect(out.value.nextStep.say).toContain(`The store answered: firefox: ${AMO_WORDS.replace(/[.\s]+$/, "")}`);
+    expect(out.value.nextStep.say).toContain("nothing is in review");
+    expect(JSON.stringify(out.value.nextStep)).not.toMatch(/review comes after this|recorded the submission/);
+    expect(JSON.stringify(out)).not.toMatch(MIRROR);
+  });
+});
+
 describe("the Edge submit's next step follows outcome.recorded", () => {
   const world = usePlatformWorld("extdev-edge-record-");
 

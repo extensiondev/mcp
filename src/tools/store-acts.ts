@@ -625,7 +625,7 @@ function readinessView(
           storeMd:
             "problem" in local
               ? { missing: local.problem }
-              : storeMdAdvisory(local, open, settled),
+              : storeMdAdvisory(local, open, settled, requirements),
         }
       : {}),
   };

@@ -116,11 +116,29 @@ export const SCREENSHOTS_DOOR =
 export const screenshotsLineSkipped = (line: string): string =>
   `the \`- ${line}:\` line in ${STORE_MD_FILENAME} is not read: ${STORE_MD_FILENAME} carries no screenshot; ${SCREENSHOTS_DOOR}`;
 
+/* @invariant WHEN THE LISTING RECORD HOLDS THE IMAGES, THE STORE.MD LINE IS
+ * RETIRED, NOT UNREAD. Rebeccat's preflight (2026-10-26) said the
+ * `- Screenshots:` line "is not read: STORE.md carries no screenshot" beside
+ * a firefox.screenshots row reading "5 screenshots (1280x800 x5)". Both were
+ * true and the pair read as a contradiction. Once the store's screenshots row
+ * reads have, the images come from the listing record and the line in
+ * STORE.md is a leftover, so the advisory says that instead of the door. */
+export const screenshotsLineRetired = (line: string, actual: string): string =>
+  `the \`- ${line}:\` line in ${STORE_MD_FILENAME} is retired: the images come from the listing record (${actual}), written by sync-listing, not from ${STORE_MD_FILENAME}`;
+
 const privacyCoveredFact = (url: string): string =>
   `privacy policy URL found in ${STORE_MD_FILENAME} (${url}), not yet in the console listing`;
 
 export const privacyMissingLine = (): string =>
   `privacy policy URL: ${STORE_MD_FILENAME} has no \`${storeMdLineOf("privacyPolicyUrl")}\` under \`${PRIVACY_SECTION}\``;
+
+/* @invariant A FIREFOX SYNC IS NOT A RECORD ONLY. AMO keeps categories,
+ * summary, description, homepage and support on the add-on and refuses the
+ * first listed version of an add-on with none (Rebeccat, 2026-10-26); the
+ * platform writes them onto the add-on with the next listed upload, in the
+ * same run, and a refusal there fails that upload with AMO's own words. */
+export const FIREFOX_METADATA_SENTENCE =
+  "For firefox, the listing's categories, summary, description, homepage and support reach the AMO add-on with the next listed upload, in the same run, before the version is created; AMO's refusal of any of them fails that upload with AMO's own words in the submission record. An unlisted upload leaves the AMO listing untouched.";
 
 export const PLAIN_LISTING_SENTENCE =
   "This listing sync was a plain act under the owner's own token (ruling 143), since every value is the owner's own STORE.md line; only a value the platform derives takes a workspace owner's approval.";
@@ -395,15 +413,32 @@ export function reconciledWithStoreMd(
     : { ...check, message: `${coverage.covered}; sync-listing writes it.` };
 }
 
+const SKIPPED_SCREENSHOTS_LINE = /^the `- (.+?):` line in STORE\.md is not read: STORE\.md carries no screenshot; /;
+
+function screenshotsOnRecord(requirements: RequirementsView | null): string | null {
+  const row = requirements?.items.find((item) => /\.screenshots$/.test(item.id));
+
+  return row && row.status === "have" ? row.actual || "screenshots on the listing record" : null;
+}
+
 export function storeMdAdvisory(
   local: LocalListing,
   checks: Row[],
   settled: Row[] = [],
+  requirements: RequirementsView | null = null,
 ): Row {
   const covers: string[] = [];
   const notCovered: string[] = [];
   const listing = local.patch.listing as Row;
   const onListing = onListingLines(listing, settled);
+  const recorded = screenshotsOnRecord(requirements);
+  const skipped = recorded
+    ? local.skipped.map((entry) => {
+        const line = entry.match(SKIPPED_SCREENSHOTS_LINE)?.[1];
+
+        return line ? screenshotsLineRetired(line, recorded) : entry;
+      })
+    : local.skipped;
 
   for (const check of checks) {
     const id = text(check.id);
@@ -424,7 +459,7 @@ export function storeMdAdvisory(
     covers,
     notCovered,
     ...(onListing.length ? { onListing } : {}),
-    ...(local.skipped.length ? { skipped: local.skipped } : {}),
+    ...(skipped.length ? { skipped } : {}),
   };
 }
 
@@ -908,6 +943,8 @@ export async function syncListing(args: ListingArgs): Promise<string> {
       plain = true;
       said.push(PLAIN_LISTING_SENTENCE);
     }
+
+    if (store === "firefox" && done) said.push(FIREFOX_METADATA_SENTENCE);
 
     stores[store] = {
       ...result,
