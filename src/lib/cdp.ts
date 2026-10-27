@@ -163,6 +163,24 @@ export class CDPClient extends CDPConnection {
     return seen;
   }
 
+  async debuggerPause(sessionId: string, settleMs = 300, timeoutMs = 2_000): Promise<Record<string, unknown> | null> {
+    let paused: Record<string, unknown> | null = null;
+    const unsubscribe = this.onEvent((msg) => {
+      if (msg.method === "Debugger.paused" && msg.sessionId === sessionId) {
+        paused = (msg.params as Record<string, unknown> | undefined) ?? {};
+      }
+    });
+
+    try {
+      await this.sendCommand("Debugger.enable", {}, sessionId, timeoutMs);
+      await sleep(settleMs);
+    } finally {
+      unsubscribe();
+    }
+
+    return paused;
+  }
+
   async enableDomains(sessionId: string): Promise<void> {
     await Promise.all([
       this.sendCommand("Runtime.enable", {}, sessionId),

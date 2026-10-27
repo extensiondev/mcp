@@ -9,6 +9,7 @@
 import { setTimeout as sleep } from "node:timers/promises";
 
 import { CDPClient } from "./cdp";
+import { diagnosePausedTarget, type PausedDiagnosis } from "./cdp-paused";
 import { extensionIsolatedContexts } from "./cdp-isolated-world";
 import { listDocumentTargets, type PageTarget } from "./cdp-targets";
 
@@ -37,7 +38,7 @@ type EvaluateResponse = {
 
 export type ExtensionPageEval =
   | { ok: true; value: unknown; note?: string }
-  | { ok: false; message: string; thrown: boolean; timedOut?: boolean; noIsolatedWorld?: true };
+  | { ok: false; message: string; thrown: boolean; timedOut?: boolean; noIsolatedWorld?: true; paused?: PausedDiagnosis };
 
 function stripHash(url: string): string {
   return url.replace(/#.*$/, "");
@@ -295,10 +296,14 @@ export async function evaluateOnExtensionPage(
     const message = error instanceof Error ? error.message : String(error);
 
     if (/timed out/i.test(message)) {
+      cdp.disconnect();
+      const paused = await diagnosePausedTarget(port, targetId);
+
       return {
         ok: false,
         thrown: false,
         timedOut: true,
+        ...(paused ? { paused } : {}),
         message: `The expression did not answer within ${budget ?? 15_000} ms over the debug port. It may still be running in the target, so a retry repeats whatever it does; read the target's state first, or pass a larger timeout.`,
       };
     }

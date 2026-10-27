@@ -68,6 +68,7 @@ import {
 } from "../lib/cdp-extension-page";
 import { listPageTargets, matchTargetsByUrl } from "../lib/cdp-targets";
 import { CDPClient } from "../lib/cdp";
+import { PAUSED_PAGE_HINT, pausedSentence, type PausedDiagnosis } from "../lib/cdp-paused";
 import {
   AMBIGUOUS_TARGET_HINT,
   findGeckoTab,
@@ -305,6 +306,8 @@ async function evaluateOnChromiumExtensionPage(
       args.timeout,
     );
 
+    if (!outcome.ok && outcome.paused) return pausedPageRefusal(outcome.paused);
+
     if (!outcome.ok) {
       return envelope({
         ok: false,
@@ -430,6 +433,8 @@ async function evaluateOnChromiumExtensionPage(
     args.timeout,
   );
   const warnings = [identicalPickWarning(pageRef(target), targets.slice(1).map(pageRef), "chromium")];
+
+  if (!outcome.ok && outcome.paused) return pausedPageRefusal(outcome.paused);
 
   if (!outcome.ok) {
     return envelope({
@@ -591,6 +596,8 @@ async function evaluateOnWebTarget(
           .join(", ")}. Pass targetId to pick another.`;
   const outcome = await evaluateOnExtensionPage(resolved.port, target.targetId, args.expression, args.timeout);
 
+  if (!outcome.ok && outcome.paused) return pausedPageRefusal(outcome.paused);
+
   if (!outcome.ok) {
     return envelope({
       ok: false,
@@ -617,6 +624,21 @@ async function evaluateOnWebTarget(
   });
 }
 
+function pausedPageRefusal(paused: PausedDiagnosis): string {
+  return envelope({
+    ok: false,
+    command: schema.name,
+    status: "page-paused",
+    error: {
+      code: "E_PAGE_PAUSED",
+      name: "PagePaused",
+      message: pausedSentence(paused),
+    },
+    value: { paused },
+    hint: PAUSED_PAGE_HINT,
+  });
+}
+
 export const CONTENT_WORLD_OVER_CDP =
   "Evaluated over CDP in the extension's isolated world, the one its content scripts share in that tab, through the inspector, which the extension's content_security_policy does not govern: chrome.runtime and the globals and DOM the content script set are visible, while variables a bundled content script keeps inside its own module scope are not";
 
@@ -639,6 +661,8 @@ async function evaluateInContentWorld(
   const outcome = await evaluateOnExtensionPage(port, target.targetId, args.expression, args.timeout, extensionId);
 
   if (!outcome.ok && outcome.noIsolatedWorld) return RELAY_INSTEAD;
+
+  if (!outcome.ok && outcome.paused) return pausedPageRefusal(outcome.paused);
 
   if (!outcome.ok) {
     return envelope({
@@ -1386,6 +1410,8 @@ async function evaluateByTargetId(
   if (!target) return targetNotFound(schema.name, targetId, live, { projectPath: args.projectPath, browser });
 
   const outcome = await evaluateOnExtensionPage(resolved.port, targetId, args.expression, args.timeout);
+
+  if (!outcome.ok && outcome.paused) return pausedPageRefusal(outcome.paused);
 
   if (!outcome.ok) {
     return envelope({
