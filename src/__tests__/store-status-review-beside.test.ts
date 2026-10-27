@@ -133,4 +133,53 @@ describe("extension_release_status never shows the previous draft's review row b
     expect(reviewBesideSubmission(review, { buildSha: "6d9e10c", storeReview: { state: "INPROGRESS" } })).toMatchObject({ status: "pending", storeState: "INPROGRESS" });
     expect(reviewSentence(review)).toBe("review pending (checked 2026-07-22T18:00:00.000Z)");
   });
+
+  it("answers approved, never the poller's pending, once the same build's record is settled live", async () => {
+    const pendingRow = { buildId: "6d9e10c", version: "0.2.0", status: "pending", checkedAt: "2026-10-27T16:51:00.000Z" };
+
+    global.fetch = fetchByFile({
+      "stores/health.json": HEALTH,
+      "stores/status.json": { ...STATUS, reviews: { chrome: pendingRow } },
+      "stores/submissions.json": {
+        updatedAt: "2026-10-27T17:00:00.000Z",
+        submissions: [
+          {
+            ...NEWER,
+            status: "published",
+            storeReview: { state: "PUBLISHED", checkedAt: "2026-10-27T17:00:00.000Z", source: "poll", liveState: "PUBLISHED" },
+          },
+        ],
+      },
+    });
+
+    const out = JSON.parse(await handler({ workspace: "acme", project: "widget" }));
+    const chrome = out.value.stores.find((r: { store: string }) => r.store === "chrome");
+
+    expect(chrome.review).toEqual({
+      status: "approved",
+      version: "0.2.0",
+      buildId: "6d9e10c",
+      checkedAt: "2026-10-27T17:00:00.000Z",
+      storeState: "PUBLISHED",
+      liveState: "PUBLISHED",
+      source: "poll",
+    });
+
+    expect(out.hint).toContain("review approved (PUBLISHED, live item PUBLISHED, checked 2026-10-27T17:00:00.000Z)");
+    expect(out.hint).not.toContain("review pending");
+  });
+
+  it("lets the same build's own newer store answer win over the poller's row, and keeps the row when it is newer", () => {
+    const row = { buildId: "6d9e10c", status: "pending", checkedAt: "2026-10-27T16:51:00.000Z" };
+    const withdrawn = { state: "NO_ACTIVE_SUBMISSION", checkedAt: "2026-10-27T17:10:00.000Z", liveState: "PUBLISHED" };
+
+    expect(reviewBesideSubmission(row, { buildSha: "6d9e10c", status: "submitted", storeReview: withdrawn })).toMatchObject({
+      status: "draft",
+      storeState: "NO_ACTIVE_SUBMISSION",
+    });
+
+    expect(reviewBesideSubmission(row, { buildSha: "6d9e10c", status: "submitted", storeReview: { ...withdrawn, checkedAt: "2026-10-27T16:00:00.000Z" } })).toBe(row);
+    expect(reviewBesideSubmission(row, { buildSha: "6d9e10c", status: "rejected" })).toMatchObject({ status: "rejected", buildId: "6d9e10c" });
+    expect(reviewBesideSubmission(row, { buildSha: "6d9e10c", status: "approved" })).toMatchObject({ status: "approved" });
+  });
 });

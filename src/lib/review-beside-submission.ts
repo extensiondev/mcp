@@ -23,6 +23,7 @@ export interface ReviewView {
 export interface ReviewedSubmission {
   version?: string;
   buildSha?: string;
+  status?: string;
   storeReview?: StoreReview;
 }
 
@@ -54,6 +55,28 @@ function sameBuild(a: string, b: string): boolean {
   return a.startsWith(b) || b.startsWith(a);
 }
 
+const SETTLED_STATUSES: Record<string, string> = { published: "approved", approved: "approved", rejected: "rejected" };
+
+function checkedAtMs(value: string | undefined): number {
+  const ms = Date.parse(value ?? "");
+
+  return Number.isFinite(ms) ? ms : 0;
+}
+
+function ownReview(submission: ReviewedSubmission, sha: string, status: string): ReviewView {
+  const own = submission.storeReview;
+
+  return {
+    status,
+    ...(submission.version ? { version: submission.version } : {}),
+    buildId: sha.slice(0, 7),
+    ...(own?.checkedAt ? { checkedAt: own.checkedAt } : {}),
+    ...(own?.state ? { storeState: own.state } : {}),
+    ...(own?.liveState ? { liveState: own.liveState } : {}),
+    ...(own?.source ? { source: own.source } : {}),
+  };
+}
+
 export function storeReviewOfRow(raw: unknown): StoreReview | undefined {
   if (!isPlainObject(raw)) return undefined;
 
@@ -79,27 +102,34 @@ export function storeReviewOfRow(raw: unknown): StoreReview | undefined {
  * builds. A row for another build is answered from the newer submission's
  * own store answer when its record carries one, and otherwise marked stale
  * with the build it belongs to, never shown as the newer submission's review.
+ *
+ * A row for the same build loses to the submission's own record once that
+ * record is settled or carries a newer store answer: the poller keeps the
+ * last row it wrote per store, and on 2026-10-27 Rebeccat's 0.2.0.6 read
+ * "review pending" beside a record the platform had read live from Chrome
+ * itself. A settled record (published, approved, rejected) answers its own
+ * verdict whatever the row says.
  */
 export function reviewBesideSubmission(
   review: ReviewView | undefined,
   submission: ReviewedSubmission | undefined,
 ): ReviewView | undefined {
   const sha = str(submission?.buildSha);
-  if (!submission || !sha || !review?.buildId || sameBuild(sha, review.buildId)) return review;
+  if (!submission || !sha || !review) return review;
 
   const own = submission.storeReview;
+  const settled = SETTLED_STATUSES[String(submission.status ?? "").trim().toLowerCase()];
+  const rowIsThisBuild = !review.buildId || sameBuild(sha, review.buildId);
 
-  if (own?.state) {
-    return {
-      status: reviewStatusOf(own.state),
-      ...(submission.version ? { version: submission.version } : {}),
-      buildId: sha.slice(0, 7),
-      ...(own.checkedAt ? { checkedAt: own.checkedAt } : {}),
-      storeState: own.state,
-      ...(own.liveState ? { liveState: own.liveState } : {}),
-      ...(own.source ? { source: own.source } : {}),
-    };
+  if (settled) return ownReview(submission, sha, settled);
+
+  if (rowIsThisBuild) {
+    return own?.state && checkedAtMs(own.checkedAt) > checkedAtMs(review.checkedAt)
+      ? ownReview(submission, sha, reviewStatusOf(own.state))
+      : review;
   }
+
+  if (own?.state) return ownReview(submission, sha, reviewStatusOf(own.state));
 
   return {
     ...review,
