@@ -165,7 +165,7 @@ describe("extension_submit preflight carries what each store asks for and says w
     platform.routes[`POST ${PREFLIGHT("safari")}`] = () => ({ body: report("safari", false, SAFARI_REQUIREMENTS) });
     platform.routes[`POST ${PREFLIGHT("edge")}`] = () => ({ body: report("edge", true, { store: "edge", items: [requirement({ id: "edge.name", label: "Extension name", format: "Up to 45 characters." })], missingRequired: 0, missingOptional: 0 }) });
 
-    const out = JSON.parse(await submit({ action: "preflight", browsers: ["safari", "edge"], buildSha: "603fc8a", api: API }));
+    const out = JSON.parse(await submit({ action: "preflight", browsers: ["safari", "edge"], buildSha: "603fc8a", detail: true, api: API }));
 
     expect(out.status).toBe("preflight-read");
     expect(out.value.stores.safari.requirements).toEqual({
@@ -204,7 +204,7 @@ describe("extension_submit preflight carries what each store asks for and says w
     platform.routes[`POST ${PREFLIGHT("chrome")}`] = () => ({ body: report("chrome", false, CHROME_WALK) });
     platform.routes[`POST ${PREFLIGHT("safari")}`] = () => ({ body: report("safari", false, SAFARI_WALK) });
 
-    const out = JSON.parse(await submit({ action: "preflight", browsers: ["chrome", "safari"], projectPath: root, api: API }));
+    const out = JSON.parse(await submit({ action: "preflight", browsers: ["chrome", "safari"], projectPath: root, detail: true, api: API }));
     const chrome = out.value.stores.chrome.requirements;
     const safari = out.value.stores.safari.requirements;
     const byId = (view: { items: Array<Record<string, unknown>> }, id: string) => view.items.find((item) => item.id === id);
@@ -303,6 +303,7 @@ describe("extension_submit preflight carries what each store asks for and says w
         action: "preflight",
         browsers: ["safari"],
         projectPath: walkProject(WALK_STORE_MD.replace("- Summary:", "- Subtitle: Blur names on screen\n- Summary:")),
+        detail: ["safari.subtitle"],
         api: API,
       }),
     );

@@ -1,0 +1,1536 @@
+{
+ "chrome": {
+  "store": "chrome",
+  "summary": {
+   "pass": 13,
+   "warn": 1,
+   "fail": 0,
+   "blockingFailures": 0,
+   "integration": {
+    "pass": 6,
+    "fail": 0,
+    "blockingFailures": 0,
+    "canQueue": true
+   },
+   "review": {
+    "pass": 7,
+    "warn": 1,
+    "fail": 0,
+    "blockingFailures": 0,
+    "canSubmitForReview": true
+   },
+   "canSubmit": true,
+   "namedBySubmit": [
+    "submission.build_selected"
+   ]
+  },
+  "checks": [
+   {
+    "id": "distribution.chrome_visibility",
+    "label": "Chrome visibility matches the project's intent",
+    "status": "warn",
+    "severity": "warning",
+    "stage": "review",
+    "message": "A new Chrome item defaults to Public in the dashboard, and this project's intent is Unlisted (the least public default, since STORE.md has no `- Visibility:` line). Google's API does not answer visibility, so set and confirm it on the Distribution tab of the item's dashboard at https://chrome.google.com/webstore/devconsole/00000000-0000-4000-8000-000000000000/abcdefghijklmnopabcdefghijklmnop/edit."
+   },
+   {
+    "id": "chrome.check_0",
+    "label": "Check 0 passes",
+    "status": "pass",
+    "severity": "blocking",
+    "stage": "integration",
+    "message": "The platform read this from the build, the registry and the store connection and found it in order."
+   },
+   {
+    "id": "chrome.check_1",
+    "label": "Check 1 passes",
+    "status": "pass",
+    "severity": "blocking",
+    "stage": "integration",
+    "message": "The platform read this from the build, the registry and the store connection and found it in order."
+   },
+   {
+    "id": "chrome.check_2",
+    "label": "Check 2 passes",
+    "status": "pass",
+    "severity": "blocking",
+    "stage": "integration",
+    "message": "The platform read this from the build, the registry and the store connection and found it in order."
+   },
+   {
+    "id": "chrome.check_3",
+    "label": "Check 3 passes",
+    "status": "pass",
+    "severity": "blocking",
+    "stage": "integration",
+    "message": "The platform read this from the build, the registry and the store connection and found it in order."
+   },
+   {
+    "id": "chrome.check_4",
+    "label": "Check 4 passes",
+    "status": "pass",
+    "severity": "blocking",
+    "stage": "integration",
+    "message": "The platform read this from the build, the registry and the store connection and found it in order."
+   },
+   {
+    "id": "chrome.check_5",
+    "label": "Check 5 passes",
+    "status": "pass",
+    "severity": "blocking",
+    "stage": "integration",
+    "message": "The platform read this from the build, the registry and the store connection and found it in order."
+   },
+   {
+    "id": "chrome.check_6",
+    "label": "Check 6 passes",
+    "status": "pass",
+    "severity": "blocking",
+    "stage": "review",
+    "message": "The platform read this from the build, the registry and the store connection and found it in order."
+   },
+   {
+    "id": "chrome.check_7",
+    "label": "Check 7 passes",
+    "status": "pass",
+    "severity": "blocking",
+    "stage": "review",
+    "message": "The platform read this from the build, the registry and the store connection and found it in order."
+   },
+   {
+    "id": "chrome.check_8",
+    "label": "Check 8 passes",
+    "status": "pass",
+    "severity": "blocking",
+    "stage": "review",
+    "message": "The platform read this from the build, the registry and the store connection and found it in order."
+   },
+   {
+    "id": "chrome.check_9",
+    "label": "Check 9 passes",
+    "status": "pass",
+    "severity": "blocking",
+    "stage": "review",
+    "message": "The platform read this from the build, the registry and the store connection and found it in order."
+   },
+   {
+    "id": "chrome.check_10",
+    "label": "Check 10 passes",
+    "status": "pass",
+    "severity": "blocking",
+    "stage": "review",
+    "message": "The platform read this from the build, the registry and the store connection and found it in order."
+   },
+   {
+    "id": "chrome.check_11",
+    "label": "Check 11 passes",
+    "status": "pass",
+    "severity": "blocking",
+    "stage": "review",
+    "message": "The platform read this from the build, the registry and the store connection and found it in order."
+   },
+   {
+    "id": "chrome.check_12",
+    "label": "Check 12 passes",
+    "status": "pass",
+    "severity": "blocking",
+    "stage": "review",
+    "message": "The platform read this from the build, the registry and the store connection and found it in order."
+   }
+  ],
+  "requirements": {
+   "store": "chrome",
+   "missingRequired": 0,
+   "missingOptional": 0,
+   "items": [
+    {
+     "id": "chrome.store_connection",
+     "label": "Chrome Web Store developer account connected",
+     "required": true,
+     "format": "A Chrome Web Store developer account (one-time registration fee paid, publisher email verified) connected through Google sign-in or pasted API credentials.",
+     "status": "have",
+     "satisfiedBy": "console-only",
+     "how": "Connect the Chrome Web Store on the project's store settings page; credentials never pass through STORE.md or the MCP.",
+     "docs": "https://developer.chrome.com/docs/webstore/register"
+    },
+    {
+     "id": "chrome.item",
+     "label": "Chrome Web Store item",
+     "required": true,
+     "format": "The item created once on the developer dashboard (the API cannot create items); its 32-character item id and the publisher id from the dashboard URL.",
+     "status": "have",
+     "satisfiedBy": "console-only",
+     "how": "Create the item on the Chrome Web Store dashboard and paste its dashboard address on the project's store settings page.",
+     "docs": "https://developer.chrome.com/docs/webstore/using-api"
+    },
+    {
+     "id": "chrome.title",
+     "label": "Title",
+     "required": true,
+     "format": "Up to 75 characters, read from the manifest name.",
+     "status": "have",
+     "satisfiedBy": "listing",
+     "how": "Set `- Name:` under `## Listing` in STORE.md.",
+     "docs": "https://developer.chrome.com/docs/webstore/cws-dashboard-listing"
+    },
+    {
+     "id": "chrome.summary",
+     "label": "Summary",
+     "required": true,
+     "format": "Up to 132 characters of plain text; this is the manifest description.",
+     "status": "have",
+     "satisfiedBy": "listing",
+     "how": "Set `- Summary:` under `## Listing` in STORE.md.",
+     "docs": "https://developer.chrome.com/docs/webstore/cws-dashboard-listing"
+    },
+    {
+     "id": "chrome.description",
+     "label": "Description",
+     "required": true,
+     "format": "Up to 16,000 characters of plain text; user benefits, no code.",
+     "status": "unknown",
+     "satisfiedBy": "store-dashboard",
+     "how": "Chrome takes this only on the Store listing tab of the item's dashboard; Google's API cannot write or read it. Paste it there from `- Description:` under `## Listing` in STORE.md.",
+     "docs": "https://developer.chrome.com/docs/webstore/cws-dashboard-listing",
+     "actual": "only the Store listing tab of the item's dashboard holds it, and Google's API does not answer it; STORE.md's `- Description:` holds the text to paste (1846 characters); Chrome answers the item PUBLISHED, so its dashboard held every required field at the last review, and edits since are not readable",
+     "dashboardTab": "Store listing",
+     "dashboardUrl": "https://chrome.google.com/webstore/devconsole/00000000-0000-4000-8000-000000000000/abcdefghijklmnopabcdefghijklmnop/edit"
+    },
+    {
+     "id": "chrome.category",
+     "label": "Category",
+     "required": true,
+     "format": "One primary category from the Chrome Web Store list.",
+     "status": "unknown",
+     "satisfiedBy": "store-dashboard",
+     "how": "Chrome takes this only on the Store listing tab of the item's dashboard; Google's API cannot write or read it. Paste it there from `- Category:` under `## Listing` in STORE.md.",
+     "docs": "https://developer.chrome.com/docs/webstore/cws-dashboard-listing",
+     "actual": "only the Store listing tab of the item's dashboard holds it, and Google's API does not answer it; STORE.md's `- Category:` holds 1 categories to paste; Chrome answers the item PUBLISHED, so its dashboard held every required field at the last review, and edits since are not readable",
+     "dashboardTab": "Store listing",
+     "dashboardUrl": "https://chrome.google.com/webstore/devconsole/00000000-0000-4000-8000-000000000000/abcdefghijklmnopabcdefghijklmnop/edit"
+    },
+    {
+     "id": "chrome.language",
+     "label": "Language",
+     "required": true,
+     "format": "The listing's language, chosen from the dashboard's list.",
+     "status": "unknown",
+     "satisfiedBy": "store-dashboard",
+     "how": "Choose it on the Store listing tab of the item's dashboard; Google's API cannot write or read it.",
+     "docs": "https://developer.chrome.com/docs/webstore/cws-dashboard-listing",
+     "actual": "only the Store listing tab of the item's dashboard holds it, and Google's API does not answer it; Chrome answers the item PUBLISHED, so its dashboard held every required field at the last review, and edits since are not readable",
+     "dashboardTab": "Store listing",
+     "dashboardUrl": "https://chrome.google.com/webstore/devconsole/00000000-0000-4000-8000-000000000000/abcdefghijklmnopabcdefghijklmnop/edit"
+    },
+    {
+     "id": "chrome.store_icon",
+     "label": "Store icon",
+     "required": true,
+     "format": "128x128 px PNG; the artwork fills 96x96 px inside a 16 px transparent margin.",
+     "status": "unknown",
+     "satisfiedBy": "store-dashboard",
+     "how": "Upload it on the Store listing tab of the item's dashboard; the build carries the 128 px icon the manifest names, which is the file to upload.",
+     "docs": "https://developer.chrome.com/docs/webstore/images",
+     "actual": "only the Store listing tab of the item's dashboard holds it, and Google's API does not answer it; the listing record holds the 128x128 icon to upload; Chrome answers the item PUBLISHED, so its dashboard held every required field at the last review, and edits since are not readable",
+     "dashboardTab": "Store listing",
+     "dashboardUrl": "https://chrome.google.com/webstore/devconsole/00000000-0000-4000-8000-000000000000/abcdefghijklmnopabcdefghijklmnop/edit"
+    },
+    {
+     "id": "chrome.screenshots",
+     "label": "Screenshots",
+     "required": true,
+     "format": "1 to 5 images, 1280x800 or 640x400 px, JPEG or 24-bit PNG with no alpha.",
+     "status": "unknown",
+     "satisfiedBy": "store-dashboard",
+     "how": "Upload them on the Store listing tab of the item's dashboard; Google's API cannot write or read them. The files are the ones in the project's listing record: Add screenshots on the store card, or pass the capture paths to sync-listing from the MCP. STORE.md never carries them.",
+     "docs": "https://developer.chrome.com/docs/webstore/images",
+     "actual": "only the Store listing tab of the item's dashboard holds it, and Google's API does not answer it; the listing record holds 5 screenshots to upload (1280x800, 1280x800, 1280x800, 1280x800, 1280x800); Chrome answers the item PUBLISHED, so its dashboard held every required field at the last review, and edits since are not readable",
+     "dashboardTab": "Store listing",
+     "dashboardUrl": "https://chrome.google.com/webstore/devconsole/00000000-0000-4000-8000-000000000000/abcdefghijklmnopabcdefghijklmnop/edit"
+    },
+    {
+     "id": "chrome.single_purpose",
+     "label": "Single purpose description",
+     "required": true,
+     "format": "One short statement of the extension's single purpose, as the Privacy tab asks for it.",
+     "status": "unknown",
+     "satisfiedBy": "store-dashboard",
+     "how": "Chrome takes this only on the Privacy tab of the item's dashboard; Google's API cannot write or read it. Paste it there from `### Single purpose` in the `## Chrome Web Store` section in STORE.md.",
+     "docs": "https://developer.chrome.com/docs/webstore/cws-dashboard-privacy",
+     "actual": "only the Privacy tab of the item's dashboard holds it, and Google's API does not answer it; STORE.md's `### Single purpose` holds the text to paste (68 characters); Chrome answers the item PUBLISHED, so its dashboard held every required field at the last review, and edits since are not readable",
+     "dashboardTab": "Privacy",
+     "dashboardUrl": "https://chrome.google.com/webstore/devconsole/00000000-0000-4000-8000-000000000000/abcdefghijklmnopabcdefghijklmnop/edit"
+    },
+    {
+     "id": "chrome.permission_justifications",
+     "label": "Permission justification",
+     "required": true,
+     "format": "One plain-English reason per permission and host permission the manifest requests, every content script match included; \"needed for the extension to work\" is refused.",
+     "status": "unknown",
+     "satisfiedBy": "store-dashboard",
+     "how": "Chrome takes this only on the Privacy tab of the item's dashboard; Google's API cannot write or read it. Paste it there from the `- <permission>: <reason>` bullets of `### Permissions justification` in the `## Chrome Web Store` section in STORE.md.",
+     "docs": "https://developer.chrome.com/docs/webstore/cws-dashboard-privacy",
+     "actual": "only the Privacy tab of the item's dashboard holds it, and Google's API does not answer it; STORE.md's `### Permissions justification` holds 8 justifications to paste, one for every permission and host of build 6d9e10c; Chrome answers the item PUBLISHED, so its dashboard held every required field at the last review, and edits since are not readable",
+     "dashboardTab": "Privacy",
+     "dashboardUrl": "https://chrome.google.com/webstore/devconsole/00000000-0000-4000-8000-000000000000/abcdefghijklmnopabcdefghijklmnop/edit"
+    },
+    {
+     "id": "chrome.remote_code",
+     "label": "Remote code",
+     "required": true,
+     "format": "The Privacy tab's answer to whether the extension runs remote code: JavaScript or WebAssembly not in the package.",
+     "status": "unknown",
+     "satisfiedBy": "store-dashboard",
+     "how": "Answer it on the Privacy tab of the item's dashboard; Google's API cannot write or read it, and a new item's answer is not reliably No.",
+     "docs": "https://developer.chrome.com/docs/webstore/cws-dashboard-privacy",
+     "actual": "only the Privacy tab of the item's dashboard holds it, and Google's API does not answer it; Chrome answers the item PUBLISHED, so its dashboard held every required field at the last review, and edits since are not readable",
+     "dashboardTab": "Privacy",
+     "dashboardUrl": "https://chrome.google.com/webstore/devconsole/00000000-0000-4000-8000-000000000000/abcdefghijklmnopabcdefghijklmnop/edit"
+    },
+    {
+     "id": "chrome.data_usage",
+     "label": "Data usage disclosures",
+     "required": true,
+     "format": "The Privacy tab's data use certification: which kinds of user data the extension collects and the three usage certifications.",
+     "status": "unknown",
+     "satisfiedBy": "store-dashboard",
+     "how": "Answer the Privacy tab once on the Chrome Web Store dashboard; the `## Privacy and data use` section of STORE.md is the sheet to copy from.",
+     "docs": "https://developer.chrome.com/docs/webstore/cws-dashboard-privacy",
+     "actual": "only the Privacy tab of the item's dashboard holds it, and Google's API does not answer it; STORE.md's `## Privacy and data use` section is the sheet to copy from; Chrome answers the item PUBLISHED, so its dashboard held every required field at the last review, and edits since are not readable",
+     "dashboardTab": "Privacy",
+     "dashboardUrl": "https://chrome.google.com/webstore/devconsole/00000000-0000-4000-8000-000000000000/abcdefghijklmnopabcdefghijklmnop/edit"
+    },
+    {
+     "id": "chrome.visibility",
+     "label": "Visibility",
+     "required": true,
+     "format": "Public, Unlisted or Private (trusted testers), set on the Distribution tab; a new item starts Public.",
+     "status": "unknown",
+     "satisfiedBy": "store-dashboard",
+     "how": "Set it on the Distribution tab of the item's dashboard to the project's intent: `- Visibility:` under `## Chrome Web Store` in STORE.md (public, unlisted or private), unlisted when the line is absent.",
+     "docs": "https://developer.chrome.com/docs/webstore/cws-dashboard-distribution",
+     "actual": "Google's API does not answer an item's visibility, and a new item starts Public on the Distribution tab; the project's intent is Unlisted (the least public default; STORE.md has no `- Visibility:` line)",
+     "value": "unlisted",
+     "dashboardTab": "Distribution",
+     "dashboardUrl": "https://chrome.google.com/webstore/devconsole/00000000-0000-4000-8000-000000000000/abcdefghijklmnopabcdefghijklmnop/edit"
+    },
+    {
+     "id": "chrome.privacy_policy_url",
+     "label": "Privacy policy URL",
+     "required": false,
+     "format": "An https address; required when the extension handles personal or sensitive user data, recommended for every listing.",
+     "status": "unknown",
+     "satisfiedBy": "store-dashboard",
+     "how": "Chrome takes this only on the Privacy tab of the item's dashboard; Google's API cannot write or read it. Paste it there from `- Privacy policy URL:` under `## Privacy and data use` in STORE.md.",
+     "docs": "https://developer.chrome.com/docs/webstore/cws-dashboard-privacy",
+     "actual": "only the Privacy tab of the item's dashboard holds it, and Google's API does not answer it; STORE.md's `- Privacy policy URL:` holds the text to paste (35 characters); Chrome answers the item PUBLISHED, so its dashboard held every required field at the last review, and edits since are not readable",
+     "dashboardTab": "Privacy",
+     "dashboardUrl": "https://chrome.google.com/webstore/devconsole/00000000-0000-4000-8000-000000000000/abcdefghijklmnopabcdefghijklmnop/edit"
+    },
+    {
+     "id": "chrome.homepage_url",
+     "label": "Official URL",
+     "required": false,
+     "format": "A site verified for the publisher account, or any https address.",
+     "status": "unknown",
+     "satisfiedBy": "store-dashboard",
+     "how": "Chrome takes this only on the Store listing tab of the item's dashboard; Google's API cannot write or read it. Paste it there from `- Homepage:` under `## Listing` in STORE.md.",
+     "docs": "https://developer.chrome.com/docs/webstore/cws-dashboard-listing",
+     "actual": "only the Store listing tab of the item's dashboard holds it, and Google's API does not answer it; STORE.md's `- Homepage:` holds the text to paste (33 characters); Chrome answers the item PUBLISHED, so its dashboard held every required field at the last review, and edits since are not readable",
+     "dashboardTab": "Store listing",
+     "dashboardUrl": "https://chrome.google.com/webstore/devconsole/00000000-0000-4000-8000-000000000000/abcdefghijklmnopabcdefghijklmnop/edit"
+    },
+    {
+     "id": "chrome.test_instructions",
+     "label": "Test instructions",
+     "required": false,
+     "format": "Credentials and steps a reviewer needs to reach every feature, such as a test account or a license key.",
+     "status": "unknown",
+     "satisfiedBy": "store-dashboard",
+     "how": "Write them on the Test instructions tab of the item's dashboard; Google's API cannot write or read them, and STORE.md's `### Test instructions` in the `## Chrome Web Store` section is the sheet to copy from.",
+     "docs": "https://developer.chrome.com/docs/webstore/cws-dashboard-test-instructions",
+     "actual": "only the Test instructions tab of the item's dashboard holds it, and Google's API does not answer it; Chrome answers the item PUBLISHED, so its dashboard held every required field at the last review, and edits since are not readable",
+     "dashboardTab": "Test instructions",
+     "dashboardUrl": "https://chrome.google.com/webstore/devconsole/00000000-0000-4000-8000-000000000000/abcdefghijklmnopabcdefghijklmnop/edit"
+    },
+    {
+     "id": "chrome.promo_tile_small",
+     "label": "Small promo tile",
+     "required": false,
+     "format": "440x280 px JPEG or 24-bit PNG with no alpha.",
+     "status": "unknown",
+     "satisfiedBy": "store-dashboard",
+     "how": "Upload it on the Store listing tab of the Chrome Web Store dashboard.",
+     "docs": "https://developer.chrome.com/docs/webstore/images",
+     "actual": "only the Store listing tab of the item's dashboard holds it, and Google's API does not answer it; Chrome answers the item PUBLISHED, so its dashboard held every required field at the last review, and edits since are not readable",
+     "dashboardTab": "Store listing",
+     "dashboardUrl": "https://chrome.google.com/webstore/devconsole/00000000-0000-4000-8000-000000000000/abcdefghijklmnopabcdefghijklmnop/edit"
+    },
+    {
+     "id": "chrome.promo_tile_marquee",
+     "label": "Marquee promo tile",
+     "required": false,
+     "format": "1400x560 px JPEG or 24-bit PNG with no alpha.",
+     "status": "unknown",
+     "satisfiedBy": "store-dashboard",
+     "how": "Upload it on the Store listing tab of the Chrome Web Store dashboard.",
+     "docs": "https://developer.chrome.com/docs/webstore/images",
+     "actual": "only the Store listing tab of the item's dashboard holds it, and Google's API does not answer it; Chrome answers the item PUBLISHED, so its dashboard held every required field at the last review, and edits since are not readable",
+     "dashboardTab": "Store listing",
+     "dashboardUrl": "https://chrome.google.com/webstore/devconsole/00000000-0000-4000-8000-000000000000/abcdefghijklmnopabcdefghijklmnop/edit"
+    },
+    {
+     "id": "chrome.promo_video",
+     "label": "Promo video",
+     "required": false,
+     "format": "A YouTube video URL.",
+     "status": "unknown",
+     "satisfiedBy": "store-dashboard",
+     "how": "Paste the YouTube address on the Store listing tab of the Chrome Web Store dashboard.",
+     "docs": "https://developer.chrome.com/docs/webstore/cws-dashboard-listing",
+     "actual": "only the Store listing tab of the item's dashboard holds it, and Google's API does not answer it; Chrome answers the item PUBLISHED, so its dashboard held every required field at the last review, and edits since are not readable",
+     "dashboardTab": "Store listing",
+     "dashboardUrl": "https://chrome.google.com/webstore/devconsole/00000000-0000-4000-8000-000000000000/abcdefghijklmnopabcdefghijklmnop/edit"
+    }
+   ]
+  },
+  "connection": {
+   "kind": "oauth",
+   "source": "project",
+   "connectedAs": "owner@example.com",
+   "healthy": true,
+   "itemId": "abcdefghijklmnopabcdefghijklmnop",
+   "itemLinked": true,
+   "itemUrl": "https://chrome.google.com/webstore/devconsole/00000000-0000-4000-8000-000000000000/abcdefghijklmnopabcdefghijklmnop/edit"
+  },
+  "dashboardUrl": "https://chrome.google.com/webstore/devconsole/00000000-0000-4000-8000-000000000000/abcdefghijklmnopabcdefghijklmnop/edit"
+ },
+ "firefox": {
+  "store": "firefox",
+  "summary": {
+   "pass": 14,
+   "warn": 1,
+   "fail": 0,
+   "blockingFailures": 0,
+   "integration": {
+    "pass": 8,
+    "fail": 0,
+    "blockingFailures": 0,
+    "canQueue": true
+   },
+   "review": {
+    "pass": 6,
+    "warn": 0,
+    "fail": 0,
+    "blockingFailures": 0,
+    "canSubmitForReview": true
+   },
+   "canSubmit": true,
+   "namedBySubmit": [
+    "submission.build_selected"
+   ]
+  },
+  "checks": [
+   {
+    "id": "store.submission_mode",
+    "label": "Submission mode",
+    "status": "warn",
+    "severity": "warning",
+    "stage": "review",
+    "message": "Firefox versions will upload to the listed channel and enter the normal public review flow."
+   },
+   {
+    "id": "firefox.check_0",
+    "label": "Check 0 passes",
+    "status": "pass",
+    "severity": "blocking",
+    "stage": "integration",
+    "message": "The platform read this from the build, the registry and the store connection and found it in order."
+   },
+   {
+    "id": "firefox.check_1",
+    "label": "Check 1 passes",
+    "status": "pass",
+    "severity": "blocking",
+    "stage": "integration",
+    "message": "The platform read this from the build, the registry and the store connection and found it in order."
+   },
+   {
+    "id": "firefox.check_2",
+    "label": "Check 2 passes",
+    "status": "pass",
+    "severity": "blocking",
+    "stage": "integration",
+    "message": "The platform read this from the build, the registry and the store connection and found it in order."
+   },
+   {
+    "id": "firefox.check_3",
+    "label": "Check 3 passes",
+    "status": "pass",
+    "severity": "blocking",
+    "stage": "integration",
+    "message": "The platform read this from the build, the registry and the store connection and found it in order."
+   },
+   {
+    "id": "firefox.check_4",
+    "label": "Check 4 passes",
+    "status": "pass",
+    "severity": "blocking",
+    "stage": "integration",
+    "message": "The platform read this from the build, the registry and the store connection and found it in order."
+   },
+   {
+    "id": "firefox.check_5",
+    "label": "Check 5 passes",
+    "status": "pass",
+    "severity": "blocking",
+    "stage": "integration",
+    "message": "The platform read this from the build, the registry and the store connection and found it in order."
+   },
+   {
+    "id": "firefox.check_6",
+    "label": "Check 6 passes",
+    "status": "pass",
+    "severity": "blocking",
+    "stage": "review",
+    "message": "The platform read this from the build, the registry and the store connection and found it in order."
+   },
+   {
+    "id": "firefox.check_7",
+    "label": "Check 7 passes",
+    "status": "pass",
+    "severity": "blocking",
+    "stage": "review",
+    "message": "The platform read this from the build, the registry and the store connection and found it in order."
+   },
+   {
+    "id": "firefox.check_8",
+    "label": "Check 8 passes",
+    "status": "pass",
+    "severity": "blocking",
+    "stage": "review",
+    "message": "The platform read this from the build, the registry and the store connection and found it in order."
+   },
+   {
+    "id": "firefox.check_9",
+    "label": "Check 9 passes",
+    "status": "pass",
+    "severity": "blocking",
+    "stage": "review",
+    "message": "The platform read this from the build, the registry and the store connection and found it in order."
+   },
+   {
+    "id": "firefox.check_10",
+    "label": "Check 10 passes",
+    "status": "pass",
+    "severity": "blocking",
+    "stage": "review",
+    "message": "The platform read this from the build, the registry and the store connection and found it in order."
+   },
+   {
+    "id": "firefox.check_11",
+    "label": "Check 11 passes",
+    "status": "pass",
+    "severity": "blocking",
+    "stage": "review",
+    "message": "The platform read this from the build, the registry and the store connection and found it in order."
+   },
+   {
+    "id": "firefox.check_12",
+    "label": "Check 12 passes",
+    "status": "pass",
+    "severity": "blocking",
+    "stage": "review",
+    "message": "The platform read this from the build, the registry and the store connection and found it in order."
+   },
+   {
+    "id": "firefox.check_13",
+    "label": "Check 13 passes",
+    "status": "pass",
+    "severity": "blocking",
+    "stage": "review",
+    "message": "The platform read this from the build, the registry and the store connection and found it in order."
+   }
+  ],
+  "requirements": {
+   "store": "firefox",
+   "missingRequired": 0,
+   "missingOptional": 0,
+   "items": [
+    {
+     "id": "firefox.api_credentials",
+     "label": "AMO API credentials",
+     "required": true,
+     "format": "The JWT issuer and JWT secret Mozilla issues once per developer account.",
+     "status": "have",
+     "satisfiedBy": "console-only",
+     "how": "Generate them at addons.mozilla.org and paste both on the project's store settings page.",
+     "docs": "https://addons.mozilla.org/developers/addon/api/key/"
+    },
+    {
+     "id": "firefox.distribution_channel",
+     "label": "Distribution channel",
+     "required": true,
+     "format": "Listed on addons.mozilla.org, or unlisted (signed for self-distribution); unset reads as unlisted.",
+     "status": "have",
+     "satisfiedBy": "store-config: releaseChannel",
+     "how": "Choose the release channel in the project's Firefox store settings; a project that never chose one submits unlisted.",
+     "docs": "https://extensionworkshop.com/documentation/publish/signing-and-distribution-overview/",
+     "actual": "listed"
+    },
+    {
+     "id": "firefox.data_collection_permissions",
+     "label": "Data collection permissions declaration",
+     "required": true,
+     "format": "browser_specific_settings.gecko.data_collection_permissions in the manifest; an extension that collects nothing declares {\"required\": [\"none\"]}.",
+     "status": "have",
+     "satisfiedBy": "file: manifest.json (browser_specific_settings.gecko.data_collection_permissions)",
+     "how": "Declare it in the manifest and keep `## Privacy and data use` in STORE.md saying the same.",
+     "docs": "https://extensionworkshop.com/documentation/develop/firefox-builtin-data-consent/"
+    },
+    {
+     "id": "firefox.source_archive",
+     "label": "Source code archive",
+     "required": true,
+     "format": "The matching sources for every bundled or minified version, with the build steps a reviewer can repeat; every build this platform produces is bundled.",
+     "status": "have",
+     "satisfiedBy": "store-config: sourceArchive",
+     "how": "Set the Firefox source archive to the repository in the project's Firefox store settings; the build steps go under `### Reviewer notes` in STORE.md.",
+     "docs": "https://extensionworkshop.com/documentation/publish/source-code-submission/",
+     "actual": "repository at the built commit"
+    },
+    {
+     "id": "firefox.reviewer_notes",
+     "label": "Notes to reviewer",
+     "required": true,
+     "format": "The steps a reviewer needs to exercise the extension, test credentials when sign-in is required, and the install and build commands that reproduce the bundle from the sources.",
+     "status": "have",
+     "satisfiedBy": "listing",
+     "how": "Write them under `### Reviewer notes` in the `## Firefox Add-ons` section of STORE.md; the upload sends them as the AMO approval notes.",
+     "docs": "https://extensionworkshop.com/documentation/publish/submitting-an-add-on/"
+    },
+    {
+     "id": "firefox.name",
+     "label": "Name",
+     "required": true,
+     "format": "Up to 50 characters.",
+     "status": "have",
+     "satisfiedBy": "listing",
+     "how": "Set `- Name:` under `## Listing` in STORE.md.",
+     "docs": "https://extensionworkshop.com/documentation/publish/submitting-an-add-on/"
+    },
+    {
+     "id": "firefox.summary",
+     "label": "Summary",
+     "required": true,
+     "format": "Up to 250 characters.",
+     "status": "have",
+     "satisfiedBy": "listing",
+     "how": "Set `- Summary:` under `## Listing` in STORE.md; the listed upload writes it to the AMO add-on.",
+     "docs": "https://extensionworkshop.com/documentation/publish/submitting-an-add-on/"
+    },
+    {
+     "id": "firefox.description",
+     "label": "Description",
+     "required": true,
+     "format": "Plain text or AMO's limited HTML; required for a listed add-on.",
+     "status": "have",
+     "satisfiedBy": "listing",
+     "how": "Write `- Description:` under `## Listing` in STORE.md with the paragraphs indented below it; the listed upload writes it to the AMO add-on.",
+     "docs": "https://extensionworkshop.com/documentation/publish/submitting-an-add-on/"
+    },
+    {
+     "id": "firefox.categories",
+     "label": "Categories",
+     "required": true,
+     "format": "1 to 2 of AMO's own categories (Alerts & Updates, Appearance, Bookmarks, Download Management, Feeds, News & Blogging, Games & Entertainment, Language Support, Photos, Music & Videos, Privacy & Security, Search Tools, Shopping, Social & Communication, Tabs, Web Development, Other); AMO refuses the first listed version of an add-on with none.",
+     "status": "have",
+     "satisfiedBy": "listing",
+     "how": "Set `- Category:` under `## Listing` in STORE.md to one of AMO's names; the listed upload writes it to the AMO add-on.",
+     "docs": "https://extensionworkshop.com/documentation/publish/submitting-an-add-on/",
+     "actual": "Privacy & Security -> privacy-security; the listed upload writes it to the AMO add-on."
+    },
+    {
+     "id": "firefox.license",
+     "label": "License",
+     "required": true,
+     "format": "One of AMO's license choices (MIT, Apache-2.0, MPL-2.0, GPL-2.0-only, GPL-3.0-only, LGPL-2.1-only, LGPL-3.0-only, AGPL-3.0-only, ISC, BSD-2-Clause, Unlicense or all-rights-reserved), a common spelling of one, or a custom license name whose text is the repository's LICENSE file; AMO refuses a listed version without one.",
+     "status": "have",
+     "satisfiedBy": "listing",
+     "how": "Set `- License:` under `## Listing` in STORE.md.",
+     "docs": "https://extensionworkshop.com/documentation/publish/submitting-an-add-on/"
+    },
+    {
+     "id": "firefox.support_email",
+     "label": "Support email",
+     "required": true,
+     "format": "An email address AMO shows on the listing.",
+     "status": "have",
+     "satisfiedBy": "listing",
+     "how": "Set `- Support email:` under `## Listing` in STORE.md; the listed upload writes it to the AMO add-on.",
+     "docs": "https://extensionworkshop.com/documentation/publish/submitting-an-add-on/"
+    },
+    {
+     "id": "firefox.icon",
+     "label": "Add-on icon",
+     "required": true,
+     "format": "A square PNG or JPEG of at least 128x128 px; AMO reads it from the manifest icons when none is uploaded.",
+     "status": "have",
+     "satisfiedBy": "listing",
+     "how": "Name a 128x128 PNG under `icons` in the manifest; the build carries it.",
+     "docs": "https://extensionworkshop.com/documentation/publish/submitting-an-add-on/"
+    },
+    {
+     "id": "firefox.add_on_id",
+     "label": "Add-on ID",
+     "required": true,
+     "format": "browser_specific_settings.gecko.id in the manifest (an email-like string or a GUID in braces); it is the add-on's identity for every version that follows, and AMO assigns one on the first upload when the manifest has none, which the next build without it does not carry.",
+     "status": "have",
+     "satisfiedBy": "file: manifest.json (browser_specific_settings.gecko.id)",
+     "how": "Set browser_specific_settings.gecko.id in the manifest before the first Firefox upload; the templates and the skill write one at project creation. A project that already uploaded without one pastes the id AMO assigned on the project's Firefox store settings page.",
+     "docs": "https://extensionworkshop.com/documentation/develop/extensions-and-the-add-on-id/",
+     "actual": "widget@extension.dev"
+    },
+    {
+     "id": "firefox.screenshots",
+     "label": "Screenshots",
+     "required": false,
+     "format": "PNG or JPEG images; 1280x800 px reads best on the listing.",
+     "status": "have",
+     "satisfiedBy": "listing",
+     "how": "Add screenshots on the store card, or pass the capture paths to sync-listing from the MCP; the listing record holds them, and AMO takes them on its site only. STORE.md never carries them.",
+     "docs": "https://extensionworkshop.com/documentation/publish/submitting-an-add-on/",
+     "actual": "5 screenshots (1280x800, 1280x800, 1280x800, 1280x800, 1280x800)"
+    },
+    {
+     "id": "firefox.support_website",
+     "label": "Support website",
+     "required": false,
+     "format": "An https address.",
+     "status": "have",
+     "satisfiedBy": "listing",
+     "how": "Set `- Homepage:` under `## Listing` in STORE.md; the listed upload writes it to the AMO add-on.",
+     "docs": "https://extensionworkshop.com/documentation/publish/submitting-an-add-on/"
+    },
+    {
+     "id": "firefox.privacy_policy",
+     "label": "Privacy policy",
+     "required": false,
+     "format": "The policy text or its https address; required when the add-on collects or transmits user data.",
+     "status": "have",
+     "satisfiedBy": "listing",
+     "how": "Set `- Privacy policy URL:` under `## Privacy and data use` in STORE.md.",
+     "docs": "https://extensionworkshop.com/documentation/publish/submitting-an-add-on/"
+    },
+    {
+     "id": "firefox.release_notes",
+     "label": "Release notes",
+     "required": false,
+     "format": "User-facing notes for the version being uploaded.",
+     "status": "have",
+     "satisfiedBy": "listing",
+     "how": "Write them under `### Release notes` in the `## Firefox Add-ons` section of STORE.md; the upload sends them as the AMO release notes.",
+     "docs": "https://extensionworkshop.com/documentation/publish/submitting-an-add-on/"
+    }
+   ]
+  },
+  "connection": {
+   "kind": "jwt",
+   "source": "project",
+   "connectedAs": "user:15559442:832",
+   "healthy": true,
+   "itemId": null,
+   "connectUrl": "https://console.extension.dev/acme/widget/project-settings/stores?connect=firefox"
+  }
+ },
+ "edge": {
+  "store": "edge",
+  "summary": {
+   "pass": 12,
+   "warn": 0,
+   "fail": 0,
+   "blockingFailures": 0,
+   "integration": {
+    "pass": 6,
+    "fail": 0,
+    "blockingFailures": 0,
+    "canQueue": true
+   },
+   "review": {
+    "pass": 6,
+    "warn": 0,
+    "fail": 0,
+    "blockingFailures": 0,
+    "canSubmitForReview": true
+   },
+   "canSubmit": true,
+   "namedBySubmit": [
+    "submission.build_selected"
+   ]
+  },
+  "checks": [
+   {
+    "id": "edge.check_0",
+    "label": "Check 0 passes",
+    "status": "pass",
+    "severity": "blocking",
+    "stage": "integration",
+    "message": "The platform read this from the build, the registry and the store connection and found it in order."
+   },
+   {
+    "id": "edge.check_1",
+    "label": "Check 1 passes",
+    "status": "pass",
+    "severity": "blocking",
+    "stage": "integration",
+    "message": "The platform read this from the build, the registry and the store connection and found it in order."
+   },
+   {
+    "id": "edge.check_2",
+    "label": "Check 2 passes",
+    "status": "pass",
+    "severity": "blocking",
+    "stage": "integration",
+    "message": "The platform read this from the build, the registry and the store connection and found it in order."
+   },
+   {
+    "id": "edge.check_3",
+    "label": "Check 3 passes",
+    "status": "pass",
+    "severity": "blocking",
+    "stage": "integration",
+    "message": "The platform read this from the build, the registry and the store connection and found it in order."
+   },
+   {
+    "id": "edge.check_4",
+    "label": "Check 4 passes",
+    "status": "pass",
+    "severity": "blocking",
+    "stage": "integration",
+    "message": "The platform read this from the build, the registry and the store connection and found it in order."
+   },
+   {
+    "id": "edge.check_5",
+    "label": "Check 5 passes",
+    "status": "pass",
+    "severity": "blocking",
+    "stage": "integration",
+    "message": "The platform read this from the build, the registry and the store connection and found it in order."
+   },
+   {
+    "id": "edge.check_6",
+    "label": "Check 6 passes",
+    "status": "pass",
+    "severity": "blocking",
+    "stage": "review",
+    "message": "The platform read this from the build, the registry and the store connection and found it in order."
+   },
+   {
+    "id": "edge.check_7",
+    "label": "Check 7 passes",
+    "status": "pass",
+    "severity": "blocking",
+    "stage": "review",
+    "message": "The platform read this from the build, the registry and the store connection and found it in order."
+   },
+   {
+    "id": "edge.check_8",
+    "label": "Check 8 passes",
+    "status": "pass",
+    "severity": "blocking",
+    "stage": "review",
+    "message": "The platform read this from the build, the registry and the store connection and found it in order."
+   },
+   {
+    "id": "edge.check_9",
+    "label": "Check 9 passes",
+    "status": "pass",
+    "severity": "blocking",
+    "stage": "review",
+    "message": "The platform read this from the build, the registry and the store connection and found it in order."
+   },
+   {
+    "id": "edge.check_10",
+    "label": "Check 10 passes",
+    "status": "pass",
+    "severity": "blocking",
+    "stage": "review",
+    "message": "The platform read this from the build, the registry and the store connection and found it in order."
+   },
+   {
+    "id": "edge.check_11",
+    "label": "Check 11 passes",
+    "status": "pass",
+    "severity": "blocking",
+    "stage": "review",
+    "message": "The platform read this from the build, the registry and the store connection and found it in order."
+   }
+  ],
+  "requirements": {
+   "store": "edge",
+   "missingRequired": 0,
+   "missingOptional": 0,
+   "items": [
+    {
+     "id": "edge.partner_center_credentials",
+     "label": "Partner Center Publish API credentials",
+     "required": true,
+     "format": "A Partner Center developer account enrolled in the Microsoft Edge program, with a Publish API client id and API key.",
+     "status": "have",
+     "satisfiedBy": "console-only",
+     "how": "Paste the Publish API client id and API key on the project's store settings page.",
+     "docs": "https://learn.microsoft.com/en-us/microsoft-edge/extensions/publish/api/using-addons-api"
+    },
+    {
+     "id": "edge.product",
+     "label": "Partner Center product",
+     "required": true,
+     "format": "The extension product created once in Partner Center with a first package uploaded by hand; its Product ID (a UUID) is what the API takes.",
+     "status": "have",
+     "satisfiedBy": "console-only",
+     "how": "The product exists in Partner Center (Product ID 11111111-1111-4111-8111-111111111111) and the platform uploads to it through the Publish API. Every platform upload carries the store version <manifest version>.<n>, numbered by the platform; the next one is 0.2.0.8.",
+     "docs": "https://learn.microsoft.com/en-us/microsoft-edge/extensions/publish/publish-extension"
+    },
+    {
+     "id": "edge.first_submission",
+     "label": "First submission through Partner Center",
+     "required": true,
+     "format": "Partner Center requires a product's first submission through its dashboard; after that first publish the platform publishes through the API. Partner Center requires the first submission of a new product through its dashboard: open the product, submit the draft there once; later versions publish from here.",
+     "status": "have",
+     "satisfiedBy": "console-only",
+     "how": "Open the product at https://partner.microsoft.com/dashboard/microsoftedge/11111111-1111-4111-8111-111111111111/packages/dashboard, complete its listing there and submit the hand-uploaded package once; Partner Center certifies that first version. The platform reads the first publish it recorded, or confirm it on the project's store settings page (\"Submitted once in Partner Center\"); every later version is sent to review from here.",
+     "docs": "https://learn.microsoft.com/en-us/microsoft-edge/extensions/publish/api/using-addons-api",
+     "actual": "the owner confirmed a first submission through Partner Center on 2026-10-26T22:48:11.907Z",
+     "value": "owner",
+     "dashboardUrl": "https://partner.microsoft.com/dashboard/microsoftedge/11111111-1111-4111-8111-111111111111/packages/dashboard"
+    },
+    {
+     "id": "edge.package_contents",
+     "label": "Package contents",
+     "required": true,
+     "format": "No compressed files inside the package; Partner Center refuses any archive in an extension package.",
+     "status": "have",
+     "satisfiedBy": "file: edge.zip",
+     "how": "Keep every file in the build uncompressed: Partner Center's package validation answers \"The uploaded package consists of a compressed file. Please remove the file and try uploading the package again.\" for any .zip, .gz, .tgz, .tar, .br, .bz2, .xz, .7z, .rar, .jar, .crx or .xpi inside the package, and reads the bytes, not the name. For Tesseract, ship `.traineddata` uncompressed (Tesseract.js takes `gzip: false`). The newest build's edge.zip is scanned and the files are named here.",
+     "docs": "https://learn.microsoft.com/en-us/microsoft-edge/extensions/publish/publish-extension",
+     "actual": "262 files in build 6d9e10c, none compressed"
+    },
+    {
+     "id": "edge.name",
+     "label": "Extension name",
+     "required": true,
+     "format": "Read from the manifest name; up to 45 characters.",
+     "status": "have",
+     "satisfiedBy": "listing",
+     "how": "Set `- Name:` under `## Listing` in STORE.md and keep the manifest name the same.",
+     "docs": "https://learn.microsoft.com/en-us/microsoft-edge/extensions/publish/publish-extension"
+    },
+    {
+     "id": "edge.short_description",
+     "label": "Short description",
+     "required": true,
+     "format": "Up to 250 characters; the manifest description is the default.",
+     "status": "have",
+     "satisfiedBy": "listing",
+     "how": "Set `- Summary:` under `## Listing` in STORE.md.",
+     "docs": "https://learn.microsoft.com/en-us/microsoft-edge/extensions/publish/publish-extension"
+    },
+    {
+     "id": "edge.description",
+     "label": "Description",
+     "required": true,
+     "format": "Up to 10,000 characters of plain text.",
+     "status": "have",
+     "satisfiedBy": "listing",
+     "how": "Write `- Description:` under `## Listing` in STORE.md with the paragraphs indented below it.",
+     "docs": "https://learn.microsoft.com/en-us/microsoft-edge/extensions/publish/publish-extension"
+    },
+    {
+     "id": "edge.category",
+     "label": "Category",
+     "required": true,
+     "format": "One category from the Partner Center list.",
+     "status": "have",
+     "satisfiedBy": "listing",
+     "how": "Set `- Category:` under `## Listing` in STORE.md.",
+     "docs": "https://learn.microsoft.com/en-us/microsoft-edge/extensions/publish/publish-extension",
+     "actual": "1 categories"
+    },
+    {
+     "id": "edge.store_logo",
+     "label": "Store logo",
+     "required": true,
+     "format": "300x300 px PNG.",
+     "status": "unknown",
+     "satisfiedBy": "store-dashboard",
+     "how": "Upload it on the Store listings page of the product in Partner Center; the Publish API takes no listing images.",
+     "docs": "https://learn.microsoft.com/en-us/microsoft-edge/extensions/publish/publish-extension"
+    },
+    {
+     "id": "edge.screenshots",
+     "label": "Screenshots",
+     "required": true,
+     "format": "Up to 10 images, 640x480 or 1280x800 px, PNG or JPEG; Partner Center calls them optional and this platform asks for at least 1.",
+     "status": "have",
+     "satisfiedBy": "listing",
+     "how": "Add screenshots on the store card, or pass the capture paths to sync-listing from the MCP; the listing record holds them, and Partner Center takes them on the Store listings page. STORE.md never carries them.",
+     "docs": "https://learn.microsoft.com/en-us/microsoft-edge/extensions/publish/publish-extension",
+     "actual": "5 screenshots (1280x800, 1280x800, 1280x800, 1280x800, 1280x800)"
+    },
+    {
+     "id": "edge.support_contact",
+     "label": "Support contact details",
+     "required": true,
+     "format": "An email address or a support page URL.",
+     "status": "have",
+     "satisfiedBy": "listing",
+     "how": "Set `- Support email:` under `## Listing` in STORE.md.",
+     "docs": "https://learn.microsoft.com/en-us/microsoft-edge/extensions/publish/publish-extension"
+    },
+    {
+     "id": "edge.privacy_policy_requirements",
+     "label": "Privacy policy requirements and mature content",
+     "required": true,
+     "format": "Whether the extension handles personal information (which makes the privacy policy URL mandatory) and whether it shows mature content.",
+     "status": "unknown",
+     "satisfiedBy": "store-dashboard",
+     "how": "Answer both on the Properties page of the product in Partner Center; `## Privacy and data use` in STORE.md is the sheet to copy from.",
+     "docs": "https://learn.microsoft.com/en-us/legal/microsoft-edge/extensions/developer-policies"
+    },
+    {
+     "id": "edge.privacy_policy_url",
+     "label": "Privacy policy URL",
+     "required": false,
+     "format": "An https address; mandatory when the extension handles personal information.",
+     "status": "have",
+     "satisfiedBy": "listing",
+     "how": "Set `- Privacy policy URL:` under `## Privacy and data use` in STORE.md.",
+     "docs": "https://learn.microsoft.com/en-us/legal/microsoft-edge/extensions/developer-policies"
+    },
+    {
+     "id": "edge.website_url",
+     "label": "Website URL",
+     "required": false,
+     "format": "An https address.",
+     "status": "have",
+     "satisfiedBy": "listing",
+     "how": "Set `- Homepage:` under `## Listing` in STORE.md.",
+     "docs": "https://learn.microsoft.com/en-us/microsoft-edge/extensions/publish/publish-extension"
+    },
+    {
+     "id": "edge.search_terms",
+     "label": "Search terms",
+     "required": false,
+     "format": "Up to 7 terms, each a word or short phrase.",
+     "status": "have",
+     "satisfiedBy": "listing",
+     "how": "Set `- Search terms:` under `## Listing` in STORE.md as a comma list.",
+     "docs": "https://learn.microsoft.com/en-us/microsoft-edge/extensions/publish/publish-extension",
+     "actual": "9 terms"
+    },
+    {
+     "id": "edge.certification_notes",
+     "label": "Notes for certification",
+     "required": false,
+     "format": "Test steps and any test credentials the certification team needs; recommended for every submission.",
+     "status": "have",
+     "satisfiedBy": "listing",
+     "how": "Write them under `### Certification notes` in the `## Edge Add-ons` section of STORE.md; the submission sends them as the Edge notes.",
+     "docs": "https://learn.microsoft.com/en-us/microsoft-edge/extensions/publish/publish-extension"
+    },
+    {
+     "id": "edge.promo_tile_small",
+     "label": "Small promotional tile",
+     "required": false,
+     "format": "440x280 px PNG.",
+     "status": "unknown",
+     "satisfiedBy": "store-dashboard",
+     "how": "Upload it on the Store listings page of the product in Partner Center.",
+     "docs": "https://learn.microsoft.com/en-us/microsoft-edge/extensions/publish/publish-extension"
+    },
+    {
+     "id": "edge.promo_tile_large",
+     "label": "Large promotional tile",
+     "required": false,
+     "format": "1400x560 px PNG.",
+     "status": "unknown",
+     "satisfiedBy": "store-dashboard",
+     "how": "Upload it on the Store listings page of the product in Partner Center.",
+     "docs": "https://learn.microsoft.com/en-us/microsoft-edge/extensions/publish/publish-extension"
+    },
+    {
+     "id": "edge.promo_video",
+     "label": "YouTube video URL",
+     "required": false,
+     "format": "A YouTube video URL.",
+     "status": "unknown",
+     "satisfiedBy": "store-dashboard",
+     "how": "Paste it on the Store listings page of the product in Partner Center.",
+     "docs": "https://learn.microsoft.com/en-us/microsoft-edge/extensions/publish/publish-extension"
+    }
+   ]
+  }
+ },
+ "safari": {
+  "store": "safari",
+  "summary": {
+   "pass": 17,
+   "warn": 3,
+   "fail": 0,
+   "blockingFailures": 0,
+   "integration": {
+    "pass": 6,
+    "fail": 0,
+    "blockingFailures": 0,
+    "canQueue": true
+   },
+   "review": {
+    "pass": 11,
+    "warn": 1,
+    "fail": 0,
+    "blockingFailures": 0,
+    "canSubmitForReview": true
+   },
+   "canSubmit": true,
+   "namedBySubmit": [
+    "submission.build_selected"
+   ]
+  },
+  "checks": [
+   {
+    "id": "store.safari_bundle_identifiers",
+    "label": "Both bundle identifiers are registered",
+    "status": "warn",
+    "severity": "warning",
+    "stage": "review",
+    "message": "The wrapper signs two bundle identifiers and App Store validation checks the app extension independently. Register com.acme.widget and com.acme.widget.extension with your Apple team and keep a current provisioning profile for each. Registration is not readable from here."
+   },
+   {
+    "id": "store.safari_signing_assets",
+    "label": "Signing certificates and provisioning profiles are saved",
+    "status": "warn",
+    "severity": "warning",
+    "stage": "review",
+    "message": "Certificate format and profile expiry cannot be read from a saved secret. Both the runner's security import and rcodesign reject an OpenSSL 3 default .p12 with a MAC verification failure, so export each certificate from Keychain Access (legacy PKCS-12) and keep each .p12 leaf-only. Provisioning profiles expire one year after issue and an expired profile fails signing on the runner, after the macOS job has already been billed."
+   },
+   {
+    "id": "store.safari_review_submission_enabled",
+    "label": "Submission enters Apple review",
+    "status": "warn",
+    "severity": "warning",
+    "stage": "review",
+    "message": "This submission stops at a TestFlight draft. Review is not a saved setting, because an App Store submission cannot be withdrawn from here: it is stated per run, by dispatching the store workflow with submit_for_review set, and the submit step confirms that intent before anything is sent. Without it publishSafari runs with skipSubmitReview and returns after attaching the build to the App Store version, and a draft is not a review round."
+   },
+   {
+    "id": "safari.check_0",
+    "label": "Check 0 passes",
+    "status": "pass",
+    "severity": "blocking",
+    "stage": "integration",
+    "message": "The platform read this from the build, the registry and the store connection and found it in order."
+   },
+   {
+    "id": "safari.check_1",
+    "label": "Check 1 passes",
+    "status": "pass",
+    "severity": "blocking",
+    "stage": "integration",
+    "message": "The platform read this from the build, the registry and the store connection and found it in order."
+   },
+   {
+    "id": "safari.check_2",
+    "label": "Check 2 passes",
+    "status": "pass",
+    "severity": "blocking",
+    "stage": "integration",
+    "message": "The platform read this from the build, the registry and the store connection and found it in order."
+   },
+   {
+    "id": "safari.check_3",
+    "label": "Check 3 passes",
+    "status": "pass",
+    "severity": "blocking",
+    "stage": "integration",
+    "message": "The platform read this from the build, the registry and the store connection and found it in order."
+   },
+   {
+    "id": "safari.check_4",
+    "label": "Check 4 passes",
+    "status": "pass",
+    "severity": "blocking",
+    "stage": "integration",
+    "message": "The platform read this from the build, the registry and the store connection and found it in order."
+   },
+   {
+    "id": "safari.check_5",
+    "label": "Check 5 passes",
+    "status": "pass",
+    "severity": "blocking",
+    "stage": "integration",
+    "message": "The platform read this from the build, the registry and the store connection and found it in order."
+   },
+   {
+    "id": "safari.check_6",
+    "label": "Check 6 passes",
+    "status": "pass",
+    "severity": "blocking",
+    "stage": "review",
+    "message": "The platform read this from the build, the registry and the store connection and found it in order."
+   },
+   {
+    "id": "safari.check_7",
+    "label": "Check 7 passes",
+    "status": "pass",
+    "severity": "blocking",
+    "stage": "review",
+    "message": "The platform read this from the build, the registry and the store connection and found it in order."
+   },
+   {
+    "id": "safari.check_8",
+    "label": "Check 8 passes",
+    "status": "pass",
+    "severity": "blocking",
+    "stage": "review",
+    "message": "The platform read this from the build, the registry and the store connection and found it in order."
+   },
+   {
+    "id": "safari.check_9",
+    "label": "Check 9 passes",
+    "status": "pass",
+    "severity": "blocking",
+    "stage": "review",
+    "message": "The platform read this from the build, the registry and the store connection and found it in order."
+   },
+   {
+    "id": "safari.check_10",
+    "label": "Check 10 passes",
+    "status": "pass",
+    "severity": "blocking",
+    "stage": "review",
+    "message": "The platform read this from the build, the registry and the store connection and found it in order."
+   },
+   {
+    "id": "safari.check_11",
+    "label": "Check 11 passes",
+    "status": "pass",
+    "severity": "blocking",
+    "stage": "review",
+    "message": "The platform read this from the build, the registry and the store connection and found it in order."
+   },
+   {
+    "id": "safari.check_12",
+    "label": "Check 12 passes",
+    "status": "pass",
+    "severity": "blocking",
+    "stage": "review",
+    "message": "The platform read this from the build, the registry and the store connection and found it in order."
+   },
+   {
+    "id": "safari.check_13",
+    "label": "Check 13 passes",
+    "status": "pass",
+    "severity": "blocking",
+    "stage": "review",
+    "message": "The platform read this from the build, the registry and the store connection and found it in order."
+   },
+   {
+    "id": "safari.check_14",
+    "label": "Check 14 passes",
+    "status": "pass",
+    "severity": "blocking",
+    "stage": "review",
+    "message": "The platform read this from the build, the registry and the store connection and found it in order."
+   },
+   {
+    "id": "safari.check_15",
+    "label": "Check 15 passes",
+    "status": "pass",
+    "severity": "blocking",
+    "stage": "review",
+    "message": "The platform read this from the build, the registry and the store connection and found it in order."
+   },
+   {
+    "id": "safari.check_16",
+    "label": "Check 16 passes",
+    "status": "pass",
+    "severity": "blocking",
+    "stage": "review",
+    "message": "The platform read this from the build, the registry and the store connection and found it in order."
+   }
+  ],
+  "requirements": {
+   "store": "safari",
+   "missingRequired": 0,
+   "missingOptional": 1,
+   "items": [
+    {
+     "id": "safari.api_key",
+     "label": "App Store Connect API key",
+     "required": true,
+     "format": "A team key with the App Manager role: its Key ID, Issuer ID and the .p8 private key, downloadable once.",
+     "status": "have",
+     "satisfiedBy": "console-only",
+     "how": "Create the key in App Store Connect under Users and Access, then paste the three values on the project's store settings page.",
+     "docs": "https://developer.apple.com/help/app-store-connect/get-started/app-store-connect-api"
+    },
+    {
+     "id": "safari.bundle_identifiers",
+     "label": "Two bundle identifiers",
+     "required": true,
+     "format": "A reverse-DNS identifier your Apple team owns for the app and <bundle id>.extension for the app extension, both registered as App IDs; identifiers are permanent once an app record uses them.",
+     "status": "have",
+     "satisfiedBy": "store-config: bundleId",
+     "how": "Set the bundle identifier on the project's Safari store settings page; Mint signing assets registers both with your team.",
+     "docs": "https://developer.apple.com/help/account/identifiers/register-an-app-id",
+     "actual": "com.acme.widget and com.acme.widget.extension"
+    },
+    {
+     "id": "safari.distribution_certificates",
+     "label": "Two distribution certificates",
+     "required": true,
+     "format": "A Mac App Distribution certificate and a Mac Installer Distribution certificate, each as a leaf-only legacy PKCS-12 .p12 with its password.",
+     "status": "have",
+     "satisfiedBy": "console-only",
+     "how": "Mint signing assets on the project's store settings page, or export both from Keychain Access and save them there.",
+     "docs": "https://developer.apple.com/help/account/certificates/certificates-overview"
+    },
+    {
+     "id": "safari.provisioning_profiles",
+     "label": "Two provisioning profiles",
+     "required": true,
+     "format": "A Mac App Store provisioning profile for the app and one for the app extension, each tied to its bundle identifier; profiles expire one year after issue.",
+     "status": "have",
+     "satisfiedBy": "console-only",
+     "how": "Mint signing assets on the project's store settings page, or create both in the developer account and save them there.",
+     "docs": "https://developer.apple.com/help/account/manage-profiles/create-an-app-store-provisioning-profile"
+    },
+    {
+     "id": "safari.app_record",
+     "label": "App record in App Store Connect",
+     "required": true,
+     "format": "Created once on the App Store Connect website (the API cannot create apps): platform macOS, name, primary language, bundle ID, SKU; its numeric App Store id is what the submission needs.",
+     "status": "have",
+     "satisfiedBy": "store-dashboard",
+     "how": "Add the app in App Store Connect under this bundle ID, then run the credential test in settings so the App Store id is captured.",
+     "docs": "https://developer.apple.com/help/app-store-connect/create-an-app-record/add-a-new-app",
+     "actual": "App Store id 6826223107"
+    },
+    {
+     "id": "safari.name",
+     "label": "Name",
+     "required": true,
+     "format": "Up to 30 characters; the app record's name. App Store names are global across every developer, so the name may already be taken, and the name typed when the app record was created is the one the record keeps.",
+     "status": "have",
+     "satisfiedBy": "listing",
+     "how": "Set `- App Store name:` under `## Safari` in STORE.md to the name the app record keeps (up to 30 characters); without it, a `- Name:` under `## Listing` of 30 characters or fewer is read. The Safari listing push writes it.",
+     "docs": "https://developer.apple.com/help/app-store-connect/reference/app-information",
+     "actual": "Widget, from `- Name:`",
+     "push": "landed"
+    },
+    {
+     "id": "safari.description",
+     "label": "Description",
+     "required": true,
+     "format": "Up to 4,000 characters; the App Store has no short-description field.",
+     "status": "have",
+     "satisfiedBy": "listing",
+     "how": "Write `- Description:` under `## Listing` in STORE.md with the paragraphs indented below it; the Safari listing push writes it.",
+     "docs": "https://developer.apple.com/help/app-store-connect/reference/platform-version-information",
+     "push": "landed"
+    },
+    {
+     "id": "safari.primary_category",
+     "label": "Primary category",
+     "required": true,
+     "format": "One App Store category on the app record; the wrapper is stamped with the matching LSApplicationCategoryType, and an upload without it is rejected with error 90242.",
+     "status": "have",
+     "satisfiedBy": "listing",
+     "how": "Set `- Category:` under `## Listing` in STORE.md; the Safari listing push writes it.",
+     "docs": "https://developer.apple.com/help/app-store-connect/reference/app-information",
+     "actual": "1 categories",
+     "push": "landed"
+    },
+    {
+     "id": "safari.support_url",
+     "label": "Support URL",
+     "required": true,
+     "format": "An https address shown on every App Store version.",
+     "status": "have",
+     "satisfiedBy": "console-only",
+     "how": "Set `- Support URL:` under `## Listing` in STORE.md, or the project's support URL in project settings; the Safari listing push writes it.",
+     "docs": "https://developer.apple.com/help/app-store-connect/reference/platform-version-information",
+     "push": "landed"
+    },
+    {
+     "id": "safari.privacy_policy_url",
+     "label": "Privacy policy URL",
+     "required": true,
+     "format": "An https address; the App Store requires one on every app, whether or not it collects user data.",
+     "status": "have",
+     "satisfiedBy": "listing",
+     "how": "Set `- Privacy policy URL:` under `## Privacy and data use` in STORE.md; the Safari listing push writes it.",
+     "docs": "https://developer.apple.com/help/app-store-connect/reference/app-information",
+     "push": "landed"
+    },
+    {
+     "id": "safari.screenshots",
+     "label": "macOS screenshots",
+     "required": true,
+     "format": "1 to 10 macOS screenshots at exactly 1280x800, 1440x900, 2560x1600, 2880x1800 px, RGB with no alpha channel, showing the extension running in Safari.",
+     "status": "have",
+     "satisfiedBy": "listing",
+     "how": "Add screenshots on the store card, or pass the capture paths to sync-listing from the MCP; the listing record holds them and the Safari listing push uploads them. STORE.md never carries them.",
+     "docs": "https://developer.apple.com/help/app-store-connect/reference/screenshot-specifications",
+     "actual": "2 screenshots (2880x1800, 2880x1800)",
+     "push": "landed"
+    },
+    {
+     "id": "safari.app_icon",
+     "label": "App icon",
+     "required": true,
+     "format": "1024x1024 px PNG with no alpha, built into the wrapper from the largest icon the manifest names.",
+     "status": "have",
+     "satisfiedBy": "listing",
+     "how": "Name a large square PNG under `icons` in the manifest; the macOS build stamps the wrapper's icon from it.",
+     "docs": "https://developer.apple.com/design/human-interface-guidelines/app-icons"
+    },
+    {
+     "id": "safari.age_rating",
+     "label": "Age rating",
+     "required": true,
+     "format": "Apple's age rating questionnaire on the app record; a content-free extension answers none to every question.",
+     "status": "have",
+     "satisfiedBy": "store-md: Age rating",
+     "how": "The Safari listing push answers none unless `### Age rating` bullets under the `## Safari` section of STORE.md say otherwise.",
+     "docs": "https://developer.apple.com/help/app-store-connect/reference/age-ratings",
+     "actual": "none to every question (the default)",
+     "push": "landed"
+    },
+    {
+     "id": "safari.content_rights",
+     "label": "Content rights",
+     "required": true,
+     "format": "The declaration that the app contains no third-party content, or that you hold the rights to the content it shows.",
+     "status": "have",
+     "satisfiedBy": "console-only",
+     "how": "The Safari listing push writes the declaration for an extension that shows no third-party content.",
+     "docs": "https://developer.apple.com/help/app-store-connect/manage-app-information/manage-content-rights-information",
+     "actual": "no third-party content (the default)",
+     "push": "landed"
+    },
+    {
+     "id": "safari.review_contact_name",
+     "label": "App Review contact name",
+     "required": true,
+     "format": "A first and last name App Review can address.",
+     "status": "have",
+     "satisfiedBy": "listing",
+     "how": "Set `- Review contact name:` under the `## Safari` section of STORE.md; the Safari listing push writes it.",
+     "docs": "https://developer.apple.com/help/app-store-connect/reference/app-review-information",
+     "push": "landed"
+    },
+    {
+     "id": "safari.review_contact_email",
+     "label": "App Review contact email",
+     "required": true,
+     "format": "An email address App Review can write to.",
+     "status": "have",
+     "satisfiedBy": "listing",
+     "how": "Set `- Review contact email:` under the `## Safari` section of STORE.md; the Safari listing push writes it.",
+     "docs": "https://developer.apple.com/help/app-store-connect/reference/app-review-information",
+     "actual": "the support email, which the push uses when no review contact email is set",
+     "push": "landed"
+    },
+    {
+     "id": "safari.review_contact_phone",
+     "label": "App Review contact phone",
+     "required": true,
+     "format": "A phone number in E.164 form (a plus, the country code and the digits); Apple requires one before review.",
+     "status": "have",
+     "satisfiedBy": "listing",
+     "how": "Set `- Review contact phone:` under the `## Safari` section of STORE.md; the Safari listing push writes it.",
+     "docs": "https://developer.apple.com/help/app-store-connect/reference/app-review-information",
+     "push": "landed"
+    },
+    {
+     "id": "safari.reviewer_notes",
+     "label": "App Review notes",
+     "required": true,
+     "format": "The notes that say how to turn the extension on in Safari and what the reviewer should see.",
+     "status": "have",
+     "satisfiedBy": "listing",
+     "how": "Write them under `### Reviewer notes` in the `## Safari` section of STORE.md; the Safari listing push writes them.",
+     "docs": "https://developer.apple.com/help/app-store-connect/reference/app-review-information",
+     "push": "landed"
+    },
+    {
+     "id": "safari.app_privacy",
+     "label": "App Privacy answers",
+     "required": true,
+     "format": "The data collection labels Apple shows on the listing; an extension with data_collection_permissions none answers Data Not Collected.",
+     "status": "unknown",
+     "satisfiedBy": "store-dashboard",
+     "how": "Answer the App Privacy sheet once in App Store Connect; it has no API.",
+     "docs": "https://developer.apple.com/help/app-store-connect/manage-app-privacy/manage-app-privacy"
+    },
+    {
+     "id": "safari.pricing_availability",
+     "label": "Price and availability",
+     "required": true,
+     "format": "A price schedule (free is a schedule too) and the territories the app is available in.",
+     "status": "have",
+     "satisfiedBy": "console-only",
+     "how": "The Safari listing push sets free pricing and worldwide availability.",
+     "docs": "https://developer.apple.com/help/app-store-connect/manage-app-pricing/set-a-price",
+     "actual": "free, worldwide",
+     "push": "landed"
+    },
+    {
+     "id": "safari.subtitle",
+     "label": "Subtitle",
+     "required": false,
+     "format": "Up to 30 characters.",
+     "status": "have",
+     "satisfiedBy": "listing",
+     "how": "Set `- Subtitle:` under `## Listing` in STORE.md; the Safari listing push writes it. Without the line, a Summary of 30 characters or fewer is copied as the subtitle, marked derived, and a workspace owner approves the copy before it is written.",
+     "docs": "https://developer.apple.com/help/app-store-connect/reference/app-information",
+     "push": "landed"
+    },
+    {
+     "id": "safari.keywords",
+     "label": "Keywords",
+     "required": false,
+     "format": "A comma list of up to 100 characters in all.",
+     "status": "have",
+     "satisfiedBy": "listing",
+     "how": "Set `- Search terms:` under `## Listing` in STORE.md; the Safari listing push writes them as keywords.",
+     "docs": "https://developer.apple.com/help/app-store-connect/reference/platform-version-information",
+     "actual": "9 terms",
+     "push": "landed"
+    },
+    {
+     "id": "safari.marketing_url",
+     "label": "Marketing URL",
+     "required": false,
+     "format": "An https address.",
+     "status": "have",
+     "satisfiedBy": "listing",
+     "how": "Set `- Homepage:` under `## Listing` in STORE.md; the Safari listing push writes it.",
+     "docs": "https://developer.apple.com/help/app-store-connect/reference/platform-version-information",
+     "push": "landed"
+    },
+    {
+     "id": "safari.whats_new",
+     "label": "What's New in This Version",
+     "required": false,
+     "format": "Release notes shown on the version; required from the second version on.",
+     "status": "missing",
+     "satisfiedBy": "store-md: Release notes",
+     "how": "Write them under `### Release notes` in the `## Safari` section of STORE.md; the Safari listing push writes them.",
+     "docs": "https://developer.apple.com/help/app-store-connect/reference/platform-version-information",
+     "push": "not pushed yet"
+    }
+   ]
+  }
+ }
+}

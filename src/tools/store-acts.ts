@@ -32,6 +32,7 @@ import {
   readSubmissionRecord,
   type PlatformSubmission,
 } from "../lib/platform-submissions";
+import { compactPreflightStores, PREFLIGHT_DETAIL_SENTENCE, preflightDetail } from "../lib/preflight-detail";
 import { consoleProjectUrl } from "../lib/registry";
 import { projectApiReadFailure, projectApiSend } from "../lib/project-api";
 import { actLinks, judgePublish, publishFailureReason, trackOf } from "../lib/store-act-outcome";
@@ -108,6 +109,7 @@ export interface StoreActArgs {
   waitSeconds?: unknown;
   project?: string;
   projectPath?: string;
+  detail?: unknown;
   api?: string;
 }
 
@@ -709,6 +711,12 @@ export async function preflight(args: StoreActArgs): Promise<string> {
     );
   }
 
+  const detail = preflightDetail(args.detail);
+
+  if ("problem" in detail) {
+    return badShipRequest(COMMAND, "preflight", "PreflightInputError", `${detail.problem}. Nothing was sent.`);
+  }
+
   const opened = await openShipApi(COMMAND, args, { action: "preflight" });
   if ("refused" in opened) return opened.refused;
 
@@ -739,6 +747,12 @@ export async function preflight(args: StoreActArgs): Promise<string> {
   const stores: Row = {};
   const reports: Record<string, Row> = {};
   const unread: string[] = [];
+
+  const shown = (): Row => {
+    const compact = compactPreflightStores(stores, detail);
+
+    return compact.trimmed ? { stores: compact.stores, detail: PREFLIGHT_DETAIL_SENTENCE } : { stores: compact.stores };
+  };
 
   asked.forEach((store, i) => {
     const read = reads[i];
@@ -847,7 +861,7 @@ export async function preflight(args: StoreActArgs): Promise<string> {
       status: connected ? "store-connection-failed" : "store-not-connected",
       value: {
         action: "preflight",
-        stores,
+        ...shown(),
         storesPageUrl,
         connectUrl,
         trackUrl: settingsUrl,
@@ -881,7 +895,7 @@ export async function preflight(args: StoreActArgs): Promise<string> {
       status: "store-item-not-linked",
       value: {
         action: "preflight",
-        stores,
+        ...shown(),
         storesPageUrl,
         ...urls,
         trackUrl: settingsUrl,
@@ -911,7 +925,7 @@ export async function preflight(args: StoreActArgs): Promise<string> {
       status: WORKSPACE_RECONNECT_STATE,
       value: {
         action: "preflight",
-        stores,
+        ...shown(),
         storesPageUrl,
         connectionSource: "workspace",
         workspaceStoreAccountsUrl: accountsUrl,
@@ -952,7 +966,7 @@ export async function preflight(args: StoreActArgs): Promise<string> {
           : "store-connection-unverified",
       value: {
         action: "preflight",
-        stores,
+        ...shown(),
         storesPageUrl,
         connectionSource: "workspace",
         workspaceStoreAccountsUrl: accountsUrl,
@@ -992,7 +1006,7 @@ export async function preflight(args: StoreActArgs): Promise<string> {
           : "store-connection-unverified",
       value: {
         action: "preflight",
-        stores,
+        ...shown(),
         storesPageUrl,
         connectUrl,
         trackUrl: settingsUrl,
@@ -1025,7 +1039,7 @@ export async function preflight(args: StoreActArgs): Promise<string> {
       status: "store-not-connected",
       value: {
         action: "preflight",
-        stores,
+        ...shown(),
         storesPageUrl,
         connectUrl,
         trackUrl: settingsUrl,
@@ -1098,7 +1112,7 @@ export async function preflight(args: StoreActArgs): Promise<string> {
       status: EDGE_FIRST_SUBMISSION_STATE,
       value: {
         action: "preflight",
-        stores,
+        ...shown(),
         storesPageUrl,
         ...(edgeFirst.partnerCenterUrl ? { partnerCenterUrl: edgeFirst.partnerCenterUrl } : {}),
         steps: edgeFirst.steps,
@@ -1149,7 +1163,7 @@ export async function preflight(args: StoreActArgs): Promise<string> {
     status: "preflight-read",
     value: {
       action: "preflight",
-      stores,
+      ...shown(),
       storesPageUrl,
       ...(itemUrl ? { itemUrl } : {}),
       ...(reviewing ? { chromeReview: reviewing } : {}),
