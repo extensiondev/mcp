@@ -83,7 +83,7 @@ vi.mock("../tools/logs", async (importOriginal) => {
 });
 
 const dev = await import("../tools/dev");
-const { NO_ATTACH_DIAGNOSIS_NOTE } = await import("../lib/compiled-not-attached");
+const { NO_ATTACH_DIAGNOSIS_NOTE, REBUILD_NOT_REACHING_NOTE } = await import("../lib/compiled-not-attached");
 const { removeSession, removeSessionMarker } = await import("../lib/process-manager");
 
 const PROFILE = "/tmp/pii-shield/dist/extension-profile-chrome";
@@ -196,6 +196,7 @@ describe("extension_dev relays the engine's attach diagnosis instead of a generi
     expect(result.value.browserUpNotAttachedHint).toBeUndefined();
     expect(result.hint).toContain("call extension_wait to keep waiting on the same contract");
     expect(result.hint).toContain(NO_ATTACH_DIAGNOSIS_NOTE);
+    expect(result.hint).toContain(REBUILD_NOT_REACHING_NOTE);
   }, 15_000);
 
   it("leaves the Safari not-enabled sentence alone, since the cause there is already named", async () => {
@@ -239,7 +240,7 @@ describe("extension_dev relays the legs this server read when the engine stamps 
     expect(result.value.failedLeg).toBe("executor");
     expect(result.value.nextStep.args.profile).toBe(FRESH);
     expect(result.value.replacedSession).toEqual({ pid: 96457, browser: "chrome", controlPort: 49239 });
-    expect(result.hint).toBe(`${says} ${WAY_OUT}`);
+    expect(result.hint).toBe(`${says} ${WAY_OUT} ${REBUILD_NOT_REACHING_NOTE}`);
     expect(result.warnings.join(" ")).toContain("Control port 49239 is the replaced session's: the engine keeps one control port per project and browser on purpose");
   }, 15_000);
 });

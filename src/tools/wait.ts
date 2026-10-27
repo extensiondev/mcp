@@ -11,18 +11,12 @@ import { setTimeout as sleep } from "node:timers/promises";
 
 import { PROJECT_PATH, SESSION_BROWSER } from "../lib/common-schema";
 import { findSessionInfo, sessionSinceMs } from "../lib/process-manager";
-import {
-  ambiguousSessionRefusal,
-  resolveSessionBrowser,
-} from "../lib/session-browser";
+import { ambiguousSessionRefusal, resolveSessionBrowser } from "../lib/session-browser";
 import { pidState } from "../lib/process-identity";
 import { readyContractPath } from "../lib/session-paths";
 import { productionLaunchEvidence, readLoadOverDebugPort } from "../lib/production-launch";
 import { sessionPorts } from "../lib/session-ports";
-import {
-  envelope,
-  sessionCommandSinceEnvelopeOwnsCommand,
-} from "../lib/envelope";
+import { envelope, sessionCommandSinceEnvelopeOwnsCommand } from "../lib/envelope";
 import { verifyGuestLoaded } from "../lib/guest-load-oracle";
 import { detachedVerdictFrame, readDetachedVerdict } from "../lib/background-liveness";
 import { WAIT_MODE_PROPERTIES, contractErrorList, waitModeFrame } from "../lib/wait-modes";
@@ -32,6 +26,7 @@ import {
   compiledNotAttachedAnswer,
 } from "../lib/compiled-not-attached";
 import { safariSigningFrame } from "../lib/safari-signing";
+import { UnattachedWatch } from "../lib/executor-recovery";
 import { recentErrorLogs } from "./doctor";
 
 import type { ReadyContract } from "../lib/types";
@@ -104,6 +99,7 @@ export async function handler(args: {
   const pollInterval = 1000;
   let sawCompiledButUnattached = false;
   let unattachedContract: ReadyContract | null = null;
+  const unattached = new UnattachedWatch(args.projectPath, browser);
   let lastContractStatus: string | null = null;
   let staleContractNote: string | null = null;
   let contractUnreadable: string | null = null;
@@ -300,16 +296,17 @@ export async function handler(args: {
         }
 
         if (!attached) {
-          await sleep(pollInterval);
           sawCompiledButUnattached = true;
           unattachedContract = contract;
+          if (!(await unattached.reattachedNow(contract, budgetMs - (Date.now() - start)))) await sleep(pollInterval);
+
           continue;
         }
 
         const runtimeErrors = recentErrorLogs(args.projectPath, browser, 3);
         const guestCheck = await verifyGuestLoaded(args.projectPath, browser);
         const signingFrame = await safariSigningFrame(args.projectPath, browser);
-        const warnings: string[] = [...(signingFrame?.warnings ?? [])];
+        const warnings: string[] = [...(signingFrame?.warnings ?? []), ...(unattached.recovery ? [unattached.recovery.say] : [])];
 
         if (runtimeErrors.length) {
           warnings.push(
@@ -349,6 +346,7 @@ export async function handler(args: {
             budgetMs,
             elapsedMs: Date.now() - start,
             ...(runtimeErrors.length ? { runtimeErrors } : {}),
+            ...(unattached.recovery ? { executorRecovery: unattached.recovery } : {}),
             ...(signingFrame ? { signing: signingFrame.signing } : {}),
           },
           warnings,
@@ -401,6 +399,7 @@ export async function handler(args: {
       elapsedMs: Date.now() - start,
       warnings: [clampNote, staleContractNote],
       contract: unattachedContract,
+      recovery: unattached.recovery,
     });
   }
 

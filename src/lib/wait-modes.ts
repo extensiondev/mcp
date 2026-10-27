@@ -9,8 +9,9 @@
 import fs from "node:fs";
 import { setTimeout as sleep } from "node:timers/promises";
 
-import { WEBKIT_FAMILY } from "./browser-family";
+import { isChromiumFamily, WEBKIT_FAMILY } from "./browser-family";
 import { envelope } from "./envelope";
+import { executorAttached, RECOVERY_WATCH_MS, reloadUnattachedWorker } from "./executor-recovery";
 import { readyContractPath } from "./session-paths";
 
 import type { ReadyContract } from "./types";
@@ -21,7 +22,7 @@ export const WAIT_MODE_PROPERTIES = {
     enum: ["ready", "rebuild"],
     default: "ready",
     description:
-      "What to wait for. \"ready\" (the default) waits for the session to be ready. \"rebuild\" waits for the compile after a source edit: until ready.json's compiledAt moves past its value at call time (or past since), then for the reload: an engine that stamps reloadedAt is waited on until that stamp lands after the new compiledAt and after its value at call time (a stamp older than the compile, such as the previous Safari re-sync, never counts), answering reload.outcome \"reloaded\" with reloadKind (full, background, content, page or safari-resync) and reloadLabel; an older engine is watched briefly for the background to connect again (reattached, still-detached, or not-stamped for a content-script, page or Safari app re-sync reload, which it does not stamp). It answers status \"rebuilt\" with the new compiledAt, errors and reload, or status \"compile-error\" with the errors.",
+      "What to wait for. \"ready\" (the default) waits for the session to be ready. \"rebuild\" waits for the compile after a source edit: until ready.json's compiledAt moves past its value at call time (or past since), then for the reload: an engine that stamps reloadedAt is waited on until that stamp lands after the new compiledAt and after its value at call time (a stamp older than the compile, such as the previous Safari re-sync, never counts), answering reload.outcome \"reloaded\" with reloadKind (full, background, content, page or safari-resync) and reloadLabel; an older engine is watched briefly for the background to connect again (reattached, still-detached, or not-stamped for a content-script, page or Safari app re-sync reload, which it does not stamp). On a Chromium dev session whose background is not connected to the dev server, the dev server cannot apply the reload, so this call reloads the extension over the debug port itself (chrome.runtime.reload in its background) and answers reattached when the new background connects, or not-reached with why, never a silent wait. It answers status \"rebuilt\" with the new compiledAt, errors and reload, or status \"compile-error\" with the errors.",
   },
   since: {
     type: "string",
@@ -64,7 +65,7 @@ function stampMs(value: unknown): number | null {
 }
 
 interface ReloadReading {
-  outcome: "reloaded" | "reattached" | "still-detached" | "not-stamped";
+  outcome: "reloaded" | "reattached" | "still-detached" | "not-stamped" | "not-reached";
   waitedMs: number;
   detachedAt?: string;
   reloadedAt?: string;
@@ -142,6 +143,34 @@ async function watchReload(
   }
 }
 
+async function reloadOverDebugPort(
+  projectPath: string,
+  browser: string,
+  contract: ReadyContract,
+  remainingMs: number,
+): Promise<ReloadReading | null> {
+  if (!isChromiumFamily(browser) || contract.command !== "dev" || executorAttached(contract)) return null;
+
+  const recovery = await reloadUnattachedWorker({ projectPath, browser, contract, watchMs: Math.max(0, Math.min(remainingMs, RECOVERY_WATCH_MS)) });
+  const notConnected = "The extension's background was not connected to the dev server when this compile landed, so the dev server could not apply its reload.";
+
+  if (recovery.outcome === "attached") {
+    return {
+      outcome: "reattached",
+      waitedMs: recovery.waitedMs,
+      reloadedAt: recovery.reloadedAt,
+      reloadKind: "debug-port",
+      note: `${notConnected} ${recovery.say}`,
+    };
+  }
+
+  return {
+    outcome: "not-reached",
+    waitedMs: "waitedMs" in recovery ? recovery.waitedMs : 0,
+    note: `${notConnected} ${recovery.say} The browser still runs the build it loaded before; extension_dev with replace: true relaunches the session.`,
+  };
+}
+
 export async function waitForRebuild(
   command: string,
   projectPath: string,
@@ -206,7 +235,8 @@ export async function waitForRebuild(
         const remaining = budgetMs - (Date.now() - start);
         const graceCap = stampsReloads ? remaining : WEBKIT_FAMILY.has(browser) ? WEBKIT_RELOAD_GRACE_MS : RELOAD_GRACE_MS;
         const grace = Math.max(0, Math.min(remaining, graceCap));
-        const watched = await watchReload(projectPath, browser, compiledAt, contract.ts, grace, reloadFloor, stampsReloads);
+        const unreached = await reloadOverDebugPort(projectPath, browser, contract, remaining);
+        const watched = unreached ?? await watchReload(projectPath, browser, compiledAt, contract.ts, grace, reloadFloor, stampsReloads);
         const reload: ReloadReading =
           stampsReloads && watched.outcome === "not-stamped"
             ? { ...watched, note: `This engine stamps every reload it applies (ready.json reloadedAt), and none landed within ${watched.waitedMs} ms of this compile, so the browser has not applied the change yet. extension_doctor reports whether the extension's executor is connected.` }

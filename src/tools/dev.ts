@@ -61,6 +61,7 @@ import { safariSigningFrame } from "../lib/safari-signing";
 import {
   CONTROL_PORT_KEPT_NOTE,
   NO_ATTACH_DIAGNOSIS_NOTE,
+  REBUILD_NOT_REACHING_NOTE,
   observedNotAttachedRelay,
   browserUpNotAttachedRelay,
 } from "../lib/compiled-not-attached";
@@ -506,7 +507,7 @@ export async function handler(
     ],
     hint: args.noBrowser
       ? "Build-only session (noBrowser: true): no browser will launch, so no runtime will ever attach. extension_wait returns as soon as the first compile lands (compiled: true, browserAttached: false) instead of waiting out its budget; do not wait for a browser. The control verbs (storage/reload/open/dom_snapshot/eval) need a live browser and will not work against this session. When you are done, call extension_stop to shut down the dev server."
-      : `${nextStep} ${signingFrame?.hints.length ? `${signingFrame.hints.join(" ")} ` : ""}${headlessHint(visibility.headless)} ${
+      : `${nextStep} ${readiness?.ready.status === "compiled-not-attached" && !isSafariTarget(browser) ? `${REBUILD_NOT_REACHING_NOTE} ` : ""}${signingFrame?.hints.length ? `${signingFrame.hints.join(" ")} ` : ""}${headlessHint(visibility.headless)} ${
         allowControl
           ? controlBound
             ? `Control channel is ON (port ${control.port} per ready.json): extension_${controlVerbs.split(", ").join("/extension_")}${args.allowEval ? "/extension_eval" : ""} will work against this session.`

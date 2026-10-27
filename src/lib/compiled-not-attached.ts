@@ -17,6 +17,7 @@ import { safariSigningFrame } from "./safari-signing";
 import { browserProfileRootDir } from "./session-paths";
 import { sessionPorts } from "./session-ports";
 
+import type { ExecutorRecovery } from "./executor-recovery";
 import type { ReadyContract } from "./types";
 
 export const NO_ATTACH_DIAGNOSIS_NOTE =
@@ -34,6 +35,7 @@ export interface NotAttachedContext {
   elapsedMs: number;
   warnings?: Array<string | null | undefined | false>;
   contract?: ReadyContract | null;
+  recovery?: ExecutorRecovery | null;
 }
 
 export type FailedLeg = "browser" | "extension-load" | "executor";
@@ -44,6 +46,9 @@ export interface ObservedAttachLegs {
   legs: Record<string, unknown>;
   freshProfile: string | null;
 }
+
+export const REBUILD_NOT_REACHING_NOTE =
+  "Until the background connects, an edit still compiles but does not reach the browser: the dev server applies every reload through that connection, so the browser keeps the build it loaded.";
 
 export const CONTROL_PORT_KEPT_NOTE =
   "the engine keeps one control port per project and browser on purpose, so a worker cached in a reused profile can find the port it was built with; a replaced session answering with the same port is that design, not a port left bound";
@@ -254,7 +259,7 @@ export function observedNotAttachedRelay(
       nextStep,
     },
     message: `The extension compiled, but the runtime executor never attached. ${ready.failedLegSays}`,
-    hint: `${ready.failedLegSays} ${nextStep.say}`,
+    hint: `${ready.failedLegSays} ${nextStep.say} ${REBUILD_NOT_REACHING_NOTE}`,
   };
 }
 
@@ -272,7 +277,7 @@ export async function compiledNotAttachedAnswer(
     status: "compiled-not-attached",
     error: {
       code: "E_NOT_ATTACHED",
-      message: `The extension compiled, but the runtime executor never attached within this call's ${ctx.budgetMs}ms budget. The build is fine; the browser side is not connected, so extension_eval/storage/reload/open will fail with "no executor connected"${undiagnosed}.${observed.failedLegSays ? ` Read here instead: ${observed.failedLegSays}` : ""}`,
+      message: `The extension compiled, but the runtime executor never attached within this call's ${ctx.budgetMs}ms budget. The build is fine; the browser side is not connected, so extension_eval/storage/reload/open will fail with "no executor connected"${undiagnosed}.${observed.failedLegSays ? ` Read here instead: ${observed.failedLegSays}` : ""}${ctx.recovery ? ` ${ctx.recovery.say}` : ""} ${REBUILD_NOT_REACHING_NOTE}`,
     },
     value: {
       compiled: true,
@@ -282,6 +287,8 @@ export async function compiledNotAttachedAnswer(
       elapsedMs: ctx.elapsedMs,
       ...(observed.failedLeg ? { failedLeg: observed.failedLeg, failedLegSays: observed.failedLegSays } : {}),
       ...(Object.keys(observed.legs).length ? { legs: observed.legs } : {}),
+      ...(ctx.recovery ? { executorRecovery: ctx.recovery } : {}),
+      rebuildsReachBrowser: false,
       ...(observed.freshProfile && wayOut
         ? {
             sayToPerson: `${observed.failedLegSays} ${wayOut}`,
