@@ -32,6 +32,12 @@ import {
 } from "../lib/session-browser";
 import { readyContractPath } from "../lib/session-paths";
 import { readTabView, tabViewSentence } from "../lib/tab-view";
+import {
+  bringTabForward,
+  foregroundSentence,
+  foregroundUnsupported,
+  type Foreground,
+} from "../lib/tab-foreground";
 import { CDPClient } from "../lib/cdp";
 import { resolveCdpPort, resolveRdpPort, CDP_PORT_MISSING_HINT } from "../lib/cdp-port";
 import { rdpListTabs, type RdpTab } from "../lib/rdp";
@@ -201,6 +207,7 @@ export interface NavigateOptions {
   tab?: number;
   avoidUrls?: string[];
   reloadRetried?: boolean;
+  foreground?: boolean;
 }
 
 const SETTLE_POLL_MS = 6000;
@@ -337,7 +344,7 @@ export async function navigateToUrl(
       await cdp.navigate(sessionId, url);
     } else {
       const created = (await cdp
-        .sendCommand("Target.createTarget", { url, background: true })
+        .sendCommand("Target.createTarget", { url, background: !options.foreground })
         .catch(() => cdp.sendCommand("Target.createTarget", { url }))) as
         | { targetId?: string }
         | undefined;
@@ -475,8 +482,12 @@ export async function navigateToUrl(
     }
 
     rememberExtensionTarget(settled.id, settled.url);
+    const foreground: Foreground | null = options.foreground
+      ? await bringTabForward(cdp, settled.id)
+      : null;
     const view = await readTabView(cdp, settled.id);
     const viewSentence = tabViewSentence(view);
+    const headless = sessionIsHeadless(projectPath, browser);
 
     return envelope({
       ok: true,
@@ -496,14 +507,19 @@ export async function navigateToUrl(
           url: settled.url,
         },
         ...view,
-        headless: sessionIsHeadless(projectPath, browser),
+        headless,
+        ...(foreground ? { foreground } : {}),
       },
       hint:
+        (foreground ? `${foregroundSentence(foreground, headless)} ` : "") +
         "Inspect it with extension_dom_snapshot or extension_inspect using url (context: 'page'), they resolve the tab themselves. " +
         "Pass `target.targetId` as `targetId` to extension_screenshot, extension_dom_snapshot, extension_inspect or extension_eval to pick this exact tab, which matters when another tab shows the same url. " +
         "It is a CDP target id, NOT a chrome.tabs id: do not pass it as `tab`. If you need a numeric tab id, call extension_dom_snapshot with listTabs: true." +
         (viewSentence ? ` ${viewSentence}` : ""),
-      warnings: [unreadableNote],
+      warnings: [
+        unreadableNote,
+        foreground && !foreground.activated ? foregroundSentence(foreground, headless) : null,
+      ],
     });
   } catch (e) {
     return envelope({
@@ -1072,7 +1088,7 @@ async function confirmSurfaceTarget(
 export const schema = {
   name: "extension_open",
   description:
-    "Open an extension surface (popup, options, sidebar, the newtab, history or bookmarks override page, or the extension's DevTools panel), navigate a tab to a url, or replay an event (the toolbar action, a chrome.commands shortcut) in a running session, over the dev session's control channel (on unless extension_dev was called with allowControl:false). Opening a url on Chromium answers target.targetId, the CDP target id of the tab it opened: pass it as `targetId` to extension_screenshot, extension_dom_snapshot, extension_inspect or extension_eval to address that exact tab even when another shows the same url (extension_dom_snapshot listTargets: true lists every targetId, on Firefox too). A url answer also carries tab {active, visibilityState}, viewport {width, height} and headless: an element below the viewport is not observed until it is scrolled into view. Not for evaluating in the page once it is open: that is extension_eval. An action or command replay invokes your listener without a user gesture, so the gesture-derived activeTab grant does not apply.",
+    "Open an extension surface (popup, options, sidebar, the newtab, history or bookmarks override page, or the extension's DevTools panel), navigate a tab to a url, or replay an event (the toolbar action, a chrome.commands shortcut) in a running session, over the dev session's control channel (on unless extension_dev was called with allowControl:false). Opening a url on Chromium answers target.targetId, the CDP target id of the tab it opened: pass it as `targetId` to extension_screenshot, extension_dom_snapshot, extension_inspect or extension_eval to address that exact tab (extension_dom_snapshot listTargets: true lists every targetId, on Firefox too). A url answer also carries tab {active, visibilityState}, viewport {width, height} and headless: an element below the viewport is not observed until it is scrolled into view. A url opens in a background tab unless foreground: true. Not for evaluating in the page once it is open: that is extension_eval. An action or command replay invokes your listener without a user gesture, so the gesture-derived activeTab grant does not apply.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -1107,6 +1123,12 @@ export const schema = {
         type: "string",
         description:
           "Navigate a real tab here instead of opening a surface, in a NEW tab unless `tab` names one (a blank or new-tab page is reused). An absolute url opens as given; a path with no scheme, such as pages/options.html, is resolved against the extension's own origin. Use for content-script test pages, or a surface as a page.",
+      },
+      foreground: {
+        type: "boolean",
+        default: false,
+        description:
+          "With `url`, on Chromium: bring the opened tab forward for a page the PERSON must act on (a sign-in, a consent screen, a payment or captcha step), by making it the active tab (CDP Target.activateTarget) and raising its browser window (Page.bringToFront). Raising the window takes the screen from whatever the person was doing, so pass it only when the person has to see or act on that page now, never for pages only the agent reads. The answer says what happened in value.foreground {activated, windowRaised} and in the hint, and what to tell the person. Default false: the tab opens in the background and the window stays where it is.",
       },
       tab: {
         type: "number",
@@ -1166,6 +1188,24 @@ function headedFallbackWarning(surface: string, extensionId: string | null): str
   return `The engine reported the ${surface} as opened, but no document for it appeared within 3s. This session is headed, so the ${surface} window may have opened and closed before this server looked (a popup closes when focus moves), ${rendered}.`;
 }
 
+function withForegroundRefusal(raw: string, projectPath: string, browser: string, tab?: number): string {
+  const frame = parseFrameObject(raw);
+  if (!frame?.ok || (frame.value && typeof frame.value === "object" && "foreground" in frame.value)) return raw;
+
+  const foreground = foregroundUnsupported(
+    !isChromiumFamily(browser)
+      ? `foreground rides the Chromium debug port, and this session runs ${browser}`
+      : tab != null
+        ? "a page navigated in place by `tab` has no debug-port target in the answer to bring forward"
+        : "the page was opened without a debug-port target to bring forward",
+  );
+
+  patchValue(frame, { foreground });
+  addWarning(frame, foregroundSentence(foreground, sessionIsHeadless(projectPath, browser)));
+
+  return actFrameJson(frame);
+}
+
 async function resolveExtensionDocumentUrl(
   projectPath: string,
   browser: string,
@@ -1219,6 +1259,7 @@ export async function handler(
     reload?: boolean;
     url?: string;
     asTab?: boolean;
+    foreground?: boolean;
   },
 ): Promise<string> {
   const ambiguous = ambiguousSessionRefusal(schema.name, args.projectPath, args.browser);
@@ -1236,9 +1277,12 @@ export async function handler(
       : await resolveExtensionDocumentUrl(args.projectPath, browser, args.url);
     if (typeof absolute !== "string") return absolute.refusal;
 
-    return navigateToUrl(args.projectPath, browser, absolute, args.timeout, {
+    const opened = await navigateToUrl(args.projectPath, browser, absolute, args.timeout, {
       tab: args.tab,
+      foreground: args.foreground === true,
     });
+
+    return args.foreground === true ? withForegroundRefusal(opened, args.projectPath, browser, args.tab) : opened;
   }
 
   const AS_TAB_SURFACES = ["popup", "options", "sidebar", ...OVERRIDE_SURFACES];
