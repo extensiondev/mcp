@@ -40,6 +40,7 @@ describe("extension_submit configure-store changes a store's settings as a plain
       "appStoreId",
       "bundleId",
       "firstSubmitted",
+      "storeUrl",
     ]);
 
     for (const property of Object.values((schema.inputSchema.properties as Record<string, any>).storeSettings.properties) as Array<{ description?: string }>) {
@@ -158,7 +159,7 @@ describe("extension_submit configure-store changes a store's settings as a plain
     platform.login();
     const cases: Array<[string, Record<string, unknown>, RegExp]> = [
       ["firefox", { storeId: "{abc}" }, /"storeId".*a listing id goes in as chromeItemId, edgeProductId, firefoxAddonGuid or appStoreId.*stay a person at a keyboard in the console/],
-      ["chrome", { publisherId: "acme" }, /"publisherId".*the Safari bundle id as bundleId, and publisher ids, store URLs and the rest stay a person at a keyboard/],
+      ["chrome", { publisherId: "acme" }, /"publisherId".*the Safari bundle id as bundleId, the Edge Add-ons listing as storeUrl on edge, and publisher ids, other store URLs and the rest stay a person at a keyboard/],
       ["chrome", { bundleId: "com.acme.widget" }, /"bundleId" is a safari store setting; chrome does not have it/],
       ["safari", { bundleId: "widget" }, /bundleId must be a reverse-DNS identifier with two or more labels/],
       ["safari", { appStoreId: "id6826486337" }, /appStoreId must be the App Store id of the app record: the 6 to 15 digit Apple ID/],
@@ -259,6 +260,47 @@ describe("extension_submit configure-store changes a store's settings as a plain
     expect(readStoreSettingsChange("edge", { firstSubmitted: false })).toEqual({ patch: { firstSubmitted: false }, requested: { firstSubmitted: false } });
     expect(readStoreSettingsChange("chrome", { firstSubmitted: true })).toEqual({ problem: '"firstSubmitted" is an edge store setting; chrome does not have it.' });
     expect(readStoreSettingsChange("edge", { firstSubmitted: "yes" })).toEqual({ problem: "storeSettings.firstSubmitted must be true or false." });
+  });
+
+  it("writes the Edge listing URL as the canonical crx id link through the store config route, hashing storeUrl last", async () => {
+    if (process.platform === "win32") return;
+
+    const crx = "abcdefghijklmnopabcdefghijklmnop";
+    const canonical = `https://microsoftedge.microsoft.com/addons/detail/${crx}`;
+
+    platform.login();
+    platform.routes[`PUT ${CONFIG}`] = () => ({ body: { ok: true, store: "edge", changes: [`edge.storeUrl: "" -> "${canonical}"`] } });
+
+    const out = JSON.parse(
+      await submit({ action: "configure-store", store: "edge", storeSettings: { storeUrl: `https://microsoftedge.microsoft.com/addons/detail/rebeccat/${crx}` }, api: API }),
+    );
+    const puts = platform.sent("PUT", CONFIG);
+
+    expect(puts).toHaveLength(1);
+    expect(puts[0].body).toEqual({ edge: { storeUrl: canonical } });
+    expect(out.status).toBe("store-configured");
+    expect(out.value.storeSettings).toEqual({ storeUrl: canonical });
+    expect(out.value.changes).toEqual([`edge.storeUrl: "" -> "${canonical}"`]);
+    expect(platform.calls.some((call) => call.path.startsWith(APPROVALS))).toBe(false);
+
+    const { createHash } = await import("node:crypto");
+    const platformBytes = JSON.stringify({ store: "edge", settings: { firstSubmitted: true, storeUrl: canonical } });
+
+    expect(storeSettingsDigest("edge", { storeUrl: canonical, firstSubmitted: true })).toBe(createHash("sha256").update(platformBytes).digest("hex"));
+  });
+
+  it("refuses an Edge listing URL without a crx id, and a store URL off Edge, before anything is sent", () => {
+    expect(readStoreSettingsChange("edge", { storeUrl: "" })).toEqual({ patch: { storeUrl: "" }, requested: { storeUrl: "" } });
+
+    for (const storeUrl of ["https://microsoftedge.microsoft.com/addons/detail/903d21e4-0e5b-4507-95f2-4620fcf06f1c", "https://example.com/addons/detail/abcdefghijklmnopabcdefghijklmnop", 7]) {
+      const read = readStoreSettingsChange("edge", { storeUrl });
+
+      expect("problem" in read && read.problem, String(storeUrl)).toMatch(/must be the Edge Add-ons listing URL that ends in the 32-letter crx id/);
+    }
+
+    const chrome = readStoreSettingsChange("chrome", { storeUrl: "https://chromewebstore.google.com/detail/abc" });
+
+    expect("problem" in chrome && chrome.problem).toMatch(/"storeUrl", which is a raw platform field/);
   });
 
   it("writes the Safari bundle id and App Store id as plain owner-token writes, hashing bundleId last, and no longer calls the bundle id console-only", async () => {

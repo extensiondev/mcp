@@ -8,6 +8,7 @@
 
 import crypto from "node:crypto";
 
+import { edgeListingUrlOf } from "./edge-listing";
 import { AMO_API_KEY_PAGE } from "./firefox-store";
 import { isRow, text } from "./ship-act";
 
@@ -26,7 +27,7 @@ export const SUBMISSION_MODE_IDS: Record<StoreSettingsStore, readonly string[]> 
   safari: ["draft", "dry-run"],
 };
 
-export const STORE_SETTING_KEYS = ["enabled", "submissionMode", "sourceArchive", "releaseChannel", "chromeItemId", "edgeProductId", "firefoxAddonGuid", "appStoreId", "bundleId", "firstSubmitted"] as const;
+export const STORE_SETTING_KEYS = ["enabled", "submissionMode", "sourceArchive", "releaseChannel", "chromeItemId", "edgeProductId", "firefoxAddonGuid", "appStoreId", "bundleId", "firstSubmitted", "storeUrl"] as const;
 
 const FIREFOX_ONLY_KEYS = new Set(["sourceArchive", "releaseChannel"]);
 
@@ -56,7 +57,7 @@ const CONSOLE_ONLY_KEYS = new Set([
 
 const CREDENTIAL_KEY = /secret|token|password|credential|issuer|key|client|json|p8|pem|cert|account|oauth|refresh/i;
 
-export const PATCH_KEYS = ["enabled", "dryRun", "skipPublish", "stagedPublish", "publishAfter", "releaseChannel", "sourceArchive", "storeId", "bundleId", "firstSubmitted"] as const;
+export const PATCH_KEYS = ["enabled", "dryRun", "skipPublish", "stagedPublish", "publishAfter", "releaseChannel", "sourceArchive", "storeId", "bundleId", "firstSubmitted", "storeUrl"] as const;
 
 export type StoreSettingsPatch = Partial<Record<(typeof PATCH_KEYS)[number], boolean | string | null>>;
 
@@ -109,11 +110,11 @@ export function readStoreSettingsChange(store: StoreSettingsStore, raw: unknown)
   const credential = Object.keys(raw).filter((key) => !(STORE_SETTING_KEYS as readonly string[]).includes(key) && CREDENTIAL_KEY.test(key));
   if (credential.length) return { credential };
 
-  const consoleOnly = Object.keys(raw).filter((key) => CONSOLE_ONLY_KEYS.has(key));
+  const consoleOnly = Object.keys(raw).filter((key) => CONSOLE_ONLY_KEYS.has(key) && !(store === "edge" && key === "storeUrl"));
 
   if (consoleOnly.length) {
     return {
-      problem: `storeSettings has ${consoleOnly.map((k) => `"${k}"`).join(", ")}, which is a raw platform field; a listing id goes in as chromeItemId, edgeProductId, firefoxAddonGuid or appStoreId, the Safari bundle id as bundleId, and publisher ids, store URLs and the rest stay a person at a keyboard in the console store settings. Use ${STORE_SETTING_KEYS.join(", ")}.`,
+      problem: `storeSettings has ${consoleOnly.map((k) => `"${k}"`).join(", ")}, which is a raw platform field; a listing id goes in as chromeItemId, edgeProductId, firefoxAddonGuid or appStoreId, the Safari bundle id as bundleId, the Edge Add-ons listing as storeUrl on edge, and publisher ids, other store URLs and the rest stay a person at a keyboard in the console store settings. Use ${STORE_SETTING_KEYS.join(", ")}.`,
     };
   }
 
@@ -183,6 +184,26 @@ export function readStoreSettingsChange(store: StoreSettingsStore, raw: unknown)
 
     patch.firstSubmitted = raw.firstSubmitted;
     requested.firstSubmitted = raw.firstSubmitted;
+  }
+
+  /* @invariant THE EDGE LISTING URL IS SENT AS THE CRX ID LINK OR NOT AT ALL.
+   * Edge Add-ons search may not list a new product for days, so the owner's
+   * listing URL is how the platform learns the crx id; it goes as the
+   * canonical `/addons/detail/<crxId>` link (the platform keys it the same
+   * way), an empty string clears it, and a link without a crx id (the
+   * Partner Center product id answers 404 there) is refused before anything
+   * is sent.
+   */
+  if ("storeUrl" in raw) {
+    const value = text(raw.storeUrl);
+    const listing = edgeListingUrlOf(value);
+
+    if (typeof raw.storeUrl !== "string" || (value && !listing)) {
+      return { problem: `storeSettings.storeUrl must be the Edge Add-ons listing URL that ends in the 32-letter crx id (https://microsoftedge.microsoft.com/addons/detail/<slug>/<crxId> or .../detail/<crxId>), or "" to clear it; got "${value}".` };
+    }
+
+    patch.storeUrl = listing;
+    requested.storeUrl = listing;
   }
 
   const mode = "submissionMode" in raw ? text(raw.submissionMode).toLowerCase() : "";
