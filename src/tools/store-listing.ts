@@ -966,6 +966,9 @@ export async function syncListing(args: ListingArgs): Promise<string> {
   const pushState = push ? readPushState(push) : null;
   if (pushState) said.push(pushSentence(pushState, push?.resend === "refused" ? "refused" : "none"));
 
+  const localIcons = builds.build || !builds.commit ? [] : rows.filter((row) => isRow(row.icon) && row.icon.from !== "build").map((row) => text(row.store));
+  if (localIcons.length) said.push(`The ${localIcons.join(", ")} icon${localIcons.length === 1 ? "" : "s"} came from the local project, not a platform build: ${builds.missed}.`);
+
   const say = said.join(" ");
   const approvals = rows.filter((row) => row.status === "approval-required");
   const failed = rows.filter(
@@ -979,6 +982,7 @@ export async function syncListing(args: ListingArgs): Promise<string> {
     action: ACT,
     project,
     stores,
+    iconSource: builds.build ? { from: "build", build: builds.build } : { from: "local", reason: builds.missed },
     storesPageUrl: consoleProjectUrl(
       api.ref,
       ConsoleProjectPage.stores,

@@ -103,23 +103,24 @@ type Row = Record<string, unknown>;
 interface BuildRow {
   id: string;
   commit: string;
+  status: string;
   done: boolean;
 }
 
+const DONE_STATUSES = new Set(["success", "ready"]);
+
+function buildRow(item: unknown): BuildRow | null {
+  if (!isRow(item)) return null;
+
+  const id = (text(item.buildId) || text(item.shortSha) || text(item.id)).toLowerCase();
+  const status = text(item.status).toLowerCase();
+  if (!id) return null;
+
+  return { id, commit: text(item.commit).toLowerCase(), status, done: DONE_STATUSES.has(status) };
+}
+
 function buildRows(items: unknown[]): BuildRow[] {
-  const rows: BuildRow[] = [];
-
-  for (const item of items) {
-    if (!isRow(item)) continue;
-
-    const id = (text(item.buildId) || text(item.shortSha) || text(item.id)).toLowerCase();
-    const status = text(item.status).toLowerCase();
-    if (!id) continue;
-
-    rows.push({ id, commit: text(item.commit).toLowerCase(), done: status === "success" || status === "ready" });
-  }
-
-  return rows;
+  return items.map(buildRow).filter((row): row is BuildRow => row !== null);
 }
 
 function sameCommit(row: BuildRow, sha: string): boolean {
@@ -128,8 +129,39 @@ function sameCommit(row: BuildRow, sha: string): boolean {
   return [row.commit, row.id].some((own) => own.length >= SHA_PREFIX && (own.startsWith(sha) || sha.startsWith(own)));
 }
 
+/* @invariant THE BUILD LIST CAN LAG THE BUILD RECORD, SO A COMMIT THE LIST
+ * DOES NOT SHOW AS COMPLETED IS READ BY ITS OWN RECORD. The platform's list
+ * keeps a run's status for minutes after the run concluded (ledger 263: the
+ * row read status building beside conclusion success while builds/<sha>
+ * already read success, so the icon fell back to dist without a word). The
+ * one build the call needs, the checked out commit or useBuild, is therefore
+ * read from builds/<sha> whenever the list does not answer it completed.
+ */
+async function wantedBuild(api: ProjectApi, rows: BuildRow[], sha: string): Promise<{ row: BuildRow | null; seen: BuildRow | null }> {
+  const listed = rows.filter((row) => sameCommit(row, sha));
+  const done = listed.find((row) => row.done);
+  if (done) return { row: done, seen: done };
+  if (sha.length < SHA_PREFIX) return { row: null, seen: null };
+
+  const detail = await projectApiGet<Record<string, unknown>>(api, `builds/${encodeURIComponent(listed[0]?.id ?? sha.slice(0, SHA_PREFIX))}`);
+  const read = detail.ok ? buildRow(isRow(detail.json?.build) ? detail.json.build : detail.json) : null;
+  const fresh = read && sameCommit(read, sha) ? read : null;
+
+  return { row: fresh?.done ? fresh : null, seen: fresh ?? listed[0] ?? null };
+}
+
+function missedSentence(target: string, asked: boolean, seen: BuildRow | null, unreadable: string | null): string {
+  if (!target) return "the project directory has no git commit checked out, so no platform build could be matched";
+  if (seen) return `build ${seen.id} of ${asked ? "that commit" : "the checked out commit"} is ${seen.status || "of unknown status"} on the platform, not completed`;
+  if (unreadable) return `the platform's build list could not be read (${unreadable})`;
+
+  return `the checked out commit ${target.slice(0, SHA_PREFIX)} has no platform build; push it, or pass useBuild with a completed build`;
+}
+
 export interface BuildIcons {
   build: string | null;
+  commit: string;
+  missed: string | null;
   newest: string | null;
   unreadable: string | null;
   take(store: ListingStore): Promise<IconPick | { problem: string }>;
@@ -154,11 +186,10 @@ export async function platformBuildIcons(api: ProjectApi, projectPath: string, u
   const rows = read.ok ? buildRows(Array.isArray(read.json?.items) ? read.json.items : []) : [];
   const newest = rows.find((row) => row.done)?.id ?? null;
   const asked = useBuild.toLowerCase();
-  const head = asked ? "" : gitHead(projectPath);
-  const chosen = asked
-    ? rows.find((row) => row.done && sameCommit(row, asked))
-    : rows.find((row) => row.done && sameCommit(row, head));
-  const build = chosen?.id ?? null;
+  const target = asked || gitHead(projectPath);
+  const wanted = target ? await wantedBuild(api, rows, target) : { row: null, seen: null };
+  const build = wanted.row?.id ?? null;
+  const missed = build ? null : missedSentence(target, Boolean(asked), wanted.seen, read.ok ? null : read.message);
   const packages = new Map<string, Promise<{ bytes: Buffer } | { absent: true } | { problem: string }>>();
 
   const fetchPackage = (file: string) => {
@@ -180,6 +211,8 @@ export async function platformBuildIcons(api: ProjectApi, projectPath: string, u
 
   return {
     build,
+    commit: target,
+    missed,
     newest,
     unreadable: read.ok ? null : read.message,
     async take(store) {

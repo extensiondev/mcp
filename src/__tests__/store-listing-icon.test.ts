@@ -272,4 +272,40 @@ describe("extension_submit sync-listing reads each store's icon from the build t
     expect(answer.value.sayToPerson).toContain("; the dist icon was sent instead.");
     expect(Buffer.from((sent.chrome!.media as any).icons[0].dataBase64, "base64").equals(NEW_ICON)).toBe(true);
   });
+
+  it("reads the commit's own build record when the list still says building, and names where every icon came from", async () => {
+    if (process.platform === "win32") return;
+
+    const root = project();
+    const head = headSha(root);
+    let record = "success";
+
+    platform.routes[`GET ${BUILDS}`] = () => ({
+      body: { items: [{ buildId: HEAD_BUILD, commit: head, status: "building", conclusion: "success" }, { buildId: OLDER_BUILD, commit: "e".repeat(40), status: "success" }] },
+    });
+
+    platform.routes[`GET ${BUILDS}/${HEAD_BUILD}`] = () => ({ body: { buildId: HEAD_BUILD, commit: head, status: record } });
+    platform.routes[`GET ${PACKAGE(HEAD_BUILD, "chrome.zip")}`] = () => ({ body: null, bytes: BUILD_PACKAGE });
+
+    const taken = JSON.parse(await submit({ action: "sync-listing", browsers: ["edge", "firefox"], projectPath: root, api: API }));
+
+    expect(taken.value.stores.edge.icon).toEqual({ from: "build", build: HEAD_BUILD, file: "chrome.zip:images/icon-128.png" });
+    expect(taken.value.stores.firefox.icon).toEqual({ from: "build", build: HEAD_BUILD, file: "chrome.zip:images/icon-128.png" });
+    expect(taken.value.iconSource).toEqual({ from: "build", build: HEAD_BUILD });
+
+    record = "building";
+
+    const current = project({ dist: NEW_ICON });
+    const currentHead = headSha(current);
+
+    platform.routes[`GET ${BUILDS}`] = () => ({ body: { items: [{ buildId: HEAD_BUILD, commit: currentHead, status: "building" }] } });
+    platform.routes[`GET ${BUILDS}/${HEAD_BUILD}`] = () => ({ body: { buildId: HEAD_BUILD, commit: currentHead, status: record } });
+
+    const local = JSON.parse(await submit({ action: "sync-listing", browsers: ["edge"], projectPath: current, api: API }));
+    const reason = `build ${HEAD_BUILD} of the checked out commit is building on the platform, not completed`;
+
+    expect(local.value.stores.edge.icon).toEqual({ from: "dist", file: "dist/edge/images/icon-128.png" });
+    expect(local.value.iconSource).toEqual({ from: "local", reason });
+    expect(local.value.sayToPerson).toContain(`The edge icon came from the local project, not a platform build: ${reason}.`);
+  });
 });
