@@ -38,8 +38,8 @@ import {
   webdriverSessionEndedMessage,
   webdriverSessionMissingHint,
 } from "../lib/webdriver";
+import { BEHIND_WINDOW_CAPTURED, captureCdpPage, type BehindWindow } from "../lib/capture-behind-window";
 import {
-  captureCdpTarget,
   captureRdpTab,
   pngDimensions,
   resolveScreenshotPath,
@@ -59,7 +59,7 @@ const DEFAULT_TIMEOUT_MS = 15_000;
 export const schema = {
   name: COMMAND,
   description:
-    "Take a screenshot of one open extension surface (popup, options, sidebar, newtab, history, bookmarks) or web page in a live extension_dev or extension_start session and save it as a .png file. It asks the browser for that page's own pixels over the session's debug port (CDP on Chromium, the screenshot actor on Firefox, WebDriver on Safari, where only web pages can be captured); it never captures the screen or another window and never brings a window to the front. Open the surface with extension_open first. `targetId` (from extension_open or extension_dom_snapshot listTargets) captures that exact page; when a url matches several tabs showing the same page, the most recently active one is captured and a warning names the others. width and height set the viewport on Chromium and crop from the top left on Firefox; deviceScaleFactor sets the pixel ratio. `forStore` (chrome, firefox, edge or safari) captures a store listing screenshot at that store's accepted size (1280x800 by default) as a 24-bit PNG with no alpha, and value.forStore says whether it clears the store's screenshot row; pass the path to extension_submit sync-listing screenshots. The file goes under dist/extension-js/<browser>/screenshots unless `path` names one; the answer gives its path and pixel size.",
+    "Take a screenshot of one open extension surface (popup, options, sidebar, newtab, history, bookmarks) or web page in a live extension_dev or extension_start session as a .png file. It asks the browser for the page's own pixels over the debug port (CDP on Chromium, the screenshot actor on Firefox, WebDriver on Safari, web pages only); it never captures the screen and never brings a window forward: on Chromium a page shown in a window behind others is captured by showing a blank tab there briefly (value.behindWindow). Open the surface with extension_open first. `targetId` (from extension_open or extension_dom_snapshot listTargets) captures that exact page; a url matching several tabs of one page captures the most recently active one and warns. width and height set the Chromium viewport and crop from the top left on Firefox; deviceScaleFactor sets the pixel ratio. `forStore` (chrome, firefox, edge or safari) captures a store listing screenshot at that store's accepted size (1280x800 by default) as a 24-bit PNG with no alpha, and value.forStore says whether it clears the store's screenshot row; pass the path to extension_submit sync-listing screenshots. The file goes under dist/extension-js/<browser>/screenshots unless `path` names one; the answer gives path and pixel size.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -139,14 +139,21 @@ function captured(
   transport: string,
   warnings: Array<string | null> = [],
   targetId?: string,
+  behindWindow?: BehindWindow,
 ): string {
   if (!outcome.ok) {
+    const behind = behindWindow?.tried
+      ? behindWindow.shown
+        ? " This tool already showed a blank tab in the page's window and retried, and the page still did not paint."
+        : ` This tool could not show another tab in the page's window to get it painted: ${behindWindow.reason}.`
+      : "";
+
     return refuse(
       outcome.timedOut ? "capture-timeout" : "capture-failed",
       outcome.timedOut ? "E_CAPTURE_TIMEOUT" : "E_CAPTURE_FAILED",
       `The browser did not hand back an image of ${url}: ${outcome.message}`,
       outcome.timedOut
-        ? "A page in a visible window that is not in front may not be painted, and this tool never brings it forward. Run the session headless (the default), or retry once the page is showing."
+        ? `The page did not paint within the budget.${behind} This tool never brings a window forward; run the session headless (the default), or retry with a larger timeout.`
         : "Confirm the session is ready (extension_wait) and the page is still open, then retry.",
     );
   }
@@ -182,7 +189,7 @@ function captured(
     ok: true,
     command: COMMAND,
     status: "captured",
-    value: { browser, context, url, ...(targetId ? { targetId } : {}), path: file, width: size.width, height: size.height, bytes: png.length, transport, ...(verdict ? { forStore: verdict } : {}) },
+    value: { browser, context, url, ...(targetId ? { targetId } : {}), ...(behindWindow?.tried ? { behindWindow } : {}), path: file, width: size.width, height: size.height, bytes: png.length, transport, ...(verdict ? { forStore: verdict } : {}) },
     warnings,
     hint: `The image is ${file} (${size.width} x ${size.height} pixels).${storeLine || " Open it with your image reader to look at it."}`,
   });
@@ -288,9 +295,10 @@ async function onChromium(args: Args, browser: string, context: string, timeoutM
   if (typeof chosen === "string") return chosen;
 
   const { target, warning } = chosen;
-  const outcome = await captureCdpTarget(resolved.port, target.targetId, args, timeoutMs);
+  const { outcome, behindWindow } = await captureCdpPage(resolved.port, target.targetId, args, timeoutMs, { projectPath: args.projectPath, browser });
+  const behindNote = behindWindow.tried && behindWindow.shown && outcome.ok ? BEHIND_WINDOW_CAPTURED : null;
 
-  return captured(args, browser, context, outcome, target.url, "cdp", [warning], target.targetId);
+  return captured(args, browser, context, outcome, target.url, "cdp", [warning, behindNote], target.targetId, behindWindow);
 }
 
 async function onGecko(args: Args, browser: string, context: string, timeoutMs: number): Promise<string> {
