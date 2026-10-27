@@ -107,7 +107,7 @@ const pageRef = (t: { targetId: string; url: string }): TargetRef => ({ targetId
 export const schema = {
   name: "extension_eval",
   description:
-    `Evaluate an expression in a running extension context: the background, an extension surface (popup, options, sidebar, devtools, newtab, history, bookmarks), a content script or a page, picked by context, url, tab or targetId. Start the session with allowEval:true (extension_dev), which writes a 0600 session token; without that token every route of this tool, the debug port included, answers eval-disabled. A returned promise is awaited; a value that cannot be cloned (a DOM node, a function) comes back as its string form. To wait for a condition that is still settling (a model loading, an element appearing), pass until: {} (or {timeoutMs, intervalMs}) and the eval repeats until its value is truthy, answering that value, or the last one on timeout. Debug-port evaluates run with a user gesture, so gesture-gated APIs (permissions.request, sidePanel.open) can succeed here and still fail when the extension's own code calls them. Naming a tab the browser refuses to script (page-not-scriptable, extension-page-unreachable) needs Extension.js 4.1.34, not yet released; on 4.1.33 such a refusal still answers as a missing target. ${SAFARI_EVAL_LIMIT} Not for reading a page's structure: that is extension_dom_snapshot, which also lists tabs and targets. Pass \`targetId\` (the target.targetId extension_open answers, or one from extension_dom_snapshot listTargets:true) to evaluate in that exact page over the debug port; context, url and tab are then ignored.`,
+    `Evaluate an expression in a running extension context: the background, an extension surface (popup, options, sidebar, devtools, newtab, history, bookmarks), a content script or a page, picked by context, url, tab or targetId. Start the session with allowEval:true (extension_dev), which writes a 0600 session token; without that token every route of this tool, the debug port included, answers eval-disabled. A returned promise is awaited; a value that cannot be cloned (a DOM node, a function) comes back as its string form. To wait for a condition that is still settling (a model loading, an element appearing), pass until: {} (or {timeoutMs, intervalMs}) and the eval repeats until its value is truthy, answering that value, or the last one on timeout. Debug-port evaluates run with a user gesture, so gesture-gated APIs (permissions.request, sidePanel.open) can succeed here and still fail when the extension's own code calls them. Naming a tab the browser refuses to script (page-not-scriptable, extension-page-unreachable) needs Extension.js 4.1.34 or later; on an older engine such a refusal still answers as a missing target. ${SAFARI_EVAL_LIMIT} Not for reading a page's structure: that is extension_dom_snapshot, which also lists tabs and targets. Pass \`targetId\` (the target.targetId extension_open answers, or one from extension_dom_snapshot listTargets:true) to evaluate in that exact page over the debug port; context, url and tab are then ignored.`,
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -120,7 +120,7 @@ export const schema = {
         type: "string",
         enum: ["background", "popup", "options", "sidebar", "devtools", "newtab", "history", "bookmarks", "content", "page"],
         description:
-          "Where to evaluate. Default background, except on a Chromium MV3 session (the default template) where it defaults to page, the active tab; background on Chromium goes over the debug port (the service worker). For content and page, pass `url` to pick the tab, or omit both `url` and `tab` for the active tab; a numeric `tab` only disambiguates, and a url that matches several tabs showing the same page evaluates in the most recently active one and warns with the others' targetIds. Extension surfaces (popup, options, sidebar, devtools) and override pages (newtab, history, bookmarks) need no tab id but must already be open: open one with extension_open first, because a closed one returns an explicit error. On a Chromium MV3 session those pages, and page with a chrome-extension:// url, evaluate over CDP, the inspector path the extension page CSP does not govern; elsewhere they evaluate over the in-bundle relay. On Firefox a document whose content security policy forbids eval (the extension's own pages, or a site's) is evaluated over the debugger protocol instead, which takes one expression; a page inside the extension that is no declared surface (pages/*) is reached the same way by page and its moz-extension:// url once a tab shows it. An extension_start session's pages carry no relay, so there a surface shown in a tab (options) and an extension page url are evaluated over the debugger protocol too, while a surface in its own window (popup) is not reachable and the answer says so. The one case where a promise is not awaited is Firefox MV2 without the scripting API, where the expression runs through tabs.executeScript and must return a synchronous value.",
+          "Where to evaluate. Default background, except on a Chromium MV3 session (the default template) where it defaults to page, the active tab; background on Chromium goes over the debug port (the service worker). For content and page, pass `url` to pick the tab, or omit both `url` and `tab` for the active tab; a numeric `tab` only disambiguates, and a url that matches several tabs showing the same page evaluates in the most recently active one and warns with the others' targetIds. Extension surfaces (popup, options, sidebar, devtools) and override pages (newtab, history, bookmarks) need no tab id but must already be open: open one with extension_open first, because a closed one returns an explicit error. On a Chromium MV3 session those pages, and page with a chrome-extension:// url, evaluate over CDP, the inspector path the extension page CSP does not govern; elsewhere they evaluate over the in-bundle relay. On Chromium, content with a url evaluates over CDP in the extension's isolated world of the matching tab, the world its content scripts share, which the extension's content_security_policy does not govern, so chrome.runtime and what the content script left on globals or the DOM are readable even under the MV3 default CSP; a tab where no content script of the extension has run yet goes through the relay instead. On Firefox a document whose content security policy forbids eval (the extension's own pages, or a site's) is evaluated over the debugger protocol instead, which takes one expression; a page inside the extension that is no declared surface (pages/*) is reached the same way by page and its moz-extension:// url once a tab shows it. An extension_start session's pages carry no relay, so there a surface shown in a tab (options) and an extension page url are evaluated over the debugger protocol too, while a surface in its own window (popup) is not reachable and the answer says so. The one case where a promise is not awaited is Firefox MV2 without the scripting API, where the expression runs through tabs.executeScript and must return a synchronous value.",
       },
       url: { type: "string", description: "content/page: pick the tab by url (match pattern, then substring). Preferred over `tab`." },
       tab: { type: "number", description: "Numeric chrome.tabs id, only to disambiguate when several tabs match." },
@@ -210,6 +210,7 @@ export function wantsExtensionPageOverCdp(
   if (!isChromiumFamily(browser) || !context) return false;
   if (context === "background") return true;
   if (context === "page") return typeof url === "string" && url.length > 0;
+  if (context === "content") return typeof url === "string" && url.length > 0 && !isExtensionUrl(url);
 
   return (
     EXTENSION_PAGE_CONTEXTS.includes(context) &&
@@ -344,6 +345,17 @@ async function evaluateOnChromiumExtensionPage(
     if (matches.length === 0) return RELAY_INSTEAD;
 
     return evaluateOnWebTarget(args, matches, url, browser);
+  }
+
+  if (context === "content") {
+    const url = args.url as string;
+    const matches = matchTargetsByUrl(await listPageTargets(resolved.port), url).filter((t) => !isBrowserErrorPage(t.url));
+    if (matches.length === 0) return RELAY_INSTEAD;
+
+    const extensionId = await resolveExtensionId(args.projectPath, browser);
+    if (!extensionId) return RELAY_INSTEAD;
+
+    return evaluateInContentWorld(args, matches, url, extensionId, resolved.port);
   }
 
   if (context === "page") {
@@ -605,6 +617,55 @@ async function evaluateOnWebTarget(
   });
 }
 
+export const CONTENT_WORLD_OVER_CDP =
+  "Evaluated over CDP in the extension's isolated world, the one its content scripts share in that tab, through the inspector, which the extension's content_security_policy does not govern: chrome.runtime and the globals and DOM the content script set are visible, while variables a bundled content script keeps inside its own module scope are not";
+
+async function evaluateInContentWorld(
+  args: ActArgs & { expression: string },
+  matches: Array<{ targetId: string; url: string; title: string }>,
+  url: string,
+  extensionId: string,
+  port: number,
+): Promise<string> {
+  const target = matches[0];
+  const pick = pickTarget(matches, pageRef);
+  const pickWarning =
+    pick.kind === "one"
+      ? identicalPickWarning(pageRef(target), pick.others.map(pageRef), "chromium")
+      : `${matches.length} tabs match ${url}; evaluated in ${target.url} (targetId ${target.targetId}). The others: ${matches
+          .slice(1)
+          .map((t) => `${t.targetId} (${t.url})`)
+          .join(", ")}. Pass targetId to pick another.`;
+  const outcome = await evaluateOnExtensionPage(port, target.targetId, args.expression, args.timeout, extensionId);
+
+  if (!outcome.ok && outcome.noIsolatedWorld) return RELAY_INSTEAD;
+
+  if (!outcome.ok) {
+    return envelope({
+      ok: false,
+      command: schema.name,
+      status: outcome.thrown ? "eval-failed" : outcome.timedOut ? "eval-timeout" : "cdp-failed",
+      error: {
+        code: outcome.thrown ? "E_EVAL" : "E_CDP",
+        name: outcome.thrown ? "EvalError" : "CdpError",
+        message: outcome.message,
+      },
+      hint: outcome.thrown
+        ? `The expression threw inside ${target.url}; it ran over CDP in the extension's isolated world, where its content scripts run.`
+        : "The session's debug port refused the call or the tab went away. extension_doctor names which.",
+    });
+  }
+
+  return envelope({
+    ok: true,
+    command: schema.name,
+    status: "evaluated",
+    value: outcome.value,
+    warnings: [pickWarning, outcome.note ?? null],
+    hint: `${CONTENT_WORLD_OVER_CDP} in ${target.url} (target ${target.targetId}).`,
+  });
+}
+
 const TRUSTED_TYPES_REFUSAL = /Trusted Type/i;
 
 const RELAY_POLL_MS = 300;
@@ -722,7 +783,7 @@ async function evaluateThroughRelay(
   );
 
   if (!outcome.settled && isGeckoFamily(browser) && cspRefusedFrame(parseFrameObject(outcome.answer))) {
-    return evaluatePastSurfaceCsp(args, context, run);
+    return evaluatePastSurfaceCsp(args, context, run, browser);
   }
 
   return outcome.answer;
@@ -760,7 +821,7 @@ function cspRefusedFrame(parsed: Record<string, any> | null): boolean {
   return code === "E_EVAL" && CSP_EVAL_REFUSAL.test(String(parsed.error?.message ?? ""));
 }
 
-function cspRefusalHint(context: string | undefined): string {
+function cspRefusalHint(context: string | undefined, browser: string): string {
   if (context === "page") {
     return (
       "This page's own Content-Security-Policy forbids eval, so the in-page executor cannot run any expression in it; this is the site's policy, not a fault in the expression. " +
@@ -770,7 +831,10 @@ function cspRefusalHint(context: string | undefined): string {
 
   if (context === "content") {
     return (
-      "The extension's content_security_policy forbids eval in its content-script world on this engine, so no string runs there; this is the extension's policy, not a fault in the expression. " +
+      "The extension's content_security_policy forbids eval in its content-script world through the in-page executor, so no string runs there that way; this is the extension's policy, not a fault in the expression. " +
+      (isChromiumFamily(browser)
+        ? "On Chromium, pass url naming a tab where the content script has run: that tab's isolated world is then evaluated over the debug port, which the policy does not govern. With a url, this answer means no tab matching it holds this extension's isolated world yet (the content script has not run there, or the session has no debug port); open or reload a matching page with extension_open and retry. "
+        : "") +
       'Evaluate the page itself with context: "page" and a url, or read the DOM the content script sees with extension_dom_snapshot or extension_inspect.'
     );
   }
@@ -782,12 +846,12 @@ function cspRefusalHint(context: string | undefined): string {
   );
 }
 
-function explainCspRefusal(raw: string, context: string | undefined): string | null {
+function explainCspRefusal(raw: string, context: string | undefined, browser: string): string | null {
   const parsed = parseFrameObject(raw);
   if (!parsed || !cspRefusedFrame(parsed)) return null;
 
   parsed.error.name = "CspBlocksEval";
-  parsed.hint = cspRefusalHint(context);
+  parsed.hint = cspRefusalHint(context, browser);
   if (typeof parsed.error.hint === "string") delete parsed.error.hint;
 
   return actFrameJson(parsed);
@@ -828,13 +892,14 @@ async function evaluatePastSurfaceCsp(
   args: ActArgs & { expression: string },
   context: string,
   run: (expression: string) => Promise<string>,
+  browser: string,
 ): Promise<string> {
   if (!isSingleExpression(args.expression)) return notOneExpression();
 
   const direct = await run(args.expression);
   const frame = parseFrameObject(direct);
   if (!frame) return direct;
-  if (cspRefusedFrame(frame)) return explainCspRefusal(direct, context) ?? direct;
+  if (cspRefusedFrame(frame)) return explainCspRefusal(direct, context, browser) ?? direct;
 
   if (frame.ok === true && frame.value === undefined) {
     frame.value = null;
@@ -1393,8 +1458,10 @@ async function evaluateRouted(
     resolveDefaultEvalContext(args.projectPath, browser) === "page";
   const context = defaulted ? "page" : args.context;
 
-  if (wantsExtensionPageOverCdp(args.projectPath, browser, context, args.url)) {
-    if (!evalTokenPresent(args.projectPath, browser)) return evalDisabled();
+  const tokenPresent = evalTokenPresent(args.projectPath, browser);
+
+  if (wantsExtensionPageOverCdp(args.projectPath, browser, context, args.url) && (tokenPresent || context !== "content")) {
+    if (!tokenPresent) return evalDisabled();
 
     const resolved = await resolveCdpPort(args.projectPath, browser);
 
@@ -1512,7 +1579,7 @@ async function evaluateRouted(
       return notOneExpression();
     }
 
-    const cspRefusal = explainCspRefusal(raw, context);
+    const cspRefusal = explainCspRefusal(raw, context, browser);
     if (cspRefusal !== null) return cspRefusal;
 
     const trustedTypes = parseFrameObject(raw);

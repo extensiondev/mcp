@@ -101,7 +101,7 @@ function identityWarnings(identity: ControlledIdentity, launchedId: string | und
 export const schema = {
   name: "extension_start",
   description:
-    "Run the PRODUCTION build in a browser: build the project, serve it, and launch. There is no hot module replacement, so your edits are not picked up; use extension_dev while writing code, and this to check what actually ships. By default there is no control channel either, so extension_eval, extension_storage, extension_reload, extension_open and extension_dom_snapshot cannot attach; pass allowControl:true (or allowEval:true, which implies it) to drive the production run with them. Both flags need Extension.js 4.1.34, not yet released; a project on 4.1.33 is refused as engine-unsupported, naming the flag, and extension_dev drives the run instead. Pass build:false to launch an existing dist/<browser> without rebuilding, or outputPath to launch any prebuilt unpacked extension directory. The answer says what it confirmed (the engine process, and the browser pid the launcher recorded once the contract lands) and what a production session cannot confirm (that the browser loaded the extension: it opens no debug port and has no console stream), and names extension_dev for a proven load.",
+    "Run the PRODUCTION build in a browser: build the project, serve it, and launch. There is no hot module replacement, so your edits are not picked up; use extension_dev while writing code, and this to check what actually ships. By default there is no control channel either, so extension_eval, extension_storage, extension_reload, extension_open and extension_dom_snapshot cannot attach; pass allowControl:true (or allowEval:true, which implies it) to drive the production run with them. Both flags need Extension.js 4.1.34 or later; a project on an older engine is refused as engine-unsupported, naming the flag, and extension_dev drives the run instead. Pass build:false to launch an existing dist/<browser> without rebuilding, or outputPath to launch any prebuilt unpacked extension directory. The answer says what it confirmed (the engine process, and the browser pid the launcher recorded once the contract lands) and what a production session cannot confirm (that the browser loaded the extension: it opens no debug port and has no console stream), and names extension_dev for a proven load.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -131,7 +131,7 @@ export const schema = {
         type: "boolean",
         default: false,
         description:
-          "Open the agent-bridge control channel on the production run, so extension_storage, extension_reload, extension_open and extension_dom_snapshot reach it. The browser loads a copy of the build with the control producer prepended to the background; dist/<browser> keeps the shipped bytes, and extension_reload then reloads the installed extension under open tabs the way a store update does, which is how to test content scripts an update orphans. Needs an engine that honors the flag (Extension.js 4.1.34); on 4.1.33 the call is refused as engine-unsupported.",
+          "Open the agent-bridge control channel on the production run, so extension_storage, extension_reload, extension_open and extension_dom_snapshot reach it. The browser loads a copy of the build with the control producer prepended to the background; dist/<browser> keeps the shipped bytes, and extension_reload then reloads the installed extension under open tabs the way a store update does, which is how to test content scripts an update orphans. Needs an engine that honors the flag (Extension.js 4.1.34 or later); on an older engine the call is refused as engine-unsupported.",
       },
       allowEval: {
         type: "boolean",
@@ -314,7 +314,7 @@ export async function handler(
         status: "engine-unsupported",
         error: {
           code: "E_ENGINE_TOO_OLD",
-          message: `The project's Extension.js engine refused ${refusedFlag[1]}: its ${command} verb has no control channel. The published extension 4.1.33 does not have it; a production run takes --allow-control and --allow-eval from the first engine release after 4.1.33. No session is running.`,
+          message: `The project's Extension.js engine refused ${refusedFlag[1]}: its ${command} verb has no control channel. Extension.js 4.1.33 and earlier do not have it; a production run takes --allow-control and --allow-eval from Extension.js 4.1.34 on. No session is running.`,
         },
         value: { ...session, exitCode: code, signal, allowControl, allowEval },
         hint: "Upgrade the project's engine (npm i -D extension@latest) once a release with start --allow-control is out, or drive the run with extension_dev, which carries the control channel today. extension_start without allowControl still runs the production build.",

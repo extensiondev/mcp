@@ -6,7 +6,10 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
+import { setTimeout as sleep } from "node:timers/promises";
+
 import { CDPConnection } from "./cdp-connection";
+import { executionContextFrom, type ExecutionContextDescription } from "./cdp-isolated-world";
 import {
   PAGE_HTML_SCRIPT,
   PAGE_META_SCRIPT,
@@ -141,6 +144,23 @@ export class CDPClient extends CDPConnection {
     })) as { sessionId?: string };
 
     return response.sessionId ?? "";
+  }
+
+  async executionContexts(sessionId: string, settleMs = 150): Promise<ExecutionContextDescription[]> {
+    const seen: ExecutionContextDescription[] = [];
+    const unsubscribe = this.onEvent((msg) => {
+      const context = executionContextFrom(msg, sessionId);
+      if (context) seen.push(context);
+    });
+
+    try {
+      await this.sendCommand("Runtime.enable", {}, sessionId);
+      await sleep(settleMs);
+    } finally {
+      unsubscribe();
+    }
+
+    return seen;
   }
 
   async enableDomains(sessionId: string): Promise<void> {

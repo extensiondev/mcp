@@ -9,6 +9,7 @@
 import { setTimeout as sleep } from "node:timers/promises";
 
 import { CDPClient } from "./cdp";
+import { extensionIsolatedContexts } from "./cdp-isolated-world";
 import { listDocumentTargets, type PageTarget } from "./cdp-targets";
 
 const EVALUATE_DEFAULTS_WITHOUT_REPL_MODE = {
@@ -36,7 +37,7 @@ type EvaluateResponse = {
 
 export type ExtensionPageEval =
   | { ok: true; value: unknown; note?: string }
-  | { ok: false; message: string; thrown: boolean; timedOut?: boolean };
+  | { ok: false; message: string; thrown: boolean; timedOut?: boolean; noIsolatedWorld?: true };
 
 function stripHash(url: string): string {
   return url.replace(/#.*$/, "");
@@ -217,6 +218,7 @@ export async function evaluateOnExtensionPage(
   targetId: string,
   expression: string,
   timeoutMs?: number,
+  isolatedWorldOf?: string,
 ): Promise<ExtensionPageEval> {
   const cdp = new CDPClient();
   const budget = typeof timeoutMs === "number" && timeoutMs > 0 ? timeoutMs : undefined;
@@ -224,9 +226,27 @@ export async function evaluateOnExtensionPage(
   try {
     await cdp.connect(await CDPClient.discoverBrowserWsUrl(port));
     const sessionId = await cdp.attachToTarget(targetId);
+    let world: { contextId?: number } = {};
+
+    if (isolatedWorldOf) {
+      const contexts = await cdp.executionContexts(sessionId).catch((error: unknown) => (error instanceof Error ? error.message : String(error)));
+      const [isolated] = typeof contexts === "string" ? [] : extensionIsolatedContexts(contexts, isolatedWorldOf, targetId);
+
+      if (!isolated) {
+        return {
+          ok: false,
+          thrown: false,
+          noIsolatedWorld: true,
+          message: typeof contexts === "string" ? `The execution contexts of ${targetId} could not be read: ${contexts}.` : `No isolated world of chrome-extension://${isolatedWorldOf} runs in the top frame of ${targetId}.`,
+        };
+      }
+
+      world = { contextId: isolated.id };
+    }
+
     let response = (await cdp.sendCommand(
       "Runtime.evaluate",
-      { expression, ...EVALUATE_DEFAULTS_WITHOUT_REPL_MODE },
+      { expression, ...world, ...EVALUATE_DEFAULTS_WITHOUT_REPL_MODE },
       sessionId,
       budget,
     )) as EvaluateResponse | undefined;
@@ -239,6 +259,7 @@ export async function evaluateOnExtensionPage(
         "Runtime.evaluate",
         {
           expression,
+          ...world,
           returnByValue: false,
           awaitPromise: false,
           userGesture: true,

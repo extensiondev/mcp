@@ -20,7 +20,7 @@ import { sessionPorts } from "./session-ports";
 import type { ReadyContract } from "./types";
 
 export const NO_ATTACH_DIAGNOSIS_NOTE =
-  "the engine running here reports no attach diagnosis; update Extension.js to read why";
+  "the engine running here wrote no attach diagnosis into ready.json, so the reason is not in the contract";
 
 const KEEPS_WAITING =
   "The dev server keeps waiting and stamps executorAttachedAt on the first attach, so a dialog dismissed in that window also turns the next extension_wait into ready.";

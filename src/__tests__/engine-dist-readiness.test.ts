@@ -13,6 +13,7 @@ import path from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
+import { NO_ATTACH_DIAGNOSIS_NOTE } from "../lib/compiled-not-attached";
 import { nameRefusedInjection } from "../lib/injection-refusal";
 import { readyContractPath } from "../lib/session-paths";
 import { schema as evalSchema } from "../tools/eval";
@@ -53,7 +54,8 @@ const lacking = Object.entries(ENGINE_TOKENS)
   .map(([token]) => token);
 
 const EARLIER = "2026-10-05T12:00:00.000Z";
-const UNRELEASED_ENGINE = /Extension\.js 4\.1\.34, not yet released/;
+const ENGINE_FLOOR = /Extension\.js 4\.1\.34 or later/;
+const RELEASE_STATE_CLAIM = /not yet released|NOT released|unreleased|first engine release after/i;
 
 let dir: string;
 
@@ -128,7 +130,7 @@ describe(`the installed engine (extension-develop ${enginePackage.version}) and 
         expect(result.status).toBe("rebuilt");
         expect(result.value.reload.outcome).toBe("reattached");
         expect(result.value.reload.reloadedAt).toBeUndefined();
-        expect(waitSchema.description).toMatch(UNRELEASED_ENGINE);
+        expect(waitSchema.description).toMatch(ENGINE_FLOOR);
         expect(waitSchema.description).toMatch(/reattached, still-detached or not-stamped/);
       });
     }
@@ -158,7 +160,7 @@ describe(`the installed engine (extension-develop ${enginePackage.version}) and 
         expect(frame.error.code).toBe("E_TARGET_NOT_FOUND");
         expect(frame.error.cliCode).toBeUndefined();
         expect(frame.hint).toBeUndefined();
-        expect(evalSchema.description).toMatch(UNRELEASED_ENGINE);
+        expect(evalSchema.description).toMatch(ENGINE_FLOOR);
         expect(evalSchema.description).toMatch(/still answers as a missing target/);
       });
     }
@@ -170,11 +172,26 @@ describe(`the installed engine (extension-develop ${enginePackage.version}) and 
         expect(Object.keys(startSchema.inputSchema.properties)).toEqual(expect.arrayContaining(["allowControl", "allowEval"]));
       });
     } else {
-      it("describes the refusal a 4.1.33 project gets and the way around it", () => {
-        expect(startSchema.description).toMatch(UNRELEASED_ENGINE);
+      it("describes the refusal an older engine gets and the way around it", () => {
+        expect(startSchema.description).toMatch(ENGINE_FLOOR);
         expect(startSchema.description).toMatch(/refused as engine-unsupported/);
         expect(startSchema.description).toMatch(/extension_dev drives the run instead/);
       });
     }
+  });
+
+  it("states the engine floor each feature needs and never a release state npm can overtake", () => {
+    for (const description of [evalSchema.description, startSchema.description, waitSchema.description, JSON.stringify(startSchema.inputSchema)]) {
+      expect(description).not.toMatch(RELEASE_STATE_CLAIM);
+    }
+
+    expect(evalSchema.description).toMatch(ENGINE_FLOOR);
+    expect(startSchema.description).toMatch(ENGINE_FLOOR);
+    expect(waitSchema.description).toMatch(ENGINE_FLOOR);
+  });
+
+  it("never asks a project with no attach diagnosis to update an engine no release of which writes one", () => {
+    expect(NO_ATTACH_DIAGNOSIS_NOTE).not.toMatch(/update|upgrade/i);
+    expect(NO_ATTACH_DIAGNOSIS_NOTE).toMatch(/wrote no attach diagnosis/);
   });
 });
