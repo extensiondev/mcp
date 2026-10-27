@@ -160,6 +160,55 @@ describe("extension_submit withdraws a submission, raises a staged rollout and c
     expect(JSON.stringify(out)).not.toMatch(/workflowRun|actions\/runs|1--prj/);
   });
 
+  it("cancel for safari asks for an approval of removing that version from App Review, on the Safari route", async () => {
+    if (process.platform === "win32") return;
+
+    const route = `${PROJECT_ROUTE}/stores/safari/submissions/sub_11/cancel`;
+    const scope = { store: "safari", submissionId: "sub_11" };
+    platform.login();
+    platform.routes[`POST ${route}`] = () => approvalRequired("extension_store.cancel", scope);
+    platform.routes[`POST ${APPROVALS}`] = () => ({ status: 201, body: { approvalId: "apr_s", approvalUrl: `${API}/approve/apr_s`, description: "This removes Safari 0.2.0 (build 11) from App Review in App Store Connect." } });
+
+    const out = JSON.parse(await submit({ action: "cancel", store: "safari", submissionId: "sub_11", api: API }));
+
+    const asked = platform.sent("POST", APPROVALS)[0].body;
+    expect(asked.scope).toEqual(scope);
+    expect(asked.description).toBe("Remove Safari submission sub_11 from App Review.");
+    expect(out.status).toBe("approval-required");
+  });
+
+  it("cancel for safari answers canceled once the record reads draft, with Apple's version state and the build kept on TestFlight", async () => {
+    if (process.platform === "win32") return;
+
+    const route = `${PROJECT_ROUTE}/stores/safari/submissions/sub_11/cancel`;
+    platform.login();
+    platform.routes[`POST ${route}`] = () => ({
+      body: { ok: true, dispatched: true, store: "safari", submissionId: "sub_11", storeSubmissionId: "e38dbd34", version: "0.2.0", dispatchId: "d-s", dispatchedAt: "2026-10-27T21:00:00.000Z" },
+    });
+
+    platform.routes["GET /api/cli/stores/submissions"] = () => ({
+      body: {
+        submissions: [
+          {
+            id: "sub_11",
+            store: "safari",
+            status: "draft",
+            rawStatus: "developer_rejected",
+            buildId: "6d9e10c",
+            version: "0.2.0",
+            storeReview: { state: "DEVELOPER_REJECTED", checkedAt: "2026-10-27T21:01:00.000Z", source: "publish-answer" },
+          },
+        ],
+      },
+    });
+
+    const out = JSON.parse(await submit({ action: "cancel", store: "safari", submissionId: "sub_11", approvalId: "apr_s", api: API }));
+
+    expect(out.status).toBe("canceled");
+    expect(out.value.outcome).toMatchObject({ recorded: true, status: "draft", storeState: "DEVELOPER_REJECTED" });
+    expect(out.hint).toContain("App Store Connect reads the version as DEVELOPER_REJECTED, so it is out of App Review; its build stays on TestFlight");
+  });
+
   it("cancel of a review the store already ended answers the store's state and asks for no approval", async () => {
     if (process.platform === "win32") return;
 

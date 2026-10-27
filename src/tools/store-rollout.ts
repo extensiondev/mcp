@@ -25,6 +25,7 @@ export async function cancelSubmission(args: StoreActArgs): Promise<string> {
   }
 
   const { store } = picked;
+  const safari = store === "safari";
   const opened = await openShipApi(COMMAND, args, { action: "cancel", store, submissionId });
   if ("refused" in opened) return opened.refused;
 
@@ -36,8 +37,10 @@ export async function cancelSubmission(args: StoreActArgs): Promise<string> {
       route: `stores/${store}/submissions/${encodeURIComponent(submissionId)}/cancel`,
       body: {},
       approvalId: args.approvalId,
-      description: `Withdraw ${store} store submission ${submissionId} from review.`,
-      reason: "The store stops reviewing it and it goes back to a draft, so a workspace owner approves withdrawing this exact submission first.",
+      description: safari ? `Remove Safari submission ${submissionId} from App Review.` : `Withdraw ${store} store submission ${submissionId} from review.`,
+      reason: safari
+        ? "Apple stops reviewing the version and its build stays on TestFlight, so a workspace owner approves removing this exact version from App Review first."
+        : "The store stops reviewing it and it goes back to a draft, so a workspace owner approves withdrawing this exact submission first.",
       stateRead: storesRead(args),
       scopeFits: (asked) => text(asked.store) === store && Boolean(text(asked.submissionId)),
       project: args.project,
@@ -82,7 +85,9 @@ export async function cancelSubmission(args: StoreActArgs): Promise<string> {
       command: COMMAND,
       status: "canceled",
       value: { ...base, dispatch, outcome: waited.outcome, links, trackUrl },
-      hint: `The platform's record of submission ${submissionId} now reads ${waited.outcome.status}, so it is out of the store's review. ${storesRead(args)} reads it again. ${made}`,
+      hint: safari
+        ? `The platform's record of submission ${submissionId} now reads ${waited.outcome.status}${waited.outcome.storeState ? ` and App Store Connect reads the version as ${waited.outcome.storeState}` : ""}, so it is out of App Review; its build stays on TestFlight and a new build can go to App Review with publish. ${storesRead(args)} reads it again. ${made}`
+        : `The platform's record of submission ${submissionId} now reads ${waited.outcome.status}, so it is out of the store's review. ${storesRead(args)} reads it again. ${made}`,
     });
   }
 

@@ -83,7 +83,7 @@ const HINTS: Record<string, string> = {
   SUBMISSION_NOT_IN_REVIEW: `Only a submission the store is still reviewing can be withdrawn. Read each store's latest submission and its review state with ${STORES_READ}.`,
   SUBMISSION_NOT_FOUND: `Read the submission ids with ${STORES_READ} and pass one as submissionId.`,
   SUBMISSION_NOT_JOINABLE: `The platform cannot tie this submission to its store record, so it did not act on it. Read it with ${STORES_READ}.`,
-  CANCEL_STORE_NOT_SUPPORTED: "Withdrawing a submission from review is a Chrome Web Store action here; other stores are handled in their own dashboards.",
+  CANCEL_STORE_NOT_SUPPORTED: "Withdrawing a submission from review is offered here for the Chrome Web Store and for Safari's App Review; Firefox and Edge withdrawals are handled in their own dashboards.",
   ROLLOUT_STORE_NOT_SUPPORTED: "A staged rollout is a Chrome Web Store feature; no other store exposes one.",
   ROLLOUT_NOT_STAGED: "Chrome publishes this project to everyone at once, so there is no rollout to raise. Staged publish is turned on in the project's Chrome store settings in the console and applies from the next submission.",
   ROLLOUT_NOT_HIGHER: 'Pass a deployPercentage above the current one; extension_release_status (include: ["rollout"]) reads it.',
