@@ -10,6 +10,7 @@ import {
   APPROVAL_DECLINED_STATUS,
   APPROVAL_EXPIRED_STATUS,
   APPROVAL_REJECTED_STATUS,
+  APPROVAL_REVOKED_STATUS,
   pendingApproval,
 } from "./approval-outcome";
 import { loginRefusedOnApproval } from "./approval-login";
@@ -28,6 +29,7 @@ export {
   APPROVAL_PENDING_STATUS,
   APPROVAL_REJECTED_STATUS,
   APPROVAL_REQUIRED_STATUS,
+  APPROVAL_REVOKED_STATUS,
 } from "./approval-outcome";
 
 export type ApprovalScope = Record<string, string | string[]>;
@@ -139,6 +141,21 @@ function expiredBlock(input: ApprovalGateInput, approvalId: string, expiresAt?: 
   );
 }
 
+export function revokedBlock(input: Pick<ApprovalGateInput, "command" | "action">, approvalId: string, data: Record<string, unknown>): { blocked: true; envelope: string } {
+  const revokedBy = typeof data.revokedBy === "string" ? data.revokedBy.trim() : "";
+  const revokedAt = typeof data.revokedAt === "string" ? data.revokedAt.trim() : "";
+
+  return block(
+    input.command,
+    APPROVAL_REVOKED_STATUS,
+    "E_APPROVAL_REJECTED",
+    "ApprovalRevoked",
+    `Approval ${approvalId} was revoked${revokedBy ? ` by ${revokedBy}` : " by a workspace owner"}${revokedAt ? ` at ${revokedAt}` : ""}, so nothing was executed and it can never be used.`,
+    { action: input.action, approvalId, ...(revokedBy ? { revokedBy } : {}), ...(revokedAt ? { revokedAt } : {}) },
+    "Ask the person whether they still want this before requesting a fresh approval by calling this tool with no approvalId.",
+  );
+}
+
 function renewedUrl(result: ApprovalGateResult): { url: string; reason: string } {
   if (!result.blocked) return { url: "", reason: "" };
 
@@ -230,6 +247,8 @@ export async function verifyApproval(params: {
     return fresh.url ? renewed : expiredBlock(input, approvalId, expiresAt, fresh.reason);
   }
 
+  if (platformCode === "APPROVAL_REVOKED") return revokedBlock(input, approvalId, data);
+
   if (res.status === 404 && (platformCode === "APPROVAL_UNKNOWN" || platformCode === "APPROVAL_NOT_FOUND")) {
     const mintedFor = minted ? `${minted.workspace}/${minted.project}` : "";
     const claims = readTokenClaims(input.token);
@@ -301,6 +320,8 @@ export async function verifyApproval(params: {
       { action: input.action, approvalId, fingerprint },
     );
   }
+
+  if (status === "revoked") return revokedBlock(input, approvalId, data);
 
   if (status === "denied") {
     return block(

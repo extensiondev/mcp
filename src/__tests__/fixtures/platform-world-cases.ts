@@ -24,6 +24,7 @@ export interface WorldCase {
 }
 
 const P = "/api/projects/prj_world";
+const WORLD_APPROVAL_ID = `apr_${"W".repeat(32)}`;
 
 const approvalAsked = (action: string, scope: Row) => ({
   status: 403,
@@ -164,6 +165,23 @@ export const WORLD_CASES: Record<string, WorldCase[]> = {
     { name: "dry run", args: { browsers: ["chrome"], buildSha: "603fc8a", ...api } },
   ],
   extension_publish: [{ name: "publish", args: { ...api } }],
+  extension_approvals: [
+    {
+      name: "status",
+      args: { approvalId: WORLD_APPROVAL_ID, ...api },
+      setup: (world) => {
+        world.routes.push([new RegExp(`^GET /api/cli/approvals/${WORLD_APPROVAL_ID}$`), () => ({ body: { status: "approved", used: false, fingerprint: "f".repeat(64), expiresAt: "2099-01-01T00:00:00.000Z" } })]);
+      },
+    },
+    {
+      name: "revoke",
+      args: { action: "revoke", approvalId: WORLD_APPROVAL_ID, ...api },
+      setup: (world) => {
+        world.routes.push([new RegExp(`^POST /api/cli/approvals/${WORLD_APPROVAL_ID}/revoke$`), () => ({ body: { status: "revoked", approvalId: WORLD_APPROVAL_ID, revokedBy: "acme", revokedAt: "2026-10-28T14:00:00.000Z" } })]);
+        world.routes.push([new RegExp(`^GET /api/cli/approvals/${WORLD_APPROVAL_ID}$`), () => ({ status: 410, body: { code: "APPROVAL_REVOKED", revokedBy: "acme" } })]);
+      },
+    },
+  ],
   extension_shares: [
     { name: "list", args: { action: "list", ...api } },
     { name: "revoke approval", approval: true, args: { action: "revoke", artifactId: SHARE_ID, ...api } },

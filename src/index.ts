@@ -35,6 +35,7 @@ import * as screenshot from "./tools/screenshot";
 import * as publish from "./tools/publish";
 import * as releasePromote from "./tools/release-promote";
 import * as releaseStatus from "./tools/release-status";
+import * as approvals from "./tools/approvals";
 import * as buildsTool from "./tools/builds";
 import * as workspaceTool from "./tools/workspace";
 import * as submitTool from "./tools/submit";
@@ -94,6 +95,7 @@ export const tools: ToolModule[] = [
   screenshot,
   publish,
   releaseStatus,
+  approvals,
   buildsTool,
   workspaceTool,
   releasePromote,

@@ -17,6 +17,7 @@ import { TOOL_POLICY, TOOL_TITLES, toolTitle } from "../lib/tool-policy";
 const CEILINGS: Record<string, number> = {
   extension_add_feature: 400,
   extension_analyze: 600,
+  extension_approvals: 700,
   extension_assert: 500,
   extension_auth: 1800,
   extension_browsers: 800,

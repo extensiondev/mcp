@@ -7,7 +7,7 @@
 
 # @extension.dev/mcp [![Version][npm-version-image]][npm-version-url] [![Downloads][npm-downloads-image]][npm-downloads-url] [![Discord][discord-image]][discord-url]
 
-> Give your AI agent hands for browser extension development. 35 MCP tools that scaffold, run, inspect, debug, test, and build cross-browser extensions on your machine, plus a platform lane (private alpha) to share and publish them.
+> Give your AI agent hands for browser extension development. 36 MCP tools that scaffold, run, inspect, debug, test, and build cross-browser extensions on your machine, plus a platform lane (private alpha) to share and publish them.
 
 <img alt="Logo" align="right" src="https://media.extension.land/brand/extension-dev/logo-dock.png" width="20.7%" />
 
@@ -121,7 +121,7 @@ Or write it into `~/.codex/config.toml` as a `[mcp_servers.extension-dev]` table
 
 ### Flags
 
-- By default the server exposes the 24 of its 35 tools that work on this machine (the 11 platform tools are off). `--features=local,platform` adds the platform group. Env: `EXTENSION_DEV_FEATURES`.
+- By default the server exposes the 24 of its 36 tools that work on this machine (the 12 platform tools are off). `--features=local,platform` adds the platform group. Env: `EXTENSION_DEV_FEATURES`.
 - `--no-ship` refuses every call that puts something in front of other people (publish, promote, a real submit, a shared preview, a revoke). Env: `EXTENSION_DEV_NO_SHIP=1`.
 - `--project <workspace>/<project>` pins the server to one project. Env: `EXTENSION_DEV_PROJECT`.
 - When a platform act answers `approval-required` on a desktop (not headless, not CI, and on Linux with a display), the server opens the approval page once in the default browser. `--no-ship` or `EXTENSION_DEV_NO_AUTO_OPEN=1` turns that off.
@@ -172,7 +172,7 @@ On by default, the 24 that work on this machine:
 | act | `extension_open` | Open a surface (popup, options, sidebar, devtools panel, override pages) / trigger `action`, `command` |
 | browsers | `extension_browsers` | Detect, list, install, and uninstall browsers |
 
-On with `--features=local,platform`, the 11 that reach the extension.dev platform (private alpha):
+On with `--features=local,platform`, the 12 that reach the extension.dev platform (private alpha):
 
 | Tier | Tool | Description |
 | ---- | ---- | ----------- |
@@ -185,6 +185,7 @@ On with `--features=local,platform`, the 11 that reach the extension.dev platfor
 | platform | `extension_release_promote` | Promote a build to a release channel, headless |
 | platform | `extension_submit` | Submit for store review: Chrome, Firefox, Edge and Safari, through extension.dev |
 | platform | `extension_release_status` | Read release channels, release history, recent builds, and store configuration, submission and review state |
+| platform | `extension_approvals` | Read one approval, or revoke a pending or approved and unused one so it never runs |
 | platform | `extension_builds` | Read the platform's builds (recent builds, one build's artifacts and integrity, its CI logs), save a build's package to disk verified against its integrity report, start a rebuild, change build settings as a plain call under the owner's token, and add a release channel |
 | platform | `extension_workspace` | Read a workspace with any of its project logins: plan and limits, projects and last builds, usage, and a project's settings |
 

@@ -86,6 +86,7 @@ export const TOOL_TITLES: Record<string, string> = {
   extension_shares: "Manage share links",
   extension_publish: "Publish a build link",
   extension_release_status: "Read the release status",
+  extension_approvals: "Read or revoke an approval",
   extension_builds: "Read and rebuild builds",
   extension_workspace: "Read or change the workspace",
   extension_release_promote: "Promote a release",
@@ -197,6 +198,10 @@ export const TOOL_POLICY: Record<string, ToolPolicy> = {
     ships: "always",
   },
   extension_release_status: { group: "platform", annotations: reads(true) },
+  extension_approvals: {
+    group: "platform",
+    annotations: acts({ destructiveHint: true, openWorldHint: true }),
+  },
   extension_builds: {
     group: "platform",
     annotations: acts({ destructiveHint: true, openWorldHint: true }),

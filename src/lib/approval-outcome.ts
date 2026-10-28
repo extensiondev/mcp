@@ -14,14 +14,16 @@ export const APPROVAL_PENDING_STATUS = "approval-pending";
 export const APPROVAL_DECLINED_STATUS = "approval-declined";
 export const APPROVAL_EXPIRED_STATUS = "approval-expired";
 export const APPROVAL_REJECTED_STATUS = "approval-rejected";
+export const APPROVAL_REVOKED_STATUS = "approval-revoked";
 export const APPROVAL_PENDING_RETRY_SECONDS = 10;
 
-export type ApprovalOutcomeKind = "pending" | "declined" | "expired" | "used" | "unverifiable" | "mismatch";
+export type ApprovalOutcomeKind = "pending" | "declined" | "revoked" | "expired" | "used" | "unverifiable" | "mismatch";
 
 const KIND_OF_CODE: Record<string, ApprovalOutcomeKind> = {
   APPROVAL_PENDING: "pending",
   APPROVAL_DENIED: "declined",
   APPROVAL_DECLINED: "declined",
+  APPROVAL_REVOKED: "revoked",
   APPROVAL_EXPIRED: "expired",
   APPROVAL_CONSUMED: "used",
   APPROVAL_USED: "used",
@@ -36,6 +38,11 @@ const OUTCOMES: Record<Exclude<ApprovalOutcomeKind, "pending">, { status: string
     status: APPROVAL_DECLINED_STATUS,
     name: "ApprovalDeclined",
     next: "A workspace owner declined it, so nothing happened. Ask the person whether they still want it before requesting a fresh approval by calling again with no approvalId.",
+  },
+  revoked: {
+    status: APPROVAL_REVOKED_STATUS,
+    name: "ApprovalRevoked",
+    next: "A workspace owner revoked this approval before it ran, so nothing happened and it can never be used. Ask the person whether they still want it before requesting a fresh approval by calling again with no approvalId.",
   },
   expired: { status: APPROVAL_EXPIRED_STATUS, name: "ApprovalExpired", next: "Request a fresh approval by calling again with no approvalId." },
   used: {

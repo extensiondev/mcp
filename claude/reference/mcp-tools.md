@@ -2,7 +2,7 @@
 
 Generated from the schemas the server registers (`src/index.ts`); do not edit by hand. Regenerate with `pnpm docs:tools`. A test fails when this file and the schemas disagree.
 
-35 tools.
+36 tools.
 
 ## extension_add_feature
 
@@ -23,6 +23,17 @@ Analyze a BUILT extension on disk: sizes, entry points, permissions, bundle comp
 | `projectPath` | string | yes |  | Extension project root |
 | `browser` | string | no | `"chrome"` | Browser build to analyze |
 | `format` | "summary" \| "tree" \| "json" | no | `"summary"` |  |
+
+## extension_approvals
+
+Read or revoke one approval a workspace owner was asked for on extension.dev. action status (the default) answers where the approval stands: pending, approved and unused, used, declined, revoked or expired. action revoke takes back a pending approval, or one that was approved and not used yet, so no act can ever run with it; only a token minted by a workspace owner may revoke, nothing else changes, and an approval that already ran is refused with what it ran. Use revoke when the person says they approved something by mistake or no longer wants it to happen. The answer reports what the platform recorded after the revoke in value.outcome and the approval page in value.links.
+
+| input | type | required | default | description |
+| --- | --- | --- | --- | --- |
+| `action` | "status" \| "revoke" | no | `"status"` | status reads the approval; revoke ends a pending or approved, unused approval for good. |
+| `approvalId` | string | yes |  | The approval, apr_ followed by 32 characters, as an approval-required answer or the approval page link gave it. |
+| `project` | string | no |  | Which stored login to use, as '<workspace>/<project>' (or a project slug that matches one login), when extension_auth has signed in to more than one project on this machine. Omitted, the login this server resolved first is used, after EXTENSION_DEV_TOKEN when that is set, and a login made elsewhere on this machine does not move it. Named, it outranks EXTENSION_DEV_TOKEN. extension_auth (action: status) lists the stored logins. |
+| `api` | string | no |  | Platform base URL (default EXTENSION_DEV_API_URL, else https://www.extension.dev) |
 
 ## extension_assert
 

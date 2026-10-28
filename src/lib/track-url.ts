@@ -243,6 +243,7 @@ export const TRACK_ACTS: Record<string, (call: TrackCall) => TrackPlan | null> =
     return { track: { page: "release", target: { releaseId: text(call.value.releaseId), channel } } };
   },
   extension_release_status: releaseStatusPlan,
+  extension_approvals: () => ({ track: { page: "project" } }),
   extension_submit: submitPlan,
   extension_publish: (call) => shareSteps(buildOf(call)),
   extension_shares: (call) => {

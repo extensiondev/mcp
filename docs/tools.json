@@ -1,7 +1,7 @@
 {
   "generatedFrom": "src/index.ts schemas, src/lib/tool-policy.ts, src/lib/docs-meta.ts; regenerate with pnpm docs:tools",
   "version": "10.18.1",
-  "count": 35,
+  "count": 36,
   "tools": [
     {
       "name": "extension_add_feature",
@@ -69,6 +69,46 @@
           "required": false,
           "default": "summary",
           "description": ""
+        }
+      ]
+    },
+    {
+      "name": "extension_approvals",
+      "tier": "platform",
+      "group": "platform",
+      "description": "Read or revoke one approval a workspace owner was asked for on extension.dev. action status (the default) answers where the approval stands: pending, approved and unused, used, declined, revoked or expired. action revoke takes back a pending approval, or one that was approved and not used yet, so no act can ever run with it; only a token minted by a workspace owner may revoke, nothing else changes, and an approval that already ran is refused with what it ran. Use revoke when the person says they approved something by mistake or no longer wants it to happen. The answer reports what the platform recorded after the revoke in value.outcome and the approval page in value.links.",
+      "gate": "the server started with --features=local,platform, and a login; revoke needs a token a workspace owner minted",
+      "samplePrompt": "I approved that App Review submission by mistake, revoke it",
+      "readOnly": false,
+      "destructive": true,
+      "idempotent": false,
+      "openWorld": true,
+      "untrusted": false,
+      "inputs": [
+        {
+          "name": "action",
+          "type": "\"status\" | \"revoke\"",
+          "required": false,
+          "default": "status",
+          "description": "status reads the approval; revoke ends a pending or approved, unused approval for good."
+        },
+        {
+          "name": "approvalId",
+          "type": "string",
+          "required": true,
+          "description": "The approval, apr_ followed by 32 characters, as an approval-required answer or the approval page link gave it."
+        },
+        {
+          "name": "project",
+          "type": "string",
+          "required": false,
+          "description": "Which stored login to use, as '<workspace>/<project>' (or a project slug that matches one login), when extension_auth has signed in to more than one project on this machine. Omitted, the login this server resolved first is used, after EXTENSION_DEV_TOKEN when that is set, and a login made elsewhere on this machine does not move it. Named, it outranks EXTENSION_DEV_TOKEN. extension_auth (action: status) lists the stored logins."
+        },
+        {
+          "name": "api",
+          "type": "string",
+          "required": false,
+          "description": "Platform base URL (default EXTENSION_DEV_API_URL, else https://www.extension.dev)"
         }
       ]
     },
