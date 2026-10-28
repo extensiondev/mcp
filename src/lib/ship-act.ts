@@ -94,6 +94,9 @@ const HINTS: Record<string, string> = {
   PUBLISH_WORKFLOW_UNSUPPORTED: "Saving the project settings in the console brings the project's platform setup up to date; then call again.",
   SAFARI_NEWER_BUILD: `A newer Safari TestFlight build is a draft, so the older build was not sent and no approval was spent. Call publish with no submissionId, or with newerSubmissionId, so the approval names the newer build; ${STORES_READ} lists both.`,
   SAFARI_NEWER_BUILD_UNREAD: `A newer Safari build's run failed after its upload, and the platform asked the project's store poller to read that build back from App Store Connect, so nothing was sent and no approval was requested. Call publish again in a few minutes; ${STORES_READ} shows the newer submission once it reads draft.`,
+  SAFARI_BUILD_NOT_FOUND: `No Safari submission carries the TestFlight build number named, so nothing was sent and no approval was requested; value.knownBuildNumbers lists the builds on record. Call publish with one of them, or with no buildNumber to send the newest; ${STORES_READ} shows each submission's build.`,
+  SAFARI_BUILD_NUMBER_INVALID: "buildNumber is the TestFlight build number Apple shows, a whole number above zero. Nothing was sent.",
+  SAFARI_VERSION_IN_REVIEW: `Apple holds another App Store version of this app for review and creates no other version meanwhile, so the draft was not sent and no approval was spent. Withdraw that version with extension_submit {action: "cancel", store: "safari", submissionId: value.heldSubmissionId} once a workspace owner approves it, then call publish again; ${STORES_READ} shows the held version.`,
   PUBLISH_STORE_NOT_SUPPORTED: "Sending a draft to review is a Chrome Web Store act here; the other stores enter review when they are submitted.",
   PUBLISH_IN_FLIGHT: `The publish you asked for is already on its way and nothing was dispatched again. Read the record with ${STORES_READ}, or call extension_submit {action: "status"} when it exists, and never send the draft again while it is on its way.`,
   CANCEL_IN_FLIGHT: `The withdrawal you asked for is already on its way and nothing was dispatched again. Read the record with ${STORES_READ} before asking again.`,
@@ -220,6 +223,13 @@ function refusal(act: ShipAct, read: ProjectApiRefusal, api: ProjectApi): string
             newerSubmissionId: text(body.newerSubmissionId),
             ...(text(body.newerBuildNumber) ? { newerBuildNumber: Number(text(body.newerBuildNumber)) } : {}),
             ...(body.refreshRequested === true ? { refreshRequested: true } : {}),
+          }
+        : {}),
+      ...(read.code === "SAFARI_BUILD_NOT_FOUND"
+        ? {
+            ...(text(body.buildNumber) ? { buildNumber: Number(text(body.buildNumber)) } : {}),
+            ...(Array.isArray(body.knownBuildNumbers) ? { knownBuildNumbers: body.knownBuildNumbers } : {}),
+            ...(text(body.submissionId) ? { submissionId: text(body.submissionId) } : {}),
           }
         : {}),
       ...(read.retryAfterSeconds ? { retryAfterSeconds: read.retryAfterSeconds } : {}),

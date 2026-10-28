@@ -68,6 +68,64 @@ describe("extension_submit publish for Safari", () => {
   });
 });
 
+describe("extension_submit publish for Safari with the TestFlight build named", () => {
+  const platform = useProjectRoutes("extdev-safari-publish-build-number-");
+
+  it("sends buildNumber to the platform in place of a submission id and carries it in the answer", async () => {
+    if (process.platform === "win32") return;
+
+    platform.login();
+    platform.routes[`POST ${SAFARI_PUBLISH}`] = () => ({
+      status: 409,
+      body: { code: "SAFARI_NEWER_BUILD", message: "Build 13 of 0.2.0 (submission 52772ba0) is a newer TestFlight draft than build 11 of 0.2.0.", submissionId: "c9fa9260", newerSubmissionId: "52772ba0", newerBuildNumber: 13, refusedBeforeApproval: true },
+    });
+
+    const out = JSON.parse(await submit({ action: "publish", browsers: ["safari"], buildNumber: 11, api: API }));
+
+    expect(platform.sent("POST", SAFARI_PUBLISH)[0].body).toEqual({ buildNumber: 11 });
+    expect(platform.sent("POST", APPROVALS)).toHaveLength(0);
+    expect(out.status).toBe("publish-refused");
+    expect(out.value).toMatchObject({ store: "safari", buildNumber: 11, newerBuildNumber: 13 });
+  });
+
+  it("answers a number no submission carries with the builds on record and no approval", async () => {
+    if (process.platform === "win32") return;
+
+    platform.login();
+    platform.routes[`POST ${SAFARI_PUBLISH}`] = () => ({
+      status: 409,
+      body: { code: "SAFARI_BUILD_NOT_FOUND", message: "No Safari submission of this project carries TestFlight build 99.", buildNumber: 99, knownBuildNumbers: [13, 11], refusedBeforeApproval: true },
+    });
+
+    const out = JSON.parse(await submit({ action: "publish", browsers: ["safari"], buildNumber: 99, api: API }));
+
+    expect(platform.sent("POST", APPROVALS)).toHaveLength(0);
+    expect(out.status).toBe("publish-refused");
+    expect(out.value).toMatchObject({ knownBuildNumbers: [13, 11], refusedBeforeApproval: true });
+    expect(out.hint).toContain("value.knownBuildNumbers lists the builds on record");
+  });
+
+  it("refuses a build number for a Chrome or Edge publish, and a number that is not Apple's, before any request", async () => {
+    if (process.platform === "win32") return;
+
+    platform.login();
+
+    const chrome = JSON.parse(await submit({ action: "publish", browsers: ["chrome"], buildNumber: 13, api: API }));
+    const bad = JSON.parse(await submit({ action: "publish", browsers: ["safari"], buildNumber: "thirteen", api: API }));
+
+    expect(chrome.ok).toBe(false);
+    expect(chrome.error.message).toContain('buildNumber names a Safari TestFlight build and takes browsers ["safari"]');
+    expect(bad.ok).toBe(false);
+    expect(bad.error.message).toContain("a whole number above zero");
+    expect(platform.sent("POST", `${PROJECT_ROUTE}/stores/chrome/publish`)).toHaveLength(0);
+    expect(platform.sent("POST", SAFARI_PUBLISH)).toHaveLength(0);
+  });
+
+  it("names the withdrawal that clears a version Apple holds in review", () => {
+    expect(shipRefusalHint("SAFARI_VERSION_IN_REVIEW", undefined, "safari")).toContain('extension_submit {action: "cancel", store: "safari", submissionId: value.heldSubmissionId}');
+  });
+});
+
 describe("extension_submit cancel for Safari", () => {
   const platform = useProjectRoutes("extdev-safari-withdraw-states-");
   const route = `${PROJECT_ROUTE}/stores/safari/submissions/c9fa9260/cancel`;

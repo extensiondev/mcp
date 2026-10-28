@@ -102,6 +102,7 @@ export interface StoreActArgs {
   store?: string;
   browsers?: string[];
   submissionId?: string;
+  buildNumber?: unknown;
   deployPercentage?: unknown;
   buildSha?: string;
   approvalId?: string;
@@ -392,10 +393,18 @@ function publishApprovalSentence(store: PublishStore): string {
   if (store === "edge") return "This sends the product to Edge's certification review.";
 
   if (store === "safari") {
-    return "This sends the App Store version holding the TestFlight build to Apple's App Review; the release mode set in App Store Connect stays as it is.";
+    return "This sends the App Store version holding the TestFlight build to Apple's App Review; the release mode set in App Store Connect stays as it is, and a version the act creates is set to manual release, so Apple's approval does not put it on sale.";
   }
 
   return PUBLISH_APPROVAL_SENTENCE;
+}
+
+export function safariBuildNumberOf(value: unknown): number | null {
+  if (value === undefined || value === null || value === "") return null;
+
+  const number = typeof value === "number" ? value : Number(String(value).trim());
+
+  return Number.isInteger(number) && number > 0 ? number : Number.NaN;
 }
 
 export async function publishDraft(args: StoreActArgs): Promise<string> {
@@ -417,16 +426,33 @@ export async function publishDraft(args: StoreActArgs): Promise<string> {
 
   const words = storeWords(store);
   const submissionId = text(args.submissionId);
+  const buildNumber = safariBuildNumberOf(args.buildNumber);
+
+  if (buildNumber !== null && (store !== "safari" || !Number.isFinite(buildNumber))) {
+    return badShipRequest(
+      COMMAND,
+      "publish",
+      "PublishInputError",
+      store === "safari"
+        ? `buildNumber is the TestFlight build number Apple shows, a whole number above zero; got ${JSON.stringify(args.buildNumber)}. Nothing was sent.`
+        : `buildNumber names a Safari TestFlight build and takes browsers ["safari"]; ${store} drafts are named by submissionId. Nothing was sent.`,
+    );
+  }
+
   const opened = await openShipApi(COMMAND, args, { action: "publish", store });
   if ("refused" in opened) return opened.refused;
 
+  const named = {
+    ...(submissionId ? { submissionId } : {}),
+    ...(buildNumber ? { buildNumber } : {}),
+  };
   const ran = await runShipAct(
     {
       command: COMMAND,
       act: "publish",
       action: "extension_store.publish",
       route: `stores/${store}/publish`,
-      body: submissionId ? { submissionId } : {},
+      body: named,
       approvalId: args.approvalId,
       description: `Send the ${words.name.replace(/^the /, "")} ${store === "safari" ? "TestFlight build" : "draft"} to review.`,
       reason: `${publishApprovalSentence(store)} Nothing changes for current users until ${words.reviewer} approves it, so a workspace owner approves this exact draft first.`,
@@ -437,7 +463,7 @@ export async function publishDraft(args: StoreActArgs): Promise<string> {
         (!submissionId || text(scope.submissionId) === submissionId),
       project: args.project,
       apiHint: args.api,
-      value: { store, ...(submissionId ? { submissionId } : {}) },
+      value: { store, ...named },
     },
     opened.api,
   );
