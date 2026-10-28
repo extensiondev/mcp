@@ -80,13 +80,23 @@ export async function cancelSubmission(args: StoreActArgs): Promise<string> {
   }
 
   if (waited.outcome.recorded) {
+    const apple = safari ? appleWithdrawStates(waited.record?.storeReview, waited.outcome.storeState) : null;
+
     return envelope({
       ok: true,
       command: COMMAND,
       status: "canceled",
-      value: { ...base, dispatch, outcome: waited.outcome, links, trackUrl },
+      value: {
+        ...base,
+        dispatch,
+        outcome: waited.outcome,
+        ...(apple?.versionState ? { versionState: apple.versionState } : {}),
+        ...(apple?.reviewSubmissionState ? { reviewSubmissionState: apple.reviewSubmissionState } : {}),
+        links,
+        trackUrl,
+      },
       hint: safari
-        ? `The platform's record of submission ${submissionId} now reads ${waited.outcome.status}${waited.outcome.storeState ? ` and App Store Connect reads the version as ${waited.outcome.storeState}` : ""}, so it is out of App Review; its build stays on TestFlight and a new build can go to App Review with publish. ${storesRead(args)} reads it again. ${made}`
+        ? `The platform's record of submission ${submissionId} now reads ${waited.outcome.status}${apple?.sentence ?? ""}, so it is out of App Review; its build stays on TestFlight and a new build can go to App Review with publish. ${storesRead(args)} reads it again. ${made}`
         : `The platform's record of submission ${submissionId} now reads ${waited.outcome.status}, so it is out of the store's review. ${storesRead(args)} reads it again. ${made}`,
     });
   }
@@ -98,6 +108,34 @@ export async function cancelSubmission(args: StoreActArgs): Promise<string> {
     value: { ...base, dispatch, outcome: waited.outcome, links, trackUrl },
     hint: `${dispatchedHint({ acceptedAt, trackUrl, readCall: storesRead(args) })} ${made}`,
   });
+}
+
+const REVIEW_SUBMISSION_STATES = new Set(["COMPLETE", "CANCELING", "CANCELED"]);
+
+/* @invariant A WITHDRAWAL NAMES APPLE'S VERSION STATE AND THE REVIEW
+ * SUBMISSION'S STATE EACH AS WHAT IT IS. Rebeccat's withdrawal of 2026-10-28
+ * was answered "App Store Connect reads the version as COMPLETE", and
+ * COMPLETE was the review submission's state, not the version's
+ * (DEVELOPER_REJECTED). The record carries both since registry-template
+ * 0f0c2fd; an older record's COMPLETE or CANCELING is said to be the review
+ * submission's, with the version's own state left to the next store poll.
+ */
+function appleWithdrawStates(
+  review: { state?: string; versionState?: string; reviewSubmissionState?: string } | undefined,
+  storeState: string | null | undefined,
+): { versionState: string; reviewSubmissionState: string; sentence: string } {
+  const state = text(review?.state || storeState).toUpperCase();
+  const submissionWord = REVIEW_SUBMISSION_STATES.has(state);
+  const versionState = text(review?.versionState).toUpperCase() || (submissionWord ? "" : state);
+  const reviewSubmissionState = text(review?.reviewSubmissionState).toUpperCase() || (submissionWord ? state : "");
+  const submission = reviewSubmissionState ? `its App Review submission as ${reviewSubmissionState}` : "";
+  const sentence = versionState
+    ? ` and App Store Connect reads the version as ${versionState}${submission ? ` and ${submission}` : ""}`
+    : submission
+      ? ` and App Store Connect reads ${submission}; the version's own state is not recorded yet and the next store poll records it`
+      : "";
+
+  return { versionState, reviewSubmissionState, sentence };
 }
 
 /* @invariant `value.dispatch` IS A STATE: runState, the step and the store's

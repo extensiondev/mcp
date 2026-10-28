@@ -92,8 +92,8 @@ const HINTS: Record<string, string> = {
   CANCEL_WORKFLOW_UNSUPPORTED: "Saving the project settings in the console brings the project's platform setup up to date; then call again.",
   ROLLOUT_WORKFLOW_UNSUPPORTED: "Saving the project settings in the console brings the project's platform setup up to date; then call again.",
   PUBLISH_WORKFLOW_UNSUPPORTED: "Saving the project settings in the console brings the project's platform setup up to date; then call again.",
-  NO_CHROME_DRAFT: "There is no Chrome draft to send yet. Submit a build with extension_submit (browsers: [\"chrome\"], dryRun: false); it lands as a draft, and publish sends that draft to review.",
-  SUBMISSION_NOT_DRAFT: `Only a Chrome draft can be sent to review. Read each submission's state with ${STORES_READ}, or call publish with no submissionId to send the newest draft.`,
+  SAFARI_NEWER_BUILD: `A newer Safari TestFlight build is a draft, so the older build was not sent and no approval was spent. Call publish with no submissionId, or with newerSubmissionId, so the approval names the newer build; ${STORES_READ} lists both.`,
+  SAFARI_NEWER_BUILD_UNREAD: `A newer Safari build's run failed after its upload, and the platform asked the project's store poller to read that build back from App Store Connect, so nothing was sent and no approval was requested. Call publish again in a few minutes; ${STORES_READ} shows the newer submission once it reads draft.`,
   PUBLISH_STORE_NOT_SUPPORTED: "Sending a draft to review is a Chrome Web Store act here; the other stores enter review when they are submitted.",
   PUBLISH_IN_FLIGHT: `The publish you asked for is already on its way and nothing was dispatched again. Read the record with ${STORES_READ}, or call extension_submit {action: "status"} when it exists, and never send the draft again while it is on its way.`,
   CANCEL_IN_FLIGHT: `The withdrawal you asked for is already on its way and nothing was dispatched again. Read the record with ${STORES_READ} before asking again.`,
@@ -103,8 +103,35 @@ const HINTS: Record<string, string> = {
   TESTING_WORKSPACE_READ_ONLY: "This is a testing workspace, which reads but does not change anything.",
 };
 
-export function shipRefusalHint(code: string, retryAfterSeconds?: number): string | undefined {
+const STORE_DRAFT_LABELS: Record<string, string> = { chrome: "Chrome", edge: "Edge", safari: "Safari" };
+
+/* @invariant A STORE REFUSAL HINT NAMES THE STORE OF THE CALL. Rebeccat's
+ * Safari publish of 2026-10-28 was answered "Only a Chrome draft can be sent
+ * to review" for a Safari submission, because the hint table was written when
+ * Chrome was the only store with a draft act. The draft hints are written for
+ * the store the act named, and a call that names none keeps Chrome.
+ */
+function storeDraftHint(code: string, store: string): string | undefined {
+  const label = STORE_DRAFT_LABELS[store] ?? STORE_DRAFT_LABELS.chrome!;
+  const browser = STORE_DRAFT_LABELS[store] ? store : "chrome";
+  const article = /^[aeiou]/i.test(label) ? "an" : "a";
+
+  if (code === "SUBMISSION_NOT_DRAFT") {
+    return `Only ${article} ${label} draft can be sent to review. Read each submission's state with ${STORES_READ}, or call publish with no submissionId to send the newest draft.`;
+  }
+
+  if (code === "NO_CHROME_DRAFT") {
+    return `There is no ${label} draft to send yet. Submit a build with extension_submit (browsers: ["${browser}"], dryRun: false); it lands as ${browser === "safari" ? "a TestFlight draft" : "a draft"}, and publish sends that draft to review.`;
+  }
+
+  return undefined;
+}
+
+export function shipRefusalHint(code: string, retryAfterSeconds?: number, store = ""): string | undefined {
   const wait = retryAfterSeconds ? ` The platform asks for ${retryAfterSeconds} seconds before the next try.` : "";
+  const drafted = storeDraftHint(code, store);
+
+  if (drafted) return drafted;
 
   if (code === "burst_cap") return `The workspace dispatched too many runs in the last hour.${wait} Nothing ran.`;
   if (code === "monthly_cap") return `The workspace's build allowance for this month is spent, so nothing ran.${wait} The plan page in the console raises it.`;
@@ -153,7 +180,7 @@ function storeStateFields(code: string, body: Row): Row {
 function refusal(act: ShipAct, read: ProjectApiRefusal, api: ProjectApi): string {
   const body = isRow(read.body) ? read.body : {};
   const before = body.refusedBeforeApproval === true;
-  const hint = shipRefusalHint(read.code, read.retryAfterSeconds);
+  const hint = shipRefusalHint(read.code, read.retryAfterSeconds, text(act.value?.store));
   const ownerOnly = read.code === OWNER_REQUIRED_CODE;
   const status = ownerOnly
     ? "needs-owner"
@@ -186,6 +213,13 @@ function refusal(act: ShipAct, read: ProjectApiRefusal, api: ProjectApi): string
             uploadRunState: text(body.uploadRunState),
             ...(text(body.submissionId) ? { submissionId: text(body.submissionId) } : {}),
             ...(text(body.buildId) ? { buildId: text(body.buildId) } : {}),
+          }
+        : {}),
+      ...(text(body.newerSubmissionId)
+        ? {
+            newerSubmissionId: text(body.newerSubmissionId),
+            ...(text(body.newerBuildNumber) ? { newerBuildNumber: Number(text(body.newerBuildNumber)) } : {}),
+            ...(body.refreshRequested === true ? { refreshRequested: true } : {}),
           }
         : {}),
       ...(read.retryAfterSeconds ? { retryAfterSeconds: read.retryAfterSeconds } : {}),
@@ -260,7 +294,7 @@ async function askForApproval(act: ShipAct, read: ProjectApiRefusal, api: Projec
     token: api.token,
     api: act.apiHint,
     refusedStatus: refusedStatus(act.act),
-    refusalHint: (code) => shipRefusalHint(code),
+    refusalHint: (code) => shipRefusalHint(code, undefined, text(act.value?.store)),
     reason: act.reason,
     stateRead: act.stateRead,
     irreversible: act.irreversible,
