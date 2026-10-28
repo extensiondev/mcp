@@ -15,6 +15,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type * as ExecModule from "../lib/exec";
 
 let failTheBuild = false;
+let devSessionOwnsTheDist = false;
 vi.mock("../lib/exec", async (importOriginal) => {
   const actual = await importOriginal<typeof ExecModule>();
 
@@ -25,6 +26,14 @@ vi.mock("../lib/exec", async (importOriginal) => {
 
       if (failTheBuild) return { code: 1, stdout: "", stderr: "compile failed" };
 
+      if (devSessionOwnsTheDist) {
+        return {
+          code: 1,
+          stdout: `${JSON.stringify(cliRefusal("build", "E_DEV_SESSION_DIST_SHARED", `A dev session (PID ${process.pid}) owns dist/${browser}, so this build was not written.`))}\n`,
+          stderr: "",
+        };
+      }
+
       writeEngineDist(args[1]!, browser);
 
       return buildCliAnswer(args[1]!, browser);
@@ -34,7 +43,7 @@ vi.mock("../lib/exec", async (importOriginal) => {
 
 const build = await import("../tools/build");
 const { registerSession, removeSession } = await import("../lib/process-manager");
-const { buildCliAnswer, browserFromCliArgs, writeEngineDist } = await import("./fixtures/engine-answers");
+const { buildCliAnswer, browserFromCliArgs, cliRefusal, writeEngineDist } = await import("./fixtures/engine-answers");
 
 const tmpDirs: string[] = [];
 
@@ -52,6 +61,7 @@ function project(): string {
 
 afterEach(() => {
   failTheBuild = false;
+  devSessionOwnsTheDist = false;
 
   for (const dir of tmpDirs.splice(0)) {
     removeSession(dir, "chrome", process.pid);
@@ -78,6 +88,23 @@ describe("the clobber warning is said only on a build that wrote, because the en
     const result = JSON.parse(await build.handler({ projectPath: dir, browser: "chrome" }));
 
     expect(result.ok).toBe(false);
+    expect(JSON.stringify(result)).not.toContain("wrote over");
+  });
+});
+
+describe("a build the engine refuses because a live dev session serves the dist answers that refusal, not a compile failure", () => {
+  it("passes the engine's code through and points at extension_stop", async () => {
+    const dir = project();
+    registerSession({ projectPath: dir, browser: "chrome", pid: process.pid, command: "dev" });
+    devSessionOwnsTheDist = true;
+
+    const result = JSON.parse(await build.handler({ projectPath: dir, browser: "chrome" }));
+
+    expect(result.ok).toBe(false);
+    expect(result.status).toBe("build-refused");
+    expect(result.error.code).toBe("E_DEV_SESSION_DIST_SHARED");
+    expect(result.value.livePids).toEqual([process.pid]);
+    expect(result.hint).toContain("extension_stop");
     expect(JSON.stringify(result)).not.toContain("wrote over");
   });
 });

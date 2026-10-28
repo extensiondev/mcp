@@ -29,6 +29,7 @@ import { BUNDLE_ID_PATTERN } from "../lib/safari-dev-options";
 import { reviewCoverageNotes, reviewDistReport, reviewRiskWarnings } from "../lib/store-review";
 
 const COMMAND = "extension_build";
+const DEV_SESSION_OWNS_THE_DIST = "E_DEV_SESSION_DIST_SHARED" as const;
 
 interface EngineSafariSummary {
   appName?: string;
@@ -947,6 +948,23 @@ export async function handler(args: {
     stderr.trim() ||
     out ||
     `extension build exited with code ${code}`;
+
+  if (engine.frame?.error?.code === DEV_SESSION_OWNS_THE_DIST) {
+    return envelope({
+      ok: false,
+      command: COMMAND,
+      status: "build-refused",
+      error: { code: DEV_SESSION_OWNS_THE_DIST, message: message.slice(0, 1200) },
+      value: {
+        browser,
+        duration,
+        livePids: clobberedSessions.map((session) => session.pid),
+      },
+      warnings,
+      hint: `A running extension_dev session serves dist/${browser} and the engine refused to write over it, so nothing was built and the session is untouched. Call extension_stop with this projectPath and browser "${browser}", then build again.`,
+    });
+  }
+
   const compileErrors = buildCompileErrors(args.projectPath, browser, start);
   const tail = [out, stderr.trim()].filter(Boolean).join("\n").trim();
 
