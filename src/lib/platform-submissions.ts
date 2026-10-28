@@ -74,6 +74,7 @@ export interface PlatformSubmission {
   channel?: string;
   submittedAt?: string;
   failureReason?: string;
+  supersededBy?: string;
   storeUrl?: string;
   sourceArchive?: string;
   storeReview?: StoreReview;
@@ -244,6 +245,7 @@ export function toSubmission(raw: Record<string, unknown>): PlatformSubmission |
     ["channel", raw.channel],
     ["submittedAt", raw.submittedAt],
     ["failureReason", raw.failureReason],
+    ["supersededBy", raw.supersededBy],
     ["storeUrl", raw.storeUrl],
     ["sourceArchive", raw.sourceArchive],
     ["retryOf", raw.retryOf],

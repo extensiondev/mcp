@@ -149,6 +149,7 @@ interface SubmissionView {
   buildSha?: string;
   storeSubmissionId?: string;
   failureReason?: string;
+  supersededBy?: string;
   storeVersion?: { packaged: string; displayed: string; source: string; buildNumber?: number };
   storeCrxVersion?: string;
   storeReview?: StoreReview;
@@ -190,6 +191,7 @@ function submissionView(row: Record<string, unknown>): SubmissionView {
   const publish = row.publish && typeof row.publish === "object" ? (row.publish as Record<string, unknown>) : null;
   const refusal = publish && str(publish.status) === "failed" ? str(publish.storeMessage) : undefined;
   const failureReason = str(row.failureReason) || refusal;
+  const supersededBy = status === "superseded" ? str(row.supersededBy) : undefined;
   const storeCrxVersion = typeof row.storeCrxVersion === "string" ? row.storeCrxVersion.trim() : "";
   const storeReview = storeReviewOfRow(row.storeReview);
   if (version) view.version = version;
@@ -200,6 +202,7 @@ function submissionView(row: Record<string, unknown>): SubmissionView {
   if (buildSha) view.buildSha = buildSha;
   if (storeSubmissionId) view.storeSubmissionId = storeSubmissionId;
   if (failureReason) view.failureReason = failureReason;
+  if (supersededBy) view.supersededBy = supersededBy;
   if (storeVersion) view.storeVersion = storeVersion;
   if (storeCrxVersion) view.storeCrxVersion = storeCrxVersion;
   if (storeReview) view.storeReview = storeReview;
@@ -556,7 +559,7 @@ export async function readStores(args: {
           submission.status || "recorded"
         }${submission.submittedAt ? ` at ${submission.submittedAt}` : ""}${
           submission.failureReason ? ` (${submission.failureReason})` : ""
-        }`,
+        }${submission.supersededBy ? ` (replaced by ${submission.supersededBy} before review, not rejected)` : ""}`,
       );
 
       if (submission.storeUrl) tail.push(`listing ${submission.storeUrl}`);

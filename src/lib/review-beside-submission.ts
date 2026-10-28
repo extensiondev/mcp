@@ -55,7 +55,12 @@ function sameBuild(a: string, b: string): boolean {
   return a.startsWith(b) || b.startsWith(a);
 }
 
-const SETTLED_STATUSES: Record<string, string> = { published: "approved", approved: "approved", rejected: "rejected" };
+const SETTLED_STATUSES: Record<string, string> = {
+  published: "approved",
+  approved: "approved",
+  rejected: "rejected",
+  superseded: "superseded",
+};
 
 function checkedAtMs(value: string | undefined): number {
   const ms = Date.parse(value ?? "");

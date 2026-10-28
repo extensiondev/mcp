@@ -169,6 +169,40 @@ describe("extension_release_status never shows the previous draft's review row b
     expect(out.hint).not.toContain("review pending");
   });
 
+  it("answers a Firefox version AMO retired for a newer upload as superseded by that version, never rejected or pending", async () => {
+    const pendingRow = { buildId: "e679664", version: "0.2.0", status: "pending", checkedAt: "2026-10-27T20:00:00.000Z" };
+
+    global.fetch = fetchByFile({
+      "stores/health.json": { ...HEALTH, stores: { firefox: { ok: true, message: "Credentials verified.", checkedAt: "2026-10-27T20:00:00.000Z" } } },
+      "stores/status.json": { ...STATUS, reviews: { firefox: pendingRow } },
+      "stores/submissions.json": {
+        updatedAt: "2026-10-27T22:30:00.000Z",
+        submissions: [
+          {
+            id: "e6796640",
+            store: "firefox",
+            channel: "stable",
+            storeSubmissionId: "6100006",
+            version: "0.2.0",
+            status: "superseded",
+            supersededBy: "0.2.0.7",
+            submittedAt: "2026-10-27T19:00:00.000Z",
+            buildId: "e679664",
+            storeReview: { state: "DISABLED", checkedAt: "2026-10-27T22:30:00.000Z", source: "poll" },
+          },
+        ],
+      },
+    });
+
+    const out = JSON.parse(await handler({ workspace: "acme", project: "widget" }));
+    const firefox = out.value.stores.find((r: { store: string }) => r.store === "firefox");
+
+    expect(firefox.lastSubmission).toMatchObject({ status: "superseded", supersededBy: "0.2.0.7" });
+    expect(firefox.review).toMatchObject({ status: "superseded", storeState: "DISABLED", buildId: "e679664" });
+    expect(out.hint).toContain("superseded at 2026-10-27T19:00:00.000Z (replaced by 0.2.0.7 before review, not rejected)");
+    expect(out.hint).not.toMatch(/rejected at|review pending/);
+  });
+
   it("lets the same build's own newer store answer win over the poller's row, and keeps the row when it is newer", () => {
     const row = { buildId: "6d9e10c", status: "pending", checkedAt: "2026-10-27T16:51:00.000Z" };
     const withdrawn = { state: "NO_ACTIVE_SUBMISSION", checkedAt: "2026-10-27T17:10:00.000Z", liveState: "PUBLISHED" };

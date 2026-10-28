@@ -34,6 +34,7 @@ export interface StoreHistoryEntry {
   buildSha?: string;
   submittedAt?: string;
   failureReason?: string;
+  supersededBy?: string;
   storeUrl?: string;
 }
 
@@ -107,6 +108,7 @@ function historyEntry(raw: Row): StoreHistoryEntry {
     ["buildSha", raw.buildId],
     ["submittedAt", raw.submittedAt],
     ["failureReason", raw.failureReason],
+    ["supersededBy", raw.supersededBy],
     ["storeUrl", raw.storeUrl],
   ];
 
