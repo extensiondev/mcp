@@ -8,6 +8,7 @@
 
 import crypto from "node:crypto";
 
+import { readLines } from "./approval-lines";
 import { loginRefusedBeforeApproval } from "./approval-login";
 import { approvalUrlFor } from "./approval-outcome";
 import { verdictOfAction } from "./approval-policy";
@@ -180,7 +181,11 @@ async function requestApproval(params: {
         ok: false,
         command: input.command,
         status: input.refusedStatus || "action-refused",
-        value: { action: input.action, description: input.description },
+        value: {
+          action: input.action,
+          description: input.description,
+          ...(Array.isArray(data.stores) ? { stores: data.stores } : {}),
+        },
         error: { code: "E_PLATFORM", name: "ActionRefused", message, ...(platformCode ? { platformCode } : {}) },
         ...(hint ? { hint } : {}),
       }),
@@ -206,6 +211,8 @@ async function requestApproval(params: {
   const approvalUrl = String(data.approvalUrl || "").trim();
   const described = typeof data.description === "string" && data.description.trim() ? data.description.trim() : input.description;
   const subject = readApprovalSubject(data.subject);
+  const lines = readLines(data.lines);
+  const lined = lines.length ? { lines } : {};
 
   if (!approvalId) {
     return block(
@@ -249,6 +256,7 @@ async function requestApproval(params: {
         ...(data.expiresAt ? { expiresAt: data.expiresAt } : {}),
         ...(subject ? { subject } : {}),
         ...(Array.isArray(data.changes) ? { changes: data.changes.filter((line) => typeof line === "string") } : {}),
+        ...lined,
         ...replaces,
         expiredApproval: { approvalId: renewing.approvalId, status: APPROVAL_EXPIRED_STATUS, ...(renewing.expiresAt ? { expiresAt: renewing.expiresAt } : {}) },
         nextStep: { kind: "approve", say, url: approvalUrl },
@@ -276,10 +284,11 @@ async function requestApproval(params: {
       ...(data.expiresAt ? { expiresAt: data.expiresAt } : {}),
       ...(subject ? { subject } : {}),
       ...(Array.isArray(data.changes) ? { changes: data.changes.filter((line) => typeof line === "string") } : {}),
+      ...lined,
       ...replaces,
     },
     approvalUrl
-      ? `Approve at ${approvalUrl}, then re-run with the same arguments and approvalId ${approvalId}.`
+      ? `Approve at ${approvalUrl}, then re-run with the same arguments and approvalId ${approvalId}.${lines.length > 1 ? " The page lists one line per store; a store unchecked there is left out." : ""}`
       : undefined,
   );
 }

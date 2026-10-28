@@ -33,6 +33,14 @@ import {
   requestApprovalAfterRefusal,
 } from "../lib/approval-gate";
 import { spendNarration } from "../lib/allowance";
+import {
+  VERSION_ACTION,
+  linesSentence,
+  readLines,
+  retryStores,
+  storesInState,
+  versionScope,
+} from "../lib/approval-lines";
 import { approvalRoundTrip } from "../lib/approval-outcome";
 import {
   FAILED_STATUSES,
@@ -584,22 +592,34 @@ async function answer(args: SubmitToolArgs): Promise<string> {
   let modes: ModeIds = {};
   let firefoxSetting: string | undefined;
 
+  const version = String(args.version || "").trim();
+
   const gateInputFor = (known: ModeIds) => {
     const drafts = browsers.every((browser) => uploadStopsAtDraft(browser, known[browser]));
     const broad = browsers.filter((browser) => DRAFT_STORES.has(browser) && !uploadStopsAtDraft(browser, known[browser]));
+    const perVersion = browsers.length > 1;
+    const modeClause = drafts
+      ? ": each upload stops at the store's draft under the saved submission mode"
+      : broad.length > 0
+        ? `: the saved ${broad.map((store) => `${store} mode "${known[store]}"`).join(" and ")} sends the upload on to review`
+        : "";
 
     return {
       command: "extension_submit",
-      action: "extension_submit",
-      scope: {
-        browsers: [...browsers].sort(),
-        buildSha: buildSha.toLowerCase(),
-      },
-      description: drafts
-        ? `Upload build ${buildSha} to ${browsers.join(", ")} as a store draft: not published and not sent to review under the saved submission mode. The store keeps the uploaded package, so the upload itself cannot be undone.`
-        : broad.length > 0
-          ? `Submit build ${buildSha} to ${browsers.join(", ")} for store review: the saved ${broad.map((store) => `${store} mode "${known[store]}"`).join(" and ")} sends the upload on to review.`
-          : `Submit build ${buildSha} to ${browsers.join(", ")} for store review.`,
+      action: perVersion ? VERSION_ACTION : "extension_submit",
+      scope: perVersion
+        ? versionScope(browsers, buildSha, version)
+        : {
+            browsers: [...browsers].sort(),
+            buildSha: buildSha.toLowerCase(),
+          },
+      description: perVersion
+        ? `Send build ${buildSha}${version ? ` (version ${version})` : ""} to ${browsers.join(", ")} under one approval, one line per store that the owner can leave out${modeClause}. A store keeps an uploaded package, so an upload cannot be undone.`
+        : drafts
+          ? `Upload build ${buildSha} to ${browsers.join(", ")} as a store draft: not published and not sent to review under the saved submission mode. The store keeps the uploaded package, so the upload itself cannot be undone.`
+          : broad.length > 0
+            ? `Submit build ${buildSha} to ${browsers.join(", ")} for store review: the saved ${broad.map((store) => `${store} mode "${known[store]}"`).join(" and ")} sends the upload on to review.`
+            : `Submit build ${buildSha} to ${browsers.join(", ")} for store review.`,
       approvalId: args.approvalId,
       token,
       api: args.api,
@@ -840,6 +860,9 @@ async function answer(args: SubmitToolArgs): Promise<string> {
       return asked(await requestApprovalAfterRefusal(gateInputFor(modes)));
     }
 
+    const refusedLines = readLines(data?.lines);
+    const lineValue = refusedLines.length ? { lines: refusedLines } : {};
+    const leftOut = storesInState(refusedLines, "denied");
     const answered =
       !dryRun && body.approvalId
         ? approvalRoundTrip({
@@ -847,10 +870,19 @@ async function answer(args: SubmitToolArgs): Promise<string> {
             platformCode: typeof data?.code === "string" ? data.code : "",
             message: typeof data?.message === "string" ? data.message : "",
             approvalId: String(body.approvalId),
-            undone: "Nothing was submitted by this call.",
+            undone: refusedLines.length
+              ? `Nothing was submitted by this call (${linesSentence(refusedLines)}).`
+              : "Nothing was submitted by this call.",
             api: args.api,
-            value: { browsers, buildSha },
+            value: { browsers, buildSha, ...lineValue },
             stateRead: statusRead,
+            ...(leftOut.length
+              ? {
+                  next: {
+                    declined: `The owner left ${leftOut.join(", ")} out on the approval page, so nothing ran for ${leftOut.length === 1 ? "it" : "them"}. Ask the person before requesting a fresh approval by calling again with no approvalId.`,
+                  },
+                }
+              : {}),
           })
         : undefined;
 
@@ -880,6 +912,7 @@ async function answer(args: SubmitToolArgs): Promise<string> {
       data?.refusedBeforeApproval !== true &&
       !BEFORE_APPROVAL.has(platformCode) &&
       !approvalRefunded;
+    const retry = retryStores(refusedLines);
 
     return envelope({
       ok: false,
@@ -892,18 +925,25 @@ async function answer(args: SubmitToolArgs): Promise<string> {
               buildSha,
               approvalId: String(body.approvalId),
               approvalRefunded: true,
+              ...lineValue,
               sayToPerson: REFUNDED_SAY,
               nextStep: REFUNDED_STEP,
             },
           }
-        : {}),
+        : refusedLines.length
+          ? { value: { browsers, buildSha, approvalId: String(body.approvalId), ...lineValue } }
+          : {}),
       error: {
         code: "E_PLATFORM",
         name: "SubmitError",
         message: `${dryRun ? "preflight" : "submit"} failed (${res.status}): ${data?.message || text || "unknown error"}`,
         ...(typeof data?.code === "string" ? { platformCode: data.code } : {}),
       },
-      ...(approvalRefunded
+      ...(approvalRefunded && refusedLines.length
+        ? {
+            hint: `The platform could not start a store run and says nothing ran for it, so that line was given back (${linesSentence(refusedLines)}): call again with the same approvalId ${String(body.approvalId)} and browsers limited to ${retry.join(", ") || "the stores that did not run"}.`,
+          }
+        : approvalRefunded
         ? {
             hint: `The platform could not start the store run and says nothing was dispatched, so the approval was not spent: call again with the same arguments and approvalId ${String(body.approvalId)}.`,
           }
@@ -1033,7 +1073,20 @@ async function answer(args: SubmitToolArgs): Promise<string> {
   }
 
   if (!dryRun) {
-    const outcome = readSubmitOutcome(data, browsers);
+    const lines = readLines(data?.lines);
+    const ran = lines.length
+      ? browsers.filter((store) => lines.some((line) => line.store === store && line.state === "spent"))
+      : browsers;
+    const outcome = readSubmitOutcome(data, ran);
+
+    if (lines.length) {
+      result.lines = lines;
+      warnings.push(`Approval lines: ${linesSentence(lines)}.`);
+
+      for (const store of storesInState(lines, "denied")) {
+        warnings.push(`NOT submitted: ${store}. The owner left it out on the approval page; ask before requesting a fresh approval for it.`);
+      }
+    }
 
     if (outcome.state === "unconfirmed") {
       return envelope({

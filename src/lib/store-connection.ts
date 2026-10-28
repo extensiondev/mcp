@@ -234,8 +234,10 @@ export function withApproveStep(out: string, reviewSentence: boolean | string): 
 
   const expiresAt = text(value.expiresAt);
   const phrase = approvalSubjectPhrase(subjectOf(value));
+  const lines = Array.isArray(value.lines) ? value.lines.length : 0;
   const say = [
     `Approve ${phrase ? `submitting ${phrase}` : "the submission"} at ${approvalUrl}${expiresAt ? ` before ${expiresAt}` : ""}.`,
+    lines > 1 ? `The page lists ${lines} stores; uncheck one to leave it out.` : "",
     closing,
   ]
     .filter(Boolean)

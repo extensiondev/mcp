@@ -23,6 +23,7 @@ const KIND_OF_CODE: Record<string, ApprovalOutcomeKind> = {
   APPROVAL_PENDING: "pending",
   APPROVAL_DENIED: "declined",
   APPROVAL_DECLINED: "declined",
+  APPROVAL_LINE_DENIED: "declined",
   APPROVAL_REVOKED: "revoked",
   APPROVAL_EXPIRED: "expired",
   APPROVAL_CONSUMED: "used",

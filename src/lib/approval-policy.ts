@@ -45,6 +45,7 @@ export const APPROVAL_POLICY = {
   "extension_settings.project": "plain",
   "extension_settings.environment": "plain",
   extension_submit: "approval",
+  "extension_submit.version": "approval",
   "extension_store.publish": "approval",
   "extension_store.cancel": "approval",
   "extension_store.rollout": "approval",

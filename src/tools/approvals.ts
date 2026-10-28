@@ -6,6 +6,7 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
+import { linesSentence, readLines } from "../lib/approval-lines";
 import { approvalUrlFor } from "../lib/approval-outcome";
 import { readJson } from "../lib/approval-verify";
 import { API_BASE } from "../lib/common-schema";
@@ -165,12 +166,14 @@ export async function handler(args: { action?: string; approvalId?: string; proj
       );
     }
 
+    const lines = readLines(read.data.lines);
+
     return envelope({
       ok: true,
       command: COMMAND,
       status: state,
-      value: { ...value, ...read.data, approvalUrl, links },
-      hint: `${SAY[state] ?? ""} The approval page is ${approvalUrl}.`.trim(),
+      value: { ...value, ...read.data, ...(lines.length ? { lines } : {}), approvalUrl, links },
+      hint: `${SAY[state] ?? ""}${lines.length ? ` Lines: ${linesSentence(lines)}.` : ""} The approval page is ${approvalUrl}.`.trim(),
     });
   }
 

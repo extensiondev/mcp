@@ -15,6 +15,7 @@ import {
 } from "./approval-outcome";
 import { loginRefusedOnApproval } from "./approval-login";
 import { storedProjectId } from "./approval-record";
+import { linesSentence, readLines } from "./approval-lines";
 import { readTokenClaims } from "./credential-source";
 import { envelope } from "./envelope";
 import { parseJsonObject } from "./json-object";
@@ -109,6 +110,12 @@ export function withoutClosingStop(text: string): string {
 
 function describedBy(input: ApprovalGateInput, minted?: MintedApproval | null): string {
   return minted?.description || input.description;
+}
+
+function linesAsked(scope: ApprovalScope): string[] {
+  const acts = scope.acts;
+
+  return Array.isArray(acts) ? acts.map((act) => String(act).trim().toLowerCase()).filter(Boolean) : [];
 }
 
 function scopeMismatch(input: ApprovalGateInput, approvalId: string, fingerprint: string, approvedFingerprint: string): { blocked: true; envelope: string } {
@@ -299,8 +306,22 @@ export async function verifyApproval(params: {
         : NaN;
   const expired =
     status === "expired" || (Number.isFinite(expiresAt) && expiresAt <= now);
+  const lines = readLines(data.lines);
+  const asked = lines.length ? linesAsked(input.scope) : [];
+  const outside = asked.filter((id) => !lines.some((line) => line.id === id));
 
-  if (storedFingerprint && storedFingerprint !== fingerprint) {
+  if (lines.length && outside.length) {
+    return block(
+      input.command,
+      APPROVAL_REJECTED_STATUS,
+      "E_APPROVAL_REJECTED",
+      "ApprovalScopeMismatch",
+      `Approval ${approvalId} does not cover ${outside.map((id) => id.split(":")[0]).join(", ")}, so nothing was executed. It covers ${lines.map((line) => line.store).join(", ")}; call again with browsers limited to those, or with no approvalId to request an approval that names every store.`,
+      { action: input.action, approvalId, lines, outside },
+    );
+  }
+
+  if (!lines.length && storedFingerprint && storedFingerprint !== fingerprint) {
     return scopeMismatch(input, approvalId, fingerprint, storedFingerprint);
   }
 
@@ -346,7 +367,21 @@ export async function verifyApproval(params: {
     );
   }
 
-  if (used) {
+  const askedLines = lines.filter((line) => asked.includes(line.id));
+  const settled = askedLines.length > 0 && askedLines.every((line) => line.state !== "pending");
+
+  if (lines.length && status === "approved" && settled) {
+    return block(
+      input.command,
+      APPROVAL_REJECTED_STATUS,
+      "E_APPROVAL_REJECTED",
+      "ApprovalConsumed",
+      `Every line this call asks for already settled (${linesSentence(askedLines)}), so nothing was executed. Read the current state first (${input.stateRead ?? "extension_release_status for a submission"}), and request a fresh approval by calling this tool with no approvalId only if a store did not happen.`,
+      { action: input.action, approvalId, lines },
+    );
+  }
+
+  if (used && !lines.length) {
     return block(
       input.command,
       APPROVAL_REJECTED_STATUS,
@@ -367,7 +402,7 @@ export async function verifyApproval(params: {
         undone: "Nothing was executed.",
         api: input.api,
         approvalUrl: (typeof data.approvalUrl === "string" ? data.approvalUrl.trim() : "") || minted?.approvalUrl || undefined,
-        value: { action: input.action, status: status || "pending" },
+        value: { action: input.action, status: status || "pending", ...(lines.length ? { lines } : {}) },
       }),
     };
   }
