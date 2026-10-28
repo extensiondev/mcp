@@ -120,10 +120,91 @@ export interface PlatformSubmission {
   run: SubmissionRun;
 }
 
+export interface QueuedStoreActView {
+  id?: string;
+  act: string;
+  store: string;
+  buildSha?: string;
+  status: string;
+  storeWord: string;
+  clearsWhen: string;
+  readAt?: string;
+  queuedAt?: string;
+  lastCheckedAt: string;
+  dispatchedAt?: string;
+  submissionId?: string;
+  canceledAt?: string;
+  canceledReason?: string;
+  failedAt?: string;
+  failedReason?: string;
+  approvalRefunded?: boolean;
+  message?: string;
+}
+
 export type PlatformSubmissionsRead =
-  | { ok: true; byStore: Record<string, PlatformSubmission> }
+  | { ok: true; byStore: Record<string, PlatformSubmission>; queued: Record<string, QueuedStoreActView> }
   | { ok: false; skipped: true }
   | { ok: false; skipped: false; message: string };
+
+/* @invariant A QUEUED ACT IS ANSWERED IN THE LOCK'S OWN WORDS. The platform
+ * records a submit or publish a store's review of another version holds back
+ * (decision C, 2026-10-28) with the store's word for the hold, the sentence
+ * for when it clears and when it last looked; this reader keeps those and
+ * nothing that names a grant, a mirror or a run.
+ */
+export function queuedActOf(raw: unknown): QueuedStoreActView | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+
+  const row = raw as Record<string, unknown>;
+  const lock = row.lock && typeof row.lock === "object" ? (row.lock as Record<string, unknown>) : {};
+  const act = str(row.act);
+  const store = str(row.store);
+  const status = str(row.status);
+  const storeWord = str(lock.storeWord);
+  const clearsWhen = str(lock.clearsWhen);
+  const lastCheckedAt = str(row.lastCheckedAt);
+
+  if (!act || !store || !status || !storeWord || !clearsWhen || !lastCheckedAt) return undefined;
+
+  const out: QueuedStoreActView = { act, store, status, storeWord, clearsWhen, lastCheckedAt };
+  const fields: Array<[keyof QueuedStoreActView, unknown]> = [
+    ["id", row.id],
+    ["buildSha", row.buildSha],
+    ["readAt", lock.readAt],
+    ["queuedAt", row.queuedAt],
+    ["dispatchedAt", row.dispatchedAt],
+    ["submissionId", row.submissionId],
+    ["canceledAt", row.canceledAt],
+    ["canceledReason", row.canceledReason],
+    ["failedAt", row.failedAt],
+    ["failedReason", row.failedReason],
+    ["message", row.message],
+  ];
+
+  for (const [key, value] of fields) {
+    const text = str(value);
+    if (text) (out as unknown as Record<string, string>)[key] = text;
+  }
+
+  if (row.approvalRefunded === true) out.approvalRefunded = true;
+
+  return out;
+}
+
+export function queuedActsOf(raw: unknown): Record<string, QueuedStoreActView> {
+  const out: Record<string, QueuedStoreActView> = {};
+
+  for (const entry of Array.isArray(raw) ? raw : []) {
+    const act = queuedActOf(entry);
+    if (act && act.status === "queued") out[act.store] = act;
+  }
+
+  return out;
+}
+
+export function queuedActSentence(act: Pick<QueuedStoreActView, "storeWord" | "lastCheckedAt">): string {
+  return `Queued behind ${act.storeWord}, sends when it clears (checked ${act.lastCheckedAt})`;
+}
 
 function str(value: unknown): string | undefined {
   const text = String(value ?? "").trim();
@@ -366,7 +447,7 @@ export async function readPlatformSubmissions(args: {
     if (submission) byStore[submission.store] = submission;
   }
 
-  return { ok: true, byStore };
+  return { ok: true, byStore, queued: queuedActsOf(data.queued) };
 }
 
 export type SubmissionRecordRead = RecordRead<PlatformSubmission>;

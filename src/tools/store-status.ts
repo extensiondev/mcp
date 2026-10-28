@@ -18,9 +18,11 @@ import { envelope, type ErrorCode } from "../lib/envelope";
 import { platformHoldEnvelope } from "../lib/platform-hold";
 import {
   isNewerOrSame,
+  queuedActSentence,
   readPlatformSubmissions,
   retryNote,
   statusReadOf,
+  type QueuedStoreActView,
   type StoreReview,
   type StoreStatusRead,
   type SubmissionRun,
@@ -555,6 +557,9 @@ export async function readStores(args: {
       row.review = review;
     }
 
+    const queuedAct = platform.ok ? platform.queued[store] : undefined;
+    if (queuedAct) row.queuedAct = queuedAct;
+
     return row;
   });
 
@@ -622,6 +627,12 @@ export async function readStores(args: {
 
     const release = row.release as StoreReleaseView | undefined;
     if (release) tail.push(`release: ${storeReleaseSentence(release)}`);
+
+    const queuedAct = row.queuedAct as QueuedStoreActView | undefined;
+
+    if (queuedAct) {
+      tail.push(`${queuedAct.act} of build ${queuedAct.buildSha || "unknown"} ${queuedActSentence(queuedAct)}; it sends on its own once ${queuedAct.clearsWhen}`);
+    }
 
     return tail.length > 0 ? `${head}; ${tail.join("; ")}` : head;
   });
