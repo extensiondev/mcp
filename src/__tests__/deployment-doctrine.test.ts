@@ -46,7 +46,7 @@ function approved(world: ReturnType<typeof usePlatformWorld>, approvalId: string
         status: "approved",
         used: false,
         expiresAt: new Date(Date.now() + 600_000).toISOString(),
-        fingerprint: actionFingerprint("extension_submit", { browsers: ["chrome"], buildSha: "603fc8a", channel: "stable" }),
+        fingerprint: actionFingerprint("extension_submit", { browsers: ["chrome"], buildSha: "603fc8a" }),
       },
     }),
   ]);
@@ -195,7 +195,7 @@ describe("an approval page opens itself once in the person's browser", () => {
   it("renews an approval the platform reports expired with the same fingerprint, and opens the fresh page once", async () => {
     if (process.platform === "win32") return;
 
-    const fingerprint = actionFingerprint("extension_submit", { browsers: ["chrome"], buildSha: "603fc8a", channel: "stable" });
+    const fingerprint = actionFingerprint("extension_submit", { browsers: ["chrome"], buildSha: "603fc8a" });
     const expiredAt = "2026-10-19T22:51:00.000Z";
     const freshUrl = `${WORLD_API}/device/approve/apr_fresh`;
 

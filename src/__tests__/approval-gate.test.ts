@@ -440,7 +440,6 @@ describe("the approval gate guards irreversible outward actions and cannot self-
       const fingerprint = actionFingerprint("extension_submit", {
         browsers: ["chrome"],
         buildSha: "abc1234",
-        channel: "stable",
       });
       global.fetch = router(calls, {
         "GET /api/cli/approvals": () =>
@@ -490,7 +489,6 @@ describe("the approval gate guards irreversible outward actions and cannot self-
       const submitFingerprint = actionFingerprint("extension_submit", {
         browsers: ["chrome"],
         buildSha: "abc1234",
-        channel: "stable",
       });
       global.fetch = router(calls, {
         "GET /api/cli/approvals": () =>

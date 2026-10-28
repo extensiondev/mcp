@@ -19,6 +19,7 @@ import {
   type ProjectApi,
 } from "../lib/project-api";
 import { contradictoryRef } from "./store-status";
+import { storeReleasesOf, storeReleasesSentence } from "../lib/platform-store-releases";
 
 const COMMAND = "extension_release_status";
 const MAX_RELEASES = 10;
@@ -156,6 +157,12 @@ export async function readReleaseHistory(scope: Scope): Promise<string> {
     : ownerOnly
       ? { read: false, needsOwner: true }
       : { read: false, reason: promoteReady.message };
+  const stores = storeReleasesOf(list.json);
+  const storesSentence = storeReleasesSentence(stores.rows, stores.unread);
+  const channelsSentence =
+    releases.length > 0
+      ? `${releases.length} channel release${releases.length === 1 ? "" : "s"} with up to ${EVENTS_PER_RELEASE} recent events each, newest first. Pass releaseId with one of these ids for that release and up to ${EVENTS_FOR_ONE_RELEASE} of its events.`
+      : "No channel release is recorded for this project yet; extension_release_promote pins a channel to a build for testers.";
 
   return envelope({
     ok: true,
@@ -164,16 +171,16 @@ export async function readReleaseHistory(scope: Scope): Promise<string> {
     value: {
       ...where,
       ...(isRow(list.json.summary) ? { summary: list.json.summary } : {}),
+      storeReleases: stores.rows,
+      ...(stores.unread ? { storeReleasesUnread: true } : {}),
       releases,
       ...(all.length > shown.length ? { moreReleases: all.length - shown.length } : {}),
       promoteReady: promoteReadyView,
       releasesPageUrl: consoleProjectUrl(api.ref, ConsoleProjectPage.releases, scope.api),
     },
-    hint:
-      releases.length > 0
-        ? `${releases.length} release${releases.length === 1 ? "" : "s"} with up to ${EVENTS_PER_RELEASE} recent events each, newest first. Pass releaseId with one of these ids for that release and up to ${EVENTS_FOR_ONE_RELEASE} of its events.`
-        : "No releases are recorded for this project yet. Promote a build with extension_release_promote to cut one.",
+    hint: `${storesSentence} ${channelsSentence}`,
     warnings: [
+      stores.unread ? "The store releases could not be read, so value.storeReleases is unknown, not empty." : null,
       ownerOnly
         ? "Whether a build is ready to promote was not read: that read needs a token minted by a workspace owner, and this login's minter is not one."
         : null,

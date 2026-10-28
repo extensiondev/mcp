@@ -104,7 +104,6 @@ export interface StoreActArgs {
   submissionId?: string;
   deployPercentage?: unknown;
   buildSha?: string;
-  channel?: string;
   approvalId?: string;
   waitSeconds?: unknown;
   project?: string;
@@ -721,7 +720,7 @@ export async function preflight(args: StoreActArgs): Promise<string> {
   if ("refused" in opened) return opened.refused;
 
   const api = opened.api;
-  const body: Row = { channel: text(args.channel) || "stable" };
+  const body: Row = {};
   if (text(args.buildSha)) body.buildId = text(args.buildSha);
 
   const reads = await Promise.all(

@@ -47,7 +47,6 @@ function approvedEdgeSubmit(world: World, reads: Array<Record<string, unknown>>)
         fingerprint: actionFingerprint("extension_submit", {
           browsers: ["edge"],
           buildSha: "f29f204",
-          channel: "stable",
         }),
       },
     }),
@@ -59,7 +58,6 @@ function approvedEdgeSubmit(world: World, reads: Array<Record<string, unknown>>)
       body: {
         ok: true,
         buildId: "f29f204",
-        channel: "stable",
         dispatchedAt: "2026-10-25T22:30:00.000Z",
         submissions: [{ id: "sub_edge", store: "edge", status: "pending" }],
       },

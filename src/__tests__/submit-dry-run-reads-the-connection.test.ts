@@ -19,7 +19,7 @@ const ITEM_ID = "abcdefghijklmnopabcdefghijklmnop";
 const ITEM_URL = `https://chrome.google.com/webstore/devconsole/pub-1/${ITEM_ID}/edit`;
 const PROD_HEALTH = "https://registry.extension.land/cezaraugusto/pii-shield/_extension-dev/stores/health.json";
 const INFRA = /registry\.extension\.land|\/api\/(?:local-)?registry\/|_extension-dev(?:-system)?\/|\.github\/workflows\/|\.yml\b/;
-const DRY_RUN = { action: "submit", browsers: ["chrome"], buildSha: "b4187328", channel: "preview", dryRun: true, api: WORLD_API };
+const DRY_RUN = { action: "submit", browsers: ["chrome"], buildSha: "b4187328", dryRun: true, api: WORLD_API };
 
 function linkedChrome(world: World): void {
   world.routes.push([
@@ -43,7 +43,6 @@ function platformDryRun(world: World, extra: Record<string, unknown> = {}): void
         ok: true,
         dryRun: true,
         buildId: "b4187328",
-        channel: "preview",
         workflow: ".github/workflows/store.yml",
         message: `Preflight OK. ${PROD_HEALTH} returned 404; the store workflow .github/workflows/store.yml is present.`,
         ...extra,

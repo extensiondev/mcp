@@ -309,7 +309,7 @@ describe("extension_submit: platform submit handler", () => {
         await handler({ browsers: ["firefox"], buildSha: "abc1234" }),
       );
       expect(out.warnings[0]).toContain("No STORE.md");
-      expect(out.warnings[out.warnings.length - 1]).toBe("channel: stable (default)");
+      expect(out.warnings.join(" ")).not.toContain("channel:");
       expect(out.value.preflight[0].reason).not.toContain("STORE.md");
     } finally {
       process.chdir(prevCwd);

@@ -250,7 +250,7 @@ describe("the Chrome Web Store goal walks from not connected to submitted with a
     const sent = world.calls.find((call) =>
       PREFLIGHT.test(`${call.method} ${call.path}`),
     );
-    expect(sent?.body).toMatchObject({ channel: "stable" });
+    expect(sent?.body).not.toHaveProperty("channel");
   });
 
   it("5. submit: the real submission answers approval-required and nextStep approve at the approval page with its expiry", async () => {
@@ -298,7 +298,6 @@ describe("the Chrome Web Store goal walks from not connected to submitted with a
           fingerprint: actionFingerprint("extension_submit", {
             browsers: ["chrome"],
             buildSha: "603fc8a",
-            channel: "stable",
           }),
         },
       }),
@@ -310,7 +309,6 @@ describe("the Chrome Web Store goal walks from not connected to submitted with a
         body: {
           ok: true,
           buildId: "603fc8a",
-          channel: "stable",
           submissions: [
             {
               id: "sub_1",

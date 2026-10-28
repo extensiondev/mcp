@@ -30,7 +30,7 @@ Steps 4 to 8 use the extension.dev platform tools (`extension_release_status`, `
 
 6. **Rehearse.** Call `extension_submit` with the browsers and `buildSha`, leaving `dryRun` at its default (`true`). Show the per-store credential rows. A store whose credentials are not healthy is fixed in the extension.dev console (the response names the page); drop it from `browsers` or stop.
 
-7. **Submit only on a clear yes.** Ask the user to confirm the exact stores, build and channel. Then call `extension_submit` with `dryRun: false`.
+7. **Submit only on a clear yes.** Ask the user to confirm the exact stores and build. Then call `extension_submit` with `dryRun: false`.
    - It answers `approval-required` with an `approvalUrl`: give the user that link. A workspace owner approves exactly this submission on extension.dev.
    - When they say it is approved, call `extension_submit` again with the same arguments plus the returned `approvalId`. It runs once.
 

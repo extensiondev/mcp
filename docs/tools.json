@@ -2099,12 +2099,6 @@
           "description": "The built commit SHA to submit. It needs a completed build in the project's build index; an unknown sha is rejected."
         },
         {
-          "name": "channel",
-          "type": "string",
-          "required": false,
-          "description": "Release channel label the submission is recorded under (default stable). The build sent is always buildSha; a channel pointing at another build changes nothing that is uploaded."
-        },
-        {
           "name": "version",
           "type": "string",
           "required": false,

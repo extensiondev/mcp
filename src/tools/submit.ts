@@ -52,14 +52,7 @@ import {
 } from "../lib/platform-submissions";
 import { trackUrl as consoleTrackUrl } from "../lib/track-url";
 import { readSubmitOutcome } from "../lib/submit-outcome";
-import {
-  consoleProjectUrl,
-  fetchRegistryJson,
-  parseChannels,
-  registryFileUrl,
-  channelsShapeProblem,
-  type ProjectRef,
-} from "../lib/registry";
+import { consoleProjectUrl, type ProjectRef } from "../lib/registry";
 import {
   PUBLISH_ACTIONS,
   preflight as readPreflight,
@@ -149,7 +142,6 @@ export interface SubmitToolArgs {
   project?: string;
   browsers?: string[];
   buildSha?: string;
-  channel?: string;
   version?: string;
   dryRun?: boolean;
   projectPath?: string;
@@ -199,10 +191,6 @@ export const schema = {
         type: "string",
         description:
           "The built commit SHA to submit. It needs a completed build in the project's build index; an unknown sha is rejected.",
-      },
-      channel: {
-        type: "string",
-        description: "Release channel label the submission is recorded under (default stable). The build sent is always buildSha; a channel pointing at another build changes nothing that is uploaded.",
       },
       version: {
         type: "string",
@@ -438,14 +426,13 @@ async function connectionPrecheck(
   args: SubmitToolArgs,
   browsers: string[],
   ref: ProjectRef | null,
-  scope: { buildSha: string; channel: string },
+  scope: { buildSha: string },
 ): Promise<{ refused: string | null; modes: ModeIds; reports: Record<string, Record<string, unknown>> }> {
   const read = await readConnectionsAndModes(
     {
       project: args.project,
       api: args.api,
       buildSha: scope.buildSha,
-      channel: args.channel,
     },
     browsers,
   );
@@ -480,7 +467,6 @@ async function connectionPrecheck(
     value: {
       browsers,
       buildSha: scope.buildSha,
-      channel: scope.channel,
       verdict: blocked.state,
       ...(linked
         ? itemLinkUrls([connections[blocked.browser]], settingsUrl)
@@ -580,9 +566,7 @@ async function answer(args: SubmitToolArgs): Promise<string> {
   const url = `${apiCheck.base}/api/cli/stores/submit`;
 
   const dryRun = args.dryRun !== false;
-  const channel = args.channel ? String(args.channel).trim() : "stable";
   const body: Record<string, unknown> = { browsers, buildSha, dryRun };
-  if (args.channel) body.channel = String(args.channel).trim();
   if (args.version) body.version = String(args.version).trim();
 
   let modes: ModeIds = {};
@@ -598,7 +582,6 @@ async function answer(args: SubmitToolArgs): Promise<string> {
       scope: {
         browsers: [...browsers].sort(),
         buildSha: buildSha.toLowerCase(),
-        channel,
       },
       description: drafts
         ? `Upload build ${buildSha} to ${browsers.join(", ")} as a store draft: not published and not sent to review under the saved submission mode. The store keeps the uploaded package, so the upload itself cannot be undone.`
@@ -622,7 +605,6 @@ async function answer(args: SubmitToolArgs): Promise<string> {
   if (!dryRun) {
     const precheck = await connectionPrecheck(args, browsers, credential.ref, {
       buildSha,
-      channel,
     });
     if (precheck.refused) return precheck.refused;
 
@@ -672,7 +654,7 @@ async function answer(args: SubmitToolArgs): Promise<string> {
           name: "SubmitUnconfirmed",
           message: `The submission request for ${browsers.join(", ")} left this machine and no answer came back (${unreached}), so whether any store was submitted is unknown.`,
         },
-        value: { browsers, buildSha, channel },
+        value: { browsers, buildSha },
         hint: `Do not submit again blind: a store that was dispatched would be submitted twice. Read ${statusRead} first and submit only the stores with no new submission.`,
       });
     }
@@ -722,7 +704,6 @@ async function answer(args: SubmitToolArgs): Promise<string> {
         value: {
           browsers,
           buildSha,
-          channel,
           ...urls,
           trackUrl: settingsUrl,
           sayToPerson: say,
@@ -753,7 +734,6 @@ async function answer(args: SubmitToolArgs): Promise<string> {
         value: {
           browsers,
           buildSha,
-          channel,
           store,
           refusedBeforeApproval: true,
           missing: incomplete.missing,
@@ -797,7 +777,6 @@ async function answer(args: SubmitToolArgs): Promise<string> {
         value: {
           browsers,
           buildSha,
-          channel,
           store: "edge",
           files,
           trackUrl: buildUrl,
@@ -836,7 +815,6 @@ async function answer(args: SubmitToolArgs): Promise<string> {
         value: {
           browsers,
           buildSha,
-          channel,
           connectUrl,
           trackUrl: settingsUrl,
           sayToPerson: say,
@@ -859,7 +837,7 @@ async function answer(args: SubmitToolArgs): Promise<string> {
             approvalId: String(body.approvalId),
             undone: "Nothing was submitted by this call.",
             api: args.api,
-            value: { browsers, buildSha, channel },
+            value: { browsers, buildSha },
             stateRead: statusRead,
           })
         : undefined;
@@ -900,7 +878,6 @@ async function answer(args: SubmitToolArgs): Promise<string> {
             value: {
               browsers,
               buildSha,
-              channel,
               approvalId: String(body.approvalId),
               approvalRefunded: true,
               sayToPerson: REFUNDED_SAY,
@@ -975,8 +952,8 @@ async function answer(args: SubmitToolArgs): Promise<string> {
   const platformOk = data?.ok !== false;
   let ok = platformOk;
   let message = typeof data?.message === "string" ? data.message : "";
-  let channelNote: string | null = null;
   let statusNote: string | null = null;
+  const platformChannel = typeof data?.channel === "string" ? data.channel.trim() : "";
 
   if (dryRun) {
     const ref = credential.ref;
@@ -994,49 +971,15 @@ async function answer(args: SubmitToolArgs): Promise<string> {
             args.api,
           )
         : consoleStoresUrl;
-    const [{ rows, connections }, channelsRes] = await Promise.all([
-      readStoreRows(
-        {
-          project: args.project,
-          api: args.api,
-          buildSha,
-          channel: args.channel,
-        },
-        browsers,
-        ctx,
-      ),
-      ref && String(args.channel || "").trim()
-        ? fetchRegistryJson(
-            registryFileUrl(ref, "channels.json", args.api),
-            fetch,
-            { ref, api: args.api },
-          )
-        : Promise.resolve(null),
-    ]);
-    const channelRows =
-      channelsRes?.ok && !channelsShapeProblem(channelsRes.json)
-        ? parseChannels(channelsRes.json)
-        : null;
-    const channelDefaulted = !String(args.channel || "").trim();
-    const resolvedChannel =
-      String(data?.channel || "").trim() ||
-      (channelDefaulted ? "stable" : String(args.channel).trim());
-
-    if (
-      !channelDefaulted &&
-      channelRows &&
-      !channelRows.some(
-        (r) =>
-          r.channel === resolvedChannel ||
-          r.channel.endsWith(`-${resolvedChannel}`),
-      )
-    ) {
-      warnings.push(
-        `Channel "${resolvedChannel}" is not one of this project's release channels (existing: ${
-          channelRows.map((r) => r.channel).join(", ") || "none"
-        }). The submission still sends build ${buildSha} as named; the channel is only the label its store records carry, so pass an existing channel if those records should match a release channel.`,
-      );
-    }
+    const { rows, connections } = await readStoreRows(
+      {
+        project: args.project,
+        api: args.api,
+        buildSha,
+      },
+      browsers,
+      ctx,
+    );
 
     const verdict = dryRunVerdict(
       rows,
@@ -1058,8 +1001,9 @@ async function answer(args: SubmitToolArgs): Promise<string> {
     result.preflight = rows;
     result.nextStep = verdict.nextStep;
     result.trackUrl = verdict.trackUrl;
-    result.channel = resolvedChannel;
-    result.channelDefaulted = channelDefaulted;
+    if (platformChannel) result.channel = platformChannel;
+    else delete result.channel;
+
     result.consoleStoresUrl = consoleStoresUrl;
 
     if (typeof data?.message === "string") {
@@ -1068,7 +1012,6 @@ async function answer(args: SubmitToolArgs): Promise<string> {
 
     const itemUrl = rows.find((row) => row.itemUrl)?.itemUrl;
     if (itemUrl) result.itemUrl = itemUrl;
-    if (channelDefaulted) channelNote = `channel: ${resolvedChannel} (default)`;
 
     warnings.push(
       `Store publish mode (draft, skip-publish or live) is not readable with this token, so a dry run does not check it; the per-store settings are at ${consoleStoresUrl}.`,
@@ -1090,7 +1033,7 @@ async function answer(args: SubmitToolArgs): Promise<string> {
           name: "SubmitUnconfirmed",
           message: `The platform answered ${res.status} but ${outcome.why}, so whether ${browsers.join(", ")} ${browsers.length === 1 ? "was" : "were"} submitted is unknown.`,
         },
-        value: { browsers, buildSha, channel, platform: data },
+        value: { browsers, buildSha, platform: data },
         hint: `Do not submit again blind: a store that was dispatched would be submitted twice. Read ${statusRead} first and submit only the stores with no new submission.`,
       });
     }
@@ -1271,7 +1214,7 @@ async function answer(args: SubmitToolArgs): Promise<string> {
         },
         value: result,
         hint: `Fix the cause and submit again; ${statusRead} reads the record. ${made}`,
-        warnings: [...warnings, channelNote, credential.note],
+        warnings: [...warnings, credential.note],
       });
     }
 
@@ -1306,7 +1249,6 @@ async function answer(args: SubmitToolArgs): Promise<string> {
             : null,
           ...failureLines.map((line) => `NOT reached: ${line}.`),
           ...warnings,
-          channelNote,
           statusNote,
         ],
       });
@@ -1319,7 +1261,7 @@ async function answer(args: SubmitToolArgs): Promise<string> {
         status: "submit-dispatched",
         value: result,
         hint: `${dispatchedHint({ acceptedAt, trackUrl: firstPage, readCall: statusRead })} A Chrome or Edge upload under the default modes (Chrome draft-until-public, Edge draft) stops at the draft and does not enter review; a saved public, staged or review mode sends it on.${sourcesLine} ${made}`,
-        warnings: [...warnings, channelNote, statusNote, credential.note],
+        warnings: [...warnings, statusNote, credential.note],
       });
     }
 
@@ -1330,7 +1272,7 @@ async function answer(args: SubmitToolArgs): Promise<string> {
         status: "submitted",
         value: result,
         hint: `${judgedStep.say}${sourcesLine} ${made}`,
-        warnings: [...warnings, channelNote, statusNote, credential.note],
+        warnings: [...warnings, statusNote, credential.note],
       });
     }
 
@@ -1343,7 +1285,7 @@ async function answer(args: SubmitToolArgs): Promise<string> {
         message ||
         `The platform's record confirms the submission for ${outcome.stores.join(", ")} (${waited.outcome.status}${waited.outcome.storeState ? `, store state ${waited.outcome.storeState}` : ""}). A Chrome or Edge upload under the default modes (Chrome draft-until-public, Edge draft) stops at the draft, does not enter review and is recorded as "Uploaded, not public"; a saved public, staged or review mode sends it on, and a store's own review, where it happens, comes after this answer.`
       }${sourcesLine} ${made}`,
-      warnings: [...warnings, channelNote, statusNote, credential.note],
+      warnings: [...warnings, statusNote, credential.note],
     });
   }
 
@@ -1353,6 +1295,6 @@ async function answer(args: SubmitToolArgs): Promise<string> {
     status: "preflight",
     value: result,
     hint: message,
-    warnings: [...warnings, channelNote, statusNote, credential.note],
+    warnings: [...warnings, statusNote, credential.note],
   });
 }

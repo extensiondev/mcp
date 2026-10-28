@@ -88,7 +88,7 @@ export function submissionModeOf(json: Row): StoreSubmissionMode | null {
 }
 
 export async function readConnectionsAndModes(
-  args: { project?: string; api?: string; buildSha?: string; channel?: string },
+  args: { project?: string; api?: string; buildSha?: string },
   browsers: string[],
 ): Promise<{ connections: Record<string, ConnectionRecord>; modes: Record<string, StoreSubmissionMode>; reports: Record<string, Row> }> {
   const opened = await openShipApi("extension_submit", args, { action: "submit" }).catch(() => null);
@@ -96,7 +96,6 @@ export async function readConnectionsAndModes(
 
   const body: Row = {};
   if (text(args.buildSha)) body.buildId = text(args.buildSha);
-  if (text(args.channel)) body.channel = text(args.channel);
 
   const reads = await Promise.all(
     browsers.map((browser) => projectApiSend<Row>(opened.api, "POST", `stores/${browser}/submissions/preflight`, body).catch(() => null)),
@@ -123,7 +122,7 @@ export async function readConnectionsAndModes(
 }
 
 export async function readConnections(
-  args: { project?: string; api?: string; buildSha?: string; channel?: string },
+  args: { project?: string; api?: string; buildSha?: string },
   browsers: string[],
 ): Promise<Record<string, ConnectionRecord>> {
   return (await readConnectionsAndModes(args, browsers)).connections;
@@ -233,7 +232,7 @@ export function rowFromHealth(browser: string, health: HealthRead): StoreRow {
 }
 
 export async function readStoreRows(
-  args: { project?: string; api?: string; buildSha?: string; channel?: string },
+  args: { project?: string; api?: string; buildSha?: string },
   browsers: string[],
   ctx: Context,
 ): Promise<{ rows: StoreRow[]; connections: Record<string, ConnectionRecord> }> {

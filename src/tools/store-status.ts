@@ -38,6 +38,12 @@ import {
 import { repairEdgeStoreUrl } from "../lib/edge-listing";
 import { storeRecordUnread } from "../lib/store-readiness";
 import { openProjectApi, projectApiSend } from "../lib/project-api";
+import {
+  newestStoreReleaseByStore,
+  readPlatformStoreReleases,
+  storeReleaseSentence,
+  type StoreReleaseView,
+} from "../lib/platform-store-releases";
 
 export const REFRESHABLE_STORES = ["chrome", "edge", "firefox", "safari"] as const;
 
@@ -416,13 +422,17 @@ export async function readStores(args: {
           api: args.api,
         })
       : null;
-  const [healthRes, statusRes, submissionsRes, platform, records] = await Promise.all([
+  const [healthRes, statusRes, submissionsRes, platform, records, releases] = await Promise.all([
     fetchRegistryJson(healthUrl, fetch, { ref, api: args.api }),
     fetchRegistryJson(statusUrl, fetch, { ref, api: args.api }),
     fetchRegistryJson(submissionsUrl, fetch, { ref, api: args.api }),
     readPlatformSubmissions({ ref, named, api: args.api }),
     readPlatformStoreRecords({ ref, named, api: args.api, stores: KNOWN_STORES }),
+    readPlatformStoreReleases({ ref, named, api: args.api }),
   ]);
+  const releaseByStore: Record<string, StoreReleaseView> = releases.ok
+    ? newestStoreReleaseByStore(releases.rows)
+    : {};
 
   const heldRead = [healthRes, statusRes, submissionsRes].find(
     (res) => !res.ok && res.held === true,
@@ -524,6 +534,7 @@ export async function readStores(args: {
     }
 
     if (runsByStore[store]) row.submissionRun = runsByStore[store];
+    if (releaseByStore[store]) row.release = releaseByStore[store];
 
     const earlier = (records.ok
       ? earlierSubmissions(records.history[store] ?? [], submissionsByStore[store])
@@ -609,6 +620,9 @@ export async function readStores(args: {
 
     if (review?.status) tail.push(reviewSentence(review));
 
+    const release = row.release as StoreReleaseView | undefined;
+    if (release) tail.push(`release: ${storeReleaseSentence(release)}`);
+
     return tail.length > 0 ? `${head}; ${tail.join("; ")}` : head;
   });
 
@@ -632,6 +646,13 @@ export async function readStores(args: {
     !submissionsRes.ok && submissionsRes.status !== 404
       ? `stores/submissions.json unreadable: ${submissionsRes.message}`
       : null;
+  const releasesUnavailable = releases.ok
+    ? releases.unread
+      ? "the platform could not read the store releases, so each store's release is unknown, not empty"
+      : null
+    : releases.skipped
+      ? null
+      : `the store releases could not be read from the platform: ${releases.message}`;
 
   return envelope({
     ok: true,
@@ -661,6 +682,7 @@ export async function readStores(args: {
       statusUnavailable,
       submissionsUnavailable,
       platformUnavailable,
+      releasesUnavailable,
       ...recordsUnavailable,
     ],
   });

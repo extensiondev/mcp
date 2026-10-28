@@ -34,7 +34,6 @@ function approvedEdgeSubmit(world: World, record: Record<string, unknown>): void
         fingerprint: actionFingerprint("extension_submit", {
           browsers: ["edge"],
           buildSha: "f29f204",
-          channel: "stable",
         }),
       },
     }),
@@ -46,7 +45,6 @@ function approvedEdgeSubmit(world: World, record: Record<string, unknown>): void
       body: {
         ok: true,
         buildId: "f29f204",
-        channel: "stable",
         dispatchedAt: "2026-10-24T03:12:52.000Z",
         submissions: [{ id: "sub_edge", store: "edge", status: "pending" }],
       },
@@ -71,7 +69,6 @@ function approvedFirefoxSubmit(world: World, record: Record<string, unknown>): v
         fingerprint: actionFingerprint("extension_submit", {
           browsers: ["firefox"],
           buildSha: "f29f204",
-          channel: "stable",
         }),
       },
     }),
@@ -83,7 +80,6 @@ function approvedFirefoxSubmit(world: World, record: Record<string, unknown>): v
       body: {
         ok: true,
         buildId: "f29f204",
-        channel: "stable",
         dispatchedAt: "2026-10-26T17:36:41.000Z",
         submissions: [{ id: "sub_firefox", store: "firefox", status: "pending" }],
       },

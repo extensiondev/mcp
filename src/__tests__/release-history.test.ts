@@ -21,12 +21,47 @@ function jsonResponse(body: unknown, status = 200): Response {
   } as unknown as Response;
 }
 
+const STORE_RELEASES = [
+  {
+    id: "chrome:0.1.0.4",
+    store: "chrome",
+    browser: "chrome",
+    version: "0.1.0.4",
+    buildSha: "603fc8a",
+    state: "live",
+    storeWord: "PUBLISHED",
+    readAt: "2026-10-12T09:00:00Z",
+    source: "poll",
+    visibility: "unlisted",
+    storeVersion: { packaged: "0.1.0.4", displayed: "0.1.0", source: "platform", buildNumber: 4 },
+    submissionId: "sub_2",
+    submittedAt: "2026-10-10T10:00:00Z",
+    updatedAt: "2026-10-12T09:00:00Z",
+    storeUrl: "https://chromewebstore.google.com/detail/abc",
+  },
+  {
+    id: "firefox:0.1.0",
+    store: "firefox",
+    browser: "firefox",
+    version: "0.1.0",
+    buildSha: "603fc8a",
+    state: "in-review",
+    storeWord: "",
+    readAt: "2026-10-11T18:40:00Z",
+    source: "inferred",
+    submissionId: "sub_f",
+    submittedAt: "2026-10-11T18:38:00Z",
+    updatedAt: "2026-10-11T18:40:00Z",
+  },
+];
+
 const RELEASES = {
-  summary: { activeReleases: 2, channels: 2 },
+  summary: { activeReleases: 1, liveChannels: 2, channels: 2 },
   items: [
     { id: "chrome-stable", browser: "chrome", channel: "stable", build: "603fc8a", version: "0.1.0", status: "live", createdAt: "2026-10-11T16:45:37Z", rollout: "100%" },
     { id: "chrome-preview", browser: "chrome", channel: "preview", build: "603fc8a", version: "0.1.0", status: "live", createdAt: "2026-10-11T16:45:37Z", rollout: "0%" },
   ],
+  storeReleases: STORE_RELEASES,
 };
 
 const event = (n: number) => ({
@@ -152,13 +187,70 @@ describe("extension_release_status reads release history and store records from 
     expect(out.ok).toBe(true);
     const history = out.value.history;
     expect(history.ok).toBe(true);
-    expect(history.value.summary).toMatchObject({ activeReleases: 2 });
+    expect(history.value.summary).toMatchObject({ activeReleases: 1, liveChannels: 2 });
     const stable = history.value.releases.find((r: { id: string }) => r.id === "chrome-stable");
     expect(stable).toMatchObject({ browser: "chrome", channel: "stable", build: "603fc8a" });
     expect(stable.events).toHaveLength(3);
     expect(stable.events[0]).toMatchObject({ event: "Promoted chrome to stable (1)" });
     expect(stable.events[0].runUrl).toBeUndefined();
     expect(calls.some((url) => url.includes("/events?limit=5"))).toBe(true);
+  });
+
+  it("answers what is live in each store, with the store's word, when it was read and its audience", async () => {
+    if (process.platform === "win32") return;
+
+    login();
+
+    const out = JSON.parse(await releaseStatus({ include: ["history"], api: API }));
+    const history = out.value.history;
+
+    expect(history.value.storeReleases.map((row: { id: string; state: string }) => [row.id, row.state])).toEqual([
+      ["chrome:0.1.0.4", "live"],
+      ["firefox:0.1.0", "in-review"],
+    ]);
+
+    expect(history.value.storeReleases[0]).toMatchObject({
+      storeWord: "PUBLISHED",
+      readAt: "2026-10-12T09:00:00Z",
+      source: "poll",
+      visibility: "unlisted",
+      storeVersion: { packaged: "0.1.0.4", buildNumber: 4 },
+    });
+
+    expect(history.hint).toContain("Live in one store: chrome 0.1.0.4 live, unlisted on build 603fc8a (the store's word PUBLISHED, read 2026-10-12T09:00:00Z by poll)");
+    expect(history.hint).toContain("firefox 0.1.0 in-review on build 603fc8a (inferred from the platform's record, no store word read)");
+    expect(history.hint).toContain("2 channel releases");
+  });
+
+  it("says the store releases are unknown, not empty, when the platform could not read them", async () => {
+    if (process.platform === "win32") return;
+
+    login();
+    routes[`/api/projects/${PROJECT_ID}/releases`] = {
+      body: { ...RELEASES, storeReleases: [], storeReleasesUnread: true, summary: { activeReleases: 0, liveChannels: 2, channels: 2 } },
+    };
+
+    const out = JSON.parse(await releaseStatus({ include: ["history"], api: API }));
+    const history = out.value.history;
+
+    expect(history.value.storeReleases).toEqual([]);
+    expect(history.value.storeReleasesUnread).toBe(true);
+    expect(history.hint).toContain("what is live in each store is unknown, not empty");
+    expect(history.warnings.join(" ")).toContain("value.storeReleases is unknown, not empty");
+  });
+
+  it("carries each store's newest release beside its submissions in the stores read", async () => {
+    if (process.platform === "win32") return;
+
+    login();
+
+    const out = JSON.parse(await releaseStatus({ include: ["stores"], api: API }));
+    const stores = out.value.stores.value.stores as Array<{ store: string; release?: { state: string; version: string } }>;
+
+    expect(stores.find((row) => row.store === "chrome")?.release).toMatchObject({ state: "live", version: "0.1.0.4", visibility: "unlisted" });
+    expect(stores.find((row) => row.store === "firefox")?.release).toMatchObject({ state: "in-review", source: "inferred" });
+    expect(stores.find((row) => row.store === "edge")?.release).toBeUndefined();
+    expect(out.value.stores.hint).toContain("release: chrome 0.1.0.4 live, unlisted on build 603fc8a");
   });
 
   it("says the promote-ready read needs an owner instead of failing the section", async () => {

@@ -283,9 +283,9 @@ describe("extension_submit withdraws a submission, raises a staged rollout and c
     platform.routes[`POST ${PREFLIGHT("chrome")}`] = () => ({ body: report("chrome", false) });
     platform.routes[`POST ${PREFLIGHT("firefox")}`] = () => ({ body: report("firefox", true) });
 
-    const out = JSON.parse(await submit({ action: "preflight", browsers: ["chrome", "firefox"], buildSha: "603fc8a", channel: "stable", api: API }));
+    const out = JSON.parse(await submit({ action: "preflight", browsers: ["chrome", "firefox"], buildSha: "603fc8a", api: API }));
 
-    expect(platform.sent("POST", PREFLIGHT("chrome"))[0].body).toEqual({ buildId: "603fc8a", channel: "stable" });
+    expect(platform.sent("POST", PREFLIGHT("chrome"))[0].body).toEqual({ buildId: "603fc8a" });
     expect(platform.sent("POST", APPROVALS)).toHaveLength(0);
     expect(out.ok).toBe(true);
     expect(out.status).toBe("preflight-read");
