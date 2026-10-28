@@ -41,7 +41,14 @@ function approved(world: World, browsers: string[], approvalId: string): void {
         status: "approved",
         used: false,
         expiresAt: new Date(Date.now() + 600_000).toISOString(),
-        fingerprint: actionFingerprint("extension_submit", { browsers, buildSha: "f29f204" }),
+        fingerprint:
+          browsers.length > 1
+            ? actionFingerprint("extension_submit.version", {
+                acts: browsers.map((store) => `${store}:upload`).sort(),
+                buildSha: "f29f204",
+                version: "",
+              })
+            : actionFingerprint("extension_submit", { browsers, buildSha: "f29f204" }),
       },
     }),
   ]);
