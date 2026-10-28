@@ -33,8 +33,40 @@ export interface StoreReview {
   visibility?: string;
   crxVersion?: string;
   liveState?: string;
+  liveCrxVersion?: string;
   versionState?: string;
   reviewSubmissionState?: string;
+}
+
+export type StoreStatusSource = "publish-answer" | "poll" | "run" | "inferred";
+
+export interface StoreStatusRead {
+  word: string;
+  readAt?: string;
+  source: StoreStatusSource;
+  storeWord?: string;
+  liveState?: string;
+}
+
+const STATUS_READ_SOURCES: ReadonlySet<string> = new Set(["publish-answer", "poll", "run", "inferred"]);
+
+export function statusReadOf(raw: unknown): StoreStatusRead | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+
+  const row = raw as Record<string, unknown>;
+  const word = str(row.word);
+  const source = str(row.source);
+  if (!word || !source || !STATUS_READ_SOURCES.has(source)) return undefined;
+
+  const out: StoreStatusRead = { word, source: source as StoreStatusSource };
+  const readAt = str(row.readAt);
+  const storeWord = str(row.storeWord);
+  const liveState = str(row.liveState);
+  if (readAt) out.readAt = readAt;
+  if (storeWord) out.storeWord = storeWord;
+  if (liveState) out.liveState = liveState;
+
+  return out;
 }
 
 export interface StoreAct {
@@ -67,6 +99,7 @@ export interface PlatformSubmission {
   id?: string;
   store: string;
   status?: string;
+  statusRead?: StoreStatusRead;
   rawStatus?: string;
   cancel?: StoreAct;
   publish?: StoreAct;
@@ -133,11 +166,13 @@ function storeReviewOf(raw: unknown): StoreReview | undefined {
   const visibility = str(row.visibility);
   const crxVersion = str(row.crxVersion);
   const liveState = str(row.liveState);
+  const liveCrxVersion = str(row.liveCrxVersion);
   if (checkedAt) out.checkedAt = checkedAt;
   if (source) out.source = source;
   if (visibility) out.visibility = visibility;
   if (crxVersion) out.crxVersion = crxVersion;
   if (liveState) out.liveState = liveState;
+  if (liveCrxVersion) out.liveCrxVersion = liveCrxVersion;
 
   const versionState = str(row.versionState);
   const reviewSubmissionState = str(row.reviewSubmissionState);
@@ -229,11 +264,13 @@ export function toSubmission(raw: Record<string, unknown>): PlatformSubmission |
 
   const out: PlatformSubmission = { store, run };
   const storeReview = storeReviewOf(raw.storeReview);
+  const statusRead = statusReadOf(raw.statusRead);
   const storeUpload = storeUploadOf(raw.storeUpload);
   const cancel = storeActOf(raw.cancel);
   const publish = storeActOf(raw.publish);
   const dispatch = dispatchOf(raw.dispatch);
   if (storeReview) out.storeReview = storeReview;
+  if (statusRead) out.statusRead = statusRead;
   if (storeUpload) out.storeUpload = storeUpload;
   if (cancel) out.cancel = cancel;
   if (publish) out.publish = publish;

@@ -20,7 +20,9 @@ import {
   isNewerOrSame,
   readPlatformSubmissions,
   retryNote,
+  statusReadOf,
   type StoreReview,
+  type StoreStatusRead,
   type SubmissionRun,
 } from "../lib/platform-submissions";
 import {
@@ -153,6 +155,27 @@ interface SubmissionView {
   storeVersion?: { packaged: string; displayed: string; source: string; buildNumber?: number };
   storeCrxVersion?: string;
   storeReview?: StoreReview;
+  statusRead?: StoreStatusRead;
+}
+
+/* @invariant A WORD THE PLATFORM INFERRED IS SAID TO BE INFERRED, AND IT
+ * GROUNDS NO NEXT STEP. The platform answers each submission's status with
+ * where its word was read (the publish answer, a poll, the run) or says it
+ * inferred it from its own record; the hint repeats that label so an agent
+ * reading "submitted (inferred)" asks for a store check instead of acting
+ * on it, which is Cezar's decision B of 2026-10-28 after Rebeccat's record
+ * drifted from the stores a dozen times in eleven days.
+ */
+export function statusReadNote(read: StoreStatusRead | undefined): string {
+  if (!read) return "";
+
+  if (read.source === "inferred") {
+    return " (inferred: the platform has no store answer behind this word, so it grounds no next step; ask for a store check with refresh)";
+  }
+
+  const where = read.source === "run" ? "the run" : read.source === "poll" ? "a store check" : "the store's answer";
+
+  return ` (read from ${where}${read.readAt ? ` at ${read.readAt}` : ""}${read.storeWord ? `, the store says ${read.storeWord}` : ""})`;
 }
 
 function storeVersionOf(raw: unknown): SubmissionView["storeVersion"] | undefined {
@@ -194,7 +217,9 @@ function submissionView(row: Record<string, unknown>): SubmissionView {
   const supersededBy = status === "superseded" ? str(row.supersededBy) : undefined;
   const storeCrxVersion = typeof row.storeCrxVersion === "string" ? row.storeCrxVersion.trim() : "";
   const storeReview = storeReviewOfRow(row.storeReview);
+  const statusRead = statusReadOf(row.statusRead);
   if (version) view.version = version;
+  if (statusRead) view.statusRead = statusRead;
   if (status) view.status = status;
   if (storeUrl) view.storeUrl = storeUrl;
   if (submittedAt) view.submittedAt = submittedAt;
@@ -557,7 +582,7 @@ export async function readStores(args: {
       tail.push(
         `last submission${submission.version ? ` v${submission.version}` : ""} ${
           submission.status || "recorded"
-        }${submission.submittedAt ? ` at ${submission.submittedAt}` : ""}${
+        }${statusReadNote(submission.statusRead)}${submission.submittedAt ? ` at ${submission.submittedAt}` : ""}${
           submission.failureReason ? ` (${submission.failureReason})` : ""
         }${submission.supersededBy ? ` (replaced by ${submission.supersededBy} before review, not rejected)` : ""}`,
       );
