@@ -64,7 +64,8 @@ describe("extension_submit publish for Safari", () => {
     expect(platform.sent("POST", APPROVALS)).toHaveLength(0);
     expect(out.status).toBe("publish-refused");
     expect(out.value).toMatchObject({ refusedBeforeApproval: true, newerSubmissionId: "52772ba0", newerBuildNumber: 13, refreshRequested: true });
-    expect(out.hint).toContain("store poller to read that build back from App Store Connect");
+    expect(out.hint).toContain("asked the project's store poller again");
+    expect(out.hint).toContain("value.readBack carries the poll's own account");
   });
 });
 

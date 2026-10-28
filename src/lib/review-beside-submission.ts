@@ -41,9 +41,19 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
+export const REVIEW_WITHDRAWN_STATES: ReadonlySet<string> = new Set(["DEVELOPER_REJECTED"]);
+
+/* @invariant APPLE'S DEVELOPER_REJECTED IS A WITHDRAWAL, NEVER A REJECTION.
+ * App Store Connect names a version the developer removed from review
+ * DEVELOPER_REJECTED, whether the platform's cancel act did it or the owner
+ * did it by hand in App Store Connect; Apple's own refusal is REJECTED (and
+ * METADATA_REJECTED, INVALID_BINARY). Rebeccat 2026-10-28 read "review
+ * rejected (DEVELOPER_REJECTED)" the day after it withdrew 0.2.0 itself, so
+ * the word is decided before the rejection pattern can match the suffix. */
 export function reviewStatusOf(state: string): string {
   const upper = state.toUpperCase();
   if (upper === "NO_ACTIVE_SUBMISSION") return "draft";
+  if (REVIEW_WITHDRAWN_STATES.has(upper)) return "withdrawn";
   if (REVIEW_APPROVED_STATES.test(upper)) return "approved";
   if (REVIEW_REJECTED_STATES.test(upper)) return "rejected";
   if (REVIEW_PENDING_STATES.test(upper)) return "pending";

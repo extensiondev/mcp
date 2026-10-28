@@ -4,7 +4,7 @@ import path from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { reviewBesideSubmission, reviewSentence } from "../lib/review-beside-submission";
+import { reviewBesideSubmission, reviewSentence, reviewStatusOf } from "../lib/review-beside-submission";
 import { readStores as handler } from "../tools/store-status";
 
 function jsonResponse(body: unknown, ok = true, status = 200): Response {
@@ -25,6 +25,18 @@ function fetchByFile(files: Record<string, unknown>): typeof fetch {
     return jsonResponse({ message: "not found" }, false, 404);
   }) as unknown as typeof fetch;
 }
+
+describe("Apple's version states in the platform's review words", () => {
+  it("reads DEVELOPER_REJECTED as withdrawn, whoever removed the version from review, and only Apple's REJECTED as rejected", () => {
+    expect(reviewStatusOf("DEVELOPER_REJECTED")).toBe("withdrawn");
+    expect(reviewStatusOf("REJECTED")).toBe("rejected");
+    expect(reviewStatusOf("METADATA_REJECTED")).toBe("rejected");
+    expect(reviewStatusOf("WAITING_FOR_REVIEW")).toBe("pending");
+    expect(
+      reviewSentence({ status: "withdrawn", version: "0.2.0", buildId: "6d9e10c", storeState: "DEVELOPER_REJECTED", checkedAt: "2026-10-28T18:21:11.000Z", source: "poll" }),
+    ).toMatch(/^review withdrawn \(DEVELOPER_REJECTED/);
+  });
+});
 
 const HEALTH = {
   schemaVersion: 1,
