@@ -298,7 +298,7 @@ export async function handler(args: {
         if (!attached) {
           sawCompiledButUnattached = true;
           unattachedContract = contract;
-          if (!(await unattached.reattachedNow(contract, budgetMs - (Date.now() - start)))) await sleep(pollInterval);
+          if (!(await unattached.reattachedNow(contract, budgetMs - (Date.now() - start)))) await sleep(unattached.pollDelayMs(pollInterval));
 
           continue;
         }

@@ -166,6 +166,7 @@ export async function recoverUnattachedOnce(input: {
 export class UnattachedWatch {
   recovery: ExecutorRecovery | null = null;
   private since: number | null = null;
+  private dueChecked = false;
 
   constructor(
     private readonly projectPath: string,
@@ -174,14 +175,23 @@ export class UnattachedWatch {
 
   async reattachedNow(contract: ReadyContract, remainingMs: number): Promise<boolean> {
     this.since ??= Date.now();
+    const unattachedForMs = Date.now() - this.since;
     this.recovery ??= await recoverUnattachedOnce({
       projectPath: this.projectPath,
       browser: this.browser,
       contract,
-      unattachedForMs: Date.now() - this.since,
+      unattachedForMs,
       remainingMs,
     });
 
+    if (unattachedForMs >= RECOVER_AFTER_MS) this.dueChecked = true;
+
     return this.recovery?.outcome === "attached";
+  }
+
+  pollDelayMs(pollMs: number): number {
+    if (this.since === null || this.recovery !== null || this.dueChecked) return pollMs;
+
+    return Math.min(pollMs, Math.max(0, this.since + RECOVER_AFTER_MS - Date.now()));
   }
 }
