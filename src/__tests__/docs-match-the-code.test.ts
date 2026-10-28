@@ -197,4 +197,16 @@ describe("the docs say what the code does", () => {
     const local = Object.values(TOOL_POLICY).filter((p) => p.group === "local").length;
     expect(read("README.md")).toContain(`exposes the ${local} of its ${tools.length} tools that work on this machine (the ${tools.length - local} platform tools are off)`);
   });
+
+  it("lists the registry entry at the version package.json ships", () => {
+    const { version } = require("../../package.json") as { version: string };
+    const server = require("../../server.json") as {
+      version: string;
+      packages: Array<{ identifier: string; version: string }>;
+    };
+    expect(server.version).toBe(version);
+    expect(server.packages.map((p) => `${p.identifier}@${p.version}`)).toEqual([
+      `@extension.dev/mcp@${version}`,
+    ]);
+  });
 });

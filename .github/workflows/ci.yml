@@ -209,7 +209,7 @@ jobs:
           NAME="$(node -p 'require("./package.json").name')"
           MCP_NAME="$(node -p 'require("./package.json").mcpName')"
           NPM_LATEST="$(npm view "$NAME" version --registry https://registry.npmjs.org/)"
-          curl -fsSL "https://registry.modelcontextprotocol.io/v0/servers?search=$MCP_NAME" > listing.json
+          curl -fsSL "https://registry.modelcontextprotocol.io/v0/servers?search=$MCP_NAME&version=latest" > listing.json
           node -e '
             const fs = require("node:fs");
             const [name, npmLatest] = process.argv.slice(1);

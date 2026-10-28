@@ -63,7 +63,7 @@ curl -fsSL "https://github.com/modelcontextprotocol/registry/releases/latest/dow
 "$PUBLISHER_DIR/mcp-publisher" publish
 
 echo "Reading the listing back from $REGISTRY"
-curl -fsSL "$REGISTRY/v0/servers?search=$SERVER_NAME" > "$PUBLISHER_DIR/listing.json"
+curl -fsSL "$REGISTRY/v0/servers?search=$SERVER_NAME&version=latest" > "$PUBLISHER_DIR/listing.json"
 node -e '
   const fs = require("node:fs");
   const [file, name, version] = process.argv.slice(1);

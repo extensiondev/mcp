@@ -11,6 +11,11 @@ name: Publish MCP registry listing
 
 on:
   workflow_dispatch:
+    inputs:
+      version:
+        description: A released version npm serves (for example 10.15.1), listed from its tag. Empty lists the server.json on main.
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -29,10 +34,38 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
 
+      - name: Checkout the released tag
+        if: inputs.version != ''
+        uses: actions/checkout@v5
+        with:
+          ref: v${{ inputs.version }}
+          path: released
+
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
           node-version: 24
 
+      - name: Align the tag's server.json with the version it shipped
+        if: inputs.version != ''
+        working-directory: released
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          node -e '
+            const fs = require("node:fs");
+            const v = process.env.VERSION;
+            const shipped = require("./package.json").version;
+            if (shipped !== v) {
+              console.error(`tag v${v} ships package.json ${shipped}, not ${v}`);
+              process.exit(1);
+            }
+            const j = JSON.parse(fs.readFileSync("server.json", "utf8"));
+            j.version = v;
+            for (const pkg of j.packages || []) pkg.version = v;
+            fs.writeFileSync("server.json", JSON.stringify(j, null, 2) + "\n");
+          '
+
       - name: Publish the listing to the MCP registry
-        run: ./scripts/publish-mcp-registry.sh
+        working-directory: ${{ inputs.version != '' && 'released' || '.' }}
+        run: ${{ github.workspace }}/scripts/publish-mcp-registry.sh

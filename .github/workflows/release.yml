@@ -263,7 +263,7 @@ jobs:
         run: |
           NEXT="nothing else is needed for a canary"
           if [ "$CHANNEL" = "stable" ]; then
-            NEXT="then run this workflow again with the same inputs: it sees the version on npm, skips the publish, and commits, tags, releases and lists it"
+            NEXT="then run this workflow again with the same inputs: it sees the version on npm, skips the publish, and commits, tags, releases and lists it. Do not bump, tag or push the release by hand: the rerun refuses an existing tag, and a hand bump leaves server.json, the GitHub release and the MCP registry listing behind (10.15.0 to 10.18.1)"
           fi
           echo "::error::npm refused the trusted publish. While npm/cli#9969 is open, publish $VERSION from a machine (npm stage publish with --provenance=false --tag $DIST_TAG, then npm stage approve with a one-time code); $NEXT."
 
