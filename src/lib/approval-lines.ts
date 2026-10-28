@@ -13,6 +13,7 @@ export const VERSION_ACTION = "extension_submit.version";
 export type LineState =
   | "pending"
   | "spent"
+  | "queued"
   | "refunded"
   | "denied"
   | "revoked"
@@ -35,6 +36,7 @@ const text = (value: unknown): string => (typeof value === "string" ? value.trim
 const STATES = new Set<string>([
   "pending",
   "spent",
+  "queued",
   "refunded",
   "denied",
   "revoked",
@@ -54,11 +56,42 @@ export const lineId = (store: string, act = "upload"): string => `${store}:${act
  * did not run and the grant still covers them.
  */
 export function versionScope(browsers: string[], buildSha: string, version: unknown): ApprovalScope {
+  return versionScopeFor(browsers.map((store) => ({ store, act: "upload" })), buildSha, version);
+}
+
+/* @invariant A PUBLISH LINE BINDS THE BUILD, A LISTING LINE BINDS ITS TEXT.
+ * The scope the platform hashes is the build, the version label and one
+ * "<store>:<act>" per line; a listing line adds "<store>:<digest>" under
+ * listings, the same digest the single listing grant hashes, so the owner's
+ * one approval covers the exact words each store receives and nothing else.
+ */
+export function versionScopeFor(
+  lines: Array<{ store: string; act: string }>,
+  buildSha: string,
+  version: unknown,
+  listings: Record<string, string> = {},
+): ApprovalScope {
+  const digests = Object.entries(listings)
+    .filter(([, digest]) => text(digest))
+    .map(([store, digest]) => `${store}:${text(digest).toLowerCase()}`)
+    .sort();
+
   return {
-    acts: [...new Set(browsers.map((store) => lineId(store)))].sort(),
-    buildSha: buildSha.toLowerCase(),
+    acts: [...new Set(lines.map((line) => lineId(line.store, line.act)))].sort(),
+    buildSha: text(buildSha).toLowerCase(),
+    ...(digests.length ? { listings: digests } : {}),
     version: text(version),
   };
+}
+
+function lockText(value: unknown): string {
+  if (typeof value === "string") return value.trim();
+  if (!value || typeof value !== "object" || Array.isArray(value)) return "";
+
+  const lock = value as Record<string, unknown>;
+  const clears = text(lock.clearsWhen);
+
+  return clears ? `queued until ${clears}` : "";
 }
 
 export function readLines(raw: unknown): ApprovalLineRow[] {
@@ -81,7 +114,7 @@ export function readLines(raw: unknown): ApprovalLineRow[] {
         act,
         state: state as LineState,
         ...(text(item.line) ? { line: text(item.line) } : {}),
-        ...(text(item.lock) ? { lock: text(item.lock) } : {}),
+        ...(lockText(item.lock) ? { lock: lockText(item.lock) } : {}),
         ...(text(item.message) ? { message: text(item.message) } : {}),
       },
     ];
@@ -95,6 +128,7 @@ export function storesInState(lines: ApprovalLineRow[], ...states: LineState[]):
 const WORDS: Record<LineState, string> = {
   pending: "not run yet",
   spent: "ran",
+  queued: "queued behind the store's review, its line still pending",
   refunded: "given back, nothing ran",
   denied: "left out by the owner",
   revoked: "revoked",

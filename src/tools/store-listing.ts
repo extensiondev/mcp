@@ -33,7 +33,15 @@ import {
   actionFingerprint,
   requestApprovalAfterRefusal,
 } from "../lib/approval-gate";
+import {
+  VERSION_ACTION,
+  linesSentence,
+  readLines,
+  versionScopeFor,
+  type ApprovalLineRow,
+} from "../lib/approval-lines";
 import { approvalRoundTrip } from "../lib/approval-outcome";
+import { mintedApproval } from "../lib/approval-record";
 import { chromeDashboardPaste, chromePasteSentence } from "../lib/chrome-dashboard-paste";
 import { withChromeVisibility } from "../lib/chrome-visibility";
 import { approvalVerdict } from "../lib/approval-policy";
@@ -629,12 +637,20 @@ export function derivedSentence(marks: DerivedMark[]): string {
  * mismatch is answered with the same digest and which side is behind. The
  * same retry covers the approval leg, whose scope was minted for the subset.
  */
+const LINE_REFUSALS = new Set([
+  "APPROVAL_LINE_DENIED",
+  "APPROVAL_CONSUMED",
+  "APPROVAL_REVOKED",
+  "APPROVAL_SCOPE_MISMATCH",
+]);
+
 async function syncOne(
   api: ProjectApi,
   args: ListingArgs,
   store: ListingStore,
   patch: ListingPatch,
   retried?: DigestMismatch,
+  versioned = false,
 ): Promise<Row | { out: string }> {
   const approvalId = text(args.approvalId);
   const { sent, resend } = await sendListing(api, store, {
@@ -663,12 +679,14 @@ async function syncOne(
 
   if (sent.ok) {
     const derived = derivedMarks(sent.json.changes);
+    const lines = readLines(sent.json.lines);
 
     return {
       store,
       status: "synced",
       changes: Array.isArray(sent.json.changes) ? sent.json.changes : [],
       ...(derived.length ? { derived } : {}),
+      ...(lines.length ? { lines } : {}),
       ...pushRow(sent.json.appStoreConnect),
     };
   }
@@ -720,6 +738,8 @@ async function syncOne(
       };
     }
 
+    if (versioned) return { store, status: "approval-wanted" };
+
     const expected = derivedListingFields(store, patch.listing);
     const derivedAct =
       approvalVerdict(STORE_LISTING_ACTION, { derived: expected.length > 0 }) === "approval";
@@ -763,6 +783,18 @@ async function syncOne(
         };
   }
 
+  const lines = readLines(isRow(sent.body) ? sent.body.lines : null);
+
+  if (versioned && approvalId && lines.length && LINE_REFUSALS.has(sent.code)) {
+    return {
+      store,
+      status: sent.code === "APPROVAL_LINE_DENIED" ? "left-out" : "refused",
+      code: sent.code,
+      message: sent.message,
+      lines,
+    };
+  }
+
   if (approvalId && !retried && sent.code === "APPROVAL_SCOPE_MISMATCH") {
     const mismatch = digestMismatchOf(store, sent.body, patch);
     if (mismatch.deferred.length) return subsetRetry(mismatch);
@@ -790,6 +822,60 @@ async function syncOne(
   };
 }
 
+/* @invariant SEVERAL LISTINGS THE PLATFORM ASKS AN OWNER FOR ARE ONE
+ * APPROVAL, NOT ONE EACH. When more than one store of a sync answers
+ * APPROVAL_REQUIRED for exactly the listing this server hashed, the asks are
+ * gathered into one version grant: one "<store>:sync-listing" line per store
+ * and that store's digest under listings, so the owner reads every change on
+ * one page and each line writes only the words it was approved for. A store
+ * whose digest the platform reads differently keeps its own path, and a
+ * store that asked for nothing is written as before.
+ */
+async function mintListingVersion(
+  api: ProjectApi,
+  args: ListingArgs,
+  stores: ListingStore[],
+  locals: Map<ListingStore, LocalListing>,
+): Promise<Row> {
+  const patches = stores.map((store) => [store, locals.get(store)!.patch] as const);
+  const asking = JSON.parse(
+    await requestApprovalAfterRefusal({
+      command: COMMAND,
+      action: VERSION_ACTION,
+      scope: versionScopeFor(
+        stores.map((store) => ({ store, act: ACT })),
+        "",
+        "",
+        Object.fromEntries(patches.map(([store, patch]) => [store, listingDigest(patch)])),
+      ),
+      description: `Fill the ${stores.join(", ")} store listings from ${STORE_MD_FILENAME} and the built icons, under one approval with one line per store.`,
+      token: api.token,
+      api: args.api,
+      refusedStatus: `${ACT}-refused`,
+      body: { listings: Object.fromEntries(patches.map(([store, patch]) => [store, approvalBody(store, patch)])) },
+      reason: "The platform asked a workspace owner to approve these listing changes before they are written; the approval page lists each store's change as the platform computed it, and the owner can leave a store out.",
+      stateRead: 'extension_submit (action: "preflight")',
+    }),
+  ) as Row;
+  const value = isRow(asking.value) ? asking.value : {};
+  const error = isRow(asking.error) ? asking.error : {};
+  const lines = readLines(value.lines);
+
+  return text(value.approvalId)
+    ? {
+        status: "approval-required",
+        approvalId: text(value.approvalId),
+        approvalUrl: text(value.approvalUrl),
+        ...(text(value.expiresAt) ? { expiresAt: text(value.expiresAt) } : {}),
+        ...(lines.length ? { lines } : {}),
+      }
+    : {
+        status: "refused",
+        code: text(error.platformCode) || text(error.name),
+        message: text(error.message),
+      };
+}
+
 export async function syncListing(args: ListingArgs): Promise<string> {
   const asked = (
     Array.isArray(args.browsers) && args.browsers.length
@@ -809,12 +895,15 @@ export async function syncListing(args: ListingArgs): Promise<string> {
     );
   }
 
-  if (text(args.approvalId) && asked.length > 1) {
+  const versioned = asked.length > 1;
+  const resumed = text(args.approvalId) ? mintedApproval(args.api, text(args.approvalId)) : null;
+
+  if (text(args.approvalId) && versioned && resumed?.action !== VERSION_ACTION) {
     return badShipRequest(
       COMMAND,
       ACT,
       "ListingInputError",
-      "Each store's listing has its own approval, so pass one browser with its approvalId. Nothing was sent.",
+      "That approval covers one store's listing, so pass one browser with its approvalId; an approval this server asked for several stores at once covers them all. Nothing was sent.",
     );
   }
 
@@ -901,8 +990,13 @@ export async function syncListing(args: ListingArgs): Promise<string> {
       continue;
     }
 
-    const result = await syncOne(api, args, store, local.patch);
+    const result = await syncOne(api, args, store, local.patch, undefined, versioned);
     if ("out" in result) return result.out as string;
+
+    if (result.status === "approval-wanted") {
+      stores[store] = result;
+      continue;
+    }
 
     if (local.iconStale && result.status === "unchanged") result.status = "icon-stale";
     if (local.iconStale) said.push(`For ${store}, ${local.iconMissing}.`);
@@ -959,7 +1053,18 @@ export async function syncListing(args: ListingArgs): Promise<string> {
     };
   }
 
+  const wanted = (Object.values(stores) as Row[]).filter((row) => row.status === "approval-wanted");
+
+  if (wanted.length) {
+    const minted = await mintListingVersion(api, args, wanted.map((row) => text(row.store) as ListingStore), locals);
+
+    for (const row of wanted) stores[text(row.store)] = { ...row, ...minted };
+  }
+
   const rows = Object.values(stores) as Row[];
+  const lineRows = rows.flatMap((row) => (Array.isArray(row.lines) ? (row.lines as ApprovalLineRow[]) : []));
+  if (lineRows.length) said.push(`Approval lines: ${linesSentence(lineRows)}.`);
+
   const push = rows
     .map((row) => (isRow(row.appStoreConnect) ? row.appStoreConnect : null))
     .find(Boolean);
@@ -973,7 +1078,7 @@ export async function syncListing(args: ListingArgs): Promise<string> {
   const approvals = rows.filter((row) => row.status === "approval-required");
   const failed = rows.filter(
     (row) =>
-      !["synced", "recorded", "unchanged", "icon-stale", "nothing-to-sync", "approval-required"].includes(
+      !["synced", "recorded", "unchanged", "icon-stale", "nothing-to-sync", "approval-required", "left-out"].includes(
         text(row.status),
       ),
   );
@@ -988,6 +1093,7 @@ export async function syncListing(args: ListingArgs): Promise<string> {
       ConsoleProjectPage.stores,
       args.api,
     ),
+    ...(lineRows.length ? { lines: lineRows } : {}),
     ...(say ? { sayToPerson: say } : {}),
   };
   const blockingLine = rows
@@ -1003,7 +1109,8 @@ export async function syncListing(args: ListingArgs): Promise<string> {
     .join("; ");
 
   if (approvals.length) {
-    const only = approvals.length === 1 ? approvals[0]! : null;
+    const shared = new Set(approvals.map((row) => text(row.approvalId))).size === 1;
+    const only = approvals.length === 1 || shared ? approvals[0]! : null;
 
     return envelope({
       ok: false,
@@ -1024,7 +1131,10 @@ export async function syncListing(args: ListingArgs): Promise<string> {
         name: "ApprovalRequired",
         message: `The platform asked a workspace owner to approve the listing change before it is written. Nothing was written for ${approvals.map((row) => text(row.store)).join(", ")}.`,
       },
-      hint: `Approve at ${approvals.map((row) => `${text(row.approvalUrl)} (${text(row.store)})`).join(", ")}, then call extension_submit action:"sync-listing" again once per store with browsers:[<store>], the same projectPath and screenshots, and that store's approvalId.`,
+      hint:
+        shared && approvals.length > 1
+          ? `Approve at ${text(only?.approvalUrl)}: one page lists the ${approvals.map((row) => text(row.store)).join(", ")} listings, one line per store, and the owner can uncheck a store. Then call extension_submit action:"sync-listing" again with the same browsers, projectPath and screenshots and approvalId ${text(only?.approvalId)}.`
+          : `Approve at ${approvals.map((row) => `${text(row.approvalUrl)} (${text(row.store)})`).join(", ")}, then call extension_submit action:"sync-listing" again once per store with browsers:[<store>], the same projectPath and screenshots, and that store's approvalId.`,
     });
   }
 

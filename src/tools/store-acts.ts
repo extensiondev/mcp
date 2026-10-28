@@ -89,6 +89,7 @@ import {
   reconciledWithStoreMd,
   storeMdAdvisory,
 } from "./store-listing";
+import { publishVersion } from "./store-publish-version";
 
 import type { ListingStore } from "../lib/store-md-listing";
 
@@ -414,15 +415,18 @@ export async function publishDraft(args: StoreActArgs): Promise<string> {
       : [text(args.store) || "chrome"]
   ).map((b) => text(b).toLowerCase());
   const store = asked[0] as PublishStore;
+  const unknown = asked.filter((name) => !PUBLISH_STORES.includes(name as PublishStore));
 
-  if (asked.length !== 1 || !PUBLISH_STORES.includes(store)) {
+  if (!asked.length || unknown.length) {
     return badShipRequest(
       COMMAND,
       "publish",
       "PublishInputError",
-      `publish sends one store's draft to review, so browsers must be ["chrome"], ["edge"] or ["safari"]; got ${JSON.stringify(args.browsers ?? args.store ?? null)}. Firefox enters review when it is submitted. Nothing was sent.`,
+      `publish sends a store's draft to review, so browsers must be ["chrome"], ["edge"] or ["safari"], or several of them with buildSha; got ${JSON.stringify(args.browsers ?? args.store ?? null)}. Firefox enters review when it is submitted. Nothing was sent.`,
     );
   }
+
+  if (asked.length > 1) return publishVersion(args, [...new Set(asked)] as PublishStore[]);
 
   const words = storeWords(store);
   const submissionId = text(args.submissionId);
@@ -565,6 +569,25 @@ export async function publishDraft(args: StoreActArgs): Promise<string> {
   });
 }
 
+/* @invariant A LOCKED CHECK KEEPS ITS LOCK. The platform answers a check
+ * whose store will refuse the act until a review it is running ends as
+ * {status: "locked", lock: {kind, clearsWhen, storeWord, readAt}}; the view
+ * carried only the message, so an agent saw a check that was not passing and
+ * nothing about what clears it (lane 3, 2026-10-28). The status and the lock
+ * travel through, and a locked check sits in `locked`, never in `failing`.
+ */
+export function lockView(lock: unknown): Row | null {
+  if (!isRow(lock)) return null;
+
+  const view: Row = {};
+
+  for (const key of ["kind", "clearsWhen", "storeWord", "readAt"]) {
+    if (text(lock[key])) view[key] = text(lock[key]);
+  }
+
+  return Object.keys(view).length ? view : null;
+}
+
 function checkView(check: Row, withLabel: boolean): Row {
   const out: Row = { id: text(check.id) };
 
@@ -575,7 +598,42 @@ function checkView(check: Row, withLabel: boolean): Row {
     if (text(check[key])) out[key] = text(check[key]);
   }
 
+  const lock = lockView(check.lock);
+
+  if (text(check.status) === "locked") out.status = "locked";
+  if (lock) out.lock = lock;
+
   return out;
+}
+
+export function storePreflightView(json: Row, store: string): Row | null {
+  const block = json[`${store}Preflight`];
+
+  if (!isRow(block)) return null;
+
+  const lock = lockView(block.lock);
+  const ids = (value: unknown) => (Array.isArray(value) ? value.map((id) => text(id)).filter(Boolean) : []);
+
+  return {
+    ...(text(block.act) ? { act: text(block.act) } : {}),
+    blocking: ids(block.blocking),
+    warnings: ids(block.warnings),
+    lock,
+    ...(text(block.approval) ? { approval: text(block.approval) } : {}),
+  };
+}
+
+export function lockSentences(storePreflight: Record<string, Row>): string {
+  return Object.entries(storePreflight)
+    .map(([store, block]) => {
+      const lock = isRow(block.lock) ? block.lock : null;
+
+      return lock && text(lock.clearsWhen)
+        ? `${store}: the ${text(block.act) || "act"} is locked until ${text(lock.clearsWhen)} (${text(lock.storeWord) || text(lock.kind)}); a submit or publish is queued behind it, never failed.`
+        : "";
+    })
+    .filter(Boolean)
+    .join(" ");
 }
 
 const NAMED_BY_SUBMIT = new Set(["submission.build_selected"]);
@@ -680,6 +738,9 @@ function readinessView(
   const failing = checks
     .filter((c) => text(c.status) === "fail")
     .map((c) => checkView(reconciledWithStoreMd(c, local), true));
+  const locked = checks
+    .filter((c) => text(c.status) === "locked")
+    .map((c) => checkView(c, true));
   const requirements = requirementsView(json.requirements, local);
   const review = isRow(summary.review) ? summary.review : null;
   const bringList = bringListOf(store, requirements, review?.canSubmitForReview !== false);
@@ -697,6 +758,7 @@ function readinessView(
     summary,
     ...(deferred.length ? { namedBySubmit: ["build"] } : {}),
     failing,
+    ...(locked.length ? { locked } : {}),
     warnings: checks
       .filter((c) => text(c.status) === "warn")
       .map((c) => checkView(reconciledWithStoreMd(c, local), true)),
@@ -771,18 +833,26 @@ export async function preflight(args: StoreActArgs): Promise<string> {
 
   const stores: Row = {};
   const reports: Record<string, Row> = {};
+  const storePreflight: Record<string, Row> = {};
   const unread: string[] = [];
 
   const shown = (): Row => {
     const compact = compactPreflightStores(stores, detail);
 
-    return compact.trimmed ? { stores: compact.stores, detail: PREFLIGHT_DETAIL_SENTENCE } : { stores: compact.stores };
+    return {
+      ...(compact.trimmed ? { stores: compact.stores, detail: PREFLIGHT_DETAIL_SENTENCE } : { stores: compact.stores }),
+      ...(Object.keys(storePreflight).length ? { storePreflight } : {}),
+    };
   };
 
   asked.forEach((store, i) => {
     const read = reads[i];
     if (read.ok) {
       reports[store] = read.json;
+
+      const block = storePreflightView(read.json, store);
+      if (block) storePreflight[store] = block;
+
       const view = readinessView(
         read.json,
         store,
@@ -858,9 +928,10 @@ export async function preflight(args: StoreActArgs): Promise<string> {
   const notReady = Object.entries(stores)
     .filter(([, view]) => (view as Row).readyForReview === false)
     .map(([store]) => store);
+  const lockLine = lockSentences(storePreflight);
   const readinessHint = blocked.length
-    ? `${blocked.join(", ")} cannot be submitted yet; each failing check says what to fix.${syncLine}${sourceLine} This read wrote nothing.`
-    : `${notReady.length ? "Every store read here can take an upload." : "Every store read here is ready to submit."}${buildLine}${modeLine}${sourceLine}${workspaceLine} This read wrote nothing; extension_submit with dryRun:false submits.`;
+    ? `${blocked.join(", ")} cannot be submitted yet; each failing check says what to fix.${syncLine}${sourceLine}${lockLine ? ` ${lockLine}` : ""} This read wrote nothing.`
+    : `${notReady.length ? "Every store read here can take an upload." : "Every store read here is ready to submit."}${buildLine}${modeLine}${sourceLine}${workspaceLine}${lockLine ? ` ${lockLine}` : ""} This read wrote nothing; extension_submit with dryRun:false submits.`;
   const chrome = isRow(stores.chrome) ? stores.chrome : null;
   const connection =
     chrome && isRow(chrome.connection) ? chrome.connection : null;

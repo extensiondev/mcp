@@ -1,4 +1,3 @@
-import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -11,6 +10,7 @@ import { STORE_FIELDS, derivedListingFields, listingForStore, parseStoreMdListin
 import { TOOL_POLICY } from "../lib/tool-policy";
 import { derivedMarks, derivedSentence, readLocalListing } from "../tools/store-listing";
 import { handler as submit, schema } from "../tools/submit";
+import { digestOf } from "./fixtures/listing-digest";
 import {
   API,
   PROJECT_ROUTE,
@@ -1670,34 +1670,6 @@ describe("extension_submit sync-listing sends the fields the platform hashes whe
     }
   });
 });
-
-function digestOf(body: {
-  listing: Record<string, unknown>;
-  media?: {
-    icons?: Array<{ dataBase64: string }>;
-    screenshots?: Array<{ dataBase64: string }>;
-  };
-}): string {
-  const image = (item: { dataBase64: string }) => {
-    const bytes = Buffer.from(item.dataBase64, "base64");
-
-    return {
-      sha256: crypto.createHash("sha256").update(bytes).digest("hex"),
-      width: bytes.readUInt32BE(16),
-      height: bytes.readUInt32BE(20),
-      bytes,
-      source: "",
-    };
-  };
-
-  return listingDigest({
-    listing: body.listing,
-    ...(body.media?.icons ? { icons: body.media.icons.map(image) } : {}),
-    ...(body.media?.screenshots
-      ? { screenshots: body.media.screenshots.map(image) }
-      : {}),
-});
-}
 
 describe("the STORE.md Support URL line", () => {
   it("is read under ## Listing as the App Store's support URL and sent with the Safari listing only", () => {

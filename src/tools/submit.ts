@@ -199,7 +199,7 @@ export const schema = {
           enum: ["chrome", "firefox", "edge", "safari"],
         },
         description:
-          "Stores to act on: chrome, firefox, edge, safari. A submit takes several; publish takes exactly one of chrome, edge or safari.",
+          "Stores to act on: chrome, firefox, edge, safari. A submit takes several; so does publish (chrome, edge, safari, with buildSha) and sync-listing, under one approval per version with one line per store, and the answer's value.lines says per store whether its line ran, was queued, given back or left out.",
       },
       buildSha: {
         type: "string",
@@ -224,7 +224,7 @@ export const schema = {
       approvalId: {
         type: "string",
         description:
-          "The approval handle returned by a prior approval-required response for a real submission, a publish, a cancel, a rollout, or a sync-listing or configure-store the platform asked an approval for (a listed or public submission mode). A real submission (dryRun:false) is irreversible and needs a workspace owner's approval every time: call once without this to get an approval id and URL, have a human approve at extension.dev, then call again with the same id. A dry run never needs it.",
+          "The approval handle returned by a prior approval-required response for a real submission, a publish, a cancel, a rollout, or a sync-listing or configure-store the platform asked an approval for (a listed or public submission mode). A real submission (dryRun:false) is irreversible and needs a workspace owner's approval every time: call once without this to get an approval id and URL, have a human approve at extension.dev, then call again with the same id. A dry run never needs it. An approval for several stores covers every store it lists once each: call again with the same id and browsers limited to the stores that have not run.",
       },
       screenshots: {
         type: "array",
