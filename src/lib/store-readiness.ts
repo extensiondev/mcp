@@ -63,7 +63,9 @@ export interface StoreRow {
   itemUrl?: string;
   connectedAs?: string;
   source: "connection" | "health" | "none";
-  publishMode: typeof NOT_CHECKED;
+  publishMode: string;
+  nextVersion?: string;
+  landing?: string;
   reason?: string;
 }
 
@@ -85,6 +87,35 @@ export function submissionModeOf(json: Row): StoreSubmissionMode | null {
   if (!mode || !text(mode.id)) return null;
 
   return { id: text(mode.id), label: text(mode.label), description: text(mode.description) };
+}
+
+export type NextVersionView = {
+  nextVersion: string;
+  channel?: string;
+  retires?: string[];
+  untouched?: string[];
+  landing?: string;
+};
+
+export function nextVersionOf(report: Row, store: string): NextVersionView | null {
+  const block = report[`${store}Preflight`];
+  if (!isRow(block) || !text(block.nextVersion)) return null;
+
+  const list = (value: unknown) => (Array.isArray(value) ? value.map((entry) => text(entry)).filter(Boolean) : null);
+  const retires = list(block.retires);
+  const untouched = list(block.untouched);
+
+  return {
+    nextVersion: text(block.nextVersion),
+    ...(text(block.channel) ? { channel: text(block.channel) } : {}),
+    ...(retires ? { retires } : {}),
+    ...(untouched ? { untouched } : {}),
+    ...(text(block.landing) ? { landing: text(block.landing) } : {}),
+  };
+}
+
+export function nextVersionSentence(store: string, view: Pick<NextVersionView, "nextVersion" | "landing">): string {
+  return view.landing ? `${store}: ${view.landing}` : `${store}: the next upload carries version ${view.nextVersion}.`;
 }
 
 export async function readConnectionsAndModes(
@@ -154,7 +185,7 @@ export async function readLegacyHealth(ctx: Context): Promise<HealthRead> {
 }
 
 export function rowFromConnection(browser: string, connection: ConnectionRecord): StoreRow {
-  const base = { browser, source: "connection" as const, publishMode: NOT_CHECKED as typeof NOT_CHECKED };
+  const base = { browser, source: "connection" as const, publishMode: NOT_CHECKED as string };
   const who = connection.connectedAs ? { connectedAs: connection.connectedAs } : {};
 
   if (!connection.kind) {
@@ -212,7 +243,7 @@ export function rowFromConnection(browser: string, connection: ConnectionRecord)
 }
 
 export function rowFromHealth(browser: string, health: HealthRead): StoreRow {
-  const base = { browser, source: "health" as const, publishMode: NOT_CHECKED as typeof NOT_CHECKED };
+  const base = { browser, source: "health" as const, publishMode: NOT_CHECKED as string };
 
   if ("missing" in health) {
     return { ...base, source: "none", ok: false, state: "not-checked", configured: NOT_CHECKED, healthy: NOT_CHECKED, reason: `The ${browser} store was not checked: ${health.missing}.` };
@@ -236,10 +267,19 @@ export async function readStoreRows(
   browsers: string[],
   ctx: Context,
 ): Promise<{ rows: StoreRow[]; connections: Record<string, ConnectionRecord> }> {
-  const connections = await readConnections(args, browsers);
+  const { connections, modes, reports } = await readConnectionsAndModes(args, browsers);
   const needsHealth = browsers.some((browser) => !connections[browser]);
   const health = needsHealth ? await readLegacyHealth(ctx) : null;
-  const rows = browsers.map((browser) => (connections[browser] ? rowFromConnection(browser, connections[browser]) : rowFromHealth(browser, health as HealthRead)));
+  const rows = browsers.map((browser) => {
+    const row = connections[browser] ? rowFromConnection(browser, connections[browser]) : rowFromHealth(browser, health as HealthRead);
+    const version = reports[browser] ? nextVersionOf(reports[browser], browser) : null;
+
+    return {
+      ...row,
+      ...(modes[browser] ? { publishMode: modes[browser].id } : {}),
+      ...(version ? { nextVersion: version.nextVersion, ...(version.landing ? { landing: version.landing } : {}) } : {}),
+    };
+  });
 
   return { rows, connections };
 }

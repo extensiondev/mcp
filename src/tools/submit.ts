@@ -99,6 +99,8 @@ import {
   connectionStep,
   dryRunVerdict,
   isConnectionState,
+  nextVersionSentence,
+  NOT_CHECKED,
   readConnectionsAndModes,
   readStoreRows,
   rowFromConnection,
@@ -1065,11 +1067,27 @@ async function answer(args: SubmitToolArgs): Promise<string> {
     const itemUrl = rows.find((row) => row.itemUrl)?.itemUrl;
     if (itemUrl) result.itemUrl = itemUrl;
 
-    warnings.push(
-      `Store publish mode (draft, skip-publish or live) is not readable with this token, so a dry run does not check it; the per-store settings are at ${consoleStoresUrl}.`,
-    );
+    const modesRead = rows.filter((row) => row.publishMode !== NOT_CHECKED);
+    const modesUnread = rows.filter((row) => row.publishMode === NOT_CHECKED).map((row) => row.browser);
+    const modeLine = modesRead.length
+      ? ` Saved submission mode: ${modesRead.map((row) => `${row.browser} ${row.publishMode}`).join(", ")}.`
+      : "";
+    const versioned = rows.filter((row) => row.nextVersion);
+    const versionLine = versioned
+      .map((row) => nextVersionSentence(row.browser, { nextVersion: row.nextVersion as string, landing: row.landing }))
+      .join(" ");
 
-    message = `${verdict.say}${checked}`;
+    if (versioned.length) {
+      result.nextVersions = Object.fromEntries(versioned.map((row) => [row.browser, row.nextVersion]));
+    }
+
+    if (modesUnread.length) {
+      warnings.push(
+        `The platform's preflight did not answer the submission mode of ${modesUnread.join(", ")}, so this dry run cannot name it; the per-store settings are at ${consoleStoresUrl}.`,
+      );
+    }
+
+    message = `${verdict.say}${checked}${modeLine}${versionLine ? ` ${versionLine}` : ""}`;
   }
 
   if (!dryRun) {
@@ -1307,7 +1325,24 @@ async function answer(args: SubmitToolArgs): Promise<string> {
       ? { ...judgedStep, say: `${retryLine} ${judgedStep.say}` }
       : judgedStep;
 
-    result.outcome = waited.outcome;
+    const storeVersions = Object.fromEntries(
+      outcome.stores
+        .map((store) => [store, waited.record?.[store]?.storeVersion] as const)
+        .filter((entry): entry is readonly [string, NonNullable<PlatformSubmission["storeVersion"]>] => Boolean(entry[1])),
+    );
+
+    result.outcome = Object.keys(storeVersions).length
+      ? { ...waited.outcome, storeVersions: Object.fromEntries(Object.entries(storeVersions).map(([store, recorded]) => [store, recorded.packaged])) }
+      : waited.outcome;
+
+    if (Array.isArray(result.submissions)) {
+      result.submissions = (result.submissions as unknown[]).map((row) =>
+        isRow(row) && storeVersions[String(row.store)] && !isRow(row.storeVersion)
+          ? { ...row, storeVersion: storeVersions[String(row.store)] }
+          : row,
+      );
+    }
+
     result.links = actLinks;
     result.nextStep = step;
     result.sayToPerson = step.say;

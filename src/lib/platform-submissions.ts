@@ -95,6 +95,30 @@ export interface StepFailure {
   step: string;
 }
 
+export interface RecordedStoreVersion {
+  packaged: string;
+  displayed: string;
+  source: string;
+  buildNumber?: number;
+}
+
+export function recordedStoreVersionOf(raw: unknown): RecordedStoreVersion | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+
+  const row = raw as Record<string, unknown>;
+  const packaged = str(row.packaged);
+  if (!packaged) return undefined;
+
+  const buildNumber = Number(row.buildNumber);
+
+  return {
+    packaged,
+    displayed: str(row.displayed) || packaged,
+    source: str(row.source) || "platform",
+    ...(Number.isInteger(buildNumber) && buildNumber > 0 ? { buildNumber } : {}),
+  };
+}
+
 export interface PlatformSubmission {
   id?: string;
   store: string;
@@ -105,6 +129,7 @@ export interface PlatformSubmission {
   publish?: StoreAct;
   dispatch?: SubmissionDispatch;
   version?: string;
+  storeVersion?: RecordedStoreVersion;
   buildSha?: string;
   channel?: string;
   submittedAt?: string;
@@ -350,6 +375,8 @@ export function toSubmission(raw: Record<string, unknown>): PlatformSubmission |
   const cancel = storeActOf(raw.cancel);
   const publish = storeActOf(raw.publish);
   const dispatch = dispatchOf(raw.dispatch);
+  const storeVersion = recordedStoreVersionOf(raw.storeVersion);
+  if (storeVersion) out.storeVersion = storeVersion;
   if (storeReview) out.storeReview = storeReview;
   if (statusRead) out.statusRead = statusRead;
   if (storeUpload) out.storeUpload = storeUpload;

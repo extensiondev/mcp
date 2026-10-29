@@ -107,7 +107,7 @@ describe("extension_submit configure-store changes a store's settings as a plain
     platform.routes[`PUT ${CONFIG}`] = () => approvalRequired(scope);
     platform.routes[`POST ${APPROVALS}`] = () => ({
       status: 201,
-      body: { approvalId: "apr_listed", approvalUrl: `${API}/device/approve/apr_listed`, changes: ['firefox.submissionMode: "unlisted" -> "listed"'] },
+      body: { approvalId: "apr_listed", approvalUrl: `${API}/device/approve/apr_listed`, changes: ['firefox.releaseChannel: "unlisted" -> "listed"'] },
     });
 
     const out = JSON.parse(await submit({ action: "configure-store", store: "firefox", storeSettings: { submissionMode: "listed" }, api: API }));
@@ -116,7 +116,7 @@ describe("extension_submit configure-store changes a store's settings as a plain
     expect(post.body).toMatchObject({ action: STORE_SETTINGS_ACTION, scope, storeSettings: { firefox: patch } });
     expect(out.ok).toBe(false);
     expect(out.status).toBe("approval-required");
-    expect(out.value).toMatchObject({ approvalId: "apr_listed", changes: ['firefox.submissionMode: "unlisted" -> "listed"'] });
+    expect(out.value).toMatchObject({ approvalId: "apr_listed", changes: ['firefox.releaseChannel: "unlisted" -> "listed"'] });
     expect(out.error.message).toContain("changes who can find the extension");
     expect(platform.sent("PUT", CONFIG)).toHaveLength(1);
   });

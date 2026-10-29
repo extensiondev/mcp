@@ -73,6 +73,7 @@ import {
 } from "../lib/store-requirements";
 import { bringListOf, bringListSentences, screenshotDoor } from "../lib/store-bring-list";
 import { notReadyForReviewStep, notReadyLine } from "../lib/store-not-ready";
+import { nextVersionOf, nextVersionSentence } from "../lib/store-readiness";
 import { LISTING_INCOMPLETE_CODE, listingIncompleteOf, listingIncompleteSentence } from "../lib/store-listing-incomplete";
 import {
   EDGE_FIRST_SUBMISSION_STATE,
@@ -620,7 +621,15 @@ export function storePreflightView(json: Row, store: string): Row | null {
     warnings: ids(block.warnings),
     lock,
     ...(text(block.approval) ? { approval: text(block.approval) } : {}),
+    ...(nextVersionOf(json, store) ?? {}),
   };
+}
+
+export function nextVersionSentences(storePreflight: Record<string, Row>): string {
+  return Object.entries(storePreflight)
+    .map(([store, block]) => (text(block.nextVersion) ? nextVersionSentence(store, { nextVersion: text(block.nextVersion), landing: text(block.landing) || undefined }) : ""))
+    .filter(Boolean)
+    .join(" ");
 }
 
 export function lockSentences(storePreflight: Record<string, Row>): string {
@@ -929,9 +938,10 @@ export async function preflight(args: StoreActArgs): Promise<string> {
     .filter(([, view]) => (view as Row).readyForReview === false)
     .map(([store]) => store);
   const lockLine = lockSentences(storePreflight);
+  const versionLine = nextVersionSentences(storePreflight);
   const readinessHint = blocked.length
-    ? `${blocked.join(", ")} cannot be submitted yet; each failing check says what to fix.${syncLine}${sourceLine}${lockLine ? ` ${lockLine}` : ""} This read wrote nothing.`
-    : `${notReady.length ? "Every store read here can take an upload." : "Every store read here is ready to submit."}${buildLine}${modeLine}${sourceLine}${workspaceLine}${lockLine ? ` ${lockLine}` : ""} This read wrote nothing; extension_submit with dryRun:false submits.`;
+    ? `${blocked.join(", ")} cannot be submitted yet; each failing check says what to fix.${syncLine}${sourceLine}${lockLine ? ` ${lockLine}` : ""}${versionLine ? ` ${versionLine}` : ""} This read wrote nothing.`
+    : `${notReady.length ? "Every store read here can take an upload." : "Every store read here is ready to submit."}${buildLine}${modeLine}${sourceLine}${workspaceLine}${lockLine ? ` ${lockLine}` : ""}${versionLine ? ` ${versionLine}` : ""} This read wrote nothing; extension_submit with dryRun:false submits.`;
   const chrome = isRow(stores.chrome) ? stores.chrome : null;
   const connection =
     chrome && isRow(chrome.connection) ? chrome.connection : null;

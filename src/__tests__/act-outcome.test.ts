@@ -329,6 +329,26 @@ describe("store acts and builds answer the recorded outcome", () => {
     expect(JSON.stringify(out)).not.toMatch(/extension-user-land-dev|\/actions\/runs\//);
   });
 
+  it("a real submit answers the version the store received once the record names it, where the dispatch answer had none", async () => {
+    if (process.platform === "win32") return;
+
+    platform.login();
+    process.env.EXTENSION_DEV_APPROVAL_GATE = "0";
+    const received = { packaged: "0.2.0.8", displayed: "0.2.0", source: "platform", buildNumber: 8 };
+    platform.routes["POST /api/cli/stores/submit"] = () => ({
+      body: { ok: true, submissions: [{ id: "sub_ff8", store: "firefox", status: "pending", storeVersion: null }] },
+    });
+
+    platform.routes["GET /api/cli/stores/submissions"] = () => ({
+      body: { submissions: [{ id: "sub_ff8", store: "firefox", status: "submitted", storeVersion: received }] },
+    });
+
+    const out = JSON.parse(await submit({ browsers: ["firefox"], buildSha: "069d4b8", dryRun: false, api: API }));
+
+    expect(out.value.outcome).toMatchObject({ recorded: true, storeVersions: { firefox: "0.2.0.8" } });
+    expect(out.value.submissions[0].storeVersion).toEqual(received);
+  });
+
   it("rebuild answers built when the build record shows this run finished, and build-failed when it failed", async () => {
     if (process.platform === "win32") return;
 
