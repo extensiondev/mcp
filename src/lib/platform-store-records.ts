@@ -39,8 +39,9 @@ export interface StoreHistoryEntry {
   failureReason?: string;
   supersededBy?: string;
   storeUrl?: string;
-  storeVersion?: { packaged: string };
+  storeVersion?: { packaged: string; buildNumber?: number };
   storeReview?: StoreReview;
+  statusReadAt?: string;
 }
 
 export type PlatformStoreRecords =
@@ -123,9 +124,19 @@ function historyEntry(raw: Row): StoreHistoryEntry {
   }
 
   const packaged = isRow(raw.storeVersion) ? str(raw.storeVersion.packaged) : "";
+  const buildNumber = isRow(raw.storeVersion) ? Number(raw.storeVersion.buildNumber) : 0;
   const storeReview = storeReviewOfRow(raw.storeReview);
-  if (packaged) entry.storeVersion = { packaged };
+  const statusReadAt = isRow(raw.statusRead) ? str(raw.statusRead.readAt) : "";
+
+  if (packaged) {
+    entry.storeVersion = {
+      packaged,
+      ...(Number.isInteger(buildNumber) && buildNumber > 0 ? { buildNumber } : {}),
+    };
+  }
+
   if (storeReview) entry.storeReview = storeReview;
+  if (statusReadAt) entry.statusReadAt = statusReadAt;
 
   return entry;
 }

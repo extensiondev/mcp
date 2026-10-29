@@ -36,6 +36,7 @@ import {
 import {
   earlierSubmissions,
   readPlatformStoreRecords,
+  type StoreHistoryEntry,
 } from "../lib/platform-store-records";
 import { repairEdgeStoreUrl } from "../lib/edge-listing";
 import { storeRecordUnread } from "../lib/store-readiness";
@@ -165,6 +166,78 @@ interface SubmissionView {
   storeCrxVersion?: string;
   storeReview?: StoreReview;
   statusRead?: StoreStatusRead;
+  releaseType?: string;
+}
+
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+function shortDay(at: string | undefined): string {
+  const date = new Date(String(at ?? ""));
+
+  return Number.isFinite(date.getTime()) ? `${MONTHS[date.getUTCMonth()]} ${date.getUTCDate()}` : "";
+}
+
+const APPLE_STATE_WORDS: Record<string, string> = {
+  WAITING_FOR_REVIEW: "waiting for review",
+  IN_REVIEW: "in review",
+  READY_FOR_REVIEW: "ready for review",
+  PENDING_DEVELOPER_RELEASE: "approved, waiting for a manual release",
+  READY_FOR_SALE: "on sale",
+  DEVELOPER_REJECTED: "withdrawn",
+  REJECTED: "rejected",
+  METADATA_REJECTED: "rejected",
+};
+
+/* @invariant A SAFARI WITHDRAWAL STAYS IN THE SUMMARY BESIDE THE NEXT REVIEW.
+ * Rebeccat 2026-10-29: build 11 of 0.2.0 was withdrawn on 10-28 and build 14
+ * of the same version went to App Review, and the summary described only the
+ * new review, so the withdrawal showed nowhere. The newest withdrawn record
+ * in the history is named with its build and day beside the latest
+ * submission's own App Review state: "0.2.0: build 11 withdrawn Oct 28;
+ * build 14 waiting for review".
+ */
+export function safariWithdrawalSentence(
+  latest: SubmissionView | undefined,
+  earlier: StoreHistoryEntry[],
+): string {
+  if (latest?.status === "withdrawn") return "";
+
+  const withdrawn = earlier
+    .filter((entry) => entry.status === "withdrawn")
+    .sort((a, b) =>
+      String(b.statusReadAt ?? b.submittedAt ?? "").localeCompare(String(a.statusReadAt ?? a.submittedAt ?? "")),
+    )[0];
+  if (!withdrawn) return "";
+
+  const version = withdrawn.storeVersion?.packaged || withdrawn.version || "";
+  const number = withdrawn.storeVersion?.buildNumber;
+  const day = shortDay(withdrawn.statusReadAt);
+  const head = `${number ? `build ${number}` : `build ${withdrawn.buildSha || "unknown"}`} withdrawn${day ? ` ${day}` : ""}`;
+
+  if (!latest) return `${version}: ${head}`;
+
+  const latestVersion = latest.storeVersion?.packaged || latest.version || "";
+  const latestNumber = latest.storeVersion?.buildNumber;
+  const state = latest.storeReview?.state ? APPLE_STATE_WORDS[latest.storeReview.state] : undefined;
+  const latestWords = `${latestNumber ? `build ${latestNumber}` : `build ${latest.buildSha || "unknown"}`} ${state || latest.status || "recorded"}`;
+
+  return latestVersion === version
+    ? `${version}: ${head}; ${latestWords}`
+    : `${version} ${head}; ${latestVersion} ${latestWords}`;
+}
+
+const RELEASE_MODE_WORDS: Record<string, string> = {
+  AFTER_APPROVAL: "is set to release automatically after approval",
+  MANUAL: "is set to manual release",
+  SCHEDULED: "is set to a scheduled release",
+};
+
+export function safariReleaseSentence(latest: SubmissionView | undefined): string {
+  const type = latest?.releaseType || (latest as { publish?: { releaseType?: string } } | undefined)?.publish?.releaseType;
+  const words = type ? RELEASE_MODE_WORDS[type] : undefined;
+  if (!latest || !words) return "";
+
+  return `${latest.storeVersion?.packaged || latest.version || "the version"} ${words}`;
 }
 
 /* @invariant A WORD THE PLATFORM INFERRED IS SAID TO BE INFERRED, AND IT
@@ -227,6 +300,8 @@ function submissionView(row: Record<string, unknown>): SubmissionView {
   const storeCrxVersion = typeof row.storeCrxVersion === "string" ? row.storeCrxVersion.trim() : "";
   const storeReview = storeReviewOfRow(row.storeReview);
   const statusRead = statusReadOf(row.statusRead);
+  const releaseType = publish ? str(publish.releaseType)?.toUpperCase() : undefined;
+  if (releaseType && RELEASE_MODE_WORDS[releaseType]) view.releaseType = releaseType;
   if (version) view.version = version;
   if (statusRead) view.statusRead = statusRead;
   if (status) view.status = status;
@@ -640,6 +715,14 @@ export async function readStores(args: {
     }
 
     if (review?.status) tail.push(reviewSentence(review));
+
+    if (store === "safari") {
+      const withdrawal = safariWithdrawalSentence(submission, (row.submissionHistory as StoreHistoryEntry[] | undefined) ?? []);
+      if (withdrawal) tail.push(withdrawal);
+
+      const releaseMode = safariReleaseSentence(submission);
+      if (releaseMode) tail.push(releaseMode);
+    }
 
     const release = row.release as StoreReleaseView | undefined;
     const channelReleases = row.amoChannels ? Object.values(row.amoChannels as Record<string, StoreReleaseView>) : [];

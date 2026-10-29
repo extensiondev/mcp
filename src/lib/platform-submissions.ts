@@ -74,6 +74,7 @@ export interface StoreAct {
   status: string;
   storeMessage?: string;
   at?: string;
+  releaseType?: string;
 }
 
 export interface SubmissionDispatch {
@@ -301,6 +302,9 @@ function storeActOf(raw: unknown): StoreAct | undefined {
   const at = str(row.at);
   if (storeMessage) out.storeMessage = storeMessage;
   if (at) out.at = at;
+
+  const releaseType = str(row.releaseType)?.toUpperCase();
+  if (releaseType && /^(MANUAL|AFTER_APPROVAL|SCHEDULED)$/.test(releaseType)) out.releaseType = releaseType;
 
   return out;
 }
