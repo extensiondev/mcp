@@ -362,6 +362,44 @@ interface StoreRetry {
  * id to the retry, keeps waiting, and later reads judge the retry's own
  * record; a retry is never retried, so its own failure is a real one.
  */
+/* @invariant A SUBMIT OF SEVERAL STORES ANSWERS ONE OUTCOME PER STORE.
+ * Rebeccat 2026-10-29: a three-store draft upload answered one outcome whose
+ * status read "chrome: draft; edge: draft; safari: draft" with no store state,
+ * so an agent had to parse a sentence to learn what each store holds. Each
+ * store answers its own record: whether it settled, its status and store
+ * state, the version the store received, the submission and its page; the
+ * combined line stays the hint's sentence and leaves value.outcome.status.
+ */
+export function storeOutcomes(args: {
+  stores: string[];
+  byStore: Record<string, PlatformSubmission> | null;
+  ids: Record<string, string>;
+  checkedAt: string;
+  trackUrl: (store: string) => string;
+}): Record<string, Record<string, unknown>> {
+  return Object.fromEntries(
+    args.stores.map((store) => {
+      const record = args.byStore?.[store];
+      const own = record && (!args.ids[store] || record.id === args.ids[store]) ? record : undefined;
+      const status = own ? String(own.status ?? "").trim().toLowerCase() : "";
+
+      return [
+        store,
+        {
+          recorded: Boolean(status) && !SUBMIT_PENDING.has(status),
+          status: status || null,
+          storeState: own?.storeUpload?.state ?? own?.storeReview?.state ?? null,
+          storeVersion: own?.storeVersion?.packaged ?? null,
+          checkedAt: args.checkedAt,
+          source: "platform-record",
+          submissionId: args.ids[store] || own?.id || null,
+          trackUrl: args.trackUrl(store),
+        },
+      ];
+    }),
+  );
+}
+
 function judgeSubmit(
   byStore: Record<string, PlatformSubmission>,
   stores: string[],
@@ -1331,9 +1369,23 @@ async function answer(args: SubmitToolArgs): Promise<string> {
         .filter((entry): entry is readonly [string, NonNullable<PlatformSubmission["storeVersion"]>] => Boolean(entry[1])),
     );
 
-    result.outcome = Object.keys(storeVersions).length
-      ? { ...waited.outcome, storeVersions: Object.fromEntries(Object.entries(storeVersions).map(([store, recorded]) => [store, recorded.packaged])) }
-      : waited.outcome;
+    const several = outcome.stores.length > 1;
+
+    result.outcome = {
+      ...waited.outcome,
+      ...(several ? { status: null } : {}),
+      ...(Object.keys(storeVersions).length
+        ? { storeVersions: Object.fromEntries(Object.entries(storeVersions).map(([store, recorded]) => [store, recorded.packaged])) }
+        : {}),
+    };
+
+    result.outcomes = storeOutcomes({
+      stores: outcome.stores,
+      byStore: waited.record,
+      ids,
+      checkedAt: waited.outcome.checkedAt,
+      trackUrl: (store) => consoleTrackUrl("submission", { ...refTarget, store, submissionId: ids[store] }, args.api),
+    });
 
     if (Array.isArray(result.submissions)) {
       result.submissions = (result.submissions as unknown[]).map((row) =>

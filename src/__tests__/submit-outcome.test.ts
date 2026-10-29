@@ -89,7 +89,10 @@ describe("extension_submit says submitted only for stores the platform recorded"
 
     expect(out.ok).toBe(true);
     expect(out.status).toBe("submitted");
-    expect(out.value.outcome).toMatchObject({ recorded: true, status: "chrome: submitted; firefox: submitted" });
+    expect(out.value.outcome).toMatchObject({ recorded: true, status: null });
+    expect(out.value.outcomes.chrome).toMatchObject({ recorded: true, status: "submitted", source: "platform-record" });
+    expect(out.value.outcomes.firefox).toMatchObject({ recorded: true, status: "submitted", source: "platform-record" });
+    expect(out.hint).toContain("chrome: submitted; firefox: submitted");
     expect(out.hint).toContain("Made: the submission page.");
     expect(out.value.submittedStores).toEqual(["chrome", "firefox"]);
     expect(out.value.missingStores).toBeUndefined();

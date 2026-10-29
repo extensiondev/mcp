@@ -347,6 +347,7 @@ describe("store acts and builds answer the recorded outcome", () => {
 
     expect(out.value.outcome).toMatchObject({ recorded: true, storeVersions: { firefox: "0.2.0.8" } });
     expect(out.value.submissions[0].storeVersion).toEqual(received);
+    expect(out.value.outcomes.firefox).toMatchObject({ recorded: true, status: "submitted", storeVersion: "0.2.0.8", submissionId: "sub_ff8" });
   });
 
   it("rebuild answers built when the build record shows this run finished, and build-failed when it failed", async () => {
