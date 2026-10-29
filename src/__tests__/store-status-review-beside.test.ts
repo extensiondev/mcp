@@ -229,3 +229,40 @@ describe("extension_release_status never shows the previous draft's review row b
     expect(reviewBesideSubmission(row, { buildSha: "6d9e10c", status: "approved" })).toMatchObject({ status: "approved" });
   });
 });
+
+describe("a Firefox review line is keyed on the version AMO holds, never on the build", () => {
+  const ROW = { status: "pending", version: "0.2.0", buildId: "069d4b8", checkedAt: "2026-10-29T12:00:00.000Z" };
+  const SIGNED = {
+    version: "0.2.0",
+    storeVersion: { packaged: "0.2.0.8" },
+    buildSha: "069d4b8",
+    status: "submitted",
+    storeReview: { state: "UNREVIEWED", checkedAt: "2026-10-29T11:00:00.000Z", source: "poll" },
+  };
+
+  it("answers the submission's own AMO state for its stamped version when the poll's row names the manifest version of the same build", () => {
+    expect(reviewBesideSubmission(ROW, SIGNED, "firefox")).toEqual({
+      status: "pending",
+      version: "0.2.0.8",
+      buildId: "069d4b8",
+      checkedAt: "2026-10-29T11:00:00.000Z",
+      storeState: "UNREVIEWED",
+      source: "poll",
+    });
+  });
+
+  it("marks the row stale with the version it names while AMO's state for the stamped version is unread", () => {
+    const { storeReview: _unread, ...unread } = SIGNED;
+
+    expect(reviewBesideSubmission(ROW, unread, "firefox")).toMatchObject({
+      stale: true,
+      staleReason: "this review line names version 0.2.0 of build 069d4b8; AMO's state for 0.2.0.8 has not been read yet",
+    });
+  });
+
+  it("keeps the poll's row when it names the stamped version the submission sent", () => {
+    const row = { ...ROW, version: "0.2.0.8", checkedAt: "2026-10-29T13:00:00.000Z" };
+
+    expect(reviewBesideSubmission(row, SIGNED, "firefox")).toEqual(row);
+  });
+});

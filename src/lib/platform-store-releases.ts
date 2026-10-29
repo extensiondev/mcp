@@ -30,6 +30,7 @@ export interface StoreReleaseView {
   storeUrl?: string;
   failureReason?: string;
   channel?: string;
+  amoChannel?: string;
   supersededBy?: string;
 }
 
@@ -87,7 +88,7 @@ export function storeReleaseView(raw: unknown): StoreReleaseView | null {
     updatedAt: str(raw.updatedAt),
   };
 
-  for (const key of ["visibility", "storeUrl", "failureReason", "channel", "supersededBy"] as const) {
+  for (const key of ["visibility", "storeUrl", "failureReason", "channel", "amoChannel", "supersededBy"] as const) {
     const value = str(raw[key]);
     if (value) view[key] = value;
   }
@@ -138,6 +139,27 @@ export function newestStoreReleaseByStore(rows: StoreReleaseView[]): Record<stri
   return out;
 }
 
+/* @invariant FIREFOX IS READ ONE LINE PER AMO CHANNEL. AMO keeps the newest
+ * listed version in review and the newest unlisted version signed side by
+ * side (Rebeccat 2026-10-29: 0.2.0.7 listed and unreviewed, 0.2.0.8 unlisted
+ * and signed), so the store read answers the newest row of each channel and
+ * an unlisted upload never hides the listed version's review.
+ */
+export function storeReleaseLane(row: Pick<StoreReleaseView, "store" | "amoChannel">): string {
+  return row.store === "firefox" && row.amoChannel ? `firefox ${row.amoChannel}` : row.store;
+}
+
+export function newestStoreReleaseByLane(rows: StoreReleaseView[]): Record<string, StoreReleaseView> {
+  const out: Record<string, StoreReleaseView> = {};
+
+  for (const row of rows) {
+    const lane = storeReleaseLane(row);
+    if (!out[lane]) out[lane] = row;
+  }
+
+  return out;
+}
+
 export function storeReleaseSentence(row: StoreReleaseView): string {
   const version =
     row.storeVersion?.buildNumber && row.storeVersion.displayed === row.version
@@ -154,13 +176,13 @@ export function storeReleaseSentence(row: StoreReleaseView): string {
         : ", audience not read"
       : "";
 
-  return `${row.store} ${version} ${row.state}${audience} on build ${row.buildSha || "unknown"} (${read})`;
+  return `${storeReleaseLane(row)} ${version} ${row.state}${audience} on build ${row.buildSha || "unknown"} (${read})`;
 }
 
 export function storeReleasesSentence(rows: StoreReleaseView[], unread: boolean): string {
   if (unread) return "The store releases could not be read from the platform, so what is live in each store is unknown, not empty.";
 
-  const newest = Object.values(newestStoreReleaseByStore(rows));
+  const newest = Object.values(newestStoreReleaseByLane(rows));
   if (!newest.length) return "No store has received a release of this project yet.";
 
   const live = newest.filter((row) => row.state === "live");

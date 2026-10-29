@@ -41,6 +41,7 @@ import { repairEdgeStoreUrl } from "../lib/edge-listing";
 import { storeRecordUnread } from "../lib/store-readiness";
 import { openProjectApi, projectApiSend } from "../lib/project-api";
 import {
+  newestStoreReleaseByLane,
   newestStoreReleaseByStore,
   readPlatformStoreReleases,
   storeReleaseSentence,
@@ -269,6 +270,13 @@ export function latestSubmissionsByStore(
   return flat;
 }
 
+export function firefoxReleasesByChannel(rows: StoreReleaseView[]): Record<string, StoreReleaseView> | null {
+  const lanes = newestStoreReleaseByLane(rows.filter((row) => row.store === "firefox" && row.amoChannel));
+  const byChannel = Object.fromEntries(Object.values(lanes).map((row) => [row.amoChannel as string, row]));
+
+  return Object.keys(byChannel).length ? byChannel : null;
+}
+
 export interface NormalizedStoresStatus {
   lastSubmission?: Record<string, unknown>;
   lastOverride?: Record<string, unknown>;
@@ -489,7 +497,7 @@ export async function readStores(args: {
     if (!isNewerOrSame(latest.submittedAt, submissionsByStore[store]?.submittedAt)) continue;
 
     const { run, store: _store, ...fields } = latest;
-    submissionsByStore[store] = fields;
+    submissionsByStore[store] = fields.storeVersion ? { ...fields, version: fields.storeVersion.packaged } : fields;
     if (Object.keys(run).length > 0) runsByStore[store] = run;
   }
 
@@ -538,6 +546,9 @@ export async function readStores(args: {
     if (runsByStore[store]) row.submissionRun = runsByStore[store];
     if (releaseByStore[store]) row.release = releaseByStore[store];
 
+    const amoChannels = store === "firefox" && releases.ok ? firefoxReleasesByChannel(releases.rows) : null;
+    if (amoChannels) row.amoChannels = amoChannels;
+
     const earlier = (records.ok
       ? earlierSubmissions(records.history[store] ?? [], submissionsByStore[store])
       : []
@@ -551,7 +562,7 @@ export async function readStores(args: {
     });
     if (earlier.length > 0) row.submissionHistory = earlier;
 
-    const review = reviewBesideSubmission(status.reviews[store], submissionsByStore[store]);
+    const review = reviewBesideSubmission(status.reviews[store], submissionsByStore[store], store);
 
     if (review && Object.values(review).some(Boolean)) {
       row.review = review;
@@ -626,7 +637,10 @@ export async function readStores(args: {
     if (review?.status) tail.push(reviewSentence(review));
 
     const release = row.release as StoreReleaseView | undefined;
-    if (release) tail.push(`release: ${storeReleaseSentence(release)}`);
+    const channelReleases = row.amoChannels ? Object.values(row.amoChannels as Record<string, StoreReleaseView>) : [];
+
+    if (channelReleases.length) tail.push(...channelReleases.map((entry) => `release: ${storeReleaseSentence(entry)}`));
+    else if (release) tail.push(`release: ${storeReleaseSentence(release)}`);
 
     const queuedAct = row.queuedAct as QueuedStoreActView | undefined;
 

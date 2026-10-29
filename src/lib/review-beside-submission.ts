@@ -22,6 +22,7 @@ export interface ReviewView {
 
 export interface ReviewedSubmission {
   version?: string;
+  storeVersion?: { packaged: string };
   buildSha?: string;
   status?: string;
   storeReview?: StoreReview;
@@ -78,12 +79,17 @@ function checkedAtMs(value: string | undefined): number {
   return Number.isFinite(ms) ? ms : 0;
 }
 
+function storeVersionOf(submission: ReviewedSubmission): string | undefined {
+  return str(submission.storeVersion?.packaged) || str(submission.version);
+}
+
 function ownReview(submission: ReviewedSubmission, sha: string, status: string): ReviewView {
   const own = submission.storeReview;
+  const version = storeVersionOf(submission);
 
   return {
     status,
-    ...(submission.version ? { version: submission.version } : {}),
+    ...(version ? { version } : {}),
     buildId: sha.slice(0, 7),
     ...(own?.checkedAt ? { checkedAt: own.checkedAt } : {}),
     ...(own?.state ? { storeState: own.state } : {}),
@@ -128,12 +134,16 @@ export function storeReviewOfRow(raw: unknown): StoreReview | undefined {
 export function reviewBesideSubmission(
   review: ReviewView | undefined,
   submission: ReviewedSubmission | undefined,
+  store?: string,
 ): ReviewView | undefined {
   const sha = str(submission?.buildSha);
   if (!submission || !sha || !review) return review;
 
   const own = submission.storeReview;
   const settled = SETTLED_STATUSES[String(submission.status ?? "").trim().toLowerCase()];
+
+  if (store === "firefox") return firefoxReviewBeside(review, submission, sha, settled);
+
   const rowIsThisBuild = !review.buildId || sameBuild(sha, review.buildId);
 
   if (settled) return ownReview(submission, sha, settled);
@@ -150,6 +160,41 @@ export function reviewBesideSubmission(
     ...review,
     stale: true,
     staleReason: `this review line belongs to build ${review.buildId}; the newer submission ${sha.slice(0, 7)} has not been checked yet`,
+  };
+}
+
+/* @invariant A FIREFOX REVIEW LINE IS KEYED ON THE VERSION AMO HOLDS, NEVER
+ * ON THE BUILD. One build reaches AMO as several versions (Rebeccat
+ * 2026-10-29: 0.2.0.7 listed and in review, 0.2.0.8 unlisted and signed,
+ * both from 069d4b8), and AMO reviews each version on its own. The poll's
+ * row names the manifest version and the build, so it is this submission's
+ * line only when it names the stamped version the submission sent; otherwise
+ * the submission's own record answers with AMO's state for that version,
+ * and with none read yet the row is marked stale with the version it names.
+ */
+function firefoxReviewBeside(
+  review: ReviewView,
+  submission: ReviewedSubmission,
+  sha: string,
+  settled: string | undefined,
+): ReviewView {
+  const own = submission.storeReview;
+  const version = storeVersionOf(submission);
+
+  if (settled) return ownReview(submission, sha, settled);
+
+  if (version && review.version === version) {
+    return own?.state && checkedAtMs(own.checkedAt) > checkedAtMs(review.checkedAt)
+      ? ownReview(submission, sha, reviewStatusOf(own.state))
+      : review;
+  }
+
+  if (own?.state) return ownReview(submission, sha, reviewStatusOf(own.state));
+
+  return {
+    ...review,
+    stale: true,
+    staleReason: `this review line names version ${review.version || "unknown"} of build ${review.buildId || "unknown"}; AMO's state for ${version || "the newer submission"} has not been read yet`,
   };
 }
 
