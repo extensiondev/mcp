@@ -83,7 +83,7 @@ function storeVersionOf(submission: ReviewedSubmission): string | undefined {
   return str(submission.storeVersion?.packaged) || str(submission.version);
 }
 
-function ownReview(submission: ReviewedSubmission, sha: string, status: string): ReviewView {
+export function ownReview(submission: ReviewedSubmission, sha: string, status: string): ReviewView {
   const own = submission.storeReview;
   const version = storeVersionOf(submission);
 
@@ -196,6 +196,55 @@ function firefoxReviewBeside(
     stale: true,
     staleReason: `this review line names version ${review.version || "unknown"} of build ${review.buildId || "unknown"}; AMO's state for ${version || "the newer submission"} has not been read yet`,
   };
+}
+
+const UPLOAD_ONLY_STATUSES = new Set(["draft", "uploaded", "pending", "dry-run", "dry_run", "queued"]);
+
+/* @invariant AN UPLOAD THAT ENTERED NO REVIEW NEVER REWRITES THE STORE'S
+ * REVIEW LINE, AND A LINE WITH NO STORE WORD IS NEVER "PENDING". Rebeccat
+ * 2026-10-29: a three-store draft upload of e679664 turned Chrome's line
+ * from approved (0.2.0.7, still published) into "review pending for build
+ * 6d9e10c", and Safari's from DEVELOPER_REJECTED into a pending line from
+ * before the withdrawal with no Apple state. While the newest submission is
+ * an upload with no store answer of its own, the line answers the newest
+ * store answer any submission of that store carries (what the store reviewed
+ * or serves, with its state, source and date), else the poll's row only when
+ * it carries the store's state and source; a pending line that names neither
+ * is not shown.
+ */
+export function storeReviewLine(args: {
+  store: string;
+  row: ReviewView | undefined;
+  latest: (ReviewedSubmission & { submittedAt?: string }) | undefined;
+  earlier: Array<ReviewedSubmission & { submittedAt?: string }>;
+}): ReviewView | undefined {
+  const { latest } = args;
+  const uploadOnly =
+    latest !== undefined &&
+    !latest.storeReview?.state &&
+    UPLOAD_ONLY_STATUSES.has(String(latest.status ?? "").trim().toLowerCase());
+  const read = (review: ReviewView | undefined) => (review && review.storeState && review.source ? review : undefined);
+
+  const review = uploadOnly
+    ? newestAnswered(args.earlier) ?? read(args.row)
+    : reviewBesideSubmission(args.row, latest, args.store);
+
+  if (!review) return undefined;
+  if (review.status === "pending" && !review.storeState && !review.source) return undefined;
+
+  return review;
+}
+
+function newestAnswered(records: ReviewedSubmission[]): ReviewView | undefined {
+  const answered = records
+    .filter((record) => record.storeReview?.state && str(record.buildSha))
+    .sort((a, b) => checkedAtMs(b.storeReview?.checkedAt) - checkedAtMs(a.storeReview?.checkedAt))[0];
+
+  if (!answered?.storeReview) return undefined;
+
+  const settled = SETTLED_STATUSES[String(answered.status ?? "").trim().toLowerCase()];
+
+  return ownReview(answered, String(answered.buildSha), settled ?? reviewStatusOf(answered.storeReview.state));
 }
 
 export function reviewSentence(review: ReviewView): string {

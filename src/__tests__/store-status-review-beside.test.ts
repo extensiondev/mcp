@@ -4,7 +4,7 @@ import path from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { reviewBesideSubmission, reviewSentence, reviewStatusOf } from "../lib/review-beside-submission";
+import { reviewBesideSubmission, reviewSentence, reviewStatusOf, storeReviewLine } from "../lib/review-beside-submission";
 import { readStores as handler } from "../tools/store-status";
 
 function jsonResponse(body: unknown, ok = true, status = 200): Response {
@@ -85,7 +85,7 @@ describe("extension_release_status never shows the previous draft's review row b
     fs.rmSync(tmp, { recursive: true, force: true });
   });
 
-  it("marks the row stale with the build it belongs to while the newer submission has no store answer", async () => {
+  it("shows no pending line for another build's row that carries no store word while the newer submission has no store answer", async () => {
     global.fetch = fetchByFile({
       "stores/health.json": HEALTH,
       "stores/status.json": STATUS,
@@ -96,15 +96,12 @@ describe("extension_release_status never shows the previous draft's review row b
     const chrome = out.value.stores.find((r: { store: string }) => r.store === "chrome");
 
     expect(chrome.lastSubmission.buildSha).toBe("6d9e10c");
-    expect(chrome.review).toEqual({
-      ...CHROME_REVIEW,
+    expect(chrome.review).toBeUndefined();
+    expect(out.hint).not.toContain("review pending");
+    expect(reviewBesideSubmission(CHROME_REVIEW, { buildSha: "6d9e10c" })).toMatchObject({
       stale: true,
       staleReason: "this review line belongs to build e4b8976; the newer submission 6d9e10c has not been checked yet",
     });
-
-    expect(out.hint).toContain(
-      "review pending for build e4b8976 (checked 2026-10-26T12:00:31.000Z), stale: this review line belongs to build e4b8976; the newer submission 6d9e10c has not been checked yet",
-    );
   });
 
   it("answers the newer submission's own store state, with the live item's beside it, once its record carries one", async () => {
@@ -264,5 +261,52 @@ describe("a Firefox review line is keyed on the version AMO holds, never on the 
     const row = { ...ROW, version: "0.2.0.8", checkedAt: "2026-10-29T13:00:00.000Z" };
 
     expect(reviewBesideSubmission(row, SIGNED, "firefox")).toEqual(row);
+  });
+});
+
+describe("an upload that entered no review never rewrites the store's review line", () => {
+  const PUBLISHED = {
+    buildSha: "e679664",
+    version: "0.2.0",
+    storeVersion: { packaged: "0.2.0.7" },
+    status: "published",
+    submittedAt: "2026-10-27T10:00:00.000Z",
+    storeReview: { state: "PUBLISHED", checkedAt: "2026-10-29T18:00:00.000Z", source: "poll", liveState: "PUBLISHED" },
+  };
+  const DRAFT = { buildSha: "e679664", version: "0.2.0", status: "draft", submittedAt: "2026-10-29T19:27:00.000Z" };
+  const OLDER_ROW = { status: "pending", version: "0.2.0", buildId: "6d9e10c", checkedAt: "2026-10-29T19:04:27.000Z" };
+
+  it("keeps Chrome's line on the published version after a draft upload, never pending for an older build", () => {
+    expect(storeReviewLine({ store: "chrome", row: OLDER_ROW, latest: DRAFT, earlier: [PUBLISHED] })).toEqual({
+      status: "approved",
+      version: "0.2.0.7",
+      buildId: "e679664",
+      checkedAt: "2026-10-29T18:00:00.000Z",
+      storeState: "PUBLISHED",
+      liveState: "PUBLISHED",
+      source: "poll",
+    });
+  });
+
+  it("keeps Safari's line on the withdrawal Apple answered after a TestFlight upload", () => {
+    const withdrawn = {
+      buildSha: "6d9e10c",
+      version: "0.2.0",
+      status: "draft",
+      storeReview: { state: "DEVELOPER_REJECTED", checkedAt: "2026-10-28T22:03:00.000Z", source: "poll" },
+    };
+    const stale = { status: "pending", version: "0.2.0", buildId: "e679664", checkedAt: "2026-10-28T11:27:27.000Z" };
+
+    expect(storeReviewLine({ store: "safari", row: stale, latest: { ...DRAFT, status: "draft" }, earlier: [withdrawn] })).toMatchObject({
+      status: "withdrawn",
+      storeState: "DEVELOPER_REJECTED",
+      source: "poll",
+      checkedAt: "2026-10-28T22:03:00.000Z",
+    });
+  });
+
+  it("answers no line, never pending, when nothing the store answered is on record", () => {
+    expect(storeReviewLine({ store: "safari", row: OLDER_ROW, latest: DRAFT, earlier: [] })).toBeUndefined();
+    expect(storeReviewLine({ store: "chrome", row: OLDER_ROW, latest: undefined, earlier: [] })).toBeUndefined();
   });
 });

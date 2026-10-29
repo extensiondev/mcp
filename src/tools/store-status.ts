@@ -28,7 +28,7 @@ import {
   type SubmissionRun,
 } from "../lib/platform-submissions";
 import {
-  reviewBesideSubmission,
+  storeReviewLine,
   reviewSentence,
   storeReviewOfRow,
   type ReviewView,
@@ -562,7 +562,12 @@ export async function readStores(args: {
     });
     if (earlier.length > 0) row.submissionHistory = earlier;
 
-    const review = reviewBesideSubmission(status.reviews[store], submissionsByStore[store], store);
+    const review = storeReviewLine({
+      store,
+      row: status.reviews[store],
+      latest: submissionsByStore[store],
+      earlier,
+    });
 
     if (review && Object.values(review).some(Boolean)) {
       row.review = review;

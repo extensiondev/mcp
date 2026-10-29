@@ -8,6 +8,9 @@
 
 import { repairEdgeStoreUrl } from "./edge-listing";
 import { openProjectApi, projectApiGet } from "./project-api";
+import { storeReviewOfRow } from "./review-beside-submission";
+
+import type { StoreReview } from "./platform-submissions";
 
 const HISTORY_PER_STORE = 5;
 
@@ -36,6 +39,8 @@ export interface StoreHistoryEntry {
   failureReason?: string;
   supersededBy?: string;
   storeUrl?: string;
+  storeVersion?: { packaged: string };
+  storeReview?: StoreReview;
 }
 
 export type PlatformStoreRecords =
@@ -114,8 +119,13 @@ function historyEntry(raw: Row): StoreHistoryEntry {
 
   for (const [key, value] of fields) {
     const text = str(value);
-    if (text) entry[key] = text;
+    if (text) (entry as Record<string, unknown>)[key] = text;
   }
+
+  const packaged = isRow(raw.storeVersion) ? str(raw.storeVersion.packaged) : "";
+  const storeReview = storeReviewOfRow(raw.storeReview);
+  if (packaged) entry.storeVersion = { packaged };
+  if (storeReview) entry.storeReview = storeReview;
 
   return entry;
 }

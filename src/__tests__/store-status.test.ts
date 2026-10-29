@@ -229,7 +229,7 @@ describe("store-status reader", () => {
       "2026-07-22T17:25:05.000Z",
     );
 
-    expect(byStore.firefox.review.status).toBe("pending");
+    expect(byStore.firefox.review).toBeUndefined();
 
     expect(out.value.lastPollAt).toBe("2026-07-22T18:00:00.000Z");
     expect(out.value.consoleStoresUrl).toContain("/acme/widget/submissions");
