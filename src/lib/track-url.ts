@@ -176,7 +176,7 @@ function submitPlan(call: TrackCall): TrackPlan {
 
   if (action === "preflight" && STORE_CONNECT_STATUSES.has(call.status)) return { track: { page: "store-settings" } };
 
-  if (action === "preflight" || action === "sync-listing") {
+  if (action === "preflight" || action === "sync-listing" || action === "status") {
     const store = firstBrowser(call.args);
 
     return { track: { page: store ? "store" : "submissions", target: { store } } };

@@ -189,6 +189,7 @@ export function inputValidationError(
   toolName: string,
   issues: InputIssue[],
   inputSchema?: Record<string, unknown>,
+  hint?: string,
 ): string {
   return envelope({
     ok: false,
@@ -199,11 +200,12 @@ export function inputValidationError(
       name: "InputValidationError",
       message: `Invalid arguments for ${toolName}: ${issues
         .map((i) => `${i.path}: ${i.message}`)
-        .join("; ")}`,
+        .join("; ")}${hint ? `. ${hint}` : ""}`,
     },
     value: {
       issues,
       ...(inputSchema ? { args: describeToolArgs(inputSchema) } : {}),
     },
+    ...(hint ? { hint } : {}),
   });
 }

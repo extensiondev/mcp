@@ -30,13 +30,14 @@ import { withCallApi } from "./origins";
 import { bindCallProject, stampAnsweredFor } from "./project-binding";
 import { followProjectMove, followSentence, movedAnswer } from "./project-move";
 import { scrubRunAnswer } from "./run-privacy";
-import { createReloader, handoverState, type BuildImporter, type RebuiltCall, type ToolFrame } from "./server-reload";
+import { createReloader, handoverState, type BuildImporter, type ListedTool, type RebuiltCall, type ToolFrame } from "./server-reload";
 import { localRebuiltWarning, reloadedWarning, serverStamp, staleEnvelope, type ServerStampReader } from "./server-stamp";
 import { shapeStoreAnswer } from "./store-answer";
 import { attachTrack } from "./track-url";
 import { fenceUntrusted } from "./untrusted-fence";
 import {
   inputValidationError,
+  type InputIssue,
   normalizeArgAliases,
   validateToolInput,
 } from "./validate-input";
@@ -52,6 +53,7 @@ export interface ToolModule {
     inputSchema: Record<string, unknown>;
   };
   handler: (args: any) => Promise<string>;
+  invalidArgumentsHint?: (issues: InputIssue[]) => string | undefined;
 }
 
 export interface ToolHandlerOptions {
@@ -62,6 +64,7 @@ export interface ToolHandlerOptions {
   openApprovals?: boolean;
   stamp?: ServerStampReader;
   importBuild?: BuildImporter;
+  onToolsChanged?: () => void;
 }
 
 function isEnvelopeText(result: string): boolean {
@@ -146,7 +149,20 @@ async function followedOnce(
   return annotate(await handler({ ...args, project: move.to }), { warning: followSentence(move) });
 }
 
+export function listedTools(tools: ToolModule[], options: ServerOptions): ListedTool[] {
+  return tools
+    .filter((t) => isToolListed(t.schema.name, options))
+    .map((t) => ({ name: t.schema.name, description: t.schema.description, inputSchema: t.schema.inputSchema }));
+}
+
 export function createToolDispatcher(setup: ToolHandlerOptions): (call: RebuiltCall) => Promise<ToolFrame> {
+  return createToolSurface(setup).dispatch;
+}
+
+export function createToolSurface(setup: ToolHandlerOptions): {
+  dispatch: (call: RebuiltCall) => Promise<ToolFrame>;
+  list: () => Promise<ListedTool[]>;
+} {
   const { tools, options } = setup;
   const toolMap = new Map(tools.map((tool) => [tool.schema.name, tool]));
   const run = setup.run ?? ((call: () => Promise<string>) => call());
@@ -158,7 +174,24 @@ export function createToolDispatcher(setup: ToolHandlerOptions): (call: RebuiltC
   });
   let localSaid: string | null = null;
 
-  return async ({ name, arguments: args }) => {
+  const list = async (): Promise<ListedTool[]> => {
+    const loaded = listedTools(tools, options);
+    const rebuilt = stamp.rebuiltSince();
+    if (!rebuilt) return loaded;
+
+    const fresh = await reloader.list(rebuilt);
+    if (!fresh) return loaded;
+
+    const byName = new Map(fresh.map((tool) => [tool.name, tool]));
+
+    return loaded.map((tool) => {
+      const next = TOOL_POLICY[tool.name]?.group === "platform" ? byName.get(tool.name) : undefined;
+
+      return next ? { name: tool.name, description: next.description, inputSchema: next.inputSchema } : tool;
+    });
+  };
+
+  const dispatch = async ({ name, arguments: args }: RebuiltCall): Promise<ToolFrame> => {
     const tool = toolMap.get(name);
 
     if (!tool) {
@@ -214,9 +247,11 @@ export function createToolDispatcher(setup: ToolHandlerOptions): (call: RebuiltC
      * created-project records and the session markers. What stays here: the
      * opened-approvals set, so an approval page opens once across
      * generations. What is rebuilt: the project id cache, refilled from the
-     * platform's whoami. A tool the rebuild added or reshaped still needs
-     * /mcp, since the client holds the list this process announced. The
-     * first answer after each reload says so in warnings, once.
+     * platform's whoami. A platform tool the rebuild reshaped is listed from
+     * the build that validates its calls, and the first reloaded answer
+     * tells the client the list changed (ledger 285); a tool the rebuild
+     * added still needs /mcp. The first answer after each reload says so in
+     * warnings, once.
      * E_SERVER_STALE remains only when the reload fails (no loader, an
      * import error, a build without the reload contract, a refused
      * handover), with value.reloadError saying why and the /mcp sentence as
@@ -235,6 +270,8 @@ export function createToolDispatcher(setup: ToolHandlerOptions): (call: RebuiltC
         );
       }
 
+      if (outcome.reloaded) setup.onToolsChanged?.();
+
       const text = outcome.frame.content[0]?.text ?? "";
       const said = annotate(
         setup.openApprovals ? openApprovalOnce(text, options) : text,
@@ -252,7 +289,7 @@ export function createToolDispatcher(setup: ToolHandlerOptions): (call: RebuiltC
     const issues = validateToolInput(tool.schema.inputSchema, normalizedArgs);
 
     if (issues.length) {
-      return refusedFrame(inputValidationError(name, issues, tool.schema.inputSchema));
+      return refusedFrame(inputValidationError(name, issues, tool.schema.inputSchema, tool.invalidArgumentsHint?.(issues)));
     }
 
     const held = bindApprovalLogin(name, normalizedArgs);
@@ -309,21 +346,27 @@ export function createToolDispatcher(setup: ToolHandlerOptions): (call: RebuiltC
       );
     }
   };
+
+  return { dispatch, list };
 }
 
 export function installToolHandlers(server: Server, setup: ToolHandlerOptions): void {
-  const { tools, options } = setup;
-  const dispatch = createToolDispatcher(setup);
+  const surface = createToolSurface({
+    ...setup,
+    onToolsChanged: () => {
+      setup.onToolsChanged?.();
+      server.sendToolListChanged().catch(() => undefined);
+    },
+  });
+  const dispatch = surface.dispatch;
 
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
-    tools: tools
-      .filter((t) => isToolListed(t.schema.name, options))
-      .map((t) => ({
-        name: t.schema.name,
-        description: t.schema.description,
-        inputSchema: t.schema.inputSchema,
-        annotations: { title: toolTitle(t.schema.name), ...TOOL_POLICY[t.schema.name].annotations },
-      })),
+    tools: (await surface.list()).map((t) => ({
+      name: t.name,
+      description: t.description,
+      inputSchema: t.inputSchema,
+      annotations: { title: toolTitle(t.name), ...TOOL_POLICY[t.name].annotations },
+    })),
   }));
 
   server.setRequestHandler(CallToolRequestSchema, async (request) => dispatch(request.params));
