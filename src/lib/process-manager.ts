@@ -11,10 +11,9 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import type { ProcessInfo } from "./types";
+import { localState } from "./local-state";
 
-const sessions = new Map<string, ProcessInfo>();
-const registrationStamps = new Map<string, { pid: number; at: number }>();
+import type { ProcessInfo } from "./types";
 
 function sessionKey(projectPath: string, browser: string): string {
   return `${path.resolve(projectPath)}::${browser}`;
@@ -151,9 +150,10 @@ function writeMarkerBestEffort(info: ProcessInfo, registeredAtMs: number): strin
 
 export function registerSession(info: ProcessInfo): string | null {
   const key = sessionKey(info.projectPath, info.browser);
-  const prior = registrationStamps.get(key);
+  const { sessions, registrations } = localState();
+  const prior = registrations.get(key);
   const at = prior && prior.pid === info.pid ? prior.at : Date.now();
-  registrationStamps.set(key, { pid: info.pid, at });
+  registrations.set(key, { pid: info.pid, at });
   sessions.set(key, info);
 
   return writeMarkerBestEffort(info, at);
@@ -163,7 +163,7 @@ export function sessionSinceMs(
   projectPath: string,
   browser: string,
 ): number | null {
-  const stamp = registrationStamps.get(sessionKey(projectPath, browser));
+  const stamp = localState().registrations.get(sessionKey(projectPath, browser));
   if (stamp) return stamp.at;
 
   const resolved = path.resolve(projectPath);
@@ -192,7 +192,7 @@ export function findSessionInfo(
   projectPath: string,
   browser: string,
 ): ProcessInfo | undefined {
-  const inMemory = sessions.get(sessionKey(projectPath, browser));
+  const inMemory = localState().sessions.get(sessionKey(projectPath, browser));
   if (inMemory) return inMemory;
 
   const resolved = path.resolve(projectPath);
@@ -215,12 +215,13 @@ export function removeSession(
   pid?: number,
 ): void {
   const key = sessionKey(projectPath, browser);
+  const { sessions, registrations } = localState();
   if (pid !== undefined && sessions.get(key)?.pid !== pid) return;
 
   sessions.delete(key);
-  registrationStamps.delete(key);
+  registrations.delete(key);
 }
 
 export function listSessions(): ProcessInfo[] {
-  return Array.from(sessions.values());
+  return Array.from(localState().sessions.values());
 }

@@ -16,7 +16,7 @@ import { openApprovalOnce } from "./approval-open";
 import { answerOnceDecided } from "./approval-wait";
 import { bindApprovalProject } from "./approval-record";
 import { withApprovalLogin } from "./approval-scope";
-import { envelope, isEnvelope, type Envelope } from "./envelope";
+import { envelope } from "./envelope";
 import { resolveApiBase } from "./login-flow";
 import {
   TOOL_POLICY,
@@ -30,11 +30,12 @@ import { withCallApi } from "./origins";
 import { bindCallProject, stampAnsweredFor } from "./project-binding";
 import { followProjectMove, followSentence, movedAnswer } from "./project-move";
 import { scrubRunAnswer } from "./run-privacy";
-import { createReloader, handoverState, type BuildImporter, type ListedTool, type RebuiltCall, type ToolFrame } from "./server-reload";
-import { localRebuiltWarning, markListStale, reloadedWarning, serverStamp, staleEnvelope, type ServerStampReader } from "./server-stamp";
+import { createReloader, handoverState, type ActiveBuild, type BuildImporter, type ListedTool, type RebuiltCall, type ToolFrame } from "./server-reload";
+import { markListStale, reloadedWarning, serverStamp, staleEnvelope, type ServerStampReader } from "./server-stamp";
+import { markStaleLocal, noLocalCarryReason, type HeldLocal } from "./stale-local";
 import { shapeStoreAnswer } from "./store-answer";
+import { annotate, frameText, refusedFrame, toolResultFrame } from "./tool-frames";
 import { attachTrack } from "./track-url";
-import { fenceUntrusted } from "./untrusted-fence";
 import {
   inputValidationError,
   type InputIssue,
@@ -45,6 +46,7 @@ import {
 import type { Server } from "@modelcontextprotocol/sdk/server/index.js";
 
 export type { ToolFrame } from "./server-reload";
+export { annotate, toolResultFrame } from "./tool-frames";
 
 export interface ToolModule {
   schema: {
@@ -65,68 +67,6 @@ export interface ToolHandlerOptions {
   stamp?: ServerStampReader;
   importBuild?: BuildImporter;
   onToolsChanged?: () => void;
-}
-
-function isEnvelopeText(result: string): boolean {
-  try {
-    return isEnvelope(JSON.parse(result));
-  } catch {
-    return false;
-  }
-}
-
-export function toolResultFrame(result: string, untrusted = false): ToolFrame {
-  let refused: boolean;
-
-  try {
-    const parsed: unknown = JSON.parse(result);
-    refused = isEnvelope(parsed) && parsed.ok === false;
-  } catch {
-    refused = false;
-  }
-
-  return {
-    content: [
-      {
-        type: "text" as const,
-        text: untrusted ? fenceUntrusted(result) : result,
-      },
-    ],
-    ...(refused || (untrusted && !isEnvelopeText(result)) ? { isError: true } : {}),
-  };
-}
-
-function refusedFrame(text: string): ToolFrame {
-  return { content: [{ type: "text" as const, text }], isError: true };
-}
-
-export function annotate(result: string, said: { note?: string; warning?: string }): string {
-  if (!said.note && !said.warning) return result;
-
-  let parsed: unknown;
-
-  try {
-    parsed = JSON.parse(result);
-  } catch {
-    return result;
-  }
-
-  if (!isEnvelope(parsed)) return result;
-
-  const frame = parsed as Envelope & { hint?: string };
-  const value = frame.value && typeof frame.value === "object" && !Array.isArray(frame.value) ? (frame.value as Record<string, unknown>) : {};
-  const note = said.note ? (typeof value.note === "string" && value.note.trim() ? `${value.note.trim()} ${said.note}` : said.note) : undefined;
-
-  return envelope({
-    ok: frame.ok,
-    command: frame.command,
-    status: frame.status,
-    value: note ? { ...value, note } : frame.value,
-    error: frame.error ?? undefined,
-    warnings: [...frame.warnings, said.warning],
-    ...(frame.truncated !== undefined ? { truncated: frame.truncated } : {}),
-    ...(frame.hint ? { hint: frame.hint } : {}),
-  });
 }
 
 /* @invariant A PLATFORM ANSWER THAT NAMES WHERE THE PROJECT WENT IS FOLLOWED
@@ -173,9 +113,10 @@ export function createToolSurface(setup: ToolHandlerOptions): {
     handover: () => handoverState(options),
   });
   const loadedAt = stamp.stamp().builtAt;
-  let localSaid: string | null = null;
   let listedAt: string | null = loadedAt;
   let announced: string | null = null;
+
+  const refused = (text: string): ToolFrame => refusedFrame(text);
 
   const list = async (): Promise<ListedTool[]> => {
     const loaded = listedTools(tools, options);
@@ -183,24 +124,98 @@ export function createToolSurface(setup: ToolHandlerOptions): {
     listedAt = loadedAt;
     if (!rebuilt) return loaded;
 
-    const fresh = await reloader.list(rebuilt);
-    if (!fresh) return loaded;
+    const active = await reloader.activate(rebuilt);
+    const fresh = "reloadError" in active ? null : await reloader.list(rebuilt);
+    if (!fresh || "reloadError" in active) return loaded;
 
     listedAt = rebuilt;
     const byName = new Map(fresh.map((tool) => [tool.name, tool]));
+    const follows = (name: string): boolean => active.local || TOOL_POLICY[name]?.group === "platform";
+    const known = new Set(loaded.map((tool) => tool.name));
+    const added = active.local ? fresh.filter((tool) => !known.has(tool.name)) : [];
 
-    return loaded.map((tool) => {
-      const next = TOOL_POLICY[tool.name]?.group === "platform" ? byName.get(tool.name) : undefined;
+    return [
+      ...loaded.map((tool) => {
+        const next = follows(tool.name) ? byName.get(tool.name) : undefined;
 
-      return next ? { name: tool.name, description: next.description, inputSchema: next.inputSchema } : tool;
-    });
+        return next ? { name: tool.name, description: next.description, inputSchema: next.inputSchema } : tool;
+      }),
+      ...added,
+    ];
   };
+
+  /* @invariant A SERVER THAT KNOWS IT IS STALE RELOADS ITS CODE INSTEAD OF
+   * REFUSING. The operation rebuilds this server from source several times
+   * a night, and until ledger 248 every rebuild stopped the walk until the
+   * owner ran /mcp by hand: five times in one evening. Now, when the entry
+   * file on disk is newer than the one this process loaded, a call imports
+   * the rebuilt dist/module.js under a stamped specifier (the bundle is one
+   * file, so nothing beside it comes back from the loader's cache) and is
+   * answered by that build's own dispatcher, while this process keeps the
+   * transport, the stdio pair and the tool list the client was given. What
+   * crosses over: the server options (features, noShip, the project pin),
+   * the kept default login per store and server, and, since ledger 300, the
+   * local state by reference (the session registry, the remembered
+   * extension targets, the one-recovery-per-session set), handed from the
+   * active generation to the next, so a session a previous generation
+   * spawned is found, stopped and guarded by the build answering now. What
+   * the new code reads from disk as it is: the credential store,
+   * approvals.json, the created-project records and the session markers.
+   * What stays here: the opened-approvals set, so an approval page opens
+   * once across generations. What is rebuilt: the project id cache,
+   * refilled from the platform's whoami. A tool the rebuild reshaped is
+   * listed from the build that validates its calls (ledger 285), a tool the
+   * rebuild added is listed and dispatched from it; while the client holds a
+   * list an older build served, every reloaded answer carries
+   * value.server.listStale with the build it was listed at and a hint to
+   * list again, and the client is told the list changed once per build
+   * (ledger 289). The first answer after each reload says so in warnings,
+   * once. E_SERVER_STALE remains only when the reload fails (no loader, an
+   * import error, a build without the reload contract, a refused handover),
+   * with value.reloadError saying why and the /mcp sentence as the last
+   * resort; a local tool then stays on the loaded code, as it does when the
+   * build on disk cannot adopt this process's sessions, and every one of its
+   * answers says so (stale-local.ts).
+   */
+  const answeredByRebuilt = async (call: RebuiltCall, rebuilt: string, untrusted: boolean): Promise<ToolFrame | { reloadError: string }> => {
+    const outcome = await reloader.dispatch(call, rebuilt);
+    if ("reloadError" in outcome) return outcome;
+
+    const stale = listedAt !== rebuilt;
+
+    if (stale && announced !== rebuilt) {
+      announced = rebuilt;
+      setup.onToolsChanged?.();
+    }
+
+    const text = frameText(outcome.frame);
+    const said = annotate(
+      setup.openApprovals ? openApprovalOnce(text, options) : text,
+      outcome.reloaded ? { warning: reloadedWarning(outcome.reloaded) } : {},
+    );
+    const told = stale ? markListStale(said, listedAt, rebuilt) : said;
+
+    return told === text ? outcome.frame : toolResultFrame(told, untrusted);
+  };
+
+  const heldLocal = (rebuilt: string, active: ActiveBuild | { reloadError: string }, failure: string | null): HeldLocal =>
+    "reloadError" in active
+      ? { rebuilt, reason: active.reloadError, version: null }
+      : { rebuilt, reason: failure ?? noLocalCarryReason(rebuilt), version: active.version };
 
   const dispatch = async ({ name, arguments: args }: RebuiltCall): Promise<ToolFrame> => {
     const tool = toolMap.get(name);
+    const rebuilt = stamp.rebuiltSince();
 
     if (!tool) {
-      return refusedFrame(
+      if (rebuilt) {
+        const active = await reloader.activate(rebuilt);
+        const answered = !("reloadError" in active) && active.local ? await answeredByRebuilt({ name, arguments: args }, rebuilt, false) : null;
+
+        if (answered && !("reloadError" in answered)) return answered;
+      }
+
+      return refused(
         envelope({
           ok: false,
           command: name,
@@ -225,93 +240,55 @@ export function createToolSurface(setup: ToolHandlerOptions): {
     const disabled =
       disabledToolEnvelope(name, aliasedArgs, options) ?? setup.refuse?.(name, aliasedArgs) ?? null;
 
-    if (disabled) return refusedFrame(disabled);
+    if (disabled) return refused(disabled);
 
     const pinned = pinProjectArgs(name, aliasedArgs, tool.schema.inputSchema, options);
 
-    if ("refused" in pinned) return refusedFrame(pinned.refused);
+    if ("refused" in pinned) return refused(pinned.refused);
 
     const untrusted = TOOL_POLICY[name]?.untrusted === true;
     const platform = TOOL_POLICY[name]?.group === "platform";
-    const rebuilt = stamp.rebuiltSince();
+    let held: HeldLocal | null = null;
 
-    /* @invariant A SERVER THAT KNOWS IT IS STALE RELOADS ITS PLATFORM CODE
-     * INSTEAD OF REFUSING. The operation rebuilds this server from source
-     * several times a night, and until ledger 248 every rebuild stopped the
-     * walk until the owner ran /mcp by hand: five times in one evening. Now,
-     * when the entry file on disk is newer than the one this process loaded,
-     * a platform call imports the rebuilt dist/module.js under a stamped
-     * specifier (the bundle is one file, so nothing beside it comes back
-     * from the loader's cache) and is answered by that build's own
-     * dispatcher, while this process keeps the transport, the stdio pair and
-     * the tool list the client was given. What crosses over: the server
-     * options (features, noShip, the project pin) and the kept default login
-     * per store and server, handed from the active generation to the next,
-     * so a login made through a reloaded build travels on. What the new code
-     * reads from disk as it is: the credential store, approvals.json, the
-     * created-project records and the session markers. What stays here: the
-     * opened-approvals set, so an approval page opens once across
-     * generations. What is rebuilt: the project id cache, refilled from the
-     * platform's whoami. A platform tool the rebuild reshaped is listed from
-     * the build that validates its calls (ledger 285); while the client
-     * holds a list an older build served, every reloaded answer carries
-     * value.server.listStale with the build it was listed at and a hint to
-     * list again, and the client is told the list changed once per build
-     * (ledger 289); a tool the rebuild added still needs /mcp. The first
-     * answer after each reload says so in warnings, once.
-     * E_SERVER_STALE remains only when the reload fails (no loader, an
-     * import error, a build without the reload contract, a refused
-     * handover), with value.reloadError saying why and the /mcp sentence as
-     * the last resort. Local tools stay on the loaded code: their dev
-     * sessions, child processes and open targets live in this module's
-     * memory and a reload would orphan them, so a rebuilt server warns once
-     * per build that /mcp picks up their new code.
-     */
-    if (rebuilt && platform) {
-      const outcome = await reloader.dispatch({ name, arguments: pinned.args }, rebuilt);
+    if (rebuilt) {
+      const active = await reloader.activate(rebuilt);
+      let failure: string | null = "reloadError" in active ? active.reloadError : null;
 
-      if ("reloadError" in outcome) {
+      if (!("reloadError" in active) && (platform || active.local)) {
+        const answered = await answeredByRebuilt({ name, arguments: pinned.args }, rebuilt, untrusted);
+        if (!("reloadError" in answered)) return answered;
+
+        failure = answered.reloadError;
+      }
+
+      if (platform) {
         return toolResultFrame(
-          attachTrack(name, pinned.args, staleEnvelope(name, rebuilt, stamp.stamp(), pinned.args, outcome.reloadError)),
+          attachTrack(name, pinned.args, staleEnvelope(name, rebuilt, stamp.stamp(), pinned.args, failure ?? undefined)),
           untrusted,
         );
       }
 
-      const stale = listedAt !== rebuilt;
-
-      if (stale && announced !== rebuilt) {
-        announced = rebuilt;
-        setup.onToolsChanged?.();
-      }
-
-      const text = outcome.frame.content[0]?.text ?? "";
-      const said = annotate(
-        setup.openApprovals ? openApprovalOnce(text, options) : text,
-        outcome.reloaded ? { warning: reloadedWarning(outcome.reloaded) } : {},
-      );
-      const told = stale ? markListStale(said, listedAt, rebuilt) : said;
-
-      return told === text ? outcome.frame : toolResultFrame(told, untrusted);
+      held = heldLocal(rebuilt, active, failure);
     }
 
     const bound = bindApprovalProject(name, pinned.args);
 
-    if ("refused" in bound) return refusedFrame(bound.refused);
+    if ("refused" in bound) return refused(bound.refused);
 
     const normalizedArgs = bound.args;
     const issues = validateToolInput(tool.schema.inputSchema, normalizedArgs);
 
     if (issues.length) {
-      return refusedFrame(inputValidationError(name, issues, tool.schema.inputSchema, tool.invalidArgumentsHint?.(issues)));
+      return refused(inputValidationError(name, issues, tool.schema.inputSchema, tool.invalidArgumentsHint?.(issues)));
     }
 
-    const held = bindApprovalLogin(name, normalizedArgs);
+    const login = bindApprovalLogin(name, normalizedArgs);
 
-    if ("refused" in held) return refusedFrame(held.refused);
+    if ("refused" in login) return refused(login.refused);
 
     try {
       const result = await withCallApi(normalizedArgs.api, () =>
-        withApprovalLogin(held.login, () =>
+        withApprovalLogin(login.login, () =>
         run(
           async () => {
             if (!platform) return annotate(await tool.handler(normalizedArgs), { note: bound.note });
@@ -336,13 +313,7 @@ export function createToolSurface(setup: ToolHandlerOptions): {
         ),
       );
 
-      if (rebuilt && localSaid !== rebuilt) {
-        localSaid = rebuilt;
-
-        return toolResultFrame(annotate(result, { warning: localRebuiltWarning(rebuilt) }), untrusted);
-      }
-
-      return toolResultFrame(result, untrusted);
+      return toolResultFrame(held ? markStaleLocal(result, stamp.stamp(), held) : result, untrusted);
     } catch (err) {
       return toolResultFrame(
         envelope({
@@ -378,7 +349,7 @@ export function installToolHandlers(server: Server, setup: ToolHandlerOptions): 
       name: t.name,
       description: t.description,
       inputSchema: t.inputSchema,
-      annotations: { title: toolTitle(t.name), ...TOOL_POLICY[t.name].annotations },
+      annotations: { title: toolTitle(t.name), ...(TOOL_POLICY[t.name]?.annotations ?? {}) },
     })),
   }));
 

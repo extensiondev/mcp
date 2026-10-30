@@ -10,7 +10,9 @@ import { createServer } from "../index";
 import { credentialKey, writeCredentials } from "../lib/credentials";
 import { ENVELOPE_SCHEMA } from "../lib/envelope";
 import { RELOAD_CONTRACT, buildSpecifier, type BuildImporter } from "../lib/server-reload";
-import { createServerStamp, localRebuiltWarning, reloadedWarning, staleSentence, type ServerStampReader } from "../lib/server-stamp";
+import { registerSession } from "../lib/process-manager";
+import { createServerStamp, reloadedWarning, staleLocalWarning, staleSentence, type ServerStampReader } from "../lib/server-stamp";
+import { noLocalCarryReason } from "../lib/stale-local";
 
 import { version } from "../../package.json";
 
@@ -45,13 +47,16 @@ function jsonResponse(body: unknown, status = 200): Response {
   } as unknown as Response;
 }
 
-function fixtureBuild(answeredBy: string): string {
+function fixtureBuild(answeredBy: string, carriesLocal = true): string {
   return [
     "let adopted = null;",
     "export function adoptHandover(state) { adopted = state; }",
-    `export function handoverState() { return { ...adopted, trail: [...(adopted.trail ?? []), ${JSON.stringify(answeredBy)}] }; }`,
+    carriesLocal
+      ? `export function handoverState() { return { ...adopted, trail: [...(adopted.trail ?? []), ${JSON.stringify(answeredBy)}] }; }`
+      : `export function handoverState() { const { local, ...rest } = adopted; return { ...rest, trail: [...(adopted.trail ?? []), ${JSON.stringify(answeredBy)}] }; }`,
+    `export function stampRebuilt() { return { version: "99.0.0+${answeredBy}", builtAt: null, startedAt: "x", pid: 0 }; }`,
     "export async function dispatchRebuilt(call) {",
-    `  const value = { answeredBy: ${JSON.stringify(answeredBy)}, args: call.arguments, options: adopted.options, keptLogins: adopted.keptLogins, trail: adopted.trail ?? [] };`,
+    `  const value = { answeredBy: ${JSON.stringify(answeredBy)}, args: call.arguments, options: adopted.options, keptLogins: adopted.keptLogins, trail: adopted.trail ?? [], localSessions: adopted.local ? [...adopted.local.sessions.values()].map((s) => s.pid) : null };`,
     `  const text = JSON.stringify({ schema: ${JSON.stringify(ENVELOPE_SCHEMA)}, ok: true, command: call.name, status: "listed", value, error: null, warnings: [] });`,
     '  return { content: [{ type: "text", text }] };',
     "}",
@@ -258,7 +263,41 @@ describe("a server that knows it was rebuilt reloads its platform code instead o
     expect(fetched.every((pathname) => pathname === "/api/cli/whoami" || pathname === `/api/projects/${PROJECT_ID}/builds`)).toBe(true);
   });
 
-  it("a local tool keeps the loaded code and says once per rebuild that /mcp picks up the new one", async () => {
+  it("a local tool answers from the rebuilt build, which reads the sessions this process registered, and says so once", async () => {
+    if (process.platform === "win32") return;
+
+    const file = entryFile(tmp);
+    const stamp = createServerStamp(file);
+    const manifest = path.join(tmp, "manifest.json");
+    fs.writeFileSync(manifest, JSON.stringify({ manifest_version: 3, name: "Probe", version: "1.0.0" }));
+    const call = await connect(stamp, importer);
+    registerSession({ pid: 424242, browser: "chrome", projectPath: path.join(tmp, "probe"), command: "dev" });
+
+    writeBuild(file, fixtureBuild("build-two"), REBUILT);
+
+    const first = await call("extension_manifest_validate", { manifestPath: manifest });
+
+    expect(first.isError).toBe(false);
+    expect(first.out.value.answeredBy).toBe("build-two");
+    expect(first.out.value.args).toEqual({ manifestPath: manifest });
+    expect(first.out.value.localSessions).toEqual([424242]);
+    expect(first.out.warnings).toEqual([reloadedWarning(REBUILT)]);
+    expect(importer).toHaveBeenCalledTimes(1);
+
+    const second = await call("extension_wait", { projectPath: path.join(tmp, "probe") });
+
+    expect(second.out.value.answeredBy).toBe("build-two");
+    expect(second.out.warnings).toEqual([]);
+    expect(importer).toHaveBeenCalledTimes(1);
+
+    const added = await call("extension_added_by_the_rebuild", { any: 1 });
+
+    expect(added.out.value.answeredBy).toBe("build-two");
+    expect(added.out.value.args).toEqual({ any: 1 });
+    expect(fetchSpy).toHaveBeenCalledTimes(0);
+  });
+
+  it("a build that cannot adopt this process's sessions leaves local tools on the loaded code and says so on every answer, while platform tools reload", async () => {
     if (process.platform === "win32") return;
 
     const file = entryFile(tmp);
@@ -267,25 +306,61 @@ describe("a server that knows it was rebuilt reloads its platform code instead o
     fs.writeFileSync(manifest, JSON.stringify({ manifest_version: 3, name: "Probe", version: "1.0.0" }));
     const call = await connect(stamp, importer);
 
-    writeBuild(file, fixtureBuild("build-two"), REBUILT);
+    writeBuild(file, fixtureBuild("build-two", false), REBUILT);
 
+    const warning = staleLocalWarning(BUILT, REBUILT, noLocalCarryReason(REBUILT));
+    const server = { version, startedAt: expect.any(String), pid: process.pid, builtAt: BUILT, stale: true, newerBuild: { version: "99.0.0+build-two", builtAt: REBUILT } };
     const first = await call("extension_manifest_validate", { manifestPath: manifest });
 
     expect(first.out.command).toBe("extension_manifest_validate");
     expect(first.out.value.answeredBy).toBeUndefined();
-    expect(first.out.warnings.filter((w: string) => w === localRebuiltWarning(REBUILT))).toHaveLength(1);
-    expect(importer).toHaveBeenCalledTimes(0);
+    expect(first.out.value.server).toEqual(server);
+    expect(first.out.warnings.filter((w: string) => w === warning)).toHaveLength(1);
+    expect(importer).toHaveBeenCalledTimes(1);
 
     const second = await call("extension_manifest_validate", { manifestPath: manifest });
 
-    expect(second.out.warnings).not.toContain(localRebuiltWarning(REBUILT));
+    expect(second.out.value.server).toEqual(server);
+    expect(second.out.warnings.filter((w: string) => w === warning)).toHaveLength(1);
 
-    writeBuild(file, fixtureBuild("build-three"), REBUILT_AGAIN);
+    const platform = await call("extension_builds", { action: "list", api: API });
 
-    const third = await call("extension_manifest_validate", { manifestPath: manifest });
+    expect(platform.out.value.answeredBy).toBe("build-two");
+    expect(platform.out.warnings).toEqual([reloadedWarning(REBUILT)]);
 
-    expect(third.out.warnings).toContain(localRebuiltWarning(REBUILT_AGAIN));
-    expect(importer).toHaveBeenCalledTimes(0);
+    const unknown = await call("extension_added_by_the_rebuild", {});
+
+    expect(unknown.out.status).toBe("unknown-tool");
+    expect(importer).toHaveBeenCalledTimes(1);
+  });
+
+  it("a failed reload leaves local tools on the loaded code with the reload error on every answer, and the verdict's producer stale", async () => {
+    if (process.platform === "win32") return;
+
+    const file = entryFile(tmp);
+    const stamp = createServerStamp(file);
+    const manifest = path.join(tmp, "manifest.json");
+    fs.writeFileSync(manifest, JSON.stringify({ manifest_version: 3, name: "Probe", version: "1.0.0" }));
+    const call = await connect(stamp, importer);
+
+    writeBuild(file, "export const half = ;\n", REBUILT);
+
+    const first = await call("extension_manifest_validate", { manifestPath: manifest });
+    const reason = first.out.value.server.newerBuild && first.out.warnings.find((w: string) => w.startsWith("This answer came from"));
+
+    expect(first.out.value.answeredBy).toBeUndefined();
+    expect(first.out.value.server).toEqual({ version, startedAt: expect.any(String), pid: process.pid, builtAt: BUILT, stale: true, newerBuild: { version: null, builtAt: REBUILT } });
+    expect(reason).toMatch(/because import of the 2026-10-23T23:37:13\.000Z build failed: /);
+
+    const verdict = await call("extension_assert", { projectPath: path.join(tmp, "nowhere"), expect: [{ assert: "background-worker-booted" }] });
+
+    expect(verdict.out.value.producer).toEqual({ name: "@extension.dev/mcp", version, stale: true, newerBuild: { version: null, builtAt: REBUILT } });
+    expect(verdict.out.value.server.stale).toBe(true);
+    expect(verdict.out.warnings.some((w: string) => w.startsWith("This answer came from"))).toBe(true);
+
+    const second = await call("extension_manifest_validate", { manifestPath: manifest });
+
+    expect(second.out.warnings.some((w: string) => w.startsWith("This answer came from"))).toBe(true);
     expect(fetchSpy).toHaveBeenCalledTimes(0);
   });
 });

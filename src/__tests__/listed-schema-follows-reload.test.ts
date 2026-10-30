@@ -30,16 +30,18 @@ const REBUILT_SUBMIT = {
 
 const REBUILT_DEV = { name: "extension_dev", description: "rebuilt extension_dev", inputSchema: { type: "object", properties: {} } };
 
-function fixtureBuild(withList: boolean): string {
+const ADDED_TOOL = { name: "extension_added_by_the_rebuild", description: "a tool the rebuild added", inputSchema: { type: "object", properties: {} } };
+
+function fixtureBuild(withList: boolean, carriesLocal = true): string {
   return [
     "let adopted = null;",
     "export function adoptHandover(state) { adopted = state; }",
-    "export function handoverState() { return adopted; }",
+    carriesLocal ? "export function handoverState() { return adopted; }" : "export function handoverState() { const { local, ...rest } = adopted; return rest; }",
     "export async function dispatchRebuilt(call) {",
     `  const text = JSON.stringify({ schema: ${JSON.stringify(ENVELOPE_SCHEMA)}, ok: true, command: call.name, status: "read", value: {}, error: null, warnings: [] });`,
     '  return { content: [{ type: "text", text }] };',
     "}",
-    withList ? `export function listRebuilt() { return ${JSON.stringify([REBUILT_SUBMIT, REBUILT_DEV])}; }` : "",
+    withList ? `export function listRebuilt() { return ${JSON.stringify([REBUILT_SUBMIT, REBUILT_DEV, ADDED_TOOL])}; }` : "",
     "",
   ].join("\n");
 }
@@ -62,6 +64,7 @@ async function connect(file: string) {
   await client.connect(clientTransport);
 
   const listed = async (name: string) => (await client.listTools()).tools.find((tool) => tool.name === name);
+  const listedNames = async () => (await client.listTools()).tools.map((tool) => tool.name);
 
   const call = async () => {
     const result = await client.callTool({ name: "extension_builds", arguments: { action: "list", api: API } });
@@ -69,7 +72,7 @@ async function connect(file: string) {
     return JSON.parse((result.content as Array<{ text: string }>)[0].text);
   };
 
-  return { client, changed, listed, call };
+  return { client, changed, listed, listedNames, call };
 }
 
 describe("the listed tool schema is the one the answering build validates against", () => {
@@ -127,7 +130,8 @@ describe("the listed tool schema is the one the answering build validates agains
     const rebuiltSubmit = await listed("extension_submit");
     expect(rebuiltSubmit?.description).toBe(REBUILT_SUBMIT.description);
     expect(rebuiltSubmit?.inputSchema).toEqual(REBUILT_SUBMIT.inputSchema);
-    expect((await listed("extension_dev"))?.description).not.toBe(REBUILT_DEV.description);
+    expect((await listed("extension_dev"))?.description).toBe(REBUILT_DEV.description);
+    expect((await listed(ADDED_TOOL.name))?.description).toBe(ADDED_TOOL.description);
 
     const fresh = await call();
     expect(fresh.value.server).toBeUndefined();
@@ -159,6 +163,19 @@ describe("the listed tool schema is the one the answering build validates agains
     expect(out.warnings).toEqual([reloadedWarning(REBUILT)]);
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(changed).toEqual([]);
+  });
+
+  it("lists local tools from the loaded code, and no added tool, when the rebuilt build cannot adopt this process's sessions", async () => {
+    if (process.platform === "win32") return;
+
+    const file = path.join(tmp, "module.js");
+    writeBuild(file, fixtureBuild(true, false), BUILT);
+    const { listed, listedNames } = await connect(file);
+    writeBuild(file, fixtureBuild(true, false), REBUILT);
+
+    expect((await listed("extension_submit"))?.description).toBe(REBUILT_SUBMIT.description);
+    expect((await listed("extension_dev"))?.description).toBe(tools.find((tool) => tool.schema.name === "extension_dev")?.schema.description);
+    expect(await listedNames()).not.toContain(ADDED_TOOL.name);
   });
 
   it("keeps the loaded list when the rebuilt build answers no list", async () => {

@@ -232,10 +232,17 @@ export function verdictOutcome(checks: CheckResult[]): VerdictOutcome {
   return OUTCOME_PASS;
 }
 
+export interface VerdictProducer {
+  name: string;
+  version?: string;
+  stale?: true;
+  newerBuild?: { version: string | null; builtAt: string };
+}
+
 export interface AssertVerdict {
   contract: typeof ASSERT_CONTRACT_NAME;
   contractVersion: number;
-  producer: { name: string; version?: string } | null;
+  producer: VerdictProducer | null;
   subject: Record<string, unknown> | null;
   generatedAt: string;
   outcome: VerdictOutcome;

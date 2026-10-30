@@ -40,8 +40,10 @@ export function reloadedWarning(at: string): string {
   return `This server reloaded its code from the ${at} build before answering.`;
 }
 
-export function localRebuiltWarning(at: string): string {
-  return `This server was rebuilt at ${at}; its local tools keep the code they loaded until you run /mcp and pick extension-dev, while platform tools already answer from the new build.`;
+export function staleLocalWarning(loadedAt: string | null, at: string, reason: string): string {
+  const held = loadedAt ? `the ${loadedAt} build this server loaded` : "the code this server loaded";
+
+  return `This answer came from ${held}, not from the ${at} build on disk, because ${reason}; run /mcp and pick extension-dev to use that build. Every answer from the held code says this, and a verdict it produces carries producer.stale: true with the newer build.`;
 }
 
 export function listStaleSentence(listedAt: string | null, builtAt: string): string {

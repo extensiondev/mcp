@@ -17,6 +17,7 @@ import {
   wakeExtensionWorker,
 } from "./cdp-extension-page";
 import { sessionGuestIdentity } from "./extension-identity";
+import { localState } from "./local-state";
 import { verifyGuestLoaded } from "./guest-load-oracle";
 import { pidState } from "./process-identity";
 import { readyContractPath } from "./session-paths";
@@ -33,8 +34,6 @@ export type ExecutorRecovery =
   | { outcome: "attached"; reloadedAt: string; attachedAt: string; waitedMs: number; say: string }
   | { outcome: "not-attached"; reloadedAt: string; waitedMs: number; say: string }
   | { outcome: "unreachable"; reason: string; say: string };
-
-const triedSessions = new Set<string>();
 
 function readContract(projectPath: string, browser: string): ReadyContract | null {
   try {
@@ -150,7 +149,7 @@ export async function recoverUnattachedOnce(input: {
   if (input.unattachedForMs < RECOVER_AFTER_MS || input.remainingMs < RECOVERY_WATCH_MS) return null;
 
   const key = `${input.projectPath}\u0000${input.browser}\u0000${input.contract.runId ?? input.contract.startedAt ?? input.contract.pid ?? ""}`;
-  if (triedSessions.has(key)) return null;
+  if (localState().recoveredSessions.has(key)) return null;
 
   const browserPid = typeof input.contract.browserPid === "number" ? input.contract.browserPid : null;
   if (browserPid !== null && pidState(browserPid) === "dead") return null;
@@ -158,7 +157,7 @@ export async function recoverUnattachedOnce(input: {
   const guest = await verifyGuestLoaded(input.projectPath, input.browser, { timeoutMs: 2_000 });
   if (!guest.checked || !guest.loaded) return null;
 
-  triedSessions.add(key);
+  localState().recoveredSessions.add(key);
 
   return reloadUnattachedWorker({ projectPath: input.projectPath, browser: input.browser, contract: input.contract });
 }
