@@ -177,9 +177,12 @@ describe("extension_builds reads the platform's builds with the project's own to
       env: "production",
       channel: "preview",
       browsers: ["chrome", "firefox"],
-      createdAt: "2026-10-11T16:45:37Z",
+      timestamp: "2026-10-11T16:45:37Z",
+      duration: "1m 6s",
       conclusion: "success",
     });
+
+    expect(out.value.builds[0].createdAt).toBeUndefined();
 
     expect(out.value.builds[0].consoleUrl).toContain("/acme/widget/builds/603fc8a");
     expect(calls.every((call) => call.url.startsWith(API))).toBe(true);
@@ -216,8 +219,8 @@ describe("extension_builds reads the platform's builds with the project's own to
 
     const out = JSON.parse(await builds({ api: API }));
 
-    expect(out.value.lastPush).toEqual(lastPush);
-    expect(out.value.headLag).toEqual(headLag);
+    expect(out.value.lastPush).toEqual({ ...lastPush, receivedAt: "2026-10-24T23:50:33Z" });
+    expect(out.value.headLag).toEqual({ ...headLag, lastBuildAt: "2026-10-11T16:45:37Z", pushReceivedAt: "2026-10-24T23:50:33Z" });
     expect(out.value.sayToPerson).toBe(headLag.message);
     expect(out.hint.startsWith(headLag.message)).toBe(true);
   });

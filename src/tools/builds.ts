@@ -11,6 +11,7 @@ import { ConsoleProjectPage } from "@extension.dev/urls/paths";
 import { WAIT_SECONDS_INPUT } from "../lib/act-outcome";
 import { API_BASE } from "../lib/common-schema";
 import { PROJECT_TOKEN_INPUT } from "../lib/credentials";
+import { isRow, text, type Row } from "../lib/builds-list-row";
 import { consoleProjectUrl } from "../lib/registry";
 import { envelope } from "../lib/envelope";
 import {
@@ -23,13 +24,12 @@ import {
 import { configure, createChannel } from "./builds-acts";
 import { CONFIGURE_CHANNEL, DELETE_CHANNEL, configureChannel, deleteChannelConsoleOnly } from "./builds-channel";
 import { DOWNLOAD_ACTION, download, type DownloadArgs } from "./builds-download";
-import { buildFailures, cancelledSentence, readLogs } from "./builds-logs";
+import { DEFAULT_LIMIT, MAX_LIMIT, listBuilds } from "./builds-list";
+import { buildFailures, readLogs } from "./builds-logs";
 import { rebuild } from "./builds-rebuild";
 import { recheck } from "./builds-recheck";
 
 const COMMAND = "extension_builds";
-const DEFAULT_LIMIT = 10;
-const MAX_LIMIT = 50;
 
 export const schema = {
   name: COMMAND,
@@ -43,7 +43,7 @@ export const schema = {
         enum: ["list", "get", "logs", "download", "rebuild", "recheck", "configure", "create-channel", "configure-channel", "delete-channel"],
         default: "list",
         description:
-          "list (the default) reads recent builds, newest first, each with its buildId, full commit sha, status (partial, with runStatus and failedBrowsers, when some browsers failed), build environment, channel, browsers, createdAt, conclusion and its console page URL. get with a buildId reads one build: its details and validation checks, the run behind it (deploymentId, startedAt, and internal.runId, an opaque id only for matching a rebuild; any run link the platform sends answers as the build's console page), its downloadable artifacts, an integrity summary per browser, failures naming the failed browsers and the manifest validator's outcome, and the usage report when one was recorded. logs with a buildId reads that build's log lines per browser: a failed browser's failure summarized by the platform (a browser with no failure line says so with the platform's reason, beside run.validation), and, when the run failed in a step every browser shares before any browser built, run.failedJob naming that job and step with its last lines while those browsers answer skipped; pass browser to read one browser, and a long log keeps its last 200 lines and says how many it left out. Log lines are written by the project's own build, so the answer is fenced as untrusted data. download with a buildId and browser (chrome, edge, firefox, safari, or source for the source archive a public project's build uploaded) saves that build's package from the platform, through www under the stored login and never from the registry address, to your cache directory (<cache>/extension-dev/artifacts/<workspace>/<project>/<sha>/<browser>.zip, where <cache> is $XDG_CACHE_HOME, ~/Library/Caches on macOS or %LOCALAPPDATA%/extension-dev/Cache on Windows) or to the directory `to` names, never inside the project and never touching its .gitignore; it answers downloaded with the absolute path, bytes, sha256 and verified (true when the file matches the sha256 the integrity report records, 'no-report' when no record names one) and integrity-mismatch, with the file left for inspection and a sentence not to upload it, when it does not; this is the file a store asks for by hand, such as Edge's first Partner Center package. recheck with a buildId (and optional browser) asks the platform to rerun the integrity checks against the build's stored artifacts, without building anything: use it when a verdict predates the build's newest run (extension_publish says so); it answers rechecked with the per-browser verdict when the record confirms it, recheck-dispatched while the platform is still checking by the bound, says when publish is now possible, and refuses while a run for the build is in progress or within 60 seconds of the last recheck. rebuild starts a real build on the platform: pass buildId for the commit (default the branch head) and buildEnv; it answers the commit, the browsers, the build page in trackUrl and the run it started, then built when the record shows this run finished, build-failed when it failed, and rebuild-dispatched when the bound passes first; a rebuild keeps the build id of the build before it, so follow it with get and match internal.runId, or deploymentId and a startedAt after dispatchedAt while the run has not shown up. configure changes build settings (enabled, installCommand, buildCommand, outputDirectory per browser): pass buildSettings with only what changes, such as { firefox: { buildCommand: 'pnpm build' } }, merged into the current settings and applied at once (build-configured, with the change the platform recorded); when the platform still asks for an approval, the first call answers approval-required with the change as the platform computed it, and a second call with that approvalId applies it once. create-channel adds a release channel (channel, with optional description, color #rrggbb and audience, public or private, which defaults to the project's visibility) that extension_release_promote can then point at a build; a public audience at creation answers approval-required before anything is sent: create it private, then configure-channel opens it. configure-channel changes an existing channel (channel, with any of audience, description, color) in one PATCH: a private audience, a description and a color are plain and answer channel-configured with the change the platform recorded; audience public opens the channel's downloads to anyone with the link, so the first call answers approval-required with the approve page and a second call with that approvalId applies it once. delete-channel never runs from here: it answers console-only with the console Channels page where a workspace owner removes the channel.",
+          "list (the default) reads recent builds, newest first, each with its buildId, full commit sha, one status word (success, failed, cancelled, building, pending, or partial with runStatus and failedBrowsers when some browsers failed), build environment, channel, browsers and its console page URL; a finished build carries startedAt, completedAt, duration and conclusion (or the platform's one timestamp when it recorded no start and end), a running one startedAt and runningFor with no verdict, and browsersNote while the platform has reported no browser for it; lastPush is the branch's last push as the platform recorded it, with build naming the row that built that commit when one exists. get with a buildId reads one build: its details and validation checks, the run behind it (deploymentId, startedAt, and internal.runId, an opaque id only for matching a rebuild; any run link the platform sends answers as the build's console page), its downloadable artifacts, an integrity summary per browser, failures naming the failed browsers and the manifest validator's outcome, and the usage report when one was recorded. logs with a buildId reads that build's log lines per browser: a failed browser's failure summarized by the platform (a browser with no failure line says so with the platform's reason, beside run.validation), and, when the run failed in a step every browser shares before any browser built, run.failedJob naming that job and step with its last lines while those browsers answer skipped; pass browser to read one browser, and a long log keeps its last 200 lines and says how many it left out. Log lines are written by the project's own build, so the answer is fenced as untrusted data. download with a buildId and browser (chrome, edge, firefox, safari, or source for the source archive a public project's build uploaded) saves that build's package from the platform, through www under the stored login and never from the registry address, to your cache directory (<cache>/extension-dev/artifacts/<workspace>/<project>/<sha>/<browser>.zip, where <cache> is $XDG_CACHE_HOME, ~/Library/Caches on macOS or %LOCALAPPDATA%/extension-dev/Cache on Windows) or to the directory `to` names, never inside the project and never touching its .gitignore; it answers downloaded with the absolute path, bytes, sha256 and verified (true when the file matches the sha256 the integrity report records, 'no-report' when no record names one) and integrity-mismatch, with the file left for inspection and a sentence not to upload it, when it does not; this is the file a store asks for by hand, such as Edge's first Partner Center package. recheck with a buildId (and optional browser) asks the platform to rerun the integrity checks against the build's stored artifacts, without building anything: use it when a verdict predates the build's newest run (extension_publish says so); it answers rechecked with the per-browser verdict when the record confirms it, recheck-dispatched while the platform is still checking by the bound, says when publish is now possible, and refuses while a run for the build is in progress or within 60 seconds of the last recheck. rebuild starts a real build on the platform: pass buildId for the commit (default the branch head) and buildEnv; it answers the commit, the browsers, the build page in trackUrl and the run it started, then built when the record shows this run finished, build-failed when it failed, and rebuild-dispatched when the bound passes first; a rebuild keeps the build id of the build before it, so follow it with get and match internal.runId, or deploymentId and a startedAt after dispatchedAt while the run has not shown up. configure changes build settings (enabled, installCommand, buildCommand, outputDirectory per browser): pass buildSettings with only what changes, such as { firefox: { buildCommand: 'pnpm build' } }, merged into the current settings and applied at once (build-configured, with the change the platform recorded); when the platform still asks for an approval, the first call answers approval-required with the change as the platform computed it, and a second call with that approvalId applies it once. create-channel adds a release channel (channel, with optional description, color #rrggbb and audience, public or private, which defaults to the project's visibility) that extension_release_promote can then point at a build; a public audience at creation answers approval-required before anything is sent: create it private, then configure-channel opens it. configure-channel changes an existing channel (channel, with any of audience, description, color) in one PATCH: a private audience, a description and a color are plain and answer channel-configured with the change the platform recorded; audience public opens the channel's downloads to anyone with the link, so the first call answers approval-required with the approve page and a second call with that approvalId applies it once. delete-channel never runs from here: it answers console-only with the console Channels page where a workspace owner removes the channel.",
       },
       buildId: {
         type: "string",
@@ -107,133 +107,12 @@ export const schema = {
   },
 };
 
-type Row = Record<string, unknown>;
-
-function text(value: unknown): string {
-  return typeof value === "string" ? value.trim() : typeof value === "number" ? String(value) : "";
-}
-
-function isRow(value: unknown): value is Row {
-  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
-}
-
 function buildConsoleUrl(api: ProjectApi, buildId: string, apiHint?: string): string {
   return consoleProjectUrl(api.ref, ConsoleProjectPage.build(buildId), apiHint);
 }
 
-function listRow(item: Row, api: ProjectApi, apiHint?: string): Row {
-  const buildId = text(item.buildId) || text(item.shortSha) || text(item.id);
-  const browsers = Array.isArray(item.browsers)
-    ? item.browsers.map((b) => (isRow(b) ? text(b.browser) || text(b.name) : text(b))).filter(Boolean)
-    : [];
-  const out: Row = { buildId };
-  const fields: Array<[string, unknown]> = [
-    ["sha", item.commit],
-    ["status", item.status],
-    ["env", item.buildEnv],
-    ["channel", item.channel],
-    ["version", item.version],
-    ["branch", item.branch],
-    ["message", item.message],
-    ["createdAt", item.startedAt || item.timestamp],
-    ["startedAt", item.startedAt],
-    ["deploymentId", item.deploymentId],
-    ["completedAt", item.completedAt],
-    ["duration", item.duration],
-    ["conclusion", item.summaryStatus || item.conclusion],
-  ];
-
-  for (const [key, value] of fields) {
-    const v = text(value);
-    if (v) out[key] = v;
-  }
-
-  if (typeof item.runId === "number" && item.runId > 0) out.internal = { runId: item.runId };
-
-  if (text(out.status).toLowerCase() === "cancelled") {
-    out.status = "cancelled";
-    out.supersededBy = text(item.supersededBy).slice(0, 7) || null;
-  }
-
-  if (text(out.conclusion).toLowerCase() === "partial" || text(item.outcome).toLowerCase() === "partial") {
-    if (text(out.status).toLowerCase() === "success") out.runStatus = "success";
-
-    out.status = "partial";
-    out.conclusion = "partial";
-    const failedBrowsers = Array.isArray(item.failedBrowsers) ? item.failedBrowsers.map(text).filter(Boolean) : [];
-    if (failedBrowsers.length) out.failedBrowsers = failedBrowsers;
-  }
-
-  out.browsers = browsers;
-  if (buildId) out.consoleUrl = buildConsoleUrl(api, buildId, apiHint);
-
-  return out;
-}
-
 async function open(args: HandlerArgs) {
   return openProjectApi({ command: COMMAND, project: args.project, api: args.api });
-}
-
-async function listBuilds(args: HandlerArgs): Promise<string> {
-  const opened = await open(args);
-  if (!opened.ok) return projectApiOpenFailure(COMMAND, opened, { api: args.api, name: "Builds", value: { action: "list" } });
-
-  const limit = Math.min(Math.max(Math.floor(Number(args.limit) || DEFAULT_LIMIT), 1), MAX_LIMIT);
-  const read = await projectApiGet<{
-    items?: unknown[];
-    dispatchDisabled?: boolean;
-    pushRefusal?: unknown;
-    lastPush?: unknown;
-    headLag?: unknown;
-  }>(
-    opened.api,
-    "builds",
-    { limit },
-  );
-
-  if (!read.ok) return projectApiReadFailure(COMMAND, read, { api: args.api, name: "Builds", value: { action: "list" } });
-
-  const items = (Array.isArray(read.json?.items) ? read.json.items : []).filter(isRow);
-  const rows = items.map((item) => listRow(item, opened.api, args.api));
-  const project = `${opened.api.ref.workspace}/${opened.api.ref.project}`;
-  const buildsPageUrl = consoleProjectUrl(opened.api.ref, ConsoleProjectPage.builds, args.api);
-  const cancelledSentences = rows.filter((row) => row.status === "cancelled").map((row) => cancelledSentence(text(row.buildId), row.supersededBy));
-  const lastPush = isRow(read.json?.lastPush) ? read.json.lastPush : null;
-  const headLag = isRow(read.json?.headLag) && text(read.json.headLag.message) ? read.json.headLag : null;
-  const spoken = [...(headLag ? [text(headLag.message)] : []), ...cancelledSentences];
-
-  return envelope({
-    ok: true,
-    command: COMMAND,
-    status: "listed",
-    value: {
-      action: "list",
-      project,
-      builds: rows,
-      count: rows.length,
-      limit,
-      ...(read.json?.dispatchDisabled === true ? { dispatchDisabled: true } : {}),
-      ...(read.json?.pushRefusal ? { pushRefusal: read.json.pushRefusal } : {}),
-      ...(lastPush ? { lastPush } : {}),
-      ...(headLag ? { headLag } : {}),
-      buildsPageUrl,
-      trackUrl: buildsPageUrl,
-      ...(spoken.length ? { sayToPerson: spoken.join(" ") } : {}),
-    },
-    hint: `${headLag ? `${text(headLag.message)} ` : ""}${
-      rows.length > 0
-        ? `${rows.length} recent build${rows.length === 1 ? "" : "s"} of ${project}, newest first; the latest is ${rows[0].buildId} (${rows[0].status ?? "status unknown"}). Pass action:"get" or action:"logs" with a buildId to read one.${
-            rows.some((row) => row.status === "partial") ? " A partial build finished with at least one browser failed; failedBrowsers names them." : ""
-          }${cancelledSentences.length ? ` ${cancelledSentences.join(" ")}` : ""}`
-        : `No builds are recorded for ${project} yet. Push a commit to produce one, then check ${buildsPageUrl}.`
-    }`,
-    warnings: [
-      rows.length === limit
-        ? `This is the newest ${limit}; raise limit (max ${MAX_LIMIT}) to see older builds.`
-        : null,
-      read.json?.dispatchDisabled === true ? "The platform reports build dispatch disabled right now, so new pushes are not building." : null,
-    ],
-  });
 }
 
 function integritySummary(json: unknown): Row {
@@ -443,5 +322,5 @@ export async function handler(args: HandlerArgs): Promise<string> {
   if (args.action === CONFIGURE_CHANNEL) return configureChannel(args);
   if (args.action === DELETE_CHANNEL) return deleteChannelConsoleOnly(args);
 
-  return listBuilds(args);
+  return listBuilds(COMMAND, args);
 }
