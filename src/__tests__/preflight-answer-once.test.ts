@@ -83,7 +83,7 @@ describe("the Chrome preflight says the owner's step once and points the other f
     const out = JSON.parse(await submit({ action: "preflight", browsers: ["chrome"], api: API }));
 
     expect(out.status).toBe("store-item-not-linked");
-    expect(out.value.sayToPerson).toContain(`with this package ${PACKAGE}, and fill its Store listing and Privacy tabs there`);
+    expect(out.value.sayToPerson).toContain(`Download chrome.zip of build 154767e at ${PACKAGE}, or let me save it with extension_builds (action: "download", buildId: "154767e", browser: "chrome"); upload it once as the item's first package.`);
     expect(out.hint).toBe(LINK_ITEM_POINTER);
     expect(out.value.nextStep).toMatchObject({ kind: "link-item", say: LINK_ITEM_POINTER, url: LINK_ITEM });
     expect(out.value.packageUrl).toBe(PACKAGE);

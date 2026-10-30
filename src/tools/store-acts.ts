@@ -75,7 +75,8 @@ import { notReadyForReviewStep, notReadyLine } from "../lib/store-not-ready";
 import { nextVersionOf, nextVersionSentence } from "../lib/store-readiness";
 import { LISTING_INCOMPLETE_CODE, listingIncompleteOf, listingIncompleteSentence } from "../lib/store-listing-incomplete";
 import { linkItemAnswer } from "../lib/link-item-answer";
-import { packageBuildLine, packageBuildViews } from "../lib/package-checks-build";
+import { withHandUploadRows } from "../lib/hand-upload";
+import { buildsReadByPackageChecks, packageBuildLine, packageBuildViews } from "../lib/package-checks-build";
 import { storePreflightChecks } from "../lib/store-preflight-checks";
 import {
   EDGE_FIRST_SUBMISSION_STATE,
@@ -94,6 +95,7 @@ import {
 } from "./store-listing";
 import { publishVersion } from "./store-publish-version";
 
+import type { PackageScope } from "../lib/package-address";
 import type { ListingStore } from "../lib/store-md-listing";
 
 export const COMMAND = "extension_submit";
@@ -713,8 +715,9 @@ function readinessView(
   store: string,
   projectPath: string,
   buildNamed: boolean,
-  apiHint?: string,
+  scope: PackageScope,
 ): Row {
+  const apiHint = scope.api;
   const all = (Array.isArray(json.checks) ? json.checks : []).filter(isRow);
   const deferred = buildNamed
     ? []
@@ -758,7 +761,9 @@ function readinessView(
   const locked = checks
     .filter((c) => text(c.status) === "locked")
     .map((c) => checkView(c, true));
-  const requirements = requirementsView(json.requirements, local);
+  const read = requirementsView(json.requirements, local);
+  const sha = text(scope.sha) || text(json.buildId) || buildsReadByPackageChecks(json, store)[0] || "";
+  const requirements = read ? { ...read, items: withHandUploadRows(read.items, { ...scope, sha }, nextVersionOf(json, store)?.nextVersion) } : null;
   const review = isRow(summary.review) ? summary.review : null;
   const bringList = bringListOf(store, requirements, review?.canSubmitForReview !== false);
 
@@ -875,7 +880,7 @@ export async function preflight(args: StoreActArgs): Promise<string> {
         store,
         text(args.projectPath),
         Boolean(text(args.buildSha)),
-        args.api,
+        { ref: api.ref, sha: text(args.buildSha), api: args.api },
       );
       stores[store] =
         store === "firefox"

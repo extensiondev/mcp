@@ -11,7 +11,8 @@ import { ConsoleProjectPage, consoleWorkspacePath } from "@extension.dev/urls/pa
 import { approvalSubjectPhrase, subjectOf } from "./approval-subject";
 import { consoleBase, consoleProjectUrl } from "./console-urls";
 import { envelope, isEnvelope } from "./envelope";
-import { itemPackageUrl, packageAddressMode, packagePathOf, type PackageScope } from "./package-address";
+import { handUploadSentence, platformVersionNote } from "./hand-upload";
+import { itemPackageUrl, packageAddressMode, packageFileOf, packagePathOf, type PackageScope } from "./package-address";
 import { isRow, text } from "./ship-act";
 
 import type { ProjectRef } from "./registry";
@@ -257,7 +258,10 @@ export function withApproveStep(out: string, reviewSentence: boolean | string): 
 }
 
 export function linkItemSentences(urls: ItemLinkUrls): string {
-  return `One step is yours, once: create the item in the Chrome Web Store dashboard at ${urls.newItemUrl} with this package ${urls.packageUrl}, and fill its Store listing and Privacy tabs there; your synced listing text is on the extension.dev store settings page to copy. Then paste the item's dashboard address at ${urls.linkItemUrl}. After that I upload every build as a draft that is not published, and nothing goes to review until you publish; set the item's visibility (public or unlisted) once in that dashboard, since no store API sets it.`;
+  const parsed = packageFileOf(urls.packageUrl);
+  const upload = { browser: parsed?.browser || "chrome", sha: parsed?.sha ?? "", address: parsed ? urls.packageUrl : "" };
+
+  return `One step is yours, once: create the item in the Chrome Web Store dashboard at ${urls.newItemUrl}. ${handUploadSentence(upload)} ${platformVersionNote()} Then fill its Store listing and Privacy tabs there (your synced listing text is on the extension.dev store settings page to copy) and paste the item's dashboard address at ${urls.linkItemUrl}. After that I upload every build as a draft that is not published, and nothing goes to review until you publish; set the item's visibility (public or unlisted) once in that dashboard, since no store API sets it.`;
 }
 
 export function itemLinkUrls(rows: unknown[], settingsUrl: string, scope?: PackageScope): ItemLinkUrls {

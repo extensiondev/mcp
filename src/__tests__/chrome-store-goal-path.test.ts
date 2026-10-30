@@ -156,7 +156,7 @@ describe("the Chrome Web Store goal walks from not connected to submitted with a
 
     walked(out, "store-item-not-linked", "link-item");
     expect(out.hint).toContain(LINK_ITEM_POINTER);
-    expect(out.value.sayToPerson).toContain(`with this package ${PACKAGE}`);
+    expect(out.value.sayToPerson).toContain(`at ${PACKAGE}, or let me save it with extension_builds`);
     expect(out.value.nextStep).toEqual({
       kind: "link-item",
       say: LINK_ITEM_POINTER,

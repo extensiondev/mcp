@@ -18,7 +18,7 @@ const SENTENCES = (url: string) =>
 const NEW_ITEM = "https://chrome.google.com/webstore/devconsole";
 const PACKAGE = "http://localhost:3100/api/projects/prj_probe/builds/b418732/chrome.zip";
 const LINK_ITEM = `${SETTINGS}?connect=chrome&link=item`;
-const LINK_SENTENCES = `One step is yours, once: create the item in the Chrome Web Store dashboard at ${NEW_ITEM} with this package ${PACKAGE}, and fill its Store listing and Privacy tabs there; your synced listing text is on the extension.dev store settings page to copy. Then paste the item's dashboard address at ${LINK_ITEM}. After that I upload every build as a draft that is not published, and nothing goes to review until you publish; set the item's visibility (public or unlisted) once in that dashboard, since no store API sets it.`;
+const LINK_SENTENCES = `One step is yours, once: create the item in the Chrome Web Store dashboard at ${NEW_ITEM}. Download chrome.zip of build b418732 at ${PACKAGE}, or let me save it with extension_builds (action: "download", buildId: "b418732", browser: "chrome"); upload it once as the item's first package. Every later platform upload carries the store version <manifest version>.<n>, numbered by the platform. Then fill its Store listing and Privacy tabs there (your synced listing text is on the extension.dev store settings page to copy) and paste the item's dashboard address at ${LINK_ITEM}. After that I upload every build as a draft that is not published, and nothing goes to review until you publish; set the item's visibility (public or unlisted) once in that dashboard, since no store API sets it.`;
 
 function readiness(connection: Record<string, unknown> | null, extra: Record<string, unknown> = {}) {
   return {
@@ -92,7 +92,7 @@ describe("extension_submit points a person at the Chrome Web Store connection in
     expect(out.value.stores.chrome.connection).toMatchObject({ kind: "oauth", healthy: false, connectedAs: "cezar@example.com" });
   });
 
-  it("a healthy connection whose store item is not linked answers the three steps the person takes once", async () => {
+  it("a healthy connection whose store item is not linked answers the steps the person takes once in five sentences", async () => {
     if (process.platform === "win32") return;
 
     platform.login();
@@ -105,7 +105,7 @@ describe("extension_submit points a person at the Chrome Web Store connection in
     expect(out.status).toBe("store-item-not-linked");
     expect(out.value).toMatchObject({ trackUrl: SETTINGS, newItemUrl: NEW_ITEM, packageUrl: PACKAGE, linkItemUrl: LINK_ITEM });
     expect(out.value.sayToPerson).toBe(LINK_SENTENCES);
-    expect(sentenceCount(out.value.sayToPerson)).toBe(3);
+    expect(sentenceCount(out.value.sayToPerson)).toBe(5);
     expect(out.hint).toBe(LINK_ITEM_POINTER);
     expect(out.value.nextStep.say).toBe(LINK_ITEM_POINTER);
     expect(out.hint).not.toContain(PACKAGE);

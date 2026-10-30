@@ -207,7 +207,7 @@ describe("every tool prints the build's extension.dev package address and no reg
 
     expect(out.status).toBe("store-item-not-linked");
     expect(out.value.packageUrl).toBe(PACKAGE);
-    expect(out.value.sayToPerson).toContain(`with this package ${PACKAGE}, and fill its Store listing`);
+    expect(out.value.sayToPerson).toContain(`at ${PACKAGE}, or let me save it with extension_builds`);
     expect(out.value.stores.chrome.connection.packageFile).toBe(`builds/${SHA}/chrome.zip`);
     expect(namesRegistryOrToken(JSON.stringify(out))).toEqual([]);
     expect(JSON.stringify(out)).not.toContain("eyJ");
@@ -221,7 +221,7 @@ describe("every tool prints the build's extension.dev package address and no reg
 
     expect(out.status).toBe("store-item-not-linked");
     expect(out.value.packageUrl).toBe(PACKAGE);
-    expect(out.value.sayToPerson).toContain(`with this package ${PACKAGE},`);
+    expect(out.value.sayToPerson).toContain(`at ${PACKAGE}, or let me save it with extension_builds`);
     expect(JSON.stringify(out)).not.toContain("token=opaque");
     expect(JSON.stringify(out)).not.toMatch(/registry/i);
   });
@@ -234,7 +234,7 @@ describe("every tool prints the build's extension.dev package address and no reg
 
     expect(early.status).toBe("store-item-not-linked");
     expect(early.value.packageUrl).toBe(PACKAGE);
-    expect(early.value.sayToPerson).toContain(`with this package ${PACKAGE},`);
+    expect(early.value.sayToPerson).toContain(`at ${PACKAGE}, or let me save it with extension_builds`);
     expect(namesRegistryOrToken(JSON.stringify(early))).toEqual([]);
 
     routes[`POST /api/projects/${PROJECT_ID}/stores/chrome/submissions/preflight`] = () => ({ body: linked() });
@@ -248,7 +248,7 @@ describe("every tool prints the build's extension.dev package address and no reg
     expect(refused.status).toBe("store-item-not-linked");
     expect(refused.error.platformCode).toBe("STORE_ITEM_NOT_LINKED");
     expect(refused.value.packageUrl).toBe(PACKAGE);
-    expect(refused.value.sayToPerson).toContain(`with this package ${PACKAGE},`);
+    expect(refused.value.sayToPerson).toContain(`at ${PACKAGE}, or let me save it with extension_builds`);
     expect(namesRegistryOrToken(JSON.stringify(refused))).toEqual([]);
 
     routes[`POST /api/projects/${PROJECT_ID}/stores/chrome/submissions/preflight`] = () => ({ body: notLinked(TOKENED) });
@@ -257,7 +257,7 @@ describe("every tool prints the build's extension.dev package address and no reg
     const dry = JSON.parse(await submit({ browsers: ["chrome"], buildSha: SHA, dryRun: true, api: PROD }));
 
     expect(dry.value.verdict).toBe("store-item-not-linked");
-    expect(dry.value.nextStep.say).toContain(`with this package ${PACKAGE},`);
+    expect(dry.value.nextStep.say).toContain(`at ${PACKAGE}, or let me save it with extension_builds`);
     expect(namesRegistryOrToken(JSON.stringify(dry))).toEqual([]);
   });
 
@@ -383,7 +383,7 @@ describe("every tool prints the build's extension.dev package address and no reg
     const published = JSON.parse(await publish({ buildSha: SHA, api: LOCAL }));
 
     expect(preflight.value.packageUrl).toBe(LOCAL_TOKENED);
-    expect(preflight.value.sayToPerson).toContain(`with this package ${LOCAL_TOKENED},`);
+    expect(preflight.value.sayToPerson).toContain(`at ${LOCAL_TOKENED}, or let me save it with extension_builds`);
     expect(get.value.artifacts[0].downloadUrl).toBe(`${LOCAL}/api/local-registry/acme/widget/builds/${SHA}/chrome.zip`);
     expect(published.value.previewCommands.chrome).toBe(`npx -y extension@latest preview ${LOCAL_TOKENED} --browser=chrome`);
   });
