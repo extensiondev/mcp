@@ -18,6 +18,7 @@ import {
   type ListingText,
   type PermissionJustification,
 } from "./store-md-declarations";
+import { bulletLine, storeOwnLinesBody } from "./store-md-bullets";
 import { safariTitle } from "./store-md-safari-title";
 
 export * from "./store-md-declarations";
@@ -125,11 +126,11 @@ function bullets(body: string): Array<{ key: string; value: string }> {
   };
 
   for (const line of body.replace(/<!--[\s\S]*?-->/g, "").split("\n")) {
-    const bullet = /^- +([^:\n]{1,80}?):(?:\s+(.*))?$/.exec(line);
+    const bullet = bulletLine(line);
 
     if (bullet) {
       flush();
-      current = { key: bullet[1]!.trim(), lines: [(bullet[2] ?? "").trim()] };
+      current = { key: bullet.key, lines: [bullet.value] };
     } else if (/^\S/.test(line) && !(current && /^\d+[.)]\s/.test(line))) {
       flush();
     } else if (current) {
@@ -419,7 +420,7 @@ export function parseStoreMdListing(content: string): StoreMdListing {
         if (value) (text as Record<string, string>)[field] = value;
       }
 
-      readBullets(result, section.body.split(/^###\s/m)[0]!, text, true);
+      readBullets(result, storeOwnLinesBody(section.body), text, true);
       result.stores[store] = text;
     }
   }

@@ -8,6 +8,7 @@
 
 import { isRow, text } from "./ship-act";
 import { STORE_MD_FILENAME } from "./store-md";
+import { reconcileChromeRow } from "./store-md-chrome-reconcile";
 import { storeMdLineOf, type StoreMdField } from "./store-md-fields";
 import { BULLET_KEYS, SUBSECTION_KEYS, type ListingField } from "./store-md-listing";
 
@@ -84,10 +85,11 @@ function lineOf(local: LocalListing, field: ListingField): string {
  * listing record stands.
  */
 function withStoreMd(row: RequirementRow, local: LocalListingRead): RequirementRow {
-  if (!local || "problem" in local || row.status !== "missing") return row;
+  if (!local || "problem" in local) return row;
 
   const field = storeMdField(row.satisfiedBy);
-  if (!field) return row;
+  if (!field) return reconcileChromeRow(row, local);
+  if (row.status !== "missing") return row;
 
   const listing = local.patch.listing as Record<string, unknown>;
 

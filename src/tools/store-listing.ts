@@ -56,6 +56,7 @@ import {
 } from "../lib/store-listing-digest";
 import { pushAnswer, pushSentence, readPushState, sendListing } from "../lib/store-listing-push";
 import { STORE_MD_FILENAME } from "../lib/store-md";
+import { reconcileChromeCheck } from "../lib/store-md-chrome-reconcile";
 import { requirementsView, type RequirementsView } from "../lib/store-requirements";
 import { linesNotFound, storeMdLineOf, storeMdSectionOf } from "../lib/store-md-fields";
 import {
@@ -413,6 +414,9 @@ export function reconciledWithStoreMd(
   local: LocalListing | { problem: string } | null,
 ): Row {
   if (!local || "problem" in local) return check;
+
+  const chrome = reconcileChromeCheck(check, local);
+  if (chrome) return chrome;
 
   const coverage = coverageOf(local, text(check.id));
   if (!coverage || "missing" in coverage) return check;

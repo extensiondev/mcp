@@ -21,6 +21,7 @@ import {
   type ListingStore,
   type ListingTextField,
 } from "./store-md-declarations";
+import { HOST_BULLET_EXAMPLE, STORE_OWN_LINES_PLACE } from "./store-md-bullets";
 
 import type { LocalListing } from "../tools/store-listing";
 
@@ -89,10 +90,10 @@ function limitOf(field: StoreMdField, store: ListingStore): string {
   if (field === "permissionJustifications") {
     const limits = LISTING_LIST_LIMITS.permissionJustifications;
 
-    return `one \`- <permission>: <reason>\` bullet each, up to ${limits.items}; a permission up to ${limits.permission} characters, a reason up to ${count(limits.justification)}`;
+    return `one \`- <permission>: <reason>\` bullet each, a host pattern keyed as the manifest spells it (${HOST_BULLET_EXAMPLE}), up to ${limits.items}; a permission up to ${limits.permission} characters, a reason up to ${count(limits.justification)}`;
   }
 
-  if (field === "visibility") return "public, unlisted or private (trusted testers); unlisted, the least public, when the line is absent";
+  if (field === "visibility") return `public, unlisted or private (trusted testers), ${STORE_OWN_LINES_PLACE}; unlisted, the least public, when the line is absent`;
 
   const chars = `up to ${count(LISTING_TEXT_LIMITS[field as ListingTextField])} characters`;
 
