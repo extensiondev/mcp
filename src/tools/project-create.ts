@@ -44,6 +44,7 @@ import { findProjectByStoredLogin, type ProjectFoundByRead } from "../lib/create
 import { rememberCreatedProject } from "../lib/created-projects";
 import { forgetPendingCreate, pendingCreate, rememberPendingCreate } from "../lib/pending-creates";
 import { isProjectRef } from "../lib/credentials";
+import { readCreateLogin, wantsCreateLogin, type CreateLogin } from "../lib/create-login";
 import {
   codeExpiresAt,
   codeExpiryFromStart,
@@ -75,7 +76,7 @@ const CREATE_STUCK_MINUTES = CREATE_STUCK_AFTER_SECONDS / 60;
 export const schema = {
   name: "extension_project_create",
   description:
-    `Create an extension.dev project for an extension that does not have one yet, without opening the console: right after extension_create and extension_build, once the source is pushed to a GitHub repository, and BEFORE extension_auth, which can only log in to a project that exists. Ask for nothing but the project slug and the repo; the platform finds the GitHub App installation on the approving account itself, and with none it returns a connect link to open. Two-phase, like login: the first call answers a code and a URL where a signed-in member of the workspace approves creating exactly this project; call again with the returned deviceCode and waitSeconds, which blocks (up to ${DEVICE_WAIT_MAX_SECONDS} s) until the owner approves and finishes the create; the same deviceCode re-reads an outcome with no second approval. It records the project on the platform and answers what the platform recorded in value.outcome, the project page it made in value.links, its console page in trackUrl, and in \`firstBuild\` whether the first build was dispatched and, when none was, why. Not for a project that already exists: that is extension_auth. Every build runs the stored build command for each enabled browser exactly as stored, then reads that browser's outputDirectory. Then run extension_auth (action: login) against the new project and extension_publish to share it. To create several projects in one workspace under one approval, pass \`projects\` instead of \`project\` and \`repo\`. One approval creates at most ${DEFAULT_CREATE_PROJECTS_PER_APPROVAL} projects, the cap the platform states in its login config, because it creates at most ${PLATFORM_CREATES_PER_HOUR} per hour for one approving account; the next ${DEFAULT_CREATE_PROJECTS_PER_APPROVAL} can start in a new call once that limit allows. A longer list is refused before any approval is asked for, never split silently, and so is any list on a platform that does not advertise batch onboarding.`,
+    `Create an extension.dev project for an extension that does not have one yet, without opening the console: right after extension_create and extension_build, once the source is pushed to a GitHub repository, and BEFORE extension_auth, which can only log in to a project that exists. Ask for nothing but the project slug and the repo; the platform finds the GitHub App installation on the approving account itself, and with none it returns a connect link to open. Two-phase, like login: the first call answers a code and a URL where a signed-in member of the workspace approves creating exactly this project; call again with the returned deviceCode and waitSeconds, which blocks (up to ${DEVICE_WAIT_MAX_SECONDS} s) until the owner approves and finishes the create; the same deviceCode re-reads an outcome with no second approval. It records the project on the platform and answers what the platform recorded in value.outcome, the project page it made in value.links, its console page in trackUrl, and in \`firstBuild\` whether the first build was dispatched and, when none was, why. Not for a project that already exists: that is extension_auth. Every build runs the stored build command for each enabled browser exactly as stored, then reads that browser's outputDirectory. The same approval signs this machine in to the new project when the platform mints its token with the create (\`login\`, default true), so the next step is extension_publish; extension_auth (action: login) is needed only when value.login.stored is false. To create several projects in one workspace under one approval, pass \`projects\` instead of \`project\` and \`repo\`. One approval creates at most ${DEFAULT_CREATE_PROJECTS_PER_APPROVAL} projects, the cap the platform states in its login config, because it creates at most ${PLATFORM_CREATES_PER_HOUR} per hour for one approving account; the next ${DEFAULT_CREATE_PROJECTS_PER_APPROVAL} can start in a new call once that limit allows. A longer list is refused before any approval is asked for, never split silently, and so is any list on a platform that does not advertise batch onboarding.`,
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -147,6 +148,12 @@ export const schema = {
         minimum: 0,
         maximum: DEVICE_WAIT_MAX_SECONDS,
         description: deviceWaitDescription("extension_project_create", "created (the create runs on the grant at once)"),
+      },
+      login: {
+        type: "boolean",
+        default: true,
+        description:
+          "Store the project token the platform mints with the create as this machine's login for the new project (the owner who approved creating it under their account approved acting on it), so no extension_auth call follows. value.login answers {stored, project, expiresAt} or {stored: false, reason, message}: the platform answered no token (reason is its code), the create was a replay (a replay carries no token), the token could not be stored, or login was false. false discards any token the platform answered.",
       },
       api: API_BASE,
     },
@@ -250,6 +257,7 @@ export async function handler(args: {
   outputDirectories?: Record<string, unknown>;
   deviceCode?: string;
   waitSeconds?: unknown;
+  login?: unknown;
   api?: string;
 }): Promise<string> {
   if (args.projects !== undefined && args.projects !== null) {
@@ -426,6 +434,7 @@ async function finishFromPoll(
       outputDirectory?: string;
       browsers?: string[];
       outputDirectories?: Record<string, unknown>;
+      login?: unknown;
     };
     verificationUri: string;
     deviceCode: string;
@@ -568,6 +577,7 @@ type CreateArgs = {
   outputDirectory?: string;
   browsers?: string[];
   outputDirectories?: Record<string, unknown>;
+  login?: unknown;
 };
 
 async function createWithGrant(ctx: {
@@ -857,6 +867,12 @@ async function sendCreate(
     { kind: "project", url: consoleUrl, made: true },
     ...(firstBuild.state === "dispatched" ? [{ kind: "build" as const, url: buildsPageUrl }] : []),
   ]);
+  const login = readCreateLogin({
+    data,
+    apiBase: ctx.apiBase,
+    project: `${finalWorkspace}/${finalProject}`,
+    login: wantsCreateLogin(ctx.args.login),
+  });
 
   return envelope({
     ok: true,
@@ -870,6 +886,7 @@ async function sendCreate(
       sourceRepo: ctx.args.repo,
       outcome: recordedOutcome(data.replayed === true ? "created-earlier" : "created"),
       links,
+      login: login.login,
       firstBuild: firstBuildValue(firstBuild),
       allowance: spendNarration({
         what:
@@ -882,7 +899,7 @@ async function sendCreate(
         api: ctx.apiBase,
       }),
       nextSteps: [
-        `extension_auth (action: login, project: '${finalWorkspace}/${finalProject}')`,
+        ...(login.login.stored ? [] : [`extension_auth (action: login, project: '${finalWorkspace}/${finalProject}')`]),
         ...(firstBuild.state === "dispatched"
           ? ["extension_publish"]
           : [
@@ -890,7 +907,9 @@ async function sendCreate(
             ]),
       ],
     },
-    hint: `Project ${finalWorkspace}/${finalProject} exists.${data.replayed === true ? " The platform read this back from its record of the earlier create request with this grant; nothing was created twice." : ""} ${firstBuildSentence(firstBuild, buildsPageUrl)} The provisioning grant is spent and not kept on this machine; the other files this tool leaves are its install id (install.json) and a note that ${finalWorkspace}/${finalProject} exists on this server (created-projects.json), so extension_auth does not doubt it. Next: extension_auth (action: login, project: '${finalWorkspace}/${finalProject}') to mint the project token, then ${
+    hint: `Project ${finalWorkspace}/${finalProject} exists.${data.replayed === true ? " The platform read this back from its record of the earlier create request with this grant; nothing was created twice." : ""} ${firstBuildSentence(firstBuild, buildsPageUrl)} ${login.sentence} The provisioning grant is spent and not kept on this machine; the other files this tool leaves are its install id (install.json) and a note that ${finalWorkspace}/${finalProject} exists on this server (created-projects.json), so extension_auth does not doubt it. Next: ${
+      login.login.stored ? "" : `extension_auth (action: login, project: '${finalWorkspace}/${finalProject}') to mint the project token, then `
+    }${
       firstBuild.state === "dispatched"
         ? "extension_publish to share it."
         : "extension_release_status until a build is listed; extension_publish has nothing to share until a build exists."
@@ -917,6 +936,7 @@ function createdByRead(found: ProjectFoundByRead, repo: string | undefined, apiB
   rememberCreatedProject(apiBase, ref);
   const consoleUrl = consoleProjectUrl({ workspace: found.workspaceSlug, project: found.projectSlug }, "", apiBase);
   const links = linksOf([{ kind: "project", url: consoleUrl, made: true }]);
+  const login: CreateLogin = { stored: false, project: ref, reason: "confirmed-by-read" };
 
   return envelope({
     ok: true,
@@ -931,13 +951,14 @@ function createdByRead(found: ProjectFoundByRead, repo: string | undefined, apiB
       confirmedBy: "project-read",
       outcome: recordedOutcome("created"),
       links,
+      login,
       firstBuild: firstBuildValue({ state: "unsaid" }),
       nextSteps: [
         `extension_auth (action: login, project: '${ref}')`,
         `extension_release_status (include: ['releases'], project: '${ref}') until a build is listed, then extension_publish`,
       ],
     },
-    hint: `Project ${ref} exists: the platform still answers this grant's request as creating, but a read with the stored login for ${found.readWith} finds the project, so the create landed and nothing was sent again. The provisioning grant is no longer kept on this machine. Next: extension_auth (action: login, project: '${ref}') to mint the project token. ${madeSentence(links)}`,
+    hint: `Project ${ref} exists: the platform still answers this grant's request as creating, but a read with the stored login for ${found.readWith} finds the project, so the create landed and nothing was sent again. No token came with that read, so one more approval is needed: extension_auth (action: login, project: '${ref}') to mint the project token. The provisioning grant is no longer kept on this machine. ${madeSentence(links)}`,
     warnings: [`The platform did not say whether a first build was dispatched for ${ref}; its Builds page in the console shows it.`],
   });
 }

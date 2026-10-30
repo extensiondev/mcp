@@ -135,6 +135,7 @@ describe("extension_project_create waits inside the call (ledger 292)", () => {
 
     expect(out.status).toBe("created");
     expect(h.tokenPolls()).toBe(3);
+    expect(out.value.login).toBeDefined();
   });
 
   it("answers authorization-pending with waitedSeconds and the seconds left when the bound passes first", async () => {
@@ -269,5 +270,70 @@ describe("extension_auth login waits inside the call (ledger 292)", () => {
     expect(wait.maximum).toBe(900);
     expect(wait.description).toContain("blocks");
     expect(authSchema.description).toContain("blocks (up to 900 s");
+  });
+});
+
+describe("extension_project_create stores the login the create minted (ledger 293)", () => {
+  const issued = { ...CREATED, tokenIssued: true, token: "project-token", expiresAt: FUTURE };
+
+  it("stores the token as the project's login and drops the extension_auth step", async () => {
+    platform({ token: [GRANT], create: { status: 200, body: issued } });
+    const out = await create({ deviceCode: "dev-code" });
+
+    expect(out.status).toBe("created");
+    expect(out.value.login).toMatchObject({ stored: true, project: PROJECT });
+    expect(out.value.login.expiresAt).toMatch(/^\d{4}-/);
+    expect(readCredentials({ project: PROJECT, api: API })?.token).toBe("project-token");
+    expect(out.value.nextSteps[0]).toBe("extension_publish");
+    expect(out.value.nextSteps.join(" ")).not.toContain("extension_auth");
+    expect(out.hint).toContain("no extension_auth call is needed");
+    expect(out.hint).not.toContain("to mint the project token");
+  });
+
+  it("says one more approval is needed when the platform answers no token on the grant", async () => {
+    platform({
+      token: [GRANT],
+      create: { status: 200, body: { ...CREATED, tokenIssued: false, tokenCode: "PROJECT_TOKEN_NOT_ISSUED", tokenMessage: "No token on this grant." } },
+    });
+
+    const out = await create({ deviceCode: "dev-code" });
+
+    expect(out.status).toBe("created");
+    expect(out.value.login).toEqual({ stored: false, project: PROJECT, reason: "PROJECT_TOKEN_NOT_ISSUED", message: "No token on this grant." });
+    expect(readCredentials({ project: PROJECT, api: API })).toBeNull();
+    expect(out.value.nextSteps[0]).toContain("extension_auth (action: login, project: 'acme/ghost-app')");
+    expect(out.hint).toContain("The platform answered no project token on this grant (PROJECT_TOKEN_NOT_ISSUED), so one more approval is needed: extension_auth (action: login, project: 'acme/ghost-app')");
+  });
+
+  it("answers NO_TOKEN_IN_RESPONSE for a platform that says nothing about a token", async () => {
+    platform({ token: [GRANT] });
+    const out = await create({ deviceCode: "dev-code" });
+
+    expect(out.value.login).toEqual({ stored: false, project: PROJECT, reason: "NO_TOKEN_IN_RESPONSE" });
+    expect(out.value.nextSteps[0]).toContain("extension_auth");
+  });
+
+  it("discards the token when login is false", async () => {
+    platform({ token: [GRANT], create: { status: 200, body: issued } });
+    const out = await create({ deviceCode: "dev-code", login: false });
+
+    expect(out.value.login).toEqual({ stored: false, project: PROJECT, reason: "not-asked" });
+    expect(readCredentials({ project: PROJECT, api: API })).toBeNull();
+    expect(out.hint).toContain("the token the platform answered was discarded");
+    expect(out.value.nextSteps[0]).toContain("extension_auth");
+  });
+
+  it("stores nothing from a replayed create, which carries no token", async () => {
+    platform({ token: [GRANT], create: { status: 200, body: { ...CREATED, replayed: true } } });
+    const out = await create({ deviceCode: "dev-code" });
+
+    expect(out.value.login).toEqual({ stored: false, project: PROJECT, reason: "replayed" });
+    expect(out.hint).toContain("a replay carries no token");
+  });
+
+  it("declares login as a boolean that defaults to true", () => {
+    expect(createSchema.inputSchema.properties.login.type).toBe("boolean");
+    expect(createSchema.inputSchema.properties.login.default).toBe(true);
+    expect(createSchema.description).toContain("extension_auth (action: login) is needed only when value.login.stored is false");
   });
 });
