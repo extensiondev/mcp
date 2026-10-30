@@ -64,7 +64,8 @@ vi.mock("../lib/boot-verdict", () => ({
 }));
 
 const start = await import("../tools/start");
-const { removeSession } = await import("../lib/process-manager");
+const { findSessionInfo, removeSession } = await import("../lib/process-manager");
+const { noSessionWords } = await import("../lib/production-receipt");
 
 const tmpDirs: string[] = [];
 
@@ -319,6 +320,25 @@ describe("extension_start opens the control channel on a production run", () => 
     expect(result.hint).not.toMatch(/opens no debug port/);
     expect(result.hint).not.toMatch(/To prove the load, run it with extension_dev/);
     expect(result.hint).toContain(`Call extension_wait {projectPath: ${JSON.stringify(project)}, browser: "chrome"}: it reads the load over the browser's debug port once the contract names it (cdpPort).`);
+  });
+
+  it("records allowControl in the session registry, so a still-starting receipt knows control was asked for", async () => {
+    const project = tmpProject();
+    writeContract(project, { command: "start", status: "starting", distPath: path.join(project, "dist", "chrome"), controlPort: null });
+
+    const contractFile = path.join(project, "dist", "extension-js", "chrome", "ready.json");
+    const later = new Date(Date.now() + 60_000);
+    fs.utimesSync(contractFile, later, later);
+
+    const result = JSON.parse(await start.handler({ projectPath: project, allowControl: true }));
+
+    expect(result.ok).toBe(true);
+    expect(findSessionInfo(project, "chrome")?.allowControl).toBe(true);
+
+    const words = noSessionWords(project, "chrome", { message: "dev words" });
+
+    expect(words.hint).not.toMatch(/without allowControl/);
+    expect(words.hint).toMatch(/This run asked for the control channel \(allowControl: true in this server's session registry\)/);
   });
 
   it("keeps extension_dev as the proof on an engine older than 4.1.34, and says which engine that is", async () => {
