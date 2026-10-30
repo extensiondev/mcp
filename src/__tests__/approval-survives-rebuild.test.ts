@@ -404,6 +404,8 @@ describe("an approval this machine minted is presented as the project that minte
 
     expect(stranger.value.mintedFor).toBeUndefined();
 
+    const mintedAt = Math.floor(Date.now() / 1000) * 1000 - 60_000;
+
     expect(
       rememberMintedApproval({
         token: PROJECTS.leon.token,
@@ -411,13 +413,13 @@ describe("an approval this machine minted is presented as the project that minte
         action: "extension_settings.build",
         fingerprint: FINGERPRINT,
         approvalUrl: APPROVAL_URL,
-        expiresAt: "2026-10-23T01:04:44.000Z",
-        now: Date.parse("2026-10-22T23:04:44.000Z"),
+        expiresAt: new Date(mintedAt + 2 * 60 * 60 * 1000).toISOString(),
+        now: mintedAt,
       }),
     ).toMatchObject({
       workspace: "acme",
       project: "leon",
-      mintedAt: "2026-10-22T23:04:44.000Z",
+      mintedAt: new Date(mintedAt).toISOString(),
     });
 
     const ours = JSON.parse(
@@ -426,7 +428,7 @@ describe("an approval this machine minted is presented as the project that minte
 
     expect(ours.error.name).toBe("ApprovalUnknown");
     expect(ours.error.message).toContain(
-      "for acme/leon, the project this machine minted it for at 2026-10-22T23:04:44.000Z",
+      `for acme/leon, the project this machine minted it for at ${new Date(mintedAt).toISOString()}`,
     );
 
     expect(ours.value).toMatchObject({
