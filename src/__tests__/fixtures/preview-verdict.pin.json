@@ -38,7 +38,8 @@
     "content-script-injected": null,
     "storage-key-present": null,
     "console-errors-empty": "frame-errors-empty",
-    "no-outside-requests": null
+    "no-outside-requests": null,
+    "page-world-clean": null
   },
   "divergences": [
     "a different contract name and registry, because these checks judge a real browser over the DevTools protocol and reusing an upstream id would redefine what that id promises",

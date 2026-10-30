@@ -65,6 +65,12 @@ import { readLogEvents,
 } from "./logs-filter";
 import { emptyReason, readLogRunId, staleFileNote } from "./logs";
 import {
+  PAGE_WORLD,
+  assertPageWorldClean,
+  parsePageWorldClause,
+  type PageWorldClause,
+} from "./assert-page-world";
+import {
   declaredSurfaces,
   resolveExtensionId,
   surfaceDocument,
@@ -120,7 +126,7 @@ export const schema = {
         type: "array",
         items: { type: "object" },
         description:
-          "One object per expectation, each { assert: <check id>, ...args }. background-worker-booted: no args. surface-rendered: surface (popup, options, sidebar, newtab, history, bookmarks), optional selector and minNodes. content-script-injected: url. storage-key-present: key, optional area (default local), equals, context. console-errors-empty: optional context (array), since (seq cursor), ignore (substrings). no-outside-requests: optional allow (host names), durationMs (default 5000): watches every target of the extension (worker, pages, offscreen documents, workers under them, extension frames in web pages) and fails on any request that leaves the machine.",
+          "One object per expectation, each { assert: <check id>, ...args }. background-worker-booted: no args. surface-rendered: surface (popup, options, sidebar, newtab, history, bookmarks), optional selector and minNodes. content-script-injected: url. storage-key-present: key, optional area (default local), equals, context. console-errors-empty: optional context (array), since (seq cursor), ignore (substrings). page-world-clean: url (a page the content scripts match, open in the session; Chromium only), optional pageGlobals (window property names the page itself defines, not reported as unknown). no-outside-requests: optional allow (host names), durationMs (default 5000): watches every target of the extension (worker, pages, offscreen documents, workers under them, extension frames in web pages) and fails on any request that leaves the machine.",
       },
       browser: SESSION_BROWSER,
       timeout: CALL_TIMEOUT,
@@ -168,7 +174,8 @@ type Clause =
   | ContentScriptClause
   | StorageClause
   | ConsoleClause
-  | NoOutsideRequestsClause;
+  | NoOutsideRequestsClause
+  | PageWorldClause;
 
 interface ParseResult {
   clauses: Clause[];
@@ -263,6 +270,13 @@ export function parseClauses(raw: unknown): ParseResult {
       }
 
       clauses.push({ assert: CONTENT_SCRIPT, subject: url, url });
+
+      return;
+    }
+
+    if (kind === PAGE_WORLD) {
+      const parsed = parsePageWorldClause(at, clause, issues);
+      if (parsed) clauses.push(parsed);
 
       return;
     }
@@ -1540,6 +1554,8 @@ async function evaluateClause(
       return assertStorageKeyPresent(clause, stage);
     case NO_OUTSIDE_REQUESTS:
       return assertNoOutsideRequests(clause, stage);
+    case PAGE_WORLD:
+      return assertPageWorldClean(clause, stage);
     default:
       return assertConsoleErrorsEmpty(clause, stage);
   }
