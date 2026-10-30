@@ -40,6 +40,7 @@ import {
   readyContractPath,
   sessionArtifactsRootDir,
 } from "../lib/session-paths";
+import { readSessionCapabilities } from "../lib/session-capabilities";
 
 import type { ReadyContract } from "../lib/types";
 
@@ -87,7 +88,7 @@ function sightedContractBrowser(projectPath: string): string | null {
 export const schema = {
   name: "extension_doctor",
   description:
-    "Diagnose a dev session end to end: ready contract, dev-server process, control-port agreement, control channel, eval token, executor, browser liveness. This returns one {check, status, detail, remediation?} per leg, in dependency order. Read a 'skip' as blocked, not as a pass: it names the check that blocked it. A session started with allowControl: false comes back ok:true with status 'read-only', not as an error: its control channel is off by choice. Run this first when any act tool (storage, reload, eval, open) errors unexpectedly. Call it with no projectPath for a pre-flight environment check (node, the Extension.js CLI, the template cache) before any project exists.",
+    "Diagnose a dev session end to end: ready contract, dev-server process, control-port agreement, control channel, eval token, executor, browser liveness. This returns one {check, status, detail, remediation?} per leg, in dependency order. Read a 'skip' as blocked, not as a pass: it names the check that blocked it. A session started with allowControl: false comes back ok:true with status 'read-only', not as an error. On Chromium, value.capabilities reads each extension context's WebGPU adapter, crossOriginIsolated and headless. Run this first when any act tool errors unexpectedly. Call it with no projectPath for a pre-flight environment check (node, the Extension.js CLI, the template cache).",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -495,6 +496,8 @@ export async function handler(args: {
         "Nothing failed. To unlock the control verbs, call extension_dev again without allowControl: false (allowEval: true for eval as well) plus replace: true, which stops this session first; a plain second call is refused so the session does not fork.";
     }
 
+    const capabilitiesRead = await readSessionCapabilities(projectPath, browser);
+
     return envelope({
       ok: healthy || readOnly,
       command: schema.name,
@@ -504,6 +507,10 @@ export async function handler(args: {
         ...(engineVersion ? { engineVersion } : {}),
         ...(readOnly ? { readOnly: true } : {}),
         checks,
+        capabilities: capabilitiesRead.capabilities,
+        ...(capabilitiesRead.capabilities
+          ? {}
+          : { capabilitiesReason: capabilitiesRead.reason }),
       },
       ...(readOnly
         ? {

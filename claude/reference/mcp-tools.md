@@ -166,7 +166,7 @@ Find the docs page to cite before answering any question about a WebExtension AP
 
 ## extension_doctor
 
-Diagnose a dev session end to end: ready contract, dev-server process, control-port agreement, control channel, eval token, executor, browser liveness. This returns one {check, status, detail, remediation?} per leg, in dependency order. Read a 'skip' as blocked, not as a pass: it names the check that blocked it. A session started with allowControl: false comes back ok:true with status 'read-only', not as an error: its control channel is off by choice. Run this first when any act tool (storage, reload, eval, open) errors unexpectedly. Call it with no projectPath for a pre-flight environment check (node, the Extension.js CLI, the template cache) before any project exists.
+Diagnose a dev session end to end: ready contract, dev-server process, control-port agreement, control channel, eval token, executor, browser liveness. This returns one {check, status, detail, remediation?} per leg, in dependency order. Read a 'skip' as blocked, not as a pass: it names the check that blocked it. A session started with allowControl: false comes back ok:true with status 'read-only', not as an error. On Chromium, value.capabilities reads each extension context's WebGPU adapter, crossOriginIsolated and headless. Run this first when any act tool errors unexpectedly. Call it with no projectPath for a pre-flight environment check (node, the Extension.js CLI, the template cache).
 
 | input | type | required | default | description |
 | --- | --- | --- | --- | --- |
