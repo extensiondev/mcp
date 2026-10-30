@@ -24,12 +24,12 @@ const PROBE_TIMEOUT_MS_READ_AS_UNKNOWN_ON_EXPIRY = 20_000;
 const SEMVER =
   /^v?(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$/;
 
-interface VersionParts {
+export interface VersionParts {
   release: number[];
   prerelease: string[];
 }
 
-function decompose(version: string): VersionParts | null {
+export function decompose(version: string): VersionParts | null {
   const match = SEMVER.exec(version.trim());
   if (!match) return null;
 

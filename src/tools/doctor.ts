@@ -17,7 +17,7 @@ import {
   refusedTheOutputFlag,
 } from "../lib/engine-version";
 import { resolveEngineOverride } from "../lib/engine-override";
-import { projectEngineCheck, readProjectEngine } from "../lib/project-engine-check";
+import { projectEngineCheck, projectEngineValue } from "../lib/project-engine-check";
 import { toMcpSpeak } from "../lib/act";
 import { envelope, isEnvelope } from "../lib/envelope";
 import {
@@ -339,7 +339,7 @@ export async function handler(args: {
     resolved.source === "fallback"
       ? (sightedContractBrowser(projectPath) ?? resolved.browser)
       : resolved.browser;
-  const engineVersion = readProjectEngine(projectPath)?.version ?? null;
+  const engineFields = projectEngineValue(projectPath);
   const engine = projectEngineCheck(projectPath);
 
   if (engine?.status === "fail") {
@@ -347,7 +347,7 @@ export async function handler(args: {
       ok: false,
       command: schema.name,
       status: "unhealthy",
-      value: { browser, ...(engineVersion ? { engineVersion } : {}), checks: [engine] },
+      value: { browser, ...engineFields, checks: [engine] },
       hint: "No engine was spawned: the engine override is set but names no bin, so the session could not be diagnosed. Fix or unset it and call extension_doctor again.",
     });
   }
@@ -491,7 +491,7 @@ export async function handler(args: {
       status: healthy ? "healthy" : readOnly ? "read-only" : "unhealthy",
       value: {
         browser,
-        ...(engineVersion ? { engineVersion } : {}),
+        ...engineFields,
         ...(readOnly ? { readOnly: true } : {}),
         checks,
         capabilities: capabilitiesRead.capabilities,

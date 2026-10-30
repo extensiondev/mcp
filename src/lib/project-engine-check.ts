@@ -18,6 +18,7 @@ import {
   readPackageVersion,
   resolveEngineOverride,
 } from "./engine-override";
+import { driftRemediation, readDeclaredDrift, readDeclaredEngine, type DeclaredRead } from "./engine-declared";
 import { engineDrift } from "./engine-version";
 import { pinnedCliVersion } from "./exec";
 
@@ -33,6 +34,36 @@ export interface ProjectEngineRead {
   packageDir: string;
   realPath: string | null;
   linkedCheckout: boolean;
+}
+
+export interface ProjectEngineValue {
+  engineVersion?: string;
+  engineDeclared?: string | null;
+}
+
+export function projectEngineValue(projectPath: string): ProjectEngineValue {
+  const engineVersion = readProjectEngine(projectPath)?.version ?? null;
+  const read = readDeclaredEngine(projectPath);
+  const engineDeclared = read.kind === "declared" ? read.spec : null;
+  if (!engineVersion && !engineDeclared) return {};
+
+  return { ...(engineVersion ? { engineVersion } : {}), engineDeclared };
+}
+
+function withDeclared(projectPath: string, check: ProjectEngineCheck, declared: DeclaredRead): ProjectEngineCheck {
+  if (!declared.sentence) return check;
+
+  const detail = `${check.detail}; ${declared.sentence}`;
+  if (!declared.drifted) return { ...check, detail };
+
+  const install = driftRemediation(projectPath, declared.declared!);
+
+  return {
+    ...check,
+    status: check.status === "fail" ? "fail" : "warn",
+    detail,
+    remediation: check.remediation ? `${install} ${check.remediation}` : install,
+  };
 }
 
 export function readProjectEngine(projectPath: string): ProjectEngineRead | null {
@@ -109,9 +140,12 @@ function pinnedCheck(projectPath: string, engineVersion: string): ProjectEngineC
 export function projectEngineCheck(projectPath: string): ProjectEngineCheck | null {
   const engine = readProjectEngine(projectPath);
   const overridden = overrideCheck(engine?.version ?? null);
-  if (overridden) return overridden;
-  if (!engine) return null;
-  if (engine.linkedCheckout) return linkedCheck(engine);
+  if (overridden?.status === "fail") return overridden;
+  if (!engine) return overridden;
 
-  return pinnedCheck(projectPath, engine.version!);
+  const declared = readDeclaredDrift(projectPath, engine.version!);
+  if (overridden) return withDeclared(projectPath, overridden, declared);
+  if (engine.linkedCheckout) return withDeclared(projectPath, linkedCheck(engine), declared);
+
+  return withDeclared(projectPath, pinnedCheck(projectPath, engine.version!), declared);
 }

@@ -188,3 +188,59 @@ describe("extension_doctor project-engine on a linked checkout", () => {
     expect(check.remediation).toContain("npm i -D extension@4.1.36");
   });
 });
+
+describe("extension_doctor project-engine drift from the package.json pin under an override or a link (ledger 279)", () => {
+  posixOnly(
+    "keeps the override sentence and adds the drift under the engine override",
+    async () => {
+      process.env.EXTENSION_MCP_CLI_VERSION = "4.1.36";
+      const root = fakeCheckout("4.1.35", "engine-fix");
+      process.env[ENGINE_DIR_ENV] = root;
+      const project = fakeProject({ version: "4.1.36" });
+      fs.writeFileSync(
+        path.join(project, "package.json"),
+        JSON.stringify({ name: "fake", dependencies: { extension: "4.1.37-canary.1793360022.4f7af0f6" } }),
+      );
+
+      const result = JSON.parse(await handler({ projectPath: project, browser: "chrome" }));
+      const check = engineCheck(result)!;
+
+      expect(check.status).toBe("warn");
+      expect(check.detail).toBe(
+        `engine override: ${root} (extension@4.1.35, ${shortSha(root)} on engine-fix) is used for every spawn; the project's extension@4.1.36 and the MCP pin are bypassed; package.json pins extension@4.1.37-canary.1793360022.4f7af0f6, node_modules has extension@4.1.36; the project's own build and tests run on the installed copy; run npm install (or pnpm install) to match`,
+      );
+
+      expect(check.remediation).toContain(`(cd ${project} && npm install)`);
+      expect(result.value.engineVersion).toBe("4.1.36");
+      expect(result.value.engineDeclared).toBe("4.1.37-canary.1793360022.4f7af0f6");
+    },
+    20_000,
+  );
+
+  posixOnly(
+    "warns on a linked checkout whose version is not the one package.json pins",
+    async () => {
+      process.env.EXTENSION_MCP_CLI_VERSION = "4.1.36";
+      const root = fakeCheckout("4.1.36", "main");
+      const packageDir = path.join(root, "programs", "extension");
+      const project = fakeProject({ linkTo: packageDir });
+      fs.writeFileSync(
+        path.join(project, "package.json"),
+        JSON.stringify({ name: "fake", devDependencies: { extension: "4.1.37-canary.1793360022.4f7af0f6" } }),
+      );
+
+      const result = JSON.parse(await handler({ projectPath: project, browser: "chrome" }));
+      const check = engineCheck(result)!;
+
+      expect(check.status).toBe("warn");
+      expect(check.detail).toContain("linked checkout");
+      expect(check.detail).toContain(
+        "package.json pins extension@4.1.37-canary.1793360022.4f7af0f6, node_modules has extension@4.1.36; the project's own build and tests run on the installed copy",
+      );
+
+      expect(check.remediation).toContain(`(cd ${project} && npm install)`);
+      expect(result.value.engineDeclared).toBe("4.1.37-canary.1793360022.4f7af0f6");
+    },
+    20_000,
+  );
+});
