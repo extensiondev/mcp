@@ -308,4 +308,57 @@ describe("extension_submit sync-listing reads each store's icon from the build t
     expect(local.value.iconSource).toEqual({ from: "local", reason });
     expect(local.value.sayToPerson).toContain(`The edge icon came from the local project, not a platform build: ${reason}.`);
   });
+
+  it("reads the newest build when the push record says the checked out commit changed docs only, and asks for no push", async () => {
+    if (process.platform === "win32") return;
+
+    const root = project();
+    const head = headSha(root);
+    const short = head.slice(0, 7);
+
+    platform.routes[`GET ${BUILDS}`] = () => ({
+      body: {
+        items: [{ buildId: OLDER_BUILD, commit: "e".repeat(40), status: "success" }],
+        lastPush: { commit: head, ref: "main", receivedAt: "2026-10-30T21:11:41.000Z", outcome: "DOCS_ONLY", dispatched: false },
+      },
+    });
+
+    platform.routes[`GET ${PACKAGE(OLDER_BUILD, "chrome.zip")}`] = () => ({ body: null, bytes: BUILD_PACKAGE });
+
+    const answer = JSON.parse(await submit({ action: "sync-listing", browsers: ["edge"], projectPath: root, api: API }));
+    const reason = `the checked out commit ${short} changes docs only; the icon is read from ${OLDER_BUILD}, the newest build, which carries the same package`;
+
+    expect(answer.status).toBe("listing-synced");
+    expect(answer.value.stores.edge.status).toBe("synced");
+    expect(answer.value.stores.edge.icon).toEqual({ from: "build", build: OLDER_BUILD, file: "chrome.zip:images/icon-128.png" });
+    expect(answer.value.iconSource).toEqual({ from: "build", build: OLDER_BUILD, reason });
+    expect(JSON.stringify(answer)).not.toMatch(/push it|came from the local project/);
+    expect(platform.sent("GET", BUILDS)).toHaveLength(1);
+    expect(platform.sent("GET", `${BUILDS}/${short}`)).toHaveLength(0);
+  });
+
+  it("names another skip word with what to do, and keeps the push-it sentence when the push record is another commit's", async () => {
+    if (process.platform === "win32") return;
+
+    const root = project({ dist: NEW_ICON });
+    const head = headSha(root);
+    const short = head.slice(0, 7);
+    const items = [{ buildId: OLDER_BUILD, commit: "e".repeat(40), status: "success" }];
+
+    platform.routes[`GET ${BUILDS}`] = () => ({ body: { items, lastPush: { commit: head, ref: "main", receivedAt: "2026-10-30T21:11:41.000Z", outcome: "PATH_FILTERED", dispatched: false } } });
+
+    const filtered = JSON.parse(await submit({ action: "sync-listing", browsers: ["edge"], projectPath: root, api: API }));
+    const reason = `the checked out commit ${short} was pushed (received 2026-10-30T21:11:41Z) and the platform skipped it as PATH_FILTERED: none of its changed paths touched the project's root directory, so push a change inside it, or run extension_builds {action: "rebuild", buildId: "${short}"} on it; or pass useBuild with a completed build`;
+
+    expect(filtered.value.stores.edge.icon).toEqual({ from: "dist", file: "dist/edge/images/icon-128.png" });
+    expect(filtered.value.iconSource).toEqual({ from: "local", reason });
+    expect(filtered.value.sayToPerson).toContain(`The edge icon came from the local project, not a platform build: ${reason}.`);
+    expect(platform.sent("GET", `${BUILDS}/${short}`)).toHaveLength(0);
+
+    platform.routes[`GET ${BUILDS}`] = () => ({ body: { items, lastPush: { commit: "e".repeat(40), ref: "main", receivedAt: "2026-10-30T21:11:41.000Z", outcome: "DOCS_ONLY", dispatched: false } } });
+
+    const unpushed = JSON.parse(await submit({ action: "sync-listing", browsers: ["edge"], projectPath: root, api: API }));
+
+    expect(unpushed.value.iconSource).toEqual({ from: "local", reason: `the checked out commit ${short} has no platform build; push it, or pass useBuild with a completed build` });
+  });
 });

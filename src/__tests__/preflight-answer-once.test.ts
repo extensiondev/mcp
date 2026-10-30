@@ -235,3 +235,86 @@ describe("the package checks name the build they read and say once when HEAD is 
     expect(platform.sent("GET", BUILDS)).toHaveLength(0);
   });
 });
+
+describe("the package checks consult the push record before asking for a push", () => {
+  const platform = useProjectRoutes("extdev-preflight-push-");
+  const OLDER = { buildId: "154767e", commit: "154767e96aca6864db7db35d00154940807560e1", status: "success" };
+  const RECEIVED = "2026-10-30T21:11:41.000Z";
+  const CHROME_BLOCK = { act: "upload", checks: [DESCRIPTION_ROW], blocking: ["chrome.package_description"], warnings: [], lock: null, inFlight: null, approval: "Upload lands as a draft." };
+
+  function pushed(head: string, outcome: string, dispatched = false) {
+    return { commit: head, ref: "main", receivedAt: RECEIVED, outcome, dispatched };
+  }
+
+  it("says HEAD changes docs only and that the checks read the newest build, which carries the same package, and asks for no push", async () => {
+    if (process.platform === "win32") return;
+
+    const { root, head } = gitProject();
+    const short = head.slice(0, 7);
+
+    platform.login();
+    platform.routes[`POST ${PREFLIGHT}`] = () => ({ body: report({ chromePreflight: CHROME_BLOCK }) });
+    platform.routes[`GET ${BUILDS}`] = () => ({ body: { items: [OLDER], lastPush: pushed(head, "DOCS_ONLY") } });
+
+    const out = JSON.parse(await submit({ action: "preflight", browsers: ["chrome"], projectPath: root, api: API }));
+    const say = `chrome: HEAD ${short} changes docs only; the package checks read 154767e, the newest build, which carries the same package.`;
+
+    expect(out.status).toBe("preflight-read");
+    expect(out.value.stores.chrome.packageBuild).toEqual({ read: ["154767e"], head: short, headPush: { outcome: "DOCS_ONLY", receivedAt: "2026-10-30T21:11:41Z" }, say });
+    expect(out.hint.split(say)).toHaveLength(2);
+    expect(JSON.stringify(out)).not.toContain("push it");
+    expect(platform.sent("GET", BUILDS)).toHaveLength(1);
+    expect(platform.sent("GET", `${BUILDS}/${short}`)).toHaveLength(0);
+  });
+
+  it("names another skip word with what to do, and a dispatched push whose build is not listed yet", async () => {
+    if (process.platform === "win32") return;
+
+    const { root, head } = gitProject();
+    const short = head.slice(0, 7);
+
+    platform.login();
+    platform.routes[`POST ${PREFLIGHT}`] = () => ({ body: report({ chromePreflight: CHROME_BLOCK }) });
+    platform.routes[`GET ${BUILDS}`] = () => ({ body: { items: [OLDER], lastPush: pushed(head, "PATH_FILTERED") } });
+
+    const filtered = JSON.parse(await submit({ action: "preflight", browsers: ["chrome"], projectPath: root, api: API }));
+
+    expect(filtered.value.stores.chrome.packageBuild).toEqual({
+      read: ["154767e"],
+      head: short,
+      headPush: { outcome: "PATH_FILTERED", receivedAt: "2026-10-30T21:11:41Z" },
+      say: `chrome: the package checks read build 154767e; HEAD ${short} was pushed (received 2026-10-30T21:11:41Z) and the platform skipped it as PATH_FILTERED: none of its changed paths touched the project's root directory, so push a change inside it, or run extension_builds {action: "rebuild", buildId: "${short}"} on it.`,
+    });
+
+    expect(filtered.hint).not.toContain("changes docs only");
+    expect(filtered.hint).not.toContain("push it so");
+
+    platform.routes[`GET ${BUILDS}`] = () => ({ body: { items: [OLDER], lastPush: pushed(head, "DISPATCHED", true) } });
+
+    const dispatched = JSON.parse(await submit({ action: "preflight", browsers: ["chrome"], projectPath: root, api: API }));
+
+    expect(dispatched.value.stores.chrome.packageBuild.say).toBe(
+      `chrome: the package checks read build 154767e; HEAD ${short} was pushed (received 2026-10-30T21:11:41Z) and the platform dispatched it, but its build is not on the list yet; extension_builds lists it once the run is recorded.`,
+    );
+
+    expect(dispatched.value.stores.chrome.packageBuild.headPush).toEqual({ outcome: "DISPATCHED", receivedAt: "2026-10-30T21:11:41Z" });
+  });
+
+  it("keeps the push-it sentence when the push record is another commit's, and reads the build list once for two stores", async () => {
+    if (process.platform === "win32") return;
+
+    const { root, head } = gitProject();
+    const short = head.slice(0, 7);
+
+    platform.login();
+    platform.routes[`POST ${PREFLIGHT}`] = () => ({ body: report({ chromePreflight: CHROME_BLOCK }) });
+    platform.routes[`POST ${PROJECT_ROUTE}/stores/edge/submissions/preflight`] = () => ({ body: { ...report(), store: "edge" } });
+    platform.routes[`GET ${BUILDS}`] = () => ({ body: { items: [OLDER], lastPush: pushed("e".repeat(40), "DOCS_ONLY") } });
+
+    const out = JSON.parse(await submit({ action: "preflight", browsers: ["chrome", "edge"], projectPath: root, api: API }));
+
+    expect(out.value.stores.chrome.packageBuild).toEqual({ read: ["154767e"], head: short, say: `chrome: the package checks read build 154767e; HEAD ${short} has no platform build yet; push it so the package checks read it.` });
+    expect(out.value.stores.edge.packageBuild.say).toBe(`edge: the package checks read build 154767e; HEAD ${short} has no platform build yet; push it so the package checks read it.`);
+    expect(platform.sent("GET", BUILDS)).toHaveLength(1);
+  });
+});

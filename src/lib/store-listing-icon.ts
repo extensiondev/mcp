@@ -9,6 +9,7 @@
 import { execFileSync } from "node:child_process";
 import path from "node:path";
 
+import { dispatchedPushSentence, docsOnlySentence, headPushOf, isDocsOnly, skippedPushSentence, type HeadPush } from "./head-push";
 import { projectApiBytes } from "./project-api-bytes";
 import { projectApiGet, type ProjectApi } from "./project-api";
 import { isRow, text } from "./ship-act";
@@ -137,11 +138,12 @@ function sameCommit(row: BuildRow, sha: string): boolean {
  * one build the call needs, the checked out commit or useBuild, is therefore
  * read from builds/<sha> whenever the list does not answer it completed.
  */
-async function wantedBuild(api: ProjectApi, rows: BuildRow[], sha: string): Promise<{ row: BuildRow | null; seen: BuildRow | null }> {
+async function wantedBuild(api: ProjectApi, rows: BuildRow[], sha: string, push: HeadPush | null): Promise<{ row: BuildRow | null; seen: BuildRow | null }> {
   const listed = rows.filter((row) => sameCommit(row, sha));
   const done = listed.find((row) => row.done);
   if (done) return { row: done, seen: done };
   if (sha.length < SHA_PREFIX) return { row: null, seen: null };
+  if (!listed.length && push && !push.dispatched) return { row: null, seen: null };
 
   const detail = await projectApiGet<Record<string, unknown>>(api, `builds/${encodeURIComponent(listed[0]?.id ?? sha.slice(0, SHA_PREFIX))}`);
   const read = detail.ok ? buildRow(isRow(detail.json?.build) ? detail.json.build : detail.json) : null;
@@ -150,12 +152,18 @@ async function wantedBuild(api: ProjectApi, rows: BuildRow[], sha: string): Prom
   return { row: fresh?.done ? fresh : null, seen: fresh ?? listed[0] ?? null };
 }
 
-function missedSentence(target: string, asked: boolean, seen: BuildRow | null, unreadable: string | null): string {
-  if (!target) return "the project directory has no git commit checked out, so no platform build could be matched";
-  if (seen) return `build ${seen.id} of ${asked ? "that commit" : "the checked out commit"} is ${seen.status || "of unknown status"} on the platform, not completed`;
-  if (unreadable) return `the platform's build list could not be read (${unreadable})`;
+export type BuildMiss = "no-commit" | "not-completed" | "unreadable" | "not-dispatched" | "dispatched-unlisted" | "no-record";
 
-  return `the checked out commit ${target.slice(0, SHA_PREFIX)} has no platform build; push it, or pass useBuild with a completed build`;
+function missedSentence(target: string, asked: boolean, seen: BuildRow | null, unreadable: string | null, push: HeadPush | null): { why: BuildMiss; missed: string } {
+  const subject = `the checked out commit ${target.slice(0, SHA_PREFIX)}`;
+
+  if (!target) return { why: "no-commit", missed: "the project directory has no git commit checked out, so no platform build could be matched" };
+  if (seen) return { why: "not-completed", missed: `build ${seen.id} of ${asked ? "that commit" : "the checked out commit"} is ${seen.status || "of unknown status"} on the platform, not completed` };
+  if (unreadable) return { why: "unreadable", missed: `the platform's build list could not be read (${unreadable})` };
+  if (push && !push.dispatched) return { why: "not-dispatched", missed: `${skippedPushSentence(push, subject)}; or pass useBuild with a completed build` };
+  if (push) return { why: "dispatched-unlisted", missed: `${dispatchedPushSentence(push, subject)}; or pass useBuild with a completed build` };
+
+  return { why: "no-record", missed: `${subject} has no platform build; push it, or pass useBuild with a completed build` };
 }
 
 export interface BuildIcons {
@@ -164,6 +172,9 @@ export interface BuildIcons {
   missed: string | null;
   newest: string | null;
   unreadable: string | null;
+  headPush: HeadPush | null;
+  why: BuildMiss | "docs-only" | null;
+  reason: string | null;
   take(store: ListingStore): Promise<IconPick | { problem: string }>;
 }
 
@@ -179,17 +190,25 @@ function packageFiles(store: ListingStore): string[] {
  * package where the store ships that one, and the 128 px icon its manifest
  * declares is read out of the archive. A project whose HEAD has no completed
  * platform build falls back to the local read, which withholds a dist older
- * than the source.
+ * than the source, unless the push record the same list answer carries says
+ * the platform classified HEAD's push docs only (ledger 305): that commit
+ * will never build and carries the newest build's package, so the newest
+ * completed build is read and the reason says so, and no push is asked for.
  */
 export async function platformBuildIcons(api: ProjectApi, projectPath: string, useBuild: string): Promise<BuildIcons> {
-  const read = await projectApiGet<{ items?: unknown[] }>(api, "builds", { limit: BUILD_LIST_LIMIT });
+  const read = await projectApiGet<{ items?: unknown[]; lastPush?: unknown }>(api, "builds", { limit: BUILD_LIST_LIMIT });
   const rows = read.ok ? buildRows(Array.isArray(read.json?.items) ? read.json.items : []) : [];
   const newest = rows.find((row) => row.done)?.id ?? null;
   const asked = useBuild.toLowerCase();
   const target = asked || gitHead(projectPath);
-  const wanted = target ? await wantedBuild(api, rows, target) : { row: null, seen: null };
-  const build = wanted.row?.id ?? null;
-  const missed = build ? null : missedSentence(target, Boolean(asked), wanted.seen, read.ok ? null : read.message);
+  const headPush = asked || !target || !read.ok ? null : headPushOf(read.json?.lastPush, target);
+  const wanted = target ? await wantedBuild(api, rows, target, headPush) : { row: null, seen: null };
+  const fallback = !wanted.row && isDocsOnly(headPush) ? newest : null;
+  const build = wanted.row?.id ?? fallback;
+  const miss = build ? null : missedSentence(target, Boolean(asked), wanted.seen, read.ok ? null : read.message, headPush);
+  const missed = miss?.missed ?? null;
+  const why = miss?.why ?? (fallback ? "docs-only" : null);
+  const reason = fallback ? docsOnlySentence(`the checked out commit ${target.slice(0, SHA_PREFIX)}`, "the icon is read from", fallback) : null;
   const packages = new Map<string, Promise<{ bytes: Buffer } | { absent: true } | { problem: string }>>();
 
   const fetchPackage = (file: string) => {
@@ -215,6 +234,9 @@ export async function platformBuildIcons(api: ProjectApi, projectPath: string, u
     missed,
     newest,
     unreadable: read.ok ? null : read.message,
+    headPush,
+    why,
+    reason,
     async take(store) {
       if (!build) return { problem: "no platform build" };
 

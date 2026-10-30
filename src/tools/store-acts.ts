@@ -75,7 +75,7 @@ import { notReadyForReviewStep, notReadyLine } from "../lib/store-not-ready";
 import { nextVersionOf, nextVersionSentence } from "../lib/store-readiness";
 import { LISTING_INCOMPLETE_CODE, listingIncompleteOf, listingIncompleteSentence } from "../lib/store-listing-incomplete";
 import { linkItemAnswer } from "../lib/link-item-answer";
-import { packageBuildLine, packageBuildView } from "../lib/package-checks-build";
+import { packageBuildLine, packageBuildViews } from "../lib/package-checks-build";
 import { storePreflightChecks } from "../lib/store-preflight-checks";
 import {
   EDGE_FIRST_SUBMISSION_STATE,
@@ -888,9 +888,7 @@ export async function preflight(args: StoreActArgs): Promise<string> {
     } else unread.push(`${store}: ${read.message}`);
   });
 
-  const packageBuilds = await Promise.all(
-    asked.map((store) => (reports[store] ? packageBuildView(api, text(args.projectPath), reports[store], store) : Promise.resolve(null))),
-  );
+  const packageBuilds = await packageBuildViews(api, text(args.projectPath), reports, asked);
 
   asked.forEach((store, i) => {
     const view = packageBuilds[i];

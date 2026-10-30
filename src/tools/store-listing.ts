@@ -1093,7 +1093,7 @@ export async function syncListing(args: ListingArgs): Promise<string> {
     action: ACT,
     project,
     stores,
-    iconSource: builds.build ? { from: "build", build: builds.build } : { from: "local", reason: builds.missed },
+    iconSource: builds.build ? { from: "build", build: builds.build, ...(builds.reason ? { reason: builds.reason } : {}) } : { from: "local", reason: builds.missed },
     storesPageUrl: consoleProjectUrl(
       api.ref,
       ConsoleProjectPage.stores,
