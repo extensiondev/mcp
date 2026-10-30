@@ -10,7 +10,9 @@ import { openProjectApi, projectApiGet } from "./project-api";
 
 export const STORE_RELEASE_STATES = ["uploaded", "in-review", "approved", "live", "rejected", "withdrawn", "superseded"] as const;
 
-export type StoreReleaseState = (typeof STORE_RELEASE_STATES)[number];
+export type StoreReleaseState = (typeof STORE_RELEASE_STATES)[number] | "unknown";
+
+const KNOWN_STORE_WORD_SOURCES: ReadonlySet<string> = new Set(["publish-answer", "poll", "run", "inferred", "hand"]);
 
 export interface StoreReleaseView {
   id: string;
@@ -19,6 +21,7 @@ export interface StoreReleaseView {
   version: string;
   buildSha: string;
   state: StoreReleaseState;
+  stateWord?: string;
   storeWord: string;
   readAt: string;
   source: string;
@@ -74,7 +77,9 @@ export function storeReleaseView(raw: unknown): StoreReleaseView | null {
   const state = str(raw.state);
   const id = str(raw.id);
   const store = str(raw.store);
-  if (!id || !store || !(STORE_RELEASE_STATES as readonly string[]).includes(state)) return null;
+  if (!id || !store || !state) return null;
+
+  const known = (STORE_RELEASE_STATES as readonly string[]).includes(state);
 
   const view: StoreReleaseView = {
     id,
@@ -82,7 +87,8 @@ export function storeReleaseView(raw: unknown): StoreReleaseView | null {
     browser: str(raw.browser) || store,
     version: str(raw.version),
     buildSha: str(raw.buildSha),
-    state: state as StoreReleaseState,
+    state: known ? (state as StoreReleaseState) : "unknown",
+    ...(known ? {} : { stateWord: state }),
     storeWord: str(raw.storeWord),
     readAt: str(raw.readAt),
     source: str(raw.source) || "inferred",
@@ -189,7 +195,12 @@ export function storeReleaseSentence(row: StoreReleaseView): string {
   const read =
     row.source === "inferred"
       ? "inferred from the platform's record, no store word read"
-      : `the store's word ${row.storeWord || "unknown"}, read ${row.readAt || "at an unknown time"} by ${row.source}`;
+      : row.source === "hand"
+        ? `recorded by hand from the store's own dashboard ${row.readAt || "at an unknown time"}, not read by a store check`
+        : KNOWN_STORE_WORD_SOURCES.has(row.source)
+          ? `the store's word ${row.storeWord || "unknown"}, read ${row.readAt || "at an unknown time"} by ${row.source}`
+          : `the store's word ${row.storeWord || "unknown"}, read ${row.readAt || "at an unknown time"} by ${row.source}, a source this MCP does not know, so it grounds no next step`;
+  const state = row.state === "unknown" ? `${row.stateWord || "unknown"} (a state this MCP does not know; update the MCP to read it)` : row.state;
   const audience =
     row.state === "live"
       ? row.visibility
@@ -209,7 +220,7 @@ export function storeReleaseSentence(row: StoreReleaseView): string {
       ? `, waiting for your release with extension_submit {action: "release", browsers: ["${row.store}"]}`
       : "";
 
-  return `${storeReleaseLane(row)} ${version} ${row.state}${audience}${release}${waiting} on build ${row.buildSha || "unknown"} (${read})`;
+  return `${storeReleaseLane(row)} ${version} ${state}${audience}${release}${waiting} on build ${row.buildSha || "unknown"} (${read})`;
 }
 
 export function storeReleasesSentence(rows: StoreReleaseView[], unread: boolean): string {
