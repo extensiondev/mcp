@@ -7,12 +7,14 @@
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
 import { devRuntimeTrailer, type SessionRead } from "./assert-page-world-dev";
+import { failingGlobals, type ExtensionGlobals } from "./assert-page-world-globals";
 import { failCheck, passCheck, type CheckResult } from "../lib/verdict";
 
 import type { Baseline } from "./assert-page-world-baseline";
 import type { PageWorldRead, SkippedResource } from "./assert-page-world-reads";
 
 const UNKNOWN_SHOWN = 12;
+const GLOBALS_SHOWN = 3;
 
 export interface ProbedResource {
   index: number;
@@ -43,6 +45,7 @@ export interface VerdictInput {
   hits: LabeledHit[];
   symbols: { attributed: string[]; unattributed: string[] };
   unknown: string[] | null;
+  globals: ExtensionGlobals;
   baseline: Baseline | null;
   probed: ProbedResource[];
   skipped: SkippedResource[];
@@ -97,11 +100,22 @@ function warnings(input: VerdictInput): string[] {
 
   if (input.baseline?.note) notes.push(input.baseline.note);
 
+  const { bundles } = input.globals;
+  if (bundles.note && (input.unknown?.length ?? 0) > 0) notes.push(`${bundles.note}.`);
+
+  for (const skip of bundles.skipped) notes.push(`${skip.reason}.`);
+
   const excluded =
-    input.hits.filter((hit) => hit.devRuntime).length + input.probed.filter((probe) => probe.ok && probe.devRuntime).length;
+    input.hits.filter((hit) => hit.devRuntime).length +
+    input.probed.filter((probe) => probe.ok && probe.devRuntime).length +
+    input.globals.engine.filter((entry) => entry.devRuntime).length;
   if (excluded > 0) notes.push(devRuntimeTrailer(excluded, input.session));
 
   return notes;
+}
+
+function globalText(entry: { name: string; file?: string }): string {
+  return entry.file ? `${entry.name} in ${entry.file}` : `${entry.name}, which the Extension.js runtime plants`;
 }
 
 function leaks(input: VerdictInput): string[] {
@@ -134,6 +148,17 @@ function leaks(input: VerdictInput): string[] {
     );
   }
 
+  const planted = failingGlobals(input.globals);
+
+  if (planted.length > 0) {
+    out.push(
+      `${plural(planted.length, "window global")} the extension's own build sets (${planted
+        .slice(0, GLOBALS_SHOWN)
+        .map(globalText)
+        .join(", ")}${planted.length > GLOBALS_SHOWN ? ", and more in evidence.globals.builtGlobals and evidence.globals.engineGlobals" : ""})`,
+    );
+  }
+
   for (const probe of input.probed) {
     if (!probe.ok || probe.devRuntime) continue;
 
@@ -161,11 +186,16 @@ export function pageWorldVerdict(input: VerdictInput): CheckResult {
 
   const shipped = input.probed.filter((probe) => !probe.devRuntime);
   const { world } = input;
+  const searched = input.globals.bundles.searched;
+  const bundleClause =
+    searched.length > 0
+      ? `, the ${plural(searched.length, "built MAIN-world bundle")} searched (${searched.join(", ")}) ${searched.length === 1 ? "plants" : "plant"} none of them`
+      : "";
 
   return passCheck(
     input.id,
     input.subject,
-    `Nothing in the main world of ${input.url} names the extension: ${count(world.dom.bytes)} bytes of outerHTML over ${count(world.dom.elements)} elements (${plural(world.dom.shadowRoots, "open shadow root")}) hold no occurrence of ${input.extensionId}, ${plural(world.ownNames.length, "own window property", "own window properties")} carry no symbol marker naming it and none names the extension, and ${plural(shipped.length, "static web_accessible_resources path")} fetched from the page ${
+    `Nothing in the main world of ${input.url} names the extension: ${count(world.dom.bytes)} bytes of outerHTML over ${count(world.dom.elements)} elements (${plural(world.dom.shadowRoots, "open shadow root")}) hold no occurrence of ${input.extensionId}, ${plural(world.ownNames.length, "own window property", "own window properties")} carry no symbol marker naming it and none names the extension${bundleClause}, and ${plural(shipped.length, "static web_accessible_resources path")} fetched from the page ${
       shipped.length === 0 ? "were declared, so there was nothing to guess" : `${shipped.length === 1 ? "was" : "were"} refused (${shipped.map((probe) => probe.path).join(", ")})`
     }.${trailer}`,
     input.evidence,

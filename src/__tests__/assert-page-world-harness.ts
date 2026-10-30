@@ -119,10 +119,10 @@ export function writeManifest(manifest: Record<string, unknown>): void {
   fs.writeFileSync(file, JSON.stringify(manifest));
 }
 
-export function writeDistFile(relative: string): void {
+export function writeDistFile(relative: string, content = "x"): void {
   const file = path.join(live.project, "dist", BROWSER, relative);
   fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.writeFileSync(file, "x");
+  fs.writeFileSync(file, content);
 }
 
 export function writeSourceManifest(manifest: Record<string, unknown>): void {

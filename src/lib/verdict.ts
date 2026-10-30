@@ -116,6 +116,8 @@ export const ASSERT_CHECKS: readonly AssertCheckDeclaration[] = Object.freeze([
     title: "a matched page's own world holds nothing that names the extension",
     reads: [
       "manifest.web_accessible_resources",
+      "manifest.content_scripts",
+      "dist.content_scripts.js",
       "cdp.targets",
       "page.mainWorld.outerHTML",
       "page.mainWorld.window",

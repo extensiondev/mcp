@@ -13,6 +13,7 @@ import { coveringMatches } from "../lib/match-patterns";
 import { isSourceManifest } from "../lib/project-manifest";
 import { readBaseline } from "./assert-page-world-baseline";
 import { devRuntimeResourceTest, isDevRuntimeAttribute, readSessionKind } from "./assert-page-world-dev";
+import { readExtensionGlobals } from "./assert-page-world-globals";
 import { pageWorldReadScript, resourceProbeScript, staticResources, type PageWorldRead, type ResourceProbe } from "./assert-page-world-reads";
 import { pageWorldVerdict, type LabeledHit, type ProbedResource } from "./assert-page-world-verdict";
 import { inconclusiveCheck, type CheckResult } from "../lib/verdict";
@@ -223,6 +224,15 @@ export async function assertPageWorldClean(clause: PageWorldClause, stage: Stage
   const unknown = baseline
     ? world.ownNames.filter((name) => !baseline.names.includes(name) && !exempt.has(name) && !leaked.has(name))
     : null;
+  const globals = readExtensionGlobals({
+    manifest: read.manifest,
+    distDir,
+    ownNames: world.ownNames,
+    unknown,
+    exempt,
+    leaked,
+    dev,
+  });
   const probed: ProbedResource[] = resources.probes.map((probe) => {
     const answer = answers.find((entry) => entry.index === probe.index);
 
@@ -252,7 +262,10 @@ export async function assertPageWorldClean(clause: PageWorldClause, stage: Stage
       symbols: world.symbols,
       attributedSymbols: symbols.attributed,
       refs: world.refs,
-      unknown,
+      unknown: globals.unexplained,
+      engineGlobals: globals.engine,
+      builtGlobals: globals.built,
+      bundles: globals.bundles,
       baseline: baseline?.source ?? null,
       ...(baseline?.note ? { baselineNote: baseline.note } : {}),
     },
@@ -267,7 +280,8 @@ export async function assertPageWorldClean(clause: PageWorldClause, stage: Stage
     world,
     hits,
     symbols,
-    unknown,
+    unknown: globals.unexplained,
+    globals,
     baseline,
     probed,
     skipped: resources.skipped,

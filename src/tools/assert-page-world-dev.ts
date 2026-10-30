@@ -108,5 +108,5 @@ export function sessionSentence(read: SessionRead): string {
 }
 
 export function devRuntimeTrailer(excluded: number, read: SessionRead): string {
-  return `${excluded.toLocaleString("en-US")} dev-runtime ${excluded === 1 ? "hit was" : "hits were"} excluded from the verdict (labeled devRuntime in the evidence) because ${sessionSentence(read)}: the Extension.js dev runtime's ${DEV_ATTRIBUTE_PREFIX}* markers and the web_accessible_resources it adds are not in the shipped build; run the check on an extension_start session for the shipped answer.`;
+  return `${excluded.toLocaleString("en-US")} dev-runtime ${excluded === 1 ? "hit was" : "hits were"} excluded from the verdict (labeled devRuntime in the evidence) because ${sessionSentence(read)}: the Extension.js dev runtime's ${DEV_ATTRIBUTE_PREFIX}* markers, the __EXTENSIONJS_* and __extjs* window globals it plants and the web_accessible_resources it adds are not in the shipped build; run the check on an extension_start session for the shipped answer.`;
 }
