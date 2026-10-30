@@ -106,6 +106,20 @@ export function packageAddress(ref: ProjectRef | null, sha: string, file: string
   return share ? `${page}?share=${encodeURIComponent(share)}` : page;
 }
 
+function channelFileAddress(ref: ProjectRef | null, channel: string, file: string, api?: string): string {
+  const name = text(channel);
+
+  return name ? userlandProjectUrl(ref, `channels/${encodeURIComponent(name)}/${file}`, api) : "";
+}
+
+export function updateManifestAddress(ref: ProjectRef | null, channel: string, api?: string): string {
+  return channelFileAddress(ref, channel, "updates.json", api);
+}
+
+export function channelXpiAddress(ref: ProjectRef | null, channel: string, api?: string): string {
+  return channelFileAddress(ref, channel, "firefox.xpi", api);
+}
+
 export function printedPackageAddress(answered: unknown, scope: PackageScope, options: { share?: string } = {}): string {
   const given = text(answered);
   if (packageAddressMode(scope.api) === "path") return given;

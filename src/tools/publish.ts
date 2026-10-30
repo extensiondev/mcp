@@ -55,6 +55,7 @@ import {
   applyArtifactHealth,
   refuseUnverified,
 } from "../lib/publish-artifacts";
+import { channelBrowsers, firefoxChannelFields, firefoxChannelSentence } from "../lib/firefox-update-url";
 import { fillFromBuildIndex } from "../lib/publish-build-index";
 import { withPackageAddresses } from "../lib/publish-package-commands";
 import { consoleProjectUrl } from "../lib/registry";
@@ -347,6 +348,10 @@ export async function handler(args: {
       channelLinkFields(ref, data.visibility, serving, args.api),
     );
 
+    if (serving && channels) {
+      Object.assign(data, firefoxChannelFields(ref, serving, channelBrowsers(channels, serving, previewCommandsOf(data.previewCommands).map(([browser]) => browser)), args.api));
+    }
+
     if (!serving) {
       channelNote = channels
         ? `No release channel serves build ${String(data.buildSha ?? "(none)")} yet, so no channelUrl is offered. Promote it with extension_release_promote for a link that follows the channel. ${CHANNEL_LINK_ADVICE}`
@@ -469,7 +474,7 @@ export async function handler(args: {
         : short
           ? "Send value.tellThem to the person as written."
           : "Send value.tellThem to the person as written; its link is long because the platform has not minted a short one yet.";
-  const hint = [unconfirmed, what, watch, made].filter(Boolean).join(" ");
+  const hint = [unconfirmed, what, watch, made, firefoxChannelSentence(data)].filter(Boolean).join(" ");
 
   if (held && sharePage) {
     const answer = `${sharePage.status}${sharePage.retryAfter ? `, retry-after ${sharePage.retryAfter}` : ""}`;

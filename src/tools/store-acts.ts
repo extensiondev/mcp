@@ -75,6 +75,7 @@ import { notReadyForReviewStep, notReadyLine } from "../lib/store-not-ready";
 import { nextVersionOf, nextVersionSentence } from "../lib/store-readiness";
 import { LISTING_INCOMPLETE_CODE, listingIncompleteOf, listingIncompleteSentence } from "../lib/store-listing-incomplete";
 import { linkItemAnswer } from "../lib/link-item-answer";
+import { firefoxUpdateManifestOf, relayFirefoxUpdateUrl } from "../lib/firefox-update-url";
 import { withHandUploadRows } from "../lib/hand-upload";
 import { buildsReadByPackageChecks, packageBuildLine, packageBuildViews } from "../lib/package-checks-build";
 import { storePreflightChecks } from "../lib/store-preflight-checks";
@@ -870,13 +871,15 @@ export async function preflight(args: StoreActArgs): Promise<string> {
   asked.forEach((store, i) => {
     const read = reads[i];
     if (read.ok) {
-      reports[store] = read.json;
+      const updateManifest = store === "firefox" ? firefoxUpdateManifestOf(read.json, api.ref, text(args.projectPath), args.api) : null;
+      const json = relayFirefoxUpdateUrl(read.json, updateManifest);
+      reports[store] = json;
 
-      const block = storePreflightView(read.json, store);
+      const block = storePreflightView(json, store);
       if (block) storePreflight[store] = block;
 
       const view = readinessView(
-        read.json,
+        json,
         store,
         text(args.projectPath),
         Boolean(text(args.buildSha)),
@@ -887,9 +890,10 @@ export async function preflight(args: StoreActArgs): Promise<string> {
           ? {
               ...view,
               ...firefoxSourceArchiveView(
-                read.json,
+                json,
                 firefoxConnectUrl(api.ref, args.api),
               ),
+              ...(updateManifest ? { updateManifest } : {}),
             }
           : view;
     } else unread.push(`${store}: ${read.message}`);
@@ -943,10 +947,10 @@ export async function preflight(args: StoreActArgs): Promise<string> {
     })
     .join("");
   const firefoxView = isRow(stores.firefox) ? stores.firefox : null;
-  const sourceLine =
-    firefoxView && isRow(firefoxView.sourceArchive)
-      ? ` ${text(firefoxView.sourceArchive.say)}`
-      : "";
+  const sourceLine = [
+    firefoxView && isRow(firefoxView.sourceArchive) ? ` ${text(firefoxView.sourceArchive.say)}` : "",
+    firefoxView && isRow(firefoxView.updateManifest) ? ` ${text(firefoxView.updateManifest.say)}` : "",
+  ].join("");
   const inputsSay = [missingRequirementsSentences(stores), bringListSentences(stores)].filter(Boolean).join(" ");
   const workspaceLine = Object.entries(stores)
     .filter(([, view]) => (view as Row).connectionSource === "workspace")
