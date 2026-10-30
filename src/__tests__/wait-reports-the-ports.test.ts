@@ -61,15 +61,27 @@ describe("extension_wait names every port the session bound, so 'tell me the por
     expect(out.value.debugPortNote).toBeUndefined();
   }, 10_000);
 
-  it("says a production start session opened no debug port", async () => {
+  it("says a production start session on an engine older than 4.1.34 opened no debug port, naming the floor", async () => {
     const dir = project();
-    contract(dir, "chrome", readyContract("start", "chrome", { compiledAt: new Date().toISOString() }));
+    contract(dir, "chrome", readyContract("start", "chrome", { toolchainVersion: "4.1.33", compiledAt: new Date().toISOString() }));
 
     const out = JSON.parse(await wait({ projectPath: dir, browser: "chrome", timeoutMs: 1500 }));
 
     expect(out.status).toBe("build-ready");
     expect(out.value.cdpPort).toBeNull();
-    expect(out.value.debugPortNote).toMatch(/no browser debug port/i);
+    expect(out.value.debugPortNote).toBe("This start session opened no browser debug port: Extension.js 4.1.33 runs a production launch without CDP or RDP (4.1.34 is the first that opens one), so there is no port to connect a debugger or a target list to.");
+  }, 10_000);
+
+  it("says a production start session on 4.1.34 or later names no debug port yet, not that it opened none", async () => {
+    const dir = project();
+    contract(dir, "chrome", readyContract("start", "chrome", { toolchainVersion: "4.1.36", compiledAt: new Date().toISOString() }));
+
+    const out = JSON.parse(await wait({ projectPath: dir, browser: "chrome", timeoutMs: 1500 }));
+
+    expect(out.status).toBe("build-ready");
+    expect(out.value.cdpPort).toBeNull();
+    expect(out.value.debugPortNote).toMatch(/names no browser debug port yet/i);
+    expect(out.value.debugPortNote).not.toMatch(/opened no browser debug port/i);
   }, 10_000);
 
   it("tells the agent in the description which ports the answer carries", () => {

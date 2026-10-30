@@ -22,7 +22,7 @@ import {
 } from "../lib/profile-carryover";
 import { removeCarrier } from "../lib/carrier";
 import { envelope } from "../lib/envelope";
-import { productionLaunchEvidence, readFreshContract, readLoadOverDebugPort } from "../lib/production-launch";
+import { productionLaunchEvidence, productionLoadProofLine, readFreshContract, readLoadOverDebugPort } from "../lib/production-launch";
 import { controlledIdentity, identityWarnings, resolveLoadedId } from "../lib/controlled-identity";
 import { spawnExtensionCli, spawnFailedEnvelope } from "../lib/exec";
 import {
@@ -42,7 +42,7 @@ import {
 export const schema = {
   name: "extension_start",
   description:
-    "Run the PRODUCTION build in a browser: build the project, serve it, and launch. There is no hot module replacement, so your edits are not picked up; use extension_dev while writing code, and this to check what actually ships. By default there is no control channel either, so extension_eval, extension_storage, extension_reload, extension_open and extension_dom_snapshot cannot attach; pass allowControl:true (or allowEval:true, which implies it) to drive the production run with them. Both flags need Extension.js 4.1.34 or later; a project on an older engine is refused as engine-unsupported, naming the flag, and extension_dev drives the run instead. Pass build:false to launch an existing dist/<browser> without rebuilding, or outputPath to launch any prebuilt unpacked extension directory. The answer says what it confirmed (the engine process, and the browser pid the launcher recorded once the contract lands) and what a production session cannot confirm (that the browser loaded the extension: it opens no debug port and has no console stream), and names extension_dev for a proven load.",
+    "Run the PRODUCTION build in a browser: build the project, serve it, and launch. There is no hot module replacement, so your edits are not picked up; use extension_dev while writing code, and this to check what actually ships. By default there is no control channel either, so extension_eval, extension_storage, extension_reload, extension_open and extension_dom_snapshot cannot attach; pass allowControl:true (or allowEval:true, which implies it) to drive the production run with them. Both flags need Extension.js 4.1.34 or later; a project on an older engine is refused as engine-unsupported, naming the flag, and extension_dev drives the run instead. Pass build:false to launch an existing dist/<browser> without rebuilding, or outputPath to launch any prebuilt unpacked extension directory. The answer says what it confirmed (the engine process, and the browser pid the launcher recorded once the contract lands) and what a production session cannot do (no hot reload, no console stream for extension_logs, and the bridge verbs need allowControl); whether the browser loaded the extension is read over its debug port by extension_wait on Extension.js 4.1.34 or later, and only extension_dev proves it on an older engine.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -388,6 +388,7 @@ export async function handler(
       : `the contract names the browser it launched (pid ${launch.browserPid}, ${launch.browserAlive ? "alive" : "gone"})`;
 
   const noBrowserOrHint = args.noBrowser ? "" : headlessHint(visibility.headless);
+  const proofLine = productionLoadProofLine(freshContract, launch, allowControl, args.projectPath, browser);
   const controlPort =
     typeof freshContract?.controlPort === "number" ? freshContract.controlPort : null;
   const controlledCopy =
@@ -421,7 +422,7 @@ export async function handler(
     },
     hint: launch.extensionLoaded === true
       ? `The engine's ${command} process was alive 5 s after spawn and ${launchSeen}, and ${browser} loaded the extension: ${launch.loadEvidence} ${bridgeLine} ${noBrowserOrHint} When you are done, call extension_stop to shut the session down.`
-      : `The engine's ${command} process was alive 5 s after spawn and ${launchSeen}. What this answer cannot confirm is that ${browser} loaded the extension: ${launch.loadEvidence} ${bridgeLine} To prove the load, run it with extension_dev, whose answer carries guestLoaded. ${noBrowserOrHint} When you are done, call extension_stop to shut the session down.`,
+      : `The engine's ${command} process was alive 5 s after spawn and ${launchSeen}. What this answer cannot confirm is that ${browser} loaded the extension: ${launch.loadEvidence} ${bridgeLine} ${proofLine} ${noBrowserOrHint} When you are done, call extension_stop to shut the session down.`,
     warnings: [
       profileReused && !args.noBrowser
         ? `${reusedProfileNote(freshContract?.profilePath ?? carryover.profilePath)}${identity.copyId ? ` That carry-over does not reach this controlled copy: its id ${loaded.extensionId ?? identity.copyId} is its own, so its chrome.storage starts empty and it holds no grants from the plain build's runs.` : ""}`

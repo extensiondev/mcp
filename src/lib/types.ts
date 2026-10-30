@@ -81,6 +81,7 @@ export interface ReadyContract {
   port?: number | null;
   host?: string;
   controlPort?: number | null;
+  toolchainVersion?: string;
   instanceId?: string;
   cdpPort?: number;
   rdpPort?: number;

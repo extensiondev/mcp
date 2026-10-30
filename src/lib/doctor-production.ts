@@ -309,7 +309,7 @@ async function debugPortLeg(browser: string, receipt: ProductionReceipt): Promis
     return {
       check: "debug-port",
       status: "skip",
-      detail: "skipped: the receipt names no cdpPort yet, so extension_open by url, extension_screenshot, the targetId reads and the capabilities read have nothing to dial; the engine stamps it once the browser binds its debug port (Extension.js 4.1.36 or later opens one on a production run)",
+      detail: "skipped: the receipt names no cdpPort yet, so extension_open by url, extension_screenshot, the targetId reads and the capabilities read have nothing to dial; the engine stamps it once the browser binds its debug port (Extension.js 4.1.34 or later opens one on a production run)",
     };
   }
 

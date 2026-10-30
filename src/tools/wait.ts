@@ -15,6 +15,7 @@ import { ambiguousSessionRefusal, resolveSessionBrowser } from "../lib/session-b
 import { pidState } from "../lib/process-identity";
 import { readyContractPath } from "../lib/session-paths";
 import { productionLaunchEvidence, readLoadOverDebugPort } from "../lib/production-launch";
+import { productionWaitHint } from "../lib/production-wait-words";
 import { sessionPorts } from "../lib/session-ports";
 import { envelope, sessionCommandSinceEnvelopeOwnsCommand } from "../lib/envelope";
 import { verifyGuestLoaded } from "../lib/guest-load-oracle";
@@ -268,7 +269,7 @@ export async function handler(args: {
             status: "build-ready",
             value: {
               compiled: true,
-              browserAttached: false,
+              browserAttached: launch.extensionLoaded === true,
               sessionCommand: contract.command,
               browser: contract.browser,
               ...sessionPorts(contract),
@@ -279,7 +280,7 @@ export async function handler(args: {
               elapsedMs: Date.now() - start,
             },
             warnings: [clampNote, staleContractNote],
-            hint: `This is an extension_start session (${contract.command === "preview" ? "a prebuilt dist served by the engine's preview verb" : "the production build"}): the contract says the build landed${launch.browserPid === null ? "" : ` and names the browser it launched (pid ${launch.browserPid}, ${launch.browserAlive ? "alive" : "gone"})`}, ${launch.extensionLoaded === true ? `and the browser loaded the extension (${launch.loadEvidence})` : "not that the browser loaded the extension"}: ${typeof contract.controlPort === "number" ? `this session carries the control channel (port ${contract.controlPort}), and the extension's background has not connected to it yet, so extension_eval, extension_storage, extension_reload, extension_open and extension_dom_snapshot reach it once it does (the contract's executorAttachedAt); extension_logs has no console stream for it.` : "a production launch carries no dev bridge, so browserAttached stays false for good, extension_logs has no console stream for it, and extension_eval, extension_storage, extension_reload, extension_open and extension_dom_snapshot cannot drive it. Do not call extension_wait again."} To prove the load, run it with extension_dev (its answer carries guestLoaded); to check the production artifact, extension_build reports its summary and extension_preview_web renders the built dist.`,
+            hint: productionWaitHint(contract, launch, { projectPath: args.projectPath, browser }),
           });
         }
 

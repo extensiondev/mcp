@@ -297,7 +297,42 @@ describe("extension_start opens the control channel on a production run", () => 
 
     const plain = productionLaunchEvidence({ command: "start" } as never);
     expect(plain.extensionLoaded).toBeNull();
-    expect(plain.loadEvidence).toMatch(/control verbs cannot attach/);
+    expect(plain.loadEvidence).toMatch(/need allowControl: true/);
+  });
+
+  it("says extension_wait reads the load over the debug port instead of claiming a production launch opens none", async () => {
+    const project = tmpProject();
+    writeContract(project, { command: "start", status: "starting", distPath: path.join(project, "dist", "chrome"), toolchainVersion: "4.1.36" });
+
+    const contractFile = path.join(project, "dist", "extension-js", "chrome", "ready.json");
+    const later = new Date(Date.now() + 60_000);
+    fs.utimesSync(contractFile, later, later);
+
+    const result = JSON.parse(
+      await start.handler({ projectPath: project, allowControl: true }),
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.value.extensionLoaded).toBeNull();
+    expect(result.value.loadEvidence).not.toMatch(/opens no debug port/);
+    expect(result.value.loadEvidence).toMatch(/the engine \(Extension\.js 4\.1\.36\) stamps the browser's debug port \(cdpPort\) in the contract once the browser binds it, and extension_wait reads the load off that port's target list/);
+    expect(result.hint).not.toMatch(/opens no debug port/);
+    expect(result.hint).not.toMatch(/To prove the load, run it with extension_dev/);
+    expect(result.hint).toContain(`Call extension_wait {projectPath: ${JSON.stringify(project)}, browser: "chrome"}: it reads the load over the browser's debug port once the contract names it (cdpPort).`);
+  });
+
+  it("keeps extension_dev as the proof on an engine older than 4.1.34, and says which engine that is", async () => {
+    const project = tmpProject();
+    writeContract(project, { command: "start", status: "starting", distPath: path.join(project, "dist", "chrome"), toolchainVersion: "4.1.33" });
+
+    const contractFile = path.join(project, "dist", "extension-js", "chrome", "ready.json");
+    const later = new Date(Date.now() + 60_000);
+    fs.utimesSync(contractFile, later, later);
+
+    const result = JSON.parse(await start.handler({ projectPath: project }));
+
+    expect(result.value.loadEvidence).toMatch(/this engine \(Extension\.js 4\.1\.33\) opens no debug port on a production run \(4\.1\.34 is the first that does\)/);
+    expect(result.hint).toMatch(/To prove the load, run it with extension_dev, whose answer carries guestLoaded\./);
   });
 
   it("refuses with the engine it needs when the engine has no control flags", async () => {

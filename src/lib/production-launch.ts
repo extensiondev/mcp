@@ -9,7 +9,9 @@
 import fs from "node:fs";
 
 import { CDPClient } from "./cdp";
+import { compareVersions, parseVersion } from "./engine-version";
 import { pidState } from "./process-identity";
+import { waitCall } from "./production-receipt";
 import { readyContractPath } from "./session-paths";
 
 import type { ReadyContract } from "./types";
@@ -24,10 +26,62 @@ export interface ProductionLaunchEvidence {
 }
 
 export const PRODUCTION_SESSION_LIMITS =
-  "a production launch opens no debug port and carries no dev bridge, so neither the browser's target list nor its console can be read from here; extension_logs has no stream for this session and the control verbs cannot attach";
+  "a production session has no hot reload and carries no dev bridge, so extension_logs has no console stream for it and the bridge verbs (extension_storage, extension_reload, extension_open with a surface, extension_dom_snapshot by tab and extension_eval) need allowControl: true";
 
 export const CONTROLLED_SESSION_LIMITS =
-  "a production launch opens no debug port, so the browser's target list cannot be read from here; this session carries the control channel, and its background connecting to it (the contract's executorAttachedAt, which extension_wait reads) is what proves the load";
+  "a production session has no hot reload and extension_logs has no console stream for it; this session carries the control channel, and its background connecting to it (the contract's executorAttachedAt, which extension_wait reads) proves the load as well";
+
+export const PRODUCTION_DEBUG_PORT_FLOOR = "4.1.34";
+
+export type DebugPortOutlook =
+  | { kind: "opens"; version: string | null }
+  | { kind: "never"; version: string }
+  | { kind: "unknown" };
+
+export function productionDebugPortOutlook(contract: ReadyContract | null, controlRequested = false): DebugPortOutlook {
+  const version = typeof contract?.toolchainVersion === "string" ? parseVersion(contract.toolchainVersion) : null;
+
+  if (version !== null) {
+    const ordering = compareVersions(version, PRODUCTION_DEBUG_PORT_FLOOR);
+    if (ordering !== null) return ordering >= 0 ? { kind: "opens", version } : { kind: "never", version };
+  }
+
+  const controlled = controlRequested || (typeof contract?.controlPort === "number" && contract.controlPort > 0);
+
+  return controlled ? { kind: "opens", version: null } : { kind: "unknown" };
+}
+
+export function debugPortWords(outlook: DebugPortOutlook): string {
+  switch (outlook.kind) {
+    case "opens": {
+      const engine = outlook.version ? `Extension.js ${outlook.version}` : `Extension.js ${PRODUCTION_DEBUG_PORT_FLOOR} or later, the engines that take allowControl`;
+
+      return `the engine (${engine}) stamps the browser's debug port (cdpPort) in the contract once the browser binds it, and extension_wait reads the load off that port's target list`;
+    }
+
+    case "never":
+      return `this engine (Extension.js ${outlook.version}) opens no debug port on a production run (${PRODUCTION_DEBUG_PORT_FLOOR} is the first that does), so the browser's target list cannot be read from here, and only extension_dev proves the load`;
+    default:
+      return `extension_wait reads the load off the browser's target list once the contract stamps cdpPort, which Extension.js ${PRODUCTION_DEBUG_PORT_FLOOR} or later does on a production run; an older engine never stamps it, and only extension_dev proves the load there`;
+  }
+}
+
+export function productionLoadProofLine(
+  contract: ReadyContract | null,
+  launch: ProductionLaunchEvidence,
+  controlRequested: boolean,
+  projectPath: string,
+  browser: string,
+): string {
+  const outlook = productionDebugPortOutlook(contract, controlRequested);
+
+  if (outlook.kind === "never") return "To prove the load, run it with extension_dev, whose answer carries guestLoaded.";
+  if (typeof launch.cdpPort === "number") return `Call ${waitCall(projectPath, browser)} to read the load again over the debug port ${launch.cdpPort}.`;
+
+  return outlook.kind === "opens"
+    ? `Call ${waitCall(projectPath, browser)}: it reads the load over the browser's debug port once the contract names it (cdpPort).`
+    : `Call ${waitCall(projectPath, browser)}: it reads the load over the browser's debug port if the contract stamps cdpPort, and says so if this engine never does.`;
+}
 
 export function readFreshContract(
   projectPath: string,
@@ -66,6 +120,7 @@ export function productionLaunchEvidence(
       ? contract.executorAttachedAt
       : null;
   const limits = controlled ? CONTROLLED_SESSION_LIMITS : PRODUCTION_SESSION_LIMITS;
+  const port = debugPortWords(productionDebugPortOutlook(contract, controlRequested));
 
   if (attachedAt && browserAlive !== false) {
     return {
@@ -79,9 +134,9 @@ export function productionLaunchEvidence(
 
   const loadEvidence =
     browserPid === null
-      ? `The contract records no browser pid yet, so not even the launch is confirmed here; extension_wait reads it once the build and the launch land. Whether the browser loads the extension stays unread either way: ${limits}.`
+      ? `The contract records no browser pid yet, so not even the launch is confirmed here; extension_wait reads it once the build and the launch land. Whether the browser loaded the extension is not read yet: ${port}. Beyond that, ${limits}.`
       : browserAlive
-        ? `The engine's launcher recorded the browser it spawned (pid ${browserPid}) and that process is alive, so the browser is up. Whether it loaded the extension is not read: ${limits}.`
+        ? `The engine's launcher recorded the browser it spawned (pid ${browserPid}) and that process is alive, so the browser is up. Whether it loaded the extension is not read yet: ${port}. Beyond that, ${limits}.`
         : `The engine's launcher recorded the browser it spawned (pid ${browserPid}) and that process is gone, so the browser exited or handed its session to another process; nothing here says the extension loaded (${limits}).`;
 
   return {

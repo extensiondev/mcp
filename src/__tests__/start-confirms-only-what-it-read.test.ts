@@ -172,7 +172,9 @@ describe("extension_start confirms only what it read and never points at a temp 
     expect(result.value.loadEvidence).toMatch(/gone/);
   }, 10_000);
 
-  it("the description says what a production session can and cannot confirm", () => {
+  it("the description says what a production session cannot do, and that extension_wait reads the load over the debug port", () => {
     expect(start.schema.description).toMatch(/loaded the extension/);
+    expect(start.schema.description).not.toMatch(/opens no debug port/);
+    expect(start.schema.description).toMatch(/cannot do \(no hot reload, no console stream for extension_logs, and the bridge verbs need allowControl\); whether the browser loaded the extension is read over its debug port by extension_wait on Extension\.js 4\.1\.34 or later, and only extension_dev proves it on an older engine\./);
   });
 });
