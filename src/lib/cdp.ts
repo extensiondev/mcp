@@ -232,6 +232,32 @@ export class CDPClient extends CDPConnection {
     return response?.result?.value;
   }
 
+  async evaluateAwaited(
+    sessionId: string,
+    expression: string,
+    timeoutMs = 2_000,
+  ): Promise<unknown> {
+    const response = (await this.sendCommand(
+      "Runtime.evaluate",
+      { expression, returnByValue: true, awaitPromise: true },
+      sessionId,
+      timeoutMs,
+    )) as {
+      result?: { value?: unknown };
+      exceptionDetails?: { text?: string; exception?: { description?: string } };
+    };
+
+    if (response?.exceptionDetails) {
+      const details = response.exceptionDetails;
+
+      throw new Error(
+        `the page threw while evaluating: ${details.exception?.description ?? details.text ?? "unknown error"}`,
+      );
+    }
+
+    return response?.result?.value;
+  }
+
   async getPageHTML(sessionId: string): Promise<string> {
     const result = await this.evaluate(sessionId, PAGE_HTML_SCRIPT);
 
