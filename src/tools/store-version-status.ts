@@ -66,12 +66,23 @@ function statusOfRow(row: Row): StoreVersionStatus {
   };
 }
 
-function storeSentence(entry: StoreVersionStatus): string {
+function landedUnsourced(entry: StoreVersionStatus, refresh: Row | null, wait: Row | null): string {
+  const own = refresh?.[entry.store];
+  const dispatchedAt = isRow(own) ? text(own.dispatchedAt) : "";
+  const readAt = Date.parse(entry.readAt ?? "");
+  if (entry.source || wait?.landed !== true || !dispatchedAt || !(readAt >= Date.parse(dispatchedAt))) return "";
+
+  return ` (the store check this call asked for landed at ${entry.readAt}, after its dispatch at ${dispatchedAt}, but the platform answered no source for that read, so it grounds no next step)`;
+}
+
+function storeSentence(entry: StoreVersionStatus, refresh: Row | null, wait: Row | null): string {
   if (!entry.version && !entry.status) return `${entry.store}: no submission recorded`;
 
   const build = entry.buildNumber ? ` build ${entry.buildNumber}` : "";
   const state = entry.state ? `, the store says ${entry.state}` : "";
-  const read = entry.source ? ` (${entry.source}${entry.readAt ? ` at ${entry.readAt}` : ""})` : " (no store read behind it)";
+  const read = entry.source
+    ? ` (${entry.source}${entry.readAt ? ` at ${entry.readAt}` : ""})`
+    : landedUnsourced(entry, refresh, wait) || " (no store read behind it)";
   const release = entry.releaseType ? `, release type ${entry.releaseType}` : "";
   const next = entry.nextStep ? `. Next: ${entry.nextStep.say}` : "";
 
@@ -139,6 +150,7 @@ export async function storeVersionStatus(args: {
   const stores = picked.map(statusOfRow);
   const step = overallStep(stores);
   const wait = isRow(value.refreshWait) ? value.refreshWait : null;
+  const refresh = isRow(value.refresh) ? value.refresh : null;
   const waitSentence = wait
     ? wait.landed === true
       ? `The store check this call asked for landed within ${String(wait.waitedSeconds)} s, so these are the states it read. `
@@ -154,12 +166,12 @@ export async function storeVersionStatus(args: {
       workspace: value.workspace,
       project: value.project,
       stores,
-      ...(isRow(value.refresh) ? { refresh: value.refresh } : {}),
+      ...(refresh ? { refresh } : {}),
       ...(wait ? { refreshWait: wait } : {}),
       nextStep: step,
       trackUrl: text(value.consoleStoresUrl) || undefined,
     },
-    hint: `${waitSentence}${stores.length ? stores.map(storeSentence).join(". ") : "No store has a submission recorded"}. This reads the same store records as ${STORES_READ_CALL}, which answers the full store picture; a state with no store read behind it grounds no next step.`,
+    hint: `${waitSentence}${stores.length ? stores.map((entry) => storeSentence(entry, refresh, wait)).join(". ") : "No store has a submission recorded"}. This reads the same store records as ${STORES_READ_CALL}, which answers the full store picture; only a state a store check or the publish answer read grounds a next step.`,
     warnings: Array.isArray(parsed.warnings) ? parsed.warnings.map(String) : [],
   });
 }
