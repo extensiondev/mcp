@@ -9,7 +9,7 @@
 import fs from "node:fs";
 import { fileURLToPath } from "node:url";
 
-import { envelope, isEnvelope } from "./envelope";
+import { envelope, isEnvelope, type Envelope } from "./envelope";
 import { serverVersion } from "./producer-version";
 
 type Row = Record<string, unknown>;
@@ -17,6 +17,13 @@ type Row = Record<string, unknown>;
 export interface ServerStamp {
   version: string;
   builtAt: string | null;
+  startedAt: string;
+  pid: number;
+}
+
+export interface ListStaleStamp extends Partial<ServerStamp> {
+  listStale: true;
+  listedAt: string | null;
 }
 
 export function rebuiltWarning(at: string): string {
@@ -37,6 +44,45 @@ export function localRebuiltWarning(at: string): string {
   return `This server was rebuilt at ${at}; its local tools keep the code they loaded until you run /mcp and pick extension-dev, while platform tools already answer from the new build.`;
 }
 
+export function listStaleSentence(listedAt: string | null, builtAt: string): string {
+  const held = listedAt ? `is from the ${listedAt} build` : `predates it`;
+
+  return `This server's tool list changed with the ${builtAt} build and the list your client holds ${held}: list the tools again before the next call, since this answer was validated by the new build's schema.`;
+}
+
+function envelopeRow(result: string): Envelope | null {
+  let parsed: unknown;
+
+  try {
+    parsed = JSON.parse(result);
+  } catch {
+    return null;
+  }
+
+  return isEnvelope(parsed) ? parsed : null;
+}
+
+export function markListStale(result: string, listedAt: string | null, builtAt: string): string {
+  const parsed = envelopeRow(result);
+  if (!parsed) return result;
+
+  const value: Row = parsed.value && typeof parsed.value === "object" && !Array.isArray(parsed.value) ? { ...(parsed.value as Row) } : {};
+  const server: Row = value.server && typeof value.server === "object" && !Array.isArray(value.server) ? (value.server as Row) : { builtAt };
+  const stale: ListStaleStamp = { ...server, listStale: true, listedAt };
+  const sentence = listStaleSentence(listedAt, builtAt);
+
+  return envelope({
+    ok: parsed.ok,
+    command: parsed.command,
+    status: parsed.status,
+    value: { ...value, server: stale },
+    error: parsed.error,
+    warnings: parsed.warnings,
+    ...(parsed.truncated !== undefined ? { truncated: parsed.truncated } : {}),
+    hint: parsed.hint ? `${parsed.hint} ${sentence}` : sentence,
+  });
+}
+
 export function staleEnvelope(command: string, at: string, stamp: ServerStamp, args: Row = {}, reloadError?: string): string {
   return envelope({
     ok: false,
@@ -49,6 +95,10 @@ export function staleEnvelope(command: string, at: string, stamp: ServerStamp, a
     },
     error: { code: "E_SERVER_STALE", name: "ServerStale", message: staleSentence(at) },
   });
+}
+
+function processStartedAt(): string {
+  return new Date(Date.now() - process.uptime() * 1000).toISOString();
 }
 
 function mtimeOf(file: string): string | null {
@@ -76,8 +126,9 @@ export function createServerStamp(entry: string): {
   apply: (result: string) => string;
 } {
   const loadedAt = mtimeOf(entry);
+  const startedAt = processStartedAt();
 
-  const stamp = (): ServerStamp => ({ version: serverVersion(), builtAt: loadedAt });
+  const stamp = (): ServerStamp => ({ version: serverVersion(), builtAt: loadedAt, startedAt, pid: process.pid });
 
   const rebuiltSince = (): string | null => {
     const now = mtimeOf(entry);

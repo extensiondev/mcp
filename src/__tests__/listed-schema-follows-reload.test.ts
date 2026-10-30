@@ -11,7 +11,7 @@ import { createServer, tools } from "../index";
 import { writeCredentials } from "../lib/credentials";
 import { ENVELOPE_SCHEMA } from "../lib/envelope";
 import { adoptHandover, listRebuilt, type BuildImporter } from "../lib/server-reload";
-import { createServerStamp } from "../lib/server-stamp";
+import { createServerStamp, listStaleSentence, reloadedWarning } from "../lib/server-stamp";
 import { SUBMIT_ACTIONS } from "../tools/submit";
 
 import type { ServerOptions } from "../lib/tool-policy";
@@ -20,6 +20,7 @@ const API = "http://localhost:3100";
 const OPTIONS: ServerOptions = { features: ["local", "platform"], noShip: false };
 const BUILT = "2026-10-30T12:00:00.000Z";
 const REBUILT = "2026-10-30T16:25:11.000Z";
+const REBUILT_AGAIN = "2026-10-30T17:08:44.000Z";
 
 const REBUILT_SUBMIT = {
   name: "extension_submit",
@@ -62,7 +63,13 @@ async function connect(file: string) {
 
   const listed = async (name: string) => (await client.listTools()).tools.find((tool) => tool.name === name);
 
-  return { client, changed, listed };
+  const call = async () => {
+    const result = await client.callTool({ name: "extension_builds", arguments: { action: "list", api: API } });
+
+    return JSON.parse((result.content as Array<{ text: string }>)[0].text);
+  };
+
+  return { client, changed, listed, call };
 }
 
 describe("the listed tool schema is the one the answering build validates against", () => {
@@ -92,29 +99,66 @@ describe("the listed tool schema is the one the answering build validates agains
     fs.rmSync(tmp, { recursive: true, force: true });
   });
 
-  it("lists a platform tool from the rebuilt build, keeps a local tool's loaded schema, and tells the client the list changed", async () => {
+  it("answers a call from the rebuilt build before the client re-lists, flags the stale list once per build, and lists the rebuilt schema after", async () => {
     if (process.platform === "win32") return;
 
     const file = path.join(tmp, "module.js");
     writeBuild(file, fixtureBuild(true), BUILT);
-    const { client, changed, listed } = await connect(file);
+    const { changed, listed, call } = await connect(file);
 
     const loadedSubmit = await listed("extension_submit");
     expect((loadedSubmit?.inputSchema.properties as Record<string, { enum?: string[] }>).action.enum).toEqual([...SUBMIT_ACTIONS]);
 
     writeBuild(file, fixtureBuild(true), REBUILT);
 
+    const early = await call();
+    expect(early.ok).toBe(true);
+    expect(early.value.server).toEqual({ builtAt: REBUILT, listStale: true, listedAt: BUILT });
+    expect(early.hint).toBe(listStaleSentence(BUILT, REBUILT));
+    expect(early.warnings).toEqual([reloadedWarning(REBUILT)]);
+    await vi.waitFor(() => expect(changed).toEqual(["tools/list_changed"]));
+
+    const second = await call();
+    expect(second.value.server).toEqual({ builtAt: REBUILT, listStale: true, listedAt: BUILT });
+    expect(second.warnings).toEqual([]);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(changed).toEqual(["tools/list_changed"]);
+
     const rebuiltSubmit = await listed("extension_submit");
     expect(rebuiltSubmit?.description).toBe(REBUILT_SUBMIT.description);
     expect(rebuiltSubmit?.inputSchema).toEqual(REBUILT_SUBMIT.inputSchema);
     expect((await listed("extension_dev"))?.description).not.toBe(REBUILT_DEV.description);
 
-    await client.callTool({ name: "extension_builds", arguments: { action: "list", api: API } });
-    await vi.waitFor(() => expect(changed).toEqual(["tools/list_changed"]));
-
-    await client.callTool({ name: "extension_builds", arguments: { action: "list", api: API } });
+    const fresh = await call();
+    expect(fresh.value.server).toBeUndefined();
+    expect(fresh.hint).toBeUndefined();
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(changed).toEqual(["tools/list_changed"]);
+
+    writeBuild(file, fixtureBuild(true), REBUILT_AGAIN);
+
+    const again = await call();
+    expect(again.value.server).toEqual({ builtAt: REBUILT_AGAIN, listStale: true, listedAt: REBUILT });
+    expect(again.hint).toBe(listStaleSentence(REBUILT, REBUILT_AGAIN));
+    await vi.waitFor(() => expect(changed).toEqual(["tools/list_changed", "tools/list_changed"]));
+  });
+
+  it("flags nothing and sends no list change when the client listed the rebuilt build first", async () => {
+    if (process.platform === "win32") return;
+
+    const file = path.join(tmp, "module.js");
+    writeBuild(file, fixtureBuild(true), BUILT);
+    const { changed, listed, call } = await connect(file);
+    writeBuild(file, fixtureBuild(true), REBUILT);
+
+    expect((await listed("extension_submit"))?.description).toBe(REBUILT_SUBMIT.description);
+
+    const out = await call();
+    expect(out.value.server).toBeUndefined();
+    expect(out.hint).toBeUndefined();
+    expect(out.warnings).toEqual([reloadedWarning(REBUILT)]);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(changed).toEqual([]);
   });
 
   it("keeps the loaded list when the rebuilt build answers no list", async () => {
