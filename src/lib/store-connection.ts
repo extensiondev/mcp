@@ -11,6 +11,7 @@ import { ConsoleProjectPage, consoleWorkspacePath } from "@extension.dev/urls/pa
 import { approvalSubjectPhrase, subjectOf } from "./approval-subject";
 import { consoleBase, consoleProjectUrl } from "./console-urls";
 import { envelope, isEnvelope } from "./envelope";
+import { itemPackageUrl, packageAddressMode, packagePathOf, type PackageScope } from "./package-address";
 import { isRow, text } from "./ship-act";
 
 import type { ProjectRef } from "./registry";
@@ -259,12 +260,12 @@ export function linkItemSentences(urls: ItemLinkUrls): string {
   return `One step is yours, once: create the item in the Chrome Web Store dashboard at ${urls.newItemUrl} with this package ${urls.packageUrl}, and fill its Store listing and Privacy tabs there; your synced listing text is on the extension.dev store settings page to copy. Then paste the item's dashboard address at ${urls.linkItemUrl}. After that I upload every build as a draft that is not published, and nothing goes to review until you publish; set the item's visibility (public or unlisted) once in that dashboard, since no store API sets it.`;
 }
 
-export function itemLinkUrls(rows: unknown[], settingsUrl: string): ItemLinkUrls {
+export function itemLinkUrls(rows: unknown[], settingsUrl: string, scope?: PackageScope): ItemLinkUrls {
   const pick = (key: string) => rows.map((row) => (isRow(row) ? text(row[key]) : "")).find(Boolean) ?? "";
 
   return {
     newItemUrl: pick("newItemUrl") || CHROME_DASHBOARD,
-    packageUrl: pick("packageUrl") || settingsUrl,
+    packageUrl: itemPackageUrl(rows, scope, settingsUrl),
     linkItemUrl: pick("linkItemUrl") || `${settingsUrl}?connect=chrome`,
   };
 }
@@ -347,7 +348,7 @@ export function chromeItemUrl(row: Row): string {
     : CHROME_DASHBOARD;
 }
 
-export function connectionOf(json: Row): (StoreConnection & Partial<ItemLinkUrls> & { connectUrl?: string }) | null {
+export function connectionOf(json: Row, apiHint?: string): (StoreConnection & Partial<ItemLinkUrls> & { connectUrl?: string; packageFile?: string }) | null {
   if (!isRow(json.connection)) return null;
 
   const row = json.connection;
@@ -356,9 +357,12 @@ export function connectionOf(json: Row): (StoreConnection & Partial<ItemLinkUrls
   const itemUrl = chromeItemUrl(row);
   const connectUrl = text(json.connectUrl) || text(row.connectUrl);
   const source = connectionSourceOf(row.source) ?? connectionSourceOf(json.connectionSource);
-  const links = ["newItemUrl", "packageUrl", "linkItemUrl"]
-    .map((key) => [key, text(row[key]) || text(json[key])] as const)
-    .filter(([, url]) => url);
+  const packageAnswered = text(row.packageUrl) || text(json.packageUrl);
+  const packageKey = packageAddressMode(apiHint) === "path" ? "packageUrl" : "packageFile";
+  const links = [
+    ...["newItemUrl", "linkItemUrl"].map((key) => [key, text(row[key]) || text(json[key])] as const),
+    [packageKey, packageKey === "packageUrl" ? packageAnswered : packagePathOf(packageAnswered)] as const,
+  ].filter(([, url]) => url);
 
   const state = text(row.state);
 

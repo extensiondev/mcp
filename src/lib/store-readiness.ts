@@ -49,6 +49,7 @@ export type ConnectionRecord = StoreConnection & {
   connectUrl?: string;
   newItemUrl?: string;
   packageUrl?: string;
+  packageFile?: string;
   linkItemUrl?: string;
   firstSubmission?: EdgeFirstSubmission;
 };
@@ -72,6 +73,7 @@ export interface StoreRow {
 interface Context {
   ref: ProjectRef | null;
   api?: string;
+  sha?: string;
 }
 
 const CONNECTION_STATES = new Set<StoreState>(["store-not-connected", "store-connection-failed", "store-item-not-linked", "workspace-reconnect-required", EDGE_FIRST_SUBMISSION_STATE]);
@@ -141,7 +143,7 @@ export async function readConnectionsAndModes(
 
     reports[browser] = read.json;
 
-    const connection = connectionOf(read.json);
+    const connection = connectionOf(read.json, args.api);
     const firstSubmission = browser === "edge" ? edgeFirstSubmissionOf(read.json) : null;
     if (connection) connections[browser] = firstSubmission ? { ...connection, firstSubmission } : connection;
 
@@ -292,7 +294,7 @@ export function connectionStep(row: StoreRow, connection: ConnectionRecord | und
   }
 
   if (row.state === "store-item-not-linked") {
-    const urls = itemLinkUrls([connection ?? {}], settingsUrl);
+    const urls = itemLinkUrls([connection ?? {}], settingsUrl, { ref: ctx.ref, sha: ctx.sha, browser: row.browser, api: ctx.api });
 
     return nextStep("link-item", linkItemSentences(urls), urls.linkItemUrl);
   }
