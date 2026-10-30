@@ -42,8 +42,23 @@ import { answerIsUnknownOutcome, readCreatedProject } from "../lib/create-answer
 import { CREATE_CEILING_SENTENCE, CREATE_STUCK_AFTER_SECONDS, creatingAge, creatingForWords } from "../lib/create-ceiling";
 import { findProjectByStoredLogin, type ProjectFoundByRead } from "../lib/created-project-read";
 import { rememberCreatedProject } from "../lib/created-projects";
-import { forgetPendingCreate, rememberPendingCreate } from "../lib/pending-creates";
+import { forgetPendingCreate, pendingCreate, rememberPendingCreate } from "../lib/pending-creates";
 import { isProjectRef } from "../lib/credentials";
+import {
+  codeExpiresAt,
+  codeExpiryFromStart,
+  deviceWait,
+  deviceWaitDescription,
+  DEVICE_WAIT_MAX_SECONDS,
+  expiredSentence,
+  firstCallWaitWarning,
+  forgetCodeExpiry,
+  rememberCodeExpiry,
+  resumeWaitSentence,
+  waitRanOutSentence,
+  waitValue,
+  type DeviceWait,
+} from "../lib/device-wait";
 import {
   firstBuildSentence,
   firstBuildValue,
@@ -60,7 +75,7 @@ const CREATE_STUCK_MINUTES = CREATE_STUCK_AFTER_SECONDS / 60;
 export const schema = {
   name: "extension_project_create",
   description:
-    `Create an extension.dev project for an extension that does not have one yet, without opening the console: right after extension_create and extension_build, once the source is pushed to a GitHub repository, and BEFORE extension_auth, which can only log in to a project that exists. Ask for nothing but the project slug and the repo; the platform finds the GitHub App installation on the approving account itself, and with none it returns a connect link to open. Two-phase, like login: the first call answers a code and a URL where a signed-in member of the workspace approves creating exactly this project; call again with the returned deviceCode to finish, and the same deviceCode re-reads an outcome with no second approval. It records the project on the platform and answers what the platform recorded in value.outcome, the project page it made in value.links, its console page in trackUrl, and in \`firstBuild\` whether the first build was dispatched and, when none was, why. Not for a project that already exists: that is extension_auth. Every build runs the stored build command for each enabled browser exactly as stored, then reads that browser's outputDirectory. Then run extension_auth (action: login) against the new project and extension_publish to share it. To create several projects in one workspace under one approval, pass \`projects\` instead of \`project\` and \`repo\`. One approval creates at most ${DEFAULT_CREATE_PROJECTS_PER_APPROVAL} projects, the cap the platform states in its login config, because it creates at most ${PLATFORM_CREATES_PER_HOUR} per hour for one approving account; the next ${DEFAULT_CREATE_PROJECTS_PER_APPROVAL} can start in a new call once that limit allows. A longer list is refused before any approval is asked for, never split silently, and so is any list on a platform that does not advertise batch onboarding.`,
+    `Create an extension.dev project for an extension that does not have one yet, without opening the console: right after extension_create and extension_build, once the source is pushed to a GitHub repository, and BEFORE extension_auth, which can only log in to a project that exists. Ask for nothing but the project slug and the repo; the platform finds the GitHub App installation on the approving account itself, and with none it returns a connect link to open. Two-phase, like login: the first call answers a code and a URL where a signed-in member of the workspace approves creating exactly this project; call again with the returned deviceCode and waitSeconds, which blocks (up to ${DEVICE_WAIT_MAX_SECONDS} s) until the owner approves and finishes the create; the same deviceCode re-reads an outcome with no second approval. It records the project on the platform and answers what the platform recorded in value.outcome, the project page it made in value.links, its console page in trackUrl, and in \`firstBuild\` whether the first build was dispatched and, when none was, why. Not for a project that already exists: that is extension_auth. Every build runs the stored build command for each enabled browser exactly as stored, then reads that browser's outputDirectory. Then run extension_auth (action: login) against the new project and extension_publish to share it. To create several projects in one workspace under one approval, pass \`projects\` instead of \`project\` and \`repo\`. One approval creates at most ${DEFAULT_CREATE_PROJECTS_PER_APPROVAL} projects, the cap the platform states in its login config, because it creates at most ${PLATFORM_CREATES_PER_HOUR} per hour for one approving account; the next ${DEFAULT_CREATE_PROJECTS_PER_APPROVAL} can start in a new call once that limit allows. A longer list is refused before any approval is asked for, never split silently, and so is any list on a platform that does not advertise batch onboarding.`,
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -125,7 +140,13 @@ export const schema = {
       deviceCode: {
         type: "string",
         description:
-          "Resume token from the prior call's `deviceCode`; omit on the first call. The approval mints a provisioning grant that lives minutes, can only create the named project or list, and is kept on this machine only while a create's outcome is unknown, in a file only this user can read beside the stored logins, so calling again with the same deviceCode and arguments reads that outcome (created, still creating, or refused) with no second approval, and a restarted server resumes a list the same way. A batch answers status 'creating' with the same deviceCode until every listed project has an answer, each call within about 45 seconds; each created project's 7-day token is stored as that project's login, so no extension_auth call is needed afterwards.",
+          "Resume token from the prior call's `deviceCode`; omit on the first call. Pass it with waitSeconds so one call blocks until the owner approves. The approval mints a provisioning grant that lives minutes, can only create the named project or list, and is kept on this machine only while a create's outcome is unknown, in a file only this user can read beside the stored logins, so calling again with the same deviceCode and arguments reads that outcome (created, still creating, or refused) with no second approval, and a restarted server resumes a list the same way. A batch answers status 'creating' with the same deviceCode until every listed project has an answer, each call within about 45 seconds; each created project's 7-day token is stored as that project's login, so no extension_auth call is needed afterwards.",
+      },
+      waitSeconds: {
+        type: "number",
+        minimum: 0,
+        maximum: DEVICE_WAIT_MAX_SECONDS,
+        description: deviceWaitDescription("extension_project_create", "created (the create runs on the grant at once)"),
       },
       api: API_BASE,
     },
@@ -171,7 +192,7 @@ function closedLane(name: string, message: string, api: string, workspace: strin
  * resume right after approving.
  */
 function deadlineSentence(expiresAt: string): string {
-  return `The code expires at ${expiresAt.slice(11, 16)} UTC; approve before then and call again right after approving, since the approval dies with the code.`;
+  return `The code expires at ${expiresAt.slice(11, 16)} UTC and the approval dies with it. ${resumeWaitSentence("extension_project_create", expiresAt, " and the same arguments")}`;
 }
 
 function pendingEnvelope(start: {
@@ -180,11 +201,12 @@ function pendingEnvelope(start: {
   verificationUri: string;
   verificationUriComplete?: string;
   expiresIn: number;
-}, pendingFor: { apiBase: string; project: string }): string {
+}, pendingFor: { apiBase: string; project: string }, waitSeconds: unknown): string {
   const complete = String(start.verificationUriComplete || "").trim();
   const hasCompleteLink =
     complete.length > 0 && complete !== start.verificationUri;
-  const expiresAt = new Date(Date.now() + start.expiresIn * 1000).toISOString();
+  const expiresAt = codeExpiryFromStart(start.expiresIn);
+  rememberCodeExpiry(start.deviceCode, expiresAt);
   rememberPendingCreate(pendingFor.apiBase, pendingFor.project, {
     userCode: start.userCode,
     verificationUri: start.verificationUri,
@@ -193,8 +215,9 @@ function pendingEnvelope(start: {
   });
 
   const message = hasCompleteLink
-    ? `Open ${complete} and approve creating the project (code ${start.userCode} is pre-filled), then call extension_project_create again with this deviceCode and the same arguments. If the page asks for a code, enter ${start.userCode} at ${start.verificationUri}. ${deadlineSentence(expiresAt)}`
-    : `Open ${start.verificationUri}, enter code ${start.userCode}, approve creating the project, then call extension_project_create again with this deviceCode and the same arguments. ${deadlineSentence(expiresAt)}`;
+    ? `Open ${complete} and approve creating the project (code ${start.userCode} is pre-filled). If the page asks for a code, enter ${start.userCode} at ${start.verificationUri}. ${deadlineSentence(expiresAt)}`
+    : `Open ${start.verificationUri}, enter code ${start.userCode} and approve creating the project. ${deadlineSentence(expiresAt)}`;
+  const asked = deviceWait({ waitSeconds, fallbackMs: 0 });
 
   return envelope({
     ok: true,
@@ -209,6 +232,7 @@ function pendingEnvelope(start: {
       expiresInSeconds: start.expiresIn,
     },
     hint: message,
+    ...(asked.waiting ? { warnings: [firstCallWaitWarning("extension_project_create", asked.bound)] } : {}),
   });
 }
 
@@ -225,6 +249,7 @@ export async function handler(args: {
   browsers?: string[];
   outputDirectories?: Record<string, unknown>;
   deviceCode?: string;
+  waitSeconds?: unknown;
   api?: string;
 }): Promise<string> {
   if (args.projects !== undefined && args.projects !== null) {
@@ -303,6 +328,11 @@ export async function handler(args: {
   let deviceCode = String(args.deviceCode || "").trim();
   let interval = 5;
   let budgetMs = RESUME_POLL_MS;
+  const expiresAt = deviceCode
+    ? (pendingCreate(apiBase, project)?.expiresAt ?? codeExpiresAt(deviceCode))
+    : null;
+  const wait = deviceWait({ waitSeconds: args.waitSeconds, expiresAt, fallbackMs: RESUME_POLL_MS });
+  budgetMs = wait.budgetMs;
 
   if (!deviceCode) {
     let start;
@@ -345,7 +375,7 @@ export async function handler(args: {
     });
 
     if (!early.ok && early.reason === "pending") {
-      return pendingEnvelope(start, { apiBase, project });
+      return pendingEnvelope(start, { apiBase, project }, args.waitSeconds);
     }
 
     return finishFromPoll(early, {
@@ -355,6 +385,8 @@ export async function handler(args: {
       verificationUri: config.verificationUri,
       deviceCode,
       callStartedAt,
+      wait: deviceWait({ waitSeconds: undefined, fallbackMs: FIRST_CALL_BUDGET_MS }),
+      expiresAt: codeExpiryFromStart(start.expiresIn),
     });
   }
 
@@ -374,6 +406,8 @@ export async function handler(args: {
     verificationUri: config.verificationUri,
     deviceCode,
     callStartedAt,
+    wait,
+    expiresAt,
   });
 }
 
@@ -396,12 +430,19 @@ async function finishFromPoll(
     verificationUri: string;
     deviceCode: string;
     callStartedAt: number;
+    wait: DeviceWait;
+    expiresAt: string | null;
   },
 ): Promise<string> {
-  if (poll.ok || poll.reason !== "pending") forgetPendingCreate(ctx.apiBase, ctx.project);
+  if (poll.ok || poll.reason !== "pending") {
+    forgetPendingCreate(ctx.apiBase, ctx.project);
+    forgetCodeExpiry(ctx.deviceCode);
+  }
 
   if (!poll.ok) {
     if (poll.reason === "pending") {
+      const ranOut = waitRanOutSentence({ tool: "extension_project_create", wait: ctx.wait, expiresAt: ctx.expiresAt, extra: " and the same arguments" });
+
       return envelope({
         ok: true,
         command: COMMAND,
@@ -409,8 +450,11 @@ async function finishFromPoll(
         value: {
           verificationUri: ctx.verificationUri,
           deviceCode: ctx.deviceCode,
+          ...waitValue(ctx.wait, ctx.expiresAt),
         },
-        hint: `Still waiting for approval at ${ctx.verificationUri}. Approve there, then call extension_project_create again with this same deviceCode right away: the code lives fifteen minutes from the first call and the approval dies with it.`,
+        hint: ctx.wait.waiting
+          ? `${ranOut} The approval page is still ${ctx.verificationUri}.`
+          : `Still waiting for approval at ${ctx.verificationUri}; the code lives fifteen minutes from the first call and the approval dies with it. ${resumeWaitSentence("extension_project_create", ctx.expiresAt, " and the same arguments")}`,
       });
     }
 
@@ -430,7 +474,11 @@ async function finishFromPoll(
     if (poll.reason === "expired") {
       return fail(
         "CreateExpired",
-        `${poll.message || "The device code has expired or is unknown."} The code lives fifteen minutes from the first call, and an approval given near the end of that window still reads as expired here, so no project was created. Run extension_project_create again (without the old deviceCode) and call it back right after the person approves.`,
+        expiredSentence(
+          "extension_project_create",
+          `${poll.message || "The device code has expired or is unknown."} The code lives fifteen minutes from the first call and an approval given after that is dropped, so no project was created.`,
+          " (without the old deviceCode) and the same arguments",
+        ),
         "create-expired",
         "E_AUTH_EXPIRED",
       );
@@ -842,10 +890,10 @@ async function sendCreate(
             ]),
       ],
     },
-    hint: `Project ${finalWorkspace}/${finalProject} exists.${data.replayed === true ? " The platform read this back from its record of the earlier create request with this grant; nothing was created twice." : ""} ${firstBuildSentence(firstBuild, buildsPageUrl)} The provisioning grant stays valid until it expires and is no longer kept on this machine; the only other files this tool leaves are its install id (install.json) and a note that ${finalWorkspace}/${finalProject} exists on this server (created-projects.json), so extension_auth does not doubt it. Next: extension_auth (action: login, project: '${finalWorkspace}/${finalProject}') to mint the project token${
+    hint: `Project ${finalWorkspace}/${finalProject} exists.${data.replayed === true ? " The platform read this back from its record of the earlier create request with this grant; nothing was created twice." : ""} ${firstBuildSentence(firstBuild, buildsPageUrl)} The provisioning grant is spent and not kept on this machine; the other files this tool leaves are its install id (install.json) and a note that ${finalWorkspace}/${finalProject} exists on this server (created-projects.json), so extension_auth does not doubt it. Next: extension_auth (action: login, project: '${finalWorkspace}/${finalProject}') to mint the project token, then ${
       firstBuild.state === "dispatched"
-        ? ", then extension_publish to share it."
-        : "; extension_publish has nothing to share until a build exists."
+        ? "extension_publish to share it."
+        : "extension_release_status until a build is listed; extension_publish has nothing to share until a build exists."
     } ${madeSentence(links)}`,
     warnings: [
       ...(renamed

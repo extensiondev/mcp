@@ -42,7 +42,7 @@ const PROJECTIONS: Record<string, HostedProjection> = {
   extension_auth: {
     module: auth,
     actions: ["status"],
-    drop: ["project", "projects", "workspace", "deviceCode"],
+    drop: ["project", "projects", "workspace", "deviceCode", "waitSeconds"],
     description: HOSTED_AUTH_DESCRIPTION,
   },
   extension_workspace: { module: workspace, actions: ["info", "projects", "settings"] },
