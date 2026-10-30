@@ -100,6 +100,7 @@ export interface ReadyContract {
   browserPid?: number | null;
   launcherPid?: number;
   extensionId?: string;
+  extensionIdSource?: string;
   browserUpNotAttachedAt?: string;
   browserUpNotAttachedWaitMs?: number;
   browserUpNotAttachedHint?: string;

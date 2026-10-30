@@ -5,8 +5,7 @@ import { spawn } from "node:child_process";
 
 import { describe, it, expect, vi, afterEach } from "vitest";
 
-import { unpackedExtensionId } from "../lib/extension-identity";
-import { sessionStateDir } from "../lib/session-paths";
+import { controlledCopyPath, registeredExtensionId } from "../lib/controlled-identity";
 
 import type { ChildProcess } from "node:child_process";
 import type * as ExecModule from "../lib/exec";
@@ -175,9 +174,10 @@ describe("extension_start opens the control channel on a production run", () => 
 
   it("names the controlled copy's own id beside the plain build's, rewrites a startingUrl that used the plain id, and says what the copy does not inherit", async () => {
     const project = tmpProject();
-    const plainId = unpackedExtensionId(path.join(project, "dist", "chrome"));
-    const copyPath = path.join(sessionStateDir(project), "chrome", "controlled");
-    const copyId = unpackedExtensionId(copyPath);
+    const plainId = registeredExtensionId(path.join(project, "dist", "chrome"));
+    const copyPath = controlledCopyPath(project, "chrome");
+    const copyId = registeredExtensionId(copyPath);
+    expect(copyPath).toBe(path.join(project, "dist", "extension-js", "chrome", "controlled"));
     writeContract(project, {
       command: "start",
       status: "ready",
@@ -185,6 +185,7 @@ describe("extension_start opens the control channel on a production run", () => 
       instanceId: "inst-1",
       distPath: copyPath,
       extensionId: copyId,
+      extensionIdSource: "browser",
     });
 
     const before = Date.now();
@@ -198,6 +199,8 @@ describe("extension_start opens the control channel on a production run", () => 
     expect(result.ok).toBe(true);
     expect(result.value.buildExtensionId).toBe(plainId);
     expect(result.value.controlledCopyId).toBe(copyId);
+    expect(result.value.extensionId).toBe(copyId);
+    expect(result.value.extensionIdSource).toBe("browser");
     expect(copyId).not.toBe(plainId);
 
     const warnings = result.warnings.join("\n");
@@ -209,6 +212,39 @@ describe("extension_start opens the control channel on a production run", () => 
     const urlIndex = cli.indexOf("--starting-url");
     expect(urlIndex).toBeGreaterThan(-1);
     expect(cli[urlIndex + 1]).toBe(`chrome://extensions/?options=${copyId}`);
+  });
+
+  it("answers the copy's id when the contract still carries the plain build's derived id, and names two different ids", async () => {
+    const project = tmpProject();
+    const plainDist = path.join(project, "dist", "chrome");
+    const plainId = registeredExtensionId(plainDist);
+    const copyId = registeredExtensionId(controlledCopyPath(project, "chrome"));
+    writeContract(project, {
+      command: "start",
+      status: "starting",
+      distPath: plainDist,
+      extensionId: plainId,
+      extensionIdSource: "derived",
+      browserPid: process.pid,
+    });
+
+    const contractFile = path.join(project, "dist", "extension-js", "chrome", "ready.json");
+    const later = new Date(Date.now() + 60_000);
+    fs.utimesSync(contractFile, later, later);
+
+    const result = JSON.parse(await start.handler({ projectPath: project, allowControl: true, build: false }));
+
+    expect(result.ok).toBe(true);
+    expect(result.value.buildExtensionId).toBe(plainId);
+    expect(result.value.controlledCopyId).toBe(copyId);
+    expect(result.value.extensionId).toBe(copyId);
+    expect(result.value.extensionIdSource).toBe("copy-folder");
+    expect(copyId).not.toBe(plainId);
+
+    const warnings = result.warnings.join("\n");
+    expect(warnings).toContain(`this session's extension id is ${copyId}, not the ${plainId} that dist/<browser> gets`);
+    expect(warnings).not.toContain(`is ${plainId}, not the ${plainId}`);
+    expect(warnings).toContain(`still carried the plain build's id ${plainId}`);
   });
 
   it("says nothing about ids on a plain production run", async () => {
