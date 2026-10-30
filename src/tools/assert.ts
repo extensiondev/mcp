@@ -65,6 +65,12 @@ import { readLogEvents,
 } from "./logs-filter";
 import { emptyReason, readLogRunId, staleFileNote } from "./logs";
 import {
+  PAGE_WORLD,
+  assertPageWorldClean,
+  parsePageWorldClause,
+  type PageWorldClause,
+} from "./assert-page-world";
+import {
   declaredSurfaces,
   resolveExtensionId,
   surfaceDocument,
@@ -114,7 +120,7 @@ export const schema = {
         type: "array",
         items: { type: "object" },
         description:
-          "One object per expectation, each { assert: <check id>, ...args }. background-worker-booted: no args. surface-rendered: surface (popup, options, sidebar, newtab, history, bookmarks), optional selector and minNodes. content-script-injected: url. storage-key-present: key, optional area (default local), equals, context. console-errors-empty: optional context (array), since (seq cursor), ignore (substrings).",
+          "One object per expectation, each { assert: <check id>, ...args }. background-worker-booted: no args. surface-rendered: surface (popup, options, sidebar, newtab, history, bookmarks), optional selector and minNodes. content-script-injected: url. storage-key-present: key, optional area (default local), equals, context. console-errors-empty: optional context (array), since (seq cursor), ignore (substrings). page-world-clean: url (a page the content scripts match, open in the session; Chromium only), optional pageGlobals (window property names the page itself defines, not reported as unknown).",
       },
       browser: SESSION_BROWSER,
       timeout: CALL_TIMEOUT,
@@ -161,7 +167,8 @@ type Clause =
   | SurfaceClause
   | ContentScriptClause
   | StorageClause
-  | ConsoleClause;
+  | ConsoleClause
+  | PageWorldClause;
 
 interface ParseResult {
   clauses: Clause[];
@@ -256,6 +263,13 @@ export function parseClauses(raw: unknown): ParseResult {
       }
 
       clauses.push({ assert: CONTENT_SCRIPT, subject: url, url });
+
+      return;
+    }
+
+    if (kind === PAGE_WORLD) {
+      const parsed = parsePageWorldClause(at, clause, issues);
+      if (parsed) clauses.push(parsed);
 
       return;
     }
@@ -375,7 +389,7 @@ interface CdpTarget {
 const NO_SESSION_SETTLED_BY =
   "Start the session with extension_dev, confirm it with extension_wait, then assert again.";
 
-class Stage {
+export class Stage {
   readonly chromium: boolean;
   readonly webkit: boolean;
   private cdpPort: number | null | undefined;
@@ -1513,6 +1527,8 @@ async function evaluateClause(
       return assertContentScriptInjected(clause, stage);
     case STORAGE:
       return assertStorageKeyPresent(clause, stage);
+    case PAGE_WORLD:
+      return assertPageWorldClean(clause, stage);
     default:
       return assertConsoleErrorsEmpty(clause, stage);
   }

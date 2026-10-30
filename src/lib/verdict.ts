@@ -99,6 +99,22 @@ export const ASSERT_CHECKS: readonly AssertCheckDeclaration[] = Object.freeze([
     counterpartNote:
       "both replace a count of zero with a read of the messages, because a zero is also what a dead log channel reports",
   },
+  {
+    id: "page-world-clean",
+    since: 1,
+    severity: "fail",
+    title: "a matched page's own world holds nothing that names the extension",
+    reads: [
+      "manifest.web_accessible_resources",
+      "cdp.targets",
+      "page.mainWorld.outerHTML",
+      "page.mainWorld.window",
+      "page.mainWorld.fetch",
+    ],
+    previewCounterpart: null,
+    counterpartNote:
+      "the preview lane has no web page with a world of its own that a site could read, so nothing there can be the counterpart of a fingerprint read",
+  },
 ]);
 
 const BY_ID = new Map(ASSERT_CHECKS.map((check) => [check.id, check]));

@@ -135,7 +135,7 @@
           "name": "expect",
           "type": "array of object",
           "required": true,
-          "description": "One object per expectation, each { assert: <check id>, ...args }. background-worker-booted: no args. surface-rendered: surface (popup, options, sidebar, newtab, history, bookmarks), optional selector and minNodes. content-script-injected: url. storage-key-present: key, optional area (default local), equals, context. console-errors-empty: optional context (array), since (seq cursor), ignore (substrings)."
+          "description": "One object per expectation, each { assert: <check id>, ...args }. background-worker-booted: no args. surface-rendered: surface (popup, options, sidebar, newtab, history, bookmarks), optional selector and minNodes. content-script-injected: url. storage-key-present: key, optional area (default local), equals, context. console-errors-empty: optional context (array), since (seq cursor), ignore (substrings). page-world-clean: url (a page the content scripts match, open in the session; Chromium only), optional pageGlobals (window property names the page itself defines, not reported as unknown)."
         },
         {
           "name": "browser",
