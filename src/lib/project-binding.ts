@@ -11,6 +11,7 @@ import { envToken, requestCredential } from "./credential-scope";
 import { resolveCredential } from "./credential-source";
 import { pinnedProject, readCredentials } from "./credentials";
 import { envelope, isEnvelope } from "./envelope";
+import { noLoginForProjectRefusal } from "./no-login-for-project";
 import { loginForPath, serverLogins } from "./path-project";
 import { TOOL_POLICY, type ServerOptions } from "./tool-policy";
 
@@ -76,8 +77,11 @@ export type CallProject = { args: Args; answeredFor: string | null; note?: strin
  * it. Otherwise a project directory settles it (path-project.ts), and with
  * neither, the one stored login on the server, or the one this server chose
  * by signing in through it. Several stored logins and no way to tell them
- * apart is a refusal that lists them, never the newest one. The project an
- * answer was made for leads its value as answeredFor.
+ * apart is a refusal that lists them, never the newest one. A directory
+ * whose project no stored login is for is a no-login-for-project refusal
+ * that names the create or the login to finish, never another project's
+ * login (ledger 287). The project an answer was made for leads its value as
+ * answeredFor.
  */
 export function bindCallProject(
   name: string,
@@ -116,17 +120,9 @@ export function bindCallProject(
       };
     }
 
-    if (found.state === "unmatched" && logins.live.length > 0) {
-      const defaultSaid = fallback ? ` The default login here is ${fallback}, and it was not used in its place.` : "";
-
+    if (found.state === "unmatched") {
       return {
-        refused: refusal(
-          name,
-          "project-mismatch",
-          `projectPath ${projectPath} is the project ${found.named.join(" or ")}, and no login stored on this machine is for it, so nothing was read or sent.${defaultSaid}`,
-          `Sign in to it with extension_auth (action: login, project: '${found.named[0]}'), or pass project naming the login to use: ${quoted(logins.live)}.`,
-          { projectPath, named: found.named, logins: logins.live, ...(fallback ? { defaultLogin: fallback } : {}) },
-        ),
+        refused: noLoginForProjectRefusal({ name, callArgs: args, projectPath, named: found.named, defaultLogin: fallback, api }),
       };
     }
   }

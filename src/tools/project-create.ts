@@ -42,6 +42,7 @@ import { answerIsUnknownOutcome, readCreatedProject } from "../lib/create-answer
 import { CREATE_CEILING_SENTENCE, CREATE_STUCK_AFTER_SECONDS, creatingAge, creatingForWords } from "../lib/create-ceiling";
 import { findProjectByStoredLogin, type ProjectFoundByRead } from "../lib/created-project-read";
 import { rememberCreatedProject } from "../lib/created-projects";
+import { forgetPendingCreate, rememberPendingCreate } from "../lib/pending-creates";
 import { isProjectRef } from "../lib/credentials";
 import {
   firstBuildSentence,
@@ -179,11 +180,18 @@ function pendingEnvelope(start: {
   verificationUri: string;
   verificationUriComplete?: string;
   expiresIn: number;
-}): string {
+}, pendingFor: { apiBase: string; project: string }): string {
   const complete = String(start.verificationUriComplete || "").trim();
   const hasCompleteLink =
     complete.length > 0 && complete !== start.verificationUri;
   const expiresAt = new Date(Date.now() + start.expiresIn * 1000).toISOString();
+  rememberPendingCreate(pendingFor.apiBase, pendingFor.project, {
+    userCode: start.userCode,
+    verificationUri: start.verificationUri,
+    ...(hasCompleteLink ? { verificationUriComplete: complete } : {}),
+    expiresAt,
+  });
+
   const message = hasCompleteLink
     ? `Open ${complete} and approve creating the project (code ${start.userCode} is pre-filled), then call extension_project_create again with this deviceCode and the same arguments. If the page asks for a code, enter ${start.userCode} at ${start.verificationUri}. ${deadlineSentence(expiresAt)}`
     : `Open ${start.verificationUri}, enter code ${start.userCode}, approve creating the project, then call extension_project_create again with this deviceCode and the same arguments. ${deadlineSentence(expiresAt)}`;
@@ -337,7 +345,7 @@ export async function handler(args: {
     });
 
     if (!early.ok && early.reason === "pending") {
-      return pendingEnvelope(start);
+      return pendingEnvelope(start, { apiBase, project });
     }
 
     return finishFromPoll(early, {
@@ -390,6 +398,8 @@ async function finishFromPoll(
     callStartedAt: number;
   },
 ): Promise<string> {
+  if (poll.ok || poll.reason !== "pending") forgetPendingCreate(ctx.apiBase, ctx.project);
+
   if (!poll.ok) {
     if (poll.reason === "pending") {
       return envelope({

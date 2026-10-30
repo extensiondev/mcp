@@ -10,6 +10,7 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 
+import { serverOf } from "./credential-server";
 import { credentialsPath } from "./credentials";
 import { withFileLock, writePrivateJson } from "./private-file";
 
@@ -20,6 +21,7 @@ export interface HeldBatch<Row> {
   grantExpiresAt: number;
   rows: Row[];
   creatingSince?: number;
+  server?: string;
 }
 
 type HeldFile = Record<string, HeldBatch<unknown>>;
@@ -85,7 +87,7 @@ function rewrite(change: (held: HeldFile) => void): void {
 export function saveHeldBatch<Row>(apiBase: string, deviceCode: string, batch: HeldBatch<Row>): boolean {
   try {
     rewrite((held) => {
-      held[slot(apiBase, deviceCode)] = batch;
+      held[slot(apiBase, deviceCode)] = { ...batch, server: serverOf(apiBase) };
     });
 
     return true;
@@ -116,4 +118,18 @@ export function loadHeldBatch<Row>(apiBase: string, deviceCode: string): HeldBat
   }
 
   return batch as HeldBatch<Row>;
+}
+
+export function heldBatchForRef(apiBase: string, ref: string): HeldBatch<unknown> | null {
+  const server = serverOf(apiBase);
+  const wanted = ref.toLowerCase();
+  const now = nowSeconds();
+
+  for (const batch of Object.values(readHeld())) {
+    if (!isHeldBatch(batch) || batch.grantExpiresAt <= now) continue;
+    if (batch.server && batch.server !== server) continue;
+    if (batch.refs.includes(wanted)) return batch;
+  }
+
+  return null;
 }

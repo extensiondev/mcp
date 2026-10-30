@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { handler, schema } from "../tools/project-create";
 import { readCredentials } from "../lib/credentials";
+import { pendingCreate } from "../lib/pending-creates";
 
 const API = "https://api.test";
 const FUTURE = Math.floor(Date.now() / 1000) + 900;
@@ -181,6 +182,25 @@ describe("extension_project_create", () => {
     expect(Date.parse(out.value.expiresAt) - Date.now()).toBeGreaterThan(890_000);
     expect(out.hint).toContain("The code expires at");
     expect(out.hint).toContain("call again right after approving");
+    expect(pendingCreate(API, "acme/ghost-app")).toEqual({
+      userCode: "ABCD-1234",
+      verificationUri: "https://extension.dev/device",
+      verificationUriComplete: "https://extension.dev/device?code=ABCD-1234",
+      expiresAt: out.value.expiresAt,
+    });
+  });
+
+  it("drops the pending create record once the code is spent", async () => {
+    const pending = createFetch({ token: [{ status: 400, body: { error: "authorization_pending" } }] });
+    vi.stubGlobal("fetch", pending.fn);
+    await handler(baseArgs);
+    expect(pendingCreate(API, "acme/ghost-app")).not.toBeNull();
+
+    const expired = createFetch({ token: [{ status: 400, body: { error: "expired_token", message: "The device code has expired." } }] });
+    vi.stubGlobal("fetch", expired.fn);
+    const out = JSON.parse(await handler({ ...baseArgs, deviceCode: "dev-code" }));
+    expect(out.status).toBe("create-expired");
+    expect(pendingCreate(API, "acme/ghost-app")).toBeNull();
   });
 
   it("says why an approved code can still read as expired and how to restart", async () => {

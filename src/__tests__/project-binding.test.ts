@@ -181,10 +181,13 @@ describe("ledger 252: with several logins stored, an unpinned platform call neve
 
     const out = await call("extension_submit", { browsers: ["chrome"], buildSha: "e4b8976", projectPath: extensionDir("rebeccat", "pii-shield"), api: API });
 
-    expect(out.status).toBe("project-mismatch");
+    expect(out.status).toBe("no-login-for-project");
+    expect(out.error.code).toBe("E_NO_LOGIN_FOR_PROJECT");
     expect(out.error.message).toContain("cezaraugusto/rebeccat or cezaraugusto/pii-shield");
     expect(out.error.message).toContain("The default login here is cezaraugusto/leon, and it was not used in its place.");
     expect(out.hint).toContain("extension_auth (action: login, project: 'cezaraugusto/rebeccat')");
+    expect(out.hint).not.toContain("'cezaraugusto/leon'");
+    expect(out.value.logins).toBeUndefined();
     expect(sent).toEqual([]);
   });
 
