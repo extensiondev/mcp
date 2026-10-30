@@ -8,7 +8,15 @@
 
 import { ConsoleProjectPage } from "@extension.dev/urls/paths";
 
-import { isRow, listRow, text } from "../lib/builds-list-row";
+import {
+  browsersPendingSentence,
+  headLagView,
+  isRow,
+  lastPushView,
+  listRow,
+  oneStampWarning,
+  text,
+} from "../lib/builds-list-row";
 import { consoleProjectUrl } from "../lib/registry";
 import { envelope } from "../lib/envelope";
 import { openProjectApi, projectApiGet, projectApiOpenFailure, projectApiReadFailure } from "../lib/project-api";
@@ -43,9 +51,10 @@ export async function listBuilds(command: string, args: ListArgs): Promise<strin
   const project = `${opened.api.ref.workspace}/${opened.api.ref.project}`;
   const buildsPageUrl = consoleProjectUrl(opened.api.ref, ConsoleProjectPage.builds, args.api);
   const cancelledSentences = rows.filter((row) => row.status === "cancelled").map((row) => cancelledSentence(text(row.buildId), row.supersededBy));
-  const lastPush = isRow(read.json?.lastPush) ? read.json.lastPush : null;
-  const headLag = isRow(read.json?.headLag) && text(read.json.headLag.message) ? read.json.headLag : null;
+  const push = lastPushView(isRow(read.json?.lastPush) ? read.json.lastPush : null, rows);
+  const headLag = headLagView(isRow(read.json?.headLag) && text(read.json.headLag.message) ? read.json.headLag : null);
   const spoken = [...(headLag ? [text(headLag.message)] : []), ...cancelledSentences];
+  const noted = [push.sentence, browsersPendingSentence(rows)].filter((s): s is string => Boolean(s));
   const latest = rows[0];
 
   return envelope({
@@ -60,7 +69,7 @@ export async function listBuilds(command: string, args: ListArgs): Promise<strin
       limit,
       ...(read.json?.dispatchDisabled === true ? { dispatchDisabled: true } : {}),
       ...(read.json?.pushRefusal ? { pushRefusal: read.json.pushRefusal } : {}),
-      ...(lastPush ? { lastPush } : {}),
+      ...(push.lastPush ? { lastPush: push.lastPush } : {}),
       ...(headLag ? { headLag } : {}),
       buildsPageUrl,
       trackUrl: buildsPageUrl,
@@ -70,12 +79,13 @@ export async function listBuilds(command: string, args: ListArgs): Promise<strin
       latest
         ? `${rows.length} recent build${rows.length === 1 ? "" : "s"} of ${project}, newest first; the latest is ${latest.buildId} (${latest.status ?? "status unknown"}). Pass action:"get" or action:"logs" with a buildId to read one.${
             rows.some((row) => row.status === "partial") ? " A partial build finished with at least one browser failed; failedBrowsers names them." : ""
-          }${cancelledSentences.length ? ` ${cancelledSentences.join(" ")}` : ""}`
-        : `No builds are recorded for ${project} yet. Push a commit to produce one, then check ${buildsPageUrl}.`
+          }${cancelledSentences.length ? ` ${cancelledSentences.join(" ")}` : ""}${noted.length ? ` ${noted.join(" ")}` : ""}`
+        : `No builds are recorded for ${project} yet.${noted.length ? ` ${noted.join(" ")}` : ""} Push a commit to produce one, then check ${buildsPageUrl}.`
     }`,
     warnings: [
       rows.length === limit ? `This is the newest ${limit}; raise limit (max ${MAX_LIMIT}) to see older builds.` : null,
       read.json?.dispatchDisabled === true ? "The platform reports build dispatch disabled right now, so new pushes are not building." : null,
+      oneStampWarning(rows),
     ],
   });
 }

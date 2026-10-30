@@ -177,7 +177,7 @@ describe("extension_builds reads the platform's builds with the project's own to
       env: "production",
       channel: "preview",
       browsers: ["chrome", "firefox"],
-      startedAt: "2026-10-11T16:45:37Z",
+      timestamp: "2026-10-11T16:45:37Z",
       duration: "1m 6s",
       conclusion: "success",
     });
@@ -219,8 +219,8 @@ describe("extension_builds reads the platform's builds with the project's own to
 
     const out = JSON.parse(await builds({ api: API }));
 
-    expect(out.value.lastPush).toEqual(lastPush);
-    expect(out.value.headLag).toEqual(headLag);
+    expect(out.value.lastPush).toEqual({ ...lastPush, receivedAt: "2026-10-24T23:50:33Z" });
+    expect(out.value.headLag).toEqual({ ...headLag, lastBuildAt: "2026-10-11T16:45:37Z", pushReceivedAt: "2026-10-24T23:50:33Z" });
     expect(out.value.sayToPerson).toBe(headLag.message);
     expect(out.hint.startsWith(headLag.message)).toBe(true);
   });

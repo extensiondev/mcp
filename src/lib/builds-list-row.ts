@@ -27,6 +27,9 @@ const FAILED_WORDS = new Set([
 const CANCELLED_WORDS = new Set(["cancelled", "canceled"]);
 const BUILDING_WORDS = new Set(["building", "running", "in_progress", "in progress"]);
 const PENDING_WORDS = new Set(["pending", "queued", "waiting", "requested"]);
+const QUEUED_PUSH_OUTCOMES = new Set(["DEBOUNCED", "DEFERRED", "HEAD_QUEUED"]);
+
+export const BROWSERS_NOT_REPORTED = "the platform has not reported this run's browsers yet; they land with the build record";
 
 export function text(value: unknown): string {
   return typeof value === "string" ? value.trim() : typeof value === "number" ? String(value) : "";
@@ -64,6 +67,16 @@ export function isActiveState(state: unknown): boolean {
   return state === "building" || state === "pending";
 }
 
+export function isoSeconds(value: unknown): string {
+  const raw = text(value);
+  if (!raw) return "";
+
+  const ms = Date.parse(raw);
+  if (!Number.isFinite(ms)) return raw;
+
+  return new Date(ms).toISOString().replace(/\.\d{3}Z$/, "Z");
+}
+
 function browsersOf(item: Row): string[] {
   return Array.isArray(item.browsers)
     ? item.browsers.map((b) => (isRow(b) ? text(b.browser) || text(b.name) : text(b))).filter(Boolean)
@@ -71,19 +84,24 @@ function browsersOf(item: Row): string[] {
 }
 
 function withTimes(out: Row, item: Row, active: boolean): void {
-  const startedAt = text(item.startedAt || item.timestamp);
-  const completedAt = active ? "" : text(item.completedAt);
+  const startedAt = isoSeconds(item.startedAt || item.timestamp);
+  const completedAt = active ? "" : isoSeconds(item.completedAt);
   const duration = text(item.duration);
 
-  if (startedAt) out.startedAt = startedAt;
-
   if (active) {
+    if (startedAt) out.startedAt = startedAt;
     if (duration) out.runningFor = duration;
 
     return;
   }
 
-  if (completedAt) out.completedAt = completedAt;
+  if (startedAt && completedAt && startedAt === completedAt) {
+    out.timestamp = startedAt;
+  } else {
+    if (startedAt) out.startedAt = startedAt;
+    if (completedAt) out.completedAt = completedAt;
+  }
+
   if (duration) out.duration = duration;
 }
 
@@ -126,7 +144,63 @@ export function listRow(item: Row, consoleUrl: (buildId: string) => string): Row
   }
 
   out.browsers = browsers;
+  if (active && browsers.length === 0) out.browsersNote = BROWSERS_NOT_REPORTED;
   if (buildId) out.consoleUrl = consoleUrl(buildId);
+
+  return out;
+}
+
+export function oneStampWarning(rows: Row[]): string | null {
+  const ids = rows.filter((row) => text(row.timestamp)).map((row) => text(row.buildId));
+  if (!ids.length) return null;
+
+  return `The platform recorded one timestamp for build${ids.length === 1 ? "" : "s"} ${ids.join(", ")}, not a start and an end; it is answered as timestamp beside the duration the platform reported.`;
+}
+
+export function browsersPendingSentence(rows: Row[]): string | null {
+  const waiting = rows.filter((row) => isActiveState(row.status) && Array.isArray(row.browsers) && row.browsers.length === 0);
+  if (!waiting.length) return null;
+
+  const named = waiting.map((row) => `${text(row.buildId)} (${text(row.status)}${text(row.runningFor) ? ` for ${text(row.runningFor)}` : ""})`);
+
+  return `${named.join(" and ")} ${waiting.length === 1 ? "has" : "have"} no browser reported by the platform yet; browsers land with the build record when the run finishes.`;
+}
+
+export function lastPushView(lastPush: Row | null, rows: Row[]): { lastPush: Row | null; sentence: string | null } {
+  if (!lastPush) return { lastPush: null, sentence: null };
+
+  const commit = text(lastPush.commit);
+  const outcome = text(lastPush.outcome);
+  const receivedAt = isoSeconds(lastPush.receivedAt);
+  const view: Row = { ...lastPush, ...(receivedAt ? { receivedAt } : {}) };
+  const built = commit ? rows.find((row) => text(row.buildId).startsWith(commit.slice(0, 7))) : undefined;
+
+  if (built) view.build = { buildId: text(built.buildId), status: text(built.status) };
+  if (lastPush.dispatched !== false || !QUEUED_PUSH_OUTCOMES.has(outcome)) return { lastPush: view, sentence: null };
+
+  const arrived = `The last push${commit ? ` ${commit}` : ""}${receivedAt ? ` (received ${receivedAt})` : ""} was ${outcome.toLowerCase()}`;
+
+  if (built) {
+    return {
+      lastPush: view,
+      sentence: `${arrived}: the platform queued it and then built it, so row ${text(built.buildId)} reads ${text(built.status)}; the push record keeps the outcome it had when the push arrived.`,
+    };
+  }
+
+  return {
+    lastPush: view,
+    sentence: `${arrived}: the platform queued it and it folds into the next build it dispatches for ${text(lastPush.ref) || "the branch"}; no build row carries it yet.`,
+  };
+}
+
+export function headLagView(headLag: Row | null): Row | null {
+  if (!headLag) return null;
+
+  const out: Row = { ...headLag };
+
+  for (const key of ["lastBuildAt", "pushReceivedAt"]) {
+    if (text(out[key])) out[key] = isoSeconds(out[key]);
+  }
 
   return out;
 }
