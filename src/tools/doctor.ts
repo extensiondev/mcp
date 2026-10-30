@@ -43,6 +43,12 @@ import {
   sessionArtifactsRootDir,
 } from "../lib/session-paths";
 import { readSessionCapabilities } from "../lib/session-capabilities";
+import { readSessionReceipt } from "../lib/production-receipt";
+import {
+  productionDoctorHint,
+  productionSessionChecks,
+  spliceProductionLegs,
+} from "../lib/doctor-production";
 
 import type { ReadyContract } from "../lib/types";
 
@@ -378,7 +384,7 @@ export async function handler(args: {
     const probed = capabilityProbeChecks(parsed);
     if (!Array.isArray(probed)) throw new Error("not a check array");
 
-    const checks = probed as DoctorCheck[];
+    let checks = probed as DoctorCheck[];
     const readOnlyLeg = controlOffByChoiceLeg(checks);
 
     for (const check of checks) {
@@ -391,6 +397,18 @@ export async function handler(args: {
 
     let healthy = code === 0;
     const contract = readContractForDiagnosis(projectPath, browser);
+    const receipt = readSessionReceipt(projectPath, browser);
+    const production =
+      receipt.kind === "production" &&
+      !checks.some((leg) => leg.check === "ready-contract" && leg.status === "pass")
+        ? receipt
+        : null;
+
+    if (production) {
+      checks = spliceProductionLegs(checks, await productionSessionChecks(projectPath, browser, production));
+      healthy = !checks.some((leg) => leg.status === "fail");
+    }
+
     const relaunched = reconcileRelaunchedBrowser(checks, contract);
 
     if (relaunched) {
@@ -493,6 +511,7 @@ export async function handler(args: {
         browser,
         ...(engineVersion ? { engineVersion } : {}),
         ...(readOnly ? { readOnly: true } : {}),
+        ...(production ? { sessionCommand: production.verb } : {}),
         checks,
         capabilities: capabilitiesRead.capabilities,
         ...(capabilitiesRead.capabilities
@@ -503,7 +522,9 @@ export async function handler(args: {
         ? {
             hint: "This session is read-only because it was started with allowControl: false, not because anything is wrong: logs, inspect, wait and doctor all work, while storage, reload, open, dom_snapshot and eval stay locked.",
           }
-        : {}),
+        : production
+          ? { hint: productionDoctorHint(production) }
+          : {}),
     });
   } catch {
     const message = stderr.trim() || `extension exited with code ${code}`;

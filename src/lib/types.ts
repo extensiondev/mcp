@@ -81,6 +81,7 @@ export interface ReadyContract {
   port?: number | null;
   host?: string;
   controlPort?: number | null;
+  instanceId?: string;
   cdpPort?: number;
   rdpPort?: number;
   webdriverPort?: number;
@@ -98,6 +99,7 @@ export interface ReadyContract {
   profilePath?: string;
   profileReused?: boolean;
   browserPid?: number | null;
+  binary?: string;
   launcherPid?: number;
   extensionId?: string;
   extensionIdSource?: string;
