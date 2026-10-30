@@ -120,7 +120,7 @@ export async function assertNoOutsideRequests(
       id,
       subject,
       "The extension's id could not be resolved from the running session, so no request could be attributed to it.",
-      "Start the session with extension_dev, confirm it with extension_wait, then assert again.",
+      "Start the session with extension_dev, or extension_start with allowControl: true for the production build, then assert again.",
     );
   }
 
@@ -131,7 +131,7 @@ export async function assertNoOutsideRequests(
       id,
       subject,
       "The browser's debug port is listed but this server could not open a DevTools connection to it, so no target was watched.",
-      "Start the session with extension_dev, confirm it with extension_wait, then assert again.",
+      "Start the session with extension_dev, or extension_start with allowControl: true for the production build, then assert again.",
     );
   }
 

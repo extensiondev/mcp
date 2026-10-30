@@ -189,7 +189,7 @@ async function environmentPreflight(): Promise<string> {
     command: schema.name,
     status: healthy ? "healthy" : "unhealthy",
     value: { mode: "environment", checks },
-    hint: "Pass projectPath to diagnose a live dev session end-to-end.",
+    hint: "Pass projectPath to diagnose a live session (extension_dev or extension_start) end-to-end.",
   });
 }
 

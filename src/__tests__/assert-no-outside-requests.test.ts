@@ -268,7 +268,7 @@ describe("no-outside-requests", () => {
 
     const noPort = await assertOnce({ assert: "no-outside-requests" });
     expect(noPort.check.outcome).toBe("inconclusive");
-    expect(noPort.check.detail).toContain("No dev session with a debugging port");
+    expect(noPort.check.detail).toContain("No session with a debugging port");
 
     live.port = 9222;
     const firefox = await assertOnce({ assert: "no-outside-requests" }, "firefox");

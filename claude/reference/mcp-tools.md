@@ -37,11 +37,11 @@ Read or revoke one approval a workspace owner was asked for on extension.dev. ac
 
 ## extension_assert
 
-Run a test stage against a live dev session: state expectations and read one verdict each, instead of reading a blob and hand-rolling the judgement. The check ids and each check's args are listed in the expect property. Each expectation comes back pass, fail or inconclusive; inconclusive means this platform cannot cover the question today, the verdict says what would settle it, and it is never a pass. Start the session with extension_dev; extension_inspect or extension_logs give the raw reading.
+Run a test stage on an extension_dev or extension_start session: one verdict per expectation (see expect): pass, fail, not ready (a precondition; see settledBy) or inconclusive (a platform limit). page-world-clean, no-outside-requests and background-worker-booted read the debug port: meant for the production build (extension_start, allowControl:true). storage-key-present needs the control channel; content-script-injected and console-errors-empty read the dev log stream: extension_dev only.
 
 | input | type | required | default | description |
 | --- | --- | --- | --- | --- |
-| `projectPath` | string | yes |  | Extension project root (needs a live dev session) |
+| `projectPath` | string | yes |  | Extension project root (needs a running session: extension_dev or extension_start) |
 | `expect` | array of object | yes |  | One object per expectation, each { assert: <check id>, ...args }. background-worker-booted: no args. surface-rendered: surface (popup, options, sidebar, newtab, history, bookmarks), optional selector and minNodes. content-script-injected: url. storage-key-present: key, optional area (default local), equals, context. console-errors-empty: optional context (array), since (seq cursor), ignore (substrings). page-world-clean: url (a page the content scripts match, open in the session; Chromium only), optional pageGlobals (window property names the page itself defines: not reported as unknown and never read as a global the extension's own build sets). no-outside-requests: optional allow (host names), durationMs (default 5000): watches every target of the extension (worker, pages, offscreen documents, workers under them, extension frames in web pages) and fails on any request that leaves the machine. |
 | `browser` | string | no |  | Session browser; defaults to this project's live session. Required when the project runs sessions for more than one browser: the call is refused with the list rather than picking one. |
 | `timeout` | number | no |  | Command timeout in ms. When omitted, the default depends on the route: 30000 through the dev session's control channel, 10000 over the Firefox debugger protocol, and 15000 per command over the Chromium debug port. |
@@ -179,7 +179,7 @@ Take a shallow structured DOM snapshot of one chosen surface: element counts, ex
 
 | input | type | required | default | description |
 | --- | --- | --- | --- | --- |
-| `projectPath` | string | yes |  | Extension project root (needs a live dev session) |
+| `projectPath` | string | yes |  | Extension project root (needs a running session: extension_dev or extension_start) |
 | `tab` | number | no |  | Numeric chrome.tabs id, only to disambiguate when several tabs match. With neither `tab` nor `url`, content/page target the active tab. |
 | `url` | string | no |  | content/page: pick the tab by url (match pattern, then substring). Preferred over `tab`. |
 | `tabUrl` | string | no |  | Pick the tab by url through the browser's own target list (needs the session's debug port: CDP page targets on Chromium, RDP tab descriptors on Firefox). One that matches several tabs showing the same page reads the most recently active one and warns; one that matches different pages returns the candidates, with their targetIds, instead of guessing. |
@@ -199,7 +199,7 @@ Evaluate an expression in a running extension context: the background, an extens
 
 | input | type | required | default | description |
 | --- | --- | --- | --- | --- |
-| `projectPath` | string | yes |  | Extension project root (needs a live dev session) |
+| `projectPath` | string | yes |  | Extension project root (needs a running session: extension_dev or extension_start) |
 | `expression` | string | yes |  | JavaScript expression to evaluate in the target context |
 | `context` | "background" \| "popup" \| "options" \| "sidebar" \| "devtools" \| "newtab" \| "history" \| "bookmarks" \| "content" \| "page" | no |  | Where to evaluate. Default background, except on a Chromium MV3 session (the default template) where it defaults to page, the active tab; background on Chromium goes over the debug port (the service worker). For content and page, pass `url` to pick the tab, or omit both `url` and `tab` for the active tab; a numeric `tab` only disambiguates, and a url that matches several tabs showing the same page evaluates in the most recently active one and warns with the others' targetIds. Extension surfaces (popup, options, sidebar, devtools) and override pages (newtab, history, bookmarks) need no tab id but must already be open: open one with extension_open first, because a closed one returns an explicit error. On a Chromium MV3 session those pages, and page with a chrome-extension:// url, evaluate over CDP, the inspector path the extension page CSP does not govern; elsewhere they evaluate over the in-bundle relay. On Chromium, content with a url evaluates over CDP in the extension's isolated world of the matching tab, the world its content scripts share, which the extension's content_security_policy does not govern, so chrome.runtime and what the content script left on globals or the DOM are readable even under the MV3 default CSP; when the tab holds several such worlds the newest one where chrome.runtime.id is set is used, a world orphaned by an extension reload (chrome.runtime.id unset) is never evaluated in and the answer names it instead, and a tab where no content script of the extension has run yet goes through the relay instead. On Firefox a document whose content security policy forbids eval (the extension's own pages, or a site's) is evaluated over the debugger protocol instead, which takes one expression; a page inside the extension that is no declared surface (pages/*) is reached the same way by page and its moz-extension:// url once a tab shows it. An extension_start session's pages carry no relay, so there a surface shown in a tab (options) and an extension page url are evaluated over the debugger protocol too, while a surface in its own window (popup) is not reachable and the answer says so. The one case where a promise is not awaited is Firefox MV2 without the scripting API, where the expression runs through tabs.executeScript and must return a synchronous value. |
 | `url` | string | no |  | content/page: pick the tab by url (match pattern, then substring). Preferred over `tab`. |
@@ -215,7 +215,7 @@ Inspect a running extension deeply over the browser's debugger protocol: full HT
 
 | input | type | required | default | description |
 | --- | --- | --- | --- | --- |
-| `projectPath` | string | yes |  | Extension project root (needs a live dev session) |
+| `projectPath` | string | yes |  | Extension project root (needs a running session: extension_dev or extension_start) |
 | `url` | string | no |  | Navigate the picked tab here before reading, or, with no navigation wanted, the substring the target's url must contain; a url that matches several tabs showing the same page reads the most recently active one and warns with the others' targetIds, so pass `targetId` to pick one exactly. |
 | `targetId` | string | no |  | Pick one open page directly by its targetId: the target.targetId extension_open answers, or a targetId from extension_dom_snapshot listTargets: true (a CDP target id on Chromium, the tab's browserId on Firefox). When given, `url` is ignored. A target that is gone is refused with E_TARGET_NOT_FOUND, naming the live ones. |
 | `probe` | array of string | no |  | CSS selectors to query; returns counts and samples for each |
@@ -230,7 +230,7 @@ List the extensions in the running dev browser: id, name, version, and, on Chrom
 
 | input | type | required | default | description |
 | --- | --- | --- | --- | --- |
-| `projectPath` | string | yes |  | Extension project root (needs a live dev session) |
+| `projectPath` | string | yes |  | Extension project root (needs a running session: extension_dev or extension_start) |
 | `browser` | string | no |  | Session browser; defaults to this project's live session. Required when the project runs sessions for more than one browser: the call is refused with the list rather than picking one. |
 
 ## extension_logs
@@ -239,7 +239,7 @@ Read or stream logs from every context of a running dev session (service worker,
 
 | input | type | required | default | description |
 | --- | --- | --- | --- | --- |
-| `projectPath` | string | yes |  | Extension project root (needs a live dev session) |
+| `projectPath` | string | yes |  | Extension project root (needs a running session: extension_dev or extension_start) |
 | `browser` | string | no |  | Which dist/extension-js/<browser>/ to read. Defaults to this project's live session, else chrome. Required when the project runs sessions for more than one browser. |
 | `level` | "off" \| "error" \| "warn" \| "info" \| "debug" \| "trace" \| "all" | no | `"all"` | Minimum severity; a level includes everything more severe. |
 | `context` | array of "background" \| "content" \| "sidebar" \| "popup" \| "options" \| "devtools" \| "newtab" \| "history" \| "bookmarks" | no |  | Restrict to these contexts. Omit for all. |
@@ -268,7 +268,7 @@ Open an extension surface (popup, options, sidebar, the newtab, history or bookm
 
 | input | type | required | default | description |
 | --- | --- | --- | --- | --- |
-| `projectPath` | string | yes |  | Extension project root (needs a live dev session) |
+| `projectPath` | string | yes |  | Extension project root (needs a running session: extension_dev or extension_start) |
 | `surface` | "popup" \| "options" \| "sidebar" \| "devtools" \| "newtab" \| "history" \| "bookmarks" \| "action" \| "command" | no |  | Which surface to open or event to replay. popup, options or sidebar open a UI surface; newtab, history or bookmarks open the matching chrome_url_overrides page in a tab (always a tab, resolved by the server, never sent to the engine). On Chromium, when Chrome refuses the sidebar for lack of a user gesture, the server opens the real panel through a synthetic click on the extension's own page and says so in warnings; if that fails too it renders the sidebar document as a tab. devtools opens the browser's DevTools on a tab (the one `url` matches, else the first web page) and shows the extension's panel there, picked by `panel` title when there are several: Chromium only, over CDP Target.openDevTools, headed or headless; the result names the panel document's url, which extension_eval reads with context 'page' and that url (the panel is no tab, so the tab-based readers do not reach it). action triggers the toolbar action, which opens its popup or replays chrome.action.onClicked when there is none; on Firefox a popup-less browser_action or page_action is clicked through the browser's own toolbar action over the debugger protocol. command with `name` replays a chrome.commands.onCommand shortcut; the engine's own frame is returned as is. |
 | `name` | string | no |  | For surface 'command': the chrome.commands name to trigger. |
 | `panel` | string | no |  | For surface 'devtools': the title the extension gave chrome.devtools.panels.create, when it registers more than one panel. Omitted, the extension's first panel is shown. |
@@ -373,7 +373,7 @@ Reload a running extension's background context, or a tab. Rides the dev session
 
 | input | type | required | default | description |
 | --- | --- | --- | --- | --- |
-| `projectPath` | string | yes |  | Extension project root (needs a live dev session) |
+| `projectPath` | string | yes |  | Extension project root (needs a running session: extension_dev or extension_start) |
 | `context` | "background" \| "content" \| "page" | no | `"background"` |  |
 | `tab` | number | no |  | For content/page: a specific tab id |
 | `browser` | string | no |  | Session browser; defaults to this project's live session. Required when the project runs sessions for more than one browser: the call is refused with the list rather than picking one. |
@@ -385,7 +385,7 @@ Take a screenshot of one open extension surface (popup, options, sidebar, newtab
 
 | input | type | required | default | description |
 | --- | --- | --- | --- | --- |
-| `projectPath` | string | yes |  | Extension project root (needs a live dev session) |
+| `projectPath` | string | yes |  | Extension project root (needs a running session: extension_dev or extension_start) |
 | `browser` | string | no |  | Session browser; defaults to this project's live session. Required when the project runs sessions for more than one browser: the call is refused with the list rather than picking one. |
 | `context` | "page" \| "popup" \| "options" \| "sidebar" \| "newtab" \| "history" \| "bookmarks" | no | `"page"` | page captures a tab picked by `url` (or the only or selected one); the rest capture that extension surface, which must already be open. |
 | `url` | string | no |  | page: the tab whose url contains this (a web address or the extension's own page url). |
@@ -461,7 +461,7 @@ Read or write chrome.storage in a running extension. Every call runs in the exte
 
 | input | type | required | default | description |
 | --- | --- | --- | --- | --- |
-| `projectPath` | string | yes |  | Extension project root (needs a live dev session) |
+| `projectPath` | string | yes |  | Extension project root (needs a running session: extension_dev or extension_start) |
 | `action` | "get" \| "set" | yes |  | get reads a key (or the whole area); set writes a key |
 | `area` | "local" \| "sync" \| "session" \| "managed" | no | `"local"` |  |
 | `key` | string | no |  | Key to get or set |
