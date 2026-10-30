@@ -29,6 +29,7 @@ import {
   type ActArgs,
 } from "../lib/act";
 import { envelope } from "../lib/envelope";
+import { noSessionEnvelope } from "../lib/production-receipt";
 import { EVAL_UNTIL_PROPERTY, evalUntilTruthy, pollTimeoutWithin, type EvalUntil } from "../lib/eval-until";
 import { parseFrameObject } from "../lib/frame-json";
 import {
@@ -870,11 +871,11 @@ function cspRefusalHint(context: string | undefined, browser: string): string {
 
   if (context === "content") {
     return (
-      "The extension's content_security_policy forbids eval in its content-script world through the in-page executor, so no string runs there that way; this is the extension's policy, not a fault in the expression. " +
-      (isChromiumFamily(browser)
+      `The extension's content_security_policy forbids eval in its content-script world through the in-page executor, so no string runs there that way; this is the extension's policy, not a fault in the expression. ${ 
+      isChromiumFamily(browser)
         ? "On Chromium, pass url naming a tab where the content script has run: that tab's isolated world is then evaluated over the debug port, which the policy does not govern. With a url, this answer means no tab matching it holds this extension's isolated world yet (the content script has not run there, or the session has no debug port); open or reload a matching page with extension_open and retry. "
-        : "") +
-      'Evaluate the page itself with context: "page" and a url, or read the DOM the content script sees with extension_dom_snapshot or extension_inspect.'
+        : "" 
+      }Evaluate the page itself with context: "page" and a url, or read the DOM the content script sees with extension_dom_snapshot or extension_inspect.`
     );
   }
 
@@ -1352,14 +1353,14 @@ function evalDisabled(): string {
   });
 }
 
-function noDebugPort(browser: string, protocol: string): string {
-  return envelope({
-    ok: false,
+function noDebugPort(projectPath: string, browser: string, protocol: string): string {
+  return noSessionEnvelope({
     command: schema.name,
-    status: "no-session",
-    error: {
-      code: "E_NO_SESSION",
-      name: "NoSession",
+    projectPath,
+    browser,
+    name: "NoSession",
+    need: "so targetId has no browser to ask",
+    dev: {
       message: `No live ${browser} session with a debug port (${protocol}) for this project, so targetId has no browser to ask. Start extension_dev and extension_wait for ready.`,
     },
   });
@@ -1390,7 +1391,7 @@ async function evaluateByTargetId(
     if (!isSingleExpression(args.expression)) return notOneExpression();
 
     const resolved = await resolveRdpPort(args.projectPath, browser, { waitMs: 3_000, graceMs: 1_000 });
-    if (!resolved) return noDebugPort(browser, "RDP");
+    if (!resolved) return noDebugPort(args.projectPath, browser, "RDP");
 
     let tabs: RdpTab[];
 
@@ -1404,12 +1405,12 @@ async function evaluateByTargetId(
 
     return (
       (await evaluateInGeckoTab(args, browser, (live) => findGeckoTab(live, targetId), `The tab with targetId ${targetId} closed before the expression ran.`)) ??
-      noDebugPort(browser, "RDP")
+      noDebugPort(args.projectPath, browser, "RDP")
     );
   }
 
   const resolved = await resolveCdpPort(args.projectPath, browser);
-  if (!resolved) return noDebugPort(browser, "CDP");
+  if (!resolved) return noDebugPort(args.projectPath, browser, "CDP");
 
   let live: TargetRef[];
 

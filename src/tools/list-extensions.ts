@@ -15,6 +15,7 @@ import {
 } from "../lib/common-schema";
 import { CDPClient } from "../lib/cdp";
 import { envelope } from "../lib/envelope";
+import { noSessionEnvelope } from "../lib/production-receipt";
 import { isChromiumFamily, isGeckoFamily } from "../lib/browser-family";
 import {
   resolveCdpPort,
@@ -221,16 +222,15 @@ export async function handler(args: {
   const resolved = await resolveCdpPort(args.projectPath, browser);
 
   if (!resolved) {
-    return envelope({
-      ok: false,
+    return noSessionEnvelope({
       command: schema.name,
-      status: "no-session",
-      error: {
-        code: "E_NO_SESSION",
-        message:
-          "No active dev session found. Cannot connect to Chrome DevTools Protocol.",
+      projectPath: args.projectPath,
+      browser,
+      need: "so there is no browser to list extensions from",
+      dev: {
+        message: "No active dev session found. Cannot connect to Chrome DevTools Protocol.",
+        hint: `Start a dev session first with extension_dev, then use extension_wait to confirm it is ready. ${CDP_PORT_MISSING_HINT}`,
       },
-      hint: `Start a dev session first with extension_dev, then use extension_wait to confirm it is ready. ${CDP_PORT_MISSING_HINT}`,
     });
   }
 

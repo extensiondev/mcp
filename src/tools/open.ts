@@ -40,6 +40,7 @@ import {
 } from "../lib/tab-foreground";
 import { CDPClient } from "../lib/cdp";
 import { resolveCdpPort, resolveRdpPort, CDP_PORT_MISSING_HINT } from "../lib/cdp-port";
+import { noSessionEnvelope } from "../lib/production-receipt";
 import { rdpListTabs, type RdpTab } from "../lib/rdp";
 import {
   isChromiumFamily,
@@ -251,6 +252,17 @@ async function navigateToUrlViaWebDriver(
   }
 }
 
+function noSessionAnswer(projectPath: string, browser: string, need: string): string {
+  return noSessionEnvelope({
+    command: schema.name,
+    projectPath,
+    browser,
+    name: "NoSession",
+    need,
+    dev: { message: `No active dev session / CDP port for ${browser}. Start extension_dev and extension_wait for ready. ${CDP_PORT_MISSING_HINT}` },
+  });
+}
+
 export async function navigateToUrl(
   projectPath: string,
   browser: string,
@@ -286,18 +298,7 @@ export async function navigateToUrl(
 
   const resolved = await resolveCdpPort(projectPath, browser);
 
-  if (!resolved) {
-    return envelope({
-      ok: false,
-      command: schema.name,
-      status: "no-session",
-      error: {
-        code: "E_NO_SESSION",
-        name: "NoSession",
-        message: `No active dev session / CDP port for ${browser}. Start extension_dev and extension_wait for ready. ${CDP_PORT_MISSING_HINT}`,
-      },
-    });
-  }
+  if (!resolved) return noSessionAnswer(projectPath, browser, `so ${url} cannot be opened`);
 
   const cdp = new CDPClient();
 
@@ -511,11 +512,11 @@ export async function navigateToUrl(
         ...(foreground ? { foreground } : {}),
       },
       hint:
-        (foreground ? `${foregroundSentence(foreground, headless)} ` : "") +
-        "Inspect it with extension_dom_snapshot or extension_inspect using url (context: 'page'), they resolve the tab themselves. " +
-        "Pass `target.targetId` as `targetId` to extension_screenshot, extension_dom_snapshot, extension_inspect or extension_eval to pick this exact tab, which matters when another tab shows the same url. " +
-        "It is a CDP target id, NOT a chrome.tabs id: do not pass it as `tab`. If you need a numeric tab id, call extension_dom_snapshot with listTabs: true." +
-        (viewSentence ? ` ${viewSentence}` : ""),
+        `${foreground ? `${foregroundSentence(foreground, headless)} ` : "" 
+        }Inspect it with extension_dom_snapshot or extension_inspect using url (context: 'page'), they resolve the tab themselves. ` +
+        `Pass \`target.targetId\` as \`targetId\` to extension_screenshot, extension_dom_snapshot, extension_inspect or extension_eval to pick this exact tab, which matters when another tab shows the same url. ` +
+        `It is a CDP target id, NOT a chrome.tabs id: do not pass it as \`tab\`. If you need a numeric tab id, call extension_dom_snapshot with listTabs: true.${ 
+        viewSentence ? ` ${viewSentence}` : ""}`,
       warnings: [
         unreadableNote,
         foreground && !foreground.activated ? foregroundSentence(foreground, headless) : null,
@@ -1568,18 +1569,7 @@ async function openDevToolsSurface(
 
   const resolved = await resolveCdpPort(args.projectPath, browser);
 
-  if (!resolved) {
-    return envelope({
-      ok: false,
-      command: schema.name,
-      status: "no-session",
-      error: {
-        code: "E_NO_SESSION",
-        name: "NoSession",
-        message: `No active dev session / CDP port for ${browser}. Start extension_dev and extension_wait for ready. ${CDP_PORT_MISSING_HINT}`,
-      },
-    });
-  }
+  if (!resolved) return noSessionAnswer(args.projectPath, browser, "so the devtools panel cannot be opened");
 
   const extensionId = await resolveExtensionId(args.projectPath, browser);
 

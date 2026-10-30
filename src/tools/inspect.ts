@@ -8,6 +8,7 @@
 
 import { CDPClient, normalizeDomSnapshot } from "../lib/cdp";
 import { envelope } from "../lib/envelope";
+import { noSessionEnvelope } from "../lib/production-receipt";
 import { isEngineCompanionUrl } from "../lib/guest-load-oracle";
 import { isChromiumFamily } from "../lib/browser-family";
 import { resolveCdpPort, CDP_PORT_MISSING_HINT } from "../lib/cdp-port";
@@ -55,16 +56,15 @@ export async function handler(args: {
   const resolved = await resolveCdpPort(args.projectPath, browser);
 
   if (!resolved) {
-    return envelope({
-      ok: false,
+    return noSessionEnvelope({
       command: schema.name,
-      status: "no-session",
-      error: {
-        code: "E_NO_SESSION",
-        message:
-          "No active dev session found. Cannot connect to Chrome DevTools Protocol.",
+      projectPath: args.projectPath,
+      browser,
+      need: "so there is no page to inspect",
+      dev: {
+        message: "No active dev session found. Cannot connect to Chrome DevTools Protocol.",
+        hint: `Start a dev session first with extension_dev, then use extension_wait to confirm it is ready. ${CDP_PORT_MISSING_HINT}`,
       },
-      hint: `Start a dev session first with extension_dev, then use extension_wait to confirm it is ready. ${CDP_PORT_MISSING_HINT}`,
     });
   }
 

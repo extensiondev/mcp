@@ -8,6 +8,7 @@
 
 import { CALL_TIMEOUT, SESSION_BROWSER, SESSION_PROJECT_PATH } from "../lib/common-schema";
 import { envelope } from "../lib/envelope";
+import { noSessionEnvelope } from "../lib/production-receipt";
 import { ambiguousSessionRefusal, resolveSessionBrowser } from "../lib/session-browser";
 import { isChromiumFamily, isGeckoFamily, WEBKIT_FAMILY } from "../lib/browser-family";
 import { CDP_PORT_MISSING_HINT, RDP_PORT_MISSING_HINT, resolveCdpPort, resolveRdpPort } from "../lib/cdp-port";
@@ -244,7 +245,16 @@ const pageRef = (t: PageTarget): TargetRef => ({ targetId: t.targetId, url: t.ur
 
 async function onChromium(args: Args, browser: string, context: string, timeoutMs: number): Promise<string> {
   const resolved = await resolveCdpPort(args.projectPath, browser, { waitMs: Math.min(timeoutMs, 5_000), graceMs: 1_000 });
-  if (!resolved) return refuse("no-session", "E_NO_SESSION", `No live ${browser} session with a debug port for this project, so there is no browser to ask for pixels. Start extension_dev and extension_wait for ready.`, CDP_PORT_MISSING_HINT);
+
+  if (!resolved) {
+    return noSessionEnvelope({
+      command: COMMAND,
+      projectPath: args.projectPath,
+      browser,
+      need: "so there is no browser to ask for pixels",
+      dev: { message: `No live ${browser} session with a debug port for this project, so there is no browser to ask for pixels. Start extension_dev and extension_wait for ready.`, hint: CDP_PORT_MISSING_HINT },
+    });
+  }
 
   let chosen: Chosen<PageTarget> | string;
 

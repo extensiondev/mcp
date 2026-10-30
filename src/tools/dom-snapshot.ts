@@ -19,6 +19,7 @@ import {
   addWarning,
 } from "../lib/act";
 import { envelope } from "../lib/envelope";
+import { noSessionEnvelope } from "../lib/production-receipt";
 import {
   ambiguousSessionRefusal,
   resolveSessionBrowser,
@@ -363,13 +364,13 @@ async function cdpPortOrError(
 
   if (!resolved) {
     return {
-      error: envelope({
-        ok: false,
+      error: noSessionEnvelope({
         command: schema.name,
-        status: "no-session",
-        error: {
-          code: "E_NO_SESSION",
-          name: "NoSession",
+        projectPath,
+        browser,
+        name: "NoSession",
+        need: `so ${feature} has no browser to ask`,
+        dev: {
           message: `No active dev session / CDP port for ${browser}, so ${feature} has no browser to ask. Start extension_dev and extension_wait for ready. ${CDP_PORT_MISSING_HINT}`,
         },
       }),

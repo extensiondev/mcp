@@ -12,7 +12,8 @@ import {
   outputFlagRefusalMessage,
   refusedTheOutputFlag,
 } from "./engine-version";
-import { knownSessionBrowsers, deadReadySession } from "./session-browser";
+import { knownSessionBrowsers, deadReadySession, resolveSessionBrowser } from "./session-browser";
+import { productionSessionContext } from "./production-receipt";
 import {
   answerAfterSafariWake,
   SAFARI_WAKE_WAIT_MS,
@@ -92,6 +93,9 @@ function withSessionContext(
     : legacyControlChannelScrape(message);
 
   if (!isControlError) return message;
+
+  const production = productionSessionContext(projectPath, browser ?? resolveSessionBrowser(projectPath, undefined).browser);
+  if (production) return `${message}\n${production}`;
 
   const dead = deadReadySession(projectPath, browser);
 
