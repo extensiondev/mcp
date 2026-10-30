@@ -37,7 +37,7 @@ import { buildCreateBody, DEFAULT_BUILD_COMMAND } from "../lib/project-create-bo
 import { consoleBase, consoleProjectUrl } from "../lib/registry";
 import { laneClosedFacts, laneClosedHint, platformHoldEnvelope, sawPlatformHold } from "../lib/platform-hold";
 import { identityHeaders } from "../lib/session-identity";
-import { spendNarration } from "../lib/allowance";
+import { firstBuildSpendNarration, readWorkspaceBuildAllowance } from "../lib/build-allowance";
 import { answerIsUnknownOutcome, readCreatedProject } from "../lib/create-answer";
 import { CREATE_CEILING_SENTENCE, CREATE_STUCK_AFTER_SECONDS, creatingAge, creatingForWords } from "../lib/create-ceiling";
 import { findProjectByStoredLogin, type ProjectFoundByRead } from "../lib/created-project-read";
@@ -60,7 +60,7 @@ const CREATE_STUCK_MINUTES = CREATE_STUCK_AFTER_SECONDS / 60;
 export const schema = {
   name: "extension_project_create",
   description:
-    `Create an extension.dev project for an extension that does not have one yet, without opening the console: right after extension_create and extension_build, once the source is pushed to a GitHub repository, and BEFORE extension_auth, which can only log in to a project that exists. Ask for nothing but the project slug and the repo; the platform finds the GitHub App installation on the approving account itself, and with none it returns a connect link to open. Two-phase, like login: the first call answers a code and a URL where a signed-in member of the workspace approves creating exactly this project; call again with the returned deviceCode to finish, and the same deviceCode re-reads an outcome with no second approval. It records the project on the platform and answers what the platform recorded in value.outcome, the project page it made in value.links, its console page in trackUrl, and in \`firstBuild\` whether the first build was dispatched and, when none was, why. Not for a project that already exists: that is extension_auth. Every build runs the stored build command for each enabled browser exactly as stored, then reads that browser's outputDirectory. Then run extension_auth (action: login) against the new project and extension_publish to share it. To create several projects in one workspace under one approval, pass \`projects\` instead of \`project\` and \`repo\`. One approval creates at most ${DEFAULT_CREATE_PROJECTS_PER_APPROVAL} projects, the cap the platform states in its login config, because it creates at most ${PLATFORM_CREATES_PER_HOUR} per hour for one approving account; the next ${DEFAULT_CREATE_PROJECTS_PER_APPROVAL} can start in a new call once that limit allows. A longer list is refused before any approval is asked for, never split silently, and so is any list on a platform that does not advertise batch onboarding.`,
+    `Create an extension.dev project for an extension that does not have one yet, without opening the console: right after extension_create and extension_build, once the source is pushed to a GitHub repository, and BEFORE extension_auth, which can only log in to a project that exists. Ask for nothing but the project slug and the repo; the platform finds the GitHub App installation on the approving account itself, and with none it returns a connect link to open. Two-phase, like login: the first call answers a code and a URL where a signed-in member of the workspace approves creating exactly this project; call again with the returned deviceCode to finish, and the same deviceCode re-reads an outcome with no second approval. It records the project on the platform and answers what the platform recorded in value.outcome, the project page it made in value.links, its console page in trackUrl, and in \`firstBuild\` whether the first build was dispatched and, when none was, why. A dispatched first build spends one build of the workspace's monthly allowance, as every push does; \`allowance\` says how many remained before the call when a stored login of the workspace could read its plan, and warns when few remain. Not for a project that already exists: that is extension_auth. Every build runs the stored build command for each enabled browser exactly as stored, then reads that browser's outputDirectory. Then run extension_auth (action: login) against the new project and extension_publish to share it. To create several projects in one workspace under one approval, pass \`projects\` instead of \`project\` and \`repo\`. One approval creates at most ${DEFAULT_CREATE_PROJECTS_PER_APPROVAL} projects, the cap the platform states in its login config, because it creates at most ${PLATFORM_CREATES_PER_HOUR} per hour for one approving account; the next ${DEFAULT_CREATE_PROJECTS_PER_APPROVAL} can start in a new call once that limit allows. A longer list is refused before any approval is asked for, never split silently, and so is any list on a platform that does not advertise batch onboarding.`,
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -601,6 +601,7 @@ async function sendCreate(
     });
   };
 
+  const allowanceBefore = await readWorkspaceBuildAllowance({ apiBase: ctx.apiBase, workspace: wantWorkspace, command: COMMAND });
   let res: Response;
   const deadline = answerDeadline(ctx.callStartedAt);
 
@@ -822,8 +823,8 @@ async function sendCreate(
       sourceRepo: ctx.args.repo,
       outcome: recordedOutcome(data.replayed === true ? "created-earlier" : "created"),
       links,
-      firstBuild: firstBuildValue(firstBuild),
-      allowance: spendNarration({
+      firstBuild: { ...firstBuildValue(firstBuild), ...(firstBuild.state === "dispatched" ? { spent: 1 } : {}) },
+      allowance: firstBuildSpendNarration({
         what:
           firstBuild.state === "dispatched"
             ? "This project creation, including its first build,"
@@ -832,6 +833,8 @@ async function sendCreate(
               : "This project creation, and its first build if the platform dispatched one,",
         body: data,
         api: ctx.apiBase,
+        dispatched: firstBuild.state === "dispatched",
+        before: allowanceBefore,
       }),
       nextSteps: [
         `extension_auth (action: login, project: '${finalWorkspace}/${finalProject}')`,

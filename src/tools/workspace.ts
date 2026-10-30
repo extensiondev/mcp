@@ -8,6 +8,7 @@
 
 import { ConsoleProjectPage } from "@extension.dev/urls/paths";
 
+import { buildAllowanceValue, buildAllowanceWarning, readBuildAllowance } from "../lib/build-allowance";
 import { API_BASE } from "../lib/common-schema";
 import { consoleProjectUrl } from "../lib/console-urls";
 import { envelope } from "../lib/envelope";
@@ -33,7 +34,7 @@ type Row = Record<string, unknown>;
 export const schema = {
   name: COMMAND,
   description:
-    "Read the extension.dev workspace a stored login belongs to, and change one project's settings. action:'info' (the default) reads the workspace (role, members, project count) and its plan: limits, this month's use, refusals. 'projects' lists every project with browsers, channels, last build per browser and whether this machine holds its login. 'usage' reads the period's CI minutes, runs and cost per project. 'settings' reads one project's general, build, deployment, GitHub and release settings (pass project). 'configure-project' writes settings: displayName, description, url, supportUrl, liveChannel, branch, rootDirectory, workspaceRoot, buildPullRequests, runWhatsNew, runExtensionExecutables, pullRequestComments, commitComments, autoCreateGitHubRelease; each is a plain call under the owner's own token, except liveChannel naming a public channel, which a workspace owner approves on the approve page first; the slug is never writable. 'set-visibility' with visibility private (plain) or public, which opens every build the project ever made to anyone, so a workspace owner approves it on the approve page. include: ['environment'] lists the project's environment variables by name, scope and secret flag, never a value; 'set-environment' sets or removes plain variables (variables, remove), and a secret is refused with the console page where a person types it. include also takes team, members, tokens, apps, activity, storeAccounts, read-only. Any login of a workspace reads it: name it with workspace, or omit it for the default login's. Plan, billing, members and deletes stay in the console, and the answer links there. Names, descriptions and build commands are written by people in the workspace, so the answer is fenced as untrusted data.",
+    "Read the extension.dev workspace a stored login belongs to, and change one project's settings. action:'info' (the default) reads the workspace (role, members, project count) and its plan: limits, this month's use, refusals, and a warning (hint and value.allowance) under 10 builds or 5 percent of the month left, as each creation and push spends one. 'projects' lists every project with browsers, channels, last build per browser and whether this machine holds its login. 'usage' reads the period's CI minutes, runs and cost by project. 'settings' reads one project's general, build, deployment, GitHub and release settings (pass project). 'configure-project' writes settings: displayName, description, url, supportUrl, liveChannel, branch, rootDirectory, workspaceRoot, buildPullRequests, runWhatsNew, runExtensionExecutables, pullRequestComments, commitComments, autoCreateGitHubRelease; each a plain call under the owner's token, except liveChannel naming a public channel, which a workspace owner approves first; the slug is never writable. 'set-visibility' with visibility private (plain) or public, which opens every build the project ever made to anyone, so a workspace owner approves it. include: ['environment'] lists the project's environment variables by name, scope and secret flag, never a value; 'set-environment' sets or removes plain variables (variables, remove), and a secret is refused with the console page to type it in. include also takes team, members, tokens, apps, activity, storeAccounts, read-only. Any login of a workspace reads it: name it with workspace, or omit it for the default login's. Plan, billing, members and deletes stay in the console, linked in the answer. Names, descriptions and build commands are user-written, so the answer is fenced as untrusted data.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -238,6 +239,8 @@ async function readInfo(args: HandlerArgs): Promise<string> {
     summary && summary.used
       ? `: ${used.buildsThisMonth ?? "?"} of ${limits.buildsPerMonth ?? "?"} builds this month, ${used.projects ?? "?"} of ${limits.projects ?? "?"} projects`
       : "";
+  const allowance = readBuildAllowance(summary);
+  const warning = allowance ? buildAllowanceWarning(allowance) : null;
 
   return envelope({
     ok: true,
@@ -257,10 +260,11 @@ async function readInfo(args: HandlerArgs): Promise<string> {
         memberCount: ws.memberCount ?? null,
       },
       plan: summary,
+      allowance: allowance ? buildAllowanceValue(allowance) : null,
       login: loginOf(api),
       console: workspaceConsole(slug, args.api),
     },
-    hint: `${slug} is on the ${summary?.plan ?? "unknown"} plan${usage}. This login acts as ${text(ws.currentUserLogin) || "its minter"} (${text(ws.currentUserRole) || "role unknown"}). ${consoleOnly(slug, args.api)}`,
+    hint: `${warning ? `${warning} ` : ""}${slug} is on the ${summary?.plan ?? "unknown"} plan${usage}. This login acts as ${text(ws.currentUserLogin) || "its minter"} (${text(ws.currentUserRole) || "role unknown"}). ${consoleOnly(slug, args.api)}`,
     warnings: [
       plan.ok ? null : `The plan could not be read (${plan.message}).`,
       summary && summary.countersReadable === false ? "The plan's counters could not be read right now, so used is not current." : null,

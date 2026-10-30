@@ -285,7 +285,7 @@ describe("extension_project_create", () => {
     expect(out.ok).toBe(true);
     expect(out.status).toBe("created");
     expect(out.value.projectId).toBe("prj_new");
-    expect(out.value.firstBuild).toEqual({ dispatched: true });
+    expect(out.value.firstBuild).toEqual({ dispatched: true, spent: 1 });
     expect(out.hint).toContain("Its first build was dispatched.");
     expect(out.value.allowance.spent).toContain("including its first build");
     expect(out.warnings ?? []).toEqual([]);
@@ -664,6 +664,62 @@ describe("extension_project_create", () => {
       expect(out.hint).not.toContain("Its first build was dispatched");
     },
   );
+
+  it("reads the workspace's plan with a stored login of that workspace before the create, and says what the first build leaves", async () => {
+    const { writeCredentials } = await import("../lib/credentials");
+    writeCredentials({ version: 1, token: "other.sig", workspaceSlug: "acme", projectSlug: "other-app", expiresAt: FUTURE + 3600, api: API });
+    const { fn, calls } = createFetch({
+      token: [{ status: 200, body: grantBody }],
+      create: {
+        status: 200,
+        body: { success: true, projectId: "prj_new", projectSlug: "ghost-app", workspaceSlug: "acme", idempotencyKey: "idem-1", initialBuild: { dispatched: true } },
+      },
+    });
+    const routed = vi.fn(async (url: any, init?: RequestInit) => {
+      if (String(url).endsWith("/api/workspaces/acme/plan")) {
+        calls.push({ url: String(url), init });
+
+        return jsonResponse({ plan: "pro", limits: { buildsPerMonth: 350, projects: 10 }, used: { buildsThisMonth: 342, projects: 3 } });
+      }
+
+      return fn(url, init);
+    });
+    vi.stubGlobal("fetch", routed);
+
+    const out = JSON.parse(await handler({ ...baseArgs, deviceCode: "dev-code" }));
+
+    expect(out.status).toBe("created");
+    expect(out.value.firstBuild).toEqual({ dispatched: true, spent: 1 });
+    expect(out.value.allowance.remains).toBe("Before this call the workspace had 8 of 350 builds left this month; the first build spends one, leaving 7.");
+    expect(out.value.allowance.remaining).toBe(7);
+    expect(out.value.allowance.warning).toBe("7 builds remain of 350 this month; each project creation and each push spends one.");
+
+    const planCall = calls.findIndex((c) => c.url.endsWith("/api/workspaces/acme/plan"));
+    const createCall = calls.findIndex((c) => c.url.endsWith("/api/cli/projects/create"));
+
+    expect(planCall).toBeGreaterThanOrEqual(0);
+    expect(planCall).toBeLessThan(createCall);
+    expect((calls[planCall]!.init?.headers as Record<string, string>).authorization).toBe("Bearer other.sig");
+    expect(calls.filter((c) => c.url.endsWith("/plan"))).toHaveLength(1);
+  });
+
+  it("asks the platform for no plan without a login of that workspace, and still says the first build spent one", async () => {
+    const out = await createdWith({ initialBuild: { dispatched: true } });
+
+    expect(out.value.firstBuild).toEqual({ dispatched: true, spent: 1 });
+    expect(out.value.allowance.remains).toContain("never invents one");
+    expect(out.value.allowance.remains).toContain("The first build spent one of the month's allowance");
+    expect(out.value.allowance.remaining).toBeUndefined();
+
+    const withheld = await createdWith({ initialBuild: { dispatched: false, reason: "no_commits" } });
+
+    expect(withheld.value.firstBuild).toEqual({ dispatched: false, reason: "no_commits" });
+    expect(withheld.value.allowance.remains).not.toContain("first build spent one");
+  });
+
+  it("says in its description that the first build spends one of the monthly allowance", () => {
+    expect(schema.description).toContain("spends one build of the workspace's monthly allowance");
+  });
 
   it("promises the firstBuild field in its description", () => {
     expect(schema.description).toContain("`firstBuild`");
