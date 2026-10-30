@@ -8,8 +8,11 @@
 
 import { pathToFileURL } from "node:url";
 
+import { adoptLocalState, localState, type LocalState } from "./local-state";
+import { serverStamp, type ServerStamp } from "./server-stamp";
 import { adoptKeptLogins, keptLoginEntries } from "./session-login";
 import { DEFAULT_SERVER_OPTIONS, setServerOptions, type ServerOptions } from "./tool-policy";
+import { ASSERT_CHECKS } from "./verdict";
 
 export type ToolFrame = {
   content: Array<{ type: "text"; text: string }>;
@@ -24,6 +27,7 @@ export interface RebuiltCall {
 export interface Handover {
   options: ServerOptions;
   keptLogins: Array<[string, string]>;
+  local?: LocalState;
 }
 
 export interface ListedTool {
@@ -37,6 +41,8 @@ export interface RebuiltBuild {
   adoptHandover: (state: Handover) => void;
   handoverState: () => Handover;
   listRebuilt?: () => ListedTool[];
+  stampRebuilt?: () => ServerStamp;
+  assertChecksRebuilt?: () => string[];
 }
 
 export type BuildImporter = (specifier: string) => Promise<unknown>;
@@ -66,13 +72,32 @@ export function listRebuilt(): ListedTool[] {
 }
 
 export function handoverState(options: ServerOptions = adoptedOptions ?? DEFAULT_SERVER_OPTIONS): Handover {
-  return { options, keptLogins: keptLoginEntries() };
+  return { options, keptLogins: keptLoginEntries(), local: localState() };
 }
 
 export function adoptHandover(state: Handover): void {
   adoptedOptions = state.options;
   setServerOptions(state.options);
   adoptKeptLogins(state.keptLogins);
+  adoptLocalState(state.local);
+}
+
+export function stampRebuilt(): ServerStamp {
+  return serverStamp.stamp();
+}
+
+export function assertChecksRebuilt(): string[] {
+  return ASSERT_CHECKS.map((check) => check.id);
+}
+
+export function carriesLocalState(candidate: RebuiltBuild, state: Handover): boolean {
+  if (!state.local) return false;
+
+  try {
+    return candidate.handoverState().local === state.local;
+  } catch {
+    return false;
+  }
 }
 
 export async function dispatchRebuilt(call: RebuiltCall): Promise<ToolFrame> {
@@ -93,7 +118,14 @@ export function buildSpecifier(entry: string, builtAt: string, attempt: number):
 
 export type ReloadOutcome = { frame: ToolFrame; reloaded: string | null } | { reloadError: string };
 
-type Loaded = RebuiltBuild | { reloadError: string };
+export interface ActiveBuild {
+  builtAt: string;
+  local: boolean;
+  version: string | null;
+  assertChecks: string[] | null;
+}
+
+type Loaded = { build: RebuiltBuild; local: boolean } | { reloadError: string };
 
 type Loading = { builtAt: string; done: Promise<Loaded> };
 
@@ -104,10 +136,11 @@ export function createReloader(deps: {
   importBuild: BuildImporter | null;
   handover: () => Handover;
 }): {
+  activate: (builtAt: string) => Promise<ActiveBuild | { reloadError: string }>;
   dispatch: (call: RebuiltCall, builtAt: string) => Promise<ReloadOutcome>;
   list: (builtAt: string) => Promise<ListedTool[] | null>;
 } {
-  let active: { builtAt: string; build: RebuiltBuild; said: boolean } | null = null;
+  let active: { builtAt: string; build: RebuiltBuild; local: boolean; said: boolean } | null = null;
   let loading: Loading | null = null;
   let attempts = 0;
 
@@ -139,7 +172,7 @@ export function createReloader(deps: {
       return { reloadError: `the ${builtAt} build refused the handover: ${messageOf(err)}` };
     }
 
-    return candidate;
+    return { build: candidate, local: carriesLocalState(candidate, state) };
   };
 
   const begin = (builtAt: string): Loading => {
@@ -147,7 +180,7 @@ export function createReloader(deps: {
       builtAt,
       done: load(builtAt).then((loaded) => {
         if (loading === pending) loading = null;
-        if (!("reloadError" in loaded)) active = { builtAt, build: loaded, said: false };
+        if (!("reloadError" in loaded)) active = { builtAt, build: loaded.build, local: loaded.local, said: false };
 
         return loaded;
       }),
@@ -158,23 +191,40 @@ export function createReloader(deps: {
   };
 
   const activate = (builtAt: string): Promise<Loaded> => {
-    if (active?.builtAt === builtAt) return Promise.resolve(active.build);
+    if (active?.builtAt === builtAt) return Promise.resolve({ build: active.build, local: active.local });
 
     const pending = loading?.builtAt === builtAt ? loading : begin(builtAt);
 
     return pending.done;
   };
 
+  const read = <T>(fn: (() => T) | undefined): T | null => {
+    if (typeof fn !== "function") return null;
+
+    try {
+      return fn();
+    } catch {
+      return null;
+    }
+  };
+
   return {
+    async activate(builtAt) {
+      const loaded = await activate(builtAt);
+      if ("reloadError" in loaded) return loaded;
+
+      return {
+        builtAt,
+        local: loaded.local,
+        version: read(loaded.build.stampRebuilt)?.version ?? null,
+        assertChecks: read(loaded.build.assertChecksRebuilt),
+      };
+    },
     async list(builtAt) {
       const loaded = await activate(builtAt);
-      if ("reloadError" in loaded || typeof loaded.listRebuilt !== "function") return null;
+      if ("reloadError" in loaded) return null;
 
-      try {
-        return loaded.listRebuilt();
-      } catch {
-        return null;
-      }
+      return read(loaded.build.listRebuilt);
     },
     async dispatch(call, builtAt) {
       const loaded = await activate(builtAt);
@@ -184,7 +234,7 @@ export function createReloader(deps: {
       let frame: ToolFrame;
 
       try {
-        frame = await loaded.dispatchRebuilt(call);
+        frame = await loaded.build.dispatchRebuilt(call);
       } catch (err) {
         return { reloadError: `the ${builtAt} build threw while answering ${call.name}: ${messageOf(err)}` };
       }

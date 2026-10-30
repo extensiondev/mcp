@@ -10,6 +10,7 @@ import fs from "node:fs";
 import { setTimeout as sleep } from "node:timers/promises";
 
 import { CDPClient } from "./cdp";
+import { localState } from "./local-state";
 import { readyContractPath } from "./session-paths";
 
 export const RECENT_RELOAD_MS = 15_000;
@@ -132,13 +133,11 @@ export async function waitForExtensionBack(
   }
 }
 
-const openedExtensionTargets = new Map<string, string>();
-
 export function rememberExtensionTarget(targetId: unknown, url: unknown): void {
   if (typeof targetId !== "string" || !targetId || typeof url !== "string") return;
-  if (extensionIdOf(url)) openedExtensionTargets.set(targetId, url);
+  if (extensionIdOf(url)) localState().extensionTargets.set(targetId, url);
 }
 
 export function rememberedExtensionTargetUrl(targetId: string): string | null {
-  return openedExtensionTargets.get(targetId) ?? null;
+  return localState().extensionTargets.get(targetId) ?? null;
 }
