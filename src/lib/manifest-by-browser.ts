@@ -50,7 +50,7 @@ function readManifest(file: string): Manifest | null {
   }
 }
 
-function sourceManifest(projectPath: string): Manifest | null {
+export function sourceManifest(projectPath: string): Manifest | null {
   return (
     readManifest(path.resolve(projectPath, "src", "manifest.json")) ??
     readManifest(path.resolve(projectPath, "manifest.json"))
