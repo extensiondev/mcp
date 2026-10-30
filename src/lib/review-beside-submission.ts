@@ -261,10 +261,14 @@ export function storeReviewLine(args: {
   return review;
 }
 
+function retired(record: ReviewedSubmission): number {
+  return Number(String(record.status ?? "").trim().toLowerCase() === "superseded");
+}
+
 function newestAnswered(records: ReviewedSubmission[]): ReviewView | undefined {
   const answered = records
     .filter((record) => record.storeReview?.state && str(record.buildSha))
-    .sort((a, b) => checkedAtMs(b.storeReview?.checkedAt) - checkedAtMs(a.storeReview?.checkedAt))[0];
+    .sort((a, b) => retired(a) - retired(b) || checkedAtMs(b.storeReview?.checkedAt) - checkedAtMs(a.storeReview?.checkedAt))[0];
 
   if (!answered?.storeReview) return undefined;
 

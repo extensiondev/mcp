@@ -305,6 +305,24 @@ describe("an upload that entered no review never rewrites the store's review lin
     });
   });
 
+  it("answers the line of the version the store still serves, never a retired version the poll checked later", () => {
+    const retired = {
+      buildSha: "e4b8976",
+      version: "0.2.0",
+      storeVersion: { packaged: "0.2.0.6" },
+      status: "superseded",
+      submittedAt: "2026-10-27T08:00:00.000Z",
+      storeReview: { state: "PUBLISHED", checkedAt: "2026-10-30T16:00:00.000Z", source: "poll" },
+    };
+
+    expect(storeReviewLine({ store: "edge", row: OLDER_ROW, latest: DRAFT, earlier: [retired, PUBLISHED] })).toMatchObject({
+      status: "approved",
+      version: "0.2.0.7",
+      buildId: "e679664",
+      checkedAt: "2026-10-29T18:00:00.000Z",
+    });
+  });
+
   it("answers no line, never pending, when nothing the store answered is on record", () => {
     expect(storeReviewLine({ store: "safari", row: OLDER_ROW, latest: DRAFT, earlier: [] })).toBeUndefined();
     expect(storeReviewLine({ store: "chrome", row: OLDER_ROW, latest: undefined, earlier: [] })).toBeUndefined();

@@ -156,14 +156,50 @@ const RELEASE_MODE_WORDS: Record<string, string> = {
   SCHEDULED: "set to a scheduled release",
 };
 
-export function newestStoreReleaseByStore(rows: StoreReleaseView[]): Record<string, StoreReleaseView> {
+const DOTTED_VERSION = /^\d+(\.\d+)*$/;
+
+function compareVersions(a: string, b: string): number {
+  if (!DOTTED_VERSION.test(a) || !DOTTED_VERSION.test(b)) return 0;
+
+  const left = a.split(".").map(Number);
+  const right = b.split(".").map(Number);
+
+  for (let i = 0; i < Math.max(left.length, right.length); i += 1) {
+    const diff = (left[i] ?? 0) - (right[i] ?? 0);
+    if (diff !== 0) return diff;
+  }
+
+  return 0;
+}
+
+function timeMs(value: string): number {
+  const ms = Date.parse(value);
+
+  return Number.isFinite(ms) ? ms : 0;
+}
+
+export function newerStoreRelease(a: StoreReleaseView, b: StoreReleaseView): boolean {
+  return (
+    compareVersions(a.version, b.version) ||
+    timeMs(a.submittedAt) - timeMs(b.submittedAt) ||
+    timeMs(a.updatedAt) - timeMs(b.updatedAt)
+  ) > 0;
+}
+
+function newestBy(rows: StoreReleaseView[], laneOf: (row: StoreReleaseView) => string): Record<string, StoreReleaseView> {
   const out: Record<string, StoreReleaseView> = {};
 
   for (const row of rows) {
-    if (!out[row.store]) out[row.store] = row;
+    const lane = laneOf(row);
+    const held = out[lane];
+    if (!held || newerStoreRelease(row, held)) out[lane] = row;
   }
 
   return out;
+}
+
+export function newestStoreReleaseByStore(rows: StoreReleaseView[]): Record<string, StoreReleaseView> {
+  return newestBy(rows, (row) => row.store);
 }
 
 /* @invariant FIREFOX IS READ ONE LINE PER AMO CHANNEL. AMO keeps the newest
@@ -177,14 +213,7 @@ export function storeReleaseLane(row: Pick<StoreReleaseView, "store" | "amoChann
 }
 
 export function newestStoreReleaseByLane(rows: StoreReleaseView[]): Record<string, StoreReleaseView> {
-  const out: Record<string, StoreReleaseView> = {};
-
-  for (const row of rows) {
-    const lane = storeReleaseLane(row);
-    if (!out[lane]) out[lane] = row;
-  }
-
-  return out;
+  return newestBy(rows, storeReleaseLane);
 }
 
 export function storeReleaseSentence(row: StoreReleaseView): string {
