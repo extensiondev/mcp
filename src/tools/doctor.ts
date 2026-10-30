@@ -10,13 +10,14 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 
-import { pinnedCliVersion, runExtensionCli } from "../lib/exec";
+import { runExtensionCli } from "../lib/exec";
 import { nodeCheck } from "../lib/node-engine";
 import {
-  engineDrift,
   outputFlagRefusalMessage,
   refusedTheOutputFlag,
 } from "../lib/engine-version";
+import { resolveEngineOverride } from "../lib/engine-override";
+import { projectEngineCheck, readProjectEngine } from "../lib/project-engine-check";
 import { toMcpSpeak } from "../lib/act";
 import { envelope, isEnvelope } from "../lib/envelope";
 import {
@@ -121,17 +122,22 @@ async function environmentPreflight(): Promise<string> {
     timeoutMs: 60_000,
   });
   const cliVersion = stdout.trim() || stderr.trim();
+  const override = resolveEngineOverride();
   checks.push({
     check: "extension-cli",
     status: code === 0 ? "pass" : "fail",
     detail:
       code === 0
-        ? `extension CLI resolvable (${cliVersion})`
-        : "extension CLI could not be resolved",
+        ? `extension CLI resolvable (${cliVersion})${override ? ` from the engine override ${override.env}=${override.given}` : ""}`
+        : override
+          ? cliVersion || "extension CLI could not be resolved"
+          : "extension CLI could not be resolved",
     remediation:
       code === 0
         ? undefined
-        : "Install locally (npm i -D extension) or rely on npx; check network access to the npm registry.",
+        : override
+          ? `Fix or unset ${override.env}; while it is set no other engine is used.`
+          : "Install locally (npm i -D extension) or rely on npx; check network access to the npm registry.",
   });
 
   const cacheFile = path.join(
@@ -226,21 +232,6 @@ export function recentErrorLogs(
   }
 
   return [...new Set(errs)].slice(-max);
-}
-
-function projectEngineVersion(projectPath: string): string | null {
-  try {
-    const p = path.resolve(
-      projectPath,
-      "node_modules",
-      "extension",
-      "package.json",
-    );
-
-    return JSON.parse(fs.readFileSync(p, "utf8")).version || null;
-  } catch {
-    return null;
-  }
 }
 
 function capabilityProbeChecks(parsed: unknown): unknown {
@@ -348,6 +339,19 @@ export async function handler(args: {
     resolved.source === "fallback"
       ? (sightedContractBrowser(projectPath) ?? resolved.browser)
       : resolved.browser;
+  const engineVersion = readProjectEngine(projectPath)?.version ?? null;
+  const engine = projectEngineCheck(projectPath);
+
+  if (engine?.status === "fail") {
+    return envelope({
+      ok: false,
+      command: schema.name,
+      status: "unhealthy",
+      value: { browser, ...(engineVersion ? { engineVersion } : {}), checks: [engine] },
+      hint: "No engine was spawned: the engine override is set but names no bin, so the session could not be diagnosed. Fix or unset it and call extension_doctor again.",
+    });
+  }
+
   const { code, stdout, stderr } = await runExtensionCli(
     ["doctor", projectPath, "--browser", browser, "--output", "json"],
     { cwd: projectPath },
@@ -433,23 +437,7 @@ export async function handler(args: {
       }
     }
 
-    const engineVersion = projectEngineVersion(projectPath);
-
-    if (engineVersion) {
-      const pin = pinnedCliVersion();
-      const drift = pin === "" || pin === "latest" ? "same" : engineDrift(engineVersion, pin);
-      const older = drift === "older" || drift === "unknown";
-      checks.push({
-        check: "project-engine",
-        status: older ? "warn" : "pass",
-        detail: `project-local extension@${engineVersion}${drift === "newer" ? `, newer than the extension@${pin} the MCP pins; the dev loop uses the project bin, not the pin, so keep it` : older ? `, but the MCP pins extension@${pin}; the dev loop uses the project bin, not the pin` : ""}`,
-        ...(older
-          ? {
-              remediation: `Run \`(cd ${projectPath} && npm i -D extension@${pin})\` to match the pinned engine.`,
-            }
-          : {}),
-      });
-    }
+    if (engine) checks.push(engine);
 
     if (WEBKIT_FAMILY.has(browser)) {
       const info = readWebDriverSession(projectPath, browser);

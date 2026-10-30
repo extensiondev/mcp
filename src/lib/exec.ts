@@ -14,6 +14,11 @@ import { setTimeout as sleep } from "node:timers/promises";
 
 import spawn from "cross-spawn";
 
+import {
+  describeEngineOverride,
+  engineOverrideRefusal,
+  resolveEngineOverride,
+} from "./engine-override";
 import { envelope } from "./envelope";
 
 import { dependencies } from "../../package.json";
@@ -88,6 +93,9 @@ export function exactVersion(spec: string): string {
 }
 
 export function describeExtensionInvocation(projectDir?: string): string {
+  const override = resolveEngineOverride();
+  if (override) return describeEngineOverride(override);
+
   const { command, prefixArgs } = resolveExtensionInvocation(projectDir);
 
   return prefixArgs.length
@@ -95,10 +103,21 @@ export function describeExtensionInvocation(projectDir?: string): string {
     : `${command} (the project's own Extension.js)`;
 }
 
-export function resolveExtensionInvocation(projectDir?: string): {
+export interface ExtensionInvocation {
   command: string;
   prefixArgs: string[];
-} {
+  refusal?: string;
+}
+
+export function resolveExtensionInvocation(projectDir?: string): ExtensionInvocation {
+  const override = resolveEngineOverride();
+
+  if (override) {
+    return override.bin
+      ? { command: process.execPath, prefixArgs: [override.bin] }
+      : { command: override.expectedBin, prefixArgs: [], refusal: engineOverrideRefusal(override) };
+  }
+
   if (projectDir) {
     const bin = path.join(
       projectDir,
@@ -122,9 +141,15 @@ export function runExtensionCli(
   args: string[],
   options?: { cwd?: string; timeoutMs?: number },
 ): Promise<CliResult> {
-  const { command, prefixArgs } = resolveExtensionInvocation(options?.cwd);
+  const { command, prefixArgs, refusal } = resolveExtensionInvocation(options?.cwd);
 
   return new Promise((resolve) => {
+    if (refusal) {
+      resolve({ code: 1, stdout: "", stderr: refusal });
+
+      return;
+    }
+
     let ioDir: string;
     let outFd: number;
     let errFd: number;
@@ -201,12 +226,14 @@ export function spawnExtensionCli(
   args: string[],
   options?: { cwd?: string; projectDir?: string; env?: Record<string, string> },
 ): SpawnedCli {
-  const { command, prefixArgs } = resolveExtensionInvocation(
+  const { command, prefixArgs, refusal } = resolveExtensionInvocation(
     options?.projectDir ?? options?.cwd,
   );
   const logDir = fs.mkdtempSync(path.join(os.tmpdir(), "extension-mcp-"));
   const logPath = path.join(logDir, "session.log");
   const fd = fs.openSync(logPath, "a");
+  if (refusal) fs.writeSync(fd, `${refusal}\n`);
+
   const child = spawn(command, [...prefixArgs, ...args], {
     cwd: options?.cwd ?? options?.projectDir,
     detached: true,
@@ -215,9 +242,9 @@ export function spawnExtensionCli(
   });
   fs.closeSync(fd);
 
-  let spawnFailure: Error | null = null;
+  let spawnFailure: Error | null = refusal ? new Error(refusal) : null;
   child.on("error", (err) => {
-    spawnFailure = err;
+    spawnFailure ??= err;
   });
 
   child.unref();
@@ -257,6 +284,6 @@ export async function spawnFailedEnvelope(
       name: "CliError",
       message: `The extension CLI process could not be spawned${cause ? ` (${cause.message})` : ""}. No session was started and nothing was registered.`,
     },
-    hint: "The one command this server chose could not be launched: the project-local node_modules/.bin/extension when the project has one, else npx. Install the engine in the project (npm i -D extension) or put npx on the PATH the MCP server runs with, then call the tool again.",
+    hint: "The one command this server chose could not be launched: the engine override when EXTENSION_MCP_ENGINE_DIR is set, else the project-local node_modules/.bin/extension when the project has one, else npx. Fix or unset the override, install the engine in the project (npm i -D extension) or put npx on the PATH the MCP server runs with, then call the tool again.",
   });
 }

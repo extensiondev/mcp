@@ -30,7 +30,7 @@ Extensions fail silently: content scripts that never inject, panels that never o
 - **Test**: state expectations about the running extension and get one verdict each
 - **Ship**: validate the manifest cross-browser and build for production. On the [platform lane](#platform-private-alpha): share a preview link, promote a build, and submit to the stores
 
-Built on [Extension.js](https://extension.js.org), the open source framework extension.dev sponsors.
+Built on [Extension.js](https://extension.js.org), the open source framework extension.dev sponsors. Every engine command runs the project's own `node_modules/.bin/extension` when the project has one, else `npx extension@<pin>` at the version this server pins (`EXTENSION_MCP_CLI_VERSION` changes the pin). To run a fix that has not shipped yet, set `EXTENSION_MCP_ENGINE_DIR` to a compiled Extension.js checkout root (the folder holding `programs/extension/bin/extension.cjs`) or to a built `extension` package folder (holding `bin/extension.cjs`): every spawn then runs `node <that bin>`, the project's engine and the pin are bypassed, `extension_doctor`'s `project-engine` check names the path with its version, sha and branch, and a path with no bin refuses every spawn instead of falling back. `EXTENSION_MCP_ENGINE_BIN` names the exact bin file instead.
 
 ## Watch it work
 
