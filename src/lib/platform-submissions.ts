@@ -38,17 +38,21 @@ export interface StoreReview {
   reviewSubmissionState?: string;
 }
 
-export type StoreStatusSource = "publish-answer" | "poll" | "run" | "inferred";
+export type StoreStatusSource = "publish-answer" | "poll" | "run" | "inferred" | "hand" | "unknown";
 
 export interface StoreStatusRead {
   word: string;
   readAt?: string;
   source: StoreStatusSource;
+  sourceWord?: string;
   storeWord?: string;
   liveState?: string;
+  note?: string;
 }
 
-const STATUS_READ_SOURCES: ReadonlySet<string> = new Set(["publish-answer", "poll", "run", "inferred"]);
+const STATUS_READ_SOURCES: ReadonlySet<string> = new Set(["publish-answer", "poll", "run", "inferred", "hand"]);
+
+const STATUS_NOTE_MAX = 300;
 
 export function statusReadOf(raw: unknown): StoreStatusRead | undefined {
   if (!raw || typeof raw !== "object") return undefined;
@@ -56,15 +60,19 @@ export function statusReadOf(raw: unknown): StoreStatusRead | undefined {
   const row = raw as Record<string, unknown>;
   const word = str(row.word);
   const source = str(row.source);
-  if (!word || !source || !STATUS_READ_SOURCES.has(source)) return undefined;
+  if (!word) return undefined;
 
-  const out: StoreStatusRead = { word, source: source as StoreStatusSource };
+  const known = Boolean(source && STATUS_READ_SOURCES.has(source));
+  const out: StoreStatusRead = { word, source: known ? (source as StoreStatusSource) : "unknown" };
   const readAt = str(row.readAt);
   const storeWord = str(row.storeWord);
   const liveState = str(row.liveState);
+  const note = str(row.note)?.slice(0, STATUS_NOTE_MAX);
+  if (!known && source) out.sourceWord = source;
   if (readAt) out.readAt = readAt;
   if (storeWord) out.storeWord = storeWord;
   if (liveState) out.liveState = liveState;
+  if (note) out.note = note;
 
   return out;
 }

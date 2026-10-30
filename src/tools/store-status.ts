@@ -284,6 +284,14 @@ export function statusReadNote(read: StoreStatusRead | undefined): string {
     return " (inferred: the platform has no store answer behind this word, so it grounds no next step; ask for a store check with refresh)";
   }
 
+  if (read.source === "hand") {
+    return ` (recorded by hand from the store's own dashboard${read.readAt ? ` at ${read.readAt}` : ""}, not read by a store check${read.note ? `: ${read.note}` : ""})`;
+  }
+
+  if (read.source === "unknown") {
+    return ` (read by a source this MCP does not know${read.sourceWord ? ` (${read.sourceWord})` : ""}${read.readAt ? ` at ${read.readAt}` : ""}, so it grounds no next step; update the MCP to read it)`;
+  }
+
   const where = read.source === "run" ? "the run" : read.source === "poll" ? "a store check" : "the store's answer";
 
   return ` (read from ${where}${read.readAt ? ` at ${read.readAt}` : ""}${read.storeWord ? `, the store says ${read.storeWord}` : ""})`;
