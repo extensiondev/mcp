@@ -6,9 +6,11 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
+import { screenshotsFrom } from "./listing-on-record";
 import { STORE_MD_FILENAME } from "./store-md";
 import { storeMdLineOf } from "./store-md-fields";
 
+import type { RecordRead } from "./listing-on-record";
 import type { ListingField } from "./store-md-listing";
 import type { LocalListing } from "../tools/store-listing";
 
@@ -49,16 +51,12 @@ const ROWS: Row[] = [
   { field: "testInstructions", label: "Test instructions", tab: CHROME_TABS.testInstructions },
 ];
 
-function fromOf(local: LocalListing, source: Row["source"]): string | null {
+function fromOf(local: LocalListing, source: Row["source"], record: RecordRead | null): string | null {
   if (!source) return null;
 
   if (source === "icon") return local.patch.icons?.length ? "the built 128 px icon" : null;
 
-  if (source === "screenshots") {
-    const shots = local.patch.screenshots?.length ?? 0;
-
-    return shots ? `${shots} screenshot${shots === 1 ? "" : "s"} in the extension.dev listing record, sent by sync-listing` : null;
-  }
+  if (source === "screenshots") return screenshotsFrom(local.patch.screenshots?.length ?? 0, record);
 
   if (source === "privacy") return local.privacy.section ? `\`## Privacy and data use\` in ${STORE_MD_FILENAME}` : null;
 
@@ -80,10 +78,10 @@ function fromOf(local: LocalListing, source: Row["source"]): string | null {
  * item's dashboard address when the platform knows it. The order is the
  * dashboard's own, tab by tab.
  */
-export function chromeDashboardPaste(local: LocalListing, dashboardUrl: string | null): DashboardPaste {
+export function chromeDashboardPaste(local: LocalListing, dashboardUrl: string | null, record: RecordRead | null = null): DashboardPaste {
   return {
     dashboardUrl,
-    fields: ROWS.map((row) => ({ field: row.field, label: row.label, tab: row.tab, from: fromOf(local, row.source) })),
+    fields: ROWS.map((row) => ({ field: row.field, label: row.label, tab: row.tab, from: fromOf(local, row.source, record) })),
   };
 }
 

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { serverInstructions } from "../index";
+import { LINK_ITEM_POINTER } from "../lib/link-item-answer";
 import { trackFields } from "../lib/track-url";
 import { handler as submit } from "../tools/submit";
 import { API, PROJECT_ROUTE, useProjectRoutes } from "./fixtures/project-routes";
@@ -103,8 +104,12 @@ describe("extension_submit points a person at the Chrome Web Store connection in
 
     expect(out.status).toBe("store-item-not-linked");
     expect(out.value).toMatchObject({ trackUrl: SETTINGS, newItemUrl: NEW_ITEM, packageUrl: PACKAGE, linkItemUrl: LINK_ITEM });
-    expect(out.hint).toBe(LINK_SENTENCES);
-    expect(sentenceCount(out.hint)).toBe(3);
+    expect(out.value.sayToPerson).toBe(LINK_SENTENCES);
+    expect(sentenceCount(out.value.sayToPerson)).toBe(3);
+    expect(out.hint).toBe(LINK_ITEM_POINTER);
+    expect(out.value.nextStep.say).toBe(LINK_ITEM_POINTER);
+    expect(out.hint).not.toContain(PACKAGE);
+    expect(JSON.stringify(out).split("One step is yours, once")).toHaveLength(2);
     expect(JSON.stringify(out)).not.toContain("created on the first submission");
     expect(JSON.stringify(out)).not.toMatch(SECRET_NAMES);
     expect(trackFields("extension_submit", { args: { action: "preflight", browsers: ["chrome"], api: API }, status: out.status, value: out.value })?.trackUrl).toBe(SETTINGS);
@@ -139,7 +144,9 @@ describe("extension_submit points a person at the Chrome Web Store connection in
     expect(out.status).toBe("store-item-not-linked");
     expect(out.error.platformCode).toBe("STORE_ITEM_NOT_LINKED");
     expect(out.value).toMatchObject({ trackUrl: SETTINGS, newItemUrl: NEW_ITEM, packageUrl: PACKAGE, linkItemUrl: LINK_ITEM });
-    expect(out.hint).toBe(LINK_SENTENCES);
+    expect(out.value.sayToPerson).toBe(LINK_SENTENCES);
+    expect(out.hint).toBe(LINK_ITEM_POINTER);
+    expect(out.value.nextStep.say).toBe(LINK_ITEM_POINTER);
     expect(JSON.stringify(out)).not.toMatch(SECRET_NAMES);
   });
 

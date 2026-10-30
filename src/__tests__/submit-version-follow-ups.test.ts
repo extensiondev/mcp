@@ -300,6 +300,15 @@ describe("the preflight view keeps a locked check's lock and each store's block"
       act: "publish",
       blocking: [],
       warnings: ["edge.description_length"],
+      checks: [
+        {
+          id: "edge.description_length",
+          label: "edge.description_length",
+          status: "fail",
+          actual: "the platform's store preflight named it without a reason: POST stores/edge/submissions/preflight listed it in edgePreflight.warnings with no row of that id in edgePreflight.checks",
+          expected: "a row in edgePreflight.checks with the rule's label, expected, actual and what to do",
+        },
+      ],
       lock: EDGE_LOCK,
       approval: "Publish is queued behind version 0.2.0.7, which Partner Center is reviewing.",
     });
