@@ -59,13 +59,29 @@ export async function listDocumentTargets(port: number): Promise<PageTarget[]> {
   return filterDocumentTargets(await CDPClient.discoverTargets(port));
 }
 
+export function urlPatternMatcher(needle: string): (text: string) => boolean {
+  if (!needle.includes("*")) {
+    const wanted = needle.toLowerCase();
+
+    return (text) => text.toLowerCase().includes(wanted);
+  }
+
+  const literal = needle
+    .split("*")
+    .map((part) => part.replace(/[.+?^${}()|[\]\\/]/g, "\\$&"))
+    .join(".*");
+  const expression = new RegExp(`^${literal}$`, "i");
+
+  return (text) => expression.test(text);
+}
+
 export function matchTargetsByUrl(
   targets: PageTarget[],
   needle: string,
 ): PageTarget[] {
-  const wanted = needle.toLowerCase();
-  const byUrl = targets.filter((t) => t.url.toLowerCase().includes(wanted));
+  const matches = urlPatternMatcher(needle);
+  const byUrl = targets.filter((t) => matches(t.url));
   if (byUrl.length > 0) return byUrl;
 
-  return targets.filter((t) => t.title.toLowerCase().includes(wanted));
+  return targets.filter((t) => matches(t.title));
 }

@@ -320,4 +320,36 @@ describe("cdp-targets helpers", () => {
 
     expect(matches.map((t) => t.targetId)).toEqual(["1"]);
   });
+
+  describe("matchTargetsByUrl reads a needle with * as a glob over the whole url", () => {
+    const pages = filterPageTargets([
+      { id: "yt", type: "page", url: "https://www.youtube.com/watch?v=05ny1bmo-Kk&t=1260s", title: "Match of the day" },
+      { id: "other", type: "page", url: "https://www.youtube.com/watch?v=zzz", title: "Other clip" },
+      { id: "plain", type: "page", url: "https://example.com/", title: "Example Domain" },
+    ]);
+
+    it("spans the query string, and ? in the glob is literal", () => {
+      expect(matchTargetsByUrl(pages, "https://www.youtube.com/watch?v=05ny1bmo-Kk*").map((t) => t.targetId)).toEqual(["yt"]);
+      expect(matchTargetsByUrl(pages, "https://www.youtube.com/watch?v=05ny1bmo-Kk").map((t) => t.targetId)).toEqual(["yt"]);
+      expect(matchTargetsByUrl(pages, "*youtube.com/watch?v=*").map((t) => t.targetId)).toEqual(["yt", "other"]);
+      expect(matchTargetsByUrl(pages, "https://www.youtube.com/watchXv=05ny1bmo-Kk*")).toEqual([]);
+    });
+
+    it("anchors the glob, so a run of literal characters alone matches nothing", () => {
+      expect(matchTargetsByUrl(pages, "youtube.com/watch?v=05ny1bmo-Kk*")).toEqual([]);
+      expect(matchTargetsByUrl(pages, "https://www.youtube.com/watch?v=05ny1bmo-Kk*&nothere")).toEqual([]);
+      expect(matchTargetsByUrl(pages, "*.example.com/*")).toEqual([]);
+    });
+
+    it("keeps a needle without * as a case-insensitive substring", () => {
+      expect(matchTargetsByUrl(pages, "YOUTUBE.COM/WATCH").map((t) => t.targetId)).toEqual(["yt", "other"]);
+      expect(matchTargetsByUrl(pages, "v=05ny1bmo-Kk&t=1260s").map((t) => t.targetId)).toEqual(["yt"]);
+    });
+
+    it("falls back to the title with the same glob reading", () => {
+      expect(matchTargetsByUrl(pages, "match of the*").map((t) => t.targetId)).toEqual(["yt"]);
+      expect(matchTargetsByUrl(pages, "*of the day").map((t) => t.targetId)).toEqual(["yt"]);
+      expect(matchTargetsByUrl(pages, "of the*")).toEqual([]);
+    });
+  });
 });
