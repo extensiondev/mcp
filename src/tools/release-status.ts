@@ -26,7 +26,7 @@ export const schema = {
         items: { type: "string", enum: ["releases", "stores", "history", "runs", "rollout", "cut", "listing"] },
         default: ["releases", "stores"],
         description:
-          "What to read. releases: the project's visibility as the platform records it (projectVisibility, public or private, with the registry's copy as the fallback), the channel to promoted build sha, each channel's audience (public or private) when the platform records it, recent builds, and a build page URL for each, which opens for anyone on a public project and only for workspace members on a private one; on a public project each channel also carries channelUrl per browser, <workspace>.extension.dev/<project>/channels/<browser>/<channel>. stores: for chrome, firefox, edge and safari, configured or not, the last credential health check, the last recorded submission and the latest review status; when your login covers the project it also reads the platform's own submission records and their store runs (a run that failed before any store step is recorded as failed, and no store received it), each store's configuration (enabled, credentials set and the names of any missing ones, never a value, listing URL, submission mode) and up to 5 earlier submissions per store, each with the id extension_submit (action:'cancel') takes. history: each release (browser and channel) with its build, version, rollout, promotion run and its 5 most recent events, plus whether a build is ready to promote; only a token minted by a workspace owner may read it. runs: the newest release workflow runs (the last 7 days, or since a date within the last 30 days), also owner-minted only. rollout: the Chrome staged rollout percentage and whether it can be raised. cut: whether a release pull request opened now could build after merging. listing: each store's saved listing (title, summary, description, categories, license, support email, homepage, privacy policy URL, per-store notes, icon and screenshot counts) and what it lacks; the four stores unless store names one. releases and stores are included by default.",
+          "What to read. releases: the project's visibility as the platform records it (projectVisibility, public or private, with the registry's copy as the fallback), the channel to promoted build sha, each channel's audience (public or private) when the platform records it, recent builds, and a build page URL for each, which opens for anyone on a public project and only for workspace members on a private one; on a public project each channel also carries channelUrl per browser, <workspace>.extension.dev/<project>/channels/<browser>/<channel>. stores: for chrome, firefox, edge and safari, configured or not, the last credential health check, the last recorded submission and the latest review status; when your login covers the project it also reads the platform's own submission records and their store runs (a run that failed before any store step is recorded as failed, and no store received it), each store's configuration (enabled, credentials set and the names of any missing ones, never a value, listing URL, submission mode) and up to 5 earlier submissions per store, each with the id extension_submit (action:'cancel') takes; the safari row carries nextStep {kind, say, url} when a store check or the publish answer read Apple's state, watch while Apple reviews the version and release (extension_submit {action:'release', browsers:['safari']}) once Apple reads PENDING_DEVELOPER_RELEASE, and none for a word the platform inferred or someone recorded by hand. history: each release (browser and channel) with its build, version, rollout, promotion run and its 5 most recent events, plus whether a build is ready to promote; only a token minted by a workspace owner may read it. runs: the newest release workflow runs (the last 7 days, or since a date within the last 30 days), also owner-minted only. rollout: the Chrome staged rollout percentage and whether it can be raised. cut: whether a release pull request opened now could build after merging. listing: each store's saved listing (title, summary, description, categories, license, support email, homepage, privacy policy URL, per-store notes, icon and screenshot counts) and what it lacks; the four stores unless store names one. releases and stores are included by default.",
       },
       since: {
         type: "string",
@@ -36,7 +36,12 @@ export const schema = {
         type: "array",
         items: { type: "string", enum: ["chrome", "edge", "firefox", "safari"] },
         description:
-          "With stores, ask the platform to read these stores again now (one poll per project per two minutes, within the platform's GitHub budget), under the stored login and with no approval; value.refresh names what happened per store (dispatched, queued for the budget reset, or refused with the reason). The registry reflects the poll a minute or two later, so read again before saying the state changed. Use it after a publish, or after the owner submitted in a store's own dashboard.",
+          "With stores, ask the platform to read these stores again now (one poll per project per two minutes, within the platform's GitHub budget), under the stored login and with no approval; value.refresh names what happened per store (dispatched, queued for the budget reset, or refused with the reason). The registry reflects the poll a minute or two later, so without waitSeconds read again before saying the state changed. Use it after a publish, or after the owner submitted in a store's own dashboard.",
+      },
+      waitSeconds: {
+        type: "number",
+        description:
+          "With refresh, how long this call waits, 0 to 600 seconds, for the store check it dispatched to land in the registry, re-reading every 10 seconds, so a fresh store state takes one call: refresh:['safari'], waitSeconds:180. It answers once each dispatched store's state was read after the dispatch, or when the bound passes; value.refreshWait {landed, waitedSeconds, stores} says which, and landed false means the read is the state before the check. Without refresh, or when no check was dispatched, it reads once.",
       },
       submissionId: {
         type: "string",
@@ -83,6 +88,7 @@ export async function handler(args: {
   include?: string[];
   since?: string;
   refresh?: string[];
+  waitSeconds?: unknown;
   submissionId?: string;
   store?: string;
   releaseId?: string;
@@ -105,7 +111,7 @@ export async function handler(args: {
 
   const [releases, stores, history, release, runs, rollout, cut, listing] = await Promise.all([
     include.includes("releases") ? readReleases(scope).then(parse) : null,
-    include.includes("stores") ? readStores({ ...scope, refresh: args.refresh, submissionId: args.submissionId }).then(parse) : null,
+    include.includes("stores") ? readStores({ ...scope, refresh: args.refresh, submissionId: args.submissionId, waitSeconds: args.waitSeconds }).then(parse) : null,
     include.includes("history") ? readReleaseHistory(scope).then(parse) : null,
     releaseId ? readOneRelease({ ...scope, releaseId }).then(parse) : null,
     include.includes("runs") ? readPromotionRuns({ ...scope, since: args.since }).then(parse) : null,

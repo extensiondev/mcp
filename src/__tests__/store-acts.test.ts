@@ -37,7 +37,7 @@ describe("extension_submit withdraws a submission, raises a staged rollout and c
   const platform = useProjectRoutes("extdev-store-acts-");
 
   it("offers the store acts beside submit, and only the ones that change what users get count as shipping", () => {
-    expect(schema.inputSchema.properties.action.enum).toEqual(["submit", "preflight", "sync-listing", "cancel", "rollout", "release", "publish", "review", "configure-store"]);
+    expect(schema.inputSchema.properties.action.enum).toEqual(["submit", "status", "preflight", "sync-listing", "cancel", "rollout", "release", "publish", "review", "configure-store"]);
     expect(schema.inputSchema.required).toEqual([]);
 
     const ships = TOOL_POLICY.extension_submit.ships as (args: Record<string, unknown>) => boolean;
@@ -48,6 +48,7 @@ describe("extension_submit withdraws a submission, raises a staged rollout and c
     expect(ships({ action: "publish" })).toBe(true);
     expect(ships({ action: "review" })).toBe(true);
     expect(ships({ action: "preflight" })).toBe(false);
+    expect(ships({ action: "status" })).toBe(false);
     expect(ships({ action: "submit", dryRun: false })).toBe(true);
     expect(ships({ browsers: ["chrome"], buildSha: "abc" })).toBe(false);
   });

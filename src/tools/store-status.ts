@@ -13,6 +13,7 @@ import {
   fetchRegistryJson,
   registryFileUrl,
   resolveProjectRef,
+  type ProjectRef,
 } from "../lib/registry";
 import { envelope, type ErrorCode } from "../lib/envelope";
 import { platformHoldEnvelope } from "../lib/platform-hold";
@@ -46,6 +47,8 @@ import {
 import { repairEdgeStoreUrl } from "../lib/edge-listing";
 import { storeRecordUnread } from "../lib/store-readiness";
 import { openProjectApi, projectApiSend } from "../lib/project-api";
+import { outcomeClock, waitBound } from "../lib/act-outcome";
+import { nextStep, type NextStep } from "../lib/store-connection";
 import {
   liveStoreReleaseOf,
   newestStoreReleaseByLane,
@@ -257,16 +260,47 @@ export const SAFARI_RELEASE_CALL = 'extension_submit {action: "release", browser
  * act waited. A word the platform inferred grounds no next step.
  */
 export function safariReleaseStepSentence(latest: SubmissionView | undefined): string {
-  const read = latest?.statusRead;
-  if (!latest || !read || (read.source !== "poll" && read.source !== "publish-answer")) return "";
-
-  const state = (read.storeWord || latest.storeReview?.state || "").toUpperCase();
-  if (state !== APPLE_PENDING_DEVELOPER_RELEASE) return "";
+  if (!latest || groundedAppleState(latest) !== APPLE_PENDING_DEVELOPER_RELEASE) return "";
 
   const version = latest.storeVersion?.packaged || latest.version || "the version";
   const build = latest.storeVersion?.buildNumber ? ` (build ${latest.storeVersion.buildNumber})` : "";
 
   return `Apple approved ${version}${build} and holds it for your release (${APPLE_PENDING_DEVELOPER_RELEASE}); to put it on sale, call ${SAFARI_RELEASE_CALL}, which a workspace owner approves once`;
+}
+
+const APPLE_REVIEW_STATES = new Set(["WAITING_FOR_REVIEW", "IN_REVIEW", "READY_FOR_REVIEW"]);
+
+export const SAFARI_FRESH_READ_CALL =
+  'extension_release_status {include: ["stores"], refresh: ["safari"], waitSeconds: 180}';
+
+function groundedAppleState(latest: SubmissionView): string {
+  const read = latest.statusRead;
+  if (!read || (read.source !== "poll" && read.source !== "publish-answer")) return "";
+
+  return (read.storeWord || latest.storeReview?.state || "").toUpperCase();
+}
+
+export function safariNextStep(latest: SubmissionView | undefined, url: string): NextStep | null {
+  const state = latest ? groundedAppleState(latest) : "";
+  if (!latest || !state) return null;
+
+  const version = latest.storeVersion?.packaged || latest.version || "the version";
+  const build = latest.storeVersion?.buildNumber ? ` (build ${latest.storeVersion.buildNumber})` : "";
+  const readAt = latest.statusRead?.readAt ? `, read at ${latest.statusRead.readAt}` : "";
+
+  if (state === APPLE_PENDING_DEVELOPER_RELEASE) {
+    return nextStep("release", `${safariReleaseStepSentence(latest)}${readAt}.`, url);
+  }
+
+  if (APPLE_REVIEW_STATES.has(state)) {
+    return nextStep(
+      "watch",
+      `Apple holds ${version}${build} as ${state}${readAt}: wait for Apple's review, there is nothing to send meanwhile. To read Apple's state again in one call, call ${SAFARI_FRESH_READ_CALL}; once it reads ${APPLE_PENDING_DEVELOPER_RELEASE}, call ${SAFARI_RELEASE_CALL}.`,
+      url,
+    );
+  }
+
+  return null;
 }
 
 /* @invariant A WORD THE PLATFORM INFERRED IS SAID TO BE INFERRED, AND IT
@@ -548,7 +582,13 @@ export function contradictoryRef(args: { workspace?: string; project?: string })
   return `workspace '${workspace}' and project '${project}' name different workspaces; pass one of them, or project as '<workspace>/<project>' alone.`;
 }
 
-function refreshSentence(refresh: Record<string, StoreRefreshView> | null): string {
+export interface RefreshWaitView {
+  landed: boolean;
+  waitedSeconds: number;
+  stores: string[];
+}
+
+function refreshSentence(refresh: Record<string, StoreRefreshView> | null, wait: RefreshWaitView | null): string {
   if (!refresh || !Object.keys(refresh).length) return "";
 
   const reads: string[] = [];
@@ -577,7 +617,49 @@ function refreshSentence(refresh: Record<string, StoreRefreshView> | null): stri
     return `${store} ${word}`;
   });
 
-  return `A store check was asked for (${rows.join("; ")})${reads.length ? `. ${reads.join(". ")}` : ""}; the registry reflects the rest of the check within a minute or two, so read extension_release_status again before saying the state changed. `;
+  const asked = `A store check was asked for (${rows.join("; ")})${reads.length ? `. ${reads.join(". ")}` : ""}`;
+
+  if (wait?.landed) {
+    return `${asked}; it landed within ${wait.waitedSeconds} s of waiting, so this read carries the state the check read for ${wait.stores.join(", ")}. `;
+  }
+
+  if (wait) {
+    return `${asked}; it had not landed after ${wait.waitedSeconds} s of waiting, so this read is the state before it: read extension_release_status again before saying the state changed. `;
+  }
+
+  return `${asked}; the registry reflects the rest of the check within a minute or two, so read extension_release_status again before saying the state changed, or pass waitSeconds with refresh to answer once it lands. `;
+}
+
+const POLL_RECHECK_MS = 10_000;
+
+function stampOf(at: unknown): number {
+  const ms = Date.parse(String(at ?? ""));
+
+  return Number.isFinite(ms) ? ms : Number.NaN;
+}
+
+function pollSince(refresh: Record<string, StoreRefreshView> | null, askedAt: number): { since: number; stores: string[] } | null {
+  const dispatched = Object.entries(refresh ?? {}).filter(([, row]) => row.dispatched);
+  if (!dispatched.length) return null;
+
+  const stamps = dispatched.map(([, row]) => stampOf(row.dispatchedAt)).filter((ms) => Number.isFinite(ms));
+
+  return { since: stamps.length ? Math.min(...stamps) : askedAt, stores: dispatched.map(([store]) => store) };
+}
+
+export function pollLanded(
+  read: { rows: Array<Record<string, unknown>>; lastPollAt?: string },
+  since: number,
+  stores: string[],
+): boolean {
+  const polledSince = stampOf(read.lastPollAt) >= since;
+
+  return stores.every((store) => {
+    const row = read.rows.find((entry) => entry.store === store);
+    const submission = row?.lastSubmission as SubmissionView | undefined;
+
+    return (polledSince && Boolean(row?.lastPollLane)) || stampOf(submission?.statusRead?.readAt) >= since;
+  });
 }
 
 function lookupSentence(lookup: SubmissionLookup | null, id: string): string {
@@ -602,6 +684,7 @@ export async function readStores(args: {
   api?: string;
   refresh?: string[];
   submissionId?: string;
+  waitSeconds?: unknown;
 }): Promise<string> {
   const ref = resolveProjectRef(args);
 
@@ -615,6 +698,46 @@ export async function readStores(args: {
     );
   }
 
+  const named = Boolean(args.workspace || args.project);
+  const askedAt = outcomeClock.now();
+  const refresh =
+    Array.isArray(args.refresh) && args.refresh.length
+      ? await refreshStores({
+          stores: args.refresh,
+          project: named ? `${ref.workspace}/${ref.project}` : undefined,
+          api: args.api,
+        })
+      : null;
+  const polled = args.waitSeconds !== undefined ? pollSince(refresh, askedAt) : null;
+  const boundMs = polled ? waitBound(args.waitSeconds) * 1000 : 0;
+
+  for (;;) {
+    const read = await answerStores(args, ref, named, refresh);
+    if (typeof read === "string" || !polled) return typeof read === "string" ? read : read.render(null);
+
+    const elapsed = outcomeClock.now() - askedAt;
+    const landed = pollLanded(read, polled.since, polled.stores);
+
+    if (landed || elapsed >= boundMs) {
+      return read.render({ landed, waitedSeconds: Math.round(elapsed / 1000), stores: polled.stores });
+    }
+
+    await outcomeClock.sleep(Math.min(POLL_RECHECK_MS, boundMs - elapsed));
+  }
+}
+
+interface StoresRead {
+  rows: Array<Record<string, unknown>>;
+  lastPollAt?: string;
+  render: (wait: RefreshWaitView | null) => string;
+}
+
+async function answerStores(
+  args: { api?: string; submissionId?: string },
+  ref: ProjectRef,
+  named: boolean,
+  refresh: Record<string, StoreRefreshView> | null,
+): Promise<string | StoresRead> {
   const healthUrl = registryFileUrl(ref, "stores/health.json", args.api);
   const statusUrl = registryFileUrl(ref, "stores/status.json", args.api);
   const submissionsUrl = registryFileUrl(ref, "stores/submissions.json", args.api);
@@ -624,15 +747,6 @@ export async function readStores(args: {
     args.api,
   );
 
-  const named = Boolean(args.workspace || args.project);
-  const refresh =
-    Array.isArray(args.refresh) && args.refresh.length
-      ? await refreshStores({
-          stores: args.refresh,
-          project: named ? `${ref.workspace}/${ref.project}` : undefined,
-          api: args.api,
-        })
-      : null;
   const [healthRes, statusRes, submissionsRes, platform, records, releases] = await Promise.all([
     fetchRegistryJson(healthUrl, fetch, { ref, api: args.api }),
     fetchRegistryJson(statusUrl, fetch, { ref, api: args.api }),
@@ -796,6 +910,9 @@ export async function readStores(args: {
     const queuedAct = platform.ok ? platform.queued[store] : undefined;
     if (queuedAct) row.queuedAct = queuedAct;
 
+    const step = store === "safari" ? safariNextStep(submission, consoleStoresUrl) : null;
+    if (step) row.nextStep = step;
+
     return row;
   });
 
@@ -924,7 +1041,7 @@ export async function readStores(args: {
       ? null
       : `the store releases could not be read from the platform: ${releases.message}`;
 
-  return envelope({
+  const render = (wait: RefreshWaitView | null): string => envelope({
     ok: true,
     command: "extension_release_status",
     status: "read",
@@ -937,6 +1054,7 @@ export async function readStores(args: {
         : {}),
       ...(status.lastPollAt ? { lastPollAt: status.lastPollAt } : {}),
       ...(refresh ? { refresh } : {}),
+      ...(wait ? { refreshWait: wait } : {}),
       ...(lookup ? { submission: lookup } : {}),
       registryUrls: {
         health: healthUrl,
@@ -945,7 +1063,7 @@ export async function readStores(args: {
       },
       consoleStoresUrl,
     },
-    hint: `${refreshSentence(refresh)}${lookupSentence(lookup, wantedId)}${summaryParts.join(". ")}. This is the registry's recorded state (submissions and the review poller write it)${
+    hint: `${refreshSentence(refresh, wait)}${lookupSentence(lookup, wantedId)}${summaryParts.join(". ")}. This is the registry's recorded state (submissions and the review poller write it)${
       platform.ok ? ", with the platform's own submission records and their runs" : ""
     }; the store dashboards are authoritative and may be ahead of it.`,
     warnings: [
@@ -957,4 +1075,6 @@ export async function readStores(args: {
       ...recordsUnavailable,
     ],
   });
+
+  return { rows, ...(status.lastPollAt ? { lastPollAt: status.lastPollAt } : {}), render };
 }

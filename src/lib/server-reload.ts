@@ -26,23 +26,43 @@ export interface Handover {
   keptLogins: Array<[string, string]>;
 }
 
+export interface ListedTool {
+  name: string;
+  description: string;
+  inputSchema: Record<string, unknown>;
+}
+
 export interface RebuiltBuild {
   dispatchRebuilt: (call: RebuiltCall) => Promise<ToolFrame>;
   adoptHandover: (state: Handover) => void;
   handoverState: () => Handover;
+  listRebuilt?: () => ListedTool[];
 }
 
 export type BuildImporter = (specifier: string) => Promise<unknown>;
 
 export type RebuiltDispatch = (call: RebuiltCall, options: ServerOptions) => Promise<ToolFrame>;
 
+export type RebuiltList = (options: ServerOptions) => ListedTool[];
+
 export const RELOAD_CONTRACT = ["dispatchRebuilt", "adoptHandover", "handoverState"] as const;
 
 let adoptedOptions: ServerOptions | null = null;
 let rebuiltDispatch: RebuiltDispatch | null = null;
+let rebuiltList: RebuiltList | null = null;
 
 export function provideRebuiltDispatch(dispatch: RebuiltDispatch): void {
   rebuiltDispatch = dispatch;
+}
+
+export function provideRebuiltList(list: RebuiltList): void {
+  rebuiltList = list;
+}
+
+export function listRebuilt(): ListedTool[] {
+  if (!rebuiltList) throw new Error("this build registered no tool list");
+
+  return rebuiltList(adoptedOptions ?? DEFAULT_SERVER_OPTIONS);
 }
 
 export function handoverState(options: ServerOptions = adoptedOptions ?? DEFAULT_SERVER_OPTIONS): Handover {
@@ -83,7 +103,10 @@ export function createReloader(deps: {
   entry: string;
   importBuild: BuildImporter | null;
   handover: () => Handover;
-}): { dispatch: (call: RebuiltCall, builtAt: string) => Promise<ReloadOutcome> } {
+}): {
+  dispatch: (call: RebuiltCall, builtAt: string) => Promise<ReloadOutcome>;
+  list: (builtAt: string) => Promise<ListedTool[] | null>;
+} {
   let active: { builtAt: string; build: RebuiltBuild; said: boolean } | null = null;
   let loading: Loading | null = null;
   let attempts = 0;
@@ -143,6 +166,16 @@ export function createReloader(deps: {
   };
 
   return {
+    async list(builtAt) {
+      const loaded = await activate(builtAt);
+      if ("reloadError" in loaded || typeof loaded.listRebuilt !== "function") return null;
+
+      try {
+        return loaded.listRebuilt();
+      } catch {
+        return null;
+      }
+    },
     async dispatch(call, builtAt) {
       const loaded = await activate(builtAt);
 
