@@ -223,3 +223,79 @@ describe("page-world-clean globals the extension's own build sets (ledger 275)",
     ).toEqual(["a.js", "b.js"]);
   });
 });
+
+const REWRITTEN_ONE =
+  "The dev build rewrites the 1 world: MAIN content script of the source manifest (content/media-hook.ts) into isolated loaders, so no built bundle was searched; their globals are judged on an extension_start session";
+
+describe("page-world-clean on a dev session whose source manifest declares MAIN-world scripts (ledger 280)", () => {
+  it("says the dev build rewrote the source's MAIN-world script instead of claiming the manifest declares none", async () => {
+    writeManifest(STATIC_MANIFEST);
+    writeSourceManifest({
+      ...STATIC_MANIFEST,
+      content_scripts: [
+        { matches: ["https://*.youtube.com/*"], js: ["content/media-hook.ts"], world: "MAIN" },
+        { matches: ["https://*.youtube.com/*"], js: ["content.ts"] },
+      ],
+    });
+
+    liveSession("dev");
+    openPage();
+    readWith("ytcfg");
+
+    const { check } = await assertOnce({ assert: "page-world-clean", url: PAGE_URL });
+    expect(check.outcome).toBe("pass");
+    expect(check.detail).toContain(`${REWRITTEN_ONE}.`);
+    expect(check.detail).not.toContain("declares no content_scripts entry with world: MAIN");
+    expect(check.evidence.globals.bundles.note).toBe(REWRITTEN_ONE);
+    expect(check.evidence.globals.bundles.searched).toEqual([]);
+    expect(check.evidence.globals.unknown).toEqual(["ytcfg"]);
+  });
+
+  it("counts and names every rewritten script", async () => {
+    writeManifest(STATIC_MANIFEST);
+    writeSourceManifest({
+      ...STATIC_MANIFEST,
+      content_scripts: [
+        { matches: ["<all_urls>"], js: ["content/a.ts", "content/b.ts"], world: "MAIN" },
+        { matches: ["<all_urls>"], js: ["content/c.ts"], world: "MAIN" },
+      ],
+    });
+
+    liveSession("dev");
+    openPage();
+    readWith("ytcfg");
+
+    const { check } = await assertOnce({ assert: "page-world-clean", url: PAGE_URL });
+    expect(check.evidence.globals.bundles.note).toBe(
+      "The dev build rewrites the 3 world: MAIN content scripts of the source manifest (content/a.ts, content/b.ts, content/c.ts) into isolated loaders, so no built bundle was searched; their globals are judged on an extension_start session",
+    );
+  });
+
+  it("keeps the no-entry sentence on a dev session whose source manifest declares no MAIN-world script", async () => {
+    writeManifest(STATIC_MANIFEST);
+    writeSourceManifest(STATIC_MANIFEST);
+    liveSession("dev");
+    openPage();
+    readWith("ytcfg");
+
+    const { check } = await assertOnce({ assert: "page-world-clean", url: PAGE_URL });
+    expect(check.evidence.globals.bundles.note).toContain("The running manifest declares no content_scripts entry with world: MAIN");
+    expect(check.detail).not.toContain("dev build rewrites");
+  });
+
+  it("keeps the production read on the running manifest even when the source declares a MAIN-world script", async () => {
+    writeManifest(STATIC_MANIFEST);
+    writeSourceManifest({
+      ...STATIC_MANIFEST,
+      content_scripts: [{ matches: ["<all_urls>"], js: ["content/media-hook.ts"], world: "MAIN" }],
+    });
+
+    liveSession("start");
+    openPage();
+    readWith("ytcfg");
+
+    const { check } = await assertOnce({ assert: "page-world-clean", url: PAGE_URL });
+    expect(check.evidence.globals.bundles.note).toContain("The running manifest declares no content_scripts entry with world: MAIN");
+    expect(check.detail).not.toContain("dev build rewrites");
+  });
+});

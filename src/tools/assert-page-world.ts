@@ -225,6 +225,8 @@ export async function assertPageWorldClean(clause: PageWorldClause, stage: Stage
     ? world.ownNames.filter((name) => !baseline.names.includes(name) && !exempt.has(name) && !leaked.has(name))
     : null;
   const globals = readExtensionGlobals({
+    projectPath: stage.projectPath,
+    browser: stage.browser,
     manifest: read.manifest,
     distDir,
     ownNames: world.ownNames,
