@@ -567,7 +567,7 @@ async function evaluateOnWebTarget(
   url: string,
   browser: string,
 ): Promise<string> {
-  const resolved = await resolveCdpPort(args.projectPath, browser);
+  const resolved = await resolveCdpPort(args.projectPath, browser, { timeoutMs: args.timeout });
   if (!resolved) return RELAY_INSTEAD;
 
   const live = matches.filter((t) => !isBrowserErrorPage(t.url));
@@ -1409,7 +1409,7 @@ async function evaluateByTargetId(
     );
   }
 
-  const resolved = await resolveCdpPort(args.projectPath, browser);
+  const resolved = await resolveCdpPort(args.projectPath, browser, { timeoutMs: args.timeout });
   if (!resolved) return noDebugPort(args.projectPath, browser, "CDP");
 
   let live: TargetRef[];
@@ -1505,7 +1505,7 @@ async function evaluateRouted(
   if (wantsExtensionPageOverCdp(args.projectPath, browser, context, args.url) && (tokenPresent || context !== "content")) {
     if (!tokenPresent) return evalDisabled();
 
-    const resolved = await resolveCdpPort(args.projectPath, browser);
+    const resolved = await resolveCdpPort(args.projectPath, browser, { timeoutMs: args.timeout });
 
     if (resolved) {
       const overCdp = await evaluateOnChromiumExtensionPage(

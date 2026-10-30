@@ -320,7 +320,7 @@ async function snapshotByTargetId(
     }
   }
 
-  const cdp = await cdpPortOrError(args.projectPath, browser, "targetId");
+  const cdp = await cdpPortOrError(args.projectPath, browser, "targetId", args.timeout);
   if ("error" in cdp) return cdp.error;
 
   let targets: PageTarget[];
@@ -344,6 +344,7 @@ async function cdpPortOrError(
   projectPath: string,
   browser: string,
   feature: string,
+  timeoutMs?: number,
 ): Promise<{ port: number } | { error: string }> {
   if (!isChromiumFamily(browser)) {
     return {
@@ -360,7 +361,7 @@ async function cdpPortOrError(
     };
   }
 
-  const resolved = await resolveCdpPort(projectPath, browser);
+  const resolved = await resolveCdpPort(projectPath, browser, { timeoutMs });
 
   if (!resolved) {
     return {
@@ -454,7 +455,7 @@ export async function handler(
       }
     }
 
-    const cdp = await cdpPortOrError(args.projectPath, browser, "listTargets");
+    const cdp = await cdpPortOrError(args.projectPath, browser, "listTargets", args.timeout);
     if ("error" in cdp) return cdp.error;
 
     try {
@@ -583,7 +584,7 @@ export async function handler(
         tabPickWarning = `${matches.length} open tabs show ${picked.url}; this read tab ${picked.tabId}, the most recently created one. The others: ${sameTabs.others.map((o) => o.tabId).join(", ")}. Pass \`tab\` to pick another.`;
       }
     } else {
-      const cdp = await cdpPortOrError(args.projectPath, browser, "tabUrl");
+      const cdp = await cdpPortOrError(args.projectPath, browser, "tabUrl", args.timeout);
       if ("error" in cdp) return cdp.error;
 
       let targets: Awaited<ReturnType<typeof listPageTargets>>;

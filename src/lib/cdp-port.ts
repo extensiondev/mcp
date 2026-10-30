@@ -9,49 +9,84 @@
 import fs from "node:fs";
 import { setTimeout as sleep } from "node:timers/promises";
 
+import { noteCallWait } from "./call-waits";
 import { readyContractPath } from "./session-paths";
 import { pidState } from "./process-identity";
+import { landingRun, type LandingRun } from "./start-landing";
 
 import type { ReadyContract } from "./types";
+
+export interface PortWaitOptions {
+  waitMs?: number;
+  graceMs?: number;
+  timeoutMs?: number;
+}
+
+type PortField = "cdpPort" | "rdpPort";
+
+type PortContract = ReadyContract & { cdpPort?: number; rdpPort?: number; pid?: number };
+
+function readContract(readyPath: string): PortContract | null {
+  try {
+    return JSON.parse(fs.readFileSync(readyPath, "utf8")) as PortContract;
+  } catch {
+    return null;
+  }
+}
+
+export function waitedForStartLine(landing: LandingRun, browser: string, waitedMs: number): string {
+  const verb = landing.verb === "dev" ? "extension_dev" : "extension_start";
+
+  return `This call waited ${(waitedMs / 1000).toFixed(1)} s for the ${browser} ${verb} run to land (its ready.json ${landing.seen}) before answering.`;
+}
 
 async function resolveContractPort(
   projectPath: string,
   browser: string,
-  field: "cdpPort" | "rdpPort",
-  options?: { waitMs?: number; graceMs?: number },
+  field: PortField,
+  options: PortWaitOptions | undefined,
+  landingAllowed: boolean,
 ): Promise<{ port: number | null; contractSeen: boolean }> {
   const waitMs = options?.waitMs ?? 20_000;
   const graceMs = options?.graceMs ?? 2_500;
+  const landingWaitMs = landingAllowed ? Math.max(options?.timeoutMs ?? waitMs, 0) : 0;
   const readyPath = readyContractPath(projectPath, browser);
 
-  const deadline = Date.now() + waitMs;
+  const start = Date.now();
+  const deadline = start + waitMs;
   let contractSeen = false;
   let contractSeenAt: number | null = null;
+  let landing: LandingRun | null = null;
 
   for (;;) {
-    try {
-      const contract = JSON.parse(
-        fs.readFileSync(readyPath, "utf8"),
-      ) as ReadyContract & { cdpPort?: number; rdpPort?: number; pid?: number };
+    const contract = readContract(readyPath);
+    const now = Date.now();
+
+    if (contract) {
       contractSeen = true;
-      if (contractSeenAt == null) contractSeenAt = Date.now();
+      if (contractSeenAt == null) contractSeenAt = now;
 
-      if (typeof contract.pid === "number" && pidState(contract.pid) !== "alive") {
-        return { port: null, contractSeen };
-      }
+      const engineGone = typeof contract.pid === "number" && pidState(contract.pid) !== "alive";
 
-      if (typeof contract[field] === "number") {
+      if (!engineGone && typeof contract[field] === "number") {
+        if (landing) noteCallWait(waitedForStartLine(landing, browser, now - start));
+
         return { port: contract[field] as number, contractSeen };
       }
-    } catch {
-      if (!contractSeen) break;
+
+      landing = landingWaitMs > 0 ? landingRun(projectPath, browser, now) : null;
+      if (engineGone && !landing) return { port: null, contractSeen };
+    } else {
+      landing = landingWaitMs > 0 ? landingRun(projectPath, browser, now) : null;
+      if (!contractSeen && !landing) break;
     }
 
-    const effectiveDeadline =
-      contractSeenAt != null
+    const effectiveDeadline = landing
+      ? Math.min(landing.deadline, start + landingWaitMs)
+      : contractSeenAt != null
         ? Math.min(deadline, contractSeenAt + graceMs)
         : deadline;
-    if (Date.now() >= effectiveDeadline) break;
+    if (now >= effectiveDeadline) break;
 
     await sleep(500);
   }
@@ -62,13 +97,14 @@ async function resolveContractPort(
 export async function resolveCdpPort(
   projectPath: string,
   browser: string,
-  options?: { waitMs?: number; graceMs?: number },
+  options?: PortWaitOptions,
 ): Promise<{ port: number; source: "contract" } | null> {
   const { port } = await resolveContractPort(
     projectPath,
     browser,
     "cdpPort",
     options,
+    true,
   );
 
   return port != null ? { port, source: "contract" } : null;
@@ -77,13 +113,14 @@ export async function resolveCdpPort(
 export async function resolveRdpPort(
   projectPath: string,
   browser: string,
-  options?: { waitMs?: number; graceMs?: number },
+  options?: PortWaitOptions,
 ): Promise<{ port: number; source: "contract" } | null> {
   const { port } = await resolveContractPort(
     projectPath,
     browser,
     "rdpPort",
     options,
+    false,
   );
 
   return port != null ? { port, source: "contract" } : null;

@@ -428,7 +428,7 @@ export class Stage {
 
   async port(): Promise<number | null> {
     if (this.cdpPort === undefined) {
-      const resolved = await resolveCdpPort(this.projectPath, this.browser);
+      const resolved = await resolveCdpPort(this.projectPath, this.browser, { timeoutMs: this.timeout });
       this.cdpPort = resolved ? resolved.port : null;
     }
 

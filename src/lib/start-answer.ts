@@ -10,12 +10,11 @@ import { envelope } from "./envelope";
 import { headlessHint } from "./launch-flags";
 import { productionLoadProofLine } from "./production-launch";
 import { waitCall } from "./production-receipt";
+import { START_WAIT_BUDGET_MS } from "./start-landing";
 import { handler as waitHandler } from "../tools/wait";
 
 import type { ProductionLaunchEvidence } from "./production-launch";
 import type { ReadyContract } from "./types";
-
-export const START_WAIT_BUDGET_MS = 45_000;
 
 interface WaitFrame {
   ok?: boolean;

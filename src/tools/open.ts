@@ -296,7 +296,7 @@ export async function navigateToUrl(
     );
   }
 
-  const resolved = await resolveCdpPort(projectPath, browser);
+  const resolved = await resolveCdpPort(projectPath, browser, { timeoutMs: timeout });
 
   if (!resolved) return noSessionAnswer(projectPath, browser, `so ${url} cannot be opened`);
 
@@ -1567,7 +1567,7 @@ async function openDevToolsSurface(
     );
   }
 
-  const resolved = await resolveCdpPort(args.projectPath, browser);
+  const resolved = await resolveCdpPort(args.projectPath, browser, { timeoutMs: args.timeout });
 
   if (!resolved) return noSessionAnswer(args.projectPath, browser, "so the devtools panel cannot be opened");
 

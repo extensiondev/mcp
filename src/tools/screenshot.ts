@@ -244,7 +244,7 @@ function chooseTarget<T>(
 const pageRef = (t: PageTarget): TargetRef => ({ targetId: t.targetId, url: t.url });
 
 async function onChromium(args: Args, browser: string, context: string, timeoutMs: number): Promise<string> {
-  const resolved = await resolveCdpPort(args.projectPath, browser, { waitMs: Math.min(timeoutMs, 5_000), graceMs: 1_000 });
+  const resolved = await resolveCdpPort(args.projectPath, browser, { waitMs: Math.min(timeoutMs, 5_000), graceMs: 1_000, timeoutMs });
 
   if (!resolved) {
     return noSessionEnvelope({

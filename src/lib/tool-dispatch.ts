@@ -16,6 +16,7 @@ import { openApprovalOnce } from "./approval-open";
 import { answerOnceDecided } from "./approval-wait";
 import { bindApprovalProject } from "./approval-record";
 import { withApprovalLogin } from "./approval-scope";
+import { withCallWaits } from "./call-waits";
 import { envelope } from "./envelope";
 import { resolveApiBase } from "./login-flow";
 import {
@@ -295,7 +296,7 @@ export function createToolSurface(setup: ToolHandlerOptions): {
         withApprovalLogin(login.login, () =>
         run(
           async () => {
-            if (!platform) return annotate(await tool.handler(normalizedArgs), { note: bound.note });
+            if (!platform) return annotate(await withCallWaits(() => tool.handler(normalizedArgs)), { note: bound.note });
 
             const scoped = bindCallProject(name, normalizedArgs, tool.schema.inputSchema, options);
 

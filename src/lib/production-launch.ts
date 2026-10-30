@@ -11,7 +11,7 @@ import fs from "node:fs";
 import { CDPClient } from "./cdp";
 import { compareVersions, parseVersion } from "./engine-version";
 import { pidState } from "./process-identity";
-import { waitCall } from "./production-receipt";
+import { waitCall } from "./session-receipt";
 import { readyContractPath } from "./session-paths";
 
 import type { ReadyContract } from "./types";
