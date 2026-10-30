@@ -452,6 +452,12 @@ export class Stage {
     return this.discovered;
   }
 
+  async refreshTargets(): Promise<CdpTarget[] | null> {
+    this.discovered = null;
+
+    return this.targets();
+  }
+
   manifest(): ReadManifest | null {
     if (this.manifestRead === undefined) {
       this.manifestRead = readBuiltManifest(this.projectPath, this.browser);

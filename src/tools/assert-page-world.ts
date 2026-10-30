@@ -17,6 +17,8 @@ import { readExtensionGlobals } from "./assert-page-world-globals";
 import { pageWorldReadScript, resourceProbeScript, staticResources, type PageWorldRead, type ResourceProbe } from "./assert-page-world-reads";
 import { pageWorldVerdict, type LabeledHit, type ProbedResource } from "./assert-page-world-verdict";
 import { inconclusiveCheck, type CheckResult } from "../lib/verdict";
+import { notReadyCheck, pageNotOpenSettledBy } from "../lib/verdict-not-ready";
+import { literalPageUrl, openPageForCheck } from "../lib/page-open-for-check";
 
 import type { CDPClient } from "../lib/cdp";
 import type { Stage } from "./assert";
@@ -123,7 +125,7 @@ export async function assertPageWorldClean(clause: PageWorldClause, stage: Stage
   const read = stage.manifest();
   if (!read) return stage.noManifest(id, subject);
 
-  const targets = await stage.targets();
+  let targets = await stage.targets();
   if (targets === null) return stage.noSession(id, subject);
 
   const extensionId = await stage.extensionId();
@@ -133,24 +135,47 @@ export async function assertPageWorldClean(clause: PageWorldClause, stage: Stage
       id,
       subject,
       "The extension's id could not be resolved from the running session, so neither its base url nor its resource urls can be looked for in the page.",
-      "Start the session with extension_dev, confirm it with extension_wait, then assert again.",
+      "Start the session with extension_dev, or extension_start with allowControl: true for the production build, then assert again.",
     );
   }
 
-  const pages = filterPageTargets(targets as Array<{ id: string; type: string; url: string; title: string }>).filter(
-    (target) => !target.url.startsWith("chrome-extension://"),
-  );
-  const candidates = matchTargetsByUrl(pages, clause.url);
+  const webPages = (list: NonNullable<typeof targets>) =>
+    filterPageTargets(list as Array<{ id: string; type: string; url: string; title: string }>).filter(
+      (target) => !target.url.startsWith("chrome-extension://"),
+    );
+  let pages = webPages(targets);
+  let candidates = matchTargetsByUrl(pages, clause.url);
+  let openedByCheck: string | null = null;
+
+  if (!candidates[0] && literalPageUrl(clause.url)) {
+    const opened = await openPageForCheck(stage, clause.url);
+
+    if (!opened.opened) {
+      return notReadyCheck(
+        id,
+        subject,
+        `No page target in the session matched ${clause.url}, and opening it from this check did not land a page (${opened.reason}), so its main world was never read.`,
+        pageNotOpenSettledBy(clause.url),
+        { openPages: pages.map((page) => page.url) },
+      );
+    }
+
+    openedByCheck = opened.url;
+    targets = (await stage.refreshTargets()) ?? targets;
+    pages = webPages(targets);
+    candidates = matchTargetsByUrl(pages, clause.url);
+  }
+
   const target = candidates[0];
 
   if (!target) {
-    return inconclusiveCheck(
+    return notReadyCheck(
       id,
       subject,
-      `No page target in the session matches ${clause.url}, so its main world was never read. Open pages: ${
-        pages.length ? pages.map((page) => page.url).join(", ") : "none"
-      }.`,
-      `Open it with extension_open (url: '${clause.url}'), wait for it to load, then assert again.`,
+      `No page target in the session matches ${clause.url}, so its main world was never read${
+        openedByCheck ? ` (this check opened ${openedByCheck}, and no page target matched it afterwards)` : " (a url pattern is matched, never opened; a full url is opened by this check)"
+      }. Open pages: ${pages.length ? pages.map((page) => page.url).join(", ") : "none"}.`,
+      pageNotOpenSettledBy(clause.url),
       { openPages: pages.map((page) => page.url) },
     );
   }
@@ -256,6 +281,7 @@ export async function assertPageWorldClean(clause: PageWorldClause, stage: Stage
     url: target.url,
     targetId: target.targetId,
     extensionId,
+    ...(openedByCheck ? { openedByCheck } : {}),
     ...(candidates.length > 1 ? { otherMatches: candidates.slice(1).map((page) => page.url) } : {}),
     session,
     dom: { ...world.dom, hits },
