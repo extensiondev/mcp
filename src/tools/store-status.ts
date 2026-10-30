@@ -18,13 +18,11 @@ import {
 import { envelope, type ErrorCode } from "../lib/envelope";
 import { platformHoldEnvelope } from "../lib/platform-hold";
 import {
-  isNewerOrSame,
   queuedActSentence,
   readPlatformSubmissions,
   retryNote,
   statusReadOf,
   type QueuedStoreActView,
-  type StoreReview,
   type StoreStatusRead,
   type SubmissionRun,
 } from "../lib/platform-submissions";
@@ -45,6 +43,7 @@ import {
   type SubmissionLookup,
 } from "../lib/platform-store-records";
 import { repairEdgeStoreUrl } from "../lib/edge-listing";
+import { platformSubmissionView, releaseModeOfRow, RELEASE_MODE_WORDS, type SubmissionView } from "../lib/store-row-sources";
 import { storeRecordUnread } from "../lib/store-readiness";
 import { openProjectApi, projectApiSend } from "../lib/project-api";
 import { outcomeClock, waitBound } from "../lib/act-outcome";
@@ -160,24 +159,6 @@ interface HealthRow {
   checkedAt?: string;
 }
 
-interface SubmissionView {
-  id?: string;
-  version?: string;
-  status?: string;
-  storeUrl?: string;
-  submittedAt?: string;
-  channel?: string;
-  buildSha?: string;
-  storeSubmissionId?: string;
-  failureReason?: string;
-  supersededBy?: string;
-  storeVersion?: { packaged: string; displayed: string; source: string; buildNumber?: number };
-  storeCrxVersion?: string;
-  storeReview?: StoreReview;
-  statusRead?: StoreStatusRead;
-  releaseType?: string;
-}
-
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 function shortDay(at: string | undefined): string {
@@ -234,12 +215,6 @@ export function safariWithdrawalSentence(
     ? `${version}: ${head}; ${latestWords}`
     : `${version} ${head}; ${latestVersion} ${latestWords}`;
 }
-
-const RELEASE_MODE_WORDS: Record<string, string> = {
-  AFTER_APPROVAL: "is set to release automatically after approval",
-  MANUAL: "is set to manual release",
-  SCHEDULED: "is set to a scheduled release",
-};
 
 export function safariReleaseSentence(latest: SubmissionView | undefined): string {
   const type = latest?.releaseType || (latest as { publish?: { releaseType?: string } } | undefined)?.publish?.releaseType;
@@ -354,19 +329,6 @@ function str(value: unknown): string | undefined {
   return text || undefined;
 }
 
-function releaseTypeOfRow(appStoreRelease: unknown, publish: Record<string, unknown> | null): string | undefined {
-  const polled = appStoreRelease && typeof appStoreRelease === "object" ? (appStoreRelease as Record<string, unknown>) : null;
-  const known = (type: string | undefined) => (type && RELEASE_MODE_WORDS[type] ? type : undefined);
-  const polledType = known(polled ? str(polled.type)?.toUpperCase() : undefined);
-  const actType = known(publish ? str(publish.releaseType)?.toUpperCase() : undefined);
-  const polledAt = Date.parse(String(polled?.readAt ?? ""));
-  const actAt = Date.parse(String(publish?.at ?? ""));
-
-  if (polledType && actType) return actAt > polledAt ? actType : polledType;
-
-  return polledType ?? actType;
-}
-
 function submissionView(row: Record<string, unknown>): SubmissionView {
   const view: SubmissionView = {};
   const storeVersion = storeVersionOf(row.storeVersion);
@@ -385,8 +347,8 @@ function submissionView(row: Record<string, unknown>): SubmissionView {
   const storeReview = storeReviewOfRow(row.storeReview);
   const statusRead = statusReadOf(row.statusRead);
   const signed = amoUnlistedSigning(str(row.store), storeReview);
-  const releaseType = releaseTypeOfRow(row.appStoreRelease, publish);
-  if (releaseType) view.releaseType = releaseType;
+  const mode = releaseModeOfRow(row.appStoreRelease, publish);
+  if (mode) Object.assign(view, mode);
   if (version) view.version = version;
   if (statusRead) view.statusRead = statusRead;
   if (status) view.status = signed ? AMO_SIGNED_STATUS : status;
@@ -816,14 +778,11 @@ async function answerStores(
   const runsByStore: Record<string, SubmissionRun> = {};
 
   for (const [store, latest] of Object.entries(platform.ok ? platform.byStore : {})) {
-    if (!isNewerOrSame(latest.submittedAt, submissionsByStore[store]?.submittedAt)) continue;
+    const view = platformSubmissionView(store, latest, submissionsByStore[store]);
+    if (!view) continue;
 
-    const { run, store: _store, appStoreRelease, ...rest } = latest;
-    const releaseType = releaseTypeOfRow(appStoreRelease, (rest.publish as Record<string, unknown> | undefined) ?? null);
-    const typed = releaseType ? { ...rest, releaseType } : rest;
-    const fields = amoUnlistedSigning(store, typed.storeReview) ? { ...typed, status: AMO_SIGNED_STATUS } : typed;
-    submissionsByStore[store] = fields.storeVersion ? { ...fields, version: fields.storeVersion.packaged } : fields;
-    if (Object.keys(run).length > 0) runsByStore[store] = run;
+    submissionsByStore[store] = view;
+    if (Object.keys(latest.run).length > 0) runsByStore[store] = latest.run;
   }
 
   const stores = [

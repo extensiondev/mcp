@@ -225,12 +225,13 @@ export async function readStoreSubmissionById(args: {
 
 export function earlierSubmissions(
   entries: StoreHistoryEntry[],
-  latest: { submittedAt?: string; version?: string } | undefined,
+  latest: { id?: string; submittedAt?: string; version?: string } | undefined,
 ): StoreHistoryEntry[] {
   const sorted = [...entries].sort((a, b) => String(b.submittedAt ?? "").localeCompare(String(a.submittedAt ?? "")));
-  const rest = latest
-    ? sorted.filter((entry) => !(entry.submittedAt === latest.submittedAt && entry.version === latest.version))
-    : sorted;
+  const isLatest = (entry: StoreHistoryEntry): boolean =>
+    Boolean(latest?.id && entry.id === latest.id) ||
+    (entry.submittedAt === latest?.submittedAt && entry.version === latest?.version);
+  const rest = latest ? sorted.filter((entry) => !isLatest(entry)) : sorted;
 
   return rest.slice(0, HISTORY_PER_STORE);
 }
