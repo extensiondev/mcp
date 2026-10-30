@@ -159,6 +159,10 @@ export async function readReleaseHistory(scope: Scope): Promise<string> {
       : { read: false, reason: promoteReady.message };
   const stores = storeReleasesOf(list.json);
   const storesSentence = storeReleasesSentence(stores.rows, stores.unread);
+  const countsSentence =
+    stores.summary.activeReleases !== undefined || stores.summary.liveChannels !== undefined
+      ? `summary.activeReleases (${stores.summary.activeReleases ?? 0}) counts the store releases at live in value.storeReleases; summary.liveChannels (${stores.summary.liveChannels ?? 0}) counts the channel releases in value.releases that every browser's promote run proved live, so a channel release reading pending says nothing about the stores.`
+      : "";
   const channelsSentence =
     releases.length > 0
       ? `${releases.length} channel release${releases.length === 1 ? "" : "s"} with up to ${EVENTS_PER_RELEASE} recent events each, newest first. Pass releaseId with one of these ids for that release and up to ${EVENTS_FOR_ONE_RELEASE} of its events.`
@@ -178,7 +182,7 @@ export async function readReleaseHistory(scope: Scope): Promise<string> {
       promoteReady: promoteReadyView,
       releasesPageUrl: consoleProjectUrl(api.ref, ConsoleProjectPage.releases, scope.api),
     },
-    hint: `${storesSentence} ${channelsSentence}`,
+    hint: [storesSentence, countsSentence, channelsSentence].filter(Boolean).join(" "),
     warnings: [
       stores.unread ? "The store releases could not be read, so value.storeReleases is unknown, not empty." : null,
       ownerOnly

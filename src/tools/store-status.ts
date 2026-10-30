@@ -45,6 +45,7 @@ import { repairEdgeStoreUrl } from "../lib/edge-listing";
 import { storeRecordUnread } from "../lib/store-readiness";
 import { openProjectApi, projectApiSend } from "../lib/project-api";
 import {
+  liveStoreReleaseOf,
   newestStoreReleaseByLane,
   newestStoreReleaseByStore,
   readPlatformStoreReleases,
@@ -286,6 +287,19 @@ function str(value: unknown): string | undefined {
   return text || undefined;
 }
 
+function releaseTypeOfRow(appStoreRelease: unknown, publish: Record<string, unknown> | null): string | undefined {
+  const polled = appStoreRelease && typeof appStoreRelease === "object" ? (appStoreRelease as Record<string, unknown>) : null;
+  const known = (type: string | undefined) => (type && RELEASE_MODE_WORDS[type] ? type : undefined);
+  const polledType = known(polled ? str(polled.type)?.toUpperCase() : undefined);
+  const actType = known(publish ? str(publish.releaseType)?.toUpperCase() : undefined);
+  const polledAt = Date.parse(String(polled?.readAt ?? ""));
+  const actAt = Date.parse(String(publish?.at ?? ""));
+
+  if (polledType && actType) return actAt > polledAt ? actType : polledType;
+
+  return polledType ?? actType;
+}
+
 function submissionView(row: Record<string, unknown>): SubmissionView {
   const view: SubmissionView = {};
   const storeVersion = storeVersionOf(row.storeVersion);
@@ -303,8 +317,8 @@ function submissionView(row: Record<string, unknown>): SubmissionView {
   const storeCrxVersion = typeof row.storeCrxVersion === "string" ? row.storeCrxVersion.trim() : "";
   const storeReview = storeReviewOfRow(row.storeReview);
   const statusRead = statusReadOf(row.statusRead);
-  const releaseType = publish ? str(publish.releaseType)?.toUpperCase() : undefined;
-  if (releaseType && RELEASE_MODE_WORDS[releaseType]) view.releaseType = releaseType;
+  const releaseType = releaseTypeOfRow(row.appStoreRelease, publish);
+  if (releaseType) view.releaseType = releaseType;
   if (version) view.version = version;
   if (statusRead) view.statusRead = statusRead;
   if (status) view.status = status;
@@ -656,7 +670,9 @@ export async function readStores(args: {
   for (const [store, latest] of Object.entries(platform.ok ? platform.byStore : {})) {
     if (!isNewerOrSame(latest.submittedAt, submissionsByStore[store]?.submittedAt)) continue;
 
-    const { run, store: _store, ...fields } = latest;
+    const { run, store: _store, appStoreRelease, ...rest } = latest;
+    const releaseType = releaseTypeOfRow(appStoreRelease, (rest.publish as Record<string, unknown> | undefined) ?? null);
+    const fields = releaseType ? { ...rest, releaseType } : rest;
     submissionsByStore[store] = fields.storeVersion ? { ...fields, version: fields.storeVersion.packaged } : fields;
     if (Object.keys(run).length > 0) runsByStore[store] = run;
   }
@@ -705,6 +721,9 @@ export async function readStores(args: {
 
     if (runsByStore[store]) row.submissionRun = runsByStore[store];
     if (releaseByStore[store]) row.release = releaseByStore[store];
+
+    const liveRelease = releases.ok ? liveStoreReleaseOf(releases.rows, store) : undefined;
+    if (liveRelease && liveRelease !== releaseByStore[store]) row.liveRelease = liveRelease;
 
     const amoChannels = store === "firefox" && releases.ok ? firefoxReleasesByChannel(releases.rows) : null;
     if (amoChannels) row.amoChannels = amoChannels;

@@ -32,12 +32,15 @@ export interface StoreReleaseView {
   channel?: string;
   amoChannel?: string;
   supersededBy?: string;
+  releaseType?: string;
+  releaseTypeReadAt?: string;
 }
 
 export interface StoreReleasesSummary {
   activeReleases?: number;
   liveChannels?: number;
   channels?: number;
+  describes?: { activeReleases?: string; liveChannels?: string };
 }
 
 export type PlatformStoreReleases =
@@ -88,7 +91,7 @@ export function storeReleaseView(raw: unknown): StoreReleaseView | null {
     updatedAt: str(raw.updatedAt),
   };
 
-  for (const key of ["visibility", "storeUrl", "failureReason", "channel", "amoChannel", "supersededBy"] as const) {
+  for (const key of ["visibility", "storeUrl", "failureReason", "channel", "amoChannel", "supersededBy", "releaseType", "releaseTypeReadAt"] as const) {
     const value = str(raw[key]);
     if (value) view[key] = value;
   }
@@ -125,9 +128,27 @@ export function storeReleasesOf(json: unknown): { rows: StoreReleaseView[]; unre
       activeReleases: count(summary.activeReleases),
       liveChannels: count(summary.liveChannels),
       channels: count(summary.channels),
+      ...(isRow(summary.describes)
+        ? {
+            describes: {
+              activeReleases: str(summary.describes.activeReleases) || undefined,
+              liveChannels: str(summary.describes.liveChannels) || undefined,
+            },
+          }
+        : {}),
     },
   };
 }
+
+export function liveStoreReleaseOf(rows: StoreReleaseView[], store: string): StoreReleaseView | undefined {
+  return rows.find((row) => row.store === store && row.state === "live");
+}
+
+const RELEASE_MODE_WORDS: Record<string, string> = {
+  AFTER_APPROVAL: "set to release automatically after approval",
+  MANUAL: "set to manual release",
+  SCHEDULED: "set to a scheduled release",
+};
 
 export function newestStoreReleaseByStore(rows: StoreReleaseView[]): Record<string, StoreReleaseView> {
   const out: Record<string, StoreReleaseView> = {};
@@ -176,7 +197,14 @@ export function storeReleaseSentence(row: StoreReleaseView): string {
         : ", audience not read"
       : "";
 
-  return `${storeReleaseLane(row)} ${version} ${row.state}${audience} on build ${row.buildSha || "unknown"} (${read})`;
+  const mode = row.releaseType ? RELEASE_MODE_WORDS[row.releaseType] : undefined;
+  const release = mode
+    ? `, ${mode} as App Store Connect answered ${row.releaseTypeReadAt || "at an unknown time"}`
+    : row.store === "safari"
+      ? ", release mode not read yet"
+      : "";
+
+  return `${storeReleaseLane(row)} ${version} ${row.state}${audience}${release} on build ${row.buildSha || "unknown"} (${read})`;
 }
 
 export function storeReleasesSentence(rows: StoreReleaseView[], unread: boolean): string {
@@ -185,12 +213,12 @@ export function storeReleasesSentence(rows: StoreReleaseView[], unread: boolean)
   const newest = Object.values(newestStoreReleaseByLane(rows));
   if (!newest.length) return "No store has received a release of this project yet.";
 
-  const live = newest.filter((row) => row.state === "live");
+  const live = Object.values(newestStoreReleaseByLane(rows.filter((row) => row.state === "live")));
   const rest = newest.filter((row) => row.state !== "live");
   const parts: string[] = [];
 
   if (live.length) parts.push(`Live in ${live.length === 1 ? "one store" : `${live.length} stores`}: ${live.map(storeReleaseSentence).join("; ")}.`);
-  if (rest.length) parts.push(`${live.length ? "Elsewhere" : "In the stores"}: ${rest.map(storeReleaseSentence).join("; ")}.`);
+  if (rest.length) parts.push(`${live.length ? "Not live yet" : "In the stores"}: ${rest.map(storeReleaseSentence).join("; ")}.`);
   if (!live.length) parts.push("Nothing is live in a store.");
 
   return parts.join(" ");

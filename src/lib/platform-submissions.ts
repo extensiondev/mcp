@@ -77,6 +77,25 @@ export interface StoreAct {
   releaseType?: string;
 }
 
+export interface AppStoreRelease {
+  type: string;
+  versionString?: string;
+  readAt: string;
+}
+
+function appStoreReleaseOf(raw: unknown): AppStoreRelease | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+
+  const row = raw as Record<string, unknown>;
+  const type = str(row.type)?.toUpperCase();
+  const readAt = str(row.readAt);
+  if (!type || !readAt || !/^(MANUAL|AFTER_APPROVAL|SCHEDULED)$/.test(type)) return undefined;
+
+  const versionString = str(row.versionString);
+
+  return { type, readAt, ...(versionString ? { versionString } : {}) };
+}
+
 export interface SubmissionDispatch {
   action?: string;
   dispatchedAt?: string;
@@ -129,6 +148,7 @@ export interface PlatformSubmission {
   cancel?: StoreAct;
   publish?: StoreAct;
   dispatch?: SubmissionDispatch;
+  appStoreRelease?: AppStoreRelease;
   version?: string;
   storeVersion?: RecordedStoreVersion;
   buildSha?: string;
@@ -378,6 +398,7 @@ export function toSubmission(raw: Record<string, unknown>): PlatformSubmission |
   const storeUpload = storeUploadOf(raw.storeUpload);
   const cancel = storeActOf(raw.cancel);
   const publish = storeActOf(raw.publish);
+  const appStoreRelease = appStoreReleaseOf(raw.appStoreRelease);
   const dispatch = dispatchOf(raw.dispatch);
   const storeVersion = recordedStoreVersionOf(raw.storeVersion);
   if (storeVersion) out.storeVersion = storeVersion;
@@ -386,6 +407,7 @@ export function toSubmission(raw: Record<string, unknown>): PlatformSubmission |
   if (storeUpload) out.storeUpload = storeUpload;
   if (cancel) out.cancel = cancel;
   if (publish) out.publish = publish;
+  if (appStoreRelease) out.appStoreRelease = appStoreRelease;
   if (dispatch) out.dispatch = dispatch;
 
   const failureRaw = raw.failure && typeof raw.failure === "object" ? (raw.failure as Record<string, unknown>) : null;

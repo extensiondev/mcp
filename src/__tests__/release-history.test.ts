@@ -253,6 +253,73 @@ describe("extension_release_status reads release history and store records from 
     expect(out.value.stores.hint).toContain("release: chrome 0.1.0.4 live, unlisted on build 603fc8a");
   });
 
+  it("answers a store's live version beside a newer draft, the Safari release mode, and which rows each count describes", async () => {
+    if (process.platform === "win32") return;
+
+    login();
+
+    const row = (over: Record<string, unknown>) => ({
+      browser: over.store,
+      buildSha: "e679664",
+      source: "poll",
+      submissionId: `sub_${String(over.id)}`,
+      submittedAt: "2026-10-29T19:21:37Z",
+      ...over,
+    });
+    const safariSubmission = {
+      id: "b40be3ae",
+      store: "safari",
+      status: "submitted",
+      version: "e679664",
+      buildId: "e679664",
+      submittedAt: "2026-10-29T19:21:53.669Z",
+      storeVersion: { packaged: "0.2.0", displayed: "0.2.0", source: "repo", buildNumber: 14 },
+      publish: { act: "publish", status: "in-review", at: "2026-10-29T20:24:39Z" },
+      appStoreRelease: { type: "MANUAL", versionString: "0.2.0", readAt: "2026-10-30T01:21:56.695Z" },
+    };
+
+    routes[`/api/projects/${PROJECT_ID}/releases`] = {
+      body: {
+        summary: {
+          activeReleases: 2,
+          liveChannels: 0,
+          channels: 1,
+          describes: { activeReleases: "storeReleases", liveChannels: "items" },
+        },
+        items: [
+          { id: "preview-chrome-069d4b8", browser: "chrome", channel: "preview", build: "069d4b8", version: "0.2.0", status: "pending", rollout: "0%" },
+        ],
+        storeReleases: [
+          row({ id: "safari:0.2.0", store: "safari", version: "0.2.0", state: "in-review", storeWord: "WAITING_FOR_REVIEW", readAt: "2026-10-30T01:21:56Z", updatedAt: "2026-10-30T01:21:57Z", storeVersion: { packaged: "0.2.0", displayed: "0.2.0", source: "repo", buildNumber: 14 }, releaseType: "MANUAL", releaseTypeReadAt: "2026-10-30T01:21:56.695Z" }),
+          row({ id: "chrome:0.2.0.8", store: "chrome", version: "0.2.0.8", state: "uploaded", storeWord: "NO_ACTIVE_SUBMISSION", readAt: "2026-10-30T01:14:27Z", updatedAt: "2026-10-30T01:14:48Z" }),
+          row({ id: "edge:0.2.0.7", store: "edge", version: "0.2.0.7", buildSha: "6d9e10c", state: "live", storeWord: "PUBLISHED", readAt: "2026-10-27T22:14:02Z", updatedAt: "2026-10-27T22:14:04Z" }),
+          row({ id: "chrome:0.2.0.7", store: "chrome", version: "0.2.0.7", state: "live", storeWord: "PUBLISHED", readAt: "2026-10-27T21:57:02Z", updatedAt: "2026-10-27T21:57:03Z" }),
+        ],
+      },
+    };
+
+    routes[`/api/projects/${PROJECT_ID}/stores/safari/submissions`] = { body: [safariSubmission] };
+    routes["/api/cli/stores/submissions"] = { body: { submissions: [safariSubmission] } };
+
+    const out = JSON.parse(await releaseStatus({ include: ["history", "stores"], api: API }));
+    const history = out.value.history;
+
+    expect(history.hint).toContain("Live in 2 stores: edge 0.2.0.7 live");
+    expect(history.hint).toContain("chrome 0.2.0.7 live");
+    expect(history.hint).toContain("Not live yet: safari 0.2.0 (build 14) in-review, set to manual release as App Store Connect answered 2026-10-30T01:21:56.695Z");
+    expect(history.hint).toContain("summary.activeReleases (2) counts the store releases at live in value.storeReleases; summary.liveChannels (0) counts the channel releases in value.releases");
+
+    const stores = out.value.stores.value.stores as Array<Record<string, any>>;
+    const chrome = stores.find((entry) => entry.store === "chrome");
+    const safari = stores.find((entry) => entry.store === "safari");
+
+    expect(chrome?.release).toMatchObject({ version: "0.2.0.8", state: "uploaded" });
+    expect(chrome?.liveRelease).toMatchObject({ version: "0.2.0.7", state: "live" });
+    expect(safari?.release).toMatchObject({ state: "in-review", releaseType: "MANUAL" });
+    expect(safari?.liveRelease).toBeUndefined();
+    expect(safari?.lastSubmission?.releaseType).toBe("MANUAL");
+  });
+
   it("says the promote-ready read needs an owner instead of failing the section", async () => {
     if (process.platform === "win32") return;
 
