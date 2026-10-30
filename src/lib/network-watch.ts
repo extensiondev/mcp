@@ -89,6 +89,7 @@ export async function watchNetwork(
   const byTarget = new Map<string, WatchedTarget>();
   const requests: SeenRequest[] = [];
   const enableErrors: string[] = [];
+  const duplicateSessions: string[] = [];
   const pending: Array<Promise<void>> = [];
 
   const session = (sessionId: string, params: Record<string, unknown>) =>
@@ -151,6 +152,12 @@ export async function watchNetwork(
         url: String(info.url ?? ""),
         detached: false,
       };
+
+      if (target.targetId && byTarget.has(target.targetId)) {
+        duplicateSessions.push(attachedSession);
+
+        return;
+      }
 
       attached.push(target);
       bySession.set(attachedSession, target);
@@ -224,13 +231,16 @@ export async function watchNetwork(
     } catch {
     }
 
-    for (const target of attached) {
-      if (target.detached) continue;
+    const held = [
+      ...attached.filter((target) => !target.detached).map((target) => target.sessionId),
+      ...duplicateSessions,
+    ];
 
+    for (const sessionId of held) {
       try {
         await connection.sendCommand(
           "Target.detachFromTarget",
-          { sessionId: target.sessionId },
+          { sessionId },
           undefined,
           SESSION_COMMAND_TIMEOUT_MS,
         );

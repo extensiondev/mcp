@@ -180,6 +180,21 @@ describe("watchNetwork attaches to every target of the browser and what runs und
     expect(reading.requests[0].target.url).toBe("https://www.youtube.com/watch?v=y");
   });
 
+  it("watches a target the browser attaches through two sessions once, so its requests are not counted twice", async () => {
+    const connection = new FakeConnection([sw, offscreen], { "s-off": [{ ...sw, sessionId: "s-sw-again" }] });
+    const reading = await watchWhile(connection, () => {
+      connection.emit(request("s-sw", "https://example.com/once"));
+      connection.emit(request("s-sw-again", "https://example.com/once"));
+    });
+
+    expect(reading.attached.filter((target) => target.targetId === "t-sw")).toHaveLength(1);
+    expect(reading.requests).toHaveLength(1);
+    expect(connection.sent("Network.enable").map((call) => call.sessionId)).toEqual(["s-sw", "s-off"]);
+    expect(connection.sent("Target.detachFromTarget").map((call) => call.params.sessionId)).toEqual(
+      expect.arrayContaining(["s-sw", "s-off", "s-sw-again"]),
+    );
+  });
+
   it("names a target that refused network events instead of passing over it in silence", async () => {
     const connection = browser();
     connection.refuseNetworkOn.add("s-framew");
