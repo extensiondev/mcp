@@ -11,22 +11,17 @@ import path from "node:path";
 import { filterPageTargets, matchTargetsByUrl } from "../lib/cdp-targets";
 import { coveringMatches } from "../lib/match-patterns";
 import { isSourceManifest } from "../lib/project-manifest";
-import {
-  BASELINE_SCRIPT,
-  pageWorldReadScript,
-  resourceProbeScript,
-  staticResources,
-  type PageWorldRead,
-  type ResourceProbe,
-} from "./assert-page-world-reads";
-import { failCheck, inconclusiveCheck, passCheck, type CheckResult } from "../lib/verdict";
+import { readBaseline } from "./assert-page-world-baseline";
+import { devRuntimeResourceTest, isDevRuntimeAttribute, readSessionKind } from "./assert-page-world-dev";
+import { pageWorldReadScript, resourceProbeScript, staticResources, type PageWorldRead, type ResourceProbe } from "./assert-page-world-reads";
+import { pageWorldVerdict, type LabeledHit, type ProbedResource } from "./assert-page-world-verdict";
+import { inconclusiveCheck, type CheckResult } from "../lib/verdict";
 
 import type { CDPClient } from "../lib/cdp";
 import type { Stage } from "./assert";
 
 export const PAGE_WORLD = "page-world-clean";
 
-const UNKNOWN_SHOWN = 12;
 const PROBE_TIMEOUT_MS = 15_000;
 
 export interface PageWorldClause {
@@ -97,41 +92,6 @@ async function probeResources(
   return Array.isArray(reply?.result?.value) ? (reply.result.value as ProbeAnswer[]) : [];
 }
 
-async function readBaseline(
-  stage: Stage,
-  cdp: CDPClient,
-  targets: Array<{ id: string; type: string; url: string }>,
-): Promise<{ names: string[]; source: "existing-blank" | "created-blank" } | null> {
-  const spare = targets.find((target) => target.type === "page" && target.url === "about:blank");
-  let createdId: string | null = null;
-
-  try {
-    let targetId = spare?.id ?? null;
-
-    if (!targetId) {
-      const created = (await cdp.sendCommand("Target.createTarget", { url: "about:blank", background: true })) as
-        | { targetId?: string }
-        | undefined;
-      if (typeof created?.targetId !== "string") return null;
-
-      createdId = created.targetId;
-      targetId = createdId;
-    }
-
-    const attached = await stage.attach(targetId);
-    if (!attached) return null;
-
-    const names = await attached.cdp.evaluate(attached.sessionId, BASELINE_SCRIPT);
-    if (!Array.isArray(names)) return null;
-
-    return { names: names.map(String), source: createdId ? "created-blank" : "existing-blank" };
-  } catch {
-    return null;
-  } finally {
-    if (createdId) await cdp.sendCommand("Target.closeTarget", { targetId: createdId }).catch(() => undefined);
-  }
-}
-
 function isPageWorldRead(value: unknown): value is PageWorldRead {
   const read = value as Partial<PageWorldRead> | null;
 
@@ -145,14 +105,6 @@ function isPageWorldRead(value: unknown): value is PageWorldRead {
     Array.isArray(read.symbols) &&
     Array.isArray(read.refs)
   );
-}
-
-function count(n: number): string {
-  return n.toLocaleString("en-US");
-}
-
-function plural(n: number, singular: string, pluralForm = `${singular}s`): string {
-  return `${count(n)} ${n === 1 ? singular : pluralForm}`;
 }
 
 export async function assertPageWorldClean(clause: PageWorldClause, stage: Stage): Promise<CheckResult> {
@@ -250,16 +202,29 @@ export async function assertPageWorldClean(clause: PageWorldClause, stage: Stage
     );
   }
 
-  const baseline = await readBaseline(stage, attached.cdp, targets);
+  const baseline = await readBaseline(stage, attached, targets, read.manifest);
+  const session = readSessionKind(
+    stage.projectPath,
+    stage.browser,
+    read.manifest,
+    world.dom.hits.map((hit) => hit.attribute),
+  );
+  const devResource = devRuntimeResourceTest(stage.projectPath, stage.browser, distDir === null);
+  const dev = session.kind === "dev";
+  const hits: LabeledHit[] = world.dom.hits.map((hit) =>
+    dev && isDevRuntimeAttribute(hit.attribute) ? { ...hit, devRuntime: true } : { ...hit },
+  );
   const exempt = new Set(clause.pageGlobals ?? []);
-  const symbols = world.symbols.filter((description) => !exempt.has(description));
+  const symbols = {
+    attributed: world.symbols.filter((description) => description.includes(extensionId)),
+    unattributed: world.symbols.filter((description) => !description.includes(extensionId) && !exempt.has(description)),
+  };
   const leaked = new Set(world.refs.map((ref) => ref.name));
   const unknown = baseline
     ? world.ownNames.filter((name) => !baseline.names.includes(name) && !exempt.has(name) && !leaked.has(name))
     : null;
-  const probed = resources.probes.map((probe) => {
+  const probed: ProbedResource[] = resources.probes.map((probe) => {
     const answer = answers.find((entry) => entry.index === probe.index);
-    const coversPage = coveringMatches(probe.matches, target.url).length > 0;
 
     return {
       index: probe.index,
@@ -271,93 +236,42 @@ export async function assertPageWorldClean(clause: PageWorldClause, stage: Stage
       ...(answer?.status !== undefined ? { status: answer.status } : {}),
       ...(answer?.error !== undefined ? { error: answer.error } : {}),
       ...(answer ? {} : { error: "no answer" }),
-      coversPage,
+      coversPage: coveringMatches(probe.matches, target.url).length > 0,
+      ...(dev && devResource(probe.path) ? { devRuntime: true as const } : {}),
     };
   });
-  const answered = probed.filter((probe) => probe.ok);
   const evidence = {
     url: target.url,
     targetId: target.targetId,
     extensionId,
     ...(candidates.length > 1 ? { otherMatches: candidates.slice(1).map((page) => page.url) } : {}),
-    dom: world.dom,
+    session,
+    dom: { ...world.dom, hits },
     globals: {
       own: world.ownNames.length,
       symbols: world.symbols,
+      attributedSymbols: symbols.attributed,
       refs: world.refs,
       unknown,
       baseline: baseline?.source ?? null,
+      ...(baseline?.note ? { baselineNote: baseline.note } : {}),
     },
     resources: { probed, skipped: resources.skipped },
   };
-  const notes: string[] = [];
 
-  for (const skip of resources.skipped) notes.push(`${skip.reason}.`);
-
-  for (const probe of probed) {
-    if (!probe.ok && !probe.coversPage) {
-      notes.push(
-        `web_accessible_resources[${probe.index}] (${probe.path}) was refused from a page not covered by its matches (${probe.matches.join(", ")}), which proves nothing for the pages they do cover.`,
-      );
-    }
-  }
-
-  if (unknown === null) {
-    notes.push("Warning: no about:blank baseline could be read, so the page's own globals were not compared against the browser's.");
-  } else if (unknown.length > 0) {
-    notes.push(
-      `Warning: ${plural(unknown.length, "own window property", "own window properties")} not on about:blank and not in pageGlobals (${unknown
-        .slice(0, UNKNOWN_SHOWN)
-        .join(", ")}${unknown.length > UNKNOWN_SHOWN ? `, and ${unknown.length - UNKNOWN_SHOWN} more` : ""}); pages define their own globals, so this is a read, not a leak.`,
-    );
-  }
-
-  const trailer = notes.length ? ` ${notes.join(" ")}` : "";
-  const leaks: string[] = [];
-
-  if (world.dom.hits.length > 0) {
-    leaks.push(
-      `${plural(world.dom.hits.length, "DOM reference")} to its id (${world.dom.hits
-        .slice(0, 3)
-        .map((hit) => (hit.attribute === "#text" ? `${hit.tag} text "${hit.value}"` : `${hit.tag}[${hit.attribute}]="${hit.value}"`))
-        .join(", ")}${world.dom.hits.length > 3 ? ", and more in evidence.dom.hits" : ""})`,
-    );
-  }
-
-  if (symbols.length > 0) {
-    leaks.push(`${plural(symbols.length, "symbol marker")} on window (${symbols.map((description) => `Symbol(${description})`).join(", ")})`);
-  }
-
-  if (world.refs.length > 0) {
-    leaks.push(
-      `${plural(world.refs.length, "window global")} naming the extension (${world.refs
-        .slice(0, 3)
-        .map((ref) => (ref.where === "name" ? ref.name : `${ref.name} = "${ref.value}"`))
-        .join(", ")}${world.refs.length > 3 ? ", and more in evidence.globals.refs" : ""})`,
-    );
-  }
-
-  for (const probe of answered) {
-    leaks.push(
-      `web_accessible_resources[${probe.index}] answers ${probe.status ?? "ok"} at ${probe.url} fetched from the page (matches: ${probe.matches.join(", ")}), so the extension is fingerprintable by url guessing`,
-    );
-  }
-
-  if (leaks.length > 0) {
-    return failCheck(
-      id,
-      subject,
-      `The main world of ${target.url} can tell the extension is installed: ${leaks.join("; ")}.${trailer}`,
-      evidence,
-    );
-  }
-
-  return passCheck(
+  return pageWorldVerdict({
     id,
     subject,
-    `Nothing in the main world of ${target.url} names the extension: ${count(world.dom.bytes)} bytes of outerHTML over ${count(world.dom.elements)} elements (${plural(world.dom.shadowRoots, "open shadow root")}) hold no occurrence of ${extensionId}, ${plural(world.ownNames.length, "own window property", "own window properties")} carry no symbol marker and none names the extension, and ${plural(resources.probes.length, "static web_accessible_resources path")} fetched from the page ${
-      resources.probes.length === 0 ? "were declared, so there was nothing to guess" : `${resources.probes.length === 1 ? "was" : "were"} refused (${resources.probes.map((probe) => probe.path).join(", ")})`
-    }.${trailer}`,
+    url: target.url,
+    extensionId,
+    world,
+    hits,
+    symbols,
+    unknown,
+    baseline,
+    probed,
+    skipped: resources.skipped,
+    session,
     evidence,
-  );
+  });
 }

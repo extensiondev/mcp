@@ -1,192 +1,24 @@
-import fs from "node:fs";
-import os from "node:os";
-import path from "node:path";
 import vm from "node:vm";
 
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 
-import { readyContractPath } from "../lib/session-paths";
+import {
+  GUEST_ID,
+  PAGE_URL,
+  STATIC_MANIFEST,
+  assertOnce,
+  cleanRead,
+  live,
+  liveSession,
+  openPage,
+  usePageWorldProject,
+  writeDistFile,
+  writeManifest,
+} from "./assert-page-world-harness";
 
-const GUEST_ID = "abcdefghijklmnopabcdefghijklmnop";
-const PAGE_URL = "https://www.youtube.com/watch?v=qSmpCizhtkw";
-
-type Target = { id: string; type: string; url: string; title?: string };
-type PageRead = {
-  dom: {
-    bytes: number;
-    elements: number;
-    shadowRoots: number;
-    occurrences: number;
-    hits: Array<{ tag: string; attribute: string; value: string }>;
-  };
-  ownNames: string[];
-  symbols: string[];
-  refs: Array<{ name: string; where: string; value: string }>;
-};
-
-const BASELINE = ["window", "document", "fetch", "HTMLElement"];
-
-const live = vi.hoisted(() => ({
-  targets: [] as Target[],
-  pageRead: null as unknown,
-  baselineNames: [] as string[],
-  probeAnswers: [] as Array<Record<string, unknown>>,
-  probeExpressions: [] as string[],
-  created: [] as Array<Record<string, unknown>>,
-  closed: [] as string[],
-  attached: [] as string[],
-  readThrows: null as string | null,
-  port: 9222 as number | null,
-}));
-
-vi.mock("../lib/cdp", async (importOriginal) => {
-  const actual = await importOriginal<Record<string, unknown>>();
-  class FakeCdp {
-    static async discoverTargets() {
-      return live.targets;
-    }
-    static async discoverBrowserWsUrl() {
-      return "ws://127.0.0.1:9222/devtools/browser/fake";
-    }
-    async connect() {}
-    async attachToTarget(id: string) {
-      live.attached.push(id);
-
-      return `session-${id}`;
-    }
-    async enableDomains() {}
-    async evaluate(sessionId: string, expression: string) {
-      if (expression === "Object.getOwnPropertyNames(window)") return live.baselineNames;
-
-      if (expression.includes("getOwnPropertySymbols")) {
-        if (live.readThrows) throw new Error(live.readThrows);
-
-        return live.pageRead;
-      }
-
-      return sessionId.includes("sw") ? GUEST_ID : undefined;
-    }
-    async sendCommand(method: string, params: Record<string, unknown>) {
-      if (method === "Target.createTarget") {
-        live.created.push(params);
-
-        return { targetId: "blank-1" };
-      }
-
-      if (method === "Target.closeTarget") {
-        live.closed.push(String(params.targetId));
-
-        return {};
-      }
-
-      if (method === "Runtime.evaluate" && String(params.expression).includes("fetch(")) {
-        live.probeExpressions.push(String(params.expression));
-
-        return { result: { value: live.probeAnswers } };
-      }
-
-      return {};
-    }
-    disconnect() {}
-  }
-
-  return { ...actual, CDPClient: FakeCdp };
-});
-
-vi.mock("../lib/cdp-port", async (importOriginal) => {
-  const actual = await importOriginal<Record<string, unknown>>();
-
-  return {
-    ...actual,
-    resolveCdpPort: async () => (live.port === null ? null : { port: live.port }),
-  };
-});
-
-const { handler } = await import("../tools/assert");
 const { pageWorldReadScript, resourceProbeScript } = await import("../tools/assert-page-world-reads");
 
-const BROWSER = "chrome";
-
-let project: string;
-
-function writeManifest(manifest: Record<string, unknown>): void {
-  const file = path.join(project, "dist", BROWSER, "manifest.json");
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.writeFileSync(file, JSON.stringify(manifest));
-}
-
-function writeDistFile(relative: string): void {
-  const file = path.join(project, "dist", BROWSER, relative);
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.writeFileSync(file, "x");
-}
-
-function liveSession(): void {
-  const file = readyContractPath(project, BROWSER);
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.writeFileSync(
-    file,
-    JSON.stringify({
-      status: "ready",
-      pid: process.pid,
-      runId: "run-1",
-      instanceId: "inst-1",
-      distPath: path.join(project, "dist", BROWSER),
-      extensionId: GUEST_ID,
-      cdpPort: 9222,
-    }),
-  );
-}
-
-function cleanRead(): PageRead {
-  return {
-    dom: { bytes: 120_000, elements: 900, shadowRoots: 2, occurrences: 0, hits: [] },
-    ownNames: [...BASELINE],
-    symbols: [],
-    refs: [],
-  };
-}
-
-function openPage(): void {
-  live.targets = [
-    { id: "sw", type: "service_worker", url: `chrome-extension://${GUEST_ID}/sw.js` },
-    { id: "tab", type: "page", url: PAGE_URL, title: "a video" },
-  ];
-}
-
-async function assertOnce(clause: Record<string, unknown>, browser = BROWSER) {
-  const raw = await handler({ projectPath: project, browser, expect: [clause] });
-  const frame = JSON.parse(raw);
-
-  return { frame, check: frame.value?.checks?.[0] };
-}
-
-const STATIC_MANIFEST = {
-  manifest_version: 3,
-  content_scripts: [{ matches: ["https://*.youtube.com/*"], js: ["content.js"] }],
-  web_accessible_resources: [
-    { resources: ["bridge.js"], matches: ["<all_urls>"], use_dynamic_url: true },
-    { resources: ["images/logo.png"], matches: ["<all_urls>"] },
-  ],
-};
-
-beforeEach(() => {
-  project = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-assert-page-world-"));
-  live.targets = [];
-  live.pageRead = cleanRead();
-  live.baselineNames = [...BASELINE];
-  live.probeAnswers = [{ index: 1, ok: false, error: "Failed to fetch" }];
-  live.probeExpressions = [];
-  live.created = [];
-  live.closed = [];
-  live.attached = [];
-  live.readThrows = null;
-  live.port = 9222;
-});
-
-afterEach(() => {
-  fs.rmSync(project, { recursive: true, force: true });
-});
+usePageWorldProject();
 
 describe("page-world-clean", () => {
   it("passes a clean page and states what it looked at", async () => {
@@ -213,28 +45,31 @@ describe("page-world-clean", () => {
     openPage();
     const read = cleanRead();
     read.dom.occurrences = 1;
-    read.dom.hits = [{ tag: "html", attribute: "data-extjs-extension-base", value: `chrome-extension://${GUEST_ID}/` }];
+    read.dom.hits = [{ tag: "html", attribute: "data-lens-base", value: `chrome-extension://${GUEST_ID}/` }];
     live.pageRead = read;
 
     const { frame, check } = await assertOnce({ assert: "page-world-clean", url: PAGE_URL });
     expect(check.outcome).toBe("fail");
     expect(frame.ok).toBe(false);
     expect(check.detail).toMatch(/1 DOM reference/);
-    expect(check.detail).toContain('html[data-extjs-extension-base]="chrome-extension://');
+    expect(check.detail).toContain('html[data-lens-base]="chrome-extension://');
     expect(check.evidence.dom.hits).toHaveLength(1);
+    expect(check.evidence.dom.hits[0].devRuntime).toBeUndefined();
   });
 
-  it("fails on a symbol marker left on window, reported by its description", async () => {
+  it("fails on a symbol marker whose description names the extension", async () => {
     writeManifest(STATIC_MANIFEST);
     liveSession();
     openPage();
     const read = cleanRead();
-    read.symbols = ["soccer-lens-media-hook"];
+    read.symbols = [`lens-hook@${GUEST_ID}`];
     live.pageRead = read;
 
     const { check } = await assertOnce({ assert: "page-world-clean", url: PAGE_URL });
     expect(check.outcome).toBe("fail");
-    expect(check.detail).toContain("Symbol(soccer-lens-media-hook)");
+    expect(check.detail).toMatch(/1 symbol marker on window naming the extension/);
+    expect(check.detail).toContain(`Symbol(lens-hook@${GUEST_ID})`);
+    expect(check.evidence.globals.attributedSymbols).toEqual([`lens-hook@${GUEST_ID}`]);
   });
 
   it("fails on a window global whose value names the extension", async () => {
@@ -303,7 +138,7 @@ describe("page-world-clean", () => {
     expect(check.detail).toMatch(/web_accessible_resources\[0\] .*not covered by its matches \(https:\/\/shop\.example\/\*\)/);
   });
 
-  it("reports globals absent from about:blank as a warning, never a fail, and honors pageGlobals", async () => {
+  it("reports globals absent from the blank frame as a warning, never a fail, and honors pageGlobals", async () => {
     writeManifest(STATIC_MANIFEST);
     liveSession();
     openPage();
@@ -321,26 +156,6 @@ describe("page-world-clean", () => {
     expect(listed.check.outcome).toBe("pass");
     expect(listed.check.detail).not.toMatch(/Warning/);
     expect(listed.check.evidence.globals.unknown).toEqual([]);
-  });
-
-  it("opens a background about:blank tab for the baseline and closes it, or reuses one already open", async () => {
-    writeManifest(STATIC_MANIFEST);
-    liveSession();
-    openPage();
-
-    await assertOnce({ assert: "page-world-clean", url: PAGE_URL });
-    expect(live.created).toEqual([{ url: "about:blank", background: true }]);
-    expect(live.closed).toEqual(["blank-1"]);
-
-    live.created = [];
-    live.closed = [];
-    live.pageRead = cleanRead();
-    live.targets = [...live.targets, { id: "spare", type: "page", url: "about:blank" }];
-    const { check } = await assertOnce({ assert: "page-world-clean", url: PAGE_URL });
-    expect(check.outcome).toBe("pass");
-    expect(live.created).toEqual([]);
-    expect(live.closed).toEqual([]);
-    expect(live.attached).toContain("spare");
   });
 
   it("is inconclusive when the page is not open and says to open it", async () => {

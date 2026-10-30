@@ -120,6 +120,21 @@ export function resourceProbeScript(probes: Array<{ index: number; url: string }
 
 export const BASELINE_SCRIPT = "Object.getOwnPropertyNames(window)";
 
+export const FRAME_BASELINE_SCRIPT = `(() => {
+  const root = document.documentElement;
+  if (!root) return null;
+  const frame = document.createElement("iframe");
+  frame.setAttribute("aria-hidden", "true");
+  frame.style.display = "none";
+  root.appendChild(frame);
+  try {
+    const inner = frame.contentWindow;
+    return inner ? Object.getOwnPropertyNames(inner) : null;
+  } finally {
+    frame.remove();
+  }
+})()`;
+
 export interface ResourceProbe {
   index: number;
   path: string;
@@ -144,6 +159,12 @@ function globToRegExp(pattern: string): RegExp {
     .join(".*");
 
   return new RegExp(`^${source}$`);
+}
+
+export function matchesResourcePattern(pattern: string, file: string): boolean {
+  const relative = file.replace(/^\/+/, "");
+
+  return hasGlob(pattern) ? globToRegExp(pattern).test(relative) : pattern.replace(/^\/+/, "") === relative;
 }
 
 function resolveGlob(distDir: string, pattern: string): string | null {
