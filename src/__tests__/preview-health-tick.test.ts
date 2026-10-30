@@ -97,7 +97,7 @@ describe("extension_start build:false health tick", () => {
         'console.error("Error: no production build found in dist/"); process.exit(1);',
       );
 
-    const result = JSON.parse(await start.handler({ projectPath: project, build: false }));
+    const result = JSON.parse(await start.handler({ wait: false, projectPath: project, build: false }));
 
     expect(result.schema).toBe(1);
     expect(result.command).toBe("extension_start");
@@ -119,7 +119,7 @@ describe("extension_start build:false health tick", () => {
       return cli;
     };
 
-    const result = JSON.parse(await start.handler({ projectPath: project, build: false }));
+    const result = JSON.parse(await start.handler({ wait: false, projectPath: project, build: false }));
 
     expect(result.ok).toBe(false);
     expect(result.status).toBe("browser-exited");
@@ -143,7 +143,7 @@ describe("extension_start build:false health tick", () => {
     nextChild = () =>
       fakeCli('console.log("preview up"); setTimeout(()=>{}, 60000);');
 
-    const result = JSON.parse(await start.handler({ projectPath: project, build: false }));
+    const result = JSON.parse(await start.handler({ wait: false, projectPath: project, build: false }));
 
     expect(result.ok).toBe(true);
     expect(result.status).toBe("started");
@@ -154,7 +154,7 @@ describe("extension_start build:false health tick", () => {
     nextChild = () =>
       fakeCli('console.log("previewing dist/chrome"); setTimeout(()=>{}, 60000);');
 
-    const result = JSON.parse(await start.handler({ projectPath: project, build: false }));
+    const result = JSON.parse(await start.handler({ wait: false, projectPath: project, build: false }));
 
     expect(result.ok).toBe(true);
     expect(result.status).toBe("started");
@@ -172,7 +172,7 @@ describe("extension_start build:false health tick", () => {
       return cli;
     };
 
-    const result = JSON.parse(await start.handler({ projectPath: project }));
+    const result = JSON.parse(await start.handler({ wait: false, projectPath: project }));
 
     expect(result.ok).toBe(false);
     expect(result.status).toBe("browser-exited");

@@ -158,7 +158,7 @@ describe("page-world-clean", () => {
     expect(listed.check.evidence.globals.unknown).toEqual([]);
   });
 
-  it("is inconclusive when the page is not open and says to open it", async () => {
+  it("is not ready when no open page matches a url pattern, says to open it, and opens nothing itself", async () => {
     writeManifest(STATIC_MANIFEST);
     liveSession();
     live.targets = [
@@ -166,10 +166,14 @@ describe("page-world-clean", () => {
       { id: "other", type: "page", url: "https://shop.example/cart" },
     ];
 
-    const { frame, check } = await assertOnce({ assert: "page-world-clean", url: PAGE_URL });
+    const pattern = "https://www.youtube.com/watch?v=*";
+
+    const { frame, check } = await assertOnce({ assert: "page-world-clean", url: pattern });
     expect(check.outcome).toBe("inconclusive");
+    expect(check.reason).toBe("not-ready");
     expect(frame.ok).toBe(false);
-    expect(check.detail).toContain(PAGE_URL);
+    expect(check.detail).toContain(pattern);
+    expect(check.detail).toContain("https://shop.example/cart");
     expect(check.settledBy).toContain("extension_open");
     expect(live.created).toEqual([]);
   });

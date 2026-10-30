@@ -22,7 +22,8 @@ import {
 } from "../lib/profile-carryover";
 import { removeCarrier } from "../lib/carrier";
 import { envelope } from "../lib/envelope";
-import { productionLaunchEvidence, productionLoadProofLine, readFreshContract, readLoadOverDebugPort } from "../lib/production-launch";
+import { productionLaunchEvidence, readFreshContract, readLoadOverDebugPort } from "../lib/production-launch";
+import { awaitStartLanding, startAnswer } from "../lib/start-answer";
 import { controlledIdentity, identityWarnings, resolveLoadedId } from "../lib/controlled-identity";
 import { spawnExtensionCli, spawnFailedEnvelope } from "../lib/exec";
 import {
@@ -33,7 +34,6 @@ import {
 import { guardSameBrowserSession } from "../lib/same-browser-session";
 import {
   LAUNCH_FLAG_SCHEMA,
-  headlessHint,
   headlessLaunch,
   launchFlagArgs,
   type LaunchFlagArgs,
@@ -42,7 +42,7 @@ import {
 export const schema = {
   name: "extension_start",
   description:
-    "Run the PRODUCTION build in a browser: build the project, serve it, and launch. There is no hot module replacement, so your edits are not picked up; use extension_dev while writing code, and this to check what actually ships. By default there is no control channel either, so extension_eval, extension_storage, extension_reload, extension_open and extension_dom_snapshot cannot attach; pass allowControl:true (or allowEval:true, which implies it) to drive the production run with them. Both flags need Extension.js 4.1.34 or later; a project on an older engine is refused as engine-unsupported, naming the flag, and extension_dev drives the run instead. Pass build:false to launch an existing dist/<browser> without rebuilding, or outputPath to launch any prebuilt unpacked extension directory. The answer says what it confirmed (the engine process, and the browser pid the launcher recorded once the contract lands) and what a production session cannot do (no hot reload, no console stream for extension_logs, and the bridge verbs need allowControl); whether the browser loaded the extension is read over its debug port by extension_wait on Extension.js 4.1.34 or later, and only extension_dev proves it on an older engine.",
+    "Run the PRODUCTION build in a browser: build, serve and launch. No hot module replacement, so edits are not picked up; use extension_dev while writing code, and this to check what ships. By default there is no control channel, so extension_eval, extension_storage, extension_reload, extension_open and extension_dom_snapshot cannot attach; pass allowControl:true (or allowEval:true, which implies it) to drive the run with them. Both flags need Extension.js 4.1.34 or later; an older engine is refused as engine-unsupported. build:false launches an existing dist/<browser>; outputPath launches any prebuilt unpacked extension directory. By default it waits for the build and the browser like extension_dev (up to 45 s) and answers build-ready with the session, the extension id and cdpPort, so no extension_wait is needed before extension_open or extension_assert; wait:false answers once the engine process is alive 5 s after spawn, and a wait that runs out answers started naming the extension_wait call. It says what a production session cannot do (no hot reload, no console stream for extension_logs, and the bridge verbs need allowControl); whether the browser loaded the extension is read over its debug port on Extension.js 4.1.34 or later, and only extension_dev proves it on an older engine.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -91,6 +91,12 @@ export const schema = {
         description:
           "Stop the live session this projectPath runs for the same browser first (an extension_dev or extension_start session), reported as replacedSession. Without it the call is refused: one session per browser owns dist/<browser> and its ready.json and eval token, and a production start would rebuild them under the running session. A session for another browser keeps running either way.",
       },
+      wait: {
+        type: "boolean",
+        default: true,
+        description:
+          "Wait for the build to land and the browser to launch before answering (the same ready.json contract extension_wait reads, up to 45 s after the 5 s boot check), then answer build-ready with the session, the extension id and cdpPort, so extension_open and extension_assert can follow at once. false answers as soon as the engine process is alive 5 s after spawn; call extension_wait yourself then. A noBrowser start never waits.",
+      },
       ...LAUNCH_FLAG_SCHEMA,
     },
     required: ["projectPath"],
@@ -109,6 +115,7 @@ export async function handler(
     allowControl?: boolean;
     allowEval?: boolean;
     replace?: boolean;
+    wait?: boolean;
   } & LaunchFlagArgs,
 ): Promise<string> {
   const browser = args.browser ?? "chrome";
@@ -361,6 +368,8 @@ export async function handler(
     });
   }
 
+  const landing =
+    args.wait === false || args.noBrowser ? null : await awaitStartLanding(args.projectPath, browser);
   const freshContract = readFreshContract(args.projectPath, browser, spawnedAt);
   const profileReused = profileReusedAt(carryover, freshContract?.profilePath, spawnedAt);
 
@@ -382,47 +391,32 @@ export async function handler(
     ...evidence,
     ...(loaded.extensionId ? { extensionId: loaded.extensionId } : {}),
   });
-  const launchSeen =
-    launch.browserPid === null
-      ? "the contract has not recorded a browser launch yet; extension_wait reads it once the build lands (browserPid, browserAlive)"
-      : `the contract names the browser it launched (pid ${launch.browserPid}, ${launch.browserAlive ? "alive" : "gone"})`;
-
-  const noBrowserOrHint = args.noBrowser ? "" : headlessHint(visibility.headless);
-  const proofLine = productionLoadProofLine(freshContract, launch, allowControl, args.projectPath, browser);
   const controlPort =
     typeof freshContract?.controlPort === "number" ? freshContract.controlPort : null;
-  const controlledCopy =
-    controlPort !== null && typeof freshContract?.distPath === "string"
-      ? freshContract.distPath
-      : `dist/extension-js/${browser}/controlled`;
-  const bridgeLine = allowControl
-    ? `${controlPort !== null ? `This production session carries the control channel (port ${controlPort})` : "This production session asked for the control channel, and the contract has not recorded its port yet because the build is still running; extension_wait reads it once the build lands. The channel rides"} on a copy of the build at ${controlledCopy}, so extension_storage, extension_reload (a real reload of the installed extension under open tabs, as a store update does), extension_open and extension_dom_snapshot attach${allowEval ? ", and extension_eval runs where the build's content_security_policy allows it (context:'page' in a tab always does)" : "; extension_eval needs allowEval:true"}. extension_logs has no console stream for it.`
-    : "A production session carries no dev bridge, so extension_logs has no console stream for it and the control verbs cannot attach; pass allowControl:true to drive it.";
 
-  return envelope({
-    ok: true,
+  return startAnswer({
     command: schema.name,
-    status: "started",
-    value: {
-      pid,
-      browser,
-      projectPath: args.projectPath,
-      verb: command,
-      ...(args.noBrowser ? {} : { profileReused }),
-      observed: "the engine process was alive 5 s after it was spawned",
-      headless: visibility.headless,
-      allowControl,
-      allowEval,
-      ...(allowControl ? { controlPort } : {}),
-      ...(identity.copyId
-        ? { buildExtensionId: identity.plainId, controlledCopyId: loaded.extensionId ?? identity.copyId, extensionIdSource: loaded.source }
-        : {}),
-      ...launch,
-      ...(replaced.length > 0 ? { replacedSession: replaced[0] } : {}),
-    },
-    hint: launch.extensionLoaded === true
-      ? `The engine's ${command} process was alive 5 s after spawn and ${launchSeen}, and ${browser} loaded the extension: ${launch.loadEvidence} ${bridgeLine} ${noBrowserOrHint} When you are done, call extension_stop to shut the session down.`
-      : `The engine's ${command} process was alive 5 s after spawn and ${launchSeen}. What this answer cannot confirm is that ${browser} loaded the extension: ${launch.loadEvidence} ${bridgeLine} ${proofLine} ${noBrowserOrHint} When you are done, call extension_stop to shut the session down.`,
+    verb: command,
+    projectPath: args.projectPath,
+    browser,
+    pid,
+    noBrowser: Boolean(args.noBrowser),
+    profileReused,
+    headless: visibility.headless,
+    allowControl,
+    allowEval,
+    controlPort,
+    controlledCopy:
+      controlPort !== null && typeof freshContract?.distPath === "string"
+        ? freshContract.distPath
+        : `dist/extension-js/${browser}/controlled`,
+    identity: identity.copyId
+      ? { buildExtensionId: identity.plainId, controlledCopyId: loaded.extensionId ?? identity.copyId, extensionIdSource: loaded.source }
+      : {},
+    launch,
+    contract: freshContract,
+    replacedSession: replaced[0],
+    landing,
     warnings: [
       profileReused && !args.noBrowser
         ? `${reusedProfileNote(freshContract?.profilePath ?? carryover.profilePath)}${identity.copyId ? ` That carry-over does not reach this controlled copy: its id ${loaded.extensionId ?? identity.copyId} is its own, so its chrome.storage starts empty and it holds no grants from the plain build's runs.` : ""}`

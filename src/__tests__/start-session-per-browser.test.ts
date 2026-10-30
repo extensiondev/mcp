@@ -123,7 +123,7 @@ describe("extension_start keeps one session per browser on a project", () => {
     const devPid = liveDevServer();
     registerSession({ pid: devPid, browser: "firefox", projectPath: project, command: "dev" });
 
-    const result = JSON.parse(await start.handler({ projectPath: project, browser: "firefox" }));
+    const result = JSON.parse(await start.handler({ wait: false, projectPath: project, browser: "firefox" }));
 
     expect(result.ok).toBe(false);
     expect(result.status).toBe("session-exists");
@@ -141,7 +141,7 @@ describe("extension_start keeps one session per browser on a project", () => {
     const devPid = liveDevServer();
     registerSession({ pid: devPid, browser: "chrome", projectPath: project, command: "dev" });
 
-    const result = JSON.parse(await start.handler({ projectPath: project, browser: "firefox" }));
+    const result = JSON.parse(await start.handler({ wait: false, projectPath: project, browser: "firefox" }));
 
     expect(result.status).toBe("started");
     expect(spawnedArgs).toHaveLength(1);
@@ -157,7 +157,7 @@ describe("extension_start keeps one session per browser on a project", () => {
     registerSession({ pid: chromePid, browser: "chrome", projectPath: project, command: "dev" });
 
     const result = JSON.parse(
-      await start.handler({ projectPath: project, browser: "firefox", replace: true }),
+      await start.handler({ wait: false, projectPath: project, browser: "firefox", replace: true }),
     );
 
     expect(result.status).toBe("started");

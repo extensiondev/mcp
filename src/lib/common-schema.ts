@@ -51,7 +51,7 @@ export const PROJECT_PATH = {
 
 export const SESSION_PROJECT_PATH = {
   type: "string",
-  description: "Extension project root (needs a live dev session)",
+  description: "Extension project root (needs a running session: extension_dev or extension_start)",
 } as const;
 
 export const SESSION_BROWSER = {

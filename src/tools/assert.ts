@@ -116,7 +116,7 @@ const STORAGE_CONTEXTS = [
 export const schema = {
   name: COMMAND,
   description:
-    "Run a test stage against a live dev session: state expectations and read one verdict each, instead of reading a blob and hand-rolling the judgement. The check ids and each check's args are listed in the expect property. Each expectation comes back pass, fail or inconclusive; inconclusive means this platform cannot cover the question today, the verdict says what would settle it, and it is never a pass. Start the session with extension_dev; extension_inspect or extension_logs give the raw reading.",
+    "Run a test stage on an extension_dev or extension_start session: one verdict per expectation (see expect): pass, fail, not ready (a precondition; see settledBy) or inconclusive (a platform limit). page-world-clean, no-outside-requests and background-worker-booted read the debug port: meant for the production build (extension_start, allowControl:true). storage-key-present needs the control channel; content-script-injected and console-errors-empty read the dev log stream: extension_dev only.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -400,7 +400,7 @@ interface CdpTarget {
 }
 
 const NO_SESSION_SETTLED_BY =
-  "Start the session with extension_dev, confirm it with extension_wait, then assert again.";
+  "Start the session with extension_dev, or extension_start with allowControl: true for the production build, then assert again.";
 
 export class Stage {
   readonly chromium: boolean;
@@ -450,6 +450,12 @@ export class Stage {
     }
 
     return this.discovered;
+  }
+
+  async refreshTargets(): Promise<CdpTarget[] | null> {
+    this.discovered = null;
+
+    return this.targets();
   }
 
   manifest(): ReadManifest | null {
@@ -531,7 +537,7 @@ export class Stage {
     return inconclusiveCheck(
       id,
       subject,
-      `No dev session with a debugging port was found for ${this.browser}, so the browser was never asked. ${CDP_PORT_MISSING_HINT}`,
+      `No session with a debugging port was found for ${this.browser}, so the browser was never asked. ${CDP_PORT_MISSING_HINT}`,
       NO_SESSION_SETTLED_BY,
     );
   }

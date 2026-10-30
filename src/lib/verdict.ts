@@ -135,6 +135,8 @@ export function assertCheckById(id: string): AssertCheckDeclaration | null {
   return BY_ID.get(id) ?? null;
 }
 
+export type InconclusiveReason = "not-ready" | "platform-limit";
+
 export interface CheckResult {
   id: string;
   subject: string | null;
@@ -144,6 +146,7 @@ export interface CheckResult {
   detail: string;
   evidence: Record<string, unknown> | null;
   settledBy?: string;
+  reason?: InconclusiveReason;
 }
 
 function declarationFor(id: string): AssertCheckDeclaration {
@@ -306,9 +309,22 @@ export function verdictSentence(verdict: AssertVerdict): string {
     parts.push(`${verdict.failures.length} failed`);
   }
 
-  if (verdict.inconclusive.length > 0) {
+  const notReady = verdict.checks.filter((check) => check.reason === "not-ready");
+  const limits = verdict.inconclusive.length - notReady.length;
+
+  if (notReady.length > 0) {
+    const steps = notReady
+      .map((check) => check.settledBy ?? check.detail)
+      .map((step) => `${step[0].toLowerCase()}${step.slice(1)}`.replace(/\.$/, ""));
+
     parts.push(
-      `${verdict.inconclusive.length} inconclusive, meaning this platform cannot cover the question today: not a pass, not a bug in the extension, and each one carries the evidence that would settle it in settledBy`,
+      `${notReady.length} not ready, a precondition this platform covers once it is met (not a platform limit, not a bug in the extension): ${steps.join(" ")}`,
+    );
+  }
+
+  if (limits > 0) {
+    parts.push(
+      `${limits} inconclusive, meaning this platform cannot cover the question today: not a pass, not a bug in the extension, and each one carries the evidence that would settle it in settledBy`,
     );
   }
 
