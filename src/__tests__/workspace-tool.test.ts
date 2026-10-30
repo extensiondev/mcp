@@ -228,6 +228,56 @@ describe("extension_workspace reads a workspace with any project login it holds"
     expect(calls.every((call) => call.auth === "Bearer alpha.sig")).toBe(true);
   });
 
+  it("leads the hint with a warning and carries value.allowance when fewer than ten builds remain", async () => {
+    if (process.platform === "win32") return;
+
+    login("acme", "alpha", "alpha.sig");
+    routes["/api/workspaces/acme/plan"] = { body: { ...PLAN, used: { ...PLAN.used, buildsThisMonth: 342 } } };
+
+    const out = JSON.parse(await workspace({ api: API }));
+
+    expect(out.ok).toBe(true);
+    expect(out.hint.startsWith("8 builds remain of 350 this month; each project creation and each push spends one. acme is on the pro plan: 342 of 350 builds")).toBe(true);
+    expect(out.value.allowance).toEqual({ used: 342, limit: 350, remaining: 8, warning: "8 builds remain of 350 this month; each project creation and each push spends one." });
+  });
+
+  it("warns under five percent of a larger allowance, and not at five percent", async () => {
+    if (process.platform === "win32") return;
+
+    login("acme", "alpha", "alpha.sig");
+    routes["/api/workspaces/acme/plan"] = { body: { ...PLAN, limits: { ...PLAN.limits, buildsPerMonth: 1000 }, used: { ...PLAN.used, buildsThisMonth: 951 } } };
+
+    const low = JSON.parse(await workspace({ api: API }));
+
+    expect(low.value.allowance.warning).toContain("49 builds remain of 1000");
+    expect(low.hint.startsWith("49 builds remain")).toBe(true);
+
+    routes["/api/workspaces/acme/plan"] = { body: { ...PLAN, limits: { ...PLAN.limits, buildsPerMonth: 1000 }, used: { ...PLAN.used, buildsThisMonth: 950 } } };
+
+    const fine = JSON.parse(await workspace({ api: API }));
+
+    expect(fine.value.allowance).toEqual({ used: 950, limit: 1000, remaining: 50, warning: null });
+    expect(fine.hint.startsWith("acme is on the pro plan")).toBe(true);
+  });
+
+  it("carries no warning above the threshold and no allowance when the counters are unreadable", async () => {
+    if (process.platform === "win32") return;
+
+    login("acme", "alpha", "alpha.sig");
+
+    const fine = JSON.parse(await workspace({ api: API }));
+
+    expect(fine.value.allowance).toEqual({ used: 4, limit: 350, remaining: 346, warning: null });
+    expect(fine.hint.startsWith("acme is on the pro plan")).toBe(true);
+
+    routes["/api/workspaces/acme/plan"] = { body: { ...PLAN, countersReadable: false, used: null } };
+
+    const unread = JSON.parse(await workspace({ api: API }));
+
+    expect(unread.value.allowance).toBeNull();
+    expect(unread.hint).not.toContain("remain");
+  });
+
   it("lists the projects with each browser's last build and the channels", async () => {
     if (process.platform === "win32") return;
 
