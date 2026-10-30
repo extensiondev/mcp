@@ -10,6 +10,7 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import vm from "node:vm";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -45,6 +46,7 @@ vi.mock("../lib/cdp-port", async (importOriginal) => {
 type Target = { id: string; type: string; url: string; title: string };
 let cdpTargets: Target[] = [];
 let contexts: ExecutionContextDescription[] = [];
+let worlds: Record<number, Record<string, unknown>> = {};
 const evaluations: Array<{ params: Record<string, unknown>; sessionId?: string }> = [];
 vi.mock("../lib/cdp", () => {
   class CDPClient {
@@ -64,8 +66,9 @@ vi.mock("../lib/cdp", () => {
     async sendCommand(method: string, params: Record<string, unknown> = {}, sessionId?: string) {
       if (method === "Runtime.evaluate") {
         evaluations.push({ params, sessionId });
+        const value = vm.runInNewContext(String(params.expression), { ...(worlds[Number(params.contextId)] ?? {}) }) as unknown;
 
-        return { result: { type: "string", value: "masked" } };
+        return { result: value === undefined ? { type: "undefined" } : { type: typeof value, value } };
       }
 
       return {};
@@ -123,7 +126,13 @@ beforeEach(() => {
     { id: 1, origin: "https://www.google.com", name: "", auxData: { isDefault: true, type: "default", frameId: "google" } },
     { id: 7, origin: `chrome-extension://${extensionId}`, name: "Mask", auxData: { isDefault: false, type: "isolated", frameId: "google" } },
   ];
+
+  worlds = { 7: { chrome: { runtime: { id: extensionId, sendMessage() {} } }, masked: true } };
 });
+
+function userEvaluations(expression: string) {
+  return evaluations.filter((evaluation) => evaluation.params.expression === expression);
+}
 
 afterEach(() => {
   cliCalls.length = 0;
@@ -145,13 +154,50 @@ describe("extension_eval context content on Chromium reaches the content script'
     );
 
     expect(result.ok).toBe(true);
-    expect(result.value).toBe("masked");
+    expect(result.value).toBe("function");
     expect(cliCalls).toEqual([]);
-    expect(evaluations).toHaveLength(1);
-    expect(evaluations[0].sessionId).toBe("session-google");
-    expect(evaluations[0].params.contextId).toBe(7);
+    const ran = userEvaluations("typeof chrome.runtime.sendMessage");
+    expect(ran).toHaveLength(1);
+    expect(ran[0].sessionId).toBe("session-google");
+    expect(ran[0].params.contextId).toBe(7);
     expect(result.hint).toContain("isolated world");
     expect(result.hint).toContain("content_security_policy does not govern");
+  });
+
+  it("evaluates in the live content script world after a background reload, not the orphaned world listed first", async () => {
+    contexts = [
+      contexts[0],
+      { id: 7, origin: `chrome-extension://${extensionId}`, name: "Mask", auxData: { isDefault: false, type: "isolated", frameId: "google" } },
+      { id: 12, origin: `chrome-extension://${extensionId}`, name: "Mask", auxData: { isDefault: false, type: "isolated", frameId: "google" } },
+    ];
+
+    worlds = { 7: { chrome: {} }, 12: { chrome: { runtime: { id: extensionId } }, x: 1 } };
+
+    const result = JSON.parse(
+      await evalTool.handler({ projectPath: dir, browser: "chrome", context: "content", url: "google.com/search", expression: "globalThis.x" }),
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.value).toBe(1);
+    expect(userEvaluations("globalThis.x").map((evaluation) => evaluation.params.contextId)).toEqual([12]);
+    expect(cliCalls).toEqual([]);
+  });
+
+  it("answers an error naming the orphaned world when no live content script world is in the tab", async () => {
+    worlds = { 7: { chrome: {} } };
+
+    const result = JSON.parse(
+      await evalTool.handler({ projectPath: dir, browser: "chrome", context: "content", url: "google.com/search", expression: "globalThis.x" }),
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.status).toBe("content-world-orphaned");
+    expect(result.error.code).toBe("E_CONTENT_WORLD_ORPHANED");
+    expect(result.error.message).toContain(`chrome-extension://${extensionId} ("Mask")`);
+    expect(result.error.message).toContain("execution context 7");
+    expect(result.value.orphanedContextIds).toEqual([7]);
+    expect(userEvaluations("globalThis.x")).toEqual([]);
+    expect(cliCalls).toEqual([]);
   });
 
   it("goes through the relay when no content script of this extension has run in the tab", async () => {

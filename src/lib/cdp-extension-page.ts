@@ -10,7 +10,7 @@ import { setTimeout as sleep } from "node:timers/promises";
 
 import { CDPClient } from "./cdp";
 import { diagnosePausedTarget, type PausedDiagnosis } from "./cdp-paused";
-import { extensionIsolatedContexts } from "./cdp-isolated-world";
+import { extensionIsolatedContexts, type ExecutionContextDescription } from "./cdp-isolated-world";
 import { listDocumentTargets, type PageTarget } from "./cdp-targets";
 
 const EVALUATE_DEFAULTS_WITHOUT_REPL_MODE = {
@@ -38,7 +38,30 @@ type EvaluateResponse = {
 
 export type ExtensionPageEval =
   | { ok: true; value: unknown; note?: string }
-  | { ok: false; message: string; thrown: boolean; timedOut?: boolean; noIsolatedWorld?: true; paused?: PausedDiagnosis };
+  | { ok: false; message: string; thrown: boolean; timedOut?: boolean; noIsolatedWorld?: true; orphanedWorld?: OrphanedWorld; paused?: PausedDiagnosis };
+
+export type OrphanedWorld = { contextIds: number[]; name: string };
+
+const RUNTIME_ID_PROBE = "globalThis.chrome?.runtime?.id ?? null";
+
+async function liveIsolatedWorld(
+  cdp: CDPClient,
+  sessionId: string,
+  candidates: ExecutionContextDescription[],
+  extensionId: string,
+): Promise<ExecutionContextDescription | null> {
+  for (const context of [...candidates].sort((a, b) => b.id - a.id)) {
+    const reply = (await cdp.sendCommand(
+      "Runtime.evaluate",
+      { expression: RUNTIME_ID_PROBE, contextId: context.id, returnByValue: true },
+      sessionId,
+    ).catch(() => undefined)) as EvaluateResponse | undefined;
+
+    if (reply?.result?.value === extensionId) return context;
+  }
+
+  return null;
+}
 
 function stripHash(url: string): string {
   return url.replace(/#.*$/, "");
@@ -231,14 +254,29 @@ export async function evaluateOnExtensionPage(
 
     if (isolatedWorldOf) {
       const contexts = await cdp.executionContexts(sessionId).catch((error: unknown) => (error instanceof Error ? error.message : String(error)));
-      const [isolated] = typeof contexts === "string" ? [] : extensionIsolatedContexts(contexts, isolatedWorldOf, targetId);
+      const candidates = typeof contexts === "string" ? [] : extensionIsolatedContexts(contexts, isolatedWorldOf, targetId);
 
-      if (!isolated) {
+      if (candidates.length === 0) {
         return {
           ok: false,
           thrown: false,
           noIsolatedWorld: true,
           message: typeof contexts === "string" ? `The execution contexts of ${targetId} could not be read: ${contexts}.` : `No isolated world of chrome-extension://${isolatedWorldOf} runs in the top frame of ${targetId}.`,
+        };
+      }
+
+      const isolated = await liveIsolatedWorld(cdp, sessionId, candidates, isolatedWorldOf);
+
+      if (!isolated) {
+        const contextIds = candidates.map((context) => context.id).sort((a, b) => b - a);
+        const name = candidates.find((context) => context.name)?.name ?? "";
+        const named = name ? ` ("${name}")` : "";
+
+        return {
+          ok: false,
+          thrown: false,
+          orphanedWorld: { contextIds, name },
+          message: `The isolated world of chrome-extension://${isolatedWorldOf}${named} in the top frame of ${targetId} (execution context ${contextIds.join(", ")}) is orphaned: chrome.runtime.id is not set there, so it belongs to a content script from before the extension reloaded, and no live content script of this extension runs in that tab.`,
         };
       }
 

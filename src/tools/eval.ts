@@ -121,7 +121,7 @@ export const schema = {
         type: "string",
         enum: ["background", "popup", "options", "sidebar", "devtools", "newtab", "history", "bookmarks", "content", "page"],
         description:
-          "Where to evaluate. Default background, except on a Chromium MV3 session (the default template) where it defaults to page, the active tab; background on Chromium goes over the debug port (the service worker). For content and page, pass `url` to pick the tab, or omit both `url` and `tab` for the active tab; a numeric `tab` only disambiguates, and a url that matches several tabs showing the same page evaluates in the most recently active one and warns with the others' targetIds. Extension surfaces (popup, options, sidebar, devtools) and override pages (newtab, history, bookmarks) need no tab id but must already be open: open one with extension_open first, because a closed one returns an explicit error. On a Chromium MV3 session those pages, and page with a chrome-extension:// url, evaluate over CDP, the inspector path the extension page CSP does not govern; elsewhere they evaluate over the in-bundle relay. On Chromium, content with a url evaluates over CDP in the extension's isolated world of the matching tab, the world its content scripts share, which the extension's content_security_policy does not govern, so chrome.runtime and what the content script left on globals or the DOM are readable even under the MV3 default CSP; a tab where no content script of the extension has run yet goes through the relay instead. On Firefox a document whose content security policy forbids eval (the extension's own pages, or a site's) is evaluated over the debugger protocol instead, which takes one expression; a page inside the extension that is no declared surface (pages/*) is reached the same way by page and its moz-extension:// url once a tab shows it. An extension_start session's pages carry no relay, so there a surface shown in a tab (options) and an extension page url are evaluated over the debugger protocol too, while a surface in its own window (popup) is not reachable and the answer says so. The one case where a promise is not awaited is Firefox MV2 without the scripting API, where the expression runs through tabs.executeScript and must return a synchronous value.",
+          "Where to evaluate. Default background, except on a Chromium MV3 session (the default template) where it defaults to page, the active tab; background on Chromium goes over the debug port (the service worker). For content and page, pass `url` to pick the tab, or omit both `url` and `tab` for the active tab; a numeric `tab` only disambiguates, and a url that matches several tabs showing the same page evaluates in the most recently active one and warns with the others' targetIds. Extension surfaces (popup, options, sidebar, devtools) and override pages (newtab, history, bookmarks) need no tab id but must already be open: open one with extension_open first, because a closed one returns an explicit error. On a Chromium MV3 session those pages, and page with a chrome-extension:// url, evaluate over CDP, the inspector path the extension page CSP does not govern; elsewhere they evaluate over the in-bundle relay. On Chromium, content with a url evaluates over CDP in the extension's isolated world of the matching tab, the world its content scripts share, which the extension's content_security_policy does not govern, so chrome.runtime and what the content script left on globals or the DOM are readable even under the MV3 default CSP; when the tab holds several such worlds the newest one where chrome.runtime.id is set is used, a world orphaned by an extension reload (chrome.runtime.id unset) is never evaluated in and the answer names it instead, and a tab where no content script of the extension has run yet goes through the relay instead. On Firefox a document whose content security policy forbids eval (the extension's own pages, or a site's) is evaluated over the debugger protocol instead, which takes one expression; a page inside the extension that is no declared surface (pages/*) is reached the same way by page and its moz-extension:// url once a tab shows it. An extension_start session's pages carry no relay, so there a surface shown in a tab (options) and an extension page url are evaluated over the debugger protocol too, while a surface in its own window (popup) is not reachable and the answer says so. The one case where a promise is not awaited is Firefox MV2 without the scripting API, where the expression runs through tabs.executeScript and must return a synchronous value.",
       },
       url: { type: "string", description: "content/page: pick the tab by url (match pattern, then substring). Preferred over `tab`." },
       tab: { type: "number", description: "Numeric chrome.tabs id, only to disambiguate when several tabs match." },
@@ -663,6 +663,21 @@ async function evaluateInContentWorld(
   if (!outcome.ok && outcome.noIsolatedWorld) return RELAY_INSTEAD;
 
   if (!outcome.ok && outcome.paused) return pausedPageRefusal(outcome.paused);
+
+  if (!outcome.ok && outcome.orphanedWorld) {
+    return envelope({
+      ok: false,
+      command: schema.name,
+      status: "content-world-orphaned",
+      error: {
+        code: "E_CONTENT_WORLD_ORPHANED",
+        name: "ContentWorldOrphaned",
+        message: outcome.message,
+      },
+      value: { targetId: target.targetId, url: target.url, orphanedContextIds: outcome.orphanedWorld.contextIds },
+      hint: `Nothing was evaluated: the only isolated world of this extension in ${target.url} lost its extension when it reloaded, so its chrome APIs and the globals of the content script that runs now are not there. Reload the tab (extension_eval with context page, the same url and location.reload()) so the content script runs again, then retry.`,
+    });
+  }
 
   if (!outcome.ok) {
     return envelope({
