@@ -135,10 +135,10 @@ export function isPackageArtifact(row: Row): boolean {
 }
 
 export function artifactWithAddress(row: unknown, scope: PackageScope): unknown {
-  if (!isRow(row) || !text(row.downloadUrl)) return row;
+  if (!isRow(row) || !text(row.downloadUrl) || !isPackageArtifact(row)) return row;
 
-  const fallback = isPackageArtifact(row) ? { sha: scope.sha, browser: text(row.browser) || packageFileOf(row.downloadUrl)?.browser } : { sha: scope.sha };
-  const address = printedPackageAddress(row.downloadUrl, { ...scope, ...fallback });
+  const browser = text(row.browser) || packageFileOf(row.downloadUrl)?.browser;
+  const address = printedPackageAddress(row.downloadUrl, { ...scope, sha: scope.sha, browser });
 
   return address ? { ...row, downloadUrl: address } : row;
 }

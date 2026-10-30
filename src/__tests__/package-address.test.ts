@@ -14,6 +14,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { writeCredentials } from "../lib/credentials";
 import {
+  artifactWithAddress,
   itemPackageUrl,
   namesRegistryOrToken,
   packageAddress,
@@ -260,7 +261,7 @@ describe("every tool prints the build's extension.dev package address and no reg
     expect(namesRegistryOrToken(JSON.stringify(dry))).toEqual([]);
   });
 
-  it("extension_builds get: every artifacts[].downloadUrl is the subdomain address, the same string the preflight prints for the same build and browser", async () => {
+  it("extension_builds get: every package artifacts[].downloadUrl is the subdomain address, the same string the preflight prints for the same build and browser, and a metadata row keeps the registry address www answered", async () => {
     world(PROD);
     routes[`POST /api/projects/${PROJECT_ID}/stores/chrome/submissions/preflight`] = () => ({ body: notLinked(TOKENED) });
 
@@ -271,12 +272,26 @@ describe("every tool prints the build's extension.dev package address and no reg
     expect(out.value.artifacts.map((row: Row) => row.downloadUrl)).toEqual([
       PACKAGE,
       `https://acme.extension.dev/widget/builds/${SHA}/firefox.xpi`,
-      `https://acme.extension.dev/widget/builds/${SHA}/artifact-integrity/chrome.json`,
+      `https://registry.extension.land/acme/widget/builds/${SHA}/artifact-integrity/chrome.json`,
     ]);
 
     expect(out.value.artifacts[0].downloadUrl).toBe(preflight.value.packageUrl);
     expect(out.value.artifacts[0].download).toEqual({ action: "download", buildId: SHA, browser: "chrome" });
-    expect(namesRegistryOrToken(JSON.stringify(out))).toEqual([]);
+    const packages = out.value.artifacts.filter((row: Row) => row.type !== "Integrity");
+    expect(namesRegistryOrToken(JSON.stringify(packages))).toEqual([]);
+    expect(namesRegistryOrToken(JSON.stringify(preflight.value.sayToPerson))).toEqual([]);
+  });
+
+  it("artifactWithAddress rewrites a package row only and passes a metadata, integrity or executable row through unchanged", () => {
+    const scope = { ref: REF, sha: SHA, api: PROD };
+    const integrity = `https://registry.extension.land/acme/widget/builds/${SHA}/artifact-integrity/chrome.json`;
+    const metadata = `https://registry.extension.land/acme/widget/builds/${SHA}/chrome.json`;
+    const executable = `https://registry.extension.land/acme/widget/builds/${SHA}/executables/widget-macos-arm64`;
+
+    expect(artifactWithAddress({ name: "chrome-extension.zip", browser: "chrome", type: "Extension package", downloadUrl: REGISTRY_ZIP("chrome") }, scope)).toMatchObject({ downloadUrl: PACKAGE });
+    expect(artifactWithAddress({ name: "chrome.integrity.json", type: "Integrity", downloadUrl: integrity }, scope)).toMatchObject({ downloadUrl: integrity });
+    expect(artifactWithAddress({ name: "chrome.json", type: "Metadata", downloadUrl: metadata }, scope)).toMatchObject({ downloadUrl: metadata });
+    expect(artifactWithAddress({ name: "widget-macos-arm64", type: "Executable", downloadUrl: executable }, scope)).toMatchObject({ downloadUrl: executable });
   });
 
   it("extension_publish: the run commands and the held-page package line carry the subdomain address with ?share=<id> and the expiry in words", async () => {
