@@ -28,6 +28,8 @@ import {
   type SubmissionRun,
 } from "../lib/platform-submissions";
 import {
+  AMO_SIGNED_STATUS,
+  amoUnlistedSigning,
   storeReviewLine,
   reviewSentence,
   storeReviewOfRow,
@@ -317,11 +319,12 @@ function submissionView(row: Record<string, unknown>): SubmissionView {
   const storeCrxVersion = typeof row.storeCrxVersion === "string" ? row.storeCrxVersion.trim() : "";
   const storeReview = storeReviewOfRow(row.storeReview);
   const statusRead = statusReadOf(row.statusRead);
+  const signed = amoUnlistedSigning(str(row.store), storeReview);
   const releaseType = releaseTypeOfRow(row.appStoreRelease, publish);
   if (releaseType) view.releaseType = releaseType;
   if (version) view.version = version;
   if (statusRead) view.statusRead = statusRead;
-  if (status) view.status = status;
+  if (status) view.status = signed ? AMO_SIGNED_STATUS : status;
   if (storeUrl) view.storeUrl = storeUrl;
   if (submittedAt) view.submittedAt = submittedAt;
   if (channel) view.channel = channel;
@@ -672,7 +675,8 @@ export async function readStores(args: {
 
     const { run, store: _store, appStoreRelease, ...rest } = latest;
     const releaseType = releaseTypeOfRow(appStoreRelease, (rest.publish as Record<string, unknown> | undefined) ?? null);
-    const fields = releaseType ? { ...rest, releaseType } : rest;
+    const typed = releaseType ? { ...rest, releaseType } : rest;
+    const fields = amoUnlistedSigning(store, typed.storeReview) ? { ...typed, status: AMO_SIGNED_STATUS } : typed;
     submissionsByStore[store] = fields.storeVersion ? { ...fields, version: fields.storeVersion.packaged } : fields;
     if (Object.keys(run).length > 0) runsByStore[store] = run;
   }

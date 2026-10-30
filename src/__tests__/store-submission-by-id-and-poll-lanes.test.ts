@@ -195,4 +195,32 @@ describe("extension_release_status reads any recorded submission by id and says 
 
     expect(stores.value.submission.submission).toMatchObject({ amoChannel: "unlisted", statusWord: "signed" });
   });
+
+  it("reads an unlisted version AMO signed as signed, and keeps the review line on the listed version in review", async () => {
+    if (process.platform === "win32") return;
+
+    const listed = {
+      id: "def49314-0000-0000-0000-000000000007",
+      store: "firefox",
+      channel: "stable",
+      version: "069d4b8",
+      buildId: "069d4b8",
+      status: "submitted",
+      statusRead: { word: "submitted", readAt: "2026-10-30T02:00:00Z", source: "poll", storeWord: "UNREVIEWED" },
+      storeVersion: { packaged: "0.2.0.7", displayed: "0.2.0", source: "platform" },
+      storeReview: { state: "UNREVIEWED", checkedAt: "2026-10-30T02:00:00Z", source: "poll", visibility: "listed" },
+      submittedAt: "2026-10-27T22:28:00Z",
+    };
+    const unlistedRecorded = { ...UNLISTED_FIREFOX, status: "approved" };
+
+    routes[`/api/projects/${PROJECT_ID}/stores/firefox/submissions`] = [unlistedRecorded, listed];
+    routes["/api/cli/stores/submissions"] = { submissions: [...SAFARI_RECORDS, listed, unlistedRecorded] };
+
+    const out = JSON.parse(await releaseStatus({ include: ["stores"], api: API }));
+    const hint = String(out.value.stores.hint);
+
+    expect(hint).toContain("last submission v0.2.0.8 signed");
+    expect(hint).toContain("review pending (UNREVIEWED");
+    expect(hint).not.toContain("approved (PUBLIC");
+  });
 });

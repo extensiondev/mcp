@@ -107,13 +107,21 @@ export function storeReviewOfRow(raw: unknown): StoreReview | undefined {
   const checkedAt = str(raw.checkedAt);
   const source = str(raw.source);
   const liveState = str(raw.liveState);
+  const visibility = str(raw.visibility)?.toLowerCase();
 
   return {
     state,
     ...(checkedAt ? { checkedAt } : {}),
     ...(source ? { source } : {}),
     ...(liveState ? { liveState } : {}),
+    ...(visibility === "listed" || visibility === "unlisted" ? { visibility } : {}),
   };
+}
+
+export const AMO_SIGNED_STATUS = "signed";
+
+export function amoUnlistedSigning(store: string | undefined, review: StoreReview | undefined): boolean {
+  return store === "firefox" && review?.visibility === "unlisted" && review.state.toUpperCase() === "PUBLIC";
 }
 
 /* @invariant THE REVIEW LINE BESIDE A SUBMISSION IS THAT SUBMISSION'S. The
@@ -219,6 +227,24 @@ export function storeReviewLine(args: {
   earlier: Array<ReviewedSubmission & { submittedAt?: string }>;
 }): ReviewView | undefined {
   const { latest } = args;
+
+  if (args.store === "firefox" && latest?.storeReview?.visibility === "unlisted") {
+    const listed = [...args.earlier]
+      .filter((record) => record.storeReview?.state && record.storeReview.visibility !== "unlisted" && str(record.buildSha))
+      .sort((a, b) => String(b.submittedAt ?? "").localeCompare(String(a.submittedAt ?? "")))[0];
+
+    if (listed?.storeReview) {
+      return (
+        reviewBesideSubmission(args.row, listed, "firefox") ??
+        ownReview(listed, String(listed.buildSha), reviewStatusOf(listed.storeReview.state))
+      );
+    }
+
+    const sha = str(latest.buildSha);
+
+    if (sha && amoUnlistedSigning("firefox", latest.storeReview)) return ownReview(latest, sha, AMO_SIGNED_STATUS);
+  }
+
   const uploadOnly =
     latest !== undefined &&
     !latest.storeReview?.state &&
