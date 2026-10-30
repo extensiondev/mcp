@@ -44,6 +44,7 @@ import { approvalRoundTrip } from "../lib/approval-outcome";
 import { mintedApproval } from "../lib/approval-record";
 import { chromeDashboardPaste, chromePasteSentence } from "../lib/chrome-dashboard-paste";
 import { withChromeVisibility } from "../lib/chrome-visibility";
+import { onRecordRow, onRecordSentence, screenshotsOnRecord } from "../lib/listing-on-record";
 import { approvalVerdict } from "../lib/approval-policy";
 import { badShipRequest, isRow, openShipApi, text } from "../lib/ship-act";
 import {
@@ -423,12 +424,6 @@ export function reconciledWithStoreMd(
 
 const SKIPPED_SCREENSHOTS_LINE = /^the `- (.+?):` line in STORE\.md is not read: STORE\.md carries no screenshot; /;
 
-function screenshotsOnRecord(requirements: RequirementsView | null): string | null {
-  const row = requirements?.items.find((item) => /\.screenshots$/.test(item.id));
-
-  return row && row.status === "have" ? row.actual || "screenshots on the listing record" : null;
-}
-
 export function storeMdAdvisory(
   local: LocalListing,
   checks: Row[],
@@ -483,6 +478,7 @@ interface StoreReadBack {
   blocking: string[];
   dashboardUrl: string | null;
   images?: ImageRows;
+  screenshotsOnRecord: string | null;
 }
 
 function readBackOf(store: string, json: Row): StoreReadBack {
@@ -491,6 +487,7 @@ function readBackOf(store: string, json: Row): StoreReadBack {
 
   return {
     ...(requirements ? { images: imageRows(store, requirements) } : {}),
+    screenshotsOnRecord: screenshotsOnRecord(requirements),
     blocking: checks
       .filter(
         (check) =>
@@ -1012,9 +1009,13 @@ export async function syncListing(args: ListingArgs): Promise<string> {
       if (back?.problem) readProblems.push(back.problem);
     }
 
-    const paste = store === "chrome" && done ? chromeDashboardPaste(local, readBack?.dashboardUrl ?? null) : null;
+    const record = screenshots === undefined && done ? { read: readBack !== null, screenshots: readBack?.screenshotsOnRecord ?? null } : null;
+    const onRecord = record ? onRecordRow(record) : null;
+    const paste = store === "chrome" && done ? chromeDashboardPaste(local, readBack?.dashboardUrl ?? null, record) : null;
     const sentImages = local.patch.screenshots?.length ?? 0;
-    if (readBack?.images && (sentImages || readBack.images.clears.length)) said.push(imagesSentence(store, sentImages, readBack.images));
+
+    if (record && onRecord) said.push(onRecordSentence(store, record, readBack?.images ?? null));
+    else if (readBack?.images && (sentImages || readBack.images.clears.length)) said.push(imagesSentence(store, sentImages, readBack.images));
 
     if (paste) {
       if (result.status === "synced") result.status = "recorded";
@@ -1047,6 +1048,7 @@ export async function syncListing(args: ListingArgs): Promise<string> {
       ...(local.patch.icons && local.icon ? { icon: local.icon } : {}),
       ...(local.iconMissing ? { iconMissing: local.iconMissing } : {}),
       ...(local.skipped.length ? { skipped: local.skipped } : {}),
+      ...(onRecord ? { onRecord } : {}),
       ...(blocking ? { stillBlocking: blocking } : {}),
       ...(readBack?.images ? { images: readBack.images } : {}),
       ...(paste ? { pasteInDashboard: paste } : {}),
