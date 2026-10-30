@@ -23,8 +23,7 @@ import {
 import { removeCarrier } from "../lib/carrier";
 import { envelope } from "../lib/envelope";
 import { productionLaunchEvidence, readFreshContract, readLoadOverDebugPort } from "../lib/production-launch";
-import { unpackedExtensionId } from "../lib/extension-identity";
-import { sessionStateDir } from "../lib/session-paths";
+import { controlledIdentity, identityWarnings, resolveLoadedId } from "../lib/controlled-identity";
 import { spawnExtensionCli, spawnFailedEnvelope } from "../lib/exec";
 import {
   registerSession,
@@ -39,64 +38,6 @@ import {
   launchFlagArgs,
   type LaunchFlagArgs,
 } from "../lib/launch-flags";
-
-/* @invariant A CONTROLLED RUN NAMES ITS OWN ID. An unpacked extension's id
- * comes from its folder, and allowControl loads a copy of the build from
- * dist/extension-js/<browser>/controlled, so the controlled run and the plain
- * dist/<browser> run are two extensions to the browser. On 2026-10-21 the
- * answer said nothing, a startingUrl built from the plain id opened an empty
- * chrome://extensions page, and the profile note promised storage the copy
- * never had. The answer now carries both ids, rewrites a startingUrl that
- * names the plain id, and says what the copy does not inherit.
- */
-type ControlledIdentity = {
-  plainId: string;
-  copyId: string | null;
-  startingUrl?: string;
-  rewroteStartingUrl: boolean;
-};
-
-function controlledIdentity(args: {
-  projectPath: string;
-  browser: string;
-  outputPath: string | null | undefined;
-  allowControl: boolean;
-  startingUrl?: string;
-}): ControlledIdentity {
-  const plainDist = args.outputPath
-    ? path.resolve(args.projectPath, args.outputPath)
-    : path.join(args.projectPath, "dist", args.browser);
-  const plainId = unpackedExtensionId(plainDist);
-
-  if (!args.allowControl) {
-    return { plainId, copyId: null, startingUrl: args.startingUrl, rewroteStartingUrl: false };
-  }
-
-  const copyId = unpackedExtensionId(path.join(sessionStateDir(args.projectPath), args.browser, "controlled"));
-  const startingUrl = args.startingUrl;
-
-  if (startingUrl && startingUrl.includes(plainId)) {
-    return { plainId, copyId, startingUrl: startingUrl.split(plainId).join(copyId), rewroteStartingUrl: true };
-  }
-
-  return { plainId, copyId, startingUrl, rewroteStartingUrl: false };
-}
-
-function identityWarnings(identity: ControlledIdentity, launchedId: string | undefined): Array<string | null> {
-  if (!identity.copyId) return [];
-
-  const actual = launchedId ?? identity.copyId;
-  const predicted = launchedId === undefined || launchedId === identity.copyId;
-
-  return [
-    `allowControl runs a copy of the build, and an unpacked extension's id comes from its folder, so this session's extension id is ${actual}, not the ${identity.plainId} that dist/<browser> gets: every chrome-extension:// address and every chrome://extensions/?options= address for this run uses ${actual}, and the copy shares no chrome.storage and no grants with the plain build's runs.`,
-    identity.rewroteStartingUrl
-      ? predicted
-        ? `startingUrl named the plain build's id ${identity.plainId}; it was rewritten to ${identity.copyId} so it opens on this run.`
-        : `startingUrl named the plain build's id ${identity.plainId} and was rewritten to ${identity.copyId}, but the contract recorded ${launchedId}; open the page again with that id.`
-      : null,
-  ];
-}
 
 export const schema = {
   name: "extension_start",
@@ -433,7 +374,12 @@ export async function handler(
     });
   }
 
-  const launch = await readLoadOverDebugPort(freshContract, productionLaunchEvidence(freshContract, allowControl));
+  const loaded = resolveLoadedId(identity, freshContract);
+  const evidence = productionLaunchEvidence(freshContract, allowControl);
+  const launch = await readLoadOverDebugPort(freshContract, {
+    ...evidence,
+    ...(loaded.extensionId ? { extensionId: loaded.extensionId } : {}),
+  });
   const launchSeen =
     launch.browserPid === null
       ? "the contract has not recorded a browser launch yet; extension_wait reads it once the build lands (browserPid, browserAlive)"
@@ -465,7 +411,9 @@ export async function handler(
       allowControl,
       allowEval,
       ...(allowControl ? { controlPort } : {}),
-      ...(identity.copyId ? { buildExtensionId: identity.plainId, controlledCopyId: identity.copyId } : {}),
+      ...(identity.copyId
+        ? { buildExtensionId: identity.plainId, controlledCopyId: loaded.extensionId ?? identity.copyId, extensionIdSource: loaded.source }
+        : {}),
       ...launch,
       ...(replaced.length > 0 ? { replacedSession: replaced[0] } : {}),
     },
@@ -474,9 +422,9 @@ export async function handler(
       : `The engine's ${command} process was alive 5 s after spawn and ${launchSeen}. What this answer cannot confirm is that ${browser} loaded the extension: ${launch.loadEvidence} ${bridgeLine} To prove the load, run it with extension_dev, whose answer carries guestLoaded. ${noBrowserOrHint} When you are done, call extension_stop to shut the session down.`,
     warnings: [
       profileReused && !args.noBrowser
-        ? `${reusedProfileNote(freshContract?.profilePath ?? carryover.profilePath)}${identity.copyId ? ` That carry-over does not reach this controlled copy: its id ${launch.extensionId ?? identity.copyId} is its own, so its chrome.storage starts empty and it holds no grants from the plain build's runs.` : ""}`
+        ? `${reusedProfileNote(freshContract?.profilePath ?? carryover.profilePath)}${identity.copyId ? ` That carry-over does not reach this controlled copy: its id ${loaded.extensionId ?? identity.copyId} is its own, so its chrome.storage starts empty and it holds no grants from the plain build's runs.` : ""}`
         : null,
-      ...identityWarnings(identity, launch.extensionId),
+      ...identityWarnings(identity, loaded),
       ...boot.warnings,
       markerWarning,
       stale.removed &&
