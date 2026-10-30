@@ -99,6 +99,16 @@ export const ASSERT_CHECKS: readonly AssertCheckDeclaration[] = Object.freeze([
     counterpartNote:
       "both replace a count of zero with a read of the messages, because a zero is also what a dead log channel reports",
   },
+  {
+    id: "no-outside-requests",
+    since: 1,
+    severity: "fail",
+    title: "no request left the machine from any context of the extension while the stage watched",
+    reads: ["cdp.targets", "cdp.network"],
+    previewCounterpart: null,
+    counterpartNote:
+      "the preview lane has no network of its own; this lane listens on every target of the real browser, workers and offscreen documents included",
+  },
 ]);
 
 const BY_ID = new Map(ASSERT_CHECKS.map((check) => [check.id, check]));

@@ -205,7 +205,8 @@ Every other tool hands back a reading. `extension_assert` states the expectation
     { "assert": "surface-rendered", "surface": "popup", "selector": "[data-testid=root]" },
     { "assert": "storage-key-present", "key": "settings", "area": "local" },
     { "assert": "console-errors-empty", "context": ["background", "popup"] },
-    { "assert": "content-script-injected", "url": "https://shop.example/cart" }
+    { "assert": "content-script-injected", "url": "https://shop.example/cart" },
+    { "assert": "no-outside-requests", "allow": ["api.shop.example"] }
   ]
 }
 ```

@@ -210,7 +210,7 @@ export class CDPConnection {
     this.consoleMessages = [];
   }
 
-  protected onEvent(
+  onEvent(
     handler: (msg: Record<string, unknown>) => void,
   ): () => void {
     this.eventListeners.add(handler);

@@ -70,6 +70,12 @@ import {
   surfaceDocument,
   SURFACE_MANIFEST_KEYS,
 } from "./open";
+import {
+  assertNoOutsideRequests,
+  NO_OUTSIDE_REQUESTS,
+  parseNoOutsideRequestsClause,
+  type NoOutsideRequestsClause,
+} from "./assert-network";
 
 import { version } from "../../package.json";
 
@@ -114,7 +120,7 @@ export const schema = {
         type: "array",
         items: { type: "object" },
         description:
-          "One object per expectation, each { assert: <check id>, ...args }. background-worker-booted: no args. surface-rendered: surface (popup, options, sidebar, newtab, history, bookmarks), optional selector and minNodes. content-script-injected: url. storage-key-present: key, optional area (default local), equals, context. console-errors-empty: optional context (array), since (seq cursor), ignore (substrings).",
+          "One object per expectation, each { assert: <check id>, ...args }. background-worker-booted: no args. surface-rendered: surface (popup, options, sidebar, newtab, history, bookmarks), optional selector and minNodes. content-script-injected: url. storage-key-present: key, optional area (default local), equals, context. console-errors-empty: optional context (array), since (seq cursor), ignore (substrings). no-outside-requests: optional allow (host names), durationMs (default 5000): watches every target of the extension (worker, pages, offscreen documents, workers under them, extension frames in web pages) and fails on any request that leaves the machine.",
       },
       browser: SESSION_BROWSER,
       timeout: CALL_TIMEOUT,
@@ -161,7 +167,8 @@ type Clause =
   | SurfaceClause
   | ContentScriptClause
   | StorageClause
-  | ConsoleClause;
+  | ConsoleClause
+  | NoOutsideRequestsClause;
 
 interface ParseResult {
   clauses: Clause[];
@@ -306,6 +313,13 @@ export function parseClauses(raw: unknown): ParseResult {
       return;
     }
 
+    if (kind === NO_OUTSIDE_REQUESTS) {
+      const parsed = parseNoOutsideRequestsClause(at, clause, issues);
+      if (parsed) clauses.push(parsed);
+
+      return;
+    }
+
     const context =
       clause.context === undefined
         ? undefined
@@ -375,7 +389,7 @@ interface CdpTarget {
 const NO_SESSION_SETTLED_BY =
   "Start the session with extension_dev, confirm it with extension_wait, then assert again.";
 
-class Stage {
+export class Stage {
   readonly chromium: boolean;
   readonly webkit: boolean;
   private cdpPort: number | null | undefined;
@@ -444,9 +458,7 @@ class Stage {
     return this.extensionIdRead;
   }
 
-  async attach(
-    targetId: string,
-  ): Promise<{ cdp: CDPClient; sessionId: string } | null> {
+  async connection(): Promise<CDPClient | null> {
     const port = await this.port();
     if (port === null) return null;
 
@@ -458,10 +470,23 @@ class Stage {
         this.client = cdp;
       }
 
-      const sessionId = await this.client.attachToTarget(targetId);
-      await this.client.enableDomains(sessionId);
+      return this.client;
+    } catch {
+      return null;
+    }
+  }
 
-      return { cdp: this.client, sessionId };
+  async attach(
+    targetId: string,
+  ): Promise<{ cdp: CDPClient; sessionId: string } | null> {
+    const cdp = await this.connection();
+    if (!cdp) return null;
+
+    try {
+      const sessionId = await cdp.attachToTarget(targetId);
+      await cdp.enableDomains(sessionId);
+
+      return { cdp, sessionId };
     } catch {
       return null;
     }
@@ -1513,6 +1538,8 @@ async function evaluateClause(
       return assertContentScriptInjected(clause, stage);
     case STORAGE:
       return assertStorageKeyPresent(clause, stage);
+    case NO_OUTSIDE_REQUESTS:
+      return assertNoOutsideRequests(clause, stage);
     default:
       return assertConsoleErrorsEmpty(clause, stage);
   }
