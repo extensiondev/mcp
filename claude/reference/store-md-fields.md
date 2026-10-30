@@ -25,7 +25,7 @@ Generated from the parser's own declarations in `src/lib/store-md-declarations.t
 | `- Privacy policy URL:` | `## Privacy and data use` | `## Listing`, `## Chrome Web Store` | `privacyPolicyUrl` | an http or https URL, up to 2,000 characters |
 | `- Homepage:` | `## Listing` | `## Chrome Web Store` | `homepageUrl` | an http or https URL, up to 2,000 characters |
 | `### Single purpose` | `## Chrome Web Store` |  | `singlePurpose` | up to 1,000 characters |
-| `### Permissions justification` | `## Chrome Web Store` |  | `permissionJustifications` | one `- <permission>: <reason>` bullet each, up to 50; a permission up to 200 characters, a reason up to 1,000 |
+| `### Permissions justification` | `## Chrome Web Store` |  | `permissionJustifications` | one `- <permission>: <reason>` bullet each, a host pattern keyed as the manifest spells it (`- *://*/*: Asked for one site at a time when the user allows it; nothing at install.`), up to 50; a permission up to 200 characters, a reason up to 1,000 |
 | `- Visibility:` | `## Chrome Web Store` | `## Listing` | `visibility` | public, unlisted or private (trusted testers); unlisted, the least public, when the line is absent |
 
 ## firefox (Firefox Add-ons, `## Firefox Add-ons`)

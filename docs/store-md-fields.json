@@ -95,7 +95,7 @@
         "line": "### Permissions justification",
         "section": "## Chrome Web Store",
         "alsoRead": [],
-        "limit": "one `- <permission>: <reason>` bullet each, up to 50; a permission up to 200 characters, a reason up to 1,000"
+        "limit": "one `- <permission>: <reason>` bullet each, a host pattern keyed as the manifest spells it (`- *://*/*: Asked for one site at a time when the user allows it; nothing at install.`), up to 50; a permission up to 200 characters, a reason up to 1,000"
       },
       {
         "field": "visibility",
