@@ -19,6 +19,8 @@ const LONG_ZIP = (browser: string) =>
 const SHORT_PAGE = "https://cezaraugusto.extension.dev/pii-shield/builds/b4187328?share=k3x9q";
 const SHORT_ZIP = (browser: string) => `https://cezaraugusto.extension.dev/pii-shield/builds/b4187328/${browser}.zip?share=k3x9q`;
 const SHORT_RUN = (browser: string) => `npx -y extension@latest preview ${SHORT_ZIP(browser)} --browser=${browser}`;
+const PACKAGE = (browser: string, grant: string) => `https://cezaraugusto.extension.dev/pii-shield/builds/b4187328/${browser}.zip?share=${grant}`;
+const PACKAGE_RUN = (browser: string, grant: string) => `npx -y extension@latest preview ${PACKAGE(browser, grant)} --browser=${browser}`;
 
 type PageAnswer = { status: number; headers?: Record<string, string> };
 
@@ -134,10 +136,12 @@ describe("extension_publish while the platform holds the public", () => {
     expect(out.status).toBe("platform-held");
     expect(out.value.sharePage).toEqual({ url: SHARE, status: 503, retryAfter: "86400", opensNow: false });
     expect(out.value.tellThem).not.toContain(SHARE);
-    expect(out.value.tellThem).toContain(`run \`npx -y extension@latest preview "${CHROME.split(" ")[4]}" --browser=chrome\``);
+    expect(out.value.tellThem).toContain(`run \`npx -y extension@latest preview "${PACKAGE("chrome", "share.tok")}" --browser=chrome\``);
     expect(out.value.tellThem).not.toContain("firefox.zip");
     expect(out.value.tellThem).toContain("Ask me for Firefox.");
-    expect(out.value.previewCommands).toEqual({ chrome: CHROME, firefox: FIREFOX });
+    expect(out.value.previewCommands).toEqual({ chrome: PACKAGE_RUN("chrome", "share.tok"), firefox: PACKAGE_RUN("firefox", "share.tok") });
+    expect(JSON.stringify(out)).not.toMatch(/registry\.extension\.land|[?&]t=/);
+    expect([CHROME, FIREFOX].join(" ")).toContain("registry.extension.land");
     expect(out.warnings.join(" ")).toContain("What works now: the run commands in value.previewCommands");
     expect(out.warnings.join(" ")).toContain("What does not: the share page, until the platform opens");
   });
@@ -238,9 +242,12 @@ describe("extension_publish while the platform holds the public", () => {
       expect(out.status).toBe("platform-held");
       expect(Object.keys(out.value.previewCommands)).toEqual(["chrome", "firefox", "edge"]);
       expect(out.value.tellThem).toBe(
-        `Here is PII Shield to try: run \`npx -y extension@latest preview "${LONG_ZIP("chrome")}" --browser=chrome\`. It works until October 26, 2026 at 17:27 UTC.\nAsk me for Firefox or Edge.`,
+        `Here is PII Shield to try: run \`npx -y extension@latest preview "${PACKAGE("chrome", LONG_TOKEN)}" --browser=chrome\`. It works until October 26, 2026 at 17:27 UTC.\nAsk me for Firefox or Edge.`,
       );
 
+      expect(out.value.previewCommands.edge).toBe(PACKAGE_RUN("edge", LONG_TOKEN));
+      expect(JSON.stringify(out)).not.toMatch(/registry\.extension\.land|[?&]t=/);
+      expect(LONG_ZIP("chrome")).toContain("registry.extension.land");
       expect(out.value.tellThem).not.toContain("firefox.zip");
       expect(out.value.link.id).toBeNull();
       expect(sentences(out.hint)).toHaveLength(5);

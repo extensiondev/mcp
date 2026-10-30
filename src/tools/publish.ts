@@ -35,7 +35,7 @@ import {
   readChannels,
 } from "../lib/channel-link";
 import {
-  carriesShareToken,
+  carriesRegistryToken,
   heldRunLine,
   longHeldLines,
   publishLinkFields,
@@ -56,6 +56,7 @@ import {
   refuseUnverified,
 } from "../lib/publish-artifacts";
 import { fillFromBuildIndex } from "../lib/publish-build-index";
+import { withPackageAddresses } from "../lib/publish-package-commands";
 import { consoleProjectUrl } from "../lib/registry";
 
 export const schema = {
@@ -373,6 +374,7 @@ export async function handler(args: {
     api: args.api,
   });
   Object.assign(data, linkFields);
+  withPackageAddresses(data, ref, send.id, args.api);
 
   data.allowance = spendNarration({
     what: "This publish",
@@ -385,7 +387,7 @@ export async function handler(args: {
     ([browser]) => !failed.has(browser.toLowerCase()),
   );
   const runs = runCommandsOf(previewCommands);
-  const short = Boolean(send.id) && !carriesShareToken(runs);
+  const short = Boolean(send.id) && !carriesRegistryToken(runs);
   const noBuild = data.buildSha == null;
   const noBuildNote = noBuild
     ? "This share serves NO build: the platform minted the link but named no build sha, which means the project has no successful build yet (or its build index could not be read). Anyone opening the link gets nothing to run. Build first (push a commit, or extension_build then a platform build), then publish again."

@@ -118,7 +118,7 @@ export async function createShareFromBuild(args: {
   const url = packageUrl(api, text(chosen.downloadUrl), args.api);
 
   if (!url) {
-    return failure("unavailable", "SharesBuildPackageUnreadable", `The platform named no registry path for build ${buildId}'s ${browser} package (${text(chosen.downloadUrl) || "no URL"}). Nothing was uploaded.`, value);
+    return failure("unavailable", "SharesBuildPackageUnreadable", `The platform named no readable package path for build ${buildId}'s ${browser} package, so it could not be fetched. Nothing was uploaded.`, value);
   }
 
   const download = await fetchRegistryBytes(url, { ref: api.ref, api: args.api, maxBytes: MAX_DOWNLOAD_BYTES });

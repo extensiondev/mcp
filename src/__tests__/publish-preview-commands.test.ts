@@ -23,6 +23,8 @@ const CHROME =
   "npx -y extension@latest preview https://registry.extension.land/open-source-demo/web-scrobbler/builds/7258a6f/chrome.zip?t=share.tok --browser=chrome";
 const FIREFOX =
   "npx -y extension@latest preview https://registry.extension.land/open-source-demo/web-scrobbler/builds/7258a6f/firefox.zip?t=share.tok --browser=firefox";
+const PACKAGE = (browser: string) =>
+  `npx -y extension@latest preview https://open-source-demo.extension.dev/web-scrobbler/builds/7258a6f/${browser}.zip?share=share.tok --browser=${browser}`;
 
 describe("extension_publish surfaces the platform's preview commands", () => {
   let tmp: string;
@@ -72,7 +74,8 @@ describe("extension_publish surfaces the platform's preview commands", () => {
 
     const out = JSON.parse(await handler({}));
     expect(out.ok).toBe(true);
-    expect(out.value.previewCommands).toEqual({ chrome: CHROME, firefox: FIREFOX });
+    expect(out.value.previewCommands).toEqual({ chrome: PACKAGE("chrome"), firefox: PACKAGE("firefox") });
+    expect(JSON.stringify(out)).not.toMatch(/registry\.extension\.land|[?&]t=/);
     expect(out.hint).not.toContain(CHROME);
     expect(out.value.notes).toContain("Each run command carries the same share token as the link and stops working when the link expires.");
   });
@@ -89,6 +92,7 @@ describe("extension_publish surfaces the platform's preview commands", () => {
     };
 
     const out = JSON.parse(await handler({}));
+    expect(out.value.previewCommands.chrome).toBe("npx -y extension@latest preview https://open-source-demo.extension.dev/web-scrobbler/builds/7258a6f/chrome.zip --browser=chrome");
     expect(out.value.notes).toContain("The run commands need no token: the project is public.");
     expect(out.value.notes.join(" ")).not.toMatch(/same share token/);
   });

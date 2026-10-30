@@ -297,7 +297,7 @@ function reworded(
     const urls =
       store === "edge"
         ? { linkItemUrl: `${settingsUrl}?link=edge` }
-        : itemLinkUrls([], settingsUrl);
+        : itemLinkUrls([], settingsUrl, { ref: api.ref, sha: text(value.buildId), browser: store, api: apiHint });
     const edgeSay = `No Edge Add-ons product is linked to this project yet. Create it once in Partner Center with this build's package, then paste its product ID in the store settings at ${urls.linkItemUrl}; after that, say publish again.`;
     const answer =
       store === "edge"
@@ -713,6 +713,7 @@ function readinessView(
   store: string,
   projectPath: string,
   buildNamed: boolean,
+  apiHint?: string,
 ): Row {
   const all = (Array.isArray(json.checks) ? json.checks : []).filter(isRow);
   const deferred = buildNamed
@@ -733,7 +734,7 @@ function readinessView(
   const local = projectPath
     ? readLocalListing(projectPath, store as ListingStore)
     : null;
-  const connection = connectionOf(json);
+  const connection = connectionOf(json, apiHint);
   const connectionSource = reportConnectionSource(json);
   const mode = isRow(json.submissionMode) ? json.submissionMode : null;
   const submissionMode =
@@ -874,6 +875,7 @@ export async function preflight(args: StoreActArgs): Promise<string> {
         store,
         text(args.projectPath),
         Boolean(text(args.buildSha)),
+        args.api,
       );
       stores[store] =
         store === "firefox"
@@ -1010,7 +1012,13 @@ export async function preflight(args: StoreActArgs): Promise<string> {
     connection.itemLinked === false
   ) {
     const settingsUrl = storeSettingsUrl(api.ref, args.api);
-    const urls = itemLinkUrls([connection], settingsUrl);
+    const chromeReport = reports.chrome ?? {};
+    const urls = itemLinkUrls([chromeReport, chromeReport.connection, connection], settingsUrl, {
+      ref: api.ref,
+      sha: text(args.buildSha) || (isRow(chrome.packageBuild) ? text(chrome.packageBuild.read) : ""),
+      browser: "chrome",
+      api: args.api,
+    });
     const answer = linkItemAnswer(urls);
 
     return envelope({

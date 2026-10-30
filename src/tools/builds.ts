@@ -12,6 +12,7 @@ import { WAIT_SECONDS_INPUT } from "../lib/act-outcome";
 import { API_BASE } from "../lib/common-schema";
 import { PROJECT_TOKEN_INPUT } from "../lib/credentials";
 import { isRow, text, type Row } from "../lib/builds-list-row";
+import { artifactWithAddress } from "../lib/package-address";
 import { consoleProjectUrl } from "../lib/registry";
 import { envelope } from "../lib/envelope";
 import {
@@ -133,12 +134,13 @@ function integritySummary(json: unknown): Row {
   return { ok: body.ok === true, failed, checks: checks.length };
 }
 
-/* @invariant THE PACKAGE ROW NAMES THE CALL THAT SAVES IT. The platform's
- * downloadUrl is the registry address, which answers 401 to a project token
- * (ledger 152), so an agent reading the row needs the path that works: the
- * download action with this build and this browser. Only the extension
- * package rows carry it; metadata, integrity and executable rows keep their
- * link alone.
+/* @invariant THE PACKAGE ROW NAMES THE CALL THAT SAVES IT. A row's
+ * downloadUrl is the build's extension.dev package address (ledger 306),
+ * which a signed-in member opens in a browser and which answers 401 to a
+ * project token (ledger 152), so an agent reading the row needs the path
+ * that works from here: the download action with this build and this
+ * browser. Only the extension package rows carry it; metadata, integrity
+ * and executable rows keep their link alone.
  */
 function withDownloadHint(row: unknown, buildId: string): unknown {
   if (!isRow(row)) return row;
@@ -246,7 +248,8 @@ async function getBuild(args: HandlerArgs): Promise<string> {
 
   const usageMarkdown = usage.ok ? text(usage.json?.markdown) : "";
   const canonical = text(detail.json.buildId) || buildId;
-  const artifactRows = (artifacts.ok && Array.isArray(artifacts.json) ? artifacts.json : []).map((row) => withDownloadHint(row, canonical));
+  const addressScope = { ref: opened.api.ref, sha: canonical, api: args.api };
+  const artifactRows = (artifacts.ok && Array.isArray(artifacts.json) ? artifacts.json : []).map((row) => withDownloadHint(artifactWithAddress(row, addressScope), canonical));
   const failing = Object.entries(integrityByBrowser).filter(([, v]) => (v as Row).ok !== true).map(([k]) => k);
   const failures = buildFailures(detail.json);
   const buildPage = buildConsoleUrl(opened.api, canonical, args.api);

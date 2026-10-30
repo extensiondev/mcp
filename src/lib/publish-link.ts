@@ -7,6 +7,7 @@
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
 import { consoleProjectUrl } from "./console-urls";
+import { GRANT_QUERY, REGISTRY_TOKEN_QUERY } from "./package-address";
 
 import type { ProjectRef } from "./registry";
 
@@ -152,7 +153,11 @@ export function runCommandsOf(commands: Array<[string, string]>): RunCommand[] {
 }
 
 export function carriesShareToken(commands: RunCommand[]): boolean {
-  return commands.some((row) => /[?&]t=/.test(row.url));
+  return commands.some((row) => GRANT_QUERY.test(row.url));
+}
+
+export function carriesRegistryToken(commands: RunCommand[]): boolean {
+  return commands.some((row) => REGISTRY_TOKEN_QUERY.test(row.url));
 }
 
 function titled(browser: string): string {
@@ -337,7 +342,7 @@ export function publishNotes(input: {
   shareLinksUrl: string | null;
 }): string[] {
   const { data, runs, short, held, shareLinksUrl } = input;
-  const isPublic = String(data.visibility ?? "").toLowerCase() === "public";
+  const isPublic = String(data.visibility ?? "").toLowerCase() === "public" && !carriesShareToken(runs);
   const visibility = data.projectVisibility as
     { makeEvergreen?: { say?: string; settingsUrl?: string } } | undefined;
   const evergreen = visibility?.makeEvergreen;
