@@ -118,7 +118,7 @@ describe("a server that knows it was rebuilt and has no loader refuses platform 
     expect(out.status).toBe("server-stale");
     expect(out.error).toEqual({ code: "E_SERVER_STALE", name: "ServerStale", message: staleSentence("2026-10-23T15:17:33.978Z") });
     expect(out.error.message).toBe("This server was rebuilt at 2026-10-23T15:17:33.978Z; run /mcp and pick extension-dev, then call again.");
-    expect(out.value.server).toEqual({ version, builtAt: "2026-10-23T14:19:47.654Z" });
+    expect(out.value.server).toEqual({ version, startedAt: expect.any(String), pid: process.pid, builtAt: "2026-10-23T14:19:47.654Z" });
     expect(out.value.action).toBe("list");
     expect(out.value.reloadError).toBe("this server was started without a loader for a rebuilt build; the extension-mcp launcher provides one");
     expect(out.value.trackUrl).toMatch(/\/acme\/widget\/builds$/);
@@ -142,7 +142,7 @@ describe("a server that knows it was rebuilt and has no loader refuses platform 
     expect(out.ok).toBe(true);
     expect(out.status).toBe("listed");
     expect(out.value.builds).toHaveLength(1);
-    expect(out.value.server).toEqual({ version, builtAt: "2026-10-23T14:19:47.654Z" });
+    expect(out.value.server).toEqual({ version, startedAt: expect.any(String), pid: process.pid, builtAt: "2026-10-23T14:19:47.654Z" });
     expect(out.warnings).toEqual([]);
     expect(fetchSpy.mock.calls.map((args) => new URL(String(args[0])).pathname)).toEqual(["/api/cli/whoami", `/api/projects/${PROJECT_ID}/builds`]);
   });

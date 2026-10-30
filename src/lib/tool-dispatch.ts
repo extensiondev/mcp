@@ -31,7 +31,7 @@ import { bindCallProject, stampAnsweredFor } from "./project-binding";
 import { followProjectMove, followSentence, movedAnswer } from "./project-move";
 import { scrubRunAnswer } from "./run-privacy";
 import { createReloader, handoverState, type BuildImporter, type ListedTool, type RebuiltCall, type ToolFrame } from "./server-reload";
-import { localRebuiltWarning, reloadedWarning, serverStamp, staleEnvelope, type ServerStampReader } from "./server-stamp";
+import { localRebuiltWarning, markListStale, reloadedWarning, serverStamp, staleEnvelope, type ServerStampReader } from "./server-stamp";
 import { shapeStoreAnswer } from "./store-answer";
 import { attachTrack } from "./track-url";
 import { fenceUntrusted } from "./untrusted-fence";
@@ -172,16 +172,21 @@ export function createToolSurface(setup: ToolHandlerOptions): {
     importBuild: setup.importBuild ?? null,
     handover: () => handoverState(options),
   });
+  const loadedAt = stamp.stamp().builtAt;
   let localSaid: string | null = null;
+  let listedAt: string | null = loadedAt;
+  let announced: string | null = null;
 
   const list = async (): Promise<ListedTool[]> => {
     const loaded = listedTools(tools, options);
     const rebuilt = stamp.rebuiltSince();
+    listedAt = loadedAt;
     if (!rebuilt) return loaded;
 
     const fresh = await reloader.list(rebuilt);
     if (!fresh) return loaded;
 
+    listedAt = rebuilt;
     const byName = new Map(fresh.map((tool) => [tool.name, tool]));
 
     return loaded.map((tool) => {
@@ -248,10 +253,12 @@ export function createToolSurface(setup: ToolHandlerOptions): {
      * opened-approvals set, so an approval page opens once across
      * generations. What is rebuilt: the project id cache, refilled from the
      * platform's whoami. A platform tool the rebuild reshaped is listed from
-     * the build that validates its calls, and the first reloaded answer
-     * tells the client the list changed (ledger 285); a tool the rebuild
-     * added still needs /mcp. The first answer after each reload says so in
-     * warnings, once.
+     * the build that validates its calls (ledger 285); while the client
+     * holds a list an older build served, every reloaded answer carries
+     * value.server.listStale with the build it was listed at and a hint to
+     * list again, and the client is told the list changed once per build
+     * (ledger 289); a tool the rebuild added still needs /mcp. The first
+     * answer after each reload says so in warnings, once.
      * E_SERVER_STALE remains only when the reload fails (no loader, an
      * import error, a build without the reload contract, a refused
      * handover), with value.reloadError saying why and the /mcp sentence as
@@ -270,15 +277,21 @@ export function createToolSurface(setup: ToolHandlerOptions): {
         );
       }
 
-      if (outcome.reloaded) setup.onToolsChanged?.();
+      const stale = listedAt !== rebuilt;
+
+      if (stale && announced !== rebuilt) {
+        announced = rebuilt;
+        setup.onToolsChanged?.();
+      }
 
       const text = outcome.frame.content[0]?.text ?? "";
       const said = annotate(
         setup.openApprovals ? openApprovalOnce(text, options) : text,
         outcome.reloaded ? { warning: reloadedWarning(outcome.reloaded) } : {},
       );
+      const told = stale ? markListStale(said, listedAt, rebuilt) : said;
 
-      return said === text ? outcome.frame : toolResultFrame(said, untrusted);
+      return told === text ? outcome.frame : toolResultFrame(told, untrusted);
     }
 
     const bound = bindApprovalProject(name, pinned.args);

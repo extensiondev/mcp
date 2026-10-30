@@ -206,7 +206,7 @@ describe("a server that knows it was rebuilt reloads its platform code instead o
     expect(broken.out.error.code).toBe("E_SERVER_STALE");
     expect(broken.out.error.message).toBe(staleSentence(REBUILT));
     expect(broken.out.value.reloadError).toMatch(/^import of the 2026-10-23T23:37:13\.000Z build failed: /);
-    expect(broken.out.value.server).toEqual({ version, builtAt: BUILT });
+    expect(broken.out.value.server).toEqual({ version, startedAt: expect.any(String), pid: process.pid, builtAt: BUILT });
     expect(broken.out.value.action).toBe("list");
     expect(broken.out.value.trackUrl).toMatch(/\/acme\/widget\/builds$/);
     expect(broken.out.warnings).toEqual([]);
@@ -248,7 +248,7 @@ describe("a server that knows it was rebuilt reloads its platform code instead o
 
     expect(isError).toBe(false);
     expect(out.status).toBe("listed");
-    expect(out.value.server).toEqual({ version, builtAt: BUILT });
+    expect(out.value.server).toEqual({ version, startedAt: expect.any(String), pid: process.pid, builtAt: BUILT });
     expect(out.warnings).toEqual([]);
     expect(importer).toHaveBeenCalledTimes(0);
 

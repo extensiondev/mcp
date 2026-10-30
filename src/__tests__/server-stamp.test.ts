@@ -2,7 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { envelope } from "../lib/envelope";
 import { createServerStamp, rebuiltWarning } from "../lib/server-stamp";
@@ -21,15 +21,18 @@ function entryFile(): string {
 describe("every platform answer says which server answered", () => {
   it("stamps the package version and the build time of the file the process loaded", () => {
     const file = entryFile();
+    const uptime = vi.spyOn(process, "uptime").mockReturnValue(3600);
     const stamp = createServerStamp(file);
+    uptime.mockRestore();
 
     expect(stamp.entry).toBe(file);
-    expect(stamp.stamp()).toEqual({ version, builtAt: "2026-10-20T10:00:00.000Z" });
+    expect(Math.abs(Date.now() - Date.parse(stamp.stamp().startedAt) - 3_600_000)).toBeLessThan(1000);
+    expect(stamp.stamp()).toEqual({ version, startedAt: expect.any(String), pid: process.pid, builtAt: "2026-10-20T10:00:00.000Z" });
     expect(stamp.rebuiltSince()).toBeNull();
 
     const out = JSON.parse(stamp.apply(envelope({ ok: true, command: "extension_submit", status: "submitted", value: { action: "submit" }, hint: "Made: no new links." })));
 
-    expect(out.value).toEqual({ action: "submit", server: { version, builtAt: "2026-10-20T10:00:00.000Z" } });
+    expect(out.value).toEqual({ action: "submit", server: { version, startedAt: expect.any(String), pid: process.pid, builtAt: "2026-10-20T10:00:00.000Z" } });
     expect(out.hint).toBe("Made: no new links.");
     expect(out.warnings).toEqual([]);
   });
@@ -63,7 +66,7 @@ describe("every platform answer says which server answered", () => {
   it("leaves a non-envelope answer and an unreadable entry alone", () => {
     const stamp = createServerStamp("/nowhere/module.js");
 
-    expect(stamp.stamp()).toEqual({ version, builtAt: null });
+    expect(stamp.stamp()).toEqual({ version, startedAt: expect.any(String), pid: process.pid, builtAt: null });
     expect(stamp.rebuiltSince()).toBeNull();
     expect(stamp.apply("plain text")).toBe("plain text");
   });
