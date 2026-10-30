@@ -10,8 +10,7 @@ import fs from "node:fs";
 import { fileURLToPath } from "node:url";
 
 import { envelope, isEnvelope } from "./envelope";
-
-import { version } from "../../package.json";
+import { serverVersion } from "./producer-version";
 
 type Row = Record<string, unknown>;
 
@@ -78,7 +77,7 @@ export function createServerStamp(entry: string): {
 } {
   const loadedAt = mtimeOf(entry);
 
-  const stamp = (): ServerStamp => ({ version, builtAt: loadedAt });
+  const stamp = (): ServerStamp => ({ version: serverVersion(), builtAt: loadedAt });
 
   const rebuiltSince = (): string | null => {
     const now = mtimeOf(entry);

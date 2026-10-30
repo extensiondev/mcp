@@ -82,8 +82,7 @@ import {
   parseNoOutsideRequestsClause,
   type NoOutsideRequestsClause,
 } from "./assert-network";
-
-import { version } from "../../package.json";
+import { serverVersion } from "../lib/producer-version";
 
 const COMMAND = "extension_assert";
 
@@ -117,7 +116,7 @@ const STORAGE_CONTEXTS = [
 export const schema = {
   name: COMMAND,
   description:
-    "Run a test stage against a live dev session: state expectations and read one verdict for each, instead of reading a blob and hand-rolling the judgement. Every expectation comes back pass, fail or inconclusive, where inconclusive means this platform cannot cover the question today and the verdict says what would settle it. An inconclusive check is never a pass. Start the session with extension_dev; use extension_inspect or extension_logs when you want the raw reading instead of a verdict.",
+    "Run a test stage against a live dev session: state expectations and read one verdict each, instead of reading a blob and hand-rolling the judgement. The check ids and each check's args are listed in the expect property. Each expectation comes back pass, fail or inconclusive; inconclusive means this platform cannot cover the question today, the verdict says what would settle it, and it is never a pass. Start the session with extension_dev; extension_inspect or extension_logs give the raw reading.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -1610,7 +1609,7 @@ export async function handler(args: {
 
   const verdict = assertVerdict({
     checks,
-    producer: { name: "@extension.dev/mcp", version },
+    producer: { name: "@extension.dev/mcp", version: serverVersion() },
     subject: { projectPath: args.projectPath, browser },
   });
 

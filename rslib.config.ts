@@ -11,6 +11,8 @@ import { createRequire } from "module";
 
 import { defineConfig } from "@rslib/core";
 
+import { readBuildId } from "./src/lib/build-id";
+
 const require = createRequire(import.meta.url);
 const shouldGenerateDts = (() => {
   try {
@@ -38,6 +40,11 @@ const distRoot = process.env.EXTENSION_MCP_DIST_ROOT || "dist";
  */
 export default defineConfig({
   output: { distPath: { root: distRoot } },
+  source: {
+    define: {
+      "process.env.EXTENSION_MCP_BUILD_ID": JSON.stringify(readBuildId(__dirname)),
+    },
+  },
   lib: [
     {
       id: "module",

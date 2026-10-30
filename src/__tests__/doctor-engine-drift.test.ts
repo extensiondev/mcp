@@ -44,7 +44,7 @@ afterEach(() => {
 const posixOnly = process.platform === "win32" ? it.skip : it;
 
 function engineCheck(result: {
-  value: { checks: Array<{ check: string; status: string; detail: string }> };
+  value: { checks: Array<{ check: string; status: string; detail: string; remediation?: string }> };
 }) {
   return result.value.checks.find((c) => c.check === "project-engine");
 }
@@ -70,16 +70,74 @@ describe("extension_doctor engine drift", () => {
   );
 
   posixOnly(
-    "compares versions exactly, so pin 4.0.1 does not swallow engine 4.0.17",
+    "compares versions as semver, so pin 4.0.17 does not swallow engine 4.0.1",
     async () => {
-      process.env.EXTENSION_MCP_CLI_VERSION = "4.0.1";
-      const project = fakeProject("4.0.17");
+      process.env.EXTENSION_MCP_CLI_VERSION = "4.0.17";
+      const project = fakeProject("4.0.1");
 
       const result = JSON.parse(
         await handler({ projectPath: project, browser: "chrome" }),
       );
 
-      expect(engineCheck(result)!.status).toBe("warn");
+      const check = engineCheck(result)!;
+      expect(check.status).toBe("warn");
+      expect(check.remediation).toContain("npm i -D extension@4.0.17");
+    },
+    20_000,
+  );
+
+  posixOnly(
+    "keeps a project engine newer than the pin: pass, says so, and never asks for a downgrade",
+    async () => {
+      process.env.EXTENSION_MCP_CLI_VERSION = "4.1.36";
+      const project = fakeProject("4.1.37-canary.1793360022.4f7af0f6");
+
+      const result = JSON.parse(
+        await handler({ projectPath: project, browser: "chrome" }),
+      );
+
+      const check = engineCheck(result)!;
+      expect(check.status).toBe("pass");
+      expect(check.detail).toContain("4.1.37-canary.1793360022.4f7af0f6");
+      expect(check.detail).toContain("newer than the extension@4.1.36");
+      expect(check.detail).toContain("project bin");
+      expect(check.remediation).toBeUndefined();
+    },
+    20_000,
+  );
+
+  posixOnly(
+    "reads a canary of the pinned base as newer, and a release above the pin as newer",
+    async () => {
+      process.env.EXTENSION_MCP_CLI_VERSION = "4.1.36";
+
+      for (const engine of ["4.1.36-canary.7.abc1234", "4.2.0", "5.0.0"]) {
+        const result = JSON.parse(
+          await handler({ projectPath: fakeProject(engine), browser: "chrome" }),
+        );
+
+        const check = engineCheck(result)!;
+        expect(check.status, engine).toBe("pass");
+        expect(check.remediation, engine).toBeUndefined();
+      }
+    },
+    40_000,
+  );
+
+  posixOnly(
+    "keeps the upgrade remediation for an older project engine",
+    async () => {
+      process.env.EXTENSION_MCP_CLI_VERSION = "4.1.36";
+      const project = fakeProject("4.1.35");
+
+      const result = JSON.parse(
+        await handler({ projectPath: project, browser: "chrome" }),
+      );
+
+      const check = engineCheck(result)!;
+      expect(check.status).toBe("warn");
+      expect(check.detail).toContain("but the MCP pins extension@4.1.36");
+      expect(check.remediation).toContain("npm i -D extension@4.1.36");
     },
     20_000,
   );

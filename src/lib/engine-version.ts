@@ -6,7 +6,7 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-import { resolveExtensionInvocation, runExtensionCli } from "./exec";
+import { exactVersion, resolveExtensionInvocation, runExtensionCli } from "./exec";
 
 export const OUTPUT_JSON_FLOOR = {
   act: "3.18.1",
@@ -96,6 +96,27 @@ export function compareVersions(a: string, b: string): number | null {
   }
 
   return 0;
+}
+
+export type EngineDrift = "same" | "newer" | "older" | "unknown";
+
+export function engineDrift(engine: string, pin: string): EngineDrift {
+  const left = decompose(exactVersion(engine));
+  const right = decompose(exactVersion(pin));
+  if (exactVersion(engine) === exactVersion(pin)) return "same";
+  if (!left || !right) return "unknown";
+
+  for (let i = 0; i < 3; i += 1) {
+    if (left.release[i] !== right.release[i]) {
+      return left.release[i] > right.release[i] ? "newer" : "older";
+    }
+  }
+
+  if (left.prerelease.length && !right.prerelease.length) return "newer";
+
+  const ordering = compareVersions(exactVersion(engine), exactVersion(pin)) ?? 0;
+
+  return ordering >= 0 ? "newer" : "older";
 }
 
 export interface EngineFacts {

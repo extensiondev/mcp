@@ -10,9 +10,10 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 
-import { exactVersion, pinnedCliVersion, runExtensionCli } from "../lib/exec";
+import { pinnedCliVersion, runExtensionCli } from "../lib/exec";
 import { nodeCheck } from "../lib/node-engine";
 import {
+  engineDrift,
   outputFlagRefusalMessage,
   refusedTheOutputFlag,
 } from "../lib/engine-version";
@@ -436,15 +437,13 @@ export async function handler(args: {
 
     if (engineVersion) {
       const pin = pinnedCliVersion();
-      const mismatch =
-        pin !== "" &&
-        pin !== "latest" &&
-        exactVersion(engineVersion) !== exactVersion(pin);
+      const drift = pin === "" || pin === "latest" ? "same" : engineDrift(engineVersion, pin);
+      const older = drift === "older" || drift === "unknown";
       checks.push({
         check: "project-engine",
-        status: mismatch ? "warn" : "pass",
-        detail: `project-local extension@${engineVersion}${mismatch ? `, but the MCP pins extension@${pin}; the dev loop uses the project bin, not the pin` : ""}`,
-        ...(mismatch
+        status: older ? "warn" : "pass",
+        detail: `project-local extension@${engineVersion}${drift === "newer" ? `, newer than the extension@${pin} the MCP pins; the dev loop uses the project bin, not the pin, so keep it` : older ? `, but the MCP pins extension@${pin}; the dev loop uses the project bin, not the pin` : ""}`,
+        ...(older
           ? {
               remediation: `Run \`(cd ${projectPath} && npm i -D extension@${pin})\` to match the pinned engine.`,
             }

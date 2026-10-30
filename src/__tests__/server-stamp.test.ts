@@ -48,6 +48,18 @@ describe("every platform answer says which server answered", () => {
     expect(out.value.server.builtAt).toBe("2026-10-20T10:00:00.000Z");
   });
 
+  it("names the build of a server compiled past the last release", () => {
+    const previous = process.env.EXTENSION_MCP_BUILD_ID;
+    process.env.EXTENSION_MCP_BUILD_ID = "48f1eba";
+
+    try {
+      expect(createServerStamp(entryFile()).stamp().version).toBe(`${version}+48f1eba`);
+    } finally {
+      if (previous === undefined) delete process.env.EXTENSION_MCP_BUILD_ID;
+      else process.env.EXTENSION_MCP_BUILD_ID = previous;
+    }
+  });
+
   it("leaves a non-envelope answer and an unreadable entry alone", () => {
     const stamp = createServerStamp("/nowhere/module.js");
 
