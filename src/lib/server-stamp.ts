@@ -10,12 +10,13 @@ import fs from "node:fs";
 import { fileURLToPath } from "node:url";
 
 import { envelope, isEnvelope, type Envelope } from "./envelope";
-import { serverVersion } from "./producer-version";
+import { serverCommit, serverVersion } from "./producer-version";
 
 type Row = Record<string, unknown>;
 
 export interface ServerStamp {
   version: string;
+  commit: string | null;
   builtAt: string | null;
   startedAt: string;
   pid: number;
@@ -113,24 +114,30 @@ function mtimeOf(file: string): string | null {
   }
 }
 
-/* @invariant EVERY PLATFORM ANSWER SAYS WHICH SERVER ANSWERED, AND WHETHER
- * A NEWER ONE IS WAITING. The operation rebuilds this server from source on
+/* @invariant EVERY ANSWER SAYS WHICH SERVER ANSWERED, AND WHETHER A NEWER
+ * ONE IS WAITING. The operation rebuilds this server from source on
  * the person's machine several times a night, and the only sign that a fix
  * is live was the person reconnecting on a guess: five reconnects in one
  * session. The stamp is the package version and the build time of the file
  * this process loaded; the warning appears when that file on disk is newer
  * than the one running, which is exactly when a reconnect does something.
+ * Since ledger 301 the stamp is on every envelope the dispatcher lets out,
+ * refusals included: an agent that read `bad-request` with no version spent
+ * a git log and an /mcp round trip finding out which checkout answered, and
+ * `brand` adds value.server to any answer that carries none, leaving a stamp
+ * a rebuilt build already wrote on its own answer alone.
  */
 export function createServerStamp(entry: string): {
   entry: string;
   stamp: () => ServerStamp;
   rebuiltSince: () => string | null;
   apply: (result: string) => string;
+  brand: (result: string) => string;
 } {
   const loadedAt = mtimeOf(entry);
   const startedAt = processStartedAt();
 
-  const stamp = (): ServerStamp => ({ version: serverVersion(), builtAt: loadedAt, startedAt, pid: process.pid });
+  const stamp = (): ServerStamp => ({ version: serverVersion(), commit: serverCommit(), builtAt: loadedAt, startedAt, pid: process.pid });
 
   const rebuiltSince = (): string | null => {
     const now = mtimeOf(entry);
@@ -165,7 +172,27 @@ export function createServerStamp(entry: string): {
     });
   };
 
-  return { entry, stamp, rebuiltSince, apply };
+  const brand = (result: string): string => {
+    const parsed = envelopeRow(result);
+    if (!parsed) return result;
+    if (Array.isArray(parsed.value) || (parsed.value !== null && typeof parsed.value !== "object")) return result;
+
+    const value: Row = parsed.value ? (parsed.value as Row) : {};
+    if (value.server !== undefined) return result;
+
+    return envelope({
+      ok: parsed.ok,
+      command: parsed.command,
+      status: parsed.status,
+      value: { ...value, server: stamp() },
+      error: parsed.error,
+      warnings: parsed.warnings,
+      ...(parsed.truncated !== undefined ? { truncated: parsed.truncated } : {}),
+      ...(parsed.hint ? { hint: parsed.hint } : {}),
+    });
+  };
+
+  return { entry, stamp, rebuiltSince, apply, brand };
 }
 
 export type ServerStampReader = ReturnType<typeof createServerStamp>;

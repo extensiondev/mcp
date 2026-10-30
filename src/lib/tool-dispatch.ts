@@ -32,7 +32,7 @@ import { followProjectMove, followSentence, movedAnswer } from "./project-move";
 import { scrubRunAnswer } from "./run-privacy";
 import { createReloader, handoverState, type ActiveBuild, type BuildImporter, type ListedTool, type RebuiltCall, type ToolFrame } from "./server-reload";
 import { markListStale, reloadedWarning, serverStamp, staleEnvelope, type ServerStampReader } from "./server-stamp";
-import { markStaleLocal, noLocalCarryReason, type HeldLocal } from "./stale-local";
+import { markStaleLocal, noLocalCarryReason, predatedChecks, predatesCheckEnvelope, type HeldLocal } from "./stale-local";
 import { shapeStoreAnswer } from "./store-answer";
 import { annotate, frameText, refusedFrame, toolResultFrame } from "./tool-frames";
 import { attachTrack } from "./track-url";
@@ -116,7 +116,7 @@ export function createToolSurface(setup: ToolHandlerOptions): {
   let listedAt: string | null = loadedAt;
   let announced: string | null = null;
 
-  const refused = (text: string): ToolFrame => refusedFrame(text);
+  const refused = (text: string): ToolFrame => refusedFrame(stamp.brand(text));
 
   const list = async (): Promise<ListedTool[]> => {
     const loaded = listedTools(tools, options);
@@ -200,8 +200,8 @@ export function createToolSurface(setup: ToolHandlerOptions): {
 
   const heldLocal = (rebuilt: string, active: ActiveBuild | { reloadError: string }, failure: string | null): HeldLocal =>
     "reloadError" in active
-      ? { rebuilt, reason: active.reloadError, version: null }
-      : { rebuilt, reason: failure ?? noLocalCarryReason(rebuilt), version: active.version };
+      ? { rebuilt, reason: active.reloadError, version: null, assertChecks: null }
+      : { rebuilt, reason: failure ?? noLocalCarryReason(rebuilt), version: active.version, assertChecks: active.assertChecks };
 
   const dispatch = async ({ name, arguments: args }: RebuiltCall): Promise<ToolFrame> => {
     const tool = toolMap.get(name);
@@ -282,6 +282,10 @@ export function createToolSurface(setup: ToolHandlerOptions): {
       return refused(inputValidationError(name, issues, tool.schema.inputSchema, tool.invalidArgumentsHint?.(issues)));
     }
 
+    const predated = held ? predatedChecks(name, normalizedArgs, held) : [];
+
+    if (held && predated.length) return refusedFrame(predatesCheckEnvelope(name, predated, stamp.stamp(), held));
+
     const login = bindApprovalLogin(name, normalizedArgs);
 
     if ("refused" in login) return refused(login.refused);
@@ -313,19 +317,21 @@ export function createToolSurface(setup: ToolHandlerOptions): {
         ),
       );
 
-      return toolResultFrame(held ? markStaleLocal(result, stamp.stamp(), held) : result, untrusted);
+      return toolResultFrame(held ? markStaleLocal(result, stamp.stamp(), held) : stamp.brand(result), untrusted);
     } catch (err) {
       return toolResultFrame(
-        envelope({
-          ok: false,
-          command: name,
-          status: "internal-error",
-          error: {
-            code: "E_INTERNAL",
-            name: err instanceof Error ? err.name : "Error",
-            message: err instanceof Error ? err.message : String(err),
-          },
-        }),
+        stamp.brand(
+          envelope({
+            ok: false,
+            command: name,
+            status: "internal-error",
+            error: {
+              code: "E_INTERNAL",
+              name: err instanceof Error ? err.name : "Error",
+              message: err instanceof Error ? err.message : String(err),
+            },
+          }),
+        ),
         untrusted,
       );
     }

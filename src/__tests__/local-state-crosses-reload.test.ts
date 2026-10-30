@@ -6,7 +6,7 @@ import { rememberExtensionTarget, rememberedExtensionTargetUrl } from "../lib/ex
 import { findSessionInfo, listSessions, registerSession, removeSession, sessionSinceMs } from "../lib/process-manager";
 import { adoptHandover, carriesLocalState, handoverState, type RebuiltBuild } from "../lib/server-reload";
 import { createServerStamp, staleLocalWarning } from "../lib/server-stamp";
-import { markStaleLocal, noLocalCarryReason, type HeldLocal } from "../lib/stale-local";
+import { markStaleLocal, noLocalCarryReason, predatedChecks, predatesCheckEnvelope, type HeldLocal } from "../lib/stale-local";
 
 import { version } from "../../package.json";
 
@@ -75,7 +75,7 @@ describe("the session registry belongs to the process and crosses a reload by re
 
 describe("every answer from held local code says so, and the verdict it produces reads stale", () => {
   const stamp = { ...createServerStamp("/nowhere/module.js").stamp(), builtAt: "2026-10-30T16:00:00.000Z" };
-  const held: HeldLocal = { rebuilt: "2026-10-30T16:40:05.170Z", reason: noLocalCarryReason("2026-10-30T16:40:05.170Z"), version: `${version}+7c7b6ea` };
+  const held: HeldLocal = { rebuilt: "2026-10-30T16:40:05.170Z", reason: noLocalCarryReason("2026-10-30T16:40:05.170Z"), version: `${version}+7c7b6ea`, assertChecks: ["background-worker-booted", "page-world-clean", "page-world-sealed"] };
   const newerBuild = { version: `${version}+7c7b6ea`, builtAt: "2026-10-30T16:40:05.170Z" };
 
   it("marks the verdict's producer and value.server with the newer build, and warns, on every call", () => {
@@ -108,5 +108,25 @@ describe("every answer from held local code says so, and the verdict it produces
     expect(empty.value).toEqual({ server: { ...stamp, stale: true, newerBuild } });
     expect(empty.error.code).toBe("E_NO_SESSION");
     expect(markStaleLocal("not json", stamp, held)).toBe("not json");
+  });
+
+  it("names the checks only the build on disk declares, and never one this build knows or neither knows", () => {
+    const args = { projectPath: PROJECT, expect: [{ assert: "page-world-sealed" }, { assert: "background-worker-booted" }, { assert: "no-such-check" }, { assert: "page-world-sealed" }, "junk", { assert: 7 }] };
+
+    expect(predatedChecks("extension_assert", args, held)).toEqual(["page-world-sealed"]);
+    expect(predatedChecks("extension_wait", args, held)).toEqual([]);
+    expect(predatedChecks("extension_assert", args, { ...held, assertChecks: null })).toEqual([]);
+    expect(predatedChecks("extension_assert", { expect: "page-world-sealed" }, held)).toEqual([]);
+
+    const out = JSON.parse(predatesCheckEnvelope("extension_assert", ["page-world-sealed", "page-world-quiet"], stamp, held));
+
+    expect(out.ok).toBe(false);
+    expect(out.status).toBe("server-stale");
+    expect(out.error.code).toBe("E_SERVER_STALE");
+    expect(out.error.message).toBe(
+      `This server predates the checks page-world-sealed, page-world-quiet: it was built at 2026-10-30T16:00:00.000Z, the build on disk at 2026-10-30T16:40:05.170Z declares them, and ${held.reason}; run /mcp and pick extension-dev, then assert again.`,
+    );
+
+    expect(out.value).toEqual({ predates: ["page-world-sealed", "page-world-quiet"], server: { ...stamp, stale: true, newerBuild }, reloadError: held.reason });
   });
 });

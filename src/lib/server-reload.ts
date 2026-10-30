@@ -12,6 +12,7 @@ import { adoptLocalState, localState, type LocalState } from "./local-state";
 import { serverStamp, type ServerStamp } from "./server-stamp";
 import { adoptKeptLogins, keptLoginEntries } from "./session-login";
 import { DEFAULT_SERVER_OPTIONS, setServerOptions, type ServerOptions } from "./tool-policy";
+import { ASSERT_CHECKS } from "./verdict";
 
 export type ToolFrame = {
   content: Array<{ type: "text"; text: string }>;
@@ -41,6 +42,7 @@ export interface RebuiltBuild {
   handoverState: () => Handover;
   listRebuilt?: () => ListedTool[];
   stampRebuilt?: () => ServerStamp;
+  assertChecksRebuilt?: () => string[];
 }
 
 export type BuildImporter = (specifier: string) => Promise<unknown>;
@@ -84,6 +86,10 @@ export function stampRebuilt(): ServerStamp {
   return serverStamp.stamp();
 }
 
+export function assertChecksRebuilt(): string[] {
+  return ASSERT_CHECKS.map((check) => check.id);
+}
+
 export function carriesLocalState(candidate: RebuiltBuild, state: Handover): boolean {
   if (!state.local) return false;
 
@@ -116,6 +122,7 @@ export interface ActiveBuild {
   builtAt: string;
   local: boolean;
   version: string | null;
+  assertChecks: string[] | null;
 }
 
 type Loaded = { build: RebuiltBuild; local: boolean } | { reloadError: string };
@@ -210,6 +217,7 @@ export function createReloader(deps: {
         builtAt,
         local: loaded.local,
         version: read(loaded.build.stampRebuilt)?.version ?? null,
+        assertChecks: read(loaded.build.assertChecksRebuilt),
       };
     },
     async list(builtAt) {

@@ -7,7 +7,8 @@
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
 import { envelope, isEnvelope, type Envelope } from "./envelope";
-import { staleLocalWarning, type ServerStamp } from "./server-stamp";
+import { SERVER_STALE_STATUS, staleLocalWarning, type ServerStamp } from "./server-stamp";
+import { ASSERT_CHECKS } from "./verdict";
 
 type Row = Record<string, unknown>;
 
@@ -15,6 +16,7 @@ export interface HeldLocal {
   rebuilt: string;
   reason: string;
   version: string | null;
+  assertChecks: string[] | null;
 }
 
 export interface NewerBuild {
@@ -80,5 +82,48 @@ export function markStaleLocal(result: string, stamp: ServerStamp, held: HeldLoc
     warnings: [...parsed.warnings, staleLocalWarning(stamp.builtAt, held.rebuilt, held.reason)],
     ...(parsed.truncated !== undefined ? { truncated: parsed.truncated } : {}),
     ...(parsed.hint ? { hint: parsed.hint } : {}),
+  });
+}
+
+function assertIdsOf(args: Row): string[] {
+  if (!Array.isArray(args.expect)) return [];
+
+  const ids: string[] = [];
+
+  for (const clause of args.expect) {
+    const id = row(clause)?.assert;
+    if (typeof id === "string" && id && !ids.includes(id)) ids.push(id);
+  }
+
+  return ids;
+}
+
+export function predatedChecks(name: string, args: Row, held: HeldLocal): string[] {
+  if (name !== "extension_assert" || !held.assertChecks) return [];
+
+  const known = new Set(ASSERT_CHECKS.map((check) => check.id));
+  const newer = new Set(held.assertChecks);
+
+  return assertIdsOf(args).filter((id) => !known.has(id) && newer.has(id));
+}
+
+export function predatesCheckEnvelope(name: string, ids: string[], stamp: ServerStamp, held: HeldLocal): string {
+  const plural = ids.length === 1 ? "check" : "checks";
+  const built = stamp.builtAt ?? "an unstamped time";
+
+  return envelope({
+    ok: false,
+    command: name,
+    status: SERVER_STALE_STATUS,
+    value: {
+      predates: ids,
+      server: { ...stamp, stale: true, newerBuild: newerBuildOf(held) },
+      reloadError: held.reason,
+    },
+    error: {
+      code: "E_SERVER_STALE",
+      name: "ServerStale",
+      message: `This server predates the ${plural} ${ids.join(", ")}: it was built at ${built}, the build on disk at ${held.rebuilt} declares ${ids.length === 1 ? "it" : "them"}, and ${held.reason}; run /mcp and pick extension-dev, then assert again.`,
+    },
   });
 }
