@@ -58,7 +58,6 @@ import {
   failedCheckSentence,
   fallbackConnectUrl,
   itemLinkUrls,
-  linkItemSentences,
   nextStep,
   storeSettingsUrl,
   storeSwitchOff,
@@ -75,6 +74,9 @@ import { bringListOf, bringListSentences, screenshotDoor } from "../lib/store-br
 import { notReadyForReviewStep, notReadyLine } from "../lib/store-not-ready";
 import { nextVersionOf, nextVersionSentence } from "../lib/store-readiness";
 import { LISTING_INCOMPLETE_CODE, listingIncompleteOf, listingIncompleteSentence } from "../lib/store-listing-incomplete";
+import { linkItemAnswer } from "../lib/link-item-answer";
+import { packageBuildLine, packageBuildView } from "../lib/package-checks-build";
+import { storePreflightChecks } from "../lib/store-preflight-checks";
 import {
   EDGE_FIRST_SUBMISSION_STATE,
   edgeFirstSubmissionOf,
@@ -296,10 +298,11 @@ function reworded(
       store === "edge"
         ? { linkItemUrl: `${settingsUrl}?link=edge` }
         : itemLinkUrls([], settingsUrl);
-    const say =
+    const edgeSay = `No Edge Add-ons product is linked to this project yet. Create it once in Partner Center with this build's package, then paste its product ID in the store settings at ${urls.linkItemUrl}; after that, say publish again.`;
+    const answer =
       store === "edge"
-        ? `No Edge Add-ons product is linked to this project yet. Create it once in Partner Center with this build's package, then paste its product ID in the store settings at ${urls.linkItemUrl}; after that, say publish again.`
-        : linkItemSentences(urls as ReturnType<typeof itemLinkUrls>);
+        ? { sayToPerson: edgeSay, nextStep: nextStep("link-item", edgeSay, urls.linkItemUrl), hint: edgeSay }
+        : linkItemAnswer(urls as ReturnType<typeof itemLinkUrls>);
 
     return envelope({
       ok: false,
@@ -316,10 +319,10 @@ function reworded(
         store,
         ...urls,
         trackUrl: settingsUrl,
-        sayToPerson: say,
-        nextStep: nextStep("link-item", say, urls.linkItemUrl),
+        sayToPerson: answer.sayToPerson,
+        nextStep: answer.nextStep,
       },
-      hint: say,
+      hint: answer.hint,
     });
   }
 
@@ -614,11 +617,15 @@ export function storePreflightView(json: Row, store: string): Row | null {
 
   const lock = lockView(block.lock);
   const ids = (value: unknown) => (Array.isArray(value) ? value.map((id) => text(id)).filter(Boolean) : []);
+  const blockingIds = ids(block.blocking);
+  const warningIds = ids(block.warnings);
+  const checks = storePreflightChecks(block, store, blockingIds, warningIds);
 
   return {
     ...(text(block.act) ? { act: text(block.act) } : {}),
-    blocking: ids(block.blocking),
-    warnings: ids(block.warnings),
+    blocking: blockingIds,
+    warnings: warningIds,
+    ...(checks.length ? { checks } : {}),
     lock,
     ...(text(block.approval) ? { approval: text(block.approval) } : {}),
     ...(nextVersionOf(json, store) ?? {}),
@@ -881,6 +888,16 @@ export async function preflight(args: StoreActArgs): Promise<string> {
     } else unread.push(`${store}: ${read.message}`);
   });
 
+  const packageBuilds = await Promise.all(
+    asked.map((store) => (reports[store] ? packageBuildView(api, text(args.projectPath), reports[store], store) : Promise.resolve(null))),
+  );
+
+  asked.forEach((store, i) => {
+    const view = packageBuilds[i];
+    if (view && isRow(stores[store])) stores[store] = { ...(stores[store] as Row), packageBuild: view };
+  });
+
+  const packageLine = packageBuildLine(packageBuilds);
   const blocked = Object.entries(stores)
     .filter(([, view]) => (view as Row).canSubmit !== true)
     .map(([store]) => store);
@@ -939,9 +956,10 @@ export async function preflight(args: StoreActArgs): Promise<string> {
     .map(([store]) => store);
   const lockLine = lockSentences(storePreflight);
   const versionLine = nextVersionSentences(storePreflight);
+  const packageSay = packageLine ? ` ${packageLine}` : "";
   const readinessHint = blocked.length
-    ? `${blocked.join(", ")} cannot be submitted yet; each failing check says what to fix.${syncLine}${sourceLine}${lockLine ? ` ${lockLine}` : ""}${versionLine ? ` ${versionLine}` : ""} This read wrote nothing.`
-    : `${notReady.length ? "Every store read here can take an upload." : "Every store read here is ready to submit."}${buildLine}${modeLine}${sourceLine}${workspaceLine}${lockLine ? ` ${lockLine}` : ""}${versionLine ? ` ${versionLine}` : ""} This read wrote nothing; extension_submit with dryRun:false submits.`;
+    ? `${blocked.join(", ")} cannot be submitted yet; each failing check says what to fix.${syncLine}${sourceLine}${lockLine ? ` ${lockLine}` : ""}${versionLine ? ` ${versionLine}` : ""}${packageSay} This read wrote nothing.`
+    : `${notReady.length ? "Every store read here can take an upload." : "Every store read here is ready to submit."}${buildLine}${modeLine}${sourceLine}${workspaceLine}${lockLine ? ` ${lockLine}` : ""}${versionLine ? ` ${versionLine}` : ""}${packageSay} This read wrote nothing; extension_submit with dryRun:false submits.`;
   const chrome = isRow(stores.chrome) ? stores.chrome : null;
   const connection =
     chrome && isRow(chrome.connection) ? chrome.connection : null;
@@ -993,7 +1011,7 @@ export async function preflight(args: StoreActArgs): Promise<string> {
   ) {
     const settingsUrl = storeSettingsUrl(api.ref, args.api);
     const urls = itemLinkUrls([connection], settingsUrl);
-    const say = linkItemSentences(urls);
+    const answer = linkItemAnswer(urls);
 
     return envelope({
       ok: true,
@@ -1005,10 +1023,10 @@ export async function preflight(args: StoreActArgs): Promise<string> {
         storesPageUrl,
         ...urls,
         trackUrl: settingsUrl,
-        sayToPerson: say,
-        nextStep: nextStep("link-item", say, urls.linkItemUrl),
+        sayToPerson: answer.sayToPerson,
+        nextStep: answer.nextStep,
       },
-      hint: say,
+      hint: answer.hint,
       warnings: [unreadLine, "This read wrote nothing."],
     });
   }

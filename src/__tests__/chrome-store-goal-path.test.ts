@@ -10,6 +10,7 @@ import { describe, expect, it } from "vitest";
 
 import { serverInstructions } from "../index";
 import { actionFingerprint } from "../lib/approval-gate";
+import { LINK_ITEM_POINTER } from "../lib/link-item-answer";
 import {
   WORLD_API,
   WORLD_PROJECT_ID,
@@ -154,9 +155,11 @@ describe("the Chrome Web Store goal walks from not connected to submitted with a
     const out = await world.call("extension_submit", PREFLIGHT_ARGS);
 
     walked(out, "store-item-not-linked", "link-item");
+    expect(out.hint).toContain(LINK_ITEM_POINTER);
+    expect(out.value.sayToPerson).toContain(`with this package ${PACKAGE}`);
     expect(out.value.nextStep).toEqual({
       kind: "link-item",
-      say: out.hint,
+      say: LINK_ITEM_POINTER,
       url: LINK_ITEM,
       thenCall: {
         tool: "extension_submit",
