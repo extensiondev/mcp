@@ -81,7 +81,7 @@ describe("spawn failure never registers a phantom session", () => {
   it("extension_start fails the same way", async () => {
     const project = tmpProject();
 
-    const result = JSON.parse(await start.handler({ projectPath: project }));
+    const result = JSON.parse(await start.handler({ wait: false, projectPath: project }));
 
     expect(result.ok).toBe(false);
     expect(result.status).toBe("spawn-failed");

@@ -119,7 +119,7 @@ describe("extension_dev health tick", () => {
     nextChild = () =>
       fakeCli('console.error("build failed: missing dependency"); process.exit(1);');
 
-    const result = JSON.parse(await start.handler({ projectPath: project }));
+    const result = JSON.parse(await start.handler({ wait: false, projectPath: project }));
 
     expect(result.ok).toBe(false);
     expect(result.command).toBe("extension_start");

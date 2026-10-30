@@ -115,7 +115,7 @@ describe("extension_start opens the control channel on a production run", () => 
   it("passes --allow-control to the engine and keeps it off by default", async () => {
     const project = tmpProject();
 
-    await start.handler({ projectPath: project });
+    await start.handler({ wait: false, projectPath: project });
     expect(spawnedArgs[0]).not.toContain("--allow-control");
     expect(spawnedArgs[0]).not.toContain("--allow-eval");
 
@@ -128,7 +128,7 @@ describe("extension_start opens the control channel on a production run", () => 
     removeSession(project, "chrome");
     spawnedArgs.length = 0;
 
-    await start.handler({ projectPath: project, allowControl: true });
+    await start.handler({ wait: false, projectPath: project, allowControl: true });
     expect(spawnedArgs[0]).toContain("--allow-control");
     expect(spawnedArgs[0]).not.toContain("--allow-eval");
   });
@@ -139,7 +139,7 @@ describe("extension_start opens the control channel on a production run", () => 
     fs.mkdirSync(built, { recursive: true });
     fs.writeFileSync(path.join(built, "manifest.json"), JSON.stringify({ manifest_version: 3, name: "Z" }));
 
-    await start.handler({ projectPath: project, build: false, allowEval: true });
+    await start.handler({ wait: false, projectPath: project, build: false, allowEval: true });
 
     expect(spawnedArgs[0][0]).toBe("preview");
     expect(spawnedArgs[0]).toContain("--allow-control");
@@ -161,7 +161,7 @@ describe("extension_start opens the control channel on a production run", () => 
     fs.utimesSync(contractFile, new Date(before + 60_000), new Date(before + 60_000));
 
     const result = JSON.parse(
-      await start.handler({ projectPath: project, allowEval: true }),
+      await start.handler({ wait: false, projectPath: project, allowEval: true }),
     );
 
     expect(result.ok).toBe(true);
@@ -194,7 +194,7 @@ describe("extension_start opens the control channel on a production run", () => 
     fs.utimesSync(contractFile, new Date(before + 60_000), new Date(before + 60_000));
 
     const result = JSON.parse(
-      await start.handler({ projectPath: project, allowEval: true, build: false, startingUrl: `chrome://extensions/?options=${plainId}` }),
+      await start.handler({ wait: false, projectPath: project, allowEval: true, build: false, startingUrl: `chrome://extensions/?options=${plainId}` }),
     );
 
     expect(result.ok).toBe(true);
@@ -233,7 +233,7 @@ describe("extension_start opens the control channel on a production run", () => 
     const later = new Date(Date.now() + 60_000);
     fs.utimesSync(contractFile, later, later);
 
-    const result = JSON.parse(await start.handler({ projectPath: project, allowControl: true, build: false }));
+    const result = JSON.parse(await start.handler({ wait: false, projectPath: project, allowControl: true, build: false }));
 
     expect(result.ok).toBe(true);
     expect(result.value.buildExtensionId).toBe(plainId);
@@ -252,7 +252,7 @@ describe("extension_start opens the control channel on a production run", () => 
     const project = tmpProject();
     writeContract(project, { command: "start", status: "ready", instanceId: "inst-2", distPath: path.join(project, "dist", "chrome") });
 
-    const result = JSON.parse(await start.handler({ projectPath: project, build: false }));
+    const result = JSON.parse(await start.handler({ wait: false, projectPath: project, build: false }));
 
     expect(result.value.buildExtensionId).toBeUndefined();
     expect(result.value.controlledCopyId).toBeUndefined();
@@ -269,7 +269,7 @@ describe("extension_start opens the control channel on a production run", () => 
     fs.utimesSync(contractFile, later, later);
 
     const result = JSON.parse(
-      await start.handler({ projectPath: project, allowEval: true }),
+      await start.handler({ wait: false, projectPath: project, allowEval: true }),
     );
 
     expect(result.ok).toBe(true);
@@ -310,7 +310,7 @@ describe("extension_start opens the control channel on a production run", () => 
     fs.utimesSync(contractFile, later, later);
 
     const result = JSON.parse(
-      await start.handler({ projectPath: project, allowControl: true }),
+      await start.handler({ wait: false, projectPath: project, allowControl: true }),
     );
 
     expect(result.ok).toBe(true);
@@ -330,7 +330,7 @@ describe("extension_start opens the control channel on a production run", () => 
     const later = new Date(Date.now() + 60_000);
     fs.utimesSync(contractFile, later, later);
 
-    const result = JSON.parse(await start.handler({ projectPath: project, allowControl: true }));
+    const result = JSON.parse(await start.handler({ wait: false, projectPath: project, allowControl: true }));
 
     expect(result.ok).toBe(true);
     expect(findSessionInfo(project, "chrome")?.allowControl).toBe(true);
@@ -349,7 +349,7 @@ describe("extension_start opens the control channel on a production run", () => 
     const later = new Date(Date.now() + 60_000);
     fs.utimesSync(contractFile, later, later);
 
-    const result = JSON.parse(await start.handler({ projectPath: project }));
+    const result = JSON.parse(await start.handler({ wait: false, projectPath: project }));
 
     expect(result.value.loadEvidence).toMatch(/this engine \(Extension\.js 4\.1\.33\) opens no debug port on a production run \(4\.1\.34 is the first that does\)/);
     expect(result.hint).toMatch(/To prove the load, run it with extension_dev, whose answer carries guestLoaded\./);
@@ -361,7 +361,7 @@ describe("extension_start opens the control channel on a production run", () => 
     bootTail.current = "error: unknown option '--allow-control'\n";
 
     const result = JSON.parse(
-      await start.handler({ projectPath: project, allowControl: true }),
+      await start.handler({ wait: false, projectPath: project, allowControl: true }),
     );
 
     expect(result.ok).toBe(false);

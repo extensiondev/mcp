@@ -97,7 +97,7 @@ describe("extension_start runs a prebuilt unpacked extension through the engine'
     fs.writeFileSync(path.join(built, "manifest.json"), JSON.stringify({ manifest_version: 2, name: "Z" }));
 
     const result = JSON.parse(
-      await start.handler({ projectPath: project, browser: "firefox", outputPath: "build/firefox" }),
+      await start.handler({ wait: false, projectPath: project, browser: "firefox", outputPath: "build/firefox" }),
     );
 
     expect(result.ok).toBe(true);
@@ -113,7 +113,7 @@ describe("extension_start runs a prebuilt unpacked extension through the engine'
     fs.mkdirSync(path.join(project, "empty"), { recursive: true });
 
     const result = JSON.parse(
-      await start.handler({ projectPath: project, outputPath: "empty" }),
+      await start.handler({ wait: false, projectPath: project, outputPath: "empty" }),
     );
 
     expect(result.ok).toBe(false);
@@ -125,7 +125,7 @@ describe("extension_start runs a prebuilt unpacked extension through the engine'
   it("still builds and starts when no outputPath is given", async () => {
     const project = tmpProject();
 
-    await start.handler({ projectPath: project });
+    await start.handler({ wait: false, projectPath: project });
 
     expect(spawnedArgs[0][0]).toBe("start");
     expect(spawnedArgs[0]).not.toContain("--output-path");
