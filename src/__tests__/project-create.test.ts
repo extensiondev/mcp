@@ -181,7 +181,8 @@ describe("extension_project_create", () => {
     expect(out.value.expiresInSeconds).toBe(900);
     expect(Date.parse(out.value.expiresAt) - Date.now()).toBeGreaterThan(890_000);
     expect(out.hint).toContain("The code expires at");
-    expect(out.hint).toContain("call again right after approving");
+    expect(out.hint).toContain("waitSeconds: 900");
+    expect(out.hint).toContain("blocks until the owner approves");
     expect(pendingCreate(API, "acme/ghost-app")).toEqual({
       userCode: "ABCD-1234",
       verificationUri: "https://extension.dev/device",

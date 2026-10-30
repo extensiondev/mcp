@@ -7,6 +7,7 @@
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
 import { API_BASE } from "../lib/common-schema";
+import { DEVICE_WAIT_MAX_SECONDS, deviceWaitDescription } from "../lib/device-wait";
 import { envelope } from "../lib/envelope";
 import { loginToProject, loginToProjects, loginToWorkspace } from "./login";
 import { WORKSPACE_WILDCARD } from "../lib/project-batch";
@@ -16,7 +17,7 @@ import { clearLocalCredentials } from "./logout";
 export const schema = {
   name: "extension_auth",
   description:
-    "Sign this machine in to extension.dev, report that login, or clear it: action status (the default), login and logout. Status names the workspace and project the stored token is scoped to and when it expires, never the token itself; that identity comes from the stored token alone and does not change with the current working directory, and the platform's whoami endpoint is asked whether the credential resolves there, answered in value.server.verdict as confirmed, refused or unavailable, so a local file claiming a login the server refused is never reported as logged in. Login is two-phase: call with `project` to get a code plus a URL the user authorizes at extension.dev/device, then call again with the returned `deviceCode`; GitHub federation happens server-side, so no GitHub token lands on this machine. Minted tokens live at most 7 days, server-enforced, so CI must re-mint before expiry on the console's project settings, Access tokens page. Not for a project that does not exist yet: that is extension_project_create. Several logins live side by side, one per server and workspace/project, and a call uses the login minted on the server it targets (`api`, else EXTENSION_DEV_API_URL, else production), so a local dev login never stands in for a production one. To sign in to several existing projects at once pass `projects` instead of `project`, or `workspace` with projects:\"*\" for every project a workspace has: one approval, one stored token per project. A project renamed in the console keeps its login: the next call notices, moves the login to the new <workspace>/<project> and says so once; a not-found answer from an older platform means list the workspace through another login and log in to the new slug.",
+    `Sign this machine in to extension.dev, report that login, or clear it: action status (the default), login and logout. Status names the workspace and project the stored token is scoped to and when it expires, never the token itself; that identity comes from the stored token alone and does not change with the current working directory, and the platform's whoami endpoint is asked whether the credential resolves there, answered in value.server.verdict as confirmed, refused or unavailable, so a local file claiming a login the server refused is never reported as logged in. Login is two-phase: call with \`project\` to get a code plus a URL the user authorizes at extension.dev/device, then call again with the returned \`deviceCode\` and \`waitSeconds\`, which blocks (up to ${DEVICE_WAIT_MAX_SECONDS} s) until the owner approves; GitHub federation is server-side, so no GitHub token lands here. Minted tokens live at most 7 days, server-enforced, so CI must re-mint before expiry on the console's project settings, Access tokens page. Not for a project that does not exist yet: that is extension_project_create. Several logins live side by side, one per server and workspace/project, and a call uses the login minted on the server it targets (\`api\`, else EXTENSION_DEV_API_URL, else production), so a local dev login never stands in for a production one. To sign in to several existing projects at once pass \`projects\` instead of \`project\`, or \`workspace\` with projects:"*" for every project a workspace has: one approval, one stored token per project. A project renamed in the console keeps its login: the next call notices, moves the login to the new <workspace>/<project> and says so once; a not-found answer from an older platform means list the workspace through another login and log in to the new slug.`,
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -46,7 +47,13 @@ export const schema = {
       deviceCode: {
         type: "string",
         description:
-          "login: resume token from the prior call's `deviceCode`; omit on the first call.",
+          "login: resume token from the prior call's `deviceCode`; omit on the first call. Pass it with waitSeconds so one call blocks until the owner approves.",
+      },
+      waitSeconds: {
+        type: "number",
+        minimum: 0,
+        maximum: DEVICE_WAIT_MAX_SECONDS,
+        description: deviceWaitDescription("extension_auth (action: login)", "logged-in with the token stored"),
       },
       api: API_BASE,
     },
@@ -69,6 +76,7 @@ export async function handler(args: {
   projects?: unknown;
   workspace?: string;
   deviceCode?: string;
+  waitSeconds?: unknown;
   api?: string;
 }): Promise<string> {
   const action = args.action ?? "status";
@@ -107,6 +115,7 @@ export async function handler(args: {
       return loginToWorkspace({
         workspace: args.workspace,
         deviceCode: args.deviceCode,
+        waitSeconds: args.waitSeconds,
         api: args.api,
       });
     }
@@ -114,6 +123,7 @@ export async function handler(args: {
     return loginToProjects({
       projects: args.projects,
       deviceCode: args.deviceCode,
+      waitSeconds: args.waitSeconds,
       api: args.api,
     });
   }
@@ -122,6 +132,7 @@ export async function handler(args: {
     return loginToProject({
       project: String(args.project ?? ""),
       deviceCode: args.deviceCode,
+      waitSeconds: args.waitSeconds,
       api: args.api,
     });
   }

@@ -283,6 +283,8 @@ describe("extension_auth login with projects: one approval, one token per projec
       verificationUriComplete: "https://extension.dev/device?code=ABCD-1234",
       deviceCode: "dev-code",
       projects: LIST,
+      expiresAt: expect.any(String),
+      expiresInSeconds: expect.any(Number),
       legacyStatus: "authorization_pending",
     });
 

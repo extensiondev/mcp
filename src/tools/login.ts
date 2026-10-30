@@ -23,6 +23,19 @@ import {
 } from "../lib/login-flow";
 import { envelope, type ErrorCode } from "../lib/envelope";
 import {
+  codeExpiresAt,
+  codeExpiryFromStart,
+  deviceWait,
+  expiredSentence,
+  firstCallWaitWarning,
+  forgetCodeExpiry,
+  rememberCodeExpiry,
+  resumeWaitSentence,
+  waitRanOutSentence,
+  waitValue,
+  type DeviceWait,
+} from "../lib/device-wait";
+import {
   BATCH_UNSUPPORTED_MESSAGE,
   WILDCARD_UNSUPPORTED_MESSAGE,
   WORKSPACE_WILDCARD,
@@ -94,15 +107,19 @@ function pending(
     userCode: string;
     verificationUri: string;
     verificationUriComplete?: string;
+    expiresAt: string;
+    waitSeconds: unknown;
   },
   presence: { warning: string | null; value: Record<string, unknown> | null } = { warning: null, value: null },
 ): string {
   const complete = String(start.verificationUriComplete || "").trim();
   const hasCompleteLink =
     complete.length > 0 && complete !== start.verificationUri;
+  const resume = resumeWaitSentence("extension_auth (action: login)", start.expiresAt, " and the same project");
   const message = hasCompleteLink
-    ? `Open ${complete} and approve (code ${start.userCode} is pre-filled), then call extension_auth (action: login) again with this deviceCode and the same project. If the page asks for a code, enter ${start.userCode} at ${start.verificationUri}.`
-    : `Open ${start.verificationUri} and enter code ${start.userCode}, then call extension_auth (action: login) again with this deviceCode and the same project.`;
+    ? `Open ${complete} and approve (code ${start.userCode} is pre-filled). If the page asks for a code, enter ${start.userCode} at ${start.verificationUri}. ${resume}`
+    : `Open ${start.verificationUri} and enter code ${start.userCode}. ${resume}`;
+  const asked = deviceWait({ waitSeconds: start.waitSeconds, fallbackMs: 0 });
 
   return envelope({
     ok: true,
@@ -113,16 +130,23 @@ function pending(
       verificationUri: start.verificationUri,
       ...(hasCompleteLink ? { verificationUriComplete: complete } : {}),
       deviceCode: start.deviceCode,
+      ...waitValue(asked, start.expiresAt),
       legacyStatus: "authorization_pending",
       ...(presence.value ? { projectCheck: presence.value } : {}),
     },
     hint: message,
-    warnings: presence.warning ? [presence.warning, PENDING_TTL_NOTE] : [PENDING_TTL_NOTE],
+    warnings: [
+      ...(presence.warning ? [presence.warning] : []),
+      ...(asked.waiting ? [firstCallWaitWarning("extension_auth (action: login)", asked.bound)] : []),
+      PENDING_TTL_NOTE,
+    ],
   });
 }
 
-function resumePending(deviceCode: string, verificationUri: string): string {
-  const message = `Still waiting for authorization. The one-click link and code from the previous response are still valid: open that link (or enter the code at ${verificationUri}), then call extension_auth (action: login) again with this same deviceCode and the same project.`;
+function resumePending(deviceCode: string, verificationUri: string, wait: DeviceWait, expiresAt: string | null): string {
+  const message = wait.waiting
+    ? `${waitRanOutSentence({ tool: "extension_auth (action: login)", wait, expiresAt, extra: " and the same project" })} The link and code from the first answer are still the ones to approve at ${verificationUri}.`
+    : `Still waiting for authorization. The one-click link and code from the previous response are still valid: open that link (or enter the code at ${verificationUri}). ${resumeWaitSentence("extension_auth (action: login)", expiresAt, " and the same project")}`;
 
   return envelope({
     ok: true,
@@ -131,6 +155,7 @@ function resumePending(deviceCode: string, verificationUri: string): string {
     value: {
       verificationUri,
       deviceCode,
+      ...waitValue(wait, expiresAt),
       legacyStatus: "authorization_pending",
     },
     hint: message,
@@ -223,7 +248,7 @@ function pollRefusal(
   if (poll.reason === "expired") {
     return fail(
       "LoginExpired",
-      "The device code expired. Run extension_auth (action: login) again to restart.",
+      expiredSentence("extension_auth (action: login)", "The device code expired, and an approval given after that is dropped.", " and the same project"),
       "login-expired",
       "E_AUTH_EXPIRED",
     );
@@ -270,6 +295,7 @@ function presenceWarning(presence: ProjectPresence, ctx: { apiBase: string; proj
 export async function loginToProject(args: {
   project: string;
   deviceCode?: string;
+  waitSeconds?: unknown;
   api?: string;
 }): Promise<string> {
   const project = String(args.project || "").trim();
@@ -310,20 +336,25 @@ export async function loginToProject(args: {
   }
 
   if (args.deviceCode) {
+    const deviceCode = String(args.deviceCode);
+    const expiresAt = codeExpiresAt(deviceCode);
+    const wait = deviceWait({ waitSeconds: args.waitSeconds, expiresAt, fallbackMs: RESUME_BUDGET_MS });
     const poll = await pollDeviceToken({
       apiBase,
       path: config.deviceTokenUrl,
       project,
-      deviceCode: String(args.deviceCode),
+      deviceCode,
       interval: 5,
-      budgetMs: RESUME_BUDGET_MS,
+      budgetMs: wait.budgetMs,
     });
+
+    if (poll.ok || poll.reason !== "pending") forgetCodeExpiry(deviceCode);
     if (poll.ok) return success(poll.creds);
 
     const refused = pollRefusal(poll, { apiBase, project });
     if (refused) return refused;
 
-    return resumePending(String(args.deviceCode), config.verificationUri);
+    return resumePending(deviceCode, config.verificationUri, wait, expiresAt);
   }
 
   const presence = await projectPresence(apiBase, project);
@@ -344,6 +375,8 @@ export async function loginToProject(args: {
     );
   }
 
+  const expiresAt = codeExpiryFromStart(start.expiresIn);
+  rememberCodeExpiry(start.deviceCode, expiresAt);
   const poll = await pollDeviceToken({
     apiBase,
     path: config.deviceTokenUrl,
@@ -352,6 +385,8 @@ export async function loginToProject(args: {
     interval: start.interval,
     budgetMs: FIRST_CALL_BUDGET_MS,
   });
+
+  if (poll.ok || poll.reason !== "pending") forgetCodeExpiry(start.deviceCode);
   if (poll.ok) return success(poll.creds);
 
   const refused = pollRefusal(poll, { apiBase, project });
@@ -363,6 +398,8 @@ export async function loginToProject(args: {
       userCode: start.userCode,
       verificationUri: start.verificationUri,
       verificationUriComplete: start.verificationUriComplete,
+      expiresAt,
+      waitSeconds: args.waitSeconds,
     },
     presenceWarning(presence, { apiBase, project }),
   );
@@ -377,6 +414,8 @@ function batchPending(args: {
   verificationUri: string;
   userCode?: string;
   verificationUriComplete?: string;
+  wait: DeviceWait;
+  expiresAt: string | null;
 }): string {
   const complete = String(args.verificationUriComplete || "").trim();
   const hasCompleteLink =
@@ -384,7 +423,9 @@ function batchPending(args: {
   const again =
     "then call extension_auth (action: login) again with this deviceCode and the same projects";
   const hint = !args.userCode
-    ? `Still waiting for authorization. The link and code from the previous response are still valid: approve at ${args.verificationUri}, ${again}.`
+    ? args.wait.waiting
+      ? `${waitRanOutSentence({ tool: "extension_auth (action: login)", wait: args.wait, expiresAt: args.expiresAt, extra: " and the same projects" })} The link and code from the first answer are still the ones to approve at ${args.verificationUri}.`
+      : `Still waiting for authorization. The link and code from the previous response are still valid: approve at ${args.verificationUri}, ${again}.`
     : hasCompleteLink
       ? `Open ${complete} and approve (code ${args.userCode} is pre-filled). The page lists all ${args.projects.length} projects this one approval signs in to; ${again}. If the page asks for a code, enter ${args.userCode} at ${args.verificationUri}.`
       : `Open ${args.verificationUri} and enter code ${args.userCode}. The page lists all ${args.projects.length} projects this one approval signs in to; ${again}.`;
@@ -401,6 +442,7 @@ function batchPending(args: {
         : {}),
       deviceCode: args.deviceCode,
       projects: args.projects,
+      ...waitValue(args.wait, args.expiresAt),
       legacyStatus: "authorization_pending",
     },
     hint,
@@ -481,6 +523,7 @@ function batchRefusal(
 export async function loginToProjects(args: {
   projects: unknown;
   deviceCode?: string;
+  waitSeconds?: unknown;
   api?: string;
 }): Promise<string> {
   const parsed = parseProjectBatch(args.projects);
@@ -544,7 +587,9 @@ export async function loginToProjects(args: {
 
   let deviceCode = String(args.deviceCode || "").trim();
   let interval = 5;
-  let budgetMs = RESUME_BUDGET_MS;
+  let expiresAt = deviceCode ? codeExpiresAt(deviceCode) : null;
+  let wait = deviceWait({ waitSeconds: args.waitSeconds, expiresAt, fallbackMs: RESUME_BUDGET_MS });
+  let budgetMs = wait.budgetMs;
   let start: Awaited<ReturnType<typeof requestDeviceCode>> | null = null;
 
   if (!deviceCode) {
@@ -568,7 +613,10 @@ export async function loginToProjects(args: {
 
     deviceCode = start.deviceCode;
     interval = start.interval;
-    budgetMs = FIRST_CALL_BUDGET_MS;
+    expiresAt = codeExpiryFromStart(start.expiresIn);
+    rememberCodeExpiry(deviceCode, expiresAt);
+    wait = deviceWait({ waitSeconds: undefined, fallbackMs: FIRST_CALL_BUDGET_MS });
+    budgetMs = wait.budgetMs;
   }
 
   const poll = await pollDeviceGrant({
@@ -580,6 +628,8 @@ export async function loginToProjects(args: {
     budgetMs,
   });
 
+  if (poll.ok || poll.reason !== "pending") forgetCodeExpiry(deviceCode);
+
   if (!poll.ok) {
     if (poll.reason === "pending") {
       return batchPending({
@@ -588,6 +638,8 @@ export async function loginToProjects(args: {
         verificationUri: start?.verificationUri ?? config.verificationUri,
         userCode: start?.userCode,
         verificationUriComplete: start?.verificationUriComplete,
+        wait,
+        expiresAt,
       });
     }
 
@@ -632,6 +684,8 @@ function workspacePending(args: {
   verificationUri: string;
   userCode?: string;
   verificationUriComplete?: string;
+  wait: DeviceWait;
+  expiresAt: string | null;
 }): string {
   const complete = String(args.verificationUriComplete || "").trim();
   const hasCompleteLink =
@@ -639,7 +693,9 @@ function workspacePending(args: {
   const again = `then call extension_auth (action: "login", workspace: "${args.workspace}", projects: "*") again with this deviceCode`;
   const shown = `The page lists every project ${args.workspace} has right now, and approving signs in to each of them (at most 20)`;
   const hint = !args.userCode
-    ? `Still waiting for authorization. The link and code from the previous response are still valid: approve at ${args.verificationUri}, ${again}.`
+    ? args.wait.waiting
+      ? `${waitRanOutSentence({ tool: "extension_auth (action: login)", wait: args.wait, expiresAt: args.expiresAt, extra: `, workspace: "${args.workspace}" and projects: "*"` })} The link and code from the first answer are still the ones to approve at ${args.verificationUri}.`
+      : `Still waiting for authorization. The link and code from the previous response are still valid: approve at ${args.verificationUri}, ${again}.`
     : hasCompleteLink
       ? `Open ${complete} and approve (code ${args.userCode} is pre-filled). ${shown}; ${again}. If the page asks for a code, enter ${args.userCode} at ${args.verificationUri}.`
       : `Open ${args.verificationUri} and enter code ${args.userCode}. ${shown}; ${again}.`;
@@ -657,6 +713,7 @@ function workspacePending(args: {
       deviceCode: args.deviceCode,
       workspace: args.workspace,
       projects: WORKSPACE_WILDCARD,
+      ...waitValue(args.wait, args.expiresAt),
       legacyStatus: "authorization_pending",
     },
     hint,
@@ -667,6 +724,7 @@ function workspacePending(args: {
 export async function loginToWorkspace(args: {
   workspace: unknown;
   deviceCode?: string;
+  waitSeconds?: unknown;
   api?: string;
 }): Promise<string> {
   const parsed = parseWorkspaceSlug(args.workspace);
@@ -714,7 +772,9 @@ export async function loginToWorkspace(args: {
 
   let deviceCode = String(args.deviceCode || "").trim();
   let interval = 5;
-  let budgetMs = RESUME_BUDGET_MS;
+  let expiresAt = deviceCode ? codeExpiresAt(deviceCode) : null;
+  let wait = deviceWait({ waitSeconds: args.waitSeconds, expiresAt, fallbackMs: RESUME_BUDGET_MS });
+  let budgetMs = wait.budgetMs;
   let start: Awaited<ReturnType<typeof requestDeviceCode>> | null = null;
 
   if (!deviceCode) {
@@ -737,7 +797,10 @@ export async function loginToWorkspace(args: {
 
     deviceCode = start.deviceCode;
     interval = start.interval;
-    budgetMs = FIRST_CALL_BUDGET_MS;
+    expiresAt = codeExpiryFromStart(start.expiresIn);
+    rememberCodeExpiry(deviceCode, expiresAt);
+    wait = deviceWait({ waitSeconds: undefined, fallbackMs: FIRST_CALL_BUDGET_MS });
+    budgetMs = wait.budgetMs;
   }
 
   const poll = await pollDeviceGrant({
@@ -750,6 +813,8 @@ export async function loginToWorkspace(args: {
     budgetMs,
   });
 
+  if (poll.ok || poll.reason !== "pending") forgetCodeExpiry(deviceCode);
+
   if (!poll.ok) {
     if (poll.reason === "pending") {
       return workspacePending({
@@ -758,6 +823,8 @@ export async function loginToWorkspace(args: {
         verificationUri: start?.verificationUri ?? config.verificationUri,
         userCode: start?.userCode,
         verificationUriComplete: start?.verificationUriComplete,
+        wait,
+        expiresAt,
       });
     }
 
