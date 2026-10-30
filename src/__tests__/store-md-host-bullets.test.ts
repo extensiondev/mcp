@@ -1,8 +1,14 @@
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+
 import { describe, expect, it } from "vitest";
 
-import { bulletLine } from "../lib/store-md-bullets";
+import { bulletLine, storeOwnLinesBody } from "../lib/store-md-bullets";
+import { CHROME_SYNC_CALL, reconcileChromeCheck, reconcileChromeRow } from "../lib/store-md-chrome-reconcile";
 import { bulletNamesHost, namesNotInBullets, patternCovers, uncoveredNamesIn } from "../lib/store-md-host-justifications";
 import { listingForStore, parseStoreMdListing } from "../lib/store-md-listing";
+import { readLocalListing, type LocalListing } from "../tools/store-listing";
 
 const HOST_REASON = "Asked for one site at a time when the user allows it; nothing at install.";
 
@@ -36,6 +42,16 @@ ${hostBullet}
 ${visibility}`;
 
 const chrome = (storeMd: string) => listingForStore(parseStoreMdListing(storeMd), "chrome").listing;
+
+function localOf(storeMd: string): LocalListing {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "extdev-host-bullets-"));
+  fs.writeFileSync(path.join(root, "STORE.md"), storeMd);
+
+  const local = readLocalListing(root, "chrome");
+  if ("problem" in local) throw new Error(local.problem);
+
+  return local;
+}
 
 describe("a justification bullet keyed by a host pattern (ledger 302)", () => {
   it("reads the key up to the first colon followed by a space, so a host pattern is a key", () => {
@@ -92,5 +108,108 @@ describe("a justification bullet keyed by a host pattern (ledger 302)", () => {
 
     expect(uncoveredNamesIn("the Chrome package of build 154767e requests tabs, which no bullet under `### Permissions justification` names")).toEqual(["tabs"]);
     expect(uncoveredNamesIn("STORE.md has no `### Permissions justification` bullets")).toEqual([]);
+  });
+});
+
+describe("the store section's own lines are read under any sub-heading (ledger 303)", () => {
+  it("reads `- Visibility:` under a `### Visibility` sub-heading of `## Chrome Web Store`, and at the top of the section", () => {
+    expect(chrome(HANDS_FREE(`- *://*/*: ${HOST_REASON}`)).visibility).toBe("unlisted");
+    expect(chrome(HANDS_FREE(`- *://*/*: ${HOST_REASON}`, "").replace("## Chrome Web Store\n", "## Chrome Web Store\n\n- Visibility: public\n")).visibility).toBe("public");
+    expect(chrome(HANDS_FREE(`- *://*/*: ${HOST_REASON}`, "")).visibility).toBeUndefined();
+  });
+
+  it("leaves the `### Permissions justification` bullets out of the store's own lines", () => {
+    const body = storeOwnLinesBody("\n- Visibility: unlisted\n\n### Permissions justification\n\n- name: Reads the name.\n\n### Visibility\n\n- Summary: For the store.\n");
+
+    expect(body).toContain("- Visibility: unlisted");
+    expect(body).toContain("- Summary: For the store.");
+    expect(body).not.toContain("- name: Reads the name.");
+
+    const listing = chrome(HANDS_FREE("- name: Reads the name."));
+
+    expect(listing.title).toBe("Hands-free");
+    expect(listing.permissionJustifications!.map((entry) => entry.permission)).toContain("name");
+  });
+});
+
+const NO_BULLETS = "STORE.md has no `### Permissions justification` bullets";
+const REQUESTS = "the Chrome package of build 154767e requests *://*/*, which no bullet under `### Permissions justification` names";
+const VISIBILITY_MESSAGE =
+  "A new Chrome item defaults to Public in the dashboard, and this project's intent is Unlisted (the least public default, since STORE.md has no `- Visibility:` line). Google's API does not answer visibility, so set and confirm it on the Distribution tab of the item's dashboard.";
+const HOST_MESSAGE =
+  "the production Chrome package of build 154767e reaches *://*/*, which no bullet under `### Permissions justification` in STORE.md names. Add a reason for each, then paste it on the Privacy tab.";
+
+const row = (id: string, actual: string, status = "missing") => ({
+  id,
+  label: id,
+  required: true,
+  format: "",
+  status: status as "missing" | "unknown",
+  satisfiedBy: "store-dashboard",
+  how: "",
+  actual,
+});
+
+describe("a Chrome row or check about STORE.md says what the file holds before the first sync (ledger 303)", () => {
+  const withHost = localOf(HANDS_FREE(`- *://*/*: ${HOST_REASON}`));
+  const withoutHost = localOf(HANDS_FREE("- clipboardWrite: Puts the blurred image on the clipboard."));
+  const empty = localOf("# Store metadata\n\n## Listing\n\n- Name: Bare\n\n## Chrome Web Store\n\n### Single purpose\n\nOne thing.\n");
+
+  it("answers the permission justifications row as not synced yet with the bullet count, never as an empty file", () => {
+    expect(reconcileChromeRow(row("chrome.permission_justifications", NO_BULLETS), withHost).actual).toBe(
+      `not synced yet (STORE.md carries 6 bullets under \`### Permissions justification\`): run ${CHROME_SYNC_CALL}`,
+    );
+
+    expect(reconcileChromeRow(row("chrome.permission_justifications", REQUESTS), withHost).actual).toBe(
+      `not synced yet (STORE.md carries 6 bullets under \`### Permissions justification\`, naming *://*/*): run ${CHROME_SYNC_CALL}`,
+    );
+
+    expect(reconcileChromeRow(row("chrome.permission_justifications", REQUESTS), withoutHost).actual).toBe(
+      `${REQUESTS}; STORE.md carries 6 bullets under \`### Permissions justification\`, none naming *://*/*: add one bullet per host pattern, keyed by the pattern as the manifest spells it, for example \`- *://*/*: ${HOST_REASON}\`, then run ${CHROME_SYNC_CALL}`,
+    );
+
+    expect(reconcileChromeRow(row("chrome.permission_justifications", NO_BULLETS), empty).actual).toBe(NO_BULLETS);
+    expect(reconcileChromeRow(row("chrome.title", NO_BULLETS), withHost).actual).toBe(NO_BULLETS);
+  });
+
+  it("answers the visibility check and row from the file's own line, naming the sync that writes it", () => {
+    const check = reconcileChromeCheck({ id: "distribution.chrome_visibility", status: "warn", message: VISIBILITY_MESSAGE }, withHost);
+
+    expect(check?.message).toBe(
+      `A new Chrome item defaults to Public in the dashboard, and this project's intent is Unlisted (the least public default; STORE.md carries \`- Visibility: unlisted\`, not synced yet: run ${CHROME_SYNC_CALL}). Google's API does not answer visibility, so set and confirm it on the Distribution tab of the item's dashboard.`,
+    );
+
+    const differs = localOf(HANDS_FREE(`- *://*/*: ${HOST_REASON}`, "### Visibility\n\n- Visibility: public\n"));
+
+    expect(reconcileChromeCheck({ id: "distribution.chrome_visibility", status: "warn", message: VISIBILITY_MESSAGE }, differs)?.message).toContain(
+      `STORE.md carries \`- Visibility: public\`, not synced yet: run ${CHROME_SYNC_CALL} and the intent reads Public)`,
+    );
+
+    const odd = localOf(HANDS_FREE(`- *://*/*: ${HOST_REASON}`, "### Visibility\n\n- Visibility: everyone\n"));
+
+    expect(reconcileChromeCheck({ id: "distribution.chrome_visibility", status: "warn", message: VISIBILITY_MESSAGE }, odd)?.message).toContain(
+      "(the least public default; the `- Visibility:` line in STORE.md is not public, unlisted or private",
+    );
+
+    expect(reconcileChromeCheck({ id: "distribution.chrome_visibility", status: "warn", message: VISIBILITY_MESSAGE }, empty)).toBeNull();
+
+    const actual = "a new item starts Public on the Distribution tab; the project's intent is Unlisted (the least public default; STORE.md has no `- Visibility:` line)";
+
+    expect(reconcileChromeRow(row("chrome.visibility", actual, "unknown"), withHost).actual).toBe(
+      `a new item starts Public on the Distribution tab; the project's intent is Unlisted (the least public default; STORE.md carries \`- Visibility: unlisted\`, not synced yet: run ${CHROME_SYNC_CALL})`,
+    );
+  });
+
+  it("answers the host check from the file's bullets, or asks for the form that works with one example", () => {
+    expect(reconcileChromeCheck({ id: "listing.chrome_host_justifications", status: "warn", message: HOST_MESSAGE }, withHost)?.message).toBe(
+      "*://*/* is named by a bullet under `### Permissions justification` in STORE.md, not yet in the listing record; sync-listing writes it.",
+    );
+
+    expect(reconcileChromeCheck({ id: "listing.chrome_host_justifications", status: "warn", message: HOST_MESSAGE }, withoutHost)?.message).toBe(
+      `${HOST_MESSAGE} STORE.md does not name *://*/* yet (6 bullets read): write one bullet per host pattern, keyed by the pattern as the manifest spells it, for example \`- *://*/*: ${HOST_REASON}\`, then run ${CHROME_SYNC_CALL}.`,
+    );
+
+    expect(reconcileChromeCheck({ id: "listing.chrome_host_justifications", status: "pass", message: "Every host pattern is named." }, withoutHost)).toBeNull();
+    expect(reconcileChromeCheck({ id: "listing.privacy_policy_present", status: "warn", message: HOST_MESSAGE }, withHost)).toBeNull();
   });
 });

@@ -18,7 +18,7 @@ import {
   type ListingText,
   type PermissionJustification,
 } from "./store-md-declarations";
-import { bulletLine } from "./store-md-bullets";
+import { bulletLine, storeOwnLinesBody } from "./store-md-bullets";
 import { safariTitle } from "./store-md-safari-title";
 
 export * from "./store-md-declarations";
@@ -420,7 +420,7 @@ export function parseStoreMdListing(content: string): StoreMdListing {
         if (value) (text as Record<string, string>)[field] = value;
       }
 
-      readBullets(result, section.body.split(/^###\s/m)[0]!, text, true);
+      readBullets(result, storeOwnLinesBody(section.body), text, true);
       result.stores[store] = text;
     }
   }
