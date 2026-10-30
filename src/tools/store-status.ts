@@ -246,6 +246,29 @@ export function safariReleaseSentence(latest: SubmissionView | undefined): strin
   return `${latest.storeVersion?.packaged || latest.version || "the version"} ${words}`;
 }
 
+const APPLE_PENDING_DEVELOPER_RELEASE = "PENDING_DEVELOPER_RELEASE";
+
+export const SAFARI_RELEASE_CALL = 'extension_submit {action: "release", browsers: ["safari"]}';
+
+/* @invariant A VERSION APPLE APPROVED FOR MANUAL RELEASE NAMES THE RELEASE
+ * ACT, AND ONLY WHEN THE STORE'S WORD WAS READ. App Store Connect holds such
+ * a version as PENDING_DEVELOPER_RELEASE; the platform answers it approved,
+ * and on 2026-10-30 it read "submitted" with no next step while the Release
+ * act waited. A word the platform inferred grounds no next step.
+ */
+export function safariReleaseStepSentence(latest: SubmissionView | undefined): string {
+  const read = latest?.statusRead;
+  if (!latest || !read || (read.source !== "poll" && read.source !== "publish-answer")) return "";
+
+  const state = (read.storeWord || latest.storeReview?.state || "").toUpperCase();
+  if (state !== APPLE_PENDING_DEVELOPER_RELEASE) return "";
+
+  const version = latest.storeVersion?.packaged || latest.version || "the version";
+  const build = latest.storeVersion?.buildNumber ? ` (build ${latest.storeVersion.buildNumber})` : "";
+
+  return `Apple approved ${version}${build} and holds it for your release (${APPLE_PENDING_DEVELOPER_RELEASE}); to put it on sale, call ${SAFARI_RELEASE_CALL}, which a workspace owner approves once`;
+}
+
 /* @invariant A WORD THE PLATFORM INFERRED IS SAID TO BE INFERRED, AND IT
  * GROUNDS NO NEXT STEP. The platform answers each submission's status with
  * where its word was read (the publish answer, a poll, the run) or says it
@@ -845,6 +868,9 @@ export async function readStores(args: {
 
       const releaseMode = safariReleaseSentence(submission);
       if (releaseMode) tail.push(releaseMode);
+
+      const releaseStep = safariReleaseStepSentence(submission);
+      if (releaseStep) tail.push(releaseStep);
     }
 
     const release = row.release as StoreReleaseView | undefined;

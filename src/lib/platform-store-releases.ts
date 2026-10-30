@@ -8,7 +8,7 @@
 
 import { openProjectApi, projectApiGet } from "./project-api";
 
-export const STORE_RELEASE_STATES = ["uploaded", "in-review", "live", "rejected", "withdrawn", "superseded"] as const;
+export const STORE_RELEASE_STATES = ["uploaded", "in-review", "approved", "live", "rejected", "withdrawn", "superseded"] as const;
 
 export type StoreReleaseState = (typeof STORE_RELEASE_STATES)[number];
 
@@ -204,7 +204,12 @@ export function storeReleaseSentence(row: StoreReleaseView): string {
       ? ", release mode not read yet"
       : "";
 
-  return `${storeReleaseLane(row)} ${version} ${row.state}${audience}${release} on build ${row.buildSha || "unknown"} (${read})`;
+  const waiting =
+    row.state === "approved" && row.source !== "inferred" && row.storeWord === "PENDING_DEVELOPER_RELEASE"
+      ? `, waiting for your release with extension_submit {action: "release", browsers: ["${row.store}"]}`
+      : "";
+
+  return `${storeReleaseLane(row)} ${version} ${row.state}${audience}${release}${waiting} on build ${row.buildSha || "unknown"} (${read})`;
 }
 
 export function storeReleasesSentence(rows: StoreReleaseView[], unread: boolean): string {
