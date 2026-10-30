@@ -49,6 +49,7 @@ export const APPROVAL_POLICY = {
   "extension_store.publish": "approval",
   "extension_store.cancel": "approval",
   "extension_store.rollout": "approval",
+  "extension_store.release": "approval",
   extension_release_promote: "approval",
   "extension_release.cut": "approval",
   "extension_release.rollback": "approval",

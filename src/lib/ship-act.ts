@@ -100,6 +100,11 @@ const HINTS: Record<string, string> = {
   SAFARI_VERSION_IN_REVIEW: `Apple holds another App Store version of this app for review and creates no other version meanwhile, so the draft was not sent and no approval was spent. Withdraw that version with extension_submit {action: "cancel", store: "safari", submissionId: value.heldSubmissionId} once a workspace owner approves it, then call publish again; ${STORES_READ} shows the held version.`,
   PUBLISH_STORE_NOT_SUPPORTED: "Sending a draft to review is a Chrome Web Store act here; the other stores enter review when they are submitted.",
   PUBLISH_IN_FLIGHT: `The publish you asked for is already on its way and nothing was dispatched again. Read the record with ${STORES_READ}, or call extension_submit {action: "status"} when it exists, and never send the draft again while it is on its way.`,
+  SAFARI_NOT_PENDING_RELEASE: `App Store Connect holds no version waiting for a developer release, so nothing was released and no approval was requested; the message names the state Apple last reported. A version goes on sale here only after Apple approves it under manual release; ${STORES_READ} shows each Safari submission's state.`,
+  SAFARI_RELEASE_NOT_MANUAL: "App Store Connect reads this version as releasing on its own after approval, so there is no manual release to make and no approval was requested. The release mode is changed in App Store Connect.",
+  RELEASE_STORE_NOT_SUPPORTED: "A manual release is an App Store act; Chrome, Edge and Firefox put an approved version live on their own. Call release with browsers [\"safari\"].",
+  RELEASE_IN_FLIGHT: `The release you asked for is already on its way and nothing was dispatched again. Read the record with ${STORES_READ} before asking again.`,
+  RELEASE_WORKFLOW_UNSUPPORTED: "Saving the project settings in the console brings the project's platform setup up to date; then call again.",
   CANCEL_IN_FLIGHT: `The withdrawal you asked for is already on its way and nothing was dispatched again. Read the record with ${STORES_READ} before asking again.`,
   SUBMISSION_NOT_CANCELLABLE: `The store holds no review to withdraw for this submission; the platform read the store's current state before asking anyone to approve. ${STORES_READ} reads the record it settled.`,
   REVIEW_RECORD_STALE: `The store's last answer about this submission is older than a day and the platform could not read the store for this project from here, so it asked the project's poller instead of withdrawing on a stale record. Read the submission again in a few minutes with ${STORES_READ}, then call again.`,
@@ -149,6 +154,8 @@ const STATE_CODES: Record<string, string> = {
   SUBMISSION_NOT_CANCELLABLE: "store-not-reviewing",
   REVIEW_RECORD_STALE: "review-record-stale",
 };
+
+const RELEASE_STATE_CODES = new Set(["SAFARI_NOT_PENDING_RELEASE", "SAFARI_RELEASE_NOT_MANUAL"]);
 
 function refusedStatus(act: string): string {
   return `${act}-refused`;
@@ -212,6 +219,15 @@ function refusal(act: ShipAct, read: ProjectApiRefusal, api: ProjectApi): string
       ...(before ? { refusedBeforeApproval: true } : {}),
       ...(read.code === "LISTING_INCOMPLETE" ? { listingIncomplete: body } : {}),
       ...storeStateFields(read.code, body),
+      ...(RELEASE_STATE_CODES.has(read.code)
+        ? {
+            ...(text(body.state) ? { state: text(body.state) } : {}),
+            ...(text(body.checkedAt) ? { checkedAt: text(body.checkedAt) } : {}),
+            ...(text(body.version) ? { version: text(body.version) } : {}),
+            ...(text(body.buildNumber) ? { buildNumber: Number(text(body.buildNumber)) } : {}),
+          }
+        : {}),
+      ...(act.act === "release" && text(body.connectUrl) ? { connectUrl: text(body.connectUrl) } : {}),
       ...(text(body.uploadRunState)
         ? {
             uploadRunState: text(body.uploadRunState),

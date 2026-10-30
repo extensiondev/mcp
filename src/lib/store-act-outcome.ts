@@ -112,6 +112,41 @@ export function judgeCancel(record: PlatformSubmission): Verdict {
   return { kind: "waiting", status: status || null };
 }
 
+const ON_SALE_STATES = new Set(["READY_FOR_SALE", "READY_FOR_DISTRIBUTION"]);
+
+export function judgeRelease(acceptedAt: string): (record: PlatformSubmission) => Verdict {
+  return (record) => {
+    const review = record.storeReview;
+    const state = text(review?.state).toUpperCase();
+    const answered = record.publish?.act === "release" && after(record.publish.at, acceptedAt) ? record.publish : null;
+    const runFailed =
+      record.dispatch?.action === "release" &&
+      record.dispatch.runState === "failed" &&
+      after(record.dispatch.dispatchedAt, acceptedAt);
+
+    if ((answered && answered.status !== "released") || (!answered && runFailed)) {
+      return { kind: "recorded", status: "release-failed", storeState: state || null, failed: true };
+    }
+
+    if (ON_SALE_STATES.has(state) && after(review?.checkedAt, acceptedAt)) {
+      return { kind: "recorded", status: "released", storeState: state };
+    }
+
+    if (answered) return { kind: "recorded", status: "released", storeState: state || null };
+
+    return { kind: "waiting", status: state || null };
+  };
+}
+
+export function releaseFailureReason(record: PlatformSubmission | null, fallback: string): string {
+  if (!record) return fallback;
+
+  const answered = record.publish?.act === "release" ? text(record.publish.storeMessage) : "";
+  const runReason = record.dispatch?.action === "release" ? text(record.dispatch.failedReason) : "";
+
+  return answered || runReason || fallback;
+}
+
 export function judgeRollout(percentage: number): (rollout: Row) => Verdict {
   return (rollout) => {
     const current = typeof rollout.percentage === "number" ? rollout.percentage : null;

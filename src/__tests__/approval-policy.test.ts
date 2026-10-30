@@ -19,6 +19,7 @@ const RULED_TABLE: Array<[keyof typeof APPROVAL_POLICY, "plain" | "approval" | "
   ["extension_store.publish", "approval"],
   ["extension_store.cancel", "approval"],
   ["extension_store.rollout", "approval"],
+  ["extension_store.release", "approval"],
   ["extension_release_promote", "approval"],
   ["extension_release.cut", "approval"],
   ["extension_release.rollback", "approval"],

@@ -220,7 +220,7 @@ export const TOOL_POLICY: Record<string, ToolPolicy> = {
   extension_submit: {
     group: "platform",
     annotations: acts({ destructiveHint: true, openWorldHint: true }),
-    ships: (args) => args.action === "cancel" || args.action === "rollout" || args.action === "publish" || args.action === "review" || args.action === "sync-listing" || ((args.action === undefined || args.action === "submit") && args.dryRun === false),
+    ships: (args) => args.action === "cancel" || args.action === "rollout" || args.action === "release" || args.action === "publish" || args.action === "review" || args.action === "sync-listing" || ((args.action === undefined || args.action === "submit") && args.dryRun === false),
   },
 };
 

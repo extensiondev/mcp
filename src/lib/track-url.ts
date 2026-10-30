@@ -158,6 +158,13 @@ function submitPlan(call: TrackCall): TrackPlan {
   }
 
   if (action === "rollout") return { track: { page: "store", target: { store: "chrome" } } };
+
+  if (action === "release") {
+    const submissionId = text(call.value.submissionId) || text(call.args.submissionId);
+
+    return { track: { page: submissionId ? "submission" : "store", target: { store: "safari", submissionId } } };
+  }
+
   if (action === "configure-store") return { track: { page: "store-settings" } };
 
   if (action === "publish" || action === "review") {
