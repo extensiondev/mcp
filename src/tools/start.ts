@@ -226,6 +226,7 @@ export async function handler(
     command,
     profileReused: carryover.reused,
     headless: visibility.headless,
+    allowControl,
   });
   child.on("exit", () => {
     removeSession(args.projectPath, browser, pid);
@@ -371,6 +372,7 @@ export async function handler(
       command,
       profileReused,
       headless: visibility.headless,
+      allowControl,
     });
   }
 

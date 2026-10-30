@@ -11,6 +11,7 @@ import fs from "node:fs";
 import { envelope } from "./envelope";
 import { contractErrorList } from "./wait-modes";
 import { pidState } from "./process-identity";
+import { findSessionInfo } from "./process-manager";
 import { liveProjectSessions } from "./session-browser";
 import { readyContractPath } from "./session-paths";
 
@@ -24,6 +25,7 @@ export interface ProductionReceipt {
   contract: ReadyContract;
   verb: "start" | "preview";
   control: boolean;
+  controlRequested: boolean | null;
   controlPort: number | null;
   cdpPort: number | null;
   attachedAt: string | null;
@@ -46,6 +48,15 @@ function phaseOf(contract: ReadyContract): ProductionPhase {
   if (contract.status === "stopped") return "stopped";
 
   return contract.status === "ready" ? "ready" : "starting";
+}
+
+function controlRequestedAtLaunch(projectPath: string, browser: string, contract: ReadyContract): boolean | null {
+  const registered = findSessionInfo(projectPath, browser);
+
+  if (!registered || typeof registered.allowControl !== "boolean") return null;
+  if (typeof contract.pid === "number" && registered.pid !== contract.pid) return null;
+
+  return registered.allowControl;
 }
 
 export function readSessionReceipt(projectPath: string, browser: string): SessionReceipt {
@@ -72,6 +83,7 @@ export function readSessionReceipt(projectPath: string, browser: string): Sessio
     contract,
     verb: contract.command,
     control: controlPort !== null,
+    controlRequested: controlRequestedAtLaunch(projectPath, browser, contract),
     controlPort,
     cdpPort: port(contract.cdpPort),
     attachedAt: typeof contract.executorAttachedAt === "string" && contract.executorAttachedAt ? contract.executorAttachedAt : null,
@@ -93,9 +105,17 @@ const NOT_DEV = "Do not start extension_dev for it: that replaces the production
 const BRIDGE_VERBS = "extension_storage, extension_reload, extension_open with a surface, extension_dom_snapshot by tab and extension_eval";
 
 function controlNote(receipt: ProductionReceipt): string {
-  return receipt.control
-    ? ""
-    : ` This run was started without allowControl, so once it is up the debug-port reads work while ${BRIDGE_VERBS} need extension_start again with allowControl: true and replace: true.`;
+  if (receipt.control) return "";
+
+  if (receipt.controlRequested === true) {
+    return ` This run asked for the control channel (allowControl: true in this server's session registry) and the contract has not recorded its port yet; once it lands, ${BRIDGE_VERBS} reach it, and the debug-port reads need no control at all.`;
+  }
+
+  if (receipt.controlRequested === false && receipt.phase === "ready") {
+    return ` This run was started without allowControl (this server's session registry recorded the launch, and the ready contract names no controlPort), so the debug-port reads work while ${BRIDGE_VERBS} need extension_start again with allowControl: true and replace: true.`;
+  }
+
+  return "";
 }
 
 function replacingRun(receipt: ProductionReceipt, projectPath: string, browser: string): number | null {
@@ -107,7 +127,7 @@ function replacingRun(receipt: ProductionReceipt, projectPath: string, browser: 
 function productionWords(receipt: ProductionReceipt, projectPath: string, browser: string, need: string): NoSessionWords {
   const { contract, path } = receipt;
   const session = `The ${browser} production session (extension_start)`;
-  const again = receipt.control ? "extension_start again with allowControl: true" : "extension_start again";
+  const again = receipt.control || receipt.controlRequested === true ? "extension_start again with allowControl: true" : "extension_start again";
 
   switch (receipt.phase) {
     case "engine-gone": {
@@ -149,7 +169,7 @@ function productionWords(receipt: ProductionReceipt, projectPath: string, browse
   if (receipt.phase === "ready" && (browserPid !== null || receipt.attachedAt)) {
     return {
       message: `${session} names no debug port yet: ${path} reads status ready${browserPid !== null ? ` and the browser it launched (pid ${browserPid})` : ""}${receipt.attachedAt ? `, with the background attached at ${receipt.attachedAt}` : ""}, but no cdpPort, ${need}.`,
-      hint: `Call ${waitCall(projectPath, browser)}, then this call again: the engine stamps cdpPort once the browser binds its debug port, and an engine that opens none on a production run (before Extension.js 4.1.36) never will.${controlNote(receipt)} ${NOT_DEV}`,
+      hint: `Call ${waitCall(projectPath, browser)}, then this call again: the engine stamps cdpPort once the browser binds its debug port, and an engine that opens none on a production run (before Extension.js 4.1.34) never will.${controlNote(receipt)} ${NOT_DEV}`,
     };
   }
 

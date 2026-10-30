@@ -80,20 +80,80 @@ describe("the no-session answer reads the start receipt before choosing its word
     );
 
     expect(words.hint).toMatch(/^Call extension_wait \{projectPath/);
-    expect(words.hint).toMatch(/before Extension\.js 4\.1\.36/);
+    expect(words.hint).toMatch(/before Extension\.js 4\.1\.34/);
     expect(words.hint).not.toMatch(/without allowControl/);
   });
 
-  it("says the bridge verbs need allowControl: true when the receipt records a run without control", () => {
+  it("says the bridge verbs need allowControl: true when the ready receipt names no controlPort and the registry recorded a launch without it", () => {
+    const project = tmpProject();
+    writeContract(project, "chrome", "start", { status: "ready", pid: process.pid, controlPort: null, cdpPort: undefined, browserPid: process.pid });
+    registerSession({ pid: process.pid, browser: "chrome", projectPath: project, command: "start", allowControl: false });
+
+    try {
+      const words = noSessionWords(project, "chrome", DEV);
+
+      expect(words.message).toMatch(/names no debug port yet/);
+      expect(words.hint).toMatch(/^Call extension_wait \{projectPath/);
+      expect(words.hint).toMatch(/started without allowControl \(this server's session registry recorded the launch, and the ready contract names no controlPort\), so the debug-port reads work while extension_storage, extension_reload, extension_open with a surface, extension_dom_snapshot by tab and extension_eval need extension_start again with allowControl: true and replace: true/);
+      expect(words.hint).toMatch(/Do not start extension_dev/);
+    } finally {
+      removeSession(project, "chrome", process.pid);
+    }
+  });
+
+  it("never says a starting run was started without allowControl when the registry recorded allowControl: true", () => {
+    const project = tmpProject();
+    writeContract(project, "chrome", "start", { status: "starting", pid: process.pid, controlPort: null, cdpPort: undefined, browserPid: undefined });
+    registerSession({ pid: process.pid, browser: "chrome", projectPath: project, command: "start", allowControl: true });
+
+    try {
+      const words = noSessionWords(project, "chrome", DEV);
+
+      expect(words.message).toMatch(/is still starting/);
+      expect(words.hint).not.toMatch(/without allowControl/);
+      expect(words.hint).toMatch(/This run asked for the control channel \(allowControl: true in this server's session registry\) and the contract has not recorded its port yet; once it lands, extension_storage, extension_reload, extension_open with a surface, extension_dom_snapshot by tab and extension_eval reach it, and the debug-port reads need no control at all\./);
+      expect(words.hint).toMatch(/Do not start extension_dev/);
+    } finally {
+      removeSession(project, "chrome", process.pid);
+    }
+  });
+
+  it("leaves the control sentence out while the receipt is starting and nothing says whether control was asked for", () => {
     const project = tmpProject();
     writeContract(project, "chrome", "start", { status: "starting", pid: process.pid, controlPort: null, cdpPort: undefined, browserPid: undefined });
 
     const words = noSessionWords(project, "chrome", DEV);
 
     expect(words.message).toMatch(/is still starting/);
-    expect(words.hint).toMatch(/^Call extension_wait \{projectPath/);
-    expect(words.hint).toMatch(/started without allowControl, so once it is up the debug-port reads work while extension_storage, extension_reload, extension_open with a surface, extension_dom_snapshot by tab and extension_eval need extension_start again with allowControl: true and replace: true/);
+    expect(words.hint).not.toMatch(/allowControl/);
     expect(words.hint).toMatch(/Do not start extension_dev/);
+  });
+
+  it("does not trust a registry entry for another run of the same project and browser", () => {
+    const project = tmpProject();
+    writeContract(project, "chrome", "start", { status: "ready", pid: process.pid, controlPort: null, cdpPort: undefined, browserPid: process.pid });
+    registerSession({ pid: process.pid + 1, browser: "chrome", projectPath: project, command: "start", allowControl: false });
+
+    try {
+      expect(noSessionWords(project, "chrome", DEV).hint).not.toMatch(/without allowControl/);
+    } finally {
+      removeSession(project, "chrome", process.pid + 1);
+    }
+  });
+
+  it("restarts a run that asked for control with allowControl: true after its engine process is gone", () => {
+    const project = tmpProject();
+    writeContract(project, "chrome", "start", { status: "starting", pid: 2_147_483_000, controlPort: null, cdpPort: undefined });
+    registerSession({ pid: 2_147_483_000, browser: "chrome", projectPath: project, command: "start", allowControl: true });
+
+    try {
+      const words = noSessionWords(project, "chrome", DEV);
+
+      expect(words.message).toMatch(/has ended/);
+      expect(words.hint).toBe("Call extension_stop to clean up, then extension_start again with allowControl: true.");
+    } finally {
+      removeSession(project, "chrome", 2_147_483_000);
+    }
   });
 
   it("says a new run is replacing the one that wrote the receipt when this server registered it", () => {
@@ -171,12 +231,18 @@ describe("the engine's own control refusals carry the receipt's words too", () =
       signal: null,
     };
 
-    const out = JSON.parse(await runActVerb(["storage", "get", "--browser", "chrome"], project));
+    registerSession({ pid: process.pid, browser: "chrome", projectPath: project, command: "start", allowControl: false });
 
-    expect(out.error.code).toBe("E_SESSION_NOT_FOUND");
-    expect(out.error.message).toMatch(/started without allowControl/);
-    expect(out.error.message).toMatch(/extension_start again with allowControl: true and replace: true/);
-    expect(out.error.message).not.toMatch(/extension_dev without allowControl: false/);
+    try {
+      const out = JSON.parse(await runActVerb(["storage", "get", "--browser", "chrome"], project));
+
+      expect(out.error.code).toBe("E_SESSION_NOT_FOUND");
+      expect(out.error.message).toMatch(/started without allowControl/);
+      expect(out.error.message).toMatch(/extension_start again with allowControl: true and replace: true/);
+      expect(out.error.message).not.toMatch(/extension_dev without allowControl: false/);
+    } finally {
+      removeSession(project, "chrome", process.pid);
+    }
   });
 
   it("adds nothing on a controlled production run that is up, so the engine's own refusal stands", () => {
