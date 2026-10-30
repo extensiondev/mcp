@@ -9,6 +9,9 @@
 import fs from "node:fs";
 import path from "node:path";
 
+import { engineManifestView } from "../lib/engine-manifest-view";
+import { sourceManifest } from "../lib/manifest-by-browser";
+
 export const BUNDLE_BYTE_CAP = 5 * 1024 * 1024;
 
 const ENGINE_GLOBAL_PREFIXES = ["__extensionjs", "__extjs"];
@@ -73,6 +76,18 @@ export function mainWorldScripts(manifest: Record<string, unknown>): string[] {
   return out;
 }
 
+export function devRewrittenScripts(projectPath: string, browser: string): string[] {
+  const source = sourceManifest(projectPath);
+
+  return source ? mainWorldScripts(engineManifestView(source, browser)) : [];
+}
+
+function rewrittenNote(rewritten: string[]): string {
+  const count = rewritten.length;
+
+  return `The dev build rewrites the ${count} world: MAIN content ${count === 1 ? "script" : "scripts"} of the source manifest (${rewritten.join(", ")}) into isolated loaders, so no built bundle was searched; their globals are judged on an extension_start session`;
+}
+
 function escapeForRegExp(text: string): string {
   return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
@@ -133,6 +148,7 @@ export function searchBundles(
   manifest: Record<string, unknown>,
   distDir: string | null,
   names: string[],
+  rewritten: string[] = [],
 ): { hits: Array<{ name: string; file: string }>; bundles: BundleRead } {
   const hits: Array<{ name: string; file: string }> = [];
   const bundles: BundleRead = { searched: [], skipped: [] };
@@ -147,8 +163,9 @@ export function searchBundles(
   const files = mainWorldScripts(manifest);
 
   if (files.length === 0) {
-    bundles.note =
-      "The running manifest declares no content_scripts entry with world: MAIN, so no built bundle was searched for the unknown globals";
+    bundles.note = rewritten.length
+      ? rewrittenNote(rewritten)
+      : "The running manifest declares no content_scripts entry with world: MAIN, so no built bundle was searched for the unknown globals";
 
     return { hits, bundles };
   }
@@ -175,6 +192,8 @@ export function searchBundles(
 }
 
 export function readExtensionGlobals(input: {
+  projectPath: string;
+  browser: string;
   manifest: Record<string, unknown>;
   distDir: string | null;
   ownNames: string[];
@@ -186,7 +205,8 @@ export function readExtensionGlobals(input: {
   const candidates = input.ownNames.filter((name) => !input.exempt.has(name) && !input.leaked.has(name));
   const engineNames = candidates.filter(isEngineGlobal);
   const toSearch = [...new Set([...engineNames, ...(input.unknown ?? [])])];
-  const { hits, bundles } = searchBundles(input.manifest, input.distDir, toSearch);
+  const rewritten = input.dev ? devRewrittenScripts(input.projectPath, input.browser) : [];
+  const { hits, bundles } = searchBundles(input.manifest, input.distDir, toSearch, rewritten);
   const fileOf = new Map(hits.map((hit) => [hit.name, hit.file]));
   const engine: EngineGlobal[] = engineNames.map((name) => {
     const file = fileOf.get(name);
