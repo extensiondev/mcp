@@ -1563,6 +1563,12 @@
           "description": "With stores, ask the platform to read these stores again now (one poll per project per two minutes, within the platform's GitHub budget), under the stored login and with no approval; value.refresh names what happened per store (dispatched, queued for the budget reset, or refused with the reason). The registry reflects the poll a minute or two later, so read again before saying the state changed. Use it after a publish, or after the owner submitted in a store's own dashboard."
         },
         {
+          "name": "submissionId",
+          "type": "string",
+          "required": false,
+          "description": "With stores, read this one store submission by its id (or its first 8 characters) from every submission the platform records, not only the newest shown in submissionHistory; value.stores.submission answers its store, status, the store's own word and, for Firefox, the AMO channel. Use it to verify a record older than the history shows."
+        },
+        {
           "name": "store",
           "type": "\"chrome\" | \"firefox\" | \"edge\" | \"safari\"",
           "required": false,

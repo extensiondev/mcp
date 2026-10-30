@@ -42,6 +42,8 @@ export interface StoreHistoryEntry {
   storeVersion?: { packaged: string; buildNumber?: number };
   storeReview?: StoreReview;
   statusReadAt?: string;
+  statusWord?: string;
+  amoChannel?: "listed" | "unlisted";
 }
 
 export type PlatformStoreRecords =
@@ -104,7 +106,18 @@ export function storeConfigView(raw: unknown, store?: string): StoreConfigView |
   return view;
 }
 
-function historyEntry(raw: Row): StoreHistoryEntry {
+function amoChannelOf(raw: Row): StoreHistoryEntry["amoChannel"] {
+  const review = isRow(raw.storeReview) ? str(raw.storeReview.visibility)?.toLowerCase() : undefined;
+  const sent = str(raw.amoChannel)?.toLowerCase();
+
+  for (const channel of [review, sent]) {
+    if (channel === "listed" || channel === "unlisted") return channel;
+  }
+
+  return undefined;
+}
+
+export function historyEntry(raw: Row): StoreHistoryEntry {
   const entry: StoreHistoryEntry = {};
   const fields: Array<[keyof StoreHistoryEntry, unknown]> = [
     ["id", raw.id],
@@ -127,6 +140,8 @@ function historyEntry(raw: Row): StoreHistoryEntry {
   const buildNumber = isRow(raw.storeVersion) ? Number(raw.storeVersion.buildNumber) : 0;
   const storeReview = storeReviewOfRow(raw.storeReview);
   const statusReadAt = isRow(raw.statusRead) ? str(raw.statusRead.readAt) : "";
+  const statusWord = isRow(raw.statusRead) ? str(raw.statusRead.word) : "";
+  const amoChannel = amoChannelOf(raw);
 
   if (packaged) {
     entry.storeVersion = {
@@ -137,8 +152,75 @@ function historyEntry(raw: Row): StoreHistoryEntry {
 
   if (storeReview) entry.storeReview = storeReview;
   if (statusReadAt) entry.statusReadAt = statusReadAt;
+  if (statusWord) entry.statusWord = statusWord;
+  if (amoChannel) entry.amoChannel = amoChannel;
 
   return entry;
+}
+
+export type SubmissionLookup =
+  | { found: true; store: string; submission: StoreHistoryEntry }
+  | { found: false; reason: string };
+
+const SHORT_ID = 8;
+
+export function findStoreSubmission(history: Record<string, StoreHistoryEntry[]>, id: string): SubmissionLookup | null {
+  const wanted = id.trim().toLowerCase();
+  if (!wanted) return { found: false, reason: "no submission id was given" };
+
+  const matches = Object.entries(history).flatMap(([store, entries]) =>
+    entries
+      .filter((entry) => {
+        const own = String(entry.id ?? "").toLowerCase();
+
+        return own === wanted || (wanted.length >= SHORT_ID && own.startsWith(wanted));
+      })
+      .map((submission) => ({ store, submission })),
+  );
+
+  if (matches.length === 1) return { found: true, ...matches[0]! };
+
+  if (matches.length > 1) {
+    return { found: false, reason: `${matches.length} submissions start with ${id}; pass more of the id` };
+  }
+
+  return null;
+}
+
+export async function readStoreSubmissionById(args: {
+  ref: { workspace: string; project: string };
+  named: boolean;
+  api?: string;
+  stores: readonly string[];
+  id: string;
+}): Promise<SubmissionLookup> {
+  const opened = await openProjectApi({
+    command: "extension_release_status",
+    project: args.named ? `${args.ref.workspace}/${args.ref.project}` : undefined,
+    api: args.api,
+    expect: args.ref,
+  });
+
+  if (!opened.ok) return { found: false, reason: opened.message };
+
+  const unread: string[] = [];
+
+  for (const store of args.stores) {
+    const read = await projectApiGet<Row>(
+      opened.api,
+      `stores/${encodeURIComponent(store)}/submissions/${encodeURIComponent(args.id.trim())}`,
+    );
+
+    if (read.ok && isRow(read.json)) return { found: true, store, submission: historyEntry(read.json) };
+    if (!read.ok && read.status !== 404) unread.push(`${store}: ${read.message}`);
+  }
+
+  return {
+    found: false,
+    reason: unread.length
+      ? `no store answered submission ${args.id} (${unread.join("; ")})`
+      : `no store holds a submission with id ${args.id}`,
+  };
 }
 
 export function earlierSubmissions(

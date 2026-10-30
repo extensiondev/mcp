@@ -139,7 +139,7 @@ describe("extension_release_status: registration + schema", () => {
       (schema.inputSchema as { properties: Record<string, unknown> })
         .properties,
     );
-    expect(props.sort()).toEqual(["api", "include", "project", "refresh", "releaseId", "since", "store", "workspace"]);
+    expect(props.sort()).toEqual(["api", "include", "project", "refresh", "releaseId", "since", "store", "submissionId", "workspace"]);
     expect((schema.inputSchema as { required: string[] }).required).toEqual([]);
   });
 

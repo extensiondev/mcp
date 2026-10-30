@@ -35,8 +35,11 @@ import {
 } from "../lib/review-beside-submission";
 import {
   earlierSubmissions,
+  findStoreSubmission,
   readPlatformStoreRecords,
+  readStoreSubmissionById,
   type StoreHistoryEntry,
+  type SubmissionLookup,
 } from "../lib/platform-store-records";
 import { repairEdgeStoreUrl } from "../lib/edge-listing";
 import { storeRecordUnread } from "../lib/store-readiness";
@@ -352,16 +355,73 @@ export function firefoxReleasesByChannel(rows: StoreReleaseView[]): Record<strin
   return Object.keys(byChannel).length ? byChannel : null;
 }
 
+export interface PollLaneView {
+  ran: boolean;
+  reason?: string;
+  checked?: number;
+  updated?: number;
+  errors?: number;
+  versionsRead?: number;
+  versionsUnread?: string;
+}
+
 export interface NormalizedStoresStatus {
   lastSubmission?: Record<string, unknown>;
   lastOverride?: Record<string, unknown>;
   reviews: Record<string, ReviewView>;
   lastPollAt?: string;
+  lanes: Record<string, PollLaneView>;
+}
+
+function count(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isInteger(value) && value >= 0 ? value : undefined;
+}
+
+function pollLanesOf(raw: unknown): Record<string, PollLaneView> {
+  const out: Record<string, PollLaneView> = {};
+  if (!isPlainObject(raw)) return out;
+
+  for (const [store, lane] of Object.entries(raw)) {
+    if (!isPlainObject(lane) || typeof lane.ran !== "boolean") continue;
+
+    const view: PollLaneView = { ran: lane.ran };
+    const reason = str(lane.reason);
+    const versionsUnread = str(lane.versionsUnread);
+    if (reason) view.reason = reason;
+
+    for (const key of ["checked", "updated", "errors", "versionsRead"] as const) {
+      const value = count(lane[key]);
+      if (value !== undefined) view[key] = value;
+    }
+
+    if (versionsUnread) view.versionsUnread = versionsUnread;
+
+    out[store] = view;
+  }
+
+  return out;
+}
+
+export function pollLaneSentence(store: string, lane: PollLaneView | undefined, at: string | undefined): string {
+  if (!lane) return "";
+
+  const when = at ? ` at ${at}` : "";
+
+  if (!lane.ran) return `the last store check${when} did not run the ${store} lane: ${lane.reason || "no reason recorded"}`;
+
+  const read =
+    store === "firefox" && lane.versionsRead !== undefined
+      ? `, read ${lane.versionsRead} AMO version${lane.versionsRead === 1 ? "" : "s"}`
+      : "";
+  const wrote = lane.updated ? `wrote ${lane.updated} record${lane.updated === 1 ? "" : "s"}` : "wrote nothing";
+  const unread = lane.versionsUnread ? `; ${lane.versionsUnread}, so no record took AMO's channel` : "";
+
+  return `the last store check${when} checked ${lane.checked ?? 0} ${store} record${lane.checked === 1 ? "" : "s"}${read} and ${wrote}${unread}`;
 }
 
 export function normalizeStoresStatus(json: unknown): NormalizedStoresStatus {
   const base = isPlainObject(json) ? json : {};
-  const out: NormalizedStoresStatus = { reviews: {} };
+  const out: NormalizedStoresStatus = { reviews: {}, lanes: {} };
 
   if (isPlainObject(base.lastSubmission)) out.lastSubmission = base.lastSubmission;
   if (isPlainObject(base.lastOverride)) out.lastOverride = base.lastOverride;
@@ -385,6 +445,7 @@ export function normalizeStoresStatus(json: unknown): NormalizedStoresStatus {
 
   if (lastPoll) {
     out.lastPollAt = str(lastPoll.timestamp);
+    out.lanes = pollLanesOf(lastPoll.lanes);
   } else if (looksLikeLegacyPoll) {
     out.lastPollAt = str(base.updatedAt);
 
@@ -471,11 +532,28 @@ function refreshSentence(refresh: Record<string, StoreRefreshView> | null): stri
   return `A store check was asked for (${rows.join("; ")})${reads.length ? `. ${reads.join(". ")}` : ""}; the registry reflects the rest of the check within a minute or two, so read extension_release_status again before saying the state changed. `;
 }
 
+function lookupSentence(lookup: SubmissionLookup | null, id: string): string {
+  if (!lookup) return "";
+  if (!lookup.found) return `Submission ${id} was not read: ${lookup.reason}. `;
+
+  const entry = lookup.submission;
+  const version = entry.storeVersion?.packaged || entry.version || "";
+  const build = entry.storeVersion?.buildNumber ? ` build ${entry.storeVersion.buildNumber}` : "";
+  const word = entry.statusWord || entry.status || "recorded";
+  const review = entry.storeReview?.state ? `, the store says ${entry.storeReview.state}` : "";
+  const channel = entry.amoChannel ? `, AMO channel ${entry.amoChannel}` : "";
+
+  return `Submission ${entry.id ?? id} (${lookup.store}${version ? ` ${version}` : ""}${build}) reads ${word}${review}${channel}${
+    entry.statusReadAt ? `, read at ${entry.statusReadAt}` : ""
+  }. `;
+}
+
 export async function readStores(args: {
   workspace?: string;
   project?: string;
   api?: string;
   refresh?: string[];
+  submissionId?: string;
 }): Promise<string> {
   const ref = resolveProjectRef(args);
 
@@ -515,6 +593,13 @@ export async function readStores(args: {
     readPlatformStoreRecords({ ref, named, api: args.api, stores: KNOWN_STORES }),
     readPlatformStoreReleases({ ref, named, api: args.api }),
   ]);
+  const wantedId = String(args.submissionId ?? "").trim();
+  const lookup: SubmissionLookup | null = wantedId
+    ? (records.ok ? findStoreSubmission(records.history, wantedId) : null) ??
+      (records.ok || !records.skipped
+        ? await readStoreSubmissionById({ ref, named, api: args.api, stores: KNOWN_STORES, id: wantedId })
+        : { found: false, reason: "reading one submission by id needs a stored login for this project (extension_auth)" })
+    : null;
   const releaseByStore: Record<string, StoreReleaseView> = releases.ok
     ? newestStoreReleaseByStore(releases.rows)
     : {};
@@ -637,6 +722,12 @@ export async function readStores(args: {
     });
     if (earlier.length > 0) row.submissionHistory = earlier;
 
+    const recorded = records.ok ? (records.history[store] ?? []).length : 0;
+    if (recorded > earlier.length + (submissionsByStore[store] ? 1 : 0)) row.submissionCount = recorded;
+
+    const lane = status.lanes[store];
+    if (lane) row.lastPollLane = lane;
+
     const review = storeReviewLine({
       store,
       row: status.reviews[store],
@@ -716,6 +807,15 @@ export async function readStores(args: {
 
     if (review?.status) tail.push(reviewSentence(review));
 
+    const laneSentence = pollLaneSentence(store, row.lastPollLane as PollLaneView | undefined, status.lastPollAt);
+    if (laneSentence && row.configured !== false) tail.push(laneSentence);
+
+    if (typeof row.submissionCount === "number") {
+      tail.push(
+        `${row.submissionCount} submissions recorded, the newest ${((row.submissionHistory as unknown[] | undefined)?.length ?? 0) + 1} shown; read any one with submissionId`,
+      );
+    }
+
     if (store === "safari") {
       const withdrawal = safariWithdrawalSentence(submission, (row.submissionHistory as StoreHistoryEntry[] | undefined) ?? []);
       if (withdrawal) tail.push(withdrawal);
@@ -780,6 +880,7 @@ export async function readStores(args: {
         : {}),
       ...(status.lastPollAt ? { lastPollAt: status.lastPollAt } : {}),
       ...(refresh ? { refresh } : {}),
+      ...(lookup ? { submission: lookup } : {}),
       registryUrls: {
         health: healthUrl,
         status: statusUrl,
@@ -787,7 +888,7 @@ export async function readStores(args: {
       },
       consoleStoresUrl,
     },
-    hint: `${refreshSentence(refresh)}${summaryParts.join(". ")}. This is the registry's recorded state (submissions and the review poller write it)${
+    hint: `${refreshSentence(refresh)}${lookupSentence(lookup, wantedId)}${summaryParts.join(". ")}. This is the registry's recorded state (submissions and the review poller write it)${
       platform.ok ? ", with the platform's own submission records and their runs" : ""
     }; the store dashboards are authoritative and may be ahead of it.`,
     warnings: [
