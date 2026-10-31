@@ -10,6 +10,8 @@ import { isNewerOrSame, type PlatformSubmission, type StoreReview, type StoreSta
 import { releaseChangeOfRow, type ReleaseTypeChange, type ReleaseTypeChangeRefused } from "./release-type-change";
 import { AMO_SIGNED_STATUS, amoUnlistedSigning } from "./review-beside-submission";
 
+import type { UpdateManifestView } from "./firefox-update-url";
+
 export { releaseChangeOfRow, releaseChangeSentence, type ReleaseTypeChange, type ReleaseTypeChangeRefused } from "./release-type-change";
 
 export interface SubmissionView {
@@ -31,6 +33,7 @@ export interface SubmissionView {
   releaseTypeReadAt?: string;
   releaseTypeChanged?: ReleaseTypeChange;
   releaseTypeChangeRefused?: ReleaseTypeChangeRefused;
+  updateManifest?: UpdateManifestView;
 }
 
 

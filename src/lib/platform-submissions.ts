@@ -6,6 +6,7 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
+import { updateManifestOf, type UpdateManifestView } from "./firefox-update-url";
 import { resolveCredential } from "./credential-source";
 import { resolveApiBase, safeApiBase } from "./login-flow";
 import { missedRead, type RecordRead } from "./act-outcome";
@@ -153,6 +154,7 @@ export function recordedStoreVersionOf(raw: unknown): RecordedStoreVersion | und
 export interface PlatformSubmission {
   id?: string;
   store: string;
+  updateManifest?: UpdateManifestView;
   status?: string;
   statusRead?: StoreStatusRead;
   rawStatus?: string;
@@ -416,7 +418,9 @@ export function toSubmission(raw: Record<string, unknown>): PlatformSubmission |
   const appStoreRelease = appStoreReleaseOf(raw.appStoreRelease);
   const dispatch = dispatchOf(raw.dispatch);
   const storeVersion = recordedStoreVersionOf(raw.storeVersion);
+  const updateManifest = updateManifestOf(raw.updateManifest);
   if (storeVersion) out.storeVersion = storeVersion;
+  if (updateManifest) out.updateManifest = updateManifest;
   if (storeReview) out.storeReview = storeReview;
   if (statusRead) out.statusRead = statusRead;
   if (storeUpload) out.storeUpload = storeUpload;

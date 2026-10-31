@@ -76,6 +76,7 @@ import {
 import { CONFIGURE_STORE, configureStore } from "./store-configure";
 import { releaseVersion } from "./store-release";
 import { cancelSubmission, raiseRollout } from "./store-rollout";
+import { firefoxUpdateManifestOutcome } from "../lib/firefox-update-url";
 import { rowsWithSentVersion } from "../lib/store-answer";
 import { STORES_READ_CALL, storeVersionStatus } from "./store-version-status";
 import {
@@ -1428,8 +1429,12 @@ async function answer(args: SubmitToolArgs): Promise<string> {
           firefoxConnectUrl(credential.ref, args.api),
         )
       : null;
-    const sourcesLine = firefoxSources ? ` ${firefoxSources.say}` : "";
+    const firefoxUpdates = outcome.stores.includes("firefox")
+      ? firefoxUpdateManifestOutcome(waited.record?.firefox as Record<string, unknown> | undefined, result.submissions)
+      : null;
+    const sourcesLine = `${firefoxSources ? ` ${firefoxSources.say}` : ""}${firefoxUpdates ? ` ${firefoxUpdates.say}` : ""}`;
     if (firefoxSources) result.firefoxSourceArchive = firefoxSources;
+    if (firefoxUpdates) result.firefoxUpdateManifest = firefoxUpdates;
 
     if (waited.failed) {
       return envelope({

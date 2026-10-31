@@ -21,9 +21,22 @@ export const UPDATE_URL_CHECK = "firefox.update_url";
 export const DEFAULT_FIREFOX_CHANNEL = "stable";
 
 const HOSTED_MANIFEST = /\/channels\/[^/\s"']+\/updates\.json/;
-const UPDATES_READ_AT = /look for updates\b[^.]*?\bat (https:\/\/[^\s"']+?)\.?(?=\s|$)/i;
+const UPDATES_READ_AT = /look for updates\b[^.]*?\bat (https?:\/\/[^\s"']+?)[.,;:]?(?=\s|$)/i;
 const PREFIXES = ["", "firefox:", "gecko:"];
 const RELEASE_CHANNEL_KEYS = ["releaseChannel", "targetChannel"];
+
+export interface UpdateManifestServed {
+  url: string;
+  served: boolean;
+  checkedAt?: string;
+  reason?: string;
+  channel?: string;
+  pinned?: { channel: string; buildId: string; pinnedAt: string };
+}
+
+export interface UpdateManifestView extends UpdateManifestServed {
+  say: string;
+}
 
 export interface FirefoxUpdateManifest {
   channel: string;
@@ -32,7 +45,82 @@ export interface FirefoxUpdateManifest {
   manifestUpdateUrl: string | null;
   suggested: boolean;
   noNetworkPromise?: string;
+  served?: boolean;
+  checkedAt?: string;
+  reason?: string;
+  pinned?: { channel: string; buildId: string; pinnedAt: string };
   say: string;
+}
+
+const SERVED_WORDS = /served now|not served yet/i;
+
+export const NOT_SERVED_REASONS: Record<string, string> = {
+  "channel-not-public": "no signed build is on that channel yet",
+  "no-signed-build": "no signed build is on that channel yet",
+  "no-gecko-id": "the signed builds on that channel carry no browser_specific_settings.gecko.id",
+  unreachable: "the address could not be read",
+};
+
+export function notServedReason(reason: unknown): string {
+  const code = text(reason);
+
+  return NOT_SERVED_REASONS[code] ?? (code ? `the address answered ${code}` : "the address did not answer 200");
+}
+
+export function updateManifestServedSentence(view: UpdateManifestServed): string {
+  const pinned = view.pinned
+    ? ` The platform pinned build ${text(view.pinned.buildId)} to the ${text(view.pinned.channel)} channel for Firefox; the manifest lists it within a minute.`
+    : "";
+
+  if (view.served) {
+    return `Firefox finds updates at ${view.url}, served now${view.checkedAt ? ` (checked ${view.checkedAt})` : ""}.${pinned}`;
+  }
+
+  return `The update manifest at ${view.url} is not served yet: ${notServedReason(view.reason)}; the platform serves it once AMO signs the version, whatever the channel's audience, with no step for you.${pinned}`;
+}
+
+export function updateManifestOf(raw: unknown): UpdateManifestView | undefined {
+  if (!isRow(raw)) return undefined;
+
+  const url = text(raw.url);
+  if (!url || typeof raw.served !== "boolean") return undefined;
+
+  const pin = isRow(raw.pinned) ? raw.pinned : null;
+  const view: UpdateManifestServed = {
+    url,
+    served: raw.served,
+    ...(text(raw.checkedAt) ? { checkedAt: text(raw.checkedAt) } : {}),
+    ...(text(raw.reason) ? { reason: text(raw.reason) } : {}),
+    ...(text(raw.channel) ? { channel: text(raw.channel) } : {}),
+    ...(pin && text(pin.channel) && text(pin.buildId)
+      ? { pinned: { channel: text(pin.channel), buildId: text(pin.buildId), pinnedAt: text(pin.pinnedAt) } }
+      : {}),
+  };
+
+  return { ...view, say: updateManifestServedSentence(view) };
+}
+
+export function firefoxUpdateManifestOutcome(record: Row | undefined, rows: unknown): UpdateManifestView | null {
+  const sent = Array.isArray(rows) ? rows.filter(isRow).find((row) => text(row.store) === "firefox") : null;
+
+  return updateManifestOf(record?.updateManifest) ?? updateManifestOf(sent?.updateManifest) ?? null;
+}
+
+function servedFieldsOf(json: Row): Pick<FirefoxUpdateManifest, "served" | "checkedAt" | "reason" | "pinned"> {
+  const block = isRow(json.firefoxPreflight) ? json.firefoxPreflight : {};
+  const read = isRow(block.updateManifest) ? block.updateManifest : null;
+  if (!read || typeof read.served !== "boolean") return {};
+
+  const pin = isRow(read.pinned) ? read.pinned : null;
+
+  return {
+    served: read.served,
+    ...(text(read.checkedAt) ? { checkedAt: text(read.checkedAt) } : {}),
+    ...(read.served || !text(read.reason) ? {} : { reason: text(read.reason) }),
+    ...(pin && text(pin.channel) && text(pin.buildId)
+      ? { pinned: { channel: text(pin.channel), buildId: text(pin.buildId), pinnedAt: text(pin.pinnedAt) } }
+      : {}),
+  };
 }
 
 export const UPDATE_URL_NETWORK_NOTE =
@@ -126,6 +214,12 @@ export function firefoxUpdateManifestOf(json: Row, ref: ProjectRef | null, proje
             ? platform
             : updateManifestSentence(updateManifestUrl);
 
+  const served = servedFieldsOf(json);
+  const servedSay =
+    served.served !== undefined && !SERVED_WORDS.test(say) && !mismatch
+      ? ` ${updateManifestServedSentence({ ...served, url: updateManifestUrl, served: served.served })}`
+      : "";
+
   return {
     channel,
     updateManifestUrl,
@@ -133,7 +227,8 @@ export function firefoxUpdateManifestOf(json: Row, ref: ProjectRef | null, proje
     manifestUpdateUrl: found,
     suggested: !mismatch && found === null && !platformPassed && !promise,
     ...(promise ? { noNetworkPromise: promise.line } : {}),
-    say,
+    ...served,
+    say: `${say}${servedSay}`,
   };
 }
 
