@@ -214,6 +214,22 @@ describe("extension_builds answers one truth per build", () => {
     );
   });
 
+  it("ledger 343: never answers a finished row's lone record stamp as the start its building read gave", async () => {
+    if (process.platform === "win32") return;
+
+    const building = { id: "982a348", buildId: "982a348", commit: "982a348e1f0c2b3a4d5e6f708192a3b4c5d6e7f8", status: "building", startedAt: "2026-10-31T23:12:06Z", timestamp: "2026-10-31T23:12:06Z", runId: 7003 };
+    body = { items: [building] };
+    const before = (await list()).value.builds[0];
+
+    body = { items: [{ ...building, status: "success", summaryStatus: "success", startedAt: undefined, timestamp: "2026-10-31T23:16:00Z", duration: "4m 57s" }] };
+    const after = (await list()).value.builds[0];
+
+    expect(before.startedAt).toBe("2026-10-31T23:12:06Z");
+    expect(after.startedAt).toBeUndefined();
+    expect(after.timestamp).toBe("2026-10-31T23:16:00Z");
+    expect(after.duration).toBe("4m 57s");
+  });
+
   it("writes every timestamp in one format, seconds in UTC, and invents no createdAt", async () => {
     if (process.platform === "win32") return;
 

@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Ledger 341. An approval message says a consequence sentence the platform's description already ends with once: the gate drops from its reason any sentence the description already holds, so a `configure-store` Chrome public approval no longer repeats "Chrome public sends the next upload to Chrome's review..." twice in a row.
+- Ledger 342. An `E_PROJECT_AMBIGUOUS` refusal never links a project's console page: `value.trackUrl` and the hint name the workspace's project list when every stored login shares one workspace, and no console link otherwise, instead of the newest login's builds page, the project the refusal declined to pick.
+- Ledger 343. `extension_builds` list never answers a finished row's one recorded stamp as its `startedAt`: a finished row with no start and end answers `timestamp` beside the duration, as the description promises, so a build that read `startedAt` 23:12:06Z while building no longer reads `startedAt` 23:16:00Z (the registry record's stamp) once done.
+
 ## 10.19.0
 
 - Publish refusal words. The `PUBLISH_STORE_NOT_SUPPORTED` hint said sending a draft to review was a Chrome Web Store act and that the other stores enter review when submitted, written when Chrome was the only store with a publish act; it now names the stores that take publish from the one draft-label list (`Chrome, Edge or Safari`, with their `browsers` values) and says what Firefox does instead: it has no publish act, AMO reviews a Firefox version when it is submitted. The cancel, rollout and release store refusals were read against www's deciders and still hold. `extension_submit publish` reads the stores that take publish from the same list (`PUBLISH_STORES`, `PUBLISH_BROWSERS_WORDS` in `src/lib/ship-act.ts`) instead of its own hand-typed copy, so the `PublishInputError` for a store off the list names the same `browsers` values the hint does.

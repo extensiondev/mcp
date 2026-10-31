@@ -31,6 +31,8 @@ const BUILD_ROW = {
   commit: "603fc8ab0ff0ac1dae1c598428ce49ad43081c98",
   status: "success",
   buildEnv: "production",
+  startedAt: "2026-10-11T16:44:51Z",
+  completedAt: "2026-10-11T16:45:37Z",
   timestamp: "2026-10-11T16:45:37Z",
   branch: "main",
   browsers: ["chrome"],

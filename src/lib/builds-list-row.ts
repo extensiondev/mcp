@@ -84,7 +84,7 @@ function browsersOf(item: Row): string[] {
 }
 
 function withTimes(out: Row, item: Row, active: boolean): void {
-  const startedAt = isoSeconds(item.startedAt || item.timestamp);
+  const startedAt = isoSeconds(active ? item.startedAt || item.timestamp : item.startedAt);
   const completedAt = active ? "" : isoSeconds(item.completedAt);
   const duration = text(item.duration);
 
@@ -95,7 +95,11 @@ function withTimes(out: Row, item: Row, active: boolean): void {
     return;
   }
 
-  if (startedAt && completedAt && startedAt === completedAt) {
+  const lone = isoSeconds(item.timestamp);
+
+  if (!startedAt && !completedAt && lone) {
+    out.timestamp = lone;
+  } else if (startedAt && completedAt && startedAt === completedAt) {
     out.timestamp = startedAt;
   } else {
     if (startedAt) out.startedAt = startedAt;
