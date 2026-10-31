@@ -199,13 +199,14 @@ export function submitFailedStep(failures: string[], trackUrl: string): NextStep
   );
 }
 
-export function doneStep(stores: string[], itemUrl: string): NextStep {
+export function doneStep(stores: string[], itemUrl: string, taken: string[] = []): NextStep {
   const drafts = stores.length > 0 && stores.every((store) => DRAFT_STORES.has(store));
+  const grounded = stores.includes("chrome") || taken.some((store) => stores.includes(store));
   const uploaded = `The build is uploaded to ${storeNames(stores)} as a draft, recorded as uploaded and not public.`;
   const testers =
     "A store draft cannot be installed from the store, but testers can already install this same build from its extension.dev build link (extension_publish shares it) while the store review has not run.";
 
-  if (drafts && stores.includes("chrome")) {
+  if (drafts && grounded) {
     return nextStep("publish", `${uploaded} ${testers} ${PUBLISH_SENTENCE}`);
   }
 

@@ -100,6 +100,7 @@ import {
   withoutSecretNames,
   type ModeIds,
 } from "../lib/store-connection";
+import { failureLineOf, uploadRefused, uploadTaken } from "../lib/store-upload-words";
 import {
   connectionStep,
   dryRunVerdict,
@@ -430,6 +431,7 @@ export function storeOutcomes(args: {
           recorded: Boolean(status) && !SUBMIT_PENDING.has(status),
           status: status || null,
           storeState: own?.storeUpload?.state ?? own?.storeReview?.state ?? null,
+          ...(own?.storeUpload?.message ? { storeMessage: own.storeUpload.message } : {}),
           storeVersion: own?.storeVersion?.packaged ?? null,
           checkedAt: args.checkedAt,
           source: "platform-record",
@@ -486,7 +488,7 @@ function judgeSubmit(
       store,
       status,
       state: record.storeUpload?.state ?? record.storeReview?.state ?? null,
-      failed: FAILED_STATUSES.has(status),
+      failed: FAILED_STATUSES.has(status) || uploadRefused(record.storeUpload),
     });
   }
 
@@ -1387,15 +1389,14 @@ async function answer(args: SubmitToolArgs): Promise<string> {
     if (retries.length) result.retried = retries;
 
     const failedStores = waited.outcome.recorded
-      ? outcome.stores.filter((store) =>
-          FAILED_STATUSES.has(
-            String(waited.record?.[store]?.status ?? "").toLowerCase(),
-          ),
+      ? outcome.stores.filter(
+          (store) =>
+            FAILED_STATUSES.has(String(waited.record?.[store]?.status ?? "").toLowerCase()) ||
+            uploadRefused(waited.record?.[store]?.storeUpload),
         )
       : [];
-    const failureLines = failedStores.map(
-      (store) =>
-        `${store}: ${String(waited.record?.[store]?.failureReason ?? "").trim() || "the store run failed"}`,
+    const failureLines = failedStores.map((store) =>
+      failureLineOf(store, waited.record?.[store]?.storeUpload, String(waited.record?.[store]?.failureReason ?? "")),
     );
 
     const uploadedFailures = waited.outcome.recorded
@@ -1417,7 +1418,11 @@ async function answer(args: SubmitToolArgs): Promise<string> {
               uploadedFailures.map((row) => String(row.record?.failure?.step)).join("; "),
               firstPage,
             )
-          : doneStep(outcome.stores, itemUrl);
+          : doneStep(
+              outcome.stores,
+              itemUrl,
+              outcome.stores.filter((store) => uploadTaken(waited.record?.[store]?.storeUpload)),
+            );
     const step = retryLine
       ? { ...judgedStep, say: `${retryLine} ${judgedStep.say}` }
       : judgedStep;

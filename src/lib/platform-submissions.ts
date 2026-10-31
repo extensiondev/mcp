@@ -121,6 +121,8 @@ export interface StoreUpload {
   state: string;
   crxVersion?: string;
   checkedAt?: string;
+  source?: string;
+  message?: string;
 }
 
 export interface StepFailure {
@@ -372,7 +374,7 @@ function dispatchOf(raw: unknown): SubmissionDispatch | undefined {
   return out;
 }
 
-function storeUploadOf(raw: unknown): StoreUpload | undefined {
+export function storeUploadOf(raw: unknown): StoreUpload | undefined {
   if (!raw || typeof raw !== "object") return undefined;
 
   const row = raw as Record<string, unknown>;
@@ -382,8 +384,12 @@ function storeUploadOf(raw: unknown): StoreUpload | undefined {
   const out: StoreUpload = { state };
   const crxVersion = str(row.crxVersion);
   const checkedAt = str(row.checkedAt);
+  const source = str(row.source);
+  const message = str(row.message);
   if (crxVersion) out.crxVersion = crxVersion;
   if (checkedAt) out.checkedAt = checkedAt;
+  if (source) out.source = source;
+  if (message) out.message = message;
 
   return out;
 }

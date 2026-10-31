@@ -10,11 +10,13 @@ import { ConsoleProjectPage } from "@extension.dev/urls/paths";
 
 import { envelope, isEnvelope } from "../lib/envelope";
 import { AMO_FILE_STATUS_LABEL, SIGNED_STATE_SENTENCE } from "../lib/platform-store-releases";
+import { storeUploadOf } from "../lib/platform-submissions";
 import { AMO_SIGNED_STATUS } from "../lib/review-beside-submission";
 import { consoleProjectUrl } from "../lib/registry";
 import { readsBeforeDispatch } from "../lib/store-read-landed";
 import { isRow, text } from "../lib/ship-act";
 import { releaseChangeOfRow, releaseChangeSentence, releaseTypeMeaning, type ReleaseTypeChange, type ReleaseTypeChangeRefused } from "../lib/store-row-sources";
+import { packageRefusedSentence, uploadRefused } from "../lib/store-upload-words";
 import { readStores } from "./store-status";
 
 import type { NextStep } from "../lib/store-connection";
@@ -32,6 +34,7 @@ export interface StoreVersionStatus {
   buildNumber: number | null;
   status: string | null;
   state: string | null;
+  storeMessage?: string;
   readAt: string | null;
   source: string | null;
   releaseType: string | null;
@@ -58,6 +61,7 @@ function statusOfRow(row: Row): StoreVersionStatus {
   const submission: Row = isRow(row.lastSubmission) ? row.lastSubmission : {};
   const read: Row = isRow(submission.statusRead) ? submission.statusRead : {};
   const review: Row = isRow(submission.storeReview) ? submission.storeReview : {};
+  const upload = storeUploadOf(submission.storeUpload);
   const storeVersion: Row = isRow(submission.storeVersion) ? submission.storeVersion : {};
   const buildNumber = typeof storeVersion.buildNumber === "number" ? storeVersion.buildNumber : null;
 
@@ -67,12 +71,13 @@ function statusOfRow(row: Row): StoreVersionStatus {
     version: text(storeVersion.packaged) || text(submission.version) || null,
     buildNumber,
     status: text(submission.status) || null,
-    state: text(read.storeWord) || text(review.state) || null,
-    readAt: text(read.readAt) || text(review.checkedAt) || null,
-    source: text(read.source) || null,
+    state: text(read.storeWord) || upload?.state || text(review.state) || null,
+    ...(upload?.message ? { storeMessage: upload.message } : {}),
+    readAt: text(read.readAt) || upload?.checkedAt || text(review.checkedAt) || null,
+    source: text(read.source) || upload?.source || null,
     releaseType: text(submission.releaseType) || null,
     ...releaseChangeOfRow(submission),
-    nextStep: isRow(row.nextStep) ? (row.nextStep as unknown as NextStep) : null,
+    nextStep: !uploadRefused(upload) && isRow(row.nextStep) ? (row.nextStep as unknown as NextStep) : null,
   };
 }
 
@@ -91,7 +96,8 @@ export function storeVersionSentence(entry: StoreVersionStatus, refresh: Row | n
   const build = entry.buildNumber ? ` build ${entry.buildNumber}` : "";
   const signed = entry.store === "firefox" && entry.status === AMO_SIGNED_STATUS;
   const status = signed ? SIGNED_STATE_SENTENCE : entry.status ?? "recorded";
-  const state = entry.state ? `, ${signed ? AMO_FILE_STATUS_LABEL : "the store says"} ${entry.state}` : "";
+  const refused = packageRefusedSentence(entry.store, entry.state ? { state: entry.state, message: entry.storeMessage } : undefined);
+  const state = refused ? `, ${refused}` : entry.state ? `, ${signed ? AMO_FILE_STATUS_LABEL : "the store says"} ${entry.state}` : "";
   const read = entry.source
     ? ` (${entry.source}${entry.readAt ? ` at ${entry.readAt}` : ""})`
     : landedUnsourced(entry, refresh, wait) || " (no store read behind it)";

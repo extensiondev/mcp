@@ -23,6 +23,7 @@ import {
   readPlatformSubmissions,
   retryNote,
   statusReadOf,
+  storeUploadOf,
   type QueuedStoreActView,
   type StoreStatusRead,
   type SubmissionRun,
@@ -44,6 +45,7 @@ import {
   type SubmissionLookup,
 } from "../lib/platform-store-records";
 import { repairEdgeStoreUrl } from "../lib/edge-listing";
+import { packageRefusedSentence } from "../lib/store-upload-words";
 import { platformSubmissionView, releaseChangeOfRow, releaseChangeSentence, releaseModeOfRow, RELEASE_MODE_WORDS, type SubmissionView } from "../lib/store-row-sources";
 import { storeRecordUnread } from "../lib/store-readiness";
 import { outcomeClock, waitBound } from "../lib/act-outcome";
@@ -272,6 +274,7 @@ function submissionView(row: Record<string, unknown>): SubmissionView {
   const supersededBy = status === "superseded" ? str(row.supersededBy) : undefined;
   const storeCrxVersion = typeof row.storeCrxVersion === "string" ? row.storeCrxVersion.trim() : "";
   const storeReview = storeReviewOfRow(row.storeReview);
+  const storeUpload = storeUploadOf(row.storeUpload);
   const statusRead = statusReadOf(row.statusRead);
   const signed = amoUnlistedSigning(str(row.store), storeReview);
   const mode = releaseModeOfRow(row.appStoreRelease, publish);
@@ -291,6 +294,7 @@ function submissionView(row: Record<string, unknown>): SubmissionView {
   if (storeVersion) view.storeVersion = storeVersion;
   if (storeCrxVersion) view.storeCrxVersion = storeCrxVersion;
   if (storeReview) view.storeReview = storeReview;
+  if (storeUpload) view.storeUpload = storeUpload;
 
   return view;
 }
@@ -846,11 +850,13 @@ async function answerStores(
     }
 
     if (submission) {
+      const refused = packageRefusedSentence(store, submission.storeUpload);
+
       tail.push(
         `last submission${submission.version ? ` v${submission.version}` : ""} ${
           submission.status === AMO_SIGNED_STATUS ? SIGNED_STATE_SENTENCE : submission.status || "recorded"
         }${statusReadNote(submission.statusRead, submission.status === AMO_SIGNED_STATUS)}${submission.submittedAt ? ` at ${submission.submittedAt}` : ""}${
-          submission.failureReason ? ` (${submission.failureReason})` : ""
+          refused ? `: ${refused}` : submission.failureReason ? ` (${submission.failureReason})` : ""
         }${submission.supersededBy ? ` (replaced by ${submission.supersededBy} before review, not rejected)` : ""}`,
       );
 
