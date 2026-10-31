@@ -144,7 +144,7 @@ describe("a Safari version Apple approved for manual release names the Release a
 
     expect(row?.state).toBe("approved");
     expect(storeReleaseSentence(row!)).toContain(
-      'safari 0.2.0 (build 14) approved, set to manual release as App Store Connect answered 2026-10-30T11:00:00.000Z, waiting for your release with extension_submit {action: "release", browsers: ["safari"]}',
+      'safari 0.2.0 (build 14) approved, set to manual release as App Store Connect answered 2026-10-30T11:00:00.000Z: approval holds it until you release it, waiting for your release with extension_submit {action: "release", browsers: ["safari"]}',
     );
 
     expect(storeReleaseSentence({ ...row!, source: "inferred" })).not.toContain("waiting for your release");

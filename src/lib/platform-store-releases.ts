@@ -7,6 +7,7 @@
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
 import { openProjectApi, projectApiGet } from "./project-api";
+import { releaseTypeMeaning } from "./store-row-sources";
 
 export const STORE_RELEASE_STATES = ["uploaded", "in-review", "approved", "live", "rejected", "withdrawn", "superseded"] as const;
 
@@ -239,7 +240,7 @@ export function storeReleaseSentence(row: StoreReleaseView): string {
 
   const mode = row.releaseType ? RELEASE_MODE_WORDS[row.releaseType] : undefined;
   const release = mode
-    ? `, ${mode} as App Store Connect answered ${row.releaseTypeReadAt || "at an unknown time"}`
+    ? `, ${mode} as App Store Connect answered ${row.releaseTypeReadAt || "at an unknown time"}: ${releaseTypeMeaning(row.releaseType)}`
     : row.store === "safari"
       ? ", release mode not read yet"
       : "";

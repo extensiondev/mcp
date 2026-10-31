@@ -28,10 +28,27 @@ export interface SubmissionView {
   releaseTypeReadAt?: string;
 }
 
+export const RELEASE_TYPE_MEANING: Record<string, string> = {
+  AFTER_APPROVAL: "approval publishes it on the App Store at once, and an approval cannot be taken back from here",
+  MANUAL: "approval holds it until you release it",
+  SCHEDULED: "approval holds it until the date set in App Store Connect",
+};
+
+export const SAFARI_MANUAL_HOLD =
+  "to hold it, set Version Release to Manually release this version in App Store Connect before review, or state `- Release: after approval` under `## Safari` in STORE.md to publish at once by choice";
+
+export function releaseTypeMeaning(type: string | undefined): string {
+  const upper = String(type ?? "").toUpperCase();
+  const meaning = RELEASE_TYPE_MEANING[upper];
+  if (!meaning) return "";
+
+  return upper === "AFTER_APPROVAL" ? `${meaning}; ${SAFARI_MANUAL_HOLD}` : meaning;
+}
+
 export const RELEASE_MODE_WORDS: Record<string, string> = {
-  AFTER_APPROVAL: "is set to release automatically after approval",
-  MANUAL: "is set to manual release",
-  SCHEDULED: "is set to a scheduled release",
+  AFTER_APPROVAL: `is set to release automatically after approval: ${releaseTypeMeaning("AFTER_APPROVAL")}`,
+  MANUAL: `is set to manual release: ${releaseTypeMeaning("MANUAL")}`,
+  SCHEDULED: `is set to a scheduled release: ${releaseTypeMeaning("SCHEDULED")}`,
 };
 
 type ReleaseMode = Pick<SubmissionView, "releaseType" | "releaseTypeReadAt">;

@@ -8,6 +8,7 @@
 
 
 import { isRow, text } from "./ship-act";
+import { releaseTypeMeaning } from "./store-row-sources";
 
 type Row = Record<string, unknown>;
 
@@ -51,4 +52,16 @@ export function storePreflightChecks(block: Row, store: string, blocking: string
 
     return row ? checkRow(row) : unexplained(store, id, list);
   });
+}
+
+export function releaseReadView(release: Row): Row {
+  const type = text(release.type);
+  const meaning = text(release.meaning) || releaseTypeMeaning(type);
+
+  return {
+    type,
+    ...(text(release.readAt) ? { readAt: text(release.readAt) } : {}),
+    ...(meaning ? { meaning } : {}),
+    say: `App Store Connect last read the version as ${type}${text(release.readAt) ? ` (${text(release.readAt)})` : ""}: ${meaning || "a release type this server does not know"}.`,
+  };
 }

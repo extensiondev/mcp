@@ -415,6 +415,15 @@
           "## Safari"
         ],
         "limit": "an http or https URL, up to 2,000 characters"
+      },
+      {
+        "field": "releaseMode",
+        "line": "- Release:",
+        "section": "## Safari",
+        "alsoRead": [
+          "## Listing"
+        ],
+        "limit": "manual or after approval, under `## Safari`: whether Apple's approval may publish the App Store version at once; manual, the least public, when the line is absent, and the preflight warns on a version set to release automatically after approval unless the line says after approval"
       }
     ]
   }

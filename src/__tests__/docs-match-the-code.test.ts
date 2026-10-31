@@ -54,6 +54,7 @@ const PLATFORM_STORE_MD_LABELS = [
   "Review contact email",
   "Review contact phone",
   "Age rating",
+  "Release",
 ];
 
 function looseJson(objectText: string): Record<string, unknown> | null {

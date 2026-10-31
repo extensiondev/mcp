@@ -29,6 +29,7 @@ export const LISTING_TEXT_LIMITS = {
   reviewContactPhone: 20,
   supportUrl: 2_000,
   visibility: 100,
+  releaseMode: 100,
 } as const;
 
 export type ListingTextField = keyof typeof LISTING_TEXT_LIMITS;
@@ -65,7 +66,7 @@ export const STORE_SECTIONS: Record<ListingStore, string> = {
 };
 
 export const STORE_OWN_LINES: Partial<Record<ListingStore, ListingField[]>> = {
-  safari: ["appStoreName", "reviewContactName", "reviewContactEmail", "reviewContactPhone"],
+  safari: ["appStoreName", "reviewContactName", "reviewContactEmail", "reviewContactPhone", "releaseMode"],
   chrome: ["visibility"],
 };
 
@@ -73,7 +74,7 @@ export const STORE_FIELDS: Record<ListingStore, ListingField[]> = {
   chrome: ["title", "shortDescription", "fullDescription", "categories", "supportEmail", "privacyPolicyUrl", "homepageUrl", "singlePurpose", "permissionJustifications", "visibility"],
   firefox: ["title", "shortDescription", "fullDescription", "categories", "supportEmail", "privacyPolicyUrl", "homepageUrl", "license", "reviewerNotes", "releaseNotes"],
   edge: ["title", "shortDescription", "fullDescription", "categories", "searchTerms", "supportEmail", "privacyPolicyUrl", "homepageUrl", "certificationNotes"],
-  safari: ["title", "appStoreName", "subtitle", "shortDescription", "fullDescription", "categories", "searchTerms", "supportEmail", "privacyPolicyUrl", "homepageUrl", "reviewerNotes", "reviewContactName", "reviewContactEmail", "reviewContactPhone", "supportUrl"],
+  safari: ["title", "appStoreName", "subtitle", "shortDescription", "fullDescription", "categories", "searchTerms", "supportEmail", "privacyPolicyUrl", "homepageUrl", "reviewerNotes", "reviewContactName", "reviewContactEmail", "reviewContactPhone", "supportUrl", "releaseMode"],
 };
 
 export type BulletField = Exclude<ListingField, "permissionJustifications">;
@@ -101,6 +102,7 @@ export const BULLET_KEYS: BulletKey[] = [
   { field: "reviewContactEmail", line: "Review contact email", pattern: /^(app review contact email|review contact email|contact email)$/ },
   { field: "reviewContactPhone", line: "Review contact phone", pattern: /^(app review contact phone|review contact phone|contact phone)$/ },
   { field: "visibility", line: "Visibility", pattern: /^visibility$/ },
+  { field: "releaseMode", line: "Release", pattern: /^(release|release type|version release)$/ },
 ];
 
 export interface SubsectionKey {

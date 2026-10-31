@@ -64,7 +64,7 @@ Generated from the parser's own declarations in `src/lib/store-md-declarations.t
 
 ## safari (App Store (Safari), `## Safari`)
 
-15 fields.
+16 fields.
 
 | line | section | also read from | field | limit |
 | --- | --- | --- | --- | --- |
@@ -83,3 +83,4 @@ Generated from the parser's own declarations in `src/lib/store-md-declarations.t
 | `- Review contact email:` | `## Safari` | `## Listing` | `reviewContactEmail` | an email address, up to 200 characters |
 | `- Review contact phone:` | `## Safari` | `## Listing` | `reviewContactPhone` | an E.164 phone number, up to 20 characters |
 | `- Support URL:` | `## Listing` | `## Safari` | `supportUrl` | an http or https URL, up to 2,000 characters |
+| `- Release:` | `## Safari` | `## Listing` | `releaseMode` | manual or after approval, under `## Safari`: whether Apple's approval may publish the App Store version at once; manual, the least public, when the line is absent, and the preflight warns on a version set to release automatically after approval unless the line says after approval |

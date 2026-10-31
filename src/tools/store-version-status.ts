@@ -12,6 +12,7 @@ import { envelope, isEnvelope } from "../lib/envelope";
 import { consoleProjectUrl } from "../lib/registry";
 import { readsBeforeDispatch } from "../lib/store-read-landed";
 import { isRow, text } from "../lib/ship-act";
+import { releaseTypeMeaning } from "../lib/store-row-sources";
 import { readStores } from "./store-status";
 
 import type { NextStep } from "../lib/store-connection";
@@ -87,7 +88,8 @@ function storeSentence(entry: StoreVersionStatus, refresh: Row | null, wait: Row
   const read = entry.source
     ? ` (${entry.source}${entry.readAt ? ` at ${entry.readAt}` : ""})`
     : landedUnsourced(entry, refresh, wait) || " (no store read behind it)";
-  const release = entry.releaseType ? `, release type ${entry.releaseType}` : "";
+  const meaning = releaseTypeMeaning(entry.releaseType ?? undefined);
+  const release = entry.releaseType ? `, release type ${entry.releaseType}${meaning ? ` (${meaning})` : ""}` : "";
   const next = entry.nextStep ? `. Next: ${entry.nextStep.say}` : "";
 
   return `${entry.store} ${entry.version ?? ""}${build}: ${entry.status ?? "recorded"}${state}${read}${release}${next}`;

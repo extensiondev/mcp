@@ -66,6 +66,7 @@ const SINGLE_LINE_FIELDS: ListingField[] = [
   "reviewContactName",
   "reviewContactEmail",
   "reviewContactPhone",
+  "releaseMode",
 ];
 
 const SCREENSHOTS_KEY = /^screenshots(\s*\([^()]*\))?$/;

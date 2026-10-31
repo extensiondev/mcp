@@ -78,7 +78,7 @@ import { linkItemAnswer } from "../lib/link-item-answer";
 import { firefoxUpdateManifestOf, relayFirefoxUpdateUrl } from "../lib/firefox-update-url";
 import { withHandUploadRows } from "../lib/hand-upload";
 import { buildsReadByPackageChecks, packageBuildLine, packageBuildViews } from "../lib/package-checks-build";
-import { storePreflightChecks } from "../lib/store-preflight-checks";
+import { releaseReadView, storePreflightChecks } from "../lib/store-preflight-checks";
 import {
   EDGE_FIRST_SUBMISSION_STATE,
   edgeFirstSubmissionOf,
@@ -632,8 +632,10 @@ export function storePreflightView(json: Row, store: string): Row | null {
     lock,
     ...(text(block.approval) ? { approval: text(block.approval) } : {}),
     ...(nextVersionOf(json, store) ?? {}),
+    ...(isRow(block.release) && text(block.release.type) ? { release: releaseReadView(block.release) } : {}),
   };
 }
+
 
 export function nextVersionSentences(storePreflight: Record<string, Row>): string {
   return Object.entries(storePreflight)

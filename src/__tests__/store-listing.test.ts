@@ -77,6 +77,7 @@ const SAFARI_UNREAD = [
   { field: "reviewContactEmail", line: "- Review contact email:", section: "## Safari" },
   { field: "reviewContactPhone", line: "- Review contact phone:", section: "## Safari" },
   { field: "supportUrl", line: "- Support URL:", section: "## Listing" },
+  { field: "releaseMode", line: "- Release:", section: "## Safari" },
 ];
 
 const SAFARI_SECTION_UNREAD = SAFARI_UNREAD.filter((row) => !["subtitle", "searchTerms", "reviewContactPhone"].includes(row.field));
@@ -1521,9 +1522,9 @@ describe("extension_submit sync-listing sends the fields the platform hashes whe
     expect(Object.keys(puts[1]!.body.listing)).toEqual(["title", "subtitle", "shortDescription", "fullDescription"]);
     expect(asked.status).toBe("approval-required");
     expect(asked.value.stores.safari.digest).toEqual({
-      client: ["title", "appStoreName", "subtitle", "shortDescription", "fullDescription", "categories", "searchTerms", "supportEmail", "privacyPolicyUrl", "homepageUrl", "reviewerNotes", "reviewContactName", "reviewContactEmail", "reviewContactPhone", "supportUrl"],
+      client: ["title", "appStoreName", "subtitle", "shortDescription", "fullDescription", "categories", "searchTerms", "supportEmail", "privacyPolicyUrl", "homepageUrl", "reviewerNotes", "reviewContactName", "reviewContactEmail", "reviewContactPhone", "supportUrl", "releaseMode"],
       platform: known,
-      differ: ["appStoreName", "searchTerms", "reviewerNotes", "reviewContactName", "reviewContactEmail", "reviewContactPhone", "supportUrl"],
+      differ: ["appStoreName", "searchTerms", "reviewerNotes", "reviewContactName", "reviewContactEmail", "reviewContactPhone", "supportUrl", "releaseMode"],
     });
 
     expect(asked.value.stores.safari.deferred).toEqual(["searchTerms", "reviewContactPhone"]);
@@ -1588,9 +1589,9 @@ describe("extension_submit sync-listing sends the fields the platform hashes whe
     platform.login();
 
     const digest = {
-      client: ["title", "appStoreName", "subtitle", "shortDescription", "fullDescription", "categories", "searchTerms", "supportEmail", "privacyPolicyUrl", "homepageUrl", "reviewerNotes", "reviewContactName", "reviewContactEmail", "reviewContactPhone", "supportUrl"],
+      client: ["title", "appStoreName", "subtitle", "shortDescription", "fullDescription", "categories", "searchTerms", "supportEmail", "privacyPolicyUrl", "homepageUrl", "reviewerNotes", "reviewContactName", "reviewContactEmail", "reviewContactPhone", "supportUrl", "releaseMode"],
       platform: LEGACY_SAFARI,
-      differ: ["appStoreName", "subtitle", "searchTerms", "reviewerNotes", "reviewContactName", "reviewContactEmail", "reviewContactPhone", "supportUrl"],
+      differ: ["appStoreName", "subtitle", "searchTerms", "reviewerNotes", "reviewContactName", "reviewContactEmail", "reviewContactPhone", "supportUrl", "releaseMode"],
     };
 
     platform.routes[`PUT ${LISTING("safari")}`] = () => ({
@@ -1609,7 +1610,7 @@ describe("extension_submit sync-listing sends the fields the platform hashes whe
       status: "refused",
       code: "LISTING_DIGEST_MISMATCH",
       message:
-        "The platform hashes this listing differently from this server even after leaving out subtitle, searchTerms and reviewContactPhone: this server declares appStoreName, subtitle, searchTerms, reviewerNotes, reviewContactName, reviewContactEmail, reviewContactPhone and supportUrl, which the platform does not hash, so this server is newer than the platform's build. No approval was requested. Say sync-listing again after the platform updates.",
+        "The platform hashes this listing differently from this server even after leaving out subtitle, searchTerms and reviewContactPhone: this server declares appStoreName, subtitle, searchTerms, reviewerNotes, reviewContactName, reviewContactEmail, reviewContactPhone, supportUrl and releaseMode, which the platform does not hash, so this server is newer than the platform's build. No approval was requested. Say sync-listing again after the platform updates.",
       digest,
       trackUrl: SUBMISSIONS,
       filled: ["title", "subtitle", "shortDescription", "fullDescription", "searchTerms", "reviewContactPhone", "icons"],
@@ -1678,6 +1679,6 @@ describe("the STORE.md Support URL line", () => {
     expect(listingForStore(parsed, "safari").listing.supportUrl).toBe("https://example.com/support");
     expect(listingForStore(parsed, "safari").listing.homepageUrl).toBe("https://example.com");
     expect(listingForStore(parsed, "chrome").listing.supportUrl).toBeUndefined();
-    expect(STORE_FIELDS.safari[STORE_FIELDS.safari.length - 1]).toBe("supportUrl");
+    expect(STORE_FIELDS.safari.slice(-2)).toEqual(["supportUrl", "releaseMode"]);
   });
 });
