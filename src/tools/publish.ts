@@ -55,7 +55,7 @@ import {
   applyArtifactHealth,
   refuseUnverified,
 } from "../lib/publish-artifacts";
-import { channelBrowsers, firefoxChannelFields, firefoxChannelSentence } from "../lib/firefox-update-url";
+import { channelBrowsers, firefoxChannelFields, firefoxChannelSentence, servedOfAnswer } from "../lib/firefox-update-url";
 import { fillFromBuildIndex } from "../lib/publish-build-index";
 import { withPackageAddresses } from "../lib/publish-package-commands";
 import { consoleProjectUrl } from "../lib/registry";
@@ -349,7 +349,7 @@ export async function handler(args: {
     );
 
     if (serving && channels) {
-      Object.assign(data, firefoxChannelFields(ref, serving, channelBrowsers(channels, serving, previewCommandsOf(data.previewCommands).map(([browser]) => browser)), args.api));
+      Object.assign(data, firefoxChannelFields(ref, serving, channelBrowsers(channels, serving, previewCommandsOf(data.previewCommands).map(([browser]) => browser)), args.api, servedOfAnswer(data)));
     }
 
     if (!serving) {

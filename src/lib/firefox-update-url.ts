@@ -79,14 +79,15 @@ export function updateManifestServedSentence(view: UpdateManifestServed): string
   return `The update manifest at ${view.url} is not served yet: ${notServedReason(view.reason)}; the platform serves it once AMO signs the version, whatever the channel's audience, with no step for you.${pinned}`;
 }
 
-export function updateManifestOf(raw: unknown): UpdateManifestView | undefined {
+export function updateManifestServedOf(raw: unknown): UpdateManifestServed | undefined {
   if (!isRow(raw)) return undefined;
 
   const url = text(raw.url);
   if (!url || typeof raw.served !== "boolean") return undefined;
 
   const pin = isRow(raw.pinned) ? raw.pinned : null;
-  const view: UpdateManifestServed = {
+
+  return {
     url,
     served: raw.served,
     ...(text(raw.checkedAt) ? { checkedAt: text(raw.checkedAt) } : {}),
@@ -96,8 +97,12 @@ export function updateManifestOf(raw: unknown): UpdateManifestView | undefined {
       ? { pinned: { channel: text(pin.channel), buildId: text(pin.buildId), pinnedAt: text(pin.pinnedAt) } }
       : {}),
   };
+}
 
-  return { ...view, say: updateManifestServedSentence(view) };
+export function updateManifestOf(raw: unknown): UpdateManifestView | undefined {
+  const view = updateManifestServedOf(raw);
+
+  return view ? { ...view, say: updateManifestServedSentence(view) } : undefined;
 }
 
 export function firefoxUpdateManifestOutcome(record: Row | undefined, rows: unknown): UpdateManifestView | null {
@@ -273,18 +278,37 @@ export function channelBrowsers(channels: ChannelEntry[], channel: string, fallb
   return named.length ? named : on.length ? [...fallback] : [];
 }
 
-export function firefoxChannelFields(ref: ProjectRef | null, channel: string, browsers: readonly string[], api?: string): Row {
+export function servedOfAnswer(body: unknown): UpdateManifestServed | undefined {
+  if (!isRow(body)) return undefined;
+
+  const firefox = isRow(body.firefox) ? body.firefox : null;
+
+  return updateManifestServedOf(body.updateManifest) ?? updateManifestServedOf(firefox?.updateManifest);
+}
+
+export function firefoxChannelFields(ref: ProjectRef | null, channel: string, browsers: readonly string[], api?: string, served?: UpdateManifestServed): Row {
   if (!browsers.some((browser) => text(browser).toLowerCase() === "firefox")) return {};
 
   const updateManifestUrl = updateManifestAddress(ref, channel, api);
   if (!updateManifestUrl) return {};
 
-  return { firefox: { channel: text(channel), updateManifestUrl, channelXpiUrl: channelXpiAddress(ref, channel, api) } };
+  return {
+    firefox: {
+      channel: text(channel),
+      updateManifestUrl,
+      channelXpiUrl: channelXpiAddress(ref, channel, api),
+      ...(served ? { updateManifest: { ...served, url: served.url || updateManifestUrl } } : {}),
+    },
+  };
 }
 
 export function firefoxChannelSentence(fields: Row): string {
   const firefox = isRow(fields.firefox) ? fields.firefox : null;
   if (!firefox) return "";
 
-  return `Firefox installs from the ${text(firefox.channel)} channel update through ${text(firefox.updateManifestUrl)}, which the platform rewrites after every signing and whose update_link is ${text(firefox.channelXpiUrl)}; a manifest that names that update_url in browser_specific_settings.gecko stays current.`;
+  const url = text(firefox.updateManifestUrl);
+  const served = updateManifestOf(isRow(firefox.updateManifest) ? { url, ...firefox.updateManifest } : null);
+  const lead = `Firefox installs from the ${text(firefox.channel)} channel update through ${url}, which the platform rewrites after every signing and whose update_link is ${text(firefox.channelXpiUrl)}, when the manifest names that update_url in browser_specific_settings.gecko. ${UPDATE_URL_NETWORK_NOTE}`;
+
+  return served ? `${lead} ${served.say}` : lead;
 }

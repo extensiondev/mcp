@@ -33,7 +33,7 @@ import {
 import { userlandProjectUrl } from "../lib/registry";
 import { cut, rollback, type ReleaseActArgs } from "./release-acts";
 import { channelLinkFields, readVisibility } from "../lib/channel-link";
-import { firefoxChannelFields, firefoxChannelSentence } from "../lib/firefox-update-url";
+import { firefoxChannelFields, firefoxChannelSentence, servedOfAnswer } from "../lib/firefox-update-url";
 
 export const schema = {
   name: "extension_release_promote",
@@ -362,7 +362,7 @@ export async function handler(args: ReleaseActArgs & {
     channelUrl: enriched.channelUrl,
     publicBuildUrl,
   });
-  const firefox = visibility === "public" ? firefoxChannelFields(promotedRef, channel, outcome.queuedBrowsers, args.api) : {};
+  const firefox = visibility === "public" ? firefoxChannelFields(promotedRef, channel, outcome.queuedBrowsers, args.api, servedOfAnswer(data)) : {};
   const made = [madeSentence(links), firefoxChannelSentence(firefox)].filter(Boolean).join(" ");
   const trackPage = links.find((link) => link.kind === "release")?.url ?? releasesPage(promotedRef, args.api);
   const value = { ...enriched, ...firefox, ...(releaseId ? { releaseId } : {}), outcome: waited.outcome, links };

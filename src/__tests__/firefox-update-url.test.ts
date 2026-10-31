@@ -14,7 +14,7 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { writeCredentials } from "../lib/credentials";
-import { channelBrowsers, firefoxChannelFields, manifestUpdateUrlOf, updateManifestSentence, updateUrlNotSuggestedSentence } from "../lib/firefox-update-url";
+import { UPDATE_URL_NETWORK_NOTE, channelBrowsers, firefoxChannelFields, firefoxChannelSentence, manifestUpdateUrlOf, servedOfAnswer, updateManifestSentence, updateUrlNotSuggestedSentence } from "../lib/firefox-update-url";
 import { channelXpiAddress, namesRegistryOrToken, updateManifestAddress } from "../lib/package-address";
 import { noNetworkPromiseOf } from "../lib/store-md-network";
 import { handler as publish } from "../tools/publish";
@@ -65,6 +65,29 @@ describe("the Firefox update manifest address is built beside the package addres
     expect(channelBrowsers([{ channel: "chrome-stable", sha: "a" }, { channel: "firefox-stable", sha: "a" }, { channel: "beta", sha: "b" }], "stable", ["chrome"])).toEqual(["chrome", "firefox"]);
     expect(channelBrowsers([{ channel: "beta", sha: "b" }], "beta", ["chrome", "firefox"])).toEqual(["chrome", "firefox"]);
     expect(channelBrowsers([{ channel: "beta", sha: "b" }], "stable", ["chrome", "firefox"])).toEqual([]);
+  });
+
+  it("the channel sentence names the network request every install makes and the served word when it is in hand, never a console step", () => {
+    const fields = firefoxChannelFields(REF, "stable", ["chrome", "firefox"], PROD);
+    const plain = firefoxChannelSentence(fields);
+
+    expect(plain).toContain(`update through ${UPDATES}, which the platform rewrites after every signing and whose update_link is ${XPI}, when the manifest names that update_url in browser_specific_settings.gecko.`);
+    expect(plain).toContain(UPDATE_URL_NETWORK_NOTE);
+    expect(plain).toContain("a network request to extension.dev");
+    expect(plain).not.toContain("stays current");
+    expect(plain).not.toMatch(/served now|not served yet/);
+    expect(firefoxChannelSentence({})).toBe("");
+
+    const notServed = servedOfAnswer({ updateManifest: { url: UPDATES, served: false, reason: "channel-not-public", checkedAt: "2026-10-31T12:00:00.000Z" } });
+    const held = firefoxChannelFields(REF, "stable", ["firefox"], PROD, notServed);
+    expect(held).toMatchObject({ firefox: { updateManifest: { url: UPDATES, served: false, reason: "channel-not-public" } } });
+    expect(firefoxChannelSentence(held)).toContain(`The update manifest at ${UPDATES} is not served yet: no signed build is on that channel yet; the platform serves it once AMO signs the version`);
+    expect(firefoxChannelSentence(held)).not.toMatch(/console/i);
+
+    const served = servedOfAnswer({ firefox: { updateManifest: { url: UPDATES, served: true, checkedAt: "2026-10-31T12:00:00.000Z" } } });
+    expect(firefoxChannelSentence(firefoxChannelFields(REF, "stable", ["firefox"], PROD, served))).toContain(`Firefox finds updates at ${UPDATES}, served now (checked 2026-10-31T12:00:00.000Z).`);
+    expect(servedOfAnswer({ updateManifest: { url: UPDATES } })).toBeUndefined();
+    expect(servedOfAnswer(null)).toBeUndefined();
   });
 
   it("reads the manifest's gecko update_url for the firefox target", () => {
@@ -278,7 +301,7 @@ describe("extension_release_promote and extension_publish name the update manife
   const saved: Record<string, string | undefined> = {};
   let tmp: string;
 
-  function registry(channels: Record<string, { sha: string }>, queuedBrowsers: string[], visibility: "public" | "private" = "public") {
+  function registry(channels: Record<string, { sha: string }>, queuedBrowsers: string[], visibility: "public" | "private" = "public", answer: Row = {}) {
     vi.stubGlobal(
       "fetch",
       vi.fn(async (url: unknown) => {
@@ -286,7 +309,7 @@ describe("extension_release_promote and extension_publish name the update manife
         const json = (body: unknown) => new Response(JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
 
         if (href.endsWith("/api/cli/publish")) return json(publishAnswer({ visibility, buildSha: "abc1234" }));
-        if (href.endsWith("/api/cli/release/promote")) return json(promoteAnswer({ queuedBrowsers, targetChannel: "stable" }));
+        if (href.endsWith("/api/cli/release/promote")) return json(promoteAnswer({ queuedBrowsers, targetChannel: "stable", ...answer }));
         if (href.endsWith("/api/cli/whoami")) return json({ login: "acme/widget", projectId: "prj_1", workspaceSlug: "acme", projectSlug: "widget" });
         if (href.endsWith("/api/projects/prj_1/releases")) return json({ items: [{ id: "rel_1", channel: "stable", buildId: "abc1234", status: "completed" }] });
         if (href.endsWith("/channels.json")) return json(channels);
@@ -326,6 +349,19 @@ describe("extension_release_promote and extension_publish name the update manife
     expect(both.status).toBe("promoted");
     expect(both.value.firefox).toEqual({ channel: "stable", updateManifestUrl: `${PROJECT}/channels/stable/updates.json`, channelXpiUrl: `${PROJECT}/channels/stable/firefox.xpi` });
     expect(both.hint).toContain(`${PROJECT}/channels/stable/updates.json`);
+    expect(both.hint).toContain(UPDATE_URL_NETWORK_NOTE);
+    expect(both.hint).not.toContain("stays current");
+    expect(both.hint).not.toMatch(/served now|not served yet/);
+
+    registry({ "chrome-stable": { sha: "abc1234" }, "firefox-stable": { sha: "abc1234" } }, ["chrome", "firefox"], "public", {
+      updateManifest: { url: `${PROJECT}/channels/stable/updates.json`, served: false, reason: "channel-not-public", checkedAt: "2026-10-31T12:00:00.000Z" },
+    });
+
+    const unserved = JSON.parse(await promote({ buildId: "abc1234", channel: "stable", browsers: ["chrome", "firefox"], api: API } as never));
+
+    expect(unserved.value.firefox.updateManifest).toMatchObject({ url: `${PROJECT}/channels/stable/updates.json`, served: false, reason: "channel-not-public" });
+    expect(unserved.hint).toContain(`The update manifest at ${PROJECT}/channels/stable/updates.json is not served yet: no signed build is on that channel yet; the platform serves it once AMO signs the version`);
+    expect(unserved.hint).not.toMatch(/console step/i);
 
     registry({ "chrome-stable": { sha: "abc1234" } }, ["chrome"]);
     const chrome = JSON.parse(await promote({ buildId: "abc1234", channel: "stable", browsers: ["chrome"], api: API } as never));
@@ -349,6 +385,8 @@ describe("extension_release_promote and extension_publish name the update manife
     expect(both.value.channelUrl).toBe(`${PROJECT}/channels/stable`);
     expect(both.value.firefox).toEqual({ channel: "stable", updateManifestUrl: `${PROJECT}/channels/stable/updates.json`, channelXpiUrl: `${PROJECT}/channels/stable/firefox.xpi` });
     expect(both.hint).toContain(`${PROJECT}/channels/stable/updates.json`);
+    expect(both.hint).toContain(UPDATE_URL_NETWORK_NOTE);
+    expect(both.hint).not.toContain("stays current");
 
     registry({ "chrome-stable": { sha: "abc1234" } }, ["chrome"]);
     const chrome = JSON.parse(await publish({ api: API }));
