@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { shipRefusalHint } from "../lib/ship-act";
+import { PUBLISH_BROWSERS_WORDS, PUBLISH_STORES, shipRefusalHint } from "../lib/ship-act";
 import { handler as submit } from "../tools/submit";
 import { API, PROJECT_ROUTE, useProjectRoutes } from "./fixtures/project-routes";
 
@@ -16,6 +16,17 @@ describe("the publish store refusal names the stores that take publish", () => {
     expect(hint).toContain("Firefox has no publish act; AMO reviews a Firefox version when it is submitted.");
     expect(hint).not.toContain("the other stores");
     expect(hint).not.toContain("Chrome Web Store act");
+  });
+
+  it("refuses a publish naming a store off the list with the browsers values the hint names, from the one list", async () => {
+    const out = JSON.parse(await submit({ action: "publish", browsers: ["firefox"], api: API }));
+    const hint = shipRefusalHint("PUBLISH_STORE_NOT_SUPPORTED") ?? "";
+
+    expect(out.error).toMatchObject({ code: "E_BAD_REQUEST", name: "PublishInputError" });
+    expect(out.error.message).toContain(`browsers must be ${PUBLISH_BROWSERS_WORDS}, or several of them with buildSha`);
+    expect(hint).toContain(`call publish with browsers ${PUBLISH_BROWSERS_WORDS}.`);
+    expect(out.error.message).toContain('got ["firefox"]. Firefox enters review when it is submitted. Nothing was sent.');
+    expect(PUBLISH_STORES).toEqual(["chrome", "edge", "safari"]);
   });
 
   describe("through extension_submit publish", () => {

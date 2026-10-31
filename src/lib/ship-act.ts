@@ -69,14 +69,20 @@ export const REFUNDED_STEP = { kind: "retry", say: REFUNDED_SAY, url: null } as 
 const ALLOWANCE = new Set(["burst_cap", "monthly_cap", "RATE_LIMITED"]);
 const UNSURE = new Set(["counter_unavailable", "entitlement_unavailable", "kill_switch", "unattributed"]);
 const STORES_READ = "extension_release_status (include: [\"stores\"])";
-const STORE_DRAFT_LABELS: Record<string, string> = { chrome: "Chrome", edge: "Edge", safari: "Safari" };
+const DRAFT_LABELS = { chrome: "Chrome", edge: "Edge", safari: "Safari" } as const;
+const STORE_DRAFT_LABELS: Record<string, string> = DRAFT_LABELS;
+
+export type PublishStore = keyof typeof DRAFT_LABELS;
+
+export const PUBLISH_STORES: readonly PublishStore[] = Object.keys(DRAFT_LABELS) as PublishStore[];
 
 function oneOf(words: string[]): string {
   return words.length > 1 ? `${words.slice(0, -1).join(", ")} or ${words[words.length - 1]}` : words.join("");
 }
 
-const PUBLISH_STORE_WORDS = oneOf(Object.values(STORE_DRAFT_LABELS));
-const PUBLISH_BROWSERS_WORDS = oneOf(Object.keys(STORE_DRAFT_LABELS).map((store) => `["${store}"]`));
+const PUBLISH_STORE_WORDS = oneOf(Object.values(DRAFT_LABELS));
+
+export const PUBLISH_BROWSERS_WORDS = oneOf(PUBLISH_STORES.map((store) => `["${store}"]`));
 
 const HINTS: Record<string, string> = {
   BUILD_DISPATCH_DISABLED: "Dispatch is paused for every project right now, so nothing ran. Try again later.",

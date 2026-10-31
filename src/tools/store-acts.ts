@@ -42,8 +42,11 @@ import {
   badShipRequest,
   isRow,
   openShipApi,
+  PUBLISH_BROWSERS_WORDS,
+  PUBLISH_STORES,
   runShipAct,
   text,
+  type PublishStore,
 } from "../lib/ship-act";
 import {
   ITEM_NOT_LINKED_CODE,
@@ -369,10 +372,6 @@ function reworded(
   return out;
 }
 
-type PublishStore = "chrome" | "edge" | "safari";
-
-const PUBLISH_STORES: readonly PublishStore[] = ["chrome", "edge", "safari"];
-
 const PUBLISH_WORDS: Record<
   PublishStore,
   { name: string; reviewer: string; noun: string; reviewWord: string }
@@ -433,7 +432,7 @@ export async function publishDraft(args: StoreActArgs): Promise<string> {
       COMMAND,
       "publish",
       "PublishInputError",
-      `publish sends a store's draft to review, so browsers must be ["chrome"], ["edge"] or ["safari"], or several of them with buildSha; got ${JSON.stringify(args.browsers ?? args.store ?? null)}. Firefox enters review when it is submitted. Nothing was sent.`,
+      `publish sends a store's draft to review, so browsers must be ${PUBLISH_BROWSERS_WORDS}, or several of them with buildSha; got ${JSON.stringify(args.browsers ?? args.store ?? null)}. Firefox enters review when it is submitted. Nothing was sent.`,
     );
   }
 
