@@ -11,6 +11,7 @@ import { splitChannelKey } from "./channel-link";
 import { channelXpiAddress, updateManifestAddress } from "./package-address";
 import { readBuiltManifest } from "./project-manifest";
 import { isRow, text } from "./ship-act";
+import { storeMdNoNetworkPromise } from "./store-md-network";
 
 import type { ChannelEntry, ProjectRef } from "./registry";
 
@@ -29,11 +30,22 @@ export interface FirefoxUpdateManifest {
   updateManifestUrl: string;
   channelXpiUrl: string;
   manifestUpdateUrl: string | null;
+  suggested: boolean;
+  noNetworkPromise?: string;
   say: string;
 }
 
+export const UPDATE_URL_NETWORK_NOTE =
+  "Firefox will then check that address for updates from every install, a network request to extension.dev on Firefox's own schedule.";
+
+export const UPDATE_URL_FROZEN_NOTE = "Without it, installs of the signed file stay on their version until you hand out the next one.";
+
 export function updateManifestSentence(address: string): string {
-  return `Put browser_specific_settings.gecko.update_url: ${address} in the manifest for the firefox target; the platform rewrites updates.json after every signing.`;
+  return `Option for self-distributed builds: put browser_specific_settings.gecko.update_url: ${address} in the manifest for the firefox target, and the platform rewrites updates.json after every signing. ${UPDATE_URL_NETWORK_NOTE} ${UPDATE_URL_FROZEN_NOTE}`;
+}
+
+export function updateUrlNotSuggestedSentence(promise: string, address: string): string {
+  return `No update_url is suggested: STORE.md says "${promise}", and browser_specific_settings.gecko.update_url would make every install check ${address} for updates, a network request to extension.dev. Installs of the signed file stay on their version until you hand out the next one.`;
 }
 
 export function updateUrlMismatchSentence(found: string, address: string): string {
@@ -98,21 +110,37 @@ export function firefoxUpdateManifestOf(json: Row, ref: ProjectRef | null, proje
 
   const found = foundUpdateUrl(json, projectPath);
   const mismatch = found !== null && found !== updateManifestUrl;
-  const platform = text(updateUrlCheckOf(json)?.message);
+  const check = updateUrlCheckOf(json);
+  const platform = text(check?.message);
+  const platformPassed = text(check?.status) === "pass";
+  const promise = found === null && !platformPassed ? storeMdNoNetworkPromise(projectPath) : null;
   const say = mismatch
     ? updateUrlMismatchSentence(found, updateManifestUrl)
-    : namesHostedManifest(platform)
+    : platformPassed && platform
       ? platform
       : found
         ? `The manifest names the platform's update_url ${updateManifestUrl}; the platform rewrites updates.json after every signing.`
-        : updateManifestSentence(updateManifestUrl);
+        : promise
+          ? updateUrlNotSuggestedSentence(promise.line, updateManifestUrl)
+          : namesHostedManifest(platform)
+            ? platform
+            : updateManifestSentence(updateManifestUrl);
 
-  return { channel, updateManifestUrl, channelXpiUrl: channelXpiAddress(ref, channel, api), manifestUpdateUrl: found, say };
+  return {
+    channel,
+    updateManifestUrl,
+    channelXpiUrl: channelXpiAddress(ref, channel, api),
+    manifestUpdateUrl: found,
+    suggested: !mismatch && found === null && !platformPassed && !promise,
+    ...(promise ? { noNetworkPromise: promise.line } : {}),
+    say,
+  };
 }
 
 function relayRow(row: Row, view: FirefoxUpdateManifest): Row {
   const mismatch = view.manifestUpdateUrl !== null && view.manifestUpdateUrl !== view.updateManifestUrl;
-  if (!mismatch && namesHostedManifest(row.message)) return row;
+  if (!mismatch && text(row.status) === "pass" && text(row.message)) return row;
+  if (!mismatch && !view.noNetworkPromise && namesHostedManifest(row.message)) return row;
 
   return {
     ...row,

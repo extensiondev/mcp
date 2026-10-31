@@ -14,8 +14,9 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { writeCredentials } from "../lib/credentials";
-import { channelBrowsers, firefoxChannelFields, manifestUpdateUrlOf, updateManifestSentence } from "../lib/firefox-update-url";
+import { channelBrowsers, firefoxChannelFields, manifestUpdateUrlOf, updateManifestSentence, updateUrlNotSuggestedSentence } from "../lib/firefox-update-url";
 import { channelXpiAddress, namesRegistryOrToken, updateManifestAddress } from "../lib/package-address";
+import { noNetworkPromiseOf } from "../lib/store-md-network";
 import { handler as publish } from "../tools/publish";
 import { handler as promote } from "../tools/release-promote";
 import { handler as submit } from "../tools/submit";
@@ -145,14 +146,49 @@ describe("extension_submit preflight: the firefox.update_url check names the pla
     const firefox = out.value.stores.firefox;
 
     expect(out.status).toBe("preflight-read");
-    expect(firefox.updateManifest).toMatchObject({ channel: "stable", updateManifestUrl: UPDATES, channelXpiUrl: XPI, manifestUpdateUrl: null, say: updateManifestSentence(UPDATES) });
+    expect(firefox.updateManifest).toMatchObject({ channel: "stable", updateManifestUrl: UPDATES, channelXpiUrl: XPI, manifestUpdateUrl: null, suggested: true, say: updateManifestSentence(UPDATES) });
+    expect(firefox.updateManifest.noNetworkPromise).toBeUndefined();
     expect(firefox.warnings.map((row: Row) => row.id)).not.toContain("firefox.update_url");
     expect(out.value.storePreflight.firefox.warnings).toEqual([]);
     expect(out.value.storePreflight.firefox.checks).toBeUndefined();
-    expect(out.hint).toContain(`Put browser_specific_settings.gecko.update_url: ${UPDATES} in the manifest for the firefox target; the platform rewrites updates.json after every signing.`);
+    expect(out.hint).toContain(updateManifestSentence(UPDATES));
+    expect(updateManifestSentence(UPDATES)).toMatch(/^Option for self-distributed builds: put browser_specific_settings\.gecko\.update_url: /);
+    expect(out.hint).toContain("Firefox will then check that address for updates from every install, a network request to extension.dev");
+    expect(out.hint).not.toContain(`Put browser_specific_settings.gecko.update_url: ${UPDATES} in the manifest for the firefox target;`);
     expect(out.value.sayToPerson).toContain(UPDATES);
     expect(JSON.stringify(out)).not.toMatch(DO_IT_YOURSELF);
     expect(namesRegistryOrToken(JSON.stringify(out))).toEqual([]);
+  });
+
+  it("suggests no update_url when the project's STORE.md promises no network requests, and says why", async () => {
+    fs.writeFileSync(path.join(project, "STORE.md"), "# Leon\n\n## Privacy and data use\n\n- Privacy policy URL: https://example.com/privacy\n\nThe extension makes no network requests at all. Everything stays in the browser.\n");
+    manifest();
+
+    const out = JSON.parse(await submit({ action: "preflight", browsers: ["firefox"], projectPath: project, api: PROD }));
+    const firefox = out.value.stores.firefox;
+    const expected = updateUrlNotSuggestedSentence("The extension makes no network requests at all.", UPDATES);
+
+    expect(firefox.updateManifest).toMatchObject({ manifestUpdateUrl: null, suggested: false, noNetworkPromise: "The extension makes no network requests at all.", say: expected });
+    expect(expected).toContain("a network request to extension.dev");
+    expect(out.hint).toContain(expected);
+    expect(out.hint).not.toContain("Option for self-distributed builds");
+    expect(out.hint).not.toContain("Put browser_specific_settings");
+    expect(firefox.warnings.map((row: Row) => row.id)).not.toContain("firefox.update_url");
+    expect(out.value.storePreflight.firefox.warnings).toEqual([]);
+    expect(JSON.stringify(out)).not.toMatch(DO_IT_YOURSELF);
+  });
+
+  it("keeps the platform's passing check verbatim when it suggests no update_url for an add-on also on AMO's listed channel", async () => {
+    const listed = "This self-distributed version sets no browser_specific_settings.gecko.update_url, and this add-on is also on AMO's listed channel (0.1.0.1): Firefox asks AMO for updates of an add-on whose manifest names no update_url, so installs of the signed file follow the listed channel, and the platform suggests no update_url.";
+    routes[`POST /api/projects/${PROJECT_ID}/stores/firefox/submissions/preflight`] = () => ({ body: firefoxReport([updateCheck(listed, "pass")], []) });
+
+    const out = JSON.parse(await submit({ action: "preflight", browsers: ["firefox"], api: PROD }));
+    const firefox = out.value.stores.firefox;
+
+    expect(firefox.updateManifest).toMatchObject({ manifestUpdateUrl: null, suggested: false, say: listed });
+    expect(out.hint).toContain(listed);
+    expect(out.hint).not.toContain("Option for self-distributed builds");
+    expect(out.value.storePreflight.firefox.warnings).toEqual([]);
   });
 
   it("relays the platform's own check text verbatim once it names the hosted manifest", async () => {
@@ -220,6 +256,19 @@ describe("extension_submit preflight: the firefox.update_url check names the pla
     expect(matched.value.stores.firefox.warnings).toEqual([]);
     expect(matched.value.stores.firefox.updateManifest).toMatchObject({ manifestUpdateUrl: UPDATES, updateManifestUrl: UPDATES });
     expect(matched.value.stores.firefox.updateManifest.say).toBe(`The manifest names the platform's update_url ${UPDATES}; the platform rewrites updates.json after every signing.`);
+  });
+});
+
+describe("a STORE.md promise of no network requests is read sentence by sentence", () => {
+  it("finds the promise in its common spellings and ignores one with an exception", () => {
+    expect(noNetworkPromiseOf("## Privacy and data use\n\n- Network requests: none\n")).toEqual({ line: "Network requests: none" });
+    expect(noNetworkPromiseOf("It does not make any network requests. It stores notes locally.")).toEqual({ line: "It does not make any network requests." });
+    expect(noNetworkPromiseOf("The extension never contacts a server and works entirely offline.")?.line).toContain("never contacts a server");
+    expect(noNetworkPromiseOf("No data leaves your device.")).toEqual({ line: "No data leaves your device." });
+    expect(noNetworkPromiseOf("<!-- no network requests -->\nIt syncs notes to our servers.")).toBeNull();
+    expect(noNetworkPromiseOf("It makes no network requests except to sync your notes to our servers.")).toBeNull();
+    expect(noNetworkPromiseOf("Network requests go to api.example.com for sync.")).toBeNull();
+    expect(noNetworkPromiseOf("")).toBeNull();
   });
 });
 
