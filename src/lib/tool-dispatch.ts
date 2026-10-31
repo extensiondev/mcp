@@ -243,12 +243,13 @@ export function createToolSurface(setup: ToolHandlerOptions): {
 
     if (disabled) return refused(disabled);
 
-    const pinned = pinProjectArgs(name, aliasedArgs, tool.schema.inputSchema, options);
-
-    if ("refused" in pinned) return refused(pinned.refused);
-
     const untrusted = TOOL_POLICY[name]?.untrusted === true;
     const platform = TOOL_POLICY[name]?.group === "platform";
+    const refusedAct = (text: string, callArgs: Record<string, unknown>): ToolFrame => refused(platform ? attachTrack(name, callArgs, text) : text);
+    const pinned = pinProjectArgs(name, aliasedArgs, tool.schema.inputSchema, options);
+
+    if ("refused" in pinned) return refusedAct(pinned.refused, aliasedArgs);
+
     let held: HeldLocal | null = null;
 
     if (rebuilt) {
@@ -274,13 +275,13 @@ export function createToolSurface(setup: ToolHandlerOptions): {
 
     const bound = bindApprovalProject(name, pinned.args);
 
-    if ("refused" in bound) return refused(bound.refused);
+    if ("refused" in bound) return refusedAct(bound.refused, pinned.args);
 
     const normalizedArgs = bound.args;
     const issues = validateToolInput(tool.schema.inputSchema, normalizedArgs);
 
     if (issues.length) {
-      return refused(inputValidationError(name, issues, tool.schema.inputSchema, tool.invalidArgumentsHint?.(issues)));
+      return refusedAct(inputValidationError(name, issues, tool.schema.inputSchema, tool.invalidArgumentsHint?.(issues)), normalizedArgs);
     }
 
     const predated = held ? predatedChecks(name, normalizedArgs, held) : [];
@@ -289,7 +290,7 @@ export function createToolSurface(setup: ToolHandlerOptions): {
 
     const login = bindApprovalLogin(name, normalizedArgs);
 
-    if ("refused" in login) return refused(login.refused);
+    if ("refused" in login) return refusedAct(login.refused, normalizedArgs);
 
     try {
       const result = await withCallApi(normalizedArgs.api, () =>
@@ -300,7 +301,7 @@ export function createToolSurface(setup: ToolHandlerOptions): {
 
             const scoped = bindCallProject(name, normalizedArgs, tool.schema.inputSchema, options);
 
-            if ("refused" in scoped) return stamp.apply(scoped.refused);
+            if ("refused" in scoped) return stamp.apply(attachTrack(name, normalizedArgs, scoped.refused));
 
             const callArgs = scoped.args;
             const answered = await answerOnceDecided(callArgs, tool.handler);

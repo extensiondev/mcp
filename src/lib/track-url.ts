@@ -320,12 +320,14 @@ export interface TrackFields {
   trackLinks?: string[];
 }
 
-export function trackFields(command: string, call: TrackCall): TrackFields | null {
+export function trackFields(command: string, call: TrackCall, projectOnly = false): TrackFields | null {
   const plan = TRACK_ACTS[command]?.(call);
   if (!plan) return null;
 
   const api = text(call.args.api) || undefined;
   const ref = refOf(call);
+  if (projectOnly && !ref.project) return null;
+
   const primary = urlOf(plan.track, ref, api);
   const also = (plan.also ?? []).map((step) => urlOf(step, ref, api));
   const approvalPage = APPROVAL_STATUSES.has(call.status) ? approvalPageOf(call.value) : "";
@@ -360,12 +362,12 @@ export function attachTrack(command: string, args: Row, result: string): string 
   if (!isEnvelope(parsed)) return result;
 
   const frame = parsed as Envelope & { hint?: string };
-  const unreached = frame.ok === false && UNREACHED_CODES.has(String(frame.error?.code ?? ""));
-  const tracked = frame.ok === true || APPROVAL_STATUSES.has(String(frame.status)) || unreached;
-  if (!tracked) return result;
-
   const value = isRow(frame.value) ? frame.value : {};
-  const fields = trackFields(command, { args, status: String(frame.status), value });
+  const unreached = frame.ok === false && UNREACHED_CODES.has(String(frame.error?.code ?? ""));
+  const refusal = frame.ok !== true && !APPROVAL_STATUSES.has(String(frame.status)) && !unreached;
+  if (refusal && text(value.trackUrl)) return result;
+
+  const fields = trackFields(command, { args, status: String(frame.status), value }, refusal);
   if (!fields) return result;
 
   const hint = typeof frame.hint === "string" ? frame.hint.trim() : "";
@@ -381,6 +383,6 @@ export function attachTrack(command: string, args: Row, result: string): string 
     error: frame.error ?? undefined,
     warnings: frame.warnings,
     ...(frame.truncated !== undefined ? { truncated: frame.truncated } : {}),
-    hint: [hint, ...trackSentences(fields, hint, unreached)].filter(Boolean).join(" "),
+    hint: [hint, ...trackSentences(fields, hint, unreached || refusal)].filter(Boolean).join(" "),
   });
 }

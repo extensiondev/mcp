@@ -323,7 +323,8 @@ describe("submit and publish answers carry the platform's store version, and a v
 
     expect(out.ok).toBe(false);
     expect(out.value.nextStep).toEqual({ kind: "resubmit", say: RESUBMIT_SENTENCE, url: null });
-    expect(out.hint).toBe(RESUBMIT_SENTENCE);
+    expect(out.value.trackUrl).toMatch(/\/acme\/widget\/submissions\/chrome$/);
+    expect(out.hint).toBe(`${RESUBMIT_SENTENCE} The console page is ${out.value.trackUrl}.`);
     expect(out.value.nextStep.say).toBe("The store already holds that version; extension.dev packages the next build with a higher build number, so build again and I resubmit.");
     expect(`${out.hint} ${out.value.nextStep.say} ${out.value.sayToPerson}`).not.toMatch(/manifest/i);
   });
