@@ -11,7 +11,7 @@ import { ConsoleProjectPage } from "@extension.dev/urls/paths";
 import { WAIT_SECONDS_INPUT } from "../lib/act-outcome";
 import { API_BASE } from "../lib/common-schema";
 import { PROJECT_TOKEN_INPUT } from "../lib/credentials";
-import { isRow, text, type Row } from "../lib/builds-list-row";
+import { buildState, isActiveState, isRow, text, type Row } from "../lib/builds-list-row";
 import { artifactWithAddress } from "../lib/package-address";
 import { consoleProjectUrl } from "../lib/registry";
 import { envelope } from "../lib/envelope";
@@ -21,6 +21,7 @@ import {
   projectApiOpenFailure,
   projectApiReadFailure,
   type ProjectApi,
+  type ProjectApiRefusal,
 } from "../lib/project-api";
 import { configure, createChannel } from "./builds-acts";
 import { CONFIGURE_CHANNEL, DELETE_CHANNEL, configureChannel, deleteChannelConsoleOnly } from "./builds-channel";
@@ -186,6 +187,16 @@ function runOf(build: Row): Row {
   return run;
 }
 
+function readProblem(read: ProjectApiRefusal): string {
+  if (read.status === 404) return "missing (404)";
+  if (read.status === 0) return "unreachable (the platform did not answer)";
+  if (read.status >= 200 && read.status < 300) return `a ${read.status} without a JSON body`;
+
+  return `unread (${read.status}${read.code ? ` ${read.code}` : ""})`;
+}
+
+const UNFINISHED_CLAUSE = "; artifacts and integrity arrive when the build finishes";
+
 function requireBuildId(args: HandlerArgs, action: string): string | null {
   const buildId = text(args.buildId);
   if (buildId) return null;
@@ -231,10 +242,12 @@ async function getBuild(args: HandlerArgs): Promise<string> {
     .map((b) => (isRow(b) ? text(b.name) || text(b.browser) : text(b)))
     .filter((name) => name && (!wanted || name.toLowerCase() === wanted));
 
-  const [artifacts, usage, ...integrity] = await Promise.all([
-    projectApiGet<unknown[]>(opened.api, `${route}/artifacts`),
+  const state = buildState(detail.json.status, detail.json.conclusion);
+  const unfinished = isActiveState(state);
+  const [usage, artifacts, integrity] = await Promise.all([
     projectApiGet<Row>(opened.api, `${route}/usage`),
-    ...browsers.map((browser) => projectApiGet(opened.api, `${route}/integrity/${encodeURIComponent(browser)}`)),
+    unfinished ? null : projectApiGet<unknown[]>(opened.api, `${route}/artifacts`),
+    Promise.all(unfinished ? [] : browsers.map((browser) => projectApiGet(opened.api, `${route}/integrity/${encodeURIComponent(browser)}`))),
   ]);
 
   const integrityByBrowser: Row = {};
@@ -242,14 +255,15 @@ async function getBuild(args: HandlerArgs): Promise<string> {
 
   browsers.forEach((browser, i) => {
     const read = integrity[i];
+    if (!read) return;
     if (read.ok) integrityByBrowser[browser] = integritySummary(read.json);
-    else integrityUnread.push(`${browser}: ${read.message}`);
+    else integrityUnread.push(`${browser} is ${readProblem(read)}`);
   });
 
   const usageMarkdown = usage.ok ? text(usage.json?.markdown) : "";
   const canonical = text(detail.json.buildId) || buildId;
   const addressScope = { ref: opened.api.ref, sha: canonical, api: args.api };
-  const artifactRows = (artifacts.ok && Array.isArray(artifacts.json) ? artifacts.json : []).map((row) => withDownloadHint(artifactWithAddress(row, addressScope), canonical));
+  const artifactRows = (artifacts?.ok && Array.isArray(artifacts.json) ? artifacts.json : []).map((row) => withDownloadHint(artifactWithAddress(row, addressScope), canonical));
   const failing = Object.entries(integrityByBrowser).filter(([, v]) => (v as Row).ok !== true).map(([k]) => k);
   const failures = buildFailures(detail.json);
   const buildPage = buildConsoleUrl(opened.api, canonical, args.api);
@@ -272,7 +286,9 @@ async function getBuild(args: HandlerArgs): Promise<string> {
         : { recorded: "unknown" },
     },
     hint: `Build ${canonical} is ${text(detail.json.status) || "of unknown status"}${
-      browsers.length
+      unfinished
+        ? UNFINISHED_CLAUSE
+        : browsers.length
         ? failing.length
           ? `; integrity checks failed for ${failing.join(", ")} (see integrity.<browser>.failed)`
           : integrityUnread.length
@@ -283,9 +299,9 @@ async function getBuild(args: HandlerArgs): Promise<string> {
       artifactRows.some((row) => isRow(row) && row.download) ? `, or action:"${DOWNLOAD_ACTION}" with a browser to save its package to disk (artifacts[].download names the call)` : ""
     }.`,
     warnings: [
-      artifacts.ok ? null : `The artifact list could not be read (${artifacts.message}).`,
-      usage.ok ? null : `The usage report could not be read (${usage.message}).`,
-      integrityUnread.length ? `Integrity could not be read for ${integrityUnread.join("; ")}.` : null,
+      !artifacts || artifacts.ok ? null : `The artifact list for build ${canonical} is ${readProblem(artifacts)}.`,
+      usage.ok ? null : `The usage report for build ${canonical} is ${readProblem(usage)}.`,
+      integrityUnread.length ? `Integrity for build ${canonical} could not be read: ${integrityUnread.join("; ")}.` : null,
     ],
   });
 }
