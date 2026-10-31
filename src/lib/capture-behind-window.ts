@@ -6,15 +6,14 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-import { CDPClient } from "./cdp";
 import { captureCdpTarget, type CaptureOutcome, type CaptureSize } from "./capture";
-import { BACKGROUND_TARGET_TYPES, evaluateOnExtensionPage, wakeExtensionWorker } from "./cdp-extension-page";
-import { sessionGuestIdentity } from "./extension-identity";
+import { evaluateOnExtensionPage } from "./cdp-extension-page";
+import { showHiddenTab, type HiddenTab } from "./capture-hidden-tab";
+import { tabsWorker, windowOf } from "./tab-switch-worker";
 
 export const FIRST_CAPTURE_MS = 4_000;
 
 const MIN_SECOND_CAPTURE_MS = 3_000;
-const EXTENSION_ORIGIN = /^chrome-extension:\/\/([a-p]{32})\//i;
 
 export type BehindWindow =
   | { tried: false }
@@ -24,59 +23,26 @@ export type BehindWindow =
 export interface BehindWindowCapture {
   outcome: CaptureOutcome;
   behindWindow: BehindWindow;
+  hiddenTab?: HiddenTab;
 }
 
 export const BEHIND_WINDOW_CAPTURED =
   "The page is the shown tab of a window that sits behind other windows, which the browser does not paint, so this tool showed a blank tab in that window for the capture and then switched back; it never brought the window forward or took the keyboard.";
 
-async function windowOf(port: number, targetId: string): Promise<number | null> {
-  const cdp = new CDPClient();
-
-  try {
-    await cdp.connect(await CDPClient.discoverBrowserWsUrl(port));
-    const found = (await cdp.sendCommand("Browser.getWindowForTarget", { targetId }, undefined, 3_000)) as { windowId?: unknown } | undefined;
-
-    return typeof found?.windowId === "number" ? found.windowId : null;
-  } catch {
-    return null;
-  } finally {
-    cdp.disconnect();
-  }
-}
-
-async function tabsWorker(port: number, projectPath: string, browser: string): Promise<{ targetId: string } | { reason: string }> {
-  const identity = sessionGuestIdentity(projectPath, browser);
-  const preferred = [...identity.expectedIds, ...identity.companionIds];
-  let listed: Array<{ id: string; type: string; url: string }>;
-
-  try {
-    listed = (await CDPClient.discoverTargets(port)).map((t) => ({ id: String(t.id), type: String(t.type), url: String(t.url ?? "") }));
-  } catch (error) {
-    return { reason: `the browser's target list could not be read: ${error instanceof Error ? error.message : String(error)}` };
-  }
-
-  const workers = listed.filter((t) => BACKGROUND_TARGET_TYPES.has(t.type) && EXTENSION_ORIGIN.test(t.url));
-
-  const rank = (url: string): number => {
-    const id = (EXTENSION_ORIGIN.exec(url)?.[1] ?? "").toLowerCase();
-    const at = preferred.indexOf(id);
-
-    return at === -1 ? preferred.length : at;
-  };
-
-  const best = workers.sort((a, b) => rank(a.url) - rank(b.url))[0];
-  if (best) return { targetId: best.id };
-
-  for (const id of identity.expectedIds) {
-    const wake = await wakeExtensionWorker(port, id);
-    const woken = wake.woken ? wake.targets.find((t) => BACKGROUND_TARGET_TYPES.has(t.type)) : undefined;
-    if (woken) return { targetId: woken.targetId };
-  }
-
-  return { reason: "no extension background is running in the browser to switch tabs from" };
-}
-
 export async function captureCdpPage(
+  port: number,
+  targetId: string,
+  size: CaptureSize,
+  timeoutMs: number,
+  session: { projectPath: string; browser: string },
+): Promise<BehindWindowCapture> {
+  const hidden = await showHiddenTab(port, targetId, session);
+  const capture = await capturePaintedPage(port, targetId, size, timeoutMs, session);
+
+  return { ...capture, hiddenTab: await hidden.restore() };
+}
+
+async function capturePaintedPage(
   port: number,
   targetId: string,
   size: CaptureSize,

@@ -177,7 +177,7 @@ describe("extension_screenshot picks a target when two tabs show the same page",
 
     expect(result.ok).toBe(true);
     expect(result.value.targetId).toBe("RECENT");
-    expect(attached).toEqual(["RECENT"]);
+    expect([...new Set(attached)]).toEqual(["RECENT"]);
     expect(result.warnings.join("\n")).toContain("this used targetId RECENT");
     expect(result.warnings.join("\n")).toContain("The others: OLDER");
   });
@@ -191,7 +191,7 @@ describe("extension_screenshot picks a target when two tabs show the same page",
 
     expect(result.ok).toBe(true);
     expect(result.value.targetId).toBe("OLDER");
-    expect(attached).toEqual(["OLDER"]);
+    expect([...new Set(attached)]).toEqual(["OLDER"]);
   });
 
   it("refuses a targetId that is gone with E_TARGET_NOT_FOUND naming the live targets", async () => {

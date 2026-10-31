@@ -38,6 +38,7 @@ import {
   foregroundUnsupported,
   type Foreground,
 } from "../lib/tab-foreground";
+import { withNavigatedTabForward } from "../lib/tab-foreground-by-id";
 import { CDPClient } from "../lib/cdp";
 import { resolveCdpPort, resolveRdpPort, CDP_PORT_MISSING_HINT } from "../lib/cdp-port";
 import { noSessionEnvelope } from "../lib/production-receipt";
@@ -273,10 +274,15 @@ export async function navigateToUrl(
   const reuse = options.reuse ?? "blank";
 
   if (options.tab != null) {
+    const navigated = await navigateToUrlViaBridge(projectPath, browser, url, timeout, schema.name, {
+      tab: options.tab,
+    });
+    const headless = sessionIsHeadless(projectPath, browser);
+
     return withSessionHeadless(
-      await navigateToUrlViaBridge(projectPath, browser, url, timeout, schema.name, {
-        tab: options.tab,
-      }),
+      options.foreground && isChromiumFamily(browser)
+        ? await withNavigatedTabForward(navigated, { projectPath, browser, headless, timeout }, options.tab)
+        : navigated,
       projectPath,
       browser,
     );
