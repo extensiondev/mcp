@@ -7,6 +7,7 @@
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
 import { AMO_SIGNED_STATUS } from "./review-beside-submission";
+
 import type { StoreReleaseState, StoreReleaseView } from "./platform-store-releases";
 import type { SubmissionView } from "./store-row-sources";
 

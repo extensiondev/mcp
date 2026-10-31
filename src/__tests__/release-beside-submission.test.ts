@@ -15,8 +15,9 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { writeCredentials } from "../lib/credentials";
 import { storeReleaseSentence, storeReleaseView } from "../lib/platform-store-releases";
 import { releaseBesideSubmission } from "../lib/release-beside-submission";
-import type { SubmissionView } from "../lib/store-row-sources";
 import { firefoxReleasesByChannel, readStores } from "../tools/store-status";
+
+import type { SubmissionView } from "../lib/store-row-sources";
 
 const POLL_AT = "2026-10-31T14:06:00.000Z";
 const PROJECT_ID = "prj_hands_free";
