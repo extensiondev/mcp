@@ -29,13 +29,13 @@ const count = (value: unknown): number => (typeof value === "number" ? value : 0
 const blockingFail = (check: Row): boolean =>
   text(check.status) === "fail" && text(check.severity) !== "warning" && text(check.severity) !== "info";
 
-function ruleForced(json: Row, store: string, counted: Set<string>): boolean {
+function ruleBlockers(json: Row, store: string, counted: Set<string>): string[] {
   const block = json[`${store}Preflight`];
-  if (!isRow(block)) return false;
+  if (!isRow(block)) return [];
 
   const blocking = ids(block.blocking);
 
-  return store === "firefox" ? blocking.length > 0 : blocking.some((id) => !counted.has(id));
+  return store === "firefox" ? blocking : blocking.filter((id) => !counted.has(id));
 }
 
 export function requirementBlockersOf(platform: Row, rows: RequirementRow[] | null): string[] {
@@ -54,12 +54,24 @@ export function summaryAgreeingWithRows(args: SummaryRowsArgs): Row {
   const review = isRow(args.summary.review) ? args.summary.review : null;
   const counted = new Set([...args.checks.filter(blockingFail).map((check) => text(check.id)), ...before]);
   const reviewChecksBlocking = args.checks.filter((check) => text(check.stage) === "review" && blockingFail(check)).length;
-  const own = reviewChecksBlocking === 0 && !ruleForced(args.json, args.store, counted);
+  const rules = ruleBlockers(args.json, args.store, counted);
+  const own = reviewChecksBlocking === 0 && rules.length === 0;
+  const added = args.recounted ? rules.length : 0;
+  const integration = isRow(args.summary.integration) ? args.summary.integration : null;
   const kept = Object.fromEntries(Object.entries(args.summary).filter(([key]) => key !== "requirementBlockers"));
 
   return {
     ...kept,
-    blockingFailures: Math.max(0, count(args.summary.blockingFailures) + delta),
+    blockingFailures: Math.max(0, count(args.summary.blockingFailures) + delta + added),
+    ...(added && integration
+      ? {
+          integration: {
+            ...integration,
+            blockingFailures: count(integration.blockingFailures) + added,
+            canQueue: false,
+          },
+        }
+      : {}),
     ...(review
       ? {
           review: {
@@ -69,6 +81,7 @@ export function summaryAgreeingWithRows(args: SummaryRowsArgs): Row {
           },
         }
       : {}),
+    ...(added ? { canSubmit: false } : {}),
     ...(after.length ? { requirementBlockers: after } : {}),
   };
 }

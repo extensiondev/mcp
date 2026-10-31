@@ -788,9 +788,7 @@ function readinessView(
   const bringList = bringListOf(store, requirements, review?.canSubmitForReview !== false);
 
   return {
-    canSubmit:
-      summary.canSubmit === true ||
-      (deferred.length > 0 && failing.length === 0),
+    canSubmit: summary.canSubmit === true,
     ...(connection ? { connection } : {}),
     ...(connectionSource ? { connectionSource } : {}),
     ...(submissionMode ? { submissionMode } : {}),
