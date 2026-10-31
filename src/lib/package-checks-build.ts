@@ -6,24 +6,28 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
-import { dispatchedPushSentence, docsOnlySentence, skippedPushSentence } from "./head-push";
+import { readBuildAllowance } from "./build-allowance";
+import { localPackageHold, packageHoldSentence, type PackageHold } from "./build-inputs";
+import { dispatchedPushSentence, docsOnlySentence, REFUSED_OUTCOMES, refusedPushSentence, skippedPushSentence, type BuildCap, type HeadPush } from "./head-push";
+import { platformApiGet, type ProjectApi } from "./project-api";
 import { isRow, text } from "./ship-act";
-import { gitHead, platformBuildIcons } from "./store-listing-icon";
-
-import type { ProjectApi } from "./project-api";
-import type { BuildIcons } from "./store-listing-icon";
+import { gitHead, platformBuildIcons, type BuildIcons } from "./store-listing-icon";
 
 type Row = Record<string, unknown>;
 
 const BUILD_IN_MESSAGE = /\bof build ([0-9a-f]{7,40})\b/g;
 const SHORT = 7;
+const HOLD_STATES = new Set(["no-record", "unreadable", "not-dispatched"]);
 
 export interface PackageBuildView {
   read: string[];
   head: string;
   headPush?: { outcome: string; receivedAt: string };
+  holds?: PackageHold;
   say: string;
 }
+
+type CapRead = () => Promise<BuildCap | null>;
 
 export function buildsReadByPackageChecks(report: Row, store: string): string[] {
   const block = report[`${store}Preflight`];
@@ -39,6 +43,12 @@ export function buildsReadByPackageChecks(report: Row, store: string): string[] 
 
 function sameBuild(id: string, head: string): boolean {
   return head.startsWith(id) || id.startsWith(head.slice(0, SHORT));
+}
+
+function refusedPush(builds: BuildIcons): HeadPush | null {
+  const push = builds.headPush;
+
+  return push && !push.dispatched && REFUSED_OUTCOMES.has(push.outcome) ? push : null;
 }
 
 function headState(builds: BuildIcons, short: string): string {
@@ -61,7 +71,18 @@ function docsOnlySay(read: string[], newest: string, short: string, store: strin
   return `${store}: the package checks read build ${read.join(", ")}; ${subject} changes docs only and ${newest}, the newest build, carries the same package; call preflight again with buildSha: "${newest}".`;
 }
 
-export async function packageBuildView(projectPath: string, report: Row, store: string, shared: () => Promise<BuildIcons>): Promise<PackageBuildView | null> {
+async function headSay(projectPath: string, read: string[], head: string, builds: BuildIcons, cap: CapRead): Promise<{ say: string; hold: PackageHold | null }> {
+  const short = head.slice(0, SHORT);
+  const subject = `HEAD ${short}`;
+  const refused = refusedPush(builds);
+  const hold = builds.why !== null && HOLD_STATES.has(builds.why) ? localPackageHold(projectPath, read, head) : null;
+  const state = refused ? refusedPushSentence(refused, subject, await cap(), builds.newest ?? read[0] ?? null) : headState(builds, short);
+  const say = hold ? `${packageHoldSentence(hold, subject)}${builds.why === "not-dispatched" ? `; ${state}` : ""}` : state;
+
+  return { say, hold };
+}
+
+export async function packageBuildView(projectPath: string, report: Row, store: string, shared: () => Promise<BuildIcons>, cap: CapRead): Promise<PackageBuildView | null> {
   const read = buildsReadByPackageChecks(report, store);
   if (!read.length || !projectPath) return null;
 
@@ -71,16 +92,30 @@ export async function packageBuildView(projectPath: string, report: Row, store: 
   const short = head.slice(0, SHORT);
   const builds = await shared();
   const push = builds.headPush ? { headPush: { outcome: builds.headPush.outcome, receivedAt: builds.headPush.receivedAt } } : {};
-  const say = builds.why === "docs-only" && builds.build ? docsOnlySay(read, builds.build, short, store) : `${store}: the package checks read build ${read.join(", ")}; ${headState(builds, short)}.`;
 
-  return { read, head: short, ...push, say };
+  if (builds.why === "docs-only" && builds.build) return { read, head: short, ...push, say: docsOnlySay(read, builds.build, short, store) };
+
+  const { say, hold } = await headSay(projectPath, read, head, builds, cap);
+
+  return { read, head: short, ...push, ...(hold ? { holds: hold } : {}), say: `${store}: the package checks read build ${read.join(", ")}; ${say}.` };
+}
+
+export async function readBuildCap(api: ProjectApi): Promise<BuildCap | null> {
+  const read = await platformApiGet<Row>(api, `/api/workspaces/${encodeURIComponent(api.ref.workspace)}/plan`);
+  if (!read.ok || !isRow(read.json)) return null;
+
+  const allowance = readBuildAllowance(read.json);
+
+  return { used: allowance?.used ?? null, limit: allowance?.limit ?? null, month: text(read.json.month) };
 }
 
 export function packageBuildViews(api: ProjectApi, projectPath: string, reports: Record<string, Row>, stores: string[]): Promise<Array<PackageBuildView | null>> {
   let builds: Promise<BuildIcons> | undefined;
+  let cap: Promise<BuildCap | null> | undefined;
   const shared = () => (builds ??= platformBuildIcons(api, projectPath, ""));
+  const capOnce = () => (cap ??= readBuildCap(api));
 
-  return Promise.all(stores.map((store) => (reports[store] ? packageBuildView(projectPath, reports[store], store, shared) : Promise.resolve(null))));
+  return Promise.all(stores.map((store) => (reports[store] ? packageBuildView(projectPath, reports[store], store, shared, capOnce) : Promise.resolve(null))));
 }
 
 export function packageBuildLine(views: Array<PackageBuildView | null>): string {
