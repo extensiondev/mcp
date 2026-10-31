@@ -9,7 +9,10 @@
 import { openProjectApi, projectApiGet } from "./project-api";
 import { releaseTypeMeaning } from "./store-row-sources";
 
-export const STORE_RELEASE_STATES = ["uploaded", "in-review", "approved", "live", "rejected", "withdrawn", "superseded"] as const;
+export const STORE_RELEASE_STATES = ["uploaded", "in-review", "approved", "live", "signed", "rejected", "withdrawn", "superseded"] as const;
+
+export const SIGNED_STATE_SENTENCE = "signed (unlisted, not on AMO)";
+export const AMO_FILE_STATUS_LABEL = "AMO's file status";
 
 export type StoreReleaseState = (typeof STORE_RELEASE_STATES)[number] | "unknown";
 
@@ -217,6 +220,10 @@ export function newestStoreReleaseByLane(rows: StoreReleaseView[]): Record<strin
   return newestBy(rows, storeReleaseLane);
 }
 
+function storeWordLabel(row: StoreReleaseView): string {
+  return row.state === "signed" ? AMO_FILE_STATUS_LABEL : "the store's word";
+}
+
 export function storeReleaseSentence(row: StoreReleaseView): string {
   const version =
     row.storeVersion?.buildNumber && row.storeVersion.displayed === row.version
@@ -228,9 +235,14 @@ export function storeReleaseSentence(row: StoreReleaseView): string {
       : row.source === "hand"
         ? `recorded by hand from the store's own dashboard ${row.readAt || "at an unknown time"}, not read by a store check`
         : KNOWN_STORE_WORD_SOURCES.has(row.source)
-          ? `the store's word ${row.storeWord || "unknown"}, read ${row.readAt || "at an unknown time"} by ${row.source}`
-          : `the store's word ${row.storeWord || "unknown"}, read ${row.readAt || "at an unknown time"} by ${row.source}, a source this MCP does not know, so it grounds no next step`;
-  const state = row.state === "unknown" ? `${row.stateWord || "unknown"} (a state this MCP does not know; update the MCP to read it)` : row.state;
+          ? `${storeWordLabel(row)} ${row.storeWord || "unknown"}, read ${row.readAt || "at an unknown time"} by ${row.source}`
+          : `${storeWordLabel(row)} ${row.storeWord || "unknown"}, read ${row.readAt || "at an unknown time"} by ${row.source}, a source this MCP does not know, so it grounds no next step`;
+  const state =
+    row.state === "unknown"
+      ? `${row.stateWord || "unknown"} (a state this MCP does not know; update the MCP to read it)`
+      : row.state === "signed"
+        ? SIGNED_STATE_SENTENCE
+        : row.state;
   const audience =
     row.state === "live"
       ? row.visibility
@@ -260,11 +272,13 @@ export function storeReleasesSentence(rows: StoreReleaseView[], unread: boolean)
   if (!newest.length) return "No store has received a release of this project yet.";
 
   const live = Object.values(newestStoreReleaseByLane(rows.filter((row) => row.state === "live")));
-  const rest = newest.filter((row) => row.state !== "live");
+  const signed = Object.values(newestStoreReleaseByLane(rows.filter((row) => row.state === "signed")));
+  const rest = newest.filter((row) => row.state !== "live" && row.state !== "signed");
   const parts: string[] = [];
 
   if (live.length) parts.push(`Live in ${live.length === 1 ? "one store" : `${live.length} stores`}: ${live.map(storeReleaseSentence).join("; ")}.`);
-  if (rest.length) parts.push(`${live.length ? "Not live yet" : "In the stores"}: ${rest.map(storeReleaseSentence).join("; ")}.`);
+  if (signed.length) parts.push(`Signed for self distribution, not on AMO: ${signed.map(storeReleaseSentence).join("; ")}.`);
+  if (rest.length) parts.push(`${live.length || signed.length ? "Not live yet" : "In the stores"}: ${rest.map(storeReleaseSentence).join("; ")}.`);
   if (!live.length) parts.push("Nothing is live in a store.");
 
   return parts.join(" ");

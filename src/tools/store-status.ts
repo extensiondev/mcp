@@ -55,6 +55,8 @@ import {
   newestStoreReleaseByLane,
   newestStoreReleaseByStore,
   readPlatformStoreReleases,
+  SIGNED_STATE_SENTENCE,
+  AMO_FILE_STATUS_LABEL,
   storeReleaseSentence,
   type StoreReleaseView,
 } from "../lib/platform-store-releases";
@@ -295,7 +297,7 @@ export function safariNextStep(latest: SubmissionView | undefined, url: string, 
  * on it, which is Cezar's decision B of 2026-10-28 after Rebeccat's record
  * drifted from the stores a dozen times in eleven days.
  */
-export function statusReadNote(read: StoreStatusRead | undefined): string {
+export function statusReadNote(read: StoreStatusRead | undefined, signed = false): string {
   if (!read) return "";
 
   if (read.source === "inferred") {
@@ -312,7 +314,7 @@ export function statusReadNote(read: StoreStatusRead | undefined): string {
 
   const where = read.source === "run" ? "the run" : read.source === "poll" ? "a store check" : "the store's answer";
 
-  return ` (read from ${where}${read.readAt ? ` at ${read.readAt}` : ""}${read.storeWord ? `, the store says ${read.storeWord}` : ""})`;
+  return ` (read from ${where}${read.readAt ? ` at ${read.readAt}` : ""}${read.storeWord ? `, ${signed ? AMO_FILE_STATUS_LABEL : "the store says"} ${read.storeWord}` : ""})`;
 }
 
 function storeVersionOf(raw: unknown): SubmissionView["storeVersion"] | undefined {
@@ -920,8 +922,8 @@ async function answerStores(
     if (submission) {
       tail.push(
         `last submission${submission.version ? ` v${submission.version}` : ""} ${
-          submission.status || "recorded"
-        }${statusReadNote(submission.statusRead)}${submission.submittedAt ? ` at ${submission.submittedAt}` : ""}${
+          submission.status === AMO_SIGNED_STATUS ? SIGNED_STATE_SENTENCE : submission.status || "recorded"
+        }${statusReadNote(submission.statusRead, submission.status === AMO_SIGNED_STATUS)}${submission.submittedAt ? ` at ${submission.submittedAt}` : ""}${
           submission.failureReason ? ` (${submission.failureReason})` : ""
         }${submission.supersededBy ? ` (replaced by ${submission.supersededBy} before review, not rejected)` : ""}`,
       );

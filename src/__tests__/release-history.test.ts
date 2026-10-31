@@ -307,7 +307,7 @@ describe("extension_release_status reads release history and store records from 
     expect(history.hint).toContain("Live in 2 stores: edge 0.2.0.7 live");
     expect(history.hint).toContain("chrome 0.2.0.7 live");
     expect(history.hint).toContain("Not live yet: safari 0.2.0 (build 14) in-review, set to manual release as App Store Connect answered 2026-10-30T01:21:56.695Z");
-    expect(history.hint).toContain("summary.activeReleases (2) counts the store releases at live in value.storeReleases; summary.liveChannels (0) counts the channel releases in value.releases");
+    expect(history.hint).toContain("summary.activeReleases (2) counts the store releases at live or signed for self distribution in value.storeReleases; summary.liveChannels (0) counts the channel releases in value.releases");
 
     const stores = out.value.stores.value.stores as Array<Record<string, any>>;
     const chrome = stores.find((entry) => entry.store === "chrome");

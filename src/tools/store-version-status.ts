@@ -9,6 +9,8 @@
 import { ConsoleProjectPage } from "@extension.dev/urls/paths";
 
 import { envelope, isEnvelope } from "../lib/envelope";
+import { AMO_FILE_STATUS_LABEL, SIGNED_STATE_SENTENCE } from "../lib/platform-store-releases";
+import { AMO_SIGNED_STATUS } from "../lib/review-beside-submission";
 import { consoleProjectUrl } from "../lib/registry";
 import { readsBeforeDispatch } from "../lib/store-read-landed";
 import { isRow, text } from "../lib/ship-act";
@@ -80,11 +82,13 @@ function landedUnsourced(entry: StoreVersionStatus, refresh: Row | null, wait: R
   return ` (the store check this call asked for landed at ${entry.readAt}, after its dispatch at ${dispatchedAt}, but the platform answered no source for that read, so it grounds no next step)`;
 }
 
-function storeSentence(entry: StoreVersionStatus, refresh: Row | null, wait: Row | null): string {
+export function storeVersionSentence(entry: StoreVersionStatus, refresh: Row | null, wait: Row | null): string {
   if (!entry.version && !entry.status) return `${entry.store}: no submission recorded`;
 
   const build = entry.buildNumber ? ` build ${entry.buildNumber}` : "";
-  const state = entry.state ? `, the store says ${entry.state}` : "";
+  const signed = entry.store === "firefox" && entry.status === AMO_SIGNED_STATUS;
+  const status = signed ? SIGNED_STATE_SENTENCE : entry.status ?? "recorded";
+  const state = entry.state ? `, ${signed ? AMO_FILE_STATUS_LABEL : "the store says"} ${entry.state}` : "";
   const read = entry.source
     ? ` (${entry.source}${entry.readAt ? ` at ${entry.readAt}` : ""})`
     : landedUnsourced(entry, refresh, wait) || " (no store read behind it)";
@@ -92,7 +96,7 @@ function storeSentence(entry: StoreVersionStatus, refresh: Row | null, wait: Row
   const release = entry.releaseType ? `, release type ${entry.releaseType}${meaning ? ` (${meaning})` : ""}` : "";
   const next = entry.nextStep ? `. Next: ${entry.nextStep.say}` : "";
 
-  return `${entry.store} ${entry.version ?? ""}${build}: ${entry.status ?? "recorded"}${state}${read}${release}${next}`;
+  return `${entry.store} ${entry.version ?? ""}${build}: ${status}${state}${read}${release}${next}`;
 }
 
 const STEP_ORDER = ["release", "watch"];
@@ -185,7 +189,7 @@ export async function storeVersionStatus(args: {
       nextStep: step,
       trackUrl: trackUrl || undefined,
     },
-    hint: `${waitSentence}${stores.length ? stores.map((entry) => storeSentence(entry, refresh, wait)).join(". ") : "No store has a submission recorded"}. This reads the same store records as ${STORES_READ_CALL}, which answers the full store picture; only a state a store check or the publish answer read grounds a next step.`,
+    hint: `${waitSentence}${stores.length ? stores.map((entry) => storeVersionSentence(entry, refresh, wait)).join(". ") : "No store has a submission recorded"}. This reads the same store records as ${STORES_READ_CALL}, which answers the full store picture; only a state a store check or the publish answer read grounds a next step.`,
     warnings: Array.isArray(parsed.warnings) ? parsed.warnings.map(String) : [],
   });
 }

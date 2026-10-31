@@ -161,7 +161,7 @@ export async function readReleaseHistory(scope: Scope): Promise<string> {
   const storesSentence = storeReleasesSentence(stores.rows, stores.unread);
   const countsSentence =
     stores.summary.activeReleases !== undefined || stores.summary.liveChannels !== undefined
-      ? `summary.activeReleases (${stores.summary.activeReleases ?? 0}) counts the store releases at live in value.storeReleases; summary.liveChannels (${stores.summary.liveChannels ?? 0}) counts the channel releases in value.releases that every browser's promote run proved live, so a channel release reading pending says nothing about the stores.`
+      ? `summary.activeReleases (${stores.summary.activeReleases ?? 0}) counts the store releases at live or signed for self distribution in value.storeReleases; summary.liveChannels (${stores.summary.liveChannels ?? 0}) counts the channel releases in value.releases that every browser's promote run proved live, so a channel release reading pending says nothing about the stores.`
       : "";
   const channelsSentence =
     releases.length > 0
