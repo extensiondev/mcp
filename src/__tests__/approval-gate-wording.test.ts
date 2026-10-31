@@ -91,6 +91,24 @@ describe("the approval gate describes an action by what it is, not as irreversib
     expect(out.error.message).toContain("Open a release pull request in acme/widget");
     expect(out.error.message).not.toContain("Change the build settings");
   });
+
+  it("ledger 341: says a consequence the platform's description already ends with once", async () => {
+    const consequence = "Chrome public sends the next upload to Chrome's review, which publishes it to everyone the item's dashboard visibility allows when it passes.";
+    const gate = await evaluateApproval(
+      input({
+        reason: `${consequence} That changes who can find the extension once a build leaves for the store.`,
+        fetchImpl: answering(201, {
+          approvalId: "apr_1",
+          approvalUrl: `${API}/approve/apr_1`,
+          description: `Change the chrome store settings of acme/widget: submission mode draft -> public. ${consequence}`,
+        }),
+      }),
+    );
+    const message = JSON.parse((gate as { envelope: string }).envelope).error.message as string;
+
+    expect(message.split(consequence)).toHaveLength(2);
+    expect(message).toContain(`${consequence} That changes who can find the extension once a build leaves for the store. Open ${API}/approve/apr_1`);
+  });
 });
 
 describe("a submit approval repeats the platform's outcome sentence on every later call", () => {

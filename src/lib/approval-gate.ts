@@ -32,6 +32,13 @@ import {
   type ApprovalScope,
 } from "./approval-verify";
 
+function unsaid(described: string, reason: string): string {
+  const sentences = reason.split(/(?<=\.)\s+/);
+  const kept = sentences.filter((sentence) => !described.includes(sentence.trim()));
+
+  return kept.join(" ");
+}
+
 export {
   APPROVAL_PENDING_STATUS,
   APPROVAL_REJECTED_STATUS,
@@ -270,7 +277,7 @@ async function requestApproval(params: {
     APPROVAL_REQUIRED_STATUS,
     "E_APPROVAL_REQUIRED",
     "ApprovalRequired",
-    `${described} ${input.reason ?? (input.irreversible ? "This is irreversible, so a human must approve it first." : "A human must approve it first.")} Open ${
+    `${described} ${unsaid(described, input.reason ?? (input.irreversible ? "This is irreversible, so a human must approve it first." : "A human must approve it first."))} Open ${
       approvalUrl || "the approval URL"
     } to review and approve, then call this tool again with the same arguments and approvalId ${
       approvalId || "<from the response>"
