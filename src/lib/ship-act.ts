@@ -69,6 +69,14 @@ export const REFUNDED_STEP = { kind: "retry", say: REFUNDED_SAY, url: null } as 
 const ALLOWANCE = new Set(["burst_cap", "monthly_cap", "RATE_LIMITED"]);
 const UNSURE = new Set(["counter_unavailable", "entitlement_unavailable", "kill_switch", "unattributed"]);
 const STORES_READ = "extension_release_status (include: [\"stores\"])";
+const STORE_DRAFT_LABELS: Record<string, string> = { chrome: "Chrome", edge: "Edge", safari: "Safari" };
+
+function oneOf(words: string[]): string {
+  return words.length > 1 ? `${words.slice(0, -1).join(", ")} or ${words[words.length - 1]}` : words.join("");
+}
+
+const PUBLISH_STORE_WORDS = oneOf(Object.values(STORE_DRAFT_LABELS));
+const PUBLISH_BROWSERS_WORDS = oneOf(Object.keys(STORE_DRAFT_LABELS).map((store) => `["${store}"]`));
 
 const HINTS: Record<string, string> = {
   BUILD_DISPATCH_DISABLED: "Dispatch is paused for every project right now, so nothing ran. Try again later.",
@@ -98,7 +106,7 @@ const HINTS: Record<string, string> = {
   SAFARI_BUILD_NOT_FOUND: `No Safari submission carries the TestFlight build number named, so nothing was sent and no approval was requested; value.knownBuildNumbers lists the builds on record. Call publish with one of them, or with no buildNumber to send the newest; ${STORES_READ} shows each submission's build.`,
   SAFARI_BUILD_NUMBER_INVALID: "buildNumber is the TestFlight build number Apple shows, a whole number above zero. Nothing was sent.",
   SAFARI_VERSION_IN_REVIEW: `Apple holds another App Store version of this app for review and creates no other version meanwhile, so the draft was not sent and no approval was spent. Withdraw that version with extension_submit {action: "cancel", store: "safari", submissionId: value.heldSubmissionId} once a workspace owner approves it, then call publish again; ${STORES_READ} shows the held version.`,
-  PUBLISH_STORE_NOT_SUPPORTED: "Sending a draft to review is a Chrome Web Store act here; the other stores enter review when they are submitted.",
+  PUBLISH_STORE_NOT_SUPPORTED: `Sending a draft to review is a ${PUBLISH_STORE_WORDS} act here: call publish with browsers ${PUBLISH_BROWSERS_WORDS}. Firefox has no publish act; AMO reviews a Firefox version when it is submitted.`,
   PUBLISH_IN_FLIGHT: `The publish you asked for is already on its way and nothing was dispatched again. Read the record with ${STORES_READ}, or call extension_submit {action: "status"} when it exists, and never send the draft again while it is on its way.`,
   SAFARI_NOT_PENDING_RELEASE: `App Store Connect holds no version waiting for a developer release, so nothing was released and no approval was requested; the message names the state Apple last reported. A version goes on sale here only after Apple approves it under manual release; ${STORES_READ} shows each Safari submission's state.`,
   SAFARI_RELEASE_NOT_MANUAL: "App Store Connect reads this version as releasing on its own after approval, so there is no manual release to make and no approval was requested. The release mode is changed in App Store Connect.",
@@ -111,8 +119,6 @@ const HINTS: Record<string, string> = {
   VERSION_NOT_AHEAD: "Pass a version above the current one, or a level instead of a version.",
   TESTING_WORKSPACE_READ_ONLY: "This is a testing workspace, which reads but does not change anything.",
 };
-
-const STORE_DRAFT_LABELS: Record<string, string> = { chrome: "Chrome", edge: "Edge", safari: "Safari" };
 
 /* @invariant A STORE REFUSAL HINT NAMES THE STORE OF THE CALL. Rebeccat's
  * Safari publish of 2026-10-28 was answered "Only a Chrome draft can be sent
