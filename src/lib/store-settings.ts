@@ -27,14 +27,17 @@ export const SUBMISSION_MODE_IDS: Record<StoreSettingsStore, readonly string[]> 
   safari: ["draft", "dry-run"],
 };
 
-export const STORE_SETTING_KEYS = ["enabled", "submissionMode", "sourceArchive", "releaseChannel", "chromeItemId", "edgeProductId", "firefoxAddonGuid", "appStoreId", "bundleId", "firstSubmitted", "storeUrl"] as const;
+export const STORE_SETTING_KEYS = ["enabled", "submissionMode", "sourceArchive", "releaseChannel", "chromeItemId", "edgeProductId", "firefoxAddonGuid", "appStoreId", "bundleId", "firstSubmitted", "storeUrl", "publisherId"] as const;
 
 const FIREFOX_ONLY_KEYS = new Set(["sourceArchive", "releaseChannel"]);
 
 export const ID_KEYS: Record<string, StoreSettingsStore> = { chromeItemId: "chrome", edgeProductId: "edge", firefoxAddonGuid: "firefox", appStoreId: "safari" };
 
 const CHROME_ITEM_ID = /^[a-p]{32}$/i;
-const CHROME_DASHBOARD_ADDRESS = /devconsole\/(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[^/\s]+)\/([a-p]{32})(?:[/?#]|$)/i;
+const CHROME_PUBLISHER_ID = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,62}[A-Za-z0-9])?$/;
+const CHROME_DASHBOARD_ADDRESS = /^(?:https?:\/\/)?chrome\.google\.com\/(?:u\/\d+\/)?webstore\/devconsole\/([^/\s?#]+)\/([a-p]{32})(?:[/?#]|$)/i;
+const CHROME_PUBLISHER_ADDRESS = /^(?:https?:\/\/)?chrome\.google\.com\/(?:u\/\d+\/)?webstore\/devconsole\/([^/\s?#]+)(?:[/?#]|$)/i;
+const CHROME_DASHBOARD_FORM = "chrome.google.com/webstore/devconsole/<publisherId>/<itemId>/edit";
 const EDGE_PRODUCT_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const AMO_GUID = /^(?:\{[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\}|[a-z0-9._-]*@[a-z0-9._-]+)$/i;
 const APP_STORE_ID = /^[1-9]\d{5,14}$/;
@@ -44,7 +47,6 @@ const AMO_GUID_RULING = "An AMO slug or numeric id does not identify the add-on 
 const CONSOLE_ONLY_KEYS = new Set([
   "storeId",
   "storeUrl",
-  "publisherId",
   "appAppleId",
   "deployPercentage",
   "reviewExemption",
@@ -57,7 +59,7 @@ const CONSOLE_ONLY_KEYS = new Set([
 
 const CREDENTIAL_KEY = /secret|token|password|credential|issuer|key|client|json|p8|pem|cert|account|oauth|refresh/i;
 
-export const PATCH_KEYS = ["enabled", "dryRun", "skipPublish", "stagedPublish", "publishAfter", "releaseChannel", "sourceArchive", "storeId", "bundleId", "firstSubmitted", "storeUrl"] as const;
+export const PATCH_KEYS = ["enabled", "dryRun", "skipPublish", "stagedPublish", "publishAfter", "releaseChannel", "sourceArchive", "storeId", "bundleId", "firstSubmitted", "storeUrl", "publisherId"] as const;
 
 export type StoreSettingsPatch = Partial<Record<(typeof PATCH_KEYS)[number], boolean | string | null>>;
 
@@ -110,11 +112,11 @@ export function readStoreSettingsChange(store: StoreSettingsStore, raw: unknown)
   const credential = Object.keys(raw).filter((key) => !(STORE_SETTING_KEYS as readonly string[]).includes(key) && CREDENTIAL_KEY.test(key));
   if (credential.length) return { credential };
 
-  const consoleOnly = Object.keys(raw).filter((key) => CONSOLE_ONLY_KEYS.has(key) && !(store === "edge" && key === "storeUrl"));
+  const consoleOnly = Object.keys(raw).filter((key) => CONSOLE_ONLY_KEYS.has(key) && !(key === "storeUrl" && (store === "edge" || store === "chrome")));
 
   if (consoleOnly.length) {
     return {
-      problem: `storeSettings has ${consoleOnly.map((k) => `"${k}"`).join(", ")}, which is a raw platform field; a listing id goes in as chromeItemId, edgeProductId, firefoxAddonGuid or appStoreId, the Safari bundle id as bundleId, the Edge Add-ons listing as storeUrl on edge, and publisher ids, other store URLs and the rest stay a person at a keyboard in the console store settings. Use ${STORE_SETTING_KEYS.join(", ")}.`,
+      problem: `storeSettings has ${consoleOnly.map((k) => `"${k}"`).join(", ")}, which is a raw platform field; a listing id goes in as chromeItemId, edgeProductId, firefoxAddonGuid or appStoreId, the Safari bundle id as bundleId, the Edge Add-ons listing as storeUrl on edge, the Chrome publisher id as publisherId or the item's dashboard address as storeUrl on chrome, and other store URLs and the rest stay a person at a keyboard in the console store settings. Use ${STORE_SETTING_KEYS.join(", ")}.`,
     };
   }
 
@@ -138,6 +140,10 @@ export function readStoreSettingsChange(store: StoreSettingsStore, raw: unknown)
     return { problem: `"firstSubmitted" is an edge store setting; ${store} does not have it.` };
   }
 
+  if (store !== "chrome" && "publisherId" in raw) {
+    return { problem: `"publisherId" is a chrome store setting; ${store} does not have it.` };
+  }
+
   const foreignId = Object.keys(raw).filter((key) => key in ID_KEYS && ID_KEYS[key] !== store);
 
   if (foreignId.length) {
@@ -153,6 +159,39 @@ export function readStoreSettingsChange(store: StoreSettingsStore, raw: unknown)
   if (id) {
     patch.storeId = id.storeId;
     requested[id.key] = id.storeId;
+  }
+
+  if ("publisherId" in raw) {
+    const publisherId = readChromePublisherId(raw.publisherId);
+
+    if (!publisherId) {
+      return { problem: `publisherId must be the Chrome Web Store publisher id, the token after /devconsole/ in the item's dashboard address (${CHROME_DASHBOARD_FORM}), or that address itself; got "${text(raw.publisherId)}".` };
+    }
+
+    patch.publisherId = publisherId;
+    requested.publisherId = publisherId;
+  }
+
+  if (store === "chrome" && "storeUrl" in raw) {
+    const address = CHROME_DASHBOARD_ADDRESS.exec(text(raw.storeUrl));
+    const publisherId = address ? readChromePublisherId(address[1]!) : "";
+
+    if (!address || !publisherId) {
+      return { problem: `storeSettings.storeUrl for chrome must be the item's address from the Chrome Web Store developer dashboard (${CHROME_DASHBOARD_FORM}), which names the publisher id and the item id together; got "${text(raw.storeUrl)}".` };
+    }
+
+    if (patch.storeId && patch.storeId !== address[2]!.toLowerCase()) {
+      return { problem: `storeSettings.storeUrl names item ${address[2]!.toLowerCase()} and chromeItemId names ${patch.storeId}; pass one of them.` };
+    }
+
+    if (patch.publisherId && patch.publisherId !== publisherId) {
+      return { problem: `storeSettings.storeUrl names publisher ${publisherId} and publisherId names ${patch.publisherId}; pass one of them.` };
+    }
+
+    patch.storeId = address[2]!.toLowerCase();
+    patch.publisherId = publisherId;
+    requested.chromeItemId = patch.storeId;
+    requested.publisherId = publisherId;
   }
 
   if ("bundleId" in raw) {
@@ -194,7 +233,7 @@ export function readStoreSettingsChange(store: StoreSettingsStore, raw: unknown)
    * Partner Center product id answers 404 there) is refused before anything
    * is sent.
    */
-  if ("storeUrl" in raw) {
+  if (store === "edge" && "storeUrl" in raw) {
     const value = text(raw.storeUrl);
     const listing = edgeListingUrlOf(value);
 
@@ -254,9 +293,19 @@ export function readStoreSettingsChange(store: StoreSettingsStore, raw: unknown)
  * which does not identify the add-on to Mozilla's blocklist; Safari takes the
  * app record's numeric App Store id (ledger 159). Each goes to the platform
  * as that store's storeId, a plain write under an owner's token, beside the
- * Safari bundleId, the project's own identifier (ledger 155); publisher ids
- * and store URLs stay in the console.
+ * Safari bundleId, the project's own identifier (ledger 155). The Chrome
+ * publisher id sits in the same dashboard address as the item id and the
+ * preflight blocks on it, so chrome takes it as publisherId, or both ids at
+ * once from the address as storeUrl (ledger 317); other store URLs stay in
+ * the console.
  */
+function readChromePublisherId(value: unknown): string {
+  const given = text(value);
+  const bare = CHROME_PUBLISHER_ADDRESS.exec(given)?.[1] ?? given;
+
+  return CHROME_PUBLISHER_ID.test(bare) ? bare : "";
+}
+
 function readStoreId(store: StoreSettingsStore, raw: Row): { key: string; storeId: string } | { problem: string } | null {
   const key = Object.keys(ID_KEYS).find((name) => name in raw && ID_KEYS[name] === store);
   if (!key) return null;
@@ -264,7 +313,7 @@ function readStoreId(store: StoreSettingsStore, raw: Row): { key: string; storeI
   const value = text(raw[key]);
 
   if (store === "chrome") {
-    const bare = CHROME_ITEM_ID.test(value) ? value : CHROME_DASHBOARD_ADDRESS.exec(value)?.[1] ?? "";
+    const bare = CHROME_ITEM_ID.test(value) ? value : CHROME_DASHBOARD_ADDRESS.exec(value)?.[2] ?? "";
 
     return bare
       ? { key, storeId: bare.toLowerCase() }
@@ -291,8 +340,8 @@ function readStoreId(store: StoreSettingsStore, raw: Row): { key: string; storeI
 /* @invariant THE CLIENT HASHES THE BYTES THE SERVER HASHES. The approval is
  * a sha256 over {store, settings} with the settings keys in the order
  * enabled, dryRun, skipPublish, stagedPublish, publishAfter, releaseChannel,
- * sourceArchive, storeId, bundleId, firstSubmitted, only the keys the patch carries, rendered with
- * JSON.stringify. A digest that differs from the platform's asks a human to
+ * sourceArchive, storeId, bundleId, firstSubmitted, storeUrl, publisherId,
+ * only the keys the patch carries, rendered with JSON.stringify. A digest that differs from the platform's asks a human to
  * approve a change that can never run, so it is refused instead.
  */
 export function storeSettingsDigest(store: StoreSettingsStore, patch: StoreSettingsPatch): string {

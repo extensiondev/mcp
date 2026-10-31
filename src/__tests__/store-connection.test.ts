@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { serverInstructions } from "../index";
+import { ITEM_ON_FILE_POINTER } from "../lib/chrome-item-left";
 import { LINK_ITEM_POINTER } from "../lib/link-item-answer";
 import { trackFields } from "../lib/track-url";
 import { handler as submit } from "../tools/submit";
@@ -113,6 +114,72 @@ describe("extension_submit points a person at the Chrome Web Store connection in
     expect(JSON.stringify(out)).not.toContain("created on the first submission");
     expect(JSON.stringify(out)).not.toMatch(SECRET_NAMES);
     expect(trackFields("extension_submit", { args: { action: "preflight", browsers: ["chrome"], api: API }, status: out.status, value: out.value })?.trackUrl).toBe(SETTINGS);
+  });
+
+  it("a healthy connection with the item id on file and no publisher id drops the create-the-item sentence and names what is left with its call (ledger 317)", async () => {
+    if (process.platform === "win32") return;
+
+    const item = "abcdefghijklmnopabcdefghijklmnop";
+    platform.login();
+    platform.routes[`POST ${PREFLIGHT}`] = () => ({
+      body: readiness(
+        { kind: "oauth", connectedAs: "cezar@example.com", healthy: true, itemId: item, publisherId: "", itemLinked: false, newItemUrl: NEW_ITEM, packageUrl: PACKAGE, linkItemUrl: LINK_ITEM },
+        {
+          checks: [
+            { id: "credentials", label: "Store credentials", status: "pass", severity: "blocking", message: "" },
+            { id: "store.chrome_publisher_id", label: "Chrome publisher ID is set", status: "fail", severity: "blocking", message: "Add the Chrome publisher ID (the UUID from your dev console URL). It is required for Chrome Web Store submissions." },
+            { id: "store.enabled", label: "Store publishing is enabled", status: "fail", severity: "blocking", message: "Turn store publishing on." },
+            { id: "submission.release_selected", label: "Release selected", status: "fail", severity: "blocking", message: "Select a release/channel before queueing a submission." },
+          ],
+        },
+      ),
+    });
+
+    const out = JSON.parse(await submit({ action: "preflight", browsers: ["chrome"], api: API }));
+
+    expect(out.status).toBe("store-item-not-linked");
+    expect(out.value.sayToPerson).toBe(
+      `The Chrome Web Store item ${item} is on file, so there is nothing to create in the dashboard. Left before a submit: the publisher id, the token after /devconsole/ in the item's dashboard address (https://chrome.google.com/webstore/devconsole/<publisherId>/${item}/edit): extension_submit action: "configure-store" store: "chrome" storeSettings: { publisherId: "<publisherId>" }, or extension_submit action: "configure-store" store: "chrome" storeSettings: { storeUrl: "<that address>" }, which saves both ids at once; store publishing, off for chrome: extension_submit action: "configure-store" store: "chrome" storeSettings: { enabled: true }, a plain call under your own token, once you want builds uploaded there; Release selected: Select a release/channel before queueing a submission.`,
+    );
+
+    expect(out.value.sayToPerson).not.toContain("create the item");
+    expect(out.value.sayToPerson).not.toContain("upload it once as the item's first package");
+    expect(out.value.nextStep).toMatchObject({ kind: "configure", url: LINK_ITEM });
+    expect(out.hint).toBe(ITEM_ON_FILE_POINTER);
+    expect(JSON.stringify(out)).not.toMatch(SECRET_NAMES);
+  });
+
+  it("a real submit and a dry run with the item id on file answer the same what-is-left sentence instead of the create-the-item steps", async () => {
+    if (process.platform === "win32") return;
+
+    const item = "abcdefghijklmnopabcdefghijklmnop";
+    process.env.EXTENSION_DEV_APPROVAL_GATE = "0";
+    platform.login();
+    platform.routes[`POST ${PREFLIGHT}`] = () => ({
+      body: readiness(
+        { kind: "oauth", connectedAs: "cezar@example.com", healthy: true, itemId: item, itemLinked: false, newItemUrl: NEW_ITEM, packageUrl: PACKAGE, linkItemUrl: LINK_ITEM },
+        { checks: [{ id: "store.chrome_publisher_id", label: "Chrome publisher ID is set", status: "fail", severity: "blocking", message: "Add the Chrome publisher ID." }] },
+      ),
+    });
+
+    platform.routes[`POST ${SUBMIT}`] = () => ({ body: { ok: true, dryRun: true, buildId: "b418732", workflow: ".github/workflows/store.yml", message: "Preflight OK." } });
+
+    const real = JSON.parse(await submit({ browsers: ["chrome"], buildSha: "b418732", dryRun: false, api: API }));
+
+    expect(real.status).toBe("store-item-not-linked");
+    expect(real.value.sayToPerson).toContain(`The Chrome Web Store item ${item} is on file, so there is nothing to create in the dashboard.`);
+    expect(real.value.sayToPerson).toContain('storeSettings: { publisherId: "<publisherId>" }');
+    expect(real.value.sayToPerson).not.toContain("store publishing, off for chrome");
+    expect(real.value.sayToPerson).not.toContain("create the item");
+    expect(real.hint).toBe(ITEM_ON_FILE_POINTER);
+    expect(platform.sent("POST", SUBMIT)).toHaveLength(0);
+
+    const dry = JSON.parse(await submit({ browsers: ["chrome"], buildSha: "b418732", dryRun: true, api: API }));
+
+    expect(dry.value.verdict).toBe("store-item-not-linked");
+    expect(dry.value.nextStep.kind).toBe("configure");
+    expect(dry.value.nextStep.say).toContain(`The Chrome Web Store item ${item} is on file, so there is nothing to create in the dashboard.`);
+    expect(dry.value.nextStep.say).not.toContain("create the item");
   });
 
   it("a healthy connection with no item id and no word on linking says nothing about creating the item", async () => {

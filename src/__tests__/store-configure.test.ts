@@ -35,6 +35,7 @@ describe("extension_submit configure-store changes a store's settings as a plain
       "sourceArchive",
       "releaseChannel",
       "chromeItemId",
+      "publisherId",
       "edgeProductId",
       "firefoxAddonGuid",
       "appStoreId",
@@ -159,7 +160,11 @@ describe("extension_submit configure-store changes a store's settings as a plain
     platform.login();
     const cases: Array<[string, Record<string, unknown>, RegExp]> = [
       ["firefox", { storeId: "{abc}" }, /"storeId".*a listing id goes in as chromeItemId, edgeProductId, firefoxAddonGuid or appStoreId.*stay a person at a keyboard in the console/],
-      ["chrome", { publisherId: "acme" }, /"publisherId".*the Safari bundle id as bundleId, the Edge Add-ons listing as storeUrl on edge, and publisher ids, other store URLs and the rest stay a person at a keyboard/],
+      ["edge", { publisherId: "acme" }, /"publisherId" is a chrome store setting; edge does not have it/],
+      ["chrome", { publisherId: "not a publisher!" }, /publisherId must be the Chrome Web Store publisher id, the token after \/devconsole\/ in the item's dashboard address/],
+      ["chrome", { storeUrl: "https://chromewebstore.google.com/detail/abcdefghijklmnopabcdefghijklmnop" }, /storeUrl for chrome must be the item's address from the Chrome Web Store developer dashboard/],
+      ["chrome", { chromeItemId: "abcdefghijklmnopabcdefghijklmnop", storeUrl: "https://chrome.google.com/webstore/devconsole/pub-1/bbcdefghijklmnopabcdefghijklmnop/edit" }, /names item bbcdefghijklmnopabcdefghijklmnop and chromeItemId names abcdefghijklmnopabcdefghijklmnop; pass one of them/],
+      ["chrome", { publisherId: "pub-2", storeUrl: "https://chrome.google.com/webstore/devconsole/pub-1/bbcdefghijklmnopabcdefghijklmnop/edit" }, /names publisher pub-1 and publisherId names pub-2; pass one of them/],
       ["chrome", { bundleId: "com.acme.widget" }, /"bundleId" is a safari store setting; chrome does not have it/],
       ["safari", { bundleId: "widget" }, /bundleId must be a reverse-DNS identifier with two or more labels/],
       ["safari", { appStoreId: "id6826486337" }, /appStoreId must be the App Store id of the app record: the 6 to 15 digit Apple ID/],
@@ -289,7 +294,7 @@ describe("extension_submit configure-store changes a store's settings as a plain
     expect(storeSettingsDigest("edge", { storeUrl: canonical, firstSubmitted: true })).toBe(createHash("sha256").update(platformBytes).digest("hex"));
   });
 
-  it("refuses an Edge listing URL without a crx id, and a store URL off Edge, before anything is sent", () => {
+  it("refuses an Edge listing URL without a crx id, a Chrome store URL off the dashboard, and a store URL off Edge and Chrome, before anything is sent", () => {
     expect(readStoreSettingsChange("edge", { storeUrl: "" })).toEqual({ patch: { storeUrl: "" }, requested: { storeUrl: "" } });
 
     for (const storeUrl of ["https://microsoftedge.microsoft.com/addons/detail/903d21e4-0e5b-4507-95f2-4620fcf06f1c", "https://example.com/addons/detail/abcdefghijklmnopabcdefghijklmnop", 7]) {
@@ -299,8 +304,44 @@ describe("extension_submit configure-store changes a store's settings as a plain
     }
 
     const chrome = readStoreSettingsChange("chrome", { storeUrl: "https://chromewebstore.google.com/detail/abc" });
+    const firefox = readStoreSettingsChange("firefox", { storeUrl: "https://addons.mozilla.org/addon/widget" });
 
-    expect("problem" in chrome && chrome.problem).toMatch(/"storeUrl", which is a raw platform field/);
+    expect("problem" in chrome && chrome.problem).toMatch(/storeUrl for chrome must be the item's address from the Chrome Web Store developer dashboard/);
+    expect("problem" in firefox && firefox.problem).toMatch(/"storeUrl", which is a raw platform field/);
+  });
+
+  it("writes the Chrome publisher id, or both Chrome ids from the dashboard address, as a plain owner-token write, hashing publisherId last (ledger 317)", async () => {
+    if (process.platform === "win32") return;
+
+    platform.login();
+    const item = "abcdefghijklmnopabcdefghijklmnop";
+    const address = `https://chrome.google.com/webstore/devconsole/pub-1/${item.toUpperCase()}/edit`;
+    const cases: Array<[Record<string, unknown>, Record<string, unknown>, Record<string, unknown>]> = [
+      [{ publisherId: "pub-1" }, { publisherId: "pub-1" }, { publisherId: "pub-1" }],
+      [{ publisherId: "https://chrome.google.com/webstore/devconsole/pub-1" }, { publisherId: "pub-1" }, { publisherId: "pub-1" }],
+      [{ storeUrl: address }, { storeId: item, publisherId: "pub-1" }, { chromeItemId: item, publisherId: "pub-1" }],
+      [{ chromeItemId: item, publisherId: "pub-1", enabled: true }, { storeId: item, publisherId: "pub-1", enabled: true }, { chromeItemId: item, publisherId: "pub-1", enabled: true }],
+    ];
+
+    for (const [storeSettings, patch, requested] of cases) {
+      platform.calls.length = 0;
+      platform.routes[`PUT ${CONFIG}`] = () => ({ body: { ok: true, store: "chrome", changes: ['chrome.publisherId: "" -> "pub-1"'] } });
+
+      const out = JSON.parse(await submit({ action: "configure-store", store: "chrome", storeSettings, api: API }));
+      const [put] = platform.sent("PUT", CONFIG);
+
+      expect(put.body, JSON.stringify(storeSettings)).toEqual({ chrome: patch });
+      expect(out.status, JSON.stringify(storeSettings)).toBe("store-configured");
+      expect(out.value.storeSettings).toEqual(requested);
+      expect(out.hint).toContain("no approval page was involved");
+      expect(platform.calls.some((call) => call.path.startsWith(APPROVALS))).toBe(false);
+    }
+
+    const { createHash } = await import("node:crypto");
+    const platformBytes = JSON.stringify({ store: "chrome", settings: { storeId: item, publisherId: "pub-1" } });
+
+    expect(storeSettingsDigest("chrome", { publisherId: "pub-1", storeId: item })).toBe(createHash("sha256").update(platformBytes).digest("hex"));
+    expect(readStoreSettingsChange("chrome", { publisherId: "" })).toMatchObject({ problem: expect.stringContaining("publisherId must be the Chrome Web Store publisher id") });
   });
 
   it("writes the Safari bundle id and App Store id as plain owner-token writes, hashing bundleId last, and no longer calls the bundle id console-only", async () => {

@@ -6,6 +6,7 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
+import { chromeItemLeftOf, itemOnFileSentences } from "./chrome-item-left";
 import { EDGE_FIRST_SUBMISSION_STATE, edgeFirstSubmissionOf, firstSubmissionStep, type EdgeFirstSubmission } from "./edge-first-submission";
 import { projectApiSend } from "./project-api";
 import { fetchRegistryJson, registryFileUrl, type ProjectRef, type RegistryFetchRefusal } from "./registry";
@@ -295,8 +296,9 @@ export function connectionStep(row: StoreRow, connection: ConnectionRecord | und
 
   if (row.state === "store-item-not-linked") {
     const urls = itemLinkUrls([connection ?? {}], settingsUrl, { ref: ctx.ref, sha: ctx.sha, browser: row.browser, api: ctx.api });
+    const left = chromeItemLeftOf(connection, null);
 
-    return nextStep("link-item", linkItemSentences(urls), urls.linkItemUrl);
+    return left ? nextStep("configure", itemOnFileSentences(left), urls.linkItemUrl) : nextStep("link-item", linkItemSentences(urls), urls.linkItemUrl);
   }
 
   if (row.state === WORKSPACE_RECONNECT_STATE) {

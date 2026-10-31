@@ -74,6 +74,7 @@ import { bringListOf, bringListSentences, screenshotDoor } from "../lib/store-br
 import { notReadyForReviewStep, notReadyLine } from "../lib/store-not-ready";
 import { nextVersionOf, nextVersionSentence } from "../lib/store-readiness";
 import { LISTING_INCOMPLETE_CODE, listingIncompleteOf, listingIncompleteSentence } from "../lib/store-listing-incomplete";
+import { chromeItemLeftOf } from "../lib/chrome-item-left";
 import { linkItemAnswer } from "../lib/link-item-answer";
 import { firefoxUpdateManifestOf, relayFirefoxUpdateUrl } from "../lib/firefox-update-url";
 import { withHandUploadRows } from "../lib/hand-upload";
@@ -1028,7 +1029,7 @@ export async function preflight(args: StoreActArgs): Promise<string> {
       browser: "chrome",
       api: args.api,
     });
-    const answer = linkItemAnswer(urls);
+    const answer = linkItemAnswer(urls, chromeItemLeftOf(connection, chromeReport));
 
     return envelope({
       ok: true,
