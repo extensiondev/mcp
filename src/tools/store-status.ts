@@ -16,6 +16,7 @@ import {
   type ProjectRef,
 } from "../lib/registry";
 import { envelope, type ErrorCode } from "../lib/envelope";
+import { expiredLoginFor, loginExpiredRefusal } from "../lib/login-expired";
 import { platformHoldEnvelope } from "../lib/platform-hold";
 import {
   queuedActSentence,
@@ -654,6 +655,16 @@ export async function readStores(args: {
       "auth-required",
       "E_AUTH_REQUIRED",
     );
+  }
+
+  const expired = expiredLoginFor(ref, args.api);
+
+  if (expired) {
+    return loginExpiredRefusal({
+      command: "extension_release_status",
+      expired,
+      trackUrl: consoleProjectUrl(ref, ConsoleProjectPage.submissions, args.api),
+    });
   }
 
   const caller = args.caller ?? "extension_release_status";

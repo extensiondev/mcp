@@ -135,15 +135,20 @@ export async function storeVersionStatus(args: {
 
   if (!isEnvelope(parsed) || parsed.ok !== true) {
     const frame: Row = isRow(parsed) ? parsed : {};
+    const refused: Row = isRow(frame.value) ? frame.value : {};
+    const refusedRef = text(refused.workspace) && text(refused.project) ? { workspace: text(refused.workspace), project: text(refused.project) } : null;
+    const storePage = wanted.length === 1 && refusedRef && text(refused.trackUrl) ? consoleProjectUrl(refusedRef, ConsoleProjectPage.submissionsStore(wanted[0] ?? ""), args.api) : "";
+    const hint = typeof frame.hint === "string" && storePage ? frame.hint.split(text(refused.trackUrl)).join(storePage) : frame.hint;
 
     return envelope({
       ok: false,
       command: COMMAND,
       status: text(frame.status) || "unavailable",
-      value: isRow(frame.value) ? frame.value : {},
+      value: storePage ? { ...refused, trackUrl: storePage, nextStep: isRow(refused.nextStep) ? { ...refused.nextStep, url: storePage } : refused.nextStep } : refused,
       error: isRow(frame.error)
         ? (frame.error as { code: "E_PLATFORM"; name?: string; message: string })
         : { code: "E_PLATFORM", name: "StatusUnavailable", message: "the store read answered nothing usable" },
+      ...(typeof hint === "string" ? { hint } : {}),
     });
   }
 
