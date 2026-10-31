@@ -13,6 +13,7 @@ import { LAUNCH_BROWSER, PROJECT_PATH } from "../lib/common-schema";
 import { runExtensionCli } from "../lib/exec";
 import { outputJsonVerdict, refusedTheOutputFlag } from "../lib/engine-version";
 import { liveProjectSessions } from "../lib/session-browser";
+import { channelAwareBuildWarnings } from "../lib/amo-update-url";
 import { CARRIER_DIR_NAME, removeCarrier } from "../lib/carrier";
 import { readZipEntryNames } from "../lib/zip-entries";
 import {
@@ -738,9 +739,11 @@ export async function handler(args: {
         ? `This build reported no summary of its own, and no summary from this run was found on disk either, so the byte totals and the engine's structured warnings are missing from the result below. The extension that was built is unaffected. ${sessionPathHint(persisted.file)}`
         : null;
     const status = engine.frame?.status;
-    const buildWarnings = engineSummary?.warnings?.length
-      ? engineSummary.warnings
-      : [];
+    const buildWarnings = await channelAwareBuildWarnings(
+      engineSummary?.warnings?.length ? engineSummary.warnings : [],
+      browser,
+      args.projectPath,
+    );
     const buildWarningsTruncated =
       buildWarnings.length &&
       typeof engineSummary?.warnings_count === "number" &&
