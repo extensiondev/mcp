@@ -16,6 +16,7 @@ import { resolveCredential } from "../lib/credential-source";
 import { credentialKey, credentialsPath, writeCredentials } from "../lib/credentials";
 import { loginForPath, pathIdentity } from "../lib/path-project";
 import { createToolDispatcher, type ToolModule } from "../lib/tool-dispatch";
+import * as builds from "../tools/builds";
 import * as releaseStatus from "../tools/release-status";
 import * as submit from "../tools/submit";
 
@@ -59,7 +60,7 @@ function extensionDir(pkg: string, repo: string): string {
 
 function dispatcher() {
   return createToolDispatcher({
-    tools: [submit, releaseStatus] as unknown as ToolModule[],
+    tools: [submit, releaseStatus, builds] as unknown as ToolModule[],
     options: { features: ["local", "platform"], noShip: false },
   });
 }
@@ -149,6 +150,18 @@ describe("ledger 252: with several logins stored, an unpinned platform call neve
     expect(out.error.code).toBe("E_PROJECT_AMBIGUOUS");
     expect(out.value.logins).toEqual(["cezaraugusto/rebeccat", "cezaraugusto/leon"]);
     expect(out.hint).toContain("'cezaraugusto/rebeccat'");
+    expect(sent).toEqual([]);
+  });
+
+  it("ledger 342: links the workspace's project list on the refusal, never the newest login's project page", async () => {
+    otherProcessesSignIn("rebeccat", "leon");
+
+    const out = await call("extension_builds", { limit: 3, api: API });
+
+    expect(out.error.code).toBe("E_PROJECT_AMBIGUOUS");
+    expect(out.value.trackUrl).toBe(`http://console.extension.localhost/${WORKSPACE}`);
+    expect(JSON.stringify(out)).not.toContain(`/${WORKSPACE}/leon`);
+    expect(JSON.stringify(out)).not.toContain(`/${WORKSPACE}/rebeccat/`);
     expect(sent).toEqual([]);
   });
 

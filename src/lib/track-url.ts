@@ -350,6 +350,14 @@ function trackSentences(fields: TrackFields, hint: string, unreached = false): s
   return out;
 }
 
+function ambiguousFields(value: Row, api?: string): TrackFields | null {
+  const logins = Array.isArray(value.logins) ? value.logins.map(text).filter(Boolean) : [];
+  const workspaces = new Set(logins.map((ref) => ref.split("/")[0]?.toLowerCase() ?? ""));
+  const [workspace] = [...workspaces];
+
+  return workspaces.size === 1 && workspace ? { trackUrl: trackUrl("workspace", { workspace }, api) } : null;
+}
+
 export function attachTrack(command: string, args: Row, result: string): string {
   let parsed: unknown;
 
@@ -367,7 +375,10 @@ export function attachTrack(command: string, args: Row, result: string): string 
   const refusal = frame.ok !== true && !APPROVAL_STATUSES.has(String(frame.status)) && !unreached;
   if (refusal && text(value.trackUrl)) return result;
 
-  const fields = trackFields(command, { args, status: String(frame.status), value }, refusal);
+  const ambiguous = frame.error?.code === "E_PROJECT_AMBIGUOUS";
+  const fields = ambiguous
+    ? ambiguousFields(value, text(args.api) || undefined)
+    : trackFields(command, { args, status: String(frame.status), value }, refusal);
   if (!fields) return result;
 
   const hint = typeof frame.hint === "string" ? frame.hint.trim() : "";
