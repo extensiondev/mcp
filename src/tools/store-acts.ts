@@ -36,7 +36,8 @@ import {
 import { compactPreflightStores, PREFLIGHT_DETAIL_SENTENCE, preflightDetail } from "../lib/preflight-detail";
 import { summaryAgreeingWithRows } from "../lib/preflight-summary";
 import { consoleProjectUrl } from "../lib/registry";
-import { projectApiReadFailure, projectApiSend } from "../lib/project-api";
+import { projectApiGet, projectApiReadFailure, projectApiSend } from "../lib/project-api";
+import { listingRecordOf, type ListingRecordRead } from "../lib/listing-record-compare";
 import { actLinks, judgePublish, publishFailureReason, trackOf } from "../lib/store-act-outcome";
 import {
   badShipRequest,
@@ -734,6 +735,7 @@ function readinessView(
   projectPath: string,
   buildNamed: boolean,
   scope: PackageScope,
+  record: ListingRecordRead = { read: false },
 ): Row {
   const apiHint = scope.api;
   const all = (Array.isArray(json.checks) ? json.checks : []).filter(isRow);
@@ -806,7 +808,7 @@ function readinessView(
           storeMd:
             "problem" in local
               ? { missing: local.problem }
-              : storeMdAdvisory(local, open, settled, requirements),
+              : storeMdAdvisory(local, open, settled, requirements, record),
         }
       : {}),
   };
@@ -860,6 +862,9 @@ export async function preflight(args: StoreActArgs): Promise<string> {
       ),
     ),
   );
+  const records = text(args.projectPath)
+    ? await Promise.all(asked.map((store) => projectApiGet<Row>(api, `stores/${store}/listing`).catch(() => null)))
+    : [];
   const firstRefusal = reads.find((read) => !read.ok);
 
   if (firstRefusal && !firstRefusal.ok && reads.every((read) => !read.ok)) {
@@ -900,6 +905,7 @@ export async function preflight(args: StoreActArgs): Promise<string> {
         text(args.projectPath),
         Boolean(text(args.buildSha)),
         { ref: api.ref, sha: text(args.buildSha), api: args.api },
+        listingRecordOf(records[i] ?? null),
       );
       stores[store] =
         store === "firefox"

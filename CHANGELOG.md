@@ -12,6 +12,9 @@
 - Ledger 332. `extension_start` on Firefox says the controlled copy loads as a temporary add-on under the manifest's gecko id at a moz-extension:// address, and answers `addonId`, instead of naming Chromium ids and `chrome-extension://` addresses.
 - Ledger 333. `extension_open {url}` on Firefox opens the new tab in the background unless `foreground: true`, as the description says, and with `foreground: true` reports the tab as activated with the window not raised.
 - Ledger 334. `extension_eval {context: "page", url}` with a bare extension path such as `sidebar/index.html` resolves it against the moz-extension origin when no tab matched it, so the path `extension_open` accepts is one `extension_eval` accepts.
+- Ledger 335. The preflight's `storeMd.onListing` reads the store's listing record (`GET stores/<store>/listing`) and says "already on the listing" only when the STORE.md value matches it, "differs from the listing: sync-listing sends the new text" when it does not, and that the record was not read when the read fails.
+- Ledger 336. The `- Screenshots:` line is worded the same for every store and names how many image files it lists ("STORE.md names 5 screenshots; sync-listing takes them as its screenshots argument"), never "carries no screenshot" or "retired" when the line names files.
+- Ledger 340. `sync-listing` `pasteInDashboard` maps Chrome's Test instructions to `### Test instructions` under `## Chrome Web Store` and Language to `- Language:` under `## Listing`, and drops the screenshots `skipped` sentence when the call passed screenshots.
 
 ## 10.19.0
 

@@ -10,6 +10,7 @@ import { STORE_FIELDS, derivedListingFields, listingForStore, parseStoreMdListin
 import { TOOL_POLICY } from "../lib/tool-policy";
 import { derivedMarks, derivedSentence, readLocalListing } from "../tools/store-listing";
 import { handler as submit, schema } from "../tools/submit";
+import { chromeDashboardPaste } from "../lib/chrome-dashboard-paste";
 import { digestOf } from "./fixtures/listing-digest";
 import {
   API,
@@ -82,7 +83,7 @@ const SAFARI_UNREAD = [
 
 const SAFARI_SECTION_UNREAD = SAFARI_UNREAD.filter((row) => !["subtitle", "searchTerms", "reviewContactPhone"].includes(row.field));
 
-const SCREENSHOTS_SKIPPED = 'the `- Screenshots:` line in STORE.md is not read: STORE.md carries no screenshot; pass screenshots to sync-listing as PNG paths inside projectPath, written by extension_screenshot with forStore: "<store>"';
+const SCREENSHOTS_SKIPPED = 'the `- Screenshots:` line in STORE.md names no screenshot file; pass screenshots to sync-listing as PNG paths inside projectPath, written by extension_screenshot with forStore: "<store>"';
 
 function png(width: number, height: number): Buffer {
   const bytes = Buffer.alloc(40);
@@ -466,7 +467,7 @@ describe("STORE.md fills the store listing", () => {
     expect(local.patch.screenshots).toBeUndefined();
     expect(local).not.toHaveProperty("screenshotsLine");
     expect(local.skipped).toEqual([
-      'the `- Screenshots (1280x800, in this order):` line in STORE.md is not read: STORE.md carries no screenshot; pass screenshots to sync-listing as PNG paths inside projectPath, written by extension_screenshot with forStore: "<store>"',
+      'the `- Screenshots (1280x800, in this order):` line in STORE.md names 1 screenshot; sync-listing takes it as its screenshots argument, as PNG paths inside projectPath written by extension_screenshot with forStore: "<store>"',
     ]);
 
     expect(local.lines.title).toBe("Name");
@@ -741,7 +742,7 @@ describe("extension_submit sync-listing and the preflight advisory", () => {
     expect(fields).toEqual(["privacyPolicyUrl", "homepageUrl", "license", "releaseNotes"]);
     expect(again.value.stores.firefox.skipped).toEqual([
       "supportEmail in STORE.md is not an email address, so it was left out",
-      'the `- Screenshots:` line in STORE.md is not read: STORE.md carries no screenshot; pass screenshots to sync-listing as PNG paths inside projectPath, written by extension_screenshot with forStore: "<store>"',
+      'the `- Screenshots:` line in STORE.md names 1 screenshot; sync-listing takes it as its screenshots argument, as PNG paths inside projectPath written by extension_screenshot with forStore: "<store>"',
     ]);
   });
 
@@ -772,7 +773,7 @@ describe("extension_submit sync-listing and the preflight advisory", () => {
     expect(bare.status).toBe("listing-recorded");
     expect(put.media?.screenshots).toBeUndefined();
     expect(bare.value.stores.chrome.filled).not.toContain("screenshots");
-    expect(bare.value.stores.chrome.skipped[0]).toContain("is not read");
+    expect(bare.value.stores.chrome.skipped[0]).toContain("names 1 screenshot; sync-listing takes it as its screenshots argument");
     expect(bare.value.stores.chrome.images).toEqual({ clears: [], remain: ["Store icon (128x128 px PNG.), confirmed only on the store's dashboard", "Screenshots (1 to 5 images, 1280x800 or 640x400 px, JPEG or 24-bit PNG with no alpha.)"] });
     expect(bare.value.sayToPerson).not.toContain("clear");
 
@@ -782,6 +783,7 @@ describe("extension_submit sync-listing and the preflight advisory", () => {
 
     expect(again.media.screenshots).toHaveLength(1);
     expect(sent.value.stores.chrome.filled).toContain("screenshots");
+    expect(JSON.stringify(sent.value.stores.chrome.skipped ?? [])).not.toContain("Screenshots");
     expect(sent.value.stores.chrome.images).toEqual({ clears: ["Screenshots"], remain: ["Store icon (128x128 px PNG.), confirmed only on the store's dashboard"] });
     expect(sent.value.sayToPerson).toContain("1 screenshot clears the Chrome Web Store Screenshots row; still open: Store icon (128x128 px PNG.), confirmed only on the store's dashboard.");
   });
@@ -1396,6 +1398,10 @@ describe("extension_submit sync-listing and the preflight advisory", () => {
       },
     });
 
+    platform.routes[`GET ${LISTING("chrome")}`] = () => ({
+      body: { listing: { title: "Rebeccat", privacyPolicyUrl: "https://example.com/privacy" }, media: {} },
+    });
+
     const out = JSON.parse(
       await submit({
         action: "preflight",
@@ -1413,6 +1419,80 @@ describe("extension_submit sync-listing and the preflight advisory", () => {
 
     expect(advisory.covers).toEqual([]);
     expect(advisory.notCovered).toEqual(["description: STORE.md has no `- Summary:` or `- Description:` under `## Listing`"]);
+  });
+
+  it("says a STORE.md value differs from the listing record instead of calling it already on the listing (ledger 335)", async () => {
+    if (process.platform === "win32") return;
+
+    const root = project();
+    fs.writeFileSync(
+      path.join(root, "STORE.md"),
+      ["# Store metadata", "", "## Listing", "", "- Title: Rebeccat", "- Search terms: cat, browser, tab, focus, read, page, quiet", "", "## Privacy and data use", "", "- Privacy policy URL: https://example.com/privacy", ""].join("\n"),
+    );
+
+    platform.login();
+    platform.routes[`POST ${PREFLIGHT("edge")}`] = () => ({
+      body: {
+        summary: { canSubmit: false },
+        checks: [
+          { id: "listing.title_present", status: "pass" },
+          { id: "listing.search_terms_present", status: "pass" },
+          { id: "listing.privacy_policy_present", status: "pass" },
+          { id: "edge.search_terms", status: "fail", message: "9 terms (at most 7)" },
+        ],
+      },
+    });
+
+    platform.routes[`GET ${LISTING("edge")}`] = () => ({
+      body: {
+        listing: {
+          title: "Rebeccat",
+          searchTerms: ["cat", "browser", "tab", "focus", "read", "page", "quiet", "calm", "mode"],
+          privacyPolicyUrl: "https://example.com/privacy",
+        },
+        media: {},
+      },
+    });
+
+    const read = async () => JSON.parse(await submit({ action: "preflight", browsers: ["edge"], projectPath: root, api: API })).value.stores.edge.storeMd.onListing;
+
+    expect(await read()).toEqual([
+      "title: STORE.md carries it, already on the listing",
+      "search terms: STORE.md differs from the listing: sync-listing sends the new text",
+      "privacy policy URL: STORE.md carries https://example.com/privacy, already on the listing",
+    ]);
+
+    delete platform.routes[`GET ${LISTING("edge")}`];
+
+    expect(await read()).toEqual([
+      "title: STORE.md carries it; the listing record was not read, so it was not compared",
+      "search terms: STORE.md carries it; the listing record was not read, so it was not compared",
+      "privacy policy URL: STORE.md carries https://example.com/privacy; the listing record was not read, so it was not compared",
+    ]);
+  });
+
+  it("names the STORE.md line Chrome's Test instructions and Language paste from (ledger 340)", () => {
+    const root = project();
+    fs.writeFileSync(
+      path.join(root, "STORE.md"),
+      STORE_MD.replace("- Screenshots: TODO", "- Language: English (United States).\n- Screenshots: TODO") +
+        "\n## Chrome Web Store\n\n### Test instructions\n\nNo account is needed. Open the popup and click Hide.\n",
+    );
+
+    const local = readLocalListing(root, "chrome");
+    if ("problem" in local) throw new Error(local.problem);
+
+    const fields = chromeDashboardPaste(local, null).fields;
+    const from = (field: string) => fields.find((row) => row.field === field)?.from;
+
+    expect(from("testInstructions")).toBe("`### Test instructions` under `## Chrome Web Store` in STORE.md");
+    expect(from("language")).toBe("`- Language:` under `## Listing` in STORE.md");
+
+    fs.writeFileSync(path.join(root, "STORE.md"), STORE_MD + "\n## Chrome Web Store\n\n### Test instructions\n\n### Single purpose\n\nHide names.\n");
+    const bare = readLocalListing(root, "chrome");
+    if ("problem" in bare) throw new Error(bare.problem);
+
+    expect(chromeDashboardPaste(bare, null).fields.filter((row) => ["testInstructions", "language"].includes(row.field)).map((row) => row.from)).toEqual([null, null]);
   });
 });
 

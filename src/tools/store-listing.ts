@@ -45,6 +45,9 @@ import { mintedApproval } from "../lib/approval-record";
 import { chromeDashboardPaste, chromePasteSentence } from "../lib/chrome-dashboard-paste";
 import { withChromeVisibility } from "../lib/chrome-visibility";
 import { onRecordRow, onRecordSentence, screenshotsOnRecord } from "../lib/listing-on-record";
+import { onListingLine, type ListingRecordRead } from "../lib/listing-record-compare";
+import { chromePasteLines, type PasteLines } from "../lib/chrome-paste-lines";
+import { SCREENSHOTS_DOOR, screenshotsAdvice, screenshotsLineSentence } from "../lib/store-md-screenshots";
 import { approvalVerdict } from "../lib/approval-policy";
 import { badShipRequest, isRow, openShipApi, text } from "../lib/ship-act";
 import {
@@ -121,23 +124,11 @@ export interface LocalListing {
   lines: Partial<Record<ListingField, string>>;
   privacy: StoreMdPrivacy;
   categories?: CategoryRead;
+  screenshotsNamed?: number;
+  pasteLines?: PasteLines;
 }
 
-export const SCREENSHOTS_DOOR =
-  'pass screenshots to sync-listing as PNG paths inside projectPath, written by extension_screenshot with forStore: "<store>"';
-
-export const screenshotsLineSkipped = (line: string): string =>
-  `the \`- ${line}:\` line in ${STORE_MD_FILENAME} is not read: ${STORE_MD_FILENAME} carries no screenshot; ${SCREENSHOTS_DOOR}`;
-
-/* @invariant WHEN THE LISTING RECORD HOLDS THE IMAGES, THE STORE.MD LINE IS
- * RETIRED, NOT UNREAD. Rebeccat's preflight (2026-10-26) said the
- * `- Screenshots:` line "is not read: STORE.md carries no screenshot" beside
- * a firefox.screenshots row reading "5 screenshots (1280x800 x5)". Both were
- * true and the pair read as a contradiction. Once the store's screenshots row
- * reads have, the images come from the listing record and the line in
- * STORE.md is a leftover, so the advisory says that instead of the door. */
-export const screenshotsLineRetired = (line: string, actual: string): string =>
-  `the \`- ${line}:\` line in ${STORE_MD_FILENAME} is retired: the images come from the listing record (${actual}), written by sync-listing, not from ${STORE_MD_FILENAME}`;
+export { SCREENSHOTS_DOOR };
 
 const privacyCoveredFact = (url: string): string =>
   `privacy policy URL found in ${STORE_MD_FILENAME} (${url}), not yet in the console listing`;
@@ -203,7 +194,7 @@ export function readLocalListing(
   const icon = localIcon(projectPath, store);
   const patch: ListingPatch = { listing };
 
-  if (parsed.screenshotsLine) skipped.push(screenshotsLineSkipped(parsed.screenshotsLine));
+  if (parsed.screenshotsLine && !screenshots?.length) skipped.push(screenshotsLineSentence(parsed.screenshotsLine, parsed.screenshotFiles ?? 0));
   if ("icon" in icon) patch.icons = [icon.icon];
   if (screenshots?.length) patch.screenshots = screenshots;
 
@@ -215,6 +206,8 @@ export function readLocalListing(
     unread,
     lines: parsed.lines,
     privacy: parsed.privacy,
+    ...(parsed.screenshotsLine ? { screenshotsNamed: parsed.screenshotFiles ?? 0 } : {}),
+    ...(store === "chrome" ? { pasteLines: chromePasteLines(content) } : {}),
     ...(read.categories ? { categories: read.categories } : {}),
     ...("icon" in icon ? { icon: icon.origin } : { iconMissing: icon.missing }),
     ...("stale" in icon && icon.stale ? { iconStale: icon.stale } : {}),
@@ -331,7 +324,7 @@ function unreadLine(local: LocalListing, rule: CheckCoverage): string | null {
   return null;
 }
 
-function onListingLines(listing: Row, settled: Row[]): string[] {
+function onListingLines(listing: Row, settled: Row[], record: ListingRecordRead): string[] {
   const lines: string[] = [];
 
   for (const check of settled) {
@@ -339,9 +332,7 @@ function onListingLines(listing: Row, settled: Row[]): string[] {
 
     if (/privacy_policy_present$/.test(id)) {
       if (listing.privacyPolicyUrl !== undefined) {
-        lines.push(
-          `privacy policy URL: ${STORE_MD_FILENAME} carries ${text(listing.privacyPolicyUrl)}, already on the listing`,
-        );
+        lines.push(onListingLine("privacy policy URL", text(listing.privacyPolicyUrl), listing, ["privacyPolicyUrl"], record));
       }
 
       continue;
@@ -351,9 +342,7 @@ function onListingLines(listing: Row, settled: Row[]): string[] {
     if (!rule) continue;
 
     if (rule.fields.some((field) => listing[field] !== undefined)) {
-      lines.push(
-        `${rule.label}: ${STORE_MD_FILENAME} carries it, already on the listing`,
-      );
+      lines.push(onListingLine(rule.label, "it", listing, rule.fields, record));
     }
   }
 
@@ -392,7 +381,7 @@ function coverageOf(local: LocalListing, id: string): Coverage {
 
     if (shots?.length) return { covered: `screenshots: ${shots.length} passed to sync-listing, not yet in the listing` };
 
-    return { missing: `screenshots: ${STORE_MD_FILENAME} carries no screenshot; ${SCREENSHOTS_DOOR}` };
+    return { missing: `screenshots: ${screenshotsAdvice(local.screenshotsNamed)}` };
   }
 
   if (/categories_present$/.test(id) && local.store === "firefox") {
@@ -444,26 +433,18 @@ export function reconciledWithStoreMd(
     : { ...check, message: `${coverage.covered}; sync-listing writes it.` };
 }
 
-const SKIPPED_SCREENSHOTS_LINE = /^the `- (.+?):` line in STORE\.md is not read: STORE\.md carries no screenshot; /;
-
 export function storeMdAdvisory(
   local: LocalListing,
   checks: Row[],
   settled: Row[] = [],
-  requirements: RequirementsView | null = null,
+  _requirements: RequirementsView | null = null,
+  record: ListingRecordRead = { read: false },
 ): Row {
   const covers: string[] = [];
   const notCovered: string[] = [];
   const listing = local.patch.listing as Row;
-  const onListing = onListingLines(listing, settled);
-  const recorded = screenshotsOnRecord(requirements);
-  const skipped = recorded
-    ? local.skipped.map((entry) => {
-        const line = entry.match(SKIPPED_SCREENSHOTS_LINE)?.[1];
-
-        return line ? screenshotsLineRetired(line, recorded) : entry;
-      })
-    : local.skipped;
+  const onListing = onListingLines(listing, settled, record);
+  const skipped = local.skipped;
 
   for (const check of checks) {
     const id = text(check.id);

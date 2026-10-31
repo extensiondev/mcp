@@ -33,12 +33,12 @@ export interface DashboardPaste {
   fields: DashboardPasteField[];
 }
 
-type Row = { field: string; label: string; tab: string; source?: ListingField | "screenshots" | "icon" | "privacy" };
+type Row = { field: string; label: string; tab: string; source?: ListingField | "screenshots" | "icon" | "privacy" | "language" | "testInstructions" };
 
 const ROWS: Row[] = [
   { field: "fullDescription", label: "Description", tab: CHROME_TABS.listing, source: "fullDescription" },
   { field: "categories", label: "Category", tab: CHROME_TABS.listing, source: "categories" },
-  { field: "language", label: "Language", tab: CHROME_TABS.listing },
+  { field: "language", label: "Language", tab: CHROME_TABS.listing, source: "language" },
   { field: "icon", label: "Store icon", tab: CHROME_TABS.listing, source: "icon" },
   { field: "screenshots", label: "Screenshots", tab: CHROME_TABS.listing, source: "screenshots" },
   { field: "homepageUrl", label: "Homepage URL", tab: CHROME_TABS.listing, source: "homepageUrl" },
@@ -48,7 +48,7 @@ const ROWS: Row[] = [
   { field: "dataUsage", label: "Data usage and the three certifications", tab: CHROME_TABS.privacy, source: "privacy" },
   { field: "privacyPolicyUrl", label: "Privacy policy URL", tab: CHROME_TABS.privacy, source: "privacyPolicyUrl" },
   { field: "visibility", label: "Visibility", tab: CHROME_TABS.distribution, source: "visibility" },
-  { field: "testInstructions", label: "Test instructions", tab: CHROME_TABS.testInstructions },
+  { field: "testInstructions", label: "Test instructions", tab: CHROME_TABS.testInstructions, source: "testInstructions" },
 ];
 
 function fromOf(local: LocalListing, source: Row["source"], record: RecordRead | null): string | null {
@@ -57,6 +57,8 @@ function fromOf(local: LocalListing, source: Row["source"], record: RecordRead |
   if (source === "icon") return local.patch.icons?.length ? "the built 128 px icon" : null;
 
   if (source === "screenshots") return screenshotsFrom(local.patch.screenshots?.length ?? 0, record);
+
+  if (source === "language" || source === "testInstructions") return local.pasteLines?.[source] ?? null;
 
   if (source === "privacy") return local.privacy.section ? `\`## Privacy and data use\` in ${STORE_MD_FILENAME}` : null;
 
