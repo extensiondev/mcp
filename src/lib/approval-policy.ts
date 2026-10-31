@@ -18,7 +18,12 @@ export type ApprovalVerdict = "plain" | "approval" | "console";
  * it computed from the stored state), and that request is honored.
  * "approval" acts mint before they run. "console" acts never reach the
  * platform from here. The three audience exceptions are computed from the
- * write, never from a flag: a listed or public submission mode, a public
+ * write, never from a flag: a submission mode under which the next upload
+ * leaves for the store's review and is published when it passes (ledger
+ * 328, the same gate for the same consequence: chrome public or staged, edge
+ * review and firefox listed, read per store from PUBLIC_SUBMISSION_MODES,
+ * while edge draft, chrome draft-until-public and draft, firefox unlisted
+ * and safari draft stay plain), a public
  * channel audience (asked at creation or set on an existing channel) and a
  * public project visibility, which opens every build the project ever made,
  * all keep the page; a channel delete is a person's act in the console, like
@@ -68,9 +73,22 @@ export const APPROVAL_POLICY = {
 
 export type PolicyAct = keyof typeof APPROVAL_POLICY;
 
-export const PUBLIC_SUBMISSION_MODES = ["listed", "public"] as const;
+export const PUBLIC_SUBMISSION_MODES: Record<string, readonly string[]> = {
+  chrome: ["public", "staged"],
+  edge: ["review"],
+  firefox: ["listed"],
+  safari: [],
+};
+
+export const PUBLIC_SUBMISSION_MODE_CONSEQUENCES: Record<string, string> = {
+  "chrome.public": "Chrome public sends the next upload to Chrome's review, which publishes it to everyone the item's dashboard visibility allows when it passes.",
+  "chrome.staged": "Chrome staged sends the next upload to Chrome's review, which publishes it to a share of the item's users when it passes; raising that share is its own approval.",
+  "edge.review": "Edge review sends the next upload to certification, which publishes the extension to everyone when it passes.",
+  "firefox.listed": "Firefox listed sends the next upload to AMO's listed review, which publishes the add-on on addons.mozilla.org to everyone when it passes.",
+};
 
 export interface PolicyWrite {
+  store?: string;
   submissionMode?: string;
   releaseChannel?: string;
   audience?: string;
@@ -84,8 +102,22 @@ export function isPolicyAct(value: unknown): value is PolicyAct {
   return typeof value === "string" && Object.prototype.hasOwnProperty.call(APPROVAL_POLICY, value);
 }
 
+function publicModesOf(store: unknown): readonly string[] {
+  const key = lower(store);
+
+  return Object.prototype.hasOwnProperty.call(PUBLIC_SUBMISSION_MODES, key) ? (PUBLIC_SUBMISSION_MODES[key] ?? []) : Object.values(PUBLIC_SUBMISSION_MODES).flat();
+}
+
+function modeOf(write: PolicyWrite): string {
+  return lower(write.releaseChannel) === "listed" ? "listed" : lower(write.submissionMode);
+}
+
 export function publicSubmissionMode(write: PolicyWrite): boolean {
-  return (PUBLIC_SUBMISSION_MODES as readonly string[]).includes(lower(write.submissionMode)) || lower(write.releaseChannel) === "listed";
+  return publicModesOf(write.store).includes(lower(write.submissionMode)) || lower(write.releaseChannel) === "listed";
+}
+
+export function publicSubmissionModeConsequence(write: PolicyWrite): string {
+  return PUBLIC_SUBMISSION_MODE_CONSEQUENCES[`${lower(write.store)}.${modeOf(write)}`] ?? "";
 }
 
 export function publicChannelAudience(write: PolicyWrite): boolean {

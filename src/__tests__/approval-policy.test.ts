@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { evaluateApproval } from "../lib/approval-gate";
-import { APPROVAL_POLICY, approvalVerdict, isPolicyAct, publicSubmissionMode, verdictOfAction } from "../lib/approval-policy";
+import { APPROVAL_POLICY, PUBLIC_SUBMISSION_MODES, approvalVerdict, isPolicyAct, publicSubmissionMode, publicSubmissionModeConsequence, verdictOfAction } from "../lib/approval-policy";
 
 const RULED_TABLE: Array<[keyof typeof APPROVAL_POLICY, "plain" | "approval" | "console"]> = [
   ["extension_settings.build", "plain"],
@@ -51,15 +51,45 @@ describe("the approval policy table holds Cezar's ruling of 2026-10-23 (ledger 1
     expect(Object.keys(APPROVAL_POLICY).sort()).toEqual(RULED_TABLE.map(([act]) => act).sort());
   });
 
-  it("keeps a listed or public submission mode on the approve page while the other store settings are plain", () => {
-    expect(approvalVerdict("extension_settings.store", { submissionMode: "draft" })).toBe("plain");
-    expect(approvalVerdict("extension_settings.store", { submissionMode: "unlisted" })).toBe("plain");
-    expect(approvalVerdict("extension_settings.store", { releaseChannel: "unlisted" })).toBe("plain");
+  it("keeps every submission mode that sends the next upload to a review that publishes it on the approve page, per store, while the other modes are plain (ledger 328)", () => {
+    const store = (name: string, submissionMode?: string) => approvalVerdict("extension_settings.store", { store: name, submissionMode });
+
+    expect(PUBLIC_SUBMISSION_MODES).toEqual({ chrome: ["public", "staged"], edge: ["review"], firefox: ["listed"], safari: [] });
+
+    for (const name of ["chrome", "edge", "firefox", "safari"]) {
+      expect(store(name), name).toBe("plain");
+      expect(store(name, "dry-run"), name).toBe("plain");
+      expect(store(name, "draft"), name).toBe("plain");
+    }
+
+    expect(store("chrome", "draft-until-public")).toBe("plain");
+    expect(store("chrome", "public")).toBe("approval");
+    expect(store("chrome", "staged")).toBe("approval");
+    expect(store("edge", "review")).toBe("approval");
+    expect(store("edge", "public")).toBe("plain");
+    expect(store("firefox", "unlisted")).toBe("plain");
+    expect(store("firefox", "listed")).toBe("approval");
+    expect(store("safari", "review")).toBe("plain");
+    expect(approvalVerdict("extension_settings.store", { store: "firefox", releaseChannel: "unlisted" })).toBe("plain");
+    expect(approvalVerdict("extension_settings.store", { store: "firefox", releaseChannel: "listed" })).toBe("approval");
     expect(approvalVerdict("extension_settings.store", { submissionMode: "listed" })).toBe("approval");
     expect(approvalVerdict("extension_settings.store", { submissionMode: "public" })).toBe("approval");
-    expect(approvalVerdict("extension_settings.store", { releaseChannel: "listed" })).toBe("approval");
     expect(publicSubmissionMode({ submissionMode: "Public" })).toBe(true);
+    expect(publicSubmissionMode({ submissionMode: "Review" })).toBe(true);
+    expect(publicSubmissionMode({ store: "safari", submissionMode: "review" })).toBe(false);
     expect(publicSubmissionMode({})).toBe(false);
+  });
+
+  it("names what each kept mode does to the next upload, and nothing for a plain mode", () => {
+    expect(publicSubmissionModeConsequence({ store: "edge", submissionMode: "review" })).toBe("Edge review sends the next upload to certification, which publishes the extension to everyone when it passes.");
+    expect(publicSubmissionModeConsequence({ store: "firefox", releaseChannel: "listed" })).toContain("AMO's listed review");
+
+    for (const [name, mode] of [["chrome", "public"], ["chrome", "staged"], ["firefox", "listed"]]) {
+      expect(publicSubmissionModeConsequence({ store: name, submissionMode: mode }), `${name} ${mode}`).toMatch(/sends the next upload to .* which publishes/);
+    }
+
+    expect(publicSubmissionModeConsequence({ store: "edge", submissionMode: "draft" })).toBe("");
+    expect(publicSubmissionModeConsequence({ store: "safari", submissionMode: "draft" })).toBe("");
   });
 
   it("keeps a public channel audience on the approve page while a private channel is plain, at creation and on an existing channel", () => {

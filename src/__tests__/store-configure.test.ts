@@ -122,6 +122,47 @@ describe("extension_submit configure-store changes a store's settings as a plain
     expect(platform.sent("PUT", CONFIG)).toHaveLength(1);
   });
 
+  it("keeps an Edge review mode and a Chrome staged publish on the approve page like a Chrome public publish, naming what each does to the next upload (ledger 328)", async () => {
+    if (process.platform === "win32") return;
+
+    const cases: Array<[string, Record<string, unknown>, string, string]> = [
+      ["edge", { dryRun: false, publishAfter: true }, 'edge.submissionMode: "draft" -> "review"', "Edge review sends the next upload to certification, which publishes the extension to everyone when it passes."],
+      ["chrome", { dryRun: false, skipPublish: null, stagedPublish: true }, 'chrome.submissionMode: "draft-until-public" -> "staged"', "Chrome staged sends the next upload to Chrome's review, which publishes it to a share of the item's users when it passes"],
+      ["chrome", { dryRun: false, skipPublish: false, stagedPublish: false }, 'chrome.submissionMode: "draft-until-public" -> "public"', "Chrome public sends the next upload to Chrome's review"],
+    ];
+
+    for (const [store, patch, line, consequence] of cases) {
+      platform.calls.length = 0;
+      platform.login();
+      const scope = scopeFor(store as "chrome" | "edge", patch);
+      platform.routes[`PUT ${CONFIG}`] = () => approvalRequired(scope);
+      platform.routes[`POST ${APPROVALS}`] = () => ({ status: 201, body: { approvalId: "apr_mode", approvalUrl: `${API}/device/approve/apr_mode`, changes: [line] } });
+
+      const mode = String(line.match(/-> "([^"]+)"/)?.[1]);
+      const out = JSON.parse(await submit({ action: "configure-store", store, storeSettings: { submissionMode: mode }, api: API }));
+      const [post] = platform.sent("POST", APPROVALS);
+
+      expect(post.body, line).toMatchObject({ action: STORE_SETTINGS_ACTION, scope, storeSettings: { [store]: patch } });
+      expect(out.status, line).toBe("approval-required");
+      expect(out.error.message, line).toContain(consequence);
+      expect(out.error.message, line).toContain("changes who can find the extension");
+    }
+  });
+
+  it("applies an Edge draft mode as a plain write under the owner's token, since a draft publishes nothing", async () => {
+    if (process.platform === "win32") return;
+
+    platform.login();
+    platform.routes[`PUT ${CONFIG}`] = () => ({ body: { ok: true, store: "edge", changes: ['edge.submissionMode: "review" -> "draft"'] } });
+
+    const out = JSON.parse(await submit({ action: "configure-store", store: "edge", storeSettings: { submissionMode: "draft" }, api: API }));
+
+    expect(platform.sent("PUT", CONFIG)[0].body).toEqual({ edge: { dryRun: false, publishAfter: false } });
+    expect(out.status).toBe("store-configured");
+    expect(out.hint).toContain("no approval page was involved");
+    expect(platform.calls.some((call) => call.path.startsWith(APPROVALS))).toBe(false);
+  });
+
   it("refuses a storeSettings key that names a credential before any request, with the console connect page and the form's labels", async () => {
     platform.login();
 

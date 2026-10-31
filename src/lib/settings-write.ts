@@ -21,8 +21,9 @@ type Row = Record<string, unknown>;
  * (approval-policy.ts) says a settings write is a plain act under the
  * owner's own token, so the write goes out with no approval and no approval
  * is minted first; the platform answers APPROVAL_REQUIRED only for an
- * audience change it computed from the write (a listed or public submission
- * mode, a public channel, a public project), and that request is honored with the fingerprint it
+ * audience change it computed from the write (a submission mode that sends
+ * the next upload to a review that publishes it, a public channel, a public
+ * project), and that request is honored with the fingerprint it
  * named. An approvalId the caller presents is verified first, whatever the
  * verdict, so a pending or spent grant answers legibly instead of reaching
  * the platform.

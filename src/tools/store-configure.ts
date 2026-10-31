@@ -17,7 +17,7 @@ import {
   type ProjectApi,
   type ProjectApiRefusal,
 } from "../lib/project-api";
-import { approvalVerdict, type PolicyWrite } from "../lib/approval-policy";
+import { approvalVerdict, publicSubmissionModeConsequence, type PolicyWrite } from "../lib/approval-policy";
 import { approvedSettingsWrite } from "../lib/settings-write";
 import { badShipRequest, isRow, openShipApi, text } from "../lib/ship-act";
 import {
@@ -44,7 +44,6 @@ export const CONFIGURE_STORE = "configure-store";
 
 const COMMAND = "extension_submit";
 
-const AUDIENCE_REASON = "A listed or public submission mode changes who can find the extension once a build leaves for the store, so a workspace owner approves this exact change on the approve page first; the page shows the change as the platform computed it.";
 const PLATFORM_ASKED_REASON = "The platform asked a workspace owner to approve this exact change before it is saved; the approval page shows the change as the platform computed it.";
 
 export interface ConfigureStoreArgs {
@@ -96,6 +95,14 @@ function credentialsConsoleOnly(args: ConfigureStoreArgs, store: StoreSettingsSt
     },
     hint: say,
   });
+}
+
+function audienceReason(write: PolicyWrite): string {
+  const consequence =
+    publicSubmissionModeConsequence(write) ||
+    `A ${text(write.submissionMode) || text(write.releaseChannel)} submission mode on ${text(write.store)} sends the next upload to the store's review, which publishes it when it passes.`;
+
+  return `${consequence} That changes who can find the extension once a build leaves for the store, so a workspace owner approves this exact change on the approve page first; the page shows the change as the platform computed it.`;
 }
 
 function refusal(sent: ProjectApiRefusal, api: ProjectApi, args: ConfigureStoreArgs, store: string, settingsPage: string): string {
@@ -152,7 +159,7 @@ export async function configureStore(args: ConfigureStoreArgs): Promise<string> 
   const scope = { store, settingsDigest: storeSettingsDigest(store, read.patch) };
   const settingsPage = storeSettingsUrl(api.ref, args.api);
   const preflightRead = `extension_submit (action: "preflight", browsers: ["${store}"])`;
-  const policyWrite: PolicyWrite = { submissionMode: text(read.requested.submissionMode), releaseChannel: text(read.requested.releaseChannel) };
+  const policyWrite: PolicyWrite = { store, submissionMode: text(read.requested.submissionMode), releaseChannel: text(read.requested.releaseChannel) };
   const audienceChange = approvalVerdict(STORE_SETTINGS_ACTION, policyWrite) === "approval";
   const gate: ApprovalGateInput = {
     command: COMMAND,
@@ -163,7 +170,7 @@ export async function configureStore(args: ConfigureStoreArgs): Promise<string> 
     api: args.api,
     refusedStatus: "configure-store-refused",
     body: { storeSettings: { [store]: read.patch } },
-    reason: audienceChange ? AUDIENCE_REASON : PLATFORM_ASKED_REASON,
+    reason: audienceChange ? audienceReason(policyWrite) : PLATFORM_ASKED_REASON,
     stateRead: preflightRead,
     write: policyWrite,
     refusalHint: (code) => (code === "NO_CHANGE" ? "The store settings already read this way; nothing needs changing." : undefined),
