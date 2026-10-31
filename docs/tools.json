@@ -1579,13 +1579,13 @@
           "name": "refresh",
           "type": "array of \"chrome\" | \"edge\" | \"firefox\" | \"safari\"",
           "required": false,
-          "description": "With stores, ask the platform to read these stores again now (one poll per project per two minutes, within the platform's GitHub budget), under the stored login and with no approval; value.refresh names what happened per store (dispatched, queued for the budget reset, or refused with the reason). The registry reflects the poll a minute or two later, so without waitSeconds read again before saying the state changed. Use it after a publish, or after the owner submitted in a store's own dashboard."
+          "description": "With stores, ask the platform to read these stores again now (one poll per project per two minutes, within the platform's GitHub budget), under the stored login and with no approval; value.refresh names what happened per store: a store check is one per project, so the first store named answers dispatched with sharedWith listing the others, each of those answers {covered: true, by: <store>, dispatchedAt} for the same check (Edge beside its storeRead, read now), and a store the platform queued for the budget reset or refused for another reason says so in its own words. The registry reflects the poll a minute or two later, so without waitSeconds read again before saying the state changed. Use it after a publish, or after the owner submitted in a store's own dashboard."
         },
         {
           "name": "waitSeconds",
           "type": "number",
           "required": false,
-          "description": "With refresh, how long this call waits, 0 to 600 seconds, for the store check it dispatched to land in the registry, re-reading every 10 seconds, so a fresh store state takes one call: refresh:['safari'], waitSeconds:180. It answers once each dispatched store's state was read after the dispatch, or when the bound passes; value.refreshWait {landed, waitedSeconds, stores} says which, and landed false means the read is the state before the check. Without refresh, or when no check was dispatched, it reads once."
+          "description": "With refresh, how long this call waits, 0 to 600 seconds, for the store check it dispatched to land in the registry, re-reading every 10 seconds, so a fresh store state takes one call: refresh:['safari'], waitSeconds:180. It answers once every store the check covers (the one that dispatched it and each one covered by it) has its state read after the dispatch, or when the bound passes; value.refreshWait {landed, waitedSeconds, stores} lists them all and says which, and landed false means the read is the state before the check. Without refresh, or when no check was dispatched, it reads once."
         },
         {
           "name": "submissionId",

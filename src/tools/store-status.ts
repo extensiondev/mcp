@@ -46,10 +46,10 @@ import {
 import { repairEdgeStoreUrl } from "../lib/edge-listing";
 import { platformSubmissionView, releaseChangeOfRow, releaseChangeSentence, releaseModeOfRow, RELEASE_MODE_WORDS, type SubmissionView } from "../lib/store-row-sources";
 import { storeRecordUnread } from "../lib/store-readiness";
-import { openProjectApi, projectApiSend } from "../lib/project-api";
 import { outcomeClock, waitBound } from "../lib/act-outcome";
 import { nextStep, type NextStep } from "../lib/store-connection";
 import { pollLanded, stampPollRunRead } from "../lib/store-read-landed";
+import { refreshCheckAt, refreshCovered, refreshInCheck, refreshStores, spokenStores, type StoreRefreshView } from "../lib/store-refresh-dispatch";
 import {
   liveStoreReleaseOf,
   newestStoreReleaseByLane,
@@ -61,99 +61,12 @@ import {
   type StoreReleaseView,
 } from "../lib/platform-store-releases";
 
-export const REFRESHABLE_STORES = ["chrome", "edge", "firefox", "safari"] as const;
-
-export interface StoreReadView {
-  state: "live" | "absent" | "unreadable" | "unresolved";
-  version?: string;
-  manifestVersion?: string;
-  listingUrl?: string;
-  checkedAt?: string;
-  reason?: string;
-}
-
-export interface StoreRefreshView {
-  dispatched: boolean;
-  queued: boolean;
-  dispatchedAt?: string;
-  dueAt?: string;
-  message?: string;
-  storeRead?: StoreReadView;
-}
-
-function storeReadOf(raw: unknown): StoreReadView | undefined {
-  if (!isPlainObject(raw)) return undefined;
-
-  const state = str(raw.state);
-
-  if (state !== "live" && state !== "absent" && state !== "unreadable" && state !== "unresolved") return undefined;
-
-  const view: StoreReadView = { state };
-
-  for (const key of ["version", "manifestVersion", "listingUrl", "checkedAt", "reason"] as const) {
-    const value = str(raw[key]);
-    if (value) view[key] = value;
-  }
-
-  return view;
-}
-
-/* @invariant A REFRESH READS THE STORE AGAIN AND ACTS ON NOTHING. For each
- * store named it asks the platform for one poll now under the stored login,
- * a member's read with no approval; the platform bounds it (one per project
- * per two minutes, the GitHub budget) and the answer carries what it did:
- * dispatched, queued for the budget reset, or refused in its own words.
- * The registry the rest of this read answers from reflects the poll a
- * minute or two later, so the hint says to read again, never that the
- * state already changed.
- */
-export async function refreshStores(args: {
-  stores: string[];
-  project?: string;
-  api?: string;
-}): Promise<Record<string, StoreRefreshView>> {
-  const wanted = args.stores
-    .map((store) => String(store || "").trim().toLowerCase())
-    .filter((store, index, all) => (REFRESHABLE_STORES as readonly string[]).includes(store) && all.indexOf(store) === index);
-  const out: Record<string, StoreRefreshView> = {};
-
-  if (!wanted.length) return out;
-
-  const opened = await openProjectApi({ command: "extension_release_status", project: args.project, api: args.api });
-
-  if (!opened.ok) {
-    for (const store of wanted) out[store] = { dispatched: false, queued: false, message: opened.message };
-
-    return out;
-  }
-
-  for (const store of wanted) {
-    const sent = await projectApiSend<Record<string, unknown>>(opened.api, "POST", `stores/${store}/poll`, {});
-
-    if (!sent.ok) {
-      out[store] = { dispatched: false, queued: false, message: sent.message };
-      continue;
-    }
-
-    const json = sent.json ?? {};
-    const dispatchedAt = str(json.dispatchedAt);
-    const dueAt = str(json.dueAt);
-    const message = str(json.message);
-
-    const storeRead = storeReadOf(json.storeRead);
-
-    out[store] = {
-      dispatched: json.dispatched === true,
-      queued: json.queued === true,
-      ...(dispatchedAt ? { dispatchedAt } : {}),
-      ...(dueAt ? { dueAt } : {}),
-      ...(message ? { message } : {}),
-      ...(storeRead ? { storeRead } : {}),
-    };
-  }
-
-  return out;
-}
+export {
+  REFRESHABLE_STORES,
+  refreshStores,
+  type StoreReadView,
+  type StoreRefreshView,
+} from "../lib/store-refresh-dispatch";
 
 const KNOWN_STORES = ["chrome", "firefox", "edge", "safari"] as const;
 
@@ -569,35 +482,27 @@ function refreshSentence(refresh: Record<string, StoreRefreshView> | null, wait:
   if (!refresh || !Object.keys(refresh).length) return "";
 
   const reads: string[] = [];
-  const rows = Object.entries(refresh).map(([store, row]) => {
+  const rows = Object.entries(refresh).flatMap(([store, row]) => {
+    const read = row.storeRead;
+    pushStoreRead(reads, read);
+    if (refreshCovered(row)) return [];
+    if (row.dispatched && row.sharedWith?.length) return [`one store check dispatched for ${spokenStores([store, ...row.sharedWith])}`];
+
     const word = row.dispatched
       ? "dispatched"
       : row.queued
         ? "queued for the budget reset"
-        : row.storeRead
+        : read
           ? "read now"
           : `refused: ${row.message || "no reason given"}`;
-    const read = row.storeRead;
 
-    if (read?.state === "live") {
-      reads.push(
-        `Edge Add-ons serves version ${read.version || read.manifestVersion || "unknown"}${
-          read.manifestVersion && read.manifestVersion !== read.version ? ` (${read.manifestVersion})` : ""
-        } now${read.listingUrl ? ` at ${read.listingUrl}` : ""}, and the platform recorded it before this read`,
-      );
-    } else if (read?.state === "absent") {
-      reads.push("Edge Add-ons does not list the product yet");
-    } else if (read?.state === "unresolved" || read?.state === "unreadable") {
-      reads.push(`Edge Add-ons was not read: ${read.reason || "no reason given"}`);
-    }
-
-    return `${store} ${word}`;
+    return [`${store} ${word}`];
   });
 
   const asked = `A store check was asked for (${rows.join("; ")})${reads.length ? `. ${reads.join(". ")}` : ""}`;
 
   if (wait?.landed) {
-    return `${asked}; it landed within ${wait.waitedSeconds} s of waiting, so this read carries the state the check read for ${wait.stores.join(", ")}. `;
+    return `${asked}; it landed within ${wait.waitedSeconds} s of waiting, so this read carries the state the check read for ${spokenStores(wait.stores)}. `;
   }
 
   if (wait) {
@@ -605,6 +510,21 @@ function refreshSentence(refresh: Record<string, StoreRefreshView> | null, wait:
   }
 
   return `${asked}; the registry reflects the rest of the check within a minute or two, so read extension_release_status again before saying the state changed, or pass waitSeconds with refresh to answer once it lands. `;
+}
+
+function pushStoreRead(reads: string[], read: StoreRefreshView["storeRead"]): void {
+
+  if (read?.state === "live") {
+    reads.push(
+      `Edge Add-ons serves version ${read.version || read.manifestVersion || "unknown"}${
+        read.manifestVersion && read.manifestVersion !== read.version ? ` (${read.manifestVersion})` : ""
+      } now${read.listingUrl ? ` at ${read.listingUrl}` : ""}, and the platform recorded it before this read`,
+    );
+  } else if (read?.state === "absent") {
+    reads.push("Edge Add-ons does not list the product yet");
+  } else if (read?.state === "unresolved" || read?.state === "unreadable") {
+    reads.push(`Edge Add-ons was not read: ${read.reason || "no reason given"}`);
+  }
 }
 
 const POLL_RECHECK_MS = 10_000;
@@ -616,12 +536,12 @@ function stampOf(at: unknown): number {
 }
 
 function pollSince(refresh: Record<string, StoreRefreshView> | null, askedAt: number): { since: number; stores: string[] } | null {
-  const dispatched = Object.entries(refresh ?? {}).filter(([, row]) => row.dispatched);
-  if (!dispatched.length) return null;
+  const inCheck = Object.entries(refresh ?? {}).filter(([, row]) => refreshInCheck(row));
+  if (!inCheck.length) return null;
 
-  const stamps = dispatched.map(([, row]) => stampOf(row.dispatchedAt)).filter((ms) => Number.isFinite(ms));
+  const stamps = inCheck.map(([, row]) => stampOf(refreshCheckAt(row))).filter((ms) => Number.isFinite(ms));
 
-  return { since: stamps.length ? Math.min(...stamps) : askedAt, stores: dispatched.map(([store]) => store) };
+  return { since: stamps.length ? Math.min(...stamps) : askedAt, stores: inCheck.map(([store]) => store) };
 }
 
 export { pollLanded };

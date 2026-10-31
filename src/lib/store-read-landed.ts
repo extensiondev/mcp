@@ -6,9 +6,10 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
+import { refreshCheckAt, type StoreRefreshView } from "./store-refresh-dispatch";
 
 import type { SubmissionView } from "./store-row-sources";
-import type { PollLaneView, StoreRefreshView } from "../tools/store-status";
+import type { PollLaneView } from "../tools/store-status";
 
 function stampOf(at: unknown): number {
   const ms = Date.parse(String(at ?? ""));
@@ -36,11 +37,11 @@ export function stampPollRunRead(args: {
   lastPollAt: string | undefined;
   refresh: StoreRefreshView | undefined;
 }): boolean {
-  const { submission, refresh } = args;
-  const dispatchedAt = stampOf(refresh?.dispatchedAt);
+  const { submission } = args;
+  const dispatchedAt = stampOf(refreshCheckAt(args.refresh));
   const ranAt = stampOf(args.lastPollAt);
 
-  if (!submission || !refresh?.dispatched || !Number.isFinite(dispatchedAt) || !Number.isFinite(ranAt)) return false;
+  if (!submission || !Number.isFinite(dispatchedAt) || !Number.isFinite(ranAt)) return false;
   if (ranAt < dispatchedAt || !laneRan(args.lane) || !readByPoll(submission)) return false;
 
   const readAt = stampOf(rowReadAt(submission));
