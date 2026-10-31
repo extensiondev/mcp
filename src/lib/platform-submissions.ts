@@ -186,6 +186,8 @@ export interface QueuedStoreActView {
   storeWord: string;
   clearsWhen: string;
   readAt?: string;
+  source?: string;
+  reason?: string;
   queuedAt?: string;
   lastCheckedAt: string;
   dispatchedAt?: string;
@@ -228,6 +230,8 @@ export function queuedActOf(raw: unknown): QueuedStoreActView | undefined {
     ["id", row.id],
     ["buildSha", row.buildSha],
     ["readAt", lock.readAt],
+    ["source", lock.source],
+    ["reason", lock.reason],
     ["queuedAt", row.queuedAt],
     ["dispatchedAt", row.dispatchedAt],
     ["submissionId", row.submissionId],

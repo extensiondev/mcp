@@ -580,17 +580,20 @@ export async function publishDraft(args: StoreActArgs): Promise<string> {
 
 /* @invariant A LOCKED CHECK KEEPS ITS LOCK. The platform answers a check
  * whose store will refuse the act until a review it is running ends as
- * {status: "locked", lock: {kind, clearsWhen, storeWord, readAt}}; the view
- * carried only the message, so an agent saw a check that was not passing and
- * nothing about what clears it (lane 3, 2026-10-28). The status and the lock
- * travel through, and a locked check sits in `locked`, never in `failing`.
+ * {status: "locked", lock: {kind, clearsWhen, storeWord, readAt, source?,
+ * reason?}}; the view carried only the message, so an agent saw a check that
+ * was not passing and nothing about what clears it (lane 3, 2026-10-28). The
+ * status and the lock travel through, and a locked check sits in `locked`,
+ * never in `failing`. `source` says whether the platform read the review
+ * from the store or could not read it at all (the owner's own Partner Center
+ * submission, ledger 329), and `reason` carries the store's words for why.
  */
 export function lockView(lock: unknown): Row | null {
   if (!isRow(lock)) return null;
 
   const view: Row = {};
 
-  for (const key of ["kind", "clearsWhen", "storeWord", "readAt"]) {
+  for (const key of ["kind", "clearsWhen", "storeWord", "readAt", "source", "reason"]) {
     if (text(lock[key])) view[key] = text(lock[key]);
   }
 
@@ -651,9 +654,13 @@ export function lockSentences(storePreflight: Record<string, Row>): string {
     .map(([store, block]) => {
       const lock = isRow(block.lock) ? block.lock : null;
 
-      return lock && text(lock.clearsWhen)
-        ? `${store}: the ${text(block.act) || "act"} is locked until ${text(lock.clearsWhen)} (${text(lock.storeWord) || text(lock.kind)}); a submit or publish is queued behind it, never failed.`
-        : "";
+      if (!lock || !text(lock.clearsWhen)) return "";
+
+      if (text(lock.source) === "unreadable") {
+        return `${store}: a submission is in certification review and its state ${text(lock.reason) || "could not be read from here"}; the ${text(block.act) || "act"} is queued until ${text(lock.clearsWhen)} (${text(lock.storeWord) || text(lock.kind)}), never failed, and nothing here can call the product idle.`;
+      }
+
+      return `${store}: the ${text(block.act) || "act"} is locked until ${text(lock.clearsWhen)} (${text(lock.storeWord) || text(lock.kind)}); a submit or publish is queued behind it, never failed.`;
     })
     .filter(Boolean)
     .join(" ");
