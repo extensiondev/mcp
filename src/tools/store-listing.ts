@@ -71,6 +71,7 @@ import {
   type StoreMdPrivacy,
   type UnreadLine,
 } from "../lib/store-md-listing";
+import { categoriesSentences, type CategoryRead, type StoreCategoryRow } from "../lib/store-categories";
 import {
   localIcon,
   platformBuildIcons,
@@ -118,6 +119,7 @@ export interface LocalListing {
   unread: Partial<Record<ListingField, UnreadLine>>;
   lines: Partial<Record<ListingField, string>>;
   privacy: StoreMdPrivacy;
+  categories?: CategoryRead;
 }
 
 export const SCREENSHOTS_DOOR =
@@ -195,7 +197,8 @@ export function readLocalListing(
   }
 
   const parsed = parseStoreMdListing(content);
-  const { listing, skipped, unread } = withChromeVisibility(listingForStore(parsed, store), parsed.lines.visibility);
+  const read = listingForStore(parsed, store);
+  const { listing, skipped, unread } = withChromeVisibility(read, parsed.lines.visibility);
   const icon = localIcon(projectPath, store);
   const patch: ListingPatch = { listing };
 
@@ -211,6 +214,7 @@ export function readLocalListing(
     unread,
     lines: parsed.lines,
     privacy: parsed.privacy,
+    ...(read.categories ? { categories: read.categories } : {}),
     ...("icon" in icon ? { icon: icon.origin } : { iconMissing: icon.missing }),
     ...("stale" in icon && icon.stale ? { iconStale: icon.stale } : {}),
   };
@@ -279,7 +283,7 @@ const CHECK_COVERAGE: CheckCoverage[] = [
     fields: ["categories"],
     label: "category",
     shape:
-      "`- Category: <name>` for every store, or `- Category: <name> (Chrome), <name> (Firefox)` per store",
+      "`- Category: <name>` for every store, `- Category: <name> (Chrome), <name> (Firefox)` per store, or `- Category: <name>` under the store's own `##` section",
   },
   {
     test: /support_email_present$/,
@@ -975,6 +979,7 @@ export async function syncListing(args: ListingArgs): Promise<string> {
   const unreadBack: string[] = [];
   const readProblems: string[] = [];
   const said: string[] = [];
+  const categoryRows: StoreCategoryRow[] = [];
 
   let plain = false;
 
@@ -1044,11 +1049,13 @@ export async function syncListing(args: ListingArgs): Promise<string> {
     }
 
     if (store === "firefox" && done) said.push(FIREFOX_METADATA_SENTENCE);
+    if (local.categories) categoryRows.push({ store, read: local.categories });
 
     stores[store] = {
       ...result,
       filled,
       ...unread,
+      ...(local.categories ? { categories: { sent: local.categories.categories, from: local.categories.from, ...(local.categories.mapped ? { mapped: local.categories.mapped } : {}) } } : {}),
       ...(local.patch.icons && local.icon ? { icon: local.icon } : {}),
       ...(local.iconMissing ? { iconMissing: local.iconMissing } : {}),
       ...(local.skipped.length ? { skipped: local.skipped } : {}),
@@ -1058,6 +1065,8 @@ export async function syncListing(args: ListingArgs): Promise<string> {
       ...(paste ? { pasteInDashboard: paste } : {}),
     };
   }
+
+  said.push(...categoriesSentences(categoryRows));
 
   const wanted = (Object.values(stores) as Row[]).filter((row) => row.status === "approval-wanted");
 

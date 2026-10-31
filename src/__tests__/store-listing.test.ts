@@ -1288,7 +1288,7 @@ describe("extension_submit sync-listing and the preflight advisory", () => {
     );
     const firefox = out.value.stores.firefox;
     const category =
-      "category: the `- Category:` line in STORE.md names chrome and edge only; the reader takes `- Category: <name>` for every store, or `- Category: <name> (Chrome), <name> (Firefox)` per store";
+      "category: the `- Category:` line in STORE.md names chrome and edge only; the reader takes `- Category: <name>` for every store, `- Category: <name> (Chrome), <name> (Firefox)` per store, or `- Category: <name>` under the store's own `##` section";
     const email =
       "support email: the `- Support email:` line in STORE.md is not an email address; the reader takes `- Support email: <address>`";
 

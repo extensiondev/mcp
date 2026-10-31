@@ -18,6 +18,7 @@ import {
   type ListingText,
   type PermissionJustification,
 } from "./store-md-declarations";
+import { resolveStoreCategories, storesNamingACategory, type CategoryRead } from "./store-categories";
 import { bulletLine, storeOwnLinesBody } from "./store-md-bullets";
 import { safariTitle } from "./store-md-safari-title";
 
@@ -48,6 +49,7 @@ export interface StoreListingRead {
   listing: ListingText;
   skipped: string[];
   unread: Partial<Record<ListingField, UnreadLine>>;
+  categories?: CategoryRead;
 }
 
 const NOTED_FIELDS: ListingField[] = ["license", "supportEmail", "homepageUrl", "supportUrl"];
@@ -341,11 +343,15 @@ function readBullets(result: StoreMdListing, body: string, into: ListingText, ow
 
     const field = BULLET_KEYS.find(({ pattern }) => pattern.test(key.toLowerCase()))?.field;
     const text = usable(value);
-    if (!field || !text || (ownSection && field === "categories")) continue;
+    if (!field || !text) continue;
 
     result.lines[field] = key;
 
-    if (field === "categories") {
+    if (field === "categories" && ownSection) {
+      const parsed = parseCategories(text);
+      const names = [...parsed.all, ...Object.values(parsed.byStore).flat()];
+      if (names.length) into.categories = names;
+    } else if (field === "categories") {
       const parsed = parseCategories(text);
       if (parsed.all.length) into.categories = parsed.all;
 
@@ -368,8 +374,9 @@ function readBullets(result: StoreMdListing, body: string, into: ListingText, ow
  * lines above a store section's first "###" subsection are read with the
  * same keys as "## Listing" and win for that store alone, so the App Store's
  * subtitle, keywords and review contact phone can sit under "## Safari" as
- * the owed message asks, while "- Category:" keeps its per-store note syntax
- * on the shared line. The privacy policy URL's home is "## Privacy and data
+ * the owed message asks, and a "- Category:" line there is that store's
+ * category in place of the shared line's (ledger 312). The privacy policy
+ * URL's home is "## Privacy and data
  * use", and a "- Privacy policy URL:" line under "## Listing" or a store
  * section is read as well, since the template's header once said "under
  * Listing"; the privacy section wins when both carry one.
@@ -522,8 +529,8 @@ const storeList = (stores: string[]): string =>
 
 export function listingForStore(parsed: StoreMdListing, store: ListingStore): StoreListingRead {
   const merged: ListingText = { ...parsed.shared, ...(parsed.overrides[store] ?? {}), ...(parsed.stores[store] ?? {}) };
-  const categories = parsed.categoryOverrides[store] ?? [...(parsed.shared.categories ?? []), ...(parsed.categoriesByStore[store] ?? [])];
-  if (categories.length) merged.categories = categories;
+  const categories = resolveStoreCategories(parsed, store);
+  if (categories) merged.categories = categories.categories;
   else delete merged.categories;
 
   const listing: ListingText = {};
@@ -546,7 +553,7 @@ export function listingForStore(parsed: StoreMdListing, store: ListingStore): St
   if (store === "safari") safariTitle(listing, skipped, unread, parsed.lines.title);
 
   if (listing.categories === undefined && parsed.lines.categories) {
-    const named = Object.keys({ ...parsed.categoriesByStore, ...parsed.categoryOverrides });
+    const named = storesNamingACategory(parsed);
 
     unread.categories = {
       line: `- ${parsed.lines.categories}:`,
@@ -554,5 +561,5 @@ export function listingForStore(parsed: StoreMdListing, store: ListingStore): St
     };
   }
 
-  return { listing, skipped, unread };
+  return { listing, skipped, unread, ...(categories && listing.categories ? { categories } : {}) };
 }

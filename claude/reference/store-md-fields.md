@@ -7,7 +7,8 @@ Generated from the parser's own declarations in `src/lib/store-md-declarations.t
 - A `##` heading is matched by prefix, case aside: `## Listing`, `## Privacy and data use`, and a store section by the store its heading names (chrome or chrome-web-store, firefox or amo, edge, safari or app store), so `## Firefox Add-ons`, `## firefox-amo` and `## AMO` are one section; the first section for a store wins. A `###` heading inside a store section is matched by prefix the same way.
 - A line is a `- Key: value` bullet; the key is case-insensitive, and the value may continue on the indented lines below it. A value that starts with TODO counts as absent. HTML comments are skipped.
 - The section column is the line's home. A line is also read from the sections in the also-read-from column, and the home wins when both carry one; a store section's own `- Key:` lines, at the top of the section or under any of its `###` sub-headings (the `### Permissions justification` bullets aside), are read with the same keys as `## Listing` and win for that store alone.
-- A single-value line is read up to a trailing parenthetical that names a store. `- Category: Productivity (Chrome: Productivity, Safari: Utilities)` reads `Productivity` for every store and the named store's own value where the note gives one, with a colon; the same `(Store: value)` note works on the name, subtitle, summary, license, support email, homepage and review contact lines. `- Category:` is read from `## Listing` only, and a line of several categories reads a plain `(Chrome Web Store)` note as the stores that category is for. A parenthetical that names no store is a remark: kept out of the license, support email and homepage, left in the prose lines.
+- A single-value line is read up to a trailing parenthetical that names a store. `- Category: Productivity (Chrome: Productivity, Safari: Utilities)` reads `Productivity` for every store and the named store's own value where the note gives one, with a colon; the same `(Store: value)` note works on the name, subtitle, summary, license, support email, homepage and review contact lines. A `- Category:` line of several categories reads a plain `(Chrome Web Store)` note as the stores that category is for. A parenthetical that names no store is a remark: kept out of the license, support email and homepage, left in the prose lines.
+- A `- Category:` line under a store's own section is that store's category in place of the `## Listing` value, for that store alone, and a trailing parenthetical on it is a remark; where the `## Listing` name is not one of a store's own categories and no such line exists, a built-in map sends the nearest name that store has (Chrome's Accessibility reaches Firefox Add-ons as Other) and the sync answer says so, naming the line to add to choose another.
 - A line that is present but over its limit or not in the shape the reader takes is left out of the sync and named, with its reason, in `skipped`; the preflight's `storeMd` block names the same line with the shape it wants.
 - Screenshots and the icon are never read from STORE.md. The icon comes from the build the store receives, and screenshots reach the per-store listing record only through the `screenshots` input of `sync-listing` (PNG paths inside the project, written by `extension_screenshot` with `forStore`); a `- Screenshots:` line is named in `skipped` and read for no file, and once the store's screenshots row reads have, that `skipped` entry says the line is retired because the images come from the listing record.
 
@@ -20,7 +21,7 @@ Generated from the parser's own declarations in `src/lib/store-md-declarations.t
 | `- Name:` | `## Listing` | `## Chrome Web Store` | `title` | up to 100 characters |
 | `- Summary:` | `## Listing` | `## Chrome Web Store` | `shortDescription` | up to 250 characters |
 | `- Description:` | `## Listing` | `## Chrome Web Store` | `fullDescription` | paragraphs indented below the bullet, up to 16,000 characters |
-| `- Category:` | `## Listing` |  | `categories` | up to 5 names of 100 characters each; one name for every store, `<name> (Chrome), <name> (Firefox)` per store, or `<name> (Chrome: <name>, Safari: <name>)` with the stores that differ |
+| `- Category:` | `## Listing` | `## Chrome Web Store` | `categories` | up to 5 names of 100 characters each; one name for every store, `<name> (Chrome), <name> (Firefox)` per store, `<name> (Chrome: <name>, Safari: <name>)` with the stores that differ, or `- Category: <name>` under `## Chrome Web Store` for that store alone |
 | `- Support email:` | `## Listing` | `## Chrome Web Store` | `supportEmail` | an email address, up to 200 characters |
 | `- Privacy policy URL:` | `## Privacy and data use` | `## Listing`, `## Chrome Web Store` | `privacyPolicyUrl` | an http or https URL, up to 2,000 characters |
 | `- Homepage:` | `## Listing` | `## Chrome Web Store` | `homepageUrl` | an http or https URL, up to 2,000 characters |
@@ -37,7 +38,7 @@ Generated from the parser's own declarations in `src/lib/store-md-declarations.t
 | `- Name:` | `## Listing` | `## Firefox Add-ons` | `title` | up to 100 characters |
 | `- Summary:` | `## Listing` | `## Firefox Add-ons` | `shortDescription` | up to 250 characters |
 | `- Description:` | `## Listing` | `## Firefox Add-ons` | `fullDescription` | paragraphs indented below the bullet, up to 16,000 characters |
-| `- Category:` | `## Listing` |  | `categories` | up to 5 names of 100 characters each; one name for every store, `<name> (Chrome), <name> (Firefox)` per store, or `<name> (Chrome: <name>, Safari: <name>)` with the stores that differ |
+| `- Category:` | `## Listing` | `## Firefox Add-ons` | `categories` | up to 5 names of 100 characters each; one name for every store, `<name> (Chrome), <name> (Firefox)` per store, `<name> (Chrome: <name>, Safari: <name>)` with the stores that differ, or `- Category: <name>` under `## Firefox Add-ons` for that store alone |
 | `- Support email:` | `## Listing` | `## Firefox Add-ons` | `supportEmail` | an email address, up to 200 characters |
 | `- Privacy policy URL:` | `## Privacy and data use` | `## Listing`, `## Firefox Add-ons` | `privacyPolicyUrl` | an http or https URL, up to 2,000 characters |
 | `- Homepage:` | `## Listing` | `## Firefox Add-ons` | `homepageUrl` | an http or https URL, up to 2,000 characters |
@@ -54,7 +55,7 @@ Generated from the parser's own declarations in `src/lib/store-md-declarations.t
 | `- Name:` | `## Listing` | `## Edge Add-ons` | `title` | up to 100 characters |
 | `- Summary:` | `## Listing` | `## Edge Add-ons` | `shortDescription` | up to 250 characters |
 | `- Description:` | `## Listing` | `## Edge Add-ons` | `fullDescription` | paragraphs indented below the bullet, up to 16,000 characters |
-| `- Category:` | `## Listing` |  | `categories` | up to 5 names of 100 characters each; one name for every store, `<name> (Chrome), <name> (Firefox)` per store, or `<name> (Chrome: <name>, Safari: <name>)` with the stores that differ |
+| `- Category:` | `## Listing` | `## Edge Add-ons` | `categories` | up to 5 names of 100 characters each; one name for every store, `<name> (Chrome), <name> (Firefox)` per store, `<name> (Chrome: <name>, Safari: <name>)` with the stores that differ, or `- Category: <name>` under `## Edge Add-ons` for that store alone |
 | `- Search terms:` | `## Listing` | `## Edge Add-ons` | `searchTerms` | a comma list, up to 16 terms of 100 characters each |
 | `- Support email:` | `## Listing` | `## Edge Add-ons` | `supportEmail` | an email address, up to 200 characters |
 | `- Privacy policy URL:` | `## Privacy and data use` | `## Listing`, `## Edge Add-ons` | `privacyPolicyUrl` | an http or https URL, up to 2,000 characters |
@@ -72,7 +73,7 @@ Generated from the parser's own declarations in `src/lib/store-md-declarations.t
 | `- Subtitle:` | `## Listing` | `## Safari` | `subtitle` | up to 30 characters |
 | `- Summary:` | `## Listing` | `## Safari` | `shortDescription` | up to 250 characters |
 | `- Description:` | `## Listing` | `## Safari` | `fullDescription` | paragraphs indented below the bullet, up to 16,000 characters |
-| `- Category:` | `## Listing` |  | `categories` | up to 5 names of 100 characters each; one name for every store, `<name> (Chrome), <name> (Firefox)` per store, or `<name> (Chrome: <name>, Safari: <name>)` with the stores that differ |
+| `- Category:` | `## Listing` | `## Safari` | `categories` | up to 5 names of 100 characters each; one name for every store, `<name> (Chrome), <name> (Firefox)` per store, `<name> (Chrome: <name>, Safari: <name>)` with the stores that differ, or `- Category: <name>` under `## Safari` for that store alone |
 | `- Search terms:` | `## Listing` | `## Safari` | `searchTerms` | a comma list, up to 16 terms of 100 characters each, 100 characters joined by commas |
 | `- Support email:` | `## Listing` | `## Safari` | `supportEmail` | an email address, up to 200 characters |
 | `- Privacy policy URL:` | `## Privacy and data use` | `## Listing`, `## Safari` | `privacyPolicyUrl` | an http or https URL, up to 2,000 characters |

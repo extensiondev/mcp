@@ -6,6 +6,7 @@
 // ╚═╝     ╚═╝ ╚═════╝╚═╝
 // Apache License 2.0 (c) 2026 Cezar Augusto and the extension.dev collaborators
 
+import { PER_STORE_CATEGORY_RULE } from "./store-categories";
 import { storeMdFieldRows, type StoreMdFieldRow } from "./store-md-fields";
 import { LISTING_SECTION, LISTING_STORES, PRIVACY_SECTION, STORE_SECTIONS, type ListingStore } from "./store-md-listing";
 
@@ -22,7 +23,8 @@ const RULES = [
   `A \`##\` heading is matched by prefix, case aside: \`${LISTING_SECTION}\`, \`${PRIVACY_SECTION}\`, and a store section by the store its heading names (chrome or chrome-web-store, firefox or amo, edge, safari or app store), so \`## Firefox Add-ons\`, \`## firefox-amo\` and \`## AMO\` are one section; the first section for a store wins. A \`###\` heading inside a store section is matched by prefix the same way.`,
   "A line is a `- Key: value` bullet; the key is case-insensitive, and the value may continue on the indented lines below it. A value that starts with TODO counts as absent. HTML comments are skipped.",
   `The section column is the line's home. A line is also read from the sections in the also-read-from column, and the home wins when both carry one; a store section's own \`- Key:\` lines, at the top of the section or under any of its \`###\` sub-headings (the \`### Permissions justification\` bullets aside), are read with the same keys as \`${LISTING_SECTION}\` and win for that store alone.`,
-  "A single-value line is read up to a trailing parenthetical that names a store. `- Category: Productivity (Chrome: Productivity, Safari: Utilities)` reads `Productivity` for every store and the named store's own value where the note gives one, with a colon; the same `(Store: value)` note works on the name, subtitle, summary, license, support email, homepage and review contact lines. `- Category:` is read from `## Listing` only, and a line of several categories reads a plain `(Chrome Web Store)` note as the stores that category is for. A parenthetical that names no store is a remark: kept out of the license, support email and homepage, left in the prose lines.",
+  "A single-value line is read up to a trailing parenthetical that names a store. `- Category: Productivity (Chrome: Productivity, Safari: Utilities)` reads `Productivity` for every store and the named store's own value where the note gives one, with a colon; the same `(Store: value)` note works on the name, subtitle, summary, license, support email, homepage and review contact lines. A `- Category:` line of several categories reads a plain `(Chrome Web Store)` note as the stores that category is for. A parenthetical that names no store is a remark: kept out of the license, support email and homepage, left in the prose lines.",
+  PER_STORE_CATEGORY_RULE,
   "A line that is present but over its limit or not in the shape the reader takes is left out of the sync and named, with its reason, in `skipped`; the preflight's `storeMd` block names the same line with the shape it wants.",
   "Screenshots and the icon are never read from STORE.md. The icon comes from the build the store receives, and screenshots reach the per-store listing record only through the `screenshots` input of `sync-listing` (PNG paths inside the project, written by `extension_screenshot` with `forStore`); a `- Screenshots:` line is named in `skipped` and read for no file, and once the store's screenshots row reads have, that `skipped` entry says the line is retired because the images come from the listing record.",
 ];

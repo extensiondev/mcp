@@ -55,8 +55,8 @@ export function storeMdLineOf(field: StoreMdField): string {
  * applies (a "###" field lives in its store's section, the privacy policy URL
  * in "## Privacy and data use" and is also read under "## Listing" or a
  * store section, the App Store's review contact lines in "## Safari" and
- * also under "## Listing", every other bullet in "## Listing" and also in
- * the store's own section, and "- Category:" in "## Listing" only). A field
+ * also under "## Listing", every other bullet, "- Category:" included, in
+ * "## Listing" and also in the store's own section). A field
  * the reader learns to take appears here the same hour, and the platform's
  * requirements name the same labels in satisfiedBy "store-md: <line>", so
  * both sides read one table. Screenshots have no row: STORE.md carries no
@@ -65,7 +65,7 @@ export function storeMdLineOf(field: StoreMdField): string {
 export function storeMdSectionOf(field: StoreMdField, store: ListingStore): StoreMdFieldHome {
   if (SUBSECTION_KEYS.some((key) => key.field === field)) return { section: STORE_SECTIONS[store], alsoRead: [] };
   if (field === "privacyPolicyUrl") return { section: PRIVACY_SECTION, alsoRead: [LISTING_SECTION, STORE_SECTIONS[store]] };
-  if (field === "categories") return { section: LISTING_SECTION, alsoRead: [] };
+  if (field === "categories") return { section: LISTING_SECTION, alsoRead: [STORE_SECTIONS[store]] };
   if (STORE_OWN_LINES[store]?.includes(field)) return { section: STORE_SECTIONS[store], alsoRead: [LISTING_SECTION] };
 
   return { section: LISTING_SECTION, alsoRead: [STORE_SECTIONS[store]] };
@@ -77,7 +77,7 @@ function limitOf(field: StoreMdField, store: ListingStore): string {
   if (field === "categories") {
     const limits = LISTING_LIST_LIMITS.categories;
 
-    return `up to ${limits.items} names of ${limits.each} characters each; one name for every store, \`<name> (Chrome), <name> (Firefox)\` per store, or \`<name> (Chrome: <name>, Safari: <name>)\` with the stores that differ`;
+    return `up to ${limits.items} names of ${limits.each} characters each; one name for every store, \`<name> (Chrome), <name> (Firefox)\` per store, \`<name> (Chrome: <name>, Safari: <name>)\` with the stores that differ, or \`- Category: <name>\` under \`${STORE_SECTIONS[store]}\` for that store alone`;
   }
 
   if (field === "searchTerms") {
