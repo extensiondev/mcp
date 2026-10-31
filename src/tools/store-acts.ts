@@ -99,6 +99,7 @@ import { publishVersion } from "./store-publish-version";
 
 import type { PackageScope } from "../lib/package-address";
 import type { ListingStore } from "../lib/store-md-listing";
+import type { LocalListingRead } from "../lib/store-requirements";
 
 export const COMMAND = "extension_submit";
 export const STORES = ["chrome", "firefox", "edge", "safari"] as const;
@@ -614,7 +615,7 @@ function checkView(check: Row, withLabel: boolean): Row {
   return out;
 }
 
-export function storePreflightView(json: Row, store: string): Row | null {
+export function storePreflightView(json: Row, store: string, local: LocalListingRead = null): Row | null {
   const block = json[`${store}Preflight`];
 
   if (!isRow(block)) return null;
@@ -623,7 +624,7 @@ export function storePreflightView(json: Row, store: string): Row | null {
   const ids = (value: unknown) => (Array.isArray(value) ? value.map((id) => text(id)).filter(Boolean) : []);
   const blockingIds = ids(block.blocking);
   const warningIds = ids(block.warnings);
-  const checks = storePreflightChecks(block, store, blockingIds, warningIds);
+  const checks = storePreflightChecks(block, store, blockingIds, warningIds).map((check) => reconciledWithStoreMd(check, local));
 
   return {
     ...(text(block.act) ? { act: text(block.act) } : {}),
@@ -878,7 +879,7 @@ export async function preflight(args: StoreActArgs): Promise<string> {
       const json = relayFirefoxUpdateUrl(read.json, updateManifest);
       reports[store] = json;
 
-      const block = storePreflightView(json, store);
+      const block = storePreflightView(json, store, text(args.projectPath) ? readLocalListing(text(args.projectPath), store as ListingStore) : null);
       if (block) storePreflight[store] = block;
 
       const view = readinessView(

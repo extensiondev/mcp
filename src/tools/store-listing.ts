@@ -303,6 +303,12 @@ const CHECK_COVERAGE: CheckCoverage[] = [
     label: "privacy policy URL",
     shape: "`- Privacy policy URL: <address>` under `## Privacy and data use`",
   },
+  {
+    test: /certification_notes$/,
+    fields: ["certificationNotes"],
+    label: "certification notes",
+    shape: "`### Certification notes` under `## Edge Add-ons` with the notes below it",
+  },
 ];
 
 function notFoundLine(local: LocalListing, rule: CheckCoverage): string {
