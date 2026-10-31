@@ -10,6 +10,7 @@ import { ConsoleProjectPage } from "@extension.dev/urls/paths";
 
 import { envelope, isEnvelope } from "../lib/envelope";
 import { consoleProjectUrl } from "../lib/registry";
+import { readsBeforeDispatch } from "../lib/store-read-landed";
 import { isRow, text } from "../lib/ship-act";
 import { readStores } from "./store-status";
 
@@ -157,7 +158,7 @@ export async function storeVersionStatus(args: {
   const waitSentence = wait
     ? wait.landed === true
       ? `The store check this call asked for landed within ${String(wait.waitedSeconds)} s, so these are the states it read. `
-      : `The store check this call asked for had not landed after ${String(wait.waitedSeconds)} s, so these are the states before it. `
+      : `The store check this call asked for had not landed after ${String(wait.waitedSeconds)} s, so these are the states before it${readsBeforeDispatch(stores, refresh)}. `
     : "";
   const ref = text(value.workspace) && text(value.project) ? { workspace: text(value.workspace), project: text(value.project) } : null;
   const trackUrl = stores.length === 1 && ref ? consoleProjectUrl(ref, ConsoleProjectPage.submissionsStore(stores[0].store), args.api) : text(value.consoleStoresUrl);

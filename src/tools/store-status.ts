@@ -48,6 +48,7 @@ import { storeRecordUnread } from "../lib/store-readiness";
 import { openProjectApi, projectApiSend } from "../lib/project-api";
 import { outcomeClock, waitBound } from "../lib/act-outcome";
 import { nextStep, type NextStep } from "../lib/store-connection";
+import { pollLanded, stampPollRunRead } from "../lib/store-read-landed";
 import {
   liveStoreReleaseOf,
   newestStoreReleaseByLane,
@@ -609,20 +610,7 @@ function pollSince(refresh: Record<string, StoreRefreshView> | null, askedAt: nu
   return { since: stamps.length ? Math.min(...stamps) : askedAt, stores: dispatched.map(([store]) => store) };
 }
 
-export function pollLanded(
-  read: { rows: Array<Record<string, unknown>>; lastPollAt?: string },
-  since: number,
-  stores: string[],
-): boolean {
-  const polledSince = stampOf(read.lastPollAt) >= since;
-
-  return stores.every((store) => {
-    const row = read.rows.find((entry) => entry.store === store);
-    const submission = row?.lastSubmission as SubmissionView | undefined;
-
-    return (polledSince && Boolean(row?.lastPollLane)) || stampOf(submission?.statusRead?.readAt) >= since;
-  });
-}
+export { pollLanded };
 
 function lookupSentence(lookup: SubmissionLookup | null, id: string): string {
   if (!lookup) return "";
@@ -854,6 +842,8 @@ async function answerStores(
 
     const lane = status.lanes[store];
     if (lane) row.lastPollLane = lane;
+
+    stampPollRunRead({ submission, lane, lastPollAt: status.lastPollAt, refresh: refresh?.[store] });
 
     const review = storeReviewLine({
       store,
